@@ -11,7 +11,6 @@ description: >-
   Bug/change → implementing-and-debugging first; structure-only → refactoring-code;
   untested costly bet → acting-on-hypotheses first; language mechanisms → writing-*.
   History/survey → answer/systematizing-knowledge; SKILL.md craft → forging-skills.
-  Workflow-native: design, tier, exceptions, acceptance SOLO; facts may fan out.
   English skill; respond in the user's language.
 ---
 

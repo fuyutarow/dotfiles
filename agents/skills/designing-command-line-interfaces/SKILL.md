@@ -9,7 +9,7 @@ description: >-
   reversibility → designing-interactions; one failure's message/locus/recovery card → designing-developer-diagnostics;
   config authority → governing-configuration-systems; version identifiers → designing-version-schemes;
   implementation → implementing-and-debugging/writing-*; existing CLI usage → driving-*; launch →
-  growing-oss-adoption. Workflow-native: decisions stay SOLO; inventories may fan out. English skill;
+  growing-oss-adoption. English skill;
   respond in the user's language.
 ---
 

@@ -15,9 +15,7 @@ description: >-
   forging-skills, which owns this file's own craft; applying a risk-calibrated code discipline →
   practicing-tiger-style; agent dispatch → orchestrating-agents; reordering a doc whose rules are
   settled → structuring-documents; a paper corpus first → systematizing-knowledge.
-  Workflow-native: the divergence probe and case verification fan out; naming the sacrifice, the
-  precedence order, and the final text stay SOLO — WHICH value to give up is the user's call,
-  never the model's. English skill; respond in the user's language (default Japanese).
+  English skill; respond in the user's language (default Japanese).
 ---
 
 # Codifying doctrine — the tie-break that survives the partition

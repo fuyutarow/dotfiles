@@ -9,7 +9,6 @@ description: >-
   jj/git commands → driving-jujutsu / driving-git; task bodies → wiring-mise-tasks;
   repo layers → wiring-repositories; Julia → writing-julia; evidence meaning →
   validating-experimental-evidence; documents → governing-research-documentation.
-  Workflow-native: home, acceptance and commit stay SOLO; retrieval may fan out.
   English skill; respond in the user's language.
 ---
 

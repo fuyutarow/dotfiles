@@ -9,7 +9,7 @@ description: >-
   → designing-command-line-interfaces; TS → writing-typescript; Python → running-python-tools; task
   graph → wiring-mise-tasks; new repo → wiring-repositories first;
   hook events → operating-the-harness; vendor CLI semantics → driving-*.
-  Workflow-native: one script SOLO; migrations fan out read-only. English skill; respond in the user's
+  English skill; respond in the user's
   language.
 ---
 

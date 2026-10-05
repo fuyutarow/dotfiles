@@ -11,7 +11,6 @@ description: >-
   invariant placement/type-as-spec → designing-type-contracts; consequential risk → practicing-tiger-style.
   PyO3/maturin binding design stays here; Python tooling → running-python-tools.
   Excludes Rust-written CLI installation, syntax explanations, and prose editing with settled design.
-  Workflow-native: source harvest may fan out; crate selection stays SOLO.
   English skill; respond in the user's language.
 ---
 
@@ -48,6 +47,7 @@ RG4 still requires checking a crate recommendation at use time.
 
 Rust task → choose mechanisms and Cargo boundaries → scoped source/manifests → verified behavior and scope.
 For project creation or layout changes, RG5 owns the Cargo layout decision; its workflow stays SOLO.
+Source harvest may fan out; crate selection stays SOLO.
 Repository layer admission and the mise task graph go to their named owners below.
 
 ## The gates — RG0–RG5, each with a checkable artifact

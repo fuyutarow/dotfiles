@@ -158,7 +158,7 @@ artifact は、dispatch ごとの effort の出所と、下げた場合の宣言
 | independent verifier | 成果物を盲検で照合し、反証または独立再計算を行う。 | 生成、修復、作者の自己評価への依存をしない。 | blind brief、oracle、verdict。 |
 | outside observer | 世評、受容、直近の外界信号を所在つきで観測する。 | 技術的真偽の根拠や独立検証者にしない。 | 観測日、範囲、source locus。 |
 
-## Workflow-native stage map
+## Fan-out stage map
 
 以下で生成仕事とは、novelty-sensitiveまたはcandidate-generatingな仕事を指す。
 
@@ -349,6 +349,22 @@ agent枠と計算資源を別々に扱う。独立した有益な仕事は利用
 | 読解・検証 | distinct lensを持つ腕。capacityが無ければ独立性を保って直列化する。 | lens、blind input、schemaが揃ったaudit table。 |
 | 小さい実装・計測 | 一人のexecutor。時間予算とself-testを固定する。 | brief、ETA、self-test、deliverable。 |
 | 大きい単一成果物 | C1でinterfaceと土台を固定し、部品へ分解する。 | `references/delegation-contracts.md` C1の分解表。 |
+
+### 並列化の運び方 — 担い手ごとの起動形（SOLE home）
+
+担い手は `agents/models/dispatch-roster.toml` の一行を選ぶ（表は CLAUDE.md に生成済み）。
+各 skill の本文は何を solo に残し何を並べるかだけを書き、起動形はこの表を指す。
+
+| 担い手 | 起動 | 並列にするとき | 受け取るもの |
+|---|---|---|---|
+| luna 行 | main loop の Bash で `codex-run --choice <id> --sandbox read-only\|workspace-write --cd <dir> --prompt-file <brief>` | 各呼び出しを background で起動する | 各 JSON receipt（`outcome`、`usage`、`last_message`） |
+| Claude 行 | Agent tool、`subagent_type` = 行の id | 一つの message に複数の Agent 呼び出しを並べる | agent の最終 text |
+| 他の CLI（grok、agy、ccc など） | 各 `driving-*` skill の一回呼び出しを Bash で | 各呼び出しを background で起動する | 各 skill が定める受領形 |
+
+Workflow tool は使わない。dispatch hook が拒否し、roster 表を返す。
+並列のローカル計算は P7 の envelope を通す（`agent-resource-run`、Linux のみ）。
+envelope を取れない host では同じ腕を直列に回す。
+CLI 固有の安全規則と受領の読み方は各 `driving-*` skill が持つ。
 
 reasoning portfolioの詳細は`references/reasoning-portfolios.md`がSOLE homeである。
 対象はtopology、candidate packet、normalization、leave-one-out pruning、schema、thresholdである。

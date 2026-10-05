@@ -112,7 +112,6 @@ async function main(): Promise<number> {
         fail("description must end with the language directive, verbatim");
       for (const [label, re] of [
         ["Director/PI/Researcher role names", /Director.*PI.*Researcher/],
-        ["Workflow-native clause", /Workflow-native:/],
         ["a DECISIVE or PURPOSE cut label", /(DECISIVE|CARDINALITY|PURPOSE):/],
       ] as const) {
         if (!re.test(raw)) fail(`description missing ${label}`);

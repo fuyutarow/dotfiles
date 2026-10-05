@@ -10,8 +10,7 @@ description: >-
   engine, Symbolics/SymPy simplify, SymEngine expand, Groebner normal forms, Schwartz–Zippel,
   乱数点での検算. PURPOSE cuts: Julia code, packages, install/TTFX, Symbolics codegen → writing-julia;
   kernel proof and statement faithfulness → proving-theorems; CAS-tool surveys →
-  systematizing-knowledge; a paper's argument → arguing-research-papers. Workflow-native: rung
-  choice and labels stay SOLO; batches of identities may fan out. English skill; respond in the
+  systematizing-knowledge; a paper's argument → arguing-research-papers. English skill; respond in the
   user's language (default Japanese).
 ---
 

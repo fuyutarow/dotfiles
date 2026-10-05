@@ -7,8 +7,7 @@ description: >-
   Stops at a scoped TYPE CONTRACT and verification plan; implementation → implementing-and-debugging
   plus writing-*; configuration authority/signing → governing-configuration-systems;
   consequential recovery/resource constraints → practicing-tiger-style. Not for routine annotations,
-  syntax explanations, or generic architecture reviews. Workflow-native: contract decisions SOLO;
-  construction-path inspection may fan out. English skill; respond in the user's language.
+  syntax explanations, or generic architecture reviews. English skill; respond in the user's language.
 ---
 
 # Designing type contracts

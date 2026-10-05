@@ -62,7 +62,7 @@ pilot、smoke、benchmark、test、本走、resident service のどれも「小�
 目的値や捕捉率に届かないことを理由に上限を実行中に上げない。上限で打ち切られた値は結果であり、
 OOMやswap stormは結果ではない。
 
-各Agent / Task / Workflow `agent()` dispatchは、prompt内に次のどちらかを**ちょうど一つ**持つ。
+各Agent / Task dispatchは、prompt内に次のどちらかを**ちょうど一つ**持つ。
 
 ```text
 RESOURCE-CLASS(NONCOMPUTE): <数値実験・benchmark・resident service・parallel test・nested fanoutを含まない理由>

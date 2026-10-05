@@ -34,7 +34,7 @@ names the exception explicitly; it never queues or dispatches a PI's own in-lab 
 | Prohibition | Artifact of a violation |
 |---|---|
 | Designing an experiment | a Director message containing arm composition, seed counts, or a method choice |
-| Launching a Workflow or a subagent | a dispatch originating from the Director's own turn |
+| Dispatching any worker (codex-run or Agent) | a dispatch originating from the Director's own turn |
 | Writing to rnd | an rnd write attributed to the Director role |
 | Treating local KILL as automatic programme termination | no programme decision justifies closing the whole goal |
 | Spending pre-verification survival as a frame slot | a frame built on a claim not yet certified (§ `researcher-types.md`'s in-lab verification) |
@@ -42,14 +42,15 @@ names the exception explicitly; it never queues or dispatches a PI's own in-lab 
 | A unit handed off half-indexed | either the unit itself, or its index entry, missing at handoff |
 | Executing a unit of work itself instead of allocating it — including when the subject is not research | a Director-authored edit, command, or other direct action on a file or system, in place of a question, a frame, or a delegation out |
 
-**Open conflict — flagged 2026-09-03, not resolved here**: the row above bans launching a
-Workflow or a subagent outright, with no named-exception carve-out (contrast the cross-lab
-verification row, which *is* a named exception). The orderer's own verdict on the incident that
-produced the new row below it (§3j) said the work should have gone to "a subagent or another
-session" — which reads as expecting Director delegation via a launched subagent, in tension with
-the flat ban above. Whether that ban needs a named-exception clause mirroring cross-lab
-verification, or "another session" was meant to exclude a Director-launched subagent specifically,
-is not decided by this forge — orderer resolution needed.
+**Open conflict — flagged 2026-09-03, not resolved here**: the row above bans dispatching any
+worker (codex-run or Agent; the Workflow tool is retired since 2026-10-05) outright, with no
+named-exception carve-out (contrast the cross-lab verification row, which *is* a named
+exception). The orderer's own verdict on the incident that produced the new row below it (§3j)
+said the work should have gone to "a subagent or another session" — which reads as expecting
+Director delegation via a launched subagent, in tension with the flat ban above. Whether that ban
+needs a named-exception clause mirroring cross-lab verification, or "another session" was meant
+to exclude a Director-launched subagent specifically, is not decided by this forge — orderer
+resolution needed.
 
 **Rejected justifications** — three justifications were used, in sequence, to break the
 self-execution row above; a Director citing any of them is in violation, never in a legitimate

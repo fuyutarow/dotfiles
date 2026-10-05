@@ -15,7 +15,7 @@ description: >-
   Code hooks are theirs, GIT hooks are here; standing .claude/ up is here, its contents theirs.
   PURPOSE vs driving-cocoindex: `ccc init` is theirs. DECISIVE vs writing-julia/python/rust/
   bun-scripts and the built-in init: one manifest, or a CLAUDE.md alone, is theirs.
-  Workflow-native: admission, order and cuts stay SOLO. English skill; respond in the user's
+  English skill; respond in the user's
   language (default Japanese).
 ---
 

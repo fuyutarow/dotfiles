@@ -78,7 +78,7 @@ An unknown stage blocks unsupported whole-path forecasts, not a separately justi
 | `orchestrating-agents` | P7 selects and admits device resources. P7 placement alone does not trigger GKR; a model-step GPU performance objective does, even without an explicit residency declaration. |
 | `validating-experimental-evidence` | EV2 owns update-order equivalence; EV3 owns throughput units and comparison footing. Consume those contracts before interpreting a faster kernel or batch. |
 | `driving-bibifi-cycles` | Chooses the next bounded experiment and allocates useful work; HERE specifies GPU design, timing and oracle obligations for that slice. |
-| `prompting-llms` / `driving-*` | Not adjacent — no overlap; listed only because Workflow-native fan-out language sounds similar. Fleet mechanics live in the harness, not here. |
+| `prompting-llms` / `driving-*` | Not adjacent — no overlap; listed only because Fan-out fan-out language sounds similar. Fleet mechanics live in the harness, not here. |
 
 ## MUST NOT FIRE
 

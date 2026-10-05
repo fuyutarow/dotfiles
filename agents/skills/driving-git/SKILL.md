@@ -11,8 +11,7 @@ description: >-
   harness permissions/isolation → operating-the-harness; code changes → implementing-and-debugging
   or refactoring-code, Git co-fires at commit; SSH keys → securing-remote-access, gh auth/signing here;
   version meaning → designing-version-schemes; jj commands → driving-jujutsu.
-  Workflow-native: mutations stay SOLO with the
-  checkout owner; only read-only forensics fan out. English skill; respond in the user's language.
+  English skill; respond in the user's language.
 ---
 
 # Driving git — jobs, verbs, receipts

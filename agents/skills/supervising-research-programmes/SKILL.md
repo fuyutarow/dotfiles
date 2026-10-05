@@ -8,8 +8,7 @@ description: >-
   issue portfolio, or open research agenda. DECISIVE cut: it decides programme-level relevance,
   coverage, and allocation, never a section's method or run; section execution belongs to
   directing-research-sections and terminal process review belongs to auditing-research-processes.
-  Workflow-native: programme judgment stays cold and SOLO; many WIP=1 sections may stream without a
-  global barrier. English skill; respond in the user's language (default Japanese).
+  English skill; respond in the user's language (default Japanese).
 ---
 
 # Supervising research programmes

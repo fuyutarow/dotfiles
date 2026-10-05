@@ -10,7 +10,6 @@ description: >-
   Owns ITERATION_PLAN/LOG in existing records; targets ~2-minute experiments, maximum 10 minutes.
   Dispatch and enforceable limits→orchestrating-agents; evidence→validating-experimental-evidence;
   proof→proving-theorems; theory→systematizing-theories; section admission→directing-research-sections.
-  Workflow-native: selection and acceptance stay with their owner; independent work runs concurrently.
   English skill; respond in the user's language.
 ---
 

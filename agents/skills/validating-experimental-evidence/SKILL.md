@@ -9,7 +9,7 @@ description: >-
   Work selection→driving-bibifi-cycles; section run admission→directing-research-sections;
   costly test threshold→acting-on-hypotheses;
   dispatch/resources→orchestrating-agents; risk ledger→practicing-tiger-style;
-  code fix→implementing-and-debugging. Workflow-native: judgment SOLO; receipts may fan out.
+  code fix→implementing-and-debugging.
   English skill; respond in the user's language.
 ---
 
@@ -112,6 +112,7 @@ a required state, mark the result `UNKNOWN` or `INSTRUMENT_REPAIR`.
 Fix its schema or launch gate there. Never claim this SKILL.md enforces a runtime rule.
 In another research system, use its one canonical evidence ledger. Verify with the
 target's accepted and rejected invocations plus raw output, not a parallel Bun script.
+The disposition judgment stays SOLO; receipts may be collected in parallel.
 
 ## MUST NOT FIRE and sibling cuts
 

@@ -297,7 +297,7 @@
       }
     ]
   },
-  "enableWorkflows": true,
+  "enableWorkflows": false,
   "statusLine": {
     "type": "command",
     "command": "bun ~/.claude/statusline-command.ts",
@@ -308,9 +308,8 @@
     "rust-analyzer-lsp@claude-plugins-official": true
   },
   "effortLevel": "medium",
-  "ultracode": true,
+  "ultracode": false,
   "tui": "fullscreen",
-  "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "switchModelsOnFlag": true,
   "remoteControlAtStartup": true,

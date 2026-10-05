@@ -12,8 +12,7 @@ description: >-
   refactoring-code (governs; this supplies the oracle); PyO3/maturin FROM Rust →
   writing-rust; prose → linting-prose. MANDATORY — read BEFORE writing ANY Python or adding
   ANY dependency. Facts ROT — verify live (PG1). New repo → wiring-repositories
-  first. Workflow-native: harvest/verification fan
-  out; SELECTION stays SOLO. English skill; respond in the user's language (default
+  first. English skill; respond in the user's language (default
   Japanese).
 ---
 

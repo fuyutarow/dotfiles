@@ -12,8 +12,7 @@ description: >-
   concept/battery→ccc search; literal/exhaustive/files→rg; structural→ccc grep;
   symbol→driving-serena. Raw Grep is hook-denied only in operational ccc repos. Cuts:
   open-ended tour→Explore; install/upgrade→running-python-tools; dead MCP server
-  diagnostics→operating-the-harness FIRST. Search fan-out may parallelize; routing and
-  freshness stay SOLO. Missing router→STOP/repair, never emulate search with Python/Node;
+  diagnostics→operating-the-harness FIRST. Missing router→STOP/repair, never emulate search with Python/Node;
   empty ccc output→NO_MATCH, not PASS. English skill; respond in the user's language
   (default Japanese).
 ---
@@ -217,29 +216,16 @@ MCP-server-dead diagnostics (is the process even starting, trust prompt, restart
 ccc-specific expected surface and the CLI fallback once harness-liveness is confirmed or
 ruled out.
 
-## Embedding in Workflow scripts
+## Parallel searches
 
-Every `agent()` passes `{model: 'sonnet'}` — the user-global PreToolUse hook denies the
-Workflow otherwise (policy owned by `~/.claude/CLAUDE.md`, not here). A worker's prompt
-embeds the CC1 registration probe and CC2 freshness probe verbatim before it searches, plus
-the CC4 RELAY demand — paraphrase drifts.
+Fan-out mechanics (who launches, how results return) → `orchestrating-agents`, 並列化の運び方. ccc-specific rules: QUERY-SHAPE routing, the CC1 registration probe
+and the CC2 freshness decision stay in the main loop and finish before any search starts. Each
+parallel search is one same-route `ccc search`; every hit keeps its file:line and snippet (a hit
+without its locus is zero). Quote paths and queries.
 
-```js
-const cccSearch = (project, query) => agent(
-  `cd "${project}" && ccc status  # CC1: confirm registration before searching
-   ccc search '${query}' --limit 8 --refresh  # CC2: --refresh, never assume freshness
-   Relay VERBATIM: the registration probe output, the refresh confirmation, and every
-   hit as file:line + snippet. No hit without its locus.`,
-  {model: 'sonnet', phase: 'Search', label: `ccc:${query}`})
-// Shell safety: quote the path; queries containing quotes/$()/backticks must be
-// sanitized or passed via a file — an ops manual that injects is worse than none.
-```
-
-- Fan out one worker per QUERY-SHAPE-homogeneous batch — mixing "find every call site"
-  queries with "how does X work" queries in one fan-out defeats CC3 routing, since each
-  shape wants a different tool.
-- Recommended composition: ccc LOCATES the semantically relevant region by concept →
-  `driving-serena` NAVIGATES/EDITS the exact symbol once found. Not a collision — a pipeline.
+Mixing "find every call site" queries with "how does X work" queries defeats CC3 routing,
+since each shape wants a different tool. Recommended composition: ccc LOCATES the semantically
+relevant region by concept → `driving-serena` NAVIGATES/EDITS the exact symbol once found.
 
 ## Execution model
 

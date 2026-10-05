@@ -1,19 +1,17 @@
 ---
 name: driving-antigravity
 description: >-
-  Drives Antigravity CLI (agy), Google’s gemini-cli successor, as headless agy -p worker
-  (Bash/Agent subagent/Workflow sonnet wrapper). MULTI-VENDOR: Gemini 3.x/Claude 4.6/GPT-OSS on one
+  Drives Antigravity CLI (agy), Google’s gemini-cli successor, through headless agy -p calls
+  (main-loop Bash, including background fan-out). MULTI-VENDOR: Gemini 3.x/Claude 4.6/GPT-OSS on one
   Google sub. Use for pipeline/audits, model probes (agy models), --model, output, or hangs.
   Triggers: antigravity, agy を workflow に組み込む, agy で監査, Claude 4.6 を agy 経由で,
   マルチベンダー検証, agy のモデル一覧, agy がファイルを勝手に書いた, agy -p が返らない. LAW:
   NO-METER—no per-call token/cost; count calls, never invent spend. UNCONFINED—default -p
   auto-approves writes; cwd≠boundary. CATALOG-BY-PROBE—--model needs exact agy models string.
   VERSION-DRIFTS—self-updates outside brew. Cuts: BINARY codex/grok→driving-codex/driving-grok;
-  PURPOSE Claude harness (hooks/Workflow/subagents)→operating-the-harness; Anthropic API/Claude
+  PURPOSE Claude harness (hooks/subagents)→operating-the-harness; Anthropic API/Claude
   pricing→claude-api (may co-fire; driving agy to Claude stays here); prompt wording→prompting-llms.
-  gemini-cli deprecated; agy only. Workflow-native: selection/containment/prompt/adjudication stay
-  SOLO; parallel calls fan out one sonnet wrapper each. English skill; respond in the user's language
-  (default Japanese).
+  gemini-cli deprecated; agy only. English skill; respond in the user's language (default Japanese).
 ---
 
 # Driving Antigravity — the agy CLI as a headless worker
@@ -42,8 +40,8 @@ Stable tokens even inside Japanese prose: **NO-METER**, **UNCONFINED**, **CATALO
 
 ## THE LAW
 
-> agy is a SUBPROCESS gateway, not an agent type — embed via `agy -p` (main-loop Bash or a sonnet
-> Workflow worker); the return is exit code + stdout. Its edge is MULTI-VENDOR models on one
+> agy is a SUBPROCESS gateway, not an agent type — run `agy -p` from main-loop Bash; the return is
+> exit code + stdout. Its edge is MULTI-VENDOR models on one
 > subscription; its price is two absences you must design around:
 > - **NO-METER**: agy exposes ZERO per-call token/cost ANYWHERE — no stdout line (unlike codex's
 >   `tokens used`), no JSON mode (unlike gemini-cli's `-o json`), no local DB field, no ccusage
@@ -143,50 +141,18 @@ rc=$?   # read on the NEXT line — never $? after a pipe
 
 Cost-model facts, roster snapshot, exact paths, and provenance grades → `references/model-catalog.md`.
 
-## Embedding in Workflow scripts — the sonnet-wrapper pattern
+## Parallel agy calls
 
-`agent()` cannot BE agy; a worker RUNS it. Every `agent()` passes `{model: 'sonnet'}` — the
-user-global PreToolUse hook denies the Workflow otherwise (policy owned by `~/.claude/CLAUDE.md`).
-The worker embeds the recipe verbatim + the A4 RELAY demand, so the orchestrator gets observables.
+Fan-out mechanics (who launches, how results return) → `orchestrating-agents`, 並列化の運び方. agy-specific rules: each call reads its untrusted prompt from a
+file (`-p "$(cat "$PROMPT_FILE")"`), never interpolated task text; only trusted model strings from
+the live `agy models` output are interpolated; each call's record is
+`model, exit_code, stdout_file, usage=UNAVAILABLE`.
 
-> **INJECTION RULE (mandatory).** The prompt payload is UNTRUSTED text. NEVER interpolate task text
-> into the shell command — `-p '...${task}...'` is a shell-injection + quote-break bug. The worker
-> writes the payload to a scratch file with its file tools, then reads it back as ONE argument:
-> `-p "$(cat "$PROMPT_FILE")"`. Only TRUSTED config (a model display string from our own roster) may
-> be interpolated.
-
-```js
-const agyAudit = (target) => agent(
-  `You drive the Antigravity CLI (follow the driving-antigravity recipe).
-   1. Verify \`agy --version\` ≥ 1.1.2 (else STOP — empty stdout may be a swallowed error).
-   2. Write the audit prompt for ${JSON.stringify(target)} to a scratch file with your file tools
-      (NEVER interpolate it into the shell). Then run exactly:
-        timeout 300 agy --model "<a Claude display string from \`agy models\`>" \
-          -p "$(cat "$PROMPT_FILE")" </dev/null
-        rc=$?
-   3. A4 RELAY: return exit code + the FULL stdout + the literal
-      "usage: UNAVAILABLE (agy exposes no per-call metering)". Empty stdout with rc=0 → report the
-      #76 landmine + the agy version; do NOT call it a real answer.`,
-  {model: 'sonnet', phase: 'Audit', label: `agy:${target}`})
-```
-
-- **MULTI-VENDOR panel** — the house killer app: fan the SAME question to N vendor models from ONE
-  binary; cross-vendor DISAGREEMENT is the signal (agreement is not proof). Same injection rule —
-  payload via file, only the trusted model string is interpolated:
-
-```js
-const models = [/* exact display strings from `agy models` — see references/model-catalog.md */];
-const panel = await parallel(models.map(m => () => agent(
-  `Drive agy: verify \`agy --version\` ≥ 1.1.2; write the question to a scratch file (file tools,
-   NOT shell); then: timeout 300 agy --model ${JSON.stringify(m)} -p "$(cat "$QFILE")" </dev/null ;
-   rc=$? . A4 RELAY the delimited triple.`,
-  {model: 'sonnet', phase: 'Panel', label: `agy:${m}`})));
-// adjudicate SOLO: agreement is weak evidence; any single dissent is the first thread to pull.
-```
-
+- **MULTI-VENDOR panel** — fan the SAME question to N vendor models from ONE binary;
+  cross-vendor DISAGREEMENT is the signal (agreement is not proof). Adjudicate SOLO: agreement is
+  weak evidence; any single dissent is the first thread to pull.
 - **Parallel agy calls**: no lock observed at N=2 (probe-verified) — treat higher fan-out as
   unproven for rate/quota contention; re-probe before large panels.
-- **Nesting**: `workflow()` nests one level only; the agy call adds none (it is Bash).
 - **Selection (A5)**: NO-METER kills the token axis — promote by wall-time + accepted quality +
   interactive `/usage` quota drain, never a token count.
 
@@ -196,7 +162,7 @@ const panel = await parallel(models.map(m => () => agent(
 |---|---|---|
 | choose model / containment class / prompt | SOLO | judgment spine — quota-blind cost, unconfined risk, and task sit in one context |
 | a single agy call | SOLO (main-loop Bash) | spawn overhead exceeds the work |
-| parallel agy calls / a multi-vendor panel | FAN-OUT — one sonnet wrapper per call | calls are independent; workers relay observables |
+| parallel agy calls / a multi-vendor panel | FAN-OUT — background Bash calls | calls are independent; capture each exit code and stdout |
 | availability probe | SOLO script | never spawn an agent to run a script |
 | cross-model disagreement adjudication | SOLO | the verdict braids every arm's evidence |
 
@@ -213,7 +179,7 @@ FIRES:
 | "agy -p hangs / returned nothing" | gotchas table |
 | 「agy が勝手にファイルを書いた」 | UNCONFINED |
 | 「agy の使えるモデル一覧」 | CATALOG-BY-PROBE |
-| "have sonnet drive agy in a draft→audit panel" | wrapper pattern |
+| "fan out agy calls for a draft→audit panel" | background Bash pattern |
 
 MUST NOT fire (route):
 
@@ -222,7 +188,7 @@ MUST NOT fire (route):
 | the `codex` subprocess | `driving-codex` |
 | the `claude -p` subprocess driven from Codex | Codex-only `driving-claude` |
 | GPT review — OpenAI's GPT via codex vs open-weight GPT-OSS via agy | OpenAI GPT (`codex exec`) → `driving-codex`; GPT-OSS through agy's Google-subscription roster → here |
-| `pipeline()`/`parallel()`/hook/subagent-policy mechanics of the CLAUDE harness | `operating-the-harness` |
+| hook/settings/subagent-policy mechanics of the CLAUDE harness | `operating-the-harness` |
 | "which Claude model + Anthropic pricing / API" | `claude-api` — it owns Claude model facts & the Anthropic API and may co-fire on any "Claude" mention; no exclusivity claimed here. Runtime cut: asking about the API/pricing → claude-api; DRIVING the agy binary that routes to a Claude model → here |
 | 「プロンプトを改善して」 | `prompting-llms` |
 | the worktree/branch the subprocess is given, how its output is reviewed (`range-diff`) and integrated | `driving-git` — PURPOSE: whether this subprocess needs containment → here; the worktree/branch, review and integration → `driving-git` (2026-09-21) |
@@ -249,7 +215,7 @@ skin over the identical `agy -p` call, not a different path to the model:
 | `driving-codex` | CARDINALITY/PURPOSE — which BINARY + its contract. `codex exec` (HAS per-call metering + a real `--sandbox read-only`, single-vendor GPT) → driving-codex; `agy`/Antigravity (NO-METER, UNCONFINED, MULTI-VENDOR Gemini/Claude/GPT-OSS) → here. Both embed a headless CLI as a worker; decide by which binary you invoke. |
 | `driving-grok` | CARDINALITY/PURPOSE — which BINARY: `grok -p` (xAI Grok Build — METERED, real sandbox, carries an EXFIL-RISK data-leak law) → `driving-grok`; `agy` (Antigravity, NO-METER, UNCONFINED, multi-vendor) → here. |
 | `driving-claude` | CARDINALITY/PURPOSE — which BINARY: `agy` (Antigravity multi-vendor) → here; `claude -p` driven by Codex (Claude Code) → Codex-only `driving-claude`. |
-| `operating-the-harness` | PURPOSE — which binary is being CONFIGURED: the `claude` harness (hooks, settings, Workflow tool semantics, subagent policy) → there; the `agy` subprocess → here. |
+| `operating-the-harness` | PURPOSE — which binary is being CONFIGURED: the `claude` harness (hooks, settings, subagent policy) → there; the `agy` subprocess → here. |
 | `claude-api` | Anthropic API / Claude model facts + pricing → there (it may co-fire on "Claude" — no exclusivity claimed here). Driving the agy binary that routes to a Claude model, with no API/pricing question → here. |
 | `prompting-llms` | prompt WORDING → there; agy CLI mechanics → here. |
 

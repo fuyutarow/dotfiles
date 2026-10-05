@@ -8,8 +8,7 @@ description: >-
   Q&A/objection plan, or sanity-checking a "science of presentations" claim. Triggers — slide deck,
   pitch deck, keynote, conference talk, thesis defense, exec/board readout, demo, "make my slides
   better", "how should I open/close", "is this presentation myth true", storytelling stats, 7-38-55,
-  attention span, 10/20/30. Workflow-native: design stays solo; slide/myth audits and objection
-  red-teams fan out read-only.
+  attention span, 10/20/30.
 ---
 
 # Designing presentations

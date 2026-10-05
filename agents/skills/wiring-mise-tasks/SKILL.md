@@ -14,8 +14,7 @@ description: >-
   language merely NAMED while scaffolding stays here); TeX task wiring → compiling-latex co-fires
   FIRST and owns the latex:* bodies, while a bare latexmk/chktex problem with no task-graph ask
   stays there alone; hook/settings enforcement → operating-the-harness. Language owners choose
-  tool requirements; this skill declares task runtimes in [tools]. Workflow-native: one repo's mise.toml stays SOLO (zero
-  agents); only multi-repo drift audits fan out one read-only gate-runner per repo. English
+  tool requirements; this skill declares task runtimes in [tools]. English
   skill; respond in the user's language (default Japanese).
 ---
 

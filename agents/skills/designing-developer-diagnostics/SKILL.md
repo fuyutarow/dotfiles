@@ -7,8 +7,7 @@ description: >-
   Use when a developer must identify a failure and choose a correct next action. PURPOSE: wording
   alone → linting-prose; root-cause investigation or implementation → implementing-and-debugging
   first; configuration authority/integrity → governing-configuration-systems; interaction flow or
-  end-user GUI recovery → designing-interactions. Workflow-native: verdicts stay SOLO; exact
-  receipts may fan out. English skill; respond in the user's language
+  end-user GUI recovery → designing-interactions. English skill; respond in the user's language
   (default Japanese).
 ---
 

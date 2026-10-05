@@ -11,8 +11,7 @@ description: >-
   language manifest/parser implementation → writing-*; cross-format consumer/trust/effective-declaration/
   integrity contract → HERE; R&D authority →
   governing-research-documentation; high-consequence risk ledger → practicing-tiger-style.
-  Workflow-native: contract and final acceptance stay SOLO; source facts and validator receipts may fan
-  out. English skill; respond in the user's language (default Japanese).
+  English skill; respond in the user's language (default Japanese).
 ---
 
 # Governing configuration systems

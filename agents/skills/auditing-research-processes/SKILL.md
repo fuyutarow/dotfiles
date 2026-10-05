@@ -9,7 +9,6 @@ description: >-
   frozen terminal research episode; scientific claim/paper appraisal belongs to
   arguing-research-papers, and software/control-plane incidents belong to their domain
   implementation or harness skill. It never directs live work or enacts a transition.
-  Workflow-native: evidence joining may be checked mechanically, but audit judgment stays SOLO.
   English skill; respond in the user's language (default Japanese).
 ---
 

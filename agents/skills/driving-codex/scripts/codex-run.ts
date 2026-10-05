@@ -1,15 +1,15 @@
 #!/usr/bin/env bun
 // codex-run — run ONE `codex exec` as a bounded, observable worker and print its receipt.
-// Consumers: a Workflow relay (a sonnet-high agent() whose Bash runs this and returns the receipt
-// verbatim), the main loop, and a human. PATH command via package.json `bin` (`mise run deps`).
+// Consumers: the main loop (one background call per luna worker, its receipt read directly) and a
+// human. PATH command via package.json `bin` (`mise run deps`).
 //
 // WHY A COMMAND, not a recipe pasted into every relay prompt: the recipe drifted (a dropped
 // `</dev/null` hung two runs for their whole budget), relays summarized instead of relaying, and a
 // wrapped `codex` escapes the model-floor hook, which only sees the Bash command line. This file
-// owns the invocation so the relay only has to pass the receipt through (driving-codex C2/C3).
+// owns the invocation so a caller only has to read the receipt (driving-codex C2/C3).
 //
 // CLI CONTRACT (designing-command-line-interfaces C0–C5)
-//   C0  consumers   agent relay (primary), main loop, human; never interactive (stdin is closed).
+//   C0  consumers   main loop (primary), human; never interactive (stdin is closed).
 //   C1  invocation  codex-run (--choice ID | --model M --effort E) --sandbox S --cd DIR [--timeout-s N]
 //                   [--receipt-dir D] (--prompt-file F | prompt on stdin)
 //                   model, effort, sandbox and cd are REQUIRED: a bare codex inherits config.toml.
@@ -25,16 +25,15 @@
 //                        1 codex-failed (nonzero exit, or exit 0 with no last message)
 //                        2 refused (usage, floor, sandbox/effort policy) — codex never started
 //                        3 timeout (killed at --timeout-s; the receipt says so)
-//   Waits / liveness     bounded by --timeout-s (default 540: under a relay's 600 s Bash ceiling).
+//   Waits / liveness     bounded by --timeout-s (default 540: under the 600 s foreground Bash ceiling).
 //   Fallbacks / handoffs none — never another model, never another sandbox. A refusal says why.
 //   C5  evolution   receipt fields are additive; `schema` bumps on any removal or meaning change.
 // --emit-envelope PATH writes the P7 resource envelope for exactly this call (same checks, no
-// codex) and exits 0: the main loop creates one per parallel worker BEFORE the Workflow starts,
-// because the dispatch hook needs each RESOURCE-ENVELOPE path to exist at dispatch time. The
-// worker then runs `agent-resource-run --manifest PATH -- codex-run …` (Linux; P7 is a Linux
+// codex) and exits 0: the main loop creates one per parallel worker before launching it, so each
+// envelope exists before admission. The main loop then runs `agent-resource-run --manifest PATH -- codex-run …` (Linux; P7 is a Linux
 // admission). Its numbers are measured, not guessed: see ENVELOPE below.
 // The receipt is also written to --receipt-dir (default $TMPDIR/codex-run) so the main loop can
-// check a relay's return against the file: a relay can paraphrase stdout, not the file.
+// re-read it after the call: a summary can paraphrase stdout, not the file.
 import { mkdirSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";

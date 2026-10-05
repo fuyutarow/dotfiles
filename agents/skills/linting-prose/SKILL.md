@@ -17,8 +17,7 @@ description: >-
   forging-skills); argument/contribution-level claim=evidence & 新規性 positioning (→
   arguing-research-papers); or info-MOVING fixes — MECE / 目標規定文 / 内容の精選 / 重点先行 at
   document scale (→ structuring-documents; cut FIX-LOCALITY: rewrite-words-in-place here,
-  move-information there). Workflow-native: floor = script, judgment SOLO, read-only flaggers at
-  corpus scale. English skill; respond in the user's language (default Japanese).
+  move-information there). English skill; respond in the user's language (default Japanese).
 ---
 
 # Linting prose

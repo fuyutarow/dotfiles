@@ -7,7 +7,6 @@ description: >-
   PURPOSE: one theory's definitions/axioms/theorems and finding updates→systematizing-theories.
   One-paper appraisal→arguing-research-papers. Actionable corpus gaps→operationalizing-research-gaps.
   document admission→governing-research-documentation after corpus judgment.
-  Workflow-native: extraction may fan out; adjudication and final artifact stay SOLO.
   English skill; answer in the user's language.
 ---
 

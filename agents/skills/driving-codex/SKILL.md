@@ -1,10 +1,10 @@
 ---
 name: driving-codex
 description: >-
-  Drives the OpenAI Codex CLI (codex exec) as a headless worker from Claude Code — direct Bash
-  calls, Agent-tool subagents, and Workflow scripts where every agent() is a sonnet wrapper whose
-  Bash runs codex. PURPOSE cut, decide by binary: configuring the claude harness itself (hooks,
-  settings.json, Workflow tool semantics, subagent policy) → operating-the-harness; the codex
+  Drives the OpenAI Codex CLI as a headless worker from Claude Code — `codex-run --choice
+  luna-<effort>` (the roster's luna rows) from the main loop's Bash, background for parallel
+  work. PURPOSE cut, decide by binary: configuring the claude harness itself (hooks,
+  settings.json, subagent policy) → operating-the-harness; the codex
   subprocess → here. Anthropic API/model facts → claude-api; prompt wording craft → prompting-llms.
   Use when embedding codex/GPT into a pipeline (sonnet draft → codex audit, heterogeneous
   cross-vendor verification), probing which GPT models an account can run when the model picker or
@@ -12,12 +12,11 @@ description: >-
   parsing --json usage or --output-last-message, codex spend / モデル使い分け・コスト比較
   (ccusage), or unsticking a hanging or failing codex exec. Triggers: codex exec, Codex CLI, gpt-5.6,
   sol/terra/luna, ultra/max effort, codex に並列サブエージェント,
-  models_cache, codex を workflow に組み込む, codex で監査,
+  models_cache, codex を並列で回す, codex で監査,
   GPT にもレビューさせて, 異種モデル検証, モデルが一覧に出ない. LAW: the local
   model cache is a delivery snapshot, not the catalog — availability is a probe exit code, never
   memory or the picker; least-privilege sandbox always (danger-full-access only in isolated
-  runners). Workflow-native: model/effort/sandbox/prompt choices and cross-model disagreement
-  adjudication stay SOLO; parallel codex calls fan out one sonnet worker each. English skill;
+  runners). English skill;
   respond in the user's language (default Japanese).
 ---
 
@@ -25,9 +24,9 @@ description: >-
 
 > **Version**: v2610.1.0 (2026-10-05) — `codex-run` owns the invocation; relays return the receipt line verbatim.
 > Prior versions and what each changed: `tests/forge-verification-ledger.md` §version history.
-> **Scope**: embedding `codex exec` as a worker under Claude Code — solo Bash calls, Agent-tool
-> subagents, Workflow scripts — plus model-availability probing, sandboxing, output parsing, and
-> spend accounting. The `claude` harness itself (hooks, settings, Workflow tool semantics) is
+> **Scope**: embedding `codex exec` as a worker under Claude Code — `codex-run` calls from the
+> main loop's Bash, solo or in the background — plus model-availability probing, sandboxing,
+> output parsing, and spend accounting. The `claude` harness itself (hooks, settings) is
 > owned by `operating-the-harness`.
 > **Resource seam**: any long-running or parallel local `codex exec`, and any mode that can spawn
 > nested agents, first reads sibling `orchestrating-agents/references/measurement-and-resources.md`
@@ -52,8 +51,8 @@ Stable tokens even inside Japanese prose: **CATALOG-BY-PROBE**, **LEAST-PRIVILEG
 
 ## THE LAW
 
-> Codex is a SUBPROCESS, not an agent type. You embed it by having the main loop — or a sonnet
-> worker inside a Workflow — run `codex exec` via Bash, and the return value is the exit code
+> Codex is a SUBPROCESS, not an agent type. You embed it by having the main loop run it via Bash
+> (`codex-run`, which owns the `codex exec` recipe), and the return value is the exit code
 > plus the last agent message. Availability is **CATALOG-BY-PROBE**: the model picker and
 > `~/.codex/models_cache.json` are delivery snapshots, not the catalog — a model's availability
 > is proven by a direct `-m` probe's exit code, never asserted from the cache or from model
@@ -123,7 +122,7 @@ contribution); sonnet-wrapper-embedded = 2/7 (five cut mid-reasoning by the 120s
 wrapper's StructuredOutput deadline). sol-class effort=high takes 10-30+ min — no wrapper survives that.
 
 ```bash
-# from the MAIN loop, Bash run_in_background: true — NOT inside a Workflow agent()
+# from the MAIN loop, Bash run_in_background: true
 agent-resource-run --manifest "$RESOURCE_ENVELOPE" -- \
   timeout 1800 codex exec --skip-git-repo-check --sandbox read-only -C "$SCRATCH" \
   -m gpt-6.1-sol -c 'model_reasoning_effort="high"' -o "$SCRATCH/out.txt" \
@@ -131,9 +130,9 @@ agent-resource-run --manifest "$RESOURCE_ENVELOPE" -- \
 # collect on task-notification; the answer is $SCRATCH/out.txt (C3: relay verbatim + tokens line)
 ```
 
-Panel pattern with sol: pre-launch sol in the main loop as background BEFORE starting the Workflow panel;
-run the panel's other arms normally; merge sol's `-o` file into the synthesizer (or a follow-up turn) when
-the notification lands. The panel never blocks on sol; sol never gets cut by a wrapper's lifecycle.
+Panel pattern with sol: launch sol in the main loop as background alongside the panel's other arms
+(background `codex-run` and Agent calls); merge sol's `-o` file when its notification lands. The panel
+never blocks on sol.
 
 ### ULTRA — ordering codex's own subagent fan-out (2026-07-25)
 
@@ -177,37 +176,28 @@ codex reports tokens only — on subscriptions the binding constraint is each pl
 dollars. Cross-vendor cost beliefs are C4 material: measure, don't assume. Cost-model facts and
 the dated cross-vendor benchmark → `references/model-catalog.md`.
 
-## Fanning out luna workers — background `codex-run`, no Workflow
+## Parallel luna workers — `codex-run`
 
-The Workflow tool is not used (owner, 2026-10-05: luna first, simplify): its agents can only be
-Claude models, and making them luna needs a gateway that turns Remote Control off for the whole
-session. Luna workers are `codex-run` calls from the main loop's Bash; the coordinator picks the
-row from `agents/models/dispatch-roster.toml` (`--choice luna-high` sets model and effort).
+Fan-out mechanics (who launches, how results return, P7 on Linux, no Workflow) →
+`orchestrating-agents`, 並列化の運び方; the row comes from `agents/models/dispatch-roster.toml`.
+codex-specific rules:
 
-1. One worker = one `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir>
-   --prompt-file <brief>`. Several workers = several such calls with `run_in_background: true`;
-   each re-invokes the coordinator when it exits.
-2. Read each worker's result from its JSON receipt (stdout, and `receipt_file` on disk): outcome,
-   codex exit, summed usage, last message, duration. A receipt is the evidence (C3); a summary
-   of it is not.
-3. Parallel local runs need P7: write one envelope per worker with `--emit-envelope
-   /abs/job.resource.json`, then run `agent-resource-run --manifest <path> -- codex-run …`
-   (Linux only). A single quick call needs none.
-4. A Claude row (`sonnet-*`, `opus-*`) is the Agent tool, `subagent_type` = the id; the dispatch
-   hook denies the Workflow tool and a luna id passed to Agent, printing the table.
+- One worker = one `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir>
+  --prompt-file <brief>`; `--choice` sets model and effort, so never add `--model`/`--effort`.
+- The JSON receipt (stdout, and `receipt_file` on disk) is the evidence (C3): outcome, codex
+  exit, summed usage, last message, duration. A summary of it is not.
+- For a P7 envelope, `codex-run … --emit-envelope /abs/job.resource.json --job-id <id>` writes it;
+  then `agent-resource-run --manifest <path> -- codex-run …`.
 
 Copyable briefs, receipt fields and the Sonnet-vs-luna verifier trial → `references/workflow-relay.md`.
 
-- **Timing**: a trivial ping returns in tens of seconds; real tasks take minutes — `pipeline()`
-  over items; a barrier across codex calls wastes wall-clock equal to the call spread.
-- **Nesting**: `workflow()` nests one level only; the codex call adds none (it is Bash).
 - **Patterns**: adversarial pair (sonnet drafts → codex audits → sonnet fixes; the orchestrator
   adjudicates); heterogeneous double-verify (same claim to a Claude worker AND codex —
   DISAGREEMENT is the signal to investigate; cross-vendor agreement is still not proof).
 - **Selection (C4)**: the probe proves AVAILABILITY, never rank — model names and version
   numbers carry no quality ordering. Before promoting a model to a standing role (e.g. standard
   auditor), run one measured head-to-head on your own task: same prompt to every candidate PLUS
-  the house baseline arm (a sonnet worker via `agent({model:'sonnet'})`, or headless `claude -p`
+  the house baseline arm (a `sonnet-high` Agent, or headless `claude -p`
   — mechanics owned by `operating-the-harness`); compare verdict quality, tokens, wall time, and
   quota drain (ccusage both sides), then promote. A dated worked example lives in
   `references/model-catalog.md`.
@@ -218,7 +208,7 @@ Copyable briefs, receipt fields and the Sonnet-vs-luna verifier trial → `refer
 |---|---|---|
 | choose model / effort / sandbox / prompt | SOLO | judgment spine — cost, risk, and task must sit in one context |
 | a single codex call | SOLO (main-loop Bash) | spawn overhead exceeds the work |
-| parallel codex calls | capacity-aware FAN-OUT — one wrapper and one P7 envelope per call | independence alone is insufficient; conflicting CPU/RAM/process/account reservations serialize |
+| parallel codex calls | capacity-aware FAN-OUT — background `codex-run` calls, one P7 envelope each on Linux | independence alone is insufficient; conflicting CPU/RAM/process/account reservations serialize |
 | availability probe | SOLO script | never spawn an agent to run a script |
 | cross-model disagreement adjudication | SOLO | the verdict braids both sides' evidence |
 
@@ -234,7 +224,7 @@ FIRES:
 | Ask | Why |
 |---|---|
 | 「codex を workflow に組み込んで利用したい」 | core territory |
-| "have sonnet drive codex in a draft→audit pipeline" | wrapper pattern |
+| "sonnet drafts, codex audits — wire it up" | parallel luna workers + Patterns |
 | 「gpt-5.6-sol 使える？ picker に出ないんだけど」 | CATALOG-BY-PROBE |
 | 「この diff、GPT にもレビューさせて」 (no headline keyword) | heterogeneous verify |
 | "codex exec hangs / returns nothing" | gotchas table |
@@ -265,7 +255,7 @@ wiring FIRST; this skill supplies the codex invocation line.
 | `driving-antigravity` | CARDINALITY/PURPOSE — which BINARY: `codex exec` (per-call metering + a real `--sandbox read-only`, single-vendor GPT) → here; `agy`/Antigravity (NO-METER, UNCONFINED, MULTI-VENDOR Gemini/Claude/GPT-OSS) → `driving-antigravity`. Both embed a headless CLI as a worker; pick by which binary. |
 | `driving-grok` | CARDINALITY/PURPOSE — which BINARY: `codex exec` (OpenAI GPT) → here; `grok -p` (xAI Grok Build — metered + sandboxed like codex, but carries an EXFIL-RISK data-leak law) → `driving-grok`. |
 | `driving-claude` | CARDINALITY/PURPOSE — which BINARY: `codex exec` (OpenAI GPT) → here; `claude -p` driven by Codex (Claude Code) → Codex-only `driving-claude`. |
-| `operating-the-harness` | PURPOSE — which binary is being configured: `claude` (hooks, settings, Workflow tool semantics, subagent policy) → there; the `codex` subprocess → here. Reciprocal pointer deferred — recorded in the ledger. |
+| `operating-the-harness` | PURPOSE — which binary is being configured: `claude` (hooks, settings, subagent policy) → there; the `codex` subprocess → here. Reciprocal pointer deferred — recorded in the ledger. |
 | `prompting-llms` | PURPOSE — prompt WORDING → there; codex CLI mechanics → here. Its OpenAI cut names `openai-docs` (nonexistent, 2026-07-12); until that exists, OpenAI prompt craft is model-native, never this skill's excuse to fire. |
 | `claude-api` | Anthropic API / Claude model facts → there; its own SKIP clause already routes OpenAI-named work away from itself. |
 | `agents-sdk` | building agents on the Claude Agent SDK → there. |

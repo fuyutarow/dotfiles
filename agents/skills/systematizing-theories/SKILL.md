@@ -6,8 +6,7 @@ description: >-
   公理・補題・定理・系・命題, 概念の分割統廃合, or finding-driven theory updates.
   Owns THEORY MAP and THEORY CHANGESET. PURPOSE: corpus synthesis→systematizing-knowledge;
   proof certification→proving-theorems; measurement validity→validating-experimental-evidence;
-  record authority/lifecycle→governing-research-documentation. Workflow-native:
-  theory design and change acceptance stay SOLO; located inventory and independent challenges may fan out.
+  record authority/lifecycle→governing-research-documentation.
   English skill; respond in the user's language.
 ---
 

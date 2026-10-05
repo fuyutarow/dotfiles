@@ -13,8 +13,7 @@ description: >-
   Candidate count and possession of a donor set do not decide the route. Cuts: premise audit →
   surfacing-blind-spots; is the anomaly real → raising-resolution FIRST; one selected costly bet →
   acting-on-hypotheses; literature corpus → systematizing-knowledge; obvious cause in code →
-  implementing-and-debugging. Workflow-native: the closed-vocabulary attempt and adversarial
-  refutation fan out; the contrast, introduction type, and signing the packet stay SOLO.
+  implementing-and-debugging.
   English skill; respond in the user's language (default Japanese).
 ---
 

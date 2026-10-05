@@ -1,5 +1,5 @@
 {
-  "maxListingChars": 56059,
+  "maxListingChars": 53106,
   "measuredOn": "2026-10-03",
   "skillsAtMeasurement": 59,
   "why": "A local ratchet over the static sum of active skill names and descriptions. This is a conservative character-footprint proxy, not measured per-turn tokens: host selection, truncation, invocation policy and tokenization affect observed listing cost. F4 in forging-skills owns membership and the retire/merge/shorten/raise decision. The shared floor compares the proxy against maxListingChars. A ceiling raise needs an explicit reason in the same reviewable change; recovered footprint may lower the ceiling.",
@@ -119,6 +119,12 @@
       "from": 56125,
       "to": 55721,
       "reason": "Outcome-first forging-skills revision shortens its description. The working-tree shared floor measures 58 active skills and 55,721 name-plus-description characters. The ceiling follows that static proxy; this is not measured per-turn token savings. Current host statistics remain separate."
+    },
+    {
+      "date": "2026-10-05",
+      "from": 56059,
+      "to": 53106,
+      "reason": "MECE reorganization of fan-out guidance. The launch mechanics for parallel work (luna rows as background codex-run, Claude rows as Agent, other CLIs as background Bash, no Workflow, P7 on Linux) now have one home: orchestrating-agents, 並列化の運び方. The per-skill description clauses (Fan-out:/Workflow-native:/Execution:) were removed from 29 descriptions; each body keeps its own solo/fan-out rule (two bodies that lacked it gained one line). The working-tree floor measures 59 active skills and 53,106 name-plus-description characters; the ceiling is pinned to that static proxy, not to measured per-turn tokens."
     }
   ]
 }

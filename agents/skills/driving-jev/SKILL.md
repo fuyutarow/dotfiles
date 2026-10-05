@@ -8,8 +8,7 @@ description: >-
   and abstention. State plus atomic typed questions go in; probabilities come out. Product SDK
   integration → the official typesafe-ai skill plus the language owner; generation or multi-step
   reasoning → driving-claude / driving-codex / driving-grok / driving-antigravity; exact predicates
-  → plain code. Workflow-native: question design, policy, and acceptance stay SOLO; approved
-  independent calls may fan out within declared data and rate budgets. English skill; respond in
+  → plain code. English skill; respond in
   the user's language (default Japanese).
 ---
 

@@ -12,7 +12,7 @@
 // THE GRADIENT THIS UNDOES. Detaching is not mischief; it is the cheapest legal move:
 // foreground Bash caps at ~10 min, `run_in_background` dies with the session, and
 // agent-resource-run admits through `systemd-run --scope` (caller-owned), so an admitted
-// multi-hour job dies with its caller too. Meanwhile the supervised route (Agent/Workflow) is
+// multi-hour job dies with its caller too. Meanwhile the supervised route (the Agent tool) is
 // the one carrying fail-closed declaration gates. Cheaper AND unsupervised is a gradient, and
 // gradients get descended. So this hook does NOT ban durability — it bans UNOBSERVABLE
 // durability, and leaves the observable kind (a NAMED transient systemd user unit) wide open.

@@ -150,7 +150,10 @@ else
 fi
 
 
-# for Rust
-export RUSTC_WRAPPER="sccache"
+# for Rust — only when sccache exists (same guard as zprofile.mac). Unguarded, every cargo call on a
+# box without sccache died with "could not execute process `sccache …rustc -vV`" (Vast, 2026-10-05).
+if command -v sccache &> /dev/null; then
+  export RUSTC_WRAPPER="sccache"
+fi
 
 _dbg "Finished .zprofile"

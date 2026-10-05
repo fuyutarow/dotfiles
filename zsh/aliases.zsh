@@ -348,10 +348,10 @@ cr() {
 
 alias di='diff -u'
 
-alias d='hunk'          # review-first diff viewer for agent-authored changesets (was: docker)
-alias dc='docker-compose'
+command_exists hunk && alias d='hunk'          # review-first diff viewer for agent-authored changesets (was: docker)
+command_exists docker-compose && alias dc='docker-compose'
 
-alias dl='yt-dlp'
+command_exists yt-dlp && alias dl='yt-dlp'
 
 # `e` with no args opens the git top-level (falling back to $PWD); with args, opens them.
 # Editor is VS Code. On WSL it must be the `code` launcher VS Code ships FOR WSL — it opens a
@@ -381,7 +381,7 @@ alias ee="editor ."
 # $ ee ~/dotfiles/shell.md
 # alias ee='echo "$(!!)" >> '
 
-alias em='emacs'
+command_exists emacs && alias em='emacs'
 
 
 ff() {
@@ -546,7 +546,7 @@ pp() {
   fi
 }
 
-alias s='start'
+# `s` (= start) lives next to `start` in zsh/mac.zsh and zsh/wsl.zsh: plain Linux has no start.
 
 # o / oo — one implementation for mac, WSL and Linux: smart-open/smart-open.ts (PATH command `smart-open`,
 # a package.json bin). A URL opens on the client you sit at when it is reachable over ssh/herdr,
@@ -1007,10 +1007,13 @@ alias du2='dust -d 2 2>/dev/null || du -ah --max-depth=2'
 
 alias wttr="curl wttr.in/Tokyo"
 
-alias x='latexmk'
-alias xp='latexmk -pv'
-alias xx='latexmk -pvc'
-alias xc='latexmk -c'
+# Not core (Brewfile.core): defined only where TeX is installed, so a core box reports no dead alias.
+if command_exists latexmk; then
+  alias x='latexmk'
+  alias xp='latexmk -pv'
+  alias xx='latexmk -pvc'
+  alias xc='latexmk -c'
+fi
 
 
 trim() {
@@ -1100,8 +1103,10 @@ alias git-help='echo https://qiita.com/muran001/items/f13742b51da3a22117ee'
 
 ##cat ~/.ssh/id_rsa.pub | ssh username@xx.xx.xx.xx "cat >> ~/.ssh/authorized_keys"
 alias del-swp="rm ~/.local/share/nvim/swap/*"
-alias enja="trans -b -sl=en -tl=ja"
-alias jaen="trans -b -sl=ja -tl=en"
+if command_exists trans; then
+  alias enja="trans -b -sl=en -tl=ja"
+  alias jaen="trans -b -sl=ja -tl=en"
+fi
 
 
 

@@ -35,7 +35,9 @@ const DOTFILES = join(homedir(), "dotfiles");
 const BIN = join(homedir(), ".local/bin");
 const MISE = join(BIN, "mise");
 const RUNTIME_BIN = join(homedir(), ".local/share/dotfiles/runtime/bin");
-const RUNTIMES = new Set(["bun", "uv"]);
+const RUNTIMES = new Set(["bun", "uv", "rustup"]);
+// Core agent CLIs that are not Brewfile entries on Linux (on the Mac agy is a cask). Same mise path.
+const AGENT_TOOLS = ["agy"] as const;
 
 // Brewfile name → mise tool, only where they differ; any other name is looked up as-is, and a
 // missing one fails `mise install` loudly.
@@ -45,6 +47,7 @@ const MISE_NAME: Readonly<Record<string, string>> = {
   tldr: "tealdeer",
   "rm-improved": "github:nivekuil/rip",
   procs: "github:dalance/procs",
+  rustup: "rust",
 };
 // Not installed here, for a stated reason (printed, never silent).
 const SKIP: Readonly<Record<string, string>> = {
@@ -80,7 +83,7 @@ function executables(binDir: string): string[] {
 
 for (const f of core.filter((x) => SKIP[x] !== undefined))
   say(`skip ${f}: ${SKIP[f]}`);
-const tools = core.filter((f) => SKIP[f] === undefined);
+const tools = [...core.filter((f) => SKIP[f] === undefined), ...AGENT_TOOLS];
 const ids = tools.map((f) => `${MISE_NAME[f] ?? f}@latest`);
 say(`mise install ${ids.length} core tools (prebuilt releases)`);
 await $`${MISE} install ${ids}`;

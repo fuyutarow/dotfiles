@@ -19,6 +19,7 @@ brew "sheldon"      # zsh plugins → zsh/aliases.zsh
 brew "herdr"        # agent multiplexer; `herdr --remote <host>` needs it on the remote too
 brew "topgrade"     # `mise run up` (m up)
 brew "zoxide"       # better cd (,)
+brew "rustup"       # cargo (cake = cargo make): Rust toolchain manager; a toolchain, so INV-6 rules as for bun
 brew "bun"          # JS runtime: brew on Mac/WSL; on a throwaway box repos declare it (INV-6)
 brew "uv"           # Python tool runner: `uvx` + `uv tool install`; same INV-6 note as bun
 brew "atuin"        # shell history (Ctrl+R)

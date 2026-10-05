@@ -196,7 +196,9 @@ const PREFIXES =
 
 async function checkCommands(host: string): Promise<Finding> {
   const probe =
-    `for n v in \${(kv)aliases}; do c=\${(Q)\${\${(z)v}[1]}}; [[ $c == (${PREFIXES}) ]] && continue; ` +
+    // Split into an ARRAY first: a nested ${${(z)v}[1]} collapses a one-word value to a scalar and
+    // [1] then takes its first CHARACTER (`dl='yt-dlp'` read as `y`).
+    `for n v in \${(kv)aliases}; do w=(\${(z)v}); c=\${(Q)w[1]}; [[ $c == (${PREFIXES}) ]] && continue; ` +
     `whence -- $c > /dev/null || print -r -- "${MARK("UNRESOLVED")}=$n→$c"; done; ` +
     `for c in ${TOPIC_COMMANDS.join(" ")}; do whence -- $c > /dev/null || print -r -- "${MARK("UNRESOLVED")}=topic→$c"; done; ` +
     `print -r -- "${MARK("DONE")}=1"`;

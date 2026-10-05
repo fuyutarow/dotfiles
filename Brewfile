@@ -54,6 +54,8 @@ if OS.mac?
   # WSL has no cask: there `code` is a symlink to the Windows VS Code WSL launcher, wired by
   # zsh/zprofile.wsl's _WIN_EXES allowlist — which is why check-tools.sh does not check `code`.
   cask "visual-studio-code"
+  # agy (Antigravity CLI; aliases a / aa) is a core agent CLI. Linux gets it from scripts/linux-init.ts.
+  cask "antigravity-cli"
   # Clipboard history (Cmd+B popup, paste-on-select). Its two defaults live in macos/defaults.ts.
   # Was an orphan ~/.config/mise/tasks/setup-maccy.sh (Apr 2026) outside this repo — folded in
   # 2026-09-11 so install has one home (here) and configuration has one home (defaults.ts).

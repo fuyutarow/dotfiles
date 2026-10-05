@@ -4,3 +4,4 @@
 
 # `o` / `oo` live in zsh/aliases.zsh (smart-open); `open` stays macOS's own.
 alias start='open -a'    # launch a macOS app by name (`s` is the common shorthand)
+alias s='start'

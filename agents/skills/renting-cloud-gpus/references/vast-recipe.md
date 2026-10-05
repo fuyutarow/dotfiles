@@ -79,7 +79,7 @@ Ship a tree, not a checkout (`git archive` carries no `.git` history). Never wri
 ## 4b. House environment (dotfiles + `herdr --remote`), verified end to end 2026-10-05
 
 One command as root on the fresh instance builds the same environment as R99 (a non-root user,
-linuxbrew, the Brewfile `@remote` entries, dotfile links, herdr/mise/jj/bun on the non-interactive
+linuxbrew, the Brewfile `@core` entries, dotfile links, herdr/mise/jj/bun on the non-interactive
 PATH); toolchains such as Julia then come from the project's `mise.toml`:
 
 ```sh

@@ -671,9 +671,9 @@ description = "Model-release SSOT floor (agents/models/releases.toml): staleness
 run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 
 # A throwaway Linux box (rented GPU container, fresh VM): run scripts/bootstrap-linux.sh as root
-# (it ends by calling this as the target user). Only Brewfile entries marked @remote; no systemd.
+# (it ends by calling this as the target user). Only Brewfile entries marked @core; no systemd.
 [tasks."linux:init"]
-description = "Slim dotfiles env for a throwaway Linux box: Brewfile @remote entries, dotfile links, herdr/mise/jj/bun on the non-interactive PATH (for herdr --remote). Entry point from scratch: curl …/scripts/bootstrap-linux.sh | bash as root"
+description = "Core dev utilities for a throwaway Linux box (experiment toolchains stay with each repo's mise.toml): Brewfile @core entries, dotfile links, herdr/mise/jj/bun on the non-interactive PATH (for herdr --remote). Entry point from scratch: curl …/scripts/bootstrap-linux.sh | bash as root"
 run = "bun ~/dotfiles/scripts/linux-init.ts"
 
 [tasks."wsl:init"]

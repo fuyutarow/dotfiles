@@ -1,6 +1,7 @@
-// `mise run linux:init` — the slim dotfiles environment for a throwaway Linux box (a rented GPU
-// container, a fresh VM): only the Brewfile entries marked `@remote`, the dotfile links, and what
-// `herdr --remote` needs. Run as the target user (never root: Homebrew refuses it), after
+// `mise run linux:init` — the core dev utilities on a throwaway Linux box (a rented GPU container,
+// a fresh VM): linuxbrew, the Brewfile entries marked `@core` (shell, search, VCS, herdr, mise …),
+// the dotfile links, and what `herdr --remote` needs. Experiment environments (Julia, CUDA, Python)
+// are NOT dotfiles: each repo's mise.toml installs its own (`mise install` in that repo). Run as the target user (never root: Homebrew refuses it), after
 // scripts/bootstrap-linux.sh has made the user and installed linuxbrew + bun + mise.
 //
 // Not wsl:init: that one adds systemd units (ccc daemon, capacity) a container cannot run, and the
@@ -23,11 +24,11 @@ const BREW = "/home/linuxbrew/.linuxbrew/bin";
 const remote = readFileSync(join(DOTFILES, "Brewfile"), "utf8")
   .split("\n")
   .flatMap((l) => {
-    const m = /^brew "([^"]+)".*#\s*@remote\b/u.exec(l);
+    const m = /^brew "([^"]+)".*#\s*@core\b/u.exec(l);
     return m?.[1] === undefined ? [] : [m[1]];
   });
 console.log(
-  `linux:init: brew install ${remote.length} @remote entries: ${remote.join(" ")}`,
+  `linux:init: brew install ${remote.length} @core entries: ${remote.join(" ")}`,
 );
 await $`${BREW}/brew install ${remote}`;
 

@@ -67,7 +67,7 @@ describe("quote-command: output mode follows the requested count", () => {
     const text = readFileSync(file ?? "", "utf8");
     // Head: from <name> | MM-DD HH:MM | turns: N | <bytes>B | <user>@<host> — no cwd.
     expect(text.split("\n")[0]).toMatch(
-      /^from quote-test-session \| \d{2}-\d{2} \d{2}:\d{2}[+-]\d{2}(?:\d{2})? \| turns: 51 \| \d+B \| [^\s@|]+@[^\s@|]+$/u,
+      /^from quote-test-session \| \d{2}-\d{2} \d{2}:\d{2} [+-]\d{2}(?:\d{2})? \| turns: 51 \| \d+B \| [^\s@|]+@[^\s@|]+$/u,
     );
     expect(text).toContain("turns: 51");
     expect(text).toContain("response 1");
@@ -106,7 +106,7 @@ describe("quote-command: output mode follows the requested count", () => {
     expect(output.reason).toContain("Download command copied");
     // The block message carries the same header the quote starts with.
     expect(output.reason).toMatch(
-      /for from \S+ \| \d{2}-\d{2} \d{2}:\d{2}[+-]\d{2}(?:\d{2})? \| turns: \d+ \| \d+B \| [^\s@|]+@[^\s@|.]+/u,
+      /for from \S+ \| \d{2}-\d{2} \d{2}:\d{2} [+-]\d{2}(?:\d{2})? \| turns: \d+ \| \d+B \| [^\s@|]+@[^\s@|.]+/u,
     );
     expect(output.reason).toContain("[pane-test]");
     const copied = readFileSync(join(home, "clipboard.txt"), "utf8");

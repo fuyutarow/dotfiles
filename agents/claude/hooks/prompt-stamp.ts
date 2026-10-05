@@ -1,4 +1,4 @@
-// The zsh PROMPT's `user@host:MM-DD HH:MM+09|cwd` head (zsh/zshrc: `%n@%m:%D{%m-%d %H:%M}<offset>|%~`),
+// The zsh PROMPT's `user@host:MM-DD HH:MM +09|cwd` head (zsh/zshrc: `%n@%m:%D{%m-%d %H:%M}<offset>|%~`),
 // as plain text — the one home for that shape. Consumers: statusline-command.ts (its row 1,
 // which it colors itself) and quote-command.ts (the /quote header, where it says who quoted
 // from where, and when). Zero-dep like every hook, so the statusline can import it too.
@@ -37,9 +37,9 @@ export function offsetShort(z: Pick<Temporal.ZonedDateTime, "offset">): string {
   return mm === "00" ? hh : `${hh}${mm}`;
 }
 
-/** "MM-DD HH:MM+09" — the prompt's stamp with its offset. */
+/** "MM-DD HH:MM +09" — the prompt's stamp with its offset, spaced for legibility (owner, 2026-10-06). */
 export const stampMDHMZ = (z: Temporal.ZonedDateTime): string =>
-  `${stampMDHM(z)}${offsetShort(z)}`;
+  `${stampMDHM(z)} ${offsetShort(z)}`;
 
 /** Unix epoch seconds -> local wall clock, in this process's time zone. */
 export const localFromEpochSec = (s: number): Temporal.ZonedDateTime =>
@@ -62,7 +62,7 @@ export function tildePath(p: string, home = process.env.HOME ?? ""): string {
 export interface PromptParts {
   user: string;
   host: string; // %m: hostname up to the first dot
-  stamp: string; // "MM-DD HH:MM+09"
+  stamp: string; // "MM-DD HH:MM +09"
   cwd: string; // tilde-shortened
 }
 
@@ -78,6 +78,6 @@ export function promptParts(
   };
 }
 
-/** "user@host:MM-DD HH:MM+09|~/cwd" — uncolored. */
+/** "user@host:MM-DD HH:MM +09|~/cwd" — uncolored. */
 export const promptHead = (p: PromptParts): string =>
   `${p.user}@${p.host}:${p.stamp}|${p.cwd}`;

@@ -55,7 +55,7 @@ case "$HOST" in
     local fmt='%D{%z}' z
     z=${(%)fmt}
     [[ $z == [+-][0-9][0-9]00 ]] && z=${z[1,3]}
-    PROMPT="${uname}@${host}:%F{cyan}%D{%m-%d %H:%M}${z}%f|${pwd}${NEWLINE}${prompt}"
+    PROMPT="${uname}@${host}:%F{cyan}%D{%m-%d %H:%M} ${z}%f|${pwd}${NEWLINE}${prompt}"
   }
   autoload -Uz add-zsh-hook
   add-zsh-hook precmd _prompt_stamp

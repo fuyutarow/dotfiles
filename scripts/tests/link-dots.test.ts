@@ -27,6 +27,9 @@ import {
 } from "../link-dots.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "link-dots.ts");
+// What bun itself creates under a fresh HOME (its caches): macOS Library/ and .cache/, Linux .bun/.
+// link-dots writes none of these, so "nothing written" means nothing else.
+const BUN_OWN = new Set(["Library", ".cache", ".bun"]);
 const REPO = join(import.meta.dir, "..", "..");
 
 function tmp(prefix: string): string {
@@ -212,9 +215,7 @@ describe("CLI", () => {
     expect(r.out).toMatch(/^drift: .*\.zshenv \(want -> /mu);
     expect(r.out).toMatch(/^check: \d+ drift\(s\)$/mu);
     // bun itself may create its cache dir under HOME; link-dots writes nothing else.
-    expect(
-      readdirSync(home).filter((n) => n !== "Library" && n !== ".cache"),
-    ).toEqual([]);
+    expect(readdirSync(home).filter((n) => !BUN_OWN.has(n))).toEqual([]);
   });
 
   test("usage errors exit 2 before any work", () => {
@@ -222,9 +223,7 @@ describe("CLI", () => {
     expect(cli(["--force", "--check"], home).code).toBe(2);
     expect(cli(["extra"], home).code).toBe(2);
     expect(cli(["--__proto__"], home).code).toBe(2);
-    expect(
-      readdirSync(home).filter((n) => n !== "Library" && n !== ".cache"),
-    ).toEqual([]);
+    expect(readdirSync(home).filter((n) => !BUN_OWN.has(n))).toEqual([]);
   });
 
   test("a foreign DOTFILES is FATAL before anything is linked", () => {
@@ -234,8 +233,6 @@ describe("CLI", () => {
     });
     expect(r.exitCode).toBe(2);
     expect(r.stderr.toString()).toContain("not a dotfiles checkout");
-    expect(
-      readdirSync(home).filter((n) => n !== "Library" && n !== ".cache"),
-    ).toEqual([]);
+    expect(readdirSync(home).filter((n) => !BUN_OWN.has(n))).toEqual([]);
   });
 });

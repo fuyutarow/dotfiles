@@ -13,6 +13,19 @@ import {
 } from "node:fs";
 import { release, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
+import { sshSupportsAttachMatch } from "../link-dots.ts";
+
+// The smart-open fixtures scope the forward with Match sessiontype (OpenSSH >= 9.9; Ubuntu 24.04
+// ships 9.6, which rejects the line). The repo case also needs a machine that attaches to r99-wsl
+// (its ~/.ssh/config.local names a HostName) — doctor SKIPs smart-open everywhere else.
+const sshV = Bun.spawnSync(["ssh", "-V"], { stderr: "pipe" }).stderr.toString();
+const OLD_SSH = !sshSupportsAttachMatch(sshV);
+const ATTACHES_TO_R99 = !Bun.spawnSync(["ssh", "-G", "r99-wsl"], {
+  stdout: "pipe",
+})
+  .stdout.toString()
+  .split("\n")
+  .includes("hostname r99-wsl");
 
 const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "doctor.ts");
@@ -213,59 +226,70 @@ describe("doctor", () => {
     return dir;
   }
 
-  test("smart-open: a forward joining the paths the code uses PASSes; drift on either end FAILs naming both sides", () => {
-    const home = tmp("doctor-home-");
-    const remote = "/tmp/smart-open-tester--r99-wsl.sock";
-    const receiver = `${home}/.cache/smart-open/receiver.sock`;
-    const pass = doctor("smart-open", {
-      HOME: home,
-      DOTFILES: fixtureSshConfig(`${remote} ${receiver}`),
-    });
-    expect(pass.code).toBe(0);
-    expect(pass.out).toMatch(/^PASS {2}smart-open {2}r99-wsl forwards /mu);
+  test.skipIf(OLD_SSH)(
+    "smart-open: a forward joining the paths the code uses PASSes; drift on either end FAILs naming both sides",
+    () => {
+      const home = tmp("doctor-home-");
+      const remote = "/tmp/smart-open-tester--r99-wsl.sock";
+      const receiver = `${home}/.cache/smart-open/receiver.sock`;
+      const pass = doctor("smart-open", {
+        HOME: home,
+        DOTFILES: fixtureSshConfig(`${remote} ${receiver}`),
+      });
+      expect(pass.code).toBe(0);
+      expect(pass.out).toMatch(/^PASS {2}smart-open {2}r99-wsl forwards /mu);
 
-    for (const [name, forward] of [
-      ["remote path drifted", `/tmp/smart-open-other.sock ${receiver}`],
-      // The pre-2026-10-03 name, without the alias: `oo` there could not name the host.
-      ["remote name lost the alias", `/tmp/smart-open-tester.sock ${receiver}`],
-      ["receiver path drifted", `${remote} ${home}/.cache/smart-open/r.sock`],
-    ] as const) {
-      const r = doctor("smart-open", {
+      for (const [name, forward] of [
+        ["remote path drifted", `/tmp/smart-open-other.sock ${receiver}`],
+        // The pre-2026-10-03 name, without the alias: `oo` there could not name the host.
+        [
+          "remote name lost the alias",
+          `/tmp/smart-open-tester.sock ${receiver}`,
+        ],
+        ["receiver path drifted", `${remote} ${home}/.cache/smart-open/r.sock`],
+      ] as const) {
+        const r = doctor("smart-open", {
+          HOME: home,
+          DOTFILES: fixtureSshConfig(forward),
+        });
+        expect([name, r.code]).toEqual([name, 1]);
+        expect(r.out).toContain(`want: ${remote} ${receiver}`);
+        expect(r.out).toContain(`have: ${forward}`);
+        expect(r.out).toContain("fix: make the RemoteForward in ssh/config");
+      }
+    },
+  );
+
+  test.skipIf(OLD_SSH)(
+    "smart-open: an editor alias that is missing, or carries the forward, FAILs naming the fix",
+    () => {
+      const home = tmp("doctor-home-");
+      const forward = `/tmp/smart-open-tester--r99-wsl.sock ${home}/.cache/smart-open/receiver.sock`;
+      const ok = doctor("smart-open", {
         HOME: home,
         DOTFILES: fixtureSshConfig(forward),
       });
-      expect([name, r.code]).toEqual([name, 1]);
-      expect(r.out).toContain(`want: ${remote} ${receiver}`);
-      expect(r.out).toContain(`have: ${forward}`);
-      expect(r.out).toContain("fix: make the RemoteForward in ssh/config");
-    }
-  });
-
-  test("smart-open: an editor alias that is missing, or carries the forward, FAILs naming the fix", () => {
-    const home = tmp("doctor-home-");
-    const forward = `/tmp/smart-open-tester--r99-wsl.sock ${home}/.cache/smart-open/receiver.sock`;
-    const ok = doctor("smart-open", {
-      HOME: home,
-      DOTFILES: fixtureSshConfig(forward),
-    });
-    expect(ok.code).toBe(0);
-    expect(ok.out).toContain(
-      "r99-wsl-code reaches the same box without the forward",
-    );
-    const absent = doctor("smart-open", {
-      HOME: home,
-      DOTFILES: fixtureSshConfig(forward, "absent"),
-    });
-    expect(absent.code).toBe(1);
-    expect(absent.out).toContain("r99-wsl-code does not reach the same box");
-    expect(absent.out).toContain("Host r99-wsl r99-wsl-code");
-    const leaks = doctor("smart-open", {
-      HOME: home,
-      DOTFILES: fixtureSshConfig(forward, "forwards"),
-    });
-    expect(leaks.code).toBe(1);
-    expect(leaks.out).toContain("r99-wsl-code carries the smart-open forward");
-  });
+      expect(ok.code).toBe(0);
+      expect(ok.out).toContain(
+        "r99-wsl-code reaches the same box without the forward",
+      );
+      const absent = doctor("smart-open", {
+        HOME: home,
+        DOTFILES: fixtureSshConfig(forward, "absent"),
+      });
+      expect(absent.code).toBe(1);
+      expect(absent.out).toContain("r99-wsl-code does not reach the same box");
+      expect(absent.out).toContain("Host r99-wsl r99-wsl-code");
+      const leaks = doctor("smart-open", {
+        HOME: home,
+        DOTFILES: fixtureSshConfig(forward, "forwards"),
+      });
+      expect(leaks.code).toBe(1);
+      expect(leaks.out).toContain(
+        "r99-wsl-code carries the smart-open forward",
+      );
+    },
+  );
 
   test("smart-open: a forward every command session carries FAILs (it would steal the socket)", () => {
     const home = tmp("doctor-home-");
@@ -283,24 +307,27 @@ describe("doctor", () => {
     );
   });
 
-  test("smart-open: a host with no RemoteForward at all FAILs, and an extra unrelated forward does not mask drift", () => {
-    const home = tmp("doctor-home-");
-    const none = doctor("smart-open", {
-      HOME: home,
-      DOTFILES: fixtureSshConfig(null),
-    });
-    expect(none.code).toBe(1);
-    expect(none.out).toContain("have: no RemoteForward at all");
+  test.skipIf(OLD_SSH)(
+    "smart-open: a host with no RemoteForward at all FAILs, and an extra unrelated forward does not mask drift",
+    () => {
+      const home = tmp("doctor-home-");
+      const none = doctor("smart-open", {
+        HOME: home,
+        DOTFILES: fixtureSshConfig(null),
+      });
+      expect(none.code).toBe(1);
+      expect(none.out).toContain("have: no RemoteForward at all");
 
-    const unrelated = doctor("smart-open", {
-      HOME: home,
-      DOTFILES: fixtureSshConfig("/tmp/unrelated.sock /tmp/elsewhere.sock"),
-    });
-    expect(unrelated.code).toBe(1);
-    expect(unrelated.out).toContain(
-      "have: /tmp/unrelated.sock /tmp/elsewhere.sock",
-    );
-  });
+      const unrelated = doctor("smart-open", {
+        HOME: home,
+        DOTFILES: fixtureSshConfig("/tmp/unrelated.sock /tmp/elsewhere.sock"),
+      });
+      expect(unrelated.code).toBe(1);
+      expect(unrelated.out).toContain(
+        "have: /tmp/unrelated.sock /tmp/elsewhere.sock",
+      );
+    },
+  );
 
   test("smart-open: a checkout with no ssh/config is SKIPped with the reason, not PASSed", () => {
     const r = doctor("smart-open", {
@@ -313,16 +340,19 @@ describe("doctor", () => {
     );
   });
 
-  test("smart-open: the repo's own ssh/config agrees with smart-open/sockets.ts", () => {
-    if (Bun.which("ssh") === null) return; // the check SKIPs without ssh; nothing to assert
-    // ssh expands %d from the passwd entry, so the real account's home is the HOME that must agree.
-    const r = doctor("smart-open", {
-      HOME: userInfo().homedir,
-      DOTFILES: REPO,
-    });
-    expect(r.out).toMatch(/^PASS {2}smart-open /mu);
-    expect(r.code).toBe(0);
-  });
+  test.skipIf(OLD_SSH || !ATTACHES_TO_R99)(
+    "smart-open: the repo's own ssh/config agrees with smart-open/sockets.ts",
+    () => {
+      if (Bun.which("ssh") === null) return; // the check SKIPs without ssh; nothing to assert
+      // ssh expands %d from the passwd entry, so the real account's home is the HOME that must agree.
+      const r = doctor("smart-open", {
+        HOME: userInfo().homedir,
+        DOTFILES: REPO,
+      });
+      expect(r.out).toMatch(/^PASS {2}smart-open /mu);
+      expect(r.code).toBe(0);
+    },
+  );
 
   test("two independent FAILs come back in one run, with a summary line", () => {
     const dotfiles = fixtureDotfiles();

@@ -26,8 +26,6 @@ const die = (m: string, code = 2): never => {
   process.exit(code);
 };
 
-const root = (await $`jj root`.text()).trim();
-process.chdir(root);
 const bookmark = process.env.BOOKMARK ?? "alpha";
 
 // strictFlags alone lets --__proto__ reach type-flag before the unknown-flag check (BG1).
@@ -52,6 +50,13 @@ const parsed = cli(
   undefined,
   Bun.argv.slice(2),
 );
+// After argv: --help and usage errors must answer anywhere, not only inside a jj repository
+// (outside one, `jj root` failed before Cleye ever saw --help — 2026-10-06, a plain git clone).
+const rootRun = await $`jj root`.quiet().nothrow();
+if (rootRun.exitCode !== 0)
+  die(`not inside a jj repository (jj root: ${rootRun.stderr.toString().trim()}) — run this from a jj checkout`);
+const root = rootRun.stdout.toString().trim();
+process.chdir(root);
 const { records, push } = parsed.flags;
 const named: string[] = [...parsed._];
 const msg = parsed.flags.file !== "" ? await Bun.file(parsed.flags.file).text() : parsed.flags.message;

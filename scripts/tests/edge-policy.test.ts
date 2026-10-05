@@ -13,6 +13,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// Edge's managed policy is a macOS plist (edge/policy.plist.mac); elsewhere the tool refuses (exit 2).
+const NOT_MAC = process.platform !== "darwin";
+
 const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "edge-policy.ts");
 const POLICY = join(REPO, "edge", "policy.plist.mac");
@@ -42,37 +45,46 @@ function run(args: string[], to: string): { code: number; out: string } {
 }
 
 describe("edge-policy.ts", () => {
-  test("--check on a missing destination FAILs with the repair, and writes nothing", () => {
-    const to = dst();
-    const r = run(["--check"], to);
-    expect(r.code).toBe(1);
-    expect(r.out).toContain("FAIL edge-policy:");
-    expect(r.out).toContain("is missing, unlike edge/policy.plist.mac");
-    expect(r.out).toContain("fix: mise run edge:policy");
-    expect(existsSync(to)).toBe(false);
-  });
+  test.skipIf(NOT_MAC)(
+    "--check on a missing destination FAILs with the repair, and writes nothing",
+    () => {
+      const to = dst();
+      const r = run(["--check"], to);
+      expect(r.code).toBe(1);
+      expect(r.out).toContain("FAIL edge-policy:");
+      expect(r.out).toContain("is missing, unlike edge/policy.plist.mac");
+      expect(r.out).toContain("fix: mise run edge:policy");
+      expect(existsSync(to)).toBe(false);
+    },
+  );
 
-  test("deploying makes the destination a byte-equal copy, and --check then PASSes", () => {
-    const to = dst();
-    const deployed = run([], to);
-    expect(deployed.code).toBe(0);
-    expect(deployed.out).toContain("PASS edge-policy: deployed to");
-    expect(readFileSync(to).equals(readFileSync(POLICY))).toBe(true);
-    const again = run(["--check"], to);
-    expect(again.code).toBe(0);
-    expect(again.out).toContain("PASS edge-policy:");
-  });
+  test.skipIf(NOT_MAC)(
+    "deploying makes the destination a byte-equal copy, and --check then PASSes",
+    () => {
+      const to = dst();
+      const deployed = run([], to);
+      expect(deployed.code).toBe(0);
+      expect(deployed.out).toContain("PASS edge-policy: deployed to");
+      expect(readFileSync(to).equals(readFileSync(POLICY))).toBe(true);
+      const again = run(["--check"], to);
+      expect(again.code).toBe(0);
+      expect(again.out).toContain("PASS edge-policy:");
+    },
+  );
 
-  test("a destination that has drifted FAILs under --check, and a deploy repairs it", () => {
-    const to = dst();
-    writeFileSync(to, "<plist></plist>");
-    const drift = run(["--check"], to);
-    expect(drift.code).toBe(1);
-    expect(drift.out).toContain("differs from edge/policy.plist.mac");
-    expect(readFileSync(to, "utf8")).toBe("<plist></plist>"); // --check changed nothing
-    expect(run([], to).code).toBe(0);
-    expect(run(["--check"], to).code).toBe(0);
-  });
+  test.skipIf(NOT_MAC)(
+    "a destination that has drifted FAILs under --check, and a deploy repairs it",
+    () => {
+      const to = dst();
+      writeFileSync(to, "<plist></plist>");
+      const drift = run(["--check"], to);
+      expect(drift.code).toBe(1);
+      expect(drift.out).toContain("differs from edge/policy.plist.mac");
+      expect(readFileSync(to, "utf8")).toBe("<plist></plist>"); // --check changed nothing
+      expect(run([], to).code).toBe(0);
+      expect(run(["--check"], to).code).toBe(0);
+    },
+  );
 
   test("an unknown flag is refused (exit 1) and the prototype guard answers --__proto__ (exit 2)", () => {
     expect(run(["--nope"], dst()).code).toBe(1);

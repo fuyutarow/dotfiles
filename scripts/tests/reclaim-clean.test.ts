@@ -15,8 +15,10 @@ import {
   chmodSync,
   existsSync,
   mkdtempSync,
+  readdirSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -85,6 +87,36 @@ function makeUvStub(dir: string, echoToStderr: boolean): void {
   chmodSync(join(dir, "uv"), 0o755);
 }
 
+// reclaim-clean probes these on PATH. /usr/bin and /bin are mirrored WITHOUT them, so "no tools on
+// PATH" holds everywhere — Ubuntu's /usr/bin carries pip (a rented box, 2026-10-06), macOS's does not.
+const PROBED = new Set([
+  "brew",
+  "npm",
+  "pnpm",
+  "yarn",
+  "pip",
+  "pip3",
+  "go",
+  "docker",
+  "mise",
+  "julia",
+  "uv",
+]);
+let systemBins: string | undefined;
+function systemBinsWithoutProbedTools(): string {
+  if (systemBins !== undefined) return systemBins;
+  const dir = mkdtempSync(join(tmpdir(), "reclaim-sysbin-"));
+  const entries = ["/usr/bin", "/bin"].flatMap((src) =>
+    readdirSync(src).map((name) => [src, name] as const),
+  );
+  for (const [src, name] of entries) {
+    if (PROBED.has(name) || existsSync(join(dir, name))) continue;
+    symlinkSync(join(src, name), join(dir, name));
+  }
+  systemBins = dir;
+  return dir;
+}
+
 function runScript(
   args: string[],
   opts: {
@@ -93,7 +125,7 @@ function runScript(
     env?: Record<string, string>;
   } = {},
 ): { out: string; err: string; code: number } {
-  const pathDirs = [...(opts.pathDirs ?? []), "/usr/bin", "/bin"];
+  const pathDirs = [...(opts.pathDirs ?? []), systemBinsWithoutProbedTools()];
   const env: Record<string, string> = {
     PATH: pathDirs.join(":"),
     ...opts.env,

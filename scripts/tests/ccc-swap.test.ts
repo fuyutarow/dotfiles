@@ -697,7 +697,7 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     expect(gc.code).toBe(0);
     expect(gc.out).toContain("RESULT: gc deleted 1 generation(s)");
     expect(listPrevGenerations(liveCcDir).length).toBe(0);
-  });
+  }, 60_000); // a dozen CLI runs; 5 s was exceeded under load
 });
 
 // ---- relocated layout (COCOINDEX_CODE_DB_PATH_MAPPING) --------------------------------------

@@ -57,12 +57,16 @@ describe("oxlint-policy: the committed .oxlintrc.json is a fresh render", () => 
 });
 
 describe("oxlint-policy: every custom ban fires on bad and is silent on good", () => {
-  test.each(policy.custom.map((c) => [c.id, c] as const))("%s", (_id, rule) => {
-    const bad = lint(rule, "bad");
-    expect(bad.files).toBe(1);
-    expect(bad.hits).toBeGreaterThan(0);
-    const good = lint(rule, "good");
-    expect(good.files).toBe(1);
-    expect(good.hits).toBe(0);
-  });
+  test.each(policy.custom.map((c) => [c.id, c] as const))(
+    "%s",
+    (_id, rule) => {
+      const bad = lint(rule, "bad");
+      expect(bad.files).toBe(1);
+      expect(bad.hits).toBeGreaterThan(0);
+      const good = lint(rule, "good");
+      expect(good.files).toBe(1);
+      expect(good.hits).toBe(0);
+    },
+    120_000,
+  ); // two oxlint runs (each bounded at 60 s); 5 s timed out under load average 22
 });

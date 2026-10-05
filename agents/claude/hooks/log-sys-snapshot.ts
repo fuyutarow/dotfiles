@@ -1,4 +1,4 @@
-// Stop / PostToolUse hook — attach one line "MM-DD HH:MM | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
+// Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM +09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
 // (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
 //
@@ -23,7 +23,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
-import { stampMDHMZ } from "./prompt-stamp.ts";
+import { promptParts } from "./prompt-stamp.ts";
 
 const HOME = process.env.HOME ?? "";
 const CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
@@ -68,10 +68,13 @@ async function main(): Promise<void> {
     const row = strAt(r, "ansi") ?? strAt(r, "line");
     return row === undefined || row === "" ? [] : [row];
   });
-  // One record per line: "MM-DD HH:MM +09 | Ctx: … | Rate: … | Sys: …" — the time is this event's
-  // (the mobile app shows none), in the prompt's own shape (prompt-stamp.ts); the separator is SEP.
-  const time = stampMDHMZ(Temporal.Now.zonedDateTimeISO());
-  const shown = [`${DIM}${time}${RST}`, ...rows, sys].join(SEP);
+  // One record per line: "user@host:MM-DD HH:MM +09 | Ctx: … | Rate: … | Sys: …" — who and where
+  // (sessions now span machines), and this event's time (the mobile app shows none), in the
+  // prompt's own head shape (prompt-stamp.ts); the separator is SEP.
+  const { user, host, stamp } = promptParts("");
+  const shown = [`${DIM}${user}@${host}:${stamp}${RST}`, ...rows, sys].join(
+    SEP,
+  );
 
   const statePath = `${STATE_DIR}/${key}.last`;
   const last = await attempt(() => Number(readFileSync(statePath, "utf8")));

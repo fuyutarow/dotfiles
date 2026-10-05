@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempHome } from "./helpers.ts";
+import { promptParts } from "../prompt-stamp.ts";
 
 const HOOK = "log-sys-snapshot.ts";
 const LINE = "Sys: CPU 25% · RAM 18% (10.0/54.9G) · VRAM 28% (3.3/12.0G)";
@@ -37,7 +38,7 @@ function writeSession(
     }),
   );
 }
-// The hook prefixes the event time and joins fields with the bar's dimmed "|"; strip both.
+// The hook prefixes user@host and the event time and joins fields with the bar's dimmed "|"; strip both.
 const ESC = String.fromCodePoint(0x1b);
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
 const Message = z.looseObject({ systemMessage: z.string() });
@@ -46,7 +47,7 @@ const messageOf = (stdout: string): string =>
 const body = (stdout: string): string =>
   messageOf(stdout)
     .replace(ANSI, "")
-    .replace(/^\d\d-\d\d \d\d:\d\d [+-]\d\d(?:\d\d)? \| /u, ""); // the prompt-stamp.ts shape, offset included
+    .replace(/^[^@\s]+@[^:\s]+:\d\d-\d\d \d\d:\d\d [+-]\d\d(?:\d\d)? \| /u, ""); // the prompt-stamp.ts head, offset included
 const fire = (home: string, event: string) =>
   runHook(HOOK, { hook_event_name: event, session_id: "s1" }, { HOME: home });
 
@@ -57,11 +58,15 @@ describe("log-sys-snapshot", () => {
     expect(body(r.stdout)).toBe(LINE);
   });
 
-  test("one line: local event time, then the fields, joined by the bar's dimmed |", () => {
+  test("one line: user@host:local event time, then the fields, joined by the bar's dimmed |", () => {
     const msg = messageOf(fire(homeWithCache(1_000), "Stop").stdout);
     expect(msg).not.toContain("\n");
+    const { user, host } = promptParts("");
     expect(msg.replace(ANSI, "")).toMatch(
-      /^\d\d-\d\d \d\d:\d\d [+-]\d\d(?:\d\d)? \| Sys: CPU 25%/u,
+      new RegExp(
+        `^${RegExp.escape(`${user}@${host}:`)}\\d\\d-\\d\\d \\d\\d:\\d\\d [+-]\\d\\d(?:\\d\\d)? \\| Sys: CPU 25%`,
+        "u",
+      ),
     );
   });
   test("PostToolUse within a minute of the last line stays silent", () => {

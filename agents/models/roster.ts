@@ -21,7 +21,9 @@ const ChoiceSchema = z.object({
   price_out: z.number(),
   use_for: z.string(),
   // The config switch: off keeps the row fully implemented but out of the table and denied.
-  enabled: z.boolean().default(true),
+  // REQUIRED, no default: a row that omits it fails to load (the hook then fails closed) instead
+  // of becoming dispatchable by omission.
+  enabled: z.boolean(),
 });
 export type Choice = z.output<typeof ChoiceSchema>;
 

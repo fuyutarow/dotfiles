@@ -42,10 +42,41 @@ writeFileSync(
   ),
 );
 
+// One row with its switch deleted: `enabled` has no implicit default, so this must not load.
+const NO_SWITCH = join(scratch, "no-switch.toml");
+writeFileSync(
+  NO_SWITCH,
+  readFileSync(ROSTER_PATH, "utf8").replace(
+    'id = "sonnet-high"\nroute = "claude"\nenabled = false\n',
+    'id = "sonnet-high"\nroute = "claude"\n',
+  ),
+);
+
 // live: the committed config. allOn: the same rows, every one enabled.
 const decide = (payload: unknown) => decisionOf(runHook(HOOK, payload).stdout);
 const decideAllOn = (payload: unknown) =>
   decisionOf(runHook(HOOK, payload, { DISPATCH_ROSTER_PATH: ALL_ON }).stdout);
+
+describe("enforce-dispatch-contract: enabled has no implicit default", () => {
+  test("the fixture really dropped the switch", () => {
+    expect(readFileSync(NO_SWITCH, "utf8")).not.toBe(
+      readFileSync(ROSTER_PATH, "utf8"),
+    );
+  });
+
+  test("a row without `enabled` fails the roster load, and the hook denies (fail closed)", () => {
+    const d = decisionOf(
+      runHook(HOOK, agent({ subagent_type: "sonnet-high" }), {
+        DISPATCH_ROSTER_PATH: NO_SWITCH,
+      }).stdout,
+    );
+    expect(d.decision).toBe("deny");
+    expect(d.reason).toContain(
+      "cannot read agents/models/dispatch-roster.toml",
+    );
+    expect(d.reason).toContain("enabled");
+  });
+});
 
 describe("enforce-dispatch-contract: live config is luna only", () => {
   test.each([["sonnet-medium"], ["sonnet-high"], ["opus-medium"]])(

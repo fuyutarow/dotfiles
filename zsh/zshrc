@@ -4,6 +4,15 @@ _dbg(){ [[ -n "$DOTFILES_DEBUG" ]] && echo "[DEBUG] $*"; }
 _dbg "Starting .zshrc"
 
 # Load sheldon if not already loaded (non-login shells skip .zprofile)
+# A non-login shell also skipped .zprofile's `brew shellenv`, so where sheldon lives in Homebrew
+# (linuxbrew on a rented box) it is not on PATH yet and this fallback silently loaded no aliases
+# (doctor:remote, 2026-10-05: zsh, but no `l`). Put Homebrew on PATH first when a prefix exists.
+if [[ -z $HOMEBREW_PREFIX ]]; then
+  for _brew in /opt/homebrew/bin/brew /home/linuxbrew/.linuxbrew/bin/brew; do
+    [[ -x $_brew ]] && { eval "$($_brew shellenv)"; break; }
+  done
+  unset _brew
+fi
 if ! type z &>/dev/null && command -v sheldon &>/dev/null; then
   _dbg "Loading sheldon from .zshrc"
   eval "$(sheldon source)"

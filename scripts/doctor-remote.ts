@@ -187,27 +187,43 @@ async function checkSmartOpen(host: string): Promise<Finding> {
       "SKIP",
       `${host} carries no smart-open forward (add \`Tag smart-open\` to its config.local block to opt in)`,
     );
-  const probe = `test -S ${forward} && echo "${MARK("SOCK")}=bound" || echo "${MARK("SOCK")}=absent"; rm -f ${forward}`;
+  // LIVE = some process listens on the path (`ss -xl`): an attach's sshd, ours or another's. A
+  // socket file with no listener is a dead bind a dropped session left behind.
+  const probe =
+    `test -S ${forward} && echo "${MARK("SOCK")}=present" || echo "${MARK("SOCK")}=absent"; ` +
+    `ss -xlH 2> /dev/null | grep -qF " ${forward} " && echo "${MARK("LIVE")}=yes" || echo "${MARK("LIVE")}=no"`;
   const r = await interactive(host, null, probe);
   const sock = marker(r.out, "SOCK");
+  const live = marker(r.out, "LIVE") === "yes";
   const refused = /remote port forwarding failed/u.test(r.err + r.out);
-  if (sock === "bound" && !refused)
+  if (!refused && sock === "present" && live) {
+    // We bound it, and our session is gone: on an sshd without StreamLocalBindUnlink the file
+    // now refuses the next real attach, so remove the one WE made. Never touch a socket another
+    // session holds (the refused branches below leave it alone).
+    await run([...SSH, host, `rm -f ${forward}`], null, 30_000);
     return finding(
       "smart-open",
       "PASS",
       `an attach binds ${forward} on ${host}`,
     );
+  }
+  if (refused && live)
+    return finding(
+      "smart-open",
+      "WARN",
+      `${forward} on ${host} is held by another live session (an open \`herdr --remote\` / ssh master): \`o\` works there, but a second attach cannot bind until that one exits`,
+    );
   if (refused)
     return finding(
       "smart-open",
       "FAIL",
-      `${host} refused the forward: a stale ${forward} from a dropped session is still there, and its sshd has no StreamLocalBindUnlink`,
+      `${host} refused the forward: ${forward} is a dead bind (no listener) a dropped session left, and its sshd has no StreamLocalBindUnlink`,
       `ssh ${host} rm -f ${forward}, then reattach (or StreamLocalBindUnlink yes in its sshd, where you have root)`,
     );
   return finding(
     "smart-open",
     "WARN",
-    `could not confirm the socket (probe said ${sock ?? "nothing"})`,
+    `could not confirm the socket (probe: ${sock ?? "nothing"}, listener ${live ? "yes" : "no"})`,
   );
 }
 

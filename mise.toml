@@ -28,12 +28,8 @@ bun = "1.4"
 [tasks.up]
 alias = "u"
 description = "Update system packages"
-# Never a silent success: until 2026-10-05 a missing topgrade printed "completed with some errors" and
-# exited 0 (a rented box, where topgrade was not yet a core tool).
-run = '''
-command -v topgrade > /dev/null || { echo "up: topgrade is not installed (Brewfile.core: mise run linux:init, or install:tools)" >&2; exit 1; }
-topgrade --disable containers || { echo "up: topgrade finished with failed steps (listed above)" >&2; exit 1; }
-'''
+# scripts/up.ts: never a silent success, and never a sudo attempt where we have no sudo.
+run = "bun ~/dotfiles/scripts/up.ts"
 
 # ── shell ────────────────────────────────────────────────────────────────────
 # The zsh alias in zsh/aliases.zsh is the primary `relogin`; this is its mise-side entrypoint.

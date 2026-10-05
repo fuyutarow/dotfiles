@@ -2,7 +2,7 @@
 # runs `ssh host 'cmd'` — and `herdr --remote`'s bridge — as `bash -c`, and bash reads only this
 # file there. So it gives the same thin environment zsh/zshenv gives zsh: user CLIs in ~/.local/bin
 # (herdr, mise, claude, the rootless @core tools) and bun's global bins in ~/.bun/bin. Nothing that
-# prints or hangs. An interactive login is handed to zsh by bash_profile before this matters.
+# prints or hangs. An interactive bash is handed to a login zsh at the end of this file.
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;
   *) PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH" ;;
@@ -12,3 +12,18 @@ export PATH
 if [ -z "${SSL_CERT_FILE:-}" ] && [ -d /etc/pki/tls/certs ] && [ -r /etc/ssl/certs/ca-certificates.crt ]; then
   export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 fi
+# An INTERACTIVE bash that is not a login shell never reads bash_profile — and that is exactly how
+# herdr opens a pane where the account's shell is bash (`/bin/bash`, no -l; seen on sol 2026-10-05:
+# the pane prompt was bash's). Hand it to a login zsh here too. `ssh host 'cmd'` is not interactive
+# (no `i` in $-), so the thin path above stays bash.
+case $- in
+  *i*)
+    # Not when bash was handed a command string: `bash -ilc env` (VS Code Remote resolving the
+    # shell environment) would lose its command to the exec and hang.
+    if [ -z "${BASH_EXECUTION_STRING:-}" ] && command -v zsh > /dev/null 2>&1; then
+      SHELL=$(command -v zsh)
+      export SHELL
+      exec zsh -l
+    fi
+    ;;
+esac

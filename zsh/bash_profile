@@ -3,7 +3,8 @@
 # ~/.profile, then hands an interactive login to zsh, so the shell, aliases and prompt are the same
 # as everywhere else. A non-interactive `ssh host 'cmd'` never reads this file (see bashrc).
 [ -f "$HOME/.profile" ] && . "$HOME/.profile"
-if [ -t 0 ] && command -v zsh > /dev/null 2>&1; then
+# Not when bash was handed a command (`bash -ilc env`, as VS Code Remote runs): the exec would drop it.
+if [ -t 0 ] && [ -z "${BASH_EXECUTION_STRING:-}" ] && command -v zsh > /dev/null 2>&1; then
   SHELL=$(command -v zsh)
   export SHELL
   exec zsh -l

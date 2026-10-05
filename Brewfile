@@ -25,7 +25,7 @@ brew "rm-improved"  # @core rip — the ONLY sanctioned file remover (rm is disa
 brew "sheldon"      # @core
 brew "tmux"
 brew "herdr"        # @core agent multiplexer (tmux-like workspace for AI coding agents) — config in herdr/, cross-OS
-brew "topgrade"
+brew "topgrade"     # @core `mise run up` (m up) — updates everything; a box without it cannot update
 brew "zoxide"       # @core better cd (,)
 brew "bun"          # @core JS runtime + pkg manager (homebrew-core; no tap. `bun upgrade` self-updates too)
 brew "uv"           # @core Python tool runner/installer: `uvx` (ephemeral, preferred) + `uv tool install` (ccc via

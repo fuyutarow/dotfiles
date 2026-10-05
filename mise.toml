@@ -28,7 +28,12 @@ bun = "1.4"
 [tasks.up]
 alias = "u"
 description = "Update system packages"
-run = '''topgrade --disable containers || echo "Topgrade completed with some errors"'''
+# Never a silent success: until 2026-10-05 a missing topgrade printed "completed with some errors" and
+# exited 0 (a rented box, where topgrade was not yet @core).
+run = '''
+command -v topgrade > /dev/null || { echo "up: topgrade is not installed (Brewfile @core: mise run linux:init, or install:tools)" >&2; exit 1; }
+topgrade --disable containers || { echo "up: topgrade finished with failed steps (listed above)" >&2; exit 1; }
+'''
 
 # ── shell ────────────────────────────────────────────────────────────────────
 # The zsh alias in zsh/aliases.zsh is the primary `relogin`; this is its mise-side entrypoint.
@@ -658,6 +663,10 @@ run = 'bash ~/dotfiles/scripts/check-tools.sh'
 [tasks.doctor]
 description = "READ-ONLY: does this machine realize what the dotfiles declare? Links, rendered settings, skills wiring, Brewfile, pinned deps, PATH bins, git hooks, login shell, INV-6, MCP registrations, the smart-open ssh forward, the Edge managed policy, and the per-OS pieces — one PASS/FAIL/WARN/SKIP line each, with the repairing command on every FAIL. DOCTOR_ONLY=links,bins to narrow."
 run = 'bun ~/dotfiles/scripts/doctor.ts'
+
+[tasks."doctor:remote"]
+description = "From the machine you sit at: is an ssh host usable as dotfiles promises? Key reach, the core CLIs on `ssh host cmd` (herdr --remote's bridge), an interactive login AND a herdr pane landing in zsh with the aliases, and the smart-open forward binding on attach — PASS/FAIL/WARN/SKIP with the fix. Usage: mise run doctor:remote -- <host>"
+run = 'bun ~/dotfiles/scripts/doctor-remote.ts'
 
 # FLAGGED 2026-09-09, not yet acted on: unlike check:tools (renamed to tools:audit, above),
 # this one genuinely exits nonzero on failure (verified: currently FAILs for real — a retired

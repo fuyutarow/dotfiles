@@ -9,7 +9,11 @@
 
 schema = 1
 
-# Free space below which a launch is refused (deny_gib) or allowed with a warning (warn_gib).
+# Free space below which a launch is refused (deny) or allowed with a warning (warn). Each line is
+# the SMALLER of a size and a share of the drive: min(deny_gib, deny_pct% of the drive's size), and
+# the same for warn. Both halves are required. The sizes were set on r99 (C: 931 GB, guest ~1 TB),
+# where min() picks them unchanged; on a 40 GB rented box `deny_gib = 40` alone refused every
+# launch with the disk 80% empty (2026-10-05), and the share is what scales it down.
 # `host` is the Windows drive under WSL2, measured at /mnt/c — skipped where that path does not
 # exist (macOS). `guest` is the filesystem at /.
 [drive.host]
@@ -19,13 +23,16 @@ path = "/mnt/c"
 # experiment with C: at 52 GiB while the guest had 433 GiB free (vhdx blocks freed inside the
 # guest are reused before the vhdx grows). Deny new work at 20; stop_gib must stay below deny_gib.
 deny_gib = 20
+deny_pct = 5
 warn_gib = 40
+warn_pct = 10
 stop_gib = 10
 
 [drive.guest]
 label = "guest /"
 path = "/"
 deny_gib = 40
+deny_pct = 10
 
 # Appended to every deny. The agent owns further safe diagnosis if the automatic recovery unit
 # cannot restore the floor; neither global trash purge nor stopping WSL is delegated here.

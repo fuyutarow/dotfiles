@@ -89,6 +89,7 @@ const CORPUS = [
   { path: "scripts/ccc-swap.ts", command: "discover" },
   { path: "scripts/edge-policy.ts" },
   { path: "scripts/install-mcp.ts" },
+  { path: "scripts/doctor-remote.ts" },
   { path: "scripts/link-dots.ts" },
   { path: "scripts/link-skills.ts" },
   { path: "scripts/skills-doctor.ts" },

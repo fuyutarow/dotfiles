@@ -103,16 +103,59 @@ function config(edit: (c: Doc) => void): Record<string, string> {
   writeFileSync(path, toToml(c));
   return { STORAGE_HEADROOM_CONFIG: path };
 }
+// A line is min(GiB, pct% of the drive): to force a line at a size, the share must not undercut it,
+// so a non-zero size gets 100% and a zero size 0%.
+const pct = (gibLine: number): number => (gibLine > 0 ? 100 : 0);
 const drives = (host: number, guest: number, hostWarn: number) => (c: Doc) => {
   driveRow(c, "host").deny_gib = host;
+  driveRow(c, "host").deny_pct = pct(host);
   driveRow(c, "guest").deny_gib = guest;
+  driveRow(c, "guest").deny_pct = pct(guest);
   driveRow(c, "host").warn_gib = hostWarn;
+  driveRow(c, "host").warn_pct = pct(hostWarn);
 };
 const FULL = config(drives(1_000_000, 1_000_000, 60));
 const EMPTY = config(drives(0, 0, 0));
 const WARN_ONLY = config(drives(0, 0, 1_000_000));
 
+// The 2026-10-05 rented box: an absolute size meant for a 1 TB disk, a small share of this one.
+const SMALL_SHARE = config((c) => {
+  driveRow(c, "host").deny_gib = 1_000_000;
+  driveRow(c, "host").deny_pct = 0;
+  driveRow(c, "guest").deny_gib = 1_000_000;
+  driveRow(c, "guest").deny_pct = 0;
+});
+
 describe("enforce-storage-headroom", () => {
+  test("a line is the smaller of its size and its share: a huge size with a 0% share does not deny", () => {
+    const r = runHook(HOOK, bash("cargo build"), SMALL_SHARE);
+    expect(r.code).toBe(0);
+    expect(decisionOf(r.stdout)?.permissionDecision).not.toBe("deny");
+  });
+
+  test("the deny reason names both halves of the line", () => {
+    const r = runHook(HOOK, bash("cargo build"), FULL);
+    expect(decisionOf(r.stdout)?.permissionDecisionReason).toMatch(
+      /the smaller of \d+ GiB and \d+% of the drive/u,
+    );
+  });
+
+  test("warn_pct without warn_gib, and a share over 100, are config errors", () => {
+    const r = runHook(
+      HOOK,
+      bash("ls"),
+      config((c) => {
+        delete driveRow(c, "host").warn_gib;
+        driveRow(c, "guest").deny_pct = 150;
+      }),
+    );
+    const reason = decisionOf(r.stdout)?.permissionDecisionReason ?? "";
+    expect(reason).toContain("drive.host: warn_gib and warn_pct go together");
+    expect(reason).toContain(
+      "drive.guest.deny_pct: a percentage of the drive must be within 0..100",
+    );
+  });
+
   test("denies launchers when headroom is gone, with measured numbers", () => {
     for (const command of [
       "systemd-run --user --unit=probe julia probe.jl",

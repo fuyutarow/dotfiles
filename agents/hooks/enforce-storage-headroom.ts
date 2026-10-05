@@ -66,7 +66,9 @@ type Drive = {
   label: string;
   path: string;
   deny_gib: number;
+  deny_pct: number;
   warn_gib?: number;
+  warn_pct?: number;
   stop_gib?: number;
 };
 type Launcher = { command: string; subcommands?: string[]; tasks?: string[] };
@@ -98,6 +100,17 @@ function nonNegative(v: unknown, where: string, errors: string[]): number {
   if (n === undefined || n < 0) {
     errors.push(
       `${where}: expected a non-negative number, got ${JSON.stringify(v)}`,
+    );
+    return 0;
+  }
+  return n;
+}
+
+function percent(v: unknown, where: string, errors: string[]): number {
+  const n = nonNegative(v, where, errors);
+  if (n > 100) {
+    errors.push(
+      `${where}: a percentage of the drive must be within 0..100, got ${n}`,
     );
     return 0;
   }
@@ -152,11 +165,19 @@ function parseDrive(where: string, d: unknown, errors: string[]): Drive {
   const t = obj(d);
   if (t === undefined) {
     errors.push(`${where}: expected a table`);
-    return { label: "", path: "", deny_gib: 0 };
+    return { label: "", path: "", deny_gib: 0, deny_pct: 0 };
   }
   onlyKeys(
     t,
-    ["label", "path", "deny_gib", "warn_gib", "stop_gib"],
+    [
+      "label",
+      "path",
+      "deny_gib",
+      "deny_pct",
+      "warn_gib",
+      "warn_pct",
+      "stop_gib",
+    ],
     where,
     errors,
   );
@@ -169,6 +190,18 @@ function parseDrive(where: string, d: unknown, errors: string[]): Drive {
     `${where}.warn_gib`,
     errors,
   );
+  // Each line is the SMALLER of a size and a share of the drive (see effective()): both are
+  // required, so a drive is never judged by an absolute size meant for a much larger disk.
+  const denyPct = percent(at(t, "deny_pct"), `${where}.deny_pct`, errors);
+  const rawWarnPct = at(t, "warn_pct");
+  const warnPct =
+    rawWarnPct === undefined
+      ? undefined
+      : percent(rawWarnPct, `${where}.warn_pct`, errors);
+  if ((warn === undefined) !== (warnPct === undefined))
+    errors.push(
+      `${where}: warn_gib and warn_pct go together (both or neither)`,
+    );
   const rawStop = at(t, "stop_gib");
   const stop = optionalNonNegative(rawStop, `${where}.stop_gib`, errors);
   if (
@@ -184,7 +217,9 @@ function parseDrive(where: string, d: unknown, errors: string[]): Drive {
     label,
     path,
     deny_gib: deny,
+    deny_pct: denyPct,
     ...(warn === undefined ? {} : { warn_gib: warn }),
+    ...(warnPct === undefined ? {} : { warn_pct: warnPct }),
     ...(stop === undefined ? {} : { stop_gib: stop }),
   };
 }
@@ -460,10 +495,24 @@ function matchLauncher(
 // --- Measuring --------------------------------------------------------------------------------
 
 async function freeBytes(path: string): Promise<number | null> {
+  return (await space(path))?.free ?? null;
+}
+
+async function space(
+  path: string,
+): Promise<{ free: number; total: number } | null> {
   return attemptOr(() => {
     const s = statfsSync(path);
-    return s.bavail * s.bsize;
+    return { free: s.bavail * s.bsize, total: s.blocks * s.bsize };
   }, null);
+}
+
+// A line in bytes: the smaller of an absolute size and a share of the drive. The sizes were set on
+// r99 (C: 931 GB, guest ~1 TB); on a 40 GB rented box `deny_gib = 40` alone denied every launch
+// with the disk 80% empty (2026-10-05). min() keeps r99's lines exactly and scales small disks.
+function effective(gibLine: number, pct: number, total: number | null): number {
+  const abs = gibLine * GiB;
+  return total === null ? abs : Math.min(abs, (pct / 100) * total);
 }
 
 // The hook only queues the bounded systemd recovery unit. A PreToolUse call must never wait for
@@ -694,13 +743,20 @@ async function main(): Promise<void> {
   if (hit === null) return;
 
   const drives = await Promise.all(
-    Object.values(config.drive).map(async (d) =>
-      Object.assign({}, d, { free: await freeBytes(d.path) }),
-    ),
+    Object.values(config.drive).map(async (d) => {
+      const sp = await space(d.path);
+      const total = sp?.total ?? null;
+      return Object.assign({}, d, {
+        free: sp?.free ?? null,
+        denyAt: effective(d.deny_gib, d.deny_pct, total),
+        warnAt:
+          d.warn_gib === undefined || d.warn_pct === undefined
+            ? undefined
+            : effective(d.warn_gib, d.warn_pct, total),
+      });
+    }),
   );
-  const low = drives.filter(
-    (d) => d.free !== null && d.free < d.deny_gib * GiB,
-  );
+  const low = drives.filter((d) => d.free !== null && d.free < d.denyAt);
   const wsl =
     process.platform === "linux" &&
     existsSync("/proc/sys/kernel/osrelease") &&
@@ -717,9 +773,7 @@ async function main(): Promise<void> {
       hostDrive !== undefined &&
       drives.some(
         (d) =>
-          d.label === hostDrive.label &&
-          d.free !== null &&
-          d.free < d.deny_gib * GiB,
+          d.label === hostDrive.label && d.free !== null && d.free < d.denyAt,
       );
     const recovery = hostLow ? await requestRecovery() : "";
     // BATCHED(drives): every drive is measured before this point and all of them are in the one
@@ -730,7 +784,7 @@ async function main(): Promise<void> {
         drives
           .map(
             (d) =>
-              `${d.label} free ${gib(d.free)} (deny below ${gib(d.deny_gib * GiB)})`,
+              `${d.label} free ${gib(d.free)} (deny below ${gib(d.denyAt)}: the smaller of ${d.deny_gib} GiB and ${d.deny_pct}% of the drive)`,
           )
           .join(", ") +
         `. ${hostUnreadable ? "Host C: could not be measured; refusing new compute until the host is visible. " : ""}${config.deny.advice}${recovery}`,
@@ -739,19 +793,15 @@ async function main(): Promise<void> {
 
   const warnings: string[] = [];
   for (const d of drives) {
-    if (
-      d.warn_gib !== undefined &&
-      d.free !== null &&
-      d.free < d.warn_gib * GiB
-    ) {
+    if (d.warnAt !== undefined && d.free !== null && d.free < d.warnAt) {
       const others = drives
         .filter((o) => o !== d)
         .map((o) => `${o.label} free ${gib(o.free)}`)
         .join(", ");
       warnings.push(
-        `storage-headroom: WARNING ${d.label} free ${gib(d.free)} (< ${gib(d.warn_gib * GiB)})` +
+        `storage-headroom: WARNING ${d.label} free ${gib(d.free)} (< ${gib(d.warnAt)})` +
           `${others !== "" ? `; ${others}` : ""}. Launching ${hit.label} anyway — reclaim before it drops ` +
-          `below ${gib(d.deny_gib * GiB)}.`,
+          `below ${gib(d.denyAt)}.`,
       );
     }
   }

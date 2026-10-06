@@ -22,7 +22,7 @@
 import { at, num, strAt } from "../../hooks/narrow.ts";
 import {
   commandKey,
-  medianMs,
+  judgedMs,
   recordStart,
   stateDir,
 } from "./bash-durations.ts";
@@ -43,7 +43,7 @@ export function backgroundReason(
 ): string | undefined {
   if (at(input, "run_in_background") === true) return undefined;
   if (measured !== undefined && measured.ms > FOREGROUND_MEASURED_MAX_MS)
-    return `\`${measured.key}\` has taken a median ${Math.round(measured.ms / 1000)} s here (the foreground maximum is ${FOREGROUND_MEASURED_MAX_MS / 1000} s)`;
+    return `\`${measured.key}\` has taken ${Math.round(measured.ms / 1000)} s here (the larger of its median and its latest run) (the foreground maximum is ${FOREGROUND_MEASURED_MAX_MS / 1000} s)`;
   const timeout = num(at(input, "timeout"));
   if (timeout !== undefined && timeout > FOREGROUND_MAX_MS)
     return `it asks for a ${Math.round(timeout / 1000)} s timeout (the foreground maximum is ${FOREGROUND_MAX_MS / 1000} s)`;
@@ -57,7 +57,7 @@ const input = at(payload, "tool_input");
 const isBash = strAt(payload, "tool_name") === "Bash";
 const key = isBash ? commandKey(strAt(input, "command") ?? "") : undefined;
 const dir = stateDir();
-const ms = key === undefined ? undefined : medianMs(dir, key);
+const ms = key === undefined ? undefined : judgedMs(dir, key);
 const measured =
   key === undefined || ms === undefined ? undefined : { key, ms };
 const why = isBash ? backgroundReason(input, measured) : undefined;

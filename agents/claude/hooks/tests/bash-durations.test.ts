@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   commandKey,
+  judgedMs,
   medianMs,
   recordEnd,
   recordStart,
@@ -20,7 +21,16 @@ describe("commandKey", () => {
     ["mise run commit -- -m x --push -- a.ts", "mise run commit"],
     ["cd /Users/fuyu/dotfiles && mise run commit -- -m x", "mise run commit"],
     ["FOO=1 bun test scripts/tests/x.test.ts", "bun test"],
-    ["agent-router run --prompt-file b.md", "agent-router run"],
+    [
+      "agent-router run --prompt-file b.md --cd x",
+      "agent-router run --prompt-file --cd",
+    ],
+    [
+      "polysearch leaderboard --all --format json",
+      "polysearch leaderboard --all --format",
+    ],
+    ["polysearch leaderboard", "polysearch leaderboard"],
+    ["bunx --bun oxlint --type-aware x.ts", "bunx --bun --type-aware"],
     ["ls", "ls"],
     ["/bin/cp -f a b", undefined],
     ["cd x", undefined],
@@ -54,7 +64,7 @@ describe("the measured rule", () => {
         { command: "mise run commit" },
         { key: "mise run commit", ms: 45_000 },
       ),
-    ).toContain("`mise run commit` has taken a median 45 s here");
+    ).toContain("`mise run commit` has taken 45 s here");
     expect(
       backgroundReason({ command: "ls" }, { key: "ls", ms: 200 }),
     ).toBeUndefined();
@@ -99,6 +109,16 @@ describe("the measured rule", () => {
     };
     const out = hook(HOOK, second);
     expect(out).toContain('"permissionDecision":"deny"');
-    expect(out).toContain("has taken a median 40 s here");
+    expect(out).toContain("has taken 40 s here");
   });
+});
+
+test("one slow latest run is enough: judged by the larger of median and latest", () => {
+  const dir = scratch();
+  for (const [i, ms] of [500, 600, 700, 120_000].entries()) {
+    recordStart(dir, `j${i}`, "polysearch leaderboard --all", 0);
+    recordEnd(dir, `j${i}`, ms);
+  }
+  expect(medianMs(dir, "polysearch leaderboard --all")).toBe(650);
+  expect(judgedMs(dir, "polysearch leaderboard --all")).toBe(120_000);
 });

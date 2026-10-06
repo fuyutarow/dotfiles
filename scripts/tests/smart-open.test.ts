@@ -1208,6 +1208,8 @@ describe("unlinkIfSame (R6: remove the dead bind we probed, never a live one re-
 /** A client that does NOT hang up after the reply — what a hostile or buggy peer does. */
 async function stubborn(sock: string, payload: string) {
   let reply = "";
+  const answered = Promise.withResolvers<void>();
+  const closed = Promise.withResolvers<void>();
   const conn = await Bun.connect({
     unix: sock,
     socket: {
@@ -1216,16 +1218,31 @@ async function stubborn(sock: string, payload: string) {
       },
       data: (_s, c) => {
         reply += c.toString();
+        if (reply.includes("\n")) answered.resolve();
       },
-      close() {},
-      error() {},
+      close() {
+        closed.resolve();
+      },
+      error() {
+        closed.resolve();
+      },
     },
   });
   cleanups.push(() => {
     conn.terminate();
   });
-  return { conn, reply: () => reply.trim() };
+  return {
+    conn,
+    reply: () => reply.trim(),
+    // Events, not pauses: the first reply line arrived / the connection ended (by either side).
+    answered: answered.promise,
+    closed: closed.promise,
+  };
 }
+
+/** Wait for `event` with a generous deadline; a missed event is left to the caller's expectations. */
+const until = (event: Promise<void>, ms = 10_000) =>
+  Promise.race([event, Bun.sleep(ms)]);
 
 /** The pid recorder() wrote for the opener the receiver spawned, once it has started. */
 async function pidOf(dir: string, name: string): Promise<number> {
@@ -1254,7 +1271,9 @@ describe("peers that never hang up (the receiver's own end() must release the sl
       args: ["--max-connections", "1"],
     });
     const held = await stubborn(rx.sock, line("https://probe.invalid/b1"));
-    await Bun.sleep(500);
+    // The receiver answers, then end()s its side; that close is the slot being released.
+    await until(held.answered);
+    await until(held.closed);
     expect(held.reply()).toBe("ok");
     expect((await ask(rx.sock, line("https://probe.invalid/b2"))).reply).toBe(
       "ok",
@@ -1367,14 +1386,22 @@ describe("client diagnostics say what actually happened", () => {
       [
         "bun",
         "-e",
-        `Bun.listen({ unix: ${JSON.stringify(sock)}, socket: { open(s) { s.end(); }, data() {} } }); setInterval(() => {}, 1000);`,
+        `Bun.listen({ unix: ${JSON.stringify(sock)}, socket: { open() {}, data(s) { s.end(); } } }); console.log("listening"); setInterval(() => {}, 1000);`,
       ],
-      { stdout: "ignore", stderr: "ignore" },
+      { stdout: "pipe", stderr: "ignore" },
     );
     cleanups.push(() => {
       proc.kill();
     });
-    for (let i = 0; i < 200 && !existsSync(sock); i++) await Bun.sleep(25);
+    // The listener hangs up only after it has read the request: closing on open races the client's
+    // write, and a close with unread data is a reset ("connection error"), not a plain hang-up.
+    // The bind creates the file before listen(2) runs: a connect in that gap is refused and reads
+    // as a stale socket. Wait for the listener to say it is listening, not for the file.
+    const ready = await Promise.race([
+      proc.stdout.getReader().read(),
+      Bun.sleep(20_000),
+    ]);
+    expect(typeof ready === "object" && !ready.done).toBe(true);
     const [local, localOpened] = recorder(dir, "local-opened");
     const r = client(["https://probe.invalid/hangup"], {
       SMART_OPEN_SOCKET: sock,

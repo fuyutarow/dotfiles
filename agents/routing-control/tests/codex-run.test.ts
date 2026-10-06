@@ -56,7 +56,7 @@ case "$FAKE_CODEX_MODE" in
     sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
   nolast) echo '{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0}}'; exit 0 ;;
 esac
-echo '{"type":"thread.started"}'
+echo '{"type":"thread.started","thread_id":"thread-fake-0001"}'
 echo '{"type":"item.started","item":{"type":"command_execution","command":"bun test"}}'
 echo '{"type":"item.completed","item":{"type":"file_change","changes":[{"path":"/w/kernel.ts"}]}}'
 echo 'not json at all'
@@ -89,6 +89,7 @@ const Receipt = z.object({
   last_message: z.string().optional(),
   stderr_tail: z.string().optional(),
   cause: z.string().optional(),
+  session: z.string().optional(),
   progress: z
     .object({ last: z.string(), commands: z.number(), files: z.number() })
     .optional(),
@@ -486,6 +487,12 @@ describe("codex-run", () => {
       commands: 1,
       files: 1,
     });
+  });
+
+  test("I1: the receipt names codex's thread as the worker's session", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run(FULL, { CODEX_RUN_BIN: bin });
+    expect(r.receipt.session).toBe("thread-fake-0001");
   });
 
   test("exit 0 with no last message is a failure, not success", () => {

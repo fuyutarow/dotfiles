@@ -48,7 +48,12 @@ import { jsonText, z } from "../../hooks/zod.ts";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { loadRoster } from "../../models/roster.ts";
 import { judge, ordersIn, parseFloorConfig } from "../../hooks/model-orders.ts";
-import { lastError, progressWriter, tallyOf } from "./codex-progress.ts";
+import {
+  lastError,
+  progressWriter,
+  sessionOf,
+  tallyOf,
+} from "./codex-progress.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
@@ -501,7 +506,9 @@ const progressSoFar = tallyOf(events);
 const cause =
   lastError(events) ??
   `codex printed no error event; last stderr line: ${errText.trim().split("\n").at(-1) ?? ""}`;
+const session = sessionOf(events);
 const common = {
+  ...(session === undefined ? {} : { session }),
   codex_exit: code,
   turns,
   usage,

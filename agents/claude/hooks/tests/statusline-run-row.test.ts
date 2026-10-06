@@ -44,13 +44,14 @@ function marker(
   );
 }
 
-const progress = (last: string, ageS: number): string =>
+const progress = (last: string, ageS: number, session?: string): string =>
   JSON.stringify({
     schema: 1,
     at: Temporal.Now.instant().subtract({ seconds: ageS }).toString(),
     last,
     commands: 12,
     files: 3,
+    ...(session === undefined ? {} : { session }),
   });
 
 async function render(stateDir: string): Promise<string> {
@@ -109,6 +110,20 @@ describe("statusline Run row", () => {
       (await render(dir)).split("\n").filter((l) => l.includes("luna-high"))
         .length,
     ).toBe(1);
+  });
+
+  // I3 (owner 2026-10-06): a coordinator names a worker by the id its vendor gave it (codex thread,
+  // claude session); the row shows its first 8 characters once the worker has printed it.
+  test("a worker's vendor session id is shown, short, after its elapsed time", async () => {
+    const dir = join(scratch, "session");
+    marker(dir, "s", process.pid, "nothrow-1");
+    writeFileSync(
+      join(dir, "active", "s.progress.json"),
+      progress("$ ls", 2, "01a1111b-7dab-7d61-8f9b-231c4cc9568a"),
+    );
+    expect(await render(dir)).toMatch(
+      /^luna-high 1m3\d+s 01a1111b nothrow-1 │ \$ ls · 12 cmd · 3 files$/mu,
+    );
   });
 
   test("more workers than the cap: the rest are counted, not dropped silently", async () => {

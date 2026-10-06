@@ -20,12 +20,19 @@ const Item = z.looseObject({
   query: z.string().optional(),
   changes: z.array(z.looseObject({ path: z.string() })).optional(),
 });
-const Event = z.looseObject({ type: z.string(), item: Item.optional() });
+const Event = z.looseObject({
+  type: z.string(),
+  item: Item.optional(),
+  thread_id: z.string().optional(),
+});
 
 export type Tally = {
   last: string;
   commands: number;
   files: ReadonlySet<string>;
+  // The vendor's own id for this worker (codex thread_id, claude session_id), once it has printed
+  // it: how a coordinator names the worker, and what `codex exec resume` / `claude --resume` take.
+  session?: string;
 };
 export const emptyTally = (): Tally => ({
   last: "starting",
@@ -82,11 +89,18 @@ export function tallyOf(events: string): {
   return { last: t.last, commands: t.commands, files: t.files.size };
 }
 
+/** The worker's session id (codex's thread_id) from a whole stdout, or undefined before codex named it. */
+export const sessionOf = (events: string): string | undefined =>
+  events.split("\n").reduce((acc, l) => foldEvent(acc, l), emptyTally())
+    .session;
+
 /** The tally after one stdout line. */
 export function foldEvent(t: Tally, line: string): Tally {
   const parsed = jsonOf(Event).safeParse(line);
   if (!parsed.success) return t;
-  const { type, item } = parsed.data;
+  const { type, item, thread_id: threadId } = parsed.data;
+  if (type === "thread.started" && threadId !== undefined)
+    return { ...t, session: threadId };
   if (item === undefined) return t;
   if (type === "item.started" && item.type === "command_execution")
     return {
@@ -118,6 +132,7 @@ export const toProgress = (t: Tally, at: string): Progress => ({
   last: t.last,
   commands: t.commands,
   files: t.files.size,
+  ...(t.session === undefined ? {} : { session: t.session }),
 });
 
 const WRITE_EVERY_MS = 1_000;

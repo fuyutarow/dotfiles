@@ -382,6 +382,7 @@ const ClaudeRelay = z.looseObject({
   total_cost_usd: z.unknown().optional(),
   usage: z.unknown().optional(),
   error: z.string().optional(),
+  session_id: z.unknown().optional(),
   parse_error: z.string().optional(),
   stderr: z.string().optional(),
 });
@@ -428,6 +429,7 @@ function claudeWorker(
   const failed = r.exit_code === 0 ? "ok" : "claude-failed";
   const outcome = r.timed_out === true ? "timeout" : failed;
   return {
+    ...(typeof r.session_id === "string" ? { session: r.session_id } : {}),
     ...(outcome === "ok" ? {} : { cause: claudeCause(r) }),
     schema: 1,
     outcome,
@@ -598,13 +600,18 @@ const LogLine = z.looseObject({
   worker: z
     .looseObject({
       outcome: z.string().optional(),
+      session: z.string().optional(),
       elapsed_s: z.number().optional(),
       last_message: z.string().optional(),
+      // null: a claude worker whose relay carried no usage (claudeWorker writes `usage: null`).
+      // Before 2026-10-06 null failed this schema and the WHOLE run line was skipped by readLog —
+      // invisible to grade, the O3 gate and stats.
       usage: z
         .looseObject({
           input_tokens: z.number().optional(),
           output_tokens: z.number().optional(),
         })
+        .nullable()
         .optional(),
     })
     .optional(),
@@ -1053,6 +1060,20 @@ async function main(): Promise<number | undefined> {
   return undefined;
 }
 
+/** A run named by the router's run_id, or by its worker's vendor session id (a unique prefix):
+ *  a coordinator names a worker the way its vendor does (owner 2026-10-06). An unknown id is passed
+ *  through, so grade / waive say "no run"; a prefix several runs share is refused, naming them. */
+function resolveRunId(id: string): string {
+  const runs = readLog().filter((l) => l.kind === "run");
+  if (id === "" || runs.some((l) => l.run_id === id)) return id;
+  const hits = runs.filter((l) => (l.worker?.session ?? "").startsWith(id));
+  if (hits.length > 1)
+    fatal(
+      `${id} matches ${hits.length} runs: ${hits.map((h) => h.run_id ?? "?").join(", ")} — give more of the session id, or the run_id`,
+    );
+  return hits[0]?.run_id ?? id;
+}
+
 /** grade RUN_ID: exactly one of --evidence (Jev grades) or --waive (a recorded reason). */
 async function gradeCommand(
   runId: string,
@@ -1063,12 +1084,13 @@ async function gradeCommand(
     fatal("grade takes --evidence or --waive, not both");
   if (why !== undefined && why.trim() === "")
     fatal("--waive needs the reason this run cannot be judged");
-  if (why !== undefined) return waive(runId, why.trim());
+  const id = resolveRunId(runId);
+  if (why !== undefined) return waive(id, why.trim());
   if (evidence === undefined || evidence === "")
     fatal(
       'grade needs --evidence <file> (the checks you ran on the work), or --waive "<why>"',
     );
-  return grade(runId, evidence);
+  return grade(id, evidence);
 }
 
 const result = await attempt(main);

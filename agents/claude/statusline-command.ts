@@ -1091,7 +1091,13 @@ interface RouteRun {
   alive: boolean;
   // what the worker is doing (codex-run progress file); undefined until its first event lands
   doing:
-    | { last: string; commands: number; files: number; ageSecs: number }
+    | {
+        last: string;
+        commands: number;
+        files: number;
+        ageSecs: number;
+        session?: string; // the vendor's id for the worker (codex thread, claude session)
+      }
     | undefined;
 }
 const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
@@ -1106,6 +1112,7 @@ function doingOf(runId: string): RouteRun["doing"] {
     commands: p.commands,
     files: p.files,
     ageSecs: sinceSecs(p.at).unwrapOr(0),
+    ...(p.session === undefined ? {} : { session: p.session }),
   };
 }
 const pidAlive = fromThrowable((pid: number) => process.kill(pid, 0));
@@ -1158,6 +1165,15 @@ function doingText(d: RouteRun["doing"]): string {
   const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
   return `${DIM}│${RST} ${d.last}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
 }
+// The worker's own id as its vendor gave it (codex thread, claude session), first 8 characters, in
+// the stamp's dark gray: what a coordinator names it by (owner 2026-10-06). Absent until printed.
+const SESSION_CHARS = 8;
+function sessionText(d: RouteRun["doing"]): string {
+  const id = d?.session;
+  return id === undefined
+    ? ""
+    : `${ESC}[38;5;240m${id.slice(0, SESSION_CHARS)}${RST} `;
+}
 function routeLines(runs: RouteRun[]): string[] {
   const live = runs.filter((r) => r.alive).toSorted((a, b) => b.secs - a.secs);
   const stale = runs.length - live.length;
@@ -1165,7 +1181,7 @@ function routeLines(runs: RouteRun[]): string[] {
     .slice(0, RUN_LINES)
     .map(
       (r) =>
-        `${r.choice} ${dur(r.secs)} ${DIM}${r.label.slice(0, 32)}${RST} ${doingText(r.doing)}`,
+        `${r.choice} ${dur(r.secs)} ${sessionText(r.doing)}${DIM}${r.label.slice(0, 32)}${RST} ${doingText(r.doing)}`,
     );
   if (live.length > RUN_LINES)
     lines.push(`${DIM}+${live.length - RUN_LINES} more${RST}`);

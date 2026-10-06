@@ -66,3 +66,16 @@ test("resultEvent: the last result event, or undefined when the run never finish
   expect(resultEvent(out)?.result).toBe("OK");
   expect(resultEvent(assistant([]))).toBeUndefined();
 });
+
+// I2 (2026-10-06): claude names its session in the system init event (`claude --resume <id>`).
+test("the init event's session_id is the session id", () => {
+  const t = foldClaudeEvent(
+    emptyTally(),
+    JSON.stringify({
+      type: "system",
+      subtype: "init",
+      session_id: "a5e888f6-1dfb-4888-8e89-74b256840cac",
+    }),
+  );
+  expect(t.session).toBe("a5e888f6-1dfb-4888-8e89-74b256840cac");
+});

@@ -26,6 +26,7 @@ const Block = z.looseObject({
 });
 const Event = z.looseObject({
   type: z.string(),
+  session_id: z.string().optional(),
   message: z.looseObject({ content: z.array(Block).optional() }).optional(),
 });
 const EDITS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
@@ -57,7 +58,12 @@ function foldBlock(t: Tally, b: z.output<typeof Block>): Tally {
 /** The tally after one stream-json line. */
 export function foldClaudeEvent(t: Tally, line: string): Tally {
   const parsed = jsonOf(Event).safeParse(line);
-  if (!parsed.success || parsed.data.type !== "assistant") return t;
+  if (!parsed.success) return t;
+  // claude names its session in the system init event (`claude --resume <id>`)
+  const sessionId = parsed.data.session_id;
+  if (parsed.data.type === "system" && sessionId !== undefined)
+    return { ...t, session: sessionId };
+  if (parsed.data.type !== "assistant") return t;
   return (parsed.data.message?.content ?? []).reduce(
     (acc, b) => foldBlock(acc, b),
     t,

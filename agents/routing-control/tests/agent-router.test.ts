@@ -103,7 +103,7 @@ if (mode === "garbage") {
 const at = Bun.argv.indexOf("--progress-file");
 if (at !== -1)
   writeFileSync(Bun.argv[at + 1] ?? "", JSON.stringify({ schema: 1, at: "2026-10-06T00:00:00Z", last: "✎ kernel.ts", commands: 2, files: 1 }));
-console.log(JSON.stringify({ exit_code: 0, timed_out: false, result: "done", total_cost_usd: 0.01 }));
+console.log(JSON.stringify({ exit_code: 0, timed_out: false, result: "done", session_id: "sess-claude-0001", total_cost_usd: 0.01 }));
 `,
 );
 const NO_EGRESS = roster("no-egress", (t) =>
@@ -736,4 +736,53 @@ test("an unexpected positional argument is refused, never ignored", async () => 
     expect([args.join(" "), r.code]).toEqual([args.join(" "), 2]);
     expect(r.err).toContain("unexpected argument: extra");
   }
+});
+
+// I4 (owner 2026-10-06): a coordinator names a worker the way its vendor does. The receipt keeps
+// the vendor's session id, and the commands that take a run accept it (a unique prefix) as well
+// as the router's own run_id.
+describe("a worker is named by its vendor session id", () => {
+  const pick = brief("ids", "PICK=sonnet-medium do the thing\n");
+  const Worker = z.looseObject({
+    run_id: z.string(),
+    worker: z.looseObject({ session: z.string().optional() }),
+  });
+
+  test("the claude relay's session_id is the receipt's worker.session, and grade takes its prefix", async () => {
+    const state = join(scratch, "ids-claude");
+    const r = await router(
+      ["run", "--prompt-file", pick, "--cd", scratch, "--sandbox", "read-only"],
+      { AGENT_ROUTER_STATE_DIR: state, AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE },
+    );
+    expect(r.code).toBe(0);
+    expect(decodedJson(Worker, r.out.trim()).worker.session).toBe(
+      "sess-claude-0001",
+    );
+    const g = await router(["grade", "sess-claude", "--waive", "fixture"], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(g.code).toBe(0);
+    expect(g.err).toContain(decodedJson(Worker, r.out.trim()).run_id);
+  });
+
+  test("a prefix two runs share is refused, naming both", async () => {
+    const state = join(scratch, "ids-ambiguous");
+    const ids: string[] = [];
+    for (const cwd of [
+      mkdtempSync(join(scratch, "ids-a-")),
+      mkdtempSync(join(scratch, "ids-b-")),
+    ]) {
+      const r = await router(
+        ["run", "--prompt-file", pick, "--cd", cwd, "--sandbox", "read-only"],
+        { AGENT_ROUTER_STATE_DIR: state, AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE },
+      );
+      ids.push(decodedJson(Worker, r.out.trim()).run_id);
+    }
+    const g = await router(["grade", "sess-claude", "--waive", "fixture"], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(g.code).toBe(2);
+    expect(g.err).toContain("matches 2 runs");
+    for (const id of ids) expect(g.err).toContain(id);
+  });
 });

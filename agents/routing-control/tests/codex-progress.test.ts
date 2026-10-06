@@ -127,3 +127,23 @@ test("toProgress is the state.ts record: counts, not the path set", () => {
     files: 1,
   });
 });
+
+// I1 (2026-10-06): codex names its thread on the first event; the tally keeps it so the Run row
+// and the receipt can name the worker the way codex itself does (`codex exec resume <id>`).
+test("thread.started's thread_id is the session id, kept in the progress record", () => {
+  const t = fold([
+    ev({
+      type: "thread.started",
+      thread_id: "01a1111b-7dab-7d61-8f9b-231c4cc9568a",
+    }),
+    ev({
+      type: "item.started",
+      item: { type: "command_execution", command: "ls" },
+    }),
+  ]);
+  expect(t.session).toBe("01a1111b-7dab-7d61-8f9b-231c4cc9568a");
+  expect(toProgress(t, "2026-10-06T00:00:00Z").session).toBe(
+    "01a1111b-7dab-7d61-8f9b-231c4cc9568a",
+  );
+  expect(fold([]).session).toBeUndefined();
+});

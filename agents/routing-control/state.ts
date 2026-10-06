@@ -68,5 +68,6 @@ export const ProgressSchema = z.strictObject({
   last: z.string(),
   commands: z.number().int().nonnegative(),
   files: z.number().int().nonnegative(),
+  session: z.string().optional(), // the vendor's id for the worker (codex thread, claude session)
 });
 export type Progress = z.output<typeof ProgressSchema>;

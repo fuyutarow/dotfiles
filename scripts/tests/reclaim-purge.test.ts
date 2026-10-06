@@ -12,6 +12,11 @@ import { join } from "node:path";
 const SCRIPT = join(import.meta.dir, "..", "reclaim-purge.ts");
 const ANSI = new RegExp(`${String.fromCodePoint(27)}\\[[0-9;?]*[A-Za-z]`, "gu");
 const HANG_MS = 20_000; // a hang is the bug under test: it must not pass by waiting forever
+// bun test's 5 s default would cut a slow box short of the hang guard.
+const TEST_MS = HANG_MS + 10_000;
+// The child runs on THIS bun, not whatever `bun` resolves to on PATH: on Vast PATH gave a mise
+// shim, and its start inside a pty ran past bun test's 5 s default (2026-10-06).
+const BUN = process.execPath;
 
 function fixture(): { root: string; env: Record<string, string> } {
   const root = mkdtempSync(join(tmpdir(), "purge-"));
@@ -51,7 +56,7 @@ async function purgeTty(
       }
     },
   });
-  const proc = Bun.spawn(["bun", SCRIPT], { env, terminal });
+  const proc = Bun.spawn([BUN, SCRIPT], { env, terminal });
   const code = await Promise.race([
     proc.exited,
     Bun.sleep(HANG_MS).then(() => {
@@ -62,45 +67,61 @@ async function purgeTty(
   return { code, out: raw.replace(ANSI, "") };
 }
 
-test("yes typed at a terminal: the graveyard is emptied and the process exits 0 (does not hang)", async () => {
-  const { root, env } = fixture();
-  const r = await purgeTty("yes\r", env);
-  expect(r.code).toBe(0);
-  expect(r.out).toContain("✅ purge 完了");
-  expect(existsSync(join(root, "g", "a"))).toBe(false);
-  expect(existsSync(join(root, "g"))).toBe(true); // the directory itself survives
-});
-
-test("yes: the delete reports what it removed, every counted entry", async () => {
-  const { root, env } = fixture();
-  mkdirSync(join(root, "g", "d", "e"), { recursive: true });
-  writeFileSync(join(root, "g", "d", "e", "f"), "junk\n");
-  const r = await purgeTty("yes\r", env);
-  expect(r.code).toBe(0);
-  // a + d + d/e + d/e/f = 4 entries
-  expect(r.out).toContain("rip graveyard: 4 件を削除しました");
-});
-
-test("anything but yes, and Esc, abort with exit 1 and remove nothing", async () => {
-  for (const keys of ["no\r", "\r", "\u001B"]) {
+test(
+  "yes typed at a terminal: the graveyard is emptied and the process exits 0 (does not hang)",
+  async () => {
     const { root, env } = fixture();
-    const r = await purgeTty(keys, env);
-    expect([keys, r.code]).toEqual([keys, 1]);
-    expect(r.out).toContain("中止しました");
-    expect(existsSync(join(root, "g", "a"))).toBe(true);
-  }
-});
+    const r = await purgeTty("yes\r", env);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("✅ purge 完了");
+    expect(existsSync(join(root, "g", "a"))).toBe(false);
+    expect(existsSync(join(root, "g"))).toBe(true); // the directory itself survives
+  },
+  TEST_MS,
+);
 
-test("a yes piped into stdin is refused: the confirmation is human-only", () => {
-  for (const answer of ["yes\n", ""]) {
+test(
+  "yes: the delete reports what it removed, every counted entry",
+  async () => {
     const { root, env } = fixture();
-    const r = Bun.spawnSync(["bun", SCRIPT], {
-      stdin: new Blob([answer]),
-      env,
-      timeout: HANG_MS,
-    });
-    expect([answer, r.exitCode]).toEqual([answer, 1]);
-    expect(r.stdout.toString()).toContain("人間専用です");
-    expect(existsSync(join(root, "g", "a"))).toBe(true);
-  }
-});
+    mkdirSync(join(root, "g", "d", "e"), { recursive: true });
+    writeFileSync(join(root, "g", "d", "e", "f"), "junk\n");
+    const r = await purgeTty("yes\r", env);
+    expect(r.code).toBe(0);
+    // a + d + d/e + d/e/f = 4 entries
+    expect(r.out).toContain("rip graveyard: 4 件を削除しました");
+  },
+  TEST_MS,
+);
+
+test(
+  "anything but yes, and Esc, abort with exit 1 and remove nothing",
+  async () => {
+    for (const keys of ["no\r", "\r", "\u001B"]) {
+      const { root, env } = fixture();
+      const r = await purgeTty(keys, env);
+      expect([keys, r.code]).toEqual([keys, 1]);
+      expect(r.out).toContain("中止しました");
+      expect(existsSync(join(root, "g", "a"))).toBe(true);
+    }
+  },
+  TEST_MS,
+);
+
+test(
+  "a yes piped into stdin is refused: the confirmation is human-only",
+  () => {
+    for (const answer of ["yes\n", ""]) {
+      const { root, env } = fixture();
+      const r = Bun.spawnSync([BUN, SCRIPT], {
+        stdin: new Blob([answer]),
+        env,
+        timeout: HANG_MS,
+      });
+      expect([answer, r.exitCode]).toEqual([answer, 1]);
+      expect(r.stdout.toString()).toContain("人間専用です");
+      expect(existsSync(join(root, "g", "a"))).toBe(true);
+    }
+  },
+  TEST_MS,
+);

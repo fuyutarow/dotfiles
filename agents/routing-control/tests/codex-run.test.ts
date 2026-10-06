@@ -430,7 +430,7 @@ describe("codex-run", () => {
   });
 
   test.each([
-    [["--choice", "sonnet-high"], "is not a luna row"],
+    [["--choice", "sonnet-high"], "is not a codex-route row"],
     [["--choice", "luna-high", "--model", "gpt-6-luna"], "not both"],
   ])("--choice %p is refused before codex starts", (args, why) => {
     const { bin, log } = fakeCodex(scratch());

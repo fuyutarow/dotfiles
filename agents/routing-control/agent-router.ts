@@ -11,17 +11,18 @@
 //       agent-router ask  --request F|-                  a typed question to Jev; its answer, never acted on
 //       agent-router ls                                  running workers (stale ones flagged)
 //       agent-router stats                               picks, confidence, fallbacks, cost, outcomes
+//       agent-router export [--since ISO]                one flat JSON line per run for analysis
 //       agent-router grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
 //       agent-router grade RUN_ID --waive "<why>"        record that a run cannot be graded, and why
-//   C2  effects  run starts `codex-run --choice <row>` (agents/routing-control/workers/codex-run.ts) as a child; a
-//                Claude row is refused with the Agent call to make instead (the CLI cannot start a
-//                Claude subagent). State lives outside the repo: $XDG_STATE_HOME/agent-router
-//                (~/.local/state/agent-router): active/<run_id>.json while running, runs.jsonl forever.
+//   C2  effects  run starts `codex-run --choice <row>` for a codex row or
+//                `run-claude.ts` for a Claude row. State lives outside the repo:
+//                $XDG_STATE_HOME/agent-router (~/.local/state/agent-router): active/<run_id>.json
+//                while running, runs.jsonl forever.
 //   C3  channels stdout: exactly one JSON line (run: the agent-router receipt; pick: the pick record;
 //                ls/stats: a JSON report). stderr: one line naming the pick and why, then the
 //                worker's own liveness lines.
 //   C4  outcomes exit = the worker's (0 ok, 1 failed, 3 timeout); 2 refused/usage before any start.
-//   AUTO PICK  Jev answers one Choice question over every roster row, luna and claude (criteria =
+//   AUTO PICK  Jev answers one Choice question over every roster row, codex and claude (criteria =
 //              use_for, measured AA/TB4/SciCode, cost multiple, graded record; roster.ts criterionFor).
 //              Jev's choice is used as made; on any Jev failure, a choice outside the roster, or a cwd under no_egress, the
 //              roster default runs and the reason is recorded — never a silent substitute.
@@ -291,14 +292,14 @@ function refuseUnrunnable(roster: Roster, id: string): Choice {
   return row;
 }
 
-// A luna row runs Codex. On a machine where Codex is not logged in every worker failed AFTER launch,
+// A codex row runs Codex. On a machine where Codex is not logged in every worker failed AFTER launch,
 // and the caller learned why only by reading the run's stderr (a rented box, 2026-10-06: two
 // workers "failed to start"). Ask Codex first, and refuse with the fix and where to run it.
 function refuseUnauthenticatedCodex(): void {
   if (process.env.AGENT_ROUTER_CODEX_RUN !== undefined) return; // test seam: a fake codex-run
   if (Bun.which("codex") === null)
     fatal(
-      `codex is not installed on ${hostname()}: every luna worker would fail — install it there: mise run install:ai-clis (dotfiles)`,
+      `codex is not installed on ${hostname()}: every codex worker would fail — install it there: mise run install:ai-clis (dotfiles)`,
     );
   // bounded: a status query reads a local file.
   const r = Bun.spawnSync(["codex", "login", "status"], {
@@ -309,7 +310,7 @@ function refuseUnauthenticatedCodex(): void {
   if (r.exitCode === 0) return;
   const said = `${r.stdout.toString()}${r.stderr.toString()}`.trim();
   fatal(
-    `codex is not logged in on ${hostname()} (${said === "" ? `exit ${r.exitCode}` : said}): every luna worker would fail — log in there with \`codex login --device-auth\` (finish it in a browser on any machine), then rerun`,
+    `codex is not logged in on ${hostname()} (${said === "" ? `exit ${r.exitCode}` : said}): every codex worker would fail — log in there with \`codex login --device-auth\` (finish it in a browser on any machine), then rerun`,
   );
 }
 
@@ -330,14 +331,14 @@ const CLAUDE_MODE: Record<string, { mode: string; tools?: string }> = {
   "workspace-write": { mode: "acceptEdits", tools: "Bash" },
 };
 
-/** The worker command for a row: codex-run for luna, run-claude for claude. */
+/** The worker command for a row: codex-run for codex, run-claude for claude. */
 function workerArgs(
   roster: Roster,
   row: Choice,
   flags: RunFlags,
   progress: string,
 ): string[] {
-  if (row.route === "luna")
+  if (row.route === "codex")
     return [
       CODEX_RUN,
       "--choice",
@@ -418,7 +419,7 @@ function claudeCause(r: z.output<typeof ClaudeRelay>): string {
   return `run-claude exited ${r.exit_code} and reported no cause`;
 }
 
-/** run-claude's relay in the receipt shape luna workers report (outcome, last_message, …). */
+/** run-claude's relay in the receipt shape codex workers report (outcome, last_message, …). */
 function claudeWorker(
   out: string,
   row: Choice,
@@ -447,6 +448,120 @@ function claudeWorker(
   };
 }
 
+type TokenCounts = {
+  input: number | null;
+  cached_input: number | null;
+  output: number | null;
+  reasoning: number | null;
+};
+
+const UsageFields = z.looseObject({
+  input_tokens: z.number().optional(),
+  cached_input_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
+  reasoning_output_tokens: z.number().optional(),
+  cache_read_input_tokens: z.number().optional(),
+  cache_creation_input_tokens: z.number().optional(),
+});
+
+const tokenCounts = (route: Choice["route"], value: unknown): TokenCounts => {
+  const parsed = UsageFields.safeParse(value);
+  if (!parsed.success)
+    return { input: null, cached_input: null, output: null, reasoning: null };
+  const usage = parsed.data;
+  if (route === "claude") {
+    const cacheFields = [
+      usage.cache_read_input_tokens,
+      usage.cache_creation_input_tokens,
+    ];
+    return {
+      input: usage.input_tokens ?? null,
+      cached_input: cacheFields.every((n) => n !== undefined)
+        ? cacheFields.reduce<number>((sum, n) => sum + (n ?? 0), 0)
+        : null,
+      output: usage.output_tokens ?? null,
+      reasoning: null,
+    };
+  }
+  return {
+    input: usage.input_tokens ?? null,
+    cached_input: usage.cached_input_tokens ?? null,
+    output: usage.output_tokens ?? null,
+    reasoning: usage.reasoning_output_tokens ?? null,
+  };
+};
+
+function statsFor(
+  row: Choice,
+  pick: Pick,
+  worker: Record<string, unknown>,
+  exit: number,
+  elapsedS: number,
+  briefChars: number,
+  cwd: string,
+  asOf: string,
+): Record<string, unknown> {
+  const tokens = tokenCounts(row.route, worker.usage);
+  const price = {
+    in: row.price_in ?? null,
+    cached_in: row.price_cached_in ?? null,
+    out: row.price_out ?? null,
+    as_of: asOf,
+  };
+  let costUsd: number | null = null;
+  let costBasis: string;
+  if (row.route === "claude") {
+    const raw = worker.total_cost_usd;
+    if (typeof raw === "number") costUsd = raw;
+    else if (typeof raw === "string" && raw.trim() !== "")
+      costUsd = Number(raw);
+    else costUsd = null;
+    if (costUsd !== null && !Number.isFinite(costUsd)) costUsd = null;
+    costBasis = "billed";
+  } else {
+    const missing = Object.entries(tokens)
+      .filter(([, n]) => n === null)
+      .map(([name]) => name);
+    if (row.price_in === undefined || row.price_out === undefined) {
+      costBasis = "unknown: no list price";
+    } else if (missing.length > 0) {
+      costBasis = `unknown: missing token counts (${missing.join(", ")})`;
+    } else {
+      const input = tokens.input ?? 0;
+      const cached = tokens.cached_input ?? 0;
+      const output = tokens.output ?? 0;
+      const reasoning = tokens.reasoning ?? 0;
+      const cachedPrice = row.price_cached_in ?? row.price_in;
+      costUsd =
+        ((input - cached) * row.price_in +
+          cached * cachedPrice +
+          (output + reasoning) * row.price_out) /
+        1_000_000;
+      costBasis = "list_price_x_tokens";
+    }
+  }
+  return {
+    row: row.id,
+    family: row.id.split("-")[0],
+    route: row.route,
+    model: row.model,
+    effort: row.effort,
+    outcome:
+      typeof worker.outcome === "string" ? worker.outcome : "codex-failed",
+    exit,
+    elapsed_s:
+      typeof worker.elapsed_s === "number" ? worker.elapsed_s : elapsedS,
+    tokens,
+    cost_usd: costUsd,
+    cost_basis: costBasis,
+    price,
+    brief_chars: briefChars,
+    cwd,
+    jev_confidence: pick.confidence ?? null,
+    picked_by: pick.source,
+  };
+}
+
 async function run(flags: RunFlags): Promise<number> {
   const roster = await loadRosterOrDie();
   if (!existsSync(flags.promptFile))
@@ -462,7 +577,7 @@ async function run(flags: RunFlags): Promise<number> {
   refuseOverUngraded(resolve(flags.cd));
   const pick = await pickFor(roster, brief, flags.cd);
   const row = refuseUnrunnable(roster, pick.choice);
-  if (row.route === "luna") refuseUnauthenticatedCodex();
+  if (row.route === "codex") refuseUnauthenticatedCodex();
   else refuseMissingClaude();
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
   const label = flags.label ?? briefLabel(brief);
@@ -514,14 +629,14 @@ async function run(flags: RunFlags): Promise<number> {
   rmSync(marker, { force: true });
   rmSync(progress, { force: true });
   const elapsedS = Math.round((performance.now() - t0) / 100) / 10;
-  const lunaWorker = jsonOf(WorkerReceipt).safeParse(out.trim());
+  const codexWorker = jsonOf(WorkerReceipt).safeParse(out.trim());
   const worker =
     row.route === "claude"
       ? {
           success: true as const,
           data: claudeWorker(out, row, flags.sandbox, elapsedS),
         }
-      : lunaWorker;
+      : codexWorker;
   const progressField = done === undefined ? {} : { progress: done };
   const receipt = {
     schema: SCHEMA,
@@ -542,7 +657,17 @@ async function run(flags: RunFlags): Promise<number> {
       ? { ...progressField, ...worker.data }
       : unreadable("codex-run", "codex-failed", out),
   };
-  appendLog({ kind: "run", ...receipt });
+  const runStats = statsFor(
+    row,
+    pick,
+    receipt.worker,
+    exit,
+    elapsedS,
+    brief.length,
+    active.cwd,
+    roster.as_of,
+  );
+  appendLog({ kind: "run", ...receipt, stats: runStats });
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
   return exit;
 }
@@ -903,6 +1028,217 @@ function stats(): number {
   return 0;
 }
 
+const ExportRunLine = z.looseObject({
+  kind: z.literal("run"),
+  run_id: z.string(),
+  started_at: z.string().optional(),
+  pick: z.looseObject({
+    choice: z.string(),
+    source: z.string().optional(),
+    confidence: z.number().optional(),
+  }),
+  worker: z
+    .looseObject({
+      outcome: z.string().optional(),
+      model: z.string().optional(),
+      effort: z.string().optional(),
+      elapsed_s: z.number().optional(),
+      total_cost_usd: z.unknown().optional(),
+      usage: z.unknown().optional(),
+    })
+    .optional(),
+  exit: z.number().optional(),
+  cwd: z.string().optional(),
+  brief: z.looseObject({ chars: z.number().optional() }).optional(),
+  stats: z.unknown().optional(),
+});
+type ExportRun = z.output<typeof ExportRunLine>;
+
+const ExportStatsSchema = z.looseObject({
+  row: z.string().optional(),
+  family: z.string().optional(),
+  route: z.enum(["codex", "claude"]).optional(),
+  model: z.string().optional(),
+  effort: z.string().optional(),
+  outcome: z.string().optional(),
+  exit: z.number().nullable().optional(),
+  elapsed_s: z.number().nullable().optional(),
+  tokens: z
+    .looseObject({
+      input: z.number().nullable().optional(),
+      cached_input: z.number().nullable().optional(),
+      output: z.number().nullable().optional(),
+      reasoning: z.number().nullable().optional(),
+    })
+    .optional(),
+  cost_usd: z.number().nullable().optional(),
+  cost_basis: z.string().optional(),
+  price: z
+    .looseObject({
+      in: z.number().nullable().optional(),
+      cached_in: z.number().nullable().optional(),
+      out: z.number().nullable().optional(),
+      as_of: z.string().nullable().optional(),
+    })
+    .optional(),
+  brief_chars: z.number().nullable().optional(),
+  cwd: z.string().nullable().optional(),
+  jev_confidence: z.number().nullable().optional(),
+  picked_by: z.string().optional(),
+});
+
+const readExportRuns = (): ExportRun[] => {
+  if (!existsSync(LOG_FILE)) return [];
+  return readFileSync(LOG_FILE, "utf8")
+    .split("\n")
+    .filter((line) => line !== "")
+    .flatMap((line) => {
+      const parsed = jsonOf(ExportRunLine).safeParse(line);
+      return parsed.success ? [parsed.data] : [];
+    });
+};
+
+const latestGrades = (): Map<
+  string,
+  { grade: Grade; confidence: number | null }
+> => {
+  const result = new Map<string, { grade: Grade; confidence: number | null }>();
+  if (!existsSync(LOG_FILE)) return result;
+  const schema = z.looseObject({
+    kind: z.literal("grade"),
+    run_id: z.string(),
+    grade: GradeEnum,
+    confidence: z.number().optional(),
+  });
+  for (const line of readFileSync(LOG_FILE, "utf8").split("\n")) {
+    const parsed = jsonOf(schema).safeParse(line);
+    if (parsed.success)
+      result.set(parsed.data.run_id, {
+        grade: parsed.data.grade,
+        confidence: parsed.data.confidence ?? null,
+      });
+  }
+  return result;
+};
+
+const latestWaivers = (): Map<string, string> => {
+  const result = new Map<string, string>();
+  if (!existsSync(LOG_FILE)) return result;
+  for (const line of readFileSync(LOG_FILE, "utf8").split("\n")) {
+    const parsed = jsonOf(WaiverLine).safeParse(line);
+    if (parsed.success) result.set(parsed.data.run_id, parsed.data.reason);
+  }
+  return result;
+};
+
+function recoveredStats(
+  entry: ExportRun,
+  roster: Roster,
+): Record<string, unknown> {
+  const parsed = ExportStatsSchema.safeParse(entry.stats);
+  const snapshot = parsed.success ? parsed.data : undefined;
+  const snapshotRow = snapshot?.row;
+  if (snapshot !== undefined && snapshotRow !== undefined) {
+    return {
+      row: snapshotRow,
+      family: snapshot.family ?? snapshotRow.split("-")[0],
+      route: snapshot.route ?? null,
+      model: snapshot.model ?? null,
+      effort: snapshot.effort ?? null,
+      outcome: snapshot.outcome ?? null,
+      exit: snapshot.exit ?? entry.exit ?? null,
+      elapsed_s: snapshot.elapsed_s ?? entry.worker?.elapsed_s ?? null,
+      tokens: {
+        input: snapshot.tokens?.input ?? null,
+        cached_input: snapshot.tokens?.cached_input ?? null,
+        output: snapshot.tokens?.output ?? null,
+        reasoning: snapshot.tokens?.reasoning ?? null,
+      },
+      cost_usd: snapshot.cost_usd ?? null,
+      cost_basis: snapshot.cost_basis ?? "unknown: no stats snapshot",
+      price: {
+        in: snapshot.price?.in ?? null,
+        cached_in: snapshot.price?.cached_in ?? null,
+        out: snapshot.price?.out ?? null,
+        as_of: snapshot.price?.as_of ?? null,
+      },
+      brief_chars: snapshot.brief_chars ?? entry.brief?.chars ?? null,
+      cwd: snapshot.cwd ?? entry.cwd ?? null,
+      jev_confidence: snapshot.jev_confidence ?? entry.pick.confidence ?? null,
+      picked_by: snapshot.picked_by ?? entry.pick.source ?? null,
+    };
+  }
+  const id = entry.pick.choice;
+  const row = roster.choice.find((choice) => choice.id === id);
+  const route =
+    row?.route ??
+    (id.startsWith("luna-") ||
+    id.startsWith("terra-") ||
+    id.startsWith("sol-") ||
+    id.startsWith("astra-")
+      ? "codex"
+      : "claude");
+  const worker = entry.worker;
+  const tokens = tokenCounts(route, worker?.usage);
+  const claudeCost = worker?.total_cost_usd;
+  let billedCost: number | null = null;
+  if (typeof claudeCost === "number") billedCost = claudeCost;
+  else if (typeof claudeCost === "string" && claudeCost.trim() !== "")
+    billedCost = Number(claudeCost);
+  return {
+    row: id,
+    family: id.split("-")[0],
+    route,
+    model: worker?.model ?? row?.model ?? null,
+    effort: worker?.effort ?? row?.effort ?? null,
+    outcome: worker?.outcome ?? null,
+    exit: entry.exit ?? null,
+    elapsed_s: worker?.elapsed_s ?? null,
+    tokens,
+    cost_usd:
+      route === "claude" &&
+      typeof billedCost === "number" &&
+      Number.isFinite(billedCost)
+        ? billedCost
+        : null,
+    cost_basis: route === "claude" ? "billed" : "unknown: no stats snapshot",
+    price: { in: null, cached_in: null, out: null, as_of: null },
+    brief_chars: entry.brief?.chars ?? null,
+    cwd: entry.cwd ?? null,
+    jev_confidence: entry.pick.confidence ?? null,
+    picked_by: entry.pick.source ?? null,
+  };
+}
+
+async function exportRuns(since: string | undefined): Promise<number> {
+  let threshold: string | undefined;
+  if (since !== undefined) {
+    const parsed = await attempt(() => Temporal.Instant.from(since).toString());
+    if (!parsed.ok) fatal(`--since must be an ISO instant: ${since}`);
+    threshold = parsed.value;
+  }
+  const roster = await loadRosterOrDie();
+  const grades = latestGrades();
+  const waivers = latestWaivers();
+  const lines = readExportRuns().filter(
+    (entry) => threshold === undefined || (entry.started_at ?? "") >= threshold,
+  );
+  for (const entry of lines) {
+    const latest = grades.get(entry.run_id);
+    const waived = waivers.get(entry.run_id);
+    const flat = {
+      ...recoveredStats(entry, roster),
+      run_id: entry.run_id,
+      started_at: entry.started_at ?? null,
+      grade: latest?.grade ?? null,
+      confidence: latest?.confidence ?? null,
+      ...(waived === undefined ? {} : { waived }),
+    };
+    process.stdout.write(`${JSON.stringify(flat)}\n`);
+  }
+  return 0;
+}
+
 // --- ask: a typed question to Jev, for any caller ---------------------------------------------------
 //
 // Ported from driving-jev's jev.ts (retired 2026-10-06; agent-router is the one entry point for
@@ -1145,6 +1481,22 @@ const argv = cli({
       help: { description: "pick and outcome statistics from runs.jsonl" },
     }),
     command({
+      name: "export",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      flags: {
+        since: {
+          type: String,
+          description: "include runs started at or after this ISO instant",
+        },
+      },
+      help: {
+        description:
+          "one flat JSON line per run, joined to its latest grade or waiver",
+      },
+    }),
+    command({
       name: "grade",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -1220,6 +1572,7 @@ async function main(): Promise<number | undefined> {
   }
   if (argv.command === "ls") return ls();
   if (argv.command === "stats") return stats();
+  if (argv.command === "export") return exportRuns(argv.flags.since);
   if (argv.command === "grade")
     return gradeCommand(argv._.runId, argv.flags.evidence, argv.flags.waive);
   return undefined;

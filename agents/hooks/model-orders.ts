@@ -777,7 +777,9 @@ function nameAModel(order: Order, floors: Floors): string {
   const example = firstRow(floors, CLI_VENDORS[order.cli]);
   const e = example === undefined ? "" : `, e.g. -m ${exampleSlug(example)}`;
   const skill = order.cli === "agy" ? "antigravity" : order.cli;
-  return `\`${order.label}\` names no model — a bare ${order.cli} call silently inherits its own configured default, which is not necessarily a current one (driving-${skill} C2: every embedded call passes the model explicitly). Add -m <slug> of the current generation${e}`;
+  const contract =
+    order.cli === "codex" ? "codex-run CLI contract C1" : `driving-${skill} C2`;
+  return `\`${order.label}\` names no model — a bare ${order.cli} call silently inherits its own configured default, which is not necessarily a current one (${contract}: every embedded call passes the model explicitly). Add -m <slug> of the current generation${e}`;
 }
 
 /** One sentence naming what is wrong with this order and the smallest edit, or undefined if it passes. */

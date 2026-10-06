@@ -3,13 +3,13 @@
 //
 // THE ROSTER (agents/models/dispatch-roster.toml, read through agents/models/roster.ts) is the one
 // home of what may be dispatched, and agent-router is the one entry point: Jev picks a row from the
-// brief, luna rows run `codex exec` (codex-run), claude rows run `claude -p` (agents/routing-control/workers/run-claude.ts,
+// brief, codex rows run `codex exec` (codex-run), claude rows run `claude -p` (agents/routing-control/workers/run-claude.ts,
 // run-claude.ts, bounded by the roster's [claude_run]). Every run is logged, shown on the statusline
 // Run: row and gradable — none of which an Agent or Workflow call would be.
 //
 // History: until 2026-10-06 a claude row ran as the Agent tool (`subagent_type: "<id>"`) and the
-// roster switched rows on and off with `enabled`. Owner 2026-10-06: Jev routes everything, luna
-// first by a declared bias, no on/off switch — so this hook no longer judges subagent types: it
+// roster switched rows on and off with `enabled`. Owner 2026-10-06: Jev routes everything with no
+// on/off switch — so this hook no longer judges subagent types: it
 // denies the tools and points at the entry point, with the table.
 //
 // FAIL CLOSED: an unreadable roster or any hook error denies; run.sh also denies when bun is
@@ -46,8 +46,8 @@ async function main(): Promise<void> {
   // SINGLE-AXIS: one question (is this the entry point?) — the tool is never it, whatever its input.
   decidePre(
     "deny",
-    `dispatch-contract: the ${tool} tool dispatches nothing — every worker, luna or claude, starts with ${ENTRY}. ` +
-      `Jev picks the row from the brief (luna first: a claude row must be rated well above the best luna row); ` +
+    `dispatch-contract: the ${tool} tool dispatches nothing — every worker, codex or claude, starts with ${ENTRY}. ` +
+      `Jev picks the row from the brief (choose the cheapest row sufficient for its needs); ` +
       `put scope, risk and difficulty in the brief, and declare the resource class there. ` +
       `For parallel work start several in the background.\nRoster (${ROSTER_FILE}):\n${rosterTable(loaded.value)}`,
   );

@@ -22,6 +22,7 @@ const scratch = mkdtempSync(join(tmpdir(), "agent-router-test-"));
 // Every request body the fake Jev received, in order (what left the machine).
 const bodies: string[] = [];
 const server = Bun.serve({
+  hostname: "127.0.0.1",
   port: 0,
   fetch: async (req) => {
     const body = await req.text();
@@ -98,7 +99,8 @@ writeFileSync(
   `import { appendFileSync } from "node:fs";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 const exit = Number(process.env.FAKE_EXIT ?? "0");
-console.log(JSON.stringify({ schema: 1, outcome: exit === 0 ? "ok" : "codex-failed", elapsed_s: 1.5, usage: { input_tokens: 100, output_tokens: 7 } }));
+const usage = process.env.FAKE_USAGE === "missing" ? { input_tokens: 100 } : { input_tokens: 100, cached_input_tokens: 20, output_tokens: 7, reasoning_output_tokens: 3 };
+console.log(JSON.stringify({ schema: 1, outcome: exit === 0 ? "ok" : "codex-failed", elapsed_s: 1.5, usage }));
 process.exit(exit);
 `,
 );
@@ -133,7 +135,7 @@ if (mode === "garbage") {
 const at = Bun.argv.indexOf("--progress-file");
 if (at !== -1)
   writeFileSync(Bun.argv[at + 1] ?? "", JSON.stringify({ schema: 1, at: "2026-10-06T00:00:00Z", last: "✎ kernel.ts", commands: 2, files: 1 }));
-console.log(JSON.stringify({ exit_code: 0, timed_out: false, result: "done", session_id: "sess-claude-0001", total_cost_usd: 0.01 }));
+console.log(JSON.stringify({ exit_code: 0, timed_out: false, result: "done", session_id: "sess-claude-0001", total_cost_usd: 0.01, usage: { input_tokens: 80, cache_read_input_tokens: 10, cache_creation_input_tokens: 5, output_tokens: 7 } }));
 `,
 );
 const NO_EGRESS = roster("no-egress", (t) =>
@@ -187,6 +189,54 @@ const Receipt = z.looseObject({
   }),
   worker: z.looseObject({ outcome: z.string() }),
 });
+const RunLogRecord = z.looseObject({
+  stats: z.looseObject({
+    row: z.string(),
+    family: z.string(),
+    route: z.enum(["codex", "claude"]),
+    model: z.string(),
+    effort: z.string(),
+    outcome: z.string(),
+    exit: z.number(),
+    tokens: z.looseObject({
+      input: z.number().nullable(),
+      cached_input: z.number().nullable(),
+      output: z.number().nullable(),
+      reasoning: z.number().nullable(),
+    }),
+    cost_usd: z.number().nullable(),
+    cost_basis: z.string(),
+    price: z.looseObject({
+      in: z.number().nullable(),
+      out: z.number().nullable(),
+      as_of: z.string(),
+    }),
+    brief_chars: z.number(),
+    cwd: z.string(),
+    jev_confidence: z.number().nullable(),
+    picked_by: z.string(),
+  }),
+});
+const ExportRecord = z.looseObject({
+  run_id: z.string(),
+  family: z.string(),
+  grade: z.enum(["pass", "partial", "fail"]).nullable(),
+  confidence: z.number().nullable(),
+  price: z.looseObject({
+    in: z.number().nullable(),
+    out: z.number().nullable(),
+    as_of: z.string().nullable(),
+  }),
+  tokens: z.looseObject({
+    input: z.number().nullable(),
+    cached_input: z.number().nullable(),
+    output: z.number().nullable(),
+    reasoning: z.number().nullable(),
+  }),
+  cost_usd: z.number().nullable(),
+  waived: z.string().optional(),
+});
+const RunIdSchema = z.looseObject({ run_id: z.string() });
 
 describe("agent-router run", () => {
   const b = brief("task", "Fix the flaky test in scripts/tests.\n");
@@ -211,7 +261,47 @@ describe("agent-router run", () => {
     expect(readFileSync(join(r.state, "runs.jsonl"), "utf8")).toContain(
       '"kind":"run"',
     );
+    const runRecord = decodedJson(
+      RunLogRecord,
+      readFileSync(join(r.state, "runs.jsonl"), "utf8").trim(),
+    );
+    expect(runRecord.stats).toMatchObject({
+      row: "luna-max",
+      family: "luna",
+      route: "codex",
+      model: "gpt-6-luna",
+      effort: "max",
+      outcome: "ok",
+      exit: 0,
+      tokens: { input: 100, cached_input: 20, output: 7, reasoning: 3 },
+      cost_basis: "list_price_x_tokens",
+      price: { in: 0.1, out: 0.5, as_of: "2026-10-06" },
+      brief_chars: readFileSync(b, "utf8").length,
+      cwd: scratch,
+      jev_confidence: 0.9,
+      picked_by: "jev",
+    });
+    expect(runRecord.stats.cost_usd).toBeCloseTo(13.2 / 1_000_000);
     expect(readdirSync(join(r.state, "active"))).toEqual([]);
+  });
+
+  test("codex cost is unknown when any token count is absent", async () => {
+    const r = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      { FAKE_USAGE: "missing" },
+    );
+    const record = decodedJson(
+      RunLogRecord,
+      readFileSync(join(r.state, "runs.jsonl"), "utf8").trim(),
+    );
+    expect(record.stats.cost_usd).toBeNull();
+    expect(record.stats.cost_basis).toContain("unknown:");
+    expect(record.stats.tokens).toEqual({
+      input: 100,
+      cached_input: null,
+      output: null,
+      reasoning: null,
+    });
   });
 
   test("the worker's exit code is agent-router's exit code", async () => {
@@ -351,12 +441,22 @@ describe("agent-router run", () => {
       const receipt = decodedJson(Receipt, r.out.trim());
       expect(receipt.pick.choice).toBe("sonnet-high");
       expect(receipt.worker.outcome).toBe("ok");
+      const record = decodedJson(
+        RunLogRecord,
+        readFileSync(join(r.state, "runs.jsonl"), "utf8").trim(),
+      );
+      expect(record.stats).toMatchObject({
+        route: "claude",
+        cost_usd: 0.01,
+        cost_basis: "billed",
+        tokens: { input: 80, cached_input: 15, output: 7, reasoning: null },
+      });
       const argv = readFileSync(join(scratch, "claude-argv.log"), "utf8")
         .trim()
         .split("\n")
         .at(-1);
       for (const word of [
-        '"--model","sonnet"',
+        '"--model","claude-sonnet-5-5"',
         '"--effort","high"',
         `"--permission-mode","${mode}"`,
         '"--max-budget-usd","2"',
@@ -449,6 +549,110 @@ describe("agent-router ls and stats", () => {
         })
       ).code,
     ).toBe(0);
+  });
+});
+
+describe("agent-router export", () => {
+  test("exports latest grade, waiver and legacy rows without dropping them", async () => {
+    const state = join(scratch, "export-history");
+    const evidence = join(scratch, "export-evidence.txt");
+    writeFileSync(evidence, "GRADE=pass\n");
+    const a = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("export-a", "first\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    const aId = decodedJson(RunIdSchema, a.out.trim()).run_id;
+    await router(["grade", aId, "--evidence", evidence], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    const b = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("export-b", "second\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      { AGENT_ROUTER_STATE_DIR: join(scratch, "export-waiver") },
+    );
+    const bId = decodedJson(RunIdSchema, b.out.trim()).run_id;
+    await router(["grade", bId, "--waive", "insufficient evidence"], {
+      AGENT_ROUTER_STATE_DIR: join(scratch, "export-waiver"),
+    });
+    const legacy = {
+      schema: 1,
+      kind: "run",
+      run_id: "legacy-run",
+      started_at: "2026-10-01T00:00:00Z",
+      pick: { source: "default", choice: "luna-high", reason: "old" },
+      exit: 0,
+      cwd: scratch,
+      brief: { path: evidence, chars: 5 },
+      worker: {
+        outcome: "ok",
+        model: "gpt-6-luna",
+        effort: "high",
+        elapsed_s: 2,
+        usage: {
+          input_tokens: 12,
+          cached_input_tokens: 3,
+          output_tokens: 4,
+          reasoning_output_tokens: 1,
+        },
+      },
+    };
+    writeFileSync(
+      join(state, "runs.jsonl"),
+      `${readFileSync(join(state, "runs.jsonl"), "utf8")}${JSON.stringify(legacy)}\n`,
+    );
+    const changedPrices = roster("changed-prices", (text) =>
+      text.replaceAll("price_in = 0.10", "price_in = 99.00"),
+    );
+    const out = await router(["export"], {
+      AGENT_ROUTER_STATE_DIR: state,
+      DISPATCH_ROSTER_PATH: changedPrices,
+    });
+    expect(out.code).toBe(0);
+    const rows = out.out
+      .trim()
+      .split("\n")
+      .map((line) => decodedJson(ExportRecord, line));
+    expect(rows.find((row) => row.run_id === aId)).toMatchObject({
+      grade: "pass",
+      confidence: 0.9,
+      price: { in: 0.1, out: 0.5, as_of: "2026-10-06" },
+    });
+    expect(rows.find((row) => row.run_id === "legacy-run")).toMatchObject({
+      grade: null,
+      family: "luna",
+      tokens: { input: 12, cached_input: 3, output: 4, reasoning: 1 },
+      cost_usd: null,
+    });
+
+    const waiverState = join(scratch, "export-waiver");
+    const waivedExport = await router(["export"], {
+      AGENT_ROUTER_STATE_DIR: waiverState,
+    });
+    expect(waivedExport.out).toContain(`"run_id":"${bId}"`);
+    expect(waivedExport.out).toContain('"waived":"insufficient evidence"');
+  });
+
+  test("--since filters on start time", async () => {
+    const r = await router(["export", "--since", "2026-10-06T00:00:00Z"], {
+      AGENT_ROUTER_STATE_DIR: join(scratch, "empty-export"),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toBe("");
   });
 });
 

@@ -1,107 +1,101 @@
-# dispatch-roster — the ONE home of the models a coordinator may dispatch work to (luna first).
+# dispatch-roster — the ONE home of the models a coordinator may dispatch work to.
 #
-# Every dispatch is `agent-router run --prompt-file … --cd … --sandbox …`, and Jev alone picks the
-# row (AUTO PICK below); `--choice` is refused. Every row here is a candidate — there is no on/off
-# switch (owner 2026-10-06: an `enabled` flag was not Tiger style; the bias toward luna is the
-# price in Jev's criteria, "the cheapest row sufficient", not a hand-set weight). The route says
-# how the picked row runs:
-#   route = "luna"   — codex-run --choice <id> (agents/routing-control/workers/codex-run.ts): Codex is the worker's
-#                      own harness. No Claude tokens.
-#   route = "claude" — claude -p through agents/routing-control/workers/run-claude.ts, bounded by [claude_run].
+# Every dispatch is `agent-router run --prompt-file … --cd … --sandbox …`, and Jev alone picks
+# the row (AUTO PICK below); `--choice` is refused. The route says how the picked row runs:
+#   route = "codex"  — codex-run --choice <id>; Codex is the worker's own harness.
+#   route = "claude" — claude -p through agents/routing-control/workers/run-claude.ts.
 # The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints the table.
 #
-# CONFIGURATION CONTRACT (consumers, effective file, strict schema, accepted/rejected inputs):
-# agents/models/dispatch-roster.contract.md.
-# Read through agents/models/roster.ts by: agent-router (Jev's criteria, the worker command), the
-# dispatch hook (the table on a deny), codex-run --choice (model and effort of a luna row), and
-# scripts/render-home.ts (the table in the deployed ~/.claude/CLAUDE.md; `mise run doctor` fails
-# when that copy is stale).
-#
-# NUMBERS are copied from primary pages on `as_of` and verified by an independent second reader
-# (2026-10-05: 22/22 index and price values, 59/62 benchmark values confirmed; the three
-# unconfirmed were per-effort luna points of a vendor chart, not used here). A number absent from
-# a primary page is left out, never estimated. Refresh: re-read the pages, then edit here only.
-#   aa_index   Artificial Analysis Intelligence Index v4.3.2 (artificialanalysis.ai/models/<slug>)
+# CONFIGURATION CONTRACT: agents/models/dispatch-roster.contract.md.
+# NUMBERS are copied from primary pages on as_of; absent benchmark or price values are left out,
+# never estimated. Per-effort AA Intelligence Index: artificialanalysis.ai/models/releases/<slug>.
+# TB4 and SciCode are only retained where Artificial Analysis reports measurements for the row.
+#   aa_index   Artificial Analysis Intelligence Index (2026-10-06)
 #   tb4        Terminal-Bench 4.0, AA's own run (agentic terminal tasks), percent
 #   scicode    SciCode, AA's own run (scientific code writing), percent
-#   coding_agent  AA Coding Agent Index v1.5 (DeepSWE v1.1 + SWE-Atlas-QnA + Terminal-Bench v4,
-#                 run inside each vendor's agent: Codex / Claude Code); only some rows are measured
-#   price_in / price_out  USD per 1M tokens, list price (OpenAI Standard short context; Anthropic
-#                 base, uncached)
+#   coding_agent  AA Coding Agent Index v1.5 (DeepSWE v1.1 + SWE-Atlas-QnA + Terminal-Bench v4)
+#   price_in / price_cached_in / price_out  USD per 1M tokens, list price
+#   codex model availability was probed on the CLI 2026-10-06; Claude rows accepted on CLI same date
 
 schema = 1
-as_of = "2026-10-05"
+as_of = "2026-10-06"
 default = "luna-high"
 
-# AUTO PICK — `agent-router run` asks Jev one Choice question over every row (each criterion is the
-# row's use_for, measured AA/TB4/SciCode, cost multiple and graded record; roster.ts criterionFor):
-# the cheapest row sufficient for the brief. Jev's choice is used as made. Only with no usable answer
-# (Jev unreachable, a choice outside the roster) or when the brief's cwd lies under a no_egress path
-# does the `default` row run, and the reason is logged (~/.local/state/agent-router/runs.jsonl). Every key is required (owner 2026-10-05: no
-# implicit default).
+# AUTO PICK — Jev sees each row's use, measured numbers, cost multiple and graded record.
 [auto]
-max_task_chars = 6000  # the head of the brief that leaves the machine
+max_task_chars = 6000
 timeout_ms = 20000
-no_egress = []         # ~/… or absolute paths whose briefs never leave the machine
+no_egress = []
 
-# Where Jev is reached. Owner 2026-10-05: the reseller (CODEFASHION TECH LTD, jevtypesafeai.com — not
-# TypeSafe; states it does not store request bodies) until an official TypeSafe key exists; then
-# { api = "typesafe", url = "https://api.typesafe.ai/v1/systemone", model = "jev-latest" }.
 [auto.jev]
 api = "reseller"
 url = "https://jevtypesafeai.com/api/v1/decide"
 
-# Bounds every claude worker runs with (agents/routing-control/workers/run-claude.ts flags), never the CLI defaults.
 [claude_run]
 max_budget_usd = 2.0
 max_turns = 60
 reason = "A worker task here cost 0.05-0.20 USD on luna; 20x is 1-4 USD, so 2 USD caps a run near the median at claude prices and turns an endless loop into a bounded failure."
 
 [sources]
-aa_models = "https://artificialanalysis.ai/models/"
+aa_releases = "https://artificialanalysis.ai/models/releases/"
 aa_coding_agents = "https://artificialanalysis.ai/agents/coding-agents"
 openai_pricing = "https://developers.openai.com/api/docs/pricing"
 anthropic_pricing = "https://platform.claude.com/docs/en/about-claude/pricing"
 
+# Existing measured rows keep their TB4, SciCode, coding-agent and use_for values.
+[[choice]]
+id = "luna-low"
+route = "codex"
+model = "gpt-6-luna"
+effort = "low"
+aa_index = 22
+price_in = 0.10
+price_cached_in = 0.01
+price_out = 0.50
+use_for = "lowest-cost simple work: narrow extraction, lookup, or routine text"
+
 [[choice]]
 id = "luna-medium"
-route = "luna"
+route = "codex"
 model = "gpt-6-luna"
 effort = "medium"
 aa_index = 30
 tb4 = 2.5
 scicode = 50.9
 price_in = 0.10
+price_cached_in = 0.01
 price_out = 0.50
 use_for = "bulk read-only work: extraction, inventory, summaries, simple edits"
 
 [[choice]]
 id = "luna-high"
-route = "luna"
+route = "codex"
 model = "gpt-6-luna"
 effort = "high"
 aa_index = 33
 tb4 = 4.5
 scicode = 50.3
 price_in = 0.10
+price_cached_in = 0.01
 price_out = 0.50
 use_for = "the default worker: clear-spec code and text, fixes, tests"
 
 [[choice]]
 id = "luna-xhigh"
-route = "luna"
+route = "codex"
 model = "gpt-6-luna"
 effort = "xhigh"
 aa_index = 35
 tb4 = 8.1
 scicode = 51.7
 price_in = 0.10
+price_cached_in = 0.01
 price_out = 0.50
 use_for = "wide or risky refactors across many files (measured 2026-10-06: 3/3 complete, 0 regressions where luna-high was 6/7 with 2), and harder reasoning; still weak at long terminal sessions"
 
 [[choice]]
 id = "luna-max"
-route = "luna"
+route = "codex"
 model = "gpt-6-luna"
 effort = "max"
 aa_index = 38
@@ -109,43 +103,314 @@ tb4 = 12.6
 scicode = 54.6
 coding_agent = 41.1
 price_in = 0.10
+price_cached_in = 0.01
 price_out = 0.50
 use_for = "the deepest luna; try before a Claude choice"
 
 [[choice]]
+id = "terra-low"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "low"
+aa_index = 28
+use_for = "low-cost contained reasoning when luna-low's capability is insufficient"
+
+[[choice]]
+id = "terra-medium"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "medium"
+aa_index = 30
+use_for = "routine reasoning tasks where luna's lower index is insufficient"
+
+[[choice]]
+id = "terra-high"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "high"
+aa_index = 34
+use_for = "moderately difficult reasoning when luna-high is insufficient"
+
+[[choice]]
+id = "terra-xhigh"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "xhigh"
+aa_index = 38
+use_for = "hard reasoning when luna-max's measured capability is insufficient"
+
+[[choice]]
+id = "terra-max"
+route = "codex"
+model = "gpt-5.6-terra"
+effort = "max"
+aa_index = 42
+use_for = "deep terra reasoning where the strongest luna effort is insufficient"
+
+[[choice]]
+id = "sol-low"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "low"
+aa_index = 42
+price_in = 2.00
+price_cached_in = 0.10
+price_out = 10.00
+use_for = "strong low-effort coding or reasoning where small models fall short"
+
+[[choice]]
+id = "sol-medium"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "medium"
+aa_index = 48
+price_in = 2.00
+price_cached_in = 0.10
+price_out = 10.00
+use_for = "difficult coding and reasoning with a strong cost-to-capability balance"
+
+[[choice]]
+id = "sol-high"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "high"
+aa_index = 50
+price_in = 2.00
+price_cached_in = 0.10
+price_out = 10.00
+use_for = "high-difficulty code and tool tasks needing near-top capability"
+
+[[choice]]
+id = "sol-xhigh"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "xhigh"
+aa_index = 51
+price_in = 2.00
+price_cached_in = 0.10
+price_out = 10.00
+use_for = "very hard multi-step coding and reasoning requiring near-frontier capability"
+
+[[choice]]
+id = "sol-max"
+route = "codex"
+model = "gpt-6.1-sol"
+effort = "max"
+aa_index = 52
+price_in = 2.00
+price_cached_in = 0.10
+price_out = 10.00
+use_for = "deep sol reasoning for tasks beyond lower-effort sol"
+
+[[choice]]
+id = "astra-low"
+route = "codex"
+model = "gpt-6-astra"
+effort = "low"
+aa_index = 46
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "high-capability low-effort work where sol-low is insufficient"
+
+[[choice]]
+id = "astra-medium"
+route = "codex"
+model = "gpt-6-astra"
+effort = "medium"
+aa_index = 50
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "difficult tasks needing stronger capability than sol-medium"
+
+[[choice]]
+id = "astra-high"
+route = "codex"
+model = "gpt-6-astra"
+effort = "high"
+aa_index = 51
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "very difficult coding or reasoning where sol-high is insufficient"
+
+[[choice]]
+id = "astra-xhigh"
+route = "codex"
+model = "gpt-6-astra"
+effort = "xhigh"
+aa_index = 52
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "frontier-level multi-step work at high reasoning effort"
+
+[[choice]]
+id = "astra-max"
+route = "codex"
+model = "gpt-6-astra"
+effort = "max"
+aa_index = 53
+price_in = 10.00
+price_cached_in = 1.00
+price_out = 50.00
+use_for = "deepest astra reasoning for the most demanding tasks"
+
+[[choice]]
+id = "sonnet-low"
+route = "claude"
+model = "claude-sonnet-5-5"
+effort = "low"
+aa_index = 36
+price_in = 2.00
+price_out = 10.00
+use_for = "low-effort Claude work where luna or terra capability is insufficient"
+
+[[choice]]
 id = "sonnet-medium"
 route = "claude"
-model = "sonnet"
+model = "claude-sonnet-5-5"
 effort = "medium"
 aa_index = 41
 tb4 = 29.8
 scicode = 52.9
 coding_agent = 45.9
-price_in = 2
-price_out = 10
+price_in = 2.00
+price_out = 10.00
 use_for = "multi-step terminal/agentic work luna fails at"
 
 [[choice]]
 id = "sonnet-high"
 route = "claude"
-model = "sonnet"
+model = "claude-sonnet-5-5"
 effort = "high"
 aa_index = 47
 tb4 = 43.9
 scicode = 53.7
 coding_agent = 55.0
-price_in = 2
-price_out = 10
+price_in = 2.00
+price_out = 10.00
 use_for = "hard agentic work, long tool loops, live harness edits"
+
+[[choice]]
+id = "sonnet-xhigh"
+route = "claude"
+model = "claude-sonnet-5-5"
+effort = "xhigh"
+aa_index = 52
+price_in = 2.00
+price_out = 10.00
+use_for = "very hard agentic work where sonnet-high is insufficient"
+
+[[choice]]
+id = "sonnet-max"
+route = "claude"
+model = "claude-sonnet-5-5"
+effort = "max"
+aa_index = 56
+price_in = 2.00
+price_out = 10.00
+use_for = "deepest sonnet effort for hard long-running agentic work"
+
+[[choice]]
+id = "opus-low"
+route = "claude"
+model = "claude-opus-5-5"
+effort = "low"
+aa_index = 42
+price_in = 4.00
+price_out = 20.00
+use_for = "strong low-effort design judgment where sonnet is insufficient"
 
 [[choice]]
 id = "opus-medium"
 route = "claude"
-model = "opus"
+model = "claude-opus-5-5"
 effort = "medium"
 aa_index = 51
 tb4 = 52.5
 scicode = 59.3
-price_in = 4
-price_out = 20
+price_in = 4.00
+price_out = 20.00
 use_for = "ambiguous spec, design judgment, factual accuracy, multi-repo change"
+
+[[choice]]
+id = "opus-high"
+route = "claude"
+model = "claude-opus-5-5"
+effort = "high"
+aa_index = 54
+price_in = 4.00
+price_out = 20.00
+use_for = "hard design and reasoning tasks needing more than sonnet-high"
+
+[[choice]]
+id = "opus-xhigh"
+route = "claude"
+model = "claude-opus-5-5"
+effort = "xhigh"
+aa_index = 56
+price_in = 4.00
+price_out = 20.00
+use_for = "very hard design, accuracy, and multi-repo work"
+
+[[choice]]
+id = "opus-max"
+route = "claude"
+model = "claude-opus-5-5"
+effort = "max"
+aa_index = 58
+price_in = 4.00
+price_out = 20.00
+use_for = "deepest opus effort for the most demanding judgment tasks"
+
+[[choice]]
+id = "fable-low"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "low"
+aa_index = 47
+price_in = 10.00
+price_out = 50.00
+use_for = "high-capability low-effort Claude work beyond opus-low"
+
+[[choice]]
+id = "fable-medium"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "medium"
+aa_index = 49
+price_in = 10.00
+price_out = 50.00
+use_for = "difficult Claude tasks needing more capability than sonnet-medium"
+
+[[choice]]
+id = "fable-high"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "high"
+aa_index = 51
+price_in = 10.00
+price_out = 50.00
+use_for = "very difficult Claude tasks where opus-high is insufficient"
+
+[[choice]]
+id = "fable-xhigh"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "xhigh"
+aa_index = 53
+price_in = 10.00
+price_out = 50.00
+use_for = "frontier Claude reasoning for long multi-step tasks"
+
+[[choice]]
+id = "fable-max"
+route = "claude"
+model = "claude-fable-5-1"
+effort = "max"
+aa_index = 53
+price_in = 10.00
+price_out = 50.00
+use_for = "deepest fable effort for the hardest Claude tasks"

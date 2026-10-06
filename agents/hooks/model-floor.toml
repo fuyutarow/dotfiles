@@ -19,7 +19,7 @@
 # deliberate, so a new tier is a decision and not a default. Release DATES stay in
 # agents/models/releases.toml, which is the sole home for them.
 #
-# WHAT THE HOOK ALSO ENFORCES, from agents/routing-control/workers/codex-run.ts and driving-antigravity: `codex exec|e|review`
+# WHAT THE HOOK ALSO ENFORCES, from the codex-run CLI contract (C1) and driving-antigravity: `codex exec|e|review`
 # and `agy -p` must NAME their model (a bare call inherits its own configured default, which is not
 # necessarily current). `grok` and `claude` with no -m run the vendor's own default, which the vendor
 # keeps at its newest, so only an explicit old choice is denied there.

@@ -15,15 +15,16 @@ export const ROSTER_PATH = join(import.meta.dir, "dispatch-roster.toml");
 // otherwise believe it took effect. Optional numbers mean "not on a primary page", not a default.
 const ChoiceSchema = z.strictObject({
   id: z.string().regex(/^[a-z]+-[a-z]+$/u),
-  route: z.enum(["luna", "claude"]),
+  route: z.enum(["codex", "claude"]),
   model: z.string(),
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
   aa_index: z.number().optional(),
   tb4: z.number().optional(),
   scicode: z.number().optional(),
   coding_agent: z.number().optional(),
-  price_in: z.number(),
-  price_out: z.number(),
+  price_in: z.number().optional(),
+  price_cached_in: z.number().optional(),
+  price_out: z.number().optional(),
   use_for: z.string(),
 });
 export type Choice = z.output<typeof ChoiceSchema>;
@@ -66,10 +67,10 @@ const RosterSchema = z
     choice: z.array(ChoiceSchema).min(1),
   })
   .refine(
-    (r) => r.choice.some((c) => c.id === r.default && c.route === "luna"),
+    (r) => r.choice.some((c) => c.id === r.default && c.route === "codex"),
     {
       message:
-        "default must name a luna choice id (the fallback must be the cheap route)",
+        "default must name a codex-route choice id (the fallback must be the cheap route)",
     },
   )
   .refine((r) => new Set(r.choice.map((c) => c.id)).size === r.choice.length, {
@@ -92,14 +93,23 @@ export async function loadRoster(path = ROSTER_PATH): Promise<RosterLoad> {
 }
 
 const num = (v: number | undefined): string => (v === undefined ? "–" : `${v}`);
-const price = (v: number): string => `$${v.toFixed(v < 1 ? 2 : 0)}`;
+function price(v: number | undefined): string {
+  if (v === undefined) return "—";
+  return `$${v.toFixed(v < 1 ? 2 : 0)}`;
+}
 
-const blended = (x: Choice): number => x.price_in + x.price_out;
+const blended = (x: Choice): number | undefined =>
+  x.price_in === undefined || x.price_out === undefined
+    ? undefined
+    : x.price_in + x.price_out;
 
 /** How many times the cheapest row's blended price (input + output per 1M tokens) this row costs. */
-export function costMultiple(r: Roster, c: Choice): number {
-  const cheapest = Math.min(...r.choice.map(blended));
-  return Math.round((blended(c) / cheapest) * 10) / 10;
+export function costMultiple(r: Roster, c: Choice): number | undefined {
+  const own = blended(c);
+  const prices = r.choice.flatMap((row) => blended(row) ?? []);
+  if (own === undefined || prices.length === 0) return undefined;
+  const cheapest = Math.min(...prices);
+  return Math.round((own / cheapest) * 10) / 10;
 }
 
 export type Graded = Readonly<{ pass: number; partial: number; fail: number }>;
@@ -123,18 +133,18 @@ export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
       : `graded runs here: ${graded.pass} pass, ${graded.partial} partial, ${graded.fail} fail`;
   return (
     `${c.use_for}. Measured (Artificial Analysis, ${r.as_of}): ${measured.join(", ")}. ` +
-    `Price ${price(c.price_in)}/${price(c.price_out)} per 1M tokens in/out = ${costMultiple(r, c)}x the cheapest row. ${record}.`
+    `Price ${price(c.price_in)}/${price(c.price_out)} per 1M tokens in/out = ${costMultiple(r, c) ?? "unknown"}x the cheapest row. ${record}.`
   );
 }
 
 /** The roster as a table: every row is a candidate Jev may pick, the default marked ●. */
 export function rosterTable(r: Roster): string {
   const head =
-    "| default | id | route | AA | TB4 | SciCode | $in/$out | cost | use for |\n" +
+    "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |\n" +
     "| :-: | --- | --- | --: | --: | --: | --- | --: | --- |";
   const rows = r.choice.map(
     (c) =>
-      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${costMultiple(r, c)}x | ${c.use_for} |`,
+      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_cached_in)}/${price(c.price_out)} | ${costMultiple(r, c) === undefined ? "—" : `${costMultiple(r, c)}x`} | ${c.use_for} |`,
   );
   return [head, ...rows].join("\n");
 }
@@ -145,13 +155,13 @@ export function rosterTable(r: Roster): string {
 export function rosterPolicy(r: Roster): string {
   return [
     `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record); it is asked for the cheapest row sufficient for the task, so a dearer row is picked only for a capability the task needs and cheaper rows measurably lack. \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unreachable or answers outside the roster the default \`${r.default}\` runs, and the receipt says why.**`,
-    `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest row; as of ${r.as_of}.`,
+    `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; as of ${r.as_of}.`,
     "",
     ...rosterTable(r)
       .split("\n")
       .map((l) => (l === "" ? "" : `  ${l}`)),
     "",
     `  How to choose: you do not — Jev does. Give it what it needs in the brief: scope (files, size), what is at risk (live hooks, harness), expected difficulty, how long a tool loop it needs.`,
-    `  How to run: \`agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write\` from Bash, in the background — the one entry point for luna AND claude rows (a claude row runs \`claude -p\` through agents/routing-control/workers/run-claude.ts, bounded at $${r.claude_run.max_budget_usd} and ${r.claude_run.max_turns} turns). It logs the pick, shows the run in the statusline, and prints a JSON receipt (a failure names its cause; every receipt says what the worker did). Grade each finished run before dispatching more from that cwd — \`agent-router grade <run_id> --evidence <checks>\` (Jev judges), or \`--waive "<why>"\` when it cannot be judged; until then a new run there is refused. The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints this table.`,
+    `  How to run: \`agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write\` from Bash, in the background — the one entry point for codex AND claude rows (a claude row runs \`claude -p\` through agents/routing-control/workers/run-claude.ts, bounded at $${r.claude_run.max_budget_usd} and ${r.claude_run.max_turns} turns). It logs the pick, shows the run in the statusline, and prints a JSON receipt (a failure names its cause; every receipt says what the worker did). Grade each finished run before dispatching more from that cwd — \`agent-router grade <run_id> --evidence <checks>\` (Jev judges), or \`--waive "<why>"\` when it cannot be judged; until then a new run there is refused. The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints this table.`,
   ].join("\n");
 }

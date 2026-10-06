@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // codex-run — run ONE `codex exec` as a bounded, observable worker and print its receipt.
-// Consumers: the main loop (one background call per luna worker, its receipt read directly) and a
+// Consumers: the main loop (one background call per codex-route worker, its receipt read directly) and a
 // human. PATH command via package.json `bin` (`mise run deps`).
 //
 // WHY A COMMAND, not a recipe pasted into every relay prompt: the recipe drifted (a dropped
@@ -13,7 +13,7 @@
 //   C1  invocation  codex-run (--choice ID | --model M --effort E) --sandbox S --cd DIR [--timeout-s N]
 //                   [--receipt-dir D] (--prompt-file F | prompt on stdin)
 //                   model, effort, sandbox and cd are REQUIRED: a bare codex inherits config.toml.
-//                   --choice names a luna row of agents/models/dispatch-roster.toml (the radio
+//                   --choice names a codex-route row of agents/models/dispatch-roster.toml (the roster
 //                   choice a coordinator makes) and supplies its model and effort.
 //   C2  effects     one codex subprocess, sandboxed as asked. read-only | workspace-write only;
 //                   danger-full-access is never asked for here (refused); the one way codex runs
@@ -111,7 +111,7 @@ const argv = cli(
       choice: {
         type: String,
         description:
-          "a luna row of agents/models/dispatch-roster.toml (sets model and effort)",
+          "a codex-route row of agents/models/dispatch-roster.toml (sets model and effort)",
       },
       model: {
         type: String,
@@ -225,10 +225,10 @@ if (choice !== undefined) {
   const roster = await loadRoster();
   if (!roster.ok) refuse(`cannot read the dispatch roster: ${roster.error}`);
   const row = roster.value.choice.find((c) => c.id === choice);
-  if (row?.route !== "luna")
+  if (row?.route !== "codex")
     refuse(
-      `--choice '${choice}' is not a luna row of agents/models/dispatch-roster.toml (luna rows: ${roster.value.choice
-        .filter((c) => c.route === "luna")
+      `--choice '${choice}' is not a codex-route row of agents/models/dispatch-roster.toml (codex rows: ${roster.value.choice
+        .filter((c) => c.route === "codex")
         .map((c) => c.id)
         .join(", ")}); a claude row runs through agent-router (run-claude.ts)`,
     );

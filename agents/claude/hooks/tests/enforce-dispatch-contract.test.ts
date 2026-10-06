@@ -7,7 +7,7 @@ import { ROSTER_PATH } from "../../../models/roster.ts";
 import { runHook } from "./helpers.ts";
 
 // enforce-dispatch-contract: the Agent, Task and Workflow tools dispatch nothing. Every worker,
-// luna or claude, starts through `agent-router run` (Jev picks the row, luna first by the roster's
+// codex or claude, starts through `agent-router run` (Jev picks the row from the roster's
 // declared weights), so every one of these calls is denied with that entry point and the roster
 // table. The roster itself loads strictly: an unknown key — including the retired `enabled`
 // switch — rejects the load, and the hook then fails closed.
@@ -59,7 +59,7 @@ describe("enforce-dispatch-contract", () => {
       expect(d.reason).toContain("agent-router run --prompt-file <brief>");
       expect(d.reason).toContain("run_in_background: true");
       // the table names every candidate, claude rows included, with its measured numbers and cost
-      expect(d.reason).toContain("| ● | `luna-high` | luna | 33 | 4.5 |");
+      expect(d.reason).toContain("| ● | `luna-high` | codex | 33 | 4.5 |");
       expect(d.reason).toContain("| ○ | `sonnet-high` | claude | 47 | 43.9 |");
     },
   );

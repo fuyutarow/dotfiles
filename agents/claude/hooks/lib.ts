@@ -6,7 +6,8 @@
 // Hook protocol reminders (see operating-the-harness/references/hooks.md):
 //   - stdin = event JSON
 //   - PreToolUse decision = exit 0 + JSON on stdout (decidePre)
-//   - Stop guard block    = exit 2 + stderr; never mix the two channels
+//   - Stop guard block    = top-level { decision: "block", reason } JSON on stdout. Existing
+//     guards may use exit 2 + stderr, but new guards should return the structured decision.
 
 import { readFileSync } from "node:fs";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";

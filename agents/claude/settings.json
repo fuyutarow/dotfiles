@@ -220,6 +220,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh enforce-reply-language.ts"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "sh ~/.claude/hooks/run.sh capture-last-response.ts"
           }
         ]

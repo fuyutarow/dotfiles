@@ -4,10 +4,19 @@ import { homedir } from "node:os";
 import { fromThrowable } from "neverthrow";
 
 import { existingGraveyards, graveyardCandidates } from "./graveyards";
+import {
+  liveExecutables,
+  readStore,
+  releasesToRemove,
+  STORES,
+} from "./version-stores.ts";
 
-// READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search),
-// vscode-server versions, and the ~/.cache breakdown — each with size, last-touched date
+// READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search) and their
+// optional components, vscode-server versions, self-updating CLIs' version stores, the ~/.cache
+// breakdown, and the largest build-artifact dirs of ANY age — each with size, last-touched date
 // and age. Deletes nothing; hand the table to whoever decides. STALE_DAYS=180 to retune.
+// §6 and §7 are the judgment tier: what no blind task may remove (an active project's target/,
+// a toolchain's offline docs), shown so a human can choose with the cost in view.
 
 const staleDays = Number(process.env.STALE_DAYS ?? "180");
 const now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
@@ -143,7 +152,99 @@ if (existsSync(cacheDir)) {
 }
 
 console.log();
-console.log("== 5. graveyard(削除済み・まだ空きは増えていない) ==");
+console.log(
+  "== 5. version stores: 自己更新する CLI の旧版(reclaim:toolchains が消すもの) ==",
+);
+const live = liveExecutables();
+const nowSec = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
+for (const store of STORES) {
+  const { releases, current } = readStore(userHome, store);
+  const removable = new Set(
+    releasesToRemove(releases, { current, live, nowSec, keepDays: 2 }).map(
+      (r) => r.name,
+    ),
+  );
+  for (const r of releases) {
+    const busy = (live ?? []).some(
+      (exe) => exe === r.path || exe.startsWith(`${r.path}/`),
+    );
+    const tag = [
+      r.name === current ? "現行" : "",
+      busy ? "実行中" : "",
+      removable.has(r.name) ? "→ 削除対象" : "",
+    ]
+      .filter((t) => t !== "")
+      .join(" ");
+    console.log(
+      `  ${(await duH(r.path)).padEnd(8)} ${`${store.name}/${r.name}`.padEnd(46)} ${await when(r.path)} ${tag}`,
+    );
+  }
+}
+
+/** The `limit` largest of `paths` (du -s), largest first. */
+async function largest(paths: string[], limit: number): Promise<string[]> {
+  if (paths.length === 0) return [];
+  return (await $`du -s ${paths}`.quiet().nothrow()).stdout
+    .toString()
+    .split("\n")
+    .filter((l) => l !== "")
+    .map((l) => {
+      const [kb = "0", ...rest] = l.split("\t");
+      return { kb: Number(kb), path: rest.join("\t") };
+    })
+    .toSorted((x, y) => y.kb - x.kb)
+    .slice(0, limit)
+    .map((e) => e.path);
+}
+
+async function auditBuildDirs(roots: string): Promise<void> {
+  if (Bun.which("fd") === null) {
+    console.log("  fd 不在のため未検索");
+    return;
+  }
+  const found = (
+    await $`fd -H -I -t d -d 4 --prune "^(target|node_modules|\\.venv)$" ${roots}`
+      .quiet()
+      .nothrow()
+  ).stdout
+    .toString()
+    .split("\n")
+    .filter((p) => p !== "");
+  for (const path of await largest(found, 8)) {
+    console.log(
+      `  ${(await duH(path)).padEnd(8)} ${path.replace(userHome, "~").padEnd(46)} ${await when(path)}`,
+    );
+  }
+  console.log(
+    "  (30 日以内の現役は reclaim:builds が触らない。消すなら cargo clean / KONDO_OLDER=0 mise run reclaim:pick)",
+  );
+}
+
+async function auditRustDocs(toolchains: string): Promise<void> {
+  if (!existsSync(toolchains)) return;
+  for (const tc of readdirSync(toolchains).toSorted((x, y) =>
+    x.localeCompare(y),
+  )) {
+    const docs = `${toolchains}/${tc}/share/doc/rust/html`;
+    if (!existsSync(docs)) continue;
+    console.log(
+      `  ${(await duH(docs)).padEnd(8)} rust-docs (${tc}) — オフライン文書。不要なら: rustup component remove rust-docs --toolchain ${tc}`,
+    );
+  }
+}
+
+console.log();
+console.log(
+  "== 6. 判断が要る: 年齢を問わない大きなビルド成果物 (target/ node_modules/ .venv/) ==",
+);
+await auditBuildDirs(process.env.AUDIT_PROJECTS ?? `${userHome}/Workspace`);
+
+console.log();
+console.log("== 7. 判断が要る: toolchain の省ける component ==");
+await auditRustDocs(`${userHome}/.rustup/toolchains`);
+
+console.log();
+console.log("== 8. graveyard(削除済み・まだ空きは増えていない) ==");
 // EVERY mechanism, not the first one found. Reporting only rip's graveyard is what hid 33 GB of
 // trashed agent worktrees in the XDG trash beside it on r99 (2026-09-21) — see graveyards.ts.
 const graves = existingGraveyards(
@@ -162,5 +263,5 @@ const dfLine =
   await $`df -h ${userHome} | awk 'NR==2{print $4" free / "$2}'`.text();
 console.log(`df: ${dfLine.trim()}`);
 console.log(
-  "→ 判断が要らない分は reclaim:clean(tool-native gc) / rustup・vscode-server は reclaim:toolchains(述語) / 受け入れた候補は rip / 空きが増えるのは reclaim:purge だけ",
+  "→ 判断が要らない分は reclaim:clean(tool-native gc) / rustup・vscode-server・CLI 旧版は reclaim:toolchains(述語) / §6・§7 は人が選ぶ / 受け入れた候補は rip / 空きが増えるのは reclaim:purge だけ",
 );

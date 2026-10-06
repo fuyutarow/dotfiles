@@ -12,6 +12,9 @@
 //                  KEEP_DAYS (default 2), and anything with a live server process — remove the
 //                  rest via rip (falls back to rm, same as cache-clean's cargo step). A fresh
 //                  VS Code Remote reconnect just redownloads what it needs.
+//   version stores: a self-updating CLI's superseded releases (codex, claude — scripts/
+//                  version-stores.ts): keep the current one, anything within KEEP_DAYS, and
+//                  anything a live process executes; rip the rest.
 //
 // No try/catch (house policy for this repo's scripts/*.ts — lint:ts / .oxlintrc.json): a throwing call
 // (statSync, Bun.spawnSync) goes through neverthrow's fromThrowable(); `.catch(() => "")` below
@@ -26,6 +29,12 @@ import { $ } from "bun";
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
+import {
+  liveExecutables,
+  readStore,
+  releasesToRemove,
+  STORES,
+} from "./version-stores.ts";
 
 let prototypeFlagError: string | undefined;
 
@@ -260,6 +269,39 @@ function runVscodeServerSection(
   }
 }
 
+// ---- version stores (self-updating CLIs) -------------------------------------------------
+
+function runVersionStoresSection(
+  dryRun: boolean,
+  home: string,
+  keepDays: number,
+): void {
+  console.log("== version stores (self-updating CLIs) ==");
+  const live = liveExecutables();
+  if (live === undefined)
+    console.log("  /proc 無し — 実行中の版が判定できないため、全版を残す");
+  const nowSec = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
+  for (const store of STORES) {
+    const { releases, current } = readStore(home, store);
+    if (releases.length === 0) continue;
+    if (current === undefined)
+      console.log(
+        `  ${store.name}: 現行版が解決できない (${store.pointer}) — 全版を残す`,
+      );
+    const remove = releasesToRemove(releases, {
+      current,
+      live,
+      nowSec,
+      keepDays,
+    });
+    const kept = releases.length - remove.length;
+    console.log(
+      `  ${store.name}: ${releases.length} 版, 現行 ${current ?? "?"}, 残す ${kept}`,
+    );
+    for (const r of remove) removeDir(r.path, dryRun);
+  }
+}
+
 // ---- entry --------------------------------------------------------------------------------
 
 async function main(): Promise<void> {
@@ -271,7 +313,7 @@ async function main(): Promise<void> {
       parameters: [],
       help: {
         description:
-          "Prune rustup toolchains and vscode-server old versions via a written safety predicate (no tool-native gc exists for either).",
+          "Prune rustup toolchains, vscode-server old versions and self-updating CLIs' superseded releases via a written safety predicate (no tool-native gc exists for any of them).",
       },
       flags: {
         dryRun: { type: Boolean, default: false },
@@ -303,6 +345,7 @@ async function main(): Promise<void> {
 
   await runRustupSection(dryRun, home);
   runVscodeServerSection(dryRun, home, keepDays);
+  runVersionStoresSection(dryRun, home, keepDays);
 
   console.log(
     "✅ reclaim:toolchains done. Deletions went through rip → mise run reclaim:purge frees the space.",

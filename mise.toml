@@ -505,7 +505,7 @@ description = "Reclaim disk: clear package/tool-manager GLOBAL caches (brew/bun/
 run = 'bun ~/dotfiles/scripts/reclaim-clean.ts'
 
 [tasks."reclaim:toolchains"]
-description = "Prune rustup toolchains and vscode-server old versions — no tool-native gc exists for either, so this writes an explicit safety predicate instead (default/pin-scan for rustup; busy/recency for vscode-server). Deletes via rip. KEEP_DAYS/AUDIT_PROJECTS to retune."
+description = "Prune rustup toolchains, vscode-server old versions and self-updating CLIs' superseded releases (codex, claude — scripts/version-stores.ts) — no tool-native gc exists for any, so this writes an explicit safety predicate instead (default/pin-scan for rustup; current/live-process/recency for the rest). Deletes via rip. KEEP_DAYS/AUDIT_PROJECTS to retune."
 run = 'bun ~/dotfiles/scripts/reclaim-toolchains.ts'
 
 # The Linux SYSTEM-state half of the 断捨離 pass; reclaim:clean owns the per-user package caches
@@ -538,7 +538,7 @@ description = "Reclaim project build artifacts (node_modules/target/build…) NO
 run = 'kondo --all --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
 
 [tasks."reclaim:audit"]
-description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, and the ~/.cache breakdown — each with size, last-touched date and age. Deletes nothing; hand the table to whoever decides. STALE_DAYS=180 to retune."
+description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, self-updating CLIs' version stores, the ~/.cache breakdown, and the judgment tier no blind task may touch — the largest build dirs of ANY age and optional toolchain components (rust-docs) — each with size, last-touched date and age. Deletes nothing. STALE_DAYS=180 to retune."
 run = 'bun ~/dotfiles/scripts/reclaim-audit.ts'
 
 [tasks."reclaim:purge"]

@@ -1181,7 +1181,7 @@ function routeLines(runs: RouteRun[]): string[] {
 function coloredHead(p: PromptParts): string {
   return (
     `${ESC}[35m${p.user}${RST}@${ESC}[33m${p.host}${RST}:` +
-    `${ESC}[36m${p.when} ${ESC}[38;5;240m${p.zone}${RST}|${ESC}[32m${p.cwd}${RST}`
+    `${ESC}[36m${p.when}${ESC}[38;5;240m${p.zone}${RST}|${ESC}[32m${p.cwd}${RST}`
   );
 }
 function render(df: Dataframe): string {

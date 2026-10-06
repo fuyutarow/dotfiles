@@ -1,4 +1,4 @@
-// Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM +09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
+// Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
 // (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
 //
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
     const row = strAt(r, "ansi") ?? strAt(r, "line");
     return row === undefined || row === "" ? [] : [row];
   });
-  // One record per line: "user@host:MM-DD HH:MM +09 | Ctx: … | Rate: … | Sys: …" — who and where
+  // One record per line: "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: … | Sys: …" — who and where
   // (sessions now span machines), and this event's time (the mobile app shows none), in the
   // prompt's own head shape (prompt-stamp.ts); the separator is SEP.
   const { user, host, stamp } = promptParts("");

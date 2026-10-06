@@ -169,7 +169,7 @@ function hostGpuLine(): string {
     : "host-wide GPU util/VRAM unreadable";
 }
 
-// "HH:MM +09", the prompt's own clock shape (prompt-stamp.ts), not a locale's.
+// "HH:MM+09", the prompt's own clock shape (prompt-stamp.ts), not a locale's.
 function clock(ms: number): string {
   return clockHMZ(localFromEpochSec(ms / 1000));
 }

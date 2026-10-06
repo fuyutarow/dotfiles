@@ -48,7 +48,7 @@ const messageOf = (stdout: string): string =>
 const body = (stdout: string): string =>
   messageOf(stdout)
     .replace(ANSI, "")
-    .replace(/^[^@\s]+@[^:\s]+:\d\d-\d\d \d\d:\d\d [+-]\d\d(?:\d\d)? \| /u, ""); // the prompt-stamp.ts head, offset included
+    .replace(/^[^@\s]+@[^:\s]+:\d\d-\d\d \d\d:\d\d[+-]\d\d(?:\d\d)? \| /u, ""); // the prompt-stamp.ts head, offset included
 const fire = (home: string, event: string) =>
   runHook(HOOK, { hook_event_name: event, session_id: "s1" }, { HOME: home });
 
@@ -65,7 +65,7 @@ describe("log-sys-snapshot", () => {
     const { user, host } = promptParts("");
     expect(msg.replace(ANSI, "")).toMatch(
       new RegExp(
-        `^${RegExp.escape(`${user}@${host}:`)}\\d\\d-\\d\\d \\d\\d:\\d\\d [+-]\\d\\d(?:\\d\\d)? \\| Sys: CPU 25%`,
+        `^${RegExp.escape(`${user}@${host}:`)}\\d\\d-\\d\\d \\d\\d:\\d\\d[+-]\\d\\d(?:\\d\\d)? \\| Sys: CPU 25%`,
         "u",
       ),
     );

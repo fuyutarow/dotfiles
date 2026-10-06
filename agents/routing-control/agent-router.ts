@@ -19,7 +19,8 @@
 //                ls/stats: a JSON report). stderr: one line naming the pick and why, then the
 //                worker's own liveness lines.
 //   C4  outcomes exit = the worker's (0 ok, 1 failed, 3 timeout); 2 refused/usage before any start.
-//   AUTO PICK  Jev answers one Choice question over the enabled roster rows (criteria = use_for).
+//   AUTO PICK  Jev answers one Choice question over every roster row, luna and claude (criteria =
+//              use_for, measured AA/TB4/SciCode, cost multiple, graded record; roster.ts criterionFor).
 //              Jev's choice is used as made; on any Jev failure, a choice outside the roster, or a cwd under no_egress, the
 //              roster default runs and the reason is recorded — never a silent substitute.
 //   C5  evolution  receipt and log records carry `schema`; fields are additive.

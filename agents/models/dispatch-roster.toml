@@ -1,24 +1,21 @@
 # dispatch-roster — the ONE home of the models a coordinator may dispatch work to (luna first).
 #
-# A dispatch picks exactly one `id` here, like a radio button (no free-text justification):
-#   route = "luna"   — run from the main loop's Bash: `codex-run --choice <id> --sandbox … --cd …
-#                      --prompt-file …` (agents/skills/driving-codex). Codex is the worker's own
-#                      harness; several in the background for parallel work. No Claude tokens.
-#   route = "claude" — the Agent tool with `subagent_type: "<id>"` (agents/claude/agents/<id>.md).
-# The Workflow tool is not used (owner, 2026-10-05: luna first, simplify); the dispatch hook
-# denies it and points here.
+# Every dispatch is `agent-router run --prompt-file … --cd … --sandbox …`, and Jev alone picks the
+# row (AUTO PICK below); `--choice` is refused. Every row here is a candidate — there is no on/off
+# switch (owner 2026-10-06: an `enabled` flag was not Tiger style; the bias toward luna is the
+# price in Jev's criteria, "the cheapest row sufficient", not a hand-set weight). The route says
+# how the picked row runs:
+#   route = "luna"   — codex-run --choice <id> (agents/skills/driving-codex): Codex is the worker's
+#                      own harness. No Claude tokens.
+#   route = "claude" — claude -p through driving-claude's run-claude.ts, bounded by [claude_run].
+# The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints the table.
 #
-# CONFIG vs IMPLEMENTATION: `enabled` is the switch, REQUIRED on every row (no implicit default:
-# a row added without it must fail to load, never become dispatchable by omission). A row with `enabled = false`
-# stays fully supported by the hook, codex-run and the agent definitions; it is only left out of
-# the table and denied with "disabled in the roster". Turning one on is one line here, then
-# `mise run link:dots`. Current config (owner, 2026-10-05: 「今のconfigでは lunaだけに限定」):
-# luna rows on, Claude rows off.
 # CONFIGURATION CONTRACT (consumers, effective file, strict schema, accepted/rejected inputs):
 # agents/models/dispatch-roster.contract.md.
-# Read through agents/models/roster.ts by: the dispatch hook (allowed ids, the table on a deny),
-# `codex-run --choice` (model and effort of a luna row), and scripts/render-home.ts (the table in
-# the deployed ~/.claude/CLAUDE.md; `mise run doctor` fails when that copy is stale).
+# Read through agents/models/roster.ts by: agent-router (Jev's criteria, the worker command), the
+# dispatch hook (the table on a deny), codex-run --choice (model and effort of a luna row), and
+# scripts/render-home.ts (the table in the deployed ~/.claude/CLAUDE.md; `mise run doctor` fails
+# when that copy is stale).
 #
 # NUMBERS are copied from primary pages on `as_of` and verified by an independent second reader
 # (2026-10-05: 22/22 index and price values, 59/62 benchmark values confirmed; the three

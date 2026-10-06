@@ -7,6 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   lstatSync,
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readlinkSync,
@@ -59,6 +60,16 @@ function isSymlink(p: string): Promise<boolean> {
 
 function cleanup(...dirs: string[]): void {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
+}
+
+function runWithReadonlyDir(
+  args: string[],
+  dir: string,
+): { out: string; code: number } {
+  chmodSync(dir, 0o555);
+  const result = run(args);
+  chmodSync(dir, 0o755);
+  return result;
 }
 
 describe("link-skills: argv contract", () => {
@@ -221,6 +232,29 @@ describe("link-skills: PRUNE (a) whole-dir legacy symlink", () => {
     expect(lstatSync(`${home}/.claude/skills`).isDirectory()).toBe(true);
     cleanup(dotfiles, home);
   });
+
+  test("reports a failed whole-dir unlink and continues the pass", () => {
+    const dotfiles = makeDotfiles(["only-skill"]);
+    const home = makeHome();
+    const legacyTarget = mkdtempSync(join(tmpdir(), "link-skills-legacy-"));
+    mkdirSync(`${home}/.claude`, { recursive: true });
+    symlinkSync(legacyTarget, `${home}/.claude/skills`);
+
+    const { out, code } = runWithReadonlyDir(
+      ["--dotfiles", dotfiles, "--home", home],
+      `${home}/.claude`,
+    );
+
+    expect(code).not.toBe(0);
+    expect(out).toContain(`cannot unlink ${home}/.claude/skills:`);
+    expect(out).toMatch(/EACCES|EPERM/u);
+    expect(out).toMatch(/\d+ link operation\(s\) failed/u);
+    expect(out).toContain(
+      `✅ Agent link pass complete. Source root: ${dotfiles}`,
+    );
+    expect(lstatSync(`${home}/.claude/skills`).isSymbolicLink()).toBe(true);
+    cleanup(dotfiles, home, legacyTarget);
+  });
 });
 
 describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
@@ -272,6 +306,29 @@ describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
     cleanup(dotfiles, home);
   });
 
+  test("reports a failed unlink and keeps processing after a dangling-link prune fails", () => {
+    const dotfiles = makeDotfiles(["kept-skill"]);
+    const home = makeHome();
+    mkdirSync(`${home}/.claude/skills`, { recursive: true });
+    const stale = `${home}/.claude/skills/renamed-away`;
+    symlinkSync(`${dotfiles}/agents/skills/renamed-away`, stale);
+
+    const { out, code } = runWithReadonlyDir(
+      ["--dotfiles", dotfiles, "--home", home],
+      `${home}/.claude/skills`,
+    );
+
+    expect(code).not.toBe(0);
+    expect(out).toContain(`cannot prune ${stale}:`);
+    expect(out).toMatch(/EACCES|EPERM/u);
+    expect(out).toMatch(/\d+ link operation\(s\) failed/u);
+    expect(out).toContain(
+      `✅ Agent link pass complete. Source root: ${dotfiles}`,
+    );
+    expect(lstatSync(stale).isSymbolicLink()).toBe(true);
+    cleanup(dotfiles, home);
+  });
+
   test("a real (non-symlink) plugin-installed skill directory is never touched", async () => {
     const dotfiles = makeDotfiles(["kept-skill"]);
     const home = makeHome();
@@ -320,6 +377,31 @@ describe("link-skills: PRUNE links to directories without SKILL.md", () => {
     expect(await isSymlink(`${home}/.agents/skills/retired-leftover`)).toBe(
       false,
     );
+    cleanup(dotfiles, home);
+  });
+
+  test("reports a failed no-SKILL.md prune and exits non-zero", () => {
+    const dotfiles = makeDotfiles(["kept-skill"]);
+    const incomplete = join(dotfiles, "agents", "skills", "retired-leftover");
+    mkdirSync(incomplete, { recursive: true });
+    const home = makeHome();
+    mkdirSync(`${home}/.agents/skills`, { recursive: true });
+    const stale = `${home}/.agents/skills/retired-leftover`;
+    symlinkSync(incomplete, stale);
+
+    const { out, code } = runWithReadonlyDir(
+      ["--dotfiles", dotfiles, "--home", home],
+      `${home}/.agents/skills`,
+    );
+
+    expect(code).not.toBe(0);
+    expect(out).toContain(`cannot prune ${stale}:`);
+    expect(out).toMatch(/EACCES|EPERM/u);
+    expect(out).toMatch(/\d+ link operation\(s\) failed/u);
+    expect(out).toContain(
+      `✅ Agent link pass complete. Source root: ${dotfiles}`,
+    );
+    expect(lstatSync(stale).isSymbolicLink()).toBe(true);
     cleanup(dotfiles, home);
   });
 });
@@ -398,6 +480,29 @@ describe("link-skills: PRUNE (d) stale ~/.codex/skills", () => {
     expect(await isSymlink(`${home}/.codex/skills`)).toBe(true);
     cleanup(dotfiles, home);
   });
+
+  test("reports a failed stale Codex symlink unlink and continues the pass", () => {
+    const dotfiles = makeDotfiles(["only-skill"]);
+    const home = makeHome();
+    mkdirSync(`${home}/.codex`, { recursive: true });
+    const stale = `${home}/.codex/skills`;
+    symlinkSync(`${dotfiles}/agents/commands`, stale);
+
+    const { out, code } = runWithReadonlyDir(
+      ["--dotfiles", dotfiles, "--home", home],
+      `${home}/.codex`,
+    );
+
+    expect(code).not.toBe(0);
+    expect(out).toContain(`cannot unlink ${stale}:`);
+    expect(out).toMatch(/EACCES|EPERM/u);
+    expect(out).toMatch(/\d+ link operation\(s\) failed/u);
+    expect(out).toContain(
+      `✅ Agent link pass complete. Source root: ${dotfiles}`,
+    );
+    expect(lstatSync(stale).isSymbolicLink()).toBe(true);
+    cleanup(dotfiles, home);
+  });
 });
 
 describe("link-skills: link_path guard", () => {
@@ -430,6 +535,51 @@ describe("link-skills: link_path guard", () => {
     );
     expect(readlinkSync(`${home}/.claude/commands`)).toBe(
       `${dotfiles}/agents/commands`,
+    );
+    cleanup(dotfiles, home);
+  });
+
+  test("reports failed relink unlink and symlink operations without stopping later links", () => {
+    const dotfiles = makeDotfiles(["only-skill"]);
+    const home = makeHome();
+    mkdirSync(`${home}/.claude`, { recursive: true });
+    const dst = `${home}/.claude/commands`;
+    symlinkSync("/old/commands", dst);
+
+    const { out, code } = runWithReadonlyDir(
+      ["--dotfiles", dotfiles, "--home", home],
+      `${home}/.claude`,
+    );
+
+    expect(code).not.toBe(0);
+    expect(out).toContain(`cannot unlink ${dst}:`);
+    expect(out).toContain(`cannot symlink ${dst}:`);
+    expect(out).toMatch(/EACCES|EPERM/u);
+    expect(out).toMatch(/\d+ link operation\(s\) failed/u);
+    expect(out).toContain(
+      `✅ Agent link pass complete. Source root: ${dotfiles}`,
+    );
+    expect(lstatSync(dst).isSymbolicLink()).toBe(true);
+    cleanup(dotfiles, home);
+  });
+
+  test("reports a failed symlink creation for an absent destination", () => {
+    const dotfiles = makeDotfiles([]);
+    const home = makeHome();
+    mkdirSync(`${home}/.claude`, { recursive: true });
+    const dst = `${home}/.claude/commands`;
+
+    const { out, code } = runWithReadonlyDir(
+      ["--dotfiles", dotfiles, "--home", home],
+      `${home}/.claude`,
+    );
+
+    expect(code).not.toBe(0);
+    expect(out).toContain(`cannot symlink ${dst}:`);
+    expect(out).toMatch(/EACCES|EPERM/u);
+    expect(out).toMatch(/\d+ link operation\(s\) failed/u);
+    expect(out).toContain(
+      `✅ Agent link pass complete. Source root: ${dotfiles}`,
     );
     cleanup(dotfiles, home);
   });

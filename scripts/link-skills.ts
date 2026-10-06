@@ -1,5 +1,5 @@
 // Port of mise task `link:skills` (see mise.toml). Structural port only — same links, same
-// guards, same four prune mechanisms, same printed lines as the original shell body. Consumer:
+// guards, same four prune mechanisms, same clean-run printed lines as the original shell body. Consumer:
 // human/agent running `mise run link:skills` — output is verdict-style lines meant for
 // eyeballing (linked/skip/pruned/SHADOWED), not a machine envelope, matching the shell original.
 //
@@ -30,22 +30,11 @@
 //   --dry-run  prints every intended link/unlink/prune as "[dry-run] would …" and performs
 //              zero filesystem writes (no mkdir, no symlink, no unlink, no git config).
 //
-// Error handling mirrors the original shell body EXACTLY: that body has no `set -e` anywhere,
-// so every individual `mkdir`/`ln`/`unlink`/`rm` failure is tolerated (bash just falls through
-// to the next statement) and the task ALWAYS reaches its final line, which always exits 0 (the
-// last command run is always `echo "✅ ..."`). Every filesystem mutation below is therefore
-// wrapped in its OWN local try/catch that swallows the failure and falls through, exactly like
-// bash without `set -e` — never in one outer catch-all that would abort everything else. Two
-// print sites intentionally differ in whether the failure suppresses the message, because the
-// original differs too: `link_path`'s `ln -sfn` and every PRUNE site except (b) have NO `&&`
-// between the mutation and its `echo`, so the message prints unconditionally even when the
-// mutation itself failed (preserved here, not "fixed" — see two-hats/behavior-preservation);
-// PRUNE (b) alone uses `rm -f "$old" && echo ...`, so ITS message is gated on success.
-// Exit: always 0 for every filesystem-mutation path, matching the original — no FATAL line is
-// ever printed for those (the original prints none either). Usage failures happen before that
-// path: Cleye strictFlags rejects ordinary unknown flags with its native exit 1, while the local
-// compatibility guard rejects its missed `--__proto__` edge with exit 2. Neither path performs
-// linking/pruning, so a typo'd `--dry-run` can never silently run a real mutation pass.
+// Mutation failures are reported at their call site and counted, but never stop later links or
+// prunes. A completed pass exits 1 when any unlink/symlink failed. Usage failures happen before
+// that path: Cleye strictFlags rejects ordinary unknown flags with its native exit 1, while the
+// local compatibility guard rejects its missed `--__proto__` edge with exit 2. Neither path
+// performs linking/pruning, so a typo'd `--dry-run` can never silently run a real mutation pass.
 
 import {
   existsSync,
@@ -83,15 +72,27 @@ function print(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
+let linkOperationFailures = 0;
+
+function reportLinkOperation(
+  operation: "unlink" | "symlink" | "prune",
+  path: string,
+  fn: () => void,
+): boolean {
+  const result = fromThrowable(fn)();
+  if (result.isOk()) return true;
+  linkOperationFailures += 1;
+  const reason =
+    result.error instanceof Error ? result.error.message : String(result.error);
+  print(`cannot ${operation} ${path}: ${reason}`);
+  return false;
+}
+
 /**
- * Runs a single filesystem mutation and swallows any failure, mirroring bash's tolerance for
- * an individual `mkdir`/`unlink`/`ln`/`rm` command when the script has no `set -e`: bash prints
- * that command's own stderr and falls through to the next statement regardless. Used at every
- * mutation site so a failure here NEVER bubbles to an outer catch-all that would abort the rest
- * of the run — each site stays locally tolerant, exactly like the original shell body.
+ * Runs best-effort directory setup. Link mutations use reportLinkOperation so failures remain
+ * visible and contribute to the final exit status.
  */
 function tryOp(fn: () => void): void {
-  // swallowed — see function doc.
   fromThrowable(fn)();
 }
 
@@ -160,16 +161,20 @@ function linkPath(src: string, dst: string, dryRun: boolean): void {
       print(`[dry-run] would link: ${dst} -> ${src}`);
       return;
     }
-    tryOp(() => {
-      unlinkSync(dst);
-    }); // dst didn't exist — nothing to remove, matches `ln -f`.
-    // `ln -sfn "$src" "$dst"` failing doesn't stop the original: the very next line,
-    // `echo "linked: $dst -> $src"`, has no `&&` gate on the `ln`, so it prints
-    // unconditionally even when `ln` itself failed — preserved verbatim, not fixed.
-    tryOp(() => {
+    const destinationIsSymlink = fromThrowable((path: string) =>
+      lstatSync(path),
+    )(dst)
+      .map((stat) => stat.isSymbolicLink())
+      .unwrapOr(false);
+    const unlinked =
+      !destinationIsSymlink ||
+      reportLinkOperation("unlink", dst, () => {
+        unlinkSync(dst);
+      });
+    const linked = reportLinkOperation("symlink", dst, () => {
       symlinkSync(src, dst);
     });
-    print(`linked: ${dst} -> ${src}`);
+    if (unlinked && linked) print(`linked: ${dst} -> ${src}`);
   } else {
     print(`skip (exists, not symlink): ${dst}`);
   }
@@ -238,10 +243,12 @@ function pruneDanglingSkillLink(
     print(`[dry-run] would prune (renamed/deleted): ${old}`);
     return;
   }
-  // Unlike the other prune sites, the original gates this one on success —
-  // `rm -f "$old" && echo "pruned ...`. A failed `rm -f` short-circuits the `&&`, so
-  // the message must NOT print and the loop just moves to the next entry.
-  if (fromThrowable(unlinkSync)(old).isErr()) return;
+  if (
+    !reportLinkOperation("prune", old, () => {
+      unlinkSync(old);
+    })
+  )
+    return;
   print(`pruned (renamed/deleted): ${old}`);
 }
 
@@ -263,7 +270,12 @@ function pruneLinkWithoutSkillMd(
     print(`[dry-run] would prune (no SKILL.md): ${old}`);
     return;
   }
-  if (fromThrowable(unlinkSync)(old).isErr()) return;
+  if (
+    !reportLinkOperation("prune", old, () => {
+      unlinkSync(old);
+    })
+  )
+    return;
   print(`pruned (no SKILL.md): ${old}`);
 }
 
@@ -351,12 +363,11 @@ function main(): Result<void, UsageError> {
       print(
         `[dry-run] would remove whole-dir symlink: ~/.claude/skills -> ${wholeDirTarget}`,
       );
-    } else {
-      // `unlink` failing doesn't stop the original: its `echo` on the next line has no `&&`
-      // gate, so it prints unconditionally even when `unlink` itself failed.
-      tryOp(() => {
+    } else if (
+      reportLinkOperation("unlink", claudeSkillsDir, () => {
         unlinkSync(claudeSkillsDir);
-      });
+      })
+    ) {
       print(`removed whole-dir symlink: ~/.claude/skills -> ${wholeDirTarget}`);
     }
   }
@@ -409,11 +420,11 @@ function main(): Result<void, UsageError> {
       print(
         `[dry-run] would remove stale: ~/.codex/skills -> ${staleExpected}`,
       );
-    } else {
-      // Unconditional echo, same shape as PRUNE (a)/(c) — no `&&` gates the `unlink`.
-      tryOp(() => {
+    } else if (
+      reportLinkOperation("unlink", codexSkillsDst, () => {
         unlinkSync(codexSkillsDst);
-      });
+      })
+    ) {
       print(`removed stale: ~/.codex/skills -> ${staleExpected}`);
     }
   }
@@ -431,15 +442,15 @@ function main(): Result<void, UsageError> {
   );
 
   print(`✅ Agent link pass complete. Source root: ${dotfiles}`);
+  if (linkOperationFailures > 0) {
+    print(`${linkOperationFailures} link operation(s) failed`);
+    process.exitCode = 1;
+  }
   return ok(undefined);
 }
 
-// No outer abort here, matching the original's total tolerance: every mutation above already
-// guards itself locally via tryOp(), so main() should never throw. This handler is a last-resort
-// safety net only — even in the unforeseen case something escapes a local guard, it is
-// swallowed silently (no new "FATAL" stderr line the original never printed) and the process
-// still exits 0, exactly like the original shell body always reaching its final `echo` (last
-// command run, so its exit status — always 0 — is the task's exit status).
+// The tracked unlink/symlink mutations report locally and do not reach this boundary. This is a
+// last-resort safety net for unexpected errors outside those operations.
 // Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
 // is the sync equivalent of BG1's mandated `main().catch(...)`.
 process.on("uncaughtException", (error) => {
@@ -447,7 +458,7 @@ process.on("uncaughtException", (error) => {
     process.stderr.write(`${error.message}\n${USAGE}`);
     process.exitCode = 2;
   }
-  // Every non-usage failure is swallowed — see comment above.
+  // Unexpected non-usage failures retain the existing tolerant boundary behavior.
   process.exit(process.exitCode ?? 0);
 });
 
@@ -460,7 +471,7 @@ if (mainResult.isErr()) {
   process.stderr.write(`${message}\n${USAGE}`);
   process.exitCode = 2;
 }
-// `?? 0` preserves the original's unconditional exit 0 for valid mutation paths. Locally caught
+// Clean runs retain exit 0; tracked link operation failures set exit 1 above. Locally caught
 // usage errors (including `--__proto__`) set exit 2 before this line; Cleye ordinary-unknown
 // strictness exits 1 inside the framework, before any filesystem work.
 process.exit(process.exitCode ?? 0);

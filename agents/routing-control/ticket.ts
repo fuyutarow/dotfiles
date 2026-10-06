@@ -1,0 +1,119 @@
+// The typed work ticket at the top of an agent-router brief: TOML front matter between `+++` lines.
+// A brief that does not start with `+++` is LEGACY — it comes back untouched, so no running
+// coordinator breaks. Consumers: agent-router (run, pick). Pure: no I/O, no state.
+//
+//   +++
+//   schema = 1
+//   writes = ["agents/routing-control/**"]   # globs relative to --cd; [] = read-only
+//   verify = ["bun test agents/routing-control/tests"]
+//   verify_timeout_s = 1200                  # optional; bound for all verify commands together
+//   capabilities = ["long-tool-loop"]        # optional; handed to Jev as required capabilities
+//   +++
+//   <the prose the worker receives>
+import { fromThrowable, z } from "../hooks/zod.ts";
+
+export const TICKET_SCHEMA = 1;
+export const DEFAULT_VERIFY_TIMEOUT_S = 1200;
+
+const writeGlob = z
+  .string()
+  .min(1)
+  .refine((g) => !g.startsWith("/") && !g.split("/").includes(".."), {
+    message: "a write glob is relative to --cd and stays inside it",
+  });
+
+export const TicketSchema = z.strictObject({
+  schema: z.literal(TICKET_SCHEMA),
+  writes: z.array(writeGlob),
+  verify: z.array(z.string().trim().min(1)).default([]),
+  verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),
+  capabilities: z.array(z.string().min(1)).default([]),
+});
+export type Ticket = z.output<typeof TicketSchema>;
+
+export type ParsedBrief =
+  | { kind: "legacy"; prose: string }
+  | { kind: "ticket"; ticket: Ticket; prose: string }
+  | { kind: "invalid"; reason: string };
+
+const FENCE = "+++";
+const isFence = (line: string | undefined): boolean =>
+  line !== undefined && line.trimEnd() === FENCE;
+
+const parseToml = fromThrowable(
+  (text: string): unknown => Bun.TOML.parse(text),
+  (e) => (e instanceof Error ? e.message : String(e)),
+);
+
+/** Split a brief into its ticket and the prose after it. Front matter is recognized only when the
+ *  very first line is `+++`; once it is, a malformed ticket is `invalid`, never silently legacy. */
+export function parseTicket(text: string): ParsedBrief {
+  const lines = text.split("\n");
+  if (!isFence(lines[0])) return { kind: "legacy", prose: text };
+  const end = lines.findIndex((l, i) => i > 0 && isFence(l));
+  if (end === -1)
+    return {
+      kind: "invalid",
+      reason: "front matter opened with +++ on the first line is never closed",
+    };
+  const toml = parseToml(lines.slice(1, end).join("\n"));
+  if (toml.isErr())
+    return { kind: "invalid", reason: `not valid TOML: ${toml.error}` };
+  const checked = TicketSchema.safeParse(toml.value);
+  if (!checked.success)
+    return {
+      kind: "invalid",
+      reason: checked.error.issues
+        .map((i) => {
+          const path = i.path.map(String).join(".");
+          return path === "" ? i.message : `${path}: ${i.message}`;
+        })
+        .join("; "),
+    };
+  return {
+    kind: "ticket",
+    ticket: checked.data,
+    prose: lines.slice(end + 1).join("\n"),
+  };
+}
+
+/** The one line appended to the worker's brief; empty when there is nothing to verify. */
+export function verifyLine(verify: string[]): string {
+  if (verify.length === 0) return "";
+  const list = verify.map((c) => `\`${c}\``).join("; ");
+  return `The router runs these verify commands after you exit and grades you on them: ${list}. Run them yourself in the foreground before you finish; do not background anything you need to see.`;
+}
+
+// --- overlap of write scopes ---------------------------------------------------------------------
+//
+// RULE (conservative literal prefix): a glob is reduced to its literal directory prefix — the path
+// segments before the first segment containing a glob metacharacter (* ? [ ] { }). Two globs overlap
+// when one prefix is a segment-wise prefix of the other (so `**`, with an empty prefix, overlaps
+// everything, and `a/*.ts` overlaps anything under `a/`). It never says "disjoint" for two globs
+// that could match one path; it may say "overlap" for two that in fact cannot (`a/*.ts` vs `a/*.md`).
+const WILDCARD = /[*?[\]{}]/u;
+
+function literalPrefix(glob: string): string[] {
+  const segments = glob.split("/").filter((s) => s !== "" && s !== ".");
+  const firstWild = segments.findIndex((s) => WILDCARD.test(s));
+  return firstWild === -1 ? segments : segments.slice(0, firstWild);
+}
+
+export function globsOverlap(a: string, b: string): boolean {
+  const pa = literalPrefix(a);
+  const pb = literalPrefix(b);
+  const shared = Math.min(pa.length, pb.length);
+  return pa.slice(0, shared).every((segment, i) => segment === pb[i]);
+}
+
+/** Every [mine, theirs] pair of globs that overlap. */
+export function overlappingGlobs(
+  mine: string[],
+  theirs: string[],
+): [string, string][] {
+  return mine.flatMap((m) =>
+    theirs
+      .filter((t) => globsOverlap(m, t))
+      .map((t): [string, string] => [m, t]),
+  );
+}

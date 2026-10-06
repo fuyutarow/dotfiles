@@ -15,6 +15,11 @@
 //       agent-router result RUN_ID|SESSION_PREFIX [--json] show the worker report
 //       agent-router grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
 //       agent-router grade RUN_ID --waive "<why>"        record that a run cannot be graded, and why
+//   TICKET  a brief may open with TOML front matter between `+++` lines (ticket.ts): `writes` globs, `verify`
+//           commands, `verify_timeout_s`, `capabilities`. The router then strips it for the worker, runs
+//           the verify commands after the worker exits (verify.ts), grades the run itself (graded_by
+//           "router", or a recorded waiver), and gates only runs whose `writes` overlap. No front matter
+//           = legacy mode: today's behaviour, byte for byte.
 //   C2  effects  run starts `codex-run --choice <row>` for a codex row or
 //                `run-claude.ts` for a Claude row. State lives outside the repo:
 //                $XDG_STATE_HOME/agent-router (~/.local/state/agent-router): active/<run_id>.json
@@ -61,6 +66,18 @@ import {
   type Active,
 } from "./state.ts";
 import { postJev, type JevTrace } from "./jev-client.ts";
+import {
+  overlappingGlobs,
+  parseTicket,
+  verifyLine,
+  type Ticket,
+} from "./ticket.ts";
+import {
+  runVerify,
+  verifyEvidence,
+  verifySummary,
+  type VerifyResult,
+} from "./verify.ts";
 
 const SCHEMA = STATE_SCHEMA;
 const STATE_DIR = stateDir();
@@ -129,13 +146,22 @@ function underNoEgress(cwd: string, paths: string[]): string | undefined {
   });
 }
 
-function jevRequest(roster: Roster, brief: string): Record<string, unknown> {
+function jevRequest(
+  roster: Roster,
+  brief: string,
+  capabilities: string[],
+): Record<string, unknown> {
   const tally = gradeTally();
   const criteria = Object.fromEntries(
     roster.choice.map((c) => [c.id, criterionFor(roster, c, tally.get(c.id))]),
   );
   const body: Record<string, unknown> = {
-    state: { task: brief.slice(0, roster.auto.max_task_chars) },
+    state: {
+      task: brief.slice(0, roster.auto.max_task_chars),
+      ...(capabilities.length === 0
+        ? {}
+        : { required_capabilities: capabilities }),
+    },
     questions: {
       worker: {
         type: "choice",
@@ -179,14 +205,22 @@ async function askJevChoice(
   return { ok: true, answer, trace };
 }
 
-async function askJev(roster: Roster, brief: string): Promise<Pick> {
+async function askJev(
+  roster: Roster,
+  brief: string,
+  capabilities: string[],
+): Promise<Pick> {
   const fallback = (reason: string, jev?: JevTrace): Pick => ({
     source: "default",
     choice: roster.default,
     reason,
     ...(jev === undefined ? {} : { jev }),
   });
-  const reply = await askJevChoice(roster, jevRequest(roster, brief), "worker");
+  const reply = await askJevChoice(
+    roster,
+    jevRequest(roster, brief, capabilities),
+    "worker",
+  );
   if (!reply.ok) return fallback(reply.reason, reply.trace);
   return judge(roster, reply.answer, reply.trace, fallback);
 }
@@ -231,6 +265,7 @@ async function pickFor(
   roster: Roster,
   brief: string,
   cwd: string,
+  capabilities: string[] = [],
 ): Promise<Pick> {
   const blocked = underNoEgress(cwd, roster.auto.no_egress);
   if (blocked !== undefined)
@@ -239,7 +274,7 @@ async function pickFor(
       choice: roster.default,
       reason: `cwd is under no_egress '${blocked}'; the brief stays on this machine`,
     };
-  return askJev(roster, brief);
+  return askJev(roster, brief, capabilities);
 }
 
 // --- state: active markers and the log -------------------------------------------------------------
@@ -578,13 +613,22 @@ async function run(flags: RunFlags): Promise<number> {
       `--choice ${flags.choice} refused: Jev alone picks the row. If Jev picks wrong, say more in the brief (scope, files, risk) or fix that row use_for in agents/models/dispatch-roster.toml`,
     );
   const brief = readFileSync(flags.promptFile, "utf8");
-  refuseOverUngraded(resolve(flags.cd));
-  const pick = await pickFor(roster, brief, flags.cd);
+  const parsed = parseTicket(brief);
+  if (parsed.kind === "invalid")
+    fatal(`invalid ticket in ${flags.promptFile}: ${parsed.reason}`);
+  const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
+  refuseOverUngraded(resolve(flags.cd), ticket?.writes);
+  const pick = await pickFor(
+    roster,
+    parsed.prose,
+    flags.cd,
+    ticket?.capabilities,
+  );
   const row = refuseUnrunnable(roster, pick.choice);
   if (row.route === "codex") refuseUnauthenticatedCodex();
   else refuseMissingClaude();
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
-  const label = flags.label ?? briefLabel(brief);
+  const label = flags.label ?? briefLabel(parsed.prose);
   console.error(
     `agent-router: ${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
   );
@@ -606,7 +650,25 @@ async function run(flags: RunFlags): Promise<number> {
   // run-claude via --progress-file); the statusline Run rows read it.
   const progress = progressFile(runId);
 
-  const args = workerArgs(roster, row, flags, progress, runId);
+  // A ticket's front matter is the router's, not the worker's: the worker gets the prose and the
+  // verify line, from a copy under the state dir. A legacy brief goes to the worker as the file itself.
+  const workerBrief =
+    ticket === undefined ? undefined : join(STATE_DIR, "briefs", `${runId}.md`);
+  if (workerBrief !== undefined && ticket !== undefined) {
+    mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
+    const line = verifyLine(ticket.verify);
+    writeFileSync(
+      workerBrief,
+      line === "" ? parsed.prose : `${parsed.prose.trimEnd()}\n\n${line}\n`,
+    );
+  }
+  const args = workerArgs(
+    roster,
+    row,
+    workerBrief === undefined ? flags : { ...flags, promptFile: workerBrief },
+    progress,
+    runId,
+  );
   const t0 = performance.now();
   const child = Bun.spawn([process.execPath, ...args], {
     stdin: "ignore",
@@ -616,6 +678,7 @@ async function run(flags: RunFlags): Promise<number> {
   });
   const stop = (signal: NodeJS.Signals, code: number): void => {
     child.kill(signal);
+    if (workerBrief !== undefined) rmSync(workerBrief, { force: true });
     rmSync(marker, { force: true });
     rmSync(progress, { force: true });
     process.exit(code);
@@ -632,6 +695,7 @@ async function run(flags: RunFlags): Promise<number> {
   const done = progressAtEnd(progress);
   rmSync(marker, { force: true });
   rmSync(progress, { force: true });
+  if (workerBrief !== undefined) rmSync(workerBrief, { force: true });
   const elapsedS = Math.round((performance.now() - t0) / 100) / 10;
   const codexWorker = jsonOf(WorkerReceipt).safeParse(out.trim());
   const worker =
@@ -642,6 +706,16 @@ async function run(flags: RunFlags): Promise<number> {
         }
       : codexWorker;
   const progressField = done === undefined ? {} : { progress: done };
+  const workerOutcome = z
+    .looseObject({ outcome: z.string().optional() })
+    .safeParse(worker.success ? worker.data : undefined);
+  const outcomeName = workerOutcome.success
+    ? workerOutcome.data.outcome
+    : undefined;
+  const verified =
+    ticket === undefined
+      ? undefined
+      : await verifyAfterWorker(ticket, active.cwd, outcomeName, done);
   const receipt = {
     schema: SCHEMA,
     run_id: runId,
@@ -653,9 +727,13 @@ async function run(flags: RunFlags): Promise<number> {
       chars: brief.length,
     },
     pick,
+    ...(ticket === undefined ? {} : { ticket }),
     started_at: active.started_at,
     ended_at: now(),
     exit,
+    ...(verified === undefined
+      ? {}
+      : { verify: verified.results, verify_summary: verified.summary }),
     // codex-run's own receipt carries progress; a claude worker's comes from its progress file
     worker: worker.success
       ? { ...progressField, ...worker.data }
@@ -672,8 +750,102 @@ async function run(flags: RunFlags): Promise<number> {
     roster.as_of,
   );
   appendLog({ kind: "run", ...receipt, stats: runStats });
-  process.stdout.write(`${JSON.stringify(receipt)}\n`);
+  const graded =
+    verified === undefined
+      ? {}
+      : await autoGrade(
+          roster,
+          runId,
+          brief,
+          receipt.worker,
+          active.cwd,
+          verified,
+        );
+  process.stdout.write(`${JSON.stringify({ ...receipt, ...graded })}\n`);
   return exit;
+}
+
+// --- the ticket after the worker exits: verify, then grade ---------------------------------------------
+
+interface Verified {
+  results: VerifyResult[];
+  summary: string;
+  /** why verify did not run, when it did not (the worker never started) */
+  skipped?: string;
+}
+
+/** Run the ticket's verify commands now that the worker is gone. They are skipped only for a worker
+ *  killed at its time bound before it ran a command or changed a file: there is nothing to verify. */
+async function verifyAfterWorker(
+  ticket: Ticket,
+  cwd: string,
+  outcome: string | undefined,
+  done: Done | undefined,
+): Promise<Verified> {
+  const neverStarted =
+    outcome === "timeout" &&
+    (done === undefined || (done.commands === 0 && done.files === 0));
+  if (neverStarted)
+    return {
+      results: [],
+      summary: "skipped: the worker timed out before doing any work",
+      skipped: "the worker timed out before doing any work",
+    };
+  const results = await runVerify(ticket.verify, cwd, ticket.verify_timeout_s);
+  const summary = verifySummary(results);
+  console.error(`agent-router: verify ${summary}`);
+  return { results, summary };
+}
+
+/** Grade the run from the router's own verify output (graded_by "router"); when Jev cannot, record a
+ *  waiver with the reason — a run is never left silently ungraded, and no grade is invented. */
+async function autoGrade(
+  roster: Roster,
+  runId: string,
+  brief: string,
+  worker: unknown,
+  cwd: string,
+  verified: Verified,
+): Promise<Record<string, unknown>> {
+  const waiveWith = (reason: string): Record<string, unknown> => {
+    recordWaiver(runId, reason, "router");
+    console.error(`agent-router: ${runId} waived — ${reason}`);
+    return { grade_waived: reason };
+  };
+  if (verified.skipped !== undefined)
+    return waiveWith(`auto-grade: ${verified.skipped}; nothing to grade`);
+  const noEgress = underNoEgress(cwd, roster.auto.no_egress);
+  if (noEgress !== undefined)
+    return waiveWith(
+      `auto-grade: jev unavailable: cwd is under no_egress '${noEgress}'; the brief stays on this machine`,
+    );
+  const report =
+    z.looseObject({ last_message: z.string().optional() }).safeParse(worker)
+      .data?.last_message ?? "(no report)";
+  const evidence = verifyEvidence(verified.results);
+  const asked = await attempt(() =>
+    requestGrade(roster, brief, report, evidence),
+  );
+  if (!asked.ok)
+    return waiveWith(
+      `auto-grade: jev unavailable: ${errorMessage(asked.error)}`,
+    );
+  if (!asked.value.ok)
+    return waiveWith(`auto-grade: jev unavailable: ${asked.value.reason}`);
+  const file = join(STATE_DIR, "evidence", `${runId}.txt`);
+  mkdirSync(join(STATE_DIR, "evidence"), { recursive: true });
+  writeFileSync(file, evidence);
+  recordGrade(runId, asked.value, file, evidence, "router");
+  console.error(
+    `agent-router: ${runId} graded ${asked.value.grade} by router (confidence ${asked.value.confidence.toFixed(2)})`,
+  );
+  return {
+    grade: {
+      grade: asked.value.grade,
+      confidence: asked.value.confidence,
+      graded_by: "router",
+    },
+  };
 }
 
 // --- pick / ls / stats -----------------------------------------------------------------------------
@@ -682,7 +854,15 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
   const roster = await loadRosterOrDie();
   if (!existsSync(promptFile)) fatal(`no such brief: ${promptFile}`);
   const brief = readFileSync(promptFile, "utf8");
-  const pick = await pickFor(roster, brief, cd);
+  const parsed = parseTicket(brief);
+  if (parsed.kind === "invalid")
+    fatal(`invalid ticket in ${promptFile}: ${parsed.reason}`);
+  const pick = await pickFor(
+    roster,
+    parsed.prose,
+    cd,
+    parsed.kind === "ticket" ? parsed.ticket.capabilities : [],
+  );
   appendLog({
     kind: "pick",
     at: now(),
@@ -719,6 +899,8 @@ const LogLine = z.looseObject({
   run_id: z.string().optional(),
   cwd: z.string().optional(),
   brief: z.looseObject({ path: z.string() }).optional(),
+  // present on a run dispatched with a ticket; absent = legacy
+  ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
   pick: z.looseObject({
     source: z.string(),
     choice: z.string(),
@@ -873,17 +1055,38 @@ function owedGrades(cwd: string): Logged[] {
   );
 }
 
-function refuseOverUngraded(cwd: string): void {
-  const owed = owedGrades(cwd);
+// The gate per write scope. `mine` is this run's declared writes (undefined = a legacy run, no ticket).
+//   - a read-only ticket (writes = []) is never blocked, and an ungraded read-only run never blocks;
+//   - a legacy run's scope is unknown, so it is treated as "may write anywhere": it blocks and is
+//     blocked by every writing run in the same cwd (today's same-cwd rule);
+//   - two ticket runs conflict only when some pair of their write globs overlaps (ticket.ts globsOverlap).
+function conflict(
+  mine: string[] | undefined,
+  theirs: string[] | undefined,
+): string | undefined {
+  if (mine?.length === 0 || theirs?.length === 0) return undefined;
+  if (mine === undefined || theirs === undefined)
+    return "same-cwd rule: one of the two runs has no ticket, so its write scope is unknown";
+  const pairs = overlappingGlobs(mine, theirs);
+  return pairs.length === 0
+    ? undefined
+    : pairs.map(([m, t]) => `${t} overlaps ${m}`).join(", ");
+}
+
+function refuseOverUngraded(cwd: string, mine?: string[]): void {
+  const owed = owedGrades(cwd).flatMap((l) => {
+    const why = conflict(mine, l.ticket?.writes);
+    return why === undefined ? [] : [{ run: l, why }];
+  });
   if (owed.length === 0) return;
   const lines = owed
     .slice(0, 10)
     .map(
-      (l) =>
-        `  ${l.run_id ?? ""}  ${l.pick.choice}  ${l.worker?.outcome ?? `exit ${l.exit ?? "?"}`}`,
+      ({ run: l, why }) =>
+        `  ${l.run_id ?? ""}  ${l.pick.choice}  ${l.worker?.outcome ?? `exit ${l.exit ?? "?"}`}  (${why})`,
     );
   const more = owed.length > 10 ? [`  … and ${owed.length - 10} more`] : [];
-  const id = owed[0]?.run_id ?? "<run_id>";
+  const id = owed[0]?.run.run_id ?? "<run_id>";
   fatal(
     [
       `${owed.length} finished run(s) in ${cwd} are not graded; grade each before dispatching more work here:`,
@@ -912,6 +1115,81 @@ function gradeTally(): Map<string, Record<Grade, number>> {
 
 const GRADE_TEXT_CHARS = 6000;
 
+type GradeReply =
+  | {
+      ok: true;
+      grade: Grade;
+      confidence: number;
+      probabilities: Record<string, number>;
+      trace: JevTrace;
+    }
+  | { ok: false; reason: string };
+
+/** Jev's grade of a run from its brief, the worker's report and the evidence — one question, shared
+ *  by `grade` (the coordinator's evidence) and the automatic grade (the router's own verify output). */
+async function requestGrade(
+  roster: Roster,
+  brief: string,
+  report: string,
+  evidence: string,
+): Promise<GradeReply> {
+  const request: Record<string, unknown> = {
+    state: {
+      task: brief.slice(0, GRADE_TEXT_CHARS),
+      worker_report: report.slice(0, GRADE_TEXT_CHARS),
+      evidence: evidence.slice(0, GRADE_TEXT_CHARS),
+    },
+    questions: {
+      grade: {
+        type: "choice",
+        instructions:
+          "How did the worker do on `task`? Judge by `evidence` (checks the coordinator ran), not by `worker_report` (the worker's own claim); where they disagree, `evidence` wins.",
+        criteria: GRADES,
+      },
+    },
+  };
+  if (roster.auto.jev.api === "typesafe") request.model = roster.auto.jev.model;
+  const reply = await askJevChoice(roster, request, "grade");
+  if (!reply.ok) return { ok: false, reason: reply.reason };
+  const answer = reply.answer;
+  const graded = GradeEnum.safeParse(answer.choice);
+  if (!graded.success)
+    return {
+      ok: false,
+      reason: `jev answered '${answer.choice}', not pass|partial|fail`,
+    };
+  return {
+    ok: true,
+    grade: graded.data,
+    confidence: answer.confidence ?? 0,
+    probabilities: answer.probabilities ?? {},
+    trace: reply.trace,
+  };
+}
+
+/** Append a grade to the log beside its run; `by` is set only for the router's own grade. */
+function recordGrade(
+  runId: string,
+  g: Extract<GradeReply, { ok: true }>,
+  evidencePath: string,
+  evidence: string,
+  by?: "router",
+) {
+  const record = {
+    kind: "grade",
+    run_id: runId,
+    grade: g.grade,
+    confidence: g.confidence,
+    probabilities: g.probabilities,
+    evidence: { path: resolve(evidencePath), sha256: sha256(evidence) },
+    graded_at: now(),
+    ...(by === undefined ? {} : { graded_by: by }),
+    jev: g.trace,
+  };
+  appendLog(record);
+  return record;
+}
+
 async function grade(runId: string, evidencePath: string): Promise<number> {
   const roster = await loadRosterOrDie();
   const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
@@ -927,45 +1205,16 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
     briefPath !== undefined && existsSync(briefPath)
       ? readFileSync(briefPath, "utf8")
       : "(brief file no longer exists)";
-  const request: Record<string, unknown> = {
-    state: {
-      task: brief.slice(0, GRADE_TEXT_CHARS),
-      worker_report: (logged.worker?.last_message ?? "(no report)").slice(
-        0,
-        GRADE_TEXT_CHARS,
-      ),
-      evidence: evidence.slice(0, GRADE_TEXT_CHARS),
-    },
-    questions: {
-      grade: {
-        type: "choice",
-        instructions:
-          "How did the worker do on `task`? Judge by `evidence` (checks the coordinator ran), not by `worker_report` (the worker's own claim); where they disagree, `evidence` wins.",
-        criteria: GRADES,
-      },
-    },
-  };
-  if (roster.auto.jev.api === "typesafe") request.model = roster.auto.jev.model;
-  const reply = await askJevChoice(roster, request, "grade");
+  const reply = await requestGrade(
+    roster,
+    brief,
+    logged.worker?.last_message ?? "(no report)",
+    evidence,
+  );
   if (!reply.ok) fatal(`not graded: ${reply.reason}`);
-  const answer = reply.answer;
-  const graded = GradeEnum.safeParse(answer.choice);
-  if (!graded.success)
-    fatal(`not graded: jev answered '${answer.choice}', not pass|partial|fail`);
-  const confidence = answer.confidence ?? 0;
-  const record = {
-    kind: "grade",
-    run_id: runId,
-    grade: graded.data,
-    confidence,
-    probabilities: answer.probabilities ?? {},
-    evidence: { path: resolve(evidencePath), sha256: sha256(evidence) },
-    graded_at: now(),
-    jev: reply.trace,
-  };
-  appendLog(record);
+  const record = recordGrade(runId, reply, evidencePath, evidence);
   console.error(
-    `agent-router: ${runId} graded ${answer.choice} (confidence ${confidence.toFixed(2)})`,
+    `agent-router: ${runId} graded ${reply.grade} (confidence ${reply.confidence.toFixed(2)})`,
   );
   process.stdout.write(
     `${JSON.stringify({ schema: SCHEMA, ...record, jev: undefined })}\n`,
@@ -973,17 +1222,23 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
   return 0;
 }
 
-function waive(runId: string, reason: string): number {
-  const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
-  if (logged === undefined)
-    fatal(`no run ${runId} in ${LOG_FILE} (agent-router stats lists the log)`);
+function recordWaiver(runId: string, reason: string, by?: "router") {
   const record = {
     kind: "grade-waived",
     run_id: runId,
     reason,
     waived_at: now(),
+    ...(by === undefined ? {} : { waived_by: by }),
   };
   appendLog(record);
+  return record;
+}
+
+function waive(runId: string, reason: string): number {
+  const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
+  if (logged === undefined)
+    fatal(`no run ${runId} in ${LOG_FILE} (agent-router stats lists the log)`);
+  const record = recordWaiver(runId, reason);
   console.error(`agent-router: ${runId} waived — ${reason}`);
   process.stdout.write(`${JSON.stringify({ schema: SCHEMA, ...record })}\n`);
   return 0;

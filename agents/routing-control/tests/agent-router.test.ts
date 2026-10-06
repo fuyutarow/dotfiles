@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import {
+  appendFileSync,
   chmodSync,
   existsSync,
   mkdirSync,
@@ -101,6 +102,12 @@ writeFileSync(
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 const exit = Number(process.env.FAKE_EXIT ?? "0");
 const args = Bun.argv.slice(2);
+const promptAt = args.indexOf("--prompt-file");
+if (promptAt !== -1)
+  appendFileSync(${JSON.stringify(join(scratch, "prompt.log"))}, "<<<" + await Bun.file(args[promptAt + 1] ?? "").text() + ">>>\\n");
+const touch = process.env.FAKE_TOUCH;
+if (touch !== undefined)
+  await Bun.write((args[args.indexOf("--cd") + 1] ?? ".") + "/" + touch, "worker-was-here");
 const runIdAt = args.indexOf("--run-id");
 const runId = runIdAt === -1 ? "standalone-fake-run" : args[runIdAt + 1];
 const lastMessage = process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n";
@@ -1389,5 +1396,364 @@ describe("agent-router ask", () => {
     expect(r.err).toContain("TYPESAFE_API_KEY");
     expect(r.err).toContain(".config/typesafe/.env");
     expect(bodies.length).toBe(before);
+  });
+});
+
+// --- the typed work ticket: verify run by the router, automatic grade, a gate per write scope --------
+
+const ticketText = (fields: string, prose = "Do the thing.\n"): string =>
+  `+++\nschema = 1\n${fields}\n+++\n${prose}`;
+const freshCwd = (): string => mkdtempSync(join(scratch, "cwd-"));
+const runArgs = (
+  promptFile: string,
+  cwd: string,
+  sandbox = "workspace-write",
+): string[] => [
+  "run",
+  "--prompt-file",
+  promptFile,
+  "--cd",
+  cwd,
+  "--sandbox",
+  sandbox,
+];
+const VerifyEntry = z.looseObject({
+  cmd: z.string(),
+  exit: z.number(),
+  elapsed_s: z.number(),
+  timed_out: z.boolean(),
+  output_tail: z.string(),
+});
+const TicketReceipt = z.looseObject({
+  exit: z.number(),
+  verify: z.array(VerifyEntry),
+  verify_summary: z.string(),
+  grade: z.looseObject({ grade: z.string(), graded_by: z.string() }).optional(),
+  grade_waived: z.string().optional(),
+});
+const AnyLine = z.looseObject({
+  kind: z.string(),
+  run_id: z.string().optional(),
+  grade: z.string().optional(),
+  graded_by: z.string().optional(),
+  reason: z.string().optional(),
+  verify_summary: z.string().optional(),
+  verify: z.array(VerifyEntry).optional(),
+  evidence: z.looseObject({ path: z.string() }).optional(),
+});
+const logLines = (state: string): z.output<typeof AnyLine>[] =>
+  readFileSync(join(state, "runs.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .map((l) => decodedJson(AnyLine, l));
+const lastJevBody = (): string => bodies.at(-1) ?? "";
+
+describe("agent-router run: a brief with a ticket", () => {
+  test("the worker gets the prose without the front matter, plus the verify line", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "t-prose",
+      ticketText('writes = ["x/**"]\nverify = ["true"]', "PROSE-MARK do it\n"),
+    );
+    const r = await router(runArgs(b, cwd));
+    expect(r.code).toBe(0);
+    const seen = readFileSync(join(scratch, "prompt.log"), "utf8");
+    const mine = seen.slice(seen.lastIndexOf("<<<"));
+    expect(mine).toContain("PROSE-MARK do it");
+    expect(mine).not.toContain("+++");
+    expect(mine).not.toContain("schema = 1");
+    expect(mine).toContain(
+      "The router runs these verify commands after you exit",
+    );
+    expect(mine).toContain("`true`");
+    expect(mine).toContain("do not background anything you need to see");
+    // the receipt still names the original brief file
+    expect(r.out).toContain(b);
+  });
+
+  test("invalid ticket: refused with the reason, exit 2, Jev never asked, no worker", async () => {
+    const before = bodies.length;
+    const argvBefore = existsSync(join(scratch, "argv.log"))
+      ? readFileSync(join(scratch, "argv.log"), "utf8")
+      : "";
+    const b = brief("t-bad", ticketText('writes = "not-a-list"'));
+    const r = await router(runArgs(b, freshCwd()));
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("ticket");
+    expect(r.err).toContain("writes");
+    expect(bodies.length).toBe(before);
+    expect(
+      existsSync(join(scratch, "argv.log"))
+        ? readFileSync(join(scratch, "argv.log"), "utf8")
+        : "",
+    ).toBe(argvBefore);
+  });
+
+  test("no front matter: legacy mode — no verify, no automatic grade, today's receipt", async () => {
+    const r = await router(
+      runArgs(brief("t-legacy", "plain brief\n"), freshCwd()),
+    );
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain('"verify"');
+    expect(logLines(r.state).map((l) => l.kind)).toEqual(["run"]);
+  });
+
+  test("capabilities reach Jev as required_capabilities in the request state", async () => {
+    const b = brief(
+      "t-caps",
+      ticketText(
+        'writes = []\nverify = []\ncapabilities = ["long-tool-loop"]',
+        "CAPS-MARK\n",
+      ),
+    );
+    const before = bodies.length;
+    await router(runArgs(b, freshCwd(), "read-only"));
+    const pick = bodies.slice(before).find((x) => x.includes('"worker"'));
+    expect(pick).toContain('"required_capabilities":["long-tool-loop"]');
+    expect(pick).toContain("CAPS-MARK");
+    expect(pick).not.toContain("schema = 1");
+  });
+
+  test("verify runs after the worker, in --cd, outputs recorded; auto-grade by the router", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "t-verify",
+      ticketText(
+        'writes = ["w/**"]\nverify = ["cat marker.txt && echo GRADE=pass", "pwd"]',
+      ),
+    );
+    const r = await router(runArgs(b, cwd), { FAKE_TOUCH: "marker.txt" });
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(TicketReceipt, r.out.trim());
+    expect(receipt.verify_summary).toBe("2/2 passed");
+    expect(receipt.verify.map((v) => v.exit)).toEqual([0, 0]);
+    expect(receipt.verify[0]?.output_tail).toContain("worker-was-here");
+    expect(receipt.verify[0]?.timed_out).toBe(false);
+    expect(receipt.verify[1]?.output_tail.trim()).toContain(
+      cwd.split("/").at(-1),
+    );
+    expect(receipt.grade).toMatchObject({ grade: "pass", graded_by: "router" });
+    const lines = logLines(r.state);
+    expect(lines.map((l) => l.kind)).toEqual(["run", "grade"]);
+    expect(lines[0]?.verify_summary).toBe("2/2 passed");
+    expect(lines[1]).toMatchObject({ grade: "pass", graded_by: "router" });
+    expect(existsSync(lines[1]?.evidence?.path ?? "/nonexistent")).toBe(true);
+    expect(r.err).toContain("2/2 passed");
+    expect(r.err).toContain("pass");
+    // the evidence Jev read carried the verify output
+    expect(lastJevBody()).toContain("worker-was-here");
+  });
+
+  test("a failing verify is recorded, named in the summary, shown to Jev; exit stays the worker's", async () => {
+    const b = brief(
+      "t-fail",
+      ticketText(
+        'writes = []\nverify = ["echo FAILMARK; exit 3", "echo second ok"]',
+      ),
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"));
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(TicketReceipt, r.out.trim());
+    expect(receipt.verify.map((v) => v.exit)).toEqual([3, 0]);
+    expect(receipt.verify_summary).toBe("1 failed: echo FAILMARK; exit 3");
+    expect(receipt.verify[0]?.output_tail).toContain("FAILMARK");
+    expect(lastJevBody()).toContain("FAILMARK");
+  });
+
+  test("a failed worker is still verified and graded", async () => {
+    const b = brief("t-wfail", ticketText('writes = []\nverify = ["true"]'));
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      FAKE_EXIT: "1",
+    });
+    expect(r.code).toBe(1);
+    const receipt = decodedJson(TicketReceipt, r.out.trim());
+    expect(receipt.verify_summary).toBe("1/1 passed");
+    expect(receipt.grade?.graded_by).toBe("router");
+  });
+
+  test("a verify that outlives the shared verify_timeout_s is killed and recorded as timed out", async () => {
+    const b = brief(
+      "t-timeout",
+      ticketText(
+        'writes = []\nverify = ["echo before; sleep 30", "echo never"]\nverify_timeout_s = 1',
+      ),
+    );
+    const t0 = performance.now();
+    const r = await router(runArgs(b, freshCwd(), "read-only"));
+    expect((performance.now() - t0) / 1000).toBeLessThan(25);
+    const receipt = decodedJson(TicketReceipt, r.out.trim());
+    expect(receipt.verify[0]?.timed_out).toBe(true);
+    expect(receipt.verify[0]?.output_tail).toContain("before");
+    // the second command had no time left: recorded, not silently dropped
+    expect(receipt.verify).toHaveLength(2);
+    expect(receipt.verify[1]?.timed_out).toBe(true);
+    expect(receipt.verify_summary).toContain("2 failed");
+  });
+
+  test("Jev unavailable: the run is waived with the reason, never left ungraded, never invented", async () => {
+    const b = brief(
+      "t-nojev",
+      ticketText('writes = []\nverify = ["true"]', "HTTP500 brief\n"),
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"));
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(TicketReceipt, r.out.trim());
+    expect(receipt.grade).toBeUndefined();
+    expect(receipt.grade_waived).toStartWith("auto-grade: jev unavailable:");
+    const lines = logLines(r.state);
+    expect(lines.map((l) => l.kind)).toEqual(["run", "grade-waived"]);
+    expect(lines[1]?.reason).toStartWith("auto-grade: jev unavailable:");
+  });
+
+  test("a cwd under no_egress is not graded by Jev: waived, nothing sent", async () => {
+    const b = brief("t-egress", ticketText('writes = []\nverify = ["true"]'));
+    const before = bodies.length;
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      DISPATCH_ROSTER_PATH: NO_EGRESS,
+    });
+    expect(bodies.length).toBe(before);
+    const receipt = decodedJson(TicketReceipt, r.out.trim());
+    expect(receipt.grade_waived).toContain("no_egress");
+  });
+
+  test("a hand grade after the automatic one wins (latest grade)", async () => {
+    const cwd = freshCwd();
+    const state = join(scratch, "state-regrade");
+    const b = brief(
+      "t-regrade",
+      ticketText('writes = ["r/**"]\nverify = ["true"]'),
+    );
+    const first = await router(runArgs(b, cwd), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    const id = decodedJson(RunIdSchema, first.out.trim()).run_id;
+    const evidence = join(scratch, "regrade-evidence.txt");
+    writeFileSync(evidence, "GRADE=fail\n");
+    const g = await router(["grade", id, "--evidence", evidence], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(g.code).toBe(0);
+    const grades = logLines(state).filter((l) => l.kind === "grade");
+    expect(grades.map((l) => l.grade)).toEqual(["partial", "fail"]);
+  });
+});
+
+describe("agent-router run: the gate per write scope", () => {
+  let seq = 0;
+  /** An ungraded finished run in `cwd`; `writes` undefined = a legacy run (no ticket). */
+  function seed(
+    state: string,
+    cwd: string,
+    writes: string[] | undefined,
+  ): string {
+    const runId = `seeded-${seq++}`;
+    mkdirSync(state, { recursive: true });
+    appendFileSync(
+      join(state, "runs.jsonl"),
+      `${JSON.stringify({
+        schema: 1,
+        kind: "run",
+        run_id: runId,
+        cwd,
+        pick: { source: "jev", choice: "luna-high" },
+        exit: 0,
+        worker: { outcome: "ok" },
+        ...(writes === undefined ? {} : { ticket: { schema: 1, writes } }),
+      })}\n`,
+    );
+    return runId;
+  }
+  const gate = (name: string): string => join(scratch, `gate-${name}-${seq++}`);
+  const ticketRun = (
+    cwd: string,
+    writes: string,
+    sandbox = "workspace-write",
+  ) =>
+    runArgs(
+      brief(`g-${seq++}`, ticketText(`writes = ${writes}\nverify = []`)),
+      cwd,
+      sandbox,
+    );
+
+  test("overlapping writes in the same cwd: blocked, naming the run and both globs", async () => {
+    const cwd = freshCwd();
+    const state = gate("overlap");
+    const id = seed(state, cwd, ["agents/routing-control/**"]);
+    const r = await router(
+      ticketRun(cwd, '["agents/routing-control/tests/**"]'),
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+      },
+    );
+    expect(r.code).toBe(2);
+    expect(r.err).toContain(id);
+    expect(r.err).toContain("agents/routing-control/**");
+    expect(r.err).toContain("agents/routing-control/tests/**");
+  });
+
+  test("disjoint writes in the same cwd: allowed", async () => {
+    const cwd = freshCwd();
+    const state = gate("disjoint");
+    seed(state, cwd, ["agents/routing-control/**"]);
+    const r = await router(ticketRun(cwd, '["agents/models/roster.ts"]'), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(r.code).toBe(0);
+  });
+
+  test("overlapping writes in another cwd: allowed (the gate is per cwd)", async () => {
+    const state = gate("othercwd");
+    seed(state, freshCwd(), ["a/**"]);
+    const r = await router(ticketRun(freshCwd(), '["a/**"]'), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(r.code).toBe(0);
+  });
+
+  test("a read-only ticket is never blocked, and never blocks", async () => {
+    const cwd = freshCwd();
+    const state = gate("readonly");
+    seed(state, cwd, ["a/**"]);
+    const ro = await router(ticketRun(cwd, "[]", "read-only"), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(ro.code).toBe(0);
+    const state2 = gate("readonly2");
+    seed(state2, cwd, []);
+    const rw = await router(ticketRun(cwd, '["a/**"]'), {
+      AGENT_ROUTER_STATE_DIR: state2,
+    });
+    expect(rw.code).toBe(0);
+    const legacy = await router(runArgs(brief(`g-${seq++}`, "legacy\n"), cwd), {
+      AGENT_ROUTER_STATE_DIR: state2,
+    });
+    expect(legacy.code).toBe(0);
+  });
+
+  test("legacy mode unchanged: an ungraded legacy run blocks a legacy run and a writing ticket run in its cwd", async () => {
+    const cwd = freshCwd();
+    const state = gate("legacy");
+    const id = seed(state, cwd, undefined);
+    const legacy = await router(runArgs(brief(`g-${seq++}`, "legacy\n"), cwd), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(legacy.code).toBe(2);
+    expect(legacy.err).toContain(id);
+    const ticket = await router(ticketRun(cwd, '["z/**"]'), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(ticket.code).toBe(2);
+    expect(ticket.err).toContain(id);
+  });
+
+  test("an ungraded writing ticket run blocks a legacy run in its cwd", async () => {
+    const cwd = freshCwd();
+    const state = gate("ticket-blocks-legacy");
+    const id = seed(state, cwd, ["z/**"]);
+    const legacy = await router(runArgs(brief(`g-${seq++}`, "legacy\n"), cwd), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(legacy.code).toBe(2);
+    expect(legacy.err).toContain(id);
   });
 });

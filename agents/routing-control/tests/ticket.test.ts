@@ -1,0 +1,87 @@
+import { describe, expect, test } from "bun:test";
+import { globsOverlap, parseTicket, verifyLine } from "../ticket.ts";
+
+// The work ticket: TOML front matter between `+++` lines at the top of a brief. A brief without one
+// is legacy mode and must come back untouched.
+
+const valid = (body: string): string =>
+  `+++\nschema = 1\n${body}\n+++\nthe prose\n`;
+
+describe("parseTicket", () => {
+  test("no front matter: legacy, the brief unchanged", () => {
+    const text = "RESOURCE-CLASS(NONCOMPUTE): x\n# task\n";
+    expect(parseTicket(text)).toEqual({ kind: "legacy", prose: text });
+  });
+
+  test("a valid ticket: fields, defaults, and the prose without the front matter", () => {
+    const r = parseTicket(
+      valid('writes = ["a/**"]\nverify = ["bun test", "tsc"]'),
+    );
+    expect(r).toMatchObject({
+      kind: "ticket",
+      prose: "the prose\n",
+      ticket: {
+        schema: 1,
+        writes: ["a/**"],
+        verify: ["bun test", "tsc"],
+        verify_timeout_s: 1200,
+        capabilities: [],
+      },
+    });
+  });
+
+  test("optional fields are read", () => {
+    const r = parseTicket(
+      valid(
+        'writes = []\nverify = ["x"]\nverify_timeout_s = 30\ncapabilities = ["long-tool-loop"]',
+      ),
+    );
+    expect(r).toMatchObject({
+      kind: "ticket",
+      ticket: { verify_timeout_s: 30, capabilities: ["long-tool-loop"] },
+    });
+  });
+
+  test.each([
+    ["not TOML", "+++\nwrites = [\n+++\nprose"],
+    ["unterminated", "+++\nschema = 1\nwrites = []\nprose"],
+    ["wrong schema", valid("writes = []\nschema = 2")],
+    ["missing writes", valid('verify = ["x"]')],
+    ["unknown key", valid("writes = []\nbogus = 1")],
+    ["absolute write glob", valid('writes = ["/etc/**"]')],
+    ["parent-escaping write glob", valid('writes = ["../x/**"]')],
+    ["empty verify command", valid('writes = []\nverify = [""]')],
+    ["non-positive timeout", valid("writes = []\nverify_timeout_s = 0")],
+  ])("invalid (%s) is refused with a reason", (_name, text) => {
+    const r = parseTicket(text);
+    expect(r.kind).toBe("invalid");
+    expect(r.kind === "invalid" && r.reason !== "").toBe(true);
+  });
+});
+
+describe("globsOverlap (conservative literal-prefix rule)", () => {
+  test.each([
+    ["agents/routing-control/**", "agents/models/roster.ts", false],
+    ["agents/routing-control/**", "agents/routing-control/tests/a.ts", true],
+    ["agents/**", "agents/models/roster.ts", true],
+    ["**", "anything/at/all", true],
+    ["a/b.ts", "a/b.ts", true],
+    ["a/b.ts", "a/c.ts", false],
+    ["a/*/x.ts", "a/b/y.ts", true],
+    ["a/b/**", "a/bc/**", false],
+    ["./a/b/", "a/b/c", true],
+    ["src/*.ts", "docs/*.md", false],
+  ])("%s vs %s → %s (symmetric)", (a, b, expected) => {
+    expect(globsOverlap(a, b)).toBe(expected);
+    expect(globsOverlap(b, a)).toBe(expected);
+  });
+});
+
+test("verifyLine lists the commands and tells the worker to run them in the foreground", () => {
+  const line = verifyLine(["bun test", "tsc"]);
+  expect(line).toContain("bun test");
+  expect(line).toContain("tsc");
+  expect(line).toContain("in the foreground");
+  expect(line).toContain("do not background anything you need to see");
+  expect(verifyLine([])).toBe("");
+});

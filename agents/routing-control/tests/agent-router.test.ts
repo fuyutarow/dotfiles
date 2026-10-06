@@ -16,6 +16,7 @@ import { basename, join } from "node:path";
 import { z } from "../../hooks/zod.ts";
 import { ROSTER_PATH } from "../../models/roster.ts";
 import { decodedJson } from "../../hooks/tests/decode.ts";
+import { attemptOr } from "../../hooks/attempt.ts";
 
 // agent-router: the one entry point. A fake codex-run stands in for the worker (it records its argv and
 // prints a receipt), a local server stands in for Jev, and every state file goes to a scratch dir.
@@ -101,7 +102,8 @@ writeFileSync(
   FAKE,
   `import { appendFileSync } from "node:fs";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
-const exit = Number(process.env.FAKE_EXIT ?? "0");
+const timedOut = process.env.FAKE_TIMEOUT === "1";
+const exit = timedOut ? 3 : Number(process.env.FAKE_EXIT ?? "0");
 const args = Bun.argv.slice(2);
 const promptAt = args.indexOf("--prompt-file");
 if (promptAt !== -1)
@@ -113,7 +115,7 @@ const runIdAt = args.indexOf("--run-id");
 const runId = runIdAt === -1 ? "standalone-fake-run" : args[runIdAt + 1];
 const lastMessage = process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n";
 const usage = process.env.FAKE_USAGE === "missing" ? { input_tokens: 100 } : { input_tokens: 100, cached_input_tokens: 20, output_tokens: 7, reasoning_output_tokens: 3 };
-console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: exit === 0 ? "ok" : "codex-failed", elapsed_s: 1.5, usage, session: "thread-fake-0001", last_message: lastMessage, ...(exit === 0 ? {} : { cause: "fake worker failed" }) }));
+console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: timedOut ? "timeout" : exit === 0 ? "ok" : "codex-failed", elapsed_s: 1.5, usage, ...(process.env.FAKE_NO_SESSION === "1" ? {} : { session: "thread-fake-0001" }), last_message: lastMessage, ...(exit === 0 ? {} : { cause: timedOut ? "fake worker timed out" : "fake worker failed" }) }));
 process.exit(exit);
 `,
 );
@@ -141,6 +143,10 @@ if (mode === "fail") {
   console.log(JSON.stringify({ exit_code: 1, timed_out: false, error: "model rejected: sonnet", stderr: "boom" }));
   process.exit(1);
 }
+if (mode === "timeout") {
+  console.log(JSON.stringify({ exit_code: 124, timed_out: true, session_id: "sess-claude-0001", stderr: "" }));
+  process.exit(124);
+}
 if (mode === "garbage") {
   console.log("not a relay");
   process.exit(1);
@@ -167,7 +173,11 @@ const brief = (name: string, text: string): string => {
 // Async on purpose: the fake Jev server lives in THIS process, so a synchronous spawn would block
 // the event loop it needs to answer.
 let stateSeq = 0;
-async function router(args: string[], env: Record<string, string> = {}) {
+async function router(
+  args: string[],
+  env: Record<string, string> = {},
+  during?: (proc: Bun.Subprocess) => Promise<void>,
+) {
   // A fresh state dir per call unless the test names one: under O3 a second run in the same cwd and
   // state is refused while the first is ungraded — the rule under test below, not these tests' topic.
   const state =
@@ -189,6 +199,7 @@ async function router(args: string[], env: Record<string, string> = {}) {
     new Response(r.stdout).text(),
     new Response(r.stderr).text(),
     r.exited,
+    during?.(r),
   ]);
   return { code, out, err, state };
 }
@@ -1845,4 +1856,254 @@ describe("agent-router: the stored brief", () => {
     expect(r.code).toBe(1);
     expect(r.err).toContain("no stored brief");
   });
+});
+
+const after = (argv: string[], flag: string): string | undefined =>
+  argv[argv.indexOf(flag) + 1];
+const isAlive = (pid: number): Promise<boolean> =>
+  attemptOr(() => process.kill(pid, 0), false);
+const readPids = (file: string): number[] =>
+  existsSync(file)
+    ? readFileSync(file, "utf8")
+        .trim()
+        .split(/\s+/u)
+        .filter((x) => x !== "")
+        .map(Number)
+    : [];
+
+// --- resume: continue a stopped worker in its own vendor session -----------------------------------
+
+describe("agent-router resume", () => {
+  const argvLines = (file: string): string[][] =>
+    readFileSync(join(scratch, file), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => decodedJson(z.array(z.string()), l));
+  const lastArgv = (file: string): string[] => argvLines(file).at(-1) ?? [];
+  const RunRec = z.looseObject({
+    run_id: z.string(),
+    kind: z.string(),
+    resumed_from: z.string().optional(),
+    resume_with: z.string().optional(),
+    pick: z.looseObject({ source: z.string(), choice: z.string() }).optional(),
+    ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
+    worker: z
+      .looseObject({
+        outcome: z.string().optional(),
+        cause: z.string().optional(),
+      })
+      .optional(),
+  });
+  const records = (state: string): z.output<typeof RunRec>[] =>
+    readFileSync(join(state, "runs.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => decodedJson(RunRec, l));
+  const runsOf = (state: string): z.output<typeof RunRec>[] =>
+    records(state).filter((x) => x.kind === "run");
+  const firstId = (state: string): string => runsOf(state)[0]?.run_id ?? "";
+  const promptTail = (): string => {
+    const seen = readFileSync(join(scratch, "prompt.log"), "utf8");
+    return seen.slice(seen.lastIndexOf("<<<"));
+  };
+  const stoppedRun = (
+    name: string,
+    env: Record<string, string>,
+    text = "do it\n",
+  ) => router(runArgs(brief(name, text), freshCwd()), env);
+
+  test("a timed-out run with a session: the receipt and stderr name the resume command; without a session they do not", async () => {
+    const r = await stoppedRun("rs-hint", { FAKE_TIMEOUT: "1" });
+    expect(r.code).toBe(3);
+    const id = firstId(r.state);
+    expect(r.err).toContain(`agent-router resume ${id}`);
+    expect(
+      decodedJson(z.looseObject({ resume_with: z.string() }), r.out.trim())
+        .resume_with,
+    ).toBe(`agent-router resume ${id}`);
+    expect(runsOf(r.state)[0]?.resume_with).toBe(`agent-router resume ${id}`);
+    const failed = await stoppedRun("rs-hint-failed", { FAKE_EXIT: "1" });
+    expect(failed.err).toContain("agent-router resume ");
+    const none = await stoppedRun("rs-hint-none", {
+      FAKE_TIMEOUT: "1",
+      FAKE_NO_SESSION: "1",
+    });
+    expect(none.err).not.toContain("agent-router resume ");
+  });
+
+  test("codex: same row, sandbox and cwd, continuing the thread; no Jev pick; logged as resumed; the default message", async () => {
+    const cwd = freshCwd();
+    const stopped = await router(
+      runArgs(brief("rs-codex", "PICK=luna-high do it\n"), cwd),
+      {
+        FAKE_TIMEOUT: "1",
+      },
+    );
+    const id = firstId(stopped.state);
+    const before = bodies.length;
+    const r = await router(["resume", id], {
+      AGENT_ROUTER_STATE_DIR: stopped.state,
+    });
+    expect(r.code).toBe(0);
+    expect(bodies.length).toBe(before); // Jev was not asked: the row is the original's
+    const argv = lastArgv("argv.log");
+    expect(after(argv, "--resume")).toBe("thread-fake-0001");
+    expect(after(argv, "--choice")).toBe("luna-high");
+    expect(after(argv, "--sandbox")).toBe("workspace-write");
+    expect(after(argv, "--cd")).toBe(cwd);
+    const runs = runsOf(stopped.state);
+    expect(runs).toHaveLength(2);
+    expect(runs[1]?.run_id).not.toBe(id);
+    expect(runs[1]?.resumed_from).toBe(id);
+    expect(runs[1]?.pick).toMatchObject({
+      source: "resume",
+      choice: "luna-high",
+    });
+    expect(r.err).toContain(id);
+    expect(promptTail()).toContain(
+      "You were stopped before you finished (timeout: fake worker timed out). Continue the same task from where you stopped; finish it, run its checks in the foreground, and write your final report.",
+    );
+    // --prompt-file replaces the default message
+    // (a second stopped run: the first resumed run is itself ungraded and owed a grade first)
+    const other = await stoppedRun("rs-msg-other", { FAKE_TIMEOUT: "1" });
+    const msg = brief("rs-msg-own", "ONLY-THE-TAIL: check the lint\n");
+    await router(["resume", firstId(other.state), "--prompt-file", msg], {
+      AGENT_ROUTER_STATE_DIR: other.state,
+    });
+    expect(promptTail()).toContain("ONLY-THE-TAIL: check the lint");
+    expect(promptTail()).not.toContain("You were stopped");
+  });
+
+  test("a session-id prefix names the run", async () => {
+    const stopped = await stoppedRun("rs-prefix", { FAKE_EXIT: "1" });
+    const r = await router(["resume", "thread-fake"], {
+      AGENT_ROUTER_STATE_DIR: stopped.state,
+    });
+    expect(r.code).toBe(0);
+    expect(runsOf(stopped.state)).toHaveLength(2);
+  });
+
+  test("a run without a session id, or an unknown run, is refused: exit 2, the reason, no worker", async () => {
+    const stopped = await stoppedRun("rs-nosession", {
+      FAKE_TIMEOUT: "1",
+      FAKE_NO_SESSION: "1",
+    });
+    const id = firstId(stopped.state);
+    const argvBefore = argvLines("argv.log").length;
+    const r = await router(["resume", id], {
+      AGENT_ROUTER_STATE_DIR: stopped.state,
+    });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("no session id");
+    expect(r.err).toContain(id);
+    expect(argvLines("argv.log")).toHaveLength(argvBefore);
+    const unknown = await router(["resume", "no-such-run"]);
+    expect(unknown.code).toBe(2);
+    expect(unknown.err).toContain("no run no-such-run");
+  });
+
+  test("claude: --resume <session> on the same row, model, effort and mode; sessions are persisted", async () => {
+    const cwd = freshCwd();
+    const claude = { AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE };
+    const stopped = await router(
+      runArgs(brief("rs-claude", "PICK=sonnet-medium do it\n"), cwd),
+      { FAKE_CLAUDE_MODE: "timeout", ...claude },
+    );
+    expect(stopped.code).toBe(124);
+    const id = firstId(stopped.state);
+    expect(stopped.err).toContain(`agent-router resume ${id}`);
+    const firstArgv = lastArgv("claude-argv.log");
+    expect(firstArgv).toContain("--persist-session"); // router-dispatched sessions stay on disk
+    expect(firstArgv).not.toContain("--resume");
+    const r = await router(["resume", id], {
+      AGENT_ROUTER_STATE_DIR: stopped.state,
+      ...claude,
+    });
+    expect(r.code).toBe(0);
+    const argv = lastArgv("claude-argv.log");
+    expect(after(argv, "--resume")).toBe("sess-claude-0001");
+    expect(after(argv, "--model")).toBe(after(firstArgv, "--model"));
+    expect(after(argv, "--effort")).toBe(after(firstArgv, "--effort"));
+    expect(after(argv, "--permission-mode")).toBe("acceptEdits");
+    expect(after(argv, "--target")).toBe(cwd);
+    expect(runsOf(stopped.state)[1]).toMatchObject({
+      resumed_from: id,
+      pick: { source: "resume", choice: "sonnet-medium" },
+    });
+  });
+
+  test("the ticket applies again: verify and the router's grade run after the resumed worker", async () => {
+    const b = brief(
+      "rs-ticket",
+      ticketText(
+        'writes = ["rw/**"]\nverify = ["echo RESUMEVERIFY && echo GRADE=pass"]',
+        "PICK=luna-high do it\n",
+      ),
+    );
+    const stopped = await router(runArgs(b, freshCwd()), { FAKE_EXIT: "1" });
+    const r = await router(["resume", firstId(stopped.state)], {
+      AGENT_ROUTER_STATE_DIR: stopped.state,
+    });
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(TicketReceipt, r.out.trim());
+    expect(receipt.verify_summary).toBe("1/1 passed");
+    expect(receipt.verify[0]?.output_tail).toContain("RESUMEVERIFY");
+    expect(receipt.grade).toMatchObject({ grade: "pass", graded_by: "router" });
+    expect(runsOf(stopped.state)[1]?.ticket?.writes).toEqual(["rw/**"]); // the gate sees it
+    expect(
+      records(stopped.state).filter((x) => x.kind === "grade"),
+    ).toHaveLength(2);
+    expect(promptTail()).toContain("`echo RESUMEVERIFY");
+  });
+});
+
+describe("agent-router: a stopped router stops its verify too", () => {
+  test("SIGTERM while verify runs kills the verify group and records the run as stopped", async () => {
+    const pidFile = join(scratch, "stop-pids");
+    const script = join(scratch, "stop-grand.sh");
+    // two grandchildren of the verify shell: one backgrounded, one in the foreground
+    writeFileSync(
+      script,
+      `sleep 60 &\necho $! > ${pidFile}\nsleep 60 &\necho $! >> ${pidFile}\nwait\n`,
+    );
+    const b = brief(
+      "rs-stop",
+      ticketText(`writes = ["s/**"]\nverify = ["sh ${script}; true"]`),
+    );
+    let pids: number[] = [];
+    const r = await router(runArgs(b, freshCwd()), {}, async (proc) => {
+      for (let i = 0; i < 200 && pids.length < 2; i++) {
+        await Bun.sleep(100);
+        pids = readPids(pidFile);
+      }
+      proc.kill("SIGTERM");
+    });
+    expect(pids).toHaveLength(2);
+    expect(r.code).toBe(143);
+    await Bun.sleep(300);
+    const alive = await Promise.all(pids.map((p) => isAlive(p)));
+    const survivors = pids.filter((_, n) => alive[n] === true);
+    for (const p of survivors) process.kill(p, "SIGKILL");
+    expect(survivors).toEqual([]);
+    // recorded as stopped, with a waiver (nothing to grade); the marker is gone
+    const lines = readFileSync(join(r.state, "runs.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) =>
+        decodedJson(
+          z.looseObject({
+            kind: z.string(),
+            worker: z
+              .looseObject({ outcome: z.string(), cause: z.string() })
+              .optional(),
+          }),
+          l,
+        ),
+      );
+    const run = lines.find((l) => l.kind === "run");
+    expect(run?.worker?.outcome).toBe("stopped");
+    expect(run?.worker?.cause).toContain("SIGTERM");
+    expect(lines.some((l) => l.kind === "grade-waived")).toBe(true);
+    expect(readdirSync(join(r.state, "active"))).toEqual([]);
+  }, 40_000);
 });

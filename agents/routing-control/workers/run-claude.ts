@@ -52,6 +52,13 @@ export type RunConfig = Readonly<{
   // When set, claude runs with stream-json and what it is doing is kept in this file (the
   // statusline Run rows read it; agent-router passes it); its `result` event is the answer.
   progressFile?: string | undefined;
+  // Keep the session on disk (~/.claude/projects/<cwd>/<session>.jsonl) so `--resume` can continue
+  // it. agent-router passes this for every worker it dispatches; probes and direct callers keep the
+  // old no-persistence default.
+  persistSession?: boolean | undefined;
+  // claude --resume <session_id>: continue that session; the prompt is the next message. A session
+  // that is resumed must be persisted, so this implies persistSession.
+  resume?: string | undefined;
   claudeBin: string;
 }>;
 
@@ -104,8 +111,11 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
       : ["stream-json", "--verbose"]),
     "--max-turns",
     String(config.maxTurns),
-    "--no-session-persistence",
   ];
+
+  if (config.resume !== undefined) args.push("--resume", config.resume);
+  else if (config.persistSession !== true)
+    args.push("--no-session-persistence");
 
   if (config.safeMode) args.push("--safe-mode");
   if (config.bare) args.push("--bare");
@@ -321,6 +331,8 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
         jsonSchemaFile: nonEmptyString("--json-schema-file"),
         claudeBin: nonEmptyString("--claude-bin"),
         progressFile: nonEmptyString("--progress-file"),
+        resume: nonEmptyString("--resume"),
+        persistSession: Boolean,
         safeMode: Boolean,
         bare: Boolean,
       },
@@ -406,6 +418,8 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
     ...(values.progressFile === undefined
       ? {}
       : { progressFile: values.progressFile }),
+    ...(values.resume === undefined ? {} : { resume: values.resume }),
+    persistSession: values.persistSession ?? false,
     claudeBin,
   });
 }

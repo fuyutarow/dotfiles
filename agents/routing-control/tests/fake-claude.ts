@@ -1,7 +1,14 @@
 #!/usr/bin/env bun
 
-// An empty export makes this file a module: top-level await and file-scoped consts.
-export {};
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+
+// This call's argv (one JSON line) in `fake-claude-argv.log` in its cwd (the run's target), for tests
+// of the flags run-claude passes.
+appendFileSync(
+  join(process.cwd(), "fake-claude-argv.log"),
+  `${JSON.stringify(Bun.argv.slice(2))}\n`,
+);
 
 const modelIndex = Bun.argv.indexOf("--model");
 const model = modelIndex === -1 ? "" : Bun.argv[modelIndex + 1];

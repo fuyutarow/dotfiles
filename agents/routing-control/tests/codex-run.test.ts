@@ -3,6 +3,7 @@ import {
   chmodSync,
   existsSync,
   mkdtempSync,
+  realpathSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -54,6 +55,7 @@ case "$FAKE_CODEX_MODE" in
     echo '{"type":"item.started","item":{"type":"command_execution","command":"bun test"}}'
     echo '{"type":"error","message":"Reconnecting... waiting for network (Connection failed: error sending request)"}'
     sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
+  pwd) pwd > "$out"; exit 0 ;;
   nolast) echo '{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0}}'; exit 0 ;;
 esac
 echo '{"type":"thread.started","thread_id":"thread-fake-0001"}'
@@ -567,4 +569,48 @@ describe("codex-run", () => {
     });
     expect(r.receipt.cause).toContain("waiting for network");
   }, 20_000);
+
+  test("--resume: `codex exec resume <thread>` with the same model/effort, sandbox as -c, cwd as the spawn cwd", () => {
+    const dir = scratch();
+    const { bin, log } = fakeCodex(dir);
+    const r = run(
+      [...FULL, "--resume", "thread-abc-123"],
+      { CODEX_RUN_BIN: bin },
+      "Carry on.",
+    );
+    expect(r.code).toBe(0);
+    expect(r.receipt.outcome).toBe("ok");
+    const argv = readFileSync(log, "utf8").split("\n");
+    expect(argv.slice(0, 2)).toEqual(["exec", "resume"]);
+    // the model-floor hook requires -m on every codex exec line
+    expect(argv[argv.indexOf("-m") + 1]).toBe("gpt-6-luna");
+    expect(argv).toContain('model_reasoning_effort="medium"');
+    // `codex exec resume` has no --sandbox / -C: the sandbox goes in as a config override
+    expect(argv).toContain('sandbox_mode="read-only"');
+    expect(argv).not.toContain("--sandbox");
+    expect(argv).not.toContain("-C");
+    expect(argv).toContain("--json");
+    expect(argv).toContain("-o");
+    // the session id, then the prompt, last
+    expect(argv.slice(-3, -1)).toEqual(["thread-abc-123", "Carry on."]);
+  });
+
+  test("--resume: the fake codex runs in --cd (the session's own directory)", () => {
+    const dir = scratch();
+    const { bin } = fakeCodex(dir);
+    const r = run(
+      [...FULL.slice(0, -1), dir, "--resume", "thread-abc-123"],
+      { CODEX_RUN_BIN: bin, FAKE_CODEX_MODE: "pwd" },
+      "Carry on.",
+    );
+    expect(r.code).toBe(0);
+    expect(r.receipt.last_message).toBe(realpathSync(dir));
+  });
+
+  test("--resume with an empty id is refused", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run([...FULL, "--resume", ""], { CODEX_RUN_BIN: bin });
+    expect(r.code).toBe(2);
+    expect(r.receipt.outcome).toBe("refused");
+  });
 });

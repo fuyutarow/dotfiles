@@ -13,6 +13,8 @@
 //       agent-router stats                               picks, confidence, fallbacks, cost, outcomes
 //       agent-router export [--since ISO]                one flat JSON line per run for analysis
 //       agent-router result RUN_ID|SESSION_PREFIX [--json] show the worker report
+//       agent-router resume RUN_ID|SESSION_PREFIX [--prompt-file F] [--timeout-s N]
+//                                                        continue a stopped run in its own vendor session
 //       agent-router grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
 //       agent-router grade RUN_ID --waive "<why>"        record that a run cannot be graded, and why
 //   TICKET  a brief may open with TOML front matter between `+++` lines (ticket.ts): `writes` globs, `verify`
@@ -20,6 +22,13 @@
 //           the verify commands after the worker exits (verify.ts), grades the run itself (graded_by
 //           "router", or a recorded waiver), and gates only runs whose `writes` overlap. No front matter
 //           = legacy mode: today's behaviour, byte for byte.
+//   RESUME  a run record carries the vendor session id (worker.session); `resume` starts a NEW run
+//           (resumed_from, pick.source "resume") on the original's row, sandbox and cwd, continuing that
+//           session (codex-run --resume → `codex exec resume`; run-claude --resume → `claude --resume`,
+//           which is why router-dispatched claude sessions are persisted). A run that ends timeout /
+//           codex-failed / claude-failed with a session says `agent-router resume <run_id>` in its receipt
+//           (resume_with) and on stderr. SIGINT/SIGTERM kills the worker AND a running verify group and
+//           records the run as stopped (with a waiver).
 //   C2  effects  run starts `codex-run --choice <row>` for a codex row or
 //                `run-claude.ts` for a Claude row. State lives outside the repo:
 //                $XDG_STATE_HOME/agent-router (~/.local/state/agent-router): active/<run_id>.json
@@ -75,6 +84,7 @@ import {
   type Ticket,
 } from "./ticket.ts";
 import {
+  killRunningVerify,
   runVerify,
   verifyEvidence,
   verifySummary,
@@ -125,7 +135,7 @@ const JevAnswer = z.looseObject({
 });
 
 export interface Pick {
-  source: "explicit" | "jev" | "default";
+  source: "explicit" | "jev" | "default" | "resume";
   choice: string;
   reason: string;
   confidence?: number;
@@ -376,6 +386,7 @@ function workerArgs(
   flags: RunFlags,
   progress: string,
   runId: string,
+  resume: string | undefined,
 ): string[] {
   if (row.route === "codex")
     return [
@@ -390,6 +401,7 @@ function workerArgs(
       flags.promptFile,
       "--run-id",
       runId,
+      ...(resume === undefined ? [] : ["--resume", resume]),
       ...(flags.timeoutS === undefined
         ? []
         : ["--timeout-s", String(flags.timeoutS)]),
@@ -416,6 +428,9 @@ function workerArgs(
     String((flags.timeoutS ?? 1800) * 1000),
     "--progress-file",
     progress,
+    // router-dispatched claude sessions stay on disk so `agent-router resume` can continue them
+    "--persist-session",
+    ...(resume === undefined ? [] : ["--resume", resume]),
   ];
 }
 
@@ -439,6 +454,13 @@ function progressAtEnd(path: string): Done | undefined {
   return p.success
     ? { last: p.data.last, commands: p.data.commands, files: p.data.files }
     : undefined;
+}
+
+/** The vendor session id a running worker has reported in its progress file, if any. */
+function progressSession(path: string): string | undefined {
+  if (!existsSync(path)) return undefined;
+  const p = jsonOf(ProgressSchema).safeParse(readFileSync(path, "utf8"));
+  return p.success ? p.data.session : undefined;
 }
 
 /** A worker whose stdout is not its receipt is a failure that says so (O1) — it used to be logged as
@@ -626,13 +648,50 @@ async function run(flags: RunFlags): Promise<number> {
     flags.cd,
     ticket?.capabilities,
   );
+  // A ticket's front matter is the router's, not the worker's: the worker gets the prose and the
+  // verify line, from a copy under the state dir. A legacy brief goes to the worker as the file itself.
+  const workerText =
+    ticket === undefined ? undefined : withVerifyLine(parsed.prose, ticket);
+  return launch({
+    roster,
+    flags,
+    brief,
+    ticket,
+    pick,
+    label: flags.label ?? briefLabel(parsed.prose),
+    workerText,
+    resume: undefined,
+  });
+}
+
+const withVerifyLine = (text: string, ticket: Ticket): string => {
+  const line = verifyLine(ticket.verify);
+  return line === "" ? text : `${text.trimEnd()}\n\n${line}\n`;
+};
+
+interface Launch {
+  roster: Roster;
+  flags: RunFlags;
+  /** the full original text, ticket included */
+  brief: string;
+  ticket: Ticket | undefined;
+  pick: Pick;
+  label: string;
+  /** what the worker is sent when it is not the brief file itself */
+  workerText: string | undefined;
+  /** the vendor session to continue, for a resume */
+  resume: { from: string; session: string } | undefined;
+}
+
+/** Start the worker for a pick, wait for it, verify and grade; shared by `run` and `resume`. */
+async function launch(l: Launch): Promise<number> {
+  const { roster, flags, brief, ticket, pick, label, resume } = l;
   const row = refuseUnrunnable(roster, pick.choice);
   if (row.route === "codex") refuseUnauthenticatedCodex();
   else refuseMissingClaude();
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
   // the full text, ticket included, kept by its hash: the run record's brief.sha256 is the key
   storeBrief(sha256(brief), brief);
-  const label = flags.label ?? briefLabel(parsed.prose);
   console.error(
     `agent-router: ${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
   );
@@ -654,17 +713,13 @@ async function run(flags: RunFlags): Promise<number> {
   // run-claude via --progress-file); the statusline Run rows read it.
   const progress = progressFile(runId);
 
-  // A ticket's front matter is the router's, not the worker's: the worker gets the prose and the
-  // verify line, from a copy under the state dir. A legacy brief goes to the worker as the file itself.
   const workerBrief =
-    ticket === undefined ? undefined : join(STATE_DIR, "briefs", `${runId}.md`);
-  if (workerBrief !== undefined && ticket !== undefined) {
+    l.workerText === undefined
+      ? undefined
+      : join(STATE_DIR, "briefs", `${runId}.md`);
+  if (workerBrief !== undefined && l.workerText !== undefined) {
     mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
-    const line = verifyLine(ticket.verify);
-    writeFileSync(
-      workerBrief,
-      line === "" ? parsed.prose : `${parsed.prose.trimEnd()}\n\n${line}\n`,
-    );
+    writeFileSync(workerBrief, l.workerText);
   }
   const args = workerArgs(
     roster,
@@ -672,6 +727,7 @@ async function run(flags: RunFlags): Promise<number> {
     workerBrief === undefined ? flags : { ...flags, promptFile: workerBrief },
     progress,
     runId,
+    resume?.session,
   );
   const t0 = performance.now();
   const child = Bun.spawn([process.execPath, ...args], {
@@ -682,6 +738,34 @@ async function run(flags: RunFlags): Promise<number> {
   });
   const stop = (signal: NodeJS.Signals, code: number): void => {
     child.kill(signal);
+    // a verify that is running is in its own process group (verify.ts): it survives unless killed here
+    killRunningVerify();
+    const session = progressSession(progress);
+    // recorded as stopped; a waiver, because a stopped run has no work to grade and must not block the cwd
+    appendLog({
+      kind: "run",
+      run_id: runId,
+      label,
+      cwd: active.cwd,
+      brief: {
+        path: resolve(flags.promptFile),
+        sha256: sha256(brief),
+        chars: brief.length,
+      },
+      pick,
+      ...(ticket === undefined ? {} : { ticket }),
+      ...(resume === undefined ? {} : { resumed_from: resume.from }),
+      started_at: active.started_at,
+      ended_at: now(),
+      exit: code,
+      worker: {
+        outcome: "stopped",
+        cause: `agent-router received ${signal}`,
+        sandbox: flags.sandbox,
+        ...(session === undefined ? {} : { session }),
+      },
+    });
+    recordWaiver(runId, `stopped: agent-router received ${signal}`, "router");
     if (workerBrief !== undefined) rmSync(workerBrief, { force: true });
     rmSync(marker, { force: true });
     rmSync(progress, { force: true });
@@ -720,6 +804,17 @@ async function run(flags: RunFlags): Promise<number> {
     ticket === undefined
       ? undefined
       : await verifyAfterWorker(ticket, active.cwd, outcomeName, done);
+  const stoppedWith = z
+    .looseObject({ outcome: z.string(), session: z.string() })
+    .safeParse(worker.success ? worker.data : undefined);
+  const resumeHint =
+    stoppedWith.success && stoppedWith.data.outcome !== "ok"
+      ? `agent-router resume ${runId}`
+      : undefined;
+  if (resumeHint !== undefined)
+    console.error(
+      `agent-router: ${stoppedWith.data?.outcome ?? "stopped"} — continue it in its own context: ${resumeHint}`,
+    );
   const receipt = {
     schema: SCHEMA,
     run_id: runId,
@@ -732,15 +827,17 @@ async function run(flags: RunFlags): Promise<number> {
     },
     pick,
     ...(ticket === undefined ? {} : { ticket }),
+    ...(resume === undefined ? {} : { resumed_from: resume.from }),
     started_at: active.started_at,
     ended_at: now(),
     exit,
+    ...(resumeHint === undefined ? {} : { resume_with: resumeHint }),
     ...(verified === undefined
       ? {}
       : { verify: verified.results, verify_summary: verified.summary }),
     // codex-run's own receipt carries progress; a claude worker's comes from its progress file
     worker: worker.success
-      ? { ...progressField, ...worker.data }
+      ? { ...progressField, sandbox: flags.sandbox, ...worker.data }
       : unreadable("codex-run", "codex-failed", out),
   };
   const runStats = statsFor(
@@ -916,10 +1013,12 @@ const LogLine = z.looseObject({
       .optional(),
   }),
   exit: z.number().optional(),
+  resumed_from: z.string().optional(),
   worker: z
     .looseObject({
       outcome: z.string().optional(),
       session: z.string().optional(),
+      sandbox: z.string().optional(),
       run_id: z.string().optional(),
       receipt_file: z.string().optional(),
       elapsed_s: z.number().optional(),
@@ -1048,7 +1147,7 @@ function readWaivers(): Set<string> {
 // empty, a run that deleted a file it was asked to lint stayed "ok", and the same mis-pick (luna on
 // long edit-and-test loops, killed at its bound) repeated. Grading was available and optional, so
 // it never happened; the gate makes the owed grade the coordinator's next step.
-function owedGrades(cwd: string): Logged[] {
+function owedGrades(cwd: string, except?: string): Logged[] {
   const graded = readGrades();
   const waived = readWaivers();
   return readLog().filter(
@@ -1056,6 +1155,7 @@ function owedGrades(cwd: string): Logged[] {
       l.kind === "run" &&
       l.run_id !== undefined &&
       l.cwd === cwd &&
+      l.run_id !== except &&
       !graded.has(l.run_id) &&
       !waived.has(l.run_id),
   );
@@ -1079,8 +1179,12 @@ function conflict(
     : pairs.map(([m, t]) => `${t} overlaps ${m}`).join(", ");
 }
 
-function refuseOverUngraded(cwd: string, mine?: string[]): void {
-  const owed = owedGrades(cwd).flatMap((l) => {
+function refuseOverUngraded(
+  cwd: string,
+  mine?: string[],
+  except?: string,
+): void {
+  const owed = owedGrades(cwd, except).flatMap((l) => {
     const why = conflict(mine, l.ticket?.writes);
     return why === undefined ? [] : [{ run: l, why }];
   });
@@ -1262,7 +1366,7 @@ function waive(runId: string, reason: string): number {
 function stats(): number {
   const lines = readLog();
   const bySource = Object.fromEntries(
-    ["explicit", "jev", "default"].map((s) => [
+    ["explicit", "jev", "default", "resume"].map((s) => [
       s,
       lines.filter((l) => l.pick.source === s).length,
     ]),
@@ -1658,6 +1762,83 @@ function errorLine(error: z.ZodError): string {
   );
 }
 
+// --- resume: continue a stopped worker in its own vendor session ----------------------------------
+//
+// 2026-10-06: about half of one coordinator's workers were killed at their time bound with 80-90% of
+// the work done, and every follow-up worker re-read everything from zero. A run record carries the
+// vendor's own session id (worker.session); both CLIs resume by it (codex-run --resume → `codex exec
+// resume`, run-claude --resume → `claude --resume`). The new run is a run of its own on the original's
+// row, sandbox and cwd; Jev picks nothing.
+
+const defaultResumeMessage = (outcome: string, cause: string): string =>
+  `You were stopped before you finished (${outcome}: ${cause}). Continue the same task from where you stopped; finish it, run its checks in the foreground, and write your final report.`;
+
+async function resumeCommand(
+  id: string,
+  promptFile: string | undefined,
+  timeoutS: number | undefined,
+): Promise<number> {
+  const roster = await loadRosterOrDie();
+  const runId = resolveRunId(id);
+  const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
+  if (logged === undefined)
+    fatal(`no run ${id} in ${LOG_FILE} (agent-router stats lists the log)`);
+  const worker = logged.worker;
+  const session = worker?.session;
+  if (session === undefined || session === "")
+    fatal(
+      `run ${runId} has no session id (outcome ${worker?.outcome ?? "unknown"}): the vendor never reported one, so there is nothing to resume`,
+    );
+  const row = roster.choice.find((c) => c.id === logged.pick.choice);
+  if (row === undefined)
+    fatal(`run ${runId} used '${logged.pick.choice}', no longer a roster row`);
+  const cwd = logged.cwd;
+  if (cwd === undefined || !existsSync(cwd))
+    fatal(`run ${runId}: its directory ${cwd ?? "(not recorded)"} is gone`);
+  const sandbox = worker?.sandbox;
+  if (sandbox !== "read-only" && sandbox !== "workspace-write")
+    fatal(`run ${runId}: its sandbox was not recorded, cannot continue it`);
+  const brief = loggedBrief(logged);
+  if (brief === undefined) fatal(`run ${runId}: its brief is no longer stored`);
+  const parsed = parseTicket(brief);
+  if (parsed.kind === "invalid")
+    fatal(`run ${runId}: its stored ticket is invalid: ${parsed.reason}`);
+  const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
+  if (promptFile !== undefined && !existsSync(promptFile))
+    fatal(`no such message file: ${promptFile}`);
+  // the original is the run being continued: its own ungraded record must not block its continuation
+  refuseOverUngraded(cwd, ticket?.writes, runId);
+  const message =
+    promptFile === undefined
+      ? defaultResumeMessage(
+          worker?.outcome ?? "unknown",
+          worker?.cause ?? "cause not recorded",
+        )
+      : readFileSync(promptFile, "utf8");
+  return launch({
+    roster,
+    flags: {
+      promptFile: logged.brief?.path ?? "",
+      cd: cwd,
+      sandbox,
+      choice: "auto",
+      label: undefined,
+      timeoutS,
+    },
+    brief,
+    ticket,
+    pick: {
+      source: "resume",
+      choice: row.id,
+      reason: `continuing session ${session} of ${runId}`,
+    },
+    label: `resume: ${briefLabel(parsed.prose)}`,
+    workerText:
+      ticket === undefined ? message : withVerifyLine(message, ticket),
+    resume: { from: runId, session },
+  });
+}
+
 // --- argv -----------------------------------------------------------------------------------------
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -1797,6 +1978,27 @@ const argv = cli({
       },
     }),
     command({
+      name: "resume",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: ["<run_id>"],
+      flags: {
+        promptFile: {
+          type: String,
+          description:
+            "the message the worker gets (default: you were stopped, continue, finish, report)",
+        },
+        timeoutS: {
+          type: String,
+          description: "worker wall clock in seconds (default 1800)",
+        },
+      },
+      help: {
+        description:
+          "continue a stopped run (by run_id or session-id prefix) in its own vendor session: a new run on the same row, sandbox and cwd; the ticket's verify and grade apply again",
+      },
+    }),
+    command({
       name: "grade",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -1824,7 +2026,11 @@ const argv = cli({
 async function main(): Promise<number | undefined> {
   // Cleye leaves excess positionals in argv._ (writing-bun-scripts BG1); result and grade take one.
   const positionals =
-    argv.command === "grade" || argv.command === "result" ? 1 : 0;
+    argv.command === "grade" ||
+    argv.command === "result" ||
+    argv.command === "resume"
+      ? 1
+      : 0;
   if (argv._.length > positionals)
     fatal(`unexpected argument: ${String(argv._[positionals])}`);
   if (argv.command === "run") {
@@ -1880,6 +2086,14 @@ async function main(): Promise<number | undefined> {
       argv.flags.json ?? false,
       argv.flags.brief ?? false,
     );
+  if (argv.command === "resume") {
+    const { promptFile, timeoutS } = argv.flags;
+    if (promptFile === "") fatal("a value is required");
+    const bound = timeoutS === undefined ? undefined : Number(timeoutS);
+    if (bound !== undefined && (!Number.isInteger(bound) || bound <= 0))
+      fatal(`not a positive whole number of seconds: ${timeoutS}`);
+    return resumeCommand(argv._.runId, promptFile, bound);
+  }
   if (argv.command === "grade")
     return gradeCommand(argv._.runId, argv.flags.evidence, argv.flags.waive);
   return undefined;

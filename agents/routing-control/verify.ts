@@ -17,6 +17,16 @@ const TAIL_CHARS = 4000;
 const TIMEOUT_EXIT = 124; // as timeout(1): killed at its bound, or never run for lack of time
 const DRAIN_GRACE_MS = 1000; // an orphaned grandchild may hold the pipe open past the shell's exit
 
+// Process groups of the verify commands running now, so a stopped router can kill them: each is its
+// own group (below), so killing the router's own group does not reach them.
+const running = new Set<number>();
+
+/** SIGKILL every verify group that is running now; synchronous, for a signal handler. */
+export function killRunningVerify(): void {
+  for (const pid of running) void attempt(() => process.kill(-pid, "SIGKILL"));
+  running.clear();
+}
+
 const tenths = (ms: number): number => Math.round(ms / 100) / 10;
 
 async function runOne(
@@ -38,6 +48,7 @@ async function runOne(
     signal: bound,
     killSignal: "SIGKILL",
   });
+  running.add(child.pid);
   let tail = "";
   const decoder = new TextDecoder();
   const drained = (async () => {
@@ -54,6 +65,7 @@ async function runOne(
   };
   bound.addEventListener("abort", killGroup, { once: true });
   const code = await child.exited;
+  running.delete(child.pid);
   // after the shell is gone its pgid may be reused: never signal a group on a late abort
   bound.removeEventListener("abort", killGroup);
   await Promise.race([drained, Bun.sleep(DRAIN_GRACE_MS)]);

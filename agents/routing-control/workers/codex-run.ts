@@ -13,6 +13,8 @@
 //   C1  invocation  codex-run (--choice ID | --model M --effort E) --sandbox S --cd DIR [--timeout-s N]
 //                   [--receipt-dir D] (--prompt-file F | prompt on stdin)
 //                   model, effort, sandbox and cd are REQUIRED: a bare codex inherits config.toml.
+//                   --resume THREAD continues that codex session in place of a fresh one: same flags,
+//                   the receipt, progress and cause handling are those of a fresh run.
 //                   --choice names a codex-route row of agents/models/dispatch-roster.toml (the roster
 //                   choice a coordinator makes) and supplies its model and effort.
 //   C2  effects     one codex subprocess, sandboxed as asked. read-only | workspace-write only;
@@ -146,6 +148,11 @@ const argv = cli(
         type: String,
         description: "file holding the prompt (else stdin)",
       },
+      resume: {
+        type: String,
+        description:
+          "a codex thread id (a receipt's `session`): continue that session with the prompt as its next message (`codex exec resume`)",
+      },
       emitEnvelope: {
         type: String,
         description:
@@ -223,7 +230,9 @@ if (argv._.length > 0)
   refuse(
     `unexpected argument: ${argv._[0]} (the prompt goes in --prompt-file or stdin)`,
   );
-const { choice, sandbox, cd, timeoutS, promptFile } = argv.flags;
+const { choice, sandbox, cd, timeoutS, promptFile, resume } = argv.flags;
+if (resume !== undefined && resume.trim() === "")
+  refuse("--resume needs the codex thread id of the session to continue");
 if (choice !== undefined) {
   if (model !== undefined || effort !== undefined)
     refuse(
@@ -382,35 +391,54 @@ if (prompt === "")
 // --- run --------------------------------------------------------------------------------------
 const lastFile = join(argv.flags.receiptDir, `${runId}.last.txt`);
 mkdirSync(argv.flags.receiptDir, { recursive: true });
-const cmd = [
-  CODEX_BIN,
-  "exec",
+// `codex exec resume` (codex-cli help read 2026-10-06) takes [SESSION_ID] [PROMPT] and -m, -c, -o,
+// --json, --skip-git-repo-check — but no --sandbox and no -C. The sandbox goes in as the config
+// override it is, and the directory is the process's own cwd, which a resumed session also expects.
+const execFlags = [
   "--json",
   "--skip-git-repo-check",
-  "--sandbox",
-  codexSandbox,
-  "-C",
-  resolve(String(cd)),
   "-m",
   String(model),
   "-c",
   `model_reasoning_effort="${effort}"`,
   "-o",
   lastFile,
-  prompt,
 ];
+const cmd =
+  resume === undefined
+    ? [
+        CODEX_BIN,
+        "exec",
+        "--sandbox",
+        codexSandbox,
+        "-C",
+        resolve(String(cd)),
+        ...execFlags,
+        prompt,
+      ]
+    : [
+        CODEX_BIN,
+        "exec",
+        "resume",
+        "-c",
+        `sandbox_mode="${codexSandbox}"`,
+        ...execFlags,
+        resume,
+        prompt,
+      ];
 if (unsandboxedReason !== undefined)
   say(
     `UNSANDBOXED: asked for ${sandbox}, running danger-full-access — ${HOST_FILE} declares this box the isolation: ${unsandboxedReason}`,
   );
 say(
-  `started ${model} effort=${effort} sandbox=${codexSandbox} in ${resolve(String(cd))}, bound ${timeoutS} s`,
+  `${resume === undefined ? "started" : `resuming ${resume}:`} ${model} effort=${effort} sandbox=${codexSandbox} in ${resolve(String(cd))}, bound ${timeoutS} s`,
 );
 const deadline = AbortSignal.timeout(timeoutS * 1000);
 const spawned = await attempt(() =>
   // stdin "ignore" is the `</dev/null` of the recipe: codex exec reads stdin and would hang on an
   // open pipe for the whole budget.
   Bun.spawn(cmd, {
+    cwd: resolve(String(cd)),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

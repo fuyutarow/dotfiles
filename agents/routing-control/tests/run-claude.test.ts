@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -174,5 +175,58 @@ describe("agents/routing-control runner: --progress-file", () => {
     );
     expect(progress).toEqual({ last: "“done”", commands: 1, files: 1 });
     await rm(dir, { recursive: true, force: true });
+  });
+});
+
+describe("agents/routing-control runner: session persistence and --resume", () => {
+  const argvOf = async (extra: Record<string, unknown>): Promise<string[]> => {
+    const dir = await mkdtemp(join(tmpdir(), "run-claude-argv-"));
+    const log = join(dir, "fake-claude-argv.log");
+    const run = await runClaude({
+      target: dir,
+      prompt: "Reply exactly OK",
+      model: "sonnet",
+      permissionMode: "plan",
+      maxTurns: 1,
+      timeoutMs: 5_000,
+      safeMode: true,
+      bare: false,
+      claudeBin: fixture,
+      ...extra,
+    });
+    expect(run.exitCode).toBe(0);
+    const argv = decodedJson(
+      z.array(z.string()),
+      readFileSync(log, "utf8").trim(),
+    );
+    await rm(dir, { recursive: true, force: true });
+    return argv;
+  };
+
+  test("by default a session is not persisted (probes and direct callers)", async () => {
+    const argv = await argvOf({});
+    expect(argv).toContain("--no-session-persistence");
+    expect(argv).not.toContain("--resume");
+  });
+
+  test("persistSession keeps the session on disk: no --no-session-persistence", async () => {
+    const argv = await argvOf({ persistSession: true });
+    expect(argv).not.toContain("--no-session-persistence");
+  });
+
+  test("resume passes --resume <session> and implies persistence", async () => {
+    const argv = await argvOf({ resume: "sess-abc" });
+    expect(
+      argv.slice(argv.indexOf("--resume"), argv.indexOf("--resume") + 2),
+    ).toEqual(["--resume", "sess-abc"]);
+    expect(argv).not.toContain("--no-session-persistence");
+  });
+
+  test("the CLI takes --resume and --persist-session", () => {
+    const result = runCli(runnerScript, ["--resume"]);
+    expect(result.exitCode).toBe(2);
+    expect(parseErrorEnvelope(result.stdout).error).toContain(
+      "--resume requires a value",
+    );
   });
 });

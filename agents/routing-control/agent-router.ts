@@ -8,6 +8,7 @@
 //   C1  agent-router run  --prompt-file F --cd DIR --sandbox read-only|workspace-write
 //                     [--label TEXT]   (--choice is refused: Jev alone picks) [--timeout-s N]
 //       agent-router pick --prompt-file F [--cd DIR]     the auto pick only; starts nothing
+//       agent-router ask  --request F|-                  a typed question to Jev; its answer, never acted on
 //       agent-router ls                                  running workers (stale ones flagged)
 //       agent-router stats                               picks, confidence, fallbacks, cost, outcomes
 //       agent-router grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
@@ -40,7 +41,7 @@ import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { cli, command } from "cleye";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
-import { jsonOf, z } from "../hooks/zod.ts";
+import { jsonOf, jsonText, z } from "../hooks/zod.ts";
 import {
   criterionFor,
   loadRoster,
@@ -901,6 +902,147 @@ function stats(): number {
   return 0;
 }
 
+// --- ask: a typed question to Jev, for any caller ---------------------------------------------------
+//
+// Ported from driving-jev's jev.ts (retired 2026-10-06; agent-router is the one entry point for
+// everything that talks to Jev). The request is validated BEFORE anything is sent. Ask returns Jev's
+// probabilities as given and never acts on them: thresholds and abstention stay with the caller.
+
+const StructuredText = z.union([
+  z.string(),
+  z.array(z.unknown()),
+  z.record(z.string(), z.unknown()),
+]);
+const AskQuestion = z.discriminatedUnion("type", [
+  z.looseObject({
+    type: z.literal("choice"),
+    instructions: StructuredText,
+    criteria: z
+      .record(z.string(), z.unknown())
+      .refine(
+        (c) => Object.keys(c).length >= 2 && Object.keys(c).length <= 255,
+        {
+          message: "choice criteria requires 2..255 options",
+        },
+      ),
+  }),
+  z.looseObject({
+    type: z.literal("score"),
+    instructions: StructuredText,
+    criteria: z.array(z.unknown()).min(2).max(10),
+  }),
+  z.looseObject({
+    type: z.literal("noul"),
+    instructions: StructuredText,
+    criteria: z.record(z.string(), z.unknown()).optional(),
+  }),
+]);
+const AskRequest = z.looseObject({
+  state: StructuredText,
+  questions: z
+    .record(z.string(), AskQuestion)
+    .refine((q) => Object.keys(q).length > 0, {
+      message: "questions must be a non-empty object",
+    }),
+});
+const AskAnswer = z.looseObject({
+  answers: z.record(z.string(), z.unknown()),
+});
+
+const ASK_DIAGNOSTIC_CHARS = 2000;
+
+/** The reason on stderr, the exit class as the return value (2 request, 3 auth, 4 retry, 5 provider). */
+function askFailure(code: 2 | 3 | 4 | 5, reason: string): number {
+  const compact = reason.replaceAll("\n", " ").trim();
+  const bounded =
+    compact.length <= ASK_DIAGNOSTIC_CHARS
+      ? compact
+      : `${compact.slice(0, ASK_DIAGNOSTIC_CHARS)} [truncated: ${compact.length} chars]`;
+  console.error(`agent-router: ${bounded === "" ? "ask failed" : bounded}`);
+  return code;
+}
+
+function askStatusExit(status: number): 3 | 4 | 5 {
+  if (status === 401 || status === 403) return 3;
+  if (status === 429 || status === 529) return 4;
+  return 5;
+}
+
+async function readAskText(path: string): Promise<string> {
+  if (path === "-") {
+    if (process.stdin.isTTY)
+      fatal("--request - needs piped stdin, not a terminal");
+    return Bun.stdin.text();
+  }
+  if (!existsSync(path)) fatal(`no such request file: ${path}`);
+  return Bun.file(path).text();
+}
+
+async function ask(requestPath: string): Promise<number> {
+  const roster = await loadRosterOrDie();
+  const text = await readAskText(requestPath);
+  const decoded = jsonText.safeParse(text);
+  if (!decoded.success)
+    return askFailure(
+      2,
+      `request is not valid JSON: ${errorLine(decoded.error)}`,
+    );
+  const checked = AskRequest.safeParse(decoded.data);
+  if (!checked.success)
+    return askFailure(2, `invalid request: ${errorLine(checked.error)}`);
+  // The request is forwarded as the caller wrote it; the model comes from the roster, as for the pick.
+  const request: Record<string, unknown> = { ...checked.data };
+  if (roster.auto.jev.api === "typesafe") request.model = roster.auto.jev.model;
+  const post = await postJev(
+    roster.auto.jev.url,
+    request,
+    roster.auto.timeout_ms,
+  );
+  const { trace } = post;
+  const logAsk = (): void => {
+    appendLog({
+      kind: "ask",
+      at: now(),
+      request_sha256: sha256(text),
+      questions: Object.keys(checked.data.questions),
+      status: post.ok ? post.status : 0,
+      latency_ms: trace.latency_ms,
+      jev: trace,
+    });
+  };
+  if (!post.ok) {
+    logAsk();
+    // no HTTP exchange and no transport error = the key was not found: an auth problem, not a retry.
+    return askFailure(trace.error === undefined ? 3 : 4, post.reason);
+  }
+  const parsed = jsonOf(AskAnswer).safeParse(post.text);
+  trace.response = parsed.success ? parsed.data : post.text.slice(0, 2000);
+  logAsk();
+  if (post.status < 200 || post.status >= 300)
+    return askFailure(
+      askStatusExit(post.status),
+      `jev HTTP ${post.status}: ${post.text}`,
+    );
+  if (!parsed.success)
+    return askFailure(
+      5,
+      `jev response is not JSON with answers: ${post.text.slice(0, 200)}`,
+    );
+  process.stdout.write(`${JSON.stringify(parsed.data)}\n`);
+  return 0;
+}
+
+/** The first zod issue as one line: its path and message. */
+function errorLine(error: z.ZodError): string {
+  const issue = error.issues[0];
+  if (issue === undefined) return "unknown problem";
+  const path = issue.path.map(String).join(".");
+  return (
+    (path === "" ? "" : `${path}: `) +
+    issue.message.replace(/^not valid JSON: /u, "")
+  );
+}
+
 // --- argv -----------------------------------------------------------------------------------------
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -978,6 +1120,23 @@ const argv = cli({
       help: { description: "running dispatches" },
     }),
     command({
+      name: "ask",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      flags: {
+        request: {
+          type: String,
+          description:
+            'file (or - for stdin) holding {"state": ..., "questions": {"<id>": {type, instructions, criteria}}}',
+        },
+      },
+      help: {
+        description:
+          "ask Jev typed questions (choice | score | noul); prints its JSON answer. It returns probabilities and never acts on them: thresholds and abstention stay with the caller. Exit 2 bad request (nothing sent), 3 auth/no key, 4 retry later (429/529, timeout, network), 5 other provider failure",
+      },
+    }),
+    command({
       name: "stats",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -1052,6 +1211,11 @@ async function main(): Promise<number | undefined> {
       fatal("a value is required");
     if (argv.flags.promptFile === undefined) fatal("pick needs --prompt-file");
     return pickOnly(argv.flags.promptFile, argv.flags.cd);
+  }
+  if (argv.command === "ask") {
+    if (argv.flags.request === undefined || argv.flags.request === "")
+      fatal("ask needs --request <file|->");
+    return ask(argv.flags.request);
   }
   if (argv.command === "ls") return ls();
   if (argv.command === "stats") return stats();

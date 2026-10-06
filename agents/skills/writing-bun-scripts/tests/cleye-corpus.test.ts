@@ -53,7 +53,6 @@ const CORPUS = [
   { path: "agents/routing-control/workers/codex-probe.ts" },
   { path: "agents/skills/driving-git/scripts/git-check.ts" },
   { path: "agents/skills/driving-grok/scripts/probe-models.ts" },
-  { path: "agents/routing-control/jev.ts" },
   { path: "agents/skills/forging-novel-theses/scripts/gate-check.ts" },
   { path: "agents/skills/forging-skills/scripts/skill-check.ts" },
   {

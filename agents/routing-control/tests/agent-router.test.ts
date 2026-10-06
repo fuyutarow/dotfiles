@@ -27,6 +27,36 @@ const server = Bun.serve({
     const body = await req.text();
     bodies.push(body);
     const confidence = body.includes("LOWCONF") ? 0.2 : 0.9;
+    // A marker in the state makes the fake answer like a failing provider (the ask exit classes).
+    const status = /HTTP(401|429|500)/u.exec(body)?.[1];
+    if (status !== undefined)
+      return new Response(`provider says ${status}`, {
+        status: Number(status),
+      });
+    if (body.includes("NOTJSON")) return new Response("plain text, no json");
+    // An ask: any question id other than the pick's and the grade's is echoed back as a choice.
+    const asked = Object.keys(
+      decodedJson(
+        z.looseObject({ questions: z.record(z.string(), z.unknown()) }),
+        body,
+      ).questions,
+    ).filter((id) => id !== "worker" && id !== "grade");
+    if (asked.length > 0)
+      return Response.json({
+        model: "fake-jev",
+        answers: Object.fromEntries(
+          asked.map((id) => [
+            id,
+            {
+              type: "choice",
+              choice: "yes",
+              confidence,
+              probabilities: { yes: confidence, no: 1 - confidence },
+            },
+          ]),
+        ),
+        usage: { input_tokens: 10, output_tokens: 2 },
+      });
     // A grade question is answered under "grade"; evidence saying GRADE=<g> picks that grade.
     if (body.includes('"grade":{"type":"choice"')) {
       const g = /GRADE=(\w+)/u.exec(body)?.[1] ?? "partial";
@@ -784,5 +814,229 @@ describe("a worker is named by its vendor session id", () => {
     expect(g.code).toBe(2);
     expect(g.err).toContain("matches 2 runs");
     for (const id of ids) expect(g.err).toContain(id);
+  });
+});
+
+// ask: a typed question to Jev. The request is validated before anything is sent; the answer is
+// returned as Jev gave it (probabilities, no threshold).
+describe("agent-router ask", () => {
+  const choiceQuestion = {
+    type: "choice",
+    instructions: "Is `task` about tests?",
+    criteria: { yes: "it is", no: "it is not" },
+  };
+  const valid = {
+    state: { task: "write a test" },
+    questions: { q1: choiceQuestion },
+  };
+  const requestFile = (name: string, value: unknown): string => {
+    const p = join(scratch, `ask-${name}.json`);
+    writeFileSync(p, JSON.stringify(value));
+    return p;
+  };
+  const AskOut = z.looseObject({
+    answers: z.record(z.string(), z.looseObject({ choice: z.string() })),
+  });
+  const AskLine = z.looseObject({
+    kind: z.string(),
+    request_sha256: z.string(),
+    questions: z.array(z.string()),
+    status: z.number(),
+    latency_ms: z.number(),
+    jev: z.looseObject({ endpoint: z.string() }),
+  });
+
+  test("a valid choice request: the answer JSON on stdout, one ask line logged", async () => {
+    const r = await router(["ask", "--request", requestFile("ok", valid)]);
+    expect(r.code).toBe(0);
+    expect(decodedJson(AskOut, r.out.trim()).answers.q1?.choice).toBe("yes");
+    const line = readFileSync(join(r.state, "runs.jsonl"), "utf8").trim();
+    const logged = decodedJson(AskLine, line);
+    expect(logged.kind).toBe("ask");
+    expect(logged.questions).toEqual(["q1"]);
+    expect(logged.status).toBe(200);
+  });
+
+  test("the request is read from stdin with '-'", async () => {
+    const r = Bun.spawn([process.execPath, CLI, "ask", "--request", "-"], {
+      env: {
+        ...process.env,
+        AGENT_ROUTER_STATE_DIR: join(scratch, "state-stdin"),
+        DISPATCH_ROSTER_PATH: LIVE_JEV,
+        TYPESAFE_API_KEY: "fixture-key",
+      },
+      stdin: new Blob([JSON.stringify(valid)]),
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 60_000,
+    });
+    const [out, code] = await Promise.all([
+      new Response(r.stdout).text(),
+      r.exited,
+    ]);
+    expect(code).toBe(0);
+    expect(decodedJson(AskOut, out.trim()).answers.q1?.choice).toBe("yes");
+  });
+
+  test("a typesafe roster sets the model; the request does not carry it", async () => {
+    const typesafe = roster("typesafe", (t) =>
+      t.replace(
+        /^\[auto\.jev\][\s\S]*?(?=\n\[)/mu,
+        `[auto.jev]\napi = "typesafe"\nmodel = "m-from-roster"\nurl = "${server.url.href}"\n`,
+      ),
+    );
+    const before = bodies.length;
+    const r = await router(["ask", "--request", requestFile("model", valid)], {
+      DISPATCH_ROSTER_PATH: typesafe,
+    });
+    expect(r.code).toBe(0);
+    expect(bodies.at(-1)).toContain('"model":"m-from-roster"');
+    expect(bodies.length).toBe(before + 1);
+  });
+
+  const bad: [string, unknown][] = [
+    ["state is a number", { state: 3, questions: { q: choiceQuestion } }],
+    ["no questions", { state: "s", questions: {} }],
+    ["questions is an array", { state: "s", questions: [choiceQuestion] }],
+    [
+      "unknown type",
+      { state: "s", questions: { q: { ...choiceQuestion, type: "rank" } } },
+    ],
+    [
+      "instructions is a number",
+      { state: "s", questions: { q: { ...choiceQuestion, instructions: 1 } } },
+    ],
+    [
+      "choice with one option",
+      {
+        state: "s",
+        questions: { q: { ...choiceQuestion, criteria: { only: "x" } } },
+      },
+    ],
+    [
+      "choice criteria is an array",
+      {
+        state: "s",
+        questions: { q: { ...choiceQuestion, criteria: ["a", "b"] } },
+      },
+    ],
+    [
+      "choice with 256 options",
+      {
+        state: "s",
+        questions: {
+          q: {
+            ...choiceQuestion,
+            criteria: Object.fromEntries(
+              Array.from({ length: 256 }, (_, i) => [`o${i}`, "x"]),
+            ),
+          },
+        },
+      },
+    ],
+    [
+      "score with one level",
+      {
+        state: "s",
+        questions: { q: { type: "score", instructions: "i", criteria: ["a"] } },
+      },
+    ],
+    [
+      "score with 11 levels",
+      {
+        state: "s",
+        questions: {
+          q: {
+            type: "score",
+            instructions: "i",
+            criteria: Array.from({ length: 11 }, (_, i) => `l${i}`),
+          },
+        },
+      },
+    ],
+    [
+      "score criteria is an object",
+      {
+        state: "s",
+        questions: {
+          q: { type: "score", instructions: "i", criteria: { a: 1, b: 2 } },
+        },
+      },
+    ],
+    [
+      "noul criteria is a string",
+      {
+        state: "s",
+        questions: { q: { type: "noul", instructions: "i", criteria: "x" } },
+      },
+    ],
+  ];
+  test.each(bad)(
+    "invalid request (%s): exit 2, the reason on stderr, nothing sent",
+    async (name, value) => {
+      const before = bodies.length;
+      const r = await router(["ask", "--request", requestFile("bad", value)]);
+      expect([name, r.code]).toEqual([name, 2]);
+      expect(r.err.trim()).not.toBe("");
+      expect(bodies.length).toBe(before);
+    },
+  );
+
+  test("a request that is not JSON, or a missing file: exit 2, nothing sent", async () => {
+    const before = bodies.length;
+    const notJson = join(scratch, "ask-notjson.json");
+    writeFileSync(notJson, "{nope");
+    for (const path of [notJson, join(scratch, "ask-absent.json")]) {
+      const r = await router(["ask", "--request", path]);
+      expect(r.code).toBe(2);
+      expect(r.err.trim()).not.toBe("");
+    }
+    expect(bodies.length).toBe(before);
+  });
+
+  test.each([
+    ["HTTP401", 3],
+    ["HTTP429", 4],
+    ["HTTP500", 5],
+    ["NOTJSON", 5],
+  ])(
+    "provider failure (%s) exits %d with the reason on stderr",
+    async (marker, code) => {
+      const r = await router([
+        "ask",
+        "--request",
+        requestFile("fail", { ...valid, state: { task: marker } }),
+      ]);
+      expect(r.code).toBe(code);
+      expect(r.err.trim()).not.toBe("");
+      expect(r.out).toBe("");
+    },
+  );
+
+  test("an unreachable Jev exits 4", async () => {
+    const dead = roster("dead", (t) =>
+      t.replace(
+        /^\[auto\.jev\][\s\S]*?(?=\n\[)/mu,
+        `[auto.jev]\napi = "reseller"\nurl = "http://127.0.0.1:1/"\n`,
+      ),
+    );
+    const r = await router(["ask", "--request", requestFile("dead", valid)], {
+      DISPATCH_ROSTER_PATH: dead,
+    });
+    expect(r.code).toBe(4);
+    expect(r.err.trim()).not.toBe("");
+  });
+
+  test("no key: a non-zero exit naming where it looked, nothing sent", async () => {
+    const before = bodies.length;
+    const home = mkdtempSync(join(scratch, "nokey-home-"));
+    const r = await router(["ask", "--request", requestFile("nokey", valid)], {
+      TYPESAFE_API_KEY: "",
+      HOME: home,
+    });
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("TYPESAFE_API_KEY");
+    expect(r.err).toContain(".config/typesafe/.env");
+    expect(bodies.length).toBe(before);
   });
 });

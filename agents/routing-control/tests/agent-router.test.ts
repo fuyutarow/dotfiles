@@ -1581,7 +1581,7 @@ describe("agent-router run: a brief with a ticket", () => {
     const b = brief(
       "t-verify",
       ticketText(
-        'writes = ["w/**"]\nverify = ["cat marker.txt && echo GRADE=pass", "pwd"]',
+        'writes = ["marker.txt"]\nverify = ["cat marker.txt && echo GRADE=pass", "pwd"]',
       ),
     );
     const r = await router(runArgs(b, cwd), { FAKE_TOUCH: "marker.txt" });
@@ -1697,6 +1697,126 @@ describe("agent-router run: a brief with a ticket", () => {
     expect(g.code).toBe(0);
     const grades = logLines(state).filter((l) => l.kind === "grade");
     expect(grades.map((l) => l.grade)).toEqual(["partial", "fail"]);
+  });
+});
+
+describe("agent-router ticket write enforcement", () => {
+  let gitSeq = 0;
+  const gitStatus = (status: string): Record<string, string> => {
+    const bin = join(scratch, `fake-git-${gitSeq++}`);
+    mkdirSync(bin, { recursive: true });
+    const git = join(bin, "git");
+    writeFileSync(git, "#!/bin/sh\nprintf '%s' \"$FAKE_STATUS_OUTPUT\"\n");
+    chmodSync(git, 0o755);
+    return {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      FAKE_STATUS_OUTPUT: status,
+    };
+  };
+  const scopeRun = (
+    name: string,
+    writes: string,
+    env: Record<string, string> = {},
+    status = "",
+  ) =>
+    router(
+      runArgs(
+        brief(
+          name,
+          ticketText(`writes = ${writes}\nverify = ["echo VERIFY-RAN"]`),
+        ),
+        freshCwd(),
+      ),
+      { ...gitStatus(status), ...env },
+    );
+
+  test("allowed changed paths are recorded and do not fail the run", async () => {
+    const r = await scopeRun(
+      "writes-inside",
+      '["allowed/**"]',
+      { FAKE_TOUCH: "allowed/file.ts" },
+      "?? allowed/file.ts\n",
+    );
+    const receipt = decodedJson(
+      z.looseObject({
+        writes_check: z.array(z.string()),
+        writes_violations: z.array(z.string()).optional(),
+        verify: z.array(z.looseObject({ output_tail: z.string() })),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.writes_check).toContain("allowed/file.ts");
+    expect(receipt.writes_violations).toBeUndefined();
+    expect(receipt.verify[0]?.output_tail).toContain("VERIFY-RAN");
+    expect(r.code).toBe(0);
+  });
+
+  test("out-of-scope path is recorded, reported, and graded fail after verify", async () => {
+    const r = await scopeRun(
+      "writes-outside",
+      '["allowed/**"]',
+      { FAKE_TOUCH: "scripts/hook-registry.ts" },
+      "?? scripts/hook-registry.ts\n",
+    );
+    const receipt = decodedJson(
+      z.looseObject({
+        writes_violations: z.array(z.string()),
+        verify: z.array(z.looseObject({ output_tail: z.string() })),
+        grade: z.looseObject({ grade: z.string(), reason: z.string() }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.writes_violations).toEqual(["scripts/hook-registry.ts"]);
+    expect(receipt.verify[0]?.output_tail).toContain("VERIFY-RAN");
+    expect(receipt.grade.grade).toBe("fail");
+    expect(receipt.grade.reason).toContain("scripts/hook-registry.ts");
+    expect(r.err).toContain("scripts/hook-registry.ts");
+    expect(logLines(r.state)[0]).toMatchObject({
+      writes_violations: ["scripts/hook-registry.ts"],
+    });
+    const grade = logLines(r.state).find((line) => line.kind === "grade");
+    expect(grade?.grade).toBe("fail");
+    expect(grade?.reason).toContain("scripts/hook-registry.ts");
+  });
+
+  test("read-only ticket with changes is a violation", async () => {
+    const b = brief(
+      "writes-readonly",
+      ticketText('writes = []\nverify = ["true"]'),
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      ...gitStatus("?? changed.txt\n"),
+      FAKE_TOUCH: "changed.txt",
+    });
+    const receipt = decodedJson(
+      z.looseObject({ writes_violations: z.array(z.string()) }),
+      r.out.trim(),
+    );
+    expect(receipt.writes_violations).toEqual(["changed.txt"]);
+    expect(r.code).not.toBe(0);
+  });
+
+  test("unavailable change listing is recorded with its cause", async () => {
+    const noVcs = join(scratch, "no-write-list-vcs");
+    mkdirSync(noVcs, { recursive: true });
+    for (const tool of ["jj", "git"]) {
+      const stub = join(noVcs, tool);
+      writeFileSync(
+        stub,
+        `#!/bin/sh\necho "${tool} disabled by test" >&2\nexit 127\n`,
+      );
+      chmodSync(stub, 0o755);
+    }
+    const r = await scopeRun("writes-unavailable", '["allowed/**"]', {
+      PATH: `${noVcs}:${process.env.PATH ?? ""}`,
+    });
+    const receipt = decodedJson(
+      z.looseObject({ writes_check: z.string() }),
+      r.out.trim(),
+    );
+    expect(receipt.writes_check).toStartWith("unavailable: ");
+    expect(receipt.writes_check).toContain("jj disabled by test");
+    expect(receipt.writes_check).toContain("git disabled by test");
   });
 });
 
@@ -2054,7 +2174,16 @@ describe("agent-router resume", () => {
 
   test("claude: --resume <session> on the same row, model, effort and mode; sessions are persisted", async () => {
     const cwd = freshCwd();
-    const claude = { AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE };
+    const home = join(scratch, "resume-claude-home");
+    const projectDir = join(
+      home,
+      ".claude",
+      "projects",
+      cwd.replaceAll(/[/.]/gu, "-"),
+    );
+    mkdirSync(projectDir, { recursive: true });
+    writeFileSync(join(projectDir, "sess-claude-0001.jsonl"), "{}\n");
+    const claude = { AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE, HOME: home };
     const stopped = await router(
       runArgs(brief("rs-claude", "PICK=sonnet-medium do it\n"), cwd),
       { FAKE_CLAUDE_MODE: "timeout", ...claude },
@@ -2080,6 +2209,39 @@ describe("agent-router resume", () => {
       resumed_from: id,
       pick: { source: "resume", choice: "sonnet-medium" },
     });
+  });
+
+  test("claude without its persisted transcript is not advertised or resumed", async () => {
+    const cwd = freshCwd();
+    const home = join(scratch, "resume-claude-missing-home");
+    const claude = { AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE, HOME: home };
+    const stopped = await router(
+      runArgs(brief("rs-claude-missing", "PICK=sonnet-medium do it\n"), cwd),
+      { FAKE_CLAUDE_MODE: "timeout", ...claude },
+    );
+    const id = firstId(stopped.state);
+    expect(stopped.err).not.toContain(`agent-router resume ${id}`);
+    expect(runsOf(stopped.state)[0]?.resume_with).toBeUndefined();
+    const before = readFileSync(join(scratch, "claude-argv.log"), "utf8")
+      .trim()
+      .split("\n").length;
+    const transcript = join(
+      home,
+      ".claude",
+      "projects",
+      cwd.replaceAll(/[/.]/gu, "-"),
+      "sess-claude-0001.jsonl",
+    );
+    const r = await router(["resume", id], {
+      AGENT_ROUTER_STATE_DIR: stopped.state,
+      ...claude,
+    });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain(transcript);
+    expect(r.err).toContain("fresh run with a continuation brief");
+    expect(
+      readFileSync(join(scratch, "claude-argv.log"), "utf8").trim().split("\n"),
+    ).toHaveLength(before);
   });
 
   test("the ticket applies again: verify and the router's grade run after the resumed worker", async () => {

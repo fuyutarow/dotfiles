@@ -114,6 +114,85 @@ const now = (): string => Temporal.Now.instant().toString();
 const sha256 = (s: string): string =>
   new Bun.CryptoHasher("sha256").update(s).digest("hex");
 
+interface WritesCheck {
+  paths: string[];
+  unavailable?: string;
+  violations?: string[];
+}
+
+interface ReadOnlyCommand {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+async function runReadOnly(
+  argv: string[],
+  cwd: string,
+): Promise<ReadOnlyCommand> {
+  const spawned = await attempt(() =>
+    Bun.spawnSync(argv, {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    }),
+  );
+  if (!spawned.ok)
+    return { exitCode: 127, stdout: "", stderr: errorMessage(spawned.error) };
+  const result = spawned.value;
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout.toString(),
+    stderr: result.stderr.toString(),
+  };
+}
+
+/** Read the target workspace's changed paths; both commands are inspection-only. */
+async function changedPaths(cwd: string): Promise<WritesCheck> {
+  const jj = await runReadOnly(["jj", "diff", "--name-only"], cwd);
+  if (jj.exitCode === 0)
+    return {
+      paths: jj.stdout.split("\n").filter((p) => p !== ""),
+    };
+  const git = await runReadOnly(["git", "status", "--porcelain"], cwd);
+  if (git.exitCode === 0)
+    return {
+      paths: git.stdout
+        .split("\n")
+        .filter((line) => line.length >= 4)
+        .map((line) => line.slice(3).split(" -> ").at(-1) ?? "")
+        .filter((p) => p !== ""),
+    };
+  const jjError = jj.stderr.trim();
+  const gitError = git.stderr.trim();
+  const jjWhy = jjError.length > 0 ? jjError : `exit ${jj.exitCode}`;
+  const gitWhy = gitError.length > 0 ? gitError : `exit ${git.exitCode}`;
+  return {
+    paths: [],
+    unavailable: `jj diff failed (${jjWhy}); git status failed (${gitWhy})`,
+  };
+}
+
+async function checkedWrites(
+  cwd: string,
+  writes: string[],
+): Promise<WritesCheck> {
+  const listed = await changedPaths(cwd);
+  if (listed.unavailable !== undefined) return listed;
+  const paths = [
+    ...new Set(listed.paths.map((p) => p.replaceAll("\\", "/"))),
+  ].filter((p) => !p.split("/").includes("node_modules"));
+  const violations = paths.filter(
+    (path) => !writes.some((glob) => new Bun.Glob(glob).match(path)),
+  );
+  return { paths, ...(violations.length === 0 ? {} : { violations }) };
+}
+
+function claudeTranscript(cwd: string, session: string): string {
+  const slug = cwd.replaceAll(/[/.]/gu, "-");
+  return join(homedir(), ".claude", "projects", slug, `${session}.jsonl`);
+}
+
 function fatal(message: string): never {
   console.error(`agent-router: ${message}`);
   return process.exit(2);
@@ -900,6 +979,19 @@ async function launch(l: Launch): Promise<number> {
   const outcomeName = workerOutcome.success
     ? workerOutcome.data.outcome
     : undefined;
+  const writes =
+    ticket === undefined
+      ? undefined
+      : await checkedWrites(active.cwd, ticket.writes);
+  const writeViolations = writes?.violations ?? [];
+  if (writes?.unavailable !== undefined)
+    console.error(
+      `agent-router: writes check unavailable: ${writes.unavailable}`,
+    );
+  if (writeViolations.length > 0)
+    console.error(
+      `agent-router: writes outside ticket scope: ${writeViolations.join(", ")}`,
+    );
   const verified =
     ticket === undefined
       ? undefined
@@ -908,13 +1000,25 @@ async function launch(l: Launch): Promise<number> {
     .looseObject({ outcome: z.string(), session: z.string() })
     .safeParse(worker.success ? worker.data : undefined);
   const resumeHint =
-    stoppedWith.success && stoppedWith.data.outcome !== "ok"
+    stoppedWith.success &&
+    stoppedWith.data.outcome !== "ok" &&
+    (row.route === "codex" ||
+      existsSync(claudeTranscript(active.cwd, stoppedWith.data.session)))
       ? `agent-router resume ${runId}`
       : undefined;
   if (resumeHint !== undefined)
     console.error(
       `agent-router: ${stoppedWith.data?.outcome ?? "stopped"} — continue it in its own context: ${resumeHint}`,
     );
+  const writesFields: Record<string, unknown> = {};
+  if (writes !== undefined) {
+    writesFields.writes_check =
+      writes.unavailable === undefined
+        ? writes.paths
+        : `unavailable: ${writes.unavailable}`;
+    if (writeViolations.length > 0)
+      writesFields.writes_violations = writeViolations;
+  }
   const receipt = {
     schema: SCHEMA,
     run_id: runId,
@@ -939,6 +1043,7 @@ async function launch(l: Launch): Promise<number> {
     ...(verified === undefined
       ? {}
       : { verify: verified.results, verify_summary: verified.summary }),
+    ...writesFields,
     // codex-run's own receipt carries progress; a claude worker's comes from its progress file
     worker: worker.success
       ? { ...progressField, sandbox: flags.sandbox, ...worker.data }
@@ -955,19 +1060,22 @@ async function launch(l: Launch): Promise<number> {
     roster.as_of,
   );
   appendLog({ kind: "run", ...receipt, stats: runStats });
-  const graded =
-    verified === undefined
-      ? {}
-      : await autoGrade(
-          roster,
-          runId,
-          brief,
-          receipt.worker,
-          active.cwd,
-          verified,
-        );
+  let graded: Record<string, unknown> = {};
+  if (verified !== undefined) {
+    graded =
+      writeViolations.length > 0
+        ? recordWritesViolationGrade(runId, verified, writeViolations)
+        : await autoGrade(
+            roster,
+            runId,
+            brief,
+            receipt.worker,
+            active.cwd,
+            verified,
+          );
+  }
   process.stdout.write(`${JSON.stringify({ ...receipt, ...graded })}\n`);
-  return exit;
+  return writeViolations.length > 0 ? 1 : exit;
 }
 
 // --- the ticket after the worker exits: verify, then grade ---------------------------------------------
@@ -1053,6 +1161,33 @@ async function autoGrade(
   };
 }
 
+function recordWritesViolationGrade(
+  runId: string,
+  verified: Verified,
+  violations: string[],
+): Record<string, unknown> {
+  const reason = `ticket writes scope violated: ${violations.join(", ")}`;
+  const evidence = `${reason}\n\n${verifyEvidence(verified.results)}`;
+  const file = join(STATE_DIR, "evidence", `${runId}.txt`);
+  mkdirSync(join(STATE_DIR, "evidence"), { recursive: true });
+  writeFileSync(file, evidence);
+  appendLog({
+    kind: "grade",
+    run_id: runId,
+    grade: "fail",
+    confidence: 1,
+    probabilities: { fail: 1 },
+    reason,
+    evidence: { path: resolve(file), sha256: sha256(evidence) },
+    graded_at: now(),
+    graded_by: "router",
+  });
+  console.error(`agent-router: ${runId} graded fail by router — ${reason}`);
+  return {
+    grade: { grade: "fail", confidence: 1, graded_by: "router", reason },
+  };
+}
+
 // --- pick / ls / stats -----------------------------------------------------------------------------
 
 async function pickOnly(promptFile: string, cd: string): Promise<number> {
@@ -1108,6 +1243,8 @@ const LogLine = z.looseObject({
     .optional(),
   // present on a run dispatched with a ticket; absent = legacy
   ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
+  writes_check: z.union([z.array(z.string()), z.string()]).optional(),
+  writes_violations: z.array(z.string()).optional(),
   pick: z.looseObject({
     source: z.string(),
     choice: z.string(),
@@ -1903,6 +2040,13 @@ async function resumeCommand(
   const cwd = logged.cwd;
   if (cwd === undefined || !existsSync(cwd))
     fatal(`run ${runId}: its directory ${cwd ?? "(not recorded)"} is gone`);
+  if (row.route === "claude") {
+    const transcript = claudeTranscript(cwd, session);
+    if (!existsSync(transcript))
+      fatal(
+        `run ${runId}: Claude transcript is missing: ${transcript}; dispatch a fresh run with a continuation brief`,
+      );
+  }
   const sandbox = worker?.sandbox;
   if (sandbox !== "read-only" && sandbox !== "workspace-write")
     fatal(`run ${runId}: its sandbox was not recorded, cannot continue it`);

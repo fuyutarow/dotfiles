@@ -3,7 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
 import { existingGraveyards, graveyardCandidates } from "./graveyards";
-import { Presets, SingleBar } from "cli-progress";
+import { cancel, isCancel, log, progress, text } from "@clack/prompts";
 import { countEntries, newlines } from "./purge-progress";
 
 // IRREVERSIBLE: empty EVERY graveyard — rip's, and the XDG trash beside it. This is the ONLY
@@ -48,44 +48,72 @@ console.log(
   `上記 ${graves.length} 箇所の中身を完全に削除します。復元はできません。`,
 );
 
-// prompt() reads ONE line and lets go of stdin. The previous `process.stdin.once("data")` left
-// stdin open after the answer, so the process printed "✅ purge 完了" and then never exited — a
-// finished command that looked hung (a rented box, 2026-10-06). null = EOF: no answer is "no".
-const ans = (prompt("続けるなら yes と入力:") ?? "").trim();
-
-if (ans !== "yes") {
-  console.log("中止しました。");
+// The answer must be typed by a human at a terminal: no TTY on stdin is a refusal, never a "yes"
+// read from a pipe. Clack's text() releases stdin after the answer (the earlier
+// `process.stdin.once("data")` kept it open, so the process printed "✅ purge 完了" and never
+// exited — a rented box, 2026-10-06). Esc / Ctrl-C cancels; anything but exactly "yes" is a no.
+if (!process.stdin.isTTY) {
+  cancel("人間専用です。端末から実行してください。中止しました。");
+  process.exit(1);
+}
+const ans = await text({ message: "続けるなら yes と入力" });
+if (isCancel(ans) || ans.trim() !== "yes") {
+  cancel("中止しました。");
   process.exit(1);
 }
 
 // The delete is the slow part (one unlink per entry), so it reports progress — never a silent wait.
 // rm -v prints one line per entry it removed; counting those lines against countEntries() is the bar.
-// The bar is cli-progress: on a TTY it redraws in place with the terminal's line wrap off, so a
-// pane narrower than the line cuts it instead of leaving a row behind per frame (a hand-drawn bar
-// did that on a ~55-column herdr pane, 2026-10-06); elsewhere (a log, a pipe) a line every 10 s.
+// On a TTY the bar is Clack's progress(): it measures display width and, on every frame, moves up
+// over the rows the last frame wrapped to before redrawing, so a narrow pane keeps one bar (a
+// hand-drawn \r bar left one row per frame on a ~55-column herdr pane, 2026-10-06). Off a TTY Clack
+// would write its spinner escapes into the log, so there it is one plain line per 10% step.
+const tty = process.stdout.isTTY;
 const count = (v: number): string => v.toLocaleString("en-US");
 for (const g of graves) {
-  process.stdout.write(`${g.label}: 件数を数えています…\n`);
   const total = countEntries(g.path);
   if (total === 0) {
-    console.log(`${g.label}: 空です`);
+    log.info(`${g.label}: 空です`);
     continue;
   }
-  const bar = new SingleBar(
-    {
-      format:
-        "削除中 [{bar}] {percentage}%  {value}/{total} 件  {duration_formatted}",
-      formatValue: (v, _options, type) =>
-        type === "value" || type === "total" ? count(v) : String(v),
-      hideCursor: true,
-      noTTYOutput: true,
-      notTTYSchedule: 10_000,
-      stream: process.stdout,
-    },
-    Presets.shades_classic,
-  );
-  bar.start(total, 0);
+  const label = (done: number): string =>
+    `${g.label}: 削除中 ${count(done)}/${count(total)} 件`;
+  const bar = tty
+    ? progress({ style: "heavy", max: total, size: 20 })
+    : undefined;
+  bar?.start(label(0));
+  // how the run ends is said where the progress was shown: the bar on a TTY, a log line elsewhere
+  const end =
+    bar === undefined
+      ? {
+          error: (m: string): void => {
+            log.error(m);
+          },
+          stop: (m: string): void => {
+            log.success(m);
+          },
+        }
+      : {
+          error: (m: string): void => {
+            bar.error(m);
+          },
+          stop: (m: string): void => {
+            bar.stop(m);
+          },
+        };
   let done = 0;
+  let step = 0;
+  const advance = (removed: number): void => {
+    // capped at total: a name with a newline makes rm -v print two lines for one entry
+    const next = Math.min(total, done + removed);
+    bar?.advance(next - done, label(next));
+    done = next;
+    const now = Math.floor((done / total) * 10);
+    if (bar === undefined && now > step) {
+      step = now;
+      process.stdout.write(`${label(done)} (${now * 10}%)\n`);
+    }
+  };
   // 絶対パスで shell の rm 無効化を回避
   const rm = Bun.spawn(
     [
@@ -104,19 +132,14 @@ for (const g of graves) {
     ],
     { stdout: "pipe", stderr: "inherit" },
   );
-  for await (const chunk of rm.stdout) {
-    // capped at total: a name with a newline makes rm -v print two lines for one entry
-    done = Math.min(total, done + newlines(chunk));
-    bar.update(done);
-  }
+  for await (const chunk of rm.stdout) advance(newlines(chunk));
   const code = await rm.exited;
-  bar.stop();
   if (code !== 0) {
-    console.log(
-      `❌ ${g.path} の削除が exit ${code} で終わりました(上の rm のエラーを参照)。残りは削除していません。`,
-    );
+    const why = `${g.path} の削除が exit ${code} で終わりました(上の rm のエラーを参照)。残りは削除していません。`;
+    end.error(why);
     process.exit(1);
   }
+  end.stop(`${g.label}: ${count(done)} 件を削除しました`);
 }
 
 const dfLine =

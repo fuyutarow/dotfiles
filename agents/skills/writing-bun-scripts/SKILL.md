@@ -15,7 +15,7 @@ description: >-
 
 # Writing Bun scripts — local automation in Bun TypeScript
 
-> **Version**: v2609.1.0 (2026-09-13) — PATH commands are package `bin` entries; floor F14 (bin ⇒ shebang + exec bit).
+> **Version**: v2610.1.0 (2026-10-06) — human progress/spinner/prompt is `@clack/prompts`, never a hand-drawn bar.
 > Bun runtime facts remain pinned in `references/bun-facts.md`.
 > **Scope**: local automation scripts on this host — dotfiles scripts, skill `scripts/`, Claude
 > hooks, repo helpers. NORMATIVE, not descriptive: the 2026-07 bash→TS migration corpus (18
@@ -73,6 +73,7 @@ inside Japanese prose: **LAW**, **gate** (BG0–BG4), **shim**, **envelope**, **
 | Own named commands + generated command help | `cli({ commands: [command({ name, parameters, strictFlags: true, ignoreArgv: rejectPrototypeFlag })], … })`; every command repeats the prototype guard |
 | Accept excess positionals | declare a deliberate `<rest...>` / `[rest...]` schema; otherwise reject `parsed._.length` or use `rejectUnexpectedArguments(parsed.unknownFlags, parsed._)` |
 | Forward arbitrary downstream argv | exact `// argv-forwarding: <downstream>` marker; parse a copy with `typeFlag`, then relay the original argv unchanged including `--` |
+| Show a human progress, a spinner, or a confirmation prompt | `@clack/prompts` (exact pin; never in hooks): `progress` + `advance`, `spinner`, `text`/`confirm` + `isCancel`. No hand-drawn `\r` bar — it wraps on a narrow pane (2026-10-06). Off a TTY: plain lines; a human-only confirm refuses a non-TTY stdin. Example: `scripts/reclaim-purge.ts` |
 | Run a JS/TS CLI tool once | `bunx pkg@x.y.z` — never npx, never `npm i -g` |
 | Python payload (lib or tool) | STOP → `running-python-tools` (uvx / `uv run --with`) |
 | Import a library | BG3 graduation check FIRST |

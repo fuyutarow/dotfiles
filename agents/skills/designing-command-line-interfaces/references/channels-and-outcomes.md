@@ -40,6 +40,8 @@ Fill one row per external wait, fallback, and handed-off effect.
 
 The response-time windows are owned by `designing-interactions`, `references/reversibility.md` §5.
 Silence is correct only for a fast default path that the contract documents.
+Bun scripts implement human-mode progress, spinners and prompts per `writing-bun-scripts`.
+Its decision table names `@clack/prompts`, with plain lines off a TTY.
 Machine mode keeps payload framing; liveness goes to documented stderr or is omitted.
 
 Local evidence: `tests/local-failure-corpus.md`, smart-open rows (2026-10).

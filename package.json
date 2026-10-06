@@ -13,8 +13,8 @@
     "agent-router": "agents/routing-control/agent-router.ts"
   },
   "dependencies": {
+    "@clack/prompts": "1.8.1",
     "cleye": "2.6.0",
-    "cli-progress": "3.12.0",
     "neverthrow": "8.2.0",
     "ts-pattern": "5.9.0",
     "type-flag": "4.5.0",
@@ -23,7 +23,6 @@
   },
   "devDependencies": {
     "@types/bun": "1.4.2",
-    "@types/cli-progress": "^3.11.6",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "oxfmt": "0.67.0",
     "oxlint": "1.82.0",

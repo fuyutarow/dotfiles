@@ -10,8 +10,8 @@
 import { renameSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import { fromThrowable } from "neverthrow";
-import { jsonOf, z } from "../../../hooks/zod.ts";
-import { STATE_SCHEMA, type Progress } from "../../../routing-control/state.ts";
+import { jsonOf, z } from "../../hooks/zod.ts";
+import { STATE_SCHEMA, type Progress } from "../state.ts";
 
 const Item = z.looseObject({
   type: z.string(),
@@ -124,7 +124,7 @@ const WRITE_EVERY_MS = 1_000;
 
 /** A writer that keeps the file at most WRITE_EVERY_MS stale; `flush` writes the final state.
  *  `fold` reads one stdout line of the worker: codex events by default, claude stream-json events
- *  for run-claude (driving-claude/scripts/claude-progress.ts).
+ *  for run-claude (claude-progress.ts beside this file).
  *  A write that fails is dropped (the run must not die for its display) and counted, so the end
  *  line can say the display was incomplete instead of pretending it was live. */
 export function progressWriter(

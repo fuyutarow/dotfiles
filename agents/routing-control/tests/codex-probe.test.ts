@@ -23,7 +23,7 @@ import { join, resolve } from "node:path";
  * networked codex CLI is never reachable through this suite.
  */
 
-const script = resolve(import.meta.dir, "../scripts/probe-models.ts");
+const script = resolve(import.meta.dir, "../workers/codex-probe.ts");
 const fixture = resolve(import.meta.dir, "fake-codex.ts");
 
 type ProbeRun = Readonly<{

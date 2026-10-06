@@ -9,8 +9,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { jsonOf, z } from "../../../hooks/zod.ts";
-import { decodedJson } from "../../../hooks/tests/decode.ts";
+import { jsonOf, z } from "../../hooks/zod.ts";
+import { decodedJson } from "../../hooks/tests/decode.ts";
 
 /**
  * codex-run.ts as a real child process against a fake `codex` (CODEX_RUN_BIN). The fake logs its
@@ -18,7 +18,7 @@ import { decodedJson } from "../../../hooks/tests/decode.ts";
  * the real, billed codex on PATH is never reachable from this suite.
  */
 
-const script = resolve(import.meta.dir, "../scripts/codex-run.ts");
+const script = resolve(import.meta.dir, "../workers/codex-run.ts");
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });

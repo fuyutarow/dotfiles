@@ -65,11 +65,11 @@ const ACTIVE_DIR = activeDir();
 const LOG_FILE = join(STATE_DIR, "runs.jsonl");
 const CODEX_RUN =
   process.env.AGENT_ROUTER_CODEX_RUN ??
-  join(import.meta.dir, "../skills/driving-codex/scripts/codex-run.ts");
+  join(import.meta.dir, "workers/codex-run.ts");
 // A claude row runs `claude -p` through driving-claude's bounded wrapper (test seam: a fake).
 const RUN_CLAUDE =
   process.env.AGENT_ROUTER_RUN_CLAUDE ??
-  join(import.meta.dir, "../skills/driving-claude/scripts/run-claude.ts");
+  join(import.meta.dir, "workers/run-claude.ts");
 
 const now = (): string => Temporal.Now.instant().toString();
 const sha256 = (s: string): string =>

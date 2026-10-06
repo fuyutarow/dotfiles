@@ -8,11 +8,8 @@
 // event is the same object `--output-format json` prints, so it is the run's answer. Any other line
 // leaves the state as it was. Nothing here calls a model.
 import { basename } from "node:path";
-import { jsonOf, z } from "../../../hooks/zod.ts";
-import {
-  oneLine,
-  type Tally,
-} from "../../driving-codex/scripts/codex-progress.ts";
+import { jsonOf, z } from "../../hooks/zod.ts";
+import { oneLine, type Tally } from "./codex-progress.ts";
 
 const Block = z.looseObject({
   type: z.string(),

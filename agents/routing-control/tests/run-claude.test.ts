@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { z } from "../../../hooks/zod.ts";
-import { probeModels } from "../scripts/probe-models.ts";
-import { asRecord, runClaude, toRelay } from "../scripts/run-claude.ts";
-import { decodedJson } from "../../../hooks/tests/decode.ts";
+import { z } from "../../hooks/zod.ts";
+import { probeModels } from "../workers/claude-probe.ts";
+import { asRecord, runClaude, toRelay } from "../workers/run-claude.ts";
+import { decodedJson } from "../../hooks/tests/decode.ts";
 
 const ErrorEnvelope = z.object({ exit_code: z.number(), error: z.string() });
 
@@ -14,8 +14,8 @@ function parseErrorEnvelope(stdout: string): z.output<typeof ErrorEnvelope> {
 }
 
 const fixture = resolve(import.meta.dir, "fake-claude.ts");
-const runnerScript = resolve(import.meta.dir, "../scripts/run-claude.ts");
-const probeScript = resolve(import.meta.dir, "../scripts/probe-models.ts");
+const runnerScript = resolve(import.meta.dir, "../workers/run-claude.ts");
+const probeScript = resolve(import.meta.dir, "../workers/claude-probe.ts");
 
 function runCli(
   script: string,

@@ -1,8 +1,8 @@
 import { existsSync, statSync } from "node:fs";
 import { cli } from "cleye";
 import { err, ok, type Result } from "neverthrow";
-import { jsonText, z } from "../../../hooks/zod.ts";
-import { progressWriter } from "../../driving-codex/scripts/codex-progress.ts";
+import { jsonText, z } from "../../hooks/zod.ts";
+import { progressWriter } from "./codex-progress.ts";
 import { foldClaudeEvent, resultEvent } from "./claude-progress.ts";
 
 let emptyStringFlag: string | undefined;

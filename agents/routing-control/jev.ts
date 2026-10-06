@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { cli } from "cleye";
-import { jsonText, z } from "../../../hooks/zod.ts";
+import { jsonText, z } from "../hooks/zod.ts";
 
 // Consumer: machine. Success is one JSON value on stdout; diagnostics stay on stderr.
 

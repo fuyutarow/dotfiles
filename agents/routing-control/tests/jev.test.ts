@@ -2,12 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
-import { z } from "../../../hooks/zod.ts";
-import { decodedJson } from "../../../hooks/tests/decode.ts";
+import { z } from "../../hooks/zod.ts";
+import { decodedJson } from "../../hooks/tests/decode.ts";
 
 const ModelEnvelope = z.object({ model: z.string() });
 
-const script = join(import.meta.dir, "..", "scripts", "jev.ts");
+const script = join(import.meta.dir, "..", "jev.ts");
 const temporaryDirectories: string[] = [];
 
 type RunResult = Readonly<{ exitCode: number; stdout: string; stderr: string }>;

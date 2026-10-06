@@ -44,14 +44,10 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { jsonText, z } from "../../../hooks/zod.ts";
-import { attempt, errorMessage } from "../../../hooks/attempt.ts";
-import { loadRoster } from "../../../models/roster.ts";
-import {
-  judge,
-  ordersIn,
-  parseFloorConfig,
-} from "../../../hooks/model-orders.ts";
+import { jsonText, z } from "../../hooks/zod.ts";
+import { attempt, errorMessage } from "../../hooks/attempt.ts";
+import { loadRoster } from "../../models/roster.ts";
+import { judge, ordersIn, parseFloorConfig } from "../../hooks/model-orders.ts";
 import { lastError, progressWriter, tallyOf } from "./codex-progress.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
@@ -65,7 +61,7 @@ const HEARTBEAT_S =
     : 30;
 const FLOOR_CONFIG =
   process.env.MODEL_FLOOR_CONFIG ??
-  join(import.meta.dir, "..", "..", "..", "hooks", "model-floor.toml");
+  join(import.meta.dir, "..", "..", "hooks", "model-floor.toml");
 // Test seam: the codex binary to run (a fake in tests). Never a model or sandbox override.
 const CODEX_BIN = process.env.CODEX_RUN_BIN ?? "codex";
 

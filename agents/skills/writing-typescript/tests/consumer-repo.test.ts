@@ -127,3 +127,36 @@ describe("consumer-repo zod.ts", () => {
     );
   });
 });
+
+// lint:ts must fail CLOSED (Tiger ledger, 2026-10-06). In a jj secondary workspace there is no Git
+// index: `git diff --cached` exits 129, the old body read that as "no staged .ts files" and exited 0
+// — a gate reporting a pass it never checked (measured on firedancer-ts, Vast).
+describe("consumer-repo lint:ts", () => {
+  const Tasks = z.looseObject({
+    tasks: z.record(z.string(), z.looseObject({ run: z.string() })),
+  });
+  const body = (): string => {
+    const tasks = decodedJson(
+      Tasks,
+      JSON.stringify(Bun.TOML.parse(read(join(FIXTURE, "mise-tasks.toml")))),
+    ).tasks;
+    return tasks["lint:ts"]?.run ?? "";
+  };
+  const runIn = (dir: string) =>
+    Bun.spawnSync(["sh", "-c", body()], { cwd: dir, timeout: 30_000 });
+
+  test("outside a Git checkout it refuses and says why, never 'no staged files'", () => {
+    const r = runIn(mkdtempSync(join(tmpdir(), "lint-ts-nogit-")));
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr.toString()).toContain("cannot read the Git index");
+    expect(r.stdout.toString()).not.toContain("no staged .ts files");
+  });
+
+  test("in a Git checkout with nothing staged it passes, saying so", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lint-ts-git-"));
+    Bun.spawnSync(["git", "init", "-q"], { cwd: dir });
+    const r = runIn(dir);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.toString()).toContain("no staged .ts files");
+  });
+});

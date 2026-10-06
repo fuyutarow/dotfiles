@@ -15,7 +15,7 @@ run = "bun ~/dotfiles/scripts/render-oxlintrc.ts --repo . --check"
 [tasks."lint:ts"]
 description = "oxlint --type-aware on the STAGED .ts files only (HOOK-1c: another session's WIP never blocks a commit)"
 run = '''
-files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts')
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts') || { echo "lint:ts: cannot read the Git index here (not a Git checkout, e.g. a jj secondary workspace) — run it where the commit is staged" >&2; exit 2; }
 if [ -z "$files" ]; then echo "lint:ts: no staged .ts files"; exit 0; fi
 bunx --bun oxlint --type-aware $files
 '''

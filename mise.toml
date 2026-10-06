@@ -441,8 +441,13 @@ description = "git post-commit body: warm the cocoindex index incrementally (`cc
 run = 'bun ~/dotfiles/scripts/hook-post-commit.ts'
 
 [tasks."hook:post-merge"]
-description = "git post-merge body: after a pull/merge, relink dotfiles (link-dots.ts, SAFE mode) then relink skills, so newly-pulled config appears with no manual step. Idempotent. Called by .githooks/post-merge."
+description = "git post-merge body: after a pull/merge, restore the pinned Bun dependencies (bun install --frozen-lockfile + bun link, = deps), relink dotfiles (link-dots.ts, SAFE mode) then relink skills, so newly-pulled code and config work with no manual step. Idempotent. Called by .githooks/post-merge."
+# deps first: a pulled commit that adds a dependency (cli-progress for reclaim:purge, 2026-10-06)
+# otherwise fails at import on every box that only pulled. An unchanged lockfile is a no-op.
 run = '''
+cd "${DOTFILES:-$HOME/dotfiles}"
+bun install --frozen-lockfile
+bun link
 bun "${DOTFILES:-$HOME/dotfiles}/scripts/link-dots.ts"
 exec mise run link:skills
 '''

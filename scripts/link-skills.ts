@@ -202,6 +202,22 @@ function linkSkill(
   linkPath(`${dotfilesSkillsDir}/${name}`, claudeDst, dryRun);
 }
 
+function linkSkills(
+  dotfilesSkillsDir: string,
+  claudeSkillsDir: string,
+  dryRun: boolean,
+): void {
+  for (const name of listEntries(dotfilesSkillsDir).filter((n) =>
+    isDir(`${dotfilesSkillsDir}/${n}`),
+  )) {
+    if (!existsSync(`${dotfilesSkillsDir}/${name}/SKILL.md`)) {
+      print(`skip (no SKILL.md): ${dotfilesSkillsDir}/${name}`);
+      continue;
+    }
+    linkSkill(name, dotfilesSkillsDir, claudeSkillsDir, dryRun);
+  }
+}
+
 /**
  * Prune (b): remove one dangling, dotfiles-owned skill symlink under ~/.claude/skills so a
  * rename/delete in agents/skills doesn't leave Claude listing a skill that's gone. No-op for
@@ -227,6 +243,38 @@ function pruneDanglingSkillLink(
   // the message must NOT print and the loop just moves to the next entry.
   if (fromThrowable(unlinkSync)(old).isErr()) return;
   print(`pruned (renamed/deleted): ${old}`);
+}
+
+/**
+ * Prune a repo-owned per-skill link whose target directory is no longer a skill. Unlike the
+ * dangling-link pass, this catches empty archive leftovers that still exist in the checkout.
+ */
+function pruneLinkWithoutSkillMd(
+  name: string,
+  skillsDir: string,
+  dotfiles: string,
+  dryRun: boolean,
+): void {
+  const old = `${skillsDir}/${name}`;
+  const target = symlinkTarget(old);
+  if (target === null || !target.startsWith(`${dotfiles}/`)) return;
+  if (!isDir(old) || existsSync(`${old}/SKILL.md`)) return;
+  if (dryRun) {
+    print(`[dry-run] would prune (no SKILL.md): ${old}`);
+    return;
+  }
+  if (fromThrowable(unlinkSync)(old).isErr()) return;
+  print(`pruned (no SKILL.md): ${old}`);
+}
+
+function pruneLinksWithoutSkillMd(
+  skillsDir: string,
+  dotfiles: string,
+  dryRun: boolean,
+): void {
+  for (const name of listEntries(skillsDir)) {
+    pruneLinkWithoutSkillMd(name, skillsDir, dotfiles, dryRun);
+  }
 }
 
 function main(): Result<void, UsageError> {
@@ -319,11 +367,7 @@ function main(): Result<void, UsageError> {
 
   const dotfilesSkillsDir = `${dotfiles}/agents/skills`;
   if (isDir(dotfilesSkillsDir)) {
-    for (const name of listEntries(dotfilesSkillsDir).filter((n) =>
-      isDir(`${dotfilesSkillsDir}/${n}`),
-    )) {
-      linkSkill(name, dotfilesSkillsDir, claudeSkillsDir, dryRun);
-    }
+    linkSkills(dotfilesSkillsDir, claudeSkillsDir, dryRun);
 
     // Prune renamed/deleted skills (b): the loop above only ADDS, so a rename leaves the old
     // link dangling and Claude keeps listing a skill that is gone. Remove only dangling links
@@ -331,6 +375,11 @@ function main(): Result<void, UsageError> {
     for (const name of listEntries(claudeSkillsDir)) {
       pruneDanglingSkillLink(name, claudeSkillsDir, dotfiles, dryRun);
     }
+
+    // An archived/retired skill may leave an empty directory behind in the checkout, so its
+    // old symlink is not dangling. Prune such links under both per-skill target directories.
+    pruneLinksWithoutSkillMd(claudeSkillsDir, dotfiles, dryRun);
+    pruneLinksWithoutSkillMd(`${home}/.agents/skills`, dotfiles, dryRun);
   } else {
     print(`skip (missing): ${dotfilesSkillsDir}`);
   }

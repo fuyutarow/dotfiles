@@ -151,6 +151,23 @@ describe("link-skills: fresh run", () => {
     cleanup(dotfiles, home);
   });
 
+  test("skips a directory without SKILL.md and names it in the output", () => {
+    const dotfiles = makeDotfiles(["real-skill"]);
+    const incomplete = join(dotfiles, "agents", "skills", "leftover");
+    mkdirSync(join(incomplete, "scripts"), { recursive: true });
+    const home = makeHome();
+
+    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+
+    expect(code).toBe(0);
+    expect(out).toContain(`skip (no SKILL.md): ${incomplete}`);
+    expect(readlinkSync(`${home}/.claude/skills/real-skill`)).toBe(
+      `${dotfiles}/agents/skills/real-skill`,
+    );
+    expect(() => readlinkSync(`${home}/.claude/skills/leftover`)).toThrow();
+    cleanup(dotfiles, home);
+  });
+
   test("missing agents/skills prints skip(missing) TWICE and runs no prune pass", async () => {
     const dotfiles = makeDotfiles([]);
     rmSync(join(dotfiles, "agents", "skills"), {
@@ -271,6 +288,36 @@ describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
       lstatSync(`${home}/.claude/skills/real-plugin-skill`).isDirectory(),
     ).toBe(true);
     expect(await isSymlink(`${home}/.claude/skills/real-plugin-skill`)).toBe(
+      false,
+    );
+    cleanup(dotfiles, home);
+  });
+});
+
+describe("link-skills: PRUNE links to directories without SKILL.md", () => {
+  test("prunes repo-owned links under both skill target directories", async () => {
+    const dotfiles = makeDotfiles(["kept-skill"]);
+    const incomplete = join(dotfiles, "agents", "skills", "retired-leftover");
+    mkdirSync(incomplete, { recursive: true });
+    const home = makeHome();
+    mkdirSync(`${home}/.claude/skills`, { recursive: true });
+    mkdirSync(`${home}/.agents/skills`, { recursive: true });
+    symlinkSync(incomplete, `${home}/.claude/skills/retired-leftover`);
+    symlinkSync(incomplete, `${home}/.agents/skills/retired-leftover`);
+
+    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+
+    expect(code).toBe(0);
+    expect(out).toContain(
+      `pruned (no SKILL.md): ${home}/.claude/skills/retired-leftover`,
+    );
+    expect(out).toContain(
+      `pruned (no SKILL.md): ${home}/.agents/skills/retired-leftover`,
+    );
+    expect(await isSymlink(`${home}/.claude/skills/retired-leftover`)).toBe(
+      false,
+    );
+    expect(await isSymlink(`${home}/.agents/skills/retired-leftover`)).toBe(
       false,
     );
     cleanup(dotfiles, home);

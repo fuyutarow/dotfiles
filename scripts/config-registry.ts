@@ -302,6 +302,15 @@ const OTHER: readonly Surface[] = [
     verify: `${DOCTOR} (deps, bins)`,
   },
   {
+    kind: "in-place",
+    when: "all",
+    sources: ["tools/shared/package.json"],
+    deployed: "the checkout",
+    consumer: "Bun package metadata for the shared TypeScript modules",
+    writer: "human, in the repo",
+    verify: "mise run lint:ts · typecheck",
+  },
+  {
     kind: "applied",
     when: "mac",
     sources: ["macos/defaults.ts"],

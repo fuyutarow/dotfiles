@@ -8,6 +8,9 @@
 import { fromThrowable, z } from "./vendor/deps.js";
 
 export { z };
+// Throw → Result, synchronously (neverthrow's, from the same bundle): for the zero-dep files that
+// cannot import neverthrow from node_modules. The async floor is ./attempt.ts.
+export { fromThrowable };
 
 /**
  * JSON text as zod input: a JSON syntax error becomes a zod issue (code `invalid_format`, format

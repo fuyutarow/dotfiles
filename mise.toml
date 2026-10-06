@@ -507,11 +507,11 @@ run = 'RECLAIM_TIER=blind bun ~/dotfiles/scripts/reclaim-system.ts'
 
 [tasks."reclaim:clean"]
 description = "Reclaim disk: clear package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo/mise/julia) via each tool's OWN gc/prune command. Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
-run = 'bun ~/dotfiles/scripts/reclaim-clean.ts'
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts clean -- bun ~/dotfiles/scripts/reclaim-clean.ts'
 
 [tasks."reclaim:toolchains"]
 description = "Prune rustup toolchains, vscode-server old versions and self-updating CLIs' superseded releases (codex, claude — scripts/version-stores.ts) — no tool-native gc exists for any, so this writes an explicit safety predicate instead (default/pin-scan for rustup; current/live-process/recency for the rest). Deletes via rip. KEEP_DAYS/AUDIT_PROJECTS to retune."
-run = 'bun ~/dotfiles/scripts/reclaim-toolchains.ts'
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts toolchains -- bun ~/dotfiles/scripts/reclaim-toolchains.ts'
 
 # The Linux SYSTEM-state half of the 断捨離 pass; reclaim:clean owns the per-user package caches
 # and stays sudo-free so it also runs on macOS. Split on WHO OWNS THE BYTES, not on OS.
@@ -522,7 +522,7 @@ run = 'bun ~/dotfiles/scripts/reclaim-toolchains.ts'
 # at shutdown only, and .wslconfig has no storage key — so preventing GROWTH is the whole point.
 [tasks."reclaim:system"]
 description = "Reclaim disk inside WSL: apt archives, journald, snap disabled revisions, then fstrim. Needs sudo. Per-user package caches are reclaim:clean; freed blocks return to Windows only on `wsl.exe --shutdown`."
-run = 'bun ~/dotfiles/scripts/reclaim-system.ts'
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts system -- bun ~/dotfiles/scripts/reclaim-system.ts'
 
 # --same-filesystem is not a nicety on WSL: without it a KONDO_DIR above the mount points walks
 # /mnt/c and /mnt/e over the DrvFs bridge — ruinously slow, and it aims a build-artifact deleter
@@ -532,7 +532,7 @@ run = 'bun ~/dotfiles/scripts/reclaim-system.ts'
 # /home/linuxbrew/.linuxbrew/bin. Probe brew tools by absolute path, never by root's PATH.
 [tasks."reclaim:pick"]
 description = "Clean project build artifacts (node_modules/target/build…) via kondo — INTERACTIVE picker, scoped to projects untouched ≥30d. Set KONDO_DIR / KONDO_OLDER to override. Blind/agent-safe form: reclaim:builds."
-run = 'kondo --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts pick --interactive -- kondo --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
 
 # Why a blind twin of reclaim:pick exists: an interactive task never runs unattended, and that
 # is exactly why artifacts accumulate — measured on r99 2026-09-08 with the picker never having
@@ -540,7 +540,7 @@ run = 'kondo --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}
 # The ≥30d default is the safety: a project touched this month is never a candidate.
 [tasks."reclaim:builds"]
 description = "Reclaim project build artifacts (node_modules/target/build…) NON-interactively via kondo -a, scoped to projects untouched ≥30d — an ACTIVE project's target/ is never a blind candidate, so KONDO_OLDER=0 is the deliberate human override. Regenerable only — any agent may run it blind. Human picker: reclaim:pick."
-run = 'kondo --all --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts builds -- kondo --all --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
 
 [tasks."reclaim:audit"]
 description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, self-updating CLIs' version stores, the ~/.cache breakdown, and the judgment tier no blind task may touch — the largest build dirs of ANY age and optional toolchain components (rust-docs) — each with size, last-touched date and age. Deletes nothing. STALE_DAYS=180 to retune."
@@ -548,7 +548,7 @@ run = 'bun ~/dotfiles/scripts/reclaim-audit.ts'
 
 [tasks."reclaim:purge"]
 description = "IRREVERSIBLE: empty EVERY graveyard — rip's AND the XDG trash (~/.local/share/Trash). This is the ONLY step that actually frees disk: both delete by rename, so the bytes stay until purged. Prints every target with sizes and requires typing 'yes'. Human-only gate; never run this from an agent."
-run = 'bun ~/dotfiles/scripts/reclaim-purge.ts'
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts purge --interactive -- bun ~/dotfiles/scripts/reclaim-purge.ts'
 
 # The WINDOWS-HOST half of reclaim, for the C: space WSL leaves that no guest-side task can reach.
 # reclaim:clean/builds/system free GUEST bytes; on a sparse vhdx those do not always return to C:

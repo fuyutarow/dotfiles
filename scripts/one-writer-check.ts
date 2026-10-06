@@ -13,7 +13,7 @@
 // Zero-dep like render-home.ts; no argv, so no Cleye boundary (writing-bun-scripts BG1).
 // Inputs: DOTFILES (default: this checkout), HOME (default: os.homedir()).
 
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
@@ -73,7 +73,7 @@ if (b < 0 || e < b) {
 
 for (const rel of RENDERED.map((r) => r.dest)) {
   const p = join(home, rel);
-  if (existsSync(p) && lstatSync(p).isSymbolicLink())
+  if (lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink() === true)
     violations.push(
       `~/${rel}: a symlink — render-home.ts writes this file; run mise run link:dots`,
     );

@@ -150,10 +150,6 @@ if (existsSync(overlayPath)) {
       "  refusing to render settings that would silently drop the private rules",
     );
   }
-  if (overlayRead.value instanceof Error)
-    fatal(
-      `FATAL: private overlay ${overlayPath} is not readable JSON — ${errorMessage(overlayRead.value)}`,
-    );
   overlay = overlayRead.value;
   overlayKeys = Object.keys(overlay).toSorted();
 }
@@ -246,12 +242,10 @@ if (!Bun.deepEquals(declared, produced)) {
   );
 }
 for (const { dest, text, from } of outputs) {
+  // One lstat per destination: undefined = absent; a symlink is the older layout (below).
+  const st = lstatSync(dest, { throwIfNoEntry: false });
   // Already current → no write, no churn (this runs on every pull via the post-merge hook).
-  if (
-    existsSync(dest) &&
-    lstatSync(dest).isFile() &&
-    readFileSync(dest, "utf8") === text
-  ) {
+  if (st?.isFile() === true && readFileSync(dest, "utf8") === text) {
     print(`current: ${dest} <- ${from}`);
     continue;
   }
@@ -261,8 +255,7 @@ for (const { dest, text, from } of outputs) {
   // The older layout had a SYMLINK here pointing into the repo. rename() would replace the link
   // itself, but unlink first so the transition is explicit and reported.
   let replaced = "";
-  const destStat = await attempt(() => lstatSync(dest));
-  if (destStat.ok && destStat.value.isSymbolicLink()) {
+  if (st?.isSymbolicLink() === true) {
     replaced = " (replaced the old symlink into the repo)";
     unlinkSync(dest);
   }

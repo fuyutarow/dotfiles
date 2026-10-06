@@ -1,9 +1,12 @@
 import { $ } from "bun";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { homedir } from "node:os";
 import { fromThrowable } from "neverthrow";
 
+import { jsonOf } from "../agents/hooks/zod.ts";
 import { existingGraveyards, graveyardCandidates } from "./graveyards";
+import { Receipt, stateDir } from "./reclaim-run.ts";
 import {
   liveExecutables,
   readStore,
@@ -256,6 +259,26 @@ for (const g of graves) {
   const size = await duH(g.path);
   console.log(
     `  ${size.padEnd(8)} ${g.path.replace(userHome, "~").padEnd(40)} ${g.label}`,
+  );
+}
+console.log();
+console.log("== 9. 直近の reclaim 実行(誰が・いつ・何を・空きの増減) ==");
+const receipts = fromThrowable(() =>
+  readFileSync(join(stateDir(), "log.jsonl"), "utf8"),
+)()
+  .unwrapOr("")
+  .split("\n")
+  .filter((l) => l !== "")
+  .slice(-6)
+  .flatMap((l) => {
+    const r = jsonOf(Receipt).safeParse(l);
+    return r.success ? [r.data] : [];
+  });
+if (receipts.length === 0) console.log("  記録なし");
+for (const r of receipts) {
+  const delta = (r.free_after - r.free_before) / 2 ** 30;
+  console.log(
+    `  ${r.started} ${r.name.padEnd(12)} exit ${r.exit} ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}G  ${r.host}:${r.pid}  ${r.output ?? ""}`,
   );
 }
 console.log();

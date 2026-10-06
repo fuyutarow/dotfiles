@@ -90,6 +90,7 @@ const CORPUS = [
   { path: "scripts/install-mcp.ts" },
   { path: "scripts/doctor-remote.ts" },
   { path: "scripts/config-map.ts" },
+  { path: "scripts/reclaim-run.ts" },
   { path: "scripts/link-dots.ts" },
   { path: "scripts/secrets-push.ts" },
   { path: "scripts/link-skills.ts" },

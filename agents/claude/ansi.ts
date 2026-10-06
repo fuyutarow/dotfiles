@@ -23,7 +23,10 @@ export function pctColor(i: number): string {
   if (i >= 70) return "38;5;178";
   return "38;5;71";
 }
-export function pctFmt(p: number): { pct: number; col: string } {
+// `text` is the percentage right-aligned to three columns ("  9", " 42", "100"): a value crossing
+// 10 or 100 must not shift every segment after it — the row flickered as CPU went 12% -> 9%
+// (owner 2026-10-06: 「一桁になると表示が縮む。チカチカする。等幅にしてほしい」).
+export function pctFmt(p: number): { pct: number; col: string; text: string } {
   const pct = Math.round(p);
-  return { pct, col: pctColor(pct) };
+  return { pct, col: pctColor(pct), text: String(pct).padStart(2) };
 }

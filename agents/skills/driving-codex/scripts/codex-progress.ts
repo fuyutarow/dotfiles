@@ -34,7 +34,7 @@ export const emptyTally = (): Tally => ({
 });
 
 const LAST_CHARS = 72;
-const oneLine = (s: string): string => {
+export const oneLine = (s: string): string => {
   const line = s.trim().split("\n")[0] ?? "";
   return line.length > LAST_CHARS ? `${line.slice(0, LAST_CHARS - 1)}…` : line;
 };
@@ -87,9 +87,14 @@ export const toProgress = (t: Tally, at: string): Progress => ({
 const WRITE_EVERY_MS = 1_000;
 
 /** A writer that keeps the file at most WRITE_EVERY_MS stale; `flush` writes the final state.
+ *  `fold` reads one stdout line of the worker: codex events by default, claude stream-json events
+ *  for run-claude (driving-claude/scripts/claude-progress.ts).
  *  A write that fails is dropped (the run must not die for its display) and counted, so the end
  *  line can say the display was incomplete instead of pretending it was live. */
-export function progressWriter(path: string): {
+export function progressWriter(
+  path: string,
+  fold: (t: Tally, line: string) => Tally = foldEvent,
+): {
   feed: (line: string) => void;
   flush: () => void;
   failedWrites: () => number;
@@ -111,7 +116,7 @@ export function progressWriter(path: string): {
   };
   return {
     feed: (line) => {
-      tally = foldEvent(tally, line);
+      tally = fold(tally, line);
       if (performance.now() - lastWrite >= WRITE_EVERY_MS) write();
     },
     flush: write,

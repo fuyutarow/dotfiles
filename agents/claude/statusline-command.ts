@@ -35,7 +35,7 @@
 //     not landed shows the last good one, marked `stale <N>s` from 60 s on; a Mac without nvidia-smi
 //     has no VRAM segment at all, see vramGated(); see the EXPLICIT-ABSENCE law below)
 //   6 Job: ... (conditional: only while a job is admitted, an orphan lives, or the scan failed)
-//   7 Run: <row> <elapsed> <label>, ONE LINE PER WORKER, longest-running first, at most RUN_LINES
+//   7 <row> <elapsed> <label> │ <doing>, ONE LINE PER WORKER (no "Run:" head: the row id says it), longest-running first, at most RUN_LINES
 //     then `+N more`; `stale×N` on its own line (conditional: workers started by agent-router;
 //     the markers are agents/routing-control/state.ts; a marker whose process is gone is
 //     counted as stale, never hidden; an unreadable state dir prints n/a with the reason)
@@ -999,14 +999,14 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // Rate row, 5h window: "5h NN% [⟳reset]". The three window segments carry no separator of their
 // own; rateRow() puts the middot BETWEEN them, so a missing 5h window cannot leave "Rate: · 7d".
 function rl5Segment(rl5: number, rl5Reset: number | undefined): string {
-  const { pct, col } = pctFmt(rl5);
+  const { text: pct, col } = pctFmt(rl5);
   let seg = `5h ${ESC}[${col}m${pct}%${RST}`;
   if (rl5Reset !== undefined) seg += ` ${DIM}${reset5(rl5Reset)}${RST}`;
   return seg;
 }
 // Rate row, 7d window: same shape as rl5Segment.
 function rl7Segment(rl7: number, rl7Reset: number | undefined): string {
-  const { pct, col } = pctFmt(rl7);
+  const { text: pct, col } = pctFmt(rl7);
   let seg = `7d ${ESC}[${col}m${pct}%${RST}`;
   if (rl7Reset !== undefined) seg += ` ${DIM}${reset7(rl7Reset)}${RST}`;
   return seg;
@@ -1014,7 +1014,7 @@ function rl7Segment(rl7: number, rl7Reset: number | undefined): string {
 // Rate row, per-model weekly cap (e.g. "Fable 100% ⟳reset") — same reset7 shape as the 7d
 // segment, since this window is also day-scale.
 function rlModelSegment(m: ModelLimit): string {
-  const { pct, col } = pctFmt(m.pct);
+  const { text: pct, col } = pctFmt(m.pct);
   let seg = `${m.name} ${ESC}[${col}m${pct}%${RST}`;
   if (m.resetEpoch !== undefined) seg += ` ${DIM}${reset7(m.resetEpoch)}${RST}`;
   return seg;
@@ -1029,7 +1029,7 @@ function ctxSegment(df: Pick<Dataframe, "ctx" | "ctxPct">): string {
   // No MID here on purpose — see render()'s header note: this is one fact (context usage)
   // shown two ways, not two sibling facts, so a bare space separates them, not the middot.
   if (df.ctxPct !== null && df.ctxPct !== undefined) {
-    const { pct, col } = pctFmt(df.ctxPct);
+    const { text: pct, col } = pctFmt(df.ctxPct);
     seg += ` ${ESC}[${col}m${pct}%${RST}`;
   } else {
     seg += ` ${na}`;
@@ -1144,13 +1144,12 @@ function routeRuns(): Result<RouteRun[], string> | undefined {
       }),
   );
 }
-// Run rows: one line per worker, like Claude Code's own background panel — "Run: <row> <elapsed>
-// <label>" on the first, the rest aligned under it. Capped at RUN_LINES so a wide fan-out cannot
+// Run rows: one line per worker, like Claude Code's own background panel — "<row> <elapsed>
+// <label> │ <doing>". No "Run:" head (owner 2026-10-06: 「Run: って labelは不要では？」): the row id
+// (luna-high, sonnet-medium) already says what the line is, and the head cost every line 5 columns. Capped at RUN_LINES so a wide fan-out cannot
 // push the other rows off screen; the cap is SAID (+N more), never silent. Stale markers get their
 // own line.
 const RUN_LINES = 6;
-const RUN_LABEL = `${ESC}[38;5;109mRun:${RST}`;
-const RUN_INDENT = "     ";
 // "│ $ bun test x.ts · 12 cmd · 3 files": the worker's latest event, then what it has done so far.
 // Older than a minute it says how old (a worker deep in reasoning prints nothing for a while — that
 // is shown as age, not hidden). No progress file yet = no event yet, said as such.
@@ -1171,9 +1170,7 @@ function routeLines(runs: RouteRun[]): string[] {
   if (live.length > RUN_LINES)
     lines.push(`${DIM}+${live.length - RUN_LINES} more${RST}`);
   if (stale > 0) lines.push(`${ESC}[38;5;167mstale×${stale}${RST}`);
-  return lines.map((l, i) =>
-    i === 0 ? `${RUN_LABEL} ${l}` : `${RUN_INDENT}${l}`,
-  );
+  return lines;
 }
 // The PS1 head in PS1's own colors (%F{magenta}%n@%F{yellow}%m:%F{cyan}date|%F{green}%~). The
 // uncolored shape has one home, hooks/prompt-stamp.ts, shared with the /quote header.
@@ -1262,7 +1259,7 @@ function render(df: Dataframe): string {
   // Run rows: present while agent-router has workers (or stale markers); n/a when unreadable.
   let runLines: string[] = [];
   if (df.routes !== undefined && df.routes.isErr())
-    runLines = [`${RUN_LABEL} ${naSegment("agent-router", df.routes.error)}`];
+    runLines = [naSegment("agent-router", df.routes.error)];
   else if (df.routes !== undefined) runLines = routeLines(df.routes.value);
 
   return [

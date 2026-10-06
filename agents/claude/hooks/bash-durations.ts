@@ -35,12 +35,9 @@ export const stateDir = (env: NodeJS.ProcessEnv = process.env): string =>
 const NOT_A_WORD = /^[/.~$'"(]/u;
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 
-/** `<up to 3 leading words> <up to 3 flags>`, env assignments and `cd …` steps skipped. */
-export function commandKey(command: string): string | undefined {
-  const segments = command.split(/&&|\|\||;|\n/u).map((s) => s.trim());
-  const main = segments.find((s) => s !== "" && !/^cd(?:\s|$)/u.test(s));
-  if (main === undefined) return undefined;
-  const all = main.split(/\s+/u).filter((w) => !ASSIGNMENT.test(w));
+/** One step's key: `<up to 3 leading words> <up to 3 flags>`, env assignments dropped. */
+function stepKey(step: string): string | undefined {
+  const all = step.split(/\s+/u).filter((w) => w !== "" && !ASSIGNMENT.test(w));
   const end = all.indexOf("--");
   const words = end === -1 ? all : all.slice(0, end);
   const firstFlag = words.findIndex((w) => w.startsWith("-"));
@@ -56,6 +53,25 @@ export function commandKey(command: string): string | undefined {
           .map((w) => w.replace(/=.*$/u, ""))
           .slice(0, 3);
   return head.length === 0 ? undefined : [...head, ...flags].join(" ");
+}
+
+/** The key of every step of a compound command (`a && b; c`), `cd …` and assignment-only steps
+ *  skipped. Owner 2026-10-06: `cd … && f=… && sed … && bun test …` ran 20 s in front because the
+ *  first step was an assignment, so the call had no key at all. */
+export function stepKeys(command: string): string[] {
+  return command
+    .split(/&&|\|\||;|\n/u)
+    .map((s) => s.trim())
+    .filter((s) => s !== "" && !/^cd(?:\s|$)/u.test(s))
+    .map((s) => stepKey(s))
+    .filter((k) => k !== undefined);
+}
+
+/** The whole command's key: its step keys joined, so a compound call is measured as itself and a
+ *  fast step never inherits the time of a slow one beside it. undefined when no step has a key. */
+export function commandKey(command: string): string | undefined {
+  const keys = stepKeys(command);
+  return keys.length === 0 ? undefined : keys.join(" && ");
 }
 
 const Summary = z.record(z.string(), z.array(z.number()));

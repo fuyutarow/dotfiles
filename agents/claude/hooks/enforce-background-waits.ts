@@ -7,7 +7,7 @@
 // foreground form:
 //
 //   deny when run_in_background is not true AND
-//     - this kind of command has MEASURED a median over FOREGROUND_MEASURED_MAX_MS here
+//     - this command, or any step of it (`a && b`), has MEASURED over FOREGROUND_MEASURED_MAX_MS here
 //       (bash-durations.ts; record-bash-duration.ts keeps the history) — the rule that matters:
 //       owner 2026-10-06 「in background が規定にならないのだけど」 after `mise run commit` (no
 //       timeout, no loop, minutes long) passed the two text rules below, or
@@ -25,14 +25,15 @@ import {
   judgedMs,
   recordStart,
   stateDir,
+  stepKeys,
 } from "./bash-durations.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 export const FOREGROUND_MAX_MS = 120_000;
-// How long the human may be kept waiting on a call the coordinator started in front. 15 s: past
-// that, the wait shows as a spinner the human has to sit through (ctrl+b was pressed on 30 s+
-// commits); below it, a quick read or lint is cheaper in front than a background round trip.
-export const FOREGROUND_MEASURED_MAX_MS = 15_000;
+// How long the human may be kept waiting on a call the coordinator started in front. 5 s, the
+// owner's bound (2026-10-06: 「5sで終わらなかったら bg送りにしたい」 after a 20 s `bun test` showed
+// "ctrl+b to run in background"); a quick read, sed or ssh probe stays under it.
+export const FOREGROUND_MEASURED_MAX_MS = 5000;
 const WAIT_LOOP = /\b(?:until|while)\b[\s\S]*?\bsleep\b/u;
 
 /** Why this Bash call must go to the background, or undefined when it may stay in front.
@@ -55,11 +56,19 @@ export function backgroundReason(
 const payload = import.meta.main ? readStdinJson() : undefined;
 const input = at(payload, "tool_input");
 const isBash = strAt(payload, "tool_name") === "Bash";
-const key = isBash ? commandKey(strAt(input, "command") ?? "") : undefined;
+const command = isBash ? (strAt(input, "command") ?? "") : "";
+const key = isBash ? commandKey(command) : undefined;
 const dir = stateDir();
-const ms = key === undefined ? undefined : judgedMs(dir, key);
-const measured =
-  key === undefined || ms === undefined ? undefined : { key, ms };
+// Judged by the slowest known of the whole command and each of its steps: a compound call first
+// seen as a whole still goes to the background when one of its steps (`bun test`) is known slow.
+const measured = [
+  ...new Set([...(key === undefined ? [] : [key]), ...stepKeys(command)]),
+]
+  .flatMap((k) => {
+    const ms = judgedMs(dir, k);
+    return ms === undefined ? [] : [{ key: k, ms }];
+  })
+  .toSorted((a, b) => b.ms - a.ms)[0];
 const why = isBash ? backgroundReason(input, measured) : undefined;
 // SINGLE-AXIS: one question (may this call hold the session?) — its triggers share one resend
 if (why !== undefined)

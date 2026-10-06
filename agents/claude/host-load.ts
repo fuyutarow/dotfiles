@@ -53,7 +53,8 @@ export function memReading(
   if (!Number.isFinite(usedG) || !Number.isFinite(totalG) || totalG <= 0)
     return undefined;
   return {
-    frac: `${usedG.toFixed(1)}/${totalG.toFixed(1)}G`,
+    // used right-aligned to the total's width, so 9.6/170.9 and 19.6/170.9 take the same columns
+    frac: `${usedG.toFixed(1).padStart(totalG.toFixed(1).length)}/${totalG.toFixed(1)}G`,
     pct: (usedG / totalG) * 100,
   };
 }
@@ -448,7 +449,7 @@ export function cpuPct(): Result<number, string> {
 // this file; the fraction rides alongside each, dimmed, as supporting detail — same
 // percent-then-dim-detail shape rl5Segment/rl7Segment already use for their reset countdowns.
 export function memSegment(label: string, m: MemReading): string {
-  const { pct, col } = pctFmt(m.pct);
+  const { text: pct, col } = pctFmt(m.pct);
   let seg = `${label} ${ESC}[${col}m${pct}%${RST} ${DIM}(${m.frac})${RST}`;
   // A number old enough to mislead is never shown as a current one: amber `stale`, its age, and why.
   // Under STALE_SHOW_S it is not marked (owner ruling 2026-10-05): with the bar refreshing every 5 s
@@ -573,8 +574,10 @@ export function diskReadings(): Result<DiskEntry[], string> {
 }
 export function diskSegment(d: DiskEntry): string {
   if (d.kind === "miss") return naSegment(d.label, d.why);
-  const pct = Math.round((d.usedG / d.totalG) * 100);
-  return `${d.label} ${ESC}[${d.col}m${pct}%${RST} ${DIM}(${Math.round(d.usedG)}/${Math.round(d.totalG)}G)${RST}`;
+  const pct = pctFmt((d.usedG / d.totalG) * 100).text;
+  const total = String(Math.round(d.totalG));
+  const used = String(Math.round(d.usedG)).padStart(total.length);
+  return `${d.label} ${ESC}[${d.col}m${pct}%${RST} ${DIM}(${used}/${total}G)${RST}`;
 }
 // Every reading is a Result: ok renders the value, err renders `<label> n/a (<why>)` — see the
 // EXPLICIT-ABSENCE law at the top. The row therefore always carries CPU, RAM and VRAM.
@@ -587,7 +590,7 @@ export function sysSegment(
   const parts: string[] = [
     cpu.match(
       (v) => {
-        const { pct, col } = pctFmt(v);
+        const { text: pct, col } = pctFmt(v);
         return `CPU ${ESC}[${col}m${pct}%${RST}`;
       },
       (why) => naSegment("CPU", why),

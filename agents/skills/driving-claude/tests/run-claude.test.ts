@@ -146,3 +146,33 @@ describe("driving-claude argv boundary", () => {
     expect(result.stdout).toBe("");
   });
 });
+
+describe("driving-claude runner: --progress-file", () => {
+  test("streams what claude is doing into the progress file; the result event is the answer", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "driving-claude-progress-"));
+    const progressFile = join(dir, "p.progress.json");
+    const run = await withTarget((target) =>
+      runClaude({
+        target,
+        prompt: "Reply exactly OK",
+        model: "sonnet",
+        permissionMode: "plan",
+        maxTurns: 1,
+        timeoutMs: 5_000,
+        safeMode: true,
+        bare: false,
+        claudeBin: fixture,
+        progressFile,
+      }),
+    );
+    expect(run.exitCode).toBe(0);
+    expect(asRecord(run.claude)?.result).toBe("OK");
+    expect(toRelay(run).session_id).toBe("fixture-session");
+    const progress = decodedJson(
+      z.object({ last: z.string(), commands: z.number(), files: z.number() }),
+      await Bun.file(progressFile).text(),
+    );
+    expect(progress).toEqual({ last: "“done”", commands: 1, files: 1 });
+    await rm(dir, { recursive: true, force: true });
+  });
+});

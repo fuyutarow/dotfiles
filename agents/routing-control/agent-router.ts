@@ -49,6 +49,7 @@ import {
 import {
   activeDir,
   ActiveSchema,
+  briefLabel,
   progressFile,
   stateDir,
   STATE_SCHEMA,
@@ -356,7 +357,12 @@ const CLAUDE_MODE: Record<string, { mode: string; tools?: string }> = {
 };
 
 /** The worker command for a row: codex-run for luna, run-claude for claude. */
-function workerArgs(roster: Roster, row: Choice, flags: RunFlags): string[] {
+function workerArgs(
+  roster: Roster,
+  row: Choice,
+  flags: RunFlags,
+  progress: string,
+): string[] {
   if (row.route === "luna")
     return [
       CODEX_RUN,
@@ -392,6 +398,8 @@ function workerArgs(roster: Roster, row: Choice, flags: RunFlags): string[] {
     String(roster.claude_run.max_budget_usd),
     "--timeout-ms",
     String((flags.timeoutS ?? 540) * 1000),
+    "--progress-file",
+    progress,
   ];
 }
 
@@ -448,14 +456,7 @@ async function run(flags: RunFlags): Promise<number> {
   if (row.route === "luna") refuseUnauthenticatedCodex();
   else refuseMissingClaude();
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
-  const label =
-    flags.label ??
-    brief
-      .split("\n")
-      .find((l) => l.trim() !== "")
-      ?.trim()
-      .slice(0, 60) ??
-    "";
+  const label = flags.label ?? briefLabel(brief);
   console.error(
     `agent-router: ${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
   );
@@ -473,10 +474,11 @@ async function run(flags: RunFlags): Promise<number> {
   mkdirSync(ACTIVE_DIR, { recursive: true });
   const marker = join(ACTIVE_DIR, `${runId}.json`);
   writeFileSync(marker, JSON.stringify(active));
-  // codex-run folds its own --json events into this file; the statusline Run: row reads it.
+  // The worker folds its own events into this file (codex-run via CODEX_RUN_PROGRESS_FILE,
+  // run-claude via --progress-file); the statusline Run rows read it.
   const progress = progressFile(runId);
 
-  const args = workerArgs(roster, row, flags);
+  const args = workerArgs(roster, row, flags, progress);
   const t0 = performance.now();
   const child = Bun.spawn([process.execPath, ...args], {
     stdin: "ignore",

@@ -8,6 +8,7 @@ import {
   medianMs,
   recordEnd,
   recordStart,
+  stepKeys,
 } from "../bash-durations.ts";
 import { backgroundReason } from "../enforce-background-waits.ts";
 
@@ -34,6 +35,12 @@ describe("commandKey", () => {
     ["ls", "ls"],
     ["/bin/cp -f a b", undefined],
     ["cd x", undefined],
+    // a compound call is keyed by all its steps; an assignment-only step is no step (the 2026-10-06
+    // miss: `cd … && f=… && sed … && bun test $f` had no key and ran 20 s in front)
+    [
+      "cd x && f=a.ts && sed -i '' s/a/b/ $f && bun test $f",
+      "sed -i && bun test",
+    ],
   ])("%s → %s", (command, key) => {
     expect(commandKey(command)).toBe(key);
   });
@@ -121,4 +128,35 @@ test("one slow latest run is enough: judged by the larger of median and latest",
   }
   expect(medianMs(dir, "polysearch leaderboard --all")).toBe(650);
   expect(judgedMs(dir, "polysearch leaderboard --all")).toBe(120_000);
+});
+
+test("a compound call first seen as a whole is still sent back when one of its steps is known slow", () => {
+  expect(
+    stepKeys("cd x && f=a.ts && sed -i '' s/a/b/ $f && bun test $f"),
+  ).toEqual(["sed -i", "bun test"]);
+  const dir = scratch();
+  recordStart(dir, "s1", "bun test", 0);
+  recordEnd(dir, "s1", 23_000);
+  const out = Bun.spawnSync(["bun", HOOK], {
+    stdin: new Blob([
+      JSON.stringify({
+        tool_name: "Bash",
+        tool_use_id: "s2",
+        tool_input: { command: "f=a.ts && sed -i '' s/a/b/ $f && bun test $f" },
+      }),
+    ]),
+    env: { ...process.env, CLAUDE_BASH_DURATIONS_DIR: dir },
+    timeout: 30_000,
+  }).stdout.toString();
+  expect(out).toContain('"permissionDecision":"deny"');
+  expect(out).toContain("`bun test` has taken 23 s here");
+});
+
+test("the foreground bound is the owner's 5 s", () => {
+  expect(backgroundReason({ command: "x" }, { key: "x", ms: 5100 })).toContain(
+    "has taken 5 s",
+  );
+  expect(
+    backgroundReason({ command: "x" }, { key: "x", ms: 4900 }),
+  ).toBeUndefined();
 });

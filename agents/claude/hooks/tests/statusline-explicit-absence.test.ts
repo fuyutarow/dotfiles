@@ -137,7 +137,7 @@ describe("statusline Sys row: VRAM", () => {
   test("a working nvidia-smi shows the number", () => {
     const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
     expect(sysRow(renderSettled({ bin }).text)).toContain(
-      "VRAM 29% (3.5/12.0G)",
+      "VRAM 29% ( 3.5/12.0G)",
     );
   });
 
@@ -165,7 +165,7 @@ describe("statusline Sys row: VRAM", () => {
         "nvidia-smi": "/bin/sleep 3\necho '3584, 12288'",
       });
       const row = sysRow(renderSettled({ bin }).text);
-      expect(row).toContain("VRAM 29% (3.5/12.0G)");
+      expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
       // VRAM only: this PATH holds just the fake nvidia-smi, so on macOS RAM reads n/a (no vm_stat).
       expect(row).not.toContain("VRAM n/a");
     },
@@ -179,12 +179,12 @@ describe("statusline Sys row: VRAM", () => {
       const at = nowMs();
       seedGpuCache(home, {
         at: at - 20_000,
-        reading: { frac: "3.5/12.0G", pct: 29.2 },
-        good: { at: at - 20_000, reading: { frac: "3.5/12.0G", pct: 29.2 } },
+        reading: { frac: " 3.5/12.0G", pct: 29.2 },
+        good: { at: at - 20_000, reading: { frac: " 3.5/12.0G", pct: 29.2 } },
       });
       const bin = binWith({ "nvidia-smi": "/bin/sleep 2\necho '3584, 12288'" });
       const during = sysRow(render({ home, bin }).text);
-      expect(during).toContain("VRAM 29% (3.5/12.0G)"); // 20 s old: plain, no marker under 60 s
+      expect(during).toContain("VRAM 29% ( 3.5/12.0G)"); // 20 s old: plain, no marker under 60 s
       waitForSampler(home);
       expect(
         readCache(home, "statusline-gpu.json", GpuMissSchema).at,
@@ -250,7 +250,7 @@ describe("statusline Sys row: VRAM", () => {
       seedGpuCache(home, { ...failed, at: failed.at - 60_000 });
       const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
       expect(sysRow(renderSettled({ home, bin }).text)).toContain(
-        "VRAM 29% (3.5/12.0G)",
+        "VRAM 29% ( 3.5/12.0G)",
       );
     },
     SLOW,
@@ -278,12 +278,12 @@ describe("statusline Sys row: VRAM", () => {
     seedGpuCache(home, {
       at: at - 120_000,
       why: "nvidia-smi timeout 2000ms",
-      good: { at: at - 90_000, reading: { frac: "3.5/12.0G", pct: 29.2 } },
+      good: { at: at - 90_000, reading: { frac: " 3.5/12.0G", pct: 29.2 } },
     });
     const row = sysRow(
       renderSettled({ home, bin: binWith({ "nvidia-smi": "exit 9" }) }).text,
     );
-    expect(row).toContain("VRAM 29% (3.5/12.0G)");
+    expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
     expect(row).toMatch(/stale (9[0-9])s \(nvidia-smi exit 9\)/u);
   });
 
@@ -293,12 +293,12 @@ describe("statusline Sys row: VRAM", () => {
     seedGpuCache(home, {
       at: at - 60_000,
       why: "nvidia-smi timeout 2000ms",
-      good: { at: at - 40_000, reading: { frac: "3.5/12.0G", pct: 29.2 } },
+      good: { at: at - 40_000, reading: { frac: " 3.5/12.0G", pct: 29.2 } },
     });
     const row = sysRow(
       renderSettled({ home, bin: binWith({ "nvidia-smi": "exit 9" }) }).text,
     );
-    expect(row).toContain("VRAM 29% (3.5/12.0G)");
+    expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
     expect(row).not.toContain("stale");
   });
 
@@ -308,7 +308,7 @@ describe("statusline Sys row: VRAM", () => {
       at: nowMs() - 60_000,
       good: {
         at: nowMs() - 31 * 60_000,
-        reading: { frac: "3.5/12.0G", pct: 29.2 },
+        reading: { frac: " 3.5/12.0G", pct: 29.2 },
       },
     });
     const row = sysRow(
@@ -334,7 +334,7 @@ describe("statusline Sys row: VRAM", () => {
         bin: binWith({ "nvidia-smi": "echo '3584, 12288'" }),
       }).text,
     );
-    expect(row).toContain("VRAM 29% (3.5/12.0G)");
+    expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
     expect(row).not.toContain("9.9/12.0G");
     expect(row).not.toContain("stale");
   });
@@ -389,7 +389,7 @@ describe("statusline Sys row: every reading is present", () => {
         vm_stat: vmStat.map((l) => `echo '${l}'`).join("\n"),
       });
       expect(sysRow(render({ bin }).text)).toMatch(
-        /RAM \d+% \(3\.0\/\d+\.\dG\)/u,
+        /RAM +\d+% \( ?3\.0\/\d+\.\dG\)/u,
       );
     },
   );
@@ -514,7 +514,7 @@ describe("statusline other rows", () => {
         cost: { total_lines_added: 0, total_lines_removed: 0 },
       },
     }).text;
-    expect(text).toContain("Ctx: 0 0%");
+    expect(text).toContain("Ctx: 0  0%");
     expect(text).toContain("(+0,-0)");
   });
 });
@@ -708,7 +708,7 @@ describe("statusline resource bounds", () => {
       }
       // One refresh later every session reads the one shared sample.
       expect(sysRow(render({ home, bin }).text)).toContain(
-        "VRAM 29% (3.5/12.0G)",
+        "VRAM 29% ( 3.5/12.0G)",
       );
       expect(invocations(log)).toBe(1);
     },
@@ -723,7 +723,7 @@ describe("statusline resource bounds", () => {
     utimesSync(lock, oldSecs, oldSecs);
     const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
     expect(sysRow(renderSettled({ home, bin }).text)).toContain(
-      "VRAM 29% (3.5/12.0G)",
+      "VRAM 29% ( 3.5/12.0G)",
     );
     expect(existsSync(lock)).toBe(false); // released after the sample
   });
@@ -736,12 +736,15 @@ describe("statusline resource bounds", () => {
     });
     seedGpuCache(home, {
       at: nowMs() - 60_000,
-      good: { at: nowMs() - 30_000, reading: { frac: "3.5/12.0G", pct: 29.2 } },
+      good: {
+        at: nowMs() - 30_000,
+        reading: { frac: " 3.5/12.0G", pct: 29.2 },
+      },
     });
     const bin = binWith({ "nvidia-smi": countingGpu(log, "echo '1, 2'") });
     const row = sysRow(render({ home, bin }).text);
     expect(invocations(log)).toBe(0);
-    expect(row).toContain("VRAM 29% (3.5/12.0G)");
+    expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
     // 30 s old: under the 60 s marker threshold, so the value shows plainly.
     expect(row).not.toContain("stale");
   });
@@ -778,7 +781,7 @@ describe("statusline trust boundaries (zod)", () => {
     seedGpuCache(home, { at: "yesterday", reading: { frac: 1, pct: "x" } });
     const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
     expect(sysRow(renderSettled({ home, bin }).text)).toContain(
-      "VRAM 29% (3.5/12.0G)",
+      "VRAM 29% ( 3.5/12.0G)",
     );
   });
 

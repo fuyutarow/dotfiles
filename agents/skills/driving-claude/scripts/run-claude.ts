@@ -2,6 +2,8 @@ import { existsSync, statSync } from "node:fs";
 import { cli } from "cleye";
 import { err, ok, type Result } from "neverthrow";
 import { jsonText, z } from "../../../hooks/zod.ts";
+import { progressWriter } from "../../driving-codex/scripts/codex-progress.ts";
+import { foldClaudeEvent, resultEvent } from "./claude-progress.ts";
 
 let emptyStringFlag: string | undefined;
 
@@ -47,6 +49,9 @@ export type RunConfig = Readonly<{
   bare: boolean;
   allowedTools?: string | undefined;
   jsonSchema?: string | undefined;
+  // When set, claude runs with stream-json and what it is doing is kept in this file (the
+  // statusline Run rows read it; agent-router passes it); its `result` event is the answer.
+  progressFile?: string | undefined;
   claudeBin: string;
 }>;
 
@@ -94,7 +99,9 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     "--permission-mode",
     config.permissionMode,
     "--output-format",
-    "json",
+    ...(config.progressFile === undefined
+      ? ["json"]
+      : ["stream-json", "--verbose"]),
     "--max-turns",
     String(config.maxTurns),
     "--no-session-persistence",
@@ -120,12 +127,33 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     killSignal: "SIGTERM",
   });
 
+  const progress =
+    config.progressFile === undefined
+      ? undefined
+      : progressWriter(config.progressFile, foldClaudeEvent);
   const [stdout, stderr, exitCode] = await Promise.all([
-    readStream(child.stdout),
+    progress === undefined
+      ? readStream(child.stdout)
+      : readLines(child.stdout, progress.feed),
     readStream(child.stderr),
     child.exited,
   ]);
   const timedOut = signal.aborted;
+  progress?.flush();
+  if (config.progressFile !== undefined) {
+    const result = resultEvent(stdout);
+    return {
+      exitCode: timedOut ? 124 : exitCode,
+      timedOut,
+      stdout,
+      stderr,
+      claude: result,
+      parseError:
+        result === undefined
+          ? "no result event in the stream-json output"
+          : undefined,
+    };
+  }
 
   // A JSON syntax error is a zod issue (never a throw); its message is "not valid JSON: <parser text>"; the prefix is dropped to keep the old parseError.
   const decoded = jsonText.safeParse(stdout);
@@ -155,6 +183,28 @@ function readStream(
   stream: ReadableStream<Uint8Array> | null,
 ): Promise<string> {
   return stream === null ? Promise.resolve("") : new Response(stream).text();
+}
+
+/** The whole stream as text, handing each complete line to `onLine` as it arrives. */
+async function readLines(
+  stream: ReadableStream<Uint8Array> | null,
+  onLine: (line: string) => void,
+): Promise<string> {
+  if (stream === null) return "";
+  const decoder = new TextDecoder();
+  let text = "";
+  let pending = "";
+  for await (const chunk of stream) {
+    const piece = decoder.decode(chunk, { stream: true });
+    text += piece;
+    const lines = (pending + piece).split("\n");
+    pending = lines.pop() ?? "";
+    lines.forEach((l) => {
+      onLine(l);
+    });
+  }
+  if (pending !== "") onLine(pending);
+  return text;
 }
 
 function boundedText(value: string): string {
@@ -270,6 +320,7 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
         allowedTools: nonEmptyString("--allowed-tools"),
         jsonSchemaFile: nonEmptyString("--json-schema-file"),
         claudeBin: nonEmptyString("--claude-bin"),
+        progressFile: nonEmptyString("--progress-file"),
         safeMode: Boolean,
         bare: Boolean,
       },
@@ -352,6 +403,9 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
     allowedTools: values.allowedTools,
     ...(values.effort === undefined ? {} : { effort: values.effort }),
     jsonSchema,
+    ...(values.progressFile === undefined
+      ? {}
+      : { progressFile: values.progressFile }),
     claudeBin,
   });
 }

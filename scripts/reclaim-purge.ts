@@ -3,7 +3,8 @@ import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
 import { existingGraveyards, graveyardCandidates } from "./graveyards";
-import { countEntries, newlines, progressLine } from "./purge-progress";
+import { Presets, SingleBar } from "cli-progress";
+import { countEntries, newlines } from "./purge-progress";
 
 // IRREVERSIBLE: empty EVERY graveyard — rip's, and the XDG trash beside it. This is the ONLY
 // step that actually frees disk: both mechanisms delete by RENAME, so the bytes stay on the
@@ -59,8 +60,10 @@ if (ans !== "yes") {
 
 // The delete is the slow part (one unlink per entry), so it reports progress — never a silent wait.
 // rm -v prints one line per entry it removed; counting those lines against countEntries() is the bar.
-// On a TTY the bar redraws in place; elsewhere (a log, a pipe) one line per 10% step.
-const tty = process.stdout.isTTY;
+// The bar is cli-progress: on a TTY it redraws in place with the terminal's line wrap off, so a
+// pane narrower than the line cuts it instead of leaving a row behind per frame (a hand-drawn bar
+// did that on a ~55-column herdr pane, 2026-10-06); elsewhere (a log, a pipe) a line every 10 s.
+const count = (v: number): string => v.toLocaleString("en-US");
 for (const g of graves) {
   process.stdout.write(`${g.label}: 件数を数えています…\n`);
   const total = countEntries(g.path);
@@ -68,29 +71,21 @@ for (const g of graves) {
     console.log(`${g.label}: 空です`);
     continue;
   }
-  const t0 = performance.now();
+  const bar = new SingleBar(
+    {
+      format:
+        "削除中 [{bar}] {percentage}%  {value}/{total} 件  {duration_formatted}",
+      formatValue: (v, _options, type) =>
+        type === "value" || type === "total" ? count(v) : String(v),
+      hideCursor: true,
+      noTTYOutput: true,
+      notTTYSchedule: 10_000,
+      stream: process.stdout,
+    },
+    Presets.shades_classic,
+  );
+  bar.start(total, 0);
   let done = 0;
-  let shown = -1; // TTY: last redraw time; else: last 10% step printed
-  const show = (final: boolean): void => {
-    if (tty) {
-      if (!final && performance.now() - shown < 100) return;
-      shown = performance.now();
-      // One column short of the pane: a line that fills the last column wraps on some terminals.
-      const cols =
-        (process.stdout.columns ?? 80) - 1 - Bun.stringWidth("削除中 ");
-      const fitted = progressLine(done, total, performance.now() - t0, cols);
-      process.stdout.write(`\r削除中 ${fitted}\u001B[K${final ? "\n" : ""}`);
-      return;
-    }
-    const step =
-      total === 0 ? 10 : Math.floor((Math.min(done, total) / total) * 10);
-    if (final || step > shown) {
-      shown = step;
-      const line = progressLine(done, total, performance.now() - t0);
-      process.stdout.write(`削除中 ${line}\n`);
-    }
-  };
-  show(false);
   // 絶対パスで shell の rm 無効化を回避
   const rm = Bun.spawn(
     [
@@ -110,11 +105,12 @@ for (const g of graves) {
     { stdout: "pipe", stderr: "inherit" },
   );
   for await (const chunk of rm.stdout) {
-    done += newlines(chunk);
-    show(false);
+    // capped at total: a name with a newline makes rm -v print two lines for one entry
+    done = Math.min(total, done + newlines(chunk));
+    bar.update(done);
   }
   const code = await rm.exited;
-  show(true);
+  bar.stop();
   if (code !== 0) {
     console.log(
       `❌ ${g.path} の削除が exit ${code} で終わりました(上の rm のエラーを参照)。残りは削除していません。`,

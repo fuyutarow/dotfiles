@@ -341,7 +341,7 @@ describe("doctor", () => {
   });
 
   test.skipIf(OLD_SSH || !ATTACHES_TO_R99)(
-    "smart-open: the repo's own ssh/config agrees with smart-open/sockets.ts",
+    "smart-open: the repo's own ssh/config agrees with tools/shared/src/sockets.ts",
     () => {
       if (Bun.which("ssh") === null) return; // the check SKIPs without ssh; nothing to assert
       // ssh expands %d from the passwd entry, so the real account's home is the HOME that must agree.

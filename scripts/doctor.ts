@@ -24,7 +24,7 @@
 //   ccc-db-map  zsh/zshenv + unit                the ccc daemon relocates index DBs exactly as
 //                                                this shell does (`ccc doctor` DB path mappings)
 //   edge-policy edge/policy.plist.mac (mac only) the live Edge managed policy is a byte-equal copy
-//   smart-open  ssh/config + smart-open/sockets.ts
+//   smart-open  ssh/config + tools/shared/src/sockets.ts
 //                                                r99-wsl's RemoteForward joins the two socket paths
 //                                                smart-open and its receiver actually use (the
 //                                                remote name carrying the alias), on attach only
@@ -72,7 +72,7 @@ import {
   editorHost,
   receiverSocket,
   remoteSocket,
-} from "../smart-open/sockets.ts";
+} from "../tools/shared/src/sockets.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 export type Finding = {
@@ -845,7 +845,7 @@ export async function checkEdgePolicy(ctx: Ctx): Promise<Finding> {
 }
 
 // ssh/config's `Host r99-wsl` forwards the REMOTE's smart-open socket to THIS machine's receiver.
-// Both ends are code (smart-open/sockets.ts); the forward is ssh syntax (%r, %d) that cannot
+// Both ends are code (tools/shared/src/sockets.ts);the forward is ssh syntax (%r, %d) that cannot
 // import them, so the only guard against drift is to ask ssh what it RESOLVES and compare. A
 // mismatch is silent in use: `o <url>` finds no socket (or one nobody answers) and opens on the
 // remote's own screen. -F pins the declared source (this repo's ssh/config, not whatever
@@ -891,14 +891,14 @@ export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
       : ["have: no RemoteForward at all"];
   return fail(
     "smart-open",
-    `${SMART_OPEN_HOST}'s RemoteForward does not join the paths smart-open/sockets.ts uses — \`o <url>\` would open on the remote's screen`,
-    "make the RemoteForward in ssh/config match smart-open/sockets.ts (or the reverse)",
+    `${SMART_OPEN_HOST}'s RemoteForward does not join the paths tools/shared/src/sockets.ts uses — \`o <url>\` would open on the remote's screen`,
+    "make the RemoteForward in ssh/config match tools/shared/src/sockets.ts (or the reverse)",
     [`want: ${want}`, ...seen],
   );
 }
 
 // The editor half: VS Code connects to <alias>-code, which must reach the same box as the attach
-// alias WITHOUT its RemoteForward (smart-open/receive.ts vouches exactly this per request; here it
+// alias WITHOUT its RemoteForward (tools/smart-open/src/receive.ts vouches exactly this per request; here it
 // is checked before the first `oo` hits it). Its HostName/Port/User come from ~/.ssh/config.local.
 async function checkEditorAlias(
   ctx: Ctx,

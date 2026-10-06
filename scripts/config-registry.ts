@@ -154,7 +154,7 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   // --- smart-open receiver (macOS: the machine you sit at; opens URLs forwarded from remote `o`) ---
   [
     "mac",
-    "smart-open/smart-open-receiver.plist.mac",
+    "tools/smart-open/smart-open-receiver.plist.mac",
     "Library/LaunchAgents/dotfiles.smart-open-receiver.plist",
   ],
 ];
@@ -304,9 +304,10 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["tools/shared/package.json"],
+    sources: ["tools/shared/package.json", "tools/smart-open/package.json"],
     deployed: "the checkout",
-    consumer: "Bun package metadata for the shared TypeScript modules",
+    consumer:
+      "Bun package metadata of the tools/ packages (shared modules; smart-open's version, read by `smart-open --version`)",
     writer: "human, in the repo",
     verify: "mise run lint:ts · typecheck",
   },

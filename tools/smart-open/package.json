@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/smart-open",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "smart-open": "src/smart-open.ts"
+  }
+}

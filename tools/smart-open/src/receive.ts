@@ -1,5 +1,5 @@
 // smart-open receiver — runs on the machine you sit at (the Mac), opens what a remote
-// `smart-open` sends it. Started at login by smart-open/smart-open-receiver.plist.mac (launchd).
+// `smart-open` sends it. Started at login by tools/smart-open/smart-open-receiver.plist.mac (launchd).
 // ssh/config forwards the remote /tmp/smart-open-$USER--<alias>.sock to this socket, so it is reachable
 // only through your own ssh connections; the socket file itself is owner-only.
 //
@@ -23,7 +23,7 @@
 // `ssh -G` (resolve without connecting):
 //   <host>        must forward smart-open to THIS socket — a box you deliberately attach from, so a
 //                 remote process cannot point your editor at an arbitrary ssh server
-//   <host>-code   (sockets.ts, editorHost) must reach the same hostname/port/user WITHOUT that
+//   <host>-code   (tools/shared/src/sockets.ts, editorHost) must reach the same hostname/port/user WITHOUT that
 //                 forward. VS Code's own ssh connection would otherwise request it too, take the
 //                 socket over (sshd StreamLocalBindUnlink: newest wins) and leave a dead bind when
 //                 its window closes — and the next `o` in the still-attached terminal would open on
@@ -58,9 +58,14 @@ import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { cli } from "cleye";
-import { attempt } from "../agents/hooks/attempt.ts";
-import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { ACK_MS, editorHost, receiverSocket, SETTLE_MS } from "./sockets.ts";
+import { attempt } from "../../shared/src/attempt.ts";
+import {
+  ACK_MS,
+  editorHost,
+  receiverSocket,
+  SETTLE_MS,
+} from "../../shared/src/sockets.ts";
+import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -152,7 +157,7 @@ const openTimeoutMs = positive("open-timeout-ms", argv.flags.openTimeoutMs);
 const settleMs = positive("settle-ms", argv.flags.settleMs);
 if (settleMs >= ACK_MS) {
   console.error(
-    `receive: --settle-ms must be below ${ACK_MS} (the client's ack patience, smart-open/sockets.ts), got ${settleMs}`,
+    `receive: --settle-ms must be below ${ACK_MS} (the client's ack patience, tools/shared/src/sockets.ts), got ${settleMs}`,
   );
   process.exit(2);
 }

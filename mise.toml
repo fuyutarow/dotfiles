@@ -248,7 +248,7 @@ git ls-files -z -- \
   'agents/goal-kernel/cli.ts' \
   'agents/resource-control/agent-resource-run.ts' \
   ':(glob)agents/routing-control/*.ts' ':(glob)agents/routing-control/workers/*.ts' \
-  'agents/serena-control/serena-foreground.ts' ':(glob)smart-open/*.ts' \
+  'agents/serena-control/serena-foreground.ts' ':(glob)tools/smart-open/src/*.ts' \
   ':(exclude)agents/claude/hooks/repo-retrieve.ts' |
   xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
 '''
@@ -373,8 +373,8 @@ run = "bun test agents/skills"
 
 [tasks."test:scripts"]
 dir = "{{config_root}}"
-description = "This repo's own script tests (scripts/tests) and their proof-of-fire fixtures"
-run = "bun test scripts/tests"
+description = "This repo's own script tests (scripts/tests) and their proof-of-fire fixtures, plus every tools/*/tests suite"
+run = "bun test scripts/tests tools/*/tests"
 
 # The one non-Bun test suite, and deliberately so: it exercises zsh functions whose behaviour is
 # defined by tty-ness, a zle precmd hook and raw DEC escapes, via a real pty from `zsh/zpty`.

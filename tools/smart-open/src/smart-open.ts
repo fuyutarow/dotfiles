@@ -5,7 +5,7 @@
 // WHERE IT OPENS, in order (first that succeeds wins):
 //   1. URL + a live client receiver  → the CLIENT machine. When you drive this box from a Mac over
 //      `ssh` / `herdr --remote`, ssh/config's RemoteForward exposes the Mac's receiver
-//      (smart-open/receive.ts) here as /tmp/smart-open-$USER--<client alias>.sock (the newest one
+//      (tools/smart-open/src/receive.ts) here as /tmp/smart-open-$USER--<client alias>.sock (the newest one
 //      wins). Opening "here" would put the page on a screen nobody is in front of — that was the
 //      old WSL `o` (explorer.exe, always).
 //   2. this machine: macOS `open`; WSL → explorer.exe (a path converted by `wslpath -w` first,
@@ -42,8 +42,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
-import { z } from "../agents/hooks/zod.ts";
+import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import {
   ACK_MS,
   editorHost,
@@ -53,7 +52,9 @@ import {
   SSH_HOST_ENV,
   unlinkIfSame,
   type FileKey,
-} from "./sockets.ts";
+} from "../../shared/src/sockets.ts";
+import { z } from "../../shared/src/zod.ts";
+import pkg from "../package.json" with { type: "json" };
 
 const die = (msg: string, code = 2): never => {
   console.error(`smart-open: ${msg}`);
@@ -67,6 +68,7 @@ const rejectPrototypeFlag = (type: string, flag: string): void => {
 const argv = cli(
   {
     name: "smart-open",
+    version: pkg.version,
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
     parameters: ["[targets...]"],

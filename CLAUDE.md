@@ -27,7 +27,9 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 
 The annotated topic tree (every directory + what it holds + how it deploys) is the canonical
 **README → Architecture**; do not duplicate it here. Topics (one tool = one directory):
-`zsh git jj smart-open tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` `edge` (mac), `wsl` (WSL).
+`zsh git jj tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` `edge` (mac), `wsl` (WSL).
+Repo CLIs live under `tools/<name>/` (own `package.json` semver, `CHANGELOG.md`, `src/`, `tests/`; may import only
+their own dir and `tools/shared/`): `tools/smart-open` (both OSes), `tools/shared` (code several tools import).
 Plumbing / single sources of truth: `scripts/config-registry.ts` (EVERY config surface — source,
 deploy kind, consumer, writer, verifier; `mise run config:map` prints it, `lint:config-map` fails on
 a config file in no row), `scripts/link-dots.ts` (realizes its links, OS-aware),
@@ -128,7 +130,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 ### Daily commands
 - `lg` lazygit · `j` jj · `e` editor · `c`/`cc` clipboard copy · `pp` view+copy
-- `o` open · `oo` open current dir — both `smart-open` (`smart-open/`): attached over ssh/herdr, a URL opens on the client and a path as a VS Code Remote-SSH window there; else here (Finder / Explorer) · `s`/`start` launch app
+- `o` open · `oo` open current dir — both `smart-open` (`tools/smart-open/`): attached over ssh/herdr, a URL opens on the client and a path as a VS Code Remote-SSH window there; else here (Finder / Explorer) · `s`/`start` launch app
 - `hhh` list custom aliases · `h <cmd>` tldr · `jl` list just tasks
 - History: atuin (Ctrl+R)
 

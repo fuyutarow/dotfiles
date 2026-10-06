@@ -69,7 +69,9 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ~/dotfiles/
 ├── zsh/         # zshenv (tiny, SSH-safe), zshrc, aliases.zsh (+ IS_MAC/IS_WSL), mac.zsh / wsl.zsh
 ├── git/         # gitconfig + local.mac / local.wsl (per-OS include)
-├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; receive.ts + launchd plist on mac
+├── tools/       # repo CLIs, one directory each (package.json with semver, CHANGELOG.md, src/, tests/); may import only its own dir and tools/shared/
+│   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
+│   └── shared/      # code several tools import (zod, attempt, narrow, typesafe-key, sockets)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
 ├── tmux/        # tmux.conf, clipboard.conf, scripts/ (status bar, layouts)
 ├── herdr/       # config.toml (agent multiplexer; tmux muscle-memory port)

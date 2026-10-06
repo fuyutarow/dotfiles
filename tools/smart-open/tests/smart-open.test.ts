@@ -1,9 +1,9 @@
-// bun test for smart-open/ — the receiver (smart-open/receive.ts) and the smart-open client (smart-open/smart-open.ts),
+// bun test for tools/smart-open/ — the receiver (src/receive.ts) and the smart-open client (src/smart-open.ts),
 // spawned as real processes against a throwaway socket and a fake opener that only appends to a
 // log. Nothing here opens a browser: the receiver's opener is SMART_OPEN_OPENER and the client's
 // this-machine opener is SMART_OPEN_LOCAL_OPENER, both pointed at the same recording script.
 //
-// The wire contract under test (smart-open/receive.ts header): one JSON line in — {"url": ...} or
+// The wire contract under test (src/receive.ts header): one JSON line in — {"url": ...} or
 // {"path", "kind", "host"} — one line out: `ok`, `refused: <why>` or `busy: <why>`. Each refusal case is paired with its accepting twin so a gate
 // that always refuses, or always accepts, is caught.
 import { afterEach, describe, expect, test } from "bun:test";
@@ -19,17 +19,18 @@ import {
 } from "node:fs";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
-import { attempt } from "../../agents/hooks/attempt.ts";
+import { attempt } from "../../shared/src/attempt.ts";
 import {
   ACK_MS,
   fileKey,
   SETTLE_MS,
   unlinkIfSame,
-} from "../../smart-open/sockets.ts";
+} from "../../shared/src/sockets.ts";
+import pkg from "../package.json" with { type: "json" };
 
-const REPO = join(import.meta.dir, "..", "..");
-const RECEIVE = join(REPO, "smart-open", "receive.ts");
-const SMART_OPEN = join(REPO, "smart-open", "smart-open.ts");
+const TOOL = join(import.meta.dir, "..");
+const RECEIVE = join(TOOL, "src", "receive.ts");
+const SMART_OPEN = join(TOOL, "src", "smart-open.ts");
 
 const cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -197,6 +198,15 @@ function client(args: string[], env: Record<string, string | undefined>): Run {
     err: p.stderr.toString(),
   };
 }
+
+describe("version", () => {
+  test("--version prints the version of this package's package.json", () => {
+    const r = client(["--version"], {});
+    expect(r.code).toBe(0);
+    expect(r.out.trim()).toBe(pkg.version);
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
+  });
+});
 
 describe("receiver wire protocol", () => {
   test("accepts http and https (scheme is case-insensitive) and hands the URL to the opener", async () => {

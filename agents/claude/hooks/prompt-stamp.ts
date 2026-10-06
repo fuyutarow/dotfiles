@@ -71,7 +71,7 @@ export interface PromptParts {
   host: string; // %m: hostname up to the first dot
   stamp: string; // "MM-DD HH:MM +09"
   when: string; // "MM-DD HH:MM" — the stamp's time, colored apart from its zone
-  zone: string; // "+09" — the stamp's UTC offset, drawn in gray (owner 2026-10-06)
+  zone: string; // "+09" — the stamp's UTC offset, drawn in dark gray (owner 2026-10-06)
   cwd: string; // tilde-shortened
 }
 

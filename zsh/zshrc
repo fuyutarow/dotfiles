@@ -55,9 +55,9 @@ case "$HOST" in
     local fmt='%D{%z}' z
     z=${(%)fmt}
     [[ $z == [+-][0-9][0-9]00 ]] && z=${z[1,3]}
-    # The offset in gray (256-color 245), the statusline's same color: it is context,
+    # The offset in dark gray (256-color 240), the statusline's same color: it is context,
     # not news, and at full cyan it read as part of the time (owner 2026-10-06).
-    PROMPT="${uname}@${host}:%F{cyan}%D{%m-%d %H:%M}%f %F{245}${z}%f|${pwd}${NEWLINE}${prompt}"
+    PROMPT="${uname}@${host}:%F{cyan}%D{%m-%d %H:%M}%f %F{240}${z}%f|${pwd}${NEWLINE}${prompt}"
   }
   autoload -Uz add-zsh-hook
   add-zsh-hook precmd _prompt_stamp

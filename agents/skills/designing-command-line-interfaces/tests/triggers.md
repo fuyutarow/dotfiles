@@ -22,7 +22,7 @@ Run these against the name and description after each description or cut edit.
 
 | Ask | Route |
 |---|---|
-| “Which `codex exec` sandbox flag?” | `driving-codex`. |
+| “Which `codex exec` sandbox flag?” | `agent-router` (`agents/routing-control`). |
 | “Make this error message friendlier.” | `linting-prose` or diagnostic card. |
 | “Should releases use SemVer?” | `designing-version-schemes`. |
 | “Canonicalize config before signing.” | `governing-configuration-systems`. |
@@ -31,4 +31,3 @@ Run these against the name and description after each description or cut edit.
 | “Implement the already-specified subcommand.” | `implementing-and-debugging` plus language owner. |
 | “My web page's spinner feels slow.” | `designing-interactions`; a GUI latency budget, not a CLI contract. |
 | “Why is this command slow? Make it faster.” | `implementing-and-debugging`; performance, not what the caller is told. |
-

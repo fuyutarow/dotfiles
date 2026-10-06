@@ -95,9 +95,8 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    `<verb-ing>-<object>` describing the activity the skill provides (`writing-julia`,
    `compiling-latex`, `running-python-tools`, `securing-remote-access`, `systematizing-knowledge`,
    `operating-the-harness`). Hard rules: lowercase/numbers/hyphens only and ≤64 chars. Shared
-   skills must not contain the reserved words `claude`/`anthropic`; **`driving-claude` is the one
-   Codex-only exception**. `mise run link:skills` must link it to Codex through `~/.agents/skills`
-   while explicitly excluding it from `~/.claude/skills`. Keep tool names and trigger keywords in
+   skills must not contain the reserved words `claude`/`anthropic`. Keep tool names and trigger
+   keywords in
    `description:` (3rd person, "what + when") — that field, with the name, is what the model
    matches on. Don't mix naming shapes across the collection (inconsistency is the documented
    anti-pattern). Ref: docs.claude.com Agent Skills → best-practices. The full CRAFT of

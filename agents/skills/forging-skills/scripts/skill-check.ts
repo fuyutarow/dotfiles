@@ -262,7 +262,7 @@ async function checkDirectory(input: string): Promise<void> {
     );
   if (name.includes("--"))
     fail(directory, `name '${name}' has consecutive hyphens`);
-  if (/(claude|anthropic)/iu.test(name) && name !== "driving-claude") {
+  if (/(claude|anthropic)/iu.test(name)) {
     fail(
       directory,
       `name '${name}' contains a reserved word (claude/anthropic)`,

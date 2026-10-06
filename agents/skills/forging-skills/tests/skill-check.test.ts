@@ -98,21 +98,13 @@ describe("skill-check floor", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("reserved word 'claude' in name (not driving-claude): FAIL", () => {
+  test("reserved word 'claude' in name: FAIL", () => {
     const dir = makeSkillDir("claude-thing", validSkillMd("claude-thing"));
     const { out, code } = runCheck(dir);
     expect(out).toBe(
       `FAIL ${dir}: name 'claude-thing' contains a reserved word (claude/anthropic)\n`,
     );
     expect(code).toBe(1);
-    rmSync(dir, { recursive: true, force: true });
-  });
-
-  test("driving-claude is the documented exception to the reserved-word rule", () => {
-    const dir = makeSkillDir("driving-claude", validSkillMd("driving-claude"));
-    const { out, code } = runCheck(dir);
-    expect(out).toBe("");
-    expect(code).toBe(0);
     rmSync(dir, { recursive: true, force: true });
   });
 

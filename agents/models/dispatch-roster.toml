@@ -5,9 +5,9 @@
 # switch (owner 2026-10-06: an `enabled` flag was not Tiger style; the bias toward luna is the
 # price in Jev's criteria, "the cheapest row sufficient", not a hand-set weight). The route says
 # how the picked row runs:
-#   route = "luna"   — codex-run --choice <id> (agents/skills/driving-codex): Codex is the worker's
+#   route = "luna"   — codex-run --choice <id> (agents/routing-control/workers/codex-run.ts): Codex is the worker's
 #                      own harness. No Claude tokens.
-#   route = "claude" — claude -p through driving-claude's run-claude.ts, bounded by [claude_run].
+#   route = "claude" — claude -p through agents/routing-control/workers/run-claude.ts, bounded by [claude_run].
 # The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints the table.
 #
 # CONFIGURATION CONTRACT (consumers, effective file, strict schema, accepted/rejected inputs):
@@ -51,7 +51,7 @@ no_egress = []         # ~/… or absolute paths whose briefs never leave the ma
 api = "reseller"
 url = "https://jevtypesafeai.com/api/v1/decide"
 
-# Bounds every claude worker runs with (driving-claude run-claude.ts flags), never the CLI defaults.
+# Bounds every claude worker runs with (agents/routing-control/workers/run-claude.ts flags), never the CLI defaults.
 [claude_run]
 max_budget_usd = 2.0
 max_turns = 60

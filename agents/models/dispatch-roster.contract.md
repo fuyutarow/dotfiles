@@ -3,7 +3,7 @@
 The contract for `agents/models/dispatch-roster.toml` (governing-configuration-systems). It
 describes the configuration system; the roster itself is the configuration.
 
-- Consumer: the owner (human editor); `agent-router` (agents/routing-control/agent-router.ts — runtime: the one entry point; sends every row to Jev as a criterion built by `criterionFor` in agents/models/roster.ts — use_for, measured AA/TB4/SciCode, cost multiple, graded record — and runs the row Jev picks: luna through `codex-run --choice`, claude through driving-claude's run-claude.ts bounded by `[claude_run]`); the dispatch hook `agents/claude/hooks/enforce-dispatch-contract.ts` (denies Agent/Task/Workflow and prints the table); `scripts/render-home.ts` (renders the table block into the deployed `~/.claude/CLAUDE.md`, which the coordinating model reads at session start; the repo template keeps only the markers)
+- Consumer: the owner (human editor); `agent-router` (agents/routing-control/agent-router.ts — runtime: the one entry point; sends every row to Jev as a criterion built by `criterionFor` in agents/models/roster.ts — use_for, measured AA/TB4/SciCode, cost multiple, graded record — and runs the row Jev picks: luna through `codex-run --choice`, claude through `agents/routing-control/workers/run-claude.ts` bounded by `[claude_run]`); the dispatch hook `agents/claude/hooks/enforce-dispatch-contract.ts` (denies Agent/Task/Workflow and prints the table); `scripts/render-home.ts` (renders the table block into the deployed `~/.claude/CLAUDE.md`, which the coordinating model reads at session start; the repo template keeps only the markers)
 - Authority / writer: the owner, by a commit to `alpha` (`mise run commit`); the deployed CLAUDE.md block is written only by `scripts/render-home.ts` (`mise run link:dots`)
 - Effective configuration: the working-tree file `agents/models/dispatch-roster.toml` of the checkout each machine runs, read on every agent-router run, hook call and `codex-run --choice`; the rendered block in `~/.claude/CLAUDE.md` is a derived view, frozen into a session when it starts
 - Source representation: TOML 1.0 (Bun.TOML), one file, no includes
@@ -26,7 +26,7 @@ describes the configuration system; the roster itself is the configuration.
   `[auto.jev]` (2026-10-05: the reseller jevtypesafeai.com, owner-approved until an official
   TypeSafe key exists). The record of what was sent and answered is
   ~/.local/state/agent-router/runs.jsonl on each machine.
-- A claude worker has no OS sandbox (driving-claude: permissions are not containment): plan mode
+- A claude worker has no OS sandbox (agents/routing-control/workers/run-claude.ts: permissions are not containment): plan mode
   for read-only, acceptEdits plus Bash for workspace-write, under the same hooks every Claude
   session runs; its budget and turn bounds are the containment of cost, not of effect.
 - The working tree is effective: an uncommitted edit takes effect on the next run, before any

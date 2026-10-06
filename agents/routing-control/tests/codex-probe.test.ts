@@ -57,7 +57,7 @@ async function withProbeDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   });
 }
 
-describe("driving-codex probe-models.ts (current behavior, pre-refactor bracket)", () => {
+describe("agent-router probe-models.ts (current behavior, pre-refactor bracket)", () => {
   test("(a) available model: exact RESULT line, exit 0, nothing on stderr", async () => {
     const run = await withProbeDir((dir) =>
       runProbe(["gpt-good"], { CODEX_BIN: fixture, PROBE_DIR: dir }),
@@ -168,7 +168,7 @@ describe("driving-codex probe-models.ts (current behavior, pre-refactor bracket)
  * in notes and do NOT add an override").
  *
  * scripts/probe-models.ts:78 hardcodes `120_000` as a literal argument at the
- * `run()` call site. Unlike driving-claude's probe-models.ts (which exports
+ * `run()` call site. Unlike agents/routing-control's probe-models.ts (which exports
  * `probeModels()`/`RunConfig` with an injectable `timeoutMs`, letting its own
  * test drive a 20ms timeout in-process), this file exports nothing — `run`
  * and `main` are module-private — and there is no env var read anywhere in

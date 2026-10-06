@@ -95,7 +95,7 @@ The 2026-07 migration corpus is graded here; receipts and the full drift evidenc
 | exact-kebab schema rule | REFACTOR | Cleye camelCase keys render as kebab-case flags; exact spelling remains only on forwarding-wrapper type-flag keys |
 | envelope vs verdict-lines split by consumer | KEEP | declare the consumer per script (BG1) |
 | zero npm imports across the corpus | **SUPERSEDED 2026-07-28** — the physics is real but it is solved by graduation, not by abstinence: measured, an inline pinned import throws under an ancestor node_modules while a lockfile-backed bare import resolves through symlinks from any cwd | repo-root package.json + bun.lock; DISTRIBUTED code (hooks/, templates/, `.zero-dep` trees) stays zero-dep |
-| fixture-binary tests (driving-claude family) | KEEP | extend to the other script families |
+| fixture-binary tests (agent-router worker family) | KEEP | extend to the other script families |
 | hooks: sync + zero-dep + explicit fail-open/-closed headers | KEEP (sync + zero-dep is load-bearing; Bun globals are equally legal there) | — |
 | hand-rolled `setTimeout`+`kill`+`clearTimeout` (probe family ×3 + run-claude) | REFACTOR | native `Bun.spawn` `timeout:`/`killSignal:` |
 | `Bun.spawn` ceremony for short bounded commands (version checks, wrangler calls) | REFACTOR | `Bun.$` + `.quiet()`/`.nothrow()` + `exitCode` branch |
@@ -139,7 +139,7 @@ MUST NOT fire (route):
 | 「PDF からテキスト抽出して」 | `running-python-tools` — Python payload (uv run --with pypdf) |
 | 「mise に lint:ts タスク足して」 | `wiring-mise-tasks` — the graph; here only if also authoring the script body |
 | a one-shot interactive pipeline (`ls \| grep …`) | no skill — a command, not a kept script |
-| 「codex exec の sandbox フラグどれ？」 | `driving-codex` — that CLI's own semantics |
+| 「codex exec の sandbox フラグどれ？」 | `agent-router` (`agents/routing-control`) |
 | 「Worker をデプロイして」 | wrangler / workers-best-practices family (but a deploy SCRIPT to author → co-fire: their wrangler semantics, this skill's script anatomy) |
 | 「bun で CLI ツール作って npm に publish したい」 | product/package engineering, not local automation — `writing-typescript` idiom floor; this skill's scope ends at the local graduation project |
 | “Design or audit a reusable CLI's consumers, grammar, effects, stdout/stderr or machine route, outcomes, or compatibility.” | `designing-command-line-interfaces`; return here once the contract is settled to implement the Bun script. |
@@ -158,7 +158,7 @@ MUST NOT fire (route):
 | `wiring-mise-tasks` | PURPOSE — task NAME/verb/graph → theirs; the script BODY a task runs → here. |
 | `forging-skills` | PURPOSE — WHETHER a skill ships a script + floor-vs-semantic doctrine → theirs; HOW that script is written → here. |
 | `operating-the-harness` | PURPOSE — hook EVENTS/matchers/settings.json → theirs; the hook's `.ts` body → here (hooks rows in BG2/BG3). Its hooks reference carries generic bash/npx RECIPE examples from the upstream docs — illustrative contract, not house style; house hook bodies follow this skill (reciprocal note deferred, ledger). |
-| `driving-claude` / `driving-codex` / `driving-grok` / `driving-antigravity` | PURPOSE — THAT CLI's flags/laws/models → theirs; generic spawn/envelope/timeout craft → here (their scripts are corpus exemplars). |
+| `agent-router` / `driving-grok` / `driving-antigravity` | PURPOSE — their CLI laws and models → their owner; generic spawn/envelope/timeout craft → here (their scripts are corpus exemplars). |
 | `implementing-and-debugging` / `refactoring-code` | co-fire with ORDER on any behavior change / restructure — they govern; this supplies the bun oracle (floor + `bun test` green bracket) and the target idioms. |
 | `raising-resolution` | silent sub-step: probe the actual runtime (`bun --version`, run the command) before asserting a Bun fact — never recall one from training. |
 

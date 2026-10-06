@@ -322,62 +322,6 @@ describe("link-skills: SHADOW report", () => {
   });
 });
 
-describe("link-skills: PRUNE (c) driving-claude Codex-only exclusion", () => {
-  test("an existing matching symlink at driving-claude is unlinked, never relinked", async () => {
-    const dotfiles = makeDotfiles(["driving-claude", "other-skill"]);
-    const home = makeHome();
-    mkdirSync(`${home}/.claude/skills`, { recursive: true });
-    symlinkSync(
-      `${dotfiles}/agents/skills/driving-claude`,
-      `${home}/.claude/skills/driving-claude`,
-    );
-
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
-    expect(code).toBe(0);
-    expect(out).toContain(
-      `excluded (Codex-only): ${home}/.claude/skills/driving-claude`,
-    );
-    expect(await isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(
-      false,
-    );
-    // The generic linker never runs for it (no "linked: …driving-claude" line).
-    expect(out).not.toContain(`linked: ${home}/.claude/skills/driving-claude`);
-    cleanup(dotfiles, home);
-  });
-
-  test("no prior symlink: still prints excluded, performs no unlink (nothing to unlink)", async () => {
-    const dotfiles = makeDotfiles(["driving-claude"]);
-    const home = makeHome();
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
-    expect(code).toBe(0);
-    expect(out).toContain(
-      `excluded (Codex-only): ${home}/.claude/skills/driving-claude`,
-    );
-    expect(await isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(
-      false,
-    );
-    cleanup(dotfiles, home);
-  });
-
-  test("a driving-claude symlink pointing elsewhere is left untouched but still reported excluded", async () => {
-    const dotfiles = makeDotfiles(["driving-claude"]);
-    const home = makeHome();
-    mkdirSync(`${home}/.claude/skills`, { recursive: true });
-    symlinkSync("/some/other/target", `${home}/.claude/skills/driving-claude`);
-
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
-    expect(code).toBe(0);
-    expect(out).toContain(
-      `excluded (Codex-only): ${home}/.claude/skills/driving-claude`,
-    );
-    expect(await isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(true);
-    expect(readlinkSync(`${home}/.claude/skills/driving-claude`)).toBe(
-      "/some/other/target",
-    );
-    cleanup(dotfiles, home);
-  });
-});
-
 describe("link-skills: PRUNE (d) stale ~/.codex/skills", () => {
   test("a symlink to agents/commands (the historical misconfiguration) is removed", async () => {
     const dotfiles = makeDotfiles(["only-skill"]);
@@ -482,14 +426,10 @@ describe("link-skills: --dry-run", () => {
     cleanup(dotfiles, home);
   });
 
-  test("dry-run still reports what an existing prune/exclusion WOULD do, without doing it", async () => {
-    const dotfiles = makeDotfiles(["driving-claude"]);
+  test("dry-run reports what an existing prune WOULD do, without doing it", async () => {
+    const dotfiles = makeDotfiles(["alpha-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude/skills`, { recursive: true });
-    symlinkSync(
-      `${dotfiles}/agents/skills/driving-claude`,
-      `${home}/.claude/skills/driving-claude`,
-    );
     const staleTarget = `${dotfiles}/agents/skills/gone`;
     symlinkSync(staleTarget, `${home}/.claude/skills/gone`);
 
@@ -502,13 +442,9 @@ describe("link-skills: --dry-run", () => {
     ]);
     expect(code).toBe(0);
     expect(out).toContain(
-      `[dry-run] would exclude (unlink, Codex-only): ${home}/.claude/skills/driving-claude`,
-    );
-    expect(out).toContain(
       `[dry-run] would prune (renamed/deleted): ${home}/.claude/skills/gone`,
     );
     // Neither was actually touched.
-    expect(await isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(true);
     expect(await isSymlink(`${home}/.claude/skills/gone`)).toBe(true);
     cleanup(dotfiles, home);
   });

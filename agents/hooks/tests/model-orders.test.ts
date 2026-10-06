@@ -182,7 +182,7 @@ describe("ordersIn: what actually RUNS a model CLI", () => {
       `mise run commit -- -m "$(cat <<'EOF'\nuse codex exec -m gpt-5.6-sol\nEOF\n)" -- f`,
       "cat <<'EOF'\ncodex exec -m gpt-5.6-sol\nEOF",
       "ls codex-update.ts",
-      "bun test agents/skills/driving-codex",
+      "bun test agents/routing-control",
       "which codex",
     ]) {
       expect(ordersIn(cmd)).toEqual([]);

@@ -6,7 +6,7 @@
 // WHY A COMMAND, not a recipe pasted into every relay prompt: the recipe drifted (a dropped
 // `</dev/null` hung two runs for their whole budget), relays summarized instead of relaying, and a
 // wrapped `codex` escapes the model-floor hook, which only sees the Bash command line. This file
-// owns the invocation so a caller only has to read the receipt (driving-codex C2/C3).
+// owns the invocation so a caller only has to read the receipt (codex-run C2/C3).
 //
 // CLI CONTRACT (designing-command-line-interfaces C0–C5)
 //   C0  consumers   main loop (primary), human; never interactive (stdin is closed).
@@ -243,7 +243,7 @@ const missing = [
 ].flatMap(([flag, v]) => (v === undefined || v === "" ? [flag] : []));
 if (missing.length > 0)
   refuse(
-    `missing ${missing.join(", ")} — every call names model, effort, sandbox and directory (driving-codex C2)`,
+    `missing ${missing.join(", ")} — every call names model, effort, sandbox and directory`,
   );
 if (!EFFORTS.includes(String(effort)))
   refuse(
@@ -254,7 +254,7 @@ if (!EFFORTS.includes(String(effort)))
 if (!SANDBOXES.includes(String(sandbox)))
   refuse(
     sandbox === "danger-full-access"
-      ? "sandbox danger-full-access is for an isolated runner only (driving-codex LEAST-PRIVILEGE)"
+      ? "sandbox danger-full-access is for an isolated runner only; the host declaration in ~/.config/codex-run/host.toml identifies that isolation"
       : `sandbox '${sandbox}' is not one of ${SANDBOXES.join(", ")}`,
   );
 if (!Number.isInteger(timeoutS) || timeoutS < 1 || timeoutS > MAX_TIMEOUT_S)
@@ -402,7 +402,7 @@ say(
 const deadline = AbortSignal.timeout(timeoutS * 1000);
 const spawned = await attempt(() =>
   // stdin "ignore" is the `</dev/null` of the recipe: codex exec reads stdin and would hang on an
-  // open pipe for the whole budget (driving-codex Gotchas).
+  // open pipe for the whole budget.
   Bun.spawn(cmd, {
     stdin: "ignore",
     stdout: "pipe",

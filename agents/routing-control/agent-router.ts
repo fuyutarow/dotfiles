@@ -13,7 +13,7 @@
 //       agent-router stats                               picks, confidence, fallbacks, cost, outcomes
 //       agent-router grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
 //       agent-router grade RUN_ID --waive "<why>"        record that a run cannot be graded, and why
-//   C2  effects  run starts `codex-run --choice <row>` (agents/skills/driving-codex) as a child; a
+//   C2  effects  run starts `codex-run --choice <row>` (agents/routing-control/workers/codex-run.ts) as a child; a
 //                Claude row is refused with the Agent call to make instead (the CLI cannot start a
 //                Claude subagent). State lives outside the repo: $XDG_STATE_HOME/agent-router
 //                (~/.local/state/agent-router): active/<run_id>.json while running, runs.jsonl forever.
@@ -67,7 +67,7 @@ const LOG_FILE = join(STATE_DIR, "runs.jsonl");
 const CODEX_RUN =
   process.env.AGENT_ROUTER_CODEX_RUN ??
   join(import.meta.dir, "workers/codex-run.ts");
-// A claude row runs `claude -p` through driving-claude's bounded wrapper (test seam: a fake).
+// A claude row runs `claude -p` through agents/routing-control/workers/run-claude.ts (test seam: a fake).
 const RUN_CLAUDE =
   process.env.AGENT_ROUTER_RUN_CLAUDE ??
   join(import.meta.dir, "workers/run-claude.ts");
@@ -321,9 +321,10 @@ function refuseMissingClaude(): void {
     );
 }
 
-// sandbox → claude permission mode. PERMISSIONS ARE NOT CONTAINMENT (driving-claude LAW): a claude
-// worker has no OS sandbox; plan mode keeps a read-only task from editing, and a workspace-write task
-// may edit and run Bash under the same hooks every Claude session runs under.
+// sandbox → claude permission mode. PERMISSIONS ARE NOT CONTAINMENT (law from
+// archives/skills/driving-claude/SKILL.md): a claude worker has no OS sandbox; plan mode keeps a
+// read-only task from editing, and a workspace-write task may edit and run Bash under the same hooks
+// every Claude session runs under.
 const CLAUDE_MODE: Record<string, { mode: string; tools?: string }> = {
   "read-only": { mode: "plan" },
   "workspace-write": { mode: "acceptEdits", tools: "Bash" },

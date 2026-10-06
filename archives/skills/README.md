@@ -42,3 +42,14 @@ Restore only on an explicit request: move the complete directory back to `agents
 ## Restored
 
 `transcribing-media` was restored to `agents/skills/` on 2026-10-03 at the user's request.
+
+## 2026-10-06 absorbed-skill retirement
+
+Retired after their worker and Jev implementations moved into `agents/routing-control/`; dispatch
+and Jev now have the single entrypoint `agent-router`.
+
+| Skill | First repository admission | Archived | Reason |
+|---|---|---|---|
+| [`driving-codex`](driving-codex/SKILL.md) | 2026-07-12 | 2026-10-06 | Absorbed by agent-router; the code lives in `agents/routing-control` |
+| [`driving-claude`](driving-claude/SKILL.md) | 2026-07-23 | 2026-10-06 | Absorbed by agent-router; the code lives in `agents/routing-control` |
+| [`driving-jev`](driving-jev/SKILL.md) | 2026-09-21 | 2026-10-06 | Absorbed by agent-router; the code lives in `agents/routing-control` |

@@ -42,7 +42,7 @@ export async function probeModels(
 
   const records: ProbeRecord[] = [];
   for (const model of models) {
-    const target = await mkdtemp(join(tmpdir(), "driving-claude-"));
+    const target = await mkdtemp(join(tmpdir(), "claude-probe-"));
     await using _cleanupTarget = {
       [Symbol.asyncDispose]: () => rm(target, { recursive: true, force: true }),
     };

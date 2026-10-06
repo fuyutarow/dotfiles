@@ -1,7 +1,7 @@
 // Port of mise task `link:skills` (see mise.toml). Structural port only — same links, same
 // guards, same four prune mechanisms, same printed lines as the original shell body. Consumer:
 // human/agent running `mise run link:skills` — output is verdict-style lines meant for
-// eyeballing (linked/skip/pruned/excluded), not a machine envelope, matching the shell original.
+// eyeballing (linked/skip/pruned/SHADOWED), not a machine envelope, matching the shell original.
 //
 // Links agents/commands + agents/skills from this dotfiles repo into Claude Code, Codex, and
 // Gemini's config directories, and prunes stale links that a rename/delete would otherwise
@@ -10,9 +10,7 @@
 //       at all (no target check), then recreated as a real directory.
 //   (b) ~/.claude/skills/<name> per-skill -> pruned only if symlink AND dangling AND its raw
 //       (non-canonicalized) target starts with "<dotfiles>/".
-//   (c) ~/.claude/skills/driving-claude -> unlinked only if its raw target is EXACTLY
-//       "<dotfiles>/agents/skills/driving-claude" (driving-claude is Codex-only by design).
-//   (d) ~/.codex/skills -> unlinked only if its raw target is EXACTLY "<dotfiles>/agents/commands"
+//   (c) ~/.codex/skills -> unlinked only if its raw target is EXACTLY "<dotfiles>/agents/commands"
 //       (cleanup of one specific historical misconfiguration).
 // Real plugin-installed skill directories (not symlinks) are never touched by any of the four.
 // A real directory occupying a name this repo DOES own is reported as "SHADOWED: …" rather than
@@ -178,54 +176,30 @@ function linkPath(src: string, dst: string, dryRun: boolean): void {
 }
 
 /**
- * One skill directory under agents/skills: either the Codex-only exclusion (PRUNE (c), for
- * `driving-claude`) or the ordinary link-or-report-shadowed path for every other skill.
+ * One skill directory under agents/skills: link it or report a shadowed destination.
  */
-function linkOrExcludeSkill(
+function linkSkill(
   name: string,
   dotfilesSkillsDir: string,
   claudeSkillsDir: string,
   dryRun: boolean,
 ): void {
-  if (name !== "driving-claude") {
-    // SHADOW report. linkPath's refusal to clobber a real directory is correct and stays, but
-    // its generic "skip (exists, not symlink)" line reads the same whether the destination is
-    // foreign content worth protecting or a stale copy MASKING this repo's own skill. Only the
-    // second case is a defect, and only here can it be told apart — the loop already knows the
-    // repo owns this name. Eight skills were masked this way for ~3 months behind that generic
-    // line. Naming the consequence is all that changes; the exit status stays 0 (this script is
-    // a tolerant linker, never a gate) and `mise run lint:skills-wiring` is what actually fails.
-    const claudeDst = `${claudeSkillsDir}/${name}`;
-    if (!isSymlinkOrAbsent(claudeDst)) {
-      print(
-        `SHADOWED: ${claudeDst} is a real path — agents/skills/${name} is NOT in use ` +
-          "(run: mise run lint:skills-wiring)",
-      );
-      return;
-    }
-    linkPath(`${dotfilesSkillsDir}/${name}`, claudeDst, dryRun);
+  // SHADOW report. linkPath's refusal to clobber a real directory is correct and stays, but
+  // its generic "skip (exists, not symlink)" line reads the same whether the destination is
+  // foreign content worth protecting or a stale copy MASKING this repo's own skill. Only the
+  // second case is a defect, and only here can it be told apart — the loop already knows the
+  // repo owns this name. Eight skills were masked this way for ~3 months behind that generic
+  // line. Naming the consequence is all that changes; the exit status stays 0 (this script is
+  // a tolerant linker, never a gate) and `mise run lint:skills-wiring` is what actually fails.
+  const claudeDst = `${claudeSkillsDir}/${name}`;
+  if (!isSymlinkOrAbsent(claudeDst)) {
+    print(
+      `SHADOWED: ${claudeDst} is a real path — agents/skills/${name} is NOT in use ` +
+        "(run: mise run lint:skills-wiring)",
+    );
     return;
   }
-  // `driving-claude` is deliberately Codex-only: it teaches Codex to drive this CLI, so
-  // exposing it as a Claude Code skill would be self-referential and creates a needless
-  // trigger collision. Codex receives the whole source tree through ~/.agents/skills below.
-  // PRUNE (c)
-  const dst = `${claudeSkillsDir}/${name}`;
-  const expected = `${dotfilesSkillsDir}/${name}`;
-  if (symlinkTarget(dst) !== expected) {
-    print(`excluded (Codex-only): ${dst}`);
-    return;
-  }
-  if (dryRun) {
-    print(`[dry-run] would exclude (unlink, Codex-only): ${dst}`);
-    return;
-  }
-  // Same unconditional-echo shape as PRUNE (a)/(d): no `&&` gates the `unlink` in
-  // the original, so the message prints even if `unlink` itself failed.
-  tryOp(() => {
-    unlinkSync(dst);
-  });
-  print(`excluded (Codex-only): ${dst}`);
+  linkPath(`${dotfilesSkillsDir}/${name}`, claudeDst, dryRun);
 }
 
 /**
@@ -248,7 +222,7 @@ function pruneDanglingSkillLink(
     print(`[dry-run] would prune (renamed/deleted): ${old}`);
     return;
   }
-  // Unlike every other prune/exclude site, the original gates this one on success —
+  // Unlike the other prune sites, the original gates this one on success —
   // `rm -f "$old" && echo "pruned ...`. A failed `rm -f` short-circuits the `&&`, so
   // the message must NOT print and the loop just moves to the next entry.
   if (fromThrowable(unlinkSync)(old).isErr()) return;
@@ -348,7 +322,7 @@ function main(): Result<void, UsageError> {
     for (const name of listEntries(dotfilesSkillsDir).filter((n) =>
       isDir(`${dotfilesSkillsDir}/${n}`),
     )) {
-      linkOrExcludeSkill(name, dotfilesSkillsDir, claudeSkillsDir, dryRun);
+      linkSkill(name, dotfilesSkillsDir, claudeSkillsDir, dryRun);
     }
 
     // Prune renamed/deleted skills (b): the loop above only ADDS, so a rename leaves the old

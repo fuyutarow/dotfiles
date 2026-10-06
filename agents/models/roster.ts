@@ -47,7 +47,7 @@ const AutoSchema = z.strictObject({
 });
 export type AutoPolicy = z.output<typeof AutoSchema>;
 
-// Bounds on a claude worker (run through driving-claude's run-claude.ts): a run has a budget and a
+// Bounds on a claude worker (run through agents/routing-control/workers/run-claude.ts): a run has a budget and a
 // turn limit, both stated, never the CLI's defaults.
 const ClaudeRunSchema = z.strictObject({
   max_budget_usd: z.number().gt(0),
@@ -152,6 +152,6 @@ export function rosterPolicy(r: Roster): string {
       .map((l) => (l === "" ? "" : `  ${l}`)),
     "",
     `  How to choose: you do not — Jev does. Give it what it needs in the brief: scope (files, size), what is at risk (live hooks, harness), expected difficulty, how long a tool loop it needs.`,
-    `  How to run: \`agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write\` from Bash, in the background — the one entry point for luna AND claude rows (a claude row runs \`claude -p\` through driving-claude's run-claude.ts, bounded at $${r.claude_run.max_budget_usd} and ${r.claude_run.max_turns} turns). It logs the pick, shows the run in the statusline, and prints a JSON receipt (a failure names its cause; every receipt says what the worker did). Grade each finished run before dispatching more from that cwd — \`agent-router grade <run_id> --evidence <checks>\` (Jev judges), or \`--waive "<why>"\` when it cannot be judged; until then a new run there is refused. The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints this table.`,
+    `  How to run: \`agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write\` from Bash, in the background — the one entry point for luna AND claude rows (a claude row runs \`claude -p\` through agents/routing-control/workers/run-claude.ts, bounded at $${r.claude_run.max_budget_usd} and ${r.claude_run.max_turns} turns). It logs the pick, shows the run in the statusline, and prints a JSON receipt (a failure names its cause; every receipt says what the worker did). Grade each finished run before dispatching more from that cwd — \`agent-router grade <run_id> --evidence <checks>\` (Jev judges), or \`--waive "<why>"\` when it cannot be judged; until then a new run there is refused. The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints this table.`,
   ].join("\n");
 }

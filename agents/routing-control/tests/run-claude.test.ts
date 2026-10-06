@@ -30,7 +30,7 @@ function runCli(
 }
 
 async function withTarget<T>(fn: (target: string) => Promise<T>): Promise<T> {
-  const target = await mkdtemp(join(tmpdir(), "driving-claude-test-"));
+  const target = await mkdtemp(join(tmpdir(), "run-claude-test-"));
   return Promise.try(() => fn(target)).then(
     async (value) => {
       await rm(target, { recursive: true, force: true });
@@ -43,7 +43,7 @@ async function withTarget<T>(fn: (target: string) => Promise<T>): Promise<T> {
   );
 }
 
-describe("driving-claude runner", () => {
+describe("agents/routing-control runner", () => {
   test("returns a bounded parsed Claude envelope", async () => {
     const run = await withTarget((target) =>
       runClaude({
@@ -109,7 +109,7 @@ describe("driving-claude runner", () => {
   });
 });
 
-describe("driving-claude argv boundary", () => {
+describe("agents/routing-control argv boundary", () => {
   test("run-claude rejects --__proto__", () => {
     const result = runCli(runnerScript, ["--__proto__"]);
     expect(result.exitCode).toBe(2);
@@ -147,9 +147,9 @@ describe("driving-claude argv boundary", () => {
   });
 });
 
-describe("driving-claude runner: --progress-file", () => {
+describe("agents/routing-control runner: --progress-file", () => {
   test("streams what claude is doing into the progress file; the result event is the answer", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "driving-claude-progress-"));
+    const dir = await mkdtemp(join(tmpdir(), "run-claude-progress-"));
     const progressFile = join(dir, "p.progress.json");
     const run = await withTarget((target) =>
       runClaude({

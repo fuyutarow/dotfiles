@@ -3,7 +3,7 @@
 //
 // THE ROSTER (agents/models/dispatch-roster.toml, read through agents/models/roster.ts) is the one
 // home of what may be dispatched, and agent-router is the one entry point: Jev picks a row from the
-// brief, luna rows run `codex exec` (codex-run), claude rows run `claude -p` (driving-claude's
+// brief, luna rows run `codex exec` (codex-run), claude rows run `claude -p` (agents/routing-control/workers/run-claude.ts,
 // run-claude.ts, bounded by the roster's [claude_run]). Every run is logged, shown on the statusline
 // Run: row and gradable — none of which an Agent or Workflow call would be.
 //

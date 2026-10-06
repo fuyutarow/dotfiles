@@ -351,7 +351,7 @@ describe("render-home: the rest of the rendered half", () => {
       /^# policy\n\n<!-- roster:begin -->\n<!-- RENDERED [^\n]*-->\n- \*\*Every dispatch goes through/u,
     );
     expect(md).toContain(
-      "| default | id | route | AA | TB4 | SciCode | $in/$out | cost |",
+      "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
     );
     expect(md.endsWith("<!-- roster:end -->\n")).toBe(true);
     expect(

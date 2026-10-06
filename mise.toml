@@ -623,6 +623,10 @@ run = 'bun ~/dotfiles/macos/defaults.ts'
 description = "Bring every registered Obsidian vault in line with obsidian/: merge app.json keys, install + enable sha256-pinned plugins.json"
 run = 'bun ~/dotfiles/obsidian/apply.ts'
 
+[tasks."mac:obsidian:trust"]
+description = "Turn Obsidian's Restricted mode OFF for every registered vault so the plugins mac:obsidian installs load. RESTARTS Obsidian (it sets the switch through a one-shot DevTools port, then relaunches without it)"
+run = 'bun ~/dotfiles/obsidian/trust.ts'
+
 [tasks."mac:iterm2"]
 description = "Point iTerm2 at dotfiles/iterm2/ as its preferences folder (single source: iterm2/setup.sh)"
 run = 'bash ~/dotfiles/iterm2/setup.sh'

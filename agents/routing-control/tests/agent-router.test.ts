@@ -723,3 +723,17 @@ describe("claude worker receipts: never silent", () => {
     });
   });
 });
+
+// Excess positionals are refused (writing-bun-scripts BG1: Cleye leaves extras in argv._ silently).
+// Found when agent-router came under the Bun floor (lint:bun) with the worker move, 2026-10-06.
+test("an unexpected positional argument is refused, never ignored", async () => {
+  for (const args of [
+    ["stats", "extra"],
+    ["ls", "extra"],
+    ["grade", "some-run", "extra", "--waive", "why"],
+  ]) {
+    const r = await router(args);
+    expect([args.join(" "), r.code]).toEqual([args.join(" "), 2]);
+    expect(r.err).toContain("unexpected argument: extra");
+  }
+});

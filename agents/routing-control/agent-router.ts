@@ -1034,6 +1034,10 @@ const argv = cli({
 });
 
 async function main(): Promise<number | undefined> {
+  // Cleye leaves excess positionals in argv._ (writing-bun-scripts BG1); only grade takes one, <run_id>.
+  const positionals = argv.command === "grade" ? 1 : 0;
+  if (argv._.length > positionals)
+    fatal(`unexpected argument: ${String(argv._[positionals])}`);
   if (argv.command === "run") {
     const f = argv.flags;
     if (

@@ -148,6 +148,11 @@ const argv = cli(
         type: String,
         description: "file holding the prompt (else stdin)",
       },
+      outputSchema: {
+        type: String,
+        description:
+          "JSON-schema file for the final message (`codex exec --output-schema`; agent-router passes the typed report's)",
+      },
       resume: {
         type: String,
         description:
@@ -403,6 +408,9 @@ const execFlags = [
   `model_reasoning_effort="${effort}"`,
   "-o",
   lastFile,
+  ...(argv.flags.outputSchema === undefined
+    ? []
+    : ["--output-schema", resolve(argv.flags.outputSchema)]),
 ];
 const cmd =
   resume === undefined

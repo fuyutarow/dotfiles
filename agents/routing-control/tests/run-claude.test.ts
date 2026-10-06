@@ -230,3 +230,59 @@ describe("agents/routing-control runner: session persistence and --resume", () =
     );
   });
 });
+
+describe("agents/routing-control runner: the stop reason in the relay", () => {
+  const relayFor = (model: string) =>
+    withTarget(async (target) => {
+      const run = await runClaude({
+        target,
+        prompt: "Reply exactly OK",
+        model,
+        permissionMode: "plan",
+        maxTurns: 60,
+        timeoutMs: 5_000,
+        safeMode: true,
+        bare: false,
+        claudeBin: fixture,
+        progressFile: join(target, "p.progress.json"),
+      });
+      return { run, relay: toRelay(run) };
+    });
+
+  for (const [model, subtype, turns, cost] of [
+    ["max-turns", "error_max_turns", 61, 0.4],
+    ["max-budget", "error_max_budget_usd", 9, 2.01],
+    ["exec-error", "error_during_execution", 3, 0.1],
+  ] as const)
+    test(`${subtype}: subtype, is_error, num_turns and cost are kept`, async () => {
+      const { run, relay } = await relayFor(model);
+      expect(run.exitCode).toBe(1);
+      expect(relay).toMatchObject({
+        exit_code: 1,
+        subtype,
+        is_error: true,
+        num_turns: turns,
+        total_cost_usd: cost,
+      });
+    });
+
+  test("a success result keeps subtype and num_turns too", async () => {
+    const { relay } = await relayFor("sonnet");
+    expect(relay).toMatchObject({
+      subtype: "success",
+      is_error: false,
+      num_turns: 4,
+    });
+  });
+
+  test("no result event at all: the relay says so", async () => {
+    const { relay } = await relayFor("no-result");
+    expect(relay.subtype).toBeUndefined();
+    expect(relay.parse_error).toBe("no result event in the stream-json output");
+  });
+
+  test("structured output (--json-schema) lands in the relay", async () => {
+    const { relay } = await relayFor("structured");
+    expect(relay.structured_output).toMatchObject({ summary: "typed" });
+  });
+});

@@ -113,7 +113,7 @@ if (touch !== undefined)
   await Bun.write((args[args.indexOf("--cd") + 1] ?? ".") + "/" + touch, "worker-was-here");
 const runIdAt = args.indexOf("--run-id");
 const runId = runIdAt === -1 ? "standalone-fake-run" : args[runIdAt + 1];
-const lastMessage = process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n";
+const lastMessage = process.env.FAKE_LAST ?? (process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n");
 const usage = process.env.FAKE_USAGE === "missing" ? { input_tokens: 100 } : { input_tokens: 100, cached_input_tokens: 20, output_tokens: 7, reasoning_output_tokens: 3 };
 console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: timedOut ? "timeout" : exit === 0 ? "ok" : "codex-failed", elapsed_s: 1.5, usage, ...(process.env.FAKE_NO_SESSION === "1" ? {} : { session: "thread-fake-0001" }), last_message: lastMessage, ...(exit === 0 ? {} : { cause: timedOut ? "fake worker timed out" : "fake worker failed" }) }));
 process.exit(exit);
@@ -147,6 +147,18 @@ if (mode === "timeout") {
   console.log(JSON.stringify({ exit_code: 124, timed_out: true, session_id: "sess-claude-0001", stderr: "" }));
   process.exit(124);
 }
+const relays: Record<string, Record<string, unknown>> = {
+  max_turns: { exit_code: 1, subtype: "error_max_turns", is_error: true, num_turns: 60, total_cost_usd: 0.5 },
+  budget: { exit_code: 1, subtype: "error_max_budget_usd", is_error: true, num_turns: 12, total_cost_usd: 2.01 },
+  exec_error: { exit_code: 1, subtype: "error_during_execution", is_error: true, num_turns: 3, result: "tool crashed" },
+  exit0_error: { exit_code: 0, subtype: "error_max_turns", is_error: true, num_turns: 60 },
+  no_result: { exit_code: 1, parse_error: "no result event in the stream-json output", stdout: "", stderr: "" },
+};
+const stopped = relays[mode];
+if (stopped !== undefined) {
+  console.log(JSON.stringify({ timed_out: false, session_id: "sess-claude-0001", stderr: "", ...stopped }));
+  process.exit(Number(stopped.exit_code));
+}
 if (mode === "garbage") {
   console.log("not a relay");
   process.exit(1);
@@ -154,7 +166,12 @@ if (mode === "garbage") {
 const at = Bun.argv.indexOf("--progress-file");
 if (at !== -1)
   writeFileSync(Bun.argv[at + 1] ?? "", JSON.stringify({ schema: 1, at: "2026-10-06T00:00:00Z", last: "✎ kernel.ts", commands: 2, files: 1 }));
-console.log(JSON.stringify({ exit_code: 0, timed_out: false, result: "done", session_id: "sess-claude-0001", total_cost_usd: 0.01, usage: { input_tokens: 80, cache_read_input_tokens: 10, cache_creation_input_tokens: 5, output_tokens: 7 } }));
+const typed = { summary: "typed", changes: [], checks: [], for_coordinator: [], open: [] };
+if (mode === "structured") {
+  console.log(JSON.stringify({ exit_code: 0, timed_out: false, subtype: "success", is_error: false, num_turns: 4, result: "", structured_output: typed, session_id: "sess-claude-0001", total_cost_usd: 0.01 }));
+  process.exit(0);
+}
+console.log(JSON.stringify({ exit_code: 0, timed_out: false, result: process.env.FAKE_LAST ?? "done", session_id: "sess-claude-0001", total_cost_usd: 0.01, usage: { input_tokens: 80, cache_read_input_tokens: 10, cache_creation_input_tokens: 5, output_tokens: 7 } }));
 `,
 );
 const NO_EGRESS = roster("no-egress", (t) =>
@@ -2106,4 +2123,317 @@ describe("agent-router: a stopped router stops its verify too", () => {
     expect(lines.some((l) => l.kind === "grade-waived")).toBe(true);
     expect(readdirSync(join(r.state, "active"))).toEqual([]);
   }, 40_000);
+});
+
+// --- the stop reason of a claude worker, and the typed final report ----------------------------------
+
+const REPORT = {
+  summary: "did the thing",
+  changes: [{ path: "a.ts", what: "added" }],
+  checks: [{ cmd: "bun test", exit: 0, result: "all pass" }],
+  for_coordinator: ["run bun test"],
+  open: [],
+};
+const claudeBrief = (name: string): string =>
+  brief(name, "PICK=sonnet-high do the thing\n");
+const runIn = (b: string, env: Record<string, string>) =>
+  router(
+    ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+    {
+      AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE,
+      ...env,
+    },
+  );
+const Worker = z.looseObject({
+  worker: z.looseObject({
+    outcome: z.string(),
+    cause: z.string().optional(),
+    last_message: z.string().optional(),
+  }),
+  report: z.unknown().optional(),
+  report_error: z.string().optional(),
+});
+
+describe("agent-router: a claude worker's stop reason", () => {
+  const cases = [
+    [
+      "max_turns",
+      "stopped at the turn bound (error_max_turns, 60 turns of 60)",
+    ],
+    [
+      "budget",
+      "stopped at the budget bound (error_max_budget_usd, $2.01 spent, bound $2)",
+    ],
+    [
+      "exec_error",
+      "claude stopped with error_during_execution (is_error=true, 3 turns): tool crashed",
+    ],
+    // claude exiting 0 with an error result is still a failure, and says why
+    [
+      "exit0_error",
+      "stopped at the turn bound (error_max_turns, 60 turns of 60)",
+    ],
+    ["no_result", "claude produced no result event"],
+  ] as const;
+  for (const [mode, cause] of cases)
+    test(`${mode}: claude-failed, cause names it`, async () => {
+      const r = await runIn(claudeBrief(`stop-${mode}`), {
+        FAKE_CLAUDE_MODE: mode,
+      });
+      const parsed = decodedJson(Worker, r.out.trim());
+      expect(parsed.worker.outcome).toBe("claude-failed");
+      expect(parsed.worker.cause ?? "").toContain(cause);
+      expect(parsed.worker.cause ?? "").not.toContain("reported no cause");
+    });
+});
+
+describe("agent-router: the typed final report", () => {
+  const instruction = "## Final report (required)";
+
+  test("every worker prompt gets the report instruction after the verify line", async () => {
+    const ticket = brief(
+      "report-ticket",
+      '+++\nschema = 1\nwrites = []\nverify = ["true"]\n+++\nDo the work.\n',
+    );
+    const cwd = join(scratch, "report-ticket-cwd");
+    mkdirSync(cwd, { recursive: true });
+    const r = await router(
+      ["run", "--prompt-file", ticket, "--cd", cwd, "--sandbox", "read-only"],
+      {},
+    );
+    expect(r.code).toBe(0);
+    const prompts = readFileSync(join(scratch, "prompt.log"), "utf8");
+    const mine = prompts.slice(prompts.lastIndexOf("<<<Do the work."));
+    expect(mine.indexOf("true")).toBeGreaterThan(-1);
+    expect(mine.indexOf(instruction)).toBeGreaterThan(mine.indexOf("true"));
+    // a legacy brief (no ticket) gets it too
+    const legacy = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("report-legacy", "Plain brief.\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      {},
+    );
+    expect(legacy.code).toBe(0);
+    const written = readFileSync(join(scratch, "prompt.log"), "utf8");
+    expect(written.slice(written.lastIndexOf("<<<Plain brief."))).toContain(
+      instruction,
+    );
+  });
+
+  test("the schema reaches both CLIs: --output-schema (codex) and --json-schema-file (claude)", async () => {
+    const codex = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("schema-codex", "Do it.\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      {},
+    );
+    const codexArgv =
+      readFileSync(join(scratch, "argv.log"), "utf8")
+        .trim()
+        .split("\n")
+        .at(-1) ?? "";
+    expect(codexArgv).toContain('"--output-schema"');
+    const schemaPath = join(codex.state, "report.schema.json");
+    const schema = decodedJson(
+      z.looseObject({
+        required: z.array(z.string()),
+        additionalProperties: z.literal(false),
+      }),
+      readFileSync(schemaPath, "utf8"),
+    );
+    expect(schema.required).toEqual([
+      "summary",
+      "changes",
+      "checks",
+      "for_coordinator",
+      "open",
+    ]);
+    await runIn(claudeBrief("schema-claude"), {});
+    const claudeArgv =
+      readFileSync(join(scratch, "claude-argv.log"), "utf8")
+        .trim()
+        .split("\n")
+        .at(-1) ?? "";
+    expect(claudeArgv).toContain('"--json-schema-file"');
+  });
+
+  test("a valid report from the codex route is stored in the receipt and the run record", async () => {
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("report-codex", "Do it.\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      { FAKE_LAST: JSON.stringify(REPORT) },
+    );
+    const receipt = decodedJson(Worker, r.out.trim());
+    expect(receipt.report).toEqual(REPORT);
+    expect(receipt.report_error).toBeUndefined();
+    const logged = decodedJson(
+      Worker,
+      readFileSync(join(r.state, "runs.jsonl"), "utf8").trim().split("\n")[0] ??
+        "",
+    );
+    expect(logged.report).toEqual(REPORT);
+  });
+
+  test("a valid report from the claude route: as text, and as structured output", async () => {
+    const asText = await runIn(claudeBrief("report-claude-text"), {
+      FAKE_LAST: JSON.stringify(REPORT),
+    });
+    expect(decodedJson(Worker, asText.out.trim()).report).toEqual(REPORT);
+    const structured = await runIn(claudeBrief("report-claude-struct"), {
+      FAKE_CLAUDE_MODE: "structured",
+    });
+    const parsed = decodedJson(Worker, structured.out.trim());
+    expect(parsed.report).toMatchObject({ summary: "typed" });
+    expect(parsed.worker.last_message).toContain('"summary":"typed"');
+  });
+
+  test("an invalid report is report_error, the raw message is kept, the run still succeeds", async () => {
+    for (const bad of ['{"summary":1}', "all done, no JSON here"]) {
+      const r = await router(
+        [
+          "run",
+          "--prompt-file",
+          brief("report-bad", "Do it.\n"),
+          "--cd",
+          scratch,
+          "--sandbox",
+          "read-only",
+        ],
+        { FAKE_LAST: bad },
+      );
+      expect(r.code).toBe(0);
+      const parsed = decodedJson(Worker, r.out.trim());
+      expect(parsed.worker.outcome).toBe("ok");
+      expect(parsed.report).toBeUndefined();
+      expect(parsed.report_error ?? "").toContain("the final message is");
+      expect(parsed.worker.last_message).toBe(bad);
+    }
+  });
+
+  test("no report at all is explicit", async () => {
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("report-none", "Do it.\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      { FAKE_NO_REPORT: "1" },
+    );
+    const parsed = decodedJson(Worker, r.out.trim());
+    expect(parsed.report).toBeUndefined();
+    expect(parsed.report_error).toBe("the worker's final message is empty");
+  });
+
+  test("result prints the sections; an invalid or missing report is said plainly", async () => {
+    const state = join(scratch, "report-result");
+    const env = { AGENT_ROUTER_STATE_DIR: state };
+    const id = async (
+      name: string,
+      extra: Record<string, string>,
+    ): Promise<string> =>
+      decodedJson(
+        RunIdSchema,
+        (
+          await router(
+            [
+              "run",
+              "--prompt-file",
+              brief(name, "Do it.\n"),
+              "--cd",
+              join(scratch, name),
+              "--sandbox",
+              "read-only",
+            ],
+            { ...env, ...extra },
+          )
+        ).out.trim(),
+      ).run_id;
+    for (const name of ["rr-ok", "rr-bad", "rr-none"])
+      mkdirSync(join(scratch, name), { recursive: true });
+    const ok = await router(
+      ["result", await id("rr-ok", { FAKE_LAST: JSON.stringify(REPORT) })],
+      env,
+    );
+    expect(ok.code).toBe(0);
+    for (const section of [
+      "## Summary",
+      "did the thing",
+      "## Changes",
+      "a.ts: added",
+      "## Checks",
+      "[exit 0] bun test — all pass",
+      "## For the coordinator",
+      "run bun test",
+      "## Open",
+    ])
+      expect(ok.out).toContain(section);
+    const bad = await router(
+      ["result", await id("rr-bad", { FAKE_LAST: "just prose" })],
+      env,
+    );
+    expect(bad.code).toBe(0);
+    expect(bad.out).toContain("the typed final report is missing or invalid");
+    expect(bad.out).toContain("just prose");
+    const none = await router(
+      ["result", await id("rr-none", { FAKE_NO_REPORT: "1" })],
+      env,
+    );
+    expect(none.code).toBe(1);
+    expect(none.out).toContain("No final report");
+    expect(none.out).toContain("the typed final report is missing or invalid");
+  });
+
+  test("a run recorded before typed reports still shows in result, and export is unaffected", async () => {
+    const state = join(scratch, "report-old");
+    mkdirSync(state, { recursive: true });
+    const old = {
+      kind: "run",
+      run_id: "2026-10-05T00-00-00Z-1",
+      cwd: scratch,
+      started_at: "2026-10-05T00:00:00Z",
+      pick: { source: "jev", choice: "luna-high" },
+      exit: 0,
+      worker: {
+        outcome: "ok",
+        elapsed_s: 2,
+        last_message: "old prose report\n",
+      },
+    };
+    writeFileSync(join(state, "runs.jsonl"), `${JSON.stringify(old)}\n`);
+    const env = { AGENT_ROUTER_STATE_DIR: state };
+    const r = await router(["result", old.run_id], env);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("no typed final report");
+    expect(r.out).toContain("old prose report");
+    const exported = await router(["export"], env);
+    expect(exported.code).toBe(0);
+    expect(
+      decodedJson(z.looseObject({ run_id: z.string() }), exported.out.trim())
+        .run_id,
+    ).toBe(old.run_id);
+    expect(exported.out).not.toContain("report");
+  });
 });

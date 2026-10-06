@@ -78,6 +78,13 @@ import {
 } from "./state.ts";
 import { postJev, type JevTrace } from "./jev-client.ts";
 import {
+  parseReport,
+  renderReport,
+  reportJsonSchema,
+  withReportInstruction,
+  WorkerReport,
+} from "./report.ts";
+import {
   overlappingGlobs,
   parseTicket,
   verifyLine,
@@ -387,12 +394,16 @@ function workerArgs(
   progress: string,
   runId: string,
   resume: string | undefined,
+  schemaFile: string,
 ): string[] {
   if (row.route === "codex")
     return [
       CODEX_RUN,
       "--choice",
       row.id,
+      // the typed report's JSON schema: `codex exec --output-schema` (fresh and resumed)
+      "--output-schema",
+      schemaFile,
       "--sandbox",
       flags.sandbox,
       "--cd",
@@ -428,6 +439,9 @@ function workerArgs(
     String((flags.timeoutS ?? 1800) * 1000),
     "--progress-file",
     progress,
+    // the typed report's JSON schema: `claude --json-schema`; the structured output lands in the relay
+    "--json-schema-file",
+    schemaFile,
     // router-dispatched claude sessions stay on disk so `agent-router resume` can continue them
     "--persist-session",
     ...(resume === undefined ? [] : ["--resume", resume]),
@@ -440,6 +454,11 @@ const ClaudeRelay = z.looseObject({
   result: z.string().optional(),
   total_cost_usd: z.unknown().optional(),
   usage: z.unknown().optional(),
+  structured_output: z.unknown().optional(),
+  // why claude stopped, from its result event (run-claude keeps them in its relay)
+  subtype: z.string().optional(),
+  is_error: z.boolean().optional(),
+  num_turns: z.number().optional(),
   error: z.string().optional(),
   session_id: z.unknown().optional(),
   parse_error: z.string().optional(),
@@ -471,13 +490,45 @@ const unreadable = (worker: string, outcome: string, out: string) => ({
   cause: `${worker} printed no ${worker === "run-claude" ? "relay" : "receipt"}: ${out.trim().slice(0, 400)}`,
 });
 
+/** Whether claude's own result event says the run did not succeed, whatever the exit code. */
+const claudeStopped = (r: z.output<typeof ClaudeRelay>): boolean =>
+  r.is_error === true || (r.subtype !== undefined && r.subtype !== "success");
+
+/** The stop reason in claude's result event (subtype, is_error, num_turns, cost), or undefined when
+ *  there is none to name. The bounds are the router's own (--max-turns, --max-budget-usd). */
+function claudeStopReason(
+  r: z.output<typeof ClaudeRelay>,
+  bounds: { maxTurns: number; maxBudgetUsd: number },
+): string | undefined {
+  if (!claudeStopped(r)) return undefined;
+  const subtype = r.subtype ?? "is_error";
+  const turns = r.num_turns === undefined ? "" : `, ${r.num_turns} turns`;
+  const spent =
+    typeof r.total_cost_usd === "number" ? `, $${r.total_cost_usd} spent` : "";
+  if (subtype === "error_max_turns")
+    return `stopped at the turn bound (${subtype}, ${r.num_turns ?? bounds.maxTurns} turns of ${bounds.maxTurns})`;
+  if (subtype.includes("budget"))
+    return `stopped at the budget bound (${subtype}${spent}, bound $${bounds.maxBudgetUsd})`;
+  const said = (r.result ?? "").trim().split("\n").at(0) ?? "";
+  return `claude stopped with ${subtype} (is_error=${r.is_error ?? false}${turns}${spent})${said === "" ? "" : `: ${said.slice(0, 200)}`}`;
+}
+
 /** Why a claude worker did not succeed, from its own relay; never empty (O1). */
-function claudeCause(r: z.output<typeof ClaudeRelay>): string {
+function claudeCause(
+  r: z.output<typeof ClaudeRelay>,
+  bounds: { maxTurns: number; maxBudgetUsd: number },
+): string {
   const stderrLast = (r.stderr ?? "").trim().split("\n").at(-1) ?? "";
   if (r.error !== undefined && r.error !== "") return r.error;
-  if (r.parse_error !== undefined && r.parse_error !== "")
-    return `claude printed no JSON result: ${r.parse_error}`;
   if (r.timed_out === true) return "killed at its time bound";
+  const stopped = claudeStopReason(r, bounds);
+  if (stopped !== undefined) return stopped;
+  if (r.parse_error !== undefined && r.parse_error !== "") {
+    if (!r.parse_error.startsWith("no result event"))
+      return `claude printed no JSON result: ${r.parse_error}`;
+    const tail = stderrLast === "" ? "" : `: ${stderrLast}`;
+    return `claude produced no result event (the stream ended without one; exit ${r.exit_code})${tail}`;
+  }
   if (stderrLast !== "") return stderrLast;
   return `run-claude exited ${r.exit_code} and reported no cause`;
 }
@@ -488,15 +539,23 @@ function claudeWorker(
   row: Choice,
   sandbox: string,
   elapsedS: number,
+  bounds: { maxTurns: number; maxBudgetUsd: number },
 ): Record<string, unknown> {
   const relay = jsonOf(ClaudeRelay).safeParse(out.trim());
   if (!relay.success) return unreadable("run-claude", "claude-failed", out);
   const r = relay.data;
-  const failed = r.exit_code === 0 ? "ok" : "claude-failed";
+  const failed =
+    r.exit_code === 0 && !claudeStopped(r) ? "ok" : "claude-failed";
   const outcome = r.timed_out === true ? "timeout" : failed;
   return {
     ...(typeof r.session_id === "string" ? { session: r.session_id } : {}),
-    ...(outcome === "ok" ? {} : { cause: claudeCause(r) }),
+    ...(outcome === "ok" ? {} : { cause: claudeCause(r, bounds) }),
+    ...(r.subtype === undefined ? {} : { stop_subtype: r.subtype }),
+    ...(r.num_turns === undefined ? {} : { num_turns: r.num_turns }),
+    // the vendor's structured output (claude --json-schema): the typed report is read from it
+    ...(r.structured_output === undefined
+      ? {}
+      : { structured_output: r.structured_output }),
     schema: 1,
     outcome,
     model: row.model,
@@ -507,8 +566,36 @@ function claudeWorker(
     exit_code: r.exit_code,
     total_cost_usd: r.total_cost_usd ?? null,
     usage: r.usage ?? null,
-    last_message: r.result ?? r.error ?? "",
+    last_message: claudeLastMessage(r),
   };
+}
+
+/** What the claude worker said last: its result text, else its structured output as JSON text. */
+function claudeLastMessage(r: z.output<typeof ClaudeRelay>): string {
+  if (r.result !== undefined && r.result !== "") return r.result;
+  if (r.structured_output !== undefined)
+    return JSON.stringify(r.structured_output);
+  return r.error ?? "";
+}
+
+/** The typed report of a finished worker, as the fields the run record and receipt carry: `report`
+ *  when valid, else `report_error` (the raw last message stays in worker.last_message). Never fatal. */
+function reportFields(worker: unknown): Record<string, unknown> {
+  const w = z
+    .looseObject({
+      last_message: z.string().optional(),
+      structured_output: z.unknown().optional(),
+    })
+    .safeParse(worker);
+  if (!w.success)
+    return {
+      report_error: "the worker printed no receipt, so no final report",
+    };
+  const parsed = parseReport(
+    w.data.structured_output,
+    w.data.last_message ?? "",
+  );
+  return parsed.ok ? { report: parsed.report } : { report_error: parsed.error };
 }
 
 type TokenCounts = {
@@ -713,21 +800,21 @@ async function launch(l: Launch): Promise<number> {
   // run-claude via --progress-file); the statusline Run rows read it.
   const progress = progressFile(runId);
 
-  const workerBrief =
-    l.workerText === undefined
-      ? undefined
-      : join(STATE_DIR, "briefs", `${runId}.md`);
-  if (workerBrief !== undefined && l.workerText !== undefined) {
-    mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
-    writeFileSync(workerBrief, l.workerText);
-  }
+  // The worker's prompt is always a copy under the state dir: what it was told, plus the typed
+  // report instruction after the ticket's verify line (a legacy brief is its own text).
+  const workerBrief = join(STATE_DIR, "briefs", `${runId}.md`);
+  mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
+  writeFileSync(workerBrief, withReportInstruction(l.workerText ?? brief));
+  const schemaFile = join(STATE_DIR, "report.schema.json");
+  writeFileSync(schemaFile, reportJsonSchema());
   const args = workerArgs(
     roster,
     row,
-    workerBrief === undefined ? flags : { ...flags, promptFile: workerBrief },
+    { ...flags, promptFile: workerBrief },
     progress,
     runId,
     resume?.session,
+    schemaFile,
   );
   const t0 = performance.now();
   const child = Bun.spawn([process.execPath, ...args], {
@@ -766,7 +853,7 @@ async function launch(l: Launch): Promise<number> {
       },
     });
     recordWaiver(runId, `stopped: agent-router received ${signal}`, "router");
-    if (workerBrief !== undefined) rmSync(workerBrief, { force: true });
+    rmSync(workerBrief, { force: true });
     rmSync(marker, { force: true });
     rmSync(progress, { force: true });
     process.exit(code);
@@ -783,14 +870,17 @@ async function launch(l: Launch): Promise<number> {
   const done = progressAtEnd(progress);
   rmSync(marker, { force: true });
   rmSync(progress, { force: true });
-  if (workerBrief !== undefined) rmSync(workerBrief, { force: true });
+  rmSync(workerBrief, { force: true });
   const elapsedS = Math.round((performance.now() - t0) / 100) / 10;
   const codexWorker = jsonOf(WorkerReceipt).safeParse(out.trim());
   const worker =
     row.route === "claude"
       ? {
           success: true as const,
-          data: claudeWorker(out, row, flags.sandbox, elapsedS),
+          data: claudeWorker(out, row, flags.sandbox, elapsedS, {
+            maxTurns: roster.claude_run.max_turns,
+            maxBudgetUsd: roster.claude_run.max_budget_usd,
+          }),
         }
       : codexWorker;
   const progressField = done === undefined ? {} : { progress: done };
@@ -832,6 +922,7 @@ async function launch(l: Launch): Promise<number> {
     ended_at: now(),
     exit,
     ...(resumeHint === undefined ? {} : { resume_with: resumeHint }),
+    ...reportFields(worker.success ? worker.data : undefined),
     ...(verified === undefined
       ? {}
       : { verify: verified.results, verify_summary: verified.summary }),
@@ -1014,6 +1105,10 @@ const LogLine = z.looseObject({
   }),
   exit: z.number().optional(),
   resumed_from: z.string().optional(),
+  // the typed final report (report.ts): `report` when valid, else `report_error`; both absent on a
+  // run recorded before it. report is unknown here so a malformed one never drops the whole line.
+  report: z.unknown().optional(),
+  report_error: z.string().optional(),
   worker: z
     .looseObject({
       outcome: z.string().optional(),
@@ -2113,6 +2208,19 @@ function resolveRunId(id: string): string {
   return hits[0]?.run_id ?? id;
 }
 
+/** Why a run's typed report cannot be shown, or undefined when it is valid. */
+function reportNoteFor(
+  logged: Logged,
+  typed: { success: true } | { success: false; error: z.ZodError },
+): string | undefined {
+  if (typed.success) return undefined;
+  if (logged.report !== undefined)
+    return `the typed final report is invalid: ${typed.error.issues[0]?.message ?? "wrong shape"}`;
+  if (logged.report_error !== undefined)
+    return `the typed final report is missing or invalid: ${logged.report_error}`;
+  return "no typed final report (this run was recorded before typed reports)";
+}
+
 /** Show a completed run's compact receipt header and the worker's own final report. */
 function resultCommand(
   id: string,
@@ -2140,13 +2248,16 @@ function resultCommand(
   const outcome = worker?.outcome ?? "unknown";
   const cause = worker?.cause;
   const report = worker?.last_message ?? "";
+  const typed = WorkerReport.safeParse(logged.report);
+  const reportNote = reportNoteFor(logged, typed);
   if (asJson) {
     process.stdout.write(`${JSON.stringify(logged)}\n`);
-    if (report.trim() === "")
+    if (reportNote !== undefined) console.error(`agent-router: ${reportNote}`);
+    if (report.trim() === "" && !typed.success)
       console.error(
         `agent-router: no final report (outcome=${outcome}; cause=${cause ?? "not recorded"})`,
       );
-    return report.trim() === "" ? 1 : 0;
+    return report.trim() === "" && !typed.success ? 1 : 0;
   }
   const fields = [
     `row=${logged.pick.choice}`,
@@ -2158,9 +2269,17 @@ function resultCommand(
     `session=${worker?.session ?? "none"}`,
   ];
   process.stdout.write(`${fields.join(" ")}\n`);
+  if (typed.success) {
+    process.stdout.write(`${renderReport(typed.data)}\n`);
+    return 0;
+  }
+  if (reportNote !== undefined && report.trim() !== "")
+    process.stdout.write(
+      `${reportNote}; the worker's raw last message follows\n\n`,
+    );
   if (report.trim() === "") {
     process.stdout.write(
-      `No final report (outcome=${outcome}; cause=${cause ?? "not recorded"})\n`,
+      `No final report (outcome=${outcome}; cause=${cause ?? "not recorded"})${reportNote === undefined ? "" : `; ${reportNote}`}\n`,
     );
     return 1;
   }

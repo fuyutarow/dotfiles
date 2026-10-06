@@ -76,6 +76,11 @@ type Relay = Readonly<{
   timed_out: boolean;
   result?: string | undefined;
   session_id?: string | number | boolean | null | undefined;
+  // why claude stopped, from its result event: subtype ("success", "error_max_turns", a budget error,
+  // "error_during_execution", …), is_error and the turns it took. Absent without a result event.
+  subtype?: string | number | boolean | null | undefined;
+  is_error?: string | number | boolean | null | undefined;
+  num_turns?: string | number | boolean | null | undefined;
   total_cost_usd?: string | number | boolean | null | undefined;
   usage?: unknown;
   structured_output?: unknown;
@@ -258,6 +263,9 @@ export function toRelay(run: RunResult): Relay {
     timed_out: run.timedOut,
     result: typeof result === "string" ? boundedText(result) : undefined,
     session_id: primitive(claude.session_id),
+    subtype: primitive(claude.subtype),
+    is_error: primitive(claude.is_error),
+    num_turns: primitive(claude.num_turns),
     total_cost_usd: primitive(claude.total_cost_usd),
     usage: boundedJson(claude.usage),
     structured_output: boundedJson(claude.structured_output),

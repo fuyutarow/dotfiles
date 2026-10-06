@@ -20,7 +20,8 @@ export type WorkerReport = z.output<typeof WorkerReport>;
 
 /** The schema as JSON-schema text (strict: every key required, no extra keys), for the CLIs' flags. */
 export const reportJsonSchema = (): string =>
-  `${JSON.stringify(z.toJSONSchema(WorkerReport), null, 2)}\n`;
+  // Claude's validator rejects the 2020-12 meta-schema, so emit draft-07 for both CLIs.
+  `${JSON.stringify(z.toJSONSchema(WorkerReport, { target: "draft-7" }), null, 2)}\n`;
 
 const SHAPE = `{ "summary": string,
   "changes": [{ "path": string, "what": string }],

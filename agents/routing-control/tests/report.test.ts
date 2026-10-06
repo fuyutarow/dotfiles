@@ -46,6 +46,7 @@ describe("report", () => {
       }),
       reportJsonSchema(),
     );
+    expect(schema.$schema).toBe("http://json-schema.org/draft-07/schema#");
     expect(schema.required).toEqual([
       "summary",
       "changes",

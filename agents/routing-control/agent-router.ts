@@ -12,6 +12,7 @@
 //       agent-router ls                                  running workers (stale ones flagged)
 //       agent-router stats                               picks, confidence, fallbacks, cost, outcomes
 //       agent-router export [--since ISO]                one flat JSON line per run for analysis
+//       agent-router result RUN_ID|SESSION_PREFIX [--json] show the worker report
 //       agent-router grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
 //       agent-router grade RUN_ID --waive "<why>"        record that a run cannot be graded, and why
 //   C2  effects  run starts `codex-run --choice <row>` for a codex row or
@@ -337,6 +338,7 @@ function workerArgs(
   row: Choice,
   flags: RunFlags,
   progress: string,
+  runId: string,
 ): string[] {
   if (row.route === "codex")
     return [
@@ -349,6 +351,8 @@ function workerArgs(
       flags.cd,
       "--prompt-file",
       flags.promptFile,
+      "--run-id",
+      runId,
       ...(flags.timeoutS === undefined
         ? []
         : ["--timeout-s", String(flags.timeoutS)]),
@@ -372,7 +376,7 @@ function workerArgs(
     "--max-budget-usd",
     String(roster.claude_run.max_budget_usd),
     "--timeout-ms",
-    String((flags.timeoutS ?? 540) * 1000),
+    String((flags.timeoutS ?? 1800) * 1000),
     "--progress-file",
     progress,
   ];
@@ -602,7 +606,7 @@ async function run(flags: RunFlags): Promise<number> {
   // run-claude via --progress-file); the statusline Run rows read it.
   const progress = progressFile(runId);
 
-  const args = workerArgs(roster, row, flags, progress);
+  const args = workerArgs(roster, row, flags, progress, runId);
   const t0 = performance.now();
   const child = Bun.spawn([process.execPath, ...args], {
     stdin: "ignore",
@@ -728,8 +732,12 @@ const LogLine = z.looseObject({
     .looseObject({
       outcome: z.string().optional(),
       session: z.string().optional(),
+      run_id: z.string().optional(),
+      receipt_file: z.string().optional(),
       elapsed_s: z.number().optional(),
       last_message: z.string().optional(),
+      cause: z.string().optional(),
+      progress: z.unknown().optional(),
       // null: a claude worker whose relay carried no usage (claudeWorker writes `usage: null`).
       // Before 2026-10-06 null failed this schema and the WHOLE run line was skipped by readLog —
       // invisible to grade, the O3 gate and stats.
@@ -1426,7 +1434,8 @@ const argv = cli({
         },
         timeoutS: {
           type: String,
-          description: "worker wall clock (codex-run --timeout-s)",
+          description:
+            "worker wall clock in seconds (default 1800; --timeout-s)",
         },
       },
       help: { description: "Jev picks a row; run the worker" },
@@ -1497,6 +1506,22 @@ const argv = cli({
       },
     }),
     command({
+      name: "result",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: ["<run_id>"],
+      flags: {
+        json: {
+          type: Boolean,
+          description: "print the complete run record as one JSON object",
+        },
+      },
+      help: {
+        description:
+          "show the worker's final report by run_id or unique vendor-session-id prefix",
+      },
+    }),
+    command({
       name: "grade",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -1522,8 +1547,9 @@ const argv = cli({
 });
 
 async function main(): Promise<number | undefined> {
-  // Cleye leaves excess positionals in argv._ (writing-bun-scripts BG1); only grade takes one, <run_id>.
-  const positionals = argv.command === "grade" ? 1 : 0;
+  // Cleye leaves excess positionals in argv._ (writing-bun-scripts BG1); result and grade take one.
+  const positionals =
+    argv.command === "grade" || argv.command === "result" ? 1 : 0;
   if (argv._.length > positionals)
     fatal(`unexpected argument: ${String(argv._[positionals])}`);
   if (argv.command === "run") {
@@ -1573,6 +1599,8 @@ async function main(): Promise<number | undefined> {
   if (argv.command === "ls") return ls();
   if (argv.command === "stats") return stats();
   if (argv.command === "export") return exportRuns(argv.flags.since);
+  if (argv.command === "result")
+    return resultCommand(argv._.runId, argv.flags.json ?? false);
   if (argv.command === "grade")
     return gradeCommand(argv._.runId, argv.flags.evidence, argv.flags.waive);
   return undefined;
@@ -1590,6 +1618,46 @@ function resolveRunId(id: string): string {
       `${id} matches ${hits.length} runs: ${hits.map((h) => h.run_id ?? "?").join(", ")} — give more of the session id, or the run_id`,
     );
   return hits[0]?.run_id ?? id;
+}
+
+/** Show a completed run's compact receipt header and the worker's own final report. */
+function resultCommand(id: string, asJson: boolean): number {
+  const resolved = resolveRunId(id);
+  const logged = readLog().find(
+    (l) => l.kind === "run" && l.run_id === resolved,
+  );
+  if (logged === undefined)
+    fatal(`no run ${id} in ${LOG_FILE} (agent-router stats lists the log)`);
+  const worker = logged.worker;
+  const outcome = worker?.outcome ?? "unknown";
+  const cause = worker?.cause;
+  const report = worker?.last_message ?? "";
+  if (asJson) {
+    process.stdout.write(`${JSON.stringify(logged)}\n`);
+    if (report.trim() === "")
+      console.error(
+        `agent-router: no final report (outcome=${outcome}; cause=${cause ?? "not recorded"})`,
+      );
+    return report.trim() === "" ? 1 : 0;
+  }
+  const fields = [
+    `row=${logged.pick.choice}`,
+    `outcome=${outcome}`,
+    `exit=${logged.exit ?? "?"}`,
+    `elapsed=${worker?.elapsed_s === undefined ? "?" : `${worker.elapsed_s}s`}`,
+    ...(outcome === "ok" ? [] : [`cause=${cause ?? "not recorded"}`]),
+    `progress=${JSON.stringify(worker?.progress ?? null)}`,
+    `session=${worker?.session ?? "none"}`,
+  ];
+  process.stdout.write(`${fields.join(" ")}\n`);
+  if (report.trim() === "") {
+    process.stdout.write(
+      `No final report (outcome=${outcome}; cause=${cause ?? "not recorded"})\n`,
+    );
+    return 1;
+  }
+  process.stdout.write(report);
+  return 0;
 }
 
 /** grade RUN_ID: exactly one of --evidence (Jev grades) or --waive (a recorded reason). */

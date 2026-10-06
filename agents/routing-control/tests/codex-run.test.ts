@@ -72,6 +72,7 @@ exit 0
 
 const Receipt = z.object({
   schema: z.literal(1),
+  run_id: z.string(),
   outcome: z.enum(["ok", "codex-failed", "refused", "timeout"]),
   model: z.string().nullable(),
   elapsed_s: z.number(),
@@ -391,6 +392,33 @@ describe("codex-run", () => {
       }),
     ).safeParse(readFileSync(path, "utf8"));
     expect(env.success).toBe(true);
+  });
+
+  test("the default timeout is 1800 seconds", () => {
+    const dir = scratch();
+    const path = join(dir, "default.resource.json");
+    const p = Bun.spawnSync(["bun", script, ...FULL, "--emit-envelope", path], {
+      stdin: "ignore",
+      timeout: 30_000,
+    });
+    expect(p.exitCode).toBe(0);
+    const envelope = jsonOf(
+      z.object({ walltime_seconds: z.number() }),
+    ).safeParse(readFileSync(path, "utf8"));
+    expect(envelope.success && envelope.data.walltime_seconds).toBe(1830);
+  });
+
+  test("--run-id names the receipt file and its run_id field", () => {
+    const { bin } = fakeCodex(scratch());
+    const id = "router-run-2026-10-06-1234";
+    const r = run([...FULL, "--run-id", id], { CODEX_RUN_BIN: bin });
+    expect(r.code).toBe(0);
+    expect(r.receipt.run_id).toBe(id);
+    expect(r.receipt.receipt_file?.split("/").at(-1)).toBe(`${id}.json`);
+    expect(
+      decodedJson(Receipt, readFileSync(r.receipt.receipt_file ?? "", "utf8"))
+        .run_id,
+    ).toBe(id);
   });
 
   test("--emit-envelope still refuses what a run would refuse", () => {

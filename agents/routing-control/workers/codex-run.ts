@@ -30,7 +30,7 @@
 //                      every non-ok receipt has a non-empty `cause` (codex's last error event, else
 //                      "codex printed no error event" + the last stderr line); every receipt has
 //                      `progress` {last, commands, files} — at a timeout, where the worker was.
-//   Waits / liveness     bounded by --timeout-s (default 540: under the 600 s foreground Bash ceiling).
+//   Waits / liveness     bounded by --timeout-s (default 1800; this runs in the background).
 //   Fallbacks / handoffs none — never another model, never another sandbox. A refusal says why.
 //   C5  evolution   receipt fields are additive; `schema` bumps on any removal or meaning change.
 // --emit-envelope PATH writes the P7 resource envelope for exactly this call (same checks, no
@@ -57,7 +57,8 @@ import {
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
-const MAX_TIMEOUT_S = 1800; // a main-loop background run; relays stay under 540
+const MAX_TIMEOUT_S = 1800;
+const DEFAULT_TIMEOUT_S = 1800;
 // CODEX_RUN_HEARTBEAT_S is a test seam (a test cannot wait 30 s for the first liveness line).
 const parsedHeartbeat = Number(process.env.CODEX_RUN_HEARTBEAT_S ?? "");
 const HEARTBEAT_S =
@@ -128,8 +129,13 @@ const argv = cli(
       cd: { type: String, description: "working directory codex runs in (-C)" },
       timeoutS: {
         type: Number,
-        default: 540,
-        description: `wall-clock bound in seconds (1..${MAX_TIMEOUT_S}); a relay must stay under its 600 s Bash ceiling`,
+        default: DEFAULT_TIMEOUT_S,
+        description: `wall-clock bound in seconds (default ${DEFAULT_TIMEOUT_S}; 1..${MAX_TIMEOUT_S})`,
+      },
+      runId: {
+        type: String,
+        description:
+          "run_id supplied by agent-router (otherwise generated here)",
       },
       receiptDir: {
         type: String,
@@ -165,7 +171,8 @@ let unsandboxedReason: string | undefined;
 const t0 = performance.now();
 const elapsed = (): number => Math.round((performance.now() - t0) / 100) / 10;
 const startedAt = Temporal.Now.instant().toString();
-const runId = `${startedAt.replaceAll(/[:.]/gu, "-")}-${process.pid}`;
+const runId =
+  argv.flags.runId ?? `${startedAt.replaceAll(/[:.]/gu, "-")}-${process.pid}`;
 
 // Print the receipt (stdout, one line), save it, say the end on stderr, and exit. Never returns:
 // every caller's path ends here.

@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -99,8 +100,12 @@ writeFileSync(
   `import { appendFileSync } from "node:fs";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 const exit = Number(process.env.FAKE_EXIT ?? "0");
+const args = Bun.argv.slice(2);
+const runIdAt = args.indexOf("--run-id");
+const runId = runIdAt === -1 ? "standalone-fake-run" : args[runIdAt + 1];
+const lastMessage = process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n";
 const usage = process.env.FAKE_USAGE === "missing" ? { input_tokens: 100 } : { input_tokens: 100, cached_input_tokens: 20, output_tokens: 7, reasoning_output_tokens: 3 };
-console.log(JSON.stringify({ schema: 1, outcome: exit === 0 ? "ok" : "codex-failed", elapsed_s: 1.5, usage }));
+console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: exit === 0 ? "ok" : "codex-failed", elapsed_s: 1.5, usage, session: "thread-fake-0001", last_message: lastMessage, ...(exit === 0 ? {} : { cause: "fake worker failed" }) }));
 process.exit(exit);
 `,
 );
@@ -461,9 +466,84 @@ describe("agent-router run", () => {
         `"--permission-mode","${mode}"`,
         '"--max-budget-usd","2"',
         '"--max-turns","60"',
+        '"--timeout-ms","1800000"',
       ])
         expect(`${sandbox}: ${argv ?? ""}`).toContain(word);
     }
+  });
+
+  test("--timeout-s overrides the Claude route default", async () => {
+    const pick = brief(
+      "pick-claude-timeout",
+      "PICK=sonnet-high do the thing\n",
+    );
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        pick,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+        "--timeout-s",
+        "17",
+      ],
+      { AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE },
+    );
+    expect(r.code).toBe(0);
+    const argv = readFileSync(join(scratch, "claude-argv.log"), "utf8")
+      .trim()
+      .split("\n")
+      .at(-1);
+    expect(argv).toContain('"--timeout-ms","17000"');
+  });
+
+  test("the router run_id is used by codex-run for its receipt file and receipt field", async () => {
+    const dir = join(scratch, "real-codex-run");
+    mkdirSync(dir, { recursive: true });
+    const codex = join(dir, "codex");
+    writeFileSync(
+      codex,
+      `#!/bin/sh\nout=""; prev=""\nfor a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\nprintf 'router integration report\\n' > "$out"\nprintf '%s\\n' '{"type":"thread.started","thread_id":"thread-router-integration"}' '{"type":"turn.completed","usage":{"input_tokens":2,"cached_input_tokens":0,"output_tokens":3,"reasoning_output_tokens":0}}'\n`,
+    );
+    chmodSync(codex, 0o755);
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("real-run", "Use the real codex-run wrapper.\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      {
+        AGENT_ROUTER_CODEX_RUN: join(
+          import.meta.dir,
+          "../workers/codex-run.ts",
+        ),
+        CODEX_RUN_BIN: codex,
+        CODEX_RUN_HOST_FILE: join(dir, "no-host.toml"),
+        TMPDIR: dir,
+      },
+    );
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        run_id: z.string(),
+        worker: z.looseObject({ run_id: z.string(), receipt_file: z.string() }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.worker.run_id).toBe(receipt.run_id);
+    expect(receipt.worker.receipt_file.split("/").at(-1)).toBe(
+      `${receipt.run_id}.json`,
+    );
+    expect(existsSync(receipt.worker.receipt_file)).toBe(true);
+    expect(readFileSync(receipt.worker.receipt_file, "utf8")).toContain(
+      `"run_id":"${receipt.run_id}"`,
+    );
   });
 
   test("a bad --sandbox is refused", async () => {
@@ -477,6 +557,73 @@ describe("agent-router run", () => {
       "danger-full-access",
     ]);
     expect(r.code).toBe(2);
+  });
+});
+
+describe("agent-router result", () => {
+  test("prints the final report verbatim after the run header", async () => {
+    const state = join(scratch, "result-report");
+    const b = brief("result-report", "Do the work.\n");
+    const run = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    const id = decodedJson(RunIdSchema, run.out.trim()).run_id;
+    const r = await router(["result", id], { AGENT_ROUTER_STATE_DIR: state });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("row=luna-max outcome=ok exit=0 elapsed=1.5s");
+    expect(r.out.endsWith("final report from fake worker\n")).toBe(true);
+  });
+
+  test("an empty final report is explicit and exits 1", async () => {
+    const state = join(scratch, "result-empty");
+    const b = brief("result-empty", "Do the work.\n");
+    const run = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+        FAKE_EXIT: "1",
+        FAKE_NO_REPORT: "1",
+      },
+    );
+    const id = decodedJson(RunIdSchema, run.out.trim()).run_id;
+    const r = await router(["result", id], { AGENT_ROUTER_STATE_DIR: state });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("outcome=codex-failed");
+    expect(r.out).toContain("No final report");
+    expect(r.out).toContain("cause=fake worker failed");
+  });
+
+  test("resolves a Claude vendor-session prefix and supports JSON", async () => {
+    const state = join(scratch, "result-claude");
+    const b = brief("result-claude", "PICK=sonnet-high do the thing\n");
+    const run = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+        AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE,
+      },
+    );
+    expect(run.code).toBe(0);
+    const r = await router(["result", "sess-claude", "--json"], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(r.code).toBe(0);
+    const parsed = decodedJson(
+      z.looseObject({
+        run_id: z.string(),
+        worker: z.looseObject({ last_message: z.string() }),
+      }),
+      r.out.trim(),
+    );
+    expect(parsed.run_id).toBe(decodedJson(RunIdSchema, run.out.trim()).run_id);
+    expect(parsed.worker.last_message).toBe("done");
+  });
+
+  test("an unknown id says there is no run", async () => {
+    const r = await router(["result", "unknown-run-id"]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("no run unknown-run-id");
   });
 });
 

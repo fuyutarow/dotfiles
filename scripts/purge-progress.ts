@@ -30,13 +30,40 @@ export function countEntries(dir: string): number {
 export const newlines = (chunk: Uint8Array): number =>
   chunk.reduce((n, b) => n + (b === 10 ? 1 : 0), 0);
 
-/** `[██████░░░░]  61%  183,204/300,112 件  12s` — done is capped at total (a name with a newline
- *  makes rm -v print two lines for one entry). */
-export function progressLine(done: number, total: number, ms: number): string {
+const BAR_MAX = 20;
+const BAR_MIN = 5;
+
+/** `[######--------------]  30%  183,204/600,112 件  12s`, at most `cols` display columns wide —
+ *  done is capped at total (a name with a newline makes rm -v print two lines for one entry).
+ *
+ *  The line must fit the terminal: a redraw with \r returns to the start of the CURRENT row only,
+ *  so a line that wraps leaves its first row behind on every frame (a ~55-column herdr pane,
+ *  2026-10-06, showed the frames strung along one row). Width is measured in display columns
+ *  (件 is two), the bar shrinks first and goes when under BAR_MIN, and the bar is ASCII: █ and ░
+ *  are East Asian Ambiguous width, two columns in a CJK-locale terminal, which no width count
+ *  here can know. */
+export function progressLine(
+  done: number,
+  total: number,
+  ms: number,
+  cols = Number.POSITIVE_INFINITY,
+): string {
   const d = Math.min(done, total);
   const frac = total === 0 ? 1 : d / total;
-  const width = 20;
-  const fill = Math.round(frac * width);
   const pct = String(Math.floor(frac * 100)).padStart(3);
-  return `[${"█".repeat(fill)}${"░".repeat(width - fill)}] ${pct}%  ${fmt(d)}/${fmt(total)} 件  ${Math.round(ms / 1000)}s`;
+  const text = `${pct}%  ${fmt(d)}/${fmt(total)} 件  ${Math.round(ms / 1000)}s`;
+  const width = Math.min(BAR_MAX, cols - Bun.stringWidth(text) - 3);
+  if (width < BAR_MIN) return fit(text, cols);
+  const fill = Math.round(frac * width);
+  return `[${"#".repeat(fill)}${"-".repeat(width - fill)}] ${text}`;
+}
+
+/** `s` cut to at most `cols` display columns. */
+function fit(s: string, cols: number): string {
+  let out = "";
+  for (const ch of s) {
+    if (Bun.stringWidth(out + ch) > cols) break;
+    out += ch;
+  }
+  return out;
 }

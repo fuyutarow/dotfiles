@@ -72,17 +72,21 @@ for (const g of graves) {
   let done = 0;
   let shown = -1; // TTY: last redraw time; else: last 10% step printed
   const show = (final: boolean): void => {
-    const line = progressLine(done, total, performance.now() - t0);
     if (tty) {
       if (!final && performance.now() - shown < 100) return;
       shown = performance.now();
-      process.stdout.write(`\r削除中 ${line}\u001B[K${final ? "\n" : ""}`);
+      // One column short of the pane: a line that fills the last column wraps on some terminals.
+      const cols =
+        (process.stdout.columns ?? 80) - 1 - Bun.stringWidth("削除中 ");
+      const fitted = progressLine(done, total, performance.now() - t0, cols);
+      process.stdout.write(`\r削除中 ${fitted}\u001B[K${final ? "\n" : ""}`);
       return;
     }
     const step =
       total === 0 ? 10 : Math.floor((Math.min(done, total) / total) * 10);
     if (final || step > shown) {
       shown = step;
+      const line = progressLine(done, total, performance.now() - t0);
       process.stdout.write(`削除中 ${line}\n`);
     }
   };

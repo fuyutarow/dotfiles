@@ -36,13 +36,13 @@ schema = 1
 as_of = "2026-10-05"
 default = "luna-high"
 
-# AUTO PICK — `agent-router run` without --choice asks Jev (one Choice question over the enabled rows;
-# each criterion is that row's `use_for`) which row fits the brief. Below min_confidence, on any Jev
-# failure, or when the brief's cwd lies under a no_egress path, the `default` row runs and the reason
-# is logged (~/.local/state/agent-router/runs.jsonl). Every key is required (owner 2026-10-05: no
+# AUTO PICK — `agent-router run` asks Jev one Choice question over every row (each criterion is the
+# row's use_for, measured AA/TB4/SciCode, cost multiple and graded record; roster.ts criterionFor):
+# the cheapest row sufficient for the brief. Jev's choice is used as made. Only with no usable answer
+# (Jev unreachable, a choice outside the roster) or when the brief's cwd lies under a no_egress path
+# does the `default` row run, and the reason is logged (~/.local/state/agent-router/runs.jsonl). Every key is required (owner 2026-10-05: no
 # implicit default).
 [auto]
-min_confidence = 0.5   # provisional; revisit from `agent-router stats` once picks accumulate
 max_task_chars = 6000  # the head of the brief that leaves the machine
 timeout_ms = 20000
 no_egress = []         # ~/… or absolute paths whose briefs never leave the machine

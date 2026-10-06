@@ -40,7 +40,6 @@ const JevEndpointSchema = z.discriminatedUnion("api", [
 export type JevEndpoint = z.output<typeof JevEndpointSchema>;
 
 const AutoSchema = z.strictObject({
-  min_confidence: z.number().min(0).max(1),
   max_task_chars: z.number().int().positive(),
   timeout_ms: z.number().int().positive(),
   no_egress: z.array(z.string()),
@@ -145,7 +144,7 @@ export function rosterTable(r: Roster): string {
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
   return [
-    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record); it is asked for the cheapest row sufficient for the task, so a dearer row is picked only for a capability the task needs and cheaper rows measurably lack. \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unsure or unavailable the default \`${r.default}\` runs, and the receipt says why.**`,
+    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record); it is asked for the cheapest row sufficient for the task, so a dearer row is picked only for a capability the task needs and cheaper rows measurably lack. \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unreachable or answers outside the roster the default \`${r.default}\` runs, and the receipt says why.**`,
     `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest row; as of ${r.as_of}.`,
     "",
     ...rosterTable(r)

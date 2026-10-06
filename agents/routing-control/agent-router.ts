@@ -20,7 +20,7 @@
 //                worker's own liveness lines.
 //   C4  outcomes exit = the worker's (0 ok, 1 failed, 3 timeout); 2 refused/usage before any start.
 //   AUTO PICK  Jev answers one Choice question over the enabled roster rows (criteria = use_for).
-//              Below [auto].min_confidence, on any Jev failure, or for a cwd under no_egress, the
+//              Jev's choice is used as made; on any Jev failure, a choice outside the roster, or a cwd under no_egress, the
 //              roster default runs and the reason is recorded — never a silent substitute.
 //   C5  evolution  receipt and log records carry `schema`; fields are additive.
 // Test seams: AGENT_ROUTER_STATE_DIR, DISPATCH_ROSTER_PATH, AGENT_ROUTER_CODEX_RUN (a fake codex-run).
@@ -225,33 +225,28 @@ function judge(
   trace: JevTrace,
   fallback: (reason: string, jev?: JevTrace) => Pick,
 ): Pick {
-  // Jev's pick stands as made: it chose from the brief and the table (jevRequest), and nothing here
-  // re-weights it. Only doubt sends the default — Jev unsure, or a choice outside the roster.
+  // Jev's pick stands as made: it chose ONE row from the brief and the table (jevRequest), and its
+  // top choice is its decision however its probability mass was spread (owner 2026-10-06: 「迷ったって
+  // どういう意味？…一つに決めないといけないのだから」 — a hand-set confidence floor overrode that
+  // decision with the cheapest row). Its confidence and probabilities are logged so graded runs can
+  // later show how low-confidence picks fare. The default runs only when there is no usable answer:
+  // Jev unreachable (askJevChoice) or a choice outside the roster.
   const row = roster.choice.find((c) => c.id === answer.choice);
   if (row === undefined)
     return fallback(`jev chose '${answer.choice}', not a roster row`, trace);
-  if (answer.confidence === undefined)
-    return fallback("jev returned no confidence", trace);
-  const scored = {
-    confidence: answer.confidence,
-    ...(answer.probabilities === undefined
-      ? {}
-      : { probabilities: answer.probabilities }),
-  };
-  const min = roster.auto.min_confidence;
-  if (answer.confidence < min)
-    return {
-      ...fallback(
-        `jev confidence ${answer.confidence.toFixed(2)} < ${min} (it chose ${row.id})`,
-        trace,
-      ),
-      ...scored,
-    };
   return {
     source: "jev",
     choice: row.id,
-    reason: `jev confidence ${answer.confidence.toFixed(2)} >= ${min}`,
-    ...scored,
+    reason:
+      answer.confidence === undefined
+        ? "jev's choice (no confidence reported)"
+        : `jev's choice (confidence ${answer.confidence.toFixed(2)})`,
+    ...(answer.confidence === undefined
+      ? {}
+      : { confidence: answer.confidence }),
+    ...(answer.probabilities === undefined
+      ? {}
+      : { probabilities: answer.probabilities }),
     jev: trace,
   };
 }
@@ -660,8 +655,8 @@ function readLog(): Logged[] {
 // stopped; whether its work was right is a separate fact. The coordinator runs the external checks
 // (lint, typecheck, tests against a baseline) and passes their output as --evidence; Jev reads that,
 // the worker's own report and the brief, and answers pass | partial | fail. The grade is appended to
-// runs.jsonl beside the run, with Jev's probabilities; below min_confidence it is marked
-// needs_review. No Jev answer = no grade (refused, exit 2), never a default.
+// runs.jsonl beside the run, with Jev's probabilities (no confidence floor: Jev's answer is the
+// grade, as its pick is the route). No Jev answer = no grade (refused, exit 2), never a default.
 
 const GRADES = {
   pass: "Every check in `evidence` passed and the worker finished its whole assigned scope: no new failures against the baseline, nothing left undone, no test weakened or deleted.",
@@ -676,7 +671,6 @@ const GradeLine = z.looseObject({
   kind: z.literal("grade"),
   run_id: z.string(),
   grade: GradeEnum,
-  needs_review: z.boolean(),
 });
 
 /** The latest grade per run_id (a regrade replaces the earlier one). */
@@ -754,14 +748,13 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
     grade: graded.data,
     confidence,
     probabilities: answer.probabilities ?? {},
-    needs_review: confidence < roster.auto.min_confidence,
     evidence: { path: resolve(evidencePath), sha256: sha256(evidence) },
     graded_at: now(),
     jev: reply.trace,
   };
   appendLog(record);
   console.error(
-    `agent-router: ${runId} graded ${answer.choice} (confidence ${confidence.toFixed(2)}${record.needs_review ? `, below ${roster.auto.min_confidence}: NEEDS REVIEW` : ""})`,
+    `agent-router: ${runId} graded ${answer.choice} (confidence ${confidence.toFixed(2)})`,
   );
   process.stdout.write(
     `${JSON.stringify({ schema: SCHEMA, ...record, jev: undefined })}\n`,

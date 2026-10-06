@@ -192,7 +192,8 @@ describe("agent-router run", () => {
     expect(receipt.pick.choice).toBe("luna-max");
   });
 
-  test("auto: low confidence falls back to the default and says why", async () => {
+  test("auto: a low-confidence answer is still Jev's choice, its confidence recorded", async () => {
+    // Jev must name one row; its top choice is its decision however spread its probabilities are.
     const low = brief("low", "LOWCONF something vague\n");
     const r = await router([
       "run",
@@ -204,8 +205,8 @@ describe("agent-router run", () => {
       "read-only",
     ]);
     const receipt = decodedJson(Receipt, r.out.trim());
-    expect(receipt.pick.source).toBe("default");
-    expect(receipt.pick.choice).toBe("luna-high");
+    expect(receipt.pick.source).toBe("jev");
+    expect(receipt.pick.choice).toBe("luna-max");
     expect(receipt.pick.reason).toContain("confidence 0.20");
   });
 
@@ -424,11 +425,11 @@ describe("agent-router grade", () => {
     const Graded = z.looseObject({
       kind: z.literal("grade"),
       grade: z.string(),
-      needs_review: z.boolean(),
+      confidence: z.number(),
     });
     expect(decodedJson(Graded, g.out.trim())).toMatchObject({
       grade: "pass",
-      needs_review: false,
+      confidence: 0.9,
     });
     // what Jev read: the evidence, the worker's report, the brief
     const sent = bodies.at(-1) ?? "";
@@ -462,7 +463,7 @@ describe("agent-router grade", () => {
     );
   });
 
-  test("a low-confidence grade is kept but marked needs_review", async () => {
+  test("a low-confidence grade is Jev's grade, its confidence recorded", async () => {
     const { state, runId } = await oneRun("low");
     const g = await router(
       [
@@ -476,7 +477,7 @@ describe("agent-router grade", () => {
       },
     );
     expect(g.code).toBe(0);
-    expect(g.err).toContain("NEEDS REVIEW");
+    expect(g.err).toContain(`${runId} graded pass (confidence 0.20)`);
   });
 
   test("refused, nothing recorded: unknown run, missing evidence, Jev unavailable", async () => {

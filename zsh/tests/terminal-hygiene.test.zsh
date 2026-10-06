@@ -117,6 +117,53 @@ zsh -f -c "IS_MAC=true IS_WSL=false; source $ROOT/zsh/aliases.zsh >/dev/null 2>&
 [[ -s $tmp ]] && bad "_term_restore wrote to a non-tty stdout" || ok "_term_restore is silent off-tty"
 command rm -f $tmp 2>/dev/null
 
+# --- 9. a real interactive startup survives redraws without duplicating the prompt header ----
+# Use the repository zshrc and aliases in an isolated HOME/ZDOTDIR. A precmd hook records how
+# many prompt generations occurred outside the pty; the distinctive `|~` in the header lets us
+# count every byte-level reprint caused by WINCH/ZLE. Those counts must agree.
+tmp=$(mktemp -d) || exit 1
+cat >| "$tmp/.zshrc" <<EOF
+cd "$tmp"
+source $ROOT/zsh/aliases.zsh
+source $ROOT/zsh/zshrc
+_prompt_test_count() { print -rn -- x >>| "$tmp/prompt-count" }
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _prompt_test_count
+EOF
+zpty -d PROMPT_TEST 2>/dev/null
+zpty PROMPT_TEST env HOME="$tmp" ZDOTDIR="$tmp" TERM=xterm-256color zsh -i \
+  || { bad "interactive prompt pty could not start"; command rm -rf "$tmp"; exit 1 }
+zpty -w PROMPT_TEST 'kill -WINCH $$'
+zpty -w PROMPT_TEST $'\n'
+zpty -w PROMPT_TEST 'stty rows 24 cols 80; kill -WINCH $$'
+zpty -w PROMPT_TEST $'\n'
+zpty -w PROMPT_TEST 'print -rn -- PARTIAL'
+zpty -w PROMPT_TEST $'\x0c'
+zpty -w PROMPT_TEST $'\n'
+zpty -w PROMPT_TEST 'exit'
+out=''
+while zpty -r PROMPT_TEST chunk; do out+=$chunk; done
+zpty -d PROMPT_TEST 2>/dev/null
+local_prompt_count=0
+[[ -f $tmp/prompt-count ]] && local_prompt_count=$(wc -c < "$tmp/prompt-count")
+header_count=0
+rest=$out
+header_marker=$'~\e[39m'
+while [[ $rest == *"$header_marker"* ]]; do
+  (( header_count++ ))
+  rest=${rest#*"$header_marker"}
+done
+if (( header_count == local_prompt_count + 1 )); then
+  ok "WINCH, empty-line, and clear-screen redraws print one header each"
+else
+  bad "prompt redraw duplicated or lost the header (prompts=$local_prompt_count headers=$header_count; bytes=${(qqq)out})"
+fi
+want "partial-line output is followed by zsh's marker" $'PARTIAL\e[1m\e[7m%\e[27m\e[1m' "$out"
+clear_sequence=$'\e[H\e[2J'
+after_clear=${out##*"$clear_sequence"}
+want "Ctrl-L redraws the header after clearing the screen" "$header_marker" "$after_clear"
+command rm -rf "$tmp" 2>/dev/null
+
 print -r -- "---"
 print -r -- "passed=$PASS failed=$FAIL"
 (( FAIL == 0 ))

@@ -43,7 +43,6 @@ case "$HOST" in
   uname="%F{magenta}%n%f"
   host="%F{yellow}%m%f"
   pwd="%F{green}%~%f"
-  NEWLINE=$'\n'
   # prompt="%F{blue})%f "
   prompt="%F{blue}$%f "
   # The UTC offset after the time, ISO 8601 short form (+09, +00, +0530): machines now span time
@@ -57,11 +56,26 @@ case "$HOST" in
     [[ $z == [+-][0-9][0-9]00 ]] && z=${z[1,3]}
     # The offset in dark gray (256-color 240), the statusline's same color: it is context,
     # not news, and at full cyan it read as part of the time (owner 2026-10-06).
-    PROMPT="${uname}@${host}:%F{cyan}%D{%m-%d %H:%M}%f%F{240}${z}%f|${pwd}${NEWLINE}${prompt}"
+    _prompt_header="${uname}@${host}:%F{cyan}%D{%m-%d %H:%M}%f%F{240}${z}%f|${pwd}"
+    # A multiline prompt is reprinted from its first line on ZLE redraw (notably SIGWINCH),
+    # which stacks headers above the input line. Print the stamp outside PROMPT so ZLE owns
+    # only the single input line and can redraw it without duplicating the header.
+    print -rP -- "$_prompt_header"
+    PROMPT="$prompt"
+  }
+  # clear-screen redraws only PROMPT, so preserve the header explicitly after clearing.
+  _prompt_clear_screen() {
+    zle .clear-screen
+    # The builtin has cleared the display and redrawn the one-line prompt at row 1. Replace
+    # that row with the header, then advance to row 2 so reset-prompt draws `$` and the buffer.
+    print -rn -- $'\e[H'
+    print -rP -- "$_prompt_header"
+    print -rn -- $'\e[K\r\n'
+    zle .reset-prompt
   }
   autoload -Uz add-zsh-hook
   add-zsh-hook precmd _prompt_stamp
-  _prompt_stamp
+  zle -N clear-screen _prompt_clear_screen
   ;;
 esac
 

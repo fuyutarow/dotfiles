@@ -25,10 +25,6 @@ const ChoiceSchema = z.strictObject({
   price_in: z.number(),
   price_out: z.number(),
   use_for: z.string(),
-  // The config switch: off keeps the row fully implemented but out of the table and denied.
-  // REQUIRED, no default: a row that omits it fails to load (the hook then fails closed) instead
-  // of becoming dispatchable by omission.
-  enabled: z.boolean(),
 });
 export type Choice = z.output<typeof ChoiceSchema>;
 
@@ -52,18 +48,43 @@ const AutoSchema = z.strictObject({
 });
 export type AutoPolicy = z.output<typeof AutoSchema>;
 
+// SELECTION (owner 2026-10-06: 「enabled = true はおかしい。全く tiger styleでもない。lunaが選ばれやすく
+// なるbiasは欲しい」). A row in the roster is a candidate; there is no on/off switch, which hid what
+// was in effect behind a boolean with no reason. Luna-first is a declared bias instead: Jev's
+// probability for each row is multiplied by its route's weight and the highest product wins, so a
+// claude row (weight w) is picked only when Jev rates it at least 1/w times the best luna row. The
+// weight must state its reason, and both the raw and the weighted numbers are logged per pick.
+const Weight = z.number().gt(0).max(1);
+const SelectionSchema = z.strictObject({
+  route_weight: z.strictObject({ luna: Weight, claude: Weight }),
+  reason: z.string().min(40),
+});
+// Bounds on a claude worker (run through driving-claude's run-claude.ts): a run has a budget and a
+// turn limit, both stated, never the CLI's defaults.
+const ClaudeRunSchema = z.strictObject({
+  max_budget_usd: z.number().gt(0),
+  max_turns: z.number().int().positive(),
+  reason: z.string().min(20),
+});
+
 const RosterSchema = z
   .strictObject({
     schema: z.literal(1),
     as_of: z.iso.date(),
     default: z.string(),
     auto: AutoSchema,
+    selection: SelectionSchema,
+    claude_run: ClaudeRunSchema,
     sources: z.record(z.string(), z.url()),
     choice: z.array(ChoiceSchema).min(1),
   })
-  .refine((r) => r.choice.some((c) => c.id === r.default && c.enabled), {
-    message: "default names no enabled choice id",
-  })
+  .refine(
+    (r) => r.choice.some((c) => c.id === r.default && c.route === "luna"),
+    {
+      message:
+        "default must name a luna choice id (the fallback must be the cheap route)",
+    },
+  )
   .refine((r) => new Set(r.choice.map((c) => c.id)).size === r.choice.length, {
     message: "choice ids must be unique",
   });
@@ -83,56 +104,72 @@ export async function loadRoster(path = ROSTER_PATH): Promise<RosterLoad> {
     : { ok: false, error: r.error.message };
 }
 
-/** The rows the current config allows. */
-export function enabledChoices(r: Roster): Choice[] {
-  return r.choice.filter((c) => c.enabled);
+/** The weight Jev's probability for this row is multiplied by (SELECTION above). */
+export const weightOf = (r: Roster, c: Choice): number =>
+  r.selection.route_weight[c.route];
+
+const round3 = (x: number): number => Math.round(x * 1000) / 1000;
+
+/** Jev's probability for each roster row times its route weight (roster SELECTION); the best row
+ *  and its share of the weighted total. undefined when Jev gave no row any probability. */
+export function weighted(
+  roster: Roster,
+  answer: {
+    choice: string;
+    probabilities?: Record<string, number> | undefined;
+    confidence?: number | undefined;
+  },
+): { row: Choice; share: number; scores: Record<string, number> } | undefined {
+  const probs = answer.probabilities ?? {
+    [answer.choice]: answer.confidence ?? 0,
+  };
+  const scored = roster.choice.map((c) => ({
+    row: c,
+    score: (probs[c.id] ?? 0) * weightOf(roster, c),
+  }));
+  const total = scored.reduce((sum, s) => sum + s.score, 0);
+  const best = scored.reduce<(typeof scored)[number] | undefined>(
+    (top, s) => (top === undefined || s.score > top.score ? s : top),
+    undefined,
+  );
+  if (best === undefined || total <= 0) return undefined;
+  return {
+    row: best.row,
+    share: round3(best.score / total),
+    scores: Object.fromEntries(scored.map((s) => [s.row.id, round3(s.score)])),
+  };
 }
 
 const num = (v: number | undefined): string => (v === undefined ? "–" : `${v}`);
 const price = (v: number): string => `$${v.toFixed(v < 1 ? 2 : 0)}`;
 
-/** The radio table a coordinator picks from: one row per enabled choice, the default marked ●;
- * disabled rows are named under it so turning one on is discoverable. */
+/** The roster as a table: every row is a candidate Jev may pick, the default marked ●, each with
+ * its selection weight. */
 export function rosterTable(r: Roster): string {
   const head =
-    "| pick | id | runs as | AA | TB4 | SciCode | $in/$out | use for |\n" +
-    "| :-: | --- | --- | --: | --: | --: | --- | --- |";
-  const rows = enabledChoices(r).map(
+    "| default | id | route | weight | AA | TB4 | SciCode | $in/$out | use for |\n" +
+    "| :-: | --- | --- | --: | --: | --: | --: | --- | --- |";
+  const rows = r.choice.map(
     (c) =>
-      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route === "luna" ? "`agent-router run` (Jev picks)" : `Agent \`subagent_type:"${c.id}"\``} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${c.use_for} |`,
+      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${weightOf(r, c)} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${c.use_for} |`,
   );
-  const off = r.choice.filter((c) => !c.enabled).map((c) => `\`${c.id}\``);
-  const note =
-    off.length === 0
-      ? []
-      : [
-          "",
-          `Disabled in this config: ${off.join(", ")} — set \`enabled = true\` in agents/models/dispatch-roster.toml to allow one.`,
-        ];
-  return [head, ...rows, ...note].join("\n");
+  return [head, ...rows].join("\n");
 }
 
 /** The dispatch policy that opens the deployed ~/.claude/CLAUDE.md: the rule, the table, and how
  * to choose and run. scripts/render-home.ts puts it between the roster markers at deploy time, so
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
-  const claudeOn = enabledChoices(r).some((c) => c.route === "claude");
+  const w = r.selection.route_weight;
   return [
-    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief (zero-shot, logged with its probabilities); \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. Luna first: when Jev is unsure or unavailable the default \`${r.default}\` runs, and the receipt says why.**`,
+    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief (zero-shot, logged with its probabilities); \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. Luna first by a declared bias: each row's probability is multiplied by its route weight (luna ${w.luna}, claude ${w.claude}), so a claude row wins only when Jev rates it ${Math.round(w.luna / w.claude)}x the best luna row. When Jev is unsure or unavailable the default \`${r.default}\` runs, and the receipt says why.**`,
     `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; as of ${r.as_of}.`,
     "",
     ...rosterTable(r)
       .split("\n")
       .map((l) => (l === "" ? "" : `  ${l}`)),
     "",
-    ...(claudeOn
-      ? [
-          `  How to choose: Jev picks luna rows (no --choice); take a Claude row for long terminal or agentic loops (the TB4 gap) or judgment.`,
-          "  How to run: a luna row is `agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` from Bash — the one entry point: Jev picks the row from the brief (falls back to the default, with the reason, when unsure); it logs the pick, shows the run in the statusline, and prints a JSON receipt. Several in the background for parallel work; `agent-router ls` / `agent-router stats`. A Claude row is the Agent tool with `subagent_type` set to the id. The Workflow tool is not used; the dispatch hook denies it, and any off-roster, disabled or luna `subagent_type`, and prints this table.",
-        ]
-      : [
-          `  How to choose: you do not — Jev does (\`--choice\` is refused). Give it what it needs in the brief: scope (files, size), what is at risk (live hooks, harness), expected difficulty.`,
-          "  How to run: `agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` from Bash — the one entry point: Jev picks the row from the brief (falls back to the default, with the reason, when unsure); it logs the pick, shows the run in the statusline, and prints a JSON receipt. Several in the background for parallel work; `agent-router ls` / `agent-router stats`. This config enables no Claude row, so the Agent tool and the Workflow tool dispatch nothing; the dispatch hook denies both and prints this table.",
-        ]),
+    `  How to choose: you do not — Jev does. Give it what it needs in the brief: scope (files, size), what is at risk (live hooks, harness), expected difficulty.`,
+    `  How to run: \`agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write\` from Bash, in the background — the one entry point for luna AND claude rows (a claude row runs \`claude -p\` through driving-claude's run-claude.ts, bounded at $${r.claude_run.max_budget_usd} and ${r.claude_run.max_turns} turns). It logs the pick, shows the run in the statusline, and prints a JSON receipt; \`agent-router grade\` records how it went. The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints this table.`,
   ].join("\n");
 }

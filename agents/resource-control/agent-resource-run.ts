@@ -30,6 +30,7 @@ import {
   type ResultAsync,
 } from "neverthrow";
 import { jsonOf, jsonText, z } from "../hooks/zod.ts";
+import { cgroupMemory } from "./lib/cgroup-memory.ts";
 
 const KiB = 1024;
 const MiB = 1024 ** 2;
@@ -962,10 +963,21 @@ export function probeHostSnapshot(cwd: string): Result<HostSnapshot, Error> {
   if (available.isErr()) return err(available.error);
   const gpus = probeGpus();
   if (gpus.isErr()) return err(gpus.error);
+  // In a container /proc/meminfo is the HOST; admit against the cgroup limit when one caps memory
+  // below it (Vast 2026-10-06: host 503 GB "available 307 GB", container limit 171 GiB at 95% anon).
+  const cg = cgroupMemory(
+    (path) =>
+      fromThrowable(() => readFileSync(path, "utf8"))().unwrapOr(undefined),
+    total.value,
+  );
   return ok({
     allowed_cpu_ids: cpus.value,
-    mem_total_bytes: total.value,
-    mem_available_bytes: available.value,
+    mem_total_bytes:
+      cg === undefined ? total.value : Math.min(total.value, cg.limitBytes),
+    mem_available_bytes:
+      cg === undefined
+        ? available.value
+        : Math.min(available.value, cg.limitBytes - cg.usedBytes),
     scratch_available_bytes:
       filesystemResult.value.bavail * filesystemResult.value.bsize,
     gpus: gpus.value,

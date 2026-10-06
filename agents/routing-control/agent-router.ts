@@ -41,7 +41,7 @@ import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { typesafeKey } from "../hooks/typesafe-key.ts";
 import { jsonOf, z } from "../hooks/zod.ts";
 import {
-  enabledChoices,
+  weighted,
   loadRoster,
   type Choice,
   type Roster,
@@ -62,6 +62,10 @@ const LOG_FILE = join(STATE_DIR, "runs.jsonl");
 const CODEX_RUN =
   process.env.AGENT_ROUTER_CODEX_RUN ??
   join(import.meta.dir, "../skills/driving-codex/scripts/codex-run.ts");
+// A claude row runs `claude -p` through driving-claude's bounded wrapper (test seam: a fake).
+const RUN_CLAUDE =
+  process.env.AGENT_ROUTER_RUN_CLAUDE ??
+  join(import.meta.dir, "../skills/driving-claude/scripts/run-claude.ts");
 
 const now = (): string => Temporal.Now.instant().toString();
 const sha256 = (s: string): string =>
@@ -109,6 +113,9 @@ export interface Pick {
   reason: string;
   confidence?: number;
   probabilities?: Record<string, number>;
+  // each row's probability times its route weight, and the row Jev itself ranked first
+  weighted?: Record<string, number>;
+  jev_choice?: string;
   jev?: JevTrace;
 }
 
@@ -130,7 +137,7 @@ function underNoEgress(cwd: string, paths: string[]): string | undefined {
 function jevRequest(roster: Roster, brief: string): Record<string, unknown> {
   const tally = gradeTally();
   const criteria = Object.fromEntries(
-    enabledChoices(roster).map((c) => {
+    roster.choice.map((c) => {
       const t = tally.get(c.id);
       return [
         c.id,
@@ -226,29 +233,46 @@ function judge(
   trace: JevTrace,
   fallback: (reason: string, jev?: JevTrace) => Pick,
 ): Pick {
-  const row = enabledChoices(roster).find((c) => c.id === answer.choice);
-  if (row === undefined)
-    return fallback(`jev chose '${answer.choice}', not an enabled row`, trace);
   if (answer.confidence === undefined)
     return fallback("jev returned no confidence", trace);
+  const w = weighted(roster, answer);
+  if (w === undefined)
+    return fallback(
+      `jev gave no probability for any roster row (it chose '${answer.choice}')`,
+      trace,
+    );
   const scored = {
-    confidence: answer.confidence,
-    ...(answer.probabilities === undefined
-      ? {}
-      : { probabilities: answer.probabilities }),
+    confidence: w.share,
+    probabilities: answer.probabilities ?? {
+      [answer.choice]: answer.confidence,
+    },
+    weighted: w.scores,
+    jev_choice: answer.choice,
   };
-  if (answer.confidence < roster.auto.min_confidence)
+  const overruled =
+    w.row.id === answer.choice ? "" : ` over jev's raw pick ${answer.choice}`;
+  // Two doubts, either one sends the default: Jev itself unsure, or the weights left no clear winner.
+  const min = roster.auto.min_confidence;
+  if (answer.confidence < min)
     return {
       ...fallback(
-        `jev confidence ${answer.confidence.toFixed(2)} < ${roster.auto.min_confidence} (it chose ${row.id})`,
+        `jev confidence ${answer.confidence.toFixed(2)} < ${min} (it chose ${answer.choice})`,
+        trace,
+      ),
+      ...scored,
+    };
+  if (w.share < min)
+    return {
+      ...fallback(
+        `weighted share ${w.share.toFixed(2)} < ${min} (it would pick ${w.row.id}${overruled})`,
         trace,
       ),
       ...scored,
     };
   return {
     source: "jev",
-    choice: row.id,
-    reason: `jev confidence ${answer.confidence.toFixed(2)} >= ${roster.auto.min_confidence}`,
+    choice: w.row.id,
+    reason: `jev confidence ${answer.confidence.toFixed(2)}, weighted share ${w.share.toFixed(2)} >= ${min}${overruled}`,
     ...scored,
     jev: trace,
   };
@@ -317,14 +341,6 @@ interface RunFlags {
 function refuseUnrunnable(roster: Roster, id: string): Choice {
   const row = roster.choice.find((c) => c.id === id);
   if (row === undefined) fatal(`'${id}' is not a roster row`);
-  if (!row.enabled)
-    fatal(
-      `'${id}' is disabled in the roster (enabled = false in agents/models/dispatch-roster.toml)`,
-    );
-  if (row.route === "claude")
-    fatal(
-      `'${id}' is a Claude row: start it with the Agent tool, subagent_type:"${id}" — this CLI starts only luna rows`,
-    );
   return row;
 }
 
@@ -350,6 +366,98 @@ function refuseUnauthenticatedCodex(): void {
   );
 }
 
+function refuseMissingClaude(): void {
+  if (process.env.AGENT_ROUTER_RUN_CLAUDE !== undefined) return; // test seam: a fake run-claude
+  if (Bun.which("claude") === null)
+    fatal(
+      `claude is not installed on ${hostname()}: a claude row cannot run here — install it: mise run install:ai-clis (dotfiles)`,
+    );
+}
+
+// sandbox → claude permission mode. PERMISSIONS ARE NOT CONTAINMENT (driving-claude LAW): a claude
+// worker has no OS sandbox; plan mode keeps a read-only task from editing, and a workspace-write task
+// may edit and run Bash under the same hooks every Claude session runs under.
+const CLAUDE_MODE: Record<string, { mode: string; tools?: string }> = {
+  "read-only": { mode: "plan" },
+  "workspace-write": { mode: "acceptEdits", tools: "Bash" },
+};
+
+/** The worker command for a row: codex-run for luna, run-claude for claude. */
+function workerArgs(roster: Roster, row: Choice, flags: RunFlags): string[] {
+  if (row.route === "luna")
+    return [
+      CODEX_RUN,
+      "--choice",
+      row.id,
+      "--sandbox",
+      flags.sandbox,
+      "--cd",
+      flags.cd,
+      "--prompt-file",
+      flags.promptFile,
+      ...(flags.timeoutS === undefined
+        ? []
+        : ["--timeout-s", String(flags.timeoutS)]),
+    ];
+  const mode = CLAUDE_MODE[flags.sandbox] ?? { mode: "plan" };
+  return [
+    RUN_CLAUDE,
+    "--target",
+    resolve(flags.cd),
+    "--prompt-file",
+    resolve(flags.promptFile),
+    "--model",
+    row.model,
+    "--effort",
+    row.effort,
+    "--permission-mode",
+    mode.mode,
+    ...(mode.tools === undefined ? [] : ["--allowed-tools", mode.tools]),
+    "--max-turns",
+    String(roster.claude_run.max_turns),
+    "--max-budget-usd",
+    String(roster.claude_run.max_budget_usd),
+    "--timeout-ms",
+    String((flags.timeoutS ?? 540) * 1000),
+  ];
+}
+
+const ClaudeRelay = z.looseObject({
+  exit_code: z.number(),
+  timed_out: z.boolean().optional(),
+  result: z.string().optional(),
+  total_cost_usd: z.unknown().optional(),
+  usage: z.unknown().optional(),
+  error: z.string().optional(),
+});
+
+/** run-claude's relay in the receipt shape luna workers report (outcome, last_message, …). */
+function claudeWorker(
+  out: string,
+  row: Choice,
+  sandbox: string,
+  elapsedS: number,
+): Record<string, unknown> {
+  const relay = jsonOf(ClaudeRelay).safeParse(out.trim());
+  if (!relay.success) return { unparsed_stdout: out.slice(0, 2000) };
+  const r = relay.data;
+  const failed = r.exit_code === 0 ? "ok" : "claude-failed";
+  const outcome = r.timed_out === true ? "timeout" : failed;
+  return {
+    schema: 1,
+    outcome,
+    model: row.model,
+    effort: row.effort,
+    sandbox,
+    permission_mode: (CLAUDE_MODE[sandbox] ?? { mode: "plan" }).mode,
+    elapsed_s: elapsedS,
+    exit_code: r.exit_code,
+    total_cost_usd: r.total_cost_usd ?? null,
+    usage: r.usage ?? null,
+    last_message: r.result ?? r.error ?? "",
+  };
+}
+
 async function run(flags: RunFlags): Promise<number> {
   const roster = await loadRosterOrDie();
   if (!existsSync(flags.promptFile))
@@ -364,7 +472,8 @@ async function run(flags: RunFlags): Promise<number> {
   const brief = readFileSync(flags.promptFile, "utf8");
   const pick = await pickFor(roster, brief, flags.cd);
   const row = refuseUnrunnable(roster, pick.choice);
-  refuseUnauthenticatedCodex();
+  if (row.route === "luna") refuseUnauthenticatedCodex();
+  else refuseMissingClaude();
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
   const label =
     flags.label ??
@@ -394,20 +503,8 @@ async function run(flags: RunFlags): Promise<number> {
   // codex-run folds its own --json events into this file; the statusline Run: row reads it.
   const progress = progressFile(runId);
 
-  const args = [
-    CODEX_RUN,
-    "--choice",
-    row.id,
-    "--sandbox",
-    flags.sandbox,
-    "--cd",
-    flags.cd,
-    "--prompt-file",
-    flags.promptFile,
-    ...(flags.timeoutS === undefined
-      ? []
-      : ["--timeout-s", String(flags.timeoutS)]),
-  ];
+  const args = workerArgs(roster, row, flags);
+  const t0 = performance.now();
   const child = Bun.spawn([process.execPath, ...args], {
     stdin: "ignore",
     stdout: "pipe",
@@ -431,7 +528,15 @@ async function run(flags: RunFlags): Promise<number> {
   const exit = await child.exited;
   rmSync(marker, { force: true });
   rmSync(progress, { force: true });
-  const worker = jsonOf(WorkerReceipt).safeParse(out.trim());
+  const elapsedS = Math.round((performance.now() - t0) / 100) / 10;
+  const lunaWorker = jsonOf(WorkerReceipt).safeParse(out.trim());
+  const worker =
+    row.route === "claude"
+      ? {
+          success: true as const,
+          data: claudeWorker(out, row, flags.sandbox, elapsedS),
+        }
+      : lunaWorker;
   const receipt = {
     schema: SCHEMA,
     run_id: runId,

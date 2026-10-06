@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { storageLine } from "../hooks/storage-line.ts";
+import { cgroupMemory } from "../resource-control/lib/cgroup-memory.ts";
 import { z } from "../hooks/zod.ts";
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import {
@@ -328,6 +329,9 @@ export function macRam(): Result<MemReading, string> {
         : err("vm_stat output unparsable");
     });
 }
+/** A small kernel file's text, or undefined when it does not exist here (cgroup-memory's reader). */
+const readIfPresent = (path: string): string | undefined =>
+  fromThrowable(() => readFileSync(path, "utf8"))().unwrapOr(undefined);
 // macOS has no /proc: see macRam().
 export function ramFrac(): Result<MemReading, string> {
   if (process.platform === "darwin") return macRam();
@@ -345,6 +349,16 @@ export function ramFrac(): Result<MemReading, string> {
     }
     if (totalKb === undefined || availKb === undefined)
       return err("meminfo lacks MemTotal/MemAvailable");
+    // Inside a container /proc/meminfo is the HOST; the cgroup limit is what this box can use
+    // (lib/cgroup-memory.ts says how Vast read 42% at the brink of an OOM kill). Marked "cgroup".
+    const GiB = 1024 ** 3;
+    const cg = cgroupMemory(readIfPresent, totalKb * 1024);
+    if (cg !== undefined) {
+      const capped = memReading(cg.usedBytes / GiB, cg.limitBytes / GiB);
+      return capped !== undefined
+        ? ok({ ...capped, frac: `${capped.frac} cgroup` })
+        : err("cgroup memory unparsable");
+    }
     const usedKb = totalKb - availKb;
     const reading = memReading(usedKb / 1024 / 1024, totalKb / 1024 / 1024);
     return reading !== undefined ? ok(reading) : err("meminfo unparsable");

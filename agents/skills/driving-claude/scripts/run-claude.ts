@@ -41,6 +41,8 @@ export type RunConfig = Readonly<{
   maxTurns: number;
   timeoutMs: number;
   maxBudgetUsd?: number | undefined;
+  // claude --effort; undefined = the session default (settings effortLevel)
+  effort?: string | undefined;
   safeMode: boolean;
   bare: boolean;
   allowedTools?: string | undefined;
@@ -102,6 +104,7 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
   if (config.bare) args.push("--bare");
   if (config.maxBudgetUsd !== undefined)
     args.push("--max-budget-usd", String(config.maxBudgetUsd));
+  if (config.effort !== undefined) args.push("--effort", config.effort);
   if (config.allowedTools !== undefined)
     args.push("--allowed-tools", config.allowedTools);
   if (config.jsonSchema !== undefined)
@@ -260,6 +263,7 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
         promptFile: nonEmptyString("--prompt-file"),
         model: nonEmptyString("--model"),
         permissionMode: nonEmptyString("--permission-mode"),
+        effort: nonEmptyString("--effort"),
         maxTurns: String,
         timeoutMs: String,
         maxBudgetUsd: String,
@@ -346,6 +350,7 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
     safeMode,
     bare,
     allowedTools: values.allowedTools,
+    ...(values.effort === undefined ? {} : { effort: values.effort }),
     jsonSchema,
     claudeBin,
   });

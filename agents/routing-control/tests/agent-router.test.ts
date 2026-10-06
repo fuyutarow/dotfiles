@@ -84,8 +84,14 @@ const withJev = (t: string): string =>
     `[auto.jev]\napi = "reseller"\nurl = "${server.url.href}"\n`,
   );
 const LIVE_JEV = roster("live", withJev);
-const ALL_ON = roster("all-on", (t) =>
-  withJev(t).replaceAll("enabled = false", "enabled = true"),
+// A fake run-claude: records its argv, prints the relay shape the real one prints.
+const FAKE_CLAUDE = join(scratch, "fake-run-claude.ts");
+writeFileSync(
+  FAKE_CLAUDE,
+  `import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(join(scratch, "claude-argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
+console.log(JSON.stringify({ exit_code: 0, timed_out: false, result: "done", total_cost_usd: 0.01 }));
+`,
 );
 const NO_EGRESS = roster("no-egress", (t) =>
   withJev(t).replace(
@@ -246,8 +252,8 @@ describe("agent-router run", () => {
     }
   });
 
-  test("Jev naming a disabled row falls back to the default and says why", async () => {
-    const pick = brief("pick-disabled", "PICK=sonnet-high do the thing\n");
+  test("Jev naming a row that is not in the roster falls back to the default and says why", async () => {
+    const pick = brief("pick-unknown", "PICK=gpt-nine do the thing\n");
     const r = await router([
       "run",
       "--prompt-file",
@@ -259,17 +265,37 @@ describe("agent-router run", () => {
     ]);
     const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("default");
-    expect(receipt.pick.reason).toContain("not an enabled row");
+    expect(receipt.pick.reason).toContain("no probability for any roster row");
   });
 
-  test("Jev naming an enabled Claude row is refused with the Agent call to make", async () => {
+  test("a claude row Jev picks runs run-claude with the roster's bounds and is logged like luna", async () => {
+    // The fake Jev rates only sonnet-high, so it wins even after the claude weight.
     const pick = brief("pick-claude", "PICK=sonnet-high do the thing\n");
-    const r = await router(
-      ["run", "--prompt-file", pick, "--cd", scratch, "--sandbox", "read-only"],
-      { DISPATCH_ROSTER_PATH: ALL_ON },
-    );
-    expect(r.code).toBe(2);
-    expect(r.err).toContain(`subagent_type:"sonnet-high"`);
+    for (const [sandbox, mode] of [
+      ["read-only", "plan"],
+      ["workspace-write", "acceptEdits"],
+    ] as const) {
+      const r = await router(
+        ["run", "--prompt-file", pick, "--cd", scratch, "--sandbox", sandbox],
+        { AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE },
+      );
+      expect(r.code).toBe(0);
+      const receipt = decodedJson(Receipt, r.out.trim());
+      expect(receipt.pick.choice).toBe("sonnet-high");
+      expect(receipt.worker.outcome).toBe("ok");
+      const argv = readFileSync(join(scratch, "claude-argv.log"), "utf8")
+        .trim()
+        .split("\n")
+        .at(-1);
+      for (const word of [
+        '"--model","sonnet"',
+        '"--effort","high"',
+        `"--permission-mode","${mode}"`,
+        '"--max-budget-usd","2"',
+        '"--max-turns","60"',
+      ])
+        expect(`${sandbox}: ${argv ?? ""}`).toContain(word);
+    }
   });
 
   test("a bad --sandbox is refused", async () => {

@@ -221,12 +221,12 @@ if (choice !== undefined) {
   const roster = await loadRoster();
   if (!roster.ok) refuse(`cannot read the dispatch roster: ${roster.error}`);
   const row = roster.value.choice.find((c) => c.id === choice);
-  if (row?.route !== "luna" || !row.enabled)
+  if (row?.route !== "luna")
     refuse(
-      `--choice '${choice}' is not an enabled luna row of agents/models/dispatch-roster.toml (enabled luna rows: ${roster.value.choice
-        .filter((c) => c.route === "luna" && c.enabled)
+      `--choice '${choice}' is not a luna row of agents/models/dispatch-roster.toml (luna rows: ${roster.value.choice
+        .filter((c) => c.route === "luna")
         .map((c) => c.id)
-        .join(", ")}); a claude row runs as an Agent subagent`,
+        .join(", ")}); a claude row runs through agent-router (run-claude.ts)`,
     );
   model = row?.model;
   effort = row?.effort;

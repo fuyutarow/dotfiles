@@ -27,6 +27,9 @@
 //                        1 codex-failed (nonzero exit, or exit 0 with no last message)
 //                        2 refused (usage, floor, sandbox/effort policy) — codex never started
 //                        3 timeout (killed at --timeout-s; the receipt says so)
+//                      every non-ok receipt has a non-empty `cause` (codex's last error event, else
+//                      "codex printed no error event" + the last stderr line); every receipt has
+//                      `progress` {last, commands, files} — at a timeout, where the worker was.
 //   Waits / liveness     bounded by --timeout-s (default 540: under the 600 s foreground Bash ceiling).
 //   Fallbacks / handoffs none — never another model, never another sandbox. A refusal says why.
 //   C5  evolution   receipt fields are additive; `schema` bumps on any removal or meaning change.
@@ -49,7 +52,7 @@ import {
   ordersIn,
   parseFloorConfig,
 } from "../../../hooks/model-orders.ts";
-import { progressWriter } from "./codex-progress.ts";
+import { lastError, progressWriter, tallyOf } from "./codex-progress.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
@@ -493,21 +496,36 @@ for (const line of events.split("\n")) {
 const last = await attempt(() => readFileSync(lastFile, "utf8"));
 const lastMessage = last.ok ? last.value.trim() : "";
 const stderrTail = errText.trim().split("\n").slice(-20).join("\n");
+// Tiger ledger O1/O2 (2026-10-06): a failed receipt always names a cause, and every receipt says
+// what the worker did. On Vast five luna runs were killed at their bound and two failed in seconds
+// with an empty stderr tail; "the model could not do it", "codex waited on the network" and "codex
+// refused to start" were indistinguishable. The cause is codex's own last error event; when it
+// printed none, the receipt says so (never an empty cause).
+const progressSoFar = tallyOf(events);
+const cause =
+  lastError(events) ??
+  `codex printed no error event; last stderr line: ${errText.trim().split("\n").at(-1) ?? ""}`;
 const common = {
   codex_exit: code,
   turns,
   usage,
+  progress: progressSoFar,
   last_message: lastMessage,
   stderr_tail: stderrTail,
 };
 
 if (deadline.aborted)
-  emit("timeout", { ...common, why: `killed at the ${timeoutS} s bound` });
+  emit("timeout", {
+    ...common,
+    why: `killed at the ${timeoutS} s bound`,
+    cause,
+  });
 if (code !== 0)
-  emit("codex-failed", { ...common, why: `codex exited ${code}` });
+  emit("codex-failed", { ...common, why: `codex exited ${code}`, cause });
 if (lastMessage === "")
   emit("codex-failed", {
     ...common,
     why: "codex exited 0 but wrote no last message",
+    cause,
   });
 emit("ok", common);

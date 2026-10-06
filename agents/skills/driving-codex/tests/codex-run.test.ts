@@ -43,6 +43,17 @@ for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
 case "$FAKE_CODEX_MODE" in
   slow) sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
   fail) echo 'ERROR: stream disconnected' >&2; exit 7 ;;
+  errfail)
+    echo '{"type":"thread.started"}'
+    echo '{"type":"error","message":"Reconnecting... 1/5"}'
+    echo '{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: invalid key"}}'
+    echo 'Reading additional input from stdin...' >&2
+    exit 1 ;;
+  netwait)
+    echo '{"type":"thread.started"}'
+    echo '{"type":"item.started","item":{"type":"command_execution","command":"bun test"}}'
+    echo '{"type":"error","message":"Reconnecting... waiting for network (Connection failed: error sending request)"}'
+    sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
   nolast) echo '{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0}}'; exit 0 ;;
 esac
 echo '{"type":"thread.started"}'
@@ -77,6 +88,10 @@ const Receipt = z.object({
     .optional(),
   last_message: z.string().optional(),
   stderr_tail: z.string().optional(),
+  cause: z.string().optional(),
+  progress: z
+    .object({ last: z.string(), commands: z.number(), files: z.number() })
+    .optional(),
 });
 
 type Run = {
@@ -443,6 +458,36 @@ describe("codex-run", () => {
     expect(r.receipt.stderr_tail).toContain("stream disconnected");
   });
 
+  // O1 (Tiger ledger, 2026-10-06): a failed receipt always carries a non-empty cause. codex reports
+  // its errors as JSON events on stdout, so the cause comes from there — the stderr tail of a real
+  // failure on Vast was only "Reading additional input from stdin...".
+  test("O1: a codex failure names codex's own error event as the cause", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run(FULL, { CODEX_RUN_BIN: bin, FAKE_CODEX_MODE: "errfail" });
+    expect(r.code).toBe(1);
+    expect(r.receipt.outcome).toBe("codex-failed");
+    expect(r.receipt.cause).toBe(
+      "unexpected status 401 Unauthorized: invalid key",
+    );
+  });
+
+  test("O1: with no error event the cause says so, with the stderr line — never empty", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run(FULL, { CODEX_RUN_BIN: bin, FAKE_CODEX_MODE: "fail" });
+    expect(r.receipt.cause).toContain("codex printed no error event");
+    expect(r.receipt.cause).toContain("stream disconnected");
+  });
+
+  test("progress: every receipt says what the worker did (ok here: one command, one file)", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run(FULL, { CODEX_RUN_BIN: bin });
+    expect(r.receipt.progress).toEqual({
+      last: "✎ kernel.ts",
+      commands: 1,
+      files: 1,
+    });
+  });
+
   test("exit 0 with no last message is a failure, not success", () => {
     const { bin } = fakeCodex(scratch());
     const r = run(FULL, { CODEX_RUN_BIN: bin, FAKE_CODEX_MODE: "nolast" });
@@ -466,5 +511,25 @@ describe("codex-run", () => {
     expect(r.stderr).toMatch(
       /codex-run: waiting for gpt-6-luna \(\d+(\.\d)? s of 3 s\)…/u,
     );
+  }, 20_000);
+
+  // O2: a killed run keeps where it was and what it was waiting on. On Vast five luna runs were
+  // killed at their bound with nothing recorded, so "the model could not do it" and "codex was
+  // waiting for the network" could not be told apart.
+  test("O2: a timeout keeps the progress at the kill and codex's last error as the cause", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run([...FULL, "--timeout-s", "3"], {
+      CODEX_RUN_BIN: bin,
+      FAKE_CODEX_MODE: "netwait",
+      FAKE_CODEX_SLEEP: "20",
+    });
+    expect(r.code).toBe(3);
+    expect(r.receipt.outcome).toBe("timeout");
+    expect(r.receipt.progress).toEqual({
+      last: "$ bun test",
+      commands: 1,
+      files: 0,
+    });
+    expect(r.receipt.cause).toContain("waiting for network");
   }, 20_000);
 });

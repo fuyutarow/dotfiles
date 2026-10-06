@@ -46,6 +46,42 @@ const SHELL_WRAP =
 export const unwrapShell = (command: string): string =>
   SHELL_WRAP.exec(command.trim())?.[2] ?? command;
 
+// codex reports a failure as a JSON event on stdout, not on stderr (sampled 2026-10-06: a closed
+// port gives {"type":"error","message":"Reconnecting... waiting for network (…)"} lines, and a
+// failed turn is {"type":"turn.failed","error":{"message":…}}). The stderr of a real failure on
+// Vast held only "Reading additional input from stdin...".
+const ErrorEvent = z.union([
+  z.looseObject({ type: z.literal("error"), message: z.string() }),
+  z.looseObject({
+    type: z.literal("turn.failed"),
+    error: z.looseObject({ message: z.string() }),
+  }),
+]);
+
+const messageOf = (e: z.output<typeof ErrorEvent>): string =>
+  e.type === "error" ? e.message : e.error.message;
+
+/** The message of the LAST error event in codex's stdout, or undefined when it printed none. */
+export function lastError(events: string): string | undefined {
+  return events
+    .split("\n")
+    .map((l) => jsonOf(ErrorEvent).safeParse(l))
+    .flatMap((r) => (r.success ? [messageOf(r.data)] : []))
+    .at(-1);
+}
+
+/** The tally over a whole stdout: what the worker did, for the receipt. */
+export function tallyOf(events: string): {
+  last: string;
+  commands: number;
+  files: number;
+} {
+  const t = events
+    .split("\n")
+    .reduce((acc, l) => foldEvent(acc, l), emptyTally());
+  return { last: t.last, commands: t.commands, files: t.files.size };
+}
+
 /** The tally after one stdout line. */
 export function foldEvent(t: Tally, line: string): Tally {
   const parsed = jsonOf(Event).safeParse(line);

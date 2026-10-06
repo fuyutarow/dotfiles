@@ -11,6 +11,7 @@
 //       agent-router ls                                  running workers (stale ones flagged)
 //       agent-router stats                               picks, confidence, fallbacks, cost, outcomes
 //       agent-router grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
+//       agent-router grade RUN_ID --waive "<why>"        record that a run cannot be graded, and why
 //   C2  effects  run starts `codex-run --choice <row>` (agents/skills/driving-codex) as a child; a
 //                Claude row is refused with the Agent call to make instead (the CLI cannot start a
 //                Claude subagent). State lives outside the repo: $XDG_STATE_HOME/agent-router
@@ -52,6 +53,7 @@ import {
   ActiveSchema,
   briefLabel,
   progressFile,
+  ProgressSchema,
   stateDir,
   STATE_SCHEMA,
   type Active,
@@ -411,7 +413,38 @@ const ClaudeRelay = z.looseObject({
   total_cost_usd: z.unknown().optional(),
   usage: z.unknown().optional(),
   error: z.string().optional(),
+  parse_error: z.string().optional(),
+  stderr: z.string().optional(),
 });
+
+/** What the worker did, from its progress file, read before the file is removed (O2). */
+type Done = { last: string; commands: number; files: number };
+function progressAtEnd(path: string): Done | undefined {
+  if (!existsSync(path)) return undefined;
+  const p = jsonOf(ProgressSchema).safeParse(readFileSync(path, "utf8"));
+  return p.success
+    ? { last: p.data.last, commands: p.data.commands, files: p.data.files }
+    : undefined;
+}
+
+/** A worker whose stdout is not its receipt is a failure that says so (O1) — it used to be logged as
+ *  `{unparsed_stdout}` with no outcome at all, neither ok nor failed. */
+const unreadable = (worker: string, outcome: string, out: string) => ({
+  schema: 1,
+  outcome,
+  cause: `${worker} printed no ${worker === "run-claude" ? "relay" : "receipt"}: ${out.trim().slice(0, 400)}`,
+});
+
+/** Why a claude worker did not succeed, from its own relay; never empty (O1). */
+function claudeCause(r: z.output<typeof ClaudeRelay>): string {
+  const stderrLast = (r.stderr ?? "").trim().split("\n").at(-1) ?? "";
+  if (r.error !== undefined && r.error !== "") return r.error;
+  if (r.parse_error !== undefined && r.parse_error !== "")
+    return `claude printed no JSON result: ${r.parse_error}`;
+  if (r.timed_out === true) return "killed at its time bound";
+  if (stderrLast !== "") return stderrLast;
+  return `run-claude exited ${r.exit_code} and reported no cause`;
+}
 
 /** run-claude's relay in the receipt shape luna workers report (outcome, last_message, …). */
 function claudeWorker(
@@ -421,11 +454,12 @@ function claudeWorker(
   elapsedS: number,
 ): Record<string, unknown> {
   const relay = jsonOf(ClaudeRelay).safeParse(out.trim());
-  if (!relay.success) return { unparsed_stdout: out.slice(0, 2000) };
+  if (!relay.success) return unreadable("run-claude", "claude-failed", out);
   const r = relay.data;
   const failed = r.exit_code === 0 ? "ok" : "claude-failed";
   const outcome = r.timed_out === true ? "timeout" : failed;
   return {
+    ...(outcome === "ok" ? {} : { cause: claudeCause(r) }),
     schema: 1,
     outcome,
     model: row.model,
@@ -452,6 +486,7 @@ async function run(flags: RunFlags): Promise<number> {
       `--choice ${flags.choice} refused: Jev alone picks the row. If Jev picks wrong, say more in the brief (scope, files, risk) or fix that row use_for in agents/models/dispatch-roster.toml`,
     );
   const brief = readFileSync(flags.promptFile, "utf8");
+  refuseOverUngraded(resolve(flags.cd));
   const pick = await pickFor(roster, brief, flags.cd);
   const row = refuseUnrunnable(roster, pick.choice);
   if (row.route === "luna") refuseUnauthenticatedCodex();
@@ -502,6 +537,7 @@ async function run(flags: RunFlags): Promise<number> {
 
   const out = await new Response(child.stdout).text();
   const exit = await child.exited;
+  const done = progressAtEnd(progress);
   rmSync(marker, { force: true });
   rmSync(progress, { force: true });
   const elapsedS = Math.round((performance.now() - t0) / 100) / 10;
@@ -513,6 +549,7 @@ async function run(flags: RunFlags): Promise<number> {
           data: claudeWorker(out, row, flags.sandbox, elapsedS),
         }
       : lunaWorker;
+  const progressField = done === undefined ? {} : { progress: done };
   const receipt = {
     schema: SCHEMA,
     run_id: runId,
@@ -527,9 +564,10 @@ async function run(flags: RunFlags): Promise<number> {
     started_at: active.started_at,
     ended_at: now(),
     exit,
+    // codex-run's own receipt carries progress; a claude worker's comes from its progress file
     worker: worker.success
-      ? worker.data
-      : { unparsed_stdout: out.slice(0, 2000) },
+      ? { ...progressField, ...worker.data }
+      : unreadable("codex-run", "codex-failed", out),
   };
   appendLog({ kind: "run", ...receipt });
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
@@ -577,6 +615,7 @@ function ls(): number {
 const LogLine = z.looseObject({
   kind: z.string(),
   run_id: z.string().optional(),
+  cwd: z.string().optional(),
   brief: z.looseObject({ path: z.string() }).optional(),
   pick: z.looseObject({
     source: z.string(),
@@ -687,6 +726,64 @@ function readGrades(): Map<string, z.output<typeof GradeLine>> {
   return grades;
 }
 
+const WaiverLine = z.looseObject({
+  kind: z.literal("grade-waived"),
+  run_id: z.string(),
+  reason: z.string().min(1),
+});
+
+/** Run ids recorded as not gradable, each with its reason (a waiver is never counted as a grade). */
+function readWaivers(): Set<string> {
+  const waived = new Set<string>();
+  if (!existsSync(LOG_FILE)) return waived;
+  for (const l of readFileSync(LOG_FILE, "utf8").split("\n")) {
+    const p = jsonOf(WaiverLine).safeParse(l);
+    if (p.success) waived.add(p.data.run_id);
+  }
+  return waived;
+}
+
+// O3 (Tiger ledger, owner 2026-10-06 「tiger styleが徹底されているべき。fail firstでなければ」): a
+// finished run is owed a grade, or a waiver with its reason, before more work is dispatched from
+// the same cwd. On Vast 38 runs were logged and none graded: Jev's "graded record" criterion stayed
+// empty, a run that deleted a file it was asked to lint stayed "ok", and the same mis-pick (luna on
+// long edit-and-test loops, killed at its bound) repeated. Grading was available and optional, so
+// it never happened; the gate makes the owed grade the coordinator's next step.
+function owedGrades(cwd: string): Logged[] {
+  const graded = readGrades();
+  const waived = readWaivers();
+  return readLog().filter(
+    (l) =>
+      l.kind === "run" &&
+      l.run_id !== undefined &&
+      l.cwd === cwd &&
+      !graded.has(l.run_id) &&
+      !waived.has(l.run_id),
+  );
+}
+
+function refuseOverUngraded(cwd: string): void {
+  const owed = owedGrades(cwd);
+  if (owed.length === 0) return;
+  const lines = owed
+    .slice(0, 10)
+    .map(
+      (l) =>
+        `  ${l.run_id ?? ""}  ${l.pick.choice}  ${l.worker?.outcome ?? `exit ${l.exit ?? "?"}`}`,
+    );
+  const more = owed.length > 10 ? [`  … and ${owed.length - 10} more`] : [];
+  const id = owed[0]?.run_id ?? "<run_id>";
+  fatal(
+    [
+      `${owed.length} finished run(s) in ${cwd} are not graded; grade each before dispatching more work here:`,
+      ...lines,
+      ...more,
+      `Run the checks on its work, then: agent-router grade ${id} --evidence <checks file>`,
+      `If it cannot be judged (it never started, its work is gone): agent-router grade ${id} --waive "<why>"`,
+    ].join("\n"),
+  );
+}
+
 /** Per roster row: how its graded runs went — fed to Jev with each row's use_for. */
 function gradeTally(): Map<string, Record<Grade, number>> {
   const grades = readGrades();
@@ -765,6 +862,22 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
   return 0;
 }
 
+function waive(runId: string, reason: string): number {
+  const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
+  if (logged === undefined)
+    fatal(`no run ${runId} in ${LOG_FILE} (agent-router stats lists the log)`);
+  const record = {
+    kind: "grade-waived",
+    run_id: runId,
+    reason,
+    waived_at: now(),
+  };
+  appendLog(record);
+  console.error(`agent-router: ${runId} waived — ${reason}`);
+  process.stdout.write(`${JSON.stringify({ schema: SCHEMA, ...record })}\n`);
+  return 0;
+}
+
 function stats(): number {
   const lines = readLog();
   const bySource = Object.fromEntries(
@@ -792,6 +905,18 @@ function stats(): number {
       p95: quantile(latency, 0.95),
     },
     per_choice: perChoice(lines),
+    // O3: finished runs still owed a grade or a waiver, over every cwd
+    ungraded: (() => {
+      const graded = readGrades();
+      const waived = readWaivers();
+      return lines.filter(
+        (l) =>
+          l.kind === "run" &&
+          l.run_id !== undefined &&
+          !graded.has(l.run_id) &&
+          !waived.has(l.run_id),
+      ).length;
+    })(),
   };
   console.error(
     `agent-router: ${lines.length} records — explicit ${bySource.explicit}, jev ${bySource.jev}, default ${bySource.default}`,
@@ -894,6 +1019,11 @@ const argv = cli({
           description:
             "file holding the checks you ran on the run's work (lint, typecheck, tests vs baseline)",
         },
+        waive: {
+          type: String,
+          description:
+            "instead of a grade: why this run cannot be judged (recorded; not counted as a grade)",
+        },
       },
       help: {
         description:
@@ -945,13 +1075,27 @@ async function main(): Promise<number | undefined> {
   }
   if (argv.command === "ls") return ls();
   if (argv.command === "stats") return stats();
-  if (argv.command === "grade") {
-    const evidence = argv.flags.evidence;
-    if (evidence === undefined || evidence === "")
-      fatal("grade needs --evidence <file> (the checks you ran on the work)");
-    return grade(argv._.runId, evidence);
-  }
+  if (argv.command === "grade")
+    return gradeCommand(argv._.runId, argv.flags.evidence, argv.flags.waive);
   return undefined;
+}
+
+/** grade RUN_ID: exactly one of --evidence (Jev grades) or --waive (a recorded reason). */
+async function gradeCommand(
+  runId: string,
+  evidence: string | undefined,
+  why: string | undefined,
+): Promise<number> {
+  if (why !== undefined && evidence !== undefined)
+    fatal("grade takes --evidence or --waive, not both");
+  if (why !== undefined && why.trim() === "")
+    fatal("--waive needs the reason this run cannot be judged");
+  if (why !== undefined) return waive(runId, why.trim());
+  if (evidence === undefined || evidence === "")
+    fatal(
+      'grade needs --evidence <file> (the checks you ran on the work), or --waive "<why>"',
+    );
+  return grade(runId, evidence);
 }
 
 const result = await attempt(main);

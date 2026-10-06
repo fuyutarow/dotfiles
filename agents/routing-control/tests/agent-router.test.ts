@@ -89,7 +89,20 @@ const FAKE_CLAUDE = join(scratch, "fake-run-claude.ts");
 writeFileSync(
   FAKE_CLAUDE,
   `import { appendFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 appendFileSync(${JSON.stringify(join(scratch, "claude-argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
+const mode = process.env.FAKE_CLAUDE_MODE ?? "ok";
+if (mode === "fail") {
+  console.log(JSON.stringify({ exit_code: 1, timed_out: false, error: "model rejected: sonnet", stderr: "boom" }));
+  process.exit(1);
+}
+if (mode === "garbage") {
+  console.log("not a relay");
+  process.exit(1);
+}
+const at = Bun.argv.indexOf("--progress-file");
+if (at !== -1)
+  writeFileSync(Bun.argv[at + 1] ?? "", JSON.stringify({ schema: 1, at: "2026-10-06T00:00:00Z", last: "✎ kernel.ts", commands: 2, files: 1 }));
 console.log(JSON.stringify({ exit_code: 0, timed_out: false, result: "done", total_cost_usd: 0.01 }));
 `,
 );
@@ -108,11 +121,16 @@ const brief = (name: string, text: string): string => {
 
 // Async on purpose: the fake Jev server lives in THIS process, so a synchronous spawn would block
 // the event loop it needs to answer.
+let stateSeq = 0;
 async function router(args: string[], env: Record<string, string> = {}) {
+  // A fresh state dir per call unless the test names one: under O3 a second run in the same cwd and
+  // state is refused while the first is ungraded — the rule under test below, not these tests' topic.
+  const state =
+    env.AGENT_ROUTER_STATE_DIR ?? join(scratch, `state-${stateSeq++}`);
   const r = Bun.spawn([process.execPath, CLI, ...args], {
     env: {
       ...process.env,
-      AGENT_ROUTER_STATE_DIR: join(scratch, "state"),
+      AGENT_ROUTER_STATE_DIR: state,
       AGENT_ROUTER_CODEX_RUN: FAKE,
       DISPATCH_ROSTER_PATH: LIVE_JEV,
       TYPESAFE_API_KEY: "fixture-key",
@@ -127,7 +145,7 @@ async function router(args: string[], env: Record<string, string> = {}) {
     new Response(r.stderr).text(),
     r.exited,
   ]);
-  return { code, out, err };
+  return { code, out, err, state };
 }
 
 const Receipt = z.looseObject({
@@ -160,10 +178,10 @@ describe("agent-router run", () => {
     expect(readFileSync(join(scratch, "argv.log"), "utf8")).toContain(
       '"--choice","luna-max"',
     );
-    expect(
-      readFileSync(join(scratch, "state", "runs.jsonl"), "utf8"),
-    ).toContain('"kind":"run"');
-    expect(readdirSync(join(scratch, "state", "active"))).toEqual([]);
+    expect(readFileSync(join(r.state, "runs.jsonl"), "utf8")).toContain(
+      '"kind":"run"',
+    );
+    expect(readdirSync(join(r.state, "active"))).toEqual([]);
   });
 
   test("the worker's exit code is agent-router's exit code", async () => {
@@ -334,7 +352,8 @@ describe("agent-router run", () => {
 
 describe("agent-router ls and stats", () => {
   test("a marker whose process is gone is reported as stale, not hidden", async () => {
-    const active = join(scratch, "state", "active");
+    const state = join(scratch, "state-stale");
+    const active = join(state, "active");
     mkdirSync(active, { recursive: true });
     writeFileSync(
       join(active, "dead.json"),
@@ -349,14 +368,29 @@ describe("agent-router ls and stats", () => {
         cwd: scratch,
       }),
     );
-    const r = await router(["ls"]);
+    const r = await router(["ls"], { AGENT_ROUTER_STATE_DIR: state });
     expect(r.err).toContain("STALE");
     expect(r.out).toContain('"alive":false');
     rmSync(join(active, "dead.json"));
   });
 
   test("stats counts picks by source and runs by row", async () => {
-    const r = await router(["stats"]);
+    const state = join(scratch, "state-stats");
+    const b = brief("stats", "Fix the flaky test.\n");
+    for (const env of [
+      {},
+      { TYPESAFE_API_KEY: "", PATH: "/usr/bin:/bin", HOME: scratch },
+    ]) {
+      const cwd = mkdtempSync(join(scratch, "stats-cwd-"));
+      await router(
+        ["run", "--prompt-file", b, "--cd", cwd, "--sandbox", "read-only"],
+        {
+          AGENT_ROUTER_STATE_DIR: state,
+          ...env,
+        },
+      );
+    }
+    const r = await router(["stats"], { AGENT_ROUTER_STATE_DIR: state });
     expect(r.code).toBe(0);
     const report = decodedJson(
       z.looseObject({
@@ -505,5 +539,187 @@ describe("agent-router grade", () => {
     expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
       '"kind":"grade"',
     );
+  });
+});
+
+// O3 (Tiger ledger, 2026-10-06): a finished run is owed a grade before more work is dispatched from
+// the same cwd. On Vast 38 runs were logged and none graded, so Jev's "graded record" criterion was
+// empty and the same mis-pick (luna on long edit-and-test loops, killed at its bound) repeated. The
+// gate is at dispatch, before Jev is asked: nothing is spent on a run that will be refused.
+describe("O3: no dispatch over ungraded work", () => {
+  const evidence = (text: string): string => {
+    const p = join(mkdtempSync(join(scratch, "ev-")), "evidence.txt");
+    writeFileSync(p, text);
+    return p;
+  };
+  const RunId = z.looseObject({ run_id: z.string() });
+  async function first(state: string, cwd: string): Promise<string> {
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("o3", "Fix x.ts.\n"),
+        "--cd",
+        cwd,
+        "--sandbox",
+        "read-only",
+      ],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    expect(r.code).toBe(0);
+    return decodedJson(RunId, r.out.trim()).run_id;
+  }
+  const again = (state: string, cwd: string) =>
+    router(
+      [
+        "run",
+        "--prompt-file",
+        brief("o3b", "Fix y.ts.\n"),
+        "--cd",
+        cwd,
+        "--sandbox",
+        "read-only",
+      ],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+
+  test("an ungraded run in the same cwd refuses the next dispatch before Jev or a worker is reached", async () => {
+    const state = join(scratch, "o3-refuse");
+    const cwd = mkdtempSync(join(scratch, "o3-cwd-"));
+    const runId = await first(state, cwd);
+    const asked = bodies.length;
+    const workers = readFileSync(join(scratch, "argv.log"), "utf8").split(
+      "\n",
+    ).length;
+    const r = await again(state, cwd);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("not graded");
+    expect(r.err).toContain(runId);
+    expect(r.err).toContain(`agent-router grade ${runId} --evidence`);
+    expect(r.err).toContain("--waive");
+    expect(bodies.length).toBe(asked); // Jev was not asked
+    expect(
+      readFileSync(join(scratch, "argv.log"), "utf8").split("\n").length,
+    ).toBe(workers);
+  });
+
+  test("graded, the next dispatch goes ahead", async () => {
+    const state = join(scratch, "o3-graded");
+    const cwd = mkdtempSync(join(scratch, "o3-cwd-"));
+    const runId = await first(state, cwd);
+    const g = await router(
+      ["grade", runId, "--evidence", evidence("GRADE=pass\n")],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+      },
+    );
+    expect(g.code).toBe(0);
+    expect((await again(state, cwd)).code).toBe(0);
+  });
+
+  test("a waiver needs a reason, is recorded as such, lets the next dispatch go, and is not a grade", async () => {
+    const state = join(scratch, "o3-waived");
+    const cwd = mkdtempSync(join(scratch, "o3-cwd-"));
+    const runId = await first(state, cwd);
+    const w = await router(
+      [
+        "grade",
+        runId,
+        "--waive",
+        "codex failed before its first turn; no work to judge",
+      ],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    expect(w.code).toBe(0);
+    const log = readFileSync(join(state, "runs.jsonl"), "utf8");
+    expect(log).toContain('"kind":"grade-waived"');
+    expect(log).toContain("no work to judge");
+    expect((await again(state, cwd)).code).toBe(0);
+    const stats = await router(["stats"], { AGENT_ROUTER_STATE_DIR: state });
+    expect(stats.out).toContain('"graded":{"pass":0,"partial":0,"fail":0}');
+  });
+
+  test("refused: --waive with an empty reason, and --waive together with --evidence", async () => {
+    const state = join(scratch, "o3-badwaive");
+    const runId = await first(state, mkdtempSync(join(scratch, "o3-cwd-")));
+    for (const args of [
+      ["grade", runId, "--waive", ""],
+      ["grade", runId, "--waive", "x", "--evidence", evidence("GRADE=pass\n")],
+    ]) {
+      const r = await router(args, { AGENT_ROUTER_STATE_DIR: state });
+      expect([args.join(" "), r.code]).toEqual([args.join(" "), 2]);
+    }
+    expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
+      "grade-waived",
+    );
+  });
+
+  test("an ungraded run in another cwd does not block this one", async () => {
+    const state = join(scratch, "o3-othercwd");
+    await first(state, mkdtempSync(join(scratch, "o3-cwd-")));
+    expect(
+      (await again(state, mkdtempSync(join(scratch, "o3-cwd-")))).code,
+    ).toBe(0);
+  });
+
+  test("stats reports how many finished runs are still owed a grade", async () => {
+    const state = join(scratch, "o3-stats");
+    await first(state, mkdtempSync(join(scratch, "o3-cwd-")));
+    const r = await router(["stats"], { AGENT_ROUTER_STATE_DIR: state });
+    expect(r.out).toContain('"ungraded":1');
+  });
+});
+
+// O1/O2 for the claude route (Tiger ledger, 2026-10-06): the same receipt obligations as luna. A
+// failed claude worker names its cause, an unreadable relay is a failure with that said (it used to
+// leave a receipt with no outcome at all), and every receipt keeps what the worker did — read from
+// the progress file before it is removed.
+describe("claude worker receipts: never silent", () => {
+  const pick = brief("o1c", "PICK=sonnet-medium do the thing\n");
+  const go = (mode: string) =>
+    router(
+      ["run", "--prompt-file", pick, "--cd", scratch, "--sandbox", "read-only"],
+      {
+        AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE,
+        FAKE_CLAUDE_MODE: mode,
+      },
+    );
+  const Worker = z.looseObject({
+    worker: z.looseObject({
+      outcome: z.string(),
+      cause: z.string().optional(),
+      progress: z
+        .looseObject({
+          last: z.string(),
+          commands: z.number(),
+          files: z.number(),
+        })
+        .optional(),
+    }),
+  });
+
+  test("a failed claude worker carries run-claude's error as its cause", async () => {
+    const r = await go("fail");
+    expect(r.code).toBe(1);
+    const w = decodedJson(Worker, r.out.trim()).worker;
+    expect(w.outcome).toBe("claude-failed");
+    expect(w.cause).toBe("model rejected: sonnet");
+  });
+
+  test("an unreadable relay is a failure that says so, never a receipt without an outcome", async () => {
+    const r = await go("garbage");
+    const w = decodedJson(Worker, r.out.trim()).worker;
+    expect(w.outcome).toBe("claude-failed");
+    expect(w.cause).toContain("run-claude printed no relay");
+    expect(w.cause).toContain("not a relay");
+  });
+
+  test("the receipt keeps what the worker did, from its progress file", async () => {
+    const r = await go("ok");
+    expect(decodedJson(Worker, r.out.trim()).worker.progress).toEqual({
+      last: "✎ kernel.ts",
+      commands: 2,
+      files: 1,
+    });
   });
 });

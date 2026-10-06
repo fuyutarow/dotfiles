@@ -3,6 +3,8 @@
 // backgrounded test dies with the worker), so the router runs them: in order, `sh -c`, stdin closed,
 // stderr folded into stdout, under ONE shared time bound.
 
+import { attempt } from "../hooks/attempt.ts";
+
 export interface VerifyResult {
   cmd: string;
   exit: number;
@@ -14,7 +16,6 @@ export interface VerifyResult {
 const TAIL_CHARS = 4000;
 const TIMEOUT_EXIT = 124; // as timeout(1): killed at its bound, or never run for lack of time
 const DRAIN_GRACE_MS = 1000; // an orphaned grandchild may hold the pipe open past the shell's exit
-const BACKSTOP_MS = 5000;
 
 const tenths = (ms: number): number => Math.round(ms / 100) / 10;
 
@@ -24,13 +25,17 @@ async function runOne(
   boundMs: number,
 ): Promise<VerifyResult> {
   const t0 = performance.now();
+  // Native timer (AbortSignal.timeout) for the bound; the shell runs in its OWN process group
+  // (`detached` = setsid, pgid = pid) so the abort handler can kill the whole group: the native
+  // kill reaches only the shell itself, and a test runner's servers and workers are grandchildren.
+  const bound = AbortSignal.timeout(Math.ceil(boundMs));
   const child = Bun.spawn(["sh", "-c", `exec 2>&1\n${cmd}`], {
     cwd,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",
-    // backstop only: the timer below also kills the shell's children, which this option does not
-    timeout: Math.ceil(boundMs + BACKSTOP_MS),
+    detached: true,
+    signal: bound,
     killSignal: "SIGKILL",
   });
   let tail = "";
@@ -42,17 +47,15 @@ async function runOne(
       );
   })();
   let timedOut = false;
-  const timer = setTimeout(() => {
+  const killGroup = (): void => {
     timedOut = true;
-    Bun.spawnSync(["pkill", "-KILL", "-P", String(child.pid)], {
-      stdout: "ignore",
-      stderr: "ignore",
-      timeout: 5_000,
-    });
-    child.kill("SIGKILL");
-  }, boundMs);
+    // Promise.try runs the kill synchronously; an already-gone group is the only throw
+    void attempt(() => process.kill(-child.pid, "SIGKILL"));
+  };
+  bound.addEventListener("abort", killGroup, { once: true });
   const code = await child.exited;
-  clearTimeout(timer);
+  // after the shell is gone its pgid may be reused: never signal a group on a late abort
+  bound.removeEventListener("abort", killGroup);
   await Promise.race([drained, Bun.sleep(DRAIN_GRACE_MS)]);
   return {
     cmd,

@@ -8,10 +8,11 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { z } from "../../hooks/zod.ts";
 import { ROSTER_PATH } from "../../models/roster.ts";
 import { decodedJson } from "../../hooks/tests/decode.ts";
@@ -1755,5 +1756,93 @@ describe("agent-router run: the gate per write scope", () => {
     });
     expect(legacy.code).toBe(2);
     expect(legacy.err).toContain(id);
+  });
+});
+
+// --- every brief's text is kept, content-addressed, under the state dir ------------------------------
+
+const sha = (s: string): string =>
+  new Bun.CryptoHasher("sha256").update(s).digest("hex");
+
+describe("agent-router: the stored brief", () => {
+  const BriefLine = z.looseObject({
+    kind: z.string(),
+    brief: z.looseObject({ sha256: z.string() }),
+  });
+  const keyOf = (state: string): string =>
+    decodedJson(
+      BriefLine,
+      readFileSync(join(state, "runs.jsonl"), "utf8").split("\n")[0] ?? "",
+    ).brief.sha256;
+
+  test("the full original text, ticket included, is at briefs/<sha256>.md after the run", async () => {
+    const text = ticketText(
+      'writes = []\nverify = ["true"]',
+      "STORE-MARK keep me\n",
+    );
+    const r = await router(
+      runArgs(brief("s-store", text), freshCwd(), "read-only"),
+    );
+    expect(r.code).toBe(0);
+    const key = keyOf(r.state);
+    expect(key).toBe(sha(text));
+    const stored = join(r.state, "briefs", `${key}.md`);
+    expect(readFileSync(stored, "utf8")).toBe(text);
+    // the per-run worker copy is gone; the content-addressed one stays
+    expect(readdirSync(join(r.state, "briefs"))).toEqual([`${key}.md`]);
+  });
+
+  test("a legacy brief (no ticket) is stored too", async () => {
+    const text = "legacy STORE-LEGACY text\n";
+    const r = await router(
+      runArgs(brief("s-legacy", text), freshCwd(), "read-only"),
+    );
+    expect(
+      readFileSync(join(r.state, "briefs", `${sha(text)}.md`), "utf8"),
+    ).toBe(text);
+  });
+
+  test("two runs of the same brief store it once, the first copy never rewritten", async () => {
+    const state = join(scratch, "s-once");
+    const b = brief("s-once", "STORE-ONCE twice\n");
+    await router(runArgs(b, freshCwd(), "read-only"), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    const file = join(state, "briefs", `${sha("STORE-ONCE twice\n")}.md`);
+    const first = statSync(file).mtimeMs;
+    await Bun.sleep(30);
+    const second = await router(runArgs(b, freshCwd(), "read-only"), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(second.code).toBe(0);
+    expect(readdirSync(join(state, "briefs"))).toEqual([basename(file)]);
+    expect(statSync(file).mtimeMs).toBe(first);
+    expect(logLines(state).filter((l) => l.kind === "run")).toHaveLength(2);
+  });
+
+  test("result --brief prints the stored brief, and still does once the original file is gone", async () => {
+    const text = ticketText("writes = []\nverify = []", "STORE-PRINT body\n");
+    const path = brief("s-print", text);
+    const run = await router(runArgs(path, freshCwd(), "read-only"));
+    const id = decodedJson(RunIdSchema, run.out.trim()).run_id;
+    rmSync(path);
+    const r = await router(["result", id, "--brief"], {
+      AGENT_ROUTER_STATE_DIR: run.state,
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toBe(text);
+  });
+
+  test("result --brief with no stored copy and no original file says so, exit 1", async () => {
+    const path = brief("s-gone", "STORE-GONE\n");
+    const run = await router(runArgs(path, freshCwd(), "read-only"));
+    const id = decodedJson(RunIdSchema, run.out.trim()).run_id;
+    rmSync(path);
+    rmSync(join(run.state, "briefs", `${sha("STORE-GONE\n")}.md`));
+    const r = await router(["result", id, "--brief"], {
+      AGENT_ROUTER_STATE_DIR: run.state,
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("no stored brief");
   });
 });

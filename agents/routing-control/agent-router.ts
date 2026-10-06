@@ -63,6 +63,8 @@ import {
   ProgressSchema,
   stateDir,
   STATE_SCHEMA,
+  storedBriefPath,
+  storeBrief,
   type Active,
 } from "./state.ts";
 import { postJev, type JevTrace } from "./jev-client.ts";
@@ -628,6 +630,8 @@ async function run(flags: RunFlags): Promise<number> {
   if (row.route === "codex") refuseUnauthenticatedCodex();
   else refuseMissingClaude();
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
+  // the full text, ticket included, kept by its hash: the run record's brief.sha256 is the key
+  storeBrief(sha256(brief), brief);
   const label = flags.label ?? briefLabel(parsed.prose);
   console.error(
     `agent-router: ${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
@@ -898,7 +902,9 @@ const LogLine = z.looseObject({
   kind: z.string(),
   run_id: z.string().optional(),
   cwd: z.string().optional(),
-  brief: z.looseObject({ path: z.string() }).optional(),
+  brief: z
+    .looseObject({ path: z.string(), sha256: z.string().optional() })
+    .optional(),
   // present on a run dispatched with a ticket; absent = legacy
   ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
   pick: z.looseObject({
@@ -1190,6 +1196,19 @@ function recordGrade(
   return record;
 }
 
+/** A run's brief text: the stored copy by its hash, else the original file when it still exists
+ *  (runs logged before briefs were stored). */
+function loggedBrief(logged: Logged): string | undefined {
+  const sha = logged.brief?.sha256;
+  const stored = sha === undefined ? undefined : storedBriefPath(sha);
+  if (stored !== undefined && existsSync(stored))
+    return readFileSync(stored, "utf8");
+  const path = logged.brief?.path;
+  return path !== undefined && existsSync(path)
+    ? readFileSync(path, "utf8")
+    : undefined;
+}
+
 async function grade(runId: string, evidencePath: string): Promise<number> {
   const roster = await loadRosterOrDie();
   const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
@@ -1200,11 +1219,7 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
       `no such evidence file: ${evidencePath} — put the check output there (lint, typecheck, tests vs baseline)`,
     );
   const evidence = readFileSync(evidencePath, "utf8");
-  const briefPath = logged.brief?.path;
-  const brief =
-    briefPath !== undefined && existsSync(briefPath)
-      ? readFileSync(briefPath, "utf8")
-      : "(brief file no longer exists)";
+  const brief = loggedBrief(logged) ?? "(brief file no longer exists)";
   const reply = await requestGrade(
     roster,
     brief,
@@ -1770,6 +1785,11 @@ const argv = cli({
           type: Boolean,
           description: "print the complete run record as one JSON object",
         },
+        brief: {
+          type: Boolean,
+          description:
+            "print the run's stored brief (the full original text, ticket included) instead",
+        },
       },
       help: {
         description:
@@ -1855,7 +1875,11 @@ async function main(): Promise<number | undefined> {
   if (argv.command === "stats") return stats();
   if (argv.command === "export") return exportRuns(argv.flags.since);
   if (argv.command === "result")
-    return resultCommand(argv._.runId, argv.flags.json ?? false);
+    return resultCommand(
+      argv._.runId,
+      argv.flags.json ?? false,
+      argv.flags.brief ?? false,
+    );
   if (argv.command === "grade")
     return gradeCommand(argv._.runId, argv.flags.evidence, argv.flags.waive);
   return undefined;
@@ -1876,13 +1900,28 @@ function resolveRunId(id: string): string {
 }
 
 /** Show a completed run's compact receipt header and the worker's own final report. */
-function resultCommand(id: string, asJson: boolean): number {
+function resultCommand(
+  id: string,
+  asJson: boolean,
+  showBrief: boolean,
+): number {
   const resolved = resolveRunId(id);
   const logged = readLog().find(
     (l) => l.kind === "run" && l.run_id === resolved,
   );
   if (logged === undefined)
     fatal(`no run ${id} in ${LOG_FILE} (agent-router stats lists the log)`);
+  if (showBrief) {
+    const text = loggedBrief(logged);
+    if (text === undefined) {
+      console.error(
+        `agent-router: no stored brief for ${logged.run_id ?? id} (briefs/<sha256>.md missing, and the original file is gone)`,
+      );
+      return 1;
+    }
+    process.stdout.write(text);
+    return 0;
+  }
   const worker = logged.worker;
   const outcome = worker?.outcome ?? "unknown";
   const cause = worker?.cause;

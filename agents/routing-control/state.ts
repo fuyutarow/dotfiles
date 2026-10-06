@@ -1,8 +1,9 @@
 // agent-router's on-disk state, defined in ONE place for its two consumers: agent-router (writes a
 // marker per running worker, appends runs.jsonl) and the statusline Run rows (read the markers).
 // Outside the repo by design: briefs and picks may be private. Zero-dep beyond the repo's zod bundle.
+import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "../hooks/zod.ts";
 
 export const STATE_SCHEMA = 1;
@@ -16,6 +17,31 @@ export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
   if (explicit !== undefined) return explicit;
   const base = nonEmpty(env.XDG_STATE_HOME) ?? join(homedir(), ".local/state");
   return join(base, "agent-router");
+}
+
+/** Every brief's full original text (ticket included), once per content: `briefs/<sha256>.md`. The
+ *  run record's `brief.sha256` is the key; the router's per-run worker copies share the directory
+ *  (named by run id) and are removed at the end of the run, these never are. */
+export const storedBriefPath = (
+  sha256: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string => join(stateDir(env), "briefs", `${sha256}.md`);
+
+/** Write the brief under its hash unless that file exists already (written once, never rewritten).
+ *  The temp file + rename keeps a reader from ever seeing half a brief; two writers racing past the
+ *  existence check land the same bytes, since the name is the content's hash. */
+export function storeBrief(
+  sha256: string,
+  text: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const path = storedBriefPath(sha256, env);
+  if (existsSync(path)) return path;
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, path);
+  return path;
 }
 
 /** One JSON marker per running worker: written at start, removed at exit. */

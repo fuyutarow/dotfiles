@@ -43,6 +43,11 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { attempt, attemptOr, errorMessage } from "./attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
+import {
+  type ShellCommand,
+  effective as effectiveCommand,
+  parseShell,
+} from "./shell-syntax.ts";
 import { storageLine as effective } from "./storage-line.ts";
 import {
   type Obj,
@@ -466,6 +471,62 @@ const esc = (s: string) => s.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 // common spellings, and a gate that misses them is decoration (caught by the test suite on
 // install, 2026-09-22 — the first draft applied PREFIX to only three of the five).
 function matchLauncher(
+  command: string,
+  launchers: Launcher[],
+): { command: string; label: string } | null {
+  const parsed = parseShell(command);
+  if (parsed !== undefined) return launcherBySyntax(parsed.commands, launchers);
+  return launcherByText(command, launchers);
+}
+
+// A launch is a command that EXECUTES (shell-syntax.ts): launcher text in a heredoc body or a quoted
+// word is data. `timeout 110 mise run test` in a brief the model is writing is not a build.
+function launcherBySyntax(
+  commands: ShellCommand[],
+  launchers: Launcher[],
+): { command: string; label: string } | null {
+  for (const l of launchers) {
+    const label = syntaxLabel(l, commands);
+    if (label !== undefined) return { command: l.command, label };
+  }
+  return null;
+}
+
+function leadingMatch(
+  names: string[] | undefined,
+  arg: string,
+): string | undefined {
+  if (names === undefined) return undefined;
+  return new RegExp(`^(?:${names.map((n) => esc(n)).join("|")})\\b`, "u").exec(
+    arg,
+  )?.[0];
+}
+
+function syntaxLabel(
+  l: Launcher,
+  commands: ShellCommand[],
+): string | undefined {
+  for (const c of commands) {
+    const eff = effectiveCommand(c);
+    const label = eff?.name === l.command ? argsLabel(l, eff.args) : undefined;
+    if (label !== undefined) return label;
+  }
+  return undefined;
+}
+
+function argsLabel(l: Launcher, args: string[]): string | undefined {
+  const [first = "", second = ""] = args;
+  const sub = leadingMatch(l.subcommands, first);
+  if (l.subcommands !== undefined && sub === undefined) return undefined;
+  const task = leadingMatch(
+    l.tasks,
+    l.subcommands === undefined ? first : second,
+  );
+  if (l.tasks !== undefined && task === undefined) return undefined;
+  return [l.command, sub, task].filter((p) => p !== undefined).join(" ");
+}
+
+function launcherByText(
   command: string,
   launchers: Launcher[],
 ): { command: string; label: string } | null {

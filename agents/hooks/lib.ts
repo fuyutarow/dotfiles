@@ -15,6 +15,7 @@ import { constants, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { parseJson, strAt } from "./narrow.ts";
+import { parseShell } from "./shell-syntax.ts";
 
 // The event JSON as `unknown`: read fields through ./narrow.ts (obj/str/strAt/...), which return a
 // value only if it really has that type. It used to be `any`, which type-checked any field access.
@@ -89,6 +90,10 @@ export function bashCwd(payload: unknown): string {
   const cwd = strAt(payload, "cwd");
   const initial = cwd !== undefined && cwd !== "" ? cwd : process.cwd();
   const command = strAt(payload, "tool_input", "command") ?? "";
+
+  // Read as syntax: a `cd` in a heredoc body or a quoted word moves nothing (shell-syntax.ts).
+  const parsed = parseShell(command, initial);
+  if (parsed !== undefined) return parsed.endCwd;
 
   let current = resolve(initial);
   for (const match of command.matchAll(SIMPLE_CD)) {

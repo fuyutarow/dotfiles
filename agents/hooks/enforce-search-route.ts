@@ -17,6 +17,12 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { attempt, errorMessage } from "./attempt.ts";
 import { bashCwd, decidePre, findExe, readStdinJson } from "./lib.ts";
 import { strAt } from "./narrow.ts";
+import {
+  type ParsedShell,
+  type ShellCommand,
+  effective,
+  parseShell,
+} from "./shell-syntax.ts";
 
 const GREP_SEARCH =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?(grep|egrep|fgrep|rg|ripgrep|ag|ack|ugrep)\b/u;
@@ -83,8 +89,134 @@ const ROUTER_COMMAND = ((): string => {
   return `bun ${ROUTER}`;
 })();
 
+const SEARCH_PROGRAMS = new Set([
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "ripgrep",
+  "ag",
+  "ack",
+  "ugrep",
+]);
+const ENUMERATORS = new Set(["fd", "fdfind", "tree", "find"]);
+const RUNTIMES = /^(?:python(?:3(?:\.\d+)?)?|node|bun|ruby|perl)$/u;
+const ROUTES = new Set([
+  "about",
+  "absent",
+  "text",
+  "regex",
+  "files",
+  "shape",
+  "exists",
+  "concept",
+  "battery",
+  "literal",
+  "exhaustive",
+  "structural",
+  "definition",
+]);
+
+// The documented display filter, by structure: [cd <dir> &&] <router> <route> … [2>&1|2>/dev/null]
+// | grep|rg [-F -i -v -w -n -c] (-e PAT | -- PAT) [| head|tail [-n N | -N]] — one pattern, no file
+// operand, nothing dynamic. The words are already unquoted, so `<`, `|` or `$` inside a quoted
+// argument no longer matter (2026-10-06: `rr text '<x>' 2>&1 | grep -F -e '.ts:'` was denied).
+function isRoutedStreamFilter(commands: ShellCommand[]): boolean {
+  const rest = [...commands];
+  if (rest.length > 0 && rest[0]?.words[0] === "cd") {
+    const cd = rest.shift();
+    if (cd === undefined || cd.words.length !== 2 || cd.dynamic) return false;
+    if (rest[0]?.sep !== "&&") return false;
+  }
+  const router = rest[0];
+  const filter = rest[1];
+  if (router === undefined || filter === undefined || rest.length > 3)
+    return false;
+  const [head, route] =
+    router.words[0] === "bun"
+      ? [router.words[1] ?? "", router.words[2]]
+      : [router.words[0] ?? "", router.words[1]];
+  const routerOk =
+    (/^(?:rr|repo-retrieve)$/u.test(head) ||
+      (router.words[0] === "bun" &&
+        /(?:^~\/\.claude\/hooks|^\/.*)\/repo-retrieve\.ts$/u.test(head))) &&
+    route !== undefined &&
+    ROUTES.has(route);
+  if (!routerOk || router.dynamic || router.heredocs.length > 0) return false;
+  if (
+    !router.redirects.every(
+      (r) =>
+        (r.op === "2>&" && r.target === "1") ||
+        (r.op === "2>" && r.target === "/dev/null"),
+    )
+  )
+    return false;
+  if (
+    filter.sep !== "|" ||
+    filter.dynamic ||
+    filter.redirects.length > 0 ||
+    filter.heredocs.length > 0
+  )
+    return false;
+  const [prog = "", ...args] = filter.words;
+  if (prog !== "grep" && prog !== "rg") return false;
+  let k = 0;
+  while (/^-[Fivwnc]+$/u.test(args[k] ?? "")) k++;
+  if ((args[k] !== "-e" && args[k] !== "--") || args.length !== k + 2)
+    return false;
+  const tail = rest[2];
+  if (tail === undefined) return true;
+  const [tprog = "", ...targs] = tail.words;
+  return (
+    tail.sep === "|" &&
+    !tail.dynamic &&
+    tail.redirects.length === 0 &&
+    (tprog === "head" || tprog === "tail") &&
+    (targs.length === 0 ||
+      (targs.length === 1 && /^-\d+$/u.test(targs[0] ?? "")) ||
+      (targs.length === 2 &&
+        targs[0] === "-n" &&
+        /^\d+$/u.test(targs[1] ?? "")))
+  );
+}
+
+function rawSearchBySyntax(parsed: ParsedShell, command: string): boolean {
+  if (isRoutedStreamFilter(parsed.commands.filter((c) => !c.nested)))
+    return false;
+  return parsed.commands.some((c) => commandSearches(c, command));
+}
+
+function commandSearches(c: ShellCommand, command: string): boolean {
+  const eff = effective(c);
+  if (eff === undefined) return false;
+  const { name, args } = eff;
+  if (SEARCH_PROGRAMS.has(name) || ENUMERATORS.has(name)) return true;
+  if (name === "ccc" && (args[0] === "search" || args[0] === "grep"))
+    return true;
+  const gitArgs = args[0] === "-C" ? args.slice(2) : args;
+  if (name === "git" && gitArgs[0] === "grep") return true;
+  if (
+    name === "xargs" &&
+    args.some((a) => SEARCH_PROGRAMS.has(a.replace(/^.*\//u, "")))
+  )
+    return true;
+  const inline =
+    RUNTIMES.test(name) &&
+    (args.some((a) => /^-[ce]/u.test(a)) ||
+      args.includes("-") ||
+      c.heredocs.length > 0);
+  if (!inline) return false;
+  const text =
+    args.includes("-") && c.heredocs.length === 0
+      ? command
+      : [...args, ...c.heredocs].join("\n");
+  return FILE_SCAN_PRIMITIVE.test(text);
+}
+
 function isRawSearch(command: string | undefined): boolean {
   if (command === undefined || command === "") return false;
+  const parsed = parseShell(command);
+  if (parsed !== undefined) return rawSearchBySyntax(parsed, command);
   if (ROUTED_STREAM_FILTER.test(command)) return false;
   return (
     GREP_SEARCH.test(command) ||

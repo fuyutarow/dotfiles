@@ -46,6 +46,7 @@
 
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
+import { effective, parseShell } from "../../hooks/shell-syntax.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 // Command position: start of line, or after a shell separator / then / do. Keeps the gate off
@@ -82,7 +83,62 @@ const FULL_CMDLINE_FLAG = /\s(?:-[A-Za-z]*f[A-Za-z]*|--full)(?=\s|$)/u;
 
 type Finding = { what: string; hint: string };
 
+// Syntax route: a command is judged by the commands it EXECUTES (shell-syntax.ts), so a word or a
+// heredoc body that merely spells `at` / `nohup` is not one. undefined = the parser is not sure.
+function detachmentBySyntax(command: string): Finding | null | undefined {
+  const parsed = parseShell(command);
+  if (parsed === undefined) return undefined;
+  for (const c of parsed.commands) {
+    const eff = effective(c);
+    if (eff === undefined) continue;
+    const { name, args } = eff;
+    const found = (what: string, hint: string): Finding => ({
+      what: c.nested ? "a detacher inside a nested shell string" : what,
+      hint: c.nested ? "quoting it does not change what it does" : hint,
+    });
+    if (name === "setsid" && !SETSID_WAITS.test(` ${args[0] ?? ""}`))
+      return found(
+        "setsid",
+        "setsid --wait keeps the parent waiting and is allowed; bare setsid is the detach",
+      );
+    if (name === "nohup")
+      return found("nohup", "nohup exists only to outlive the caller's hangup");
+    if (name === "disown")
+      return found(
+        "disown",
+        "disown drops the job from the shell that could report it",
+      );
+    if (
+      (name === "tmux" &&
+        (args[0] === "new" || args[0] === "new-session") &&
+        args.slice(1).some((a) => /^-\w*d/u.test(a))) ||
+      (name === "screen" && args.some((a) => /^-\w*d\w*m/u.test(a)))
+    )
+      return found(
+        "a detached tmux/screen session",
+        "a human viewport is not supervision — the harness still sees nothing",
+      );
+    const first = args[0] ?? "";
+    if (
+      ((name === "at" || name === "batch") &&
+        /^(?:-|now\b|\d|noon\b|midnight\b|teatime\b)/u.test(first)) ||
+      (name === "crontab" && first !== "" && !/^(?:-l|-e)\b/u.test(first))
+    )
+      return found(
+        "at/batch/crontab scheduling",
+        "deferred execution detaches the same way, just later",
+      );
+  }
+  return null;
+}
+
 function detachmentIn(command: string): Finding | null {
+  const bySyntax = detachmentBySyntax(command);
+  if (bySyntax !== undefined) return bySyntax;
+  return detachmentByText(command);
+}
+
+function detachmentByText(command: string): Finding | null {
   for (const m of command.matchAll(SETSID_CALL)) {
     if (!SETSID_WAITS.test(m[2] ?? "")) {
       return {
@@ -120,6 +176,23 @@ function detachmentIn(command: string): Finding | null {
 }
 
 function selfMatchingPollIn(command: string): boolean {
+  const parsed = parseShell(command);
+  if (parsed !== undefined) {
+    const polls = parsed.commands.some(
+      (c) => c.leading.includes("while") || c.leading.includes("until"),
+    );
+    return (
+      polls &&
+      parsed.commands.some((c) => {
+        const eff = effective(c);
+        return (
+          eff?.name === "pgrep" &&
+          eff.args.some((a) => /^(?:-[A-Za-z]*f[A-Za-z]*|--full)$/u.test(a)) &&
+          !eff.args.some((a) => a.includes("["))
+        );
+      })
+    );
+  }
   if (!POLL_LOOP.test(command)) return false;
   for (const m of command.matchAll(PGREP_CALL)) {
     const args = m[1] ?? "";

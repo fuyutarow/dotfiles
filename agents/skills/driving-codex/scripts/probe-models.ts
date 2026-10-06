@@ -77,7 +77,7 @@ async function main(): Promise<Outcome> {
       name: "probe-models.ts",
       parameters: ["<models...>"],
       strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     args,

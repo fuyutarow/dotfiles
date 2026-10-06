@@ -7,7 +7,9 @@ let emptyStringFlag: string | undefined;
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    process.stdout.write(`${JSON.stringify({ exit_code: 2, error: `Unknown option '--${flag}'` })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ exit_code: 2, error: `Unknown option '--${flag}'` })}\n`,
+    );
     process.exit(2);
   }
 }

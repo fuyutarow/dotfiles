@@ -152,7 +152,7 @@ async function main(): Promise<void | Error> {
       parameters: ["[command...]"],
       flags: { timeout: Number, expectFail: Boolean, json: Boolean },
       strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     argv,

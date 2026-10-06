@@ -1,0 +1,10 @@
+# This repo's additions to the owner's one TypeScript lint policy (~/dotfiles/oxlint-policy.toml).
+# It may only ADD ignores, each with its reason; it cannot turn a rule off — the renderer rejects
+# any other key. Render: mise run oxlint:render · drift check: mise run lint:oxlint-policy.
+schema = 1
+ignore = []
+
+# Example (firedancer): code kept as a record of what a run executed is not maintained code.
+# [[ignore]]
+# pattern = "research_record"
+# reason = "frozen copies of apparatus code: a run's provenance; rewriting them breaks what the record reproduces"

@@ -113,9 +113,7 @@ describe("driving-jev runner", () => {
       JSON.stringify(requestBody()),
     );
     expect(result.exitCode).toBe(0);
-    expect(decodedJson(ModelEnvelope, result.stdout).model).toBe(
-      "jev-test",
-    );
+    expect(decodedJson(ModelEnvelope, result.stdout).model).toBe("jev-test");
   });
 
   test("rejects invalid local requests before the network", async () => {

@@ -25,13 +25,20 @@ test("accepts a complete exact-recovery card", () => {
 });
 
 test("rejects an exact recovery without tested preconditions", () => {
-  const invalid = validCard.replace("Preconditions: the documented request schema applies", "Preconditions: none");
-  expect(checkCard(invalid).failures).toContain("exact recovery requires Preconditions");
+  const invalid = validCard.replace(
+    "Preconditions: the documented request schema applies",
+    "Preconditions: none",
+  );
+  expect(checkCard(invalid).failures).toContain(
+    "exact recovery requires Preconditions",
+  );
 });
 
 test("rejects investigation without a discriminating observation", () => {
   const invalid = validCard
     .replace("Recovery mode: exact", "Recovery mode: investigate")
     .replace("Next observation: none", "Next observation: none");
-  expect(checkCard(invalid).failures).toContain("investigate recovery requires Next observation");
+  expect(checkCard(invalid).failures).toContain(
+    "investigate recovery requires Next observation",
+  );
 });

@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { jsonOf, z } from "../../../hooks/zod.ts";
@@ -72,22 +79,61 @@ const Receipt = z.object({
   stderr_tail: z.string().optional(),
 });
 
-type Run = { code: number; receipt: z.output<typeof Receipt>; stdout: string; stderr: string };
-function run(args: string[], env: Record<string, string>, prompt = "Audit this."): Run {
+type Run = {
+  code: number;
+  receipt: z.output<typeof Receipt>;
+  stdout: string;
+  stderr: string;
+};
+function run(
+  args: string[],
+  env: Record<string, string>,
+  prompt = "Audit this.",
+): Run {
   const dir = scratch();
   const promptFile = join(dir, "prompt.md");
   writeFileSync(promptFile, prompt);
   const p = Bun.spawnSync(
-    ["bun", script, "--receipt-dir", join(dir, "receipts"), "--prompt-file", promptFile, ...args],
+    [
+      "bun",
+      script,
+      "--receipt-dir",
+      join(dir, "receipts"),
+      "--prompt-file",
+      promptFile,
+      ...args,
+    ],
     // CODEX_RUN_HOST_FILE defaults to a path that does not exist: a box that really carries a host
     // declaration (a rented container) must not flip every sandbox assertion in this suite.
-    { env: { ...process.env, CODEX_RUN_HOST_FILE: join(dir, "no-host.toml"), ...env }, stdin: "ignore", timeout: 30_000 },
+    {
+      env: {
+        ...process.env,
+        CODEX_RUN_HOST_FILE: join(dir, "no-host.toml"),
+        ...env,
+      },
+      stdin: "ignore",
+      timeout: 30_000,
+    },
   );
   const stdout = p.stdout.toString();
   const lines = stdout.trim().split("\n");
-  return { code: p.exitCode ?? -1, receipt: decodedJson(Receipt, lines.at(-1) ?? ""), stdout, stderr: p.stderr.toString() };
+  return {
+    code: p.exitCode ?? -1,
+    receipt: decodedJson(Receipt, lines.at(-1) ?? ""),
+    stdout,
+    stderr: p.stderr.toString(),
+  };
 }
-const FULL = ["--model", "gpt-6-luna", "--effort", "medium", "--sandbox", "read-only", "--cd", tmpdir()];
+const FULL = [
+  "--model",
+  "gpt-6-luna",
+  "--effort",
+  "medium",
+  "--sandbox",
+  "read-only",
+  "--cd",
+  tmpdir(),
+];
 
 describe("codex-run", () => {
   test("ok: one receipt line, usage summed over every turn, last message, and the same receipt on disk", () => {
@@ -105,44 +151,129 @@ describe("codex-run", () => {
     expect(r.receipt.last_message).toBe("VERDICT: fine");
     const file = r.receipt.receipt_file ?? "";
     expect(existsSync(file)).toBe(true);
-    expect(decodedJson(Receipt, readFileSync(file, "utf8"))).toEqual(decodedJson(Receipt, r.stdout));
+    expect(decodedJson(Receipt, readFileSync(file, "utf8"))).toEqual(
+      decodedJson(Receipt, r.stdout),
+    );
     // C2: the triplet reaches codex explicitly, with --json and -o.
     const argv = readFileSync(log, "utf8").split("\n");
-    for (const w of ["exec", "--json", "--skip-git-repo-check", "-m", "gpt-6-luna", "read-only", 'model_reasoning_effort="medium"', "-o"])
+    for (const w of [
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-m",
+      "gpt-6-luna",
+      "read-only",
+      'model_reasoning_effort="medium"',
+      "-o",
+    ])
       expect(argv).toContain(w);
-    expect(r.stderr).toContain("codex-run: started gpt-6-luna effort=medium sandbox=read-only");
+    expect(r.stderr).toContain(
+      "codex-run: started gpt-6-luna effort=medium sandbox=read-only",
+    );
     expect(r.stderr).toMatch(/codex-run: ok after \d+(\.\d)? s — receipt /u);
   });
 
   test.each([
-    ["missing model, effort, sandbox and cd", [], "missing --model, --effort, --sandbox, --cd"],
-    ["a model below its family's floor", ["--model", "gpt-5.6-luna", "--effort", "medium", "--sandbox", "read-only", "--cd", "."], "model-floor:"],
-    ["a model family with no floor", ["--model", "gpt-9-nova", "--effort", "medium", "--sandbox", "read-only", "--cd", "."], "model-floor:"],
-    ["danger-full-access", ["--model", "gpt-6-luna", "--effort", "medium", "--sandbox", "danger-full-access", "--cd", "."], "isolated runner only"],
-    ["effort ultra", ["--model", "gpt-6-luna", "--effort", "ultra", "--sandbox", "read-only", "--cd", "."], "cannot admit"],
-    ["a timeout above the ceiling", [...FULL, "--timeout-s", "99999"], "--timeout-s must be an integer"],
-  ])("refuses %s before codex starts (exit 2, the reason in the receipt)", (_name, args, why) => {
-    const { bin, log } = fakeCodex(scratch());
-    const r = run(args, { CODEX_RUN_BIN: bin });
-    expect(r.code).toBe(2);
-    expect(r.receipt.outcome).toBe("refused");
-    expect(r.receipt.why).toContain(why);
-    expect(existsSync(log)).toBe(false);
-  });
+    [
+      "missing model, effort, sandbox and cd",
+      [],
+      "missing --model, --effort, --sandbox, --cd",
+    ],
+    [
+      "a model below its family's floor",
+      [
+        "--model",
+        "gpt-5.6-luna",
+        "--effort",
+        "medium",
+        "--sandbox",
+        "read-only",
+        "--cd",
+        ".",
+      ],
+      "model-floor:",
+    ],
+    [
+      "a model family with no floor",
+      [
+        "--model",
+        "gpt-9-nova",
+        "--effort",
+        "medium",
+        "--sandbox",
+        "read-only",
+        "--cd",
+        ".",
+      ],
+      "model-floor:",
+    ],
+    [
+      "danger-full-access",
+      [
+        "--model",
+        "gpt-6-luna",
+        "--effort",
+        "medium",
+        "--sandbox",
+        "danger-full-access",
+        "--cd",
+        ".",
+      ],
+      "isolated runner only",
+    ],
+    [
+      "effort ultra",
+      [
+        "--model",
+        "gpt-6-luna",
+        "--effort",
+        "ultra",
+        "--sandbox",
+        "read-only",
+        "--cd",
+        ".",
+      ],
+      "cannot admit",
+    ],
+    [
+      "a timeout above the ceiling",
+      [...FULL, "--timeout-s", "99999"],
+      "--timeout-s must be an integer",
+    ],
+  ])(
+    "refuses %s before codex starts (exit 2, the reason in the receipt)",
+    (_name, args, why) => {
+      const { bin, log } = fakeCodex(scratch());
+      const r = run(args, { CODEX_RUN_BIN: bin });
+      expect(r.code).toBe(2);
+      expect(r.receipt.outcome).toBe("refused");
+      expect(r.receipt.why).toContain(why);
+      expect(existsSync(log)).toBe(false);
+    },
+  );
 
   test("a host declaration runs codex unsandboxed, says so on stderr, and records why", () => {
     const dir = scratch();
     const { bin, log } = fakeCodex(dir);
     const host = join(dir, "host.toml");
-    writeFileSync(host, 'schema = 1\nunsandboxed_reason = "Vast container: seccomp blocks user namespaces"\n');
+    writeFileSync(
+      host,
+      'schema = 1\nunsandboxed_reason = "Vast container: seccomp blocks user namespaces"\n',
+    );
     const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_HOST_FILE: host });
     expect(r.code).toBe(0);
     const argv = readFileSync(log, "utf8").split("\n");
     expect(argv).toContain("danger-full-access");
     expect(argv).not.toContain("read-only");
-    expect(r.stderr).toContain("UNSANDBOXED: asked for read-only, running danger-full-access");
+    expect(r.stderr).toContain(
+      "UNSANDBOXED: asked for read-only, running danger-full-access",
+    );
     expect(r.stderr).toContain("seccomp blocks user namespaces");
-    const Sandbox = z.object({ sandbox: z.string(), sandbox_effective: z.string(), unsandboxed_reason: z.string() });
+    const Sandbox = z.object({
+      sandbox: z.string(),
+      sandbox_effective: z.string(),
+      unsandboxed_reason: z.string(),
+    });
     expect(decodedJson(Sandbox, r.stdout.trim())).toEqual({
       sandbox: "read-only",
       sandbox_effective: "danger-full-access",
@@ -156,7 +287,12 @@ describe("codex-run", () => {
     const file = join(dir, "run.progress.json");
     const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_PROGRESS_FILE: file });
     expect(r.code).toBe(0);
-    const Progress = z.object({ schema: z.literal(1), last: z.string(), commands: z.number(), files: z.number() });
+    const Progress = z.object({
+      schema: z.literal(1),
+      last: z.string(),
+      commands: z.number(),
+      files: z.number(),
+    });
     expect(decodedJson(Progress, readFileSync(file, "utf8"))).toEqual({
       schema: 1,
       last: "✎ kernel.ts",
@@ -170,33 +306,59 @@ describe("codex-run", () => {
   test("no host declaration: the asked sandbox, and the receipt says so", () => {
     const { bin } = fakeCodex(scratch());
     const r = run(FULL, { CODEX_RUN_BIN: bin });
-    const Sandbox = z.object({ sandbox_effective: z.string(), unsandboxed_reason: z.null() });
-    expect(decodedJson(Sandbox, r.stdout.trim())).toEqual({ sandbox_effective: "read-only", unsandboxed_reason: null });
+    const Sandbox = z.object({
+      sandbox_effective: z.string(),
+      unsandboxed_reason: z.null(),
+    });
+    expect(decodedJson(Sandbox, r.stdout.trim())).toEqual({
+      sandbox_effective: "read-only",
+      unsandboxed_reason: null,
+    });
     expect(r.stderr).not.toContain("UNSANDBOXED");
   });
 
   test.each([
     ["an empty reason", 'schema = 1\nunsandboxed_reason = "  "\n'],
-    ["an unknown key", 'schema = 1\nunsandboxed_reason = "x"\nnetwork = true\n'],
+    [
+      "an unknown key",
+      'schema = 1\nunsandboxed_reason = "x"\nnetwork = true\n',
+    ],
     ["not TOML", "schema = = 1\n"],
-  ])("a malformed host declaration (%s) is refused before codex starts", (_name, text) => {
-    const dir = scratch();
-    const { bin, log } = fakeCodex(dir);
-    const host = join(dir, "host.toml");
-    writeFileSync(host, text);
-    const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_HOST_FILE: host });
-    expect(r.code).toBe(2);
-    expect(r.receipt.why).toContain("is not a valid host declaration");
-    expect(existsSync(log)).toBe(false);
-  });
+  ])(
+    "a malformed host declaration (%s) is refused before codex starts",
+    (_name, text) => {
+      const dir = scratch();
+      const { bin, log } = fakeCodex(dir);
+      const host = join(dir, "host.toml");
+      writeFileSync(host, text);
+      const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_HOST_FILE: host });
+      expect(r.code).toBe(2);
+      expect(r.receipt.why).toContain("is not a valid host declaration");
+      expect(existsSync(log)).toBe(false);
+    },
+  );
 
   test("--emit-envelope writes a P7 envelope for exactly this call and runs no codex", () => {
     const dir = scratch();
     const { bin, log } = fakeCodex(dir);
     const path = join(dir, "job.resource.json");
     const p = Bun.spawnSync(
-      ["bun", script, ...FULL, "--timeout-s", "300", "--emit-envelope", path, "--job-id", "luna-verify-1"],
-      { env: { ...process.env, CODEX_RUN_BIN: bin }, stdin: "ignore", timeout: 30_000 },
+      [
+        "bun",
+        script,
+        ...FULL,
+        "--timeout-s",
+        "300",
+        "--emit-envelope",
+        path,
+        "--job-id",
+        "luna-verify-1",
+      ],
+      {
+        env: { ...process.env, CODEX_RUN_BIN: bin },
+        stdin: "ignore",
+        timeout: 30_000,
+      },
     );
     expect(p.exitCode).toBe(0);
     expect(existsSync(log)).toBe(false);
@@ -206,7 +368,10 @@ describe("codex-run", () => {
         job_id: z.literal("luna-verify-1"),
         child_fanout: z.literal(0),
         walltime_seconds: z.literal(330),
-        device: z.object({ kind: z.literal("cpu"), gpu_status: z.literal("not-beneficial") }),
+        device: z.object({
+          kind: z.literal("cpu"),
+          gpu_status: z.literal("not-beneficial"),
+        }),
       }),
     ).safeParse(readFileSync(path, "utf8"));
     expect(env.success).toBe(true);
@@ -216,7 +381,20 @@ describe("codex-run", () => {
     const dir = scratch();
     const path = join(dir, "job.resource.json");
     const p = Bun.spawnSync(
-      ["bun", script, "--model", "gpt-5.6-luna", "--effort", "low", "--sandbox", "read-only", "--cd", ".", "--emit-envelope", path],
+      [
+        "bun",
+        script,
+        "--model",
+        "gpt-5.6-luna",
+        "--effort",
+        "low",
+        "--sandbox",
+        "read-only",
+        "--cd",
+        ".",
+        "--emit-envelope",
+        path,
+      ],
       { stdin: "ignore", timeout: 30_000 },
     );
     expect(p.exitCode).toBe(2);
@@ -285,6 +463,8 @@ describe("codex-run", () => {
     expect(r.code).toBe(3);
     expect(r.receipt.outcome).toBe("timeout");
     expect(r.receipt.why).toContain("3 s bound");
-    expect(r.stderr).toMatch(/codex-run: waiting for gpt-6-luna \(\d+(\.\d)? s of 3 s\)…/u);
+    expect(r.stderr).toMatch(
+      /codex-run: waiting for gpt-6-luna \(\d+(\.\d)? s of 3 s\)…/u,
+    );
   }, 20_000);
 });

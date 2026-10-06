@@ -14,7 +14,10 @@ function repo(tools: string): string {
   const d = mkdtempSync(join(tmpdir(), "mise-pins-"));
   dirs.push(d);
   // A task is needed: without one the contract is "not adopted" and the pin check never runs.
-  writeFileSync(join(d, "mise.toml"), `[tools]\n${tools}\n\n[tasks.check]\nrun = "true"\n`);
+  writeFileSync(
+    join(d, "mise.toml"),
+    `[tools]\n${tools}\n\n[tasks.check]\nrun = "true"\n`,
+  );
   return d;
 }
 function run(dir: string): string {

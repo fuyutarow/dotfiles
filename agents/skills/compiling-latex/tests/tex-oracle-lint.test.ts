@@ -11,9 +11,20 @@ const dirty = join(import.meta.dir, "fixtures/lint/dirty/main.tex");
 const clean = join(import.meta.dir, "fixtures/lint/clean/main.tex");
 const scratch = mkdtempSync(join(tmpdir(), "tex-oracle-lint-"));
 
-async function run(...args: string[]): Promise<{ code: number; out: string; err: string }> {
-  const proc = Bun.spawn(["bun", oracle, ...args], { cwd: skill, stdout: "pipe", stderr: "pipe", timeout: 30_000 });
-  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+async function run(
+  ...args: string[]
+): Promise<{ code: number; out: string; err: string }> {
+  const proc = Bun.spawn(["bun", oracle, ...args], {
+    cwd: skill,
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 30_000,
+  });
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
   return { code, out, err };
 }
 
@@ -27,8 +38,13 @@ describe("lint against the shipped NOTATION.md template", () => {
   test("dirty fixture: every rule hits exactly once, exit 1", async () => {
     const { code, out } = await run("lint", dirty, "--contract", contract);
     const ruleCount = Number(out.match(/\((\d+) rules, 3 files\)/u)?.[1]);
-    const ids = [...out.matchAll(/^\S+:\d+:\d+: \[(R\d+)\]/gmu)].map((m) => m[1]).toSorted((a, b) => (a ?? "").localeCompare(b ?? ""));
-    const expected = Array.from({ length: ruleCount }, (_, i) => `R${i + 1}`).toSorted((a, b) => a.localeCompare(b));
+    const ids = [...out.matchAll(/^\S+:\d+:\d+: \[(R\d+)\]/gmu)]
+      .map((m) => m[1])
+      .toSorted((a, b) => (a ?? "").localeCompare(b ?? ""));
+    const expected = Array.from(
+      { length: ruleCount },
+      (_, i) => `R${i + 1}`,
+    ).toSorted((a, b) => a.localeCompare(b));
     expect(code).toBe(1);
     expect(ruleCount).toBeGreaterThan(0);
     expect(ids).toEqual(expected);
@@ -57,7 +73,11 @@ describe("lint against the shipped NOTATION.md template", () => {
 describe("contract grammar errors exit 2", () => {
   const cases: [string, string, string][] = [
     ["no block", "# x\n", "found 0"],
-    ["two blocks", "```forbidden\na\tb\n```\n```forbidden\nc\td\n```\n", "found 2"],
+    [
+      "two blocks",
+      "```forbidden\na\tb\n```\n```forbidden\nc\td\n```\n",
+      "found 2",
+    ],
     ["unclosed", "```forbidden\na\tb\n", "never closed"],
     ["empty block", "```forbidden\n\n```\n", "no rules"],
     ["no tab", "```forbidden\nnotab\n```\n", "<regex><TAB><reason>"],
@@ -66,7 +86,12 @@ describe("contract grammar errors exit 2", () => {
   ];
   for (const [name, text, message] of cases) {
     test(name, async () => {
-      const { code, err } = await run("lint", clean, "--contract", contractFile(`${name.replaceAll(" ", "-")}.md`, text));
+      const { code, err } = await run(
+        "lint",
+        clean,
+        "--contract",
+        contractFile(`${name.replaceAll(" ", "-")}.md`, text),
+      );
       expect(code).toBe(2);
       expect(err).toContain(message);
     });
@@ -74,12 +99,33 @@ describe("contract grammar errors exit 2", () => {
 });
 
 describe("CLI boundary exits 2", () => {
-  test("missing --contract", async () => { expect((await run("lint", clean)).code).toBe(2); });
-  test("--contract with no value", async () => { expect((await run("lint", clean, "--contract")).code).toBe(2); });
-  test("extra positional", async () => { expect((await run("lint", clean, "extra", "--contract", contract)).code).toBe(2); });
-  test("unknown flag", async () => { expect((await run("lint", clean, "--contract", contract, "--bogus")).code).toBe(2); });
-  test("--__proto__", async () => { expect((await run("lint", clean, "--contract", contract, "--__proto__", "x")).code).toBe(2); });
-  test("contract file missing", async () => { expect((await run("lint", clean, "--contract", join(scratch, "nope.md"))).code).toBe(2); });
+  test("missing --contract", async () => {
+    expect((await run("lint", clean)).code).toBe(2);
+  });
+  test("--contract with no value", async () => {
+    expect((await run("lint", clean, "--contract")).code).toBe(2);
+  });
+  test("extra positional", async () => {
+    expect(
+      (await run("lint", clean, "extra", "--contract", contract)).code,
+    ).toBe(2);
+  });
+  test("unknown flag", async () => {
+    expect(
+      (await run("lint", clean, "--contract", contract, "--bogus")).code,
+    ).toBe(2);
+  });
+  test("--__proto__", async () => {
+    expect(
+      (await run("lint", clean, "--contract", contract, "--__proto__", "x"))
+        .code,
+    ).toBe(2);
+  });
+  test("contract file missing", async () => {
+    expect(
+      (await run("lint", clean, "--contract", join(scratch, "nope.md"))).code,
+    ).toBe(2);
+  });
   test("\\input target missing", async () => {
     const main = contractFile("main.tex", "\\input{gone}\n");
     const { code, err } = await run("lint", main, "--contract", contract);

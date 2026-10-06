@@ -4,17 +4,16 @@ description: >-
   House TypeScript style — prefer type inference or `satisfies` over `as` casts; use `??` (nullish
   coalescing) not `||` for defaults; model absence with `undefined`/`null` before reaching for
   `""` sentinels; replace `switch` and nested ternaries with `ts-pattern`; validate/narrow with
-  zod `safeParse` instead of hand-written type guards. Auto-activates when .ts/.tsx files are in
-  play; also use when writing or reviewing TypeScript. Not for language-agnostic change discipline
+  zod `safeParse` instead of hand-written type guards. Use when writing or
+  reviewing TypeScript, or adopting the house oxlint/tsconfig setup in another repo. Not for language-agnostic change discipline
   (→ implementing-and-debugging), prose (→ linting-prose), or Bun script/runtime craft — spawn,
-  bunx, deps, script anatomy (→ writing-bun-scripts, whose zero-dep floor wins in standalone
-  scripts).
+  bunx, deps, script anatomy (→ writing-bun-scripts).
 paths: "**/*.{ts,tsx}"
 ---
 
 # Writing TypeScript — house style
 
-> **Version**: v2609.1.0 (2026-09-21) — adds the string-construction boundary to the house `/LINT_TS` floor.
+> **Version**: v2610.1.0 (2026-10-06) — names the enforced policy (oxlint-policy.toml) and ships the consumer-repo fixture.
 > A lean per-filetype style floor; extend as house TS conventions accrete.
 
 Each rule changes what you write. Prefer the `✅` form; flag the `❌` in review.
@@ -42,6 +41,21 @@ Each rule changes what you write. Prefer the `✅` form; flag the `❌` in revie
   Use the target's DOM/framework, query parameters, argument vectors, or URL builder for other formats.
   Never pre-escape an interpolated value. A literal backtick
   or `${` is the remaining source-syntax exception; escape it only as literal syntax, not data.
+
+## What is enforced, and in other repos
+
+The rules above are style; what a gate enforces is `~/dotfiles/oxlint-policy.toml` — the one home
+of the house lint policy (no `throw`, no `try`, no `as`, zod `safeParse`, …), each rule with its
+reason. `.oxlintrc.json` is rendered from it, never edited. When a rule here and the policy
+disagree, the policy wins and this file is stale.
+
+A repo other than dotfiles adopts the same setup from [`assets/consumer-repo/`](assets/consumer-repo/):
+copy `package.json` (rename it), `tsconfig.json` (adjust only `include`/`exclude`) and
+`oxlint-policy.local.toml` (ignores only, each with a reason); paste `mise-tasks.toml` into its
+`mise.toml` and add `lint:ts` and `lint:oxlint-policy` to its `lint` depends; then `bun install`
+and `mise run oxlint:render`. `lint:ts` checks staged files only, so another session's WIP never
+blocks a commit. `tests/consumer-repo.test.ts` fails when these files drift from dotfiles' own
+pins, compilerOptions or rules.
 
 ## Cut
 

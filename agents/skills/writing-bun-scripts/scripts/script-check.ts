@@ -782,7 +782,9 @@ async function checkFile(file: string): Promise<void> {
 async function main(): Promise<void> {
   const args = Bun.argv.slice(2);
   if (args.includes("--__proto__")) {
-    process.stderr.write("FATAL: refusing prototype-mutating option '--__proto__'\n");
+    process.stderr.write(
+      "FATAL: refusing prototype-mutating option '--__proto__'\n",
+    );
     process.exit(2);
   }
   await cli(

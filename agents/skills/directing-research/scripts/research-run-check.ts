@@ -60,7 +60,7 @@ async function main(): Promise<void> {
         ],
       },
       strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),

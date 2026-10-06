@@ -208,7 +208,8 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 }
 
 function inputPath():
-  { ok: true; value: string } | { ok: false; error: string } {
+  | { ok: true; value: string }
+  | { ok: false; error: string } {
   const parsed = cli(
     {
       name: "configuration-contract-check.ts",

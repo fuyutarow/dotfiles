@@ -1348,7 +1348,7 @@ async function readInput(): Promise<Input | ErrorValue> {
         transferBundle: String,
       },
       strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),

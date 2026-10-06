@@ -22,8 +22,16 @@ const Item = z.looseObject({
 });
 const Event = z.looseObject({ type: z.string(), item: Item.optional() });
 
-export type Tally = { last: string; commands: number; files: ReadonlySet<string> };
-export const emptyTally = (): Tally => ({ last: "starting", commands: 0, files: new Set() });
+export type Tally = {
+  last: string;
+  commands: number;
+  files: ReadonlySet<string>;
+};
+export const emptyTally = (): Tally => ({
+  last: "starting",
+  commands: 0,
+  files: new Set(),
+});
 
 const LAST_CHARS = 72;
 const oneLine = (s: string): string => {
@@ -38,16 +46,26 @@ export function foldEvent(t: Tally, line: string): Tally {
   const { type, item } = parsed.data;
   if (item === undefined) return t;
   if (type === "item.started" && item.type === "command_execution")
-    return { ...t, last: `$ ${oneLine(item.command ?? "")}`, commands: t.commands + 1 };
+    return {
+      ...t,
+      last: `$ ${oneLine(item.command ?? "")}`,
+      commands: t.commands + 1,
+    };
   if (type !== "item.completed") return t;
   if (item.type === "file_change") {
     const paths = (item.changes ?? []).map((c) => c.path);
     const latest = paths.at(-1);
     if (latest === undefined) return t;
-    return { ...t, last: `✎ ${basename(latest)}`, files: new Set([...t.files, ...paths]) };
+    return {
+      ...t,
+      last: `✎ ${basename(latest)}`,
+      files: new Set([...t.files, ...paths]),
+    };
   }
-  if (item.type === "agent_message") return { ...t, last: `“${oneLine(item.text ?? "")}”` };
-  if (item.type === "web_search") return { ...t, last: `⌕ ${oneLine(item.query ?? "")}` };
+  if (item.type === "agent_message")
+    return { ...t, last: `“${oneLine(item.text ?? "")}”` };
+  if (item.type === "web_search")
+    return { ...t, last: `⌕ ${oneLine(item.query ?? "")}` };
   return t;
 }
 
@@ -74,7 +92,9 @@ export function progressWriter(path: string): {
   let failed = 0;
   const write = (): void => {
     const tmp = `${path}.tmp`;
-    const body = JSON.stringify(toProgress(tally, Temporal.Now.instant().toString()));
+    const body = JSON.stringify(
+      toProgress(tally, Temporal.Now.instant().toString()),
+    );
     const done = fromThrowable(() => {
       writeFileSync(tmp, body);
       renameSync(tmp, path);

@@ -138,7 +138,9 @@ function nextCodeTickCount(current: number, runLength: number): number {
 
 function isTableSeparator(line: string): boolean {
   const cells = tableCells(line);
-  return cells?.length === 5 && cells.every((cell) => /^:?-{3,}:?$/u.test(cell));
+  return (
+    cells?.length === 5 && cells.every((cell) => /^:?-{3,}:?$/u.test(cell))
+  );
 }
 
 function validateProcessLenses(

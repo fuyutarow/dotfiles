@@ -1,0 +1,17 @@
+{
+  "name": "REPLACE-ME-ts",
+  "private": true,
+  "description": "The house TypeScript toolchain, pinned. Versions are the dotfiles pins (writing-typescript tests fail when they drift). The lint rules are not here: .oxlintrc.json is rendered from ~/dotfiles/oxlint-policy.toml (mise run oxlint:render).",
+  "dependencies": {
+    "neverthrow": "8.2.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "oxfmt": "0.67.0",
+    "oxlint": "1.82.0",
+    "oxlint-plugin-eslint": "1.82.0",
+    "oxlint-tsgolint": "7.0.2003"
+  }
+}

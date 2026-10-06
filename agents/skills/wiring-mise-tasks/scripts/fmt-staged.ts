@@ -113,7 +113,7 @@ async function main(): Promise<number> {
         },
       },
       strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),

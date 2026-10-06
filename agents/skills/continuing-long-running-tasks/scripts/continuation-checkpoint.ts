@@ -198,7 +198,8 @@ function writerForBoundSlot(
     ReturnType<typeof readContinuationBindingAtSlot>
   >;
   type BindingOutcome =
-    { bound: true; binding: SlotBinding } | { bound: false };
+    | { bound: true; binding: SlotBinding }
+    | { bound: false };
   return fromThrowable((): BindingOutcome => {
     const binding = readContinuationBindingAtSlot(resolve(slotPath));
     if (binding?.status === "bound" && binding.record === resolve(recordPath)) {

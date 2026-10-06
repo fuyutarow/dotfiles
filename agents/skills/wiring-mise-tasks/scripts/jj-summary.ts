@@ -13,7 +13,8 @@ export function summaryPaths(summary: string): string[] {
       continue;
     }
     const [, pre = "", from = "", to = "", post = ""] = brace;
-    const join = (mid: string) => `${pre}${mid}${post}`.replaceAll(/\/{2,}/gu, "/").replace(/^\//u, "");
+    const join = (mid: string) =>
+      `${pre}${mid}${post}`.replaceAll(/\/{2,}/gu, "/").replace(/^\//u, "");
     if (kind === "R") out.push(join(from));
     out.push(join(to));
   }

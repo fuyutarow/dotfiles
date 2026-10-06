@@ -30,7 +30,9 @@ if (model === "avail") {
 }
 
 if (model === "invalid") {
-  process.stderr.write(`Error: model "invalid" is not recognized as a known model\n`);
+  process.stderr.write(
+    `Error: model "invalid" is not recognized as a known model\n`,
+  );
   process.exit(1);
 }
 

@@ -5,59 +5,59 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const donorCheck = resolve(
-	import.meta.dir,
-	"../../systematizing-knowledge/scripts/check-donor-set.ts",
+  import.meta.dir,
+  "../../systematizing-knowledge/scripts/check-donor-set.ts",
 );
 const candidateCheck = resolve(
-	import.meta.dir,
-	"../../forging-novel-theses/scripts/gate-check.ts",
+  import.meta.dir,
+  "../../forging-novel-theses/scripts/gate-check.ts",
 );
 const researchCheck = resolve(import.meta.dir, "../scripts/research-check.ts");
 const temporaryDirectories: string[] = [];
 
 type RunResult = Readonly<{
-	exitCode: number;
-	stderr: string;
-	stdout: string;
+  exitCode: number;
+  stderr: string;
+  stdout: string;
 }>;
 
 const normalize = (text: string): string => `${text.trim()}\n`;
 
 const fixtureSet = (): Readonly<{
-	directory: string;
-	donorPath: string;
-	transferPath: string;
-	judgmentPath: string;
+  directory: string;
+  donorPath: string;
+  transferPath: string;
+  judgmentPath: string;
 }> => {
-	const directory = mkdtempSync(join(tmpdir(), "transfer-chain-"));
-	temporaryDirectories.push(directory);
-	return {
-		directory,
-		donorPath: join(directory, "donor-set.md"),
-		judgmentPath: join(directory, "judgment.md"),
-		transferPath: join(directory, "transfer-bundle.md"),
-	};
+  const directory = mkdtempSync(join(tmpdir(), "transfer-chain-"));
+  temporaryDirectories.push(directory);
+  return {
+    directory,
+    donorPath: join(directory, "donor-set.md"),
+    judgmentPath: join(directory, "judgment.md"),
+    transferPath: join(directory, "transfer-bundle.md"),
+  };
 };
 
 const write = (path: string, text: string): void => {
-	writeFileSync(path, normalize(text));
+  writeFileSync(path, normalize(text));
 };
 
 const sha256 = (path: string): string =>
-	createHash("sha256").update(readFileSync(path)).digest("hex");
+  createHash("sha256").update(readFileSync(path)).digest("hex");
 
 const run = (script: string, arguments_: readonly string[]): RunResult => {
-	const result = Bun.spawnSync({
-		cmd: ["bun", script, ...arguments_],
-		stderr: "pipe",
-		stdout: "pipe",
-		timeout: 10_000,
-	});
-	return {
-		exitCode: result.exitCode,
-		stderr: result.stderr.toString(),
-		stdout: result.stdout.toString(),
-	};
+  const result = Bun.spawnSync({
+    cmd: ["bun", script, ...arguments_],
+    stderr: "pipe",
+    stdout: "pipe",
+    timeout: 10_000,
+  });
+  return {
+    exitCode: result.exitCode,
+    stderr: result.stderr.toString(),
+    stdout: result.stdout.toString(),
+  };
 };
 
 const donorSet = `
@@ -171,79 +171,79 @@ const judgment = (path: string, digest: string): string => `
 `;
 
 afterEach(() => {
-	for (const directory of temporaryDirectories.splice(0)) {
-		rmSync(directory, { force: true, recursive: true });
-	}
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { force: true, recursive: true });
+  }
 });
 
 describe("frozen transfer artifact chain", () => {
-	test("passes DONOR SET -> transfer bundle -> TRANSFER DISPOSITION end to end", () => {
-		const paths = fixtureSet();
-		write(paths.donorPath, donorSet);
-		const donorDigest = sha256(paths.donorPath);
-		write(paths.transferPath, transferBundle(paths.donorPath, donorDigest));
-		const transferDigest = sha256(paths.transferPath);
-		write(paths.judgmentPath, judgment(paths.transferPath, transferDigest));
+  test("passes DONOR SET -> transfer bundle -> TRANSFER DISPOSITION end to end", () => {
+    const paths = fixtureSet();
+    write(paths.donorPath, donorSet);
+    const donorDigest = sha256(paths.donorPath);
+    write(paths.transferPath, transferBundle(paths.donorPath, donorDigest));
+    const transferDigest = sha256(paths.transferPath);
+    write(paths.judgmentPath, judgment(paths.transferPath, transferDigest));
 
-		const donorResult = run(donorCheck, [paths.donorPath]);
-		const candidateResult = run(candidateCheck, [
-			"--legacy-v1",
-			"--donor-set",
-			paths.donorPath,
-			paths.transferPath,
-		]);
-		const judgmentResult = run(researchCheck, [
-			"--donor-set",
-			paths.donorPath,
-			"--transfer-bundle",
-			paths.transferPath,
-			paths.judgmentPath,
-		]);
+    const donorResult = run(donorCheck, [paths.donorPath]);
+    const candidateResult = run(candidateCheck, [
+      "--legacy-v1",
+      "--donor-set",
+      paths.donorPath,
+      paths.transferPath,
+    ]);
+    const judgmentResult = run(researchCheck, [
+      "--donor-set",
+      paths.donorPath,
+      "--transfer-bundle",
+      paths.transferPath,
+      paths.judgmentPath,
+    ]);
 
-		expect(donorResult.exitCode).toBe(0);
-		expect(candidateResult.exitCode).toBe(0);
-		expect(candidateResult.stdout).toContain("frozen DONOR SET verified");
-		expect(judgmentResult.exitCode).toBe(0);
-		expect(judgmentResult.stdout).toContain(
-			"TRANSFER DISPOSITION attempts=2 mapping-breaks=1",
-		);
-	});
+    expect(donorResult.exitCode).toBe(0);
+    expect(candidateResult.exitCode).toBe(0);
+    expect(candidateResult.stdout).toContain("frozen DONOR SET verified");
+    expect(judgmentResult.exitCode).toBe(0);
+    expect(judgmentResult.stdout).toContain(
+      "TRANSFER DISPOSITION attempts=2 mapping-breaks=1",
+    );
+  });
 
-	test("rejects donor or transfer mutation after its digest was frozen", () => {
-		const paths = fixtureSet();
-		write(paths.donorPath, donorSet);
-		const donorDigest = sha256(paths.donorPath);
-		write(paths.transferPath, transferBundle(paths.donorPath, donorDigest));
-		const transferDigest = sha256(paths.transferPath);
-		write(paths.judgmentPath, judgment(paths.transferPath, transferDigest));
+  test("rejects donor or transfer mutation after its digest was frozen", () => {
+    const paths = fixtureSet();
+    write(paths.donorPath, donorSet);
+    const donorDigest = sha256(paths.donorPath);
+    write(paths.transferPath, transferBundle(paths.donorPath, donorDigest));
+    const transferDigest = sha256(paths.transferPath);
+    write(paths.judgmentPath, judgment(paths.transferPath, transferDigest));
 
-		write(
-			paths.donorPath,
-			`${donorSet}\n- Later mutation: changed after freeze`,
-		);
-		const donorMutation = run(candidateCheck, [
-			"--donor-set",
-			paths.donorPath,
-			paths.transferPath,
-		]);
-		expect(donorMutation.exitCode).toBe(1);
-		expect(donorMutation.stdout).toContain("DONOR SET SHA-256 does not match");
+    write(
+      paths.donorPath,
+      `${donorSet}\n- Later mutation: changed after freeze`,
+    );
+    const donorMutation = run(candidateCheck, [
+      "--donor-set",
+      paths.donorPath,
+      paths.transferPath,
+    ]);
+    expect(donorMutation.exitCode).toBe(1);
+    expect(donorMutation.stdout).toContain("DONOR SET SHA-256 does not match");
 
-		write(paths.donorPath, donorSet);
-		write(
-			paths.transferPath,
-			`${transferBundle(paths.donorPath, donorDigest)}\n- Later mutation: changed after disposition`,
-		);
-		const transferMutation = run(researchCheck, [
-			"--donor-set",
-			paths.donorPath,
-			"--transfer-bundle",
-			paths.transferPath,
-			paths.judgmentPath,
-		]);
-		expect(transferMutation.exitCode).toBe(1);
-		expect(transferMutation.stdout).toContain(
-			"transfer bundle SHA-256 does not match",
-		);
-	});
+    write(paths.donorPath, donorSet);
+    write(
+      paths.transferPath,
+      `${transferBundle(paths.donorPath, donorDigest)}\n- Later mutation: changed after disposition`,
+    );
+    const transferMutation = run(researchCheck, [
+      "--donor-set",
+      paths.donorPath,
+      "--transfer-bundle",
+      paths.transferPath,
+      paths.judgmentPath,
+    ]);
+    expect(transferMutation.exitCode).toBe(1);
+    expect(transferMutation.stdout).toContain(
+      "transfer bundle SHA-256 does not match",
+    );
+  });
 });

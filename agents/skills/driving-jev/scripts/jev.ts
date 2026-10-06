@@ -197,7 +197,7 @@ async function main(): Promise<Outcome<void>> {
         allowCustomBaseUrl: Boolean,
       },
       strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),

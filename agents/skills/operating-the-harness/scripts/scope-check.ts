@@ -113,7 +113,7 @@ async function main(): Promise<number> {
       name: "scope-check.ts",
       parameters: ["[user-scope-root]"],
       strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),

@@ -44,7 +44,11 @@ import { fromThrowable } from "neverthrow";
 import { jsonText, z } from "../../../hooks/zod.ts";
 import { attempt, errorMessage } from "../../../hooks/attempt.ts";
 import { loadRoster } from "../../../models/roster.ts";
-import { judge, ordersIn, parseFloorConfig } from "../../../hooks/model-orders.ts";
+import {
+  judge,
+  ordersIn,
+  parseFloorConfig,
+} from "../../../hooks/model-orders.ts";
 import { progressWriter } from "./codex-progress.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
@@ -102,11 +106,21 @@ const argv = cli(
     flags: {
       choice: {
         type: String,
-        description: "a luna row of agents/models/dispatch-roster.toml (sets model and effort)",
+        description:
+          "a luna row of agents/models/dispatch-roster.toml (sets model and effort)",
       },
-      model: { type: String, description: "exact model slug (checked against model-floor.toml)" },
-      effort: { type: String, description: `reasoning effort: ${EFFORTS.join(" | ")}` },
-      sandbox: { type: String, description: `codex sandbox: ${SANDBOXES.join(" | ")}` },
+      model: {
+        type: String,
+        description: "exact model slug (checked against model-floor.toml)",
+      },
+      effort: {
+        type: String,
+        description: `reasoning effort: ${EFFORTS.join(" | ")}`,
+      },
+      sandbox: {
+        type: String,
+        description: `codex sandbox: ${SANDBOXES.join(" | ")}`,
+      },
       cd: { type: String, description: "working directory codex runs in (-C)" },
       timeoutS: {
         type: Number,
@@ -118,12 +132,19 @@ const argv = cli(
         default: join(tmpdir(), "codex-run"),
         description: "directory the receipt file is written to",
       },
-      promptFile: { type: String, description: "file holding the prompt (else stdin)" },
+      promptFile: {
+        type: String,
+        description: "file holding the prompt (else stdin)",
+      },
       emitEnvelope: {
         type: String,
-        description: "write the P7 resource envelope for this call to PATH and exit (no codex run)",
+        description:
+          "write the P7 resource envelope for this call to PATH and exit (no codex run)",
       },
-      jobId: { type: String, description: "job_id for --emit-envelope (default: the run id)" },
+      jobId: {
+        type: String,
+        description: "job_id for --emit-envelope (default: the run id)",
+      },
     },
   },
   undefined,
@@ -165,11 +186,16 @@ function emit(outcome: Outcome, fields: Record<string, unknown>): never {
   const saved = fromThrowable(
     () => {
       mkdirSync(dir, { recursive: true });
-      writeFileSync(path, `${JSON.stringify({ ...receipt, receipt_file: path })}\n`);
+      writeFileSync(
+        path,
+        `${JSON.stringify({ ...receipt, receipt_file: path })}\n`,
+      );
     },
     (e) => errorMessage(e),
   )();
-  const shown = saved.isOk() ? { ...receipt, receipt_file: path } : { ...receipt, receipt_file: null };
+  const shown = saved.isOk()
+    ? { ...receipt, receipt_file: path }
+    : { ...receipt, receipt_file: null };
   writeSync(1, `${JSON.stringify(shown)}\n`);
   say(
     `${outcome} after ${elapsed()} s${saved.isOk() ? ` — receipt ${path}` : ` — receipt file not written (${saved.error})`}`,
@@ -182,11 +208,16 @@ function refuse(why: string): never {
 }
 
 // --- C1/C2 checks: everything that can be refused before codex starts -------------------------
-if (argv._.length > 0) refuse(`unexpected argument: ${argv._[0]} (the prompt goes in --prompt-file or stdin)`);
+if (argv._.length > 0)
+  refuse(
+    `unexpected argument: ${argv._[0]} (the prompt goes in --prompt-file or stdin)`,
+  );
 const { choice, sandbox, cd, timeoutS, promptFile } = argv.flags;
 if (choice !== undefined) {
   if (model !== undefined || effort !== undefined)
-    refuse("give --choice OR --model/--effort, not both — --choice already sets model and effort");
+    refuse(
+      "give --choice OR --model/--effort, not both — --choice already sets model and effort",
+    );
   const roster = await loadRoster();
   if (!roster.ok) refuse(`cannot read the dispatch roster: ${roster.error}`);
   const row = roster.value.choice.find((c) => c.id === choice);
@@ -207,7 +238,9 @@ const missing = [
   ["--cd", cd],
 ].flatMap(([flag, v]) => (v === undefined || v === "" ? [flag] : []));
 if (missing.length > 0)
-  refuse(`missing ${missing.join(", ")} — every call names model, effort, sandbox and directory (driving-codex C2)`);
+  refuse(
+    `missing ${missing.join(", ")} — every call names model, effort, sandbox and directory (driving-codex C2)`,
+  );
 if (!EFFORTS.includes(String(effort)))
   refuse(
     effort === "ultra"
@@ -221,20 +254,30 @@ if (!SANDBOXES.includes(String(sandbox)))
       : `sandbox '${sandbox}' is not one of ${SANDBOXES.join(", ")}`,
   );
 if (!Number.isInteger(timeoutS) || timeoutS < 1 || timeoutS > MAX_TIMEOUT_S)
-  refuse(`--timeout-s must be an integer from 1 to ${MAX_TIMEOUT_S}, got ${timeoutS}`);
+  refuse(
+    `--timeout-s must be an integer from 1 to ${MAX_TIMEOUT_S}, got ${timeoutS}`,
+  );
 
 // The same judgment the model-floor hook makes on a Bash command line, made on the command this
 // file is about to run: a wrapped codex must not be the way around the floor.
 const floorProblem = await attempt(() => {
-  const config = parseFloorConfig(Bun.TOML.parse(readFileSync(FLOOR_CONFIG, "utf8")));
-  if (!config.ok) return `model-floor config ${FLOOR_CONFIG} is invalid: ${config.errors.join("; ")}`;
+  const config = parseFloorConfig(
+    Bun.TOML.parse(readFileSync(FLOOR_CONFIG, "utf8")),
+  );
+  if (!config.ok)
+    return `model-floor config ${FLOOR_CONFIG} is invalid: ${config.errors.join("; ")}`;
   const problems = ordersIn(`codex exec -m ${String(model)}`).flatMap((o) => {
     const p = judge(o, config.floors);
     return p === undefined ? [] : [p];
   });
-  return problems.length > 0 ? `model-floor: ${problems.join("; ")}` : undefined;
+  return problems.length > 0
+    ? `model-floor: ${problems.join("; ")}`
+    : undefined;
 });
-if (!floorProblem.ok) refuse(`cannot read the model floor ${FLOOR_CONFIG}: ${errorMessage(floorProblem.error)}`);
+if (!floorProblem.ok)
+  refuse(
+    `cannot read the model floor ${FLOOR_CONFIG}: ${errorMessage(floorProblem.error)}`,
+  );
 if (floorProblem.value !== undefined) refuse(floorProblem.value);
 
 // HOST DECLARATION: a box where codex's own sandbox cannot exist. codex sandboxes with bwrap on
@@ -246,9 +289,16 @@ if (floorProblem.value !== undefined) refuse(floorProblem.value);
 // reason in the receipt. No file = the sandbox asked for; a malformed file = refused, never guessed.
 const HOST_FILE =
   process.env.CODEX_RUN_HOST_FILE ??
-  join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "codex-run", "host.toml");
+  join(
+    process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+    "codex-run",
+    "host.toml",
+  );
 const HostDeclaration = z
-  .object({ schema: z.literal(1), unsandboxed_reason: z.string().trim().min(1) })
+  .object({
+    schema: z.literal(1),
+    unsandboxed_reason: z.string().trim().min(1),
+  })
   .strict();
 const hostText = await attempt(() => readFileSync(HOST_FILE, "utf8"));
 if (hostText.ok) {
@@ -260,7 +310,8 @@ if (hostText.ok) {
     );
   unsandboxedReason = parsed.data.unsandboxed_reason;
 }
-codexSandbox = unsandboxedReason === undefined ? String(sandbox) : "danger-full-access";
+codexSandbox =
+  unsandboxedReason === undefined ? String(sandbox) : "danger-full-access";
 
 // Measured 2026-10-05 on macOS: codex-run + codex (gpt-6-luna, effort low, read-only) peaked at
 // 191 MB RSS (`/usr/bin/time -l`) and used 1.7 s CPU in a 5.6 s run — a network-bound client.
@@ -289,21 +340,33 @@ if (argv.flags.emitEnvelope !== undefined) {
   };
   const path = resolve(argv.flags.emitEnvelope);
   const written = fromThrowable(
-    () =>{  writeFileSync(path, `${JSON.stringify(envelope, null, 2)}\n`); },
+    () => {
+      writeFileSync(path, `${JSON.stringify(envelope, null, 2)}\n`);
+    },
     (e) => errorMessage(e),
   )();
-  if (written.isErr()) refuse(`cannot write the envelope ${path}: ${written.error}`);
-  writeSync(1, `${JSON.stringify({ envelope_file: path, job_id: jobId, walltime_seconds: envelope.walltime_seconds })}\n`);
-  say(`envelope for ${model} (bound ${timeoutS} s) written to ${path} — run: agent-resource-run --manifest ${path} -- codex-run …`);
+  if (written.isErr())
+    refuse(`cannot write the envelope ${path}: ${written.error}`);
+  writeSync(
+    1,
+    `${JSON.stringify({ envelope_file: path, job_id: jobId, walltime_seconds: envelope.walltime_seconds })}\n`,
+  );
+  say(
+    `envelope for ${model} (bound ${timeoutS} s) written to ${path} — run: agent-resource-run --manifest ${path} -- codex-run …`,
+  );
   process.exit(0);
 }
 
 const promptRead = await attempt(async () =>
-  promptFile !== undefined ? readFileSync(promptFile, "utf8") : Bun.stdin.text(),
+  promptFile !== undefined
+    ? readFileSync(promptFile, "utf8")
+    : Bun.stdin.text(),
 );
-if (!promptRead.ok) refuse(`cannot read the prompt: ${errorMessage(promptRead.error)}`);
+if (!promptRead.ok)
+  refuse(`cannot read the prompt: ${errorMessage(promptRead.error)}`);
 const prompt = promptRead.value.trim();
-if (prompt === "") refuse("empty prompt (give --prompt-file, or pipe the prompt on stdin)");
+if (prompt === "")
+  refuse("empty prompt (give --prompt-file, or pipe the prompt on stdin)");
 
 // --- run --------------------------------------------------------------------------------------
 const lastFile = join(argv.flags.receiptDir, `${runId}.last.txt`);
@@ -329,30 +392,42 @@ if (unsandboxedReason !== undefined)
   say(
     `UNSANDBOXED: asked for ${sandbox}, running danger-full-access — ${HOST_FILE} declares this box the isolation: ${unsandboxedReason}`,
   );
-say(`started ${model} effort=${effort} sandbox=${codexSandbox} in ${resolve(String(cd))}, bound ${timeoutS} s`);
+say(
+  `started ${model} effort=${effort} sandbox=${codexSandbox} in ${resolve(String(cd))}, bound ${timeoutS} s`,
+);
 const deadline = AbortSignal.timeout(timeoutS * 1000);
 const spawned = await attempt(() =>
   // stdin "ignore" is the `</dev/null` of the recipe: codex exec reads stdin and would hang on an
   // open pipe for the whole budget (driving-codex Gotchas).
-  Bun.spawn(cmd, { stdin: "ignore", stdout: "pipe", stderr: "pipe", signal: deadline, killSignal: "SIGKILL" }),
+  Bun.spawn(cmd, {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    signal: deadline,
+    killSignal: "SIGKILL",
+  }),
 );
-if (!spawned.ok) refuse(`cannot start ${CODEX_BIN}: ${errorMessage(spawned.error)}`);
+if (!spawned.ok)
+  refuse(`cannot start ${CODEX_BIN}: ${errorMessage(spawned.error)}`);
 const proc = spawned.value;
-const heartbeat = setInterval(
-  () =>{  say(`waiting for ${model} (${elapsed()} s of ${timeoutS} s)…`); },
-  HEARTBEAT_S * 1000,
-);
+const heartbeat = setInterval(() => {
+  say(`waiting for ${model} (${elapsed()} s of ${timeoutS} s)…`);
+}, HEARTBEAT_S * 1000);
 // Read both pipes from the start (a child blocked on a full pipe never exits), but stop waiting for
 // them PIPE_GRACE_MS after the child itself exits: a killed codex can leave a grandchild holding
 // the pipe open, and the bound must hold even then.
 const PIPE_GRACE_MS = 1_000;
 const graced = (r: Promise<string>): Promise<string> =>
-  proc.exited.then(() => Promise.race([r, Bun.sleep(PIPE_GRACE_MS).then(() => "")]));
+  proc.exited.then(() =>
+    Promise.race([r, Bun.sleep(PIPE_GRACE_MS).then(() => "")]),
+  );
 // stdout is read as it arrives: every JSONL line also feeds the statusline's progress file when
 // agent-router asked for one (CODEX_RUN_PROGRESS_FILE; codex-progress.ts). What was read before a
 // grace cut-off is kept, not dropped.
 const progress =
-  process.env.CODEX_RUN_PROGRESS_FILE === undefined ? undefined : progressWriter(process.env.CODEX_RUN_PROGRESS_FILE);
+  process.env.CODEX_RUN_PROGRESS_FILE === undefined
+    ? undefined
+    : progressWriter(process.env.CODEX_RUN_PROGRESS_FILE);
 let streamed = "";
 function readEvents(): Promise<string> {
   const decoder = new TextDecoder();
@@ -378,7 +453,9 @@ const events = eventsRead === "" ? streamed : eventsRead;
 clearInterval(heartbeat);
 progress?.flush();
 if (progress !== undefined && progress.failedWrites() > 0)
-  say(`progress file ${process.env.CODEX_RUN_PROGRESS_FILE}: ${progress.failedWrites()} write(s) failed — the Run: row was not live for them`);
+  say(
+    `progress file ${process.env.CODEX_RUN_PROGRESS_FILE}: ${progress.failedWrites()} write(s) failed — the Run: row was not live for them`,
+  );
 
 // Usage is the sum over every turn.completed event (`--json` JSONL); a line that is not JSON, or
 // an event of another shape, carries no usage and is skipped.
@@ -396,7 +473,12 @@ const TurnCompleted = z.object({
     reasoning_output_tokens: Count,
   }),
 });
-const usage: Usage = { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0, reasoning_output_tokens: 0 };
+const usage: Usage = {
+  input_tokens: 0,
+  cached_input_tokens: 0,
+  output_tokens: 0,
+  reasoning_output_tokens: 0,
+};
 let turns = 0;
 for (const line of events.split("\n")) {
   const json = jsonText.safeParse(line);
@@ -411,9 +493,21 @@ for (const line of events.split("\n")) {
 const last = await attempt(() => readFileSync(lastFile, "utf8"));
 const lastMessage = last.ok ? last.value.trim() : "";
 const stderrTail = errText.trim().split("\n").slice(-20).join("\n");
-const common = { codex_exit: code, turns, usage, last_message: lastMessage, stderr_tail: stderrTail };
+const common = {
+  codex_exit: code,
+  turns,
+  usage,
+  last_message: lastMessage,
+  stderr_tail: stderrTail,
+};
 
-if (deadline.aborted) emit("timeout", { ...common, why: `killed at the ${timeoutS} s bound` });
-if (code !== 0) emit("codex-failed", { ...common, why: `codex exited ${code}` });
-if (lastMessage === "") emit("codex-failed", { ...common, why: "codex exited 0 but wrote no last message" });
+if (deadline.aborted)
+  emit("timeout", { ...common, why: `killed at the ${timeoutS} s bound` });
+if (code !== 0)
+  emit("codex-failed", { ...common, why: `codex exited ${code}` });
+if (lastMessage === "")
+  emit("codex-failed", {
+    ...common,
+    why: "codex exited 0 but wrote no last message",
+  });
 emit("ok", common);

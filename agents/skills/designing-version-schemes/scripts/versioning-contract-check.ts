@@ -40,7 +40,8 @@ function rejectPrototypeFlag(type: ArgvType, flag: string): void {
 }
 
 function inputPath():
-  { ok: true; value: string } | { ok: false; error: string } {
+  | { ok: true; value: string }
+  | { ok: false; error: string } {
   const parsed = cli(
     {
       name: "versioning-contract-check.ts",

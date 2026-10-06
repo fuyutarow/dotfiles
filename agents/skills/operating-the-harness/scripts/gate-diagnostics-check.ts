@@ -164,7 +164,7 @@ async function main(): Promise<number> {
       name: "gate-diagnostics-check.ts",
       parameters: ["[hooks-dir]"],
       strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),

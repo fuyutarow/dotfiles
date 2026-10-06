@@ -48,7 +48,8 @@ type Severity = "PASS" | "FAIL" | "MISSING";
 type VisibleLine = Readonly<{ text: string; number: number }>;
 type RegimeParse = Readonly<{ malformed: boolean; values: readonly string[] }>;
 type Attempt<T> =
-  Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; error: string }>;
+  | Readonly<{ ok: true; value: T }>
+  | Readonly<{ ok: false; error: string }>;
 
 function closesFence(
   marker: ReturnType<typeof markdownFence>,

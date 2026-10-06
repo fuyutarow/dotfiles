@@ -15,9 +15,11 @@ if (model === "reject") {
   process.exit(1);
 }
 
-process.stdout.write(`${JSON.stringify({
-  result: "OK",
-  session_id: "fixture-session",
-  total_cost_usd: 0,
-  usage: { input_tokens: 1, output_tokens: 1 },
-})}\n`);
+process.stdout.write(
+  `${JSON.stringify({
+    result: "OK",
+    session_id: "fixture-session",
+    total_cost_usd: 0,
+    usage: { input_tokens: 1, output_tokens: 1 },
+  })}\n`,
+);

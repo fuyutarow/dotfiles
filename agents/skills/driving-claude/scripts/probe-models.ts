@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { cli } from "cleye";
 import { asRecord, runClaude, type RunConfig } from "./run-claude.ts";
 
-
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
     process.stderr.write(`FATAL: unknown option '--${flag}'\n`);

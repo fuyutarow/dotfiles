@@ -321,10 +321,7 @@ describe("blind-spot-check", () => {
         "If operators bypass onboarding rather than complete it, does scope freeze still follow?",
         "Tell me anything about onboarding.",
       )
-      .replace(
-        "Reopens the object and action assumptions.",
-        "Nothing changes.",
-      )
+      .replace("Reopens the object and action assumptions.", "Nothing changes.")
       .replace(
         "operators, not administrators, absorb setup failure.",
         "shallow",

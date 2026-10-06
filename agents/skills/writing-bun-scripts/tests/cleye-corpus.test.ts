@@ -108,7 +108,9 @@ function run(entry: CorpusEntry, argv: string[]) {
     [
       "bun",
       join(ROOT, entry.path),
-      ...(entry.command !== undefined && entry.command !== "" ? [entry.command] : []),
+      ...(entry.command !== undefined && entry.command !== ""
+        ? [entry.command]
+        : []),
       ...argv,
     ],
     {
@@ -160,7 +162,10 @@ describe("production Cleye corpus boundary", () => {
       expect(help.stdout.toString()).toContain("Show help");
 
       const unknown = run(entry, ["--definitely-unknown-cleye-contract"]);
-      const expected = entry.unknownFlag ?? { exit: 1, message: "Unknown flag" };
+      const expected = entry.unknownFlag ?? {
+        exit: 1,
+        message: "Unknown flag",
+      };
       expect(unknown.exitCode).toBe(expected.exit);
       expect(unknown.stderr.toString()).toContain(expected.message);
 

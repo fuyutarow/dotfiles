@@ -773,7 +773,7 @@ async function input(): Promise<string | Error> {
       name: "blind-spot-check.ts",
       parameters: ["[path]"],
       strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),

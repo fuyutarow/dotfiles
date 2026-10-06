@@ -74,9 +74,11 @@ run = 'exec zsh -l'
 # ONLY: shfmt's zsh dialect (v3.13+) is real but incomplete, and these zsh files are
 # boot-critical config (break = no interactive shell), so we do NOT auto-format them.
 # Bash file discovery is centralised via `shfmt -f <dirs>` (extension+shebang
-# detection); TS discovery is oxfmt's own glob walk, `'**/*.ts' '!agents/skills/**'`
-# (house source only — agents/skills/** holds vendored skill templates, excluded like it
-# is for shfmt/rumdl). JSON/TOML are deliberately NOT auto-formatted: the JSON population
+# detection); TS discovery is oxfmt's own glob walk, `'**/*.ts'` (node_modules, archives and the
+# vendored agents/hooks/vendor bundle are oxfmt-ignored in .oxfmtrc.json). agents/skills/** WAS excluded
+# "for vendored skill templates"; measured 2026-10-06 there is no TS template in any skill — the
+# exclusion only left the skills' own scripts and tests unformatted (and a stray prettier run in them
+# unrecoverable), so it was removed. JSON/TOML are deliberately NOT auto-formatted: the JSON population
 # is dominated by karabiner's vendored/auto-backup files and boot-critical config — hence
 # the explicit *.ts glob rather than a bare `oxfmt .`. `-ln bash` pins shfmt's dialect
 # deterministically (and makes shfmt ignore any stray .editorconfig).
@@ -101,13 +103,13 @@ run = 'bun ~/dotfiles/scripts/fmt-sh-check.ts'
 
 [tasks."fmt:ts"]
 dir = "{{config_root}}"
-description = "Format TypeScript in place with oxfmt (.oxfmtrc.json; agents/skills/** templates excluded)"
-run = "bunx --bun oxfmt '**/*.ts' '!agents/skills/**'"
+description = "Format TypeScript in place with oxfmt (.oxfmtrc.json)"
+run = "bunx --bun oxfmt '**/*.ts'"
 
 [tasks."fmt:ts:check"]
 dir = "{{config_root}}"
 description = "Check TS formatting without writing (CI gate; lists drifted files + non-zero on drift)"
-run = "bunx --bun oxfmt --check '**/*.ts' '!agents/skills/**'"
+run = "bunx --bun oxfmt --check '**/*.ts'"
 
 # Umbrella format-check for the auto-formatted languages (Markdown check = lint:md via
 # rumdl, kept there since rumdl check is a structural lint not a format-verify).

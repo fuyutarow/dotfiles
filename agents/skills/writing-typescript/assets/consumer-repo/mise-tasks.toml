@@ -1,0 +1,29 @@
+# The house TypeScript gates for a repo other than dotfiles. Paste these into the repo's mise.toml
+# and add "lint:ts" and "lint:oxlint-policy" to its `lint` task's depends.
+#
+# lint:ts checks only STAGED .ts files (wiring-repositories HOOK-1c): another session's uncommitted
+# work must never block this commit. lint:ts:all is the whole tree, for a deliberate sweep.
+
+[tasks."oxlint:render"]
+description = "Render .oxlintrc.json from the owner's one policy (~/dotfiles/oxlint-policy.toml) plus oxlint-policy.local.toml"
+run = "bun ~/dotfiles/scripts/render-oxlintrc.ts --repo . --write"
+
+[tasks."lint:oxlint-policy"]
+description = "Fail when .oxlintrc.json is not a fresh render of the owner's policy (edit the TOML, then mise run oxlint:render)"
+run = "bun ~/dotfiles/scripts/render-oxlintrc.ts --repo . --check"
+
+[tasks."lint:ts"]
+description = "oxlint --type-aware on the STAGED .ts files only (HOOK-1c: another session's WIP never blocks a commit)"
+run = '''
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts')
+if [ -z "$files" ]; then echo "lint:ts: no staged .ts files"; exit 0; fi
+bunx --bun oxlint --type-aware $files
+'''
+
+[tasks."lint:ts:all"]
+description = "oxlint --type-aware on every .ts file the policy does not ignore"
+run = "bunx --bun oxlint --type-aware"
+
+[tasks.typecheck]
+description = "Type-check with tsgo against tsconfig.json (the owner's strict compilerOptions)"
+run = "bunx --bun tsgo --noEmit"

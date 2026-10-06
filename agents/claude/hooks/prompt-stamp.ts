@@ -70,6 +70,8 @@ export interface PromptParts {
   user: string;
   host: string; // %m: hostname up to the first dot
   stamp: string; // "MM-DD HH:MM +09"
+  when: string; // "MM-DD HH:MM" — the stamp's time, colored apart from its zone
+  zone: string; // "+09" — the stamp's UTC offset, drawn desaturated (owner 2026-10-06)
   cwd: string; // tilde-shortened
 }
 
@@ -81,6 +83,8 @@ export function promptParts(
     user: userInfo().username,
     host: hostname().split(".")[0] ?? "",
     stamp: stampMDHMZ(now),
+    when: stampMDHM(now),
+    zone: offsetShort(now),
     cwd: tildePath(cwd),
   };
 }

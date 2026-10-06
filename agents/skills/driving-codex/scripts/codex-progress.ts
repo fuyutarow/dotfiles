@@ -39,6 +39,13 @@ const oneLine = (s: string): string => {
   return line.length > LAST_CHARS ? `${line.slice(0, LAST_CHARS - 1)}…` : line;
 };
 
+// codex runs every command as `<shell> -lc '<command>'`; on the one-line Run: row the wrapper
+// pushed the command itself out of view. Show the inner command; anything else stays as it is.
+const SHELL_WRAP =
+  /^(?:\S*\/)?(?:ba|z|da|k)?sh\s+-l?c\s+(["'])([\s\S]*)\1\s*$/u;
+export const unwrapShell = (command: string): string =>
+  SHELL_WRAP.exec(command.trim())?.[2] ?? command;
+
 /** The tally after one stdout line. */
 export function foldEvent(t: Tally, line: string): Tally {
   const parsed = jsonOf(Event).safeParse(line);
@@ -48,7 +55,7 @@ export function foldEvent(t: Tally, line: string): Tally {
   if (type === "item.started" && item.type === "command_execution")
     return {
       ...t,
-      last: `$ ${oneLine(item.command ?? "")}`,
+      last: `$ ${oneLine(unwrapShell(item.command ?? ""))}`,
       commands: t.commands + 1,
     };
   if (type !== "item.completed") return t;

@@ -8,12 +8,10 @@
   // setting, 90 with those two off. Both stay ON; the 203 were paid down the same day (real
   // findings among them: a bogus type predicate on learning-bus.ts's timestamp(), a cleye
   // multi-value flag tuple in ccc-swap.ts, an acquireLease() return type wider than its
-  // returns). agents/skills/** is excluded like every other repo gate (vendored templates
-  // share that tree); lint:bun still reaches those scripts structurally.
-  // MEASURED 2026-10-03, and that reason does not hold: with the exclusion removed tsgo reports
-  // 65 errors, ALL in skills' own scripts/ (51) and tests/ (14), none in templates/. So the
-  // exclusion is the largest remaining gap (the repo's own code, unchecked), not a necessary
-  // one: pay the 65 down, then delete "agents/skills" from `exclude` below.
+  // returns). agents/skills/** is checked like the rest: it was excluded "for vendored
+  // templates" until 2026-10-03, when the 65 errors that hid there (all in skills' own scripts
+  // and tests, none in a template) were paid down and the exclusion removed; formatting
+  // followed on 2026-10-06 (mise.toml fmt:ts).
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "target": "ESNext",

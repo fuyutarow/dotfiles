@@ -27,6 +27,28 @@ describe("foldEvent", () => {
     expect(t.commands).toBe(1);
   });
 
+  test("codex's shell wrapper is dropped so the command itself is shown", () => {
+    const run = (command: string) =>
+      fold([
+        ev({
+          type: "item.started",
+          item: { type: "command_execution", command },
+        }),
+      ]).last;
+    expect(run(`/bin/zsh -lc "rr regex --context 14 -p cli.ts"`)).toBe(
+      "$ rr regex --context 14 -p cli.ts",
+    );
+    expect(run(`/bin/bash -lc 'bun test x.test.ts'`)).toBe(
+      "$ bun test x.test.ts",
+    );
+    expect(run("bash -c 'ls'")).toBe("$ ls");
+    // not a wrapper (no -c, or mismatched quotes): shown unchanged
+    expect(run("zsh script.zsh")).toBe("$ zsh script.zsh");
+    expect(run(`/bin/zsh -lc "unterminated'`)).toBe(
+      `$ /bin/zsh -lc "unterminated'`,
+    );
+  });
+
   test("file changes count distinct paths and name the latest file", () => {
     const t = fold([
       ev({

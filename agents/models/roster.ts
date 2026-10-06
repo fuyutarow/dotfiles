@@ -117,8 +117,8 @@ export type Graded = Readonly<{ pass: number; partial: number; fail: number }>;
 /** What Jev reads about one row: what it is for, its measured capability, its price relative to the
  *  cheapest row, and how its graded runs here went. SELECTION (owner 2026-10-06: 「model パフォーマン
  *  ステーブルと task brief によって選択されるべき」): the pick comes from these numbers against the
- *  brief — no hand-set weight or bias corrects Jev afterwards. Luna-first is not a constant here; it
- *  is the question agent-router asks (the cheapest row sufficient for the task) over these facts. */
+ *  brief — no hand-set weight or post-hoc route bias corrects Jev afterwards. The codex-over-claude
+ *  tie-break is explicit in agent-router's question, and the route is part of each row's criterion. */
 export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
   const measured = [
     c.aa_index === undefined ? undefined : `AA ${c.aa_index}`,
@@ -132,7 +132,7 @@ export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
       ? "no graded runs here yet"
       : `graded runs here: ${graded.pass} pass, ${graded.partial} partial, ${graded.fail} fail`;
   return (
-    `${c.use_for}. Measured (Artificial Analysis, ${r.as_of}): ${measured.join(", ")}. ` +
+    `Route ${c.route}. ${c.use_for}. Measured (Artificial Analysis, ${r.as_of}): ${measured.join(", ")}. ` +
     `Price ${price(c.price_in)}/${price(c.price_out)} per 1M tokens in/out = ${costMultiple(r, c) ?? "unknown"}x the cheapest row. ${record}.`
   );
 }
@@ -154,7 +154,7 @@ export function rosterTable(r: Roster): string {
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
   return [
-    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record); it is asked for the cheapest row sufficient for the task, so a dearer row is picked only for a capability the task needs and cheaper rows measurably lack. \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unreachable or answers outside the roster the default \`${r.default}\` runs, and the receipt says why.**`,
+    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record); it is asked for the cheapest row sufficient for the task, so a dearer row is picked only for a capability the task needs and cheaper rows measurably lack. When codex and claude rows are comparably capable for needed capabilities, prefer codex; choose claude only when codex rows measurably lack a needed capability. \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unreachable or answers outside the roster the default \`${r.default}\` runs, and the receipt says why.**`,
     `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; as of ${r.as_of}.`,
     "",
     ...rosterTable(r)

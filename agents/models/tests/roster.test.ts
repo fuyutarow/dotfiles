@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadRoster, rosterTable } from "../roster.ts";
+import { loadRoster, rosterPolicy, rosterTable } from "../roster.ts";
 
 describe("dispatch roster", () => {
   test("loads all 35 route and effort rows with optional prices and benchmarks", async () => {
@@ -45,5 +45,17 @@ describe("dispatch roster", () => {
     if (!loaded.ok)
       expect(loaded.error).toContain("default must name a codex-route");
     rmSync(folder, { recursive: true, force: true });
+  });
+
+  test("rendered roster policy gives codex the tie-break when capability is comparable", async () => {
+    const loaded = await loadRoster();
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const sentence = rosterPolicy(loaded.value).split("\n")[0] ?? "";
+    expect(sentence).toContain("prefer codex");
+    expect(sentence).toContain("comparably capable for needed capabilities");
+    expect(sentence).toContain(
+      "claude only when codex rows measurably lack a needed capability",
+    );
   });
 });

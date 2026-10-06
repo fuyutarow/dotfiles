@@ -461,7 +461,7 @@ describe("agent-router run", () => {
     }
   });
 
-  test("Jev is asked for the cheapest sufficient row, with each row's measured numbers and cost", async () => {
+  test("Jev is asked to prefer codex when equally sufficient, with each row's route and measured numbers", async () => {
     await router([
       "run",
       "--prompt-file",
@@ -473,6 +473,10 @@ describe("agent-router run", () => {
     ]);
     const sent = bodies.at(-1) ?? "";
     expect(sent).toContain("Choose the CHEAPEST worker");
+    expect(sent).toContain("about equally capable");
+    expect(sent).toContain("choose the codex-route row");
+    expect(sent).toContain("Route codex.");
+    expect(sent).toContain("Route claude.");
     // every roster row reaches Jev with its benchmark numbers and price multiple, claude rows included
     expect(sent).toContain("TB4 43.9%");
     expect(sent).toContain("20x the cheapest row");

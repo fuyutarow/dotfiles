@@ -188,7 +188,11 @@ function jevRequest(
           "Which worker should carry out `task`? Choose the CHEAPEST worker whose measured capability " +
           "and graded record are sufficient for what `task` actually needs. Pick a dearer worker only " +
           "when `task` needs a capability the cheaper ones measurably lack (for example a long " +
-          "terminal or agentic session, where TB4 differs most), not because it is stronger in general.",
+          "terminal or agentic session, where TB4 differs most), not because it is stronger in general. " +
+          "When a codex-route row and a claude-route row are about equally capable for this task " +
+          "(comparable measured numbers for the capabilities it needs), choose the codex-route row. " +
+          "Then choose the cheapest sufficient codex row as before. Choose a claude-route row only " +
+          "if the task needs a capability that codex rows measurably lack.",
         criteria,
       },
     },

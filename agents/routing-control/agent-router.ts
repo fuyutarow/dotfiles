@@ -792,6 +792,9 @@ async function launch(l: Launch): Promise<number> {
     pick_source: pick.source,
     started_at: now(),
     cwd: resolve(flags.cd),
+    ...(process.env.CLAUDE_CODE_SESSION_ID === undefined
+      ? {}
+      : { dispatcher_session: process.env.CLAUDE_CODE_SESSION_ID }),
   };
   mkdirSync(ACTIVE_DIR, { recursive: true });
   const marker = join(ACTIVE_DIR, `${runId}.json`);
@@ -843,6 +846,9 @@ async function launch(l: Launch): Promise<number> {
       ...(ticket === undefined ? {} : { ticket }),
       ...(resume === undefined ? {} : { resumed_from: resume.from }),
       started_at: active.started_at,
+      ...(active.dispatcher_session === undefined
+        ? {}
+        : { dispatcher_session: active.dispatcher_session }),
       ended_at: now(),
       exit: code,
       worker: {
@@ -919,6 +925,9 @@ async function launch(l: Launch): Promise<number> {
     ...(ticket === undefined ? {} : { ticket }),
     ...(resume === undefined ? {} : { resumed_from: resume.from }),
     started_at: active.started_at,
+    ...(active.dispatcher_session === undefined
+      ? {}
+      : { dispatcher_session: active.dispatcher_session }),
     ended_at: now(),
     exit,
     ...(resumeHint === undefined ? {} : { resume_with: resumeHint }),

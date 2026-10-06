@@ -35,10 +35,9 @@
 //     not landed shows the last good one, marked `stale <N>s` from 60 s on; a Mac without nvidia-smi
 //     has no VRAM segment at all, see vramGated(); see the EXPLICIT-ABSENCE law below)
 //   6 Job: ... (conditional: only while a job is admitted, an orphan lives, or the scan failed)
-//   7 <row> <elapsed> <label> │ <doing>, ONE LINE PER WORKER (no "Run:" head: the row id says it), longest-running first, at most RUN_LINES
-//     then `+N more`; `stale×N` on its own line (conditional: workers started by agent-router;
-//     the markers are agents/routing-control/state.ts; a marker whose process is gone is
-//     counted as stale, never hidden; an unreadable state dir prints n/a with the reason)
+//   7 this session's agent-router workers as full rows, then `+N in other sessions` and `stale×N`
+//     counts (conditional: markers are agents/routing-control/state.ts; this session is identified
+//     by the Claude payload's session_id; an unreadable state dir prints n/a with the reason)
 //
 // EXPLICIT-ABSENCE (2026-10-03): no reading is ever dropped from a row because it could not be
 // taken — it prints as n/a with the reason. Silence is reserved for "does not exist" (not a
@@ -1089,6 +1088,7 @@ interface RouteRun {
   label: string;
   secs: number;
   alive: boolean;
+  dispatcherSession: string | undefined;
   // what the worker is doing (codex-run progress file); undefined until its first event lands
   doing:
     | {
@@ -1145,14 +1145,16 @@ function routeRuns(): Result<RouteRun[], string> | undefined {
             label: a.label,
             secs: sinceSecs(a.started_at).unwrapOr(0),
             alive: pidAlive(a.pid).isOk(),
+            dispatcherSession: a.dispatcher_session,
             doing: doingOf(a.run_id),
           },
         ];
       }),
   );
 }
-// Run rows: one line per worker, like Claude Code's own background panel — "<row> <elapsed>
-// <label> │ <doing>". No "Run:" head (owner 2026-10-06: 「Run: って labelは不要では？」): the row id
+// This session's Run rows: one line per worker, like Claude Code's own background panel — "<row>
+// <elapsed> <label> │ <doing>". Other sessions' workers are one count. No "Run:" head (owner
+// 2026-10-06: 「Run: って labelは不要では？」): the row id
 // (luna-high, sonnet-medium) already says what the line is, and the head cost every line 5 columns. Capped at RUN_LINES so a wide fan-out cannot
 // push the other rows off screen; the cap is SAID (+N more), never silent. Stale markers get their
 // own line.
@@ -1174,17 +1176,23 @@ function sessionText(d: RouteRun["doing"]): string {
     ? ""
     : `${ESC}[38;5;240m${id.slice(0, SESSION_CHARS)}${RST} `;
 }
-function routeLines(runs: RouteRun[]): string[] {
+function routeLines(runs: RouteRun[], sessionId: string | undefined): string[] {
   const live = runs.filter((r) => r.alive).toSorted((a, b) => b.secs - a.secs);
   const stale = runs.length - live.length;
-  const lines = live
+  const own =
+    sessionId === undefined
+      ? []
+      : live.filter((r) => r.dispatcherSession === sessionId);
+  const other = live.length - own.length;
+  const lines = own
     .slice(0, RUN_LINES)
     .map(
       (r) =>
         `${r.choice} ${dur(r.secs)} ${sessionText(r.doing)}${DIM}${r.label.slice(0, 32)}${RST} ${doingText(r.doing)}`,
     );
-  if (live.length > RUN_LINES)
-    lines.push(`${DIM}+${live.length - RUN_LINES} more${RST}`);
+  if (own.length > RUN_LINES)
+    lines.push(`${DIM}+${own.length - RUN_LINES} more${RST}`);
+  if (other > 0) lines.push(`${DIM}+${other} in other sessions${RST}`);
   if (stale > 0) lines.push(`${ESC}[38;5;167mstale×${stale}${RST}`);
   return lines;
 }
@@ -1276,7 +1284,8 @@ function render(df: Dataframe): string {
   let runLines: string[] = [];
   if (df.routes !== undefined && df.routes.isErr())
     runLines = [naSegment("agent-router", df.routes.error)];
-  else if (df.routes !== undefined) runLines = routeLines(df.routes.value);
+  else if (df.routes !== undefined)
+    runLines = routeLines(df.routes.value, df.sid);
 
   return [
     joinText(line1, repoLine),

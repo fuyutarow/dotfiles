@@ -102,6 +102,7 @@ writeFileSync(
   FAKE,
   `import { appendFileSync } from "node:fs";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
+await Bun.sleep(Number(process.env.FAKE_SLEEP_MS ?? "0"));
 const timedOut = process.env.FAKE_TIMEOUT === "1";
 const exit = timedOut ? 3 : Number(process.env.FAKE_EXIT ?? "0");
 const args = Bun.argv.slice(2);
@@ -281,6 +282,34 @@ const RunIdSchema = z.looseObject({ run_id: z.string() });
 
 describe("agent-router run", () => {
   const b = brief("task", "Fix the flaky test in scripts/tests.\n");
+
+  test("the active marker and run record carry the Claude dispatcher session", async () => {
+    const state = join(scratch, "dispatcher-session-state");
+    let markerText = "";
+    const r = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+        CLAUDE_CODE_SESSION_ID: "claude-session-test",
+        FAKE_SLEEP_MS: "100",
+      },
+      async () => {
+        const active = join(state, "active");
+        for (let attempt = 0; attempt < 100 && markerText === ""; attempt++) {
+          const file = existsSync(active)
+            ? readdirSync(active).find((name) => name.endsWith(".json"))
+            : undefined;
+          if (file !== undefined)
+            markerText = readFileSync(join(active, file), "utf8");
+          else await Bun.sleep(5);
+        }
+      },
+    );
+    expect(markerText).toContain('"dispatcher_session":"claude-session-test"');
+    expect(readFileSync(join(r.state, "runs.jsonl"), "utf8")).toContain(
+      '"dispatcher_session":"claude-session-test"',
+    );
+  });
 
   test("Jev's row runs codex-run with that row, logs, and leaves no running marker", async () => {
     const r = await router([

@@ -13,9 +13,10 @@ const scratch = mkdtempSync(join(tmpdir(), "statusline-run-"));
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
+const SESSION = "00000000-0000-0000-0000-000000000000";
 const ANSI = new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu");
 const PAYLOAD = JSON.stringify({
-  session_id: "00000000-0000-0000-0000-000000000000",
+  session_id: SESSION,
   cwd: scratch,
   workspace: { current_dir: scratch },
   model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
@@ -27,6 +28,7 @@ function marker(
   pid: number,
   label: string,
   ageS = 90,
+  dispatcherSession: string | null = SESSION,
 ): void {
   mkdirSync(join(dir, "active"), { recursive: true });
   writeFileSync(
@@ -40,6 +42,9 @@ function marker(
       pick_source: "jev",
       started_at: Temporal.Now.instant().subtract({ seconds: ageS }).toString(),
       cwd: scratch,
+      ...(dispatcherSession === null
+        ? {}
+        : { dispatcher_session: dispatcherSession }),
     }),
   );
 }
@@ -73,6 +78,43 @@ describe("statusline Run row", () => {
     marker(dir, "a", process.pid, "lint batch 7");
     const out = await render(dir);
     expect(out).toMatch(/^luna-high 1m3\d+s lint batch 7 │ no event yet$/mu);
+  });
+
+  test("a worker from this session shows its full row", async () => {
+    const dir = join(scratch, "own-session");
+    marker(dir, "own", process.pid, "my worker", 90, SESSION);
+    expect(await render(dir)).toMatch(
+      /^luna-high 1m3\d+s my worker │ no event yet$/mu,
+    );
+  });
+
+  test("a worker from another session is represented only by the count", async () => {
+    const dir = join(scratch, "other-session");
+    marker(dir, "other", process.pid, "private worker", 90, "other-session-id");
+    const out = await render(dir);
+    expect(out).toContain("+1 in other sessions");
+    expect(out).not.toContain("private worker");
+    expect(out).not.toContain("luna-high");
+  });
+
+  test("a live worker without a dispatcher is counted as other", async () => {
+    const dir = join(scratch, "no-dispatcher");
+    marker(dir, "unowned", process.pid, "undispatched worker", 90, null);
+    const out = await render(dir);
+    expect(out).toContain("+1 in other sessions");
+    expect(out).not.toContain("undispatched worker");
+  });
+
+  test("mixed sessions show this session's rows and count all other live workers", async () => {
+    const dir = join(scratch, "mixed-sessions");
+    marker(dir, "own", process.pid, "my worker", 90, SESSION);
+    marker(dir, "other", process.pid, "other worker", 80, "other-session-id");
+    marker(dir, "none", process.pid, "unowned worker", 70, null);
+    const out = await render(dir);
+    expect(out).toMatch(/^luna-high 1m3\d+s my worker │ no event yet$/mu);
+    expect(out).toContain("+2 in other sessions");
+    expect(out).not.toContain("other worker");
+    expect(out).not.toContain("unowned worker");
   });
 
   test("several workers: one line each, longest-running first", async () => {
@@ -142,7 +184,7 @@ describe("statusline Run row", () => {
     marker(dir, "b", 2_147_483_000, "killed");
     const out = await render(dir);
     expect(out).toMatch(/^stale×1$/mu);
-    expect(out).not.toContain("killed");
+    expect(out).not.toMatch(/^luna-high .* killed/mu);
   });
 
   test("no agent-router state on this machine: no Run row at all", async () => {

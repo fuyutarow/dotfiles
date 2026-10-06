@@ -13,6 +13,9 @@
 //       timeout, no loop, minutes long) passed the two text rules below, or
 //     - timeout > FOREGROUND_MAX_MS (asking for more than the default bound announces a long call), or
 //     - the command is a wait loop: `until`/`while` … `sleep`.
+// A dispatched `claude -p` worker has no human session to hold and cannot receive a background
+// completion notice. `run-claude.ts` marks that child with AGENT_ROUTER_WORKER=1; in that
+// session all three background rules are lifted. The worker's own run-claude timeout still bounds it.
 //
 // An allowed foreground call has its start recorded, so its duration is measured too. A command
 // never measured passes once; from then on its own history decides. run_in_background is a Claude
@@ -20,6 +23,10 @@
 // FAIL CLOSED (run.sh --fail-closed).
 
 import { at, num, strAt } from "../../hooks/narrow.ts";
+import {
+  AGENT_ROUTER_WORKER_ENV,
+  AGENT_ROUTER_WORKER_VALUE,
+} from "../../hooks/worker-env.ts";
 import {
   commandKey,
   judgedMs,
@@ -41,7 +48,9 @@ const WAIT_LOOP = /\b(?:until|while)\b[\s\S]*?\bsleep\b/u;
 export function backgroundReason(
   input: unknown,
   measured?: { key: string; ms: number },
+  isWorker = false,
 ): string | undefined {
+  if (isWorker) return undefined;
   if (at(input, "run_in_background") === true) return undefined;
   if (measured !== undefined && measured.ms > FOREGROUND_MEASURED_MAX_MS)
     return `\`${measured.key}\` has taken ${Math.round(measured.ms / 1000)} s here (the larger of its median and its latest run) (the foreground maximum is ${FOREGROUND_MEASURED_MAX_MS / 1000} s)`;
@@ -56,6 +65,8 @@ export function backgroundReason(
 const payload = import.meta.main ? readStdinJson() : undefined;
 const input = at(payload, "tool_input");
 const isBash = strAt(payload, "tool_name") === "Bash";
+const isWorker =
+  process.env[AGENT_ROUTER_WORKER_ENV] === AGENT_ROUTER_WORKER_VALUE;
 const command = isBash ? (strAt(input, "command") ?? "") : "";
 const key = isBash ? commandKey(command) : undefined;
 const dir = stateDir();
@@ -69,7 +80,7 @@ const measured = [
     return ms === undefined ? [] : [{ key: k, ms }];
   })
   .toSorted((a, b) => b.ms - a.ms)[0];
-const why = isBash ? backgroundReason(input, measured) : undefined;
+const why = isBash ? backgroundReason(input, measured, isWorker) : undefined;
 // SINGLE-AXIS: one question (may this call hold the session?) — its triggers share one resend
 if (why !== undefined)
   decidePre(

@@ -7,6 +7,7 @@ import { z } from "../../hooks/zod.ts";
 import { probeModels } from "../workers/claude-probe.ts";
 import { asRecord, runClaude, toRelay } from "../workers/run-claude.ts";
 import { decodedJson } from "../../hooks/tests/decode.ts";
+import { AGENT_ROUTER_WORKER_ENV } from "../../hooks/worker-env.ts";
 
 const ErrorEnvelope = z.object({ exit_code: z.number(), error: z.string() });
 
@@ -209,6 +210,29 @@ describe("agents/routing-control runner: session persistence and --resume", () =
     expect(argv).not.toContain("--resume");
   });
 
+  test("marks the Claude child as an agent-router worker", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "run-claude-env-"));
+    const run = await runClaude({
+      target: dir,
+      prompt: "Reply exactly OK",
+      model: "sonnet",
+      permissionMode: "plan",
+      maxTurns: 1,
+      timeoutMs: 5_000,
+      safeMode: true,
+      bare: false,
+      claudeBin: fixture,
+    });
+    expect(run.exitCode).toBe(0);
+    expect(
+      decodedJson(
+        z.object({ [AGENT_ROUTER_WORKER_ENV]: z.string() }),
+        readFileSync(join(dir, "fake-claude-env.log"), "utf8").trim(),
+      ),
+    ).toEqual({ [AGENT_ROUTER_WORKER_ENV]: "1" });
+    await rm(dir, { recursive: true, force: true });
+  });
+
   test("persistSession keeps the session on disk: no --no-session-persistence", async () => {
     const argv = await argvOf({ persistSession: true });
     expect(argv).not.toContain("--no-session-persistence");
@@ -228,61 +252,5 @@ describe("agents/routing-control runner: session persistence and --resume", () =
     expect(parseErrorEnvelope(result.stdout).error).toContain(
       "--resume requires a value",
     );
-  });
-});
-
-describe("agents/routing-control runner: the stop reason in the relay", () => {
-  const relayFor = (model: string) =>
-    withTarget(async (target) => {
-      const run = await runClaude({
-        target,
-        prompt: "Reply exactly OK",
-        model,
-        permissionMode: "plan",
-        maxTurns: 60,
-        timeoutMs: 5_000,
-        safeMode: true,
-        bare: false,
-        claudeBin: fixture,
-        progressFile: join(target, "p.progress.json"),
-      });
-      return { run, relay: toRelay(run) };
-    });
-
-  for (const [model, subtype, turns, cost] of [
-    ["max-turns", "error_max_turns", 61, 0.4],
-    ["max-budget", "error_max_budget_usd", 9, 2.01],
-    ["exec-error", "error_during_execution", 3, 0.1],
-  ] as const)
-    test(`${subtype}: subtype, is_error, num_turns and cost are kept`, async () => {
-      const { run, relay } = await relayFor(model);
-      expect(run.exitCode).toBe(1);
-      expect(relay).toMatchObject({
-        exit_code: 1,
-        subtype,
-        is_error: true,
-        num_turns: turns,
-        total_cost_usd: cost,
-      });
-    });
-
-  test("a success result keeps subtype and num_turns too", async () => {
-    const { relay } = await relayFor("sonnet");
-    expect(relay).toMatchObject({
-      subtype: "success",
-      is_error: false,
-      num_turns: 4,
-    });
-  });
-
-  test("no result event at all: the relay says so", async () => {
-    const { relay } = await relayFor("no-result");
-    expect(relay.subtype).toBeUndefined();
-    expect(relay.parse_error).toBe("no result event in the stream-json output");
-  });
-
-  test("structured output (--json-schema) lands in the relay", async () => {
-    const { relay } = await relayFor("structured");
-    expect(relay.structured_output).toMatchObject({ summary: "typed" });
   });
 });

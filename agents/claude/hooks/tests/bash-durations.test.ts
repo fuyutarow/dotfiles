@@ -11,6 +11,10 @@ import {
   stepKeys,
 } from "../bash-durations.ts";
 import { backgroundReason } from "../enforce-background-waits.ts";
+import {
+  AGENT_ROUTER_WORKER_ENV,
+  AGENT_ROUTER_WORKER_VALUE,
+} from "../../../hooks/worker-env.ts";
 
 // bash-durations: a command kind's measured duration decides whether it may run in front.
 const HOOK = join(import.meta.dir, "..", "enforce-background-waits.ts");
@@ -159,4 +163,57 @@ test("the foreground bound is the owner's 5 s", () => {
   expect(
     backgroundReason({ command: "x" }, { key: "x", ms: 4900 }),
   ).toBeUndefined();
+});
+
+test("a dispatched worker may keep measured-slow and long-timeout Bash calls in front", () => {
+  const dir = scratch();
+  recordStart(dir, "worker-slow", "bun test", 0);
+  recordEnd(dir, "worker-slow", 23_000);
+  const payload = {
+    tool_name: "Bash",
+    tool_use_id: "worker-next",
+    tool_input: { command: "bun test", timeout: 900_000 },
+  };
+  const worker = Bun.spawnSync(["bun", HOOK], {
+    stdin: new Blob([JSON.stringify(payload)]),
+    env: {
+      ...process.env,
+      CLAUDE_BASH_DURATIONS_DIR: dir,
+      [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+    },
+    timeout: 30_000,
+  }).stdout.toString();
+  expect(worker).toBe("");
+
+  const timeoutOnly = {
+    tool_name: "Bash",
+    tool_use_id: "worker-timeout",
+    tool_input: { command: "sleep 1", timeout: 900_000 },
+  };
+  const workerTimeout = Bun.spawnSync(["bun", HOOK], {
+    stdin: new Blob([JSON.stringify(timeoutOnly)]),
+    env: {
+      ...process.env,
+      CLAUDE_BASH_DURATIONS_DIR: dir,
+      [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+    },
+    timeout: 30_000,
+  }).stdout.toString();
+  expect(workerTimeout).toBe("");
+
+  const interactive = Bun.spawnSync(["bun", HOOK], {
+    stdin: new Blob([JSON.stringify(payload)]),
+    env: { ...process.env, CLAUDE_BASH_DURATIONS_DIR: dir },
+    timeout: 30_000,
+  }).stdout.toString();
+  expect(interactive).toContain('"permissionDecision":"deny"');
+  expect(interactive).toContain("`bun test` has taken 23 s here");
+
+  const interactiveTimeout = Bun.spawnSync(["bun", HOOK], {
+    stdin: new Blob([JSON.stringify(timeoutOnly)]),
+    env: { ...process.env, CLAUDE_BASH_DURATIONS_DIR: dir },
+    timeout: 30_000,
+  }).stdout.toString();
+  expect(interactiveTimeout).toContain('"permissionDecision":"deny"');
+  expect(interactiveTimeout).toContain("asks for a 900 s timeout");
 });

@@ -58,9 +58,9 @@ describe("enforce-dispatch-contract", () => {
       expect(d.reason).toContain(`the ${tool} tool dispatches nothing`);
       expect(d.reason).toContain("agent-router run --prompt-file <brief>");
       expect(d.reason).toContain("run_in_background: true");
-      // the table names every candidate, claude rows included, with its weight
-      expect(d.reason).toContain("| ● | `luna-high` | luna | 1 |");
-      expect(d.reason).toContain("| ○ | `sonnet-high` | claude | 0.2 |");
+      // the table names every candidate, claude rows included, with its measured numbers and cost
+      expect(d.reason).toContain("| ● | `luna-high` | luna | 33 | 4.5 |");
+      expect(d.reason).toContain("| ○ | `sonnet-high` | claude | 47 | 43.9 |");
     },
   );
 

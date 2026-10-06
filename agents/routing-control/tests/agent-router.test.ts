@@ -252,6 +252,25 @@ describe("agent-router run", () => {
     }
   });
 
+  test("Jev is asked for the cheapest sufficient row, with each row's measured numbers and cost", async () => {
+    await router([
+      "run",
+      "--prompt-file",
+      brief("table", "Fix one typo.\n"),
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+    ]);
+    const sent = bodies.at(-1) ?? "";
+    expect(sent).toContain("Choose the CHEAPEST worker");
+    // every roster row reaches Jev with its benchmark numbers and price multiple, claude rows included
+    expect(sent).toContain("TB4 43.9%");
+    expect(sent).toContain("20x the cheapest row");
+    expect(sent).toContain("40x the cheapest row");
+    expect(sent).toContain("1x the cheapest row");
+  });
+
   test("Jev naming a row that is not in the roster falls back to the default and says why", async () => {
     const pick = brief("pick-unknown", "PICK=gpt-nine do the thing\n");
     const r = await router([
@@ -265,7 +284,7 @@ describe("agent-router run", () => {
     ]);
     const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("default");
-    expect(receipt.pick.reason).toContain("no probability for any roster row");
+    expect(receipt.pick.reason).toContain("not a roster row");
   });
 
   test("a claude row Jev picks runs run-claude with the roster's bounds and is logged like luna", async () => {
@@ -439,7 +458,7 @@ describe("agent-router grade", () => {
       AGENT_ROUTER_STATE_DIR: state,
     });
     expect(bodies.at(-1)).toContain(
-      "graded runs so far: 0 pass, 0 partial, 1 fail",
+      "graded runs here: 0 pass, 0 partial, 1 fail",
     );
   });
 

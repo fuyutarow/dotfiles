@@ -48,17 +48,6 @@ const AutoSchema = z.strictObject({
 });
 export type AutoPolicy = z.output<typeof AutoSchema>;
 
-// SELECTION (owner 2026-10-06: 「enabled = true はおかしい。全く tiger styleでもない。lunaが選ばれやすく
-// なるbiasは欲しい」). A row in the roster is a candidate; there is no on/off switch, which hid what
-// was in effect behind a boolean with no reason. Luna-first is a declared bias instead: Jev's
-// probability for each row is multiplied by its route's weight and the highest product wins, so a
-// claude row (weight w) is picked only when Jev rates it at least 1/w times the best luna row. The
-// weight must state its reason, and both the raw and the weighted numbers are logged per pick.
-const Weight = z.number().gt(0).max(1);
-const SelectionSchema = z.strictObject({
-  route_weight: z.strictObject({ luna: Weight, claude: Weight }),
-  reason: z.string().min(40),
-});
 // Bounds on a claude worker (run through driving-claude's run-claude.ts): a run has a budget and a
 // turn limit, both stated, never the CLI's defaults.
 const ClaudeRunSchema = z.strictObject({
@@ -73,7 +62,6 @@ const RosterSchema = z
     as_of: z.iso.date(),
     default: z.string(),
     auto: AutoSchema,
-    selection: SelectionSchema,
     claude_run: ClaudeRunSchema,
     sources: z.record(z.string(), z.url()),
     choice: z.array(ChoiceSchema).min(1),
@@ -104,54 +92,50 @@ export async function loadRoster(path = ROSTER_PATH): Promise<RosterLoad> {
     : { ok: false, error: r.error.message };
 }
 
-/** The weight Jev's probability for this row is multiplied by (SELECTION above). */
-export const weightOf = (r: Roster, c: Choice): number =>
-  r.selection.route_weight[c.route];
-
-const round3 = (x: number): number => Math.round(x * 1000) / 1000;
-
-/** Jev's probability for each roster row times its route weight (roster SELECTION); the best row
- *  and its share of the weighted total. undefined when Jev gave no row any probability. */
-export function weighted(
-  roster: Roster,
-  answer: {
-    choice: string;
-    probabilities?: Record<string, number> | undefined;
-    confidence?: number | undefined;
-  },
-): { row: Choice; share: number; scores: Record<string, number> } | undefined {
-  const probs = answer.probabilities ?? {
-    [answer.choice]: answer.confidence ?? 0,
-  };
-  const scored = roster.choice.map((c) => ({
-    row: c,
-    score: (probs[c.id] ?? 0) * weightOf(roster, c),
-  }));
-  const total = scored.reduce((sum, s) => sum + s.score, 0);
-  const best = scored.reduce<(typeof scored)[number] | undefined>(
-    (top, s) => (top === undefined || s.score > top.score ? s : top),
-    undefined,
-  );
-  if (best === undefined || total <= 0) return undefined;
-  return {
-    row: best.row,
-    share: round3(best.score / total),
-    scores: Object.fromEntries(scored.map((s) => [s.row.id, round3(s.score)])),
-  };
-}
-
 const num = (v: number | undefined): string => (v === undefined ? "–" : `${v}`);
 const price = (v: number): string => `$${v.toFixed(v < 1 ? 2 : 0)}`;
 
-/** The roster as a table: every row is a candidate Jev may pick, the default marked ●, each with
- * its selection weight. */
+const blended = (x: Choice): number => x.price_in + x.price_out;
+
+/** How many times the cheapest row's blended price (input + output per 1M tokens) this row costs. */
+export function costMultiple(r: Roster, c: Choice): number {
+  const cheapest = Math.min(...r.choice.map(blended));
+  return Math.round((blended(c) / cheapest) * 10) / 10;
+}
+
+export type Graded = Readonly<{ pass: number; partial: number; fail: number }>;
+
+/** What Jev reads about one row: what it is for, its measured capability, its price relative to the
+ *  cheapest row, and how its graded runs here went. SELECTION (owner 2026-10-06: 「model パフォーマン
+ *  ステーブルと task brief によって選択されるべき」): the pick comes from these numbers against the
+ *  brief — no hand-set weight or bias corrects Jev afterwards. Luna-first is not a constant here; it
+ *  is the question agent-router asks (the cheapest row sufficient for the task) over these facts. */
+export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
+  const measured = [
+    c.aa_index === undefined ? undefined : `AA ${c.aa_index}`,
+    c.tb4 === undefined
+      ? undefined
+      : `TB4 ${c.tb4}% (long terminal/agentic sessions)`,
+    c.scicode === undefined ? undefined : `SciCode ${c.scicode}%`,
+  ].filter((x) => x !== undefined);
+  const record =
+    graded === undefined
+      ? "no graded runs here yet"
+      : `graded runs here: ${graded.pass} pass, ${graded.partial} partial, ${graded.fail} fail`;
+  return (
+    `${c.use_for}. Measured (Artificial Analysis, ${r.as_of}): ${measured.join(", ")}. ` +
+    `Price ${price(c.price_in)}/${price(c.price_out)} per 1M tokens in/out = ${costMultiple(r, c)}x the cheapest row. ${record}.`
+  );
+}
+
+/** The roster as a table: every row is a candidate Jev may pick, the default marked ●. */
 export function rosterTable(r: Roster): string {
   const head =
-    "| default | id | route | weight | AA | TB4 | SciCode | $in/$out | use for |\n" +
-    "| :-: | --- | --- | --: | --: | --: | --: | --- | --- |";
+    "| default | id | route | AA | TB4 | SciCode | $in/$out | cost | use for |\n" +
+    "| :-: | --- | --- | --: | --: | --: | --- | --: | --- |";
   const rows = r.choice.map(
     (c) =>
-      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${weightOf(r, c)} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${c.use_for} |`,
+      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${costMultiple(r, c)}x | ${c.use_for} |`,
   );
   return [head, ...rows].join("\n");
 }
@@ -160,16 +144,15 @@ export function rosterTable(r: Roster): string {
  * to choose and run. scripts/render-home.ts puts it between the roster markers at deploy time, so
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
-  const w = r.selection.route_weight;
   return [
-    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief (zero-shot, logged with its probabilities); \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. Luna first by a declared bias: each row's probability is multiplied by its route weight (luna ${w.luna}, claude ${w.claude}), so a claude row wins only when Jev rates it ${Math.round(w.luna / w.claude)}x the best luna row. When Jev is unsure or unavailable the default \`${r.default}\` runs, and the receipt says why.**`,
-    `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; as of ${r.as_of}.`,
+    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record); it is asked for the cheapest row sufficient for the task, so a dearer row is picked only for a capability the task needs and cheaper rows measurably lack. \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unsure or unavailable the default \`${r.default}\` runs, and the receipt says why.**`,
+    `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest row; as of ${r.as_of}.`,
     "",
     ...rosterTable(r)
       .split("\n")
       .map((l) => (l === "" ? "" : `  ${l}`)),
     "",
-    `  How to choose: you do not — Jev does. Give it what it needs in the brief: scope (files, size), what is at risk (live hooks, harness), expected difficulty.`,
+    `  How to choose: you do not — Jev does. Give it what it needs in the brief: scope (files, size), what is at risk (live hooks, harness), expected difficulty, how long a tool loop it needs.`,
     `  How to run: \`agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write\` from Bash, in the background — the one entry point for luna AND claude rows (a claude row runs \`claude -p\` through driving-claude's run-claude.ts, bounded at $${r.claude_run.max_budget_usd} and ${r.claude_run.max_turns} turns). It logs the pick, shows the run in the statusline, and prints a JSON receipt; \`agent-router grade\` records how it went. The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints this table.`,
   ].join("\n");
 }

@@ -54,13 +54,6 @@ no_egress = []         # ~/… or absolute paths whose briefs never leave the ma
 api = "reseller"
 url = "https://jevtypesafeai.com/api/v1/decide"
 
-# Luna first, as a declared bias — not an on/off switch per row (owner 2026-10-06). Jev's probability
-# for each row is multiplied by its route's weight; the highest product is picked. With claude at 0.2
-# a claude row wins only when Jev rates it 5x the best luna row.
-[selection]
-route_weight = { luna = 1.0, claude = 0.2 }
-reason = "A claude row costs 20x a luna row (price_in 2 vs 0.10, price_out 10 vs 0.50; opus 40x). Luna is NOT the stronger model: TB4 2.5-12.6 vs 29.8-52.5 (AA, as_of above); SciCode is level. Measured here 2026-10-06: luna's failures (2 regressions, 1 incomplete scope, 1 stalled run in 14 runs) were all caught by the coordinator's checks, so cheap-plus-checks is the default and a claude row must be clearly the better fit. Revisit from agent-router stats once graded claude runs exist."
-
 # Bounds every claude worker runs with (driving-claude run-claude.ts flags), never the CLI defaults.
 [claude_run]
 max_budget_usd = 2.0

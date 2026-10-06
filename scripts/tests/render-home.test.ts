@@ -350,7 +350,9 @@ describe("render-home: the rest of the rendered half", () => {
     expect(md).toMatch(
       /^# policy\n\n<!-- roster:begin -->\n<!-- RENDERED [^\n]*-->\n- \*\*Every dispatch goes through/u,
     );
-    expect(md).toContain("| pick | id | runs as |");
+    expect(md).toContain(
+      "| default | id | route | AA | TB4 | SciCode | $in/$out | cost |",
+    );
     expect(md.endsWith("<!-- roster:end -->\n")).toBe(true);
     expect(
       readFileSync(join(dotfiles, "agents", "claude", "CLAUDE.md"), "utf8"),

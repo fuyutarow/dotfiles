@@ -41,7 +41,7 @@ import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { typesafeKey } from "../hooks/typesafe-key.ts";
 import { jsonOf, z } from "../hooks/zod.ts";
 import {
-  weighted,
+  criterionFor,
   loadRoster,
   type Choice,
   type Roster,
@@ -113,9 +113,6 @@ export interface Pick {
   reason: string;
   confidence?: number;
   probabilities?: Record<string, number>;
-  // each row's probability times its route weight, and the row Jev itself ranked first
-  weighted?: Record<string, number>;
-  jev_choice?: string;
   jev?: JevTrace;
 }
 
@@ -137,15 +134,7 @@ function underNoEgress(cwd: string, paths: string[]): string | undefined {
 function jevRequest(roster: Roster, brief: string): Record<string, unknown> {
   const tally = gradeTally();
   const criteria = Object.fromEntries(
-    roster.choice.map((c) => {
-      const t = tally.get(c.id);
-      return [
-        c.id,
-        t === undefined
-          ? c.use_for
-          : `${c.use_for} (graded runs so far: ${t.pass} pass, ${t.partial} partial, ${t.fail} fail)`,
-      ];
-    }),
+    roster.choice.map((c) => [c.id, criterionFor(roster, c, tally.get(c.id))]),
   );
   const body: Record<string, unknown> = {
     state: { task: brief.slice(0, roster.auto.max_task_chars) },
@@ -153,7 +142,10 @@ function jevRequest(roster: Roster, brief: string): Record<string, unknown> {
       worker: {
         type: "choice",
         instructions:
-          "Which worker should carry out `task`? Choose the one whose description best fits the work `task` asks for.",
+          "Which worker should carry out `task`? Choose the CHEAPEST worker whose measured capability " +
+          "and graded record are sufficient for what `task` actually needs. Pick a dearer worker only " +
+          "when `task` needs a capability the cheaper ones measurably lack (for example a long " +
+          "terminal or agentic session, where TB4 differs most), not because it is stronger in general.",
         criteria,
       },
     },
@@ -233,46 +225,32 @@ function judge(
   trace: JevTrace,
   fallback: (reason: string, jev?: JevTrace) => Pick,
 ): Pick {
+  // Jev's pick stands as made: it chose from the brief and the table (jevRequest), and nothing here
+  // re-weights it. Only doubt sends the default — Jev unsure, or a choice outside the roster.
+  const row = roster.choice.find((c) => c.id === answer.choice);
+  if (row === undefined)
+    return fallback(`jev chose '${answer.choice}', not a roster row`, trace);
   if (answer.confidence === undefined)
     return fallback("jev returned no confidence", trace);
-  const w = weighted(roster, answer);
-  if (w === undefined)
-    return fallback(
-      `jev gave no probability for any roster row (it chose '${answer.choice}')`,
-      trace,
-    );
   const scored = {
-    confidence: w.share,
-    probabilities: answer.probabilities ?? {
-      [answer.choice]: answer.confidence,
-    },
-    weighted: w.scores,
-    jev_choice: answer.choice,
+    confidence: answer.confidence,
+    ...(answer.probabilities === undefined
+      ? {}
+      : { probabilities: answer.probabilities }),
   };
-  const overruled =
-    w.row.id === answer.choice ? "" : ` over jev's raw pick ${answer.choice}`;
-  // Two doubts, either one sends the default: Jev itself unsure, or the weights left no clear winner.
   const min = roster.auto.min_confidence;
   if (answer.confidence < min)
     return {
       ...fallback(
-        `jev confidence ${answer.confidence.toFixed(2)} < ${min} (it chose ${answer.choice})`,
-        trace,
-      ),
-      ...scored,
-    };
-  if (w.share < min)
-    return {
-      ...fallback(
-        `weighted share ${w.share.toFixed(2)} < ${min} (it would pick ${w.row.id}${overruled})`,
+        `jev confidence ${answer.confidence.toFixed(2)} < ${min} (it chose ${row.id})`,
         trace,
       ),
       ...scored,
     };
   return {
     source: "jev",
-    choice: w.row.id,
-    reason: `jev confidence ${answer.confidence.toFixed(2)}, weighted share ${w.share.toFixed(2)} >= ${min}${overruled}`,
+    choice: row.id,
+    reason: `jev confidence ${answer.confidence.toFixed(2)} >= ${min}`,
     ...scored,
     jev: trace,
   };

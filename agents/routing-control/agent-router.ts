@@ -40,7 +40,6 @@ import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { cli, command } from "cleye";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
-import { typesafeKey } from "../hooks/typesafe-key.ts";
 import { jsonOf, z } from "../hooks/zod.ts";
 import {
   criterionFor,
@@ -58,6 +57,7 @@ import {
   STATE_SCHEMA,
   type Active,
 } from "./state.ts";
+import { postJev, type JevTrace } from "./jev-client.ts";
 
 const SCHEMA = STATE_SCHEMA;
 const STATE_DIR = stateDir();
@@ -102,15 +102,6 @@ const JevAnswer = z.looseObject({
   usage: z.looseObject({}).optional(),
 });
 
-interface JevTrace {
-  endpoint: string;
-  request: unknown;
-  key_source?: string;
-  status?: number;
-  response?: unknown;
-  error?: string;
-  latency_ms: number;
-}
 export interface Pick {
   source: "explicit" | "jev" | "default";
   choice: string;
@@ -168,39 +159,17 @@ async function askJevChoice(
   request: Record<string, unknown>,
   question: string,
 ): Promise<JevReply> {
-  const trace: JevTrace = {
-    endpoint: roster.auto.jev.url,
+  const post = await postJev(
+    roster.auto.jev.url,
     request,
-    latency_ms: 0,
-  };
-  const key = typesafeKey();
-  if (!key.ok)
-    return { ok: false, reason: `jev unavailable: ${key.reason}`, trace };
-  trace.key_source = key.source;
-  const started = performance.now();
-  const res = await attempt(() =>
-    fetch(roster.auto.jev.url, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${key.key}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(roster.auto.timeout_ms),
-    }),
+    roster.auto.timeout_ms,
   );
-  if (!res.ok) {
-    trace.latency_ms = Math.round(performance.now() - started);
-    trace.error = errorMessage(res.error);
-    return { ok: false, reason: `jev request failed: ${trace.error}`, trace };
-  }
-  const text = await res.value.text();
-  trace.latency_ms = Math.round(performance.now() - started);
-  trace.status = res.value.status;
-  const parsed = jsonOf(JevAnswer).safeParse(text);
-  trace.response = parsed.success ? parsed.data : text.slice(0, 2000);
-  if (res.value.status !== 200)
-    return { ok: false, reason: `jev HTTP ${res.value.status}`, trace };
+  if (!post.ok) return post;
+  const { trace } = post;
+  const parsed = jsonOf(JevAnswer).safeParse(post.text);
+  trace.response = parsed.success ? parsed.data : post.text.slice(0, 2000);
+  if (post.status !== 200)
+    return { ok: false, reason: `jev HTTP ${post.status}`, trace };
   const answer = parsed.success ? parsed.data.answers[question] : undefined;
   if (answer === undefined)
     return { ok: false, reason: "jev answer did not parse", trace };

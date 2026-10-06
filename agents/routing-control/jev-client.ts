@@ -1,0 +1,57 @@
+// The one way agent-router reaches Jev (TypeSafe System One, or the reseller in front of it): the
+// routing pick, the grade and `ask` all POST through here. One home for the key lookup, the time
+// bound, the failure reasons and the trace that runs.jsonl keeps — before 2026-10-06 the same
+// transport was written twice (here and driving-jev's jev.ts) and the two drifted (key sources,
+// reasons). What a caller asks and how it reads the answer stay with the caller.
+import { attempt, errorMessage } from "../hooks/attempt.ts";
+import { typesafeKey } from "../hooks/typesafe-key.ts";
+
+/** What runs.jsonl keeps about one Jev call (never the key). */
+export interface JevTrace {
+  endpoint: string;
+  request: unknown;
+  key_source?: string;
+  status?: number;
+  response?: unknown;
+  error?: string;
+  latency_ms: number;
+}
+
+/** ok = an HTTP answer arrived (any status; the caller judges it); otherwise why none did. */
+export type JevPost =
+  | { ok: true; status: number; text: string; trace: JevTrace }
+  | { ok: false; reason: string; trace: JevTrace };
+
+/** POST `request` to `url` with the TypeSafe key, bounded by `timeoutMs`. */
+export async function postJev(
+  url: string,
+  request: unknown,
+  timeoutMs: number,
+): Promise<JevPost> {
+  const trace: JevTrace = { endpoint: url, request, latency_ms: 0 };
+  const key = typesafeKey();
+  if (!key.ok)
+    return { ok: false, reason: `jev unavailable: ${key.reason}`, trace };
+  trace.key_source = key.source;
+  const started = performance.now();
+  const res = await attempt(() =>
+    fetch(url, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key.key}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(timeoutMs),
+    }),
+  );
+  if (!res.ok) {
+    trace.latency_ms = Math.round(performance.now() - started);
+    trace.error = errorMessage(res.error);
+    return { ok: false, reason: `jev request failed: ${trace.error}`, trace };
+  }
+  const text = await res.value.text();
+  trace.latency_ms = Math.round(performance.now() - started);
+  trace.status = res.value.status;
+  return { ok: true, status: res.value.status, text, trace };
+}

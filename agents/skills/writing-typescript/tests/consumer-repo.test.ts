@@ -79,7 +79,15 @@ describe("consumer-repo fixture", () => {
     expect(r.exitCode).toBe(0);
     const ours = decodedJson(Rc, read(join(ROOT, ".oxlintrc.json")));
     const theirs = decodedJson(Rc, read(join(dir, ".oxlintrc.json")));
-    expect(theirs.rules).toEqual(ours.rules);
+    // The house rules are dotfiles' own; only the dotfiles-scoped ones (the zod import
+    // restriction: oxlint-policy.toml scope = "dotfiles") stay behind in dotfiles.
+    const { "eslint/no-restricted-imports": ourImports, ...ourRest } =
+      ours.rules;
+    const { "eslint/no-restricted-imports": theirImports, ...theirRest } =
+      theirs.rules;
+    expect(theirRest).toEqual(ourRest);
+    expect(JSON.stringify(ourImports)).toContain('"name":"zod"');
+    expect(JSON.stringify(theirImports)).not.toContain('"name":"zod"');
   });
 
   test("the mise tasks parse and name the gates the SKILL.md section promises", () => {
@@ -101,5 +109,21 @@ describe("consumer-repo fixture", () => {
       ].toSorted(),
     );
     expect(tasks["lint:ts"]?.run).toContain("git diff --cached");
+  });
+});
+
+describe("consumer-repo zod.ts", () => {
+  test("decodes JSON exactly like dotfiles' agents/hooks/zod.ts", async () => {
+    const theirs = await import("../assets/consumer-repo/zod.ts");
+    const ours = await import("../../../hooks/zod.ts");
+    for (const text of ['{"a":1}', "[1,2]", "{", "", "null"]) {
+      const a = theirs.jsonOf(theirs.z.unknown()).safeParse(text);
+      const b = ours.jsonOf(ours.z.unknown()).safeParse(text);
+      expect([text, a.success, a.data]).toEqual([text, b.success, b.data]);
+    }
+    const bad = theirs.jsonOf(theirs.z.number()).safeParse("{");
+    expect(bad.success ? "" : (bad.error.issues[0]?.code ?? "")).toBe(
+      "invalid_format",
+    );
   });
 });

@@ -51,11 +51,13 @@ disagree, the policy wins and this file is stale.
 
 A repo other than dotfiles adopts the same setup from [`assets/consumer-repo/`](assets/consumer-repo/):
 copy `package.json` (rename it), `tsconfig.json` (adjust only `include`/`exclude`) and
-`oxlint-policy.local.toml` (ignores only, each with a reason); paste `mise-tasks.toml` into its
+`oxlint-policy.local.toml` (ignores only, each with a reason) and `zod.ts` (the `jsonOf` JSON codec
+the house rules point to — dotfiles keeps its own vendored copy in agents/hooks/zod.ts); paste `mise-tasks.toml` into its
 `mise.toml` and add `lint:ts` and `lint:oxlint-policy` to its `lint` depends; then `bun install`
 and `mise run oxlint:render`. `lint:ts` checks staged files only, so another session's WIP never
 blocks a commit. `tests/consumer-repo.test.ts` fails when these files drift from dotfiles' own
-pins, compilerOptions or rules.
+pins, compilerOptions or rules. A consumer gets only the policy's `scope = "house"` rules; a
+`scope = "dotfiles"` rule (the vendored-zod import) describes dotfiles' own layout and stays there.
 
 ## Cut
 

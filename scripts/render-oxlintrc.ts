@@ -26,6 +26,12 @@ const RuleName = z.string().regex(/^[a-z-]+\/[a-z0-9-]+$/u);
 const Reasoned = z.strictObject({ rule: RuleName, reason: z.string().min(1) });
 const Custom = z.strictObject({
   id: z.string().regex(/^[a-z0-9-]+$/u),
+  // Where the rule holds. "house": every repo of the owner — rendered here and by --repo.
+  // "dotfiles": a fact of this repo's layout (zod comes from the vendored agents/hooks/zod.ts because
+  // hooks run before `bun install`), so --repo leaves it out (firedancer, 2026-10-06: workers were
+  // pushed to `../node_modules/zod/index.js` by a rule that had no meaning there). Required: every
+  // rule is classified on purpose.
+  scope: z.enum(["house", "dotfiles"]),
   kind: z.enum(["global", "syntax", "import-path", "import-pattern"]),
   target: z.string().min(1),
   since: z.iso.date(),
@@ -98,9 +104,14 @@ export async function loadRepoPolicy(
   const local = LocalSchema.safeParse(raw.value);
   if (!local.success)
     return { ok: false, error: `${path}: ${local.error.message}` };
+  // A consumer repo gets the house rules only (Custom.scope); dotfiles-scoped rules stay here.
   return {
     ok: true,
-    value: { ...base, ignore: [...base.ignore, ...local.data.ignore] },
+    value: {
+      ...base,
+      ignore: [...base.ignore, ...local.data.ignore],
+      custom: base.custom.filter((c) => c.scope === "house"),
+    },
   };
 }
 export type CustomRule = z.output<typeof Custom>;

@@ -39,7 +39,14 @@ test("ignores are appended; the rules are this repo's, unchanged; --check then p
     Rc,
     readFileSync(join(dir, ".oxlintrc.json"), "utf8"),
   );
-  expect(theirs.rules).toEqual(ours.rules);
+  // The house rules are dotfiles' own; only the dotfiles-scoped ones (the zod import
+  // restriction: oxlint-policy.toml scope = "dotfiles") stay behind in dotfiles.
+  const { "eslint/no-restricted-imports": ourImports, ...ourRest } = ours.rules;
+  const { "eslint/no-restricted-imports": theirImports, ...theirRest } =
+    theirs.rules;
+  expect(theirRest).toEqual(ourRest);
+  expect(JSON.stringify(ourImports)).toContain('"name":"zod"');
+  expect(JSON.stringify(theirImports)).not.toContain('"name":"zod"');
   expect(theirs.ignorePatterns).toContain("research_record");
   expect(render("--repo", dir, "--check").text).toContain("up to date");
 });

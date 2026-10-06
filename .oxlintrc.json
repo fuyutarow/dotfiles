@@ -25,6 +25,7 @@
     "node_modules",
     "archives",
     "agents/claude/hooks/repo-retrieve.ts",
+    "agents/skills/writing-typescript/assets/consumer-repo",
     "agents/hooks/vendor"
   ],
   "rules": {
@@ -116,7 +117,7 @@
       },
       {
         "selector": "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.object.name='z'][callee.property.name='codec'] *)",
-        "message": "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — import { jsonOf, z } from agents/hooks/zod.ts (relative path). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
+        "message": "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — jsonOf/jsonText from the repo's zod module (dotfiles: agents/hooks/zod.ts; another repo: its copy of writing-typescript's assets/consumer-repo/zod.ts). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
       },
       {
         "selector": "CallExpression[callee.property.name='parse']:not([callee.object.name='JSON']):not([callee.object.object.name='Bun'])",
@@ -124,7 +125,7 @@
       },
       {
         "selector": "CallExpression[callee.property.name='json'][arguments.length=0]:not([callee.object.name='z'])",
-        "message": "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` from agents/hooks/zod.ts, so the body is validated where it enters."
+        "message": "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` (the repo's zod module: dotfiles agents/hooks/zod.ts, elsewhere writing-typescript's assets/consumer-repo/zod.ts), so the body is validated where it enters."
       }
     ],
     "eslint/no-restricted-imports": [

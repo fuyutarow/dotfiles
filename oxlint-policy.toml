@@ -42,6 +42,10 @@ pattern = "agents/claude/hooks/repo-retrieve.ts"
 reason = "a symlink oxlint resolves at the link path; the real file (agents/retrieval-control/repo-retrieve.ts) is linted"
 
 [[ignore]]
+pattern = "agents/skills/writing-typescript/assets/consumer-repo"
+reason = "material copied INTO another repo (zod.ts imports zod the way a consumer repo must); that repo lints its copy under the house rules, and tests/consumer-repo.test.ts pins its behaviour to dotfiles' own agents/hooks/zod.ts"
+
+[[ignore]]
 pattern = "agents/hooks/vendor"
 reason = "generated dependency bundle (scripts/vendor-deps.ts)"
 
@@ -131,6 +135,7 @@ reason = "`any` switches type checking off at the trust boundary; parse with zod
 
 [[custom]]
 id = "no-date"
+scope = "house"
 kind = "global"
 target = "Date"
 since = "2026-10-03"
@@ -140,6 +145,7 @@ good = ["export const t = Temporal.Now.instant();\n"]
 
 [[custom]]
 id = "no-switch"
+scope = "house"
 kind = "syntax"
 target = "SwitchStatement"
 since = "2026-10-03"
@@ -149,6 +155,7 @@ good = ["export function f(x: number): number {\n  return x === 1 ? 1 : 0;\n}\n"
 
 [[custom]]
 id = "no-nested-ternary"
+scope = "house"
 kind = "syntax"
 target = "ConditionalExpression ConditionalExpression"
 since = "2026-10-03"
@@ -158,6 +165,7 @@ good = ["export const f = (a: boolean): number => (a ? 1 : 3);\n"]
 
 [[custom]]
 id = "no-try"
+scope = "house"
 kind = "syntax"
 target = "TryStatement"
 since = "2026-10-03"
@@ -167,6 +175,7 @@ good = ["declare function g(): void;\nexport function f(): void {\n  g();\n}\n"]
 
 [[custom]]
 id = "no-throw"
+scope = "house"
 kind = "syntax"
 target = "ThrowStatement"
 since = "2026-10-06"
@@ -176,6 +185,7 @@ good = ["import { err, ok, type Result } from \"neverthrow\";\nexport function f
 
 [[custom]]
 id = "no-promise-reject"
+scope = "house"
 kind = "syntax"
 target = "CallExpression[callee.object.name='Promise'][callee.property.name='reject']"
 since = "2026-10-06"
@@ -185,6 +195,7 @@ good = ["import { errAsync, type ResultAsync } from \"neverthrow\";\nexport cons
 
 [[custom]]
 id = "no-stdin-listener"
+scope = "house"
 kind = "syntax"
 target = "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdin'][callee.property.name=/^(on|once|addListener|prependListener|prependOnceListener)$/]"
 since = "2026-10-06"
@@ -194,6 +205,7 @@ good = ["export const answer = prompt(\"continue?\") ?? \"\";\n"]
 
 [[custom]]
 id = "no-type-predicate"
+scope = "house"
 kind = "syntax"
 target = "TSTypePredicate"
 since = "2026-10-03"
@@ -203,6 +215,7 @@ good = ["export function isText(x: unknown): boolean {\n  return typeof x === \"
 
 [[custom]]
 id = "no-in-probe"
+scope = "house"
 kind = "syntax"
 target = "BinaryExpression[operator='in']"
 since = "2026-10-03"
@@ -218,6 +231,7 @@ good = [
 
 [[custom]]
 id = "no-as-cast"
+scope = "house"
 kind = "syntax"
 target = "TSAsExpression:not([typeAnnotation.typeName.name='const'])"
 since = "2026-10-03"
@@ -227,6 +241,7 @@ good = ["export const pair = [1, 2] as const;\n"]
 
 [[custom]]
 id = "no-angle-cast"
+scope = "house"
 kind = "syntax"
 target = "TSTypeAssertion"
 since = "2026-10-03"
@@ -236,10 +251,11 @@ good = ["export const pair = [1, 2] as const;\n"]
 
 [[custom]]
 id = "no-json-parse"
+scope = "house"
 kind = "syntax"
 target = "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.object.name='z'][callee.property.name='codec'] *)"
 since = "2026-10-04"
-message = "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — import { jsonOf, z } from agents/hooks/zod.ts (relative path). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
+message = "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — jsonOf/jsonText from the repo's zod module (dotfiles: agents/hooks/zod.ts; another repo: its copy of writing-typescript's assets/consumer-repo/zod.ts). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
 bad = [
   "export const v: unknown = JSON.parse(\"1\");\n",
   "declare const lib: { codec: (f: () => unknown) => unknown };\nexport const c = lib.codec((): unknown => JSON.parse(\"1\"));\n",
@@ -248,6 +264,7 @@ good = ["import { z } from \"./agents/hooks/zod.ts\";\nexport const c = z.codec(
 
 [[custom]]
 id = "no-throwing-parse"
+scope = "house"
 kind = "syntax"
 target = "CallExpression[callee.property.name='parse']:not([callee.object.name='JSON']):not([callee.object.object.name='Bun'])"
 since = "2026-10-06"
@@ -266,10 +283,11 @@ good = [
 
 [[custom]]
 id = "no-untyped-json-body"
+scope = "house"
 kind = "syntax"
 target = "CallExpression[callee.property.name='json'][arguments.length=0]:not([callee.object.name='z'])"
 since = "2026-10-04"
-message = "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` from agents/hooks/zod.ts, so the body is validated where it enters."
+message = "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` (the repo's zod module: dotfiles agents/hooks/zod.ts, elsewhere writing-typescript's assets/consumer-repo/zod.ts), so the body is validated where it enters."
 bad = ["export async function f(r: Response): Promise<unknown> {\n  return await r.json();\n}\n"]
 good = [
   "export async function f(r: Response): Promise<string> {\n  return await r.text();\n}\n",
@@ -278,6 +296,7 @@ good = [
 
 [[custom]]
 id = "no-direct-zod"
+scope = "dotfiles"
 kind = "import-path"
 target = "zod"
 since = "2026-10-04"
@@ -287,6 +306,7 @@ good = ["import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string
 
 [[custom]]
 id = "no-direct-zod-subpath"
+scope = "dotfiles"
 kind = "import-pattern"
 target = "zod/*"
 since = "2026-10-04"

@@ -20,6 +20,13 @@ import {
 const HOOK = join(import.meta.dir, "..", "enforce-background-waits.ts");
 const POST = join(import.meta.dir, "..", "record-bash-duration.ts");
 const scratch = (): string => mkdtempSync(join(tmpdir(), "bash-durations-"));
+const ordinarySessionEnv = (
+  extra: Record<string, string>,
+): NodeJS.ProcessEnv => {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+  delete env[AGENT_ROUTER_WORKER_ENV];
+  return env;
+};
 
 describe("commandKey", () => {
   test.each([
@@ -89,7 +96,7 @@ describe("the measured rule", () => {
 
   test("end to end: a measured slow command is denied, a fast one is allowed and measured", () => {
     const dir = scratch();
-    const env = { ...process.env, CLAUDE_BASH_DURATIONS_DIR: dir };
+    const env = ordinarySessionEnv({ CLAUDE_BASH_DURATIONS_DIR: dir });
     const hook = (path: string, payload: unknown): string =>
       Bun.spawnSync(["bun", path], {
         stdin: new Blob([JSON.stringify(payload)]),
@@ -149,7 +156,7 @@ test("a compound call first seen as a whole is still sent back when one of its s
         tool_input: { command: "f=a.ts && sed -i '' s/a/b/ $f && bun test $f" },
       }),
     ]),
-    env: { ...process.env, CLAUDE_BASH_DURATIONS_DIR: dir },
+    env: ordinarySessionEnv({ CLAUDE_BASH_DURATIONS_DIR: dir }),
     timeout: 30_000,
   }).stdout.toString();
   expect(out).toContain('"permissionDecision":"deny"');
@@ -203,7 +210,7 @@ test("a dispatched worker may keep measured-slow and long-timeout Bash calls in 
 
   const interactive = Bun.spawnSync(["bun", HOOK], {
     stdin: new Blob([JSON.stringify(payload)]),
-    env: { ...process.env, CLAUDE_BASH_DURATIONS_DIR: dir },
+    env: ordinarySessionEnv({ CLAUDE_BASH_DURATIONS_DIR: dir }),
     timeout: 30_000,
   }).stdout.toString();
   expect(interactive).toContain('"permissionDecision":"deny"');
@@ -211,7 +218,7 @@ test("a dispatched worker may keep measured-slow and long-timeout Bash calls in 
 
   const interactiveTimeout = Bun.spawnSync(["bun", HOOK], {
     stdin: new Blob([JSON.stringify(timeoutOnly)]),
-    env: { ...process.env, CLAUDE_BASH_DURATIONS_DIR: dir },
+    env: ordinarySessionEnv({ CLAUDE_BASH_DURATIONS_DIR: dir }),
     timeout: 30_000,
   }).stdout.toString();
   expect(interactiveTimeout).toContain('"permissionDecision":"deny"');

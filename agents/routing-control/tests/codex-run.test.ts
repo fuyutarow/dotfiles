@@ -43,6 +43,7 @@ out=""; prev=""
 for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
 case "$FAKE_CODEX_MODE" in
   slow) sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
+  kill) kill -KILL "$$" ;;
   fail) echo 'ERROR: stream disconnected' >&2; exit 7 ;;
   errfail)
     echo '{"type":"thread.started"}'
@@ -75,7 +76,7 @@ exit 0
 const Receipt = z.object({
   schema: z.literal(1),
   run_id: z.string(),
-  outcome: z.enum(["ok", "codex-failed", "refused", "timeout"]),
+  outcome: z.enum(["ok", "codex-failed", "refused", "timeout", "killed"]),
   model: z.string().nullable(),
   elapsed_s: z.number(),
   receipt_file: z.string().nullable(),
@@ -487,6 +488,19 @@ describe("codex-run", () => {
     expect(r.receipt.outcome).toBe("codex-failed");
     expect(r.receipt.codex_exit).toBe(7);
     expect(r.receipt.stderr_tail).toContain("stream disconnected");
+  });
+
+  test("a signal death before the bound is killed by the outside signal, not a timeout", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run([...FULL, "--timeout-s", "10"], {
+      CODEX_RUN_BIN: bin,
+      FAKE_CODEX_MODE: "kill",
+    });
+    expect(r.code).toBe(1);
+    expect(r.receipt.outcome).toBe("killed");
+    expect(r.receipt.why).toMatch(
+      /killed by SIGKILL from outside codex-run after .* s \(not its bound\)/u,
+    );
   });
 
   // O1 (Tiger ledger, 2026-10-06): a failed receipt always carries a non-empty cause. codex reports

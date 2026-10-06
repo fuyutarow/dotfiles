@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { decoded } from "../../../hooks/tests/decode.ts";
+import { AGENT_ROUTER_WORKER_ENV } from "../../../hooks/worker-env.ts";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
 
@@ -18,10 +19,16 @@ export function runHook(
   env: Record<string, string> = {},
   cwd?: string,
 ): { code: number | null; stdout: string; stderr: string } {
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLAUDE_HOOK_QUIET: "1",
+    ...env,
+  };
+  delete childEnv[AGENT_ROUTER_WORKER_ENV];
   const r = spawnSync(process.execPath, [join(HOOKS_DIR, name)], {
     input: typeof payload === "string" ? payload : JSON.stringify(payload),
     encoding: "utf8",
-    env: { ...process.env, CLAUDE_HOOK_QUIET: "1", ...env },
+    env: childEnv,
     ...(cwd !== undefined && cwd !== "" ? { cwd } : {}),
   });
   return { code: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };

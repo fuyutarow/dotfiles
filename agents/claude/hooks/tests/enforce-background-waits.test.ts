@@ -4,13 +4,17 @@ import {
   backgroundReason,
   FOREGROUND_MAX_MS,
 } from "../enforce-background-waits.ts";
+import { AGENT_ROUTER_WORKER_ENV } from "../../../hooks/worker-env.ts";
 
 // enforce-background-waits: a long or waiting foreground Bash call is denied with the resend to make.
 
 const HOOK = join(import.meta.dir, "..", "enforce-background-waits.ts");
 const decide = (tool_input: Record<string, unknown>): string => {
+  const env = { ...process.env };
+  delete env[AGENT_ROUTER_WORKER_ENV];
   const p = Bun.spawnSync(["bun", HOOK], {
     stdin: new Blob([JSON.stringify({ tool_name: "Bash", tool_input })]),
+    env,
     timeout: 30_000,
   });
   return p.stdout.toString();

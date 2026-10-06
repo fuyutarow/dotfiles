@@ -73,10 +73,11 @@ const FLOOR_CONFIG =
 // Test seam: the codex binary to run (a fake in tests). Never a model or sandbox override.
 const CODEX_BIN = process.env.CODEX_RUN_BIN ?? "codex";
 
-type Outcome = "ok" | "codex-failed" | "refused" | "timeout";
+type Outcome = "ok" | "codex-failed" | "refused" | "timeout" | "killed";
 const EXIT: Record<Outcome, number> = {
   ok: 0,
   "codex-failed": 1,
+  killed: 1,
   refused: 2,
   timeout: 3,
 };
@@ -181,6 +182,7 @@ let effort = argv.flags.effort;
 let codexSandbox: string | undefined;
 let unsandboxedReason: string | undefined;
 const t0 = performance.now();
+const wallT0 = Temporal.Now.instant().epochMilliseconds;
 const elapsed = (): number => Math.round((performance.now() - t0) / 100) / 10;
 const startedAt = Temporal.Now.instant().toString();
 const runId =
@@ -441,7 +443,12 @@ if (unsandboxedReason !== undefined)
 say(
   `${resume === undefined ? "started" : `resuming ${resume}:`} ${model} effort=${effort} sandbox=${codexSandbox} in ${resolve(String(cd))}, bound ${timeoutS} s`,
 );
-const deadline = AbortSignal.timeout(timeoutS * 1000);
+const deadline = new AbortController();
+let boundFired = false;
+const boundTimer = setTimeout(() => {
+  boundFired = true;
+  deadline.abort();
+}, timeoutS * 1000);
 const spawned = await attempt(() =>
   // stdin "ignore" is the `</dev/null` of the recipe: codex exec reads stdin and would hang on an
   // open pipe for the whole budget.
@@ -450,7 +457,7 @@ const spawned = await attempt(() =>
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
-    signal: deadline,
+    signal: deadline.signal,
     killSignal: "SIGKILL",
   }),
 );
@@ -498,6 +505,7 @@ const [code, eventsRead, errText] = await Promise.all([
 ]);
 const events = eventsRead === "" ? streamed : eventsRead;
 clearInterval(heartbeat);
+clearTimeout(boundTimer);
 progress?.flush();
 if (progress !== undefined && progress.failedWrites() > 0)
   say(
@@ -560,12 +568,28 @@ const common = {
   stderr_tail: stderrTail,
 };
 
-if (deadline.aborted)
+if (boundFired)
   emit("timeout", {
     ...common,
     why: `killed at the ${timeoutS} s bound`,
     cause,
   });
+let signal = proc.signalCode ?? undefined;
+if (signal === undefined && code === 137) signal = "SIGKILL";
+if (signal === undefined && code === 143) signal = "SIGTERM";
+if (signal !== undefined) {
+  const monotonicElapsed = (performance.now() - t0) / 1000;
+  const wallElapsed =
+    (Temporal.Now.instant().epochMilliseconds - wallT0) / 1000;
+  const sleepSeconds = Math.round(wallElapsed - monotonicElapsed);
+  const sleepNote =
+    sleepSeconds > 60 ? `; the machine slept about ${sleepSeconds} s` : "";
+  emit("killed", {
+    ...common,
+    why: `killed by ${signal} from outside codex-run after ${elapsed()} s (not its bound)${sleepNote}`,
+    cause,
+  });
+}
 if (code !== 0)
   emit("codex-failed", { ...common, why: `codex exited ${code}`, cause });
 if (lastMessage === "")

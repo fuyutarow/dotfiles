@@ -333,8 +333,8 @@ run = "bunx --bun tsgo --noEmit"
 
 [tasks.test]
 alias = "t"
-description = "Test the repo: hooks, resource control, repo-retrieve, Bun script floor, zsh terminal hygiene, and toolchain scope"
-depends = ["test:hooks", "test:resource-control", "test:retrieval-control", "test:agent-router", "test:scripts", "test:android", "test:zsh", "test:mise-scope"]
+description = "Test the repo: hooks, resource control, repo-retrieve, Bun script floor, skills, zsh terminal hygiene, and toolchain scope"
+depends = ["test:hooks", "test:resource-control", "test:retrieval-control", "test:agent-router", "test:scripts", "test:skills", "test:android", "test:zsh", "test:mise-scope"]
 
 [tasks."test:android"]
 dir = "{{config_root}}"
@@ -365,14 +365,15 @@ dir = "{{config_root}}"
 description = "dispatch (the one worker entry point) tests: fake codex-run, fake Jev, scratch state dir"
 run = "bun test agents/routing-control/tests"
 
+[tasks."test:skills"]
+dir = "{{config_root}}"
+description = "Run the tests shipped with all agent skills"
+run = "bun test agents/skills"
+
 [tasks."test:scripts"]
 dir = "{{config_root}}"
-description = "This repo's own script tests (scripts/tests) plus the house Bun-script floor tests and their proof-of-fire fixtures"
-# scripts/tests/ was outside every test task until 2026-08-14 — link-skills.ts shipped with a
-# characterization suite that `mise run test` never ran. Both roots are named explicitly because
-# `bun test scripts/tests` is a substring filter, not a path: it also matches
-# agents/skills/writing-bun-scripts/tests, which is confusing rather than deliberate.
-run = "bun test scripts/tests agents/skills/writing-bun-scripts/tests"
+description = "This repo's own script tests (scripts/tests) and their proof-of-fire fixtures"
+run = "bun test scripts/tests"
 
 # The one non-Bun test suite, and deliberately so: it exercises zsh functions whose behaviour is
 # defined by tty-ness, a zle precmd hook and raw DEC escapes, via a real pty from `zsh/zpty`.

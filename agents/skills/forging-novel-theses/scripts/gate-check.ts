@@ -96,7 +96,7 @@ let fatalError: string | undefined;
 function currentFatalError(): string {
   return fatalError ?? "";
 }
-function rejectPrototypeFlagBase(
+function rejectPrototypeFlag(
   type: ArgvType,
   flag: string,
   _flagValue?: string,
@@ -109,25 +109,20 @@ const legacyV1Flag = "legacy-v1";
 const legacyV1FlagError =
   "legacy v1 compatibility requires exactly one bare --legacy-v1 token";
 
-function createGateCheckArgvGuard(): typeof rejectPrototypeFlagBase {
-  let legacyV1Seen = false;
-  return (type, flag, flagValue) => {
-    rejectPrototypeFlagBase(type, flag, flagValue);
-    if (type === "argument") return;
-    const normalized = `${flag}${flagValue ?? ""}`
+function legacyV1UsageError(args: readonly string[]): string | undefined {
+  let legacyV1Count = 0;
+  for (const arg of args) {
+    if (arg === "--") break;
+    if (!arg.startsWith("--")) continue;
+    const normalized = arg
+      .slice(2)
       .replaceAll(/[^A-Za-z0-9]/gu, "")
       .toLowerCase();
-    if (!normalized.includes("legacyv1")) return;
-    if (
-      type !== "known-flag" ||
-      flag !== legacyV1Flag ||
-      flagValue !== undefined ||
-      legacyV1Seen
-    ) {
-      argvError = legacyV1FlagError;
-    }
-    legacyV1Seen = true;
-  };
+    if (!normalized.includes("legacyv1")) continue;
+    if (arg !== `--${legacyV1Flag}`) return legacyV1FlagError;
+    legacyV1Count += 1;
+  }
+  return legacyV1Count > 1 ? legacyV1FlagError : undefined;
 }
 
 function fieldPattern(label: string): RegExp {
@@ -1327,7 +1322,12 @@ function nonEmptyString(value: string | undefined): string {
 }
 
 async function input(): Promise<Input> {
-  const rejectPrototypeFlag = createGateCheckArgvGuard();
+  const args = Bun.argv.slice(2);
+  const legacyV1Error = legacyV1UsageError(args);
+  if (legacyV1Error !== undefined) {
+    fatalError = legacyV1Error;
+    return { legacyV1: false, text: "" };
+  }
   const parsed = cli(
     {
       name: "gate-check.ts",
@@ -1337,7 +1337,7 @@ async function input(): Promise<Input> {
       ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
-    Bun.argv.slice(2),
+    args,
   );
   if (argvError !== undefined) {
     fatalError = argvError;

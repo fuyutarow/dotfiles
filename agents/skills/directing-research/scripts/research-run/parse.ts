@@ -47,17 +47,8 @@ function parseFields(
   const fields = new Map<string, string>();
   for (const [index, line] of content.split(/\r?\n/u).entries()) {
     const match = line.match(/^([A-Z][A-Z0-9_]*):\s*(.*)$/u);
-    if (match?.[1] === undefined || match[2] === undefined) continue;
-    const key = match[1];
-    if (fields.has(key))
-      addFinding(
-        findings,
-        "RR002",
-        path,
-        `duplicate key ${key} at line ${index + 1}`,
-      );
-    else fields.set(key, match[2].trim());
     if (
+      match === null &&
       line.trim() !== "" &&
       !/^\s*#{1,6}\s+/u.test(line) &&
       !/^\s*\|.*\|\s*$/u.test(line)
@@ -68,6 +59,17 @@ function parseFields(
         path,
         `unrecognized content at line ${index + 1}; use key: value rows and the PROCESS LENSES table`,
       );
+    if (match === null) continue;
+    const key = match[1] ?? "";
+    const value = match[2] ?? "";
+    if (fields.has(key))
+      addFinding(
+        findings,
+        "RR002",
+        path,
+        `duplicate key ${key} at line ${index + 1}`,
+      );
+    else fields.set(key, value.trim());
   }
   if (
     kind === "receipt" &&

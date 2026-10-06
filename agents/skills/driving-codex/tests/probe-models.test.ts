@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
-import { rmSync } from "node:fs";
+import { realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -93,15 +93,22 @@ describe("driving-codex probe-models.ts (current behavior, pre-refactor bracket)
   });
 
   test("PROBE_DIR is honored as the spawned child's actual cwd", async () => {
-    const run = await withProbeDir((dir) =>
-      runProbe(["gpt-echo-cwd"], { CODEX_BIN: fixture, PROBE_DIR: dir }).then(
-        (result) => ({ result, dir }),
-      ),
+    const run = await withProbeDir(async (dir) => {
+      const result = await runProbe(["gpt-echo-cwd"], {
+        CODEX_BIN: fixture,
+        PROBE_DIR: dir,
+      });
+      const reportedCwd = result.stdout.match(/  ERROR: cwd=(.+)\n/u)?.[1];
+      expect(reportedCwd).toBeDefined();
+      if (reportedCwd !== undefined) {
+        expect(realpathSync(reportedCwd)).toBe(realpathSync(dir));
+      }
+      return result;
+    });
+    expect(run.stdout).toMatch(
+      /^RESULT: UNAVAILABLE gpt-echo-cwd \(exit 1\)\n  ERROR: cwd=(.+)\n$/u,
     );
-    expect(run.result.stdout).toBe(
-      `RESULT: UNAVAILABLE gpt-echo-cwd (exit 1)\n  ERROR: cwd=${run.dir}\n`,
-    );
-    expect(run.result.exitCode).toBe(1);
+    expect(run.exitCode).toBe(1);
   });
 
   test("(c) missing codex binary: exact FATAL line on stderr, empty stdout, exit 2", async () => {

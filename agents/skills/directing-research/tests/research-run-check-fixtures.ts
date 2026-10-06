@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -33,7 +33,7 @@ function denominatorDigest(runIds: readonly string[]): string {
 }
 
 export function temporaryRoot(): string {
-  const path = mkdtempSync(join(tmpdir(), "research-run-check-"));
+  const path = mkdtempSync(join(realpathSync(tmpdir()), "research-run-check-"));
   temporaryDirectories.push(path);
   return path;
 }

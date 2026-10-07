@@ -172,6 +172,7 @@ async function runBounded(
   argv: string[],
   timeoutMs: number,
   cwd = join(import.meta.dir, ".."),
+  env?: NodeJS.ProcessEnv,
 ): Promise<{
   code: number;
   timedOut: boolean;
@@ -180,6 +181,7 @@ async function runBounded(
   const signal = AbortSignal.timeout(timeoutMs);
   const proc = Bun.spawn(argv, {
     cwd,
+    ...(env === undefined ? {} : { env }),
     stdout: "pipe",
     stderr: "pipe",
     signal,
@@ -303,10 +305,17 @@ async function reclaim(policy: Policy): Promise<Result<number, Error>> {
   for (const [task, ...args] of steps) {
     if (free >= policy.denyBytes) break;
     const before = free;
+    // This unattended service may run while compute is active; retain the previous age grace.
+    const env =
+      task === "reclaim:builds"
+        ? { ...process.env, KONDO_OLDER: "30d" }
+        : undefined;
     const result = await fromAsyncThrowable(() =>
       runBounded(
         [mise, "run", task, ...args],
         task === "reclaim:builds" ? 180_000 : 120_000,
+        undefined,
+        env,
       ),
     )();
     const measured = freeBytes(policy.path);

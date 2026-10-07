@@ -479,7 +479,7 @@ mise run hook:post-merge
 #
 # The family is split by WHO MAY DECIDE, crossed with HOW SAFETY IS PROVEN:
 #   reclaim:clean       tool-native gc/prune (the tool judges "unused")   → any agent, run blind
-#   reclaim:builds      kondo -a, regenerable build output, ≥30d idle     → any agent, run blind
+#   reclaim:builds      kondo -a, every project's regenerable build output → any agent, run blind
 #   reclaim:toolchains  a WRITTEN predicate (busy-check / pin-scan) —     → any agent, run blind
 #                       no built-in gc exists, so the predicate errs toward keeping on missing
 #                       evidence (no fd -> skip rustup entirely) rather than guessing
@@ -537,16 +537,17 @@ run = 'bun ~/dotfiles/scripts/reclaim-run.ts system -- bun ~/dotfiles/scripts/re
 # declare it) — an earlier "absent" reading was `command -v` run as root, whose PATH lacks
 # /home/linuxbrew/.linuxbrew/bin. Probe brew tools by absolute path, never by root's PATH.
 [tasks."reclaim:pick"]
-description = "Clean project build artifacts (node_modules/target/build…) via kondo — INTERACTIVE picker, scoped to projects untouched ≥30d. Set KONDO_DIR / KONDO_OLDER to override. Blind/agent-safe form: reclaim:builds."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts pick --interactive -- kondo --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
+description = "Clean every project's regenerable build artifacts (node_modules/target/build…) via kondo — INTERACTIVE picker. Set KONDO_OLDER (for example 30d) to narrow candidates; KONDO_DIR changes the root. Blind/agent-safe form: reclaim:builds."
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts pick --interactive -- kondo --same-filesystem --older "${KONDO_OLDER:-0d}" ${KONDO_DIR:-$HOME}'
 
 # Why a blind twin of reclaim:pick exists: an interactive task never runs unattended, and that
 # is exactly why artifacts accumulate — measured on r99 2026-09-08 with the picker never having
 # run: target/ 11.0 GB + .venv/ 7.8 GB + node_modules/ 6.4 GB + build|dist/ 2.7 GB = ~28 GB.
-# The ≥30d default is the safety: a project touched this month is never a candidate.
+# The safety boundary is the regenerable-build-output allowlist, not project age. By default,
+# every project's matching output is a candidate; KONDO_OLDER=30d (or any age) narrows it.
 [tasks."reclaim:builds"]
-description = "Reclaim project build artifacts (node_modules/target/build…) NON-interactively via kondo -a, scoped to projects untouched ≥30d — an ACTIVE project's target/ is never a blind candidate, so KONDO_OLDER=0 is the deliberate human override. Regenerable only — any agent may run it blind. Human picker: reclaim:pick."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts builds -- kondo --all --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
+description = "Reclaim every project's regenerable build artifacts (node_modules/target/build…) NON-interactively via kondo -a. Set KONDO_OLDER (for example 30d) to narrow candidates. Regenerable only — any agent may run it blind. Human picker: reclaim:pick."
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts builds -- kondo --all --same-filesystem --older "${KONDO_OLDER:-0d}" ${KONDO_DIR:-$HOME}'
 
 [tasks."reclaim:audit"]
 description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, self-updating CLIs' version stores, the ~/.cache breakdown, and the judgment tier — the largest build dirs of ANY age and optional toolchain components (rust-docs). Use reclaim:judgment to preview owner-approved Rust target/docs cleanup; use reclaim:judgment:yes to act. Each audit item has size, last-touched date and age. Deletes nothing. STALE_DAYS=180 to retune."

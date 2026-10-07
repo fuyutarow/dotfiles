@@ -219,7 +219,7 @@ async function auditBuildDirs(roots: string): Promise<void> {
     );
   }
   console.log(
-    "  (30 日以内の現役は reclaim:builds が触らない。Rust target は mise run reclaim:judgment で計画、reclaim:judgment:yes で実行)",
+    "  (reclaim:builds は既定で全プロジェクトの再生成可能なビルド出力を対象にする。絞るなら KONDO_OLDER=30d。Rust target は mise run reclaim:judgment で計画、reclaim:judgment:yes で実行)",
   );
 }
 

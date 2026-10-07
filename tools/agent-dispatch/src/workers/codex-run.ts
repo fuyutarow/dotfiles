@@ -42,7 +42,7 @@
 // The receipt is also written to --receipt-dir (default $TMPDIR/codex-run) so the main loop can
 // re-read it after the call: a summary can paraphrase stdout, not the file.
 import { mkdirSync, readFileSync, writeFileSync, writeSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
@@ -60,6 +60,10 @@ import {
   sessionOf,
   tallyOf,
 } from "./codex-progress.ts";
+import {
+  codexHostDeclarationPath,
+  readCodexHostDeclaration,
+} from "./codex-host.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
@@ -329,29 +333,11 @@ if (floorProblem.value !== undefined) refuse(floorProblem.value);
 // ~/.config/codex-run/host.toml (`schema = 1`, `unsandboxed_reason = "<why this box is itself the
 // isolation>"`): the run then uses danger-full-access, says so on stderr every time, and records the
 // reason in the receipt. No file = the sandbox asked for; a malformed file = refused, never guessed.
-const HOST_FILE =
-  process.env.CODEX_RUN_HOST_FILE ??
-  join(
-    process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-    "codex-run",
-    "host.toml",
-  );
-const HostDeclaration = z
-  .object({
-    schema: z.literal(1),
-    unsandboxed_reason: z.string().trim().min(1),
-  })
-  .strict();
-const hostText = await attempt(() => readFileSync(HOST_FILE, "utf8"));
-if (hostText.ok) {
-  const toml = await attempt(() => Bun.TOML.parse(hostText.value));
-  const parsed = toml.ok ? HostDeclaration.safeParse(toml.value) : undefined;
-  if (parsed?.success !== true)
-    refuse(
-      `${HOST_FILE} is not a valid host declaration (want exactly: schema = 1, unsandboxed_reason = "<why this box is itself the isolation>"): ${toml.ok ? (parsed?.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") ?? "") : errorMessage(toml.error)}`,
-    );
-  unsandboxedReason = parsed.data.unsandboxed_reason;
-}
+const HOST_FILE = codexHostDeclarationPath();
+const hostDeclaration = readCodexHostDeclaration(HOST_FILE);
+if (hostDeclaration.kind === "invalid") refuse(hostDeclaration.reason);
+if (hostDeclaration.kind === "valid")
+  unsandboxedReason = hostDeclaration.declaration.unsandboxedReason;
 codexSandbox =
   unsandboxedReason === undefined ? String(sandbox) : "danger-full-access";
 

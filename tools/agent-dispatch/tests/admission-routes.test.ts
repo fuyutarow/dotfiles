@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { admitCodexWorker, codexWorkerLimit } from "../src/admission.ts";
@@ -23,6 +23,7 @@ describe("route capability cache", () => {
       host: "host-a",
       version,
       cachePath,
+      hostFile: join(dir, "host.toml"),
       now: () => now,
       codexProbe: () => {
         probes += 1;
@@ -48,6 +49,7 @@ describe("route capability cache", () => {
       host: "host-b",
       version: "1",
       cachePath: join(dir, "cache.json"),
+      hostFile: join(dir, "host.toml"),
       now: () => 1,
       codexProbe: () => ({ available: false, reason: "namespace denied" }),
       claudePath: noClaude,
@@ -55,6 +57,79 @@ describe("route capability cache", () => {
     expect(routes).toEqual({
       codex: { available: false, reason: "namespace denied" },
       claude: { available: false, reason: "claude is not on PATH" },
+    });
+  });
+  test("a valid host declaration enables codex when the sandbox probe fails", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-dispatch-routes-"));
+    dirs.push(dir);
+    const hostFile = join(dir, "host.toml");
+    writeFileSync(
+      hostFile,
+      'schema = 1\nunsandboxed_reason = "Vast container is the isolation"\n',
+    );
+    const routes = probeRoutes({
+      host: "host-c",
+      version: "1",
+      cachePath: join(dir, "cache.json"),
+      hostFile,
+      now: () => 1,
+      codexProbe: () => ({ available: false, reason: "sandbox denied" }),
+      claudePath: noClaude,
+    });
+
+    expect(routes.codex).toEqual({
+      available: true,
+      reason:
+        "unsandboxed by host declaration: Vast container is the isolation",
+    });
+  });
+
+  test("an invalid host declaration is unavailable with codex-run validation", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-dispatch-routes-"));
+    dirs.push(dir);
+    const hostFile = join(dir, "host.toml");
+    writeFileSync(hostFile, 'schema = 1\nunsandboxed_reason = "  "\n');
+    const routes = probeRoutes({
+      host: "host-d",
+      version: "1",
+      cachePath: join(dir, "cache.json"),
+      hostFile,
+      now: () => 1,
+      codexProbe: () => ({ available: false, reason: "sandbox denied" }),
+      claudePath: noClaude,
+    });
+
+    expect(routes.codex.available).toBe(false);
+    expect(routes.codex.reason).toContain(
+      `${hostFile} is not a valid host declaration`,
+    );
+    expect(routes.codex.reason).toContain(
+      "unsandboxed_reason: Too small: expected string to have >=1 characters",
+    );
+  });
+
+  test("adding a declaration invalidates a cached unavailable route", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-dispatch-routes-"));
+    dirs.push(dir);
+    const hostFile = join(dir, "host.toml");
+    const deps = {
+      host: "host-e",
+      version: "1",
+      cachePath: join(dir, "cache.json"),
+      hostFile,
+      now: () => 1,
+      codexProbe: () => ({ available: false, reason: "sandbox denied" }),
+      claudePath: noClaude,
+    };
+
+    expect(probeRoutes(deps).codex.available).toBe(false);
+    writeFileSync(
+      hostFile,
+      'schema = 1\nunsandboxed_reason = "This host is the isolation"\n',
+    );
+    expect(probeRoutes(deps).codex).toEqual({
+      available: true,
+      reason: "unsandboxed by host declaration: This host is the isolation",
     });
   });
 });

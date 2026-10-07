@@ -43,6 +43,7 @@ export type JevEndpoint = z.output<typeof JevEndpointSchema>;
 const AutoSchema = z.strictObject({
   max_task_chars: z.number().int().positive(),
   timeout_ms: z.number().int().positive(),
+  max_codex_workers: z.number().int().positive().optional(),
   no_egress: z.array(z.string()),
   jev: JevEndpointSchema,
 });

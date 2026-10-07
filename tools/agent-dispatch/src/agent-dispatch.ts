@@ -61,10 +61,18 @@ import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { jsonOf, jsonText, z } from "../../shared/src/zod.ts";
 import {
   criterionFor,
+  costMultiple,
   loadRoster,
   type Choice,
   type Roster,
 } from "../../../agents/models/roster.ts";
+import { admitCodexWorker, codexWorkerLimit } from "./admission.ts";
+import {
+  currentHost,
+  probeRoutes,
+  routeCachePath,
+  type Routes,
+} from "./routes.ts";
 import {
   activeDir,
   ActiveSchema,
@@ -112,6 +120,8 @@ const RUN_CLAUDE =
   join(import.meta.dir, "workers/run-claude.ts");
 
 const now = (): string => Temporal.Now.instant().toString();
+const epochMilliseconds = (): number =>
+  Temporal.Now.instant().epochMilliseconds;
 const sha256 = (s: string): string =>
   new Bun.CryptoHasher("sha256").update(s).digest("hex");
 
@@ -228,6 +238,100 @@ export interface Pick {
   confidence?: number;
   probabilities?: Record<string, number>;
   jev?: JevTrace;
+  routes_unavailable?: Partial<Record<"codex" | "claude", string>>;
+  default_fallback?: string;
+}
+
+function hostRoutes(): Routes {
+  const codexPath = Bun.which(process.env.CODEX_BIN ?? "codex");
+  const codexVersion =
+    codexPath === null
+      ? "missing"
+      : Bun.spawnSync([codexPath, "--version"], {
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 3_000,
+        })
+          .stdout.toString()
+          .trim();
+  return probeRoutes({
+    host: currentHost(),
+    version: codexVersion,
+    cachePath: routeCachePath(STATE_DIR),
+    now: epochMilliseconds,
+    codexProbe: () => {
+      if (process.env.AGENT_ROUTER_TEST_CODEX_ROUTE === "unavailable")
+        return { available: false, reason: "injected sandbox denial" };
+      if (process.env.AGENT_ROUTER_CODEX_RUN !== undefined)
+        return { available: true, reason: "test worker override" };
+      if (codexPath === null)
+        return { available: false, reason: "codex is not on PATH" };
+      const r = Bun.spawnSync([codexPath, "sandbox", "true"], {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 5_000,
+      });
+      const output =
+        `${r.stdout.toString()}${r.stderr.toString()}`
+          .trim()
+          .split("\n")
+          .at(0) ?? "";
+      if (r.exitCode === 0)
+        return { available: true, reason: "Codex sandbox probe passed" };
+      const reason =
+        output === ""
+          ? `sandbox probe exited ${r.exitCode}`
+          : output.slice(0, 300);
+      return { available: false, reason };
+    },
+    claudePath: (): string | null => {
+      if (process.env.AGENT_ROUTER_TEST_CLAUDE_ROUTE === "unavailable")
+        return null;
+      if (process.env.AGENT_ROUTER_RUN_CLAUDE !== undefined)
+        return process.env.AGENT_ROUTER_RUN_CLAUDE;
+      return Bun.which("claude");
+    },
+  });
+}
+
+function availableRoster(
+  roster: Roster,
+  routes: Routes,
+): {
+  roster: Roster;
+  unavailable: Partial<Record<"codex" | "claude", string>>;
+  fallback?: string;
+} {
+  const unavailable = Object.fromEntries(
+    Object.entries(routes)
+      .filter(([, status]) => !status.available)
+      .map(([route, status]) => [route, status.reason]),
+  );
+  const choice = roster.choice.filter((row) => routes[row.route].available);
+  if (choice.length === 0)
+    fatal(
+      `no worker route is available on ${hostname()}: ${Object.entries(
+        unavailable,
+      )
+        .map(([route, reason]) => `${route}: ${reason}`)
+        .join("; ")}`,
+    );
+  const fallbackRow = choice.toSorted(
+    (a, b) =>
+      (costMultiple({ ...roster, choice }, a) ?? Number.POSITIVE_INFINITY) -
+      (costMultiple({ ...roster, choice }, b) ?? Number.POSITIVE_INFINITY),
+  )[0];
+  const defaultRow = choice.find((row) => row.id === roster.default);
+  const fallback = defaultRow === undefined ? fallbackRow?.id : undefined;
+  return {
+    roster: {
+      ...roster,
+      choice,
+      default: defaultRow?.id ?? fallbackRow?.id ?? roster.default,
+    },
+    unavailable,
+    ...(fallback === undefined ? {} : { fallback }),
+  };
 }
 
 // Both sides are compared as REAL paths: a no_egress entry written through a symlink (/var vs
@@ -370,14 +474,41 @@ async function pickFor(
   cwd: string,
   capabilities: string[] = [],
 ): Promise<Pick> {
+  const available = availableRoster(roster, hostRoutes());
   const blocked = underNoEgress(cwd, roster.auto.no_egress);
   if (blocked !== undefined)
     return {
       source: "default",
-      choice: roster.default,
+      choice: available.roster.default,
       reason: `cwd is under no_egress '${blocked}'; the brief stays on this machine`,
+      ...(Object.keys(available.unavailable).length === 0
+        ? {}
+        : { routes_unavailable: available.unavailable }),
+      ...(available.fallback === undefined
+        ? {}
+        : {
+            default_fallback: `default route unavailable; using cheapest available row ${available.fallback}`,
+          }),
     };
-  return askJev(roster, brief, capabilities);
+  const pick = await askJev(available.roster, brief, capabilities);
+  const fallbackReason =
+    available.fallback === undefined
+      ? undefined
+      : `default route unavailable; fallback default is cheapest available row ${available.fallback}`;
+  const defaultFallback =
+    fallbackReason === undefined ? {} : { default_fallback: fallbackReason };
+  const pickReason =
+    fallbackReason !== undefined && pick.source === "default"
+      ? { reason: `${pick.reason}; ${fallbackReason}` }
+      : {};
+  return {
+    ...pick,
+    ...(Object.keys(available.unavailable).length === 0
+      ? {}
+      : { routes_unavailable: available.unavailable }),
+    ...defaultFallback,
+    ...pickReason,
+  };
 }
 
 // --- state: active markers and the log -------------------------------------------------------------
@@ -858,8 +989,43 @@ interface Launch {
 async function launch(l: Launch): Promise<number> {
   const { roster, flags, brief, ticket, pick, label, resume } = l;
   const row = refuseUnrunnable(roster, pick.choice);
+  const routeStatus = hostRoutes()[row.route];
+  if (!routeStatus.available)
+    fatal(
+      `${row.route} route is unavailable on ${hostname()}: ${routeStatus.reason}`,
+    );
   if (row.route === "codex") refuseUnauthenticatedCodex();
   else refuseMissingClaude();
+  if (row.route === "codex") {
+    const limitOutput = Bun.spawnSync(["sh", "-c", "ulimit -u"], {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 2_000,
+    })
+      .stdout.toString()
+      .trim();
+    const limit = codexWorkerLimit(limitOutput, roster.auto.max_codex_workers);
+    const admitted = await admitCodexWorker({
+      liveCodexWorkers: () =>
+        readActive().filter(
+          (entry) =>
+            entry.alive &&
+            roster.choice.find((choice) => choice.id === entry.active.choice)
+              ?.route === "codex",
+        ).length,
+      limit,
+      waitMs: 5 * 60_000,
+      intervalMs: 30_000,
+      now: epochMilliseconds,
+      sleep: (ms) => Bun.sleep(ms),
+      reportWait: (live, max, waited) => {
+        console.error(
+          `agent-dispatch: waiting for codex worker slot (${live}/${max} active; ${Math.round(waited / 1000)}s elapsed)`,
+        );
+      },
+    });
+    if (!admitted.ok) fatal(admitted.reason);
+  }
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
   // the full text, ticket included, kept by its hash: the run record's brief.sha256 is the key
   storeBrief(sha256(brief), brief);
@@ -1232,6 +1398,18 @@ function ls(): number {
     );
   if (rows.length === 0) console.error("agent-dispatch: nothing running");
   process.stdout.write(`${JSON.stringify({ schema: SCHEMA, active: rows })}\n`);
+  return 0;
+}
+
+function doctor(): number {
+  const routes = hostRoutes();
+  console.error(
+    `agent-dispatch: codex: ${routes.codex.available ? "available" : "unavailable"} — ${routes.codex.reason}`,
+  );
+  console.error(
+    `agent-dispatch: claude: ${routes.claude.available ? "available" : "unavailable"} — ${routes.claude.reason}`,
+  );
+  process.stdout.write(`${JSON.stringify({ schema: SCHEMA, routes })}\n`);
   return 0;
 }
 
@@ -2175,6 +2353,13 @@ const argv = cli({
       help: { description: "running dispatches" },
     }),
     command({
+      name: "doctor",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: { description: "route capability status on this host" },
+    }),
+    command({
       name: "ask",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -2336,6 +2521,7 @@ async function main(): Promise<number | undefined> {
     return ask(argv.flags.request);
   }
   if (argv.command === "ls") return ls();
+  if (argv.command === "doctor") return doctor();
   if (argv.command === "stats") return stats();
   if (argv.command === "export") return exportRuns(argv.flags.since);
   if (argv.command === "result")

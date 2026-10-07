@@ -283,6 +283,73 @@ const RunIdSchema = z.looseObject({ run_id: z.string() });
 describe("agent-dispatch run", () => {
   const b = brief("task", "Fix the flaky test in scripts/tests.\n");
 
+  test("filters unavailable codex rows and records the claude fallback default", async () => {
+    const state = join(scratch, "routes-codex-unavailable");
+    const target = brief("routes-codex-unavailable", "HTTP500\n");
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        target,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+        AGENT_ROUTER_TEST_CODEX_ROUTE: "unavailable",
+        AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE,
+      },
+    );
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        pick: z.looseObject({
+          choice: z.string(),
+          routes_unavailable: z.record(z.string(), z.string()),
+          default_fallback: z.string(),
+        }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.pick.choice).toMatch(/^sonnet-/u);
+    expect(receipt.pick.routes_unavailable.codex).toBe(
+      "injected sandbox denial",
+    );
+    expect(receipt.pick.default_fallback).toContain("fallback default");
+    const asked = decodedJson(
+      z.looseObject({
+        questions: z.looseObject({
+          worker: z.looseObject({ criteria: z.record(z.string(), z.string()) }),
+        }),
+      }),
+      bodies.at(-1) ?? "{}",
+    );
+    expect(
+      Object.keys(asked.questions.worker.criteria).every(
+        (id) =>
+          !id.startsWith("luna-") &&
+          !id.startsWith("terra-") &&
+          !id.startsWith("sol-") &&
+          !id.startsWith("astra-"),
+      ),
+    ).toBe(true);
+  });
+
+  test("refuses with exit 2 when neither worker route is available", async () => {
+    const target = brief("routes-none", "Do this.\n");
+    const r = await router(["pick", "--prompt-file", target, "--cd", scratch], {
+      AGENT_ROUTER_STATE_DIR: join(scratch, "routes-none"),
+      AGENT_ROUTER_TEST_CODEX_ROUTE: "unavailable",
+      AGENT_ROUTER_TEST_CLAUDE_ROUTE: "unavailable",
+    });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("no worker route is available");
+    expect(r.err).toContain("codex: injected sandbox denial");
+    expect(r.err).toContain("claude: claude is not on PATH");
+  });
+
   test("the active marker and run record carry the Claude dispatcher session", async () => {
     const state = join(scratch, "dispatcher-session-state");
     let markerText = "";

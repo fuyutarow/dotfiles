@@ -286,6 +286,16 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "all",
+    sources: ["agents/codex/config.declared.toml"],
+    deployed:
+      "the Codex-owned ~/.codex/config.toml workspace-write network setting",
+    consumer: "Codex workers using workspace-write sandbox",
+    writer: "human, in the repo; mise run codex:sandbox-network converges",
+    verify: `${DOCTOR} (codex-sandbox-network)`,
+  },
+  {
+    kind: "applied",
+    when: "all",
     sources: ["Brewfile", "Brewfile.core"],
     deployed: "installed CLIs (brew; mise on a plain Linux box)",
     consumer: "every shell",

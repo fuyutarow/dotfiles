@@ -69,6 +69,11 @@ import {
   readLive,
 } from "../agents/codex/remote-control.ts";
 import {
+  drift as sandboxNetworkDrift,
+  readDeclared as readSandboxNetworkDeclared,
+  readLive as readSandboxNetworkLive,
+} from "../agents/codex/sandbox-network.ts";
+import {
   editorHost,
   receiverSocket,
   remoteSocket,
@@ -820,6 +825,37 @@ export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
   );
 }
 
+export async function checkCodexSandboxNetwork(ctx: Ctx): Promise<Finding> {
+  if (Bun.which("codex") === undefined)
+    return skip("codex-sandbox-network", "codex not installed");
+  const declared = await readSandboxNetworkDeclared(ctx.dotfiles);
+  if (declared instanceof Error)
+    return fail(
+      "codex-sandbox-network",
+      declared.message,
+      "fix agents/codex/config.declared.toml",
+    );
+  const live = await readSandboxNetworkLive(ctx.home);
+  if (live instanceof Error)
+    return fail(
+      "codex-sandbox-network",
+      live.message,
+      "repair ~/.codex/config.toml",
+    );
+  const lines = sandboxNetworkDrift(declared, live);
+  if (lines.length === 0)
+    return pass(
+      "codex-sandbox-network",
+      `workspace network access ${declared} as declared`,
+    );
+  return fail(
+    "codex-sandbox-network",
+    "Codex workspace-write network access differs from agents/codex/config.declared.toml",
+    "mise run codex:sandbox-network",
+    lines,
+  );
+}
+
 // Delegates to scripts/edge-policy.ts --check, which owns the destination and the comparison.
 export async function checkEdgePolicy(ctx: Ctx): Promise<Finding> {
   if (!existsSync("/Applications/Microsoft Edge.app"))
@@ -1045,6 +1081,11 @@ export const CHECKS: Check[] = [
   { name: "bun-floor", run: checkBunFloor, applies: always },
   { name: "mcp", run: checkMcp, applies: always },
   { name: "codex-remote", run: checkCodexRemote, applies: always },
+  {
+    name: "codex-sandbox-network",
+    run: checkCodexSandboxNetwork,
+    applies: always,
+  },
   { name: "smart-open", run: checkSmartOpen, applies: always },
   {
     name: "edge-policy",

@@ -128,4 +128,14 @@ const converge = Bun.spawn(
 );
 await converge.exited;
 
+const sandboxNetwork = Bun.spawn(
+  ["bun", `${import.meta.dir}/codex-sandbox-network.ts`],
+  {
+    stdout: "inherit",
+    stderr: "inherit",
+    timeout: RESTART_TIMEOUT_MS,
+  },
+);
+await sandboxNetwork.exited;
+
 process.exit(updateCode);

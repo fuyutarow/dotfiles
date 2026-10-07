@@ -1,0 +1,3 @@
+# Codex CLI configuration keys maintained by dotfiles.
+[sandbox_workspace_write]
+network_access = true

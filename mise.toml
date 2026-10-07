@@ -843,3 +843,7 @@ run = 'bun ~/dotfiles/scripts/vendor-skill.ts'
 [tasks."codex:remote-control"]
 description = "Converge the Codex app-server daemon's remote control (how the ChatGPT mobile app reaches this machine) to agents/codex/app-server.toml. Idempotent; on drift it persists the setting and restarts a running daemon. `mise run doctor` (codex-remote) reports the drift."
 run = "bun agents/codex/codex-remote-control.ts"
+
+[tasks."codex:sandbox-network"]
+description = "Converge the declared Codex workspace-write network setting into the Codex-owned ~/.codex/config.toml; `mise run doctor` reports drift."
+run = "bun agents/codex/codex-sandbox-network.ts"

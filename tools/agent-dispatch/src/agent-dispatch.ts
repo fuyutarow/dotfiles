@@ -997,7 +997,8 @@ async function launch(l: Launch): Promise<number> {
   if (row.route === "codex") refuseUnauthenticatedCodex();
   else refuseMissingClaude();
   if (row.route === "codex") {
-    const limitOutput = Bun.spawnSync(["sh", "-c", "ulimit -u"], {
+    // bash, not sh: dash (Ubuntu's /bin/sh) has no `ulimit -u`, prints nothing, and that read as limit 1.
+    const limitOutput = Bun.spawnSync(["bash", "-c", "ulimit -u"], {
       stdout: "pipe",
       stderr: "pipe",
       timeout: 2_000,

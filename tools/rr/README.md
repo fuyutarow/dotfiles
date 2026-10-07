@@ -1,4 +1,4 @@
-# retrieval-control — `rr` (= `repo-retrieve`)
+# tools/rr — `rr` (= `repo-retrieve`)
 
 The search router. The caller says WHAT it is looking for; the router picks the engine. In an
 operational ccc repo the `enforce-search-route` hook denies raw search and points here.
@@ -20,13 +20,13 @@ lines keep the old internal labels (`route=literal` …) because other tools par
 
 | file | responsibility |
 |---|---|
-| `repo-retrieve.ts` | the CLI (Cleye) and the routes — the only entry point |
-| `ccc-index.ts` | ccc index adapter: registration lookup, the `.cocoindex_code/INDEXED_AT` watermark, the NO_INDEX gate concept/battery run before serving, and the `index` action (the watermark's only writer) |
-| `child.ts` | bounded child-process helpers (exit 124 on timeout) |
-| `definitions.ts` | the `definition` route: catalog freshness, recall, rerank, cards |
-| `ccc_defs.py` | definition extractor under ccc's interpreter (ccc's scope + tree-sitter patterns), per-file cache |
-| `rerank_server.py` | resident cross-encoder (Qwen3-Reranker-0.6B), socket-activated, inside its VRAM partition |
-| `bench-definitions.ts` | the yardstick: top-1/3/10 per language + absence, on a private case file |
+| `src/repo-retrieve.ts` | the CLI (Cleye) and the routes — the only entry point |
+| `src/ccc-index.ts` | ccc index adapter: registration lookup, the `.cocoindex_code/INDEXED_AT` watermark, the NO_INDEX gate concept/battery run before serving, and the `index` action (the watermark's only writer) |
+| `src/child.ts` | bounded child-process helpers (exit 124 on timeout) |
+| `src/definitions.ts` | the `definition` route: catalog freshness, recall, rerank, cards |
+| `src/ccc_defs.py` | definition extractor under ccc's interpreter (ccc's scope + tree-sitter patterns), per-file cache |
+| `src/rerank_server.py` | resident cross-encoder (Qwen3-Reranker-0.6B), socket-activated, inside its VRAM partition |
+| `src/bench-definitions.ts` | the yardstick: top-1/3/10 per language + absence, on a private case file |
 
 Entry points: `bun ~/.claude/hooks/repo-retrieve.ts` (guaranteed; a symlink in the linked hooks
 dir) and the PATH command `repo-retrieve` (package `bin`, installed by `mise run deps`).

@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { inScopeChanges } from "../ccc-scope.ts";
+import { inScopeChanges } from "../src/ccc-scope.ts";
 
 // Uses the INSTALLED ccc on purpose: the whole point of ccc-scope is that ccc's own matcher
 // answers. Skipped where ccc is absent.

@@ -39,7 +39,7 @@ reason = "retired skills kept as reference, not maintained code"
 
 [[ignore]]
 pattern = "agents/claude/hooks/repo-retrieve.ts"
-reason = "a symlink oxlint resolves at the link path; the real file (agents/retrieval-control/repo-retrieve.ts) is linted"
+reason = "a symlink oxlint resolves at the link path; the real file (tools/rr/src/repo-retrieve.ts) is linted"
 
 [[ignore]]
 pattern = "agents/skills/writing-typescript/assets/consumer-repo"

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { realpathSync } from "node:fs";
 import type { Result } from "neverthrow";
-import { MAPPING_ENV, parseMapping, resolveDbDir } from "../ccc-db-dir.ts";
+import { MAPPING_ENV, parseMapping, resolveDbDir } from "../src/ccc-db-dir.ts";
 
 const env = (value: string | undefined) => ({ [MAPPING_ENV]: value });
 const valueOrError = (result: Result<string, Error>) =>

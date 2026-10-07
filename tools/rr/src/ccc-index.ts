@@ -23,7 +23,7 @@
 import { readdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { jsonOf, z } from "../hooks/zod.ts";
+import { jsonOf, z } from "../../shared/src/zod.ts";
 import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";

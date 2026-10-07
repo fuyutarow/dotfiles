@@ -56,7 +56,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli, command } from "cleye";
-import { z } from "../hooks/zod.ts";
+import { z } from "../../shared/src/zod.ts";
 import {
   err,
   fromAsyncThrowable,
@@ -73,6 +73,7 @@ import {
 } from "./ccc-index.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
 import { findDefinitions, refreshCatalog, renderCards } from "./definitions.ts";
+import pkg from "../package.json" with { type: "json" };
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
@@ -1125,6 +1126,7 @@ async function main(): Promise<Result<number, Error>> {
   await cli(
     {
       name: "repo-retrieve",
+      version: pkg.version,
       parameters: ["[route]"],
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,

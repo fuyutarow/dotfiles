@@ -10,8 +10,8 @@
 
 import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { attempt } from "../hooks/attempt.ts";
-import { jsonOf, z } from "../hooks/zod.ts";
+import { attempt } from "../../shared/src/attempt.ts";
+import { jsonOf, z } from "../../shared/src/zod.ts";
 
 // The `ccc` entry point is a uv-tool script whose shebang names the interpreter that can import
 // cocoindex_code.

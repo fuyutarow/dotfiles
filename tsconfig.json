@@ -55,8 +55,8 @@
     // Retired code: nothing links or runs archives/ (see archives/skills/README.md), so it is
     // outside the audit, like node_modules.
     "archives",
-    // A symlink to agents/retrieval-control/repo-retrieve.ts. tsgo checks it at the LINK path and
-    // resolves its relative imports (./ccc-index.ts, ./child.ts) from agents/claude/hooks/,
+    // A symlink to tools/rr/src/repo-retrieve.ts. tsgo checks it at the LINK path and
+    // resolves its relative imports (./ccc-index.ts, ./child.ts, ../../shared/src/zod.ts) from agents/claude/hooks/,
     // where they do not exist — two false errors. The real file is checked at its own path.
     "agents/claude/hooks/repo-retrieve.ts"
   ]

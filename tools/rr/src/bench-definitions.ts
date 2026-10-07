@@ -10,7 +10,7 @@
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { err, ok, type Result } from "neverthrow";
-import { jsonOf, z } from "../hooks/zod.ts";
+import { jsonOf, z } from "../../shared/src/zod.ts";
 import { findDefinitions } from "./definitions.ts";
 
 let prototypeFlag = false;

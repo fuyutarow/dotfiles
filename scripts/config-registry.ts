@@ -304,7 +304,11 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["tools/shared/package.json", "tools/smart-open/package.json"],
+    sources: [
+      "tools/shared/package.json",
+      "tools/smart-open/package.json",
+      "tools/rr/package.json",
+    ],
     deployed: "the checkout",
     consumer:
       "Bun package metadata of the tools/ packages (shared modules; smart-open's version, read by `smart-open --version`)",
@@ -455,7 +459,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["agents/retrieval-control/retrieval.toml"],
+    sources: ["tools/rr/retrieval.toml"],
     deployed: "the checkout",
     consumer: "rr / repo-retrieve and its search gate",
     writer: "human, in the repo",

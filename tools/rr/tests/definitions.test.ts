@@ -11,7 +11,7 @@ import {
   isTest,
   loadRetrievalConfig,
   strengthOf,
-} from "../definitions.ts";
+} from "../src/definitions.ts";
 
 const loadFromText = (text: string) => {
   const path = join(

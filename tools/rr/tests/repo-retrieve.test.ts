@@ -13,14 +13,17 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
-import { z } from "../../hooks/zod.ts";
-import { decodedJson } from "../../hooks/tests/decode.ts";
+import { z } from "../../shared/src/zod.ts";
+import pkg from "../package.json" with { type: "json" };
+import { decodedJson } from "../../../agents/hooks/tests/decode.ts";
 
-const ROUTER = join(import.meta.dir, "..", "repo-retrieve.ts");
+const ROUTER = join(import.meta.dir, "..", "src", "repo-retrieve.ts");
 const COMPATIBILITY_PATH = join(
   import.meta.dir,
   "..",
   "..",
+  "..",
+  "agents",
   "claude",
   "hooks",
   "repo-retrieve.ts",
@@ -229,10 +232,17 @@ function run(
 }
 
 describe("repo-retrieve route contract", () => {
-  test("retrieval-control owns the executable router and the old hook path resolves to it", () => {
+  test("tools/rr owns the executable router and the old hook path resolves to it", () => {
     expect(existsSync(ROUTER)).toBe(true);
     expect(statSync(ROUTER).mode & 0o111).not.toBe(0);
     expect(realpathSync(COMPATIBILITY_PATH)).toBe(realpathSync(ROUTER));
+  });
+
+  test("--version prints the version of this package's package.json", () => {
+    const result = run(tmpdir(), ["--version"]);
+    expect(result.code).toBe(0);
+    expect(result.stdout.trim()).toBe(pkg.version);
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 
   test("concept routes to ccc search without an implicit refresh", () => {
@@ -1451,7 +1461,7 @@ describe("repo-retrieve route contract", () => {
   // `--multiline` alone does NOT retroactively make a literal string absorb a newline, and that a
   // wrap-tolerant match instead needs a regex query plus `-U --multiline-dotall`, was verified
   // separately against the REAL `rg` binary before this change shipped (see the comment on
-  // rgFlags() in ../repo-retrieve.ts for the exact commands and results). ---
+  // rgFlags() in ../src/repo-retrieve.ts for the exact commands and results). ---
   test("--multiline reaches rg's argv on the literal route", () => {
     const result = run(registerProject(), [
       "literal",

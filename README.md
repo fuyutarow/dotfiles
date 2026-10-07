@@ -70,6 +70,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── zsh/         # zshenv (tiny, SSH-safe), zshrc, aliases.zsh (+ IS_MAC/IS_WSL), mac.zsh / wsl.zsh
 ├── git/         # gitconfig + local.mac / local.wsl (per-OS include)
 ├── tools/       # repo CLIs, one directory each (package.json with semver, CHANGELOG.md, src/, tests/); may import only its own dir and tools/shared/
+│   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   └── shared/      # code several tools import (zod, attempt, narrow, typesafe-key, sockets)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
@@ -88,7 +89,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── wsl/         # /etc/wsl.conf system config (WSL only)
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
-│                #   and shared agent tools (retrieval-control/ = repo-retrieve, resource-control/, …)
+│                #   and shared agent tools (resource-control/, …; the repo-retrieve CLI is tools/rr/)
 ├── scripts/     # plumbing — config-registry.ts (every config surface), link-dots.ts (deploys it), check-tools.sh
 ├── Brewfile     # every CLI tool (mac casks gated by OS.mac?)
 └── mise.toml    # the task runner (no justfile)

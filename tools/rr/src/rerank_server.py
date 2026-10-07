@@ -32,7 +32,7 @@ from pathlib import Path
 
 def local_config() -> tuple[str, int]:
     """[definition.local] of retrieval.toml: the model and the idle exit. A bad value stops here."""
-    path = Path(__file__).with_name("retrieval.toml")
+    path = Path(__file__).resolve().parents[1] / "retrieval.toml"
     local = tomllib.loads(path.read_text()).get("definition", {}).get("local", {})
     model, idle = local.get("model"), local.get("idle_seconds")
     if not isinstance(model, str) or not model:
@@ -101,7 +101,7 @@ class Reranker:
 
 
 def serve(listener: socket.socket) -> None:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "resource-control"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "agents" / "resource-control"))
     from gpu_partition import apply  # before torch: it decides what the process may see
 
     on_gpu = apply("rerank") == "cuda"

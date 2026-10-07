@@ -1,1 +1,1 @@
-../../retrieval-control/repo-retrieve.ts
+../../../tools/rr/src/repo-retrieve.ts

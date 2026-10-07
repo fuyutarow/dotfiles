@@ -7,7 +7,7 @@
 //
 // What it does: finds definitions in the inserted text that were not in the replaced text (Write:
 // the whole file is new text), describes each by its doc comment + signature + first body lines,
-// and runs the definition search (agents/retrieval-control/definitions.ts) excluding itself. Only a
+// and runs the definition search (tools/rr/src/definitions.ts) excluding itself. Only a
 // STRONG match (the same function, by the reranker's log-odds) is reported — a "maybe" would be
 // noise on every edit. At most two new definitions per edit are checked.
 //
@@ -21,8 +21,8 @@ import {
   isTest,
   loadRetrievalConfig,
   type Definition,
-} from "../../retrieval-control/definitions.ts";
-import { findRegisteredProject } from "../../retrieval-control/ccc-index.ts";
+} from "../../../tools/rr/src/definitions.ts";
+import { findRegisteredProject } from "../../../tools/rr/src/ccc-index.ts";
 import { attempt } from "../../hooks/attempt.ts";
 import { arr, at, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";

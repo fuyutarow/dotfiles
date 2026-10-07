@@ -1,0 +1,10 @@
+{
+  "name": "@dotfiles/rr",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "rr": "src/repo-retrieve.ts",
+    "repo-retrieve": "src/repo-retrieve.ts"
+  }
+}

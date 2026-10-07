@@ -45,8 +45,8 @@ import {
   ok,
   type Result,
 } from "neverthrow";
-import { jsonOf, z } from "../hooks/zod.ts";
-import { typesafeKey } from "../hooks/typesafe-key.ts";
+import { jsonOf, z } from "../../shared/src/zod.ts";
+import { typesafeKey } from "../../shared/src/typesafe-key.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
 
 // One definition as ccc_defs.py writes it (see its `Record:` line); every file this module reads
@@ -99,7 +99,7 @@ function configuredString(
   return err(new Error(`${key} must be a string when present`));
 }
 
-const CONFIG = join(import.meta.dir, "retrieval.toml");
+const CONFIG = join(import.meta.dir, "..", "retrieval.toml");
 const JEV_TIMEOUT_MS = 20_000;
 const JEV_RETRIES = 3; // 429 / 529, exponential backoff — the API reference's guidance
 
@@ -848,7 +848,7 @@ export async function judgeJev(
   docs: string[],
   endpoint: JevEndpoint,
 ): Promise<RerankResult> {
-  // One key lookup for every Jev caller (agents/hooks/typesafe-key.ts: env, then fnox, then the
+  // One key lookup for every Jev caller (tools/shared/src/typesafe-key.ts: env, then fnox, then the
   // dotenv file). This file had its own copy without fnox, so on a machine whose key lives in fnox
   // `rr` reported "Jev unavailable" while agent-router used Jev (2026-10-06).
   const lookup = typesafeKey();

@@ -21,7 +21,7 @@ const CORPUS = [
   { path: "agents/models/check-releases.ts" },
   { path: "agents/research-control/cli.ts" },
   { path: "agents/resource-control/agent-resource-run.ts" },
-  { path: "agents/retrieval-control/bench-definitions.ts" },
+  { path: "tools/rr/src/bench-definitions.ts" },
   { path: "agents/serena-control/serena-foreground.ts" },
   { path: "agents/skills/codifying-doctrine/scripts/doctrine-check.ts" },
   { path: "agents/skills/commanding-research-fleets/scripts/check.ts" },
@@ -79,7 +79,7 @@ const CORPUS = [
   { path: "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts" },
   { path: "agents/skills/wiring-repositories/scripts/wiring-check.ts" },
   { path: "agents/skills/writing-bun-scripts/scripts/script-check.ts" },
-  { path: "agents/retrieval-control/repo-retrieve.ts", command: "literal" },
+  { path: "tools/rr/src/repo-retrieve.ts", command: "literal" },
   { path: "scripts/reclaim-clean.ts" },
   { path: "scripts/reclaim-host.ts" },
   { path: "scripts/reclaim-toolchains.ts" },
@@ -142,7 +142,7 @@ async function productionCleyeImportsIn(base: string): Promise<string[]> {
 
 async function productionCleyeImports(): Promise<string[]> {
   const paths: string[] = [];
-  for (const base of ["agents", "cocoindex", "scripts"] as const) {
+  for (const base of ["agents", "cocoindex", "scripts", "tools/rr"] as const) {
     paths.push(...(await productionCleyeImportsIn(base)));
   }
   return paths.toSorted();

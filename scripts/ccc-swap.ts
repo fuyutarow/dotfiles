@@ -8,7 +8,7 @@
 // per-project DB redirect) while the live indexes keep serving searches untouched, then swaps
 // the new indexes in with a directory rename (near-instant) and a single daemon restart.
 //
-// RELOCATED LAYOUT (2026-09-23, `agents/retrieval-control/ccc-db-dir.ts`): when
+// RELOCATED LAYOUT (2026-09-23, `tools/rr/src/ccc-db-dir.ts`): when
 // COCOINDEX_CODE_DB_PATH_MAPPING is set host-wide, a project's DB artifacts
 // (cocoindex.db/target_sqlite.db/INDEXED_AT — DB_ARTIFACTS) live OUTSIDE the project, under the
 // mapped target; only settings.yml stays in `<root>/.cocoindex_code/`. `resolveDbDir(root, env)`
@@ -94,7 +94,7 @@ import {
   parseMapping,
   resolveDbDir,
   SETTINGS_DIR_NAME,
-} from "../agents/retrieval-control/ccc-db-dir";
+} from "../tools/rr/src/ccc-db-dir";
 
 // ---------------------------------------------------------------------------------------------
 // Constants

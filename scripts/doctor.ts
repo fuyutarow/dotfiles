@@ -55,10 +55,7 @@ import {
 } from "node:fs";
 import { homedir, release, tmpdir, userInfo } from "node:os";
 import { basename, join } from "node:path";
-import {
-  MAPPING_ENV,
-  parseMapping,
-} from "../agents/retrieval-control/ccc-db-dir.ts";
+import { MAPPING_ENV, parseMapping } from "../tools/rr/src/ccc-db-dir.ts";
 import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
 import { RENDERED } from "./config-registry.ts";
 import { obj } from "../agents/hooks/narrow.ts";

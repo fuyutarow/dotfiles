@@ -7,8 +7,9 @@ import { join } from "node:path";
 // the two together: on 2026-10-06 the offset was desaturated in one and the owner found the other
 // unchanged — 「片方は治しているのに、もう片方に影響がないのはどうなの？」. They stay separate code
 // (no forced sharing); this test is the link. It renders BOTH heads for real — zsh from the repo's
-// zsh/zshrc, not the deployed copy — and fails when any part's color or text differs (the minute
-// may tick between the two renders, so the time's text is not compared, only its color).
+// zsh/zshrc, not the deployed copy, using the header _prompt_stamp prints rather than PROMPT's
+// input line — and fails when any part's color or text differs (the minute may tick between the
+// two renders, so the time's text is not compared, only its color).
 
 const REPO = join(import.meta.dir, "..", "..", "..", "..");
 const STATUSLINE = join(REPO, "agents", "claude", "statusline-command.ts");
@@ -42,11 +43,18 @@ function zshHead(): Part[] {
     join(zdot, ".zshrc"),
     `source ${JSON.stringify(join(REPO, "zsh", "zshrc"))}\n`,
   );
-  const r = Bun.spawnSync(["zsh", "-ic", 'print -rP -- "$PROMPT"'], {
-    cwd: REPO,
-    env: { ...process.env, ZDOTDIR: zdot, PWD: REPO },
-    timeout: 30_000,
-  });
+  const r = Bun.spawnSync(
+    [
+      "zsh",
+      "-ic",
+      'add-zsh-hook -d precmd _prompt_stamp; _prompt_stamp >/dev/null; print -rP -- "$_prompt_header"',
+    ],
+    {
+      cwd: REPO,
+      env: { ...process.env, ZDOTDIR: zdot, PWD: REPO },
+      timeout: 30_000,
+    },
+  );
   return parts(r.stdout.toString().split("\n")[0] ?? "").slice(0, HEAD_PARTS);
 }
 

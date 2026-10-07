@@ -10,10 +10,10 @@
 
 ## Versions
 
-| Package | Version | Cadence | Source |
-|---|---|---|---|
-| `cocoindex-code` (ccc) | row measured at **0.2.37**; installed is **0.2.39** as of 2026-07-30 — verify with `ls ~/.local/share/uv/tools/cocoindex-code/lib/python*/site-packages/cocoindex_code-*.dist-info`, and read source ONLY from that path: a stale 0.1.10 tree under `~/.cache/uv/archive-v0/` produced two false findings on 2026-07-30 | ~weekly now — 43 PyPI releases / 44 GitHub tags across a ~5mo life (first upload 2026-02-08, repo created 2026-02-01), initial burst (4/day, 2026-04-14) tapering to ~1/week; verify-fleet corrected an unpaginated first count | raw PyPI JSON `pypi.org/pypi/cocoindex-code/json` (`.releases \| keys \| length`) + `gh api --paginate repos/cocoindex-io/cocoindex-code/releases` |
-| `cocoindex` (framework, upstream) | **1.0.16** | v1.0.9→1.0.16 in 24 days (2026-06-12→07-06), ~3–4 days/release | PyPI JSON + `gh api .../releases` |
+| Package                           | Version                                                                                                                                                                                                                                                                                                                 | Cadence                                                                                                                                                                                                                         | Source                                                                                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cocoindex-code` (ccc)            | row measured at **0.2.37**; installed is **0.2.39** as of 2026-07-30 — verify with `ls ~/.local/share/uv/tools/cocoindex-code/lib/python*/site-packages/cocoindex_code-*.dist-info`, and read source ONLY from that path: a stale 0.1.10 tree under `~/.cache/uv/archive-v0/` produced two false findings on 2026-07-30 | ~weekly now — 43 PyPI releases / 44 GitHub tags across a ~5mo life (first upload 2026-02-08, repo created 2026-02-01), initial burst (4/day, 2026-04-14) tapering to ~1/week; verify-fleet corrected an unpaginated first count | raw PyPI JSON `pypi.org/pypi/cocoindex-code/json` (`.releases \| keys \| length`) + `gh api --paginate repos/cocoindex-io/cocoindex-code/releases` |
+| `cocoindex` (framework, upstream) | **1.0.16**                                                                                                                                                                                                                                                                                                              | v1.0.9→1.0.16 in 24 days (2026-06-12→07-06), ~3–4 days/release                                                                                                                                                                  | PyPI JSON + `gh api .../releases`                                                                                                                  |
 
 Both `requires-python >=3.11`. Relationship: same org (`cocoindex-io`), same lead author
 (`georgeh0`, top committer on both) — ccc's `requires_dist` hard-pins
@@ -46,7 +46,7 @@ pulled `cocoindex-code@latest` through `uvx`, i.e. a THIRD floating copy alongsi
 
 The decisive argument is not the failures, it is duplication of a **guarded** capability by an
 **unguarded** one. `agents/hooks/enforce-search-route.ts` (Claude Code and Codex) denies raw search (including bare
-`ccc search`) inside a registered project and forces the caller through `tools/rr/src/repo-retrieve.ts`,
+`ccc search`) inside a registered project and forces the caller through `tools/repo-retrieve/src/repo-retrieve.ts`,
 which owns query-shape declaration, index freshness on `concept`, the ≥3-paraphrase `battery`
 gate, and the Serena hand-off. The MCP `search` tool answered the same questions with **none** of
 those gates and never passed through the hook, whose matcher is `Grep|Bash`. Verified after
@@ -74,13 +74,18 @@ meaning -- unlike grep or text matching, it finds relevant code even when exact 
 unknown."
 
 `tools/list` — exactly ONE tool, `search`, verbatim shape:
+
 ```json
-{"query": "string, required — NL or code snippet",
- "limit": "int 1-100, default 5  ← NOTE: CLI's own `ccc search` defaults to 10, not 5",
- "offset": "int, default 0",
- "refresh_index": "bool, default TRUE  ← NOTE: CLI's `--refresh` defaults to FALSE — asymmetry",
- "languages": "string[] | null", "paths": "string[] glob | null, e.g. ['src/utils/*','*.py']"}
+{
+  "query": "string, required — NL or code snippet",
+  "limit": "int 1-100, default 5  ← NOTE: CLI's own `ccc search` defaults to 10, not 5",
+  "offset": "int, default 0",
+  "refresh_index": "bool, default TRUE  ← NOTE: CLI's `--refresh` defaults to FALSE — asymmetry",
+  "languages": "string[] | null",
+  "paths": "string[] glob | null, e.g. ['src/utils/*','*.py']"
+}
 ```
+
 Returns `SearchResultModel{success, results:[{file_path, language, content, start_line, end_line,
 score}], total_returned, offset, message}`. Startup timing (warm daemon, from an initialized
 project): `initialize` 0.250s, `tools/list` +0.002s after — MCP startup itself is never the
@@ -88,27 +93,27 @@ bottleneck; the CC1 registration gate is (unregistered cwd exits before any of t
 
 ## Measured numbers — starlette trial corpus (100 files, 1205–1206 chunks, dim-384, this host)
 
-| Metric | Value | Note |
-|---|---|---|
-| `ccc search` latency | ~0.1–0.4s wall | dominated by `uvx` process startup (user+sys time only 0.06–0.08s), not model inference |
-| `rg` latency, same queries | 0.006–0.02s | for comparison only — different tool, different job |
-| Incremental reindex (1 file changed / 102 listed) | 0.428s | |
-| Incremental reindex (9 files changed) | 1.022s | |
-| Full from-scratch rebuild | ~5–8s / 100 files | |
-| DB size, starlette trial | 13MB (`target_sqlite.db`, 100 files/1205 chunks) | dir total 18M |
-| DB size, `qoed` (real project) | 88M total — `cocoindex.db/` 44M + `target_sqlite.db` 45M (46,071,808 B) | 853 files / 11,962 chunks |
+| Metric                                            | Value                                                                   | Note                                                                                    |
+| ------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `ccc search` latency                              | ~0.1–0.4s wall                                                          | dominated by `uvx` process startup (user+sys time only 0.06–0.08s), not model inference |
+| `rg` latency, same queries                        | 0.006–0.02s                                                             | for comparison only — different tool, different job                                     |
+| Incremental reindex (1 file changed / 102 listed) | 0.428s                                                                  |                                                                                         |
+| Incremental reindex (9 files changed)             | 1.022s                                                                  |                                                                                         |
+| Full from-scratch rebuild                         | ~5–8s / 100 files                                                       |                                                                                         |
+| DB size, starlette trial                          | 13MB (`target_sqlite.db`, 100 files/1205 chunks)                        | dir total 18M                                                                           |
+| DB size, `qoed` (real project)                    | 88M total — `cocoindex.db/` 44M + `target_sqlite.db` 45M (46,071,808 B) | 853 files / 11,962 chunks                                                               |
 
 **Head-to-head, 6 queries, `ccc search` vs `rg`** (starlette corpus, clean HEAD, verdicts are
 this trial's, not a general law — re-run for other corpora):
 
-| # | Query shape | Winner | Why |
-|---|---|---|---|
-| a | "where are HTTP redirect responses implemented" (concept, vocabulary mismatch) | **ccc** | `rg redirect` buried the real class in 30+ noisy hits; ccc ranked it #3 |
-| b | "how does middleware wrap the application" (concept, code doesn't say "wrap") | **ccc**, with caveat | `rg -i wrap` → zero hits; but ccc's own top-4 buried the real mechanism below markdown docs until `--path`-filtered |
-| c | "websocket disconnect handling" (query word = the actual identifier) | **rg** | `rg disconnect` hit `on_disconnect` directly in 0.006s; ccc's top-6 were all tests/docs |
-| d | "background tasks run after response" (same doc-ranking-bias pattern as b) | **rg** | ccc buried the 3 real call sites below docs/tests entirely off top-6 |
-| e | "test client cookie persistence across requests" | **ccc**, marginally | neither tool found the true root cause (inherited from httpx); ccc's set was more actionable |
-| f (adversarial) | exhaustive call-site enumeration of `get_route_path(` | **rg, decisively** | `rg` = 5/5 exact call sites, 0.017s; ccc top-8 missed 2/5 real sites AND 5/8 hits had zero literal match (pure false positives) |
+| #               | Query shape                                                                    | Winner               | Why                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| a               | "where are HTTP redirect responses implemented" (concept, vocabulary mismatch) | **ccc**              | `rg redirect` buried the real class in 30+ noisy hits; ccc ranked it #3                                                         |
+| b               | "how does middleware wrap the application" (concept, code doesn't say "wrap")  | **ccc**, with caveat | `rg -i wrap` → zero hits; but ccc's own top-4 buried the real mechanism below markdown docs until `--path`-filtered             |
+| c               | "websocket disconnect handling" (query word = the actual identifier)           | **rg**               | `rg disconnect` hit `on_disconnect` directly in 0.006s; ccc's top-6 were all tests/docs                                         |
+| d               | "background tasks run after response" (same doc-ranking-bias pattern as b)     | **rg**               | ccc buried the 3 real call sites below docs/tests entirely off top-6                                                            |
+| e               | "test client cookie persistence across requests"                               | **ccc**, marginally  | neither tool found the true root cause (inherited from httpx); ccc's set was more actionable                                    |
+| f (adversarial) | exhaustive call-site enumeration of `get_route_path(`                          | **rg, decisively**   | `rg` = 5/5 exact call sites, 0.017s; ccc top-8 missed 2/5 real sites AND 5/8 hits had zero literal match (pure false positives) |
 
 Pattern across b/d/e: this embedding model has a measured **doc-over-code ranking bias** —
 markdown restating the query's vocabulary systematically outranks the correct implementation.
@@ -127,15 +132,15 @@ Host: WSL2, 12 logical CPUs, 58 GiB RAM, RTX 3060 12 GiB, `granite-311m-multilin
 The "before" column is an unsupervised daemon indexing `firedancer` + `dotfiles`; the "after" is
 the same work under `ccc-daemon.service`. Procedure and the unit → `operations.md` §3a.
 
-| | before (LAZY-SPAWN, no ceiling) | after (SUPERVISED) |
-|---|---|---|
-| CPU, instantaneous | 588 % (≈6 of 12 cores) | 197 % (ceiling `CPUQuota=300%`) |
-| CPU, mean over the run | 560 % sustained across 1 h 43 m | — |
-| RSS peak | 4.85 GiB | 1.0 GiB |
-| threads | 73 | 27 |
-| cgroup | `…/session-994.scope` (a login session) | `…/app.slice/ccc-daemon.service` |
-| scheduling | default | `Nice=10`, `CPUWeight=20` |
-| quota engaged | n/a | `cpu.stat nr_throttled` 2 within 3 min |
+|                        | before (LAZY-SPAWN, no ceiling)         | after (SUPERVISED)                     |
+| ---------------------- | --------------------------------------- | -------------------------------------- |
+| CPU, instantaneous     | 588 % (≈6 of 12 cores)                  | 197 % (ceiling `CPUQuota=300%`)        |
+| CPU, mean over the run | 560 % sustained across 1 h 43 m         | —                                      |
+| RSS peak               | 4.85 GiB                                | 1.0 GiB                                |
+| threads                | 73                                      | 27                                     |
+| cgroup                 | `…/session-994.scope` (a login session) | `…/app.slice/ccc-daemon.service`       |
+| scheduling             | default                                 | `Nice=10`, `CPUWeight=20`              |
+| quota engaged          | n/a                                     | `cpu.stat nr_throttled` 2 within 3 min |
 
 Ceilings in the unit as shipped: `CPUQuota=300%`, `MemoryHigh=4G`, `MemoryMax=6G`,
 `MemorySwapMax=0`, `TasksMax=256`, `OOMPolicy=kill`. Provisional — the 4G/6G pair was sized from
@@ -159,17 +164,17 @@ unique topic by construction) = 527 files / 5,434 chunks. Model: shipped default
 unless noted. Caveat: one corpus, single-digit probe count (2 EN→EN concept + 4 wall +
 3 rephrase + 1 EN token control) — indicative, not a benchmark.
 
-| Metric | Value |
-|---|---|
-| Full first index | 93.5s wall (526 files / 5,432 chunks) |
-| Incremental re-index, 1 md file added | 0.97s |
+| Metric                                | Value                                 |
+| ------------------------------------- | ------------------------------------- |
+| Full first index                      | 93.5s wall (526 files / 5,432 chunks) |
+| Incremental re-index, 1 md file added | 0.97s                                 |
 
 **EN→EN concept queries** (vocabulary-mismatch, ground truth known):
 
-| Query | Truth rank / top-10 score band |
-|---|---|
-| "why do search results become outdated after editing files" → driving-cocoindex stale-row | **#3** (0.648; band 0.664–0.636) |
-| "prevent two skills from both activating on the same request" → forging-skills F2 | **#4** (0.617; band 0.631–0.597) — also #8 |
+| Query                                                                                     | Truth rank / top-10 score band             |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------ |
+| "why do search results become outdated after editing files" → driving-cocoindex stale-row | **#3** (0.648; band 0.664–0.636)           |
+| "prevent two skills from both activating on the same request" → forging-skills F2         | **#4** (0.617; band 0.631–0.597) — also #8 |
 
 `rg` controls: Q1 `outdated` hit 5 files, none the truth (it says "stale"); Q2 `activating`
 (vendor dirs excluded) hit 2 files, none the truth (it says "trigger"/"collision").
@@ -178,21 +183,21 @@ Truth-in-top-5 but flat bands → top-k is a candidate set, not an oracle (opera
 
 **Wall probes** (3 of 4 failed; the one success carries an anomaly):
 
-| Probe | Result |
-|---|---|
-| JA→JA, real doc ("おかしな形式のツール出力が会話履歴に紛れ込むのを止めたい" → recovering-poisoned-context) | truth absent from top-8; **#1 = the unrelated nukadoko plant @ 0.595** |
-| JA→JA, plant ("野菜を漬ける発酵床の日々の手入れ" → nukadoko) | ranking SUCCESS — #1 @ 0.545. Anomaly: the unrelated query above scored this same doc HIGHER (0.595 > 0.545); cross-query score comparison is suggestive, not conclusive — the raw-model matrix below is the cleaner evidence |
-| EN→JA ("daily care routine for a fermented rice bran pickling bed" → nukadoko) | absent from top-8 — no cross-lingual bridging |
-| JA exact-token (「ぬか床」 → the only file containing it) | missed entirely; top-8 = random JA-ish files @ ~0.65 — but see the EN token control below: NOT language-specific evidence |
+| Probe                                                                                                      | Result                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JA→JA, real doc ("おかしな形式のツール出力が会話履歴に紛れ込むのを止めたい" → recovering-poisoned-context) | truth absent from top-8; **#1 = the unrelated nukadoko plant @ 0.595**                                                                                                                                                        |
+| JA→JA, plant ("野菜を漬ける発酵床の日々の手入れ" → nukadoko)                                               | ranking SUCCESS — #1 @ 0.545. Anomaly: the unrelated query above scored this same doc HIGHER (0.595 > 0.545); cross-query score comparison is suggestive, not conclusive — the raw-model matrix below is the cleaner evidence |
+| EN→JA ("daily care routine for a fermented rice bran pickling bed" → nukadoko)                             | absent from top-8 — no cross-lingual bridging                                                                                                                                                                                 |
+| JA exact-token (「ぬか床」 → the only file containing it)                                                  | missed entirely; top-8 = random JA-ish files @ ~0.65 — but see the EN token control below: NOT language-specific evidence                                                                                                     |
 
 **Rephrase probes** (run during adversarial verification; truth =
 `recovering-poisoned-context/reference.md`, a JA/EN-MIXED technical doc):
 
-| Paraphrase | Result |
-|---|---|
-| 「壊れたツールコールが履歴を汚染しないようにする方法」 (pure JA, closer vocab) | truth recovered at #3/#4/#8 — below the nukadoko attractor (#1 @ 0.587) |
+| Paraphrase                                                                                                      | Result                                                                                              |
+| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 「壊れたツールコールが履歴を汚染しないようにする方法」 (pure JA, closer vocab)                                  | truth recovered at #3/#4/#8 — below the nukadoko attractor (#1 @ 0.587)                             |
 | 「malformed な tool call を context に入れない対策」 (code-switched — reuses the doc's own EN technical tokens) | **truth #1 @ 0.763 and its chunks sweep the entire top-8** — strongest retrieval of the whole trial |
-| 「ツール呼び出しの失敗出力を検出して透過的に除去する仕組み」 (pure JA, different vocab) | truth absent from top-8 |
+| 「ツール呼び出しの失敗出力を検出して透過的に除去する仕組み」 (pure JA, different vocab)                         | truth absent from top-8                                                                             |
 
 Rephrase verdict: topical signal flows through ENGLISH tokens. Pure-JA phrasing is
 unreliable (1 of 2 extra paraphrases recovered, never to #1); code-switching onto the
@@ -207,15 +212,15 @@ consistent with it and does not distinguish the language wall.
 **Raw-model cosine matrices** (query-side, normalized, via the ccc uvx env — isolates the
 model from ccc plumbing):
 
-| Pair | arctic-embed-xs | granite-107m-multilingual |
-|---|---|---|
-| JA query ↔ correct JA doc (tool-output topic) | 0.545 | **0.676** |
-| same JA query ↔ WRONG JA doc (nukadoko) | 0.593 (**wrong beats right**) | 0.483 |
-| JA query ↔ correct JA doc (nukadoko topic) | 0.556 | **0.670** |
-| reverse pair: nukadoko query ↔ tool doc | 0.471 | 0.458 |
-| EN query ↔ JA doc, same topic (cross-lingual) | 0.465 | **0.639** |
-| JA query ↔ EN doc, same topic (cross-lingual) | 0.342 | **0.686** |
-| EN query ↔ correct EN doc (control) | 0.756 | 0.792 |
+| Pair                                          | arctic-embed-xs               | granite-107m-multilingual |
+| --------------------------------------------- | ----------------------------- | ------------------------- |
+| JA query ↔ correct JA doc (tool-output topic) | 0.545                         | **0.676**                 |
+| same JA query ↔ WRONG JA doc (nukadoko)       | 0.593 (**wrong beats right**) | 0.483                     |
+| JA query ↔ correct JA doc (nukadoko topic)    | 0.556                         | **0.670**                 |
+| reverse pair: nukadoko query ↔ tool doc       | 0.471                         | 0.458                     |
+| EN query ↔ JA doc, same topic (cross-lingual) | 0.465                         | **0.639**                 |
+| JA query ↔ EN doc, same topic (cross-lingual) | 0.342                         | **0.686**                 |
+| EN query ↔ correct EN doc (control)           | 0.756                         | 0.792                     |
 
 Verdict, citing only tabled values: arctic's JA↔JA pairs land at 0.471–0.593 with
 wrong-beats-right on the tool topic, while its EN control separates cleanly (0.756 on-topic
@@ -258,12 +263,12 @@ shows whether the model needs asymmetric query-vs-document prompting — relevan
 Chosen by a local A/B pilot on the house JA-notes + code corpus (278 chunks, 28 vocabulary-
 mismatched concept queries, candidate local models on this host). nDCG@10:
 
-| Model (dim) | notes | code | all | vs prior |
-|---|---|---|---|---|
-| `granite-97m-r2` (384) — prior active | 0.341 | 0.300 | 0.322 | — |
-| **`granite-311m-r2` (768) — chosen** | **0.595** | **0.493** | **0.548** | **+70%** |
-| `cl-nagoya/ruri-v3-70m` (384) | 0.584 | 0.124 | 0.370 | notes win, code collapse |
-| `cl-nagoya/ruri-v3-310m` (768) | 0.555 | 0.281 | 0.428 | dominated by 311m-r2 |
+| Model (dim)                           | notes     | code      | all       | vs prior                 |
+| ------------------------------------- | --------- | --------- | --------- | ------------------------ |
+| `granite-97m-r2` (384) — prior active | 0.341     | 0.300     | 0.322     | —                        |
+| **`granite-311m-r2` (768) — chosen**  | **0.595** | **0.493** | **0.548** | **+70%**                 |
+| `cl-nagoya/ruri-v3-70m` (384)         | 0.584     | 0.124     | 0.370     | notes win, code collapse |
+| `cl-nagoya/ruri-v3-310m` (768)        | 0.555     | 0.281     | 0.428     | dominated by 311m-r2     |
 
 311m-r2 is the only candidate that beats the prior model on BOTH halves. ruri-v3 (JA-prose
 specialist, no code training) wins Japanese notes but collapses on code — its tmux / editor /
@@ -312,11 +317,11 @@ stripped), so vocabulary mismatch is structural. The notes half doubles as the d
 code queries, which reproduces the documented doc-over-code bias. nDCG@10, `all` = **macro** mean
 of the halves:
 
-| Model (dim) | notes | code | all | vs incumbent |
-|---|---|---|---|---|
-| `granite-311m-r2` (768) — incumbent | 0.382 | **0.854** | 0.618 | — |
-| `bekko-v1-a8m` (384) | 0.401 | 0.814 | 0.608 | notes +5%, code −4.7% |
-| **`bekko-v1-a25m`** (384) | **0.426** | 0.852 | **0.639** | **notes +11.5%, code −0.3%** |
+| Model (dim)                         | notes     | code      | all       | vs incumbent                 |
+| ----------------------------------- | --------- | --------- | --------- | ---------------------------- |
+| `granite-311m-r2` (768) — incumbent | 0.382     | **0.854** | 0.618     | —                            |
+| `bekko-v1-a8m` (384)                | 0.401     | 0.814     | 0.608     | notes +5%, code −4.7%        |
+| **`bekko-v1-a25m`** (384)           | **0.426** | 0.852     | **0.639** | **notes +11.5%, code −0.3%** |
 
 a25m won Japanese notes and was statistically indistinguishable on code (Δ −0.0024 on n=65, far
 below what 65 queries can resolve) — it did not repeat the ruri-v3 failure above (ruri lost 43%
@@ -381,17 +386,17 @@ run.
 
 ## Known issues (provenance-graded)
 
-| Issue | Grade | Basis |
-|---|---|---|
-| Daemon `BrokenPipeError`/streaming-response crash on client disconnect | **HIGH** | directly observed in `daemon.log` (2 occurrences) + matches a summarized top GitHub issue |
-| `ccc mcp` hard-exits code 1 outside an initialized project, before the MCP handshake | **HIGH** | direct source read (`cli.py::require_project_root`) + direct reproduction; host log evidence: 34 client-log files spanning 2026-06-25→07-12, **35/35 connection attempts failed with the identical** `Not in an initialized project directory` **error, each in ~200–300ms** — the count SKILL.md's Gotchas row points at |
-| No filesystem watcher; reindex is pull-based only | **HIGH** | direct grep of installed source for `watchdog\|watchfiles\|inotify\|fsevents`, zero hits |
-| `describe`/`guide` mentioned in a changelog blurb (v0.2.34) don't exist in installed `--help` | **HIGH** (the absence) / low (the changelog claim itself) | direct `--help` vs. a summarized changelog fetch — docs/changelog-vs-reality mismatch |
-| Return-type annotations break bare `):`-terminated `ccc grep` patterns | **HIGH** | directly reproduced on synthetic + real (`cli.py`) source |
-| Voyage/Bedrock LiteLLM encoding-format breakage (fixed v0.2.31) | CONSENSUS only | summarized WebFetch of issues/releases, not reproduced |
-| Dart file-type gap / watchdog-based auto-reindex requested | CONSENSUS only | summarized WebFetch of issues page |
-| `ccc reset` (no `--all`) followed by unexpected auto-rebuild on next daemon poke | observed, **UNVERIFIED mechanism** | could not disambiguate background auto-rebuild vs. an implicit ensure-index side-effect of repeated status polls — do not rely on this behavior |
-| Smoke-anchor rot: a corpus-scoping change (excluding a document from `settings.yml`) silently invalidates a recorded end-to-end smoke anchor, which then misreads as a MODEL regression on the next unrelated swap that happens to use it | **HIGH** | reproduced this session: qoed commit `7d915ed` (2026-07-28) excluded the 2026-07-17 smoke anchor's target document from the index, 2 days before that anchor was used to gate the 2026-07-30 bekko swap and reverted it; the SAME anchor also fails against the CURRENT incumbent index (verified live), proving the anchor had rotted, not the model — rule: a smoke anchor is a corpus-scoping dependency, not a fixed constant; re-verify it resolves under the CURRENT index before trusting a pass/fail verdict measured against it, and record which file the anchor depends on so a future exclusion is traceable |
+| Issue                                                                                                                                                                                                                                     | Grade                                                     | Basis                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Daemon `BrokenPipeError`/streaming-response crash on client disconnect                                                                                                                                                                    | **HIGH**                                                  | directly observed in `daemon.log` (2 occurrences) + matches a summarized top GitHub issue                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `ccc mcp` hard-exits code 1 outside an initialized project, before the MCP handshake                                                                                                                                                      | **HIGH**                                                  | direct source read (`cli.py::require_project_root`) + direct reproduction; host log evidence: 34 client-log files spanning 2026-06-25→07-12, **35/35 connection attempts failed with the identical** `Not in an initialized project directory` **error, each in ~200–300ms** — the count SKILL.md's Gotchas row points at                                                                                                                                                                                                                                                                                                |
+| No filesystem watcher; reindex is pull-based only                                                                                                                                                                                         | **HIGH**                                                  | direct grep of installed source for `watchdog\|watchfiles\|inotify\|fsevents`, zero hits                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `describe`/`guide` mentioned in a changelog blurb (v0.2.34) don't exist in installed `--help`                                                                                                                                             | **HIGH** (the absence) / low (the changelog claim itself) | direct `--help` vs. a summarized changelog fetch — docs/changelog-vs-reality mismatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Return-type annotations break bare `):`-terminated `ccc grep` patterns                                                                                                                                                                    | **HIGH**                                                  | directly reproduced on synthetic + real (`cli.py`) source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Voyage/Bedrock LiteLLM encoding-format breakage (fixed v0.2.31)                                                                                                                                                                           | CONSENSUS only                                            | summarized WebFetch of issues/releases, not reproduced                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Dart file-type gap / watchdog-based auto-reindex requested                                                                                                                                                                                | CONSENSUS only                                            | summarized WebFetch of issues page                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `ccc reset` (no `--all`) followed by unexpected auto-rebuild on next daemon poke                                                                                                                                                          | observed, **UNVERIFIED mechanism**                        | could not disambiguate background auto-rebuild vs. an implicit ensure-index side-effect of repeated status polls — do not rely on this behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Smoke-anchor rot: a corpus-scoping change (excluding a document from `settings.yml`) silently invalidates a recorded end-to-end smoke anchor, which then misreads as a MODEL regression on the next unrelated swap that happens to use it | **HIGH**                                                  | reproduced this session: qoed commit `7d915ed` (2026-07-28) excluded the 2026-07-17 smoke anchor's target document from the index, 2 days before that anchor was used to gate the 2026-07-30 bekko swap and reverted it; the SAME anchor also fails against the CURRENT incumbent index (verified live), proving the anchor had rotted, not the model — rule: a smoke anchor is a corpus-scoping dependency, not a fixed constant; re-verify it resolves under the CURRENT index before trusting a pass/fail verdict measured against it, and record which file the anchor depends on so a future exclusion is traceable |
 
 ## Provenance hygiene
 

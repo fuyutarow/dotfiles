@@ -72,7 +72,7 @@ url = "https://jevtypesafeai.com/api/v1/decide" # takes no `model` field
 # Owner decision 2026-10-01: the prepaid reseller balance is used up, never topped up again.
 when_exhausted = """do NOT top up the reseller — switch to official TypeSafe: get a key at \
 console.typesafe.ai, put it in ~/.config/typesafe/.env as TYPESAFE_API_KEY, and set \
-jev_provider = "typesafe" in tools/rr/retrieval.toml"""
+jev_provider = "typesafe" in tools/repo-retrieve/retrieval.toml"""
 
 # The local judge (rerank_server.py, started by repo-retrieve-rerank.socket). idle_seconds: how long
 # it keeps its GPU partition after the last request before exiting.

@@ -1,4 +1,4 @@
-# tools/rr — `rr` (= `repo-retrieve`)
+# tools/repo-retrieve — `rr` (= `repo-retrieve`)
 
 The search router. The caller says WHAT it is looking for; the router picks the engine. In an
 operational ccc repo the `enforce-search-route` hook denies raw search and points here.
@@ -18,15 +18,15 @@ rr index                     -> ccc index, record the freshness watermark, warm 
 Old names stay as aliases; a query may be given positionally or with `--query`/`-q`. The RESULT
 lines keep the old internal labels (`route=literal` …) because other tools parse them.
 
-| file | responsibility |
-|---|---|
-| `src/repo-retrieve.ts` | the CLI (Cleye) and the routes — the only entry point |
-| `src/ccc-index.ts` | ccc index adapter: registration lookup, the `.cocoindex_code/INDEXED_AT` watermark, the NO_INDEX gate concept/battery run before serving, and the `index` action (the watermark's only writer) |
-| `src/child.ts` | bounded child-process helpers (exit 124 on timeout) |
-| `src/definitions.ts` | the `definition` route: catalog freshness, recall, rerank, cards |
-| `src/ccc_defs.py` | definition extractor under ccc's interpreter (ccc's scope + tree-sitter patterns), per-file cache |
-| `src/rerank_server.py` | resident cross-encoder (Qwen3-Reranker-0.6B), socket-activated, inside its VRAM partition |
-| `src/bench-definitions.ts` | the yardstick: top-1/3/10 per language + absence, on a private case file |
+| file                       | responsibility                                                                                                                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/repo-retrieve.ts`     | the CLI (Cleye) and the routes — the only entry point                                                                                                                                          |
+| `src/ccc-index.ts`         | ccc index adapter: registration lookup, the `.cocoindex_code/INDEXED_AT` watermark, the NO_INDEX gate concept/battery run before serving, and the `index` action (the watermark's only writer) |
+| `src/child.ts`             | bounded child-process helpers (exit 124 on timeout)                                                                                                                                            |
+| `src/definitions.ts`       | the `definition` route: catalog freshness, recall, rerank, cards                                                                                                                               |
+| `src/ccc_defs.py`          | definition extractor under ccc's interpreter (ccc's scope + tree-sitter patterns), per-file cache                                                                                              |
+| `src/rerank_server.py`     | resident cross-encoder (Qwen3-Reranker-0.6B), socket-activated, inside its VRAM partition                                                                                                      |
+| `src/bench-definitions.ts` | the yardstick: top-1/3/10 per language + absence, on a private case file                                                                                                                       |
 
 Entry points: `bun ~/.claude/hooks/repo-retrieve.ts` (guaranteed; a symlink in the linked hooks
 dir) and the PATH command `repo-retrieve` (package `bin`, installed by `mise run deps`).
@@ -62,12 +62,12 @@ rr exists --query 'Int16 の加算を飽和させて折り返さないように�
 Describe the behaviour (English or Japanese), not the name. The answer is a few cards — name,
 signature, location, the first doc line — then one of:
 
-| RESULT | exit | meaning |
-|---|---|---|
-| `PASS strength=strong` | 0 | the top card is the same function (reranker log-odds ≥ 4) |
-| `PASS strength=likely` | 0 | read the top cards before writing a new one |
-| `NO_DEFINITION` | 1 | nothing in the catalog does this; the cards are the nearest, not matches |
-| `UNRANKED` | 0 | the reranker was unavailable: embedding order, no judgement |
+| RESULT                 | exit | meaning                                                                  |
+| ---------------------- | ---- | ------------------------------------------------------------------------ |
+| `PASS strength=strong` | 0    | the top card is the same function (reranker log-odds ≥ 4)                |
+| `PASS strength=likely` | 0    | read the top cards before writing a new one                              |
+| `NO_DEFINITION`        | 1    | nothing in the catalog does this; the cards are the nearest, not matches |
+| `UNRANKED`             | 0    | the reranker was unavailable: embedding order, no judgement              |
 
 Covered: functions and types the extractor recognises (Julia, Python, TypeScript/JavaScript,
 Rust). Not covered: inline code inside a script body — use `concept` for that.
@@ -96,11 +96,11 @@ reading the catalog as it stands.
 12 FireOps primitive needs × EN/JA, phrased without the function name, plus 4 needs nothing
 implements (× EN/JA):
 
-| method | top-3 | top-10 | absence right |
-|---|---|---|---|
-| `concept` (before) | 13/24 | 16/24 | — |
-| `definition`, embeddings only | 15/24 | 19/24 | — |
-| `definition`, + helper folding + public prior + reranker | **21/24** | **23/24** | **8/8** |
+| method                                                   | top-3     | top-10    | absence right |
+| -------------------------------------------------------- | --------- | --------- | ------------- |
+| `concept` (before)                                       | 13/24     | 16/24     | —             |
+| `definition`, embeddings only                            | 15/24     | 19/24     | —             |
+| `definition`, + helper folding + public prior + reranker | **21/24** | **23/24** | **8/8**       |
 
 Median latency 1.5 s on a shared, busy GPU. Remaining misses: a builder wording no candidate's doc
 shares ("pointer jumping" vs "compose function tables"), and an older copy of an implementation
@@ -109,4 +109,3 @@ outranking the canonical one.
 ```sh
 mise run bench:definitions -- --cases ~/.local/share/repo-retrieve/bench/<name>.json
 ```
-

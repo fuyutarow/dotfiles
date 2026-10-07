@@ -232,7 +232,7 @@ function run(
 }
 
 describe("repo-retrieve route contract", () => {
-  test("tools/rr owns the executable router and the old hook path resolves to it", () => {
+  test("tools/repo-retrieve owns the executable router and the compatibility hook path resolves to it", () => {
     expect(existsSync(ROUTER)).toBe(true);
     expect(statSync(ROUTER).mode & 0o111).not.toBe(0);
     expect(realpathSync(COMPATIBILITY_PATH)).toBe(realpathSync(ROUTER));

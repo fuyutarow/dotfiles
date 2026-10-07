@@ -10,6 +10,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 ## Development Environment
 
 ### Operating Systems (dual-target)
+
 - **macOS** (primary at the moment) and **WSL2 Ubuntu** — detect at runtime, never assume one.
 - Shell config detects OS **once** via `IS_MAC` / `IS_WSL` (defined at the top of
   `zsh/aliases.zsh`). Use these booleans for any new OS-dependent logic; do not add new
@@ -20,6 +21,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
   Cursor was retired 2026-07-14; do not reintroduce it.
 
 ### Package Managers
+
 - **System**: Homebrew (both OSes — linuxbrew on WSL). `Brewfile` is the single source of truth.
 - **Node.js**: bun (preferred). **Rust**: cargo. **Python**: pip/uv.
 
@@ -29,7 +31,7 @@ The annotated topic tree (every directory + what it holds + how it deploys) is t
 **README → Architecture**; do not duplicate it here. Topics (one tool = one directory):
 `zsh git jj tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` `edge` (mac), `wsl` (WSL).
 Repo CLIs live under `tools/<name>/` (own `package.json` semver, `CHANGELOG.md`, `src/`, `tests/`; may import only
-their own dir and `tools/shared/`): `tools/smart-open`, `tools/rr` (`rr` / `repo-retrieve`), `tools/agent-dispatch` (`agent-dispatch` / one-release `agent-router` alias), `tools/agent-resource-run`, and `tools/serena-foreground` (both OSes), `tools/shared` (code several tools import).
+their own dir and `tools/shared/`): `tools/smart-open`, `tools/repo-retrieve` (`rr` / `repo-retrieve`), `tools/agent-dispatch` (`agent-dispatch` / one-release `agent-router` alias), `tools/agent-resource-run`, and `tools/serena-foreground` (both OSes), `tools/shared` (code several tools import).
 Plumbing / single sources of truth: `scripts/config-registry.ts` (EVERY config surface — source,
 deploy kind, consumer, writer, verifier; `mise run config:map` prints it, `lint:config-map` fails on
 a config file in no row), `scripts/link-dots.ts` (realizes its links, OS-aware),
@@ -38,12 +40,13 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
 `*.win` = the Windows HOST under WSL (read by Windows, so copied, never symlinked).
 
 **Conventions to preserve:**
+
 1. **Topic-first**: adding/removing a tool touches exactly ONE directory + `scripts/config-registry.ts`.
-   Never recreate `common`/`mac`/`wsl` as OS-variance *bucket* dirs — OS variance of a
+   Never recreate `common`/`mac`/`wsl` as OS-variance _bucket_ dirs — OS variance of a
    cross-OS tool lives INSIDE that tool's topic dir as `*.mac` / `*.wsl` / `*.win` (or
    `mac.zsh` / `wsl.zsh`) files. `*.win` is the third target: the Windows HOST underneath WSL
    (`wsl/wslconfig.win`, `wsl/winget.win.json`) — Windows reads it, so it is COPIED by a
-   `wsl:*` task, never symlinked. A genuinely single-OS *topic* may still own its dir (e.g.
+   `wsl:*` task, never symlinked. A genuinely single-OS _topic_ may still own its dir (e.g.
    `karabiner/` for macOS, `wsl/` for the `wsl.conf` system config) — those are tools, not OS
    buckets.
 2. Shared files must never contain machine-absolute paths (`/Users/...`, `/home/...`) or
@@ -84,7 +87,7 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    non-interactive ONLY, because `ssh host 'cmd'` skips `.zshrc`. Never `mise use -g`, never
    add a second version manager to a login shell (fnm removed 2026-08-06), never put the shim
    dir on an interactive PATH. `mise run test:mise-scope` fails on all three.
-6a. **Data flows one way (INV-8).** declaration (repo) → render (`link:dots`) → deployed (`$HOME`)
+   6a. **Data flows one way (INV-8).** declaration (repo) → render (`link:dots`) → deployed (`$HOME`)
    → runtime; every file has ONE writer. Never generate INTO a hand-written file (no wired hook
    entries in `agents/claude/settings.json` / `agents/codex/hooks.json`, no rendered roster in
    `agents/claude/CLAUDE.md` — `mise run lint:one-writer` fails on both); never link a path a
@@ -124,17 +127,20 @@ All repo tasks go through **mise** (`mise tasks` to list):
 ## Key Tools & Aliases
 
 ### Modern CLI replacements (installed via Brewfile, aliased in zsh/aliases.zsh)
+
 - `ls` → `eza` (l, ll, la) · `cat` → `bat` (p) · `grep` → `ripgrep` (gr) · `find` → `fd` (f)
 - `cd` → `zoxide` (`,` and `,,`) · `du` → `dust` (du2) · `ps` → `procs`
 - `rm` → **DISABLED** (function errors out); use `rip` for file removal
 
 ### Daily commands
+
 - `lg` lazygit · `j` jj · `e` editor · `c`/`cc` clipboard copy · `pp` view+copy
 - `o` open · `oo` open current dir — both `smart-open` (`tools/smart-open/`): attached over ssh/herdr, a URL opens on the client and a path as a VS Code Remote-SSH window there; else here (Finder / Explorer) · `s`/`start` launch app
 - `hhh` list custom aliases · `h <cmd>` tldr · `jl` list just tasks
 - History: atuin (Ctrl+R)
 
 ## Git → jj (Jujutsu)
+
 - **Agents do not run git in this repo** (2026-10-01, same as firedancer). The repo is a colocated
   jj repo (`.git` + `.jj`); `.claude/settings.json` denies `Bash(git:*)`. Operate it with jj
   (`driving-jujutsu` skill). jj runs no Git hooks, so record and sync through mise:
@@ -151,16 +157,17 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - lazygit (`lg`) remains the human's interactive surface
 
 ## Safety Rules
+
 - `rm` is permanently disabled in shell config — **always use `rip`** (never suggest raw `rm`).
 - `mv`/`cp` are shell **functions** that **refuse loudly and abort (exit 1)** when they would
   overwrite an existing path — they print the conflict and tell you to re-run with `mvf`/`cpf`
-  (= `command mv`/`command cp`, force-overwrite). This replaces the old *silent* no-clobber skip
+  (= `command mv`/`command cp`, force-overwrite). This replaces the old _silent_ no-clobber skip
   (`-n` / `--update=none`) that exited 0 and fooled callers (esp. agents) into thinking a
   copy/move succeeded when it was dropped. Mirrors `rm`→`rip`; OS-agnostic (same on BSD/GNU).
-  When you *intend* to overwrite (incl. in scripts), call `cpf`/`mvf` — a bare `cp`/`mv` won't.
+  When you _intend_ to overwrite (incl. in scripts), call `cpf`/`mvf` — a bare `cp`/`mv` won't.
 - `git checkout` (and the retired aliases `co`/`cb`) is a shell **function** that refuses
   and prints the disambiguated replacement instead of running — branches → `git switch
-  [<branch>|-c <branch>]`, files → `git restore [-- <path>]`. Never suggest raw `git checkout`;
+[<branch>|-c <branch>]`, files → `git restore [-- <path>]`. Never suggest raw `git checkout`;
   use `git switch`/`git restore` directly. Interactive shells only (scripts/CI/hooks get the
   real binary via `command git`). Git operations follow the `driving-git` skill; `git/gitconfig`
   carries the modern defaults (rerere, updateRefs, zdiff3, histogram, autoSetupRemote …).
@@ -177,6 +184,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - Clipboard is cross-platform (`cc`, `pp`, `pwdc`) with UTF-8/UTF-16 handling for WSL.
 
 ## Notes for Claude
+
 1. Check `jl` / `mise tasks` before suggesting manual installs; prefer `brew bundle`.
 2. New OS-dependent logic: branch on `$IS_MAC` / `$IS_WSL`; OS-only files go INSIDE the
    topic dir as `*.mac` / `*.wsl` / `*.win` (e.g. `zsh/mac.zsh`, `git/local.wsl`, `wsl/wslconfig.win`).

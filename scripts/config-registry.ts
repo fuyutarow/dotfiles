@@ -307,7 +307,7 @@ const OTHER: readonly Surface[] = [
     sources: [
       "tools/shared/package.json",
       "tools/smart-open/package.json",
-      "tools/rr/package.json",
+      "tools/repo-retrieve/package.json",
       "tools/agent-resource-run/package.json",
       "tools/serena-foreground/package.json",
       "tools/agent-dispatch/package.json",
@@ -462,7 +462,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["tools/rr/retrieval.toml"],
+    sources: ["tools/repo-retrieve/retrieval.toml"],
     deployed: "the checkout",
     consumer: "rr / repo-retrieve and its search gate",
     writer: "human, in the repo",

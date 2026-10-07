@@ -1,4 +1,4 @@
-# Socket for the `repo-retrieve definition` reranker (tools/rr/src/rerank_server.py).
+# Socket for the `repo-retrieve definition` reranker (tools/repo-retrieve/src/rerank_server.py).
 # Symlinked to ~/.config/systemd/user/ by scripts/link-dots.ts; enabled by `mise run wsl:rerank`.
 # Socket activation: systemd listens here at all times and starts the service on the first
 # request; the service exits after 30 idle minutes (VRAM back to the host), and the next request

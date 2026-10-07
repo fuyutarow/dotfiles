@@ -13,7 +13,7 @@ Call apply("<service>") BEFORE torch (or anything that imports it) is loaded. It
 A thread reports the allocator's peak to stderr whenever it rises, so the partition size can be
 checked against reality (journalctl --user -u <unit>).
 
-Used by cocoindex/ccc-daemon-launch.py (service "ccc") and tools/rr/src/rerank_server.py (service "rerank"). Policy path: $AGENT_RESOURCE_POLICY or the file beside this one.
+Used by cocoindex/ccc-daemon-launch.py (service "ccc") and tools/repo-retrieve/src/rerank_server.py (service "rerank"). Policy path: $AGENT_RESOURCE_POLICY or the file beside this one.
 """
 
 import os

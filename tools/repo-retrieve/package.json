@@ -1,6 +1,6 @@
 {
-  "name": "@dotfiles/rr",
-  "version": "1.0.0",
+  "name": "@dotfiles/repo-retrieve",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "bin": {

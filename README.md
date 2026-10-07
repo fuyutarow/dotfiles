@@ -2,7 +2,7 @@
 
 知者不惑，仁者不憂，勇者不懼。
 
-> **Dotfiles for the agent era.** One repo configures both my machines (macOS + WSL2) *and* my AI
+> **Dotfiles for the agent era.** One repo configures both my machines (macOS + WSL2) _and_ my AI
 > coding agents — Claude Code, Codex, Gemini — from a single source, on a shell that refuses to
 > destroy files silently. Topic-first: one tool owns one directory; OS differences live inside it.
 
@@ -25,14 +25,14 @@ Most dotfiles configure a shell. Two things here are less usual:
 - **The shell fails loudly, on purpose — because silent success is how an agent corrupts your tree.**
   `cp` / `mv` are guarded functions that **abort with a non-zero exit** when they would overwrite a
   file — they name the conflict and point you at `cpf` / `mvf` to force it. The usual silent
-  no-clobber (`cp -n`) exits `0`, fooling a caller — *especially an LLM agent* — into thinking a copy
+  no-clobber (`cp -n`) exits `0`, fooling a caller — _especially an LLM agent_ — into thinking a copy
   happened when the file was dropped. (`rm` is disabled in favor of `rip`, a trashcan `rm`; that half
   is ordinary hygiene — the overwrite guard is the uncommon part.) `git checkout` is disabled the
   same way, for the reason it was split upstream: one verb does branch-switch, file-restore, and
   branch-creation duty at once, so a typo does something else plausible instead of erroring — the
   guard names which one you meant and points at `git switch` or `git restore`. `ssh` is guarded too, for a
   different failure: a link that dies mid-session never delivers the remote TUI's disable
-  sequences, so the terminal keeps reporting input as escapes — mouse motion *and*, separately,
+  sequences, so the terminal keeps reporting input as escapes — mouse motion _and_, separately,
   Kitty-protocol key events — and stays on the alternate screen. The shell re-asserts a
   known-good terminal state before every prompt — by **writing** it
   blind, never by querying the terminal, because a query there can hang the shell. `fixterm` is
@@ -43,22 +43,22 @@ Most dotfiles configure a shell. Two things here are less usual:
 A curated modern-CLI stack, aliased for a terse daily grammar. Run `hhh` for the full annotated
 cheat sheet.
 
-| Replaces | Tool | Alias | What you get |
-|---|---|---|---|
-| `ls` | eza | `l` `ll` `la` | git-aware colorized listing; `lt` tree, `lll` by mtime |
-| `cat` | bat | `p` | syntax-highlighted pager |
-| `grep` | ripgrep | `gr` | fast, gitignore-aware code search |
-| `find` | fd | `f` | intuitive file finder (`ff <ext>` bats the matches) |
-| `cd` | zoxide | `,` `,,` | frecency jumping — the comma is the navigation grammar |
-| `du` | dust | `du2` | tree-view disk usage by size |
-| `ps` | procs | — | colored, searchable process tree (run by name) |
-| `diff` | git-delta | `diff` | syntax-highlighted diffs + git pager |
-| `Ctrl+R` | atuin | `Ctrl+R` | SQLite-backed searchable history |
-| `man` | tldr | `h <cmd>` | example-first help |
+| Replaces | Tool      | Alias         | What you get                                           |
+| -------- | --------- | ------------- | ------------------------------------------------------ |
+| `ls`     | eza       | `l` `ll` `la` | git-aware colorized listing; `lt` tree, `lll` by mtime |
+| `cat`    | bat       | `p`           | syntax-highlighted pager                               |
+| `grep`   | ripgrep   | `gr`          | fast, gitignore-aware code search                      |
+| `find`   | fd        | `f`           | intuitive file finder (`ff <ext>` bats the matches)    |
+| `cd`     | zoxide    | `,` `,,`      | frecency jumping — the comma is the navigation grammar |
+| `du`     | dust      | `du2`         | tree-view disk usage by size                           |
+| `ps`     | procs     | —             | colored, searchable process tree (run by name)         |
+| `diff`   | git-delta | `diff`        | syntax-highlighted diffs + git pager                   |
+| `Ctrl+R` | atuin     | `Ctrl+R`      | SQLite-backed searchable history                       |
+| `man`    | tldr      | `h <cmd>`     | example-first help                                     |
 
 Plus: **lazygit** (`lg`, with `Ctrl+A` AI commit messages) · **tmux** (`t2`–`t6` spin up an N-pane
 session in one keystroke) · **cross-OS clipboard** (`c`, `pp` = view+copy, `pwdc`; OSC-52 so a copy
-over SSH reaches your *local* terminal) · **bun** · **direnv** · **mise** · a linted LaTeX build
+over SSH reaches your _local_ terminal) · **bun** · **direnv** · **mise** · a linted LaTeX build
 (`x` / `xx`).
 
 ## Architecture
@@ -90,7 +90,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── wsl/         # /etc/wsl.conf system config (WSL only)
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
-│                #   and shared agent assets (commands/, skills/); repo-retrieve lives in tools/rr/ and
+│                #   and shared agent assets (commands/, skills/); repo-retrieve lives in tools/repo-retrieve/ and
 │                #   agent-resource-run and serena-foreground live in tools/
 ├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open) + shared TS modules
 ├── scripts/     # plumbing — config-registry.ts (every config surface), link-dots.ts (deploys it), check-tools.sh
@@ -114,19 +114,19 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
 [`CLAUDE.md`](CLAUDE.md) (Claude Code) and [`AGENTS.md`](AGENTS.md) (Codex).
 
 1. **Topic-first.** Adding or removing a tool touches exactly one directory plus `scripts/config-registry.ts`.
-   No `common` / `mac` / `wsl` bucket directories — OS variance goes *inside* the tool's directory.
-2. **Single source of truth.** Each fact has one home (see *Architecture → Single sources of truth*):
+   No `common` / `mac` / `wsl` bucket directories — OS variance goes _inside_ the tool's directory.
+2. **Single source of truth.** Each fact has one home (see _Architecture → Single sources of truth_):
    to change it you edit one file, never many.
 3. **OS-neutral.** Shell logic branches on `IS_MAC` / `IS_WSL` (computed once in `zsh/aliases.zsh`);
    shared files never hard-code a machine-absolute path.
-4. **A quiet `zshenv`.** `zsh/zshenv` stays tiny — zsh reads it on *every* invocation, including
+4. **A quiet `zshenv`.** `zsh/zshenv` stays tiny — zsh reads it on _every_ invocation, including
    `ssh host 'cmd'`, so user CLIs in `~/.local/bin` and bun's global bins in `~/.bun/bin`
    (this repo's own `bin` commands) work in non-login SSH shells.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
-6. **No implicit global toolchain.** A managed tool is reachable where a config *declares* it,
+6. **No implicit global toolchain.** A managed tool is reachable where a config _declares_ it,
    or not at all: no global default version, and no second version manager hooking a login
    shell. mise's two delivery paths stay apart — `mise activate` serves interactive shells
-   per-directory; the shim directory serves *only* non-interactive ones (`ssh host 'cmd'`
+   per-directory; the shim directory serves _only_ non-interactive ones (`ssh host 'cmd'`
    never reads `.zshrc`, so it has no other way to reach a declared tool). Merging them puts a
    name like `npm` on every PATH for a tool nothing declared, which then refuses to run.
    Enforced by `mise run test:mise-scope`.
@@ -136,7 +136,7 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    usable immediately, reachable with `herdr --remote`. It is not a portable container image, and
    it never builds an experiment environment: Julia, CUDA, Python and their versions are each
    repo's `mise.toml` (`mise install` in that repo). A machine where an alias is missing is a
-   dotfiles bug, not a property of the machine. Entry points: *Setup* below.
+   dotfiles bug, not a property of the machine. Entry points: _Setup_ below.
 8. **Data flows one way; every file has one writer.** declaration (the repo, hand-written) →
    render (`mise run link:dots`) → deployed (`$HOME`, never edited) → runtime. Nothing flows
    back as data; the only way back is a check (`mise run doctor`, `link:dots --check`).

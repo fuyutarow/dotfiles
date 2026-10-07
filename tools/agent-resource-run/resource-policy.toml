@@ -77,7 +77,7 @@ gpu_vram_sample_interval_ms = 1000
 #     (it starts on demand and exits after 5 idle minutes).
 #   - Each service caps ITSELF to its partition (tools/agent-resource-run/gpu_partition.py, read by
 #     the ccc daemon launcher cocoindex/ccc-daemon-launch.py and by
-#     tools/rr/src/rerank_server.py): the PyTorch allocator is limited to the partition
+#     tools/repo-retrieve/src/rerank_server.py): the PyTorch allocator is limited to the partition
 #     minus a CUDA-context allowance, and a service that finds less than its partition free at
 #     start runs on CPU instead of growing into job memory.
 # Why these sizes (measured 2026-10-01, RTX 3060 12 GiB):

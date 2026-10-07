@@ -64,13 +64,13 @@ const ROUTED_STREAM_FILTER = new RegExp(
   "u",
 );
 // Resolved through the real path: the hook runs from ~/.agents/hooks (a symlink to this dir), and
-// the router lives in tools/rr/ of the repo, not beside the link.
+// the router lives in tools/repo-retrieve/ of the repo, not beside the link.
 const ROUTER = join(
   dirname(realpathSync(import.meta.path)),
   "..",
   "..",
   "tools",
-  "rr",
+  "repo-retrieve",
   "src",
   "repo-retrieve.ts",
 );
@@ -331,7 +331,7 @@ function main(): void {
       "deny",
       `search-route: configuration fault — required router is missing at ${ROUTER}. ` +
         `Do not bypass this gate with Python, Node, shell loops, or another search ` +
-        `implementation. Restore tools/rr/src/repo-retrieve.ts in dotfiles, then retry.`,
+        `implementation. Restore tools/repo-retrieve/src/repo-retrieve.ts in dotfiles, then retry.`,
     );
   }
 

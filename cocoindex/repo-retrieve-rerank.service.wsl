@@ -7,7 +7,7 @@ Requires=repo-retrieve-rerank.socket
 
 [Service]
 Type=simple
-ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/tools/rr/src/rerank_server.py
+ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/tools/repo-retrieve/src/rerank_server.py
 Restart=no
 CPUQuota=400%
 MemoryHigh=3G

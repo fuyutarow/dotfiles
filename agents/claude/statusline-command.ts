@@ -1170,11 +1170,24 @@ function doingText(d: RouteRun["doing"]): string {
 // The worker's own id as its vendor gave it (codex thread, claude session), first 8 characters, in
 // the stamp's dark gray: what a coordinator names it by (owner 2026-10-06). Absent until printed.
 const SESSION_CHARS = 8;
-function sessionText(d: RouteRun["doing"]): string {
+function sessionText(d: RouteRun["doing"], reserve = false): string {
   const id = d?.session;
-  return id === undefined
-    ? ""
-    : `${ESC}[38;5;240m${id.slice(0, SESSION_CHARS)}${RST} `;
+  if (id === undefined) return reserve ? "         " : "";
+  const short = truncateDisplay(id, SESSION_CHARS);
+  return `${ESC}[38;5;240m${short}${" ".repeat(SESSION_CHARS - Bun.stringWidth(short))}${RST} `;
+}
+const RUN_LABEL_WIDTH = 32;
+function truncateDisplay(value: string, width: number): string {
+  let result = "";
+  for (const char of value) {
+    if (Bun.stringWidth(result + char) > width) break;
+    result += char;
+  }
+  return result;
+}
+function padDisplay(value: string, width: number, left = false): string {
+  const padding = " ".repeat(Math.max(0, width - Bun.stringWidth(value)));
+  return left ? padding + value : value + padding;
 }
 function routeLines(runs: RouteRun[], sessionId: string | undefined): string[] {
   const live = runs.filter((r) => r.alive).toSorted((a, b) => b.secs - a.secs);
@@ -1184,12 +1197,27 @@ function routeLines(runs: RouteRun[], sessionId: string | undefined): string[] {
       ? []
       : live.filter((r) => r.dispatcherSession === sessionId);
   const other = live.length - own.length;
-  const lines = own
-    .slice(0, RUN_LINES)
-    .map(
-      (r) =>
-        `${r.choice} ${dur(r.secs)} ${sessionText(r.doing)}${DIM}${r.label.slice(0, 32)}${RST} ${doingText(r.doing)}`,
-    );
+  const shown = own.slice(0, RUN_LINES);
+  const choices = shown.map((r) => r.choice);
+  const elapsed = shown.map((r) => dur(r.secs));
+  const labels = shown.map((r) => truncateDisplay(r.label, RUN_LABEL_WIDTH));
+  const choiceWidth = Math.max(
+    0,
+    ...choices.map((value) => Bun.stringWidth(value)),
+  );
+  const elapsedWidth = Math.max(
+    0,
+    ...elapsed.map((value) => Bun.stringWidth(value)),
+  );
+  const labelWidth = Math.max(
+    0,
+    ...labels.map((value) => Bun.stringWidth(value)),
+  );
+  const reserveSession = shown.some((r) => r.doing?.session !== undefined);
+  const lines = shown.map(
+    (r, i) =>
+      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${sessionText(r.doing, reserveSession)}${DIM}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing)}`,
+  );
   if (own.length > RUN_LINES)
     lines.push(`${DIM}+${own.length - RUN_LINES} more${RST}`);
   if (other > 0) lines.push(`${DIM}+${other} in other sessions${RST}`);

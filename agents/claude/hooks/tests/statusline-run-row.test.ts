@@ -29,6 +29,7 @@ function marker(
   label: string,
   ageS = 90,
   dispatcherSession: string | null = SESSION,
+  choice = "luna-high",
 ): void {
   mkdirSync(join(dir, "active"), { recursive: true });
   writeFileSync(
@@ -38,7 +39,7 @@ function marker(
       run_id: name,
       pid,
       label,
-      choice: "luna-high",
+      choice,
       pick_source: "jev",
       started_at: Temporal.Now.instant().subtract({ seconds: ageS }).toString(),
       cwd: scratch,
@@ -123,10 +124,65 @@ describe("statusline Run row", () => {
     marker(dir, "long", process.pid, "long one", 600);
     const lines = (await render(dir)).split("\n");
     const at = lines.findIndex((l) => l.startsWith("luna-high "));
-    expect(lines[at]).toMatch(/^luna-high 10m0\ds long one │ no event yet$/u);
+    expect(lines[at]).toMatch(/^luna-high 10m0\ds long one +│ no event yet$/u);
     expect(lines[at + 1]).toMatch(
-      /^luna-high 0m3\ds short one │ no event yet$/u,
+      /^luna-high +0m3\ds short one │ no event yet$/u,
     );
+  });
+
+  test("rows align names, elapsed, ids and labels using terminal columns", async () => {
+    const dir = join(scratch, "aligned");
+    marker(
+      dir,
+      "luna",
+      process.pid,
+      "link-dots reloads a launchd agent",
+      14,
+      SESSION,
+      "luna-high",
+    );
+    marker(
+      dir,
+      "sonnet",
+      process.pid,
+      "tools/ migration: move rr",
+      723,
+      SESSION,
+      "sonnet-high",
+    );
+    marker(
+      dir,
+      "japanese",
+      process.pid,
+      "日本語のラベル",
+      3720,
+      SESSION,
+      "fable-xhigh",
+    );
+    for (const [name, session] of [
+      ["luna", "01a113e0-1111-1111-1111-111111111111"],
+      ["sonnet", "20e32723-2222-2222-2222-222222222222"],
+      ["japanese", "30e32723-3333-3333-3333-333333333333"],
+    ])
+      writeFileSync(
+        join(dir, "active", `${name}.progress.json`),
+        progress("$ cmd", 2, session),
+      );
+    const lines = (await render(dir))
+      .split("\n")
+      .filter((line) => /^(luna|sonnet|fable)-/u.test(line));
+    expect(lines).toHaveLength(3);
+    const widths = lines.map((line) =>
+      Bun.stringWidth(line.slice(0, line.indexOf("│"))),
+    );
+    expect(new Set(widths).size).toBe(1);
+    const idStarts = ["01a113e0", "20e32723", "30e32723"].map((id) =>
+      lines.find((line) => line.includes(id))?.indexOf(id),
+    );
+    expect(new Set(idStarts).size).toBe(1);
+    expect(lines.some((line) => line.includes("luna-high"))).toBe(true);
+    expect(lines.some((line) => line.includes("sonnet-high"))).toBe(true);
+    expect(lines.some((line) => line.includes("日本語のラベル"))).toBe(true);
   });
 
   test("a worker with a progress file shows its latest event and its counts", async () => {

@@ -1,4 +1,13 @@
 {
+  "code-view": {
+    "repo": "CasualBot/obsidian-codeviewer-plugin",
+    "version": "1.0.3",
+    "sha256": {
+      "main.js": "fc6691db8c78cdc5adfdb55ebeb3c8ec7cd3f3033f9fb9834de570dc8f202ffb",
+      "manifest.json": "eb7ef22aa69a40d9bfc2ac9aa6658fbde9e74fbcba661dfaea92b51c87b2d1a6",
+      "styles.css": "0f394cade9fddb8908079c2d1749f46c458cc1348dca6ddb4e8af74179c6d94e"
+    }
+  },
   "show-whitespace-cm6": {
     "repo": "ebullient/obsidian-show-whitespace-cm6",
     "version": "0.3.0",
@@ -6,6 +15,15 @@
       "main.js": "381521387f11ca03ba471a5608323a7d4cca84cc77018380b1c3b39ae58b5262",
       "manifest.json": "1cee712a991cd637751d0470b472a81ed2eddd3aa21a05b09cbcba41959657a7",
       "styles.css": "27811abbb6e0bd1bc27bdfa8a3521c12bca0130b811ac14b4cef65cdeb574ea4"
+    }
+  },
+  "word-reader": {
+    "repo": "qianwei4712/obsidian-word-reader",
+    "version": "3.5.0",
+    "sha256": {
+      "main.js": "b06eabdc137256985424c0bb02ddb22dae65df3d6b125574f8411a505ecf9fdc",
+      "manifest.json": "45c79b41168a481ff14a104f11ff14648fc395660545f2c33cd625a0b13bd292",
+      "styles.css": "875f8b1ca991226a16876460f420942226ca147bea9a1b3352b50551968f0f15"
     }
   }
 }

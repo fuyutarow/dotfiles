@@ -47,7 +47,9 @@ function resolvePathEntry(entry: string): string[] | undefined {
   return resolved;
 }
 
-export function pathBinaries(pathValue = process.env.PATH ?? ""): string[] | undefined {
+export function pathBinaries(
+  pathValue = process.env.PATH ?? "",
+): string[] | undefined {
   const resolved: string[] = [];
   for (const entry of pathValue.split(":").filter(Boolean)) {
     const binaries = resolvePathEntry(entry);
@@ -58,15 +60,24 @@ export function pathBinaries(pathValue = process.env.PATH ?? ""): string[] | und
 }
 
 function sizeBytes(path: string): number {
-  const result = Bun.spawnSync(["du", "-sk", path], { stdout: "pipe", stderr: "ignore" });
+  const result = Bun.spawnSync(["du", "-sk", path], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
   if (result.exitCode !== 0) return 0;
   return Number(result.stdout.toString().split("\t")[0] ?? 0) * 1024;
 }
 
 function docsBytes(rustupHome: string): number {
-  const roots = fromThrowable(() => readdirSync(join(rustupHome, "toolchains")))().unwrapOr([]);
+  const roots = fromThrowable(() =>
+    readdirSync(join(rustupHome, "toolchains")),
+  )().unwrapOr([]);
   return roots.reduce(
-    (sum, toolchain) => sum + sizeBytes(join(rustupHome, "toolchains", toolchain, "share/doc/rust/html")),
+    (sum, toolchain) =>
+      sum +
+      sizeBytes(
+        join(rustupHome, "toolchains", toolchain, "share/doc/rust/html"),
+      ),
     0,
   );
 }
@@ -83,9 +94,21 @@ function skipReason(
 ): string | undefined {
   if (busy === undefined) return "no /proc evidence — keep";
   if (binaries === undefined) return "could not resolve PATH binaries — keep";
-  if (projectIsBusy(project, busy)) return "cargo/rustc running inside project — keep";
-  if (holdsPathBinary(target, binaries)) return "PATH command resolves inside target — keep";
+  if (projectIsBusy(project, busy))
+    return "cargo/rustc running inside project — keep";
+  if (holdsPathBinary(target, binaries))
+    return "PATH command resolves inside target — keep";
   return undefined;
+}
+
+// Cleye 2.6.0's strictFlags misses --__proto__; reject that prototype-sensitive name before assignment (BG1,
+// same guard as tools/repo-retrieve). Ordinary unknown flags remain strictFlags' responsibility.
+let prototypeFlag = false;
+function rejectPrototypeFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag" && flag === "__proto__") prototypeFlag = true;
 }
 
 async function main(): Promise<number> {
@@ -93,13 +116,21 @@ async function main(): Promise<number> {
     {
       name: "reclaim-judgment.ts",
       strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
       parameters: [],
-      help: { description: "Plan or clean owner-approved active Rust targets and optional rust-docs." },
+      help: {
+        description:
+          "Plan or clean owner-approved active Rust targets and optional rust-docs.",
+      },
       flags: { yes: { type: Boolean, default: false } },
     },
     undefined,
     Bun.argv.slice(2),
   );
+  if (prototypeFlag) {
+    process.stderr.write("usage: unknown option '--__proto__'\n");
+    return 2;
+  }
   if (parsed._.length > 0) {
     process.stderr.write(`usage: unexpected argument '${parsed._[0]}'\n`);
     return 2;
@@ -110,19 +141,30 @@ async function main(): Promise<number> {
     console.log(`== Rust target/ (all ages; root ${roots}) ==`);
     console.log("  fd absent — skip; target inventory is unknown");
   }
-  const targetsRoot = Bun.which("fd") === null
-    ? ""
-    : (await $`fd -H -I -t d -d 4 --prune "^target$" ${roots}`.quiet().nothrow()).stdout.toString();
-  const targets: RustTarget[] = targetsRoot.split("\n").filter(Boolean).flatMap((foundTarget) => {
-    const target = resolve(foundTarget);
-    const project = dirname(target);
-    return fromThrowable(() => statSync(join(project, "Cargo.toml")).isFile())().unwrapOr(false)
-      ? [{ project, target }]
-      : [];
-  });
+  const targetsRoot =
+    Bun.which("fd") === null
+      ? ""
+      : (
+          await $`fd -H -I -t d -d 4 --prune "^target$" ${roots}`
+            .quiet()
+            .nothrow()
+        ).stdout.toString();
+  const targets: RustTarget[] = targetsRoot
+    .split("\n")
+    .filter(Boolean)
+    .flatMap((foundTarget) => {
+      const target = resolve(foundTarget);
+      const project = dirname(target);
+      return fromThrowable(() =>
+        statSync(join(project, "Cargo.toml")).isFile(),
+      )().unwrapOr(false)
+        ? [{ project, target }]
+        : [];
+    });
   const busy = buildCwds();
   const binaries = pathBinaries();
-  if (Bun.which("fd") !== null) console.log(`== Rust target/ (all ages; root ${roots}) ==`);
+  if (Bun.which("fd") !== null)
+    console.log(`== Rust target/ (all ages; root ${roots}) ==`);
   for (const item of targets) {
     const size = sizeBytes(item.target);
     const reason = skipReason(item.project, item.target, busy, binaries);
@@ -130,12 +172,17 @@ async function main(): Promise<number> {
       console.log(`  ${bytes(size)} ${item.target} — ${reason}`);
       continue;
     }
-    console.log(`  ${bytes(size)} ${item.target} — ${act ? "clean" : "[dry-run] cargo clean"}`);
+    console.log(
+      `  ${bytes(size)} ${item.target} — ${act ? "clean" : "[dry-run] cargo clean"}`,
+    );
     if (!act) continue;
     const before = sizeBytes(item.target);
-    const result = await $`cargo clean --manifest-path ${join(item.project, "Cargo.toml")}`.nothrow();
+    const result =
+      await $`cargo clean --manifest-path ${join(item.project, "Cargo.toml")}`.nothrow();
     const after = sizeBytes(item.target);
-    console.log(`    cargo clean exit ${result.exitCode}; freed ${bytes(Math.max(0, before - after))}`);
+    console.log(
+      `    cargo clean exit ${result.exitCode}; freed ${bytes(Math.max(0, before - after))}`,
+    );
   }
 
   console.log("== Optional rustup documentation components ==");
@@ -144,7 +191,9 @@ async function main(): Promise<number> {
     return 0;
   }
   const list = await $`rustup component list --installed`.quiet().nothrow();
-  const installed = list.stdout.toString().split("\n")
+  const installed = list.stdout
+    .toString()
+    .split("\n")
     .flatMap((line) => {
       const name = /^(.+?)\s+\(installed\)$/u.exec(line)?.[1];
       return name === undefined ? [] : [name];
@@ -154,14 +203,19 @@ async function main(): Promise<number> {
   if (docs.length === 0) console.log("  no documentation components installed");
   for (const component of docs) {
     const size = docsBytes(rustupHome);
-    console.log(`  ${bytes(size)} ${component} — ${act ? "remove" : "[dry-run] rustup component remove"}`);
+    console.log(
+      `  ${bytes(size)} ${component} — ${act ? "remove" : "[dry-run] rustup component remove"}`,
+    );
     if (!act) continue;
     const before = docsBytes(rustupHome);
     const result = await $`rustup component remove ${component}`.nothrow();
     const after = docsBytes(rustupHome);
-    console.log(`    rustup component remove exit ${result.exitCode}; freed ${bytes(Math.max(0, before - after))}`);
+    console.log(
+      `    rustup component remove exit ${result.exitCode}; freed ${bytes(Math.max(0, before - after))}`,
+    );
   }
-  if (!act) console.log("Dry run only. Run `mise run reclaim:judgment:yes` to act.");
+  if (!act)
+    console.log("Dry run only. Run `mise run reclaim:judgment:yes` to act.");
   return 0;
 }
 

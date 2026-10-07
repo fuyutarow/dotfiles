@@ -1,4 +1,5 @@
 import { $ } from "bun";
+import { cli } from "cleye";
 import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
@@ -8,8 +9,9 @@ import { countEntries, newlines } from "./purge-progress";
 
 // IRREVERSIBLE: empty EVERY graveyard — rip's, and the XDG trash beside it. This is the ONLY
 // step that actually frees disk: both mechanisms delete by RENAME, so the bytes stay on the
-// filesystem until something empties them. Prints every target with its size and requires typing
-// 'yes'. Human-only gate; never run this from an agent.
+// filesystem until something empties them. Prints every target with its size, then requires typing
+// 'yes' at a terminal - or the explicit argv confirmation `--yes`, which an agent may pass when the
+// owner asks for disk to be freed (owner's decision 2026-10-07: the human-only gate is removed).
 //
 // Why "every": until 2026-09-21 this purged only rip's /tmp/graveyard-$USER. On r99 that held
 // 503 MB while the XDG trash held 33 GB of trashed agent worktrees — the largest pure-waste item
@@ -18,6 +20,44 @@ import { countEntries, newlines } from "./purge-progress";
 //
 // Each target is a directory whose CONTENTS are removed; the directory itself survives, because
 // the XDG spec needs files/ and info/ to exist for the next trash operation.
+
+// '--__proto__' would reach Cleye's type-flag table before strictFlags rejects it.
+function rejectPrototypeFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
+const parsed = cli(
+  {
+    name: "reclaim-purge.ts",
+    strictFlags: true,
+    ignoreArgv: rejectPrototypeFlag,
+    parameters: [],
+    help: {
+      description:
+        "Empty every graveyard (rip's and the XDG trash). Irreversible.",
+    },
+    flags: {
+      yes: {
+        type: Boolean,
+        default: false,
+        description: "explicit confirmation; skips the terminal prompt",
+      },
+    },
+  },
+  undefined,
+  Bun.argv.slice(2),
+);
+if (parsed._.length > 0) {
+  process.stderr.write(`FATAL: unexpected argument: ${parsed._[0]}\n`);
+  process.exit(2);
+}
+const { flags } = parsed;
 
 const home = homedir();
 const graves = existingGraveyards(
@@ -48,18 +88,22 @@ console.log(
   `上記 ${graves.length} 箇所の中身を完全に削除します。復元はできません。`,
 );
 
-// The answer must be typed by a human at a terminal: no TTY on stdin is a refusal, never a "yes"
-// read from a pipe. Clack's text() releases stdin after the answer (the earlier
+// Confirmation is explicit: the argv flag `--yes`, or "yes" typed at a terminal - never a "yes" read
+// from a pipe. Clack's text() releases stdin after the answer (the earlier
 // `process.stdin.once("data")` kept it open, so the process printed "✅ purge 完了" and never
 // exited — a rented box, 2026-10-06). Esc / Ctrl-C cancels; anything but exactly "yes" is a no.
-if (!process.stdin.isTTY) {
-  cancel("人間専用です。端末から実行してください。中止しました。");
-  process.exit(1);
-}
-const ans = await text({ message: "続けるなら yes と入力" });
-if (isCancel(ans) || ans.trim() !== "yes") {
-  cancel("中止しました。");
-  process.exit(1);
+if (!flags.yes) {
+  if (!process.stdin.isTTY) {
+    cancel(
+      "確認がありません。端末で yes と入力するか、--yes を付けて実行してください。中止しました。",
+    );
+    process.exit(1);
+  }
+  const ans = await text({ message: "続けるなら yes と入力" });
+  if (isCancel(ans) || ans.trim() !== "yes") {
+    cancel("中止しました。");
+    process.exit(1);
+  }
 }
 
 // The delete is the slow part (one unlink per entry), so it reports progress — never a silent wait.

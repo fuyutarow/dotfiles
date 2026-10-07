@@ -548,8 +548,12 @@ description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (w
 run = 'bun ~/dotfiles/scripts/reclaim-audit.ts'
 
 [tasks."reclaim:purge"]
-description = "IRREVERSIBLE: empty EVERY graveyard — rip's AND the XDG trash (~/.local/share/Trash). This is the ONLY step that actually frees disk: both delete by rename, so the bytes stay until purged. Prints every target with sizes and requires typing 'yes'. Human-only gate; never run this from an agent."
+description = "IRREVERSIBLE: empty EVERY graveyard — rip's AND the XDG trash (~/.local/share/Trash). This is the ONLY step that actually frees disk: both delete by rename, so the bytes stay until purged. Prints every target with sizes and requires typing 'yes'. Non-interactive form: reclaim:purge:yes."
 run = 'bun ~/dotfiles/scripts/reclaim-run.ts purge --interactive -- bun ~/dotfiles/scripts/reclaim-purge.ts'
+
+[tasks."reclaim:purge:yes"]
+description = "IRREVERSIBLE: reclaim:purge confirmed by argv (--yes) instead of a typed 'yes' — prints every target with sizes, then empties every graveyard; output kept in the reclaim receipt log. Owner's decision 2026-10-07: the human-only gate is removed."
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts purge -- bun ~/dotfiles/scripts/reclaim-purge.ts --yes'
 
 # The WINDOWS-HOST half of reclaim, for the C: space WSL leaves that no guest-side task can reach.
 # reclaim:clean/builds/system free GUEST bytes; on a sparse vhdx those do not always return to C:

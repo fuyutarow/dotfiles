@@ -10,7 +10,7 @@ import {
   ordersIn,
   parseFloorConfig,
   simpleCommands,
-} from "../model-orders.ts";
+} from "../../../tools/shared/src/model-orders.ts";
 
 const parseToml = (text: string): unknown => Bun.TOML.parse(text);
 
@@ -182,7 +182,7 @@ describe("ordersIn: what actually RUNS a model CLI", () => {
       `mise run commit -- -m "$(cat <<'EOF'\nuse codex exec -m gpt-5.6-sol\nEOF\n)" -- f`,
       "cat <<'EOF'\ncodex exec -m gpt-5.6-sol\nEOF",
       "ls codex-update.ts",
-      "bun test agents/routing-control",
+      "bun test tools/agent-dispatch",
       "which codex",
     ]) {
       expect(ordersIn(cmd)).toEqual([]);

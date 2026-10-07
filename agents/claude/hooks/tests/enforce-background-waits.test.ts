@@ -4,7 +4,7 @@ import {
   backgroundReason,
   FOREGROUND_MAX_MS,
 } from "../enforce-background-waits.ts";
-import { AGENT_ROUTER_WORKER_ENV } from "../../../hooks/worker-env.ts";
+import { AGENT_ROUTER_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
 
 // enforce-background-waits: a long or waiting foreground Bash call is denied with the resend to make.
 

@@ -14,7 +14,7 @@ import { backgroundReason } from "../enforce-background-waits.ts";
 import {
   AGENT_ROUTER_WORKER_ENV,
   AGENT_ROUTER_WORKER_VALUE,
-} from "../../../hooks/worker-env.ts";
+} from "../../../../tools/shared/src/worker-env.ts";
 
 // bash-durations: a command kind's measured duration decides whether it may run in front.
 const HOOK = join(import.meta.dir, "..", "enforce-background-waits.ts");
@@ -34,8 +34,8 @@ describe("commandKey", () => {
     ["cd /Users/fuyu/dotfiles && mise run commit -- -m x", "mise run commit"],
     ["FOO=1 bun test scripts/tests/x.test.ts", "bun test"],
     [
-      "agent-router run --prompt-file b.md --cd x",
-      "agent-router run --prompt-file --cd",
+      "agent-dispatch run --prompt-file b.md --cd x",
+      "agent-dispatch run --prompt-file --cd",
     ],
     [
       "polysearch leaderboard --all --format json",

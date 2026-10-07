@@ -2,7 +2,7 @@
 
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { AGENT_ROUTER_WORKER_ENV } from "../../hooks/worker-env.ts";
+import { AGENT_ROUTER_WORKER_ENV } from "../../shared/src/worker-env.ts";
 
 // This call's argv (one JSON line) in `fake-claude-argv.log` in its cwd (the run's target), for tests
 // of the flags run-claude passes.

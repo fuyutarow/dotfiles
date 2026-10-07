@@ -24,7 +24,11 @@ import { join } from "node:path";
 import { attempt, errorMessage } from "./attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 import { strAt } from "./narrow.ts";
-import { judge, ordersIn, parseFloorConfig } from "./model-orders.ts";
+import {
+  judge,
+  ordersIn,
+  parseFloorConfig,
+} from "../../tools/shared/src/model-orders.ts";
 
 const CONFIG_PATH =
   process.env.MODEL_FLOOR_CONFIG ?? join(import.meta.dir, "model-floor.toml");

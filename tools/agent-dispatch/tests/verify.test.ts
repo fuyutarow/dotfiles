@@ -2,8 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { attempt, attemptOr } from "../../hooks/attempt.ts";
-import { runVerify } from "../verify.ts";
+import { attempt, attemptOr } from "../../shared/src/attempt.ts";
+import { runVerify } from "../src/verify.ts";
 
 // verify.ts: a verify command that hits its bound must leave no process behind, however deep.
 

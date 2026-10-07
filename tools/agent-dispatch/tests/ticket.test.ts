@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { globsOverlap, parseTicket, verifyLine } from "../ticket.ts";
+import { globsOverlap, parseTicket, verifyLine } from "../src/ticket.ts";
 
 // The work ticket: TOML front matter between `+++` lines at the top of a brief. A brief without one
 // is legacy mode and must come back untouched.
@@ -61,8 +61,8 @@ describe("parseTicket", () => {
 
 describe("globsOverlap (conservative literal-prefix rule)", () => {
   test.each([
-    ["agents/routing-control/**", "agents/models/roster.ts", false],
-    ["agents/routing-control/**", "agents/routing-control/tests/a.ts", true],
+    ["tools/agent-dispatch/**", "agents/models/roster.ts", false],
+    ["tools/agent-dispatch/**", "tools/agent-dispatch/tests/a.ts", true],
     ["agents/**", "agents/models/roster.ts", true],
     ["**", "anything/at/all", true],
     ["a/b.ts", "a/b.ts", true],

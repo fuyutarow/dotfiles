@@ -23,7 +23,7 @@ import { join, resolve } from "node:path";
  * networked codex CLI is never reachable through this suite.
  */
 
-const script = resolve(import.meta.dir, "../workers/codex-probe.ts");
+const script = resolve(import.meta.dir, "../src/workers/codex-probe.ts");
 const fixture = resolve(import.meta.dir, "fake-codex.ts");
 
 type ProbeRun = Readonly<{
@@ -57,7 +57,7 @@ async function withProbeDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   });
 }
 
-describe("agent-router probe-models.ts (current behavior, pre-refactor bracket)", () => {
+describe("agent-dispatch probe-models.ts (current behavior, pre-refactor bracket)", () => {
   test("(a) available model: exact RESULT line, exit 0, nothing on stderr", async () => {
     const run = await withProbeDir((dir) =>
       runProbe(["gpt-good"], { CODEX_BIN: fixture, PROBE_DIR: dir }),
@@ -168,7 +168,7 @@ describe("agent-router probe-models.ts (current behavior, pre-refactor bracket)"
  * in notes and do NOT add an override").
  *
  * scripts/probe-models.ts:78 hardcodes `120_000` as a literal argument at the
- * `run()` call site. Unlike agents/routing-control's probe-models.ts (which exports
+ * `run()` call site. Unlike tools/agent-dispatch's probe-models.ts (which exports
  * `probeModels()`/`RunConfig` with an injectable `timeoutMs`, letting its own
  * test drive a 20ms timeout in-process), this file exports nothing — `run`
  * and `main` are module-private — and there is no env var read anywhere in

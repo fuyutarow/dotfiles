@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { z } from "../../hooks/zod.ts";
-import { decodedJson } from "../../hooks/tests/decode.ts";
+import { z } from "../../shared/src/zod.ts";
+import { decodedJson } from "./decode.ts";
 import {
   parseReport,
   renderReport,
   reportJsonSchema,
   withReportInstruction,
   WorkerReport,
-} from "../report.ts";
+} from "../src/report.ts";
 
 const GOOD: WorkerReport = {
   summary: "s",

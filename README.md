@@ -72,7 +72,8 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── tools/       # repo CLIs, one directory each (package.json with semver, CHANGELOG.md, src/, tests/); may import only its own dir and tools/shared/
 │   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
-│   └── shared/      # code several tools import (zod, attempt, narrow, typesafe-key, sockets)
+│   ├── agent-dispatch/ # agent-dispatch / one-release agent-router alias and codex-run (Jev-selected worker routing; state stays in ~/.local/state/agent-router)
+│   └── shared/      # code several tools import (zod, attempt, narrow, typesafe-key, sockets, model-orders, worker-env)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
 ├── tmux/        # tmux.conf, clipboard.conf, scripts/ (status bar, layouts)
 ├── herdr/       # config.toml (agent multiplexer; tmux muscle-memory port)

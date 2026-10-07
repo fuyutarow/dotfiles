@@ -46,10 +46,14 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { jsonText, z } from "../../hooks/zod.ts";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
-import { loadRoster } from "../../models/roster.ts";
-import { judge, ordersIn, parseFloorConfig } from "../../hooks/model-orders.ts";
+import { jsonText, z } from "../../../shared/src/zod.ts";
+import { attempt, errorMessage } from "../../../shared/src/attempt.ts";
+import { loadRoster } from "../../../../agents/models/roster.ts";
+import {
+  judge,
+  ordersIn,
+  parseFloorConfig,
+} from "../../../shared/src/model-orders.ts";
 import {
   lastError,
   progressWriter,
@@ -69,7 +73,16 @@ const HEARTBEAT_S =
     : 30;
 const FLOOR_CONFIG =
   process.env.MODEL_FLOOR_CONFIG ??
-  join(import.meta.dir, "..", "..", "hooks", "model-floor.toml");
+  join(
+    import.meta.dir,
+    "..",
+    "..",
+    "..",
+    "..",
+    "agents",
+    "hooks",
+    "model-floor.toml",
+  );
 // Test seam: the codex binary to run (a fake in tests). Never a model or sandbox override.
 const CODEX_BIN = process.env.CODEX_RUN_BIN ?? "codex";
 
@@ -138,7 +151,7 @@ const argv = cli(
       runId: {
         type: String,
         description:
-          "run_id supplied by agent-router (otherwise generated here)",
+          "run_id supplied by agent-dispatch (otherwise generated here)",
       },
       receiptDir: {
         type: String,
@@ -152,7 +165,7 @@ const argv = cli(
       outputSchema: {
         type: String,
         description:
-          "JSON-schema file for the final message (`codex exec --output-schema`; agent-router passes the typed report's)",
+          "JSON-schema file for the final message (`codex exec --output-schema`; agent-dispatch passes the typed report's)",
       },
       resume: {
         type: String,
@@ -253,7 +266,9 @@ if (choice !== undefined) {
       `--choice '${choice}' is not a codex-route row of agents/models/dispatch-roster.toml (codex rows: ${roster.value.choice
         .filter((c) => c.route === "codex")
         .map((c) => c.id)
-        .join(", ")}); a claude row runs through agent-router (run-claude.ts)`,
+        .join(
+          ", ",
+        )}); a claude row runs through agent-dispatch (run-claude.ts)`,
     );
   model = row?.model;
   effort = row?.effort;
@@ -476,7 +491,7 @@ const graced = (r: Promise<string>): Promise<string> =>
     Promise.race([r, Bun.sleep(PIPE_GRACE_MS).then(() => "")]),
   );
 // stdout is read as it arrives: every JSONL line also feeds the statusline's progress file when
-// agent-router asked for one (CODEX_RUN_PROGRESS_FILE; codex-progress.ts). What was read before a
+// agent-dispatch asked for one (CODEX_RUN_PROGRESS_FILE; codex-progress.ts). What was read before a
 // grace cut-off is kept, not dropped.
 const progress =
   process.env.CODEX_RUN_PROGRESS_FILE === undefined

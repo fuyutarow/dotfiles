@@ -26,7 +26,7 @@ import { at, num, strAt } from "../../hooks/narrow.ts";
 import {
   AGENT_ROUTER_WORKER_ENV,
   AGENT_ROUTER_WORKER_VALUE,
-} from "../../hooks/worker-env.ts";
+} from "../../../tools/shared/src/worker-env.ts";
 import {
   commandKey,
   judgedMs,

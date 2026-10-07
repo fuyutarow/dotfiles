@@ -1,10 +1,10 @@
-// The one way agent-router reaches Jev (TypeSafe System One, or the reseller in front of it): the
+// The one way agent-dispatch reaches Jev (TypeSafe System One, or the reseller in front of it): the
 // routing pick, the grade and `ask` all POST through here. One home for the key lookup, the time
 // bound, the failure reasons and the trace that runs.jsonl keeps — before 2026-10-06 the same
 // transport was written twice (here and a separate jev CLI, now retired) and the two drifted (key
 // sources, reasons). What a caller asks and how it reads the answer stay with the caller.
-import { attempt, errorMessage } from "../hooks/attempt.ts";
-import { typesafeKey } from "../hooks/typesafe-key.ts";
+import { attempt, errorMessage } from "../../shared/src/attempt.ts";
+import { typesafeKey } from "../../shared/src/typesafe-key.ts";
 
 /** What runs.jsonl keeps about one Jev call (never the key). */
 export interface JevTrace {

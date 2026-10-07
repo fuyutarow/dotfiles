@@ -29,8 +29,7 @@ The annotated topic tree (every directory + what it holds + how it deploys) is t
 **README → Architecture**; do not duplicate it here. Topics (one tool = one directory):
 `zsh git jj tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` `edge` (mac), `wsl` (WSL).
 Repo CLIs live under `tools/<name>/` (own `package.json` semver, `CHANGELOG.md`, `src/`, `tests/`; may import only
-their own dir and `tools/shared/`): `tools/smart-open`, `tools/rr` (`rr` / `repo-retrieve`),
-`tools/agent-resource-run`, and `tools/serena-foreground` (both OSes), `tools/shared` (code several tools import).
+their own dir and `tools/shared/`): `tools/smart-open`, `tools/rr` (`rr` / `repo-retrieve`), `tools/agent-dispatch` (`agent-dispatch` / one-release `agent-router` alias), `tools/agent-resource-run`, and `tools/serena-foreground` (both OSes), `tools/shared` (code several tools import).
 Plumbing / single sources of truth: `scripts/config-registry.ts` (EVERY config surface — source,
 deploy kind, consumer, writer, verifier; `mise run config:map` prints it, `lint:config-map` fails on
 a config file in no row), `scripts/link-dots.ts` (realizes its links, OS-aware),

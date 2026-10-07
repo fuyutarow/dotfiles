@@ -1,5 +1,5 @@
 // codex-progress — what a running `codex exec --json` is doing, folded from its JSONL events, for the
-// statusline `Run:` row (agents/routing-control/state.ts ProgressSchema). codex-run feeds every
+// statusline `Run:` row (tools/agent-dispatch/src/state.ts ProgressSchema). codex-run feeds every
 // stdout line through foldEvent and writes the result to CODEX_RUN_PROGRESS_FILE, at most once per
 // WRITE_EVERY_MS and once more at the end. Nothing here calls a model: it reads events codex
 // already prints, so it costs no tokens.
@@ -10,7 +10,7 @@
 import { renameSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import { fromThrowable } from "neverthrow";
-import { jsonOf, z } from "../../hooks/zod.ts";
+import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { STATE_SCHEMA, type Progress } from "../state.ts";
 
 const Item = z.looseObject({

@@ -15,7 +15,7 @@ import {
   modelName,
   parseFloorConfig,
   type Floors,
-} from "../../hooks/model-orders.ts";
+} from "../../../tools/shared/src/model-orders.ts";
 import { at, obj, parseJson, str, strAt } from "../../hooks/narrow.ts";
 
 // Codex spawn_agent (hooks see it as tool "Agent") takes per-call `model` and

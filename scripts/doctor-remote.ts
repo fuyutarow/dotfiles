@@ -126,7 +126,7 @@ async function checkSshCmd(host: string): Promise<Finding> {
 }
 
 // The agents can work there: Codex and Claude logged in (a luna worker fails at launch without
-// Codex's login — 2026-10-06), and Jev's key opens through fnox (else agent-router uses its default
+// Codex's login — 2026-10-06), and Jev's key opens through fnox (else agent-dispatch uses its default
 // row and rr its local judge: stated, not silent).
 async function checkAgents(host: string): Promise<Finding> {
   const probe = [
@@ -168,7 +168,7 @@ async function checkAgents(host: string): Promise<Finding> {
     : finding(
         "agents",
         "WARN",
-        "codex and claude logged in; no Jev key here — agent-router uses its default row, rr its local judge",
+        "codex and claude logged in; no Jev key here — agent-dispatch uses its default row, rr its local judge",
         `if ${host}'s root is trusted: mise run secrets:push -- ${host}`,
       );
 }

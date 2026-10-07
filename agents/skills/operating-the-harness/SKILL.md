@@ -26,7 +26,7 @@ description: >-
 > discipline, the verification loop, hooks, permissions/settings, MCP, Skills/commands,
 > subagents/parallelism, plan-mode & context workflow. Host-agnostic.
 > **Out of scope**: the Anthropic *API/SDK* (→ `claude-api` skill); `claude -p` as a subprocess
-> driven by Codex (→ `agent-router`, `agents/routing-control`); mechanical settings.json
+> driven by Codex (→ `dispatch`, `tools/dispatch`); mechanical settings.json
 > edits the harness performs for you (→ `update-config` skill); writing domain skills like
 > Julia (→ that skill). This skill is the *strategy* layer; those are the *mechanics*.
 > The CRAFT of skill content — what deserves a skill, distillation, sibling cuts, trigger test
@@ -121,7 +121,7 @@ table: `references/settings-permissions-mcp.md`.
 | `references/commands-and-skills.md` | commands⇄Skills unification, `SKILL.md` frontmatter & progressive disclosure, invocation control (`disable-model-invocation`, `context: fork`), `$ARGUMENTS`/`!cmd`, **and** writing good tool/MCP descriptions | authoring a slash command, Skill, or tool/MCP description |
 | `references/subagents-and-parallelism.md` | subagents (fresh isolated context) vs `/fork` (inherits), `.claude/agents/*.md`, built-in agents, writer/reviewer & TDD splits, worktrees, agent teams, `/workflows`, headless fan-out | delegating, isolating a big search, or running work in parallel |
 | `references/workflow-and-context.md` | Explore→Plan→Code→Commit, plan mode, `opusplan`, `/effort` & `ultrathink`, `/clear`/`/compact`/`/btw`, `/rewind` checkpoints, `/context`/`/usage`, prompt specificity, SPEC.md flow | running a session well or managing the context window |
-| `references/headless-and-ci.md` | output styles, `statusLine`, CI/GitHub Actions; Codex-driven `claude -p` subprocess execution routes to `agent-router` (`agents/routing-control`) | automating, scripting, or wiring CI |
+| `references/headless-and-ci.md` | output styles, `statusLine`, CI/GitHub Actions; Codex-driven `claude -p` subprocess execution routes to `dispatch` (`tools/dispatch`) | automating, scripting, or wiring CI |
 | `references/methodologies.md` | the vanilla-vs-framework decision ladder; Superpowers / Spec-Kit / BMAD — what to steal, what to skip | tempted by a heavyweight workflow framework |
 
 ---
@@ -281,7 +281,7 @@ the source, gate only the residue that is deterministically always-wrong.
   settings can still produce ZERO tools in-session (server exits before the handshake; e.g. a
   cwd-gated stdio server spawned in the wrong directory). Diagnose with `claude mcp list` +
   the per-server client log, never by re-reading the config; a tool-specific `driving-*` skill
-  (driving-cocoindex, agent-router) supplies the expected surface + fallback AFTER liveness
+  (driving-cocoindex, agent-dispatch) supplies the expected surface + fallback AFTER liveness
   is settled here.
 
 ---

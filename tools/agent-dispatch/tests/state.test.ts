@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { briefLabel } from "../state.ts";
+import { briefLabel } from "../src/state.ts";
 
 // A worker's default label skips the dispatch declaration every brief starts with (Vast 2026-10-06:
 // three Run rows all read "RESOURCE-CLASS(NONCOMPUTE): read").

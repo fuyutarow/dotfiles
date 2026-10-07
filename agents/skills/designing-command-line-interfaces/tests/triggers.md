@@ -22,7 +22,7 @@ Run these against the name and description after each description or cut edit.
 
 | Ask | Route |
 |---|---|
-| “Which `codex exec` sandbox flag?” | `agent-router` (`agents/routing-control`). |
+| “Which `codex exec` sandbox flag?” | `dispatch` (`tools/dispatch`). |
 | “Make this error message friendlier.” | `linting-prose` or diagnostic card. |
 | “Should releases use SemVer?” | `designing-version-schemes`. |
 | “Canonicalize config before signing.” | `governing-configuration-systems`. |

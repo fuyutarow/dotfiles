@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { z } from "../../hooks/zod.ts";
-import { probeModels } from "../workers/claude-probe.ts";
-import { asRecord, runClaude, toRelay } from "../workers/run-claude.ts";
-import { decodedJson } from "../../hooks/tests/decode.ts";
-import { AGENT_ROUTER_WORKER_ENV } from "../../hooks/worker-env.ts";
+import { z } from "../../shared/src/zod.ts";
+import { probeModels } from "../src/workers/claude-probe.ts";
+import { asRecord, runClaude, toRelay } from "../src/workers/run-claude.ts";
+import { decodedJson } from "./decode.ts";
+import { AGENT_ROUTER_WORKER_ENV } from "../../shared/src/worker-env.ts";
 
 const ErrorEnvelope = z.object({ exit_code: z.number(), error: z.string() });
 
@@ -16,8 +16,8 @@ function parseErrorEnvelope(stdout: string): z.output<typeof ErrorEnvelope> {
 }
 
 const fixture = resolve(import.meta.dir, "fake-claude.ts");
-const runnerScript = resolve(import.meta.dir, "../workers/run-claude.ts");
-const probeScript = resolve(import.meta.dir, "../workers/claude-probe.ts");
+const runnerScript = resolve(import.meta.dir, "../src/workers/run-claude.ts");
+const probeScript = resolve(import.meta.dir, "../src/workers/claude-probe.ts");
 
 function runCli(
   script: string,
@@ -45,7 +45,7 @@ async function withTarget<T>(fn: (target: string) => Promise<T>): Promise<T> {
   );
 }
 
-describe("agents/routing-control runner", () => {
+describe("tools/agent-dispatch runner", () => {
   test("returns a bounded parsed Claude envelope", async () => {
     const run = await withTarget((target) =>
       runClaude({
@@ -111,7 +111,7 @@ describe("agents/routing-control runner", () => {
   });
 });
 
-describe("agents/routing-control argv boundary", () => {
+describe("tools/agent-dispatch argv boundary", () => {
   test("run-claude rejects --__proto__", () => {
     const result = runCli(runnerScript, ["--__proto__"]);
     expect(result.exitCode).toBe(2);
@@ -149,7 +149,7 @@ describe("agents/routing-control argv boundary", () => {
   });
 });
 
-describe("agents/routing-control runner: --progress-file", () => {
+describe("tools/agent-dispatch runner: --progress-file", () => {
   test("streams what claude is doing into the progress file; the result event is the answer", async () => {
     const dir = await mkdtemp(join(tmpdir(), "run-claude-progress-"));
     const progressFile = join(dir, "p.progress.json");
@@ -179,7 +179,7 @@ describe("agents/routing-control runner: --progress-file", () => {
   });
 });
 
-describe("agents/routing-control runner: session persistence and --resume", () => {
+describe("tools/agent-dispatch runner: session persistence and --resume", () => {
   const argvOf = async (extra: Record<string, unknown>): Promise<string[]> => {
     const dir = await mkdtemp(join(tmpdir(), "run-claude-argv-"));
     const log = join(dir, "fake-claude-argv.log");
@@ -210,7 +210,7 @@ describe("agents/routing-control runner: session persistence and --resume", () =
     expect(argv).not.toContain("--resume");
   });
 
-  test("marks the Claude child as an agent-router worker", async () => {
+  test("marks the Claude child as an agent-dispatch worker", async () => {
     const dir = await mkdtemp(join(tmpdir(), "run-claude-env-"));
     const run = await runClaude({
       target: dir,

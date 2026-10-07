@@ -101,7 +101,7 @@ rental, one final listing.
 | Local CPU/RAM/VRAM admission for parallel work | `orchestrating-agents` P7 |
 | The R99 Windows/WSL host itself (GPU driver, wake, disk) | `operating-wsl2-on-windows` |
 | Installing a Python CLI in general | `running-python-tools` |
-| Which model/worker runs a task | the dispatch roster (`agent-router`) |
+| Which model/worker runs a task | the dispatch roster (`agent-dispatch`) |
 | Validity of the experiment's numbers | `validating-experimental-evidence` |
 
 ## Reference index

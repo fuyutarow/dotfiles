@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { decoded } from "../../../hooks/tests/decode.ts";
-import { AGENT_ROUTER_WORKER_ENV } from "../../../hooks/worker-env.ts";
+import { AGENT_ROUTER_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
 

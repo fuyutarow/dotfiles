@@ -35,8 +35,8 @@
 //     not landed shows the last good one, marked `stale <N>s` from 60 s on; a Mac without nvidia-smi
 //     has no VRAM segment at all, see vramGated(); see the EXPLICIT-ABSENCE law below)
 //   6 Job: ... (conditional: only while a job is admitted, an orphan lives, or the scan failed)
-//   7 this session's agent-router workers as full rows, then `+N in other sessions` and `stale×N`
-//     counts (conditional: markers are agents/routing-control/state.ts; this session is identified
+//   7 this session's agent-dispatch workers as full rows, then `+N in other sessions` and `stale×N`
+//     counts (conditional: markers are tools/agent-dispatch/src/state.ts; this session is identified
 //     by the Claude payload's session_id; an unreadable state dir prints n/a with the reason)
 //
 // EXPLICIT-ABSENCE (2026-10-03): no reading is ever dropped from a row because it could not be
@@ -87,7 +87,7 @@ import {
   ActiveSchema,
   progressFile,
   ProgressSchema,
-} from "../routing-control/state.ts";
+} from "../../tools/agent-dispatch/src/state.ts";
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
@@ -201,7 +201,7 @@ interface Dataframe {
   jobs: Admitted[];
   orphans: number;
   jobScanWhy?: string | undefined; // the process scan failed: jobs/orphans are unknown, not zero
-  // agent-router workers. undefined = agent-router has never run on this machine (no state dir).
+  // agent-dispatch workers. undefined = agent-dispatch has never run on this machine (no state dir).
   routes?: Result<RouteRun[], string> | undefined;
   // Host readings are Results, not optionals: "could not be taken" carries its reason, and
   // render() prints it. See the EXPLICIT-ABSENCE law below.
@@ -1080,9 +1080,9 @@ function admittedJobSegment(jobs: Admitted[], orphans: number): string {
   if (orphans > 0) seg += ` ${DIM}orphan×${orphans}${RST}`;
   return seg;
 }
-// Run row source: one marker per worker agent-router started (agents/routing-control/state.ts).
+// Run row source: one marker per worker agent-dispatch started (tools/agent-dispatch/src/state.ts).
 // A marker is written at start and removed at exit, so a marker whose process is gone means
-// agent-router itself was killed — counted as stale, never dropped (EXPLICIT-ABSENCE).
+// agent-dispatch itself was killed — counted as stale, never dropped (EXPLICIT-ABSENCE).
 interface RouteRun {
   choice: string;
   label: string;
@@ -1308,10 +1308,10 @@ function render(df: Dataframe): string {
     }
   }
 
-  // Run rows: present while agent-router has workers (or stale markers); n/a when unreadable.
+  // Run rows: present while agent-dispatch has workers (or stale markers); n/a when unreadable.
   let runLines: string[] = [];
   if (df.routes !== undefined && df.routes.isErr())
-    runLines = [naSegment("agent-router", df.routes.error)];
+    runLines = [naSegment("agent-dispatch", df.routes.error)];
   else if (df.routes !== undefined)
     runLines = routeLines(df.routes.value, df.sid);
 

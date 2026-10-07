@@ -310,6 +310,7 @@ const OTHER: readonly Surface[] = [
       "tools/rr/package.json",
       "tools/agent-resource-run/package.json",
       "tools/serena-foreground/package.json",
+      "tools/agent-dispatch/package.json",
     ],
     deployed: "the checkout",
     consumer:
@@ -435,10 +436,10 @@ const OTHER: readonly Surface[] = [
       "agents/models/dispatch-roster.contract.md",
     ],
     deployed: "the checkout; rendered into ~/.claude/CLAUDE.md",
-    consumer: "dispatch hook, agent-router, codex-run --choice, render-home",
+    consumer: "dispatch hook, agent-dispatch, codex-run --choice, render-home",
     writer:
       "human, in the repo (CONFIGURATION CONTRACT: dispatch-roster.contract.md)",
-    verify: `mise run test:hooks · test:agent-router · ${DOCTOR} (rendered)`,
+    verify: `mise run test:hooks · test:agent-dispatch · ${DOCTOR} (rendered)`,
   },
   {
     kind: "in-place",

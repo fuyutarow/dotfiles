@@ -6,11 +6,12 @@
   "bin": {
     "agent-resource-run": "tools/agent-resource-run/src/agent-resource-run.ts",
     "serena-foreground": "tools/serena-foreground/src/serena-foreground.ts",
+    "rr": "tools/rr/src/repo-retrieve.ts",
     "repo-retrieve": "tools/rr/src/repo-retrieve.ts",
     "smart-open": "tools/smart-open/src/smart-open.ts",
-    "codex-run": "agents/routing-control/workers/codex-run.ts",
-    "rr": "tools/rr/src/repo-retrieve.ts",
-    "agent-router": "agents/routing-control/agent-router.ts"
+    "codex-run": "tools/agent-dispatch/src/workers/codex-run.ts",
+    "agent-dispatch": "tools/agent-dispatch/src/agent-dispatch.ts",
+    "agent-router": "tools/agent-dispatch/src/agent-dispatch.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

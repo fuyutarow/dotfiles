@@ -4,7 +4,7 @@
 // Owner 2026-10-06: coordinators dug final reports out of stream-json by hand, many workers ended with
 // none, and prose reports vary in shape so a coordinator could not check them mechanically. Nothing
 // here calls a model or fails a run: an invalid or missing report is recorded, never fatal.
-import { jsonText, z } from "../hooks/zod.ts";
+import { jsonText, z } from "../../shared/src/zod.ts";
 
 export const WorkerReport = z.object({
   summary: z.string(),
@@ -86,7 +86,7 @@ export function parseReport(
 const bullets = (items: string[], empty = "(none)"): string =>
   items.length === 0 ? `  ${empty}` : items.map((i) => `  - ${i}`).join("\n");
 
-/** The report as readable sections (what `agent-router result` prints). */
+/** The report as readable sections (what `agent-dispatch result` prints). */
 export function renderReport(r: WorkerReport): string {
   return [
     `## Summary\n${r.summary}`,

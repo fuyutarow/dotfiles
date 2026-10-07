@@ -13,16 +13,16 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { z } from "../../hooks/zod.ts";
-import { ROSTER_PATH } from "../../models/roster.ts";
-import { decodedJson } from "../../hooks/tests/decode.ts";
-import { attemptOr } from "../../hooks/attempt.ts";
+import { z } from "../../shared/src/zod.ts";
+import { ROSTER_PATH } from "../../../agents/models/roster.ts";
+import { decodedJson } from "./decode.ts";
+import { attemptOr } from "../../shared/src/attempt.ts";
 
-// agent-router: the one entry point. A fake codex-run stands in for the worker (it records its argv and
+// agent-dispatch: the one entry point. A fake codex-run stands in for the worker (it records its argv and
 // prints a receipt), a local server stands in for Jev, and every state file goes to a scratch dir.
 
-const CLI = join(import.meta.dir, "..", "agent-router.ts");
-const scratch = mkdtempSync(join(tmpdir(), "agent-router-test-"));
+const CLI = join(import.meta.dir, "..", "src", "agent-dispatch.ts");
+const scratch = mkdtempSync(join(tmpdir(), "agent-dispatch-test-"));
 // Every request body the fake Jev received, in order (what left the machine).
 const bodies: string[] = [];
 const server = Bun.serve({
@@ -280,7 +280,7 @@ const ExportRecord = z.looseObject({
 });
 const RunIdSchema = z.looseObject({ run_id: z.string() });
 
-describe("agent-router run", () => {
+describe("agent-dispatch run", () => {
   const b = brief("task", "Fix the flaky test in scripts/tests.\n");
 
   test("the active marker and run record carry the Claude dispatcher session", async () => {
@@ -374,7 +374,7 @@ describe("agent-router run", () => {
     });
   });
 
-  test("the worker's exit code is agent-router's exit code", async () => {
+  test("the worker's exit code is agent-dispatch's exit code", async () => {
     const r = await router(
       ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
       { FAKE_EXIT: "1" },
@@ -590,7 +590,7 @@ describe("agent-router run", () => {
       {
         AGENT_ROUTER_CODEX_RUN: join(
           import.meta.dir,
-          "../workers/codex-run.ts",
+          "../src/workers/codex-run.ts",
         ),
         CODEX_RUN_BIN: codex,
         CODEX_RUN_HOST_FILE: join(dir, "no-host.toml"),
@@ -629,7 +629,7 @@ describe("agent-router run", () => {
   });
 });
 
-describe("agent-router result", () => {
+describe("agent-dispatch result", () => {
   test("prints the final report verbatim after the run header", async () => {
     const state = join(scratch, "result-report");
     const b = brief("result-report", "Do the work.\n");
@@ -696,7 +696,7 @@ describe("agent-router result", () => {
   });
 });
 
-describe("agent-router ls and stats", () => {
+describe("agent-dispatch ls and stats", () => {
   test("a marker whose process is gone is reported as stale, not hidden", async () => {
     const state = join(scratch, "state-stale");
     const active = join(state, "active");
@@ -768,7 +768,7 @@ describe("agent-router ls and stats", () => {
   });
 });
 
-describe("agent-router export", () => {
+describe("agent-dispatch export", () => {
   test("exports latest grade, waiver and legacy rows without dropping them", async () => {
     const state = join(scratch, "export-history");
     const evidence = join(scratch, "export-evidence.txt");
@@ -872,7 +872,7 @@ describe("agent-router export", () => {
   });
 });
 
-describe("agent-router grade", () => {
+describe("agent-dispatch grade", () => {
   // Each test gets its own state dir and one real (fake-worker) run to grade.
   async function oneRun(
     name: string,
@@ -1045,7 +1045,7 @@ describe("O3: no dispatch over ungraded work", () => {
     expect(r.code).toBe(2);
     expect(r.err).toContain("not graded");
     expect(r.err).toContain(runId);
-    expect(r.err).toContain(`agent-router grade ${runId} --evidence`);
+    expect(r.err).toContain(`agent-dispatch grade ${runId} --evidence`);
     expect(r.err).toContain("--waive");
     expect(bodies.length).toBe(asked); // Jev was not asked
     expect(
@@ -1175,7 +1175,7 @@ describe("claude worker receipts: never silent", () => {
 });
 
 // Excess positionals are refused (writing-bun-scripts BG1: Cleye leaves extras in argv._ silently).
-// Found when agent-router came under the Bun floor (lint:bun) with the worker move, 2026-10-06.
+// Found when agent-dispatch came under the Bun floor (lint:bun) with the worker move, 2026-10-06.
 test("an unexpected positional argument is refused, never ignored", async () => {
   for (const args of [
     ["stats", "extra"],
@@ -1239,7 +1239,7 @@ describe("a worker is named by its vendor session id", () => {
 
 // ask: a typed question to Jev. The request is validated before anything is sent; the answer is
 // returned as Jev gave it (probabilities, no threshold).
-describe("agent-router ask", () => {
+describe("agent-dispatch ask", () => {
   const choiceQuestion = {
     type: "choice",
     instructions: "Is `task` about tests?",
@@ -1510,7 +1510,7 @@ const logLines = (state: string): z.output<typeof AnyLine>[] =>
     .map((l) => decodedJson(AnyLine, l));
 const lastJevBody = (): string => bodies.at(-1) ?? "";
 
-describe("agent-router run: a brief with a ticket", () => {
+describe("agent-dispatch run: a brief with a ticket", () => {
   test("the worker gets the prose without the front matter, plus the verify line", async () => {
     const cwd = freshCwd();
     const b = brief(
@@ -1700,7 +1700,7 @@ describe("agent-router run: a brief with a ticket", () => {
   });
 });
 
-describe("agent-router ticket write enforcement", () => {
+describe("agent-dispatch ticket write enforcement", () => {
   let gitSeq = 0;
   const gitStatus = (status: string): Record<string, string> => {
     const bin = join(scratch, `fake-git-${gitSeq++}`);
@@ -1820,7 +1820,7 @@ describe("agent-router ticket write enforcement", () => {
   });
 });
 
-describe("agent-router run: the gate per write scope", () => {
+describe("agent-dispatch run: the gate per write scope", () => {
   let seq = 0;
   /** An ungraded finished run in `cwd`; `writes` undefined = a legacy run (no ticket). */
   function seed(
@@ -1860,23 +1860,23 @@ describe("agent-router run: the gate per write scope", () => {
   test("overlapping writes in the same cwd: blocked, naming the run and both globs", async () => {
     const cwd = freshCwd();
     const state = gate("overlap");
-    const id = seed(state, cwd, ["agents/routing-control/**"]);
+    const id = seed(state, cwd, ["tools/agent-dispatch/**"]);
     const r = await router(
-      ticketRun(cwd, '["agents/routing-control/tests/**"]'),
+      ticketRun(cwd, '["tools/agent-dispatch/tests/**"]'),
       {
         AGENT_ROUTER_STATE_DIR: state,
       },
     );
     expect(r.code).toBe(2);
     expect(r.err).toContain(id);
-    expect(r.err).toContain("agents/routing-control/**");
-    expect(r.err).toContain("agents/routing-control/tests/**");
+    expect(r.err).toContain("tools/agent-dispatch/**");
+    expect(r.err).toContain("tools/agent-dispatch/tests/**");
   });
 
   test("disjoint writes in the same cwd: allowed", async () => {
     const cwd = freshCwd();
     const state = gate("disjoint");
-    seed(state, cwd, ["agents/routing-control/**"]);
+    seed(state, cwd, ["tools/agent-dispatch/**"]);
     const r = await router(ticketRun(cwd, '["agents/models/roster.ts"]'), {
       AGENT_ROUTER_STATE_DIR: state,
     });
@@ -1945,7 +1945,7 @@ describe("agent-router run: the gate per write scope", () => {
 const sha = (s: string): string =>
   new Bun.CryptoHasher("sha256").update(s).digest("hex");
 
-describe("agent-router: the stored brief", () => {
+describe("agent-dispatch: the stored brief", () => {
   const BriefLine = z.looseObject({
     kind: z.string(),
     brief: z.looseObject({ sha256: z.string() }),
@@ -2043,7 +2043,7 @@ const readPids = (file: string): number[] =>
 
 // --- resume: continue a stopped worker in its own vendor session -----------------------------------
 
-describe("agent-router resume", () => {
+describe("agent-dispatch resume", () => {
   const argvLines = (file: string): string[][] =>
     readFileSync(join(scratch, file), "utf8")
       .trim()
@@ -2086,19 +2086,19 @@ describe("agent-router resume", () => {
     const r = await stoppedRun("rs-hint", { FAKE_TIMEOUT: "1" });
     expect(r.code).toBe(3);
     const id = firstId(r.state);
-    expect(r.err).toContain(`agent-router resume ${id}`);
+    expect(r.err).toContain(`agent-dispatch resume ${id}`);
     expect(
       decodedJson(z.looseObject({ resume_with: z.string() }), r.out.trim())
         .resume_with,
-    ).toBe(`agent-router resume ${id}`);
-    expect(runsOf(r.state)[0]?.resume_with).toBe(`agent-router resume ${id}`);
+    ).toBe(`agent-dispatch resume ${id}`);
+    expect(runsOf(r.state)[0]?.resume_with).toBe(`agent-dispatch resume ${id}`);
     const failed = await stoppedRun("rs-hint-failed", { FAKE_EXIT: "1" });
-    expect(failed.err).toContain("agent-router resume ");
+    expect(failed.err).toContain("agent-dispatch resume ");
     const none = await stoppedRun("rs-hint-none", {
       FAKE_TIMEOUT: "1",
       FAKE_NO_SESSION: "1",
     });
-    expect(none.err).not.toContain("agent-router resume ");
+    expect(none.err).not.toContain("agent-dispatch resume ");
   });
 
   test("codex: same row, sandbox and cwd, continuing the thread; no Jev pick; logged as resumed; the default message", async () => {
@@ -2190,7 +2190,7 @@ describe("agent-router resume", () => {
     );
     expect(stopped.code).toBe(124);
     const id = firstId(stopped.state);
-    expect(stopped.err).toContain(`agent-router resume ${id}`);
+    expect(stopped.err).toContain(`agent-dispatch resume ${id}`);
     const firstArgv = lastArgv("claude-argv.log");
     expect(firstArgv).toContain("--persist-session"); // router-dispatched sessions stay on disk
     expect(firstArgv).not.toContain("--resume");
@@ -2220,7 +2220,7 @@ describe("agent-router resume", () => {
       { FAKE_CLAUDE_MODE: "timeout", ...claude },
     );
     const id = firstId(stopped.state);
-    expect(stopped.err).not.toContain(`agent-router resume ${id}`);
+    expect(stopped.err).not.toContain(`agent-dispatch resume ${id}`);
     expect(runsOf(stopped.state)[0]?.resume_with).toBeUndefined();
     const before = readFileSync(join(scratch, "claude-argv.log"), "utf8")
       .trim()
@@ -2269,7 +2269,7 @@ describe("agent-router resume", () => {
   });
 });
 
-describe("agent-router: a stopped router stops its verify too", () => {
+describe("agent-dispatch: a stopped router stops its verify too", () => {
   test("SIGTERM while verify runs kills the verify group and records the run as stopped", async () => {
     const pidFile = join(scratch, "stop-pids");
     const script = join(scratch, "stop-grand.sh");
@@ -2349,7 +2349,7 @@ const Worker = z.looseObject({
   report_error: z.string().optional(),
 });
 
-describe("agent-router: a claude worker's stop reason", () => {
+describe("agent-dispatch: a claude worker's stop reason", () => {
   const cases = [
     [
       "max_turns",
@@ -2382,7 +2382,7 @@ describe("agent-router: a claude worker's stop reason", () => {
     });
 });
 
-describe("agent-router: the typed final report", () => {
+describe("agent-dispatch: the typed final report", () => {
   const instruction = "## Final report (required)";
 
   test("every worker prompt gets the report instruction after the verify line", async () => {

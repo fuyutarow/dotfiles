@@ -3,7 +3,7 @@ import {
   emptyTally,
   foldEvent,
   toProgress,
-} from "../workers/codex-progress.ts";
+} from "../src/workers/codex-progress.ts";
 
 // codex-progress: the fold from `codex exec --json` lines to the statusline's progress record.
 

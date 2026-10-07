@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { z } from "../hooks/zod.ts";
+import { z } from "../../shared/src/zod.ts";
 
 export const STATE_SCHEMA = 1;
 

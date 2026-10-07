@@ -3,7 +3,7 @@
 # POLICY (owner, 2026-10-03): work is ordered from the CURRENT generation of every model, never an
 # older one that still happens to answer. This file says WHAT counts as current — per model family,
 # the oldest generation still allowed — and the hook (agents/hooks/enforce-model-floor.ts, with the
-# parsing in model-orders.ts) says HOW: it denies a Bash command that RUNS codex, grok, claude or agy
+# parsing in tools/shared/src/model-orders.ts) says HOW: it denies a Bash command that RUNS codex, grok, claude or agy
 # with a model below its family's floor. `min` is a FLOOR, not a pin: a newer generation (sol 6.2,
 # sol 7, grok 5) passes with no edit here.
 #

@@ -1,11 +1,11 @@
 import { existsSync, statSync } from "node:fs";
 import { cli } from "cleye";
 import { err, ok, type Result } from "neverthrow";
-import { jsonText, z } from "../../hooks/zod.ts";
+import { jsonText, z } from "../../../shared/src/zod.ts";
 import {
   AGENT_ROUTER_WORKER_ENV,
   AGENT_ROUTER_WORKER_VALUE,
-} from "../../hooks/worker-env.ts";
+} from "../../../shared/src/worker-env.ts";
 import { progressWriter } from "./codex-progress.ts";
 import { foldClaudeEvent, resultEvent } from "./claude-progress.ts";
 
@@ -54,10 +54,10 @@ export type RunConfig = Readonly<{
   allowedTools?: string | undefined;
   jsonSchema?: string | undefined;
   // When set, claude runs with stream-json and what it is doing is kept in this file (the
-  // statusline Run rows read it; agent-router passes it); its `result` event is the answer.
+  // statusline Run rows read it; agent-dispatch passes it); its `result` event is the answer.
   progressFile?: string | undefined;
   // Keep the session on disk (~/.claude/projects/<cwd>/<session>.jsonl) so `--resume` can continue
-  // it. agent-router passes this for every worker it dispatches; probes and direct callers keep the
+  // it. agent-dispatch passes this for every worker it dispatches; probes and direct callers keep the
   // old no-persistence default.
   persistSession?: boolean | undefined;
   // claude --resume <session_id>: continue that session; the prompt is the next message. A session

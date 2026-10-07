@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { emptyTally } from "../workers/codex-progress.ts";
-import { foldClaudeEvent, resultEvent } from "../workers/claude-progress.ts";
+import { emptyTally } from "../src/workers/codex-progress.ts";
+import {
+  foldClaudeEvent,
+  resultEvent,
+} from "../src/workers/claude-progress.ts";
 
 // claude-progress: claude stream-json events folded into the Run row's tally.
 const assistant = (content: unknown[]): string =>

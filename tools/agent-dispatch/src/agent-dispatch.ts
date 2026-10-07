@@ -1,22 +1,22 @@
 #!/usr/bin/env bun
-// agent-router — the ONE entry point that starts a worker for a task, records why that worker was
-// chosen, and shows it as running (statusline `Run:` segment, `agent-router ls`).
+// agent-dispatch — the ONE entry point that starts a worker for a task, records why that worker was
+// chosen, and shows it as running (statusline `Run:` segment, `agent-dispatch ls`).
 // Consumers: the coordinating agent (primary), a human, the statusline. PATH command via
 // package.json `bin` (`mise run deps`).
 //
 // CLI CONTRACT (designing-command-line-interfaces C0–C5)
-//   C1  agent-router run  --prompt-file F --cd DIR --sandbox read-only|workspace-write
+//   C1  agent-dispatch run  --prompt-file F --cd DIR --sandbox read-only|workspace-write
 //                     [--label TEXT]   (--choice is refused: Jev alone picks) [--timeout-s N]
-//       agent-router pick --prompt-file F [--cd DIR]     the auto pick only; starts nothing
-//       agent-router ask  --request F|-                  a typed question to Jev; its answer, never acted on
-//       agent-router ls                                  running workers (stale ones flagged)
-//       agent-router stats                               picks, confidence, fallbacks, cost, outcomes
-//       agent-router export [--since ISO]                one flat JSON line per run for analysis
-//       agent-router result RUN_ID|SESSION_PREFIX [--json] show the worker report
-//       agent-router resume RUN_ID|SESSION_PREFIX [--prompt-file F] [--timeout-s N]
+//       agent-dispatch pick --prompt-file F [--cd DIR]     the auto pick only; starts nothing
+//       agent-dispatch ask  --request F|-                  a typed question to Jev; its answer, never acted on
+//       agent-dispatch ls                                  running workers (stale ones flagged)
+//       agent-dispatch stats                               picks, confidence, fallbacks, cost, outcomes
+//       agent-dispatch export [--since ISO]                one flat JSON line per run for analysis
+//       agent-dispatch result RUN_ID|SESSION_PREFIX [--json] show the worker report
+//       agent-dispatch resume RUN_ID|SESSION_PREFIX [--prompt-file F] [--timeout-s N]
 //                                                        continue a stopped run in its own vendor session
-//       agent-router grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
-//       agent-router grade RUN_ID --waive "<why>"        record that a run cannot be graded, and why
+//       agent-dispatch grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
+//       agent-dispatch grade RUN_ID --waive "<why>"        record that a run cannot be graded, and why
 //   TICKET  a brief may open with TOML front matter between `+++` lines (ticket.ts): `writes` globs, `verify`
 //           commands, `verify_timeout_s`, `capabilities`. The router then strips it for the worker, runs
 //           the verify commands after the worker exits (verify.ts), grades the run itself (graded_by
@@ -26,14 +26,14 @@
 //           (resumed_from, pick.source "resume") on the original's row, sandbox and cwd, continuing that
 //           session (codex-run --resume → `codex exec resume`; run-claude --resume → `claude --resume`,
 //           which is why router-dispatched claude sessions are persisted). A run that ends timeout /
-//           codex-failed / claude-failed with a session says `agent-router resume <run_id>` in its receipt
+//           codex-failed / claude-failed with a session says `agent-dispatch resume <run_id>` in its receipt
 //           (resume_with) and on stderr. SIGINT/SIGTERM kills the worker AND a running verify group and
 //           records the run as stopped (with a waiver).
 //   C2  effects  run starts `codex-run --choice <row>` for a codex row or
 //                `run-claude.ts` for a Claude row. State lives outside the repo:
 //                $XDG_STATE_HOME/agent-router (~/.local/state/agent-router): active/<run_id>.json
 //                while running, runs.jsonl forever.
-//   C3  channels stdout: exactly one JSON line (run: the agent-router receipt; pick: the pick record;
+//   C3  channels stdout: exactly one JSON line (run: the agent-dispatch receipt; pick: the pick record;
 //                ls/stats: a JSON report). stderr: one line naming the pick and why, then the
 //                worker's own liveness lines.
 //   C4  outcomes exit = the worker's (0 ok, 1 failed, 3 timeout); 2 refused/usage before any start.
@@ -56,14 +56,15 @@ import {
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { cli, command } from "cleye";
-import { attempt, errorMessage } from "../hooks/attempt.ts";
-import { jsonOf, jsonText, z } from "../hooks/zod.ts";
+import pkg from "../package.json" with { type: "json" };
+import { attempt, errorMessage } from "../../shared/src/attempt.ts";
+import { jsonOf, jsonText, z } from "../../shared/src/zod.ts";
 import {
   criterionFor,
   loadRoster,
   type Choice,
   type Roster,
-} from "../models/roster.ts";
+} from "../../../agents/models/roster.ts";
 import {
   activeDir,
   ActiveSchema,
@@ -105,7 +106,7 @@ const LOG_FILE = join(STATE_DIR, "runs.jsonl");
 const CODEX_RUN =
   process.env.AGENT_ROUTER_CODEX_RUN ??
   join(import.meta.dir, "workers/codex-run.ts");
-// A claude row runs `claude -p` through agents/routing-control/workers/run-claude.ts (test seam: a fake).
+// A claude row runs `claude -p` through tools/agent-dispatch/src/workers/run-claude.ts (test seam: a fake).
 const RUN_CLAUDE =
   process.env.AGENT_ROUTER_RUN_CLAUDE ??
   join(import.meta.dir, "workers/run-claude.ts");
@@ -194,7 +195,7 @@ function claudeTranscript(cwd: string, session: string): string {
 }
 
 function fatal(message: string): never {
-  console.error(`agent-router: ${message}`);
+  console.error(`agent-dispatch: ${message}`);
   return process.exit(2);
 }
 
@@ -525,7 +526,7 @@ function workerArgs(
     // the typed report's JSON schema: `claude --json-schema`; the structured output lands in the relay
     "--json-schema-file",
     schemaFile,
-    // router-dispatched claude sessions stay on disk so `agent-router resume` can continue them
+    // router-dispatched claude sessions stay on disk so `agent-dispatch resume` can continue them
     "--persist-session",
     ...(resume === undefined ? [] : ["--resume", resume]),
   ];
@@ -863,7 +864,7 @@ async function launch(l: Launch): Promise<number> {
   // the full text, ticket included, kept by its hash: the run record's brief.sha256 is the key
   storeBrief(sha256(brief), brief);
   console.error(
-    `agent-router: ${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
+    `agent-dispatch: ${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
   );
 
   const active: Active = {
@@ -936,12 +937,12 @@ async function launch(l: Launch): Promise<number> {
       exit: code,
       worker: {
         outcome: "stopped",
-        cause: `agent-router received ${signal}`,
+        cause: `agent-dispatch received ${signal}`,
         sandbox: flags.sandbox,
         ...(session === undefined ? {} : { session }),
       },
     });
-    recordWaiver(runId, `stopped: agent-router received ${signal}`, "router");
+    recordWaiver(runId, `stopped: agent-dispatch received ${signal}`, "router");
     rmSync(workerBrief, { force: true });
     rmSync(marker, { force: true });
     rmSync(progress, { force: true });
@@ -986,11 +987,11 @@ async function launch(l: Launch): Promise<number> {
   const writeViolations = writes?.violations ?? [];
   if (writes?.unavailable !== undefined)
     console.error(
-      `agent-router: writes check unavailable: ${writes.unavailable}`,
+      `agent-dispatch: writes check unavailable: ${writes.unavailable}`,
     );
   if (writeViolations.length > 0)
     console.error(
-      `agent-router: writes outside ticket scope: ${writeViolations.join(", ")}`,
+      `agent-dispatch: writes outside ticket scope: ${writeViolations.join(", ")}`,
     );
   const verified =
     ticket === undefined
@@ -1004,11 +1005,11 @@ async function launch(l: Launch): Promise<number> {
     stoppedWith.data.outcome !== "ok" &&
     (row.route === "codex" ||
       existsSync(claudeTranscript(active.cwd, stoppedWith.data.session)))
-      ? `agent-router resume ${runId}`
+      ? `agent-dispatch resume ${runId}`
       : undefined;
   if (resumeHint !== undefined)
     console.error(
-      `agent-router: ${stoppedWith.data?.outcome ?? "stopped"} — continue it in its own context: ${resumeHint}`,
+      `agent-dispatch: ${stoppedWith.data?.outcome ?? "stopped"} — continue it in its own context: ${resumeHint}`,
     );
   const writesFields: Record<string, unknown> = {};
   if (writes !== undefined) {
@@ -1106,7 +1107,7 @@ async function verifyAfterWorker(
     };
   const results = await runVerify(ticket.verify, cwd, ticket.verify_timeout_s);
   const summary = verifySummary(results);
-  console.error(`agent-router: verify ${summary}`);
+  console.error(`agent-dispatch: verify ${summary}`);
   return { results, summary };
 }
 
@@ -1122,7 +1123,7 @@ async function autoGrade(
 ): Promise<Record<string, unknown>> {
   const waiveWith = (reason: string): Record<string, unknown> => {
     recordWaiver(runId, reason, "router");
-    console.error(`agent-router: ${runId} waived — ${reason}`);
+    console.error(`agent-dispatch: ${runId} waived — ${reason}`);
     return { grade_waived: reason };
   };
   if (verified.skipped !== undefined)
@@ -1150,7 +1151,7 @@ async function autoGrade(
   writeFileSync(file, evidence);
   recordGrade(runId, asked.value, file, evidence, "router");
   console.error(
-    `agent-router: ${runId} graded ${asked.value.grade} by router (confidence ${asked.value.confidence.toFixed(2)})`,
+    `agent-dispatch: ${runId} graded ${asked.value.grade} by router (confidence ${asked.value.confidence.toFixed(2)})`,
   );
   return {
     grade: {
@@ -1182,7 +1183,7 @@ function recordWritesViolationGrade(
     graded_at: now(),
     graded_by: "router",
   });
-  console.error(`agent-router: ${runId} graded fail by router — ${reason}`);
+  console.error(`agent-dispatch: ${runId} graded fail by router — ${reason}`);
   return {
     grade: { grade: "fail", confidence: 1, graded_by: "router", reason },
   };
@@ -1215,7 +1216,7 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
     pick,
   });
   console.error(
-    `agent-router: would run ${pick.choice} (${pick.source}: ${pick.reason})`,
+    `agent-dispatch: would run ${pick.choice} (${pick.source}: ${pick.reason})`,
   );
   process.stdout.write(`${JSON.stringify(pick)}\n`);
   return 0;
@@ -1229,7 +1230,7 @@ function ls(): number {
     console.error(
       `${r.alive ? "running" : "STALE  "} ${r.choice.padEnd(12)} ${r.started_at}  ${r.label}`,
     );
-  if (rows.length === 0) console.error("agent-router: nothing running");
+  if (rows.length === 0) console.error("agent-dispatch: nothing running");
   process.stdout.write(`${JSON.stringify({ schema: SCHEMA, active: rows })}\n`);
   return 0;
 }
@@ -1447,8 +1448,8 @@ function refuseOverUngraded(
       `${owed.length} finished run(s) in ${cwd} are not graded; grade each before dispatching more work here:`,
       ...lines,
       ...more,
-      `Run the checks on its work, then: agent-router grade ${id} --evidence <checks file>`,
-      `If it cannot be judged (it never started, its work is gone): agent-router grade ${id} --waive "<why>"`,
+      `Run the checks on its work, then: agent-dispatch grade ${id} --evidence <checks file>`,
+      `If it cannot be judged (it never started, its work is gone): agent-dispatch grade ${id} --waive "<why>"`,
     ].join("\n"),
   );
 }
@@ -1562,7 +1563,9 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
   const roster = await loadRosterOrDie();
   const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
   if (logged === undefined)
-    fatal(`no run ${runId} in ${LOG_FILE} (agent-router stats lists the log)`);
+    fatal(
+      `no run ${runId} in ${LOG_FILE} (agent-dispatch stats lists the log)`,
+    );
   if (!existsSync(evidencePath))
     fatal(
       `no such evidence file: ${evidencePath} — put the check output there (lint, typecheck, tests vs baseline)`,
@@ -1578,7 +1581,7 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
   if (!reply.ok) fatal(`not graded: ${reply.reason}`);
   const record = recordGrade(runId, reply, evidencePath, evidence);
   console.error(
-    `agent-router: ${runId} graded ${reply.grade} (confidence ${reply.confidence.toFixed(2)})`,
+    `agent-dispatch: ${runId} graded ${reply.grade} (confidence ${reply.confidence.toFixed(2)})`,
   );
   process.stdout.write(
     `${JSON.stringify({ schema: SCHEMA, ...record, jev: undefined })}\n`,
@@ -1601,9 +1604,11 @@ function recordWaiver(runId: string, reason: string, by?: "router") {
 function waive(runId: string, reason: string): number {
   const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
   if (logged === undefined)
-    fatal(`no run ${runId} in ${LOG_FILE} (agent-router stats lists the log)`);
+    fatal(
+      `no run ${runId} in ${LOG_FILE} (agent-dispatch stats lists the log)`,
+    );
   const record = recordWaiver(runId, reason);
-  console.error(`agent-router: ${runId} waived — ${reason}`);
+  console.error(`agent-dispatch: ${runId} waived — ${reason}`);
   process.stdout.write(`${JSON.stringify({ schema: SCHEMA, ...record })}\n`);
   return 0;
 }
@@ -1649,7 +1654,7 @@ function stats(): number {
     })(),
   };
   console.error(
-    `agent-router: ${lines.length} records — explicit ${bySource.explicit}, jev ${bySource.jev}, default ${bySource.default}`,
+    `agent-dispatch: ${lines.length} records — explicit ${bySource.explicit}, jev ${bySource.jev}, default ${bySource.default}`,
   );
   process.stdout.write(`${JSON.stringify(report)}\n`);
   return 0;
@@ -1868,7 +1873,7 @@ async function exportRuns(since: string | undefined): Promise<number> {
 
 // --- ask: a typed question to Jev, for any caller ---------------------------------------------------
 //
-// Ported from driving-jev's jev.ts (retired 2026-10-06; agent-router is the one entry point for
+// Ported from driving-jev's jev.ts (retired 2026-10-06; agent-dispatch is the one entry point for
 // everything that talks to Jev). The request is validated BEFORE anything is sent. Ask returns Jev's
 // probabilities as given and never acts on them: thresholds and abstention stay with the caller.
 
@@ -1922,7 +1927,7 @@ function askFailure(code: 2 | 3 | 4 | 5, reason: string): number {
     compact.length <= ASK_DIAGNOSTIC_CHARS
       ? compact
       : `${compact.slice(0, ASK_DIAGNOSTIC_CHARS)} [truncated: ${compact.length} chars]`;
-  console.error(`agent-router: ${bounded === "" ? "ask failed" : bounded}`);
+  console.error(`agent-dispatch: ${bounded === "" ? "ask failed" : bounded}`);
   return code;
 }
 
@@ -2027,7 +2032,7 @@ async function resumeCommand(
   const runId = resolveRunId(id);
   const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
   if (logged === undefined)
-    fatal(`no run ${id} in ${LOG_FILE} (agent-router stats lists the log)`);
+    fatal(`no run ${id} in ${LOG_FILE} (agent-dispatch stats lists the log)`);
   const worker = logged.worker;
   const session = worker?.session;
   if (session === undefined || session === "")
@@ -2098,13 +2103,14 @@ const rejectPrototypeFlag = (type: string, flag: string): void => {
     fatal(`unknown option '--${flag}'`);
 };
 const argv = cli({
-  name: "agent-router",
+  name: "agent-dispatch",
+  version: pkg.version,
   strictFlags: true,
   ignoreArgv: rejectPrototypeFlag,
   parameters: [],
   help: {
     description:
-      "Start a worker for a task (the one agent-router entry point), and report on dispatches.",
+      "Start a worker for a task and report on dispatches. agent-router is an alias for one release.",
   },
   commands: [
     command({
@@ -2389,12 +2395,12 @@ function resultCommand(
     (l) => l.kind === "run" && l.run_id === resolved,
   );
   if (logged === undefined)
-    fatal(`no run ${id} in ${LOG_FILE} (agent-router stats lists the log)`);
+    fatal(`no run ${id} in ${LOG_FILE} (agent-dispatch stats lists the log)`);
   if (showBrief) {
     const text = loggedBrief(logged);
     if (text === undefined) {
       console.error(
-        `agent-router: no stored brief for ${logged.run_id ?? id} (briefs/<sha256>.md missing, and the original file is gone)`,
+        `agent-dispatch: no stored brief for ${logged.run_id ?? id} (briefs/<sha256>.md missing, and the original file is gone)`,
       );
       return 1;
     }
@@ -2409,10 +2415,11 @@ function resultCommand(
   const reportNote = reportNoteFor(logged, typed);
   if (asJson) {
     process.stdout.write(`${JSON.stringify(logged)}\n`);
-    if (reportNote !== undefined) console.error(`agent-router: ${reportNote}`);
+    if (reportNote !== undefined)
+      console.error(`agent-dispatch: ${reportNote}`);
     if (report.trim() === "" && !typed.success)
       console.error(
-        `agent-router: no final report (outcome=${outcome}; cause=${cause ?? "not recorded"})`,
+        `agent-dispatch: no final report (outcome=${outcome}; cause=${cause ?? "not recorded"})`,
       );
     return report.trim() === "" && !typed.success ? 1 : 0;
   }

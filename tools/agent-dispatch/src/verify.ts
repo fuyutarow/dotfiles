@@ -1,9 +1,9 @@
-// Runs a ticket's verify commands for agent-router, after the worker has exited. Consumers:
-// agent-router run. A worker cannot hold a long verification (its foreground call is capped, and a
+// Runs a ticket's verify commands for agent-dispatch, after the worker has exited. Consumers:
+// agent-dispatch run. A worker cannot hold a long verification (its foreground call is capped, and a
 // backgrounded test dies with the worker), so the router runs them: in order, `sh -c`, stdin closed,
 // stderr folded into stdout, under ONE shared time bound.
 
-import { attempt } from "../hooks/attempt.ts";
+import { attempt } from "../../shared/src/attempt.ts";
 
 export interface VerifyResult {
   cmd: string;

@@ -247,7 +247,7 @@ git ls-files -z -- \
   ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \
   'agents/goal-kernel/cli.ts' \
   ':(glob)tools/agent-resource-run/src/*.ts' \
-  ':(glob)agents/routing-control/*.ts' ':(glob)agents/routing-control/workers/*.ts' \
+  ':(glob)tools/agent-dispatch/src/*.ts' ':(glob)tools/agent-dispatch/src/workers/*.ts' \
   ':(glob)tools/serena-foreground/src/*.ts' ':(glob)tools/smart-open/src/*.ts' \
   ':(exclude)agents/claude/hooks/repo-retrieve.ts' |
   xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
@@ -335,7 +335,7 @@ run = "bunx --bun tsgo --noEmit"
 [tasks.test]
 alias = "t"
 description = "Test the repo: hooks, resource control, repo-retrieve, Bun script floor, skills, zsh terminal hygiene, and toolchain scope"
-depends = ["test:hooks", "test:resource-control", "test:agent-router", "test:scripts", "test:skills", "test:android", "test:zsh", "test:mise-scope"]
+depends = ["test:hooks", "test:resource-control", "test:agent-dispatch", "test:scripts", "test:skills", "test:android", "test:zsh", "test:mise-scope"]
 
 [tasks."test:android"]
 dir = "{{config_root}}"
@@ -361,10 +361,10 @@ dir = "{{config_root}}"
 description = "repo-retrieve route and CLI contract tests (fake ccc/rg executables); also run by test:scripts via tools/*/tests"
 run = "bun test tools/rr/tests"
 
-[tasks."test:agent-router"]
+[tasks."test:agent-dispatch"]
 dir = "{{config_root}}"
-description = "dispatch (the one worker entry point) tests: fake codex-run, fake Jev, scratch state dir"
-run = "bun test agents/routing-control/tests"
+description = "agent-dispatch (the one worker entry point) tests: fake codex-run, fake Jev, scratch state dir"
+run = "bun test tools/agent-dispatch/tests"
 
 [tasks."test:skills"]
 dir = "{{config_root}}"

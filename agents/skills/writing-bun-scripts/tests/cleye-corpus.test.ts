@@ -14,8 +14,8 @@ type CorpusEntry = Readonly<{
 
 const CORPUS = [
   { path: "agents/goal-kernel/cli.ts" },
-  { path: "agents/routing-control/agent-router.ts" },
-  { path: "agents/routing-control/workers/codex-run.ts" },
+  { path: "tools/agent-dispatch/src/agent-dispatch.ts" },
+  { path: "tools/agent-dispatch/src/workers/codex-run.ts" },
   { path: "scripts/render-oxlintrc.ts" },
   { path: "scripts/vendor-deps.ts" },
   { path: "agents/models/check-releases.ts" },
@@ -48,9 +48,9 @@ const CORPUS = [
   { path: "agents/skills/directing-research/scripts/research-check.ts" },
   { path: "agents/skills/directing-research/scripts/research-run-check.ts" },
   { path: "agents/skills/driving-antigravity/scripts/probe-models.ts" },
-  { path: "agents/routing-control/workers/claude-probe.ts" },
-  { path: "agents/routing-control/workers/run-claude.ts" },
-  { path: "agents/routing-control/workers/codex-probe.ts" },
+  { path: "tools/agent-dispatch/src/workers/claude-probe.ts" },
+  { path: "tools/agent-dispatch/src/workers/run-claude.ts" },
+  { path: "tools/agent-dispatch/src/workers/codex-probe.ts" },
   { path: "agents/skills/driving-git/scripts/git-check.ts" },
   { path: "agents/skills/driving-grok/scripts/probe-models.ts" },
   { path: "agents/skills/forging-novel-theses/scripts/gate-check.ts" },

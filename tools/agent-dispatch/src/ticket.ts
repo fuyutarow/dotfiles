@@ -1,16 +1,16 @@
-// The typed work ticket at the top of an agent-router brief: TOML front matter between `+++` lines.
+// The typed work ticket at the top of an agent-dispatch brief: TOML front matter between `+++` lines.
 // A brief that does not start with `+++` is LEGACY — it comes back untouched, so no running
-// coordinator breaks. Consumers: agent-router (run, pick). Pure: no I/O, no state.
+// coordinator breaks. Consumers: agent-dispatch (run, pick). Pure: no I/O, no state.
 //
 //   +++
 //   schema = 1
-//   writes = ["agents/routing-control/**"]   # globs relative to --cd; [] = read-only
-//   verify = ["bun test agents/routing-control/tests"]
+//   writes = ["tools/agent-dispatch/**"]   # globs relative to --cd; [] = read-only
+//   verify = ["bun test tools/agent-dispatch/tests"]
 //   verify_timeout_s = 1200                  # optional; bound for all verify commands together
 //   capabilities = ["long-tool-loop"]        # optional; handed to Jev as required capabilities
 //   +++
 //   <the prose the worker receives>
-import { fromThrowable, z } from "../hooks/zod.ts";
+import { fromThrowable, z } from "../../shared/src/zod.ts";
 
 export const TICKET_SCHEMA = 1;
 export const DEFAULT_VERIFY_TIMEOUT_S = 1200;

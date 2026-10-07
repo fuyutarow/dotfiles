@@ -1,6 +1,6 @@
 // The dispatch roster (agents/models/dispatch-roster.toml), read and rendered in ONE place.
 // Consumers: the dispatch hook (agents/claude/hooks/enforce-dispatch-contract.ts), `codex-run
-// --choice` (agents/routing-control/workers/codex-run.ts) and scripts/render-home.ts (which
+// --choice` (tools/agent-dispatch/src/workers/codex-run.ts) and scripts/render-home.ts (which
 // writes rosterPolicy into the deployed ~/.claude/CLAUDE.md).
 // Zero-install like the hooks: zod comes from agents/hooks/zod.ts (the committed bundle).
 import { readFileSync } from "node:fs";
@@ -48,7 +48,7 @@ const AutoSchema = z.strictObject({
 });
 export type AutoPolicy = z.output<typeof AutoSchema>;
 
-// Bounds on a claude worker (run through agents/routing-control/workers/run-claude.ts): a run has a budget and a
+// Bounds on a claude worker (run through tools/agent-dispatch/src/workers/run-claude.ts): a run has a budget and a
 // turn limit, both stated, never the CLI's defaults.
 const ClaudeRunSchema = z.strictObject({
   max_budget_usd: z.number().gt(0),
@@ -118,7 +118,7 @@ export type Graded = Readonly<{ pass: number; partial: number; fail: number }>;
  *  cheapest row, and how its graded runs here went. SELECTION (owner 2026-10-06: 「model パフォーマン
  *  ステーブルと task brief によって選択されるべき」): the pick comes from these numbers against the
  *  brief — no hand-set weight or post-hoc route bias corrects Jev afterwards. The codex-over-claude
- *  tie-break is explicit in agent-router's question, and the route is part of each row's criterion. */
+ *  tie-break is explicit in agent-dispatch's question, and the route is part of each row's criterion. */
 export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
   const measured = [
     c.aa_index === undefined ? undefined : `AA ${c.aa_index}`,
@@ -154,7 +154,7 @@ export function rosterTable(r: Roster): string {
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
   return [
-    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record); it is asked for the cheapest row sufficient for the task, so a dearer row is picked only for a capability the task needs and cheaper rows measurably lack. When codex and claude rows are comparably capable for needed capabilities, prefer codex; choose claude only when codex rows measurably lack a needed capability. \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unreachable or answers outside the roster the default \`${r.default}\` runs, and the receipt says why.**`,
+    `- **Every dispatch goes through \`agent-dispatch run\` (\`agent-router\` is its alias for one release): Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record); it is asked for the cheapest row sufficient for the task, so a dearer row is picked only for a capability the task needs and cheaper rows measurably lack. When codex and claude rows are comparably capable for needed capabilities, prefer codex; choose claude only when codex rows measurably lack a needed capability. \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unreachable or answers outside the roster the default \`${r.default}\` runs, and the receipt says why.**`,
     `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; as of ${r.as_of}.`,
     "",
     ...rosterTable(r)
@@ -162,6 +162,6 @@ export function rosterPolicy(r: Roster): string {
       .map((l) => (l === "" ? "" : `  ${l}`)),
     "",
     `  How to choose: you do not — Jev does. Give it what it needs in the brief: scope (files, size), what is at risk (live hooks, harness), expected difficulty, how long a tool loop it needs.`,
-    `  How to run: \`agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write\` from Bash, in the background — the one entry point for codex AND claude rows (a claude row runs \`claude -p\` through agents/routing-control/workers/run-claude.ts, bounded at $${r.claude_run.max_budget_usd} and ${r.claude_run.max_turns} turns). It logs the pick, shows the run in the statusline, and prints a JSON receipt (a failure names its cause; every receipt says what the worker did). Grade each finished run before dispatching more from that cwd — \`agent-router grade <run_id> --evidence <checks>\` (Jev judges), or \`--waive "<why>"\` when it cannot be judged; until then a new run there is refused. A brief may open with a TOML ticket between \`+++\` lines (\`schema = 1\`, \`writes = [globs relative to --cd; [] = read-only]\`, \`verify = [commands]\`, optional \`verify_timeout_s\` (default 1200) and \`capabilities = [tags for Jev]\`; an invalid ticket is refused, exit 2): the worker gets only the prose after it, the ROUTER runs the verify commands after the worker exits (the worker must not background them), records their results and grades the run itself (\`graded_by: "router"\`, or a recorded waiver when Jev is unreachable), and a ticket run is blocked only by an ungraded run in the same cwd whose \`writes\` overlap its own (a conservative literal-directory-prefix test; read-only tickets never block and are never blocked). A brief without a ticket keeps the plain rule above. The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints this table.`,
+    `  How to run: \`agent-dispatch run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write\` from Bash, in the background — \`agent-router\` is its alias for one release. This is the one entry point for codex AND claude rows (a claude row runs \`claude -p\` through tools/agent-dispatch/src/workers/run-claude.ts, bounded at $${r.claude_run.max_budget_usd} and ${r.claude_run.max_turns} turns). It logs the pick, shows the run in the statusline, and prints a JSON receipt (a failure names its cause; every receipt says what the worker did). Grade each finished run before dispatching more from that cwd — \`agent-dispatch grade <run_id> --evidence <checks>\` (Jev judges), or \`--waive "<why>"\` when it cannot be judged; until then a new run there is refused. A brief may open with a TOML ticket between \`+++\` lines (\`schema = 1\`, \`writes = [globs relative to --cd; [] = read-only]\`, \`verify = [commands]\`, optional \`verify_timeout_s\` (default 1200) and \`capabilities = [tags for Jev]\`; an invalid ticket is refused, exit 2): the worker gets only the prose after it, the ROUTER runs the verify commands after the worker exits (the worker must not background them), records their results and grades the run itself (\`graded_by: "router"\`, or a recorded waiver when Jev is unreachable), and a ticket run is blocked only by an ungraded run in the same cwd whose \`writes\` overlap its own (a conservative literal-directory-prefix test; read-only tickets never block and are never blocked). A brief without a ticket keeps the plain rule above. The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints this table.`,
   ].join("\n");
 }

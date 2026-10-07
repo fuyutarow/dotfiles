@@ -2,7 +2,7 @@
 
 > The non-interactive surface of Claude Code: changing the system prompt's tone, the local
 > status bar, and wiring it into CI / GitHub. Codex driving `claude -p` as a subprocess is owned
-> by `agent-router` (`agents/routing-control`); this reference retains harness/CI facts. Parent:
+> by `dispatch` (`tools/dispatch`); this reference retains harness/CI facts. Parent:
 > SKILL.md §0–§4.
 
 ---
@@ -115,7 +115,7 @@ echo "[$MODEL] ${PCT}% context"
 
 ## §3. Headless mode — `claude -p`
 
-**Codex as the caller:** use `agent-router` (`agents/routing-control`) for its trusted-CWD,
+**Codex as the caller:** use `dispatch` (`tools/dispatch`) for its trusted-CWD,
 permission, probe, bounded-output, and cross-model relay gates. Do not copy its invocation recipe
 into a hook or `settings.json`; configure those surfaces through this parent skill first.
 

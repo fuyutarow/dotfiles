@@ -502,13 +502,18 @@ mise run hook:post-merge
 # C: never moved. RECLAIM_TIER=blind turns an unmet precondition (no sudo, not WSL) into a SKIP
 # line with the human command, exit 0; `mise run reclaim:system` alone still fails loudly.
 [tasks.reclaim]
-description = "Reclaim disk, blind tier: clean + builds + toolchains, then system (WSL) — which SKIPs with the human command when passwordless sudo is unavailable, so it can never abort the others. Nothing interactive, nothing irreversible. Human tiers: reclaim:system (sudo), reclaim:vhdx, reclaim:pick, reclaim:purge."
-depends = ["reclaim:clean", "reclaim:builds", "reclaim:toolchains"]
+description = "Reclaim disk, blind tier: clean + builds + rust + toolchains, then system (WSL) — which SKIPs with the human command when passwordless sudo is unavailable, so it can never abort the others. Nothing interactive, nothing irreversible. Human tiers: reclaim:system (sudo), reclaim:vhdx, reclaim:pick, reclaim:purge."
+depends = ["reclaim:clean", "reclaim:builds", "reclaim:rust", "reclaim:toolchains"]
 run = 'RECLAIM_TIER=blind bun ~/dotfiles/scripts/reclaim-system.ts'
 
 [tasks."reclaim:clean"]
 description = "Reclaim disk: clear package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo/mise/julia) via each tool's OWN gc/prune command. Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
 run = 'bun ~/dotfiles/scripts/reclaim-run.ts clean -- bun ~/dotfiles/scripts/reclaim-clean.ts'
+
+[tasks."reclaim:rust"]
+dir = "{{config_root}}"
+description = "cargo clean every Rust target/ under AUDIT_PROJECTS (~/Workspace) not built for RUST_TARGET_DAYS (7; 30 without sccache) and with no cargo/rustc running inside it. Blind tier: sccache makes the rebuild cheap, so this goes sooner than reclaim:builds' 30 days. Frees space now (cargo's own clean, no graveyard). -- --dry-run to preview."
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts rust -- bun ~/dotfiles/scripts/reclaim-rust-targets.ts'
 
 [tasks."reclaim:toolchains"]
 description = "Prune rustup toolchains, vscode-server old versions and self-updating CLIs' superseded releases (codex, claude — scripts/version-stores.ts) — no tool-native gc exists for any, so this writes an explicit safety predicate instead (default/pin-scan for rustup; current/live-process/recency for the rest). Deletes via rip. KEEP_DAYS/AUDIT_PROJECTS to retune."

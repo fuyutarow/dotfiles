@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { storageLine } from "../hooks/storage-line.ts";
-import { cgroupMemory } from "../resource-control/lib/cgroup-memory.ts";
+import { cgroupMemory } from "../../tools/agent-resource-run/src/lib/cgroup-memory.ts";
 import { z } from "../hooks/zod.ts";
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import {

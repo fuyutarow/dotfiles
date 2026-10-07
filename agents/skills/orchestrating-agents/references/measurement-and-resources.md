@@ -73,7 +73,7 @@ RESOURCE-ENVELOPE(/absolute/path/to/job.resource.json): agent-resource-run only
 呼び替えたり、pilotを「計器」と呼んだりして使わない。envelopeを宣言した腕は、その計算を
 raw `julia` / `python` / test runnerで発射せず、指定pathを `agent-resource-run --manifest ... --`
 へ渡す。dispatch hookの実装は `agents/{claude,codex}/hooks/`、実行の正本は
-`agents/resource-control/agent-resource-run.ts` である。
+`tools/agent-resource-run/src/agent-resource-run.ts` である。
 
 ### 資源envelope schema
 

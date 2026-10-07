@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fromThrowable, type Result } from "neverthrow";
-import { z } from "../../hooks/zod.ts";
+import { z } from "../../shared/src/zod.ts";
 import {
   buildSampledLaunch,
   buildSystemdLaunch,
@@ -43,8 +43,8 @@ import {
   type HostSnapshot,
   type ResourceManifest,
   type Reservation,
-} from "../agent-resource-run.ts";
-import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
+} from "../src/agent-resource-run.ts";
+import { decoded, decodedJson } from "../../shared/src/decode.ts";
 
 // Platform requirements, declared — a test that needs a facility this machine lacks is SKIPPED
 // and counted as such, never failed for that reason (macOS has no util-linux setsid/taskset; a
@@ -565,7 +565,12 @@ describe("resource policy", () => {
     "..",
     "resource-policy.toml",
   );
-  const scriptPath = resolve(import.meta.dir, "..", "agent-resource-run.ts");
+  const scriptPath = resolve(
+    import.meta.dir,
+    "..",
+    "src",
+    "agent-resource-run.ts",
+  );
 
   /** Writes the shipped policy with `edit` applied to its text; returns the fixture path. */
   function policyFixture(edit: (text: string) => string): string {
@@ -1049,13 +1054,13 @@ describe("admission receipt", () => {
   // — see README.md "Child admission receipt" and the task-owned outer envelope at
   // examples/resource-runner-tests.resource.json. `mise run test:resource-control` wraps itself
   // that way wherever the runner can admit (Linux + a live user systemd); a plain
-  // `bun test agents/resource-control`, or the task on macOS, does not (measured:
+  // `bun test tools/agent-resource-run`, or the task on macOS, does not (measured:
   // AGENT_RESOURCE_ADMISSION_RECEIPT is unset there), so this test skips instead of failing on a
   // precondition the invocation never promised — asserting on `undefined` would be a false
   // failure, not a caught bug. Confirmed green when actually wrapped:
-  //   bun agents/resource-control/agent-resource-run.ts \
-  //     --manifest agents/resource-control/examples/resource-runner-tests.resource.json -- \
-  //     bun test agents/resource-control/tests/agent-resource-run.test.ts -t "accepts only a runner child"
+  //   bun tools/agent-resource-run/src/agent-resource-run.ts \
+  //     --manifest tools/agent-resource-run/examples/resource-runner-tests.resource.json -- \
+  //     bun test tools/agent-resource-run/tests/agent-resource-run.test.ts -t "accepts only a runner child"
   const outerReceiptIsPresent =
     process.env.AGENT_RESOURCE_ADMISSION_RECEIPT !== undefined;
   if (!outerReceiptIsPresent) {
@@ -1144,7 +1149,7 @@ describe("admission receipt", () => {
       const receiptPath = join(stateDirectory, "child-receipt.json");
       const runnerModulePath = join(
         import.meta.dir,
-        "../agent-resource-run.ts",
+        "../src/agent-resource-run.ts",
       );
       const childScript = [
         'import { readFileSync, writeFileSync } from "node:fs";',
@@ -1436,7 +1441,7 @@ describe("bounded execution", () => {
   // own scope UUIDs against dmesg, once by attribution failing because the dmesg ring had
   // already rolled past the run and only a firedancer journal read settled it). Before
   // investigating an unattributed `agent-resource-*.scope` OOM-kill in dmesg or a journal, check
-  // whether `bun test agents/resource-control/` ran around that time — this is very likely it.
+  // whether `bun test tools/agent-resource-run/` ran around that time — this is very likely it.
   test.skipIf(NO_CGROUP_SCOPES)(
     "the cgroup kills a job before it can exceed its RAM envelope",
     async () => {
@@ -1644,4 +1649,24 @@ describe("sampled enforcement (host opt-in)", () => {
       );
     },
   );
+});
+
+describe("--version", () => {
+  test("prints the version of this package.json", () => {
+    const pkg = decodedJson(
+      z.object({ version: z.string() }),
+      readFileSync(join(import.meta.dir, "../package.json"), "utf8"),
+    );
+    const run = Bun.spawnSync(
+      [
+        "bun",
+        join(import.meta.dir, "../src/agent-resource-run.ts"),
+        "--version",
+      ],
+      { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
+    );
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout.toString().trim()).toBe(pkg.version);
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
+  });
 });

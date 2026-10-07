@@ -246,9 +246,9 @@ git ls-files -z -- \
   ':(glob)agents/claude/*.ts' ':(glob)agents/claude/hooks/*.ts' ':(glob)agents/hooks/*.ts' \
   ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \
   'agents/goal-kernel/cli.ts' \
-  'agents/resource-control/agent-resource-run.ts' \
+  ':(glob)tools/agent-resource-run/src/*.ts' \
   ':(glob)agents/routing-control/*.ts' ':(glob)agents/routing-control/workers/*.ts' \
-  'agents/serena-control/serena-foreground.ts' ':(glob)tools/smart-open/src/*.ts' \
+  ':(glob)tools/serena-foreground/src/*.ts' ':(glob)tools/smart-open/src/*.ts' \
   ':(exclude)agents/claude/hooks/repo-retrieve.ts' |
   xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
 '''

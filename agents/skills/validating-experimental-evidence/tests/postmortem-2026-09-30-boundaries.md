@@ -42,7 +42,7 @@ Git ownership remains in driving-git; adding a duplicate warning here would not 
 ## Verified mechanism limits
 
 The current resource runner rejects `[N/A]` in `parseNvidiaSmiComputeAppRow` and initializes its peak as undefined.
-Its receipt omits unavailable VRAM, as documented in `agents/resource-control/README.md`.
+Its receipt omits unavailable VRAM, as documented in `tools/agent-resource-run/README.md`.
 The source's printed zero therefore has unverified provenance; no current runner bug is inferred from that report.
 Allocator telemetry alone also cannot establish context, library or unobserved-phase bounds.
 

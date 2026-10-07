@@ -20,9 +20,9 @@ const CORPUS = [
   { path: "scripts/vendor-deps.ts" },
   { path: "agents/models/check-releases.ts" },
   { path: "agents/research-control/cli.ts" },
-  { path: "agents/resource-control/agent-resource-run.ts" },
+  { path: "tools/agent-resource-run/src/agent-resource-run.ts" },
   { path: "tools/rr/src/bench-definitions.ts" },
-  { path: "agents/serena-control/serena-foreground.ts" },
+  { path: "tools/serena-foreground/src/serena-foreground.ts" },
   { path: "agents/skills/codifying-doctrine/scripts/doctrine-check.ts" },
   { path: "agents/skills/commanding-research-fleets/scripts/check.ts" },
   {
@@ -100,6 +100,8 @@ const CORPUS = [
   { path: "scripts/wsl-reap.ts" },
   { path: "scripts/wsl-wake.ts" },
   { path: "scripts/wsl-winget.ts" },
+  { path: "tools/smart-open/src/receive.ts" },
+  { path: "tools/smart-open/src/smart-open.ts" },
 ] satisfies readonly CorpusEntry[];
 
 function run(entry: CorpusEntry, argv: string[]) {
@@ -142,7 +144,7 @@ async function productionCleyeImportsIn(base: string): Promise<string[]> {
 
 async function productionCleyeImports(): Promise<string[]> {
   const paths: string[] = [];
-  for (const base of ["agents", "cocoindex", "scripts", "tools/rr"] as const) {
+  for (const base of ["agents", "cocoindex", "scripts", "tools"] as const) {
     paths.push(...(await productionCleyeImportsIn(base)));
   }
   return paths.toSorted();

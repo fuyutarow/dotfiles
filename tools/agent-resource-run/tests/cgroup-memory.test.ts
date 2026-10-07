@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cgroupMemory } from "../lib/cgroup-memory.ts";
+import { cgroupMemory } from "../src/lib/cgroup-memory.ts";
 
 // cgroup-memory: a container's limit and working set, read from fixture files.
 const GiB = 1024 ** 3;

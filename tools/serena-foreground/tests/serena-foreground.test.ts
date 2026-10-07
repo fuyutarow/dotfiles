@@ -4,7 +4,9 @@ import {
   SERENA_DEFAULT_CONTEXT,
   buildSerenaCommand,
   buildSerenaManifest,
-} from "../serena-foreground.ts";
+} from "../src/serena-foreground.ts";
+
+import pkg from "../package.json" with { type: "json" };
 
 const GiB = 1024 ** 3;
 
@@ -75,5 +77,17 @@ describe("explicit Serena lifecycle", () => {
       device: { kind: "cpu", gpu_status: "incompatible" },
       cleanup: { mode: "term-then-kill", grace_seconds: 10 },
     });
+  });
+});
+
+describe("--version", () => {
+  test("prints the version of this package.json", () => {
+    const run = Bun.spawnSync(
+      ["bun", `${import.meta.dir}/../src/serena-foreground.ts`, "--version"],
+      { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
+    );
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout.toString().trim()).toBe(pkg.version);
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 });

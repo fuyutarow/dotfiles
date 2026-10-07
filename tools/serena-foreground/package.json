@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/serena-foreground",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "serena-foreground": "src/serena-foreground.ts"
+  }
+}

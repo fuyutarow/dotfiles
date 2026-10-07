@@ -20,7 +20,7 @@
 // daemon; those are named here for that reason.
 //
 // EXPLICITLY ALLOWED, and why:
-//   setsid --wait / -w      the parent still waits — no detachment. agent-resource-run.ts
+//   setsid --wait / -w      the parent still waits — no detachment. agent-resource-run
 //                           itself runs `setsid --wait systemd-run …`; denying it would break
 //                           the very runner this policy wants everything to go through.
 //   systemd-run --user …    manager-owned, so it survives the session BY DESIGN while staying

@@ -75,7 +75,7 @@ gpu_vram_sample_interval_ms = 1000
 #   - agent-resource-run subtracts the ccc partition on gpu_partition_device up front, used or not
 #     (the daemon is resident), and the reranker's only while repo-retrieve-rerank.service runs
 #     (it starts on demand and exits after 5 idle minutes).
-#   - Each service caps ITSELF to its partition (agents/resource-control/gpu_partition.py, read by
+#   - Each service caps ITSELF to its partition (tools/agent-resource-run/gpu_partition.py, read by
 #     the ccc daemon launcher cocoindex/ccc-daemon-launch.py and by
 #     tools/rr/src/rerank_server.py): the PyTorch allocator is limited to the partition
 #     minus a CUDA-context allowance, and a service that finds less than its partition free at

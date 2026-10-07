@@ -6,7 +6,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resourceDeclarationResult } from "../../resource-control/lib/dispatch-declaration.ts";
+import { resourceDeclarationResult } from "../../../tools/agent-resource-run/src/lib/dispatch-declaration.ts";
 import { attempt } from "../../hooks/attempt.ts";
 import {
   compareVersions,

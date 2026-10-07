@@ -2,7 +2,7 @@
 // output streams through untouched).
 //
 // WHY A LAUNCHER AND NOT A ONE-LINE TASK. The receipt integration test in
-// agents/resource-control/tests/agent-resource-run.test.ts verifies a receipt-bearing CHILD from
+// tools/agent-resource-run/tests/agent-resource-run.test.ts verifies a receipt-bearing CHILD from
 // inside a receipt-bearing PARENT, so the `bun test` process itself must run under the runner's
 // own admission — the task-owned outer envelope examples/resource-runner-tests.resource.json
 // (README, "Child admission receipt"). From 2026-08-21 to 2026-09-12 the task never did that, so
@@ -22,11 +22,11 @@
 const SUITE = [
   "bun",
   "test",
-  "agents/resource-control",
-  "agents/serena-control",
+  "tools/agent-resource-run/tests",
+  "tools/serena-foreground/tests",
 ];
 const ENVELOPE =
-  "agents/resource-control/examples/resource-runner-tests.resource.json";
+  "tools/agent-resource-run/examples/resource-runner-tests.resource.json";
 
 function userSystemdCanAdmit(): boolean {
   if (process.platform !== "linux") return false;
@@ -43,7 +43,7 @@ function userSystemdCanAdmit(): boolean {
 const command = userSystemdCanAdmit()
   ? [
       "bun",
-      "agents/resource-control/agent-resource-run.ts",
+      "tools/agent-resource-run/src/agent-resource-run.ts",
       "--manifest",
       ENVELOPE,
       "--",

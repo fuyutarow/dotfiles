@@ -1119,7 +1119,7 @@ Distillation stays inside P7 rather than adding a gate. `measurement-and-resourc
 home for the pre-pilot envelope, conditional GPU-first rule, aggregate reservations, analytic memory
 bound, system reserve, and monitor-enforcement limitation. `delegation-contracts.md` adds exactly one
 dispatch field/pointer; the core P7 row remains an entrypoint. Hard behavior is implemented in
-`agents/resource-control/agent-resource-run.ts` and the Claude/Codex dispatch hooks.
+`tools/agent-resource-run/src/agent-resource-run.ts` and the Claude/Codex dispatch hooks.
 
 Desk-check:
 

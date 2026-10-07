@@ -86,8 +86,8 @@ reading the catalog as it stands.
    the public definition in its file that calls it.
 3. **Rerank**: `rerank_server.py`, enabled by `mise run wsl:rerank` (systemd socket activation,
    idle exit after 5 min). It lives in a FIXED VRAM partition, `gpu_partition_rerank_mib` in
-   `agents/resource-control/resource-policy.toml`, hard-capped in-process by
-   `agents/resource-control/gpu_partition.py`; agent-resource-run reserves the same partition up
+   `tools/agent-resource-run/resource-policy.toml`, hard-capped in-process by
+   `tools/agent-resource-run/gpu_partition.py`; agent-resource-run reserves the same partition up
    front. Without its partition it refuses (CPU measured 80-90 s per query) and the route answers
    `UNRANKED`.
 

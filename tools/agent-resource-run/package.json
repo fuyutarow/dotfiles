@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/agent-resource-run",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agent-resource-run": "src/agent-resource-run.ts"
+  }
+}

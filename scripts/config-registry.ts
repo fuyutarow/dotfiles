@@ -308,10 +308,12 @@ const OTHER: readonly Surface[] = [
       "tools/shared/package.json",
       "tools/smart-open/package.json",
       "tools/rr/package.json",
+      "tools/agent-resource-run/package.json",
+      "tools/serena-foreground/package.json",
     ],
     deployed: "the checkout",
     consumer:
-      "Bun package metadata of the tools/ packages (shared modules; smart-open's version, read by `smart-open --version`)",
+      "Bun package metadata of the tools/ packages (shared modules; each CLI reads its own version)",
     writer: "human, in the repo",
     verify: "mise run lint:ts · typecheck",
   },
@@ -450,7 +452,7 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["agents/resource-control/resource-policy.toml"],
+    sources: ["tools/agent-resource-run/resource-policy.toml"],
     deployed: "the checkout",
     consumer: "agent-resource-run (admission)",
     writer: "human, in the repo",

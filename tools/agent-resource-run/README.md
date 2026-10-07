@@ -1,10 +1,10 @@
 # Agent resource control
 
-This directory implements the machine floor; it does not own policy. The sole schema and
+`tools/agent-resource-run/` implements the machine floor; it does not own policy. The sole schema and
 GPU-first argument live in
 `agents/skills/orchestrating-agents/references/measurement-and-resources.md` P7.
 
-`agent-resource-run.ts` is the package `bin` `agent-resource-run` (installed into `~/.bun/bin` by
+`src/agent-resource-run.ts` is the package `bin` `agent-resource-run` (installed into `~/.bun/bin` by
 `bun link` via dotfiles `mise run deps`). On Linux it reserves a
 disjoint CPU set and aggregate RAM/VRAM/scratch headroom. Each admitted command runs in a transient
 user-systemd scope with a CPU quota, `MemoryHigh` and `MemoryMax` both set to the exact declared
@@ -22,7 +22,7 @@ a monitor-only fallback.
 **Investigating an unattributed `agent-resource-*.scope` OOM-kill?** `agent-resource-run.test.ts`
 deliberately triggers a real kernel OOM-kill against a real systemd scope as one test's passing
 condition (2026-09-04, mistaken for live-dispatch harm twice in one evening). Check whether
-`bun test agents/resource-control/` ran around that time before assuming the kill came from a real
+`bun test tools/agent-resource-run/` ran around that time before assuming the kill came from a real
 dispatch — see that test's own comment for the incident history.
 
 Several declared GPU jobs may share one device: the controller aggregates the declared
@@ -60,9 +60,9 @@ refusal.
 
 ## Measured peak, on release
 
-The manifest's `host_ram_peak_bytes`/`vram_peak_bytes` are what the job *declared*; a `RELEASE`
+The manifest's `host_ram_peak_bytes`/`vram_peak_bytes` are what the job _declared_; a `RELEASE`
 line — printed once per run, whether the job passed or breached, right before the systemd scope
-is torn down — reports what it *measured*: `ram_peak_measured_bytes` (preferring the scope's own
+is torn down — reports what it _measured_: `ram_peak_measured_bytes` (preferring the scope's own
 cgroup `MemoryPeak`, kernel-tracked and unaffected by the monitor's own polling interval; falling
 back to the highest `/proc` RSS the monitor sampled when cgroup accounting is unavailable —
 `ram_peak_source` says which) and, for a `gpu` job, `vram_peak_measured_bytes` sampled from
@@ -131,11 +131,11 @@ cooperating child launched by this runner has a byte-bound manifest receipt and 
 runner's scope; it does not establish a remote or adversary-resistant launcher identity.
 
 The Linux receipt integration test uses the task-owned outer envelope at
-`agents/resource-control/examples/resource-runner-tests.resource.json`: it grants three CPUs so
+`tools/agent-resource-run/examples/resource-runner-tests.resource.json`: it grants three CPUs so
 the inner two-CPU reservation can retain the controller's one-CPU safety reserve, and it reserves
 768 MiB for the inner 512 MiB scope plus the outer Bun test runner/controller. The inner receipt
 job is the separate two-CPU manifest at
-`agents/resource-control/examples/resource-runner-receipt-inner.resource.json`. The test writes
+`tools/agent-resource-run/examples/resource-runner-receipt-inner.resource.json`. The test writes
 the runner-child environment and receipt to its temporary state directory, confirms verification
 inside the runner scope, then reuses that exact environment in a direct child and requires
 verification to fail because its cgroup does not contain the receipt's scope component.
@@ -144,14 +144,14 @@ Smoke check:
 
 ```bash
 agent-resource-run \
-  --manifest "$HOME/dotfiles/agents/resource-control/examples/cpu-smoke.resource.json" \
+  --manifest "$HOME/dotfiles/tools/agent-resource-run/examples/cpu-smoke.resource.json" \
   --check-only
 ```
 
 ## Named resource classes, without copying the manifest per ticket
 
 `decideAdmission` refuses two live reservations under the same `job_id`, and `job_id` is a field
-*inside* the manifest — so running several concurrent tickets from one resource shape (say, a
+_inside_ the manifest — so running several concurrent tickets from one resource shape (say, a
 "cpu-8g" class) used to force a fresh copy of the file per ticket just to give each one a unique
 identity (reported live 2026-09-26: 20+ per-ticket copies of one template piling up under one
 fleet's envelope directory). `--job-id <id>` overrides the manifest's own `job_id` at invocation

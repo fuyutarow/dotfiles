@@ -45,7 +45,7 @@ def local_config() -> tuple[str, int]:
 MODEL, IDLE_SECONDS = local_config()
 MAX_TOKENS = 384
 BATCH = 4
-# GPU budget: a fixed partition, `gpu_partition_rerank_mib` in agents/resource-control/
+# GPU budget: a fixed partition, `gpu_partition_rerank_mib` in tools/agent-resource-run/
 # resource-policy.toml, enforced in-process by gpu_partition.py and reserved up front by
 # agent-resource-run. It once held ~11 GB (2026-10-01): every forward computed full-vocabulary
 # logits for every token (batch x 384 x 151k), PyTorch's cache kept that, and every research job

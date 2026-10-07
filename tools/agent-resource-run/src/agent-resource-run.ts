@@ -29,7 +29,8 @@ import {
   type Result,
   type ResultAsync,
 } from "neverthrow";
-import { jsonOf, jsonText, z } from "../hooks/zod.ts";
+import { jsonOf, jsonText, z } from "../../shared/src/zod.ts";
+import pkg from "../package.json" with { type: "json" };
 import { cgroupMemory } from "./lib/cgroup-memory.ts";
 
 const KiB = 1024;
@@ -37,7 +38,7 @@ const MiB = 1024 ** 2;
 const GiB = 1024 ** 3;
 // Implementation invariants, not operator policy. Every operator-tunable threshold (CPU/RAM/
 // scratch/VRAM safety headroom, GPU idle rules and concurrency cap, sampling intervals) and the
-// reason for its value lives in resource-policy.toml next to this file — see loadResourcePolicy.
+// reason for its value lives in resource-policy.toml one directory up — see loadResourcePolicy.
 const LOCK_WAIT_MS = 2_000;
 const LOCK_STALE_MS = 5_000;
 const MIN_KERNEL_TASKS = 32;
@@ -50,7 +51,7 @@ class StateError extends Error {}
 
 // --- Policy: CONFIG vs MECHANISM ----------------------------------------------------------------
 // resource-policy.toml says HOW MUCH is held back; this file says HOW. The TOML is resolved next
-// to this script's real path (import.meta.dir, so the `bun link` bin finds it), or at the
+// to this script's real path, one directory up from src/ (import.meta.dir, so the `bun link` bin finds it), or at the
 // absolute path in AGENT_RESOURCE_POLICY (tests). Every key is required, typed, and range-checked;
 // any violation refuses admission with the file and key named — never a guessed default.
 
@@ -208,7 +209,7 @@ const POLICY_RULES: Record<string, PolicyRule> = {
   },
 };
 
-const DEFAULT_POLICY_PATH = join(import.meta.dir, "resource-policy.toml");
+const DEFAULT_POLICY_PATH = join(import.meta.dir, "..", "resource-policy.toml");
 
 /** The policy file this process reads: AGENT_RESOURCE_POLICY (absolute) or the shipped TOML. */
 export function resourcePolicyPath(): Result<string, UsageError> {
@@ -1164,7 +1165,7 @@ type GpuLedger = {
  * STANDING PARTITIONS (owner ruling 2026-10-01: 「VRAM は ccc と分けて使うべきです。はじめから
  * 隔壁しておけよ」). The resident services — the ccc embedder daemon and the repo-retrieve
  * reranker — each own a fixed VRAM partition, hard-capped inside their own process
- * (agents/resource-control/gpu_partition.py, sized here in resource-policy.toml). Their partitions
+ * (tools/agent-resource-run/gpu_partition.py, sized here in resource-policy.toml). Their partitions
  * count as reserved from the start, used or not: a job never meets a card "mysteriously full" when
  * a service wakes up, and a service never grows into job memory.
  *
@@ -2589,6 +2590,7 @@ async function main(): Promise<Result<number, Error>> {
   const parsed = cli(
     {
       name: "agent-resource-run",
+      version: pkg.version,
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       parameters: ["[command...]"],

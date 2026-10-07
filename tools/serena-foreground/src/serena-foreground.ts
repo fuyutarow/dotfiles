@@ -12,7 +12,8 @@ import {
   executeJob,
   validateManifest,
   type ResourceManifest,
-} from "../resource-control/agent-resource-run.ts";
+} from "../../agent-resource-run/src/index.ts";
+import pkg from "../package.json" with { type: "json" };
 
 const GiB = 1024 ** 3;
 export const SERENA_COMMIT = "29d07d4f6b7a04a0db3981d6c6be6f736cfb44d2";
@@ -145,6 +146,7 @@ async function main(): Promise<void> {
   const parsed = cli(
     {
       name: "serena-foreground",
+      version: pkg.version,
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       parameters: [],

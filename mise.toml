@@ -724,6 +724,11 @@ run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 description = "Core dev utilities for a throwaway Linux box (experiment toolchains stay with each repo's mise.toml): Brewfile.core via mise prebuilt releases into ~/.local/bin (root or not), agent CLIs, dotfile links. Entry point from scratch: curl …/scripts/bootstrap-linux.sh | bash as root; without root see the scripts/linux-init.ts header. Check from your machine: mise run doctor:remote -- <host>"
 run = "bun ~/dotfiles/scripts/linux-init.ts"
 
+# Run FROM THE MAC after a rental is reachable. Renting itself (offer, cap, tier) stays a judgment.
+[tasks."box:init"]
+description = "From the Mac, once a rented box answers ssh (or with --root-host/--root-port to bootstrap it as root): bring it to 'experiments can resume' — reach, gh login (--gh), per --repo: clone, mise trust+install, jj (setup:jj or colocate), setup, doctor — then doctor:remote. Idempotent: a finished box re-runs as fast PASS no-ops. Usage: mise run box:init -- <alias> [--root-host H --root-port P] [--gh] [--repo owner/name …]"
+run = 'bun ~/dotfiles/scripts/box-init.ts'
+
 [tasks."wsl:init"]
 description = "Initialize WSL environment (after: install linuxbrew, brew install mise)"
 run = 'bun ~/dotfiles/scripts/wsl-init.ts'

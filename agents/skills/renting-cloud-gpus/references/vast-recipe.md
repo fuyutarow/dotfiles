@@ -80,8 +80,17 @@ Ship a tree, not a checkout (`git archive` carries no `.git` history). Never wri
 
 One command as root on the fresh instance builds the core dev environment (a non-root user, the
 `Brewfile.core` tools as mise-downloaded releases in ~/.local/bin, the agent CLIs, dotfile links);
-toolchains such as Julia then come from the project's `mise.toml`. Verify with
-`mise run doctor:remote -- <alias>` from the Mac:
+toolchains such as Julia then come from the project's `mise.toml`. From the Mac, ONE task does all
+of it — the root bootstrap, the gh login, each repo's clone / `mise install` / jj / setup / doctor,
+and `doctor:remote` — and is a fast no-op on a finished box:
+
+```sh
+mise run box:init -- <alias> --root-host <host> --root-port <port> --gh --repo owner/name [--repo …]
+```
+
+Add the `Host <alias>` block to `~/.ssh/config.local` first (the task prints the requirement and
+stops if the alias does not answer); drop `--root-host/--root-port` once the box is bootstrapped.
+What the bootstrap step runs, by hand if the task itself is the thing broken:
 
 ```sh
 ssh -p <port> root@<host> 'curl -fsSL https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh | bash'

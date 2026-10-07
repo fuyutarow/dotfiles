@@ -46,12 +46,14 @@ Keep these tokens stable: **DESTROY-NOT-STOP**, **NOTHING-LEFT-BEHIND**, **TIER-
 
 ```text
 choose tier + cap → search → create (label) → wait + prove reachable (bounded)
-  → bootstrap core dev utils (dotfiles one-liner) → ~/.ssh/config.local alias → herdr --remote
-  → ship code → `mise install` in the repo (its experiment env) → run → retrieve
-  → destroy → remove the alias → verify none left
+  → `mise run box:init -- <alias> [--root-host H --root-port P] [--gh] [--repo owner/name …]`
+      (bootstrap, gh login, clone + mise install + jj + setup + doctors, doctor:remote)
+  → herdr --remote → run → retrieve → destroy → remove the alias → verify none left
 ```
 
-The bootstrap and the dotfiles/mise split are not this skill's: they are dotfiles' own operating
+`box:init` (run from the Mac, idempotent, `~/.ssh/config.local` alias block still yours to add) is
+the whole "rented box → experiments can resume" step; the codex/claude browser logins it leaves as
+a WARN are the one human step. The bootstrap and the dotfiles/mise split are dotfiles' own operating
 principle (README *Design* invariant 7, *Setup → Throwaway Linux box*). This skill only rents,
 proves reachability, and destroys.
 

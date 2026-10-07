@@ -183,7 +183,8 @@ exec zsh
 dotfiles gives such a box the **core dev utilities** only — `Brewfile.core` (shell, search, VCS,
 herdr, mise …) as prebuilt releases via mise, root or not, plus the agent CLIs and the dotfile
 links — so it is usable at once and reachable with `herdr --remote`. Verify it from your machine with
-`mise run doctor:remote -- <alias>`. It does **not** build experiment environments: Julia, CUDA, Python
+`mise run doctor:remote -- <alias>`; `mise run box:init -- <alias> [--gh] [--repo owner/name …]`
+runs the bootstrap, the repos' setup and both doctors in one idempotent pass. It does **not** build experiment environments: Julia, CUDA, Python
 and their versions belong to each repo's `mise.toml` (`mise install` inside that repo).
 
 ```bash

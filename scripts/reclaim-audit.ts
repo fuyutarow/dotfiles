@@ -18,8 +18,8 @@ import {
 // optional components, vscode-server versions, self-updating CLIs' version stores, the ~/.cache
 // breakdown, and the largest build-artifact dirs of ANY age — each with size, last-touched date
 // and age. Deletes nothing; hand the table to whoever decides. STALE_DAYS=180 to retune.
-// §6 and §7 are the judgment tier: what no blind task may remove (an active project's target/,
-// a toolchain's offline docs), shown so a human can choose with the cost in view.
+// §6 and §7 are the judgment tier: active target/ and optional rust-docs are shown with cost in
+// view; the owner-approved plan/action pair is reclaim:judgment / reclaim:judgment:yes.
 
 const staleDays = Number(process.env.STALE_DAYS ?? "180");
 const now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
@@ -219,7 +219,7 @@ async function auditBuildDirs(roots: string): Promise<void> {
     );
   }
   console.log(
-    "  (30 日以内の現役は reclaim:builds が触らない。消すなら cargo clean / KONDO_OLDER=0 mise run reclaim:pick)",
+    "  (30 日以内の現役は reclaim:builds が触らない。Rust target は mise run reclaim:judgment で計画、reclaim:judgment:yes で実行)",
   );
 }
 
@@ -231,14 +231,14 @@ async function auditRustDocs(toolchains: string): Promise<void> {
     const docs = `${toolchains}/${tc}/share/doc/rust/html`;
     if (!existsSync(docs)) continue;
     console.log(
-      `  ${(await duH(docs)).padEnd(8)} rust-docs (${tc}) — オフライン文書。不要なら: rustup component remove rust-docs --toolchain ${tc}`,
+      `  ${(await duH(docs)).padEnd(8)} rust-docs (${tc}) — オフライン文書。計画: mise run reclaim:judgment / 実行: mise run reclaim:judgment:yes`,
     );
   }
 }
 
 console.log();
 console.log(
-  "== 6. 判断が要る: 年齢を問わない大きなビルド成果物 (target/ node_modules/ .venv/) ==",
+  "== 6. 判断が要る: 年齢を問わない大きなビルド成果物 (target/ node_modules/ .venv/) — Rust target: reclaim:judgment / reclaim:judgment:yes ==",
 );
 await auditBuildDirs(process.env.AUDIT_PROJECTS ?? `${userHome}/Workspace`);
 
@@ -286,5 +286,5 @@ const dfLine =
   await $`df -h ${userHome} | awk 'NR==2{print $4" free / "$2}'`.text();
 console.log(`df: ${dfLine.trim()}`);
 console.log(
-  "→ 判断が要らない分は reclaim:clean(tool-native gc) / rustup・vscode-server・CLI 旧版は reclaim:toolchains(述語) / §6・§7 は人が選ぶ / 受け入れた候補は rip / 空きが増えるのは reclaim:purge だけ",
+  "→ 判断が要らない分は reclaim:clean(tool-native gc) / rustup・vscode-server・CLI 旧版は reclaim:toolchains(述語) / Rust target・rust-docs は reclaim:judgment で計画、reclaim:judgment:yes で実行 / 他の候補は人が選び、受け入れたものは rip / 空きが増えるのは reclaim:purge だけ",
 );

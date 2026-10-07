@@ -549,8 +549,16 @@ description = "Reclaim project build artifacts (node_modules/target/build…) NO
 run = 'bun ~/dotfiles/scripts/reclaim-run.ts builds -- kondo --all --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
 
 [tasks."reclaim:audit"]
-description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, self-updating CLIs' version stores, the ~/.cache breakdown, and the judgment tier no blind task may touch — the largest build dirs of ANY age and optional toolchain components (rust-docs) — each with size, last-touched date and age. Deletes nothing. STALE_DAYS=180 to retune."
+description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, self-updating CLIs' version stores, the ~/.cache breakdown, and the judgment tier — the largest build dirs of ANY age and optional toolchain components (rust-docs). Use reclaim:judgment to preview owner-approved Rust target/docs cleanup; use reclaim:judgment:yes to act. Each audit item has size, last-touched date and age. Deletes nothing. STALE_DAYS=180 to retune."
 run = 'bun ~/dotfiles/scripts/reclaim-audit.ts'
+
+[tasks."reclaim:judgment"]
+description = "READ-ONLY plan for owner-approved cleanup of Rust target/ directories of any age and optional rust-docs components. Skips active cargo/rustc projects and targets containing an on-PATH binary. Use reclaim:judgment:yes to act; every action and freed byte is captured by reclaim-run."
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts judgment -- bun ~/dotfiles/scripts/reclaim-judgment.ts'
+
+[tasks."reclaim:judgment:yes"]
+description = "Act on reclaim:judgment's owner-approved Rust target/docs plan: cargo clean eligible targets and remove installed rust-docs components. Per-action freed bytes and command output go to the reclaim receipt."
+run = 'bun ~/dotfiles/scripts/reclaim-run.ts judgment -- bun ~/dotfiles/scripts/reclaim-judgment.ts --yes'
 
 [tasks."reclaim:purge"]
 description = "IRREVERSIBLE: empty EVERY graveyard — rip's AND the XDG trash (~/.local/share/Trash). This is the ONLY step that actually frees disk: both delete by rename, so the bytes stay until purged. Prints every target with sizes and requires typing 'yes'. Non-interactive form: reclaim:purge:yes."

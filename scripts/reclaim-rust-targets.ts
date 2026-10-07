@@ -69,11 +69,14 @@ export function targetsToClean(
     .filter(
       (t) =>
         busy !== undefined &&
-        !busy.some(
-          (cwd) => cwd === t.project || cwd.startsWith(`${t.project}/`),
-        ),
+        !projectIsBusy(t.project, busy),
     )
     .map((t) => t.project);
+}
+
+/** Whether a running cargo/rustc cwd is inside this project. */
+export function projectIsBusy(project: string, busy: readonly string[]): boolean {
+  return busy.some((cwd) => cwd === project || cwd.startsWith(`${project}/`));
 }
 
 function rejectPrototypeFlag(

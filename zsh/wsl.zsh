@@ -78,7 +78,7 @@ link-win-exes() {
 }
 link-win-exes
 
-# `open` = smart-open (smart-open/smart-open.ts): attached over ssh/herdr, a URL goes to the machine you
+# `open` = smart-open (tools/smart-open/src/smart-open.ts): attached over ssh/herdr, a URL goes to the machine you
 # sit at and a path to its VS Code (Remote-SSH, back to here); otherwise explorer.exe with a Windows path. `o` / `oo` live in
 # zsh/aliases.zsh.
 alias open='smart-open'

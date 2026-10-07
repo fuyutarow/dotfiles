@@ -22,6 +22,7 @@ import {
   type Ctx,
   ensureToolOwned,
   link,
+  loadSmartOpenReceiver,
   linkSshAttach,
   prune,
   sshSupportsAttachMatch,
@@ -134,6 +135,77 @@ describe("link", () => {
     const dst = join(ctx.home, "gone");
     link(ctx, "no-such-file", dst);
     expect(isLink(dst)).toBe(false);
+  });
+});
+
+describe("loadSmartOpenReceiver", () => {
+  function receiverFixture(): Ctx {
+    const ctx = fixture("safe");
+    ctx.os = "mac";
+    mkdirSync(join(ctx.home, "Library/LaunchAgents"), { recursive: true });
+    writeFileSync(
+      join(ctx.dotfiles, "receiver.plist"),
+      `<?xml version="1.0"?><plist><dict><key>ProgramArguments</key><array><string>/bin/zsh</string><string>-lc</string><string>exec bun "$HOME/dotfiles/tools/smart-open/src/receive.ts"</string></array></dict></plist>`,
+    );
+    symlinkSync(
+      join(ctx.dotfiles, "receiver.plist"),
+      join(ctx.home, "Library/LaunchAgents/dotfiles.smart-open-receiver.plist"),
+    );
+    return ctx;
+  }
+
+  test("reboots a loaded agent when its arguments differ from the plist", () => {
+    const ctx = receiverFixture();
+    const calls: string[][] = [];
+    loadSmartOpenReceiver(ctx, (args) => {
+      calls.push(args);
+      return args[0] === "print"
+        ? {
+            exitCode: 0,
+            stdout: `arguments = {\n    /bin/zsh\n    -lc\n    exec bun "$HOME/dotfiles/smart-open/smart-open.ts"\n}\n`,
+          }
+        : { exitCode: 0, stdout: "" };
+    });
+    expect(calls.map(([verb]) => verb)).toEqual([
+      "print",
+      "bootout",
+      "bootstrap",
+    ]);
+  });
+
+  test("does not reload when the loaded arguments match the plist", () => {
+    const ctx = receiverFixture();
+    const calls: string[][] = [];
+    loadSmartOpenReceiver(ctx, (args) => {
+      calls.push(args);
+      return {
+        exitCode: 0,
+        stdout: `arguments = {\n    /bin/zsh\n    -lc\n    exec bun "$HOME/dotfiles/tools/smart-open/src/receive.ts"\n}\n`,
+      };
+    });
+    expect(calls.map(([verb]) => verb)).toEqual(["print"]);
+  });
+
+  test("reloads when the plist link target changed even if arguments match", () => {
+    const ctx = receiverFixture();
+    const plist = join(
+      ctx.home,
+      "Library/LaunchAgents/dotfiles.smart-open-receiver.plist",
+    );
+    ctx.changedLinks = new Set([plist]);
+    const calls: string[][] = [];
+    loadSmartOpenReceiver(ctx, (args) => {
+      calls.push(args);
+      return {
+        exitCode: 0,
+        stdout: `arguments = {\n    /bin/zsh\n    -lc\n    exec bun "$HOME/dotfiles/tools/smart-open/src/receive.ts"\n}\n`,
+      };
+    });
+    expect(calls.map(([verb]) => verb)).toEqual([
+      "print",
+      "bootout",
+      "bootstrap",
+    ]);
   });
 });
 

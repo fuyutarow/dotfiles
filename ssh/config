@@ -51,7 +51,7 @@ Host r99-wsl r99-wsl-code r99
     Compression yes
 
 # --- smart-open: open a URL on the machine you sit at, not on the box you drive ----------------
-# `o <url>` on r99-wsl (smart-open/smart-open.ts) writes to /tmp/smart-open-$USER--<alias>.sock there;
+# `o <url>` on r99-wsl (tools/smart-open/src/smart-open.ts) writes to /tmp/smart-open-$USER--<alias>.sock there;
 # this forward carries it to the local receiver (smart-open/receive.ts, started at login on macOS by
 # smart-open/smart-open-receiver.plist.mac), which opens http(s) URLs and remote folders. herdr
 # --remote reads this file first, so its attach carries the forward too. With no receiver running

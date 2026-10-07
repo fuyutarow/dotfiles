@@ -30,6 +30,7 @@ import {
   mkdirSync,
   readdirSync,
   readlinkSync,
+  readFileSync,
   renameSync,
   statSync,
   symlinkSync,
@@ -56,6 +57,7 @@ export type Ctx = {
   os: Os;
   mode: Mode;
   drift: string[];
+  changedLinks?: Set<string>;
 };
 
 // Prune: a link this script USED to create keeps pointing into the repo after the source is
@@ -129,6 +131,7 @@ export function link(ctx: Ctx, rel: string, dst: string): void {
   else if (st !== undefined && !moveAside(ctx, dst)) return;
   mkdirSync(dirname(dst), { recursive: true });
   symlinkSync(src, dst);
+  ctx.changedLinks?.add(dst);
   say(`linked: ${dst} -> ${src}`);
 }
 
@@ -237,20 +240,89 @@ function renderHome(ctx: Ctx): void {
     );
 }
 
-function loadSmartOpenReceiver(ctx: Ctx): void {
-  const uid = process.getuid?.();
-  if (uid === undefined) return;
-  const label = "dotfiles.smart-open-receiver";
-  const loaded = Bun.spawnSync(["launchctl", "print", `gui/${uid}/${label}`], {
-    stdout: "ignore",
+type LaunchctlResult = { exitCode: number; stdout: string };
+type LaunchctlRunner = (args: string[]) => LaunchctlResult;
+
+function runLaunchctl(args: string[]): LaunchctlResult {
+  const r = Bun.spawnSync(["launchctl", ...args], {
+    stdout: "pipe",
     stderr: "ignore",
     timeout: 10_000,
   });
-  if (loaded.exitCode === 0) return;
+  return { exitCode: r.exitCode, stdout: r.stdout.toString() };
+}
+
+function plistProgramArguments(xml: string): string[] | undefined {
+  const block =
+    /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/u.exec(xml)?.[1];
+  if (block === undefined) return undefined;
+  return Array.from(
+    block.matchAll(/<string>([\s\S]*?)<\/string>/gu),
+    ([, value]) =>
+      (value ?? "")
+        .replaceAll("&quot;", '"')
+        .replaceAll("&apos;", "'")
+        .replaceAll("&lt;", "<")
+        .replaceAll("&gt;", ">")
+        .replaceAll("&amp;", "&"),
+  );
+}
+
+function loadedProgramArguments(output: string): string[] | undefined {
+  const block = /\barguments\s*=\s*\{([\s\S]*?)\}/u.exec(output)?.[1];
+  if (block === undefined) return undefined;
+  return block
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+export function loadSmartOpenReceiver(
+  ctx: Ctx,
+  run: LaunchctlRunner = runLaunchctl,
+): void {
+  if (ctx.os !== "mac") return;
+  const uid = process.getuid?.();
+  if (uid === undefined) return;
+  const label = "dotfiles.smart-open-receiver";
   const plist = join(ctx.home, "Library/LaunchAgents", `${label}.plist`);
-  const r = Bun.spawnSync(["launchctl", "bootstrap", `gui/${uid}`, plist], {
-    timeout: 10_000,
-  });
+  const domain = `gui/${uid}`;
+  const loaded = run(["print", `${domain}/${label}`]);
+  const linkChanged = ctx.changedLinks?.has(plist) === true;
+  const expected = existsSync(plist)
+    ? plistProgramArguments(readFileSync(plist, "utf8"))
+    : undefined;
+  const actual = loadedProgramArguments(loaded.stdout);
+  const argumentsChanged =
+    loaded.exitCode === 0 &&
+    expected !== undefined &&
+    (actual === undefined ||
+      JSON.stringify(actual) !== JSON.stringify(expected));
+
+  if (loaded.exitCode === 0 && (linkChanged || argumentsChanged)) {
+    const bootout = run(["bootout", `${domain}/${label}`]);
+    if (bootout.exitCode !== 0) {
+      say(`warn: launchctl bootout ${label} failed (exit ${bootout.exitCode})`);
+      return;
+    }
+    const r = run(["bootstrap", domain, plist]);
+    if (r.exitCode === 0) {
+      const why = [
+        linkChanged ? "plist link target changed" : undefined,
+        argumentsChanged ? "program arguments changed" : undefined,
+      ]
+        .filter((reason) => reason !== undefined)
+        .join("; ");
+      say(`reloaded: ${label} (launchd; ${why})`);
+    } else {
+      say(
+        `warn: launchctl bootstrap ${label} failed after reload (exit ${r.exitCode})`,
+      );
+    }
+    return;
+  }
+  if (loaded.exitCode === 0) return;
+  const r = run(["bootstrap", domain, plist]);
   say(
     r.exitCode === 0
       ? `loaded: ${label} (launchd)`
@@ -396,6 +468,7 @@ function main(): Error | void {
     os: detectedOs,
     mode: parsed.flags.force ? "force" : mode,
     drift: [],
+    changedLinks: new Set(),
   };
   const rootsError = assertRoots(ctx.home, ctx.dotfiles);
   if (rootsError !== undefined) return rootsError;

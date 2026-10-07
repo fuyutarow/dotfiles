@@ -27,6 +27,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-official-execution.ts"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
             "command": "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
             "timeout": 15
           }

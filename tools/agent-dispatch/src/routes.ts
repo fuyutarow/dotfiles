@@ -38,11 +38,15 @@ export type RouteProbeDependencies = Readonly<{
   hostFile?: string;
   now: () => number;
   codexProbe: () => RouteStatus;
+  codexLoggedIn: () => boolean;
   claudePath: () => string | null;
 }>;
 
-/** Probe runner capability before route selection; codex results cache for 24 h per host, version, and declaration mtime. */
+/** Recheck login every time; sandbox capability caches for 24 h per host, version, and declaration mtime. */
 export function probeRoutes(deps: RouteProbeDependencies): Routes {
+  const loggedIn = deps.codexLoggedIn();
+  const loginReason =
+    "codex is not logged in here — run `mise run auth:push -- <this host>` from the Mac";
   const hostFile = deps.hostFile ?? codexHostDeclarationPath();
   const hostFileMtime = fromThrowable(
     () => statSync(hostFile).mtimeMs,
@@ -51,7 +55,9 @@ export function probeRoutes(deps: RouteProbeDependencies): Routes {
   const hostFileMtimeKey = hostFileMtime.isOk() ? hostFileMtime.value : null;
   const hostDeclaration = readCodexHostDeclaration(hostFile);
   let codex: RouteStatus | undefined;
-  if (hostDeclaration.kind === "invalid") {
+  if (!loggedIn) {
+    codex = { available: false, reason: loginReason };
+  } else if (hostDeclaration.kind === "invalid") {
     codex = { available: false, reason: hostDeclaration.reason };
   } else if (hostDeclaration.kind === "valid") {
     codex = {
@@ -73,7 +79,7 @@ export function probeRoutes(deps: RouteProbeDependencies): Routes {
       codex = { available: cached.available, reason: cached.reason };
   }
   codex ??= deps.codexProbe();
-  if (hostDeclaration.kind !== "invalid") {
+  if (loggedIn && hostDeclaration.kind !== "invalid") {
     mkdirSync(dirname(deps.cachePath), { recursive: true });
     writeFileSync(
       deps.cachePath,

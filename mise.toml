@@ -702,6 +702,11 @@ run = 'bun ~/dotfiles/scripts/doctor.ts'
 description = "Push this machine's fnox secrets (TYPESAFE_API_KEY) to an ssh host, age-encrypted, and prove they open there. Only to a box whose root you trust (a rented box of your own, R99) — not a shared server. Usage: mise run secrets:push -- <host>"
 run = 'bun ~/dotfiles/scripts/secrets-push.ts'
 
+[tasks."auth:push"]
+dir = "{{config_root}}"
+description = "Transfer this machine's Codex, Claude Code, and GitHub CLI logins over SSH stdin to an owner's disposable box. Usage: mise run auth:push -- <host> [--only codex,claude,gh] [--force]"
+run = "bun scripts/auth-push.ts"
+
 [tasks."doctor:remote"]
 description = "From the machine you sit at: is an ssh host usable as dotfiles promises? Key reach, the core CLIs on `ssh host cmd` (herdr --remote's bridge), an interactive login AND a herdr pane landing in zsh with the aliases, and the smart-open forward binding on attach — PASS/FAIL/WARN/SKIP with the fix. Usage: mise run doctor:remote -- <host>"
 run = 'bun ~/dotfiles/scripts/doctor-remote.ts'

@@ -1,8 +1,8 @@
-// `mise run box:init -- <alias> [--root-host H --root-port P] [--gh] [--repo owner/name …]` — from the
+// `mise run box:init -- <alias> [--root-host H --root-port P] [--repo owner/name …]` — from the
 // Mac: take a rented box that is renting-done (Vast instance created, ssh answering) to "experiments
 // can resume". Until 2026-10-08 that was ~8 hand-run steps per rental; the human ruled it routine.
 //   reach    ssh <alias> true; else (with --root-host/--root-port) the dotfiles bootstrap as root
-//   gh       (--gh) copy this Mac's gh login to the box over ssh stdin — the token is never printed
+//   auth     transfer available agent CLI logins via auth:push
 //   per repo clone → mise trust + install → jj (setup:jj, else `jj git init --colocate`) → setup
 //   doctor   per repo `mise run doctor` where the repo has it, then `mise run doctor:remote`
 // Renting (offer, price cap, tier) is NOT here — it stays a judgment (skill renting-cloud-gpus).
@@ -50,7 +50,6 @@ export type Opts = {
   alias: string;
   rootHost?: string;
   rootPort?: string;
-  gh: boolean;
   repos: string[];
   error?: never;
 };
@@ -126,56 +125,48 @@ export function buildPlan(o: Opts): Step[] {
           ],
         }
       : undefined;
-  plan.push({
-    name: "reach",
-    group: "",
-    probe: { argv: [...SSH, alias, "true"] },
-    ...(bootstrap === undefined ? {} : { act: bootstrap }),
-    done: `bootstrapped ${alias} as root (bootstrap-linux.sh)`,
-    timeoutMs: 30 * MIN,
-    fix:
-      bootstrap === undefined
-        ? `ssh ${alias} failed: add its Host block to ~/.ssh/config.local, or give --root-host/--root-port to bootstrap it as root`
-        : `the alias ${alias} must exist in ~/.ssh/config.local (Hostname = root-host, user fuyu, a Tag smart-open line) — then re-run`,
-  });
-  if (o.gh) {
-    plan.push({
-      name: "gh",
+  plan.push(
+    {
+      name: "reach",
       group: "",
-      probe: onBox(alias, "gh auth status > /dev/null 2>&1"),
-      act: {
-        argv: [
-          ...SSH,
-          alias,
-          "gh auth login --with-token && gh auth setup-git",
-        ],
-        stdinFrom: ["gh", "auth", "token"],
-      },
-      done: "copied this machine's gh login to the box",
+      probe: { argv: [...SSH, alias, "true"] },
+      ...(bootstrap === undefined ? {} : { act: bootstrap }),
+      done: `bootstrapped ${alias} as root (bootstrap-linux.sh)`,
+      timeoutMs: 30 * MIN,
+      fix:
+        bootstrap === undefined
+          ? `ssh ${alias} failed: add its Host block to ~/.ssh/config.local, or give --root-host/--root-port to bootstrap it as root`
+          : `the alias ${alias} must exist in ~/.ssh/config.local (Hostname = root-host, user fuyu, a Tag smart-open line) — then re-run`,
+    },
+    {
+      name: "auth:push",
+      group: "",
+      act: { argv: ["mise", "run", "auth:push", "--", alias] },
+      done: "available agent CLI logins transferred and verified",
       timeoutMs: 2 * MIN,
-      fix: "run `gh auth login` on this machine first (the token is read from `gh auth token`)",
-    });
-  }
-  plan.push({
-    name: "codex host",
-    group: "",
-    probe: onBox(
-      alias,
-      "bun $HOME/dotfiles/scripts/codex-host-bootstrap.ts --check",
-    ),
-    act: onBox(
-      alias,
-      logged(
-        "codex-host",
-        "bun $HOME/dotfiles/scripts/codex-host-bootstrap.ts --rented",
-        2 * MIN,
+      fix: `from this Mac: mise run auth:push -- ${alias}`,
+    },
+    {
+      name: "codex host",
+      group: "",
+      probe: onBox(
+        alias,
+        "bun $HOME/dotfiles/scripts/codex-host-bootstrap.ts --check",
       ),
-    ),
-    done: "codex-run host declaration",
-    timeoutMs: 2 * MIN,
-    log: "codex-host",
-    fix: "the rented Linux box must have Bun available and pass the measured container and user-namespace checks",
-  });
+      act: onBox(
+        alias,
+        logged(
+          "codex-host",
+          "bun $HOME/dotfiles/scripts/codex-host-bootstrap.ts --rented",
+          2 * MIN,
+        ),
+      ),
+      done: "codex-run host declaration",
+      timeoutMs: 2 * MIN,
+      log: "codex-host",
+      fix: "the rented Linux box must have Bun available and pass the measured container and user-namespace checks",
+    },
+  );
   for (const repo of o.repos) {
     const base = repo.split("/")[1] ?? repo;
     const dir = `$HOME/Workspace/${base}`;
@@ -197,7 +188,7 @@ export function buildPlan(o: Opts): Step[] {
         done: `cloned ${repo} into ~/Workspace/${base}`,
         timeoutMs: 5 * MIN,
         log: `clone-${base}`,
-        fix: "needs --gh (or a gh login on the box) with read access to the repo",
+        fix: "needs a gh login on this machine and repository read access",
       },
       {
         name: `mise ${base}`,
@@ -304,10 +295,6 @@ export function parseOpts(argv: string[]): Opts | { error: string } {
           type: String,
           description: "ssh port of the fresh box's root login",
         },
-        gh: {
-          type: Boolean,
-          description: "copy this machine's gh login to the box",
-        },
         repo: {
           type: [String],
           description: "owner/name to clone and set up (repeatable)",
@@ -315,9 +302,9 @@ export function parseOpts(argv: string[]): Opts | { error: string } {
       },
       help: {
         description:
-          "Bring a rented box up so experiments can resume: reach, codex host declaration, gh, repos (clone, mise, jj, setup), doctors. Run from the Mac; every step is idempotent.",
+          "Bring a rented box up so experiments can resume: reach, auth:push, codex host declaration, repos (clone, mise, jj, setup), doctors. Run from the Mac; every step is idempotent.",
         usage:
-          "box-init.ts <alias> [--root-host H --root-port P] [--gh] [--repo owner/name …]",
+          "box-init.ts <alias> [--root-host H --root-port P] [--repo owner/name …]",
       },
     },
     undefined,
@@ -330,7 +317,7 @@ export function parseOpts(argv: string[]): Opts | { error: string } {
     return {
       error: `one alias only; unexpected: ${parsed._.slice(1).join(" ")}`,
     };
-  const { rootHost, rootPort, gh, repo } = parsed.flags;
+  const { rootHost, rootPort, repo } = parsed.flags;
   if ((rootHost === undefined) !== (rootPort === undefined))
     return { error: "--root-host and --root-port go together" };
   if (rootHost !== undefined && !HOST_RE.test(rootHost))
@@ -342,7 +329,6 @@ export function parseOpts(argv: string[]): Opts | { error: string } {
     return { error: `--repo wants owner/name, got ${bad}` };
   return {
     alias,
-    gh: gh ?? false,
     repos: [...new Set(repo)],
     ...(rootHost === undefined ? {} : { rootHost }),
     ...(rootPort === undefined ? {} : { rootPort }),
@@ -485,7 +471,7 @@ async function main(): Promise<void> {
   const o = parseOpts(Bun.argv.slice(2));
   if (o.error !== undefined) {
     process.stderr.write(
-      `${o.error}\nUsage: mise run box:init -- <alias> [--root-host H --root-port P] [--gh] [--repo owner/name …]\n`,
+      `${o.error}\nUsage: mise run box:init -- <alias> [--root-host H --root-port P] [--repo owner/name …]\n`,
     );
     process.exitCode = 2;
     return;

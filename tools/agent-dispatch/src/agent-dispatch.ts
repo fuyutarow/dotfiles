@@ -284,6 +284,17 @@ function hostRoutes(): Routes {
           : output.slice(0, 300);
       return { available: false, reason };
     },
+    codexLoggedIn: () => {
+      if (process.env.AGENT_ROUTER_CODEX_RUN !== undefined) return true;
+      if (codexPath === null) return false;
+      return (
+        Bun.spawnSync([codexPath, "login", "status"], {
+          stdout: "ignore",
+          stderr: "ignore",
+          timeout: 5_000,
+        }).exitCode === 0
+      );
+    },
     claudePath: (): string | null => {
       if (process.env.AGENT_ROUTER_TEST_CLAUDE_ROUTE === "unavailable")
         return null;

@@ -59,7 +59,6 @@ describe("argv", () => {
         "ssh1.vast.ai",
         "--root-port",
         "2222",
-        "--gh",
         "--repo",
         "a/x",
         "--repo",
@@ -71,7 +70,6 @@ describe("argv", () => {
       alias: "box",
       rootHost: "ssh1.vast.ai",
       rootPort: "2222",
-      gh: true,
       repos: ["a/x", "b/y"],
     });
   });
@@ -83,26 +81,18 @@ describe("argv", () => {
 
 describe("plan", () => {
   test("bare alias: reach, then doctor:remote", () => {
-    expect(names({ alias: "box", gh: false, repos: [] })).toEqual([
+    expect(names({ alias: "box", repos: [] })).toEqual([
       "reach",
+      "auth:push",
       "codex host",
       "doctor:remote",
     ]);
   });
 
-  test("--gh adds the gh step right after reach", () => {
-    expect(names({ alias: "box", gh: true, repos: [] })).toEqual([
+  test("each repo runs clone, mise, jj, setup, doctor after auth:push", () => {
+    expect(names({ alias: "box", repos: ["o/a", "o/b"] })).toEqual([
       "reach",
-      "gh",
-      "codex host",
-      "doctor:remote",
-    ]);
-  });
-
-  test("each repo runs clone, mise, jj, setup, doctor in order, before doctor:remote", () => {
-    expect(names({ alias: "box", gh: true, repos: ["o/a", "o/b"] })).toEqual([
-      "reach",
-      "gh",
+      "auth:push",
       "codex host",
       "clone a",
       "mise a",
@@ -119,13 +109,12 @@ describe("plan", () => {
   });
 
   test("reach bootstraps as root only when root-host and root-port are given", () => {
-    const without = buildPlan({ alias: "box", gh: false, repos: [] })[0];
+    const without = buildPlan({ alias: "box", repos: [] })[0];
     expect(without?.act).toBeUndefined();
     const withRoot = buildPlan({
       alias: "box",
       rootHost: "h",
       rootPort: "22",
-      gh: false,
       repos: [],
     })[0];
     expect(withRoot?.probe?.argv.slice(-2)).toEqual(["box", "true"]);
@@ -135,15 +124,23 @@ describe("plan", () => {
     expect(withRoot?.act?.argv.at(-1)).toContain("bash -s -- --rented");
   });
 
-  test("the gh token travels on stdin only: no argv carries it", () => {
-    const gh = buildPlan({ alias: "box", gh: true, repos: [] })[1];
-    expect(gh?.act?.stdinFrom).toEqual(["gh", "auth", "token"]);
-    expect(gh?.act?.argv.join(" ")).toContain("gh auth login --with-token");
-    expect(gh?.probe?.argv.at(-1)).toContain("gh auth status");
+  test("auth:push runs after reach and before repository work", () => {
+    const plan = buildPlan({ alias: "box", repos: ["o/a"] });
+    expect(plan[1]?.name).toBe("auth:push");
+    expect(plan[1]?.act?.argv).toEqual([
+      "mise",
+      "run",
+      "auth:push",
+      "--",
+      "box",
+    ]);
+    expect(plan.findIndex((step) => step.name === "auth:push")).toBeLessThan(
+      plan.findIndex((step) => step.name === "clone a"),
+    );
   });
 
   test("repo steps: clone is guarded, jj prefers setup:jj else colocates, slow steps log", () => {
-    const plan = buildPlan({ alias: "box", gh: false, repos: ["o/a"] });
+    const plan = buildPlan({ alias: "box", repos: ["o/a"] });
     const by = (n: string): string =>
       plan.find((s) => s.name === n)?.act?.argv.at(-1) ?? "";
     expect(
@@ -165,7 +162,7 @@ describe("plan", () => {
   });
 
   test("doctor:remote runs doctor-remote.ts on the alias", () => {
-    const last = buildPlan({ alias: "box", gh: false, repos: [] }).at(-1);
+    const last = buildPlan({ alias: "box", repos: [] }).at(-1);
     expect(last?.act?.argv[0]).toBe("bun");
     expect(last?.act?.argv.at(-2)).toContain("doctor-remote.ts");
     expect(last?.act?.argv.at(-1)).toBe("box");
@@ -173,7 +170,7 @@ describe("plan", () => {
   });
 
   test("codex host declaration validates first and runs the rented declaration step", () => {
-    const step = buildPlan({ alias: "box", gh: false, repos: [] }).find(
+    const step = buildPlan({ alias: "box", repos: [] }).find(
       (item) => item.name === "codex host",
     );
     expect(step?.probe?.argv.at(-1)).toContain("--check");

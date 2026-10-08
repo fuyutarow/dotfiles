@@ -98,6 +98,7 @@ const CORPUS = [
   { path: "scripts/reclaim-rust-targets.ts" },
   { path: "scripts/link-dots.ts" },
   { path: "scripts/secrets-push.ts" },
+  { path: "scripts/auth-push.ts" },
   { path: "scripts/link-skills.ts" },
   { path: "scripts/skills-doctor.ts" },
   { path: "scripts/vendor-skill.ts" },

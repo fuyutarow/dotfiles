@@ -85,8 +85,10 @@ of it — the root bootstrap, the gh login, each repo's clone / `mise install` /
 and `doctor:remote` — and is a fast no-op on a finished box:
 
 ```sh
-mise run box:init -- <alias> --root-host <host> --root-port <port> --gh --repo owner/name [--repo …]
+mise run box:init -- <alias> --root-host <host> --root-port <port> --repo owner/name [--repo …]
 ```
+
+Logins come from the Mac via `mise run auth:push -- <alias>` (`box:init` runs it); credentials die with the container, so destroy it when finished rather than stopping it.
 
 Add the `Host <alias>` block to `~/.ssh/config.local` first (the task prints the requirement and
 stops if the alias does not answer); drop `--root-host/--root-port` once the box is bootstrapped.

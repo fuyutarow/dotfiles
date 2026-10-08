@@ -141,7 +141,9 @@ async function checkCodexRoute(host: string): Promise<Finding> {
       "codex-route",
       "FAIL",
       `agent-dispatch doctor: codex unavailable — ${status[2]}`,
-      `on ${host}: cd ~/dotfiles && mise run linux:init -- --rented (only for an owner's disposable Vast container; never on a shared server)`,
+      status[2]?.includes("not logged in") === true
+        ? `from the Mac: mise run auth:push -- ${host}`
+        : `on ${host}: cd ~/dotfiles && mise run linux:init -- --rented (only for an owner's disposable Vast container; never on a shared server)`,
     );
   const diagnostic = r.err.trim();
   const detail = diagnostic.length > 0 ? diagnostic : r.out.trim();
@@ -159,7 +161,8 @@ async function checkCodexRoute(host: string): Promise<Finding> {
 async function checkAgents(host: string): Promise<Finding> {
   const probe = [
     `codex login status > /dev/null 2>&1 && echo "${MARK("CODEX")}=in" || echo "${MARK("CODEX")}=out"`,
-    `claude auth status 2>/dev/null | grep -q '"loggedIn": true' && echo "${MARK("CLAUDE")}=in" || echo "${MARK("CLAUDE")}=out"`,
+    `claude auth status > /dev/null 2>&1 && echo "${MARK("CLAUDE")}=in" || echo "${MARK("CLAUDE")}=out"`,
+    `gh auth status > /dev/null 2>&1 && echo "${MARK("GH")}=in" || echo "${MARK("GH")}=out"`,
     `fnox get TYPESAFE_API_KEY > /dev/null 2>&1 && echo "${MARK("JEV")}=yes" || echo "${MARK("JEV")}=no"`,
   ].join("; ");
   const r = await run(
@@ -172,31 +175,35 @@ async function checkAgents(host: string): Promise<Finding> {
     return finding(
       "agents",
       "WARN",
-      `the probe did not finish (exit ${r.code})`,
+      "the probe did not finish (exit " + r.code + ")",
     );
-  const out = [
-    ...(codex === "in"
-      ? []
-      : ["codex not logged in (every luna worker fails)"]),
-    ...(marker(r.out, "CLAUDE") === "in" ? [] : ["claude not logged in"]),
-  ];
-  if (out.length > 0)
+  const states = [
+    ["codex", codex],
+    ["claude", marker(r.out, "CLAUDE")],
+    ["gh", marker(r.out, "GH")],
+  ] as const;
+  const stateDetails = states.map(
+    ([name, state]) =>
+      name + (state === "in" ? " logged in" : " not logged in"),
+  );
+  if (states.some(([, state]) => state !== "in"))
     return finding(
       "agents",
       "FAIL",
-      out.join("; "),
-      `on ${host}: codex login --device-auth / claude (log in once; finish in a browser on any machine)`,
+      stateDetails.join("; "),
+      `from the Mac: mise run auth:push -- ${host}`,
     );
   return marker(r.out, "JEV") === "yes"
     ? finding(
         "agents",
         "PASS",
-        "codex and claude logged in; Jev's key opens via fnox",
+        stateDetails.join("; ") + "; Jev's key opens via fnox",
       )
     : finding(
         "agents",
         "WARN",
-        "codex and claude logged in; no Jev key here — agent-dispatch uses its default row, rr its local judge",
+        stateDetails.join("; ") +
+          "; no Jev key here — agent-dispatch uses its default row, rr its local judge",
         `if ${host}'s root is trusted: mise run secrets:push -- ${host}`,
       );
 }

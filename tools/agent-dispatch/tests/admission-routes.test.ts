@@ -25,6 +25,7 @@ describe("route capability cache", () => {
       cachePath,
       hostFile: join(dir, "host.toml"),
       now: () => now,
+      codexLoggedIn: () => true,
       codexProbe: () => {
         probes += 1;
         return { available: false, reason: "sandbox denied" };
@@ -51,6 +52,7 @@ describe("route capability cache", () => {
       cachePath: join(dir, "cache.json"),
       hostFile: join(dir, "host.toml"),
       now: () => 1,
+      codexLoggedIn: () => true,
       codexProbe: () => ({ available: false, reason: "namespace denied" }),
       claudePath: noClaude,
     });
@@ -73,6 +75,7 @@ describe("route capability cache", () => {
       cachePath: join(dir, "cache.json"),
       hostFile,
       now: () => 1,
+      codexLoggedIn: () => true,
       codexProbe: () => ({ available: false, reason: "sandbox denied" }),
       claudePath: noClaude,
     });
@@ -95,6 +98,7 @@ describe("route capability cache", () => {
       cachePath: join(dir, "cache.json"),
       hostFile,
       now: () => 1,
+      codexLoggedIn: () => true,
       codexProbe: () => ({ available: false, reason: "sandbox denied" }),
       claudePath: noClaude,
     });
@@ -118,6 +122,7 @@ describe("route capability cache", () => {
       cachePath: join(dir, "cache.json"),
       hostFile,
       now: () => 1,
+      codexLoggedIn: () => true,
       codexProbe: () => ({ available: false, reason: "sandbox denied" }),
       claudePath: noClaude,
     };
@@ -131,6 +136,34 @@ describe("route capability cache", () => {
       available: true,
       reason: "unsandboxed by host declaration: This host is the isolation",
     });
+  });
+
+  test("a missing Codex login makes the route unavailable and is checked again immediately", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-dispatch-routes-"));
+    dirs.push(dir);
+    let loggedIn = false;
+    let probes = 0;
+    const deps = {
+      host: "host-f",
+      version: "1",
+      cachePath: join(dir, "cache.json"),
+      hostFile: join(dir, "host.toml"),
+      now: () => 1,
+      codexLoggedIn: () => loggedIn,
+      codexProbe: () => {
+        probes += 1;
+        return { available: true, reason: "sandbox probe passed" };
+      },
+      claudePath: noClaude,
+    };
+    expect(probeRoutes(deps).codex).toEqual({
+      available: false,
+      reason:
+        "codex is not logged in here — run `mise run auth:push -- <this host>` from the Mac",
+    });
+    loggedIn = true;
+    expect(probeRoutes(deps).codex.available).toBe(true);
+    expect(probes).toBe(1);
   });
 });
 

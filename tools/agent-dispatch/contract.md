@@ -11,7 +11,8 @@ independent stats entry.
 The grader receives the full brief, the BIBIFI microticket rules (one consumed decision,
 `first_return` is an early checkpoint of that same final deliverable, split only at two or more
 independently checkable final deliverables, queues are still containers, and long work cannot be
-obtained by chaining), and the strict JSON shape emitted in an `agent-dispatch-grade` fenced block.
+obtained by chaining; a change stays with its own test, dry-run, seal/hash check, required params/config, and paired claim bounds unless pieces deliver independently consumable results), and the strict JSON shape emitted in an `agent-dispatch-grade` fenced block.
+Read-only tickets (`writes = []` or `read_only_diagnostic`) split only across independent questions; derived or mutually-referencing sections stay together.
 The dispatcher validates the fence and schema. Every proposed piece is converted to a schema 2
 ticket and must pass the model-free floor. A piece whose outcome is contained in the parent's
 `first_return` is rejected as a split. Ready-to-paste piece headers carry `split_from`, and a ticket

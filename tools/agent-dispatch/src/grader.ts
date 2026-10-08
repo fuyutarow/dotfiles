@@ -42,7 +42,10 @@ export const GRADE_WORKER_PROMPT = (brief: string): string =>
   `## BIBIFI microticket rules\n` +
   `- One ticket has one consumed decision.\n` +
   `- first_return is the early checkpoint of the same final deliverable, never a separate deliverable; one artifact plus its first_return is a microticket.\n` +
+  `- A change and its own acceptance check are one deliverable: build X so check Y passes. This includes tests, dry-runs, seal or hash checks, params/config files the change needs to run, and paired halves of one claim (such as lower and upper bounds, or both directions of an equivalence).\n` +
   `- Split only when there are at least two independently checkable FINAL deliverables.\n` +
+  `- A split is warranted only when each piece delivers an independently consumable result.\n` +
+  `- For a read-only ticket (writes = [] or read_only_diagnostic), split only when its parts answer independent questions; derived or mutually-referencing sections stay together.\n` +
   `- A ticket with split_from in its front matter is already a piece and must not be split again.\n` +
   `- A queue held by one worker is still a container.\n` +
   `- A long run must not be obtained by chaining pieces.\n\n` +
@@ -204,6 +207,21 @@ function splitOnlyByFileList(pieces: AgentPiece[]): boolean {
   );
 }
 
+const acceptanceCheckLanguage =
+  /\b(?:tests?|testing|verify|verification|checks?|seal(?:s|ed|ing)?|dry[- ]runs?|bounds?|params?|parameters?|configs?|configuration|hash(?:es|ed|ing)?)\b/iu;
+
+function splitSeparatesChangeFromItsCheck(pieces: AgentPiece[]): boolean {
+  // This is a deliberately small lexical heuristic: acceptance language in a dependent
+  // piece's outcome/checkpoint signals that it may only verify or complete its dependency.
+  // It cannot determine semantic read sets, so unrelated staged work with such wording can
+  // be rejected; graders should keep genuinely independent pieces free of false dependencies.
+  return pieces.some(
+    (piece) =>
+      piece.depends_on.length > 0 &&
+      acceptanceCheckLanguage.test(`${piece.outcome} ${piece.first_return}`),
+  );
+}
+
 function validateAgentGrade(
   grade: AgentGrade,
   parentBrief?: string,
@@ -220,10 +238,19 @@ function validateAgentGrade(
     return "a split grade must contain at least two pieces";
   if (splitOnlyByFileList(pieces))
     return "split pieces repeat one operation over different file lists; file count is not a separate deliverable";
+  if (splitSeparatesChangeFromItsCheck(pieces))
+    return "split separates a change from its own check";
   const parent =
     parentBrief === undefined ? undefined : parseTicket(parentBrief);
   if (parent?.kind === "ticket" && parent.ticket.split_from !== undefined)
     return `ticket is already a split piece (split_from=${parent.ticket.split_from}) and cannot be split again`;
+  if (
+    parent?.kind === "ticket" &&
+    (parent.ticket.writes?.length === 0 ||
+      parent.ticket.read_only_diagnostic === true) &&
+    pieces.some((piece) => piece.depends_on.length > 0)
+  )
+    return "split separates dependent read-only sections";
   if (parent?.kind === "ticket" && parent.ticket.first_return !== undefined) {
     const firstReturn = parent.ticket.first_return
       .trim()

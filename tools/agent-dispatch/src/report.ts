@@ -33,7 +33,7 @@ export type ReturnRecord = z.output<typeof ReturnSchema>;
 /** The pre-run remand record. Kept here as its single schema home so the later grader can fill it. */
 export const TicketGradeSchema = z.strictObject({
   verdict: z.enum(["pass", "split", "clarify"]),
-  source: z.literal("floor"),
+  source: z.enum(["floor", "floor+grader"]),
   violations: z.array(
     z.strictObject({
       rule: z.string(),
@@ -60,6 +60,31 @@ export const TicketGradeSchema = z.strictObject({
     .optional(),
   estimated_first_return_s: z.number().int().optional(),
   basis: z.string().optional(),
+  grader: z
+    .strictObject({
+      status: z.enum(["ok", "failed", "skipped"]),
+      reason: z.string().optional(),
+      pick: z.unknown().optional(),
+      row: z
+        .strictObject({
+          id: z.string(),
+          route: z.enum(["codex", "claude"]),
+          model: z.string(),
+          effort: z.string(),
+        })
+        .optional(),
+      elapsed_s: z.number().nonnegative().optional(),
+      usage: z
+        .strictObject({
+          input_tokens: z.number().optional(),
+          cached_input_tokens: z.number().optional(),
+          output_tokens: z.number().optional(),
+          reasoning_output_tokens: z.number().optional(),
+          cost_usd: z.number().nonnegative().nullable().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 export type TicketGrade = z.output<typeof TicketGradeSchema>;
 

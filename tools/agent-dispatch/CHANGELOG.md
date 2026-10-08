@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.2 — 2026-10-08
+
+- Run a bounded, read-only grader worker selected by Jev from the roster; record its pick, row, status, elapsed time, usage and cost inside the parent receipt, and fall back to the floor on any grader failure without refusing the run.
+- Validate each proposed piece as a schema 2 ticket against the model-free floor, and reject overlapping writes unless `depends_on` orders the pieces. Schema 2 split/clarify grades remand with actionable violations and ready-to-paste pieces or questions; schema 1/plain grades remain warnings.
+- Add `grade-replay <dir> [--expect <file.tsv>]` to grade fixture briefs without starting their real workers and report agreement plus false-refusal rate; `--no-grader` skips grading and records that choice.
+- Fix checkpoint receipts so `worker.elapsed_s` covers the whole run and the wrap-up turn is recorded separately as `checkpoint.wrap_up_s`.
+- Align the checkpoint timer and `fired_at_s` to the worker-start origin; a new resume starts a fresh first-return window.
+
 ## 1.3.1 — 2026-10-08
 
 - Set the default worker bound to 600 seconds, add a 360-second first-return window, and require a reason above 600 seconds.

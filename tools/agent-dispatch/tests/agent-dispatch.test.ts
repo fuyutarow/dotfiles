@@ -104,12 +104,14 @@ writeFileSync(
 import { dirname } from "node:path";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 const args = Bun.argv.slice(2);
+const promptAt = args.indexOf("--prompt-file");
+const promptText = promptAt === -1 ? "" : await Bun.file(args[promptAt + 1] ?? "").text();
+const isGrader = promptText.includes("Grade this brief as a meaningful remand judgment");
 const resuming = args.includes("--resume");
-if (process.env.FAKE_CHECKPOINT === "1" && !resuming && process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE !== undefined)
+if (process.env.FAKE_CHECKPOINT === "1" && process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE !== undefined)
   appendFileSync(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: 1, files: 0, session: "thread-fake-checkpoint" }));
-if (!(process.env.FAKE_CHECKPOINT === "1" && resuming))
-  await Bun.sleep(Number(process.env.FAKE_SLEEP_MS ?? "0"));
-const timedOut = process.env.FAKE_TIMEOUT === "1";
+await Bun.sleep(Number(isGrader ? process.env.FAKE_GRADER_SLEEP_MS ?? "0" : resuming ? process.env.FAKE_RESUME_SLEEP_MS ?? "0" : process.env.FAKE_SLEEP_MS ?? "0"));
+const timedOut = isGrader ? process.env.FAKE_GRADER_TIMEOUT === "1" : process.env.FAKE_TIMEOUT === "1";
 if (timedOut && process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE !== undefined)
   appendFileSync(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "checks complete", commands: 1, files: 0 }));
 const exit = timedOut ? 3 : Number(process.env.FAKE_EXIT ?? "0");
@@ -117,9 +119,8 @@ if (process.env.FAKE_ORPHAN_PID_FILE !== undefined) {
   const orphan = Bun.spawn(["sleep", "60"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
   await Bun.write(process.env.FAKE_ORPHAN_PID_FILE, String(orphan.pid));
 }
-const promptAt = args.indexOf("--prompt-file");
 if (promptAt !== -1)
-  appendFileSync(${JSON.stringify(join(scratch, "prompt.log"))}, "<<<" + await Bun.file(args[promptAt + 1] ?? "").text() + ">>>\\n");
+  appendFileSync(${JSON.stringify(join(scratch, "prompt.log"))}, "<<<" + promptText + ">>>\\n");
 const touch = process.env.FAKE_TOUCH;
 if (touch !== undefined) {
   const path = (args[args.indexOf("--cd") + 1] ?? ".") + "/" + touch;
@@ -129,9 +130,11 @@ if (touch !== undefined) {
 const runIdAt = args.indexOf("--run-id");
 const runId = runIdAt === -1 ? "standalone-fake-run" : args[runIdAt + 1];
 const checkpointReturn = '{"summary":"checkpoint","changes":[],"checks":[],"for_coordinator":[],"open":[]}\\n\`\`\`agent-dispatch-return\\n{"findings":[{"text":"checkpointed"}],"evidence":["fake"],"impact_on_brief":"none","proposed_next":"done","artifacts":[]}\\n\`\`\`';
-const lastMessage = process.env.FAKE_LAST ?? (process.env.FAKE_CHECKPOINT === "1" && resuming ? checkpointReturn : process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n");
+const gradeReply = process.env.FAKE_GRADE ?? '{"verdict":"pass","violations":[]}';
+const fence = String.fromCharCode(96).repeat(3);
+const lastMessage = isGrader ? process.env.FAKE_GRADE_LAST ?? fence + "agent-dispatch-grade\\n" + gradeReply + "\\n" + fence : process.env.FAKE_LAST ?? (process.env.FAKE_CHECKPOINT === "1" && resuming ? checkpointReturn : process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n");
 const usage = process.env.FAKE_USAGE === "missing" ? { input_tokens: 100 } : { input_tokens: 100, cached_input_tokens: 20, output_tokens: 7, reasoning_output_tokens: 3 };
-console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: timedOut ? "timeout" : exit === 0 ? "ok" : "codex-failed", elapsed_s: 1.5, usage, ...(process.env.FAKE_NO_SESSION === "1" ? {} : { session: "thread-fake-0001" }), last_message: lastMessage, ...(exit === 0 ? {} : { cause: timedOut ? "fake worker timed out" : "fake worker failed" }) }));
+console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: timedOut ? "timeout" : exit === 0 ? "ok" : "codex-failed", elapsed_s: Number(process.env.FAKE_ELAPSED_S ?? "1.5"), usage, ...(process.env.FAKE_NO_SESSION === "1" ? {} : { session: "thread-fake-0001" }), last_message: lastMessage, ...(exit === 0 ? {} : { cause: timedOut ? "fake worker timed out" : "fake worker failed" }) }));
 process.exit(exit);
 `,
 );
@@ -215,7 +218,13 @@ async function router(
   // state is refused while the first is ungraded — the rule under test below, not these tests' topic.
   const state =
     env.AGENT_ROUTER_STATE_DIR ?? join(scratch, `state-${stateSeq++}`);
-  const r = Bun.spawn([process.execPath, CLI, ...args], {
+  const routedArgs =
+    args[0] === "run" &&
+    env.TEST_ENABLE_GRADER !== "1" &&
+    !args.includes("--no-grader")
+      ? [...args, "--no-grader"]
+      : args;
+  const r = Bun.spawn([process.execPath, CLI, ...routedArgs], {
     env: {
       ...process.env,
       AGENT_ROUTER_STATE_DIR: state,
@@ -1069,7 +1078,9 @@ describe("agent-dispatch result", () => {
     const id = decodedJson(RunIdSchema, run.out.trim()).run_id;
     const r = await router(["result", id], { AGENT_ROUTER_STATE_DIR: state });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("row=luna-max outcome=ok exit=0 elapsed=1.5s");
+    expect(r.out).toMatch(
+      /row=luna-max outcome=ok exit=0 elapsed=\d+(?:\.\d+)?s/u,
+    );
     expect(r.out.endsWith("final report from fake worker\n")).toBe(true);
   });
 
@@ -1986,6 +1997,40 @@ describe("agent-dispatch ask", () => {
 
 const ticketText = (fields: string, prose = "Do the thing.\n"): string =>
   `+++\nschema = 1\n${fields}\n+++\n${prose}`;
+const splitGrade = {
+  verdict: "split",
+  violations: [
+    {
+      rule: "multiple-deliverables",
+      quote_from_brief: "Deliver A and B.",
+      why_it_blocks_a_6min_first_return:
+        "A and B can be checked independently, so one ticket hides two decisions.",
+      fix: "Run the two bounded tickets in dependency order.",
+    },
+  ],
+  pieces: [
+    {
+      title: "A decision",
+      outcome: "Choose A",
+      consumer: "A owner",
+      first_return: "a.md within six minutes",
+      writes: ["a/**"],
+      verify: ["true"],
+      depends_on: [],
+    },
+    {
+      title: "B decision",
+      outcome: "Choose B",
+      consumer: "B owner",
+      first_return: "b.md within six minutes",
+      writes: ["b/**"],
+      verify: ["true"],
+      depends_on: [],
+    },
+  ],
+  estimated_first_return_s: 180,
+  basis: "Two independent checkable outcomes.",
+};
 const freshCwd = (): string => mkdtempSync(join(scratch, "cwd-"));
 const runArgs = (
   promptFile: string,
@@ -2111,6 +2156,181 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     expect(readFileSync(join(r.state, "runs.jsonl"), "utf8")).toContain(
       '"ticket_grade"',
     );
+  });
+
+  test("valid split refuses schema 2 and prints ready-to-paste pieces", async () => {
+    const b = brief(
+      "t-grader-split",
+      '+++\nschema = 2\noutcome = "choose A and B"\nconsumer = "coordinator"\nfirst_return = "decision.md"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nDeliver A and B.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(splitGrade),
+    });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("remand multiple-deliverables:");
+    expect(r.err).toContain("split piece 1: A decision");
+    expect(r.err).toContain("first_return: a.md within six minutes");
+    const refusal = decodedJson(
+      z.looseObject({
+        ticket_grade: z.looseObject({
+          verdict: z.string(),
+          source: z.string(),
+          grader: z.looseObject({
+            status: z.string(),
+            pick: z.looseObject({ choice: z.string() }),
+            row: z.looseObject({ id: z.string(), route: z.string() }),
+            elapsed_s: z.number(),
+            usage: z.looseObject({
+              input_tokens: z.number(),
+              cost_usd: z.number().nullable(),
+            }),
+          }),
+        }),
+      }),
+      readFileSync(join(r.state, "runs.jsonl"), "utf8").trim(),
+    );
+    expect(refusal.ticket_grade).toMatchObject({
+      verdict: "split",
+      source: "floor+grader",
+      grader: { status: "ok", row: { id: "luna-max", route: "codex" } },
+    });
+    expect(logLines(r.state).map((line) => line.kind)).toEqual(["refusal"]);
+  });
+
+  test("piece missing first_return invalidates the grade and falls back to the floor", async () => {
+    const invalid = {
+      ...splitGrade,
+      pieces: splitGrade.pieces.map((piece, index) =>
+        index === 0 ? { ...piece, first_return: undefined } : piece,
+      ),
+    };
+    const b = brief(
+      "t-grader-invalid-piece",
+      '+++\nschema = 2\noutcome = "choose A"\nconsumer = "owner"\nfirst_return = "decision.md"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nChoose A.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(invalid),
+    });
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        ticket_grade: z.looseObject({
+          verdict: z.string(),
+          source: z.string(),
+          grader: z.looseObject({ status: z.string(), reason: z.string() }),
+        }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.ticket_grade).toMatchObject({
+      verdict: "pass",
+      source: "floor",
+      grader: { status: "failed" },
+    });
+  });
+
+  test("overlapping piece writes without depends_on invalidate the grade", async () => {
+    const overlap = {
+      ...splitGrade,
+      pieces: splitGrade.pieces.map((piece, index) =>
+        index === 1 ? { ...piece, writes: ["a/file.txt"] } : piece,
+      ),
+    };
+    const b = brief(
+      "t-grader-overlap",
+      '+++\nschema = 2\noutcome = "choose A"\nconsumer = "owner"\nfirst_return = "decision.md"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nChoose A.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(overlap),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("overlapping writes without a depends_on order");
+    expect(r.out).toContain('"status":"failed"');
+  });
+
+  test.each([
+    ["malformed block", { FAKE_GRADE_LAST: "no grade fence" }],
+    [
+      "timeout",
+      {
+        FAKE_GRADER_SLEEP_MS: "200",
+        AGENT_DISPATCH_TEST_GRADER_TIMEOUT_MS: "30",
+      },
+    ],
+  ])("%s grader failure never refuses the run", async (_label, extraEnv) => {
+    const b = brief(
+      `t-grader-${_label}`,
+      '+++\nschema = 2\noutcome = "choose A"\nconsumer = "owner"\nfirst_return = "decision.md"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nChoose A.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      ...extraEnv,
+    });
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        ticket_grade: z.looseObject({
+          verdict: z.string(),
+          grader: z.looseObject({ status: z.string() }),
+        }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.ticket_grade.verdict).toBe("pass");
+    expect(receipt.ticket_grade.grader.status).toBe("failed");
+  });
+
+  test("schema 1 split is warned and runs", async () => {
+    const b = brief(
+      "t-grader-schema1",
+      ticketText("writes = []", "Deliver A and B.\n"),
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(splitGrade),
+    });
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("schema 1/plain refusal is planned for 1.4.0");
+    expect(r.err).toContain("split piece 1: A decision");
+  });
+
+  test("--no-grader is recorded in the parent receipt", async () => {
+    const b = brief("t-no-grader", "plain brief\n");
+    const r = await router([
+      ...runArgs(b, freshCwd(), "read-only"),
+      "--no-grader",
+    ]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(
+      '"status":"skipped","reason":"disabled by --no-grader"',
+    );
+  });
+
+  test("grade-replay reports agreement and false-refusal rate without running brief workers", async () => {
+    const dir = mkdtempSync(join(scratch, "grade-replay-"));
+    writeFileSync(join(dir, "a.md"), "A and B are separate decisions.\n");
+    writeFileSync(join(dir, "b.md"), "Another two-part decision.\n");
+    const expected = join(dir, "expected.tsv");
+    writeFileSync(expected, "a.md\tclarify\nb.md\tpass\n");
+    const before = existsSync(join(scratch, "argv.log"))
+      ? readFileSync(join(scratch, "argv.log"), "utf8").trim().split("\n")
+          .length
+      : 0;
+    const r = await router(["grade-replay", dir, "--expect", expected], {
+      FAKE_GRADE: JSON.stringify(splitGrade),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("a.md\tclarify\t2\ttrue\tok");
+    expect(r.out).toContain("agreement=1/2 (50%)");
+    expect(r.out).toContain("false_refusal_rate=1/1 (100%)");
+    const after = existsSync(join(scratch, "argv.log"))
+      ? readFileSync(join(scratch, "argv.log"), "utf8").trim().split("\n")
+          .length
+      : 0;
+    expect(after - before).toBe(2);
   });
 
   test.each([59, 14401, 60.5])(
@@ -2254,6 +2474,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       AGENT_DISPATCH_CHECKPOINT_MS: "250",
       FAKE_CHECKPOINT: "1",
       FAKE_SLEEP_MS: "2000",
+      FAKE_ELAPSED_S: "0.01",
     });
     expect(r.code).toBe(0);
     const receipt = decodedJson(
@@ -2262,8 +2483,9 @@ describe("agent-dispatch run: a brief with a ticket", () => {
           supported: z.boolean(),
           fired_at_s: z.number().nullable().optional(),
           return_followed: z.boolean().optional(),
+          wrap_up_s: z.number().optional(),
         }),
-        worker: z.looseObject({ outcome: z.string() }),
+        worker: z.looseObject({ outcome: z.string(), elapsed_s: z.number() }),
       }),
       r.out.trim(),
     );
@@ -2272,6 +2494,11 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       return_followed: true,
     });
     expect(typeof receipt.checkpoint.fired_at_s).toBe("number");
+    expect(receipt.checkpoint.fired_at_s).toBeGreaterThanOrEqual(0.2);
+    expect(receipt.checkpoint.wrap_up_s).toBe(0.01);
+    expect(receipt.worker.elapsed_s).toBeGreaterThanOrEqual(
+      receipt.checkpoint.fired_at_s ?? 0,
+    );
     expect(receipt.worker.outcome).toBe("returned");
     const args = readFileSync(join(scratch, "argv.log"), "utf8")
       .trim()
@@ -2307,6 +2534,38 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     );
     expect(receipt.checkpoint.fired_at_s).toBeNull();
     expect(receipt.checkpoint.return_followed).toBe(true);
+  });
+
+  test("a new resume starts a fresh first-return timer at its worker start", async () => {
+    const state = join(scratch, "fresh-resume-checkpoint");
+    const b = brief("t-fresh-resume", "plain task that initially fails\n");
+    const first = await router(runArgs(b, freshCwd(), "read-only"), {
+      AGENT_ROUTER_STATE_DIR: state,
+      FAKE_EXIT: "1",
+    });
+    expect(first.code).toBe(1);
+    const original = decodedJson(RunIdSchema, first.out.trim()).run_id;
+    const resumed = await router(["resume", original], {
+      AGENT_ROUTER_STATE_DIR: state,
+      AGENT_DISPATCH_CHECKPOINT_MS: "250",
+      FAKE_CHECKPOINT: "1",
+      FAKE_RESUME_SLEEP_MS: "1000",
+      FAKE_ELAPSED_S: "0.01",
+    });
+    expect(resumed.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        resumed_from: z.string(),
+        checkpoint: z.looseObject({ fired_at_s: z.number().nullable() }),
+        worker: z.looseObject({ elapsed_s: z.number() }),
+      }),
+      resumed.out.trim(),
+    );
+    expect(receipt.resumed_from).toBe(original);
+    expect(receipt.checkpoint.fired_at_s).toBeGreaterThanOrEqual(0.2);
+    expect(receipt.worker.elapsed_s).toBeGreaterThanOrEqual(
+      receipt.checkpoint.fired_at_s ?? 0,
+    );
   });
 
   test("capabilities reach Jev as required_capabilities in the request state", async () => {

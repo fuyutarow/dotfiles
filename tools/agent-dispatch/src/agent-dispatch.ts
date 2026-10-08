@@ -52,6 +52,7 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, hostname } from "node:os";
@@ -97,7 +98,14 @@ import {
   withReportInstruction,
   WorkerReport,
 } from "./report.ts";
-import { floorTicketGrade, renderTicketRemand } from "./ticket-grade.ts";
+import { floorTicketGrade } from "./ticket-grade.ts";
+import {
+  GRADE_WORKER_PROMPT,
+  mergeTicketGrades,
+  parseAgentGrade,
+  renderGradeRemand,
+  type ParsedAgentGrade,
+} from "./grader.ts";
 import {
   DEFAULT_TIMEOUT_S,
   EXTENDED_TIMEOUT_THRESHOLD_S,
@@ -883,6 +891,7 @@ interface RunFlags {
   label: string | undefined;
   timeoutS: number | undefined;
   timeoutReason: string | undefined;
+  noGrader: boolean;
 }
 
 function refuseUnrunnable(roster: Roster, id: string): Choice {
@@ -985,6 +994,215 @@ function workerArgs(
     "--persist-session",
     ...(resume === undefined ? [] : ["--resume", resume]),
   ];
+}
+
+const GRADER_TIMEOUT_S = 90;
+const GRADER_TIMEOUT_MS = (() => {
+  const testOverride = Number(
+    process.env.AGENT_DISPATCH_TEST_GRADER_TIMEOUT_MS ?? "",
+  );
+  return Number.isInteger(testOverride) && testOverride > 0
+    ? Math.min(testOverride, GRADER_TIMEOUT_S * 1000)
+    : GRADER_TIMEOUT_S * 1000;
+})();
+
+type GraderUsage = NonNullable<TicketGrade["grader"]>["usage"];
+
+function graderUsage(
+  row: Choice,
+  worker: Record<string, unknown>,
+): GraderUsage {
+  const rawUsage = z
+    .looseObject({
+      input_tokens: z.number().optional(),
+      cached_input_tokens: z.number().optional(),
+      output_tokens: z.number().optional(),
+      reasoning_output_tokens: z.number().optional(),
+      cache_read_input_tokens: z.number().optional(),
+      cache_creation_input_tokens: z.number().optional(),
+    })
+    .safeParse(worker.usage);
+  const normalized: {
+    input_tokens?: number;
+    cached_input_tokens?: number;
+    output_tokens?: number;
+    reasoning_output_tokens?: number;
+  } = {};
+  if (rawUsage.success) {
+    const usage = rawUsage.data;
+    let cachedInput = usage.cached_input_tokens;
+    if (
+      cachedInput === undefined &&
+      usage.cache_read_input_tokens !== undefined &&
+      usage.cache_creation_input_tokens !== undefined
+    )
+      cachedInput =
+        usage.cache_read_input_tokens + usage.cache_creation_input_tokens;
+    if (usage.input_tokens !== undefined)
+      normalized.input_tokens = usage.input_tokens;
+    if (cachedInput !== undefined) normalized.cached_input_tokens = cachedInput;
+    if (usage.output_tokens !== undefined)
+      normalized.output_tokens = usage.output_tokens;
+    if (usage.reasoning_output_tokens !== undefined)
+      normalized.reasoning_output_tokens = usage.reasoning_output_tokens;
+  }
+  let cost: number | null = null;
+  if (row.route === "claude") {
+    const amount = worker.total_cost_usd;
+    if (typeof amount === "number") cost = amount;
+    else if (typeof amount === "string" && amount.trim() !== "")
+      cost = Number(amount);
+    if (cost !== null && !Number.isFinite(cost)) cost = null;
+  } else if (
+    row.price_in !== undefined &&
+    row.price_out !== undefined &&
+    normalized.input_tokens !== undefined &&
+    normalized.output_tokens !== undefined
+  ) {
+    const input = normalized.input_tokens;
+    const cached = normalized.cached_input_tokens ?? 0;
+    const cachedPrice = row.price_cached_in ?? row.price_in;
+    cost =
+      ((input - cached) * row.price_in +
+        cached * cachedPrice +
+        ((normalized.output_tokens ?? 0) +
+          (normalized.reasoning_output_tokens ?? 0)) *
+          row.price_out) /
+      1_000_000;
+  }
+  return {
+    ...normalized,
+    cost_usd: cost,
+  };
+}
+
+/** Dispatch a read-only grader as a child of the parent run, without creating a run record. */
+async function gradeWithWorker(
+  roster: Roster,
+  brief: string,
+  cwd: string,
+  parentRunId: string,
+): Promise<{
+  grade: ReturnType<typeof parseAgentGrade>;
+  record: NonNullable<TicketGrade["grader"]>;
+}> {
+  const prompt = GRADE_WORKER_PROMPT(brief);
+  const pick = await pickFor(roster, prompt, cwd, [], GRADER_TIMEOUT_S);
+  const row = refuseUnrunnable(roster, pick.choice);
+  const graderDir = join(STATE_DIR, "grader");
+  mkdirSync(graderDir, { recursive: true });
+  const workerBrief = join(graderDir, `${parentRunId}.md`);
+  const progress = join(graderDir, `${parentRunId}.progress.json`);
+  writeFileSync(workerBrief, prompt);
+  const runId = `${parentRunId}-grader`;
+  const args = workerArgs(
+    roster,
+    row,
+    {
+      promptFile: workerBrief,
+      cd: cwd,
+      sandbox: "read-only",
+      choice: "auto",
+      label: "ticket grader",
+      timeoutS: GRADER_TIMEOUT_S,
+      timeoutReason: undefined,
+      noGrader: true,
+    },
+    progress,
+    runId,
+    undefined,
+  );
+  const signal = AbortSignal.timeout(GRADER_TIMEOUT_MS);
+  const started = performance.now();
+  const child = Bun.spawn([process.execPath, ...args], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, AGENT_DISPATCH_CODEX_PROGRESS_FILE: progress },
+    detached: true,
+    signal,
+    killSignal: "SIGTERM",
+  });
+  const stopGroup = (): void => {
+    void attempt(() => process.kill(-child.pid, "SIGTERM"));
+  };
+  signal.addEventListener("abort", stopGroup, { once: true });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    child.stdout === null
+      ? Promise.resolve("")
+      : new Response(child.stdout).text(),
+    child.stderr === null
+      ? Promise.resolve("")
+      : new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  signal.removeEventListener("abort", stopGroup);
+  if (signal.aborted) stopGroup();
+  await reapWorkerGroup(child.pid);
+  const elapsed = Math.round((performance.now() - started) / 100) / 10;
+  const decoded = jsonText.safeParse(stdout.trim());
+  const worker = decoded.success
+    ? z
+        .looseObject({
+          outcome: z.string().optional(),
+          exit_code: z.number().optional(),
+          last_message: z.string().optional(),
+          result: z.string().optional(),
+          usage: z.unknown().optional(),
+          total_cost_usd: z.unknown().optional(),
+          elapsed_s: z.number().optional(),
+          cause: z.string().optional(),
+          error: z.string().optional(),
+        })
+        .safeParse(decoded.data)
+    : undefined;
+  let failureReason = "no worker receipt";
+  if (worker?.success === true)
+    failureReason =
+      worker.data.cause ?? worker.data.error ?? "no grader response";
+  else {
+    const stderrText = stderr.trim();
+    if (stderrText.length > 0) failureReason = stderrText;
+  }
+  const workerSucceeded = worker?.success === true;
+  let parsed: ParsedAgentGrade;
+  if (
+    !signal.aborted &&
+    exitCode === 0 &&
+    workerSucceeded &&
+    worker.data.outcome !== "timeout" &&
+    worker.data.exit_code !== 124
+  ) {
+    parsed = parseAgentGrade(
+      worker.data.last_message ?? worker.data.result ?? "",
+    );
+  } else if (signal.aborted) {
+    parsed = {
+      valid: false,
+      reason: `grader timed out after ${GRADER_TIMEOUT_MS / 1000} seconds`,
+    };
+  } else {
+    parsed = {
+      valid: false,
+      reason: `grader worker failed (exit ${exitCode}): ${failureReason.slice(0, 300)}`,
+    };
+  }
+  const record = {
+    status: parsed.valid ? ("ok" as const) : ("failed" as const),
+    ...(parsed.valid ? {} : { reason: parsed.reason }),
+    pick,
+    row: {
+      id: row.id,
+      route: row.route,
+      model: row.model,
+      effort: row.effort,
+    },
+    elapsed_s: workerSucceeded ? (worker.data.elapsed_s ?? elapsed) : elapsed,
+    ...(workerSucceeded ? { usage: graderUsage(row, worker.data) } : {}),
+  } satisfies NonNullable<TicketGrade["grader"]>;
+  rmSync(workerBrief, { force: true });
+  rmSync(progress, { force: true });
+  return { grade: parsed, record };
 }
 
 const ClaudeRelay = z.looseObject({
@@ -1189,6 +1407,7 @@ function statsFor(
   briefChars: number,
   cwd: string,
   asOf: string,
+  graderCostUsd: number | null = null,
 ): Record<string, unknown> {
   const tokens = tokenCounts(row.route, worker.usage);
   const price = {
@@ -1229,6 +1448,10 @@ function statsFor(
       costBasis = "list_price_x_tokens";
     }
   }
+  const combinedCost =
+    costUsd === null || graderCostUsd === null
+      ? costUsd
+      : costUsd + graderCostUsd;
   return {
     row: row.id,
     family: row.id.split("-")[0],
@@ -1241,8 +1464,12 @@ function statsFor(
     elapsed_s:
       typeof worker.elapsed_s === "number" ? worker.elapsed_s : elapsedS,
     tokens,
-    cost_usd: costUsd,
-    cost_basis: costBasis,
+    cost_usd: combinedCost,
+    grader_cost_usd: graderCostUsd,
+    cost_basis:
+      graderCostUsd === null
+        ? costBasis
+        : `${costBasis} + grader billed/list price`,
     price,
     brief_chars: briefChars,
     cwd,
@@ -1281,9 +1508,50 @@ async function run(flags: RunFlags): Promise<number> {
     parsed,
     roster.choice.find((choice) => choice.id === pick.choice)?.effort,
   );
-  if (ticketGrade.violations.length > 0) {
-    for (const line of renderTicketRemand(ticketGrade)) console.error(line);
-    if (ticket?.schema === 2) {
+  let finalGrade = ticketGrade;
+  if (flags.noGrader) {
+    finalGrade = {
+      ...ticketGrade,
+      grader: { status: "skipped", reason: "disabled by --no-grader" },
+    };
+  } else if (ticket?.schema === 2 && ticketGrade.violations.length > 0) {
+    finalGrade = {
+      ...ticketGrade,
+      grader: { status: "skipped", reason: "floor refused schema 2 ticket" },
+    };
+  } else {
+    const parentId = `${now().replaceAll(/[:.]/gu, "-")}-${process.pid}`;
+    const attempted = await attempt(() =>
+      gradeWithWorker(roster, brief, resolve(flags.cd), parentId),
+    );
+    if (!attempted.ok) {
+      finalGrade = {
+        ...ticketGrade,
+        grader: {
+          status: "failed",
+          reason: errorMessage(attempted.error).slice(0, 300),
+        },
+      };
+    } else if (!attempted.value.grade.valid) {
+      finalGrade = {
+        ...ticketGrade,
+        grader: {
+          ...attempted.value.record,
+          status: "failed",
+          reason: attempted.value.grade.reason,
+        },
+      };
+    } else {
+      finalGrade = mergeTicketGrades(
+        ticketGrade,
+        attempted.value.grade.grade,
+        attempted.value.record,
+      );
+    }
+  }
+  if (finalGrade.violations.length > 0) {
+    for (const line of renderGradeRemand(finalGrade)) console.error(line);
+    if (ticket?.schema === 2 && finalGrade.verdict !== "pass") {
       appendLog({
         kind: "refusal",
         at: now(),
@@ -1294,13 +1562,29 @@ async function run(flags: RunFlags): Promise<number> {
           chars: brief.length,
         },
         pick,
-        ticket_grade: ticketGrade,
+        ticket_grade: finalGrade,
       });
       return 2;
     }
-    console.error(
-      "agent-dispatch: remand is a warning for this brief; schema 2 refusal is planned for 1.4.0",
-    );
+    if (ticket?.schema !== 2 && finalGrade.verdict !== "pass")
+      console.error(
+        "agent-dispatch: remand is a warning for this brief; schema 1/plain refusal is planned for 1.4.0",
+      );
+  } else if (ticket?.schema === 2 && finalGrade.verdict !== "pass") {
+    for (const line of renderGradeRemand(finalGrade)) console.error(line);
+    appendLog({
+      kind: "refusal",
+      at: now(),
+      cwd: resolve(flags.cd),
+      brief: {
+        path: resolve(flags.promptFile),
+        sha256: sha256(brief),
+        chars: brief.length,
+      },
+      pick,
+      ticket_grade: finalGrade,
+    });
+    return 2;
   }
   // A ticket's front matter is the router's, not the worker's: the worker gets the prose and the
   // verify line, from a copy under the state dir. A legacy brief goes to the worker as the file itself.
@@ -1311,7 +1595,7 @@ async function run(flags: RunFlags): Promise<number> {
     flags,
     brief,
     ticket,
-    ticketGrade,
+    ticketGrade: finalGrade,
     pick,
     label: flags.label ?? briefLabel(parsed.prose),
     workerText,
@@ -1458,7 +1742,8 @@ async function launch(l: Launch): Promise<number> {
     runId,
     resume?.session,
   );
-  const t0 = performance.now();
+  const workerStartedAt = performance.now();
+  const t0 = workerStartedAt;
   const spawnWorker = (workerArgs_: string[]) =>
     Bun.spawn([process.execPath, ...workerArgs_], {
       stdin: "ignore",
@@ -1468,6 +1753,7 @@ async function launch(l: Launch): Promise<number> {
       detached: true,
     });
   let child = spawnWorker(args);
+  let checkpointResumed = false;
   let stopping = false;
   const stop = async (signal: NodeJS.Signals, code: number): Promise<void> => {
     if (stopping) return;
@@ -1550,6 +1836,10 @@ async function launch(l: Launch): Promise<number> {
       Number.isFinite(testDelay) && testDelay > 0
         ? testDelay
         : firstReturnS * 1000;
+    const timerDelayMs = Math.max(
+      0,
+      checkpointDelayMs - (performance.now() - workerStartedAt),
+    );
     checkpointTimer = setTimeout(() => {
       const lastMessageFile = join(
         STATE_DIR,
@@ -1560,9 +1850,10 @@ async function launch(l: Launch): Promise<number> {
         ? readFileSync(lastMessageFile, "utf8")
         : "";
       if (parseReturn(currentMessage).kind === "valid") return;
-      checkpointFiredAtS = Math.round((performance.now() - t0) / 1000);
+      checkpointFiredAtS =
+        Math.round(((performance.now() - workerStartedAt) / 1000) * 10) / 10;
       void attempt(() => process.kill(-child.pid, "SIGINT"));
-    }, checkpointDelayMs);
+    }, timerDelayMs);
   }
   let out = await new Response(child.stdout).text();
   let workerExit = await child.exited;
@@ -1597,6 +1888,7 @@ async function launch(l: Launch): Promise<number> {
         runId,
         session,
       );
+      checkpointResumed = true;
       child = spawnWorker(resumeArgs);
       out = await new Response(child.stdout).text();
       workerExit = await child.exited;
@@ -1627,6 +1919,16 @@ async function launch(l: Launch): Promise<number> {
     z.looseObject({ last_message: z.string().optional() }).safeParse(rawWorker)
       .data?.last_message ?? "";
   const parsedReturn = parseReturn(lastMessage);
+  const wrapUpElapsed = z
+    .looseObject({ elapsed_s: z.number().optional() })
+    .safeParse(rawWorker);
+  const wrapUpField: { wrap_up_s?: number } = {};
+  if (
+    checkpointResumed &&
+    wrapUpElapsed.success &&
+    wrapUpElapsed.data.elapsed_s !== undefined
+  )
+    wrapUpField.wrap_up_s = wrapUpElapsed.data.elapsed_s;
   const checkpoint =
     row.route === "claude"
       ? {
@@ -1637,6 +1939,7 @@ async function launch(l: Launch): Promise<number> {
           supported: true,
           fired_at_s: checkpointFiredAtS ?? null,
           return_followed: parsedReturn.kind === "valid",
+          ...wrapUpField,
         };
   let workerData = rawWorker;
   if (parsedReturn.kind === "valid" && workerData !== undefined)
@@ -1784,7 +2087,12 @@ async function launch(l: Launch): Promise<number> {
         : "process group only; this router does not assign a per-run Linux cgroup or recover reparented descendants that called setsid",
     // agent-dispatch's own receipt carries progress; a claude worker's comes from its progress file
     worker: worker.success
-      ? { ...progressField, sandbox: flags.sandbox, ...workerData }
+      ? {
+          ...progressField,
+          sandbox: flags.sandbox,
+          ...workerData,
+          elapsed_s: elapsedS,
+        }
       : unreadable("agent-dispatch", "codex-failed", out),
   };
   const runStats = statsFor(
@@ -1796,6 +2104,7 @@ async function launch(l: Launch): Promise<number> {
     brief.length,
     active.cwd,
     roster.as_of,
+    ticketGrade.grader?.usage?.cost_usd ?? null,
   );
   appendLog({ kind: "run", ...receipt, stats: runStats });
   rmSync(marker, { force: true });
@@ -1959,6 +2268,108 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
     `agent-dispatch: would run ${pick.choice} (${pick.source}: ${pick.reason})`,
   );
   process.stdout.write(`${JSON.stringify(pick)}\n`);
+  return 0;
+}
+
+type ReplayVerdict = "pass" | "split" | "clarify";
+
+function replayExpectations(expectFile: string): Map<string, ReplayVerdict> {
+  if (!existsSync(expectFile)) fatal(`no such expectation file: ${expectFile}`);
+  const ExpectedVerdict = z.enum(["pass", "split", "clarify"]);
+  const expected = new Map<string, ReplayVerdict>();
+  for (const [index, line] of readFileSync(expectFile, "utf8")
+    .split("\n")
+    .entries()) {
+    if (line === "") continue;
+    const [file, verdict, ...extra] = line.split("\t");
+    if (file === undefined || verdict === undefined || extra.length > 0)
+      fatal(`invalid expectation TSV row ${index + 1}`);
+    const parsedVerdict = ExpectedVerdict.safeParse(verdict);
+    if (!parsedVerdict.success)
+      fatal(`invalid expectation verdict at row ${index + 1}: ${verdict}`);
+    if (expected.has(file)) fatal(`duplicate expectation for ${file}`);
+    expected.set(file, parsedVerdict.data);
+  }
+  return expected;
+}
+
+async function gradeReplayBrief(
+  roster: Roster,
+  directory: string,
+  file: string,
+): Promise<{
+  grade: TicketGrade;
+  status: "ok" | "failed" | "skipped";
+  valid: boolean;
+}> {
+  const brief = readFileSync(join(directory, file), "utf8");
+  const parsed = parseTicket(brief);
+  const floor = floorTicketGrade(brief, parsed);
+  if (parsed.kind === "invalid")
+    return { grade: floor, status: "skipped", valid: false };
+  if (
+    parsed.kind === "ticket" &&
+    parsed.ticket.schema === 2 &&
+    floor.violations.length > 0
+  )
+    return { grade: floor, status: "skipped", valid: false };
+  const replayId = `replay-${sha256(`${file}:${brief}`).slice(0, 16)}`;
+  const result = await attempt(() =>
+    gradeWithWorker(roster, brief, resolve(directory), replayId),
+  );
+  if (!result.ok) return { grade: floor, status: "failed", valid: false };
+  if (!result.value.grade.valid)
+    return { grade: floor, status: "failed", valid: false };
+  return {
+    grade: mergeTicketGrades(
+      floor,
+      result.value.grade.grade,
+      result.value.record,
+    ),
+    status: "ok",
+    valid: true,
+  };
+}
+
+async function gradeReplay(
+  directory: string,
+  expectFile: string | undefined,
+): Promise<number> {
+  if (!existsSync(directory) || !statSync(directory).isDirectory())
+    fatal(`grade-replay needs an existing directory: ${directory}`);
+  const expected =
+    expectFile === undefined
+      ? new Map<string, ReplayVerdict>()
+      : replayExpectations(expectFile);
+  const roster = await loadRosterOrDie();
+  const files = readdirSync(directory)
+    .filter((file) => file.endsWith(".md"))
+    .toSorted();
+  let agreement = 0;
+  let compared = 0;
+  let falseRefusals = 0;
+  let expectedPass = 0;
+  for (const file of files) {
+    const evaluation = await gradeReplayBrief(roster, directory, file);
+    const nPieces = evaluation.grade.pieces?.length ?? 0;
+    process.stdout.write(
+      `${file}\t${evaluation.grade.verdict}\t${nPieces}\t${evaluation.valid}\t${evaluation.status}\n`,
+    );
+    const want = expected.get(file);
+    if (want === undefined) continue;
+    compared += 1;
+    if (want === "pass") expectedPass += 1;
+    if (want === evaluation.grade.verdict) agreement += 1;
+    if (want === "pass" && evaluation.grade.verdict !== "pass")
+      falseRefusals += 1;
+  }
+  const falseRate =
+    expectedPass === 0
+      ? "n/a"
+      : `${falseRefusals}/${expectedPass} (${Math.round((falseRefusals / expectedPass) * 100)}%)`;
+  process.stdout.write(
+    `TOTAL briefs=${files.length} agreement=${compared === 0 ? "n/a" : `${agreement}/${compared} (${Math.round((agreement / compared) * 100)}%)`} false_refusal_rate=${falseRate}\n`,
+  );
   return 0;
 }
 
@@ -2885,6 +3296,7 @@ async function resumeCommand(
       label: undefined,
       timeoutS,
       timeoutReason,
+      noGrader: false,
     },
     brief,
     ticket,
@@ -2955,6 +3367,11 @@ const argv = cli({
           type: String,
           description: "required justification when --timeout-s exceeds 1800",
         },
+        noGrader: {
+          type: Boolean,
+          description:
+            "skip the pre-spawn ticket grader (recorded in the receipt)",
+        },
       },
       help: { description: "Jev picks a row; run the worker" },
     }),
@@ -2975,6 +3392,22 @@ const argv = cli({
         },
       },
       help: { description: "the auto pick only; starts nothing" },
+    }),
+    command({
+      name: "grade-replay",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: ["<dir>"],
+      flags: {
+        expect: {
+          type: String,
+          description: "TSV file with file<TAB>expected verdict rows",
+        },
+      },
+      help: {
+        description:
+          "grade every Markdown brief with the floor and grader without starting the real worker",
+      },
     }),
     command({
       name: "ls",
@@ -3105,6 +3538,7 @@ const argv = cli({
 async function main(): Promise<number | undefined> {
   // Cleye leaves excess positionals in argv._ (writing-bun-scripts BG1); result and grade take one.
   const positionals =
+    argv.command === "grade-replay" ||
     argv.command === "grade" ||
     argv.command === "result" ||
     argv.command === "resume"
@@ -3156,6 +3590,7 @@ async function main(): Promise<number | undefined> {
       label: f.label,
       timeoutS,
       timeoutReason: f.timeoutReason,
+      noGrader: f.noGrader ?? false,
     });
   }
   if (argv.command === "pick") {
@@ -3163,6 +3598,11 @@ async function main(): Promise<number | undefined> {
       fatal("a value is required");
     if (argv.flags.promptFile === undefined) fatal("pick needs --prompt-file");
     return pickOnly(argv.flags.promptFile, argv.flags.cd);
+  }
+  if (argv.command === "grade-replay") {
+    if (argv._.length !== 1) fatal("grade-replay needs <dir>");
+    if (argv.flags.expect === "") fatal("--expect needs a file path");
+    return gradeReplay(argv._.dir, argv.flags.expect);
   }
   if (argv.command === "ask") {
     if (argv.flags.request === undefined || argv.flags.request === "")

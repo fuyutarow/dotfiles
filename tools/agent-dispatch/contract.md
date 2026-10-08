@@ -2,7 +2,7 @@
 
 ## Worker display IDs
 
-`agent-dispatch run --name <name>` or ticket front matter `name = "<name>"` assigns the worker ID `agt_<name>`; the CLI value takes precedence. Names keep their typed case and must contain 1..16 ASCII letters, digits, `_` or `-`. Without either name, the dispatcher assigns `agt_` followed by four lowercase base36 characters. A live ID on this host cannot be reused; finished runs release it. Resume keeps the original display ID. `resume`, `result`, `grade` and `ack` accept the display ID, choosing the most recent run when finished history contains more than one match.
+`agent-dispatch run --name <name>` or ticket front matter `name = "<name>"` assigns the worker ID `agt_<name>`, name in [A-Za-z0-9_] (hyphens become underscores); the CLI value takes precedence. Names keep their typed case and must contain 1..16 ASCII letters, digits, `_` or `-`. A hyphenated name is normalized to underscores with one stderr note; other characters are refused with exit 2. Without either name, the dispatcher assigns `agt_` followed by four lowercase base36 characters. A live ID on this host cannot be reused; finished runs release it. Resume keeps the original display ID. `resume`, `result`, `grade` and `ack` accept the display ID, choosing the most recent run when finished history contains more than one match; hyphenated spelling resolves to the underscore ID.
 
 ## Pre-spawn ticket grading
 

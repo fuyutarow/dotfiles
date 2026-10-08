@@ -947,6 +947,9 @@ function readActive(): { active: Active; alive: boolean; file: string }[] {
 const validDisplayName = (name: string): boolean =>
   /^[A-Za-z0-9_-]{1,16}$/u.test(name);
 
+const normalizeDisplayName = (name: string): string =>
+  name.replaceAll("-", "_");
+
 function chooseDisplayId(name: string | undefined): string {
   if (name !== undefined && !validDisplayName(name))
     fatal(
@@ -954,8 +957,13 @@ function chooseDisplayId(name: string | undefined): string {
     );
   const live = readActive().filter((entry) => entry.alive);
   if (name !== undefined) {
-    const displayId = displayIdForName(name);
+    const normalizedName = normalizeDisplayName(name);
+    const displayId = displayIdForName(normalizedName);
     stderrRun = { displayId };
+    if (normalizedName !== name)
+      console.error(
+        `agent-dispatch: normalized worker name '${name}' to '${normalizedName}'`,
+      );
     const holder = live.find((entry) => entry.active.display_id === displayId);
     if (holder !== undefined)
       fatal(
@@ -4229,7 +4237,10 @@ async function main(): Promise<number | undefined> {
 function resolveRunId(id: string): string {
   const runs = readLog().filter((l) => l.kind === "run");
   if (id === "" || runs.some((l) => l.run_id === id)) return id;
-  const displayMatches = runs.filter((l) => l.display_id === id);
+  const normalizedId = /^agt[_-]/u.test(id)
+    ? `agt_${normalizeDisplayName(id.slice(4))}`
+    : id;
+  const displayMatches = runs.filter((l) => l.display_id === normalizedId);
   if (displayMatches.length > 0) {
     const latest = displayMatches.at(-1);
     if (displayMatches.length > 1)

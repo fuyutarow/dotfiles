@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.4 — 2026-10-09
+
+- Normalize hyphens in named worker display IDs to underscores, resolve either spelling, and refuse other characters.
+
 ## 1.5.3 — 2026-10-09
 
 - Apply the requested stats window consistently, report grading overhead by component while excluding ticket verification from `--check`, and explain that returned runs count as accepted only after acknowledgement.

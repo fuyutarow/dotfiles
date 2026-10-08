@@ -4460,6 +4460,31 @@ describe("agent-dispatch: the typed final report", () => {
       decodedJson(z.looseObject({ display_id: z.string() }), cliRun.out.trim())
         .display_id,
     ).toBe("agt_cli_name");
+
+    const hyphenRun = await router(
+      [
+        "run",
+        "--prompt-file",
+        ticket,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+        "--name",
+        "gy-pressure",
+      ],
+      {},
+    );
+    expect(hyphenRun.code).toBe(0);
+    expect(hyphenRun.err).toContain(
+      "normalized worker name 'gy-pressure' to 'gy_pressure'",
+    );
+    expect(
+      decodedJson(
+        z.looseObject({ display_id: z.string() }),
+        hyphenRun.out.trim(),
+      ).display_id,
+    ).toBe("agt_gy_pressure");
   });
 
   test("invalid and duplicate live names are refused with the reason and holder", async () => {
@@ -4491,7 +4516,7 @@ describe("agent-dispatch: the typed final report", () => {
         "--sandbox",
         "read-only",
         "--name",
-        "same",
+        "a-b",
       ],
       { AGENT_ROUTER_STATE_DIR: state, FAKE_BLOCK_UNTIL_FILE: releaseFile },
       async () => {
@@ -4504,7 +4529,7 @@ describe("agent-dispatch: the typed final report", () => {
                 file.endsWith(".json") &&
                 !file.endsWith(".progress.json") &&
                 readFileSync(join(activeDir, file), "utf8").includes(
-                  '"display_id":"agt_same"',
+                  '"display_id":"agt_a_b"',
                 ),
             )
           )
@@ -4521,7 +4546,7 @@ describe("agent-dispatch: the typed final report", () => {
             "--sandbox",
             "read-only",
             "--name",
-            "same",
+            "a_b",
           ],
           { AGENT_ROUTER_STATE_DIR: state },
         );
@@ -4530,9 +4555,7 @@ describe("agent-dispatch: the typed final report", () => {
     );
     expect(first.code).toBe(0);
     expect(duplicate?.code).toBe(2);
-    expect(duplicate?.err).toContain(
-      "display id agt_same is held by live run ",
-    );
+    expect(duplicate?.err).toContain("display id agt_a_b is held by live run ");
   });
 
   test("finished runs release names and unnamed runs get four lowercase base36 characters", async () => {
@@ -4600,7 +4623,7 @@ describe("agent-dispatch: the typed final report", () => {
       { AGENT_ROUTER_STATE_DIR: state, FAKE_TIMEOUT: "1" },
     );
     expect(first.code).toBe(3);
-    const resumed = await router(["resume", "agt_resume_me"], {
+    const resumed = await router(["resume", "agt-resume-me"], {
       AGENT_ROUTER_STATE_DIR: state,
     });
     expect(resumed.code).toBe(0);
@@ -4610,14 +4633,14 @@ describe("agent-dispatch: the typed final report", () => {
     ).toBe("agt_resume_me");
     expect(
       (
-        await router(["grade", "agt_resume_me", "--waive", "not needed"], {
+        await router(["grade", "agt-resume-me", "--waive", "not needed"], {
           AGENT_ROUTER_STATE_DIR: state,
         })
       ).code,
     ).toBe(0);
     expect(
       (
-        await router(["ack", "agt_resume_me"], {
+        await router(["ack", "agt-resume-me"], {
           AGENT_ROUTER_STATE_DIR: state,
         })
       ).code,

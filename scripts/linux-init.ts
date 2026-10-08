@@ -28,9 +28,14 @@ import {
   symlinkSync,
   unlinkSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
+import { cli } from "cleye";
 import { $ } from "bun";
+import {
+  declareRentedCodexHost,
+  hostDeclarationProbes,
+} from "./codex-host-bootstrap.ts";
 import { sudoIsOurs } from "./sudo-group.ts";
 
 const DOTFILES = join(homedir(), "dotfiles");
@@ -61,6 +66,50 @@ const SKIP: Readonly<Record<string, string>> = {
 const say = (line: string): void => {
   process.stdout.write(`linux:init: ${line}\n`);
 };
+
+function rejectPrototypeFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (
+    type === "unknown-flag" &&
+    (flag === "__proto__" || flag === "constructor")
+  ) {
+    process.stderr.write(`unknown flag(s): --${flag}\n`);
+    process.exit(2);
+  }
+}
+
+const parsed = cli(
+  {
+    name: "linux-init.ts",
+    strictFlags: true,
+    ignoreArgv: rejectPrototypeFlag,
+    parameters: [],
+    flags: {
+      rented: {
+        type: Boolean,
+        description: "declare this owner's rented box for codex-run",
+      },
+    },
+  },
+  undefined,
+  Bun.argv.slice(2),
+);
+if (parsed._.length > 0) {
+  process.stderr.write(`unexpected argument(s): ${parsed._.join(" ")}\n`);
+  process.exit(2);
+}
+
+const codexHostDeclaration = declareRentedCodexHost({
+  home: homedir(),
+  rented: parsed.flags.rented ?? false,
+  hostname: hostname(),
+  date: Temporal.Now.plainDateISO().toString(),
+  probes: hostDeclarationProbes(),
+  say,
+});
+if (codexHostDeclaration === "invalid") process.exit(1);
 
 const core = readFileSync(join(DOTFILES, "Brewfile.core"), "utf8")
   .split("\n")

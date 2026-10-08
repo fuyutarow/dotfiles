@@ -11,5 +11,7 @@ id "$U" > /dev/null 2>&1 || {
 }
 [ -f /root/.ssh/authorized_keys ] && install -d -m 700 -o "$U" -g "$U" "/home/$U/.ssh" && install -m 600 -o "$U" -g "$U" /root/.ssh/authorized_keys "/home/$U/.ssh/" # -D would leave ~/.ssh root-owned and link-dots could not write ~/.ssh/config
 apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq procps curl git zsh > /dev/null
-sudo -iu "$U" bash -c 'set -e; [ -x ~/.local/bin/mise ] || curl -fsSL https://mise.run | sh; [ -d ~/dotfiles ] || git clone https://github.com/fuyutarow/dotfiles ~/dotfiles; ~/.local/bin/mise x bun@1.4 -- bun ~/dotfiles/scripts/linux-init.ts'
+RENTED=""
+if [ "${1:-}" = "--rented" ]; then RENTED="--rented"; fi
+sudo -iu "$U" bash -c 'set -e; [ -x ~/.local/bin/mise ] || curl -fsSL https://mise.run | sh; [ -d ~/dotfiles ] || git clone https://github.com/fuyutarow/dotfiles ~/dotfiles; ~/.local/bin/mise x bun@1.4 -- bun ~/dotfiles/scripts/linux-init.ts "$@"' _ ${RENTED:+"$RENTED"}
 chsh -s "$(command -v zsh)" "$U"

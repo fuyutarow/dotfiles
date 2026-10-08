@@ -96,6 +96,8 @@ What the bootstrap step runs, by hand if the task itself is the thing broken:
 ssh -p <port> root@<host> 'curl -fsSL https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh | bash'
 ```
 
+`mise run box:init -- <alias>` also writes the codex-run host declaration on this owner's rented box when its measured container and user-namespace checks pass.
+
 Right after pushing a change to it, use the commit in the URL instead of `alpha`
 (`…/dotfiles/<commit>/scripts/bootstrap-linux.sh`): raw.githubusercontent.com served the
 pre-push version for several minutes (observed 2026-10-05). The traps it handles, seen on

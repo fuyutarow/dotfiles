@@ -122,7 +122,7 @@ export function buildPlan(o: Opts): Step[] {
             "-o",
             "StrictHostKeyChecking=accept-new",
             `root@${o.rootHost}`,
-            `curl -fsSL ${BOOTSTRAP_URL} | bash`,
+            `curl -fsSL ${BOOTSTRAP_URL} | bash -s -- --rented`,
           ],
         }
       : undefined;
@@ -156,6 +156,26 @@ export function buildPlan(o: Opts): Step[] {
       fix: "run `gh auth login` on this machine first (the token is read from `gh auth token`)",
     });
   }
+  plan.push({
+    name: "codex host",
+    group: "",
+    probe: onBox(
+      alias,
+      "bun $HOME/dotfiles/scripts/codex-host-bootstrap.ts --check",
+    ),
+    act: onBox(
+      alias,
+      logged(
+        "codex-host",
+        "bun $HOME/dotfiles/scripts/codex-host-bootstrap.ts --rented",
+        2 * MIN,
+      ),
+    ),
+    done: "codex-run host declaration",
+    timeoutMs: 2 * MIN,
+    log: "codex-host",
+    fix: "the rented Linux box must have Bun available and pass the measured container and user-namespace checks",
+  });
   for (const repo of o.repos) {
     const base = repo.split("/")[1] ?? repo;
     const dir = `$HOME/Workspace/${base}`;
@@ -295,7 +315,7 @@ export function parseOpts(argv: string[]): Opts | { error: string } {
       },
       help: {
         description:
-          "Bring a rented box up so experiments can resume: reach, gh, repos (clone, mise, jj, setup), doctors. Run from the Mac; every step is idempotent.",
+          "Bring a rented box up so experiments can resume: reach, codex host declaration, gh, repos (clone, mise, jj, setup), doctors. Run from the Mac; every step is idempotent.",
         usage:
           "box-init.ts <alias> [--root-host H --root-port P] [--gh] [--repo owner/name …]",
       },

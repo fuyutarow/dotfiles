@@ -85,6 +85,7 @@ describe("plan", () => {
   test("bare alias: reach, then doctor:remote", () => {
     expect(names({ alias: "box", gh: false, repos: [] })).toEqual([
       "reach",
+      "codex host",
       "doctor:remote",
     ]);
   });
@@ -93,6 +94,7 @@ describe("plan", () => {
     expect(names({ alias: "box", gh: true, repos: [] })).toEqual([
       "reach",
       "gh",
+      "codex host",
       "doctor:remote",
     ]);
   });
@@ -101,6 +103,7 @@ describe("plan", () => {
     expect(names({ alias: "box", gh: true, repos: ["o/a", "o/b"] })).toEqual([
       "reach",
       "gh",
+      "codex host",
       "clone a",
       "mise a",
       "jj a",
@@ -129,6 +132,7 @@ describe("plan", () => {
     expect(withRoot?.act?.argv).toContain("root@h");
     expect(withRoot?.act?.argv).toContain("-p");
     expect(withRoot?.act?.argv.at(-1)).toContain("bootstrap-linux.sh | bash");
+    expect(withRoot?.act?.argv.at(-1)).toContain("bash -s -- --rented");
   });
 
   test("the gh token travels on stdin only: no argv carries it", () => {
@@ -166,6 +170,17 @@ describe("plan", () => {
     expect(last?.act?.argv.at(-2)).toContain("doctor-remote.ts");
     expect(last?.act?.argv.at(-1)).toBe("box");
     expect(last?.humanOnly).toEqual(["agents"]);
+  });
+
+  test("codex host declaration validates first and runs the rented declaration step", () => {
+    const step = buildPlan({ alias: "box", gh: false, repos: [] }).find(
+      (item) => item.name === "codex host",
+    );
+    expect(step?.probe?.argv.at(-1)).toContain("--check");
+    expect(step?.act?.argv.at(-1)).toContain(
+      "codex-host-bootstrap.ts --rented",
+    );
+    expect(step?.log).toBe("codex-host");
   });
 });
 

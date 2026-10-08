@@ -79,15 +79,19 @@ async function readJsonObject(
 }
 
 // Replace JSON files as one sibling rename so readers never observe a partial write.
-async function atomicWrite(path: string, contents: string | Uint8Array): Promise<void> {
+async function atomicWrite(
+  path: string,
+  contents: string | Uint8Array,
+): Promise<void> {
   mkdirSync(dirname(path), { recursive: true });
   const temp = `${path}.${crypto.randomUUID()}.tmp`;
-  try {
-    await Bun.write(temp, contents);
-    renameSync(temp, path);
-  } finally {
-    if (existsSync(temp)) unlinkSync(temp);
-  }
+  await Bun.write(temp, contents)
+    .then(() => {
+      renameSync(temp, path);
+    })
+    .finally(() => {
+      if (existsSync(temp)) unlinkSync(temp);
+    });
 }
 
 function asPlugin(id: string, v: unknown): Result<Plugin, string> {

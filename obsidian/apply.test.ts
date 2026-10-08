@@ -8,11 +8,18 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 const tempDirs: string[] = [];
 
+function readJson(path: string): unknown {
+  const parsed = jsonOf(z.unknown()).safeParse(readFileSync(path, "utf8"));
+  return parsed.success ? parsed.data : undefined;
+}
+
 afterEach(() => {
-  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of tempDirs.splice(0))
+    rmSync(dir, { recursive: true, force: true });
 });
 
 test("merges declared settings atomically and keeps check read-only", async () => {
@@ -79,28 +86,27 @@ test("merges declared settings atomically and keeps check read-only", async () =
     readFileSync(path, "utf8"),
   );
   expect((await run("--check")).exitCode).toBe(1);
-  expect([appPath, dataPath, enabledPath].map((path) => readFileSync(path, "utf8"))).toEqual(before);
+  expect(
+    [appPath, dataPath, enabledPath].map((path) => readFileSync(path, "utf8")),
+  ).toEqual(before);
 
   expect((await run()).exitCode).toBe(0);
-  expect(JSON.parse(readFileSync(appPath, "utf8"))).toEqual({
+  expect(readJson(appPath)).toEqual({
     unrelated: "keep",
     readableLineLength: false,
   });
-  expect(JSON.parse(readFileSync(dataPath, "utf8"))).toEqual({
+  expect(readJson(dataPath)).toEqual({
     showLineNumbers: false,
     extensions: "a,b",
     flag: true,
   });
-  expect(JSON.parse(readFileSync(enabledPath, "utf8"))).toEqual([
-    "existing",
-    "code-view",
-  ]);
+  expect(readJson(enabledPath)).toEqual(["existing", "code-view"]);
   expect((await run()).stdout).toContain("OK");
   expect((await run("--check")).exitCode).toBe(0);
 
   rmSync(dataPath);
   expect((await run()).exitCode).toBe(0);
-  expect(JSON.parse(readFileSync(dataPath, "utf8"))).toEqual({
+  expect(readJson(dataPath)).toEqual({
     extensions: "a,b",
     flag: true,
   });

@@ -160,14 +160,18 @@ function main(): Result<number, Error> {
     return err(new UsageError(`unexpected argument: ${parsed._[0]}`));
   const rows = surfaces();
   if (parsed.flags.check) {
-    // Tracked files only — an untracked cache or editor file is not configuration. The same
-    // `git ls-files` lint:bun reads; the extension filter is CONFIG_GLOB's.
-    const ls = Bun.spawnSync(["git", "ls-files", "-z"], {
-      cwd: ROOT,
-      timeout: 30_000,
-    });
+    // Tracked files only — an untracked cache or editor file is not configuration.
+    const ls = Bun.spawnSync(
+      ["bun", "scripts/tracked-files.ts", "--expect-non-empty"],
+      {
+        cwd: ROOT,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      },
+    );
     if (ls.exitCode !== 0)
-      return err(new Error(`git ls-files failed: ${ls.stderr.toString()}`));
+      return err(new Error(`tracked-files failed: ${ls.stderr.toString()}`));
     const glob = new Bun.Glob(CONFIG_GLOB);
     const files = ls.stdout
       .toString()

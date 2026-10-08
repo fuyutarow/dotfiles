@@ -17,20 +17,28 @@ const git = (args: string[]): { code: number; out: string } => {
 };
 
 const idx = "agents/skills/README.md";
+const listed = Bun.spawnSync(
+  [
+    "bun",
+    "scripts/tracked-files.ts",
+    "--git-index",
+    "--expect-non-empty",
+    "agents/skills/*/SKILL.md",
+  ],
+  { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
+);
+if (listed.exitCode !== 0) {
+  console.log(`❌ tracked-files failed — ${listed.stderr.toString().trim()}`);
+  process.exit(1);
+}
 const readme = git(["show", `:${idx}`]);
 if (readme.code !== 0) {
   console.log(`❌ missing ${idx} in the index`);
   process.exit(1);
 }
 
-const listed = git(["ls-files", "--", "agents/skills/*/SKILL.md"]);
-if (listed.code !== 0) {
-  console.log("❌ git ls-files failed — cannot enumerate staged skills");
-  process.exit(1);
-}
-
 let rc = 0;
-for (const path of listed.out.split("\n").filter(Boolean)) {
+for (const path of listed.stdout.toString().split("\0").filter(Boolean)) {
   const n = path.split("/")[2] ?? "";
   if (readme.out.includes(`](${n}/)`)) continue;
   console.log(`❌ not in index: ${n}`);

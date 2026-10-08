@@ -92,6 +92,7 @@ const CORPUS = [
   { path: "scripts/box-init.ts" },
   { path: "scripts/agent-dispatch-host.ts" },
   { path: "scripts/config-map.ts" },
+  { path: "scripts/tracked-files.ts" },
   { path: "scripts/reclaim-purge.ts" },
   { path: "scripts/reclaim-run.ts" },
   { path: "scripts/reclaim-judgment.ts" },

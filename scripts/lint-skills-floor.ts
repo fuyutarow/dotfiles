@@ -19,10 +19,17 @@ const run = (cmd: string[], stdin?: Uint8Array) =>
     timeout: 120_000,
   });
 
-const listed = run(["git", "ls-files", "-z", "--", "agents/skills", BUDGET]);
+const listed = run([
+  "bun",
+  "scripts/tracked-files.ts",
+  "--git-index",
+  "--expect-non-empty",
+  "agents/skills",
+  BUDGET,
+]);
 if (listed.exitCode !== 0) {
   console.error(
-    `lint-skills-floor: git ls-files failed: ${listed.stderr.toString().trim()}`,
+    `lint-skills-floor: tracked-files failed: ${listed.stderr.toString().trim()}`,
   );
   process.exit(2);
 }

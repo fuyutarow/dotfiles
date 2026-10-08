@@ -241,7 +241,7 @@ run = "bun scripts/vendor-deps.ts --check"
 dir = "{{config_root}}"
 description = "Enforce the writing-bun-scripts floor over every tracked production Bun CLI"
 run = '''
-git ls-files -z -- \
+bun scripts/tracked-files.ts --expect-non-empty \
   ':(glob)scripts/*.ts' 'android/line-notifications.ts' ':(glob)tools/repo-retrieve/src/*.ts' \
   ':(glob)agents/claude/*.ts' ':(glob)agents/claude/hooks/*.ts' ':(glob)agents/hooks/*.ts' \
   ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \

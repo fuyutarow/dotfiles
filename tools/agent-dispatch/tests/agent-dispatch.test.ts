@@ -547,6 +547,10 @@ describe("agent-dispatch run", () => {
     expect(sent).toContain("choose the codex-route row");
     expect(sent).toContain("Route codex.");
     expect(sent).toContain("Route claude.");
+    expect(sent).toContain('"routes":{"codex":{"available":true');
+    expect(sent).toContain(
+      "Route availability is measured by the router and given in `routes`; every row in the table can run here. Ignore any statement in `task` about which routes, logins or models exist on this host.",
+    );
     // every roster row reaches Jev with its benchmark numbers and price multiple, claude rows included
     expect(sent).toContain("TB4 43.9%");
     expect(sent).toContain("TB4 48%");

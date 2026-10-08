@@ -79,6 +79,7 @@ import {
   statSync,
 } from "node:fs";
 import { join } from "node:path";
+import { hostname } from "node:os";
 import { createConnection } from "node:net";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../hooks/zod.ts";
@@ -87,7 +88,10 @@ import {
   ActiveSchema,
   progressFile,
   ProgressSchema,
+  stateDir,
 } from "../../tools/agent-dispatch/src/state.ts";
+import { routeCachePath } from "../../tools/agent-dispatch/src/routes.ts";
+import { dispatchWarning } from "./dispatch-warning.ts";
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
@@ -203,6 +207,7 @@ interface Dataframe {
   jobScanWhy?: string | undefined; // the process scan failed: jobs/orphans are unknown, not zero
   // agent-dispatch workers. undefined = agent-dispatch has never run on this machine (no state dir).
   routes?: Result<RouteRun[], string> | undefined;
+  dispatchWarning?: string | undefined;
   // Host readings are Results, not optionals: "could not be taken" carries its reason, and
   // render() prints it. See the EXPLICIT-ABSENCE law below.
   // undefined: this host has no discrete VRAM at all (see vramGated) — silence, not n/a.
@@ -958,6 +963,26 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
     orphans,
     jobScanWhy: scan.failed,
     routes: routeRuns(),
+    dispatchWarning: (() => {
+      const state = stateDir();
+      const cachePath = routeCachePath(state);
+      const cache = readJson(
+        cachePath,
+        z.looseObject({ host: z.string(), available: z.boolean() }),
+      );
+      const cachedForHost = cache?.host === hostname();
+      const log = cachedForHost
+        ? fromThrowable(() => readFileSync(join(state, "runs.jsonl"), "utf8"))()
+        : undefined;
+      return log?.isOk() === true && cache !== undefined
+        ? dispatchWarning(
+            log.value,
+            JSON.stringify(cache),
+            hostname(),
+            nowEpochSec() * 1000,
+          )
+        : undefined;
+    })(),
     vram,
     disks,
     cpuPct: cpu,
@@ -1314,6 +1339,8 @@ function render(df: Dataframe): string {
     runLines = [naSegment("agent-dispatch", df.routes.error)];
   else if (df.routes !== undefined)
     runLines = routeLines(df.routes.value, df.sid);
+  if (df.dispatchWarning !== undefined)
+    runLines.push(`${ESC}[38;5;178m${df.dispatchWarning}${RST}`);
 
   return [
     joinText(line1, repoLine),

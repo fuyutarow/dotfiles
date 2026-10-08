@@ -30,6 +30,7 @@ function marker(
   ageS = 90,
   dispatcherSession: string | null = SESSION,
   choice = "luna-high",
+  pickSource = "jev",
 ): void {
   mkdirSync(join(dir, "active"), { recursive: true });
   writeFileSync(
@@ -40,7 +41,7 @@ function marker(
       pid,
       label,
       choice,
-      pick_source: "jev",
+      pick_source: pickSource,
       started_at: Temporal.Now.instant().subtract({ seconds: ageS }).toString(),
       cwd: scratch,
       ...(dispatcherSession === null
@@ -176,7 +177,7 @@ describe("statusline Run row", () => {
       Bun.stringWidth(line.slice(0, line.indexOf("│"))),
     );
     expect(new Set(widths).size).toBe(1);
-    const idStarts = ["01a113e0", "20e32723", "30e32723"].map((id) =>
+    const idStarts = ["01a1..", "20e3..", "30e3.."].map((id) =>
       lines.find((line) => line.includes(id))?.indexOf(id),
     );
     expect(new Set(idStarts).size).toBe(1);
@@ -220,8 +221,61 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "01a1111b-7dab-7d61-8f9b-231c4cc9568a"),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s 01a1111b nothrow-1 │ \$ ls · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s 01a1\.\.568a nothrow-1 │ \$ ls · 12 cmd · 3 files$/mu,
     );
+  });
+
+  test("UUIDv7 ids sharing their timestamp prefix still render distinctly", async () => {
+    const dir = join(scratch, "uuidv7-prefix-collision");
+    marker(dir, "a", process.pid, "first", 30, SESSION, "luna-high");
+    marker(dir, "b", process.pid, "second", 20, SESSION, "sonnet-high");
+    writeFileSync(
+      join(dir, "active", "a.progress.json"),
+      progress("$ ls", 2, "0191abcd-0000-7000-8000-11111111abcd"),
+    );
+    writeFileSync(
+      join(dir, "active", "b.progress.json"),
+      progress("$ ls", 2, "0191abcd-0000-7000-8000-22222222bcde"),
+    );
+    const out = await render(dir);
+    expect(out).toContain("0191..abcd");
+    expect(out).toContain("0191..bcde");
+  });
+
+  test("ids sharing their last four digits grow the tail until distinct", async () => {
+    const dir = join(scratch, "uuid-tail-collision");
+    marker(dir, "a", process.pid, "first", 30, SESSION, "luna-high");
+    marker(dir, "b", process.pid, "second", 20, SESSION, "sonnet-high");
+    writeFileSync(
+      join(dir, "active", "a.progress.json"),
+      progress("$ ls", 2, "01234567-0000-7000-8000-11111111abcd"),
+    );
+    writeFileSync(
+      join(dir, "active", "b.progress.json"),
+      progress("$ ls", 2, "01239999-0000-7000-8000-22222222abcd"),
+    );
+    const out = await render(dir);
+    expect(out).toContain("0123..1abcd");
+    expect(out).toContain("0123..2abcd");
+  });
+
+  test("resume workers mark their reused session id", async () => {
+    const dir = join(scratch, "resume-session");
+    marker(
+      dir,
+      "resume",
+      process.pid,
+      "resumed",
+      30,
+      SESSION,
+      "luna-high",
+      "resume",
+    );
+    writeFileSync(
+      join(dir, "active", "resume.progress.json"),
+      progress("$ ls", 2, "0191abcd-0000-7000-8000-11111111abcd"),
+    );
+    expect(await render(dir)).toContain("↻0191..abcd");
   });
 
   test("more workers than the cap: the rest are counted, not dropped silently", async () => {

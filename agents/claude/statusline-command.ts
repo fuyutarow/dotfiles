@@ -1113,6 +1113,7 @@ interface RouteRun {
   label: string;
   secs: number;
   alive: boolean;
+  pickSource: string;
   dispatcherSession: string | undefined;
   // what the worker is doing (agent-dispatch progress file); undefined until its first event lands
   doing:
@@ -1170,6 +1171,7 @@ function routeRuns(): Result<RouteRun[], string> | undefined {
             label: a.label,
             secs: sinceSecs(a.started_at).unwrapOr(0),
             alive: pidAlive(a.pid).isOk(),
+            pickSource: a.pick_source,
             dispatcherSession: a.dispatcher_session,
             doing: doingOf(a.run_id),
           },
@@ -1192,14 +1194,60 @@ function doingText(d: RouteRun["doing"]): string {
   const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
   return `${DIM}│${RST} ${d.last}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
 }
-// The worker's own id as its vendor gave it (codex thread, claude session), first 8 characters, in
-// the stamp's dark gray: what a coordinator names it by (owner 2026-10-06). Absent until printed.
-const SESSION_CHARS = 8;
-function sessionText(d: RouteRun["doing"], reserve = false): string {
-  const id = d?.session;
-  if (id === undefined) return reserve ? "         " : "";
-  const short = truncateDisplay(id, SESSION_CHARS);
-  return `${ESC}[38;5;240m${short}${" ".repeat(SESSION_CHARS - Bun.stringWidth(short))}${RST} `;
+// The worker's vendor id (codex thread, claude session), shortened without UUIDv7's shared
+// timestamp prefix. Extend the tail only for rows that still collide; resumes are marked because
+// they intentionally reuse their parent's session id.
+function growSessionTail(
+  group: number[],
+  ids: string[],
+  tailLengths: number[],
+): boolean {
+  let grew = false;
+  for (const index of group) {
+    const maxTail = (ids[index] ?? "").length - 4;
+    const tailLength = tailLengths[index] ?? 0;
+    if (tailLength < maxTail) {
+      tailLengths[index] = tailLength + 1;
+      grew = true;
+    }
+  }
+  return grew;
+}
+function sessionDisplays(shown: RouteRun[]): string[] {
+  const ids = shown.map((run) => run.doing?.session?.replaceAll("-", "") ?? "");
+  const tailLengths = ids.map((id) =>
+    id === "" ? 0 : Math.min(4, Math.max(0, id.length - 4)),
+  );
+  const displayFor = (index: number): string => {
+    const id = ids[index] ?? "";
+    if (id === "") return "";
+    const tailLength = tailLengths[index] ?? 0;
+    const tail = tailLength === 0 ? "" : id.slice(-tailLength);
+    const base = `${id.slice(0, 4)}..${tail}`;
+    return `${shown[index]?.pickSource === "resume" ? "↻" : ""}${base}`;
+  };
+  let displays = ids.map((_, index) => displayFor(index));
+  for (;;) {
+    const groups = new Map<string, number[]>();
+    displays.forEach((display, index) => {
+      if (display === "") return;
+      const group = groups.get(display) ?? [];
+      group.push(index);
+      groups.set(display, group);
+    });
+    const collisions = [...groups.values()].filter((group) => group.length > 1);
+    if (collisions.length === 0) break;
+    let grew = false;
+    for (const group of collisions)
+      grew = growSessionTail(group, ids, tailLengths) || grew;
+    if (!grew) break;
+    displays = ids.map((_, index) => displayFor(index));
+  }
+  return displays;
+}
+function sessionText(value: string, width: number, reserve: boolean): string {
+  if (value === "") return reserve ? " ".repeat(width + 1) : "";
+  return `${ESC}[38;5;240m${padDisplay(value, width)}${RST} `;
 }
 const RUN_LABEL_WIDTH = 32;
 function truncateDisplay(value: string, width: number): string {
@@ -1238,10 +1286,15 @@ function routeLines(runs: RouteRun[], sessionId: string | undefined): string[] {
     0,
     ...labels.map((value) => Bun.stringWidth(value)),
   );
-  const reserveSession = shown.some((r) => r.doing?.session !== undefined);
+  const sessions = sessionDisplays(shown);
+  const sessionWidth = Math.max(
+    0,
+    ...sessions.map((value) => Bun.stringWidth(value)),
+  );
+  const reserveSession = sessionWidth > 0;
   const lines = shown.map(
     (r, i) =>
-      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${sessionText(r.doing, reserveSession)}${DIM}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing)}`,
+      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing)}`,
   );
   if (own.length > RUN_LINES)
     lines.push(`${DIM}+${own.length - RUN_LINES} more${RST}`);

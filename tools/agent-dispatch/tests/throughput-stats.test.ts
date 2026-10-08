@@ -26,6 +26,20 @@ const run = (values: Record<string, unknown>): string =>
   });
 
 describe("throughputStats", () => {
+  test("uses observational first-return timing while retaining the legacy checkpoint shape", () => {
+    const result = throughputStats(
+      run({
+        checkpoint: {
+          mode: "observe",
+          first_return_by_deadline: true,
+          first_return_at_s: 12,
+        },
+      }),
+      { now, sinceMs: now - 86_400_000, grading: false },
+    );
+    expect(result.per_row["row-a"]?.median_time_to_first_return_s).toBe(12);
+  });
+
   test("accepts graded and consumed returns and counts only unconsumed, unaccepted tokens as wasted", () => {
     const log = [
       run({}),

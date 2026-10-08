@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.5 — 2026-10-09
+
+- Make `first_return_s` observational: record whether a RETURN or progress appeared by its deadline without interrupting Codex or forcing a wrap-up turn; `timeout_s` remains the worker kill bound. Keep process-group reaping after worker exit; this release cannot safely distinguish every tool-call descendant from other group members, and records any survivors.
+- Let ungraded runs without verify emit one warning instead of blocking the next dispatch, and resolve both normalized and legacy hyphenated worker display IDs.
+
 ## 1.5.4 — 2026-10-09
 
 - Normalize hyphens in named worker display IDs to underscores, resolve either spelling, and refuse other characters.

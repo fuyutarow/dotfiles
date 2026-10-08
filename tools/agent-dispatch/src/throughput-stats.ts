@@ -45,6 +45,8 @@ const Line = z.looseObject({
     .optional(),
   checkpoint: z
     .looseObject({
+      first_return_by_deadline: z.boolean().optional(),
+      first_return_at_s: z.number().nullable().optional(),
       fired_at_s: z.number().nullable().optional(),
       return_followed: z.boolean().optional(),
     })
@@ -171,7 +173,16 @@ export function throughputStats(
       entry.checkpoint?.return_followed === true &&
       entry.checkpoint.fired_at_s !== undefined &&
       entry.checkpoint.fired_at_s !== null;
+    const observedFirstReturn =
+      entry.checkpoint?.first_return_by_deadline === true &&
+      entry.checkpoint.first_return_at_s !== undefined &&
+      entry.checkpoint.first_return_at_s !== null;
     const elapsed = entry.stats?.elapsed_s ?? entry.worker?.elapsed_s ?? 0;
+    let firstReturnS = elapsed;
+    if (checkpointReturn)
+      firstReturnS = entry.checkpoint?.fired_at_s ?? elapsed;
+    if (observedFirstReturn)
+      firstReturnS = entry.checkpoint?.first_return_at_s ?? elapsed;
     return [
       {
         ...entry,
@@ -181,9 +192,7 @@ export function throughputStats(
         outcome: entry.stats?.outcome ?? "unknown",
         elapsed_s: elapsed,
         tokens: tokenTotal(entry),
-        first_return_s: checkpointReturn
-          ? (entry.checkpoint?.fired_at_s ?? elapsed)
-          : elapsed,
+        first_return_s: firstReturnS,
       },
     ];
   });

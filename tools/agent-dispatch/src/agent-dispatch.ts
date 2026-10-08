@@ -21,8 +21,8 @@
 //           commands, `verify_timeout_s`, `timeout_s`, `capabilities`. The router then strips it for the worker, runs
 //           the verify commands after the worker exits (verify.ts), grades the run itself (graded_by
 //           "router", or a recorded waiver); verified runs never gate. A plain brief or ticket with no
-//           verify that remains ungraded gates the next dispatch from the same dispatcher session, or
-//           the same cwd when no session id is available. No front matter = plain-run gate behavior.
+//           verify that remains ungraded emits one warning at the next dispatch, then continues. No
+//           front matter = plain-run warning behavior.
 //   RESUME  a run record carries the vendor session id (worker.session); `resume` starts a NEW run
 //           (resumed_from, pick.source "resume") on the original's row, sandbox and cwd, continuing that
 //           session (agent-dispatch --resume → `codex exec resume`; run-claude --resume → `claude --resume`,
@@ -142,7 +142,7 @@ const CODEX_WORKER =
   process.env.AGENT_ROUTER_CODEX_WORKER ??
   join(import.meta.dir, "workers/codex.ts");
 const CODEX_PATCH_GUIDANCE =
-  "For apply_patch, use at most one operation per file in a call: put all hunks for that file in one Update File block, or split into separate calls. After a tool error, change approach; do not resend the same call.";
+  "For apply_patch, use at most one operation per file in a call: put all hunks for that file in one Update File block, or split into separate calls. After a tool error, change approach; do not resend the same call. At the declared first_return_s (T), send an interim RETURN by T if you can; never stop running jobs to do so.";
 // A claude row runs `claude -p` through tools/agent-dispatch/src/workers/run-claude.ts (test seam: a fake).
 const RUN_CLAUDE =
   process.env.AGENT_ROUTER_RUN_CLAUDE ??
@@ -400,36 +400,59 @@ async function reapWorkerGroup(pgid: number): Promise<{
         };
   }
   if (found.length === 0) return { reaped: [], left: [] };
-  const left = found.filter(
+  const protectedProcesses = found.filter(
     (p) => runnerOwnsScope || p.cmd.includes("agent-resource-run"),
   );
-  const targets = found.filter((p) => !left.includes(p));
+  const targets = found.filter((p) => !protectedProcesses.includes(p));
   if (targets.length > 0) {
     void attempt(() => process.kill(-pgid, "SIGTERM"));
     const deadline = performance.now() + 5_000;
     while (
       performance.now() < deadline &&
       (await processGroup(pgid)).processes.some(
-        (p) => !left.some((x) => x.pid === p.pid),
+        (p) => !protectedProcesses.some((x) => x.pid === p.pid),
       )
     )
       await Bun.sleep(100);
+    const remaining = await processGroup(pgid);
     if (
-      (await processGroup(pgid)).processes.some(
-        (p) => !left.some((x) => x.pid === p.pid),
+      remaining.processes.some(
+        (p) => !protectedProcesses.some((x) => x.pid === p.pid),
       )
-    )
+    ) {
       void attempt(() => process.kill(-pgid, "SIGKILL"));
+      await Bun.sleep(100);
+    }
   }
+  const after = await processGroup(pgid);
+  const survivors = after.processes.filter(
+    (p) => !protectedProcesses.some((x) => x.pid === p.pid),
+  );
   return {
-    reaped: targets,
-    left: left.map((p) => ({
-      pid: p.pid,
-      cmd: p.cmd,
-      why: runnerOwnsScope
-        ? "agent-resource-run owns this process scope"
-        : "agent-resource-run process excluded from teardown",
-    })),
+    reaped: targets.filter((p) => !survivors.some((x) => x.pid === p.pid)),
+    left: [
+      ...protectedProcesses.map((p) => ({
+        pid: p.pid,
+        cmd: p.cmd,
+        why: runnerOwnsScope
+          ? "agent-resource-run owns this process scope"
+          : "agent-resource-run process excluded from teardown",
+      })),
+      ...survivors.map((p) => ({
+        pid: p.pid,
+        cmd: p.cmd,
+        why: "survived SIGTERM and SIGKILL teardown",
+      })),
+      ...(after.unavailable === undefined
+        ? []
+        : [
+            {
+              pid: pgid,
+              cmd: "unknown process group",
+              why: `cannot verify teardown: ${after.unavailable}`,
+            },
+          ]),
+    ],
   };
 }
 
@@ -1670,7 +1693,7 @@ async function run(flags: RunFlags): Promise<number> {
     return 2;
   }
   if (ticket === undefined || ticket.verify.length === 0)
-    refuseOverUngraded(resolve(flags.cd));
+    warnOverUngraded(resolve(flags.cd));
   const pick = await pickFor(
     roster,
     parsed.prose,
@@ -2003,7 +2026,6 @@ async function launch(l: Launch): Promise<number> {
       detached: true,
     });
   let child = spawnWorker(args);
-  let checkpointResumed = false;
   let stopping = false;
   const stop = async (signal: NodeJS.Signals, code: number): Promise<void> => {
     if (stopping) return;
@@ -2078,8 +2100,11 @@ async function launch(l: Launch): Promise<number> {
     void stop("SIGTERM", 143);
   });
 
-  let checkpointFiredAtS: number | undefined;
+  let firstReturnAtS: number | undefined;
+  let firstReturnByDeadline = false;
+  let firstReturnWindowS = ticket?.first_return_s ?? 360;
   let checkpointTimer: ReturnType<typeof setTimeout> | undefined;
+  let firstReturnPoll: ReturnType<typeof setInterval> | undefined;
   if (row.route === "codex") {
     const firstReturnS = ticket?.first_return_s ?? 360;
     const testDelay = Number(process.env.AGENT_DISPATCH_CHECKPOINT_MS ?? "");
@@ -2091,7 +2116,8 @@ async function launch(l: Launch): Promise<number> {
       0,
       checkpointDelayMs - (performance.now() - workerStartedAt),
     );
-    checkpointTimer = setTimeout(() => {
+    firstReturnWindowS = checkpointDelayMs / 1000;
+    const observeFirstReturn = (): void => {
       const lastMessageFile = join(
         STATE_DIR,
         "worker-receipts",
@@ -2100,18 +2126,31 @@ async function launch(l: Launch): Promise<number> {
       const currentMessage = existsSync(lastMessageFile)
         ? readFileSync(lastMessageFile, "utf8")
         : "";
-      if (parseReturn(currentMessage).kind === "valid") return;
-      checkpointFiredAtS =
-        Math.round(((performance.now() - workerStartedAt) / 1000) * 10) / 10;
-      void attempt(() => process.kill(-child.pid, "SIGINT"));
+      const currentProgress = progressAtEnd(progress);
+      const progressObserved =
+        currentProgress !== undefined &&
+        (currentProgress.commands > 0 ||
+          currentProgress.files > 0 ||
+          currentProgress.last !== "starting");
+      if (
+        firstReturnAtS === undefined &&
+        (parseReturn(currentMessage).kind === "valid" || progressObserved)
+      )
+        firstReturnAtS =
+          Math.round(((performance.now() - workerStartedAt) / 1000) * 10) / 10;
+    };
+    firstReturnPoll = setInterval(observeFirstReturn, 50);
+    checkpointTimer = setTimeout(() => {
+      observeFirstReturn();
+      firstReturnByDeadline =
+        firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
     }, timerDelayMs);
   }
   let out = await new Response(child.stdout).text();
   let workerExit = await child.exited;
   if (checkpointTimer !== undefined) clearTimeout(checkpointTimer);
-  let orphans = await reapWorkerGroup(child.pid);
-  if (checkpointFiredAtS !== undefined) {
-    const session = progressSession(progress);
+  if (firstReturnPoll !== undefined) clearInterval(firstReturnPoll);
+  if (row.route === "codex" && firstReturnAtS === undefined) {
     const lastMessageFile = join(
       STATE_DIR,
       "worker-receipts",
@@ -2120,36 +2159,21 @@ async function launch(l: Launch): Promise<number> {
     const currentMessage = existsSync(lastMessageFile)
       ? readFileSync(lastMessageFile, "utf8")
       : "";
-    if (parseReturn(currentMessage).kind !== "valid" && session !== undefined) {
-      const remainingS = Math.max(
-        1,
-        Math.floor(timeout.seconds - (performance.now() - t0) / 1000),
-      );
-      const wrapUp =
-        "time box checkpoint: stop new work and RETURN now with the agent-dispatch-return block: findings so far, evidence, impact_on_brief, proposed_next, artifacts";
-      writeFileSync(
-        workerBrief,
-        withReportInstruction(`${CODEX_PATCH_GUIDANCE}\n\n${wrapUp}`),
-      );
-      const resumeArgs = workerArgs(
-        roster,
-        row,
-        { ...flags, timeoutS: remainingS, promptFile: workerBrief },
-        progress,
-        runId,
-        session,
-      );
-      checkpointResumed = true;
-      child = spawnWorker(resumeArgs);
-      out = await new Response(child.stdout).text();
-      workerExit = await child.exited;
-      const resumedOrphans = await reapWorkerGroup(child.pid);
-      orphans = {
-        reaped: [...orphans.reaped, ...resumedOrphans.reaped],
-        left: [...orphans.left, ...resumedOrphans.left],
-      };
-    }
+    const currentProgress = progressAtEnd(progress);
+    if (
+      parseReturn(currentMessage).kind === "valid" ||
+      (currentProgress !== undefined &&
+        (currentProgress.commands > 0 ||
+          currentProgress.files > 0 ||
+          currentProgress.last !== "starting"))
+    )
+      firstReturnAtS =
+        Math.round(((performance.now() - workerStartedAt) / 1000) * 10) / 10;
   }
+  if (row.route === "codex")
+    firstReturnByDeadline =
+      firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
+  let orphans = await reapWorkerGroup(child.pid);
   const done = progressAtEnd(progress);
   rmSync(progress, { force: true });
   rmSync(workerBrief, { force: true });
@@ -2170,16 +2194,16 @@ async function launch(l: Launch): Promise<number> {
     z.looseObject({ last_message: z.string().optional() }).safeParse(rawWorker)
       .data?.last_message ?? "";
   const parsedReturn = parseReturn(lastMessage);
-  const wrapUpElapsed = z
-    .looseObject({ elapsed_s: z.number().optional() })
-    .safeParse(rawWorker);
-  const wrapUpField: { wrap_up_s?: number } = {};
   if (
-    checkpointResumed &&
-    wrapUpElapsed.success &&
-    wrapUpElapsed.data.elapsed_s !== undefined
+    row.route === "codex" &&
+    firstReturnAtS === undefined &&
+    parsedReturn.kind === "valid" &&
+    elapsedS <= firstReturnWindowS
   )
-    wrapUpField.wrap_up_s = wrapUpElapsed.data.elapsed_s;
+    firstReturnAtS = elapsedS;
+  if (row.route === "codex")
+    firstReturnByDeadline =
+      firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
   const checkpoint =
     row.route === "claude"
       ? {
@@ -2187,10 +2211,9 @@ async function launch(l: Launch): Promise<number> {
           reason: "claude worker takes its prompt at start; no live injection",
         }
       : {
-          supported: true,
-          fired_at_s: checkpointFiredAtS ?? null,
-          return_followed: parsedReturn.kind === "valid",
-          ...wrapUpField,
+          mode: "observe",
+          first_return_by_deadline: firstReturnByDeadline,
+          first_return_at_s: firstReturnAtS ?? null,
         };
   let workerData = rawWorker;
   if (parsedReturn.kind === "valid" && workerData !== undefined)
@@ -3023,7 +3046,7 @@ function owedGrades(cwd: string, sessionId?: string): Logged[] {
   );
 }
 
-function refuseOverUngraded(
+function warnOverUngraded(
   cwd: string,
   session = currentDispatcherSession(),
   except?: string,
@@ -3032,19 +3055,8 @@ function refuseOverUngraded(
     (entry) => entry.run_id !== except,
   );
   if (owed.length === 0) return;
-  const lines = owed.flatMap((l) => {
-    const id = l.run_id ?? "<run_id>";
-    return [
-      `  run_id=${id} cwd=${l.cwd ?? "(not recorded)"} label=${l.label ?? "(not recorded)"} finished=${l.ended_at ?? "(not recorded)"}`,
-      `    agent-dispatch grade ${id} --evidence <checks>`,
-      `    agent-dispatch grade ${id} --waive "<why>"`,
-    ];
-  });
-  fatal(
-    [
-      `${owed.length} finished run(s) in ${session === undefined ? cwd : `dispatcher session ${session}`} are not graded; grade each before dispatching more work from this session:`,
-      ...lines,
-    ].join("\n"),
+  dispatchError(
+    `agent-dispatch: warning: ${owed.length} finished run(s) in ${session === undefined ? cwd : `dispatcher session ${session}`} remain ungraded; dispatch continues (grade or waive them when convenient)`,
   );
 }
 
@@ -3782,7 +3794,7 @@ async function resumeCommand(
     fatal(`no such message file: ${promptFile}`);
   // the original is the run being continued: its own ungraded record must not block its continuation
   if (ticket === undefined || ticket.verify.length === 0)
-    refuseOverUngraded(cwd, currentDispatcherSession(), runId);
+    warnOverUngraded(cwd, currentDispatcherSession(), runId);
   const message =
     promptFile === undefined
       ? defaultResumeMessage(
@@ -4240,7 +4252,14 @@ function resolveRunId(id: string): string {
   const normalizedId = /^agt[_-]/u.test(id)
     ? `agt_${normalizeDisplayName(id.slice(4))}`
     : id;
-  const displayMatches = runs.filter((l) => l.display_id === normalizedId);
+  const displayMatches = runs.filter((l) => {
+    const storedId = l.display_id;
+    if (typeof storedId !== "string") return false;
+    const normalizedStoredId = /^agt[_-]/u.test(storedId)
+      ? `agt_${normalizeDisplayName(storedId.slice(4))}`
+      : storedId;
+    return storedId === id || normalizedStoredId === normalizedId;
+  });
   if (displayMatches.length > 0) {
     const latest = displayMatches.at(-1);
     if (displayMatches.length > 1)

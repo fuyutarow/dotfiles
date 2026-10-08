@@ -1751,11 +1751,8 @@ describe("agent-dispatch grade", () => {
   });
 });
 
-// O3 (Tiger ledger, 2026-10-06): a finished plain run is owed a grade before more work is dispatched from
-// the same dispatcher session. On Vast 38 runs were logged and none graded, so Jev's "graded record" criterion was
-// empty and the same mis-pick (luna on long edit-and-test loops, killed at its bound) repeated. The
-// gate is at dispatch, before Jev is asked: nothing is spent on a run that will be refused.
-describe("O3: no dispatch over ungraded work", () => {
+// An ungraded run without verify is advisory: dispatch warns once and continues.
+describe("ungraded runs without verify", () => {
   const evidence = (text: string): string => {
     const p = join(mkdtempSync(join(scratch, "ev-")), "evidence.txt");
     writeFileSync(p, text);
@@ -1796,24 +1793,26 @@ describe("O3: no dispatch over ungraded work", () => {
       { AGENT_ROUTER_STATE_DIR: state, CLAUDE_CODE_SESSION_ID: session },
     );
 
-  test("an ungraded run in the same cwd refuses the next dispatch before Jev or a worker is reached", async () => {
+  test("an ungraded run warns once and the next dispatch reaches Jev and a worker", async () => {
     const state = join(scratch, "o3-refuse");
     const cwd = mkdtempSync(join(scratch, "o3-cwd-"));
-    const runId = await first(state, cwd);
+    await first(state, cwd);
     const asked = bodies.length;
     const workers = readFileSync(join(scratch, "argv.log"), "utf8").split(
       "\n",
     ).length;
     const r = await again(state, cwd);
-    expect(r.code).toBe(2);
-    expect(r.err).toContain("not graded");
-    expect(r.err).toContain(runId);
-    expect(r.err).toContain(`agent-dispatch grade ${runId} --evidence`);
-    expect(r.err).toContain("--waive");
-    expect(bodies.length).toBe(asked); // Jev was not asked
+    expect(r.code).toBe(0);
+    const warnings = r.err
+      .split("\n")
+      .filter(
+        (line) => line.includes("warning:") && line.includes("remain ungraded"),
+      );
+    expect(warnings).toHaveLength(1);
+    expect(bodies.length).toBeGreaterThan(asked);
     expect(
       readFileSync(join(scratch, "argv.log"), "utf8").split("\n").length,
-    ).toBe(workers);
+    ).toBeGreaterThan(workers);
   });
 
   test("graded, the next dispatch goes ahead", async () => {
@@ -2996,7 +2995,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     expect(logLines(r.state).map((l) => l.kind)).toEqual(["run"]);
   });
 
-  test("codex checkpoint resumes once and a wrap-up RETURN is success", async () => {
+  test("first-return deadline observes progress without signaling or resuming Codex", async () => {
     const b = brief(
       "t-checkpoint",
       ticketText("writes = []\nverify = []\nfirst_return_s = 60"),
@@ -3015,39 +3014,33 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     const receipt = decodedJson(
       z.looseObject({
         checkpoint: z.looseObject({
-          supported: z.boolean(),
-          fired_at_s: z.number().nullable().optional(),
-          return_followed: z.boolean().optional(),
-          wrap_up_s: z.number().optional(),
+          mode: z.literal("observe"),
+          first_return_by_deadline: z.boolean(),
+          first_return_at_s: z.number().nullable(),
         }),
-        worker: z.looseObject({ outcome: z.string(), elapsed_s: z.number() }),
+        worker: z.looseObject({ outcome: z.string() }),
       }),
       r.out.trim(),
     );
     expect(receipt.checkpoint).toMatchObject({
-      supported: true,
-      return_followed: true,
+      mode: "observe",
+      first_return_by_deadline: true,
     });
-    expect(typeof receipt.checkpoint.fired_at_s).toBe("number");
-    expect(receipt.checkpoint.fired_at_s).toBeGreaterThanOrEqual(0.2);
-    expect(receipt.checkpoint.wrap_up_s).toBe(0.01);
-    expect(receipt.worker.elapsed_s).toBeGreaterThanOrEqual(
-      receipt.checkpoint.fired_at_s ?? 0,
-    );
-    expect(receipt.worker.outcome).toBe("returned");
+    expect(typeof receipt.checkpoint.first_return_at_s).toBe("number");
+    expect(receipt.worker.outcome).toBe("ok");
     const args = readFileSync(join(scratch, "argv.log"), "utf8")
       .trim()
       .split("\n")
       .slice(before)
       .map((line) => decodedJson(z.array(z.string()), line));
-    expect(args).toHaveLength(2);
-    expect(args[1]).toContain("--resume");
-    expect(readFileSync(join(scratch, "prompt.log"), "utf8")).toContain(
+    expect(args).toHaveLength(1);
+    expect(args[0]).not.toContain("--resume");
+    expect(readFileSync(join(scratch, "prompt.log"), "utf8")).not.toContain(
       "time box checkpoint: stop new work and RETURN now",
     );
   }, 45_000);
 
-  test("RETURN before the checkpoint prevents resume", async () => {
+  test("RETURN before the deadline is recorded as observed", async () => {
     const b = brief(
       "t-no-checkpoint-after-return",
       "plain task that returns\n",
@@ -3061,14 +3054,16 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     const receipt = decodedJson(
       z.looseObject({
         checkpoint: z.looseObject({
-          fired_at_s: z.unknown(),
-          return_followed: z.boolean(),
+          mode: z.literal("observe"),
+          first_return_by_deadline: z.boolean(),
+          first_return_at_s: z.number().nullable(),
         }),
       }),
       r.out.trim(),
     );
-    expect(receipt.checkpoint.fired_at_s).toBeNull();
-    expect(receipt.checkpoint.return_followed).toBe(true);
+    expect(receipt.checkpoint.mode).toBe("observe");
+    expect(receipt.checkpoint.first_return_by_deadline).toBe(true);
+    expect(receipt.checkpoint.first_return_at_s).not.toBeNull();
   });
 
   test("a new resume starts a fresh first-return timer at its worker start", async () => {
@@ -3091,15 +3086,21 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     const receipt = decodedJson(
       z.looseObject({
         resumed_from: z.string(),
-        checkpoint: z.looseObject({ fired_at_s: z.number().nullable() }),
+        checkpoint: z.looseObject({
+          mode: z.literal("observe"),
+          first_return_by_deadline: z.boolean(),
+          first_return_at_s: z.number().nullable(),
+        }),
         worker: z.looseObject({ elapsed_s: z.number() }),
       }),
       resumed.out.trim(),
     );
     expect(receipt.resumed_from).toBe(original);
-    expect(receipt.checkpoint.fired_at_s).toBeGreaterThanOrEqual(0.2);
+    expect(receipt.checkpoint.mode).toBe("observe");
+    expect(receipt.checkpoint.first_return_by_deadline).toBe(true);
+    expect(receipt.checkpoint.first_return_at_s).not.toBeNull();
     expect(receipt.worker.elapsed_s).toBeGreaterThanOrEqual(
-      receipt.checkpoint.fired_at_s ?? 0,
+      receipt.checkpoint.first_return_at_s ?? 0,
     );
   });
 
@@ -3537,7 +3538,7 @@ describe("agent-dispatch worker teardown", () => {
   });
 });
 
-describe("agent-dispatch run: the ungraded-run gate", () => {
+describe("agent-dispatch run: ungraded no-verify warnings", () => {
   let seq = 0;
   /** An ungraded finished run in `cwd`; `writes` undefined = a legacy run (no ticket). */
   function seed(
@@ -3587,77 +3588,80 @@ describe("agent-dispatch run: the ungraded-run gate", () => {
       sandbox,
     );
 
-  test("ungraded no-verify ticket blocks by same cwd fallback and names grading command", async () => {
+  test("ungraded no-verify ticket warns and continues by same cwd fallback", async () => {
     const cwd = freshCwd();
     const state = gate("overlap");
-    const id = seed(state, cwd, ["tools/agent-dispatch/**"]);
+    seed(state, cwd, ["tools/agent-dispatch/**"]);
     const r = await router(
       ticketRun(cwd, '["tools/agent-dispatch/tests/**"]'),
       {
         AGENT_ROUTER_STATE_DIR: state,
       },
     );
-    expect(r.code).toBe(2);
-    expect(r.err).toContain(id);
-    expect(r.err).toContain(`agent-dispatch grade ${id} --evidence`);
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("warning:");
+    expect(r.err).toContain("remain ungraded");
+    expect(
+      r.err.split("\n").filter((line) => line.includes("warning:")),
+    ).toHaveLength(1);
   });
 
-  test("gate refusal lists every blocker with its location, finish time, and both resolution commands", async () => {
+  test("one warning summarizes multiple ungraded runs", async () => {
     const cwd = freshCwd();
     const state = gate("all-blockers");
-    const ids = Array.from({ length: 12 }, () => seed(state, cwd, ["a/**"]));
+    for (let index = 0; index < 12; index += 1) seed(state, cwd, ["a/**"]);
     const r = await router(ticketRun(cwd, '["a/**"]'), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(r.code).toBe(2);
-    for (const id of ids) {
-      expect(r.err).toContain(`run_id=${id}`);
-      expect(r.err).toContain(`agent-dispatch grade ${id} --evidence <checks>`);
-      expect(r.err).toContain(`agent-dispatch grade ${id} --waive "<why>"`);
-    }
-    expect(r.err).toContain(`cwd=${cwd}`);
-    expect(r.err).toContain("label=seeded side worker");
-    expect(r.err).toContain("finished=2026-10-08T01:02:03Z");
+    expect(r.code).toBe(0);
+    expect(
+      r.err.split("\n").filter((line) => line.includes("warning:")),
+    ).toHaveLength(1);
     expect(r.err).toContain("12 finished run(s)");
   });
 
-  test("disjoint write globs still block when a no-verify run is ungraded", async () => {
+  test("disjoint write globs do not block when a no-verify run is ungraded", async () => {
     const cwd = freshCwd();
     const state = gate("disjoint");
     seed(state, cwd, ["tools/agent-dispatch/**"]);
     const r = await router(ticketRun(cwd, '["agents/models/roster.ts"]'), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(r.code).toBe(2);
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("warning:");
   });
 
-  test("dispatcher-session gate spans cwd boundaries", async () => {
+  test("dispatcher-session warning spans cwd boundaries", async () => {
     const state = gate("othercwd");
     seed(state, freshCwd(), ["a/**"]);
     const r = await router(ticketRun(freshCwd(), '["a/**"]'), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(r.code).toBe(2);
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("warning:");
   });
 
-  test("read-only no-verify tickets participate in the grading gate", async () => {
+  test("read-only and writing no-verify tickets warn and continue", async () => {
     const cwd = freshCwd();
     const state = gate("readonly");
     seed(state, cwd, ["a/**"]);
     const ro = await router(ticketRun(cwd, "[]", "read-only"), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(ro.code).toBe(2);
+    expect(ro.code).toBe(0);
+    expect(ro.err).toContain("warning:");
     const state2 = gate("readonly2");
     seed(state2, cwd, []);
     const rw = await router(ticketRun(cwd, '["a/**"]'), {
       AGENT_ROUTER_STATE_DIR: state2,
     });
-    expect(rw.code).toBe(2);
+    expect(rw.code).toBe(0);
+    expect(rw.err).toContain("warning:");
     const legacy = await router(runArgs(brief(`g-${seq++}`, "legacy\n"), cwd), {
       AGENT_ROUTER_STATE_DIR: state2,
     });
-    expect(legacy.code).toBe(2);
+    expect(legacy.code).toBe(0);
+    expect(legacy.err).toContain("warning:");
   });
 
   test("an ungraded ticket with verify never gates a later dispatch", async () => {
@@ -3682,43 +3686,43 @@ describe("agent-dispatch run: the ungraded-run gate", () => {
     expect(r.err).not.toContain(id);
   });
 
-  test("cwd is the gate key when no dispatcher session is available", async () => {
+  test("cwd is the warning key when no dispatcher session is available", async () => {
     const cwd = freshCwd();
     const state = gate("cwd-fallback");
-    const id = seed(state, cwd, undefined, undefined, null);
+    seed(state, cwd, undefined, undefined, null);
     const r = await router(runArgs(brief(`g-${seq++}`, "plain\n"), cwd), {
       AGENT_ROUTER_STATE_DIR: state,
       CLAUDE_CODE_SESSION_ID: "",
     });
-    expect(r.code).toBe(2);
-    expect(r.err).toContain(id);
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("warning:");
   });
 
-  test("legacy mode unchanged: an ungraded legacy run blocks a legacy run and a writing ticket run in its cwd", async () => {
+  test("legacy mode also warns and continues for later legacy and writing-ticket runs", async () => {
     const cwd = freshCwd();
     const state = gate("legacy");
-    const id = seed(state, cwd, undefined);
+    seed(state, cwd, undefined);
     const legacy = await router(runArgs(brief(`g-${seq++}`, "legacy\n"), cwd), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(legacy.code).toBe(2);
-    expect(legacy.err).toContain(id);
+    expect(legacy.code).toBe(0);
+    expect(legacy.err).toContain("warning:");
     const ticket = await router(ticketRun(cwd, '["z/**"]'), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(ticket.code).toBe(2);
-    expect(ticket.err).toContain(id);
+    expect(ticket.code).toBe(0);
+    expect(ticket.err).toContain("warning:");
   });
 
-  test("an ungraded writing ticket run blocks a legacy run in its cwd", async () => {
+  test("an ungraded writing ticket run warns before a legacy run", async () => {
     const cwd = freshCwd();
     const state = gate("ticket-blocks-legacy");
-    const id = seed(state, cwd, ["z/**"]);
+    seed(state, cwd, ["z/**"]);
     const legacy = await router(runArgs(brief(`g-${seq++}`, "legacy\n"), cwd), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(legacy.code).toBe(2);
-    expect(legacy.err).toContain(id);
+    expect(legacy.code).toBe(0);
+    expect(legacy.err).toContain("warning:");
   });
 });
 
@@ -4645,5 +4649,47 @@ describe("agent-dispatch: the typed final report", () => {
         })
       ).code,
     ).toBe(0);
+  });
+
+  test("resume resolves a legacy hyphenated display ID stored before 1.5.4", async () => {
+    const prompt = brief(
+      "legacy-hyphen-display-id",
+      '+++\nschema = 1\nwrites = []\nverify = ["true"]\n+++\nDo the work.\n',
+    );
+    const state = join(scratch, "legacy-hyphen-display-id");
+    const first = await router(
+      [
+        "run",
+        "--prompt-file",
+        prompt,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+        "--name",
+        "rust-gc",
+      ],
+      { AGENT_ROUTER_STATE_DIR: state, FAKE_TIMEOUT: "1" },
+    );
+    expect(first.code).toBe(3);
+    const original = decodedJson(RunIdSchema, first.out.trim()).run_id;
+    const logPath = join(state, "runs.jsonl");
+    const [line = ""] = readFileSync(logPath, "utf8").trim().split("\n");
+    const legacy = {
+      ...decodedJson(z.looseObject({ display_id: z.string() }), line),
+      display_id: "agt_rust-gc",
+    };
+    writeFileSync(logPath, `${JSON.stringify(legacy)}\n`);
+
+    const resumed = await router(["resume", "agt_rust-gc"], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(resumed.code).toBe(0);
+    expect(
+      decodedJson(
+        z.looseObject({ resumed_from: z.string() }),
+        resumed.out.trim(),
+      ).resumed_from,
+    ).toBe(original);
   });
 });

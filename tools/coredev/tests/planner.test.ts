@@ -12,9 +12,17 @@ describe("coredev planner", () => {
       "runtime",
       "tools",
       "links",
+      "login-shell",
+      "herdr-server",
       "wsl-services",
     ]);
     expect(plan.steps[1]?.adapter).toBe("wsl-tools");
+    expect(
+      plan.steps.find((step) => step.id === "login-shell")?.prerequisites,
+    ).toEqual(["links"]);
+    expect(
+      plan.steps.find((step) => step.id === "herdr-server")?.prerequisites,
+    ).toEqual(["login-shell"]);
   });
 
   test("overlay deterministically replaces duplicate step ids", () => {
@@ -49,6 +57,8 @@ describe("coredev planner", () => {
         "runtime | wsl | probe:runtime-present | action:ensure-runtime | verify:runtime-version",
         "tools | wsl | probe:wsl-tools-present | action:install-wsl-tools | verify:wsl-tools",
         "links | wsl | probe:dotfiles-linked | action:realize-dotfiles | verify:dotfiles-check",
+        "login-shell | wsl | probe:passwd-zsh-listed-in-shells | action:sudo-chsh-zsh | verify:passwd-zsh-listed-in-shells",
+        "herdr-server | wsl | probe:herdr-server-shell-current | action:stop-stale-herdr-servers | verify:no-stale-herdr-server",
         "wsl-services | wsl | probe:services-ready | action:enable-wsl-services | verify:wsl-services",
       ].join("\n"),
     );

@@ -45,6 +45,29 @@ const core: readonly ProfileStep[] = [
     failure: "links-failed",
     verifier: "dotfiles-check",
   },
+  {
+    id: "login-shell",
+    host: "target",
+    prerequisites: ["links"],
+    adapter: "login-shell",
+    probe: "passwd-zsh-listed-in-shells",
+    action: "sudo-chsh-zsh",
+    timeoutSeconds: 60,
+    failure:
+      "login shell must be zsh; probe reports the current shell and repair command",
+    verifier: "passwd-zsh-listed-in-shells",
+  },
+  {
+    id: "herdr-server",
+    host: "target",
+    prerequisites: ["login-shell"],
+    adapter: "herdr-server",
+    probe: "herdr-server-shell-current",
+    action: "stop-stale-herdr-servers",
+    timeoutSeconds: 5,
+    failure: "could not stop stale herdr server within 5 seconds",
+    verifier: "no-stale-herdr-server",
+  },
 ];
 
 const wsl: readonly ProfileStep[] = [

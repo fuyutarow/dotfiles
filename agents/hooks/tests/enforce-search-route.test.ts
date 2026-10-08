@@ -256,6 +256,31 @@ describe("enforce-search-route", () => {
     expect(result.stdout.trim()).toBe("");
   });
 
+  test("allows searches whose file targets are outside a registered project", () => {
+    const project = registerProject();
+    const output = "/tmp/x/out.txt";
+    const outside = "/private/tmp/search-route-external-target";
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      [project, `grep needle ${output}`],
+      [project, `find ${outside} -name out.txt`],
+      [project, "ls | grep foo"],
+      [project, "grep -r foo ."],
+      [project, "grep foo agents/"],
+      [outside, `rg foo ${join(project, "scripts")}`],
+    ];
+
+    for (const [cwd, command] of cases) {
+      const result = runHook(HOOK, bashPayload(cwd, command), withCcc());
+      const expected =
+        command === "grep -r foo ." ||
+        command === "grep foo agents/" ||
+        command.startsWith("rg foo ")
+          ? "deny"
+          : undefined;
+      expect(decisionOf(result.stdout)?.permissionDecision).toBe(expected);
+    }
+  });
+
   test("allows raw search when ccc is unavailable", () => {
     const project = registerProject();
     const emptyHome = tempDir("search-route-home-");

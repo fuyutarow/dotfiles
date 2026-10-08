@@ -243,6 +243,163 @@ function startPath(payload: unknown): string {
   return isAbsolute(raw) ? raw : resolve(cwd, raw);
 }
 
+const GREP_VALUE_OPTIONS = new Set([
+  "-e",
+  "--regexp",
+  "-f",
+  "--file",
+  "-m",
+  "-A",
+  "-B",
+  "-C",
+  "-g",
+  "-t",
+  "-T",
+  "-M",
+  "-j",
+  "-d",
+  "-D",
+  "--max-count",
+  "--glob",
+  "--type",
+  "--type-not",
+  "--max-columns",
+  "--threads",
+  "--after-context",
+  "--before-context",
+  "--context",
+  "--devices",
+  "--directories",
+  "--include",
+  "--exclude",
+  "--exclude-from",
+  "--exclude-dir",
+  "--color",
+  "--colour",
+  "--binary-files",
+  "--label",
+]);
+
+function optionValue(args: string[], index: number): number {
+  const arg = args[index] ?? "";
+  if (GREP_VALUE_OPTIONS.has(arg)) return 1;
+  if (/^--[^=]+=./u.test(arg)) return 0;
+  if (/^-(?:e|f).+/u.test(arg)) return 0;
+  return 0;
+}
+
+function isRecursiveOption(arg: string): boolean {
+  return (
+    arg === "--recursive" ||
+    arg === "--dereference-recursive" ||
+    arg === "-r" ||
+    arg === "-R" ||
+    (arg.includes("r") && /^-[^-]/u.test(arg))
+  );
+}
+
+function resolveSearchTarget(operand: string, cwd: string): string {
+  let expanded = operand;
+  if (operand === "~") expanded = homedir();
+  else if (operand.startsWith("~/"))
+    expanded = join(homedir(), operand.slice(2));
+  return isAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded);
+}
+
+/** File/directory operands searched by one parsed search command; empty means stdin. */
+function searchOperands(c: ShellCommand): string[] {
+  const eff = effective(c);
+  if (eff === undefined) return [];
+  const { name } = eff;
+  let args = eff.args;
+  if (name === "git") {
+    if (args[0] === "-C") args = args.slice(2);
+    return [c.cwd]; // git grep searches the worktree when no pathspec is given
+  }
+  if (name === "ccc" || name === "xargs" || RUNTIMES.test(name)) return [c.cwd];
+  if (ENUMERATORS.has(name)) {
+    if (name === "find") {
+      const firstPredicate = args.findIndex((arg) =>
+        /^(?:!|\(|-name|-iname|-path|-ipath|-type|-size|-mtime|-newer|-print|-exec|-delete|-maxdepth|-mindepth)$/u.test(
+          arg,
+        ),
+      );
+      const paths =
+        firstPredicate === -1 ? args : args.slice(0, firstPredicate);
+      const targets = paths.filter((arg) => arg !== "" && !arg.startsWith("-"));
+      return targets.length > 0 ? targets : [c.cwd];
+    }
+    if (name === "fd" || name === "fdfind") {
+      const positionals = args.filter((arg) => !arg.startsWith("-"));
+      return positionals.length > 1 ? positionals.slice(1) : [c.cwd];
+    }
+    const paths = args.filter((arg) => !arg.startsWith("-"));
+    return paths.length > 0 ? paths : [c.cwd];
+  }
+  if (!SEARCH_PROGRAMS.has(name)) return [c.cwd];
+
+  let patternSeen = false;
+  let endOptions = false;
+  const paths: string[] = [];
+  let recursive = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (!endOptions && arg === "--") {
+      endOptions = true;
+      continue;
+    }
+    if (!endOptions && arg.startsWith("-") && arg !== "-") {
+      recursive = recursive || isRecursiveOption(arg);
+      patternSeen =
+        patternSeen ||
+        arg === "-e" ||
+        arg === "--regexp" ||
+        arg === "-f" ||
+        arg === "--file" ||
+        /^-(?:e|f).+/u.test(arg) ||
+        /^--(?:regexp|file)=/u.test(arg);
+      const skip = optionValue(args, i);
+      i += skip;
+      continue;
+    }
+    if (arg === "-") continue;
+    if (!patternSeen) patternSeen = true;
+    else paths.push(arg);
+  }
+  const redirectedInput = c.redirects
+    .filter((redirect) => redirect.op.startsWith("<") && redirect.target !== "")
+    .map((redirect) => redirect.target);
+  if (paths.length > 0 || redirectedInput.length > 0)
+    return [...paths, ...redirectedInput];
+  return recursive || (name !== "grep" && name !== "egrep" && name !== "fgrep")
+    ? [c.cwd]
+    : [];
+}
+
+function searchTargets(payload: unknown): string[] {
+  if (strAt(payload, "tool_name") === "Grep") return [startPath(payload)];
+  const command = strAt(payload, "tool_input", "command") ?? "";
+  let cwd = strAt(payload, "cwd") ?? process.cwd();
+  if (cwd === "") cwd = process.cwd();
+  const parsed = parseShell(command, cwd);
+  if (parsed === undefined) return [startPath(payload)];
+  if (isRoutedStreamFilter(parsed.commands.filter((c) => !c.nested))) return [];
+  const targets = parsed.commands.flatMap((c) =>
+    commandSearches(c, command)
+      ? searchOperands(c).map((operand) => resolveSearchTarget(operand, c.cwd))
+      : [],
+  );
+  // A malformed router/filter pipeline is still a repository search attempt. Only the one
+  // explicitly accepted stream-filter shape above is exempt; preserve the gate for other forms.
+  const hasRouter = parsed.commands.some((c) => {
+    const eff = effective(c);
+    return (
+      eff !== undefined && (eff.name === "rr" || eff.name === "repo-retrieve")
+    );
+  });
+  return targets.length === 0 && hasRouter ? [resolve(cwd)] : targets;
+}
+
 /**
  * **Governed repos are exempt: judgment lives in one place, and here it is not that place.**
  *
@@ -322,8 +479,16 @@ function main(): void {
   const governed = governedRepo(startPath(payload));
   if (governed !== null && governed !== "") return;
 
-  const project = registeredProject(startPath(payload));
-  if (project === undefined || project === null || !cccIsAvailable()) return;
+  if (!cccIsAvailable()) return;
+  let project: string | null = null;
+  for (const target of searchTargets(payload)) {
+    const candidate = registeredProject(target);
+    if (candidate !== null) {
+      project = candidate;
+      break;
+    }
+  }
+  if (project === null) return;
 
   if (!existsSync(ROUTER)) {
     // FATAL: without the router there is no route to advise, so the normal deny cannot be built.

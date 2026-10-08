@@ -335,6 +335,74 @@ price_out = 50.00
 use_for = "deepest astra reasoning for the most demanding multi-step terminal/agentic work"
 
 [[choice]]
+id = "haiku-low"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "low"
+aa_index = 29 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5-low
+tb4 = 12.6 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "short Claude-specific tasks or quick Claude Code hook edits when luna lacks a needed capability; use codex when comparable"
+
+[[choice]]
+id = "haiku-medium"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "medium"
+aa_index = 34 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5-medium
+tb4 = 15.2 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+scicode = 49.0 # AA (2026-10-08): https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-medium-vs-claude-haiku-5-5-xhigh
+scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-medium-vs-claude-haiku-5-5-xhigh"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "short Claude-specific work or quick Claude Code hook edits needing more care than haiku-low when luna lacks the capability; use codex when comparable"
+
+[[choice]]
+id = "haiku-high"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "high"
+aa_index = 38 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5-high
+tb4 = 21.7 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+scicode = 49.0 # AA (2026-10-08): https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-high-vs-claude-haiku-5-5-medium
+scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-high-vs-claude-haiku-5-5-medium"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "Claude Code hook-sensitive edits needing stronger follow-through when luna lacks a needed capability; use codex when comparable"
+
+[[choice]]
+id = "haiku-xhigh"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "xhigh"
+aa_index = 41 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5-xhigh
+tb4 = 29.3 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+scicode = 52.0 # AA (2026-10-08): https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh
+scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "demanding Claude-native work needing high follow-through when luna lacks a needed capability; use codex when comparable"
+
+[[choice]]
+id = "haiku-max"
+route = "claude"
+model = "claude-haiku-5-5"
+effort = "max"
+aa_index = 43 # AA (2026-10-08): https://artificialanalysis.ai/models/claude-haiku-5-5
+tb4 = 32.8 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro
+tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
+scicode = 55.0 # AA (2026-10-08): https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh
+scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh"
+price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
+price_out = 0.50
+use_for = "deepest Haiku effort for Claude-native work when luna lacks a needed capability; use codex when comparable"
+
+[[choice]]
 id = "sonnet-low"
 route = "claude"
 model = "claude-sonnet-5-5"

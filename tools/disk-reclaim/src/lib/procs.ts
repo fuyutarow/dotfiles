@@ -12,6 +12,14 @@ export type Probe<T> = { ok: true; value: T } | { ok: false; error: string };
 type ProcResult<T> = { ok: true; value: T } | { ok: false; error: unknown };
 export type OpenPath = { pid: number; via: string; path: string };
 export type OpenPaths = { open: OpenPath[]; unknown: string[] };
+export type ProcessFact = {
+  pid: number;
+  comm: string | undefined;
+  exe: string | undefined;
+  cwd: string | undefined;
+  environ: string | undefined;
+  openPaths: string[];
+};
 export type ProcFs = {
   readText: (path: string) => string | Error;
   readlink: (path: string) => string | Error;
@@ -42,6 +50,7 @@ export const resolveProcRoot = (root?: string): string =>
   "/proc";
 export type ProcessSnapshot = {
   environSessionIds: Probe<string[]>;
+  processes: ProcessFact[];
   openPaths: (dir: string) => OpenPaths;
 };
 const errorCode = (error: unknown): string | undefined => {
@@ -130,6 +139,7 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
   const fs = options.fs ?? procFs;
   const allow = options.ignoreUnreadableProcs ?? [];
   const paths: OpenPath[] = [];
+  const processes: ProcessFact[] = [];
   const ids: string[] = [];
   const unknown: { uid: number | undefined; detail: string }[] = [];
   const initialStats = new Map<number, ProcResult<ProcStat>>();
@@ -208,18 +218,33 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
         .filter((entry) => entry.startsWith("CLAUDE_CODE_SESSION_ID="))
         .map((entry) => entry.slice("CLAUDE_CODE_SESSION_ID=".length)),
     );
-    const pathProbe = (via: string) => {
+    const pathProbe = (via: string): string | undefined => {
       const path = probe(via, () => {
         const value = fs.readlink(join(base, via));
         return value instanceof Error ? value : cleaned(value);
       });
-      if (path !== undefined && path.startsWith("/"))
+      if (path !== undefined && path.startsWith("/")) {
         paths.push({ pid, via, path });
+        return path;
+      }
+      return undefined;
     };
-    pathProbe("exe");
-    pathProbe("cwd");
+    const exe = pathProbe("exe");
+    const cwd = pathProbe("cwd");
     const fds = probe("fd", () => fs.readdir(join(base, "fd")));
-    for (const fd of fds ?? []) pathProbe(`fd/${fd}`);
+    const openPaths = (fds ?? []).flatMap((fd) => {
+      const path = pathProbe(`fd/${fd}`);
+      return path === undefined ? [] : [path];
+    });
+    const comm = probe("comm", () => fs.readText(join(base, "comm")))?.trim();
+    processes.push({
+      pid,
+      comm: comm === "" ? undefined : comm,
+      exe,
+      cwd,
+      environ,
+      openPaths,
+    });
   }
   if (process.env.RECLAIM_PROC_TRACE === "1" && unknown.length > 0)
     unknown.forEach((item) => {
@@ -230,6 +255,7 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
       unknown.length === 0
         ? { ok: true, value: ids }
         : { ok: false, error: unknown.map(({ detail }) => detail).join("; ") },
+    processes,
     openPaths: (dir) => ({
       open: paths.filter((p) => under(p.path, resolve(dir))),
       unknown: unknown.map(({ detail }) => detail),

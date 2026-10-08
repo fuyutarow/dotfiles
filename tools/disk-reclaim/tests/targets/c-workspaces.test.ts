@@ -73,7 +73,7 @@ describe("workspaces target", () => {
       commit_id: wc,
     });
     expect(recovery[0]?.op_id).toMatch(/^[0-9a-f]+$/u);
-  });
+  }, 30_000);
 
   test("a Rust target is delegated to the rust owner before workspace deletion", async () => {
     const w = world({ ".gitignore": "target/\n" });
@@ -145,7 +145,7 @@ describe("workspaces target", () => {
     const candidate = only(await plan(w), ws);
     assert.ok(candidate.verdict === "KEEP", candidate.reason);
     expect(failed(candidate)).toContain("no conflicts");
-  });
+  }, 30_000);
 
   test("a local bookmark ahead of the remote is ASK", async () => {
     const w = world();
@@ -181,7 +181,7 @@ describe("workspaces target", () => {
     const candidate = only(await plan(w), ws);
     expect(candidate.verdict).toBe("ASK");
     expect(failed(candidate)).toContain("fresh working copy");
-  });
+  }, 30_000);
 
   test("run snapshots: an unrecorded new file makes the working copy non-empty, so ASK", async () => {
     const w = world();

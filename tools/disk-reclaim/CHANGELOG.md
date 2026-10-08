@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Report every discovered `target/` directory in the Rust tier with its size and a RECLAIM, KEEP, or ASK verdict; recency now orders rows instead of hiding them.
+- Tie Rust target KEEP decisions to same-uid build processes that use that workspace or target, and ask when process state is unreadable or the repo has a live session.
+- Show `incremental/` as a separate sized row when target liveness requires an operator decision.
+- Keep a containing workspace protected while deciding its Rust target independently in the Rust tier.
+
 ## 0.3.1
 
 - Allow purging recent graveyard entries below the shared host deny line with `--under-pressure`, while preserving live, locked, and 10-minute undo-window entries; record headroom and the flag in receipts.

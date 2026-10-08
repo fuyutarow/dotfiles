@@ -1,14 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  mkdirSync,
-  rmSync,
-  symlinkSync,
-  utimesSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
-import { busyCwds } from "../../src/lib/busy.ts";
 import { createRustTarget } from "../../src/targets/rust.ts";
 
 const config = {
@@ -18,149 +11,180 @@ const config = {
   delete_roots: [],
   regenerable_ignored: [],
   session_grace_hours: 24,
-  ignore_unreadable_procs: ["sshd"],
+  ignore_unreadable_procs: [],
 };
 
-describe("rust target", () => {
-  test("plans only old Cargo targets, keeps fresh builds and non-project targets", () => {
-    const root = tempRoot("reclaim-rust-");
-    const oldDays = process.env.RUST_TARGET_DAYS;
-    process.env.RUST_TARGET_DAYS = "7";
-    using cleanup = new DisposableStack();
-    cleanup.defer(() => {
-      if (oldDays === undefined) delete process.env.RUST_TARGET_DAYS;
-      else process.env.RUST_TARGET_DAYS = oldDays;
-      rmSync(root, { recursive: true, force: true });
-    });
-    const old = join(root, "old/target");
-    const fresh = join(root, "fresh/target");
-    const noManifest = join(root, "no-manifest/target");
-    for (const target of [old, fresh, noManifest])
-      mkdirSync(target, { recursive: true });
-    for (const project of ["old", "fresh"])
-      writeFileSync(join(root, project, "Cargo.toml"), "[package]");
-    const oldSec = Temporal.Now.instant().epochMilliseconds / 1000 - 10 * 86400;
-    const freshSec = Temporal.Now.instant().epochMilliseconds / 1000 - 86400;
-    utimesSync(old, oldSec, oldSec);
-    utimesSync(fresh, freshSec, freshSec);
-    const procDir = join(root, "proc");
-    mkdirSync(procDir);
-    const planned = createRustTarget(() => root).plan({
-      mode: "plan",
-      explicit: false,
-      config,
-      procDir,
-      log: () => {},
-    });
-    expect(planned.map((candidate) => candidate.path)).toEqual([old]);
-  });
+const context = (procDir: string) => ({
+  mode: "plan" as const,
+  explicit: false,
+  config,
+  procDir,
+  log: () => {},
+});
 
-  test("a recent direct child keeps an otherwise old target", () => {
-    const root = tempRoot("reclaim-rust-child-");
-    const oldDays = process.env.RUST_TARGET_DAYS;
-    process.env.RUST_TARGET_DAYS = "7";
+function processFixture(
+  procDir: string,
+  pid: string,
+  name: string,
+  cwd: string,
+  options: { fd?: string; env?: string } = {},
+): void {
+  const base = join(procDir, pid);
+  mkdirSync(join(base, "fd"), { recursive: true });
+  writeFileSync(join(base, "comm"), `${name}\n`);
+  writeFileSync(
+    join(base, "stat"),
+    `${pid} (${name}) S ${Array.from({ length: 18 }, () => "0").join(" ")} 123\n`,
+  );
+  writeFileSync(join(base, "environ"), options.env ?? "");
+  symlinkSync(`/usr/bin/${name}`, join(base, "exe"));
+  symlinkSync(cwd, join(base, "cwd"));
+  if (options.fd !== undefined) symlinkSync(options.fd, join(base, "fd/3"));
+}
+
+function plan(root: string, procDir: string) {
+  return createRustTarget(() => root).plan(context(procDir));
+}
+
+describe("rust target", () => {
+  test("a recent but idle target has a RECLAIM row", () => {
+    const root = tempRoot("reclaim-rust-recent-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      if (oldDays === undefined) delete process.env.RUST_TARGET_DAYS;
-      else process.env.RUST_TARGET_DAYS = oldDays;
       rmSync(root, { recursive: true, force: true });
     });
     const target = join(root, "project/target");
-    mkdirSync(join(target, "debug"), { recursive: true });
+    mkdirSync(target, { recursive: true });
     writeFileSync(join(root, "project/Cargo.toml"), "[package]");
-    const oldSec = Temporal.Now.instant().epochMilliseconds / 1000 - 10 * 86400;
-    const recentSec = Temporal.Now.instant().epochMilliseconds / 1000 - 86400;
-    utimesSync(join(target, "debug"), recentSec, recentSec);
-    utimesSync(target, oldSec, oldSec);
-    expect(
-      createRustTarget(() => root).plan({
-        mode: "plan",
-        explicit: false,
-        config,
-        log: () => {},
-      }),
-    ).toEqual([]);
+    const procDir = join(root, "proc");
+    mkdirSync(procDir);
+    const rows = plan(root, procDir);
+    expect(rows.map(({ path, verdict }) => [path, verdict])).toEqual([
+      [target, "RECLAIM"],
+    ]);
   });
 
-  test("busy cargo/rustc cwd excludes a target and unavailable /proc remains conservative", () => {
-    const root = tempRoot("reclaim-rust-busy-");
-    const oldDays = process.env.RUST_TARGET_DAYS;
-    process.env.RUST_TARGET_DAYS = "7";
+  test("live cargo cwd inside the project keeps that target", () => {
+    const root = tempRoot("reclaim-rust-cargo-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      if (oldDays === undefined) delete process.env.RUST_TARGET_DAYS;
-      else process.env.RUST_TARGET_DAYS = oldDays;
       rmSync(root, { recursive: true, force: true });
     });
     const project = join(root, "project");
     const target = join(project, "target");
+    const procDir = join(root, "proc");
     mkdirSync(target, { recursive: true });
+    mkdirSync(procDir);
     writeFileSync(join(project, "Cargo.toml"), "[package]");
-    const oldSec = Temporal.Now.instant().epochMilliseconds / 1000 - 10 * 86400;
-    utimesSync(target, oldSec, oldSec);
-    expect(
-      createRustTarget(
-        () => root,
-        () => [project],
-      ).plan({ mode: "plan", explicit: false, config, log: () => {} }),
-    ).toEqual([]);
-    expect(
-      createRustTarget(() => root, unavailableCwds).plan({
-        mode: "plan",
-        explicit: false,
-        config,
-        log: () => {},
-      }),
-    ).toEqual([]);
+    processFixture(procDir, "10", "cargo", project);
+    expect(plan(root, procDir)[0]).toMatchObject({
+      path: target,
+      verdict: "KEEP",
+      reason: "live Rust build process uses this target",
+    });
   });
 
-  test("busy cwd matching uses a path boundary, not a similarly named sibling", () => {
-    const root = tempRoot("reclaim-rust-sibling-");
-    const oldDays = process.env.RUST_TARGET_DAYS;
-    process.env.RUST_TARGET_DAYS = "7";
+  test("an open fd under the target keeps it even when cwd is elsewhere", () => {
+    const root = tempRoot("reclaim-rust-fd-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      if (oldDays === undefined) delete process.env.RUST_TARGET_DAYS;
-      else process.env.RUST_TARGET_DAYS = oldDays;
       rmSync(root, { recursive: true, force: true });
     });
-    const project = join(root, "old");
+    const project = join(root, "project");
     const target = join(project, "target");
+    const procDir = join(root, "proc");
     mkdirSync(target, { recursive: true });
+    mkdirSync(procDir);
     writeFileSync(join(project, "Cargo.toml"), "[package]");
-    const oldSec = Temporal.Now.instant().epochMilliseconds / 1000 - 10 * 86400;
-    utimesSync(target, oldSec, oldSec);
-    expect(
-      createRustTarget(
-        () => root,
-        () => [join(root, "old-fork")],
-      )
-        .plan({ mode: "plan", explicit: false, config, log: () => {} })
-        .map((candidate) => candidate.path),
-    ).toEqual([target]);
+    processFixture(procDir, "11", "rustc", "/elsewhere", {
+      fd: join(target, "artifact"),
+    });
+    expect(plan(root, procDir)[0]?.verdict).toBe("KEEP");
   });
 
-  test("shared /proc probe finds cargo/rustc cwd and treats a missing proc tree as unknown", () => {
-    const proc = tempRoot("reclaim-rust-proc-");
+  test("CARGO_TARGET_DIR pointing at the target keeps it", () => {
+    const root = tempRoot("reclaim-rust-cargo-dir-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
-      rmSync(proc, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
     });
-    const processes: [string, string, string][] = [
-      ["10", "/usr/bin/cargo", "/w/a"],
-      ["11", "/opt/rustc", "/w/b"],
-      ["12", "/usr/bin/zsh", "/w/c"],
-    ];
-    for (const [pid, exe, cwd] of processes) {
-      mkdirSync(join(proc, pid));
-      symlinkSync(exe, join(proc, pid, "exe"));
-      symlinkSync(cwd, join(proc, pid, "cwd"));
-    }
-    expect(busyCwds(proc)?.toSorted()).toEqual(["/w/a", "/w/b"]);
-    expect(busyCwds(join(proc, "missing"))).toBeUndefined();
+    const project = join(root, "project");
+    const target = join(project, "target");
+    const procDir = join(root, "proc");
+    mkdirSync(target, { recursive: true });
+    mkdirSync(procDir);
+    writeFileSync(join(project, "Cargo.toml"), "[package]");
+    processFixture(procDir, "14", "sccache", "/elsewhere", {
+      env: `CARGO_TARGET_DIR=${target}\0`,
+    });
+    expect(plan(root, procDir)[0]?.verdict).toBe("KEEP");
+  });
+
+  test("unreadable process facts with no confirmed use produce ASK", () => {
+    const root = tempRoot("reclaim-rust-unknown-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(root, { recursive: true, force: true });
+    });
+    const project = join(root, "project");
+    const target = join(project, "target");
+    const procDir = join(root, "missing-proc");
+    mkdirSync(target, { recursive: true });
+    writeFileSync(join(project, "Cargo.toml"), "[package]");
+    const rows = plan(root, procDir);
+    expect(rows[0]).toMatchObject({ path: target, verdict: "ASK" });
+  });
+
+  test("a live repo process without a build process makes the target ASK", () => {
+    const root = tempRoot("reclaim-rust-session-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(root, { recursive: true, force: true });
+    });
+    const project = join(root, "project");
+    const target = join(project, "target");
+    const procDir = join(root, "proc");
+    mkdirSync(join(target, "incremental"), { recursive: true });
+    mkdirSync(procDir);
+    writeFileSync(join(project, "Cargo.toml"), "[package]");
+    processFixture(procDir, "13", "claude", project);
+    expect(plan(root, procDir)).toMatchObject([
+      {
+        path: target,
+        verdict: "ASK",
+        reason:
+          "live process cwd is inside the repository; no Rust build process uses this target",
+      },
+      {
+        path: join(target, "incremental"),
+        verdict: "ASK",
+      },
+    ]);
+    expect(plan(root, procDir)[0]).toMatchObject({
+      path: target,
+      verdict: "ASK",
+      reason:
+        "live process cwd is inside the repository; no Rust build process uses this target",
+    });
+  });
+
+  test("every discovered target gets a row, including a non-Cargo target", () => {
+    const root = tempRoot("reclaim-rust-all-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(root, { recursive: true, force: true });
+    });
+    const target = join(root, "not-rust/target");
+    mkdirSync(target, { recursive: true });
+    const procDir = join(root, "proc");
+    mkdirSync(procDir);
+    expect(plan(root, procDir)).toMatchObject([
+      {
+        path: target,
+        verdict: "ASK",
+        reason:
+          "Cargo.toml is missing or unreadable; target ownership is unknown",
+      },
+    ]);
   });
 });
-
-function unavailableCwds(): undefined {
-  return undefined;
-}

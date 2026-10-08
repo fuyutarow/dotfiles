@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.0 — 2026-10-09
+
+- Give Jev per-kind records and label thin history as “record thin → weigh benchmarks.”
+- Export/import records per capability tag with `record export` and `record import` subcommands.
+- Preserve comparable-ticket throughput, route masking, softmax sampling, and stale-worker marker handling.
+
 ## 1.9.0 — 2026-10-09
 
 - Smooth eligible Jev row probabilities with default epsilon 0.1 before temperature sampling, preserving hard masks and recording epsilon plus sampled probability.
@@ -12,13 +18,20 @@
 
 - Sample a reproducible row from Jev probabilities after route, budget, and effort masking; record the sampling decision and preserve it on resume.
 
-
 ## 1.6.0 — 2026-10-09
 
 - For resource-envelope briefs, probe once per worker process whether Codex's sandbox blocks the host user bus or an available GPU device; fall back to unsandboxed execution with a recorded reason when it does. Noncompute briefs do not probe.
+
+## 1.5.7 — 2026-10-09
+
+- Give Jev per-ticket throughput from comparable capability tags and ticket size classes, mark the best observed row, and state thin history per row without substituting overall averages.
+- Treat active markers held by dead pids as released for worker-name uniqueness.
+
 ## 1.5.6 — 2026-10-09
 
-- Include compact recent per-row throughput in Jev pick requests; label rows with fewer than three runs UNMEASURED and retain picks when the run log cannot be read.
+- Include seven-day per-capability records beside each row's overall record in Jev's request, marking records below five runs as little; cache the latest bounded statistics snapshot.
+- Mask rows with two lineage failures, partial grades, or returned runs without acknowledgement from Jev's candidates; record reasons and keep the overall-record argmax available when every row would be masked.
+
 
 ## 1.5.5 — 2026-10-09
 

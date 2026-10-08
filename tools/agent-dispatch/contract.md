@@ -51,6 +51,23 @@ false-refusal rate among expected-pass briefs.
 
 ## Throughput and acknowledgements
 
+Routing includes each roster row's overall seven-day median first-return time, timeout rate,
+accepted rate and cost per accepted result. For every capability tag on the current ticket, it also
+includes that row's record restricted to runs whose ticket carried that tag. Each row also gets a
+comparable-ticket tradeoff from runs with the same exact capability tags and the same size class
+(writes-glob count and brief length): expected time to first return, timeout rate, accepted rate,
+cost per accepted, and expected accepted-returns-per-hour. The row with the best observed expected
+throughput is marked, and Jev is asked to maximize that quantity. A record with fewer than five
+runs is marked `little record`; thin comparable history is stated per row and is never silently
+replaced by overall averages. These are evidence for Jev's choice and do not let a caller select a
+row.
+
+For a ticket `name` reused within 24 hours, or a continuation through `resume`, the router treats
+the run and its resumes as one lineage. Rows with at least two lineage runs graded `fail` or
+`partial`, or returned without an ack-consumed, are masked from Jev's candidates. The receipt records
+each masked row and reason. If every candidate is masked, the overall-record argmax remains
+available and the receipt says which row was kept; Jev still makes the choice.
+
 `agent-dispatch ack <run_id> [--consumed|--rejected] [--note "<why>"]` appends an acknowledgement
 with the current dispatcher session and timestamp. It accepts finished runs with any outcome; an
 unknown run is refused without writing a record. Omitted outcome means consumed. A later

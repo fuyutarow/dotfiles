@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { replayStats, throughputStats } from "../src/throughput-stats.ts";
+import {
+  lineageMasks,
+  maskCandidates,
+  replayStats,
+  throughputStats,
+} from "../src/throughput-stats.ts";
 
 const now = Temporal.Instant.from("2026-10-08T00:00:00Z").epochMilliseconds;
 const started = "2026-10-07T23:00:00Z";
@@ -26,6 +31,150 @@ const run = (values: Record<string, unknown>): string =>
   });
 
 describe("throughputStats", () => {
+  test("reuses the cached result for the same bounded log snapshot", () => {
+    const options = { now: 1_000, sinceMs: 0, grading: false };
+    const first = throughputStats("", options);
+    expect(throughputStats("", options)).toBe(first);
+  });
+  test("masks after two lineage failures, but leaves a row after one", () => {
+    const nowMs = Temporal.Now.instant().epochMilliseconds;
+    const startedAt = Temporal.Instant.fromEpochMilliseconds(
+      nowMs - 1_000,
+    ).toString();
+    const entries = ["a", "b"].flatMap((id) => [
+      {
+        kind: "run",
+        run_id: id,
+        started_at: startedAt,
+        ticket: { schema: 2, name: "named" },
+        pick: { choice: "luna-high" },
+        stats: { row: "luna-high", outcome: "timeout" },
+      },
+      { kind: "grade", run_id: id, grade: "fail" },
+    ]);
+    const log = entries.map((entry) => JSON.stringify(entry)).join("\n");
+    expect(lineageMasks(log, { name: "named", now: nowMs })).toMatchObject({
+      "luna-high": { failures: 2 },
+    });
+    expect(
+      lineageMasks(log.split("\n").slice(0, 1).join("\n"), {
+        name: "named",
+        now: nowMs,
+      }),
+    ).toEqual({});
+  });
+  test("all masked candidates retain the overall-record argmax", () => {
+    const result = maskCandidates(
+      ["slow", "fast"],
+      {
+        slow: { failures: 2, reason: "two" },
+        fast: { failures: 2, reason: "two" },
+      },
+      {
+        slow: { accepted_returns_per_worker_hour: 1 },
+        fast: { accepted_returns_per_worker_hour: 3 },
+      },
+    );
+    expect(result).toEqual({
+      masked: { slow: { failures: 2, reason: "two" } },
+      fallback: "fast",
+    });
+  });
+  test("keeps per-capability row records separate from the overall record", () => {
+    const startedAt = Temporal.Now.instant().toString();
+    const log = [
+      {
+        kind: "run",
+        run_id: "ts",
+        started_at: startedAt,
+        ticket: { schema: 2, capabilities: ["typescript"] },
+        stats: {
+          row: "luna-high",
+          outcome: "returned",
+          elapsed_s: 10,
+          cost_usd: 1,
+        },
+      },
+      { kind: "grade", run_id: "ts", grade: "pass" },
+      {
+        kind: "run",
+        run_id: "gpu",
+        started_at: startedAt,
+        ticket: { schema: 2, capabilities: ["gpu-kernels"] },
+        stats: {
+          row: "luna-high",
+          outcome: "timeout",
+          elapsed_s: 100,
+          cost_usd: 1,
+        },
+      },
+    ]
+      .map((entry) => JSON.stringify(entry))
+      .join("\n");
+    const result = throughputStats(log, {
+      now: Temporal.Now.instant().epochMilliseconds,
+      sinceMs: 0,
+      grading: false,
+    });
+    expect(result.per_row["luna-high"]?.runs).toBe(2);
+    expect(result.per_tag["gpu-kernels"]?.["luna-high"]?.runs).toBe(1);
+    expect(result.per_tag["gpu-kernels"]?.["luna-high"]?.timeout_rate).toBe(1);
+    expect(result.per_tag["typescript"]?.["luna-high"]?.accepted_rate).toBe(1);
+  });
+  test("builds ticket-size cohorts from exact capability tags and caches them", () => {
+    const startedAt = Temporal.Now.instant().toString();
+    const entries = [
+      {
+        kind: "run",
+        run_id: "comparable-pass",
+        started_at: startedAt,
+        ticket: {
+          schema: 2,
+          capabilities: ["gpu-kernels", "julia"],
+          writes: ["src/**"],
+        },
+        brief: { chars: 400 },
+        stats: {
+          row: "row-a",
+          outcome: "returned",
+          elapsed_s: 20,
+          cost_usd: 0.5,
+        },
+      },
+      { kind: "grade", run_id: "comparable-pass", grade: "pass" },
+      {
+        kind: "run",
+        run_id: "different-size",
+        started_at: startedAt,
+        ticket: {
+          schema: 2,
+          capabilities: ["gpu-kernels", "julia"],
+          writes: ["src/**", "tests/**", "docs/**", "extra/**"],
+        },
+        brief: { chars: 400 },
+        stats: { row: "row-a", outcome: "timeout", elapsed_s: 200 },
+      },
+    ].map((entry) => JSON.stringify(entry));
+    const log = entries.join("\n");
+    const options = {
+      now: Temporal.Now.instant().epochMilliseconds,
+      sinceMs: 0,
+      grading: false,
+    };
+    const first = throughputStats(log, options);
+    const key = JSON.stringify({
+      capabilities: ["gpu-kernels", "julia"],
+      writes: "1-3",
+      brief: "0-500",
+    });
+    expect(first.per_row["row-a"]?.runs).toBe(2);
+    expect(first.per_comparable_ticket[key]?.["row-a"]).toMatchObject({
+      runs: 1,
+      accepted_rate: 1,
+      median_time_to_first_return_s: 20,
+    });
+    expect(throughputStats(log, options)).toBe(first);
+  });
   test("uses observational first-return timing while retaining the legacy checkpoint shape", () => {
     const result = throughputStats(
       run({

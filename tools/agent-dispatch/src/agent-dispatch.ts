@@ -58,7 +58,7 @@ import {
 } from "node:fs";
 import { createHash, randomInt } from "node:crypto";
 import { homedir, hostname } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { cli, command } from "cleye";
 import pkg from "../package.json" with { type: "json" };
 import { fromThrowable } from "neverthrow";
@@ -84,8 +84,13 @@ import { dispatchStats } from "./dispatch-stats.ts";
 import {
   parseSince,
   replayStats,
+  lineageMasks,
+  maskCandidates,
+  comparableTicketKey,
   throughputStats,
   perRowRecord,
+  perTagRecord,
+  perKindRecord,
 } from "./throughput-stats.ts";
 import {
   activeDir,
@@ -157,6 +162,21 @@ const RecordExportSchema = z.strictObject({
       timeout_rate: z.number().min(0).max(1),
     }),
   ),
+  per_tag: z
+    .record(
+      z.string(),
+      z.record(
+        z.string(),
+        z.looseObject({
+          runs: z.number().int().nonnegative(),
+          accepted_returns_per_worker_hour: z.number().nullable(),
+          median_time_to_first_return_s: z.number().nullable(),
+          accepted_rate: z.number().min(0).max(1),
+          timeout_rate: z.number().min(0).max(1),
+        }),
+      ),
+    )
+    .optional(),
 });
 const CODEX_WORKER =
   process.env.AGENT_ROUTER_CODEX_WORKER ??
@@ -660,29 +680,32 @@ function underNoEgress(cwd: string, paths: string[]): string | undefined {
   });
 }
 
-async function routingCriteria(roster: Roster): Promise<{
+async function routingCriteria(
+  roster: Roster,
+  capabilities: string[] = [],
+  lineageName?: string,
+  writesCount = 0,
+  briefChars = 0,
+  cwd = process.cwd(),
+): Promise<{
   criteria: Record<string, string>;
-  throughputLines?: string[];
+  masks: Record<string, { failures: number; reason: string }>;
+  throughputLines: string[];
+  fallback?: string;
   failure?: string;
 }> {
   const current = epochMilliseconds();
   const loaded = await attempt(async () => {
     const gradeCounts = gradeTally();
-    if (!existsSync(LOG_FILE))
-      return {
-        throughput: throughputStats("", {
-          now: current,
-          sinceMs: current - ROUTING_RECORD_WINDOW_MS,
-          grading: false,
-        }),
-        tally: gradeCounts,
-      };
-    const size = statSync(LOG_FILE).size;
-    const start = Math.max(0, size - ROUTING_LOG_TAIL_BYTES);
-    const tail = await Bun.file(LOG_FILE).slice(start, size).text();
-    const newline = tail.indexOf("\n");
-    let complete = tail;
-    if (start > 0) complete = newline < 0 ? "" : tail.slice(newline + 1);
+    let complete = "";
+    if (existsSync(LOG_FILE)) {
+      const size = statSync(LOG_FILE).size;
+      const start = Math.max(0, size - ROUTING_LOG_TAIL_BYTES);
+      const tail = await Bun.file(LOG_FILE).slice(start, size).text();
+      const newline = tail.indexOf("\n");
+      if (start > 0) complete = newline < 0 ? "" : tail.slice(newline + 1);
+      else complete = tail;
+    }
     return {
       throughput: throughputStats(complete, {
         now: current,
@@ -690,6 +713,11 @@ async function routingCriteria(roster: Roster): Promise<{
         grading: false,
       }),
       tally: gradeCounts,
+      log: complete,
+      masks: lineageMasks(complete, {
+        ...(lineageName === undefined ? {} : { name: lineageName }),
+        now: current,
+      }),
     };
   });
   if (!loaded.ok)
@@ -700,6 +728,8 @@ async function routingCriteria(roster: Roster): Promise<{
           `${criterionFor(roster, choice)} Recent measured record unavailable.`,
         ]),
       ),
+      masks: {},
+      throughputLines: [],
       failure: errorMessage(loaded.error).slice(0, 300),
     };
   let imported: z.output<typeof RecordExportSchema> | undefined;
@@ -711,64 +741,117 @@ async function routingCriteria(roster: Roster): Promise<{
       ? jsonOf(RecordExportSchema).safeParse(read.value)
       : undefined;
     if (parsed?.success === true) imported = parsed.data;
-    else {
-      const reason = read.ok
-        ? (parsed?.error.issues[0]?.message ?? "invalid shape")
-        : errorMessage(read.error);
+    else
       console.error(
-        `agent-dispatch: ignoring unreadable imported record: ${reason}`,
+        `agent-dispatch: ignoring unreadable imported record: ${read.ok ? (parsed?.error.issues[0]?.message ?? "invalid shape") : errorMessage(read.error)}`,
       );
-    }
   }
-  const exportedAt = imported?.exported_at;
-  const importedDate =
-    exportedAt === undefined ? undefined : exportedAt.slice(0, 10);
+  const importedDate = imported?.exported_at.slice(0, 10);
+  const { masked, fallback } = maskCandidates(
+    roster.choice.map((choice) => choice.id),
+    loaded.value.masks,
+    loaded.value.throughput.per_row,
+  );
+  const comparableKey = comparableTicketKey(
+    capabilities,
+    writesCount,
+    briefChars,
+  );
+  const bestThroughputRow = roster.choice
+    .map((choice) => {
+      const record =
+        loaded.value.throughput.per_comparable_ticket[comparableKey]?.[
+          choice.id
+        ];
+      const medianFirstReturn = record?.median_time_to_first_return_s;
+      const throughput =
+        record !== undefined &&
+        medianFirstReturn !== null &&
+        medianFirstReturn !== undefined &&
+        medianFirstReturn > 0
+          ? (record.accepted_rate * 3600) / medianFirstReturn
+          : undefined;
+      return { id: choice.id, throughput };
+    })
+    .filter((row) => row.throughput !== undefined)
+    .toSorted((a, b) => (b.throughput ?? 0) - (a.throughput ?? 0))[0]?.id;
   const throughputLines = roster.choice.map((choice) => {
-    const row = loaded.value.throughput.per_row[choice.id];
-    const runs = row?.runs ?? 0;
-    const measured = runs >= ROUTING_RECORD_MIN_RUNS ? row : undefined;
+    const local = loaded.value.throughput.per_row[choice.id];
     const importedRow = imported?.per_row[choice.id];
-    const picked = measured ?? importedRow;
+    const row =
+      (local?.runs ?? 0) >= ROUTING_RECORD_MIN_RUNS ? local : importedRow;
     let prefix = "";
-    if (measured === undefined) {
-      prefix =
-        importedRow === undefined
-          ? "UNMEASURED | "
-          : `imported from ${imported?.host} ${importedDate} | `;
+    if ((local?.runs ?? 0) < ROUTING_RECORD_MIN_RUNS) {
+      if (row === undefined) prefix = "UNMEASURED | ";
+      else prefix = `imported from ${imported?.host} ${importedDate} | `;
     }
-    return `${choice.id} | ${prefix}runs ${picked?.runs ?? 0} | accepted/h ${picked?.accepted_returns_per_worker_hour?.toFixed(2) ?? "unknown"} | p50 first return ${picked?.median_time_to_first_return_s?.toFixed(1) ?? "unknown"}${picked === undefined ? "" : "s"} | accepted ${((picked?.accepted_rate ?? 0) * 100).toFixed(1)}% | timeout ${((picked?.timeout_rate ?? 0) * 100).toFixed(1)}%`;
+    const firstReturn = row?.median_time_to_first_return_s;
+    return `${choice.id} | ${prefix}runs ${row?.runs ?? 0} | accepted/h ${row?.accepted_returns_per_worker_hour?.toFixed(2) ?? "unknown"} | p50 first return ${firstReturn === null || firstReturn === undefined ? "unknown" : `${firstReturn.toFixed(1)}s`} | accepted ${((row?.accepted_rate ?? 0) * 100).toFixed(1)}% | timeout ${((row?.timeout_rate ?? 0) * 100).toFixed(1)}%`;
   });
   const criteria = Object.fromEntries(
-    roster.choice.map((choice) => {
-      const local = loaded.value.throughput.per_row[choice.id];
-      let rowRecord:
-        | typeof local
-        | z.output<typeof RecordExportSchema>["per_row"][string];
-      if ((local?.runs ?? 0) >= ROUTING_RECORD_MIN_RUNS) rowRecord = local;
-      else rowRecord = imported?.per_row[choice.id];
-      const n = rowRecord?.runs ?? 0;
-      let provenance = "local";
-      if ((local?.runs ?? 0) < ROUTING_RECORD_MIN_RUNS)
-        provenance =
-          rowRecord === undefined
-            ? "UNMEASURED"
-            : `imported from ${imported?.host} ${importedDate}`;
-      const record =
-        `Recent measured record (last 7 days): n=${n}; ` +
-        `median time to first return=${rowRecord?.median_time_to_first_return_s === null || rowRecord?.median_time_to_first_return_s === undefined ? "unknown" : `${rowRecord.median_time_to_first_return_s}s`}; ` +
-        `timeout rate=${rowRecord === undefined ? "unknown" : `${(rowRecord.timeout_rate * 100).toFixed(1)}%`}; ` +
-        `accepted rate=${rowRecord === undefined ? "unknown" : `${(rowRecord.accepted_rate * 100).toFixed(1)}%`}; ` +
-        `cost per accepted=${local?.cost_per_accepted_usd === null || local?.cost_per_accepted_usd === undefined ? "unknown" : `$${local.cost_per_accepted_usd.toFixed(4)}`}` +
-        (n < ROUTING_RECORD_MIN_RUNS
-          ? `; little record (fewer than ${ROUTING_RECORD_MIN_RUNS} runs)`
-          : "");
-      return [
-        choice.id,
-        `${criterionFor(roster, choice, loaded.value.tally.get(choice.id))} ${provenance} ${record}`,
-      ];
-    }),
+    roster.choice
+      .filter((choice) => masked[choice.id] === undefined)
+      .map((choice) => {
+        const local = loaded.value.throughput.per_row[choice.id];
+        const localRuns = local?.runs ?? 0;
+        const localWins = localRuns >= ROUTING_RECORD_MIN_RUNS;
+        const allRow = localWins ? local : imported?.per_row[choice.id];
+        const localKind = perKindRecord(
+          loaded.value.log,
+          choice.id,
+          capabilities,
+          basename(cwd),
+          {
+            now: current,
+            sinceMs: current - ROUTING_RECORD_WINDOW_MS,
+            grading: false,
+          },
+        );
+        const importedKind = capabilities
+          .map((tag) => imported?.per_tag?.[tag]?.[choice.id])
+          .find((record) => record !== undefined);
+        const kind =
+          (localKind?.runs ?? 0) >= ROUTING_RECORD_MIN_RUNS
+            ? localKind
+            : (importedKind ?? localKind);
+        const globalMedian = allRow?.median_time_to_first_return_s;
+        const globalLine = `all tickets: runs ${allRow?.runs ?? 0} | accepted/h ${allRow?.accepted_returns_per_worker_hour?.toFixed(2) ?? "unknown"} | p50 first return ${globalMedian === null || globalMedian === undefined ? "unknown" : `${globalMedian.toFixed(1)}s`} | accepted ${((allRow?.accepted_rate ?? 0) * 100).toFixed(1)}% | timeout ${((allRow?.timeout_rate ?? 0) * 100).toFixed(1)}%`;
+        const comparableRecord =
+          loaded.value.throughput.per_comparable_ticket[comparableKey]?.[
+            choice.id
+          ];
+        const comparableMedian =
+          comparableRecord?.median_time_to_first_return_s;
+        const throughput =
+          comparableRecord !== undefined &&
+          comparableMedian !== null &&
+          comparableMedian !== undefined &&
+          comparableMedian > 0
+            ? (comparableRecord.accepted_rate * 3600) / comparableMedian
+            : undefined;
+        const comparableLine = `Comparable-ticket tradeoff: n=${comparableRecord?.runs ?? 0}; expected accepted-returns-per-hour=${throughput?.toFixed(2) ?? "unknown"}`;
+        const provenance =
+          !localWins && allRow !== undefined
+            ? `imported from ${imported?.host} ${importedDate}; `
+            : "";
+        let kindLine =
+          "record for this kind of ticket: record thin for this kind of ticket — weigh benchmarks (AA, TB4, SciCode)";
+        if (kind !== undefined && kind.runs >= 3) {
+          const medianFirst = kind.median_time_to_first_return_s;
+          kindLine = `record for this kind of ticket: n=${kind.runs}; accepted/h ${kind.accepted_returns_per_worker_hour?.toFixed(2) ?? "unknown"}; p50 first return ${medianFirst === null ? "unknown" : medianFirst.toFixed(1)}s; accepted ${(kind.accepted_rate * 100).toFixed(1)}%; timeout ${(kind.timeout_rate * 100).toFixed(1)}%`;
+        }
+        return [
+          choice.id,
+          `${criterionFor(roster, choice, loaded.value.tally.get(choice.id))} ${provenance}${kindLine} ${globalLine} ${comparableLine}${bestThroughputRow === choice.id ? " [best expected throughput for this ticket]" : ""}`,
+        ];
+      }),
   );
-  return { criteria, throughputLines };
+  return {
+    criteria,
+    masks: masked,
+    throughputLines,
+    ...(fallback === undefined ? {} : { fallback }),
+  };
 }
 
 function jevRequest(
@@ -799,7 +882,8 @@ function jevRequest(
         type: "choice",
         instructions:
           `${ROUTING_OBJECTIVE} The first useful return is due within ${firstReturnS} seconds. ` +
-          "Run metrics below cover the last 7 days. Maximize accepted returns per worker hour. Treat UNMEASURED rows as worth trying when their benchmark capability fits the ticket. " +
+          "Judge by the record for this kind of ticket; where it is thin, rely on the benchmark columns, not the all-tickets record. " +
+          "Maximize expected accepted-returns-per-hour shown in each comparable-ticket tradeoff line; favor the marked best row when evidence supports it. " +
           "Route availability is measured by the router and given in `routes`; every row in the table can run here. Ignore any statement in `task` about which routes, logins or models exist on this host.",
         criteria,
       },
@@ -1095,6 +1179,8 @@ async function pickFor(
   budgetUsd?: number,
   temperatureOverride?: number,
   seedOverride?: string,
+  lineageName?: string,
+  writesCount = 0,
 ): Promise<Pick> {
   const routes = hostRoutes();
   const available = availableRoster(roster, routes);
@@ -1126,15 +1212,47 @@ async function pickFor(
             default_fallback: `default route unavailable; using cheapest available row ${available.fallback}`,
           }),
     };
-  const routing = await routingCriteria(available.roster);
-  const pick = await askJev(
+  const routing = await routingCriteria(
     available.roster,
+    capabilities,
+    lineageName,
+    writesCount,
+    brief.length,
+    cwd,
+  );
+  const candidates = available.roster.choice.filter(
+    (row) => routing.masks[row.id] === undefined,
+  );
+  let routedRoster = available.roster;
+  if (candidates.length > 0) {
+    const defaultRow =
+      candidates.find((row) => row.id === available.roster.default) ??
+      candidates[0]!;
+    routedRoster = {
+      ...available.roster,
+      choice: candidates,
+      default: defaultRow.id,
+    };
+  }
+  let requestRoster = routedRoster;
+  if (routing.fallback !== undefined)
+    requestRoster = {
+      ...routedRoster,
+      choice: routedRoster.choice.filter((row) => row.id === routing.fallback),
+      default: routing.fallback,
+    };
+  const pick = await askJev(
+    requestRoster,
     brief,
     capabilities,
     routes,
     firstReturnS,
     budgetUsd,
-    routing.criteria,
+    Object.fromEntries(
+      Object.entries(routing.criteria).filter(([id]) =>
+        requestRoster.choice.some((row) => row.id === id),
+      ),
+    ),
     routing.throughputLines,
     temperatureOverride ?? roster.auto.pick_temperature,
     seedOverride ??
@@ -1157,6 +1275,19 @@ async function pickFor(
     fallbackReason !== undefined && pick.source === "default"
       ? { reason: `${pick.reason}; ${fallbackReason}` }
       : {};
+  const allMaskedFallback =
+    routing.fallback === undefined
+      ? {}
+      : { all_masked_fallback: routing.fallback };
+  const lineageMaskField =
+    Object.keys(routing.masks).length === 0 && routing.fallback === undefined
+      ? {}
+      : {
+          lineage_mask: {
+            masked: routing.masks,
+            ...allMaskedFallback,
+          },
+        };
   return {
     ...pick,
     ...(Object.keys(available.unavailable).length === 0
@@ -1179,6 +1310,7 @@ async function pickFor(
     ...(routing.failure === undefined
       ? {}
       : { selection_record_unavailable: routing.failure }),
+    ...lineageMaskField,
     ...(Object.keys(available.unavailable).length === 0
       ? {}
       : { routes_unavailable: available.unavailable }),
@@ -1962,6 +2094,8 @@ async function run(flags: RunFlags): Promise<number> {
         .update(flags.runId ?? `${now().replaceAll(":", "-")}-${process.pid}`)
         .digest("hex")
         .slice(0, 16),
+    ticket?.name ?? flags.name,
+    ticket?.writes?.length ?? 0,
   );
   const floorGrade = floorTicketGrade(
     brief,
@@ -2887,6 +3021,12 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
     parsed.prose,
     cd,
     ticket?.capabilities ?? [],
+    ticket?.first_return_s,
+    ticket?.budget_usd,
+    undefined,
+    undefined,
+    ticket?.name,
+    ticket?.writes?.length ?? 0,
   );
   appendLog({
     kind: "pick",
@@ -3676,6 +3816,7 @@ function exportRecord(since: string, out: string | undefined): number {
     exported_at: now(),
     window: since,
     per_row: perRowRecord(logText, { now: nowMs, sinceMs, grading: false }),
+    per_tag: perTagRecord(logText, { now: nowMs, sinceMs, grading: false }),
   });
   if (!candidate.success)
     fatal(
@@ -3686,6 +3827,21 @@ function exportRecord(since: string, out: string | undefined): number {
   if (out === undefined) process.stdout.write(text);
   else writeFileSync(out, text);
   return 0;
+}
+
+function exportRecordCommand(
+  flags: { since: string | undefined; out: string | undefined },
+  file: string | undefined,
+): number {
+  const { since, out } = flags;
+  if (since === "" || out === "") fatal("a value is required");
+  if (file !== undefined) fatal("record export takes no positional arguments");
+  return exportRecord(since ?? "7d", out);
+}
+
+function importRecordCommand(file: string | undefined): number {
+  if (file === undefined) fatal("record import needs <file>");
+  return importRecord(file);
 }
 
 function importRecord(file: string): number {
@@ -4354,27 +4510,15 @@ const argv = cli({
       },
     }),
     command({
-      name: "record-export",
-      alias: "record",
+      name: "record",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
-      parameters: [],
-      flags: {
-        since: {
-          type: String,
-          default: "7d",
-          description: "record window (default 7d)",
-        },
-        out: { type: String, description: "write to a file instead of stdout" },
+      parameters: ["<action>", "[file]"],
+      flags: { since: { type: String, default: "7d" }, out: { type: String } },
+      help: {
+        description:
+          "agent-dispatch record export [--since 7d] [--out file] | import <file>",
       },
-      help: { description: "agent-dispatch record export" },
-    }),
-    command({
-      name: "record-import",
-      strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
-      parameters: ["<file>"],
-      help: { description: "agent-dispatch record import <file>" },
     }),
     command({
       name: "ack",
@@ -4487,8 +4631,8 @@ const argv = cli({
 async function main(): Promise<number | undefined> {
   // Cleye leaves excess positionals in argv._ (writing-bun-scripts BG1); result and grade take one.
   let positionals = 0;
+  if (argv.command === "record") positionals = 2;
   if (
-    argv.command === "record-import" ||
     argv.command === "grade-replay" ||
     argv.command === "grade" ||
     argv.command === "ack" ||
@@ -4586,14 +4730,12 @@ async function main(): Promise<number | undefined> {
       replay,
     });
   }
-  if (argv.command === "record-export") {
-    const { since, out } = argv.flags;
-    if (since === "" || out === "") fatal("a value is required");
-    return exportRecord(since ?? "7d", out);
-  }
-  if (argv.command === "record-import") {
-    if (argv._.length !== 1) fatal("record import needs <file>");
-    return importRecord(argv._.file);
+  if (argv.command === "record") {
+    const action = argv._.action;
+    if (action === "export")
+      return exportRecordCommand(argv.flags, argv._.file);
+    if (action === "import") return importRecordCommand(argv._.file);
+    fatal("record needs export or import");
   }
   if (argv.command === "ack") {
     if (argv._.length !== 1) fatal("ack needs <run_id>");

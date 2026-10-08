@@ -12,7 +12,9 @@ const Line = z.looseObject({
   ticket: z
     .looseObject({
       schema: z.number(),
+      name: z.string().optional(),
       capabilities: z.array(z.string()).optional(),
+      writes: z.array(z.string()).optional(),
       urgent_reason: z.string().optional(),
     })
     .optional(),
@@ -23,7 +25,12 @@ const Line = z.looseObject({
       jev: z.looseObject({ latency_ms: z.number().optional() }).optional(),
     })
     .optional(),
-  brief: z.looseObject({ sha256: z.string().optional() }).optional(),
+  brief: z
+    .looseObject({
+      sha256: z.string().optional(),
+      chars: z.number().optional(),
+    })
+    .optional(),
   ticket_grade: z
     .looseObject({
       verdict: z.string().optional(),
@@ -73,6 +80,7 @@ const Line = z.looseObject({
   grade: z.string().optional(),
   consumed: z.boolean().optional(),
   at: z.string().optional(),
+  resumed_from: z.string().optional(),
 });
 
 type Entry = z.output<typeof Line>;
@@ -131,6 +139,26 @@ const median = (xs: number[]): number | null => {
     ? (sorted[middle - 1]! + sorted[middle]!) / 2
     : sorted[middle]!;
 };
+const writesClass = (count: number): string => {
+  if (count === 0) return "0";
+  if (count <= 3) return "1-3";
+  return "4+";
+};
+const briefClass = (chars: number): string => {
+  if (chars <= 500) return "0-500";
+  if (chars <= 1500) return "501-1500";
+  return "1501+";
+};
+export const comparableTicketKey = (
+  capabilities: string[],
+  writesCount: number,
+  briefChars: number,
+): string =>
+  JSON.stringify({
+    capabilities: [...capabilities].toSorted(),
+    writes: writesClass(writesCount),
+    brief: briefClass(briefChars),
+  });
 const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
 const dispatcherKey = (entry: Entry): string | undefined =>
   entry.dispatcher_session ??
@@ -160,7 +188,66 @@ export function perRowRecord(log: string, options: ThroughputOptions) {
   );
 }
 
-export function throughputStats(
+export function perTagRecord(log: string, options: ThroughputOptions) {
+  const report = throughputStats(log, options);
+  return Object.fromEntries(
+    Object.entries(report.per_tag).map(([tag, rows]) => [
+      tag,
+      Object.fromEntries(
+        Object.entries(rows).map(([row, stats]) => [
+          row,
+          {
+            runs: stats.runs,
+            accepted_returns_per_worker_hour:
+              stats.accepted_returns_per_worker_hour,
+            median_time_to_first_return_s: stats.median_time_to_first_return_s,
+            accepted_rate: stats.accepted_rate,
+            timeout_rate: stats.timeout_rate,
+          },
+        ]),
+      ),
+    ]),
+  );
+}
+
+export function perKindRecord(
+  log: string,
+  row: string,
+  capabilities: string[],
+  repo: string,
+  options: ThroughputOptions,
+) {
+  const entries = log.split("\n").flatMap((line) => {
+    const parsed = jsonOf(Line).safeParse(line);
+    if (
+      !parsed.success ||
+      parsed.data.kind !== "run" ||
+      parsed.data.run_id === undefined ||
+      parsed.data.started_at === undefined
+    )
+      return [];
+    const started = epoch(parsed.data.started_at);
+    if (
+      started === undefined ||
+      started < options.sinceMs ||
+      started > options.now
+    )
+      return [];
+    const tags = parsed.data.ticket?.capabilities ?? [];
+    let match = false;
+    if (capabilities.length > 0)
+      match = tags.some((tag) => capabilities.includes(tag));
+    else
+      match =
+        (parsed.data.cwd?.split(/[\\/]/u).findLast(Boolean) ?? "") === repo;
+    if (!match || (parsed.data.stats?.row ?? parsed.data.pick?.choice) !== row)
+      return [];
+    return [JSON.stringify(parsed.data)];
+  });
+  return throughputStats(entries.join("\n"), options).per_row[row];
+}
+
+function calculateThroughputStats(
   log: string,
   { now, sinceMs, grading }: ThroughputOptions,
 ) {
@@ -254,6 +341,60 @@ export function throughputStats(
       wasted_tokens: sum(tokens),
     };
   };
+  const perTag = Object.fromEntries(
+    [...new Set(runs.flatMap((run) => run.ticket?.capabilities ?? []))]
+      .toSorted()
+      .map((tag) => [
+        tag,
+        Object.fromEntries(
+          [
+            ...new Set(
+              runs
+                .filter(
+                  (run) => run.ticket?.capabilities?.includes(tag) === true,
+                )
+                .map((run) => run.row),
+            ),
+          ]
+            .toSorted()
+            .map((row) => [
+              row,
+              summarize(
+                runs.filter(
+                  (run) =>
+                    run.row === row &&
+                    run.ticket?.capabilities?.includes(tag) === true,
+                ),
+              ),
+            ]),
+        ),
+      ]),
+  );
+  const ticketCohorts = new Map<string, Run[]>();
+  for (const run of runs) {
+    const writesCount = run.ticket?.writes?.length;
+    const briefChars = run.brief?.chars;
+    if (writesCount === undefined || briefChars === undefined) continue;
+    const key = comparableTicketKey(
+      run.ticket?.capabilities ?? [],
+      writesCount,
+      briefChars,
+    );
+    ticketCohorts.set(key, [...(ticketCohorts.get(key) ?? []), run]);
+  }
+  const perComparableTicket = Object.fromEntries(
+    [...ticketCohorts].map(([key, cohort]) => [
+      key,
+      Object.fromEntries(
+        [...new Set(cohort.map((run) => run.row))]
+          .toSorted()
+          .map((row) => [
+            row,
+            summarize(cohort.filter((run) => run.row === row)),
+          ]),
+      ),
+    ]),
+  );
   const gradingRows = entries.filter(
     (entry) =>
       (entry.kind === "run" || entry.kind === "refusal") &&
@@ -438,6 +579,26 @@ export function throughputStats(
     per_row: Object.fromEntries(
       [...groups].map(([row, group]) => [row, summarize(group)]),
     ),
+    per_tag: perTag,
+    per_repo: (() => {
+      const repoGroups = new Map<string, Run[]>();
+      for (const run of runs) {
+        const repo = run.cwd?.split(/[\\/]/u).findLast(Boolean) ?? "";
+        repoGroups.set(repo, [...(repoGroups.get(repo) ?? []), run]);
+      }
+      return Object.fromEntries(
+        [...repoGroups].map(([repo, repoRuns]) => [
+          repo,
+          Object.fromEntries(
+            [...new Set(repoRuns.map((run) => run.row))].map((row) => [
+              row,
+              summarize(repoRuns.filter((run) => run.row === row)),
+            ]),
+          ),
+        ]),
+      );
+    })(),
+    per_comparable_ticket: perComparableTicket,
     per_dispatcher: Object.fromEntries(
       [...new Set(runs.map((run) => run.dispatcher_session ?? "unknown"))]
         .toSorted()
@@ -455,6 +616,150 @@ export function throughputStats(
       "row rates are independent of task; candidate picks use the recorded window rate for each alternative row",
     note: "accepted counts returned runs only when acked (agent-dispatch ack <run_id> --consumed)",
   };
+}
+
+// Routing reuses the same bounded log snapshot for a pick and its audit fields. Keep only the
+// latest snapshot: a changed log or time window invalidates it without growing state over time.
+let statsCache:
+  | {
+      log: string;
+      now: number;
+      sinceMs: number;
+      grading: boolean;
+      value: ReturnType<typeof calculateThroughputStats>;
+    }
+  | undefined;
+
+export function throughputStats(log: string, options: ThroughputOptions) {
+  if (
+    statsCache?.log === log &&
+    statsCache.now === options.now &&
+    statsCache.sinceMs === options.sinceMs &&
+    statsCache.grading === options.grading
+  )
+    return statsCache.value;
+  const value = calculateThroughputStats(log, options);
+  statsCache = { log, ...options, value };
+  return value;
+}
+
+export function lineageMasks(
+  log: string,
+  {
+    name,
+    resumeFrom,
+    now,
+  }: { name?: string; resumeFrom?: string; now: number },
+): Record<string, { failures: number; reason: string }> {
+  const entries = log.split("\n").flatMap((line) => {
+    const parsed = jsonOf(Line).safeParse(line);
+    return parsed.success ? [parsed.data] : [];
+  });
+  const runs = entries.filter(
+    (entry) => entry.kind === "run" && entry.run_id !== undefined,
+  );
+  const selected = new Set<string>();
+  if (resumeFrom !== undefined) selected.add(resumeFrom);
+  const namedRuns =
+    name === undefined
+      ? []
+      : runs.filter((run) => {
+          const started = epoch(run.started_at);
+          return (
+            run.ticket?.name === name &&
+            started !== undefined &&
+            started >= now - 24 * 60 * 60 * 1000 &&
+            started <= now
+          );
+        });
+  namedRuns.forEach((run) => {
+    selected.add(run.run_id!);
+  });
+  const expandLineage = (): number => {
+    const before = selected.size;
+    const linkedRuns = runs.filter(
+      (run) =>
+        (run.resumed_from !== undefined && selected.has(run.resumed_from)) ||
+        selected.has(run.run_id!),
+    );
+    linkedRuns.forEach((run) => {
+      if (run.resumed_from !== undefined && !selected.has(run.resumed_from)) {
+        selected.add(run.resumed_from);
+      }
+      if (!selected.has(run.run_id!)) {
+        selected.add(run.run_id!);
+      }
+    });
+    return selected.size - before;
+  };
+  while (expandLineage() > 0) {
+    // Expand ancestors and descendants until the lineage reaches a fixed point.
+  }
+  const acks = new Map<string, boolean>();
+  const grades = new Map<string, string>();
+  for (const entry of entries) {
+    if (
+      entry.kind === "ack" &&
+      entry.run_id !== undefined &&
+      entry.consumed !== undefined
+    )
+      acks.set(entry.run_id, entry.consumed);
+    if (
+      entry.kind === "grade" &&
+      entry.run_id !== undefined &&
+      entry.grade !== undefined
+    )
+      grades.set(entry.run_id, entry.grade);
+  }
+  const failures = new Map<string, number>();
+  for (const run of runs) {
+    const id = run.run_id!;
+    if (!selected.has(id)) continue;
+    const row = run.stats?.row ?? run.pick?.choice ?? "unknown";
+    const bad =
+      grades.get(id) === "fail" ||
+      grades.get(id) === "partial" ||
+      ((run.stats?.outcome ?? "") === "returned" && acks.get(id) !== true);
+    if (bad) failures.set(row, (failures.get(row) ?? 0) + 1);
+  }
+  return Object.fromEntries(
+    [...failures]
+      .filter(([, count]) => count >= 2)
+      .map(([row, count]) => [
+        row,
+        {
+          failures: count,
+          reason: `${count} lineage runs ended fail/partial or returned without ack-consumed`,
+        },
+      ]),
+  );
+}
+
+export function maskCandidates(
+  rows: string[],
+  masks: Record<string, { failures: number; reason: string }>,
+  perRow: Record<string, { accepted_returns_per_worker_hour: number | null }>,
+): {
+  masked: Record<string, { failures: number; reason: string }>;
+  fallback?: string;
+} {
+  const masked = Object.fromEntries(
+    Object.entries(masks).filter(([row]) => rows.includes(row)),
+  );
+  if (rows.some((row) => masked[row] === undefined)) return { masked };
+  const fallback = [...rows].toSorted(
+    (a, b) =>
+      (perRow[b]?.accepted_returns_per_worker_hour ?? -1) -
+      (perRow[a]?.accepted_returns_per_worker_hour ?? -1),
+  )[0];
+  return fallback === undefined
+    ? { masked: {} }
+    : {
+        masked: Object.fromEntries(
+          Object.entries(masked).filter(([row]) => row !== fallback),
+        ),
+        fallback,
+      };
 }
 
 const Candidate = z.strictObject({

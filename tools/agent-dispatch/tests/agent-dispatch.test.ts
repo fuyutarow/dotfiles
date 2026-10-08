@@ -424,6 +424,10 @@ describe("agent-dispatch run", () => {
             kind: "run",
             run_id: runId,
             started_at: started,
+            ticket: {
+              schema: 2,
+              capabilities: index === 4 ? ["gpu-kernels"] : ["typescript"],
+            },
             stats: {
               row: "luna-max",
               outcome: index === 4 ? "timeout" : "ok",
@@ -453,7 +457,10 @@ describe("agent-dispatch run", () => {
       ),
     ].flat();
     writeFileSync(join(state, "runs.jsonl"), `${entries.join("\n")}\n`);
-    const requestBrief = brief("throughput-record", "Choose a worker.\n");
+    const requestBrief = brief(
+      "throughput-record",
+      '+++\nschema = 2\ncapabilities = ["gpu-kernels"]\n+++\nChoose a worker.\n',
+    );
     const r = await router(
       ["pick", "--prompt-file", requestBrief, "--cd", scratch],
       {
@@ -474,17 +481,23 @@ describe("agent-dispatch run", () => {
       lastJevBody(),
     );
     expect(request.questions.worker.instructions).toContain(
-      "Objective: pick the row that maximizes this ticket's expected useful throughput, defined as P(a valid RETURN or verified result within first_return_s that is later accepted) divided by the expected wall-clock time to that return. Weigh each row's measured record (median time to first return, timeout rate, accepted rate, cost per accepted result) ahead of benchmark scores; use benchmarks only where the record is thin for this kind of ticket. Choose the lowest effort that does not lower that throughput; xhigh/max only when the ticket names a capability lower effort measurably lacks. Among rows within noise of each other, pick the cheaper, and when a codex and a claude row are comparable, pick codex. Cost excludes a row only when its expected cost exceeds the ticket's declared budget.",
+      "Objective: maximize this ticket's expected accepted-returns-per-hour",
+    );
+    expect(request.questions.worker.instructions).toContain(
+      "Maximize expected accepted-returns-per-hour shown in each comparable-ticket tradeoff line",
     );
     expect(request.questions.worker.criteria["luna-max"]).toContain(
-      "Recent measured record (last 7 days): n=5; median time to first return=60s; timeout rate=20.0%; accepted rate=80.0%; cost per accepted=$0.6250",
+      "record for this kind of ticket: record thin for this kind of ticket",
+    );
+    expect(request.questions.worker.criteria["luna-max"]).toContain(
+      "all tickets: runs 5",
     );
     expect(request.questions.worker.criteria["terra-max"]).toContain("n=0;");
     expect(request.questions.worker.criteria["terra-max"]).toContain(
-      "little record (fewer than 3 runs)",
+      "all tickets: runs 0",
     );
     expect(request.questions.worker.instructions).toContain(
-      "Maximize accepted returns per worker hour. Treat UNMEASURED rows as worth trying when their benchmark capability fits the ticket.",
+      "Judge by the record for this kind of ticket; where it is thin, rely on the benchmark columns, not the all-tickets record.",
     );
     expect(request.state.recent_throughput).toContain(
       "luna-max | runs 5 | accepted/h 48.00 | p50 first return 60.0s | accepted 80.0% | timeout 20.0%",
@@ -492,6 +505,58 @@ describe("agent-dispatch run", () => {
     expect(request.state.recent_throughput).toContain(
       "terra-max | UNMEASURED | runs 0 | accepted/h unknown | p50 first return unknown | accepted 0.0% | timeout 0.0%",
     );
+    expect(request.questions.worker.criteria["luna-max"]).toContain(
+      "record for this kind of ticket: record thin for this kind of ticket",
+    );
+    expect(request.questions.worker.criteria["luna-max"]).toContain(
+      "Comparable-ticket tradeoff: n=0;",
+    );
+    expect(request.questions.worker.criteria["luna-max"]).toContain(
+      "Comparable-ticket tradeoff: n=0;",
+    );
+  });
+
+  test("kind records use any shared capability tag and isolate unrelated tags", async () => {
+    const state = join(scratch, "kind-records");
+    mkdirSync(state, { recursive: true });
+    const started = Temporal.Now.instant().toString();
+    const kindCwd = freshCwd();
+    writeFileSync(
+      join(state, "runs.jsonl"),
+      Array.from({ length: 3 }, (_, index) =>
+        JSON.stringify({
+          kind: "run",
+          run_id: `ts-kind-${index}`,
+          started_at: started,
+          cwd: kindCwd,
+          ticket: { schema: 2, capabilities: ["typescript"] },
+          pick: { choice: "luna-max" },
+          stats: { row: "luna-max", outcome: "ok", elapsed_s: 30 },
+        }),
+      ).join("\n") + "\n",
+    );
+    const juliaBrief = brief(
+      "julia-kind",
+      '+++\nschema = 2\noutcome = "choose a worker"\nconsumer = "test"\nfirst_return = "decision"\nwrites = []\nverify = ["true"]\ncapabilities = ["julia", "gpu-kernels"]\n+++\nChoose a worker.\n',
+    );
+    const julia = await router(
+      ["pick", "--prompt-file", juliaBrief, "--cd", kindCwd],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    expect(julia.code, julia.err).toBe(0);
+    expect(lastJevBody()).toContain(
+      "record for this kind of ticket: record thin",
+    );
+    const tsBrief = brief(
+      "typescript-kind",
+      '+++\nschema = 2\noutcome = "choose a worker"\nconsumer = "test"\nfirst_return = "decision"\nwrites = []\nverify = ["true"]\ncapabilities = ["typescript"]\n+++\nChoose a worker.\n',
+    );
+    const ts = await router(
+      ["pick", "--prompt-file", tsBrief, "--cd", kindCwd],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    expect(ts.code).toBe(0);
+    expect(lastJevBody()).toContain("record for this kind of ticket: n=3;");
   });
 
   test("throughput stats failure is recorded while the worker still runs", async () => {
@@ -546,7 +611,7 @@ describe("agent-dispatch run", () => {
       }),
     ).join("\n");
     writeFileSync(join(state, "runs.jsonl"), `${log}\n`);
-    const exported = await router(["record-export", "--since", "7d"], {
+    const exported = await router(["record", "export", "--since", "7d"], {
       AGENT_ROUTER_STATE_DIR: state,
     });
     expect(exported.code).toBe(0);
@@ -566,21 +631,49 @@ describe("agent-dispatch run", () => {
             timeout_rate: z.number(),
           }),
         ),
+        per_tag: z.record(
+          z.string(),
+          z.record(z.string(), z.looseObject({ runs: z.number() })),
+        ),
       }),
       exported.out,
     );
     expect(record.window).toBe("7d");
     expect(record.per_row["terra-max"]?.runs).toBe(3);
+    expect(record.per_tag).toEqual({});
     const file = join(scratch, "record-import.json");
     writeFileSync(file, exported.out);
-    const imported = await router(["record-import", file], {
+    const imported = await router(["record", "import", file], {
       AGENT_ROUTER_STATE_DIR: state,
     });
     expect(imported.code).toBe(0);
     expect(imported.out.trim().split("\n")).toHaveLength(1);
     expect(existsSync(join(state, "imported-record.json"))).toBe(true);
+    const legacy = {
+      schema: 1,
+      host: "legacy-host",
+      exported_at: "2026-10-08T12:00:00Z",
+      window: "7d",
+      per_row: {
+        "terra-max": {
+          runs: 4,
+          accepted_returns_per_worker_hour: 2,
+          median_time_to_first_return_s: 45,
+          accepted_rate: 0.5,
+          timeout_rate: 0,
+        },
+      },
+    };
+    writeFileSync(file, JSON.stringify(legacy));
+    expect(
+      (
+        await router(["record", "import", file], {
+          AGENT_ROUTER_STATE_DIR: state,
+        })
+      ).code,
+    ).toBe(0);
     writeFileSync(file, "{bad json");
-    const rejected = await router(["record-import", file], {
+    const rejected = await router(["record", "import", file], {
       AGENT_ROUTER_STATE_DIR: state,
     });
     expect(rejected.code).toBe(2);
@@ -614,9 +707,7 @@ describe("agent-dispatch run", () => {
       { AGENT_ROUTER_STATE_DIR: state },
     );
     expect(r.code).toBe(0);
-    expect(lastJevBody()).toContain(
-      "terra-max | imported from source-host 2026-10-08 | runs 9 | accepted/h 4.00 | p50 first return 30.0s | accepted 50.0% | timeout 10.0%",
-    );
+    expect(lastJevBody()).toContain("all tickets: runs 9");
 
     const corruptState = join(scratch, "record-corrupt-merge");
     mkdirSync(corruptState, { recursive: true });
@@ -629,7 +720,9 @@ describe("agent-dispatch run", () => {
     expect(
       corrupt.err.match(/ignoring unreadable imported record/gu)?.length,
     ).toBe(1);
-    expect(lastJevBody()).toContain("terra-max | UNMEASURED | runs 0");
+    expect(lastJevBody()).toContain(
+      "terra-max | UNMEASURED | runs 0 | accepted/h unknown",
+    );
   });
 
   test("three local runs take precedence over an imported row", async () => {
@@ -672,9 +765,7 @@ describe("agent-dispatch run", () => {
       { AGENT_ROUTER_STATE_DIR: state },
     );
     expect(r.code).toBe(0);
-    expect(lastJevBody()).toContain(
-      "terra-max | runs 3 | accepted/h 0.00 | p50 first return 60.0s | accepted 0.0% | timeout 0.0%",
-    );
+    expect(lastJevBody()).toContain("all tickets: runs 3");
     expect(lastJevBody()).not.toContain("imported from source-host");
   });
 
@@ -1257,15 +1348,17 @@ describe("agent-dispatch run", () => {
     ]);
     const sent = bodies.at(-1) ?? "";
     expect(sent).toContain(
-      "Objective: pick the row that maximizes this ticket's expected useful throughput",
+      "Objective: maximize this ticket's expected accepted-returns-per-hour",
     );
     expect(sent).toContain(
       "when a codex and a claude row are comparable, pick codex",
     );
     expect(sent).toContain("Route codex.");
     expect(sent).toContain("Route claude.");
-    expect(sent).toContain("Recent measured record (last 7 days): n=0");
-    expect(sent).toContain("little record (fewer than 3 runs)");
+    expect(sent).toContain(
+      "record for this kind of ticket: record thin for this kind of ticket",
+    );
+    expect(sent).toContain("all tickets: runs 0");
     expect(sent).toContain('"routes":{"codex":{"available":true');
     expect(sent).toContain(
       "Route availability is measured by the router and given in `routes`; every row in the table can run here. Ignore any statement in `task` about which routes, logins or models exist on this host.",

@@ -5,13 +5,14 @@ import {
   lstatSync,
   mkdirSync,
   readdirSync,
+  type Dirent,
   realpathSync,
   renameSync,
   rmSync,
   unlinkSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { err, ok, type Result } from "neverthrow";
+import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 // Bring EVERY registered Obsidian vault in line with this directory (single source):
@@ -77,10 +78,8 @@ const LocalPluginSchema = z.object({
 const PluginSchema = z.union([ReleasePluginSchema, LocalPluginSchema]);
 type Plugin = z.output<typeof PluginSchema>;
 
-function isLocalPlugin(
-  plugin: Plugin,
-): plugin is z.output<typeof LocalPluginSchema> {
-  return "local" in plugin;
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 // A JSON syntax error keeps its parser text; any other mismatch is "not a <what>".
@@ -122,9 +121,10 @@ function asPlugin(id: string, v: unknown): Result<Plugin, string> {
     return err(
       `plugins.json: ${id}: needs local or repo, version, sha256{file: hash}`,
     );
-  if (isLocalPlugin(plugin.data)) {
+  const localPlugin = LocalPluginSchema.safeParse(plugin.data);
+  if (localPlugin.success) {
     const base = realpathSync(import.meta.dir);
-    const source = resolve(base, plugin.data.local);
+    const source = resolve(base, localPlugin.data.local);
     const declaredRel = relative(base, source);
     if (
       isAbsolute(declaredRel) ||
@@ -134,7 +134,7 @@ function asPlugin(id: string, v: unknown): Result<Plugin, string> {
       return err(`plugins.json: ${id}: local path must stay inside obsidian/`);
     if (!existsSync(source) || !lstatSync(source).isDirectory())
       return err(
-        `plugins.json: ${id}: local plugin directory not found: ${plugin.data.local}`,
+        `plugins.json: ${id}: local plugin directory not found: ${localPlugin.data.local}`,
       );
     const actualRel = relative(base, realpathSync(source));
     if (
@@ -232,48 +232,20 @@ async function pluginFixes(
   p: Plugin,
 ): Promise<Result<Fix[], string>> {
   const pdir = join(dir, "plugins", id);
-  if (isLocalPlugin(p)) {
-    const source = resolve(import.meta.dir, p.local);
-    const files: string[] = [];
-    const collect = (current: string, prefix = "") => {
-      for (const entry of readdirSync(current, { withFileTypes: true })) {
-        const rel = join(prefix, entry.name);
-        const path = join(current, entry.name);
-        if (entry.isDirectory()) collect(path, rel);
-        else if (entry.isFile()) files.push(rel);
-        else throw new Error(`unsupported local plugin entry: ${path}`);
-      }
-    };
-    try {
-      collect(source);
-    } catch (error) {
-      return err(error instanceof Error ? error.message : String(error));
-    }
-    const changed: string[] = [];
-    const destinationFiles: string[] = [];
-    if (existsSync(pdir)) {
-      const collectDestination = (current: string, prefix = "") => {
-        for (const entry of readdirSync(current, { withFileTypes: true })) {
-          const rel = join(prefix, entry.name);
-          const path = join(current, entry.name);
-          if (entry.isDirectory()) collectDestination(path, rel);
-          else destinationFiles.push(rel);
-        }
-      };
-      collectDestination(pdir);
-    }
-    for (const file of files) {
-      const from = join(source, file);
-      const to = join(pdir, file);
-      if (
-        !existsSync(to) ||
-        !lstatSync(to).isFile() ||
-        sha256(await Bun.file(from).bytes()) !== sha256(await Bun.file(to).bytes())
-      ) changed.push(file);
-    }
-    // data.json is the plugin's runtime state (preserved on install), never a stray file.
+  const localPluginResult = LocalPluginSchema.safeParse(p);
+  if (localPluginResult.success) {
+    const localPlugin = localPluginResult.data;
+    const source = resolve(import.meta.dir, localPlugin.local);
+    const filesResult = collectLocalEntries(source);
+    if (filesResult.isErr()) return err(filesResult.error);
+    const files = filesResult.value;
+    const destinationResult = existsSync(pdir)
+      ? collectLocalEntries(pdir, true)
+      : ok<string[]>([]);
+    if (destinationResult.isErr()) return err(destinationResult.error);
+    const changed = await changedLocalFiles(source, pdir, files);
     changed.push(
-      ...destinationFiles.filter(
+      ...destinationResult.value.filter(
         (file) => !files.includes(file) && file !== "data.json",
       ),
     );
@@ -281,45 +253,23 @@ async function pluginFixes(
     return ok([
       {
         what: `${id}(local:${changed.join(",")})`,
-        apply: async () => {
-          const parent = dirname(pdir);
-          const stage = `${pdir}.${crypto.randomUUID()}.stage`;
-          const backup = `${pdir}.${crypto.randomUUID()}.backup`;
-          mkdirSync(parent, { recursive: true });
-          try {
-            cpSync(source, stage, { recursive: true, errorOnExist: true });
-            const dataFile = join(pdir, "data.json");
-            if (
-              existsSync(dataFile) &&
-              lstatSync(dataFile).isFile() &&
-              !files.includes("data.json")
-            )
-              cpSync(dataFile, join(stage, "data.json"));
-            if (existsSync(pdir)) renameSync(pdir, backup);
-            try {
-              renameSync(stage, pdir);
-            } catch (error) {
-              if (existsSync(backup)) renameSync(backup, pdir);
-              throw error;
-            }
-            if (existsSync(backup)) rmSync(backup, { recursive: true, force: true });
-            return ok(undefined);
-          } catch (error) {
-            if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
-            return err(error instanceof Error ? error.message : String(error));
-          }
-        },
+        apply: () => Promise.resolve(replaceLocalPlugin(source, pdir, files)),
       },
     ]);
   }
+  const releasePlugin = ReleasePluginSchema.safeParse(p);
+  if (!releasePlugin.success)
+    return err(
+      `plugins.json: ${id}: needs local or repo, version, sha256{file: hash}`,
+    );
   const fixes: Fix[] = [];
-  for (const [file, hash] of Object.entries(p.sha256)) {
+  for (const [file, hash] of Object.entries(releasePlugin.data.sha256)) {
     if ((await fileHash(join(pdir, file))) === hash) continue;
     fixes.push({
-      what: `${id}@${p.version}/${file}`,
+      what: `${id}@${releasePlugin.data.version}/${file}`,
       apply: async () => {
         // Verify first: a refused asset must leave no plugin dir behind.
-        const bytes = await asset(p, file);
+        const bytes = await asset(releasePlugin.data, file);
         if (bytes.isErr()) return err(bytes.error);
         mkdirSync(pdir, { recursive: true });
         await atomicWrite(join(pdir, file), bytes.value);
@@ -330,8 +280,113 @@ async function pluginFixes(
   return ok(fixes);
 }
 
-function plainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function collectLocalEntries(
+  current: string,
+  includeSpecial = false,
+  prefix = "",
+  files: string[] = [],
+): Result<string[], string> {
+  const entries = fromThrowable(
+    () => readdirSync(current, { withFileTypes: true }),
+    (error: unknown) =>
+      error instanceof Error ? error.message : String(error),
+  )();
+  if (entries.isErr()) return err(entries.error);
+  for (const entry of entries.value) {
+    const rel = join(prefix, entry.name);
+    const path = join(current, entry.name);
+    const collected = collectLocalEntry(
+      entry,
+      path,
+      rel,
+      includeSpecial,
+      files,
+    );
+    if (collected.isErr()) return collected;
+  }
+  return ok(files);
+}
+
+function collectLocalEntry(
+  entry: Dirent,
+  path: string,
+  relativePath: string,
+  includeSpecial: boolean,
+  files: string[],
+): Result<string[], string> {
+  if (entry.isDirectory())
+    return collectLocalEntries(path, includeSpecial, relativePath, files);
+  if (entry.isFile() || includeSpecial) {
+    files.push(relativePath);
+    return ok(files);
+  }
+  return err(`unsupported local plugin entry: ${path}`);
+}
+
+async function changedLocalFiles(
+  source: string,
+  pdir: string,
+  files: string[],
+): Promise<string[]> {
+  const changed: string[] = [];
+  for (const file of files) {
+    const from = join(source, file);
+    const to = join(pdir, file);
+    if (
+      !existsSync(to) ||
+      !lstatSync(to).isFile() ||
+      sha256(await Bun.file(from).bytes()) !==
+        sha256(await Bun.file(to).bytes())
+    )
+      changed.push(file);
+  }
+  return changed;
+}
+
+function replaceLocalPlugin(
+  source: string,
+  pdir: string,
+  files: string[],
+): Result<void, string> {
+  const parent = dirname(pdir);
+  const stage = `${pdir}.${crypto.randomUUID()}.stage`;
+  const backup = `${pdir}.${crypto.randomUUID()}.backup`;
+  mkdirSync(parent, { recursive: true });
+  const prepared = fromThrowable(() => {
+    cpSync(source, stage, { recursive: true, errorOnExist: true });
+    const dataFile = join(pdir, "data.json");
+    if (
+      existsSync(dataFile) &&
+      lstatSync(dataFile).isFile() &&
+      !files.includes("data.json")
+    )
+      cpSync(dataFile, join(stage, "data.json"));
+    if (existsSync(pdir)) renameSync(pdir, backup);
+  }, errorMessage)();
+  if (prepared.isErr()) {
+    if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
+    return err(prepared.error);
+  }
+  const installed = fromThrowable(() => {
+    renameSync(stage, pdir);
+  }, errorMessage)();
+  if (installed.isErr()) {
+    const restored = existsSync(backup)
+      ? fromThrowable(() => {
+          renameSync(backup, pdir);
+        }, errorMessage)()
+      : ok(undefined);
+    if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
+    return restored.isErr() ? err(restored.error) : err(installed.error);
+  }
+  const removed = fromThrowable(() => {
+    if (existsSync(backup)) rmSync(backup, { recursive: true, force: true });
+  }, errorMessage)();
+  if (removed.isErr()) {
+    if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
+    return err(removed.error);
+  }
+  return ok(undefined);
 }
 
 function mergeDeclared(
@@ -340,9 +395,11 @@ function mergeDeclared(
 ): Record<string, unknown> {
   const merged = { ...have };
   for (const [key, value] of Object.entries(want)) {
+    const wantObject = RecordSchema.safeParse(value);
+    const haveObject = RecordSchema.safeParse(have[key]);
     merged[key] =
-      plainObject(value) && plainObject(have[key])
-        ? mergeDeclared(have[key], value)
+      wantObject.success && haveObject.success
+        ? mergeDeclared(haveObject.data, wantObject.data)
         : value;
   }
   return merged;
@@ -369,10 +426,7 @@ async function pluginSettingsFixes(
     {
       what: `${id}/data.json(${changed.join(",")})`,
       apply: async () => {
-        await atomicWrite(
-          target,
-          `${JSON.stringify(merged, null, 2)}\n`,
-        );
+        await atomicWrite(target, `${JSON.stringify(merged, null, 2)}\n`);
         return ok(undefined);
       },
     },

@@ -359,6 +359,17 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "mac",
+    sources: ["obsidian/local-plugins/doc-view/manifest.json"],
+    deployed:
+      "each registered vault's .obsidian/plugins/doc-view/ (staged directory swap)",
+    consumer: "Obsidian",
+    writer:
+      "human, in the repo; obsidian/apply.ts copies via mise run mac:obsidian",
+    verify: "bun test obsidian/apply.test.ts",
+  },
+  {
+    kind: "applied",
+    when: "mac",
     sources: ["edge/policy.plist.mac"],
     deployed: "/Library/Managed Preferences (COPY, sudo)",
     consumer: "Microsoft Edge",

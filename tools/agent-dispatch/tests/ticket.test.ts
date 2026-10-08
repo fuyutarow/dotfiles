@@ -33,12 +33,16 @@ describe("parseTicket", () => {
   test("optional fields are read", () => {
     const r = parseTicket(
       valid(
-        'writes = []\nverify = ["x"]\nverify_timeout_s = 30\ncapabilities = ["long-tool-loop"]',
+        'writes = []\nverify = ["x"]\nverify_timeout_s = 30\ntimeout_s = 3600\ncapabilities = ["long-tool-loop"]',
       ),
     );
     expect(r).toMatchObject({
       kind: "ticket",
-      ticket: { verify_timeout_s: 30, capabilities: ["long-tool-loop"] },
+      ticket: {
+        verify_timeout_s: 30,
+        timeout_s: 3600,
+        capabilities: ["long-tool-loop"],
+      },
     });
   });
 
@@ -52,6 +56,9 @@ describe("parseTicket", () => {
     ["parent-escaping write glob", valid('writes = ["../x/**"]')],
     ["empty verify command", valid('writes = []\nverify = [""]')],
     ["non-positive timeout", valid("writes = []\nverify_timeout_s = 0")],
+    ["timeout below minimum", valid("writes = []\ntimeout_s = 59")],
+    ["timeout above maximum", valid("writes = []\ntimeout_s = 14401")],
+    ["non-integer timeout", valid("writes = []\ntimeout_s = 60.5")],
   ])("invalid (%s) is refused with a reason", (_name, text) => {
     const r = parseTicket(text);
     expect(r.kind).toBe("invalid");

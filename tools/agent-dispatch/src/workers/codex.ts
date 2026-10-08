@@ -65,7 +65,7 @@ import {
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
-const MAX_TIMEOUT_S = 1800;
+const MAX_TIMEOUT_S = 14400;
 const DEFAULT_TIMEOUT_S = 1800;
 // AGENT_DISPATCH_CODEX_HEARTBEAT_S is a test seam (a test cannot wait 30 s for the first liveness line).
 const parsedHeartbeat = Number(

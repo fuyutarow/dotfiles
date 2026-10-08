@@ -7,6 +7,7 @@
 //   writes = ["tools/agent-dispatch/**"]   # globs relative to --cd; [] = read-only
 //   verify = ["bun test tools/agent-dispatch/tests"]
 //   verify_timeout_s = 1200                  # optional; bound for all verify commands together
+//   timeout_s = 3600                         # optional; worker wall clock (60..14400)
 //   capabilities = ["long-tool-loop"]        # optional; handed to Jev as required capabilities
 //   +++
 //   <the prose the worker receives>
@@ -27,6 +28,7 @@ export const TicketSchema = z.strictObject({
   writes: z.array(writeGlob),
   verify: z.array(z.string().trim().min(1)).default([]),
   verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),
+  timeout_s: z.number().int().min(60).max(14400).optional(),
   capabilities: z.array(z.string().min(1)).default([]),
 });
 export type Ticket = z.output<typeof TicketSchema>;

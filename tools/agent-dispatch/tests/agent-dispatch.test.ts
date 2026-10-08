@@ -33,7 +33,7 @@ const server = Bun.serve({
     bodies.push(body);
     const confidence = body.includes("LOWCONF") ? 0.2 : 0.9;
     // A marker in the state makes the fake answer like a failing provider (the ask exit classes).
-    const status = /HTTP(401|429|500)/u.exec(body)?.[1];
+    const status = /HTTP(401|429|500|503)/u.exec(body)?.[1];
     if (status !== undefined)
       return new Response(`provider says ${status}`, {
         status: Number(status),
@@ -105,6 +105,8 @@ import { dirname } from "node:path";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 await Bun.sleep(Number(process.env.FAKE_SLEEP_MS ?? "0"));
 const timedOut = process.env.FAKE_TIMEOUT === "1";
+if (timedOut && process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE !== undefined)
+  appendFileSync(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "checks complete", commands: 1, files: 0 }));
 const exit = timedOut ? 3 : Number(process.env.FAKE_EXIT ?? "0");
 if (process.env.FAKE_ORPHAN_PID_FILE !== undefined) {
   const orphan = Bun.spawn(["sleep", "60"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
@@ -774,6 +776,28 @@ describe("agent-dispatch result", () => {
     expect(shown.out).toContain("Partial (harness-written):");
   });
 
+  test("timeout keeps the harness partial report even when verify passes and the worker has no final report", async () => {
+    const b = brief(
+      "result-timeout-verified-no-report",
+      ticketText('writes = []\nverify = ["true"]', "Do bounded work.\n"),
+    );
+    const run = await router(runArgs(b, freshCwd()), {
+      FAKE_TIMEOUT: "1",
+      FAKE_NO_REPORT: "1",
+    });
+    const receipt = decodedJson(
+      z.looseObject({
+        report_partial: z.looseObject({ cause: z.string() }),
+        verify_summary: z.string(),
+        worker: z.looseObject({ last_message: z.string() }),
+      }),
+      run.out.trim(),
+    );
+    expect(receipt.report_partial.cause).toContain("timed out");
+    expect(receipt.verify_summary).toBe("1/1 passed");
+    expect(receipt.worker.last_message).toBe("");
+  });
+
   test("an empty final report is explicit and exits 1", async () => {
     const state = join(scratch, "result-empty");
     const b = brief("result-empty", "Do the work.\n");
@@ -1095,7 +1119,7 @@ describe("agent-dispatch grade", () => {
     expect(g.err).toContain(`${runId} graded pass (confidence 0.20)`);
   });
 
-  test("refused, nothing recorded: unknown run, missing evidence, Jev unavailable", async () => {
+  test("refused, nothing recorded: unknown run and missing evidence", async () => {
     const { state, runId } = await oneRun("refused");
     const ev = evidenceFile("refused", "GRADE=pass\n");
     const cases: [string[], Record<string, string>, string][] = [
@@ -1106,11 +1130,6 @@ describe("agent-dispatch grade", () => {
         "no such evidence file",
       ],
       [["grade", runId], {}, "grade needs --evidence"],
-      [
-        ["grade", runId, "--evidence", ev],
-        { TYPESAFE_API_KEY: "", PATH: "/usr/bin:/bin", HOME: scratch },
-        "not graded: jev unavailable",
-      ],
     ];
     for (const [args, env, why] of cases) {
       const r = await router(args, { AGENT_ROUTER_STATE_DIR: state, ...env });
@@ -1120,6 +1139,41 @@ describe("agent-dispatch grade", () => {
     expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
       '"kind":"grade"',
     );
+  });
+
+  test("Jev 503 is automatically waived and releases the dispatcher-session gate", async () => {
+    const state = join(scratch, "grade-auto-waive-503");
+    const cwd = freshCwd();
+    const session = "grade-auto-waive-503";
+    const first = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("grade-auto-waive-503-first", "First ungraded run.\n"),
+        "--cd",
+        cwd,
+        "--sandbox",
+        "read-only",
+      ],
+      { AGENT_ROUTER_STATE_DIR: state, CLAUDE_CODE_SESSION_ID: session },
+    );
+    const runId = decodedJson(RunIdSchema, first.out.trim()).run_id;
+    const evidence = evidenceFile("auto-waive-503", "HTTP503\n");
+    const graded = await router(["grade", runId, "--evidence", evidence], {
+      AGENT_ROUTER_STATE_DIR: state,
+      CLAUDE_CODE_SESSION_ID: session,
+    });
+    expect(graded.code).toBe(0);
+    const waiver = logLines(state).find(
+      (line) => line.kind === "grade-waived" && line.run_id === runId,
+    );
+    expect(waiver?.reason).toContain("503");
+    const next = await router(
+      runArgs(brief("grade-auto-waive-503-next", "Next run.\n"), cwd),
+      { AGENT_ROUTER_STATE_DIR: state, CLAUDE_CODE_SESSION_ID: session },
+    );
+    expect(next.code).toBe(0);
+    expect(next.err).not.toContain(runId);
   });
 });
 
@@ -1691,6 +1745,110 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     ).toBe(argvBefore);
   });
 
+  test.each([59, 14401, 60.5])(
+    "invalid timeout_s %s is refused with its field name and exit 2",
+    async (seconds) => {
+      const b = brief(
+        `t-timeout-invalid-${seconds}`,
+        ticketText(`writes = []\ntimeout_s = ${seconds}`),
+      );
+      const r = await router(runArgs(b, freshCwd()));
+      expect(r.code).toBe(2);
+      expect(r.err).toContain("timeout_s");
+    },
+  );
+
+  test.each([
+    [undefined, undefined, 1800, "default"],
+    [3600, undefined, 3600, "ticket"],
+    [3600, 7200, 7200, "cli"],
+  ] as const)(
+    "timeout precedence and receipt record: ticket=%s cli=%s → %s (%s)",
+    async (ticketTimeout, cliTimeout, expectedSeconds, expectedSource) => {
+      const cwd = freshCwd();
+      const ticketLine =
+        ticketTimeout === undefined ? "" : `\ntimeout_s = ${ticketTimeout}`;
+      const b = brief(
+        `t-timeout-${expectedSource}`,
+        ticketText(`writes = []\nverify = []${ticketLine}`),
+      );
+      const args = runArgs(b, cwd);
+      if (cliTimeout !== undefined)
+        args.push("--timeout-s", String(cliTimeout));
+      const r = await router(args, { CLAUDE_CODE_SESSION_ID: "" });
+      expect(r.code).toBe(0);
+      const receipt = decodedJson(
+        z.looseObject({
+          timeout_s: z.number(),
+          timeout_source: z.string(),
+        }),
+        r.out.trim(),
+      );
+      expect(receipt).toMatchObject({
+        timeout_s: expectedSeconds,
+        timeout_source: expectedSource,
+      });
+      const record = logLines(r.state)[0];
+      expect(record).toMatchObject({
+        timeout_s: expectedSeconds,
+        timeout_source: expectedSource,
+      });
+      const workerArgs = decodedJson(
+        z.array(z.string()),
+        readFileSync(join(scratch, "argv.log"), "utf8")
+          .trim()
+          .split("\n")
+          .at(-1) ?? "[]",
+      );
+      expect(
+        workerArgs.slice(
+          workerArgs.indexOf("--timeout-s"),
+          workerArgs.indexOf("--timeout-s") + 2,
+        ),
+      ).toEqual(["--timeout-s", String(expectedSeconds)]);
+    },
+  );
+
+  test.each([
+    [undefined, 3600, "ticket"],
+    [7200, 7200, "cli"],
+  ] as const)(
+    "resume uses the declared timeout unless overridden: cli=%s → %s (%s)",
+    async (cliTimeout, expectedSeconds, expectedSource) => {
+      const state = join(scratch, `resume-timeout-${expectedSource}`);
+      const ticket = brief(
+        `resume-timeout-${expectedSource}`,
+        ticketText("writes = []\ntimeout_s = 3600", "Continue the work.\n"),
+      );
+      const first = await router(runArgs(ticket, freshCwd()), {
+        AGENT_ROUTER_STATE_DIR: state,
+        CLAUDE_CODE_SESSION_ID: "",
+      });
+      const runId = decodedJson(RunIdSchema, first.out.trim()).run_id;
+      const args = ["resume", runId];
+      if (cliTimeout !== undefined)
+        args.push("--timeout-s", String(cliTimeout));
+      const resumed = await router(args, {
+        AGENT_ROUTER_STATE_DIR: state,
+        CLAUDE_CODE_SESSION_ID: "",
+      });
+      expect(resumed.code).toBe(0);
+      const receipt = decodedJson(
+        z.looseObject({
+          timeout_s: z.number(),
+          timeout_source: z.string(),
+          resumed_from: z.string(),
+        }),
+        resumed.out.trim(),
+      );
+      expect(receipt).toMatchObject({
+        timeout_s: expectedSeconds,
+        timeout_source: expectedSource,
+        resumed_from: runId,
+      });
+    },
+  );
+
   test("no front matter: legacy mode — no verify, no automatic grade, today's receipt", async () => {
     const r = await router(
       runArgs(brief("t-legacy", "plain brief\n"), freshCwd()),
@@ -2079,7 +2237,9 @@ describe("agent-dispatch run: the ungraded-run gate", () => {
         schema: 1,
         kind: "run",
         run_id: runId,
+        label: "seeded side worker",
         cwd,
+        ended_at: "2026-10-08T01:02:03Z",
         ...(dispatcherSession === null
           ? {}
           : { dispatcher_session: dispatcherSession }),
@@ -2116,6 +2276,25 @@ describe("agent-dispatch run: the ungraded-run gate", () => {
     expect(r.code).toBe(2);
     expect(r.err).toContain(id);
     expect(r.err).toContain(`agent-dispatch grade ${id} --evidence`);
+  });
+
+  test("gate refusal lists every blocker with its location, finish time, and both resolution commands", async () => {
+    const cwd = freshCwd();
+    const state = gate("all-blockers");
+    const ids = Array.from({ length: 12 }, () => seed(state, cwd, ["a/**"]));
+    const r = await router(ticketRun(cwd, '["a/**"]'), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(r.code).toBe(2);
+    for (const id of ids) {
+      expect(r.err).toContain(`run_id=${id}`);
+      expect(r.err).toContain(`agent-dispatch grade ${id} --evidence <checks>`);
+      expect(r.err).toContain(`agent-dispatch grade ${id} --waive "<why>"`);
+    }
+    expect(r.err).toContain(`cwd=${cwd}`);
+    expect(r.err).toContain("label=seeded side worker");
+    expect(r.err).toContain("finished=2026-10-08T01:02:03Z");
+    expect(r.err).toContain("12 finished run(s)");
   });
 
   test("disjoint write globs still block when a no-verify run is ungraded", async () => {

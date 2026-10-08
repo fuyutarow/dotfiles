@@ -18,7 +18,7 @@
 //       agent-dispatch grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
 //       agent-dispatch grade RUN_ID --waive "<why>"        record that a run cannot be graded, and why
 //   TICKET  a brief may open with TOML front matter between `+++` lines (ticket.ts): `writes` globs, `verify`
-//           commands, `verify_timeout_s`, `capabilities`. The router then strips it for the worker, runs
+//           commands, `verify_timeout_s`, `timeout_s`, `capabilities`. The router then strips it for the worker, runs
 //           the verify commands after the worker exits (verify.ts), grades the run itself (graded_by
 //           "router", or a recorded waiver); verified runs never gate. A plain brief or ticket with no
 //           verify that remains ungraded gates the next dispatch from the same dispatcher session, or
@@ -1294,6 +1294,12 @@ interface Launch {
 /** Start the worker for a pick, wait for it, verify and grade; shared by `run` and `resume`. */
 async function launch(l: Launch): Promise<number> {
   const { roster, flags, brief, ticket, pick, label, resume } = l;
+  let timeout: { seconds: number; source: "cli" | "ticket" | "default" };
+  if (flags.timeoutS !== undefined)
+    timeout = { seconds: flags.timeoutS, source: "cli" };
+  else if (ticket?.timeout_s !== undefined)
+    timeout = { seconds: ticket.timeout_s, source: "ticket" };
+  else timeout = { seconds: 1800, source: "default" };
   const row = refuseUnrunnable(roster, pick.choice);
   const routeStatus = hostRoutes()[row.route];
   if (!routeStatus.available)
@@ -1372,7 +1378,7 @@ async function launch(l: Launch): Promise<number> {
   const args = workerArgs(
     roster,
     row,
-    { ...flags, promptFile: workerBrief },
+    { ...flags, timeoutS: timeout.seconds, promptFile: workerBrief },
     progress,
     runId,
     resume?.session,
@@ -1413,6 +1419,8 @@ async function launch(l: Launch): Promise<number> {
       },
       pick,
       ...(ticket === undefined ? {} : { ticket }),
+      timeout_s: timeout.seconds,
+      timeout_source: timeout.source,
       ...(resume === undefined ? {} : { resumed_from: resume.from }),
       started_at: active.started_at,
       ...(active.dispatcher_session === undefined
@@ -1524,6 +1532,7 @@ async function launch(l: Launch): Promise<number> {
     .safeParse(worker.success ? worker.data : undefined);
   const stopCause =
     outcomeName === "timeout" ||
+    exit === 3 ||
     outcomeName === "killed" ||
     outcomeName === "stopped" ||
     stoppedSubtypes.data?.stop_subtype === "error_max_turns" ||
@@ -1538,7 +1547,10 @@ async function launch(l: Launch): Promise<number> {
     .looseObject({ cause: z.string().optional() })
     .safeParse(workerData).data?.cause;
   const partialCause =
-    outcomeName ?? stoppedSubtypes.data?.stop_subtype ?? "unknown cause";
+    outcomeName ??
+    (exit === 3 ? "timeout" : undefined) ??
+    stoppedSubtypes.data?.stop_subtype ??
+    "unknown cause";
   const partialReport = stopCause
     ? {
         last_progress: done?.last ?? "no progress observed",
@@ -1562,6 +1574,8 @@ async function launch(l: Launch): Promise<number> {
     },
     pick,
     ...(ticket === undefined ? {} : { ticket }),
+    timeout_s: timeout.seconds,
+    timeout_source: timeout.source,
     ...(resume === undefined ? {} : { resumed_from: resume.from }),
     started_at: active.started_at,
     ...(active.dispatcher_session === undefined
@@ -1788,6 +1802,7 @@ function doctor(): number {
 const LogLine = z.looseObject({
   kind: z.string(),
   run_id: z.string().optional(),
+  label: z.string().optional(),
   cwd: z.string().optional(),
   dispatcher_session: z.string().optional(),
   started_at: z.string().optional(),
@@ -1802,6 +1817,8 @@ const LogLine = z.looseObject({
       verify: z.array(z.string()).optional(),
     })
     .optional(),
+  timeout_s: z.number().int().optional(),
+  timeout_source: z.enum(["cli", "ticket", "default"]).optional(),
   writes_check: z.union([z.array(z.string()), z.string()]).optional(),
   writes_violations: z.array(z.string()).optional(),
   writes_unattributed: z.array(z.string()).optional(),
@@ -1986,21 +2003,18 @@ function refuseOverUngraded(
     (entry) => entry.run_id !== except,
   );
   if (owed.length === 0) return;
-  const lines = owed
-    .slice(0, 10)
-    .map(
-      (l) =>
-        `  ${l.run_id ?? ""}  ${l.pick.choice}  ${l.worker?.outcome ?? `exit ${l.exit ?? "?"}`}`,
-    );
-  const more = owed.length > 10 ? [`  … and ${owed.length - 10} more`] : [];
-  const id = owed[0]?.run_id ?? "<run_id>";
+  const lines = owed.flatMap((l) => {
+    const id = l.run_id ?? "<run_id>";
+    return [
+      `  run_id=${id} cwd=${l.cwd ?? "(not recorded)"} label=${l.label ?? "(not recorded)"} finished=${l.ended_at ?? "(not recorded)"}`,
+      `    agent-dispatch grade ${id} --evidence <checks>`,
+      `    agent-dispatch grade ${id} --waive "<why>"`,
+    ];
+  });
   fatal(
     [
       `${owed.length} finished run(s) in ${session === undefined ? cwd : `dispatcher session ${session}`} are not graded; grade each before dispatching more work from this session:`,
       ...lines,
-      ...more,
-      `Run the checks on its work, then: agent-dispatch grade ${id} --evidence <checks file>`,
-      `If it cannot be judged (it never started, its work is gone): agent-dispatch grade ${id} --waive "<why>"`,
     ].join("\n"),
   );
 }
@@ -2736,9 +2750,9 @@ const argv = cli({
           description: "short name shown by ls and the statusline",
         },
         timeoutS: {
-          type: String,
+          type: Number,
           description:
-            "worker wall clock in seconds (default 1800; --timeout-s)",
+            "worker wall clock in seconds (60..14400; default from ticket or 1800)",
         },
       },
       help: { description: "Jev picks a row; run the worker" },
@@ -2848,8 +2862,9 @@ const argv = cli({
             "the message the worker gets (default: you were stopped, continue, finish, report)",
         },
         timeoutS: {
-          type: String,
-          description: "worker wall clock in seconds (default 1800)",
+          type: Number,
+          description:
+            "worker wall clock in seconds (60..14400; default from ticket or 1800)",
         },
       },
       help: {
@@ -2900,12 +2915,14 @@ async function main(): Promise<number | undefined> {
       )
     )
       fatal("a value is required");
-    const timeoutS = f.timeoutS === undefined ? undefined : Number(f.timeoutS);
+    const timeoutS = f.timeoutS;
     if (
       timeoutS !== undefined &&
-      (!Number.isInteger(timeoutS) || timeoutS <= 0)
+      (!Number.isInteger(timeoutS) || timeoutS < 1 || timeoutS > 14400)
     )
-      fatal(`not a positive whole number of seconds: ${f.timeoutS}`);
+      fatal(
+        `--timeout-s must be a positive whole number no greater than 14400 seconds: ${timeoutS}`,
+      );
     if (
       f.promptFile === undefined ||
       f.cd === undefined ||
@@ -2949,10 +2966,14 @@ async function main(): Promise<number | undefined> {
   if (argv.command === "resume") {
     const { promptFile, timeoutS } = argv.flags;
     if (promptFile === "") fatal("a value is required");
-    const bound = timeoutS === undefined ? undefined : Number(timeoutS);
-    if (bound !== undefined && (!Number.isInteger(bound) || bound <= 0))
-      fatal(`not a positive whole number of seconds: ${timeoutS}`);
-    return resumeCommand(argv._.runId, promptFile, bound);
+    if (
+      timeoutS !== undefined &&
+      (!Number.isInteger(timeoutS) || timeoutS < 1 || timeoutS > 14400)
+    )
+      fatal(
+        `--timeout-s must be a positive whole number no greater than 14400 seconds: ${timeoutS}`,
+      );
+    return resumeCommand(argv._.runId, promptFile, timeoutS);
   }
   if (argv.command === "grade")
     return gradeCommand(argv._.runId, argv.flags.evidence, argv.flags.waive);

@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import {
   docsComponents,
   judgmentCandidates,
 } from "../../src/targets/judgment.ts";
 
 test("judgment owns rust-docs only; Rust target directories belong to rust", () => {
-  const root = mkdtempSync(join(tmpdir(), "disk-reclaim-judgment-"));
+  const root = tempRoot("disk-reclaim-judgment-");
   const project = join(root, "project");
   const target = join(project, "target");
   const docs = join(root, ".rustup/toolchains/stable/share/doc/rust/html");

@@ -5,7 +5,6 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   rmSync,
   statSync,
@@ -13,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { loadConfig } from "../src/engine.ts";
 import { deleteApproved } from "../src/delete.ts";
@@ -21,6 +20,7 @@ import { readReceipts } from "../src/receipt.ts";
 import { removeTree } from "../src/lib/remove-tree.ts";
 import { ReceiptV2 } from "../src/model.ts";
 import { procFixture } from "./fixtures/procs.ts";
+import { tempRoot } from "./fixtures/temp.ts";
 
 const fixtures: string[] = [];
 function restoreDirectories(path: string): void {
@@ -29,7 +29,7 @@ function restoreDirectories(path: string): void {
   for (const entry of readdirSync(path)) restoreDirectories(join(path, entry));
 }
 function fixture() {
-  const path = mkdtempSync(join(tmpdir(), "disk-reclaim-delete-"));
+  const path = tempRoot("disk-reclaim-delete-");
   fixtures.push(path);
   const loaded = loadConfig();
   assert.ok(
@@ -56,7 +56,7 @@ afterEach(() => {
 test("refuses relative, root, HOME, repo root, outside-root, and symlink escape targets with named rules", async () => {
   const f = fixture();
   const repo = join(f.path, "repo");
-  const outside = mkdtempSync(join(tmpdir(), "disk-reclaim-outside-"));
+  const outside = tempRoot("disk-reclaim-outside-");
   fixtures.push(outside);
   const symlink = join(f.path, "escape");
   mkdirSync(repo);

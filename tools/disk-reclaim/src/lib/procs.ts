@@ -35,6 +35,11 @@ export type ProcOptions = {
   ignoreUnreadableProcs?: readonly string[];
   fs?: ProcFs;
 };
+export const resolveProcRoot = (root?: string): string =>
+  root ??
+  process.env.RECLAIM_UNIT_PROC_ROOT ??
+  process.env.RECLAIM_TEST_PROC_ROOT ??
+  "/proc";
 export type ProcessSnapshot = {
   environSessionIds: Probe<string[]>;
   openPaths: (dir: string) => OpenPaths;
@@ -120,7 +125,7 @@ export function ignoreUnreadableProcess(
 
 /** One same-uid scan supplies BOTH environment liveness and cwd/fd evidence. */
 export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
-  const root = options.procRoot ?? "/proc";
+  const root = resolveProcRoot(options.procRoot);
   const uid = options.uid ?? process.getuid?.() ?? 0;
   const fs = options.fs ?? procFs;
   const allow = options.ignoreUnreadableProcs ?? [];
@@ -133,7 +138,7 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
   if (!names.ok)
     unknown.push({
       uid: undefined,
-      detail: `${root}: ${message(names.error)}`,
+      detail: `process scan unavailable: ${root}: ${message(names.error)}`,
     });
   for (const name of names.ok ? names.value : []) {
     if (!/^\d+$/u.test(name)) continue;

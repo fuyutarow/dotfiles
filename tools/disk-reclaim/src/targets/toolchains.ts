@@ -57,7 +57,7 @@ export const createToolchainsTarget = (
       const nowSec = Math.floor(
         Temporal.Now.instant().epochMilliseconds / 1000,
       );
-      const live = liveExecutables();
+      const live = liveExecutables(_ctx.procDir);
       const candidates = [];
       const rustupDir = join(home, ".rustup/toolchains");
       const pins = walkPins(projects)
@@ -70,9 +70,9 @@ export const createToolchainsTarget = (
       let rustupNames: string[] = [];
       let defaultName: string | undefined;
       if (rustup.available() && existsSync(rustupDir)) {
-        rustupNames = fromThrowable(() => readdirSync(rustupDir))().unwrapOr(
-          [],
-        );
+        rustupNames = fromThrowable(() => readdirSync(rustupDir))()
+          .map((names) => names.toSorted())
+          .unwrapOr([]);
         defaultName = rustup.defaultToolchain();
       }
       for (const name of rustupNames) {

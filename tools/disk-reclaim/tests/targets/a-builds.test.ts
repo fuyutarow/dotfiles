@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import { createBuildsTarget } from "../../src/targets/builds.ts";
 
 const context = (repoRoots: string[], procDir: string) => ({
@@ -28,7 +22,7 @@ const context = (repoRoots: string[], procDir: string) => ({
 
 describe("builds target", () => {
   test("preserves old kondo roots and age semantics while excluding Rust targets", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-builds-"));
+    const home = tempRoot("reclaim-builds-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -50,7 +44,7 @@ describe("builds target", () => {
   });
 
   test("keeps project virtualenv and dependencies in the blind tier", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-builds-repo-"));
+    const home = tempRoot("reclaim-builds-repo-");
     const oldHome = process.env.HOME;
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -86,7 +80,7 @@ describe("builds target", () => {
   });
 
   test("keeps a global Bun node_modules tree reached through the Bun bin symlink", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-builds-bun-"));
+    const home = tempRoot("reclaim-builds-bun-");
     const oldHome = process.env.HOME;
     using cleanup = new DisposableStack();
     cleanup.defer(() => {

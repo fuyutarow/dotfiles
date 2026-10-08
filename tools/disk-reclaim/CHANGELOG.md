@@ -1,12 +1,18 @@
 # Changelog
 
+## 0.2.1
+
+- Resolve the process root in one place and report unavailable process scans explicitly; all mutating paths remain fail-closed when idleness cannot be established.
+- Canonicalize test roots from the real system temp directory so macOS `/var` aliases do not trigger the real-path safety refusal.
+- Keep the Linux full-suite process-scan race under investigation.
+
 ## 0.2.0
 
 - Refuse mutating run and approved delete commands from agent-dispatch workers unless HOME or reclaim state is isolated under a system tmp directory.
 
 ### Known issues
 
-- The independent predicate suite is intermittently flaky under full-suite runs (about 1 failure per run, always on the refusal side: under-lock recheck / process-scan races). Passes in isolation. Root cause under investigation.
+- On Linux, the independent predicate suite has an intermittent refusal-side failure under full-suite runs (under-lock recheck / process-scan race). Root cause remains under investigation; reproduce and fix on a Linux host.
 
 ## 0.1.0
 

@@ -209,6 +209,30 @@ describe("workspaces target", () => {
     expect(recovery[0]?.commit_id).toBe(wc);
   });
 
+  test("owner preflight failure refuses before forgetting the workspace", async () => {
+    const w = world();
+    const ws = w.add("ws1");
+    const refusing = createWorkspacesTarget({
+      openPaths: probe,
+      owner: () => ({
+        uid: (process.getuid?.() ?? 0) + 1,
+        name: "different-owner",
+      }),
+    });
+    const candidate = only(await refusing.plan(w.context("plan")), ws);
+    expect(candidate.verdict).toBe("RECLAIM");
+    const recovery: Recovery[] = [];
+    const result = await refusing.act(
+      candidate,
+      w.context("run", {}, recovery),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("workspace deletion preflight failed");
+    expect(w.workspaceNames()).toContain("ws1");
+    expect(existsSync(ws)).toBe(true);
+    expect(recovery).toHaveLength(0);
+  });
+
   test("an orphan directory (forgotten but still on disk) is ASK", async () => {
     const w = world();
     const ws = w.add("ws1");

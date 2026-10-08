@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import { createCleanTarget } from "../../src/targets/clean.ts";
 import { run } from "../../src/engine.ts";
 import { processBusy } from "../../src/lib/busy.ts";
@@ -55,7 +49,7 @@ describe("clean target", () => {
   });
 
   test("plans every existing regenerable package cache and ignores absent caches", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-clean-"));
+    const home = tempRoot("reclaim-clean-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -94,7 +88,7 @@ describe("clean target", () => {
 
   test("default home resolution uses HOME", () => {
     const previous = process.env.HOME;
-    const fixtureHome = mkdtempSync(join(tmpdir(), "reclaim-clean-home-"));
+    const fixtureHome = tempRoot("reclaim-clean-home-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       if (previous === undefined) delete process.env.HOME;
@@ -111,7 +105,7 @@ describe("clean target", () => {
   });
 
   test("a selected cache is actually deleted through the target action", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-clean-delete-"));
+    const home = tempRoot("reclaim-clean-delete-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -133,7 +127,7 @@ describe("clean target", () => {
   });
 
   test("uv and Julia caches are kept with exact busy reasons", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-clean-busy-"));
+    const home = tempRoot("reclaim-clean-busy-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -162,7 +156,7 @@ describe("clean target", () => {
   });
 
   test("Julia cleanup never selects protected directories or the .julia root", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-clean-julia-scope-"));
+    const home = tempRoot("reclaim-clean-julia-scope-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -191,7 +185,7 @@ describe("clean target", () => {
   });
 
   test("a Bun cache is kept when the process probe finds a running bun process", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-clean-bun-busy-"));
+    const home = tempRoot("reclaim-clean-bun-busy-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -217,7 +211,7 @@ describe("clean target", () => {
   });
 
   test("Cargo registry and git caches are kept while same-uid Rust tools run", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-clean-cargo-busy-"));
+    const home = tempRoot("reclaim-clean-cargo-busy-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -254,7 +248,7 @@ describe("clean target", () => {
   });
 
   test("uses Bun's cache gc for an idle Bun cache", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-clean-bun-gc-"));
+    const home = tempRoot("reclaim-clean-bun-gc-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -286,7 +280,7 @@ describe("clean target", () => {
   });
 
   test("a cache becoming busy after preview is kept during the engine's locked recheck", async () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-clean-recheck-"));
+    const home = tempRoot("reclaim-clean-recheck-");
     const state = join(home, "state");
     const cache = join(home, ".cache/uv");
     mkdirSync(cache, { recursive: true });

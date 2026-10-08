@@ -1,6 +1,5 @@
 import { test, expect } from "bun:test";
 import {
-  mkdtempSync,
   mkdirSync,
   writeFileSync,
   readFileSync,
@@ -13,8 +12,8 @@ import {
   lstatSync,
   readdirSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import { jsonOf } from "../../../shared/src/zod.ts";
 import { Plan, type Candidate } from "../../src/model.ts";
 const cli = resolve("tools/disk-reclaim/src/reclaim.ts");
@@ -27,8 +26,8 @@ function repair(p: string) {
     for (const n of readdirSync(p)) repair(join(p, n));
   }
 }
-function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "reclaim-independent-"));
+function fixture(procRoot?: string) {
+  const root = tempRoot("reclaim-independent-");
   mkdirSync(join(root, "proc"));
   const children: ReturnType<typeof Bun.spawn>[] = [];
   const home = join(root, "home"),
@@ -47,7 +46,8 @@ function fixture() {
     XDG_CACHE_HOME: join(home, "cache"),
     XDG_STATE_HOME: join(home, "state"),
     RECLAIM_CONFIG: config,
-    RECLAIM_TEST_PROC_ROOT: join(root, "proc"),
+    RECLAIM_TEST_PROC_ROOT: procRoot ?? join(root, "proc"),
+    RECLAIM_UNIT_PROC_ROOT: procRoot ?? join(root, "proc"),
     RECLAIM_STATE_DIR: join(root, "state"),
     RECLAIM_LOCK_WAIT_S: "2",
     JJ_CONFIG: join(root, "jj.toml"),
@@ -84,6 +84,10 @@ function fixture() {
     cmd,
     must,
     children,
+    setProcRoot: (path: string) => {
+      env.RECLAIM_TEST_PROC_ROOT = path;
+      env.RECLAIM_UNIT_PROC_ROOT = path;
+    },
     run: (...args: string[]) => cmd(["bun", cli, ...args]),
     stopChildren,
     cleanup: async () => {
@@ -122,6 +126,19 @@ function deletion(
     30000,
   );
 }
+test("approved delete refuses when the process scan is unavailable", async () => {
+  const f = fixture();
+  await using cleanup = new AsyncDisposableStack();
+  cleanup.defer(f.cleanup);
+  const target = join(f.allowed, "target");
+  mkdirSync(target);
+  f.setProcRoot(join(f.root, "missing-proc"));
+  const r = f.run("delete", target, "--yes", "--json");
+  expect(r.exit, r.out + r.err).toBe(2);
+  expect(r.out).toContain("process scan unavailable");
+  expect(r.out).toContain("no-live-process");
+  expect(existsSync(target)).toBe(true);
+});
 deletion(
   "Deletion primitive: directory symlinks are unlinked without traversing or chmodding outside entries",
   (f, t) => {
@@ -342,15 +359,30 @@ wsTest(
 wsTest("§3 orphan discovery: missing store is ASK", "ASK", (f, w) => {
   f.must(["mv", join(w.repo, ".jj/repo/store"), join(f.root, "moved-store")]);
 });
-wsTest(
-  "§3.6 process cwd in workspace is protected",
-  ["KEEP", "ASK"],
-  (f, w) => {
+test.skipIf(process.platform !== "linux")(
+  "§3.6 process cwd in workspace is protected (requires Linux /proc semantics)",
+  async () => {
+    const f = fixture("/proc");
+    await using cleanup = new AsyncDisposableStack();
+    cleanup.defer(f.cleanup);
+    const w = workspace(f);
     const child = Bun.spawn(["sleep", "10"], {
       cwd: w.ws,
       env: { ...process.env, HOME: f.home },
     });
     f.children.push(child);
+    const r = f.run("run", "workspaces", "--yes", "--json");
+    expect(r.exit, r.out + r.err).toBe(0);
+    const parsed = jsonOf(Plan).safeParse(r.out);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const candidates = parsed.data.targets.flatMap(
+      (target) => target.candidates,
+    );
+    const candidate = candidates.find((item) => item.path === w.ws);
+    expect(candidate, JSON.stringify(candidates)).toBeDefined();
+    if (candidate !== undefined)
+      expect(["KEEP", "ASK"]).toContain(candidate.verdict);
   },
 );
 test("§3 never touch default workspace or store holder", async () => {

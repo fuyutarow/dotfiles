@@ -32,7 +32,7 @@ const inspect = <T>(operation: () => T): Inspection<T> => {
 
 function candidatesUnder(root: string): LivenessRef[] {
   const refs: LivenessRef[] = [];
-  const slugs = inspect(() => readdirSync(root));
+  const slugs = inspect(() => readdirSync(root).toSorted());
   if (!slugs.ok) return refs;
   for (const slug of slugs.value) refs.push(...candidatesForSlug(root, slug));
   return refs;
@@ -40,7 +40,7 @@ function candidatesUnder(root: string): LivenessRef[] {
 
 function candidatesForSlug(root: string, slug: string): LivenessRef[] {
   const slugPath = join(root, slug);
-  const sessions = inspect(() => readdirSync(slugPath));
+  const sessions = inspect(() => readdirSync(slugPath).toSorted());
   if (!sessions.ok) return [];
   const refs: LivenessRef[] = [];
   for (const uuid of sessions.value) {
@@ -68,7 +68,7 @@ function candidateForUuid(
 }
 
 function hasDelegatedWorkspace(root: string): Inspection<boolean> {
-  const entries = inspect(() => readdirSync(root));
+  const entries = inspect(() => readdirSync(root).toSorted());
   if (!entries.ok) return entries;
   for (const name of entries.value) {
     const result = inspectDelegatedEntry(root, name);

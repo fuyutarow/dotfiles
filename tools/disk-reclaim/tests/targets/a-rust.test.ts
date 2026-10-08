@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
   mkdirSync,
-  mkdtempSync,
   rmSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import { busyCwds } from "../../src/lib/busy.ts";
 import { createRustTarget } from "../../src/targets/rust.ts";
 
@@ -24,7 +23,7 @@ const config = {
 
 describe("rust target", () => {
   test("plans only old Cargo targets, keeps fresh builds and non-project targets", () => {
-    const root = mkdtempSync(join(tmpdir(), "reclaim-rust-"));
+    const root = tempRoot("reclaim-rust-");
     const oldDays = process.env.RUST_TARGET_DAYS;
     process.env.RUST_TARGET_DAYS = "7";
     using cleanup = new DisposableStack();
@@ -44,17 +43,20 @@ describe("rust target", () => {
     const freshSec = Temporal.Now.instant().epochMilliseconds / 1000 - 86400;
     utimesSync(old, oldSec, oldSec);
     utimesSync(fresh, freshSec, freshSec);
+    const procDir = join(root, "proc");
+    mkdirSync(procDir);
     const planned = createRustTarget(() => root).plan({
       mode: "plan",
       explicit: false,
       config,
+      procDir,
       log: () => {},
     });
     expect(planned.map((candidate) => candidate.path)).toEqual([old]);
   });
 
   test("a recent direct child keeps an otherwise old target", () => {
-    const root = mkdtempSync(join(tmpdir(), "reclaim-rust-child-"));
+    const root = tempRoot("reclaim-rust-child-");
     const oldDays = process.env.RUST_TARGET_DAYS;
     process.env.RUST_TARGET_DAYS = "7";
     using cleanup = new DisposableStack();
@@ -81,7 +83,7 @@ describe("rust target", () => {
   });
 
   test("busy cargo/rustc cwd excludes a target and unavailable /proc remains conservative", () => {
-    const root = mkdtempSync(join(tmpdir(), "reclaim-rust-busy-"));
+    const root = tempRoot("reclaim-rust-busy-");
     const oldDays = process.env.RUST_TARGET_DAYS;
     process.env.RUST_TARGET_DAYS = "7";
     using cleanup = new DisposableStack();
@@ -113,7 +115,7 @@ describe("rust target", () => {
   });
 
   test("busy cwd matching uses a path boundary, not a similarly named sibling", () => {
-    const root = mkdtempSync(join(tmpdir(), "reclaim-rust-sibling-"));
+    const root = tempRoot("reclaim-rust-sibling-");
     const oldDays = process.env.RUST_TARGET_DAYS;
     process.env.RUST_TARGET_DAYS = "7";
     using cleanup = new DisposableStack();
@@ -139,7 +141,7 @@ describe("rust target", () => {
   });
 
   test("shared /proc probe finds cargo/rustc cwd and treats a missing proc tree as unknown", () => {
-    const proc = mkdtempSync(join(tmpdir(), "reclaim-rust-proc-"));
+    const proc = tempRoot("reclaim-rust-proc-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(proc, { recursive: true, force: true });

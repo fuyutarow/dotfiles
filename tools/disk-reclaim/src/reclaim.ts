@@ -13,6 +13,7 @@ import { readHeadroom } from "./storage.ts";
 import { registry, type Context, type Target } from "./targets/index.ts";
 import { typedYes } from "./targets/purge.ts";
 import { workerMutationRefusal } from "./lib/worker-guard.ts";
+import { resolveProcRoot } from "./lib/procs.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -202,9 +203,7 @@ export async function main(
       config: loaded.config,
       yes: f.yes,
       state: stateDir(),
-      ...(process.env.RECLAIM_UNIT_PROC_ROOT === undefined
-        ? {}
-        : { procRoot: process.env.RECLAIM_UNIT_PROC_ROOT }),
+      procRoot: resolveProcRoot(),
     });
     for (const refusal of result.refused)
       process.stderr.write(
@@ -262,7 +261,7 @@ export async function main(
     progressTty,
     reportProgress: f.noProgress ? undefined : reportProgress,
     config: loaded.config,
-    procDir: process.env.RECLAIM_UNIT_PROC_ROOT,
+    procDir: resolveProcRoot(),
     log: (m) => {
       process.stderr.write(`reclaim: ${m}\n`);
     },

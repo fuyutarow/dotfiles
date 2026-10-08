@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
+import { realTmpdir } from "./fixtures/temp.ts";
 import {
   AGENT_ROUTER_WORKER_ENV,
   AGENT_ROUTER_WORKER_VALUE,
@@ -21,7 +22,7 @@ test("worker guard permits a tmp HOME", () => {
   expect(
     workerMutationRefusal({
       [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
-      HOME: join(tmpdir(), "disk-reclaim-test-home"),
+      HOME: join(realTmpdir, "disk-reclaim-test-home"),
       RECLAIM_STATE_DIR: join(homedir(), ".local/state/reclaim"),
     }),
   ).toBeNull();
@@ -32,7 +33,7 @@ test("worker guard permits reclaim state under tmp", () => {
     workerMutationRefusal({
       [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
       HOME: homedir(),
-      RECLAIM_STATE_DIR: join(tmpdir(), "disk-reclaim-test-state"),
+      RECLAIM_STATE_DIR: join(realTmpdir, "disk-reclaim-test-state"),
     }),
   ).toBeNull();
 });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import {
   readSessions,
   type LivenessFacts,
@@ -64,7 +64,7 @@ describe("scratch liveness predicate", () => {
     ).toBe("unknown");
   });
   test("any malformed sessions registry JSON makes the registry unknown", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-session-registry-"));
+    const home = tempRoot("reclaim-session-registry-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -77,9 +77,7 @@ describe("scratch liveness predicate", () => {
     expect(judge(ref, registryFacts).verdict).toBe("unknown");
   });
   test("a missing sessions registry makes every otherwise-dead candidate unknown", () => {
-    const home = mkdtempSync(
-      join(tmpdir(), "reclaim-session-registry-missing-"),
-    );
+    const home = tempRoot("reclaim-session-registry-missing-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });

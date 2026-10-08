@@ -8,7 +8,9 @@ import { fromThrowable } from "../../../shared/src/zod.ts";
 
 function findTargets(root: string, depth = 0): string[] {
   if (depth > 4) return [];
-  const names = fromThrowable(() => readdirSync(root))().unwrapOr([]);
+  const names = fromThrowable(() => readdirSync(root))()
+    .map((entries) => entries.toSorted())
+    .unwrapOr([]);
   return names.flatMap((name) => {
     const path = join(root, name);
     const stat = fromThrowable(() => statSync(path))();
@@ -35,18 +37,18 @@ export const createRustTarget = (
   root: () => string = () =>
     process.env.AUDIT_PROJECTS ??
     join(process.env.HOME ?? homedir(), "Workspace"),
-  getBusyCwds: () => string[] | undefined = busyCwds,
+  getBusyCwds: (procDir?: string) => string[] | undefined = busyCwds,
 ) =>
   ({
     name: "rust",
     tier: "blind",
     available: () => ({ available: true, skip_reason: null }),
-    plan: (_ctx: Context) => {
+    plan: (ctx: Context) => {
       const keepDays = Number(
         process.env.RUST_TARGET_DAYS ??
           (Bun.which("sccache") === null ? "30" : "7"),
       );
-      const busy = getBusyCwds();
+      const busy = getBusyCwds(ctx.procDir);
       const cutoff =
         Math.floor(Temporal.Now.instant().epochMilliseconds / 1000) -
         keepDays * 86400;

@@ -3,12 +3,11 @@ import {
   existsSync,
   chmodSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { hostname, tmpdir } from "node:os";
+import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import {
@@ -19,11 +18,13 @@ import { Plan, ReceiptV1 } from "../src/model.ts";
 import { readReceipts, stateDir, writeReceipt } from "../src/receipt.ts";
 import { loadConfig } from "../src/engine.ts";
 import { cliEnv } from "./fixtures/cli-env.ts";
+import { tempRoot } from "./fixtures/temp.ts";
+import { realTmpdir } from "./fixtures/temp.ts";
 
 const script = resolve(import.meta.dir, "../src/reclaim.ts");
 const dirs: string[] = [];
 function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "reclaim-cli-"));
+  const dir = tempRoot("reclaim-cli-");
   dirs.push(dir);
   return dir;
 }
@@ -33,7 +34,7 @@ function invoke(
   env: Record<string, string> = {},
 ) {
   const r = Bun.spawnSync([process.execPath, script, ...args], {
-    cwd: tmpdir(),
+    cwd: realTmpdir,
     env: (() => {
       const isolated: Record<string, string> = {
         ...cliEnv(fixture()),
@@ -335,17 +336,13 @@ test("unreadable same-uid process blocks approved delete", () => {
   expect(deleted.stdout).toContain("process usage is unknown");
   expect(existsSync(candidate)).toBe(true);
 });
-test("worker can use read-only commands with non-tmp HOME and state", () => {
+test("worker read-only commands stay isolated under a tmp HOME", () => {
   const root = fixture();
-  const home = process.env.HOME ?? root;
   const workerEnv = {
     ...cliEnv(root),
     [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
-    HOME: home,
-    RECLAIM_STATE_DIR: join(
-      home,
-      ".local/state/disk-reclaim-worker-guard-readonly",
-    ),
+    HOME: root,
+    RECLAIM_STATE_DIR: join(root, "readonly-state"),
   };
   for (const args of [
     ["plan", "--json"],

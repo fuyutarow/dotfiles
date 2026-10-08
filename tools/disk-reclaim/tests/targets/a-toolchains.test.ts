@@ -2,14 +2,13 @@ import { describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   rmSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import {
   liveExecutables,
   readStore,
@@ -34,13 +33,18 @@ const context = {
   config,
   log: () => {},
 };
+const contextFor = (home: string) => {
+  const procDir = join(home, "proc");
+  mkdirSync(procDir, { recursive: true });
+  return { ...context, procDir };
+};
 const NOW = 2_000_000_000;
 const OLD = NOW - 10 * 86400;
 const names = (releases: readonly { name: string }[]) =>
   releases.map((release) => release.name);
 
 function versionHome(store: VersionStore): string {
-  const home = mkdtempSync(join(tmpdir(), "reclaim-version-store-"));
+  const home = tempRoot("reclaim-version-store-");
   mkdirSync(join(home, store.dir), { recursive: true });
   mkdirSync(join(home, store.pointer, ".."), { recursive: true });
   for (const version of ["1.0", "2.0"]) {
@@ -92,7 +96,7 @@ describe("toolchains target and version stores", () => {
   });
 
   test("matches a current pointer resolving inside a release directory", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-version-pointer-"));
+    const home = tempRoot("reclaim-version-pointer-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });
@@ -138,7 +142,7 @@ describe("toolchains target and version stores", () => {
   });
 
   test("reads executable paths from fixture proc and strips the deleted suffix; missing proc is unknown", () => {
-    const proc = mkdtempSync(join(tmpdir(), "reclaim-version-proc-"));
+    const proc = tempRoot("reclaim-version-proc-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(proc, { recursive: true, force: true });
@@ -151,7 +155,7 @@ describe("toolchains target and version stores", () => {
   });
 
   test("toolchains plans old VS Code versions except the newest and recent versions", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-toolchains-servers-"));
+    const home = tempRoot("reclaim-toolchains-servers-");
     const keepDays = process.env.KEEP_DAYS;
     process.env.KEEP_DAYS = "2";
     using cleanup = new DisposableStack();
@@ -172,7 +176,7 @@ describe("toolchains target and version stores", () => {
     utimesSync(old, oldSec, oldSec);
     utimesSync(recent, recentSec, recentSec);
     const planned = createToolchainsTarget(() => home)
-      .plan(context)
+      .plan(contextFor(home))
       .map((candidate) => candidate.path);
     expect(planned).toContain(old);
     expect(planned).not.toContain(newest);
@@ -180,7 +184,7 @@ describe("toolchains target and version stores", () => {
   });
 
   test("rustup pin files and the discovered default toolchain are explicit KEEP candidates", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-toolchains-pins-"));
+    const home = tempRoot("reclaim-toolchains-pins-");
     const projects = join(home, "Workspace/project");
     const rustupDir = join(home, ".rustup/toolchains");
     const defaultPath = join(rustupDir, "stable-x86_64-unknown-linux-gnu");
@@ -203,14 +207,18 @@ describe("toolchains target and version stores", () => {
       defaultToolchain: () => "stable-x86_64-unknown-linux-gnu",
     });
     const rustup = target
-      .plan(context)
+      .plan(contextFor(home))
       .filter((candidate) => candidate.path?.startsWith(rustupDir) === true);
     expect(
-      rustup.map(({ path, verdict, reason }) => [path, verdict, reason]),
+      rustup
+        .toSorted((left, right) =>
+          (left.path ?? "").localeCompare(right.path ?? ""),
+        )
+        .map(({ path, verdict, reason }) => [path, verdict, reason]),
     ).toEqual([
-      [defaultPath, "KEEP", "default rustup toolchain"],
-      [pinnedPath, "KEEP", "pinned rustup toolchain"],
       [removablePath, "RECLAIM", "non-default rustup toolchain is not pinned"],
+      [pinnedPath, "KEEP", "pinned rustup toolchain"],
+      [defaultPath, "KEEP", "default rustup toolchain"],
     ]);
   });
 
@@ -231,13 +239,13 @@ describe("toolchains target and version stores", () => {
       Temporal.Now.instant().epochMilliseconds / 1000 - 100 * 86400;
     utimesSync(oldRelease, oldSec, oldSec);
     const candidate = target
-      .plan(context)
+      .plan(contextFor(home))
       .find((item) => item.path === oldRelease);
     expect(candidate).toBeDefined();
     expect(candidate).toBeDefined();
     if (candidate === undefined) return;
     expect(
-      target.act(candidate, { ...context, mode: "run", procDir }),
+      target.act(candidate, { ...contextFor(home), mode: "run", procDir }),
     ).toMatchObject({ ok: true });
     expect(existsSync(oldRelease)).toBe(false);
   });

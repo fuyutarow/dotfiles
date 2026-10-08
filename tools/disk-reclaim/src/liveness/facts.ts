@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { fromThrowable, jsonOf, z } from "../../../shared/src/zod.ts";
 import {
   collectProcesses,
+  resolveProcRoot,
   type OpenPaths,
   type ProcessSnapshot,
   type ProcOptions,
@@ -148,7 +149,7 @@ export function collectLivenessFacts(
     ignoreUnreadableProcs?: readonly string[];
   },
 ): LivenessFacts {
-  const procRoot = options.procRoot ?? "/proc";
+  const procRoot = resolveProcRoot(options.procRoot);
   const probes = { ...defaultLivenessProbes, ...options.probes };
   const processes =
     options.processes ??
@@ -241,7 +242,7 @@ export function createLivenessSnapshot(
           home,
           now: capturedNow,
           graceHours: config.session_grace_hours,
-          procRoot: options.procs?.procRoot ?? "/proc",
+          procRoot: resolveProcRoot(options.procs?.procRoot),
           processes: getProcesses(ref.uid),
           probes,
         });

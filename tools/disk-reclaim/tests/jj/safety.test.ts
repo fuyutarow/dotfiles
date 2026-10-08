@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import { regenerable, scanWorkspace } from "../../src/jj/scan.ts";
 import { judgeWorkspace, type WorkspaceFacts } from "../../src/jj/safety.ts";
 import { REMOTE_SET, unpushedRevset } from "../../src/jj/jj.ts";
@@ -63,7 +63,7 @@ describe("scanWorkspace", () => {
     expect(regenerable(".env", ["target"])).toBe(false);
   });
   test("untracked entries must be regenerable, including nested ones; empty dirs are fine", () => {
-    const root = mkdtempSync(join(tmpdir(), "reclaim-scan-"));
+    const root = tempRoot("reclaim-scan-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(root, { recursive: true, force: true });

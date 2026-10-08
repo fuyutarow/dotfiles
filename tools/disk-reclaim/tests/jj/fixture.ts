@@ -1,19 +1,13 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import assert from "node:assert/strict";
 import type { Config } from "../../src/model.ts";
 import type { Context } from "../../src/targets/index.ts";
 
 /** A throwaway world: bare git remote + one jj store (`repo`, pushed `main`) + secondary workspaces beside it. */
 export class World {
-  readonly root = realpathSync(mkdtempSync(join(tmpdir(), "reclaim-ws-")));
+  readonly root = tempRoot("reclaim-ws-");
   readonly repo = join(this.root, "repo");
   readonly remote = join(this.root, "remote.git");
   private readonly previousConfig = process.env.JJ_CONFIG;

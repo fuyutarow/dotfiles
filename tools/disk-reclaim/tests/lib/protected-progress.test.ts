@@ -1,18 +1,12 @@
 import { expect, test } from "bun:test";
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import { removeTree } from "../../src/lib/remove-tree.ts";
 import { protectedReason } from "../../src/lib/protected.ts";
 
 test("tool install roots and bin symlink destinations are protected", () => {
-  const home = mkdtempSync(join(tmpdir(), "reclaim-protected-home-"));
+  const home = tempRoot("reclaim-protected-home-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
     rmSync(home, { recursive: true, force: true });
@@ -23,7 +17,7 @@ test("tool install roots and bin symlink destinations are protected", () => {
 });
 
 test("process cwd protects its containing candidate, not candidate descendants", () => {
-  const root = mkdtempSync(join(tmpdir(), "reclaim-protected-cwd-"));
+  const root = tempRoot("reclaim-protected-cwd-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
     rmSync(root, { recursive: true, force: true });
@@ -44,7 +38,7 @@ test("process cwd protects its containing candidate, not candidate descendants",
 });
 
 test("removeTree emits throttled progress to its stderr writer on a fake TTY", () => {
-  const root = mkdtempSync(join(tmpdir(), "reclaim-progress-"));
+  const root = tempRoot("reclaim-progress-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
     rmSync(root, { recursive: true, force: true });

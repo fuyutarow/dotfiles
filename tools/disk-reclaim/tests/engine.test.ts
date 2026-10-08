@@ -1,23 +1,18 @@
 import { afterEach, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { hostname, tmpdir } from "node:os";
+import { hostname } from "node:os";
 import { tryAcquire } from "../../shared/src/dir-lock.ts";
 import { loadConfig, plan, run, type EngineOptions } from "../src/engine.ts";
 import { Plan, ReceiptV2 } from "../src/model.ts";
 import { readReceipts } from "../src/receipt.ts";
 import { createSystemTarget } from "../src/targets/system.ts";
 import { candidate, fakeTarget } from "./fixtures/fake-target.ts";
+import { tempRoot } from "./fixtures/temp.ts";
 
 const dirs: string[] = [];
 function options(extra: Partial<EngineOptions> = {}): EngineOptions {
-  const state = mkdtempSync(join(tmpdir(), "reclaim-engine-"));
+  const state = tempRoot("reclaim-engine-");
   const procDir = join(state, "proc");
   mkdirSync(procDir);
   dirs.push(state);

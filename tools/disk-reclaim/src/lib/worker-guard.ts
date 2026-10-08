@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
@@ -5,6 +6,7 @@ import {
   AGENT_ROUTER_WORKER_VALUE,
 } from "../../../shared/src/worker-env.ts";
 import { stateDir } from "../receipt.ts";
+import { fromThrowable } from "../../../shared/src/zod.ts";
 
 const isWithin = (path: string, parent: string): boolean => {
   const rel = relative(resolve(parent), resolve(path));
@@ -14,8 +16,13 @@ const isWithin = (path: string, parent: string): boolean => {
   );
 };
 
+const realTmpdir = fromThrowable(() => realpathSync(tmpdir()))().unwrapOr(
+  resolve(tmpdir()),
+);
 const isSystemTmp = (path: string): boolean =>
-  [tmpdir(), "/tmp"].some((root) => isWithin(path, root));
+  [tmpdir(), realTmpdir, "/tmp", "/private/tmp"].some((root) =>
+    isWithin(path, root),
+  );
 
 /** Return the refusal message when a worker's mutating command is not isolated. */
 export function workerMutationRefusal(

@@ -12,7 +12,7 @@ export function cliEnv(
   mkdirSync(home, { recursive: true });
   mkdirSync(bin, { recursive: true });
   mkdirSync(procRoot, { recursive: true });
-  for (const name of ["jj", "git", "lsattr", "getent", "pgrep", "sh", "true"]) {
+  for (const name of ["jj", "git", "lsattr", "pgrep", "sh", "true"]) {
     const source = Bun.which(name);
     if (source !== null) symlinkSync(source, join(bin, name));
   }

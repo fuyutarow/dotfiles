@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import { run, plan } from "../../src/engine.ts";
 import type {
   LivenessFacts,
@@ -51,7 +45,7 @@ function makeFacts(
 
 describe("scratch target", () => {
   test("only uuid-shaped scratchpad directories are enumerated and uncertainty asks", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-scratch-enumeration-"));
+    const home = tempRoot("reclaim-scratch-enumeration-");
     const root = join(home, `claude-${process.getuid?.() ?? 0}`);
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -86,7 +80,7 @@ describe("scratch target", () => {
   });
 
   test("nested jj workspace is delegated and kept", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-scratch-jj-"));
+    const home = tempRoot("reclaim-scratch-jj-");
     const root = join(home, `claude-${process.getuid?.() ?? 0}`);
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -115,7 +109,7 @@ describe("scratch target", () => {
   });
 
   test("nested git worktree marker is delegated", () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-scratch-git-"));
+    const home = tempRoot("reclaim-scratch-git-");
     const root = join(home, `claude-${process.getuid?.() ?? 0}`);
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -138,7 +132,7 @@ describe("scratch target", () => {
   });
 
   test("plan and run remove only the proven dead fixture scratchpad", async () => {
-    const home = mkdtempSync(join(tmpdir(), "reclaim-scratch-e2e-"));
+    const home = tempRoot("reclaim-scratch-e2e-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(home, { recursive: true, force: true });

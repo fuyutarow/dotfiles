@@ -1,6 +1,7 @@
 import { readdirSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fromThrowable } from "../../../shared/src/zod.ts";
+import { resolveProcRoot } from "./procs.ts";
 
 export type VersionStore = {
   readonly name: string;
@@ -53,7 +54,9 @@ export function readStore(
         })?.name;
   return { releases, current };
 }
-export function liveExecutables(procDir = "/proc"): string[] | undefined {
+export function liveExecutables(
+  procDir = resolveProcRoot(),
+): string[] | undefined {
   const pids = fromThrowable(() => readdirSync(procDir))();
   if (pids.isErr()) return undefined;
   return pids.value

@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 import {
   mkdirSync,
-  mkdtempSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -10,7 +9,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import {
   createLivenessSnapshot,
   scratchRef,
@@ -19,6 +17,7 @@ import { judge } from "../../src/liveness/predicate.ts";
 import { collectProcesses, openPathsUnder } from "../../src/lib/procs.ts";
 import { judgeWorkspace, type WorkspaceFacts } from "../../src/jj/safety.ts";
 import { procFixture } from "../fixtures/procs.ts";
+import { tempRoot } from "../fixtures/temp.ts";
 import type { Candidate } from "../../src/model.ts";
 
 const uuid = "123e4567-e89b-42d3-a456-426614174000";
@@ -39,7 +38,7 @@ const cases: [string, Candidate["verdict"]][] = [
 for (const via of ["cwd", "fd", "fd/3", "environ"]) {
   for (const [comm, expected] of cases) {
     test(`unreadable ${comm} ${via}: both liveness and workspace probe give ${expected}`, () => {
-      const root = mkdtempSync(join(tmpdir(), "reclaim-procs-"));
+      const root = tempRoot("reclaim-procs-");
       using cleanup = new DisposableStack();
       cleanup.defer(() => {
         rmSync(root, { recursive: true, force: true });
@@ -99,7 +98,7 @@ test("same-uid EACCES requires a readable allowlisted comm; EPERM remains unknow
     { comm: "sshd-helper", denied: ["cwd"], code: "EACCES", unknown: true },
     { comm: "sshd", denied: ["cwd"], code: "EACCES", unknown: true, allow: [] },
   ]) {
-    const root = mkdtempSync(join(tmpdir(), "reclaim-proc-identity-"));
+    const root = tempRoot("reclaim-proc-identity-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(root, { recursive: true, force: true });
@@ -114,7 +113,7 @@ test("same-uid EACCES requires a readable allowlisted comm; EPERM remains unknow
 });
 
 test("recorded EACCES facts include process comm, state, and status uid line", () => {
-  const root = mkdtempSync(join(tmpdir(), "reclaim-proc-eacces-fact-"));
+  const root = tempRoot("reclaim-proc-eacces-fact-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
     rmSync(root, { recursive: true, force: true });
@@ -138,7 +137,7 @@ test("same-uid EACCES rechecks process state and starttime once", () => {
     "ignored",
     "live",
   ] as const) {
-    const root = mkdtempSync(join(tmpdir(), "reclaim-proc-eacces-race-"));
+    const root = tempRoot("reclaim-proc-eacces-race-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
       rmSync(root, { recursive: true, force: true });
@@ -175,7 +174,7 @@ test("same-uid EACCES rechecks process state and starttime once", () => {
 });
 
 test("allowlisted permission failures do not suppress readable live paths; deleted fd links respect boundaries", () => {
-  const root = mkdtempSync(join(tmpdir(), "reclaim-proc-paths-"));
+  const root = tempRoot("reclaim-proc-paths-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
     rmSync(root, { recursive: true, force: true });
@@ -205,7 +204,7 @@ test("a known conflict requires KEEP even when process evidence is unknown", () 
 });
 
 test("foreign uid unreadable processes have no effect", () => {
-  const root = mkdtempSync(join(tmpdir(), "reclaim-proc-foreign-"));
+  const root = tempRoot("reclaim-proc-foreign-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
     rmSync(root, { recursive: true, force: true });
@@ -223,7 +222,7 @@ test("foreign uid unreadable processes have no effect", () => {
 });
 
 test("foreign root process permission failures have no effect", () => {
-  const root = mkdtempSync(join(tmpdir(), "reclaim-proc-root-"));
+  const root = tempRoot("reclaim-proc-root-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
     rmSync(root, { recursive: true, force: true });
@@ -238,7 +237,7 @@ test("foreign root process permission failures have no effect", () => {
 });
 
 test("same-uid cwd inside the candidate is KEEP evidence", () => {
-  const root = mkdtempSync(join(tmpdir(), "reclaim-proc-cwd-"));
+  const root = tempRoot("reclaim-proc-cwd-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
     rmSync(root, { recursive: true, force: true });

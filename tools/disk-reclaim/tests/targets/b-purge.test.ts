@@ -3,14 +3,13 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   utimesSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { tempRoot } from "../fixtures/temp.ts";
 import { purge } from "../../src/targets/purge.ts";
 import { main as reclaimMain } from "../../src/reclaim.ts";
 import { purgeCandidates } from "../../src/targets/purge.ts";
@@ -28,7 +27,7 @@ import type {
 async function purgeTty(
   keys: string,
 ): Promise<{ code: number; out: string; root: string }> {
-  const root = mkdtempSync(join(tmpdir(), "disk-reclaim-purge-tty-"));
+  const root = tempRoot("disk-reclaim-purge-tty-");
   const grave = join(root, "grave");
   const procDir = join(root, "proc");
   mkdirSync(procDir);
@@ -77,7 +76,7 @@ async function purgeTty(
 }
 
 test("purge removes 555/444 tree without following a symlink outside it", () => {
-  const root = mkdtempSync(join(tmpdir(), "disk-reclaim-purge-"));
+  const root = tempRoot("disk-reclaim-purge-");
   const procDir = join(root, "proc");
   mkdirSync(procDir);
   const grave = join(root, "grave");
@@ -147,7 +146,7 @@ test("typed confirmation accepts only an exact yes", async () => {
 });
 
 test("purge planning selects each configured graveyard root", () => {
-  const root = mkdtempSync(join(tmpdir(), "disk-reclaim-graves-"));
+  const root = tempRoot("disk-reclaim-graves-");
   const env = {
     HOME: join(root, "home"),
     USER: "fixture",
@@ -179,7 +178,7 @@ function livenessSnapshot(facts: LivenessFacts): LivenessSnapshot {
 }
 
 test("rip graveyard keeps a recent entry from a live Claude session", () => {
-  const root = mkdtempSync(join(tmpdir(), "disk-reclaim-live-grave-"));
+  const root = tempRoot("disk-reclaim-live-grave-");
   const grave = join(root, "grave");
   const uuid = "3a2afd34-1111-4111-8111-111111111111";
   const dest = join(
@@ -218,7 +217,7 @@ test("rip graveyard keeps a recent entry from a live Claude session", () => {
 });
 
 test("old rip graveyard entry from a dead session is reclaimable", () => {
-  const root = mkdtempSync(join(tmpdir(), "disk-reclaim-old-grave-"));
+  const root = tempRoot("disk-reclaim-old-grave-");
   const grave = join(root, "grave");
   const uuid = "3a2afd34-1111-4111-8111-111111111111";
   const entry = join(
@@ -265,7 +264,7 @@ test("old rip graveyard entry from a dead session is reclaimable", () => {
 });
 
 test("graveyard record time is used and missing records fall back to mtime", () => {
-  const root = mkdtempSync(join(tmpdir(), "disk-reclaim-record-grave-"));
+  const root = tempRoot("disk-reclaim-record-grave-");
   const grave = join(root, "grave");
   const recorded = join(grave, "recorded");
   const fallback = join(grave, "fallback");
@@ -329,7 +328,7 @@ test("existing graveyards retain only present directories and allow no matches",
 });
 
 test("purge progress counts nested entries and symlinks without following links", () => {
-  const root = mkdtempSync(join(tmpdir(), "disk-reclaim-count-"));
+  const root = tempRoot("disk-reclaim-count-");
   mkdirSync(join(root, "a", "b"), { recursive: true });
   writeFileSync(join(root, "a", "b", "f"), "x");
   symlinkSync("/", join(root, "loop"));
@@ -344,7 +343,7 @@ test("purge progress counts one line per reported entry", () => {
 });
 
 test("interactive purge refuses without a terminal before touching fixture graveyards", async () => {
-  const root = mkdtempSync(join(tmpdir(), "disk-reclaim-purge-pipe-"));
+  const root = tempRoot("disk-reclaim-purge-pipe-");
   const grave = join(root, "grave");
   mkdirSync(grave);
   writeFileSync(join(grave, "keep"), "fixture");

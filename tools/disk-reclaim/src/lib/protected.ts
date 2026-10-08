@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fromThrowable } from "../../../shared/src/zod.ts";
-import { collectProcesses } from "./procs.ts";
+import { collectProcesses, resolveProcRoot } from "./procs.ts";
 
 export type ProtectionOptions = {
   ownerTarget?: string | undefined;
@@ -160,7 +160,7 @@ export function protectedReason(
   );
   if (repoRule !== null) return repoRule;
   const processes = collectProcesses({
-    procRoot: options.procDir ?? process.env.RECLAIM_UNIT_PROC_ROOT ?? "/proc",
+    procRoot: resolveProcRoot(options.procDir),
     ignoreUnreadableProcs: options.ignoreUnreadableProcs ?? [],
   }).openPaths(path);
   if (processes.unknown.length > 0) return "process paths are unknown";

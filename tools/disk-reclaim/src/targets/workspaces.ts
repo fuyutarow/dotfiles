@@ -15,11 +15,16 @@ import {
 } from "../jj/discover.ts";
 import { jj, unpushedRevset, workingCopyRevset } from "../jj/jj.ts";
 import type { OpenPaths } from "../lib/procs.ts";
+import { resolveProcRoot } from "../lib/procs.ts";
 import { createLivenessSnapshot, scratchRef } from "../liveness/facts.ts";
 import { judge } from "../liveness/predicate.ts";
 import { judgeWorkspace, type WorkspaceFacts } from "../jj/safety.ts";
 import { scanWorkspace } from "../jj/scan.ts";
-import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
+import {
+  removeTree,
+  removeTreeProgress,
+  type RemoveTreeOptions,
+} from "../lib/remove-tree.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { treeBytes } from "./tree.ts";
@@ -33,6 +38,8 @@ export type WorkspacesOptions = {
   sessionDead?: (path: string) => boolean | null;
   /** process probe; the default fails closed on any unreadable same-uid /proc entry */
   openPaths?: (dir: string) => OpenPaths;
+  owner?: RemoveTreeOptions["owner"];
+  immutable?: RemoveTreeOptions["immutable"];
 };
 
 const real = (path: string): string => {
@@ -42,7 +49,7 @@ const under = (path: string, dir: string): boolean =>
   path === dir || path.startsWith(`${dir}/`);
 const processComm = (pid: number, procDir?: string): string => {
   const result = fromThrowable(() =>
-    readFileSync(join(procDir ?? "/proc", String(pid), "comm"), "utf8"),
+    readFileSync(join(resolveProcRoot(procDir), String(pid), "comm"), "utf8"),
   )();
   if (result.isErr()) return "unreadable";
   const comm = result.value.trim();
@@ -450,6 +457,37 @@ export function createWorkspacesTarget(
         ctx.log(`workspace process check refused: ${evidence.join("; ")}`);
         return fail("a process may be using the workspace");
       }
+      if (candidate.action.kind === "jj-forget+delete") {
+        const removalOptions = {
+          uid: process.getuid?.() ?? 0,
+          ...(options.owner === undefined ? {} : { owner: options.owner }),
+          ...(options.immutable === undefined
+            ? {}
+            : { immutable: options.immutable }),
+          protection: {
+            ownerTarget: "workspaces",
+            procDir: ctx.procDir,
+            repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
+            protectedPaths: ctx.config.protected ?? [],
+            ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
+          },
+        } satisfies Omit<RemoveTreeOptions, "progress">;
+        const preflight = removeTree(path, {
+          ...removalOptions,
+          dryRun: true,
+          allowListedWorkspace: path,
+          progress: false,
+        });
+        if (!preflight.ok) {
+          const details = [
+            ...preflight.refused.map((item) => `${item.path}: ${item.reason}`),
+            ...preflight.errors.map((item) => `${item.path}: ${item.error}`),
+          ];
+          return fail(
+            `workspace deletion preflight failed: ${details.join("; ")}`,
+          );
+        }
+      }
       // 1. recovery is durable before anything is destroyed
       ctx.recordRecovery(candidate, {
         repo: store,
@@ -480,6 +518,10 @@ export function createWorkspacesTarget(
       // 4. real delete
       const removed = removeTree(path, {
         uid: process.getuid?.() ?? 0,
+        ...(options.owner === undefined ? {} : { owner: options.owner }),
+        ...(options.immutable === undefined
+          ? {}
+          : { immutable: options.immutable }),
         protection: {
           ownerTarget: "workspaces",
           procDir: ctx.procDir,

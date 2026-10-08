@@ -10,6 +10,7 @@ import {
   unlinkSync,
   rmdirSync,
 } from "node:fs";
+import { userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { dlopen, FFIType, ptr, read } from "bun:ffi";
@@ -39,6 +40,8 @@ export type RemoveTreeOptions = {
   uid: number;
   owner?: (path: string) => { uid: number; name: string };
   immutable?: (path: string) => boolean | null;
+  dryRun?: boolean;
+  allowListedWorkspace?: string;
   protection?: {
     ownerTarget?: string | undefined;
     repoRoots?: string[] | undefined;
@@ -56,6 +59,13 @@ export type RemoveTreeOptions = {
         write?: (line: string) => void;
       };
 };
+
+function nameForUid(uid: number): string {
+  return fromThrowable(() => userInfo())().match(
+    (user) => (user.uid === uid ? user.username : String(uid)),
+    () => String(uid),
+  );
+}
 
 const estimatedBytes = (path: string): number => {
   const stat = fromThrowable(() => lstatSync(path))().unwrapOr(null);
@@ -161,6 +171,19 @@ function linuxAttributesAt(path: string): boolean | null {
 
 function attributesAt(path: string): boolean | null {
   if (process.platform === "linux") return linuxAttributesAt(path);
+  if (process.platform === "darwin") {
+    const output = fromThrowable(() =>
+      execFileSync("/usr/bin/stat", ["-f", "%Sf", path], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    )();
+    if (output.isErr()) return null;
+    const flags = output.value.trim();
+    if (flags === "-") return false;
+    if (flags === "") return null;
+    return /(?:^|,)(?:uchg|schg|uappnd|sappnd|sunlnk)(?:,|$)/u.test(flags);
+  }
   const output = fromThrowable(() =>
     execFileSync("lsattr", ["-d", "--", path], {
       encoding: "utf8",
@@ -197,7 +220,8 @@ export function removeTree(
   let lastProgress = 0;
   const writeProgress = (final = false): void => {
     const progress = options.progress;
-    if (progress === undefined || progress === false) return;
+    if (options.dryRun === true || progress === undefined || progress === false)
+      return;
     const now = Temporal.Now.instant().epochMilliseconds;
     const interval = progress.tty ? 250 : 2000;
     if (!final && now - lastProgress < interval) return;
@@ -256,17 +280,9 @@ export function removeTree(
     options.owner ??
     ((entry: string) => {
       const uid = lstatSync(entry).uid;
-      const passwd = execFileSync("getent", ["passwd", String(uid)], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      const ownerName = passwd.split(":")[0];
       return {
         uid,
-        name:
-          ownerName === undefined || ownerName.length === 0
-            ? String(uid)
-            : ownerName,
+        name: nameForUid(uid),
       };
     });
   const checkAttribute = options.immutable ?? attributesAt;
@@ -284,7 +300,7 @@ export function removeTree(
     });
   };
   const ensureOwnerWritable = (entry: string, mode: number): string | null => {
-    if ((mode & 0o700) === 0o700) return null;
+    if (options.dryRun === true || (mode & 0o700) === 0o700) return null;
     return fromThrowable(() => {
       chmodSync(entry, mode | 0o700);
     })().match(
@@ -347,7 +363,13 @@ export function removeTree(
         (reason) => reason,
         (error) => `cannot inspect repo store: ${message(error)}`,
       );
-      if (protection !== null) {
+      if (
+        protection !== null &&
+        !(
+          entry === options.allowListedWorkspace &&
+          protection.startsWith("listed jj workspace ")
+        )
+      ) {
         refuse(entry, owner, protection);
         return false;
       }
@@ -361,6 +383,7 @@ export function removeTree(
         complete = visit(join(entry, child)) && complete;
       }
       if (!complete) return false;
+      if (options.dryRun === true) return true;
       const removed = fromThrowable(() => {
         rmdirSync(entry);
       })();
@@ -373,6 +396,7 @@ export function removeTree(
       writeProgress();
       return true;
     }
+    if (options.dryRun === true) return true;
     const removed = fromThrowable(() => {
       unlinkSync(entry);
     })();

@@ -478,9 +478,9 @@ describe("agent-dispatch run", () => {
     expect(request.questions.worker.criteria["luna-max"]).toContain(
       "Recent measured record (last 7 days): n=5; median time to first return=60s; timeout rate=20.0%; accepted rate=80.0%; cost per accepted=$0.6250",
     );
-    expect(request.questions.worker.criteria["terra-max"]).toContain("n=2;");
+    expect(request.questions.worker.criteria["terra-max"]).toContain("n=0;");
     expect(request.questions.worker.criteria["terra-max"]).toContain(
-      "little record (fewer than 5 runs)",
+      "little record (fewer than 3 runs)",
     );
     expect(request.questions.worker.instructions).toContain(
       "Maximize accepted returns per worker hour. Treat UNMEASURED rows as worth trying when their benchmark capability fits the ticket.",
@@ -489,7 +489,7 @@ describe("agent-dispatch run", () => {
       "luna-max | runs 5 | accepted/h 48.00 | p50 first return 60.0s | accepted 80.0% | timeout 20.0%",
     );
     expect(request.state.recent_throughput).toContain(
-      "terra-max | UNMEASURED | runs 2 | accepted/h 0.00 | p50 first return 45.0s | accepted 0.0% | timeout 0.0%",
+      "terra-max | UNMEASURED | runs 0 | accepted/h unknown | p50 first return unknown | accepted 0.0% | timeout 0.0%",
     );
   });
 
@@ -530,6 +530,151 @@ describe("agent-dispatch run", () => {
       bodies.slice(requestStart).find((body) => body.includes('"worker"')) ??
       "";
     expect(workerRequest).toContain("Recent measured record unavailable.");
+  });
+
+  test("record export has the compact schema and import validates/replaces the saved record", async () => {
+    const state = join(scratch, "record-commands");
+    mkdirSync(state, { recursive: true });
+    const log = Array.from({ length: 3 }, (_, i) =>
+      JSON.stringify({
+        kind: "run",
+        run_id: `record-export-${i}`,
+        started_at: Temporal.Now.instant().subtract({ hours: i }).toString(),
+        pick: { choice: "terra-max" },
+        stats: { row: "terra-max", outcome: "ok", elapsed_s: 60 },
+      }),
+    ).join("\n");
+    writeFileSync(join(state, "runs.jsonl"), `${log}\n`);
+    const exported = await router(["record-export", "--since", "7d"], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(exported.code).toBe(0);
+    const record = decodedJson(
+      z.strictObject({
+        schema: z.literal(1),
+        host: z.string(),
+        exported_at: z.string(),
+        window: z.string(),
+        per_row: z.record(
+          z.string(),
+          z.strictObject({
+            runs: z.number(),
+            accepted_returns_per_worker_hour: z.number().nullable(),
+            median_time_to_first_return_s: z.number().nullable(),
+            accepted_rate: z.number(),
+            timeout_rate: z.number(),
+          }),
+        ),
+      }),
+      exported.out,
+    );
+    expect(record.window).toBe("7d");
+    expect(record.per_row["terra-max"]?.runs).toBe(3);
+    const file = join(scratch, "record-import.json");
+    writeFileSync(file, exported.out);
+    const imported = await router(["record-import", file], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(imported.code).toBe(0);
+    expect(imported.out.trim().split("\n")).toHaveLength(1);
+    expect(existsSync(join(state, "imported-record.json"))).toBe(true);
+    writeFileSync(file, "{bad json");
+    const rejected = await router(["record-import", file], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(rejected.code).toBe(2);
+  });
+
+  test("imported rows fill thin local rows and corrupt imports do not block picks", async () => {
+    const state = join(scratch, "record-merge");
+    mkdirSync(state, { recursive: true });
+    const imported = {
+      schema: 1,
+      host: "source-host",
+      exported_at: "2026-10-08T12:00:00Z",
+      window: "7d",
+      per_row: {
+        "terra-max": {
+          runs: 9,
+          accepted_returns_per_worker_hour: 4,
+          median_time_to_first_return_s: 30,
+          accepted_rate: 0.5,
+          timeout_rate: 0.1,
+        },
+      },
+    };
+    writeFileSync(
+      join(state, "imported-record.json"),
+      JSON.stringify(imported),
+    );
+    const requestBrief = brief("imported-record-pick", "Choose a worker.\n");
+    const r = await router(
+      ["pick", "--prompt-file", requestBrief, "--cd", scratch],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    expect(r.code).toBe(0);
+    expect(lastJevBody()).toContain(
+      "terra-max | imported from source-host 2026-10-08 | runs 9 | accepted/h 4.00 | p50 first return 30.0s | accepted 50.0% | timeout 10.0%",
+    );
+
+    const corruptState = join(scratch, "record-corrupt-merge");
+    mkdirSync(corruptState, { recursive: true });
+    writeFileSync(join(corruptState, "imported-record.json"), "not json");
+    const corrupt = await router(
+      ["pick", "--prompt-file", requestBrief, "--cd", scratch],
+      { AGENT_ROUTER_STATE_DIR: corruptState },
+    );
+    expect(corrupt.code).toBe(0);
+    expect(
+      corrupt.err.match(/ignoring unreadable imported record/gu)?.length,
+    ).toBe(1);
+    expect(lastJevBody()).toContain("terra-max | UNMEASURED | runs 0");
+  });
+
+  test("three local runs take precedence over an imported row", async () => {
+    const state = join(scratch, "record-local-precedence");
+    mkdirSync(state, { recursive: true });
+    const started = Temporal.Now.instant().toString();
+    writeFileSync(
+      join(state, "runs.jsonl"),
+      Array.from({ length: 3 }, (_, i) =>
+        JSON.stringify({
+          kind: "run",
+          run_id: `local-${i}`,
+          started_at: started,
+          pick: { choice: "terra-max" },
+          stats: { row: "terra-max", outcome: "ok", elapsed_s: 60 },
+        }),
+      ).join("\n") + "\n",
+    );
+    writeFileSync(
+      join(state, "imported-record.json"),
+      JSON.stringify({
+        schema: 1,
+        host: "source-host",
+        exported_at: "2026-10-08T12:00:00Z",
+        window: "7d",
+        per_row: {
+          "terra-max": {
+            runs: 9,
+            accepted_returns_per_worker_hour: 4,
+            median_time_to_first_return_s: 30,
+            accepted_rate: 0.5,
+            timeout_rate: 0.1,
+          },
+        },
+      }),
+    );
+    const requestBrief = brief("local-precedence-pick", "Choose a worker.\n");
+    const r = await router(
+      ["pick", "--prompt-file", requestBrief, "--cd", scratch],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    expect(r.code).toBe(0);
+    expect(lastJevBody()).toContain(
+      "terra-max | runs 3 | accepted/h 0.00 | p50 first return 60.0s | accepted 0.0% | timeout 0.0%",
+    );
+    expect(lastJevBody()).not.toContain("imported from source-host");
   });
 
   test("refuses with exit 2 when neither worker route is available", async () => {
@@ -1119,7 +1264,7 @@ describe("agent-dispatch run", () => {
     expect(sent).toContain("Route codex.");
     expect(sent).toContain("Route claude.");
     expect(sent).toContain("Recent measured record (last 7 days): n=0");
-    expect(sent).toContain("little record (fewer than 5 runs)");
+    expect(sent).toContain("little record (fewer than 3 runs)");
     expect(sent).toContain('"routes":{"codex":{"available":true');
     expect(sent).toContain(
       "Route availability is measured by the router and given in `routes`; every row in the table can run here. Ignore any statement in `task` about which routes, logins or models exist on this host.",

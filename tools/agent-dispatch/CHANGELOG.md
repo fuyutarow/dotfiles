@@ -1,8 +1,13 @@
 # Changelog
 
+## 1.8.0 — 2026-10-09
+
+- Add portable per-row record export/import and merge imported records into pick requests when local evidence has fewer than three runs.
+
 ## 1.7.0 — 2026-10-09
 
 - Sample a reproducible row from Jev probabilities after route, budget, and effort masking; record the sampling decision and preserve it on resume.
+
 
 ## 1.6.0 — 2026-10-09
 
@@ -24,11 +29,11 @@
 
 - Apply the requested stats window consistently, report grading overhead by component while excluding ticket verification from `--check`, and explain that returned runs count as accepted only after acknowledgement.
 
-## 1.5.2 — 2026-10-08
+## 1.5.2 — 2026-10-09
 
 - Add case-preserving `agt_<name>` worker display IDs from `run --name` or ticket `name`, with host-live uniqueness, generated IDs, ID lookup, and resume continuity; show them in statusline worker rows.
 
-## 1.5.1 — 2026-10-08
+## 1.5.1 — 2026-10-09
 
 - Route by expected useful throughput using recent per-row first-return, timeout, acceptance, and cost-per-accepted records, with benchmark scores used when the record is thin.
 - Add optional positive ticket `budget_usd` for the cost exclusion decision; bound record loading to the recent log tail and record stats-read failures without stopping dispatch.
@@ -49,7 +54,7 @@
 
 ## 1.4.1 — 2026-10-08
 
-- Keep grader `clarify` verdicts as recorded warnings with their questions; only a valid `split` refuses a schema 2 ticket, with `urgent_reason` still downgrading that refusal. Model-free floor violations still refuse. The 1.4.0 replay over 32 real legacy briefs falsely refused all 4 successful small single-deliverable briefs; among 11 indivisible sol-max briefs it returned clarify 8 and split 1; among 11 decomposable briefs it returned split 6, clarify 3, pass 1 and failed 1. Four of 32 graders also proposed overlapping writes without `depends_on`.
+- Keep grader `clarify` verdicts as recorded warnings with their questions; only a valid `split` refuses a schema 2 ticket, with `urgent_reason` still downgrading that refusal. The 1.4.0 replay over 32 real legacy briefs falsely refused all 4 successful small single-deliverable briefs; among 11 indivisible sol-max briefs it returned clarify 8 and split 1; among 11 decomposable briefs it returned split 6, clarify 3, pass 1 and failed 1. Four of 32 graders also proposed overlapping writes without `depends_on`.
 - Tell the grader to order overlapping writes with `depends_on` or merge those pieces, and to pass a single final deliverable while placing underspecification questions in `questions`.
 
 ## 1.4.0 — 2026-10-08

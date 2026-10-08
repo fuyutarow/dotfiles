@@ -49,6 +49,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   readdirSync,
   realpathSync,
   rmSync,
@@ -84,6 +85,7 @@ import {
   parseSince,
   replayStats,
   throughputStats,
+  perRowRecord,
 } from "./throughput-stats.ts";
 import {
   activeDir,
@@ -136,9 +138,26 @@ const SCHEMA = STATE_SCHEMA;
 const STATE_DIR = stateDir();
 const ACTIVE_DIR = activeDir();
 const LOG_FILE = join(STATE_DIR, "runs.jsonl");
+const IMPORTED_RECORD_FILE = join(STATE_DIR, "imported-record.json");
 const ROUTING_RECORD_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const ROUTING_RECORD_MIN_RUNS = 5;
+const ROUTING_RECORD_MIN_RUNS = 3;
 const ROUTING_LOG_TAIL_BYTES = 4 * 1024 * 1024;
+const RecordExportSchema = z.strictObject({
+  schema: z.literal(1),
+  host: z.string().min(1),
+  exported_at: z.string(),
+  window: z.string(),
+  per_row: z.record(
+    z.string(),
+    z.strictObject({
+      runs: z.number().int().nonnegative(),
+      accepted_returns_per_worker_hour: z.number().nullable(),
+      median_time_to_first_return_s: z.number().nullable(),
+      accepted_rate: z.number().min(0).max(1),
+      timeout_rate: z.number().min(0).max(1),
+    }),
+  ),
+});
 const CODEX_WORKER =
   process.env.AGENT_ROUTER_CODEX_WORKER ??
   join(import.meta.dir, "workers/codex.ts");
@@ -682,27 +701,69 @@ async function routingCriteria(roster: Roster): Promise<{
       ),
       failure: errorMessage(loaded.error).slice(0, 300),
     };
+  let imported: z.output<typeof RecordExportSchema> | undefined;
+  if (existsSync(IMPORTED_RECORD_FILE)) {
+    const read = await attempt(() =>
+      readFileSync(IMPORTED_RECORD_FILE, "utf8"),
+    );
+    const parsed = read.ok
+      ? jsonOf(RecordExportSchema).safeParse(read.value)
+      : undefined;
+    if (parsed?.success === true) imported = parsed.data;
+    else {
+      const reason = read.ok
+        ? (parsed?.error.issues[0]?.message ?? "invalid shape")
+        : errorMessage(read.error);
+      console.error(
+        `agent-dispatch: ignoring unreadable imported record: ${reason}`,
+      );
+    }
+  }
+  const exportedAt = imported?.exported_at;
+  const importedDate =
+    exportedAt === undefined ? undefined : exportedAt.slice(0, 10);
   const throughputLines = roster.choice.map((choice) => {
     const row = loaded.value.throughput.per_row[choice.id];
     const runs = row?.runs ?? 0;
-    return `${choice.id} | ${runs < 3 ? "UNMEASURED | " : ""}runs ${runs} | accepted/h ${row?.accepted_returns_per_worker_hour?.toFixed(2) ?? "unknown"} | p50 first return ${row?.median_time_to_first_return_s?.toFixed(1) ?? "unknown"}s | accepted ${((row?.accepted_rate ?? 0) * 100).toFixed(1)}% | timeout ${((row?.timeout_rate ?? 0) * 100).toFixed(1)}%`;
+    const measured = runs >= ROUTING_RECORD_MIN_RUNS ? row : undefined;
+    const importedRow = imported?.per_row[choice.id];
+    const picked = measured ?? importedRow;
+    let prefix = "";
+    if (measured === undefined) {
+      prefix =
+        importedRow === undefined
+          ? "UNMEASURED | "
+          : `imported from ${imported?.host} ${importedDate} | `;
+    }
+    return `${choice.id} | ${prefix}runs ${picked?.runs ?? 0} | accepted/h ${picked?.accepted_returns_per_worker_hour?.toFixed(2) ?? "unknown"} | p50 first return ${picked?.median_time_to_first_return_s?.toFixed(1) ?? "unknown"}${picked === undefined ? "" : "s"} | accepted ${((picked?.accepted_rate ?? 0) * 100).toFixed(1)}% | timeout ${((picked?.timeout_rate ?? 0) * 100).toFixed(1)}%`;
   });
   const criteria = Object.fromEntries(
     roster.choice.map((choice) => {
-      const rowRecord = loaded.value.throughput.per_row[choice.id];
+      const local = loaded.value.throughput.per_row[choice.id];
+      let rowRecord:
+        | typeof local
+        | z.output<typeof RecordExportSchema>["per_row"][string];
+      if ((local?.runs ?? 0) >= ROUTING_RECORD_MIN_RUNS) rowRecord = local;
+      else rowRecord = imported?.per_row[choice.id];
       const n = rowRecord?.runs ?? 0;
+      let provenance = "local";
+      if ((local?.runs ?? 0) < ROUTING_RECORD_MIN_RUNS)
+        provenance =
+          rowRecord === undefined
+            ? "UNMEASURED"
+            : `imported from ${imported?.host} ${importedDate}`;
       const record =
         `Recent measured record (last 7 days): n=${n}; ` +
         `median time to first return=${rowRecord?.median_time_to_first_return_s === null || rowRecord?.median_time_to_first_return_s === undefined ? "unknown" : `${rowRecord.median_time_to_first_return_s}s`}; ` +
         `timeout rate=${rowRecord === undefined ? "unknown" : `${(rowRecord.timeout_rate * 100).toFixed(1)}%`}; ` +
         `accepted rate=${rowRecord === undefined ? "unknown" : `${(rowRecord.accepted_rate * 100).toFixed(1)}%`}; ` +
-        `cost per accepted=${rowRecord?.cost_per_accepted_usd === null || rowRecord?.cost_per_accepted_usd === undefined ? "unknown" : `$${rowRecord.cost_per_accepted_usd.toFixed(4)}`}` +
+        `cost per accepted=${local?.cost_per_accepted_usd === null || local?.cost_per_accepted_usd === undefined ? "unknown" : `$${local.cost_per_accepted_usd.toFixed(4)}`}` +
         (n < ROUTING_RECORD_MIN_RUNS
           ? `; little record (fewer than ${ROUTING_RECORD_MIN_RUNS} runs)`
           : "");
       return [
         choice.id,
-        `${criterionFor(roster, choice, loaded.value.tally.get(choice.id))} ${record}`,
+        `${criterionFor(roster, choice, loaded.value.tally.get(choice.id))} ${provenance} ${record}`,
       ];
     }),
   );
@@ -3598,6 +3659,50 @@ function stats(flags: {
   return flags.check && throughput.grading?.exceeds_saves === true ? 1 : 0;
 }
 
+function exportRecord(since: string, out: string | undefined): number {
+  const nowMs = epochMilliseconds();
+  const sinceMs = parseSince(since, nowMs);
+  if (!Number.isFinite(sinceMs))
+    fatal(
+      `invalid --since value '${since}': use an ISO instant or duration such as 7d`,
+    );
+  const logText = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf8") : "";
+  const candidate = RecordExportSchema.safeParse({
+    schema: 1,
+    host: hostname(),
+    exported_at: now(),
+    window: since,
+    per_row: perRowRecord(logText, { now: nowMs, sinceMs, grading: false }),
+  });
+  if (!candidate.success)
+    fatal(
+      `could not form record export: ${candidate.error.issues[0]?.message ?? "invalid shape"}`,
+    );
+  const record = candidate.data;
+  const text = `${JSON.stringify(record, null, 2)}\n`;
+  if (out === undefined) process.stdout.write(text);
+  else writeFileSync(out, text);
+  return 0;
+}
+
+function importRecord(file: string): number {
+  const parsed = jsonOf(RecordExportSchema).safeParse(
+    readFileSync(file, "utf8"),
+  );
+  if (!parsed.success)
+    fatal(
+      `invalid record export: ${parsed.error.issues[0]?.message ?? "wrong shape"}`,
+    );
+  mkdirSync(STATE_DIR, { recursive: true });
+  const temporary = `${IMPORTED_RECORD_FILE}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(parsed.data, null, 2)}\n`);
+  renameSync(temporary, IMPORTED_RECORD_FILE);
+  process.stdout.write(
+    `Imported ${Object.keys(parsed.data.per_row).length} rows from ${parsed.data.host} (${parsed.data.exported_at.slice(0, 10)}).\n`,
+  );
+  return 0;
+}
+
 const ExportRunLine = z.looseObject({
   kind: z.literal("run"),
   run_id: z.string(),
@@ -4243,6 +4348,29 @@ const argv = cli({
       },
     }),
     command({
+      name: "record-export",
+      alias: "record",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      flags: {
+        since: {
+          type: String,
+          default: "7d",
+          description: "record window (default 7d)",
+        },
+        out: { type: String, description: "write to a file instead of stdout" },
+      },
+      help: { description: "agent-dispatch record export" },
+    }),
+    command({
+      name: "record-import",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: ["<file>"],
+      help: { description: "agent-dispatch record import <file>" },
+    }),
+    command({
       name: "ack",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -4352,14 +4480,16 @@ const argv = cli({
 
 async function main(): Promise<number | undefined> {
   // Cleye leaves excess positionals in argv._ (writing-bun-scripts BG1); result and grade take one.
-  const positionals =
+  let positionals = 0;
+  if (
+    argv.command === "record-import" ||
     argv.command === "grade-replay" ||
     argv.command === "grade" ||
     argv.command === "ack" ||
     argv.command === "result" ||
     argv.command === "resume"
-      ? 1
-      : 0;
+  )
+    positionals = 1;
   if (argv._.length > positionals)
     fatal(`unexpected argument: ${String(argv._[positionals])}`);
   if (argv.command === "run") {
@@ -4449,6 +4579,15 @@ async function main(): Promise<number | undefined> {
       check: check ?? false,
       replay,
     });
+  }
+  if (argv.command === "record-export") {
+    const { since, out } = argv.flags;
+    if (since === "" || out === "") fatal("a value is required");
+    return exportRecord(since ?? "7d", out);
+  }
+  if (argv.command === "record-import") {
+    if (argv._.length !== 1) fatal("record import needs <file>");
+    return importRecord(argv._.file);
   }
   if (argv.command === "ack") {
     if (argv._.length !== 1) fatal("ack needs <run_id>");

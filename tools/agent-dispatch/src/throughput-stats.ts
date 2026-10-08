@@ -142,6 +142,24 @@ export type ThroughputOptions = Readonly<{
   grading: boolean;
 }>;
 
+/** The compact, shareable subset used by pick requests and record exports. */
+export function perRowRecord(log: string, options: ThroughputOptions) {
+  const report = throughputStats(log, options);
+  return Object.fromEntries(
+    Object.entries(report.per_row).map(([row, stats]) => [
+      row,
+      {
+        runs: stats.runs,
+        accepted_returns_per_worker_hour:
+          stats.accepted_returns_per_worker_hour,
+        median_time_to_first_return_s: stats.median_time_to_first_return_s,
+        accepted_rate: stats.accepted_rate,
+        timeout_rate: stats.timeout_rate,
+      },
+    ]),
+  );
+}
+
 export function throughputStats(
   log: string,
   { now, sinceMs, grading }: ThroughputOptions,

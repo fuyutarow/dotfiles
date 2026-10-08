@@ -30,7 +30,7 @@
 //                      every non-ok receipt has a non-empty `cause` (codex's last error event, else
 //                      "codex printed no error event" + the last stderr line); every receipt has
 //                      `progress` {last, commands, files} — at a timeout, where the worker was.
-//   Waits / liveness     bounded by --timeout-s (default 1800; this runs in the background).
+//   Waits / liveness     bounded by --timeout-s (default 900; this runs in the background).
 //   Fallbacks / handoffs none — never another model, never another sandbox. A refusal says why.
 //   C5  evolution   receipt fields are additive; `schema` bumps on any removal or meaning change.
 // --emit-envelope PATH writes the P7 resource envelope for exactly this call (same checks, no
@@ -67,7 +67,7 @@ import {
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
 const MAX_TIMEOUT_S = 14400;
-const DEFAULT_TIMEOUT_S = 1800;
+const DEFAULT_TIMEOUT_S = 900;
 const IDENTICAL_TOOL_ERROR_LIMIT = 5; // Stop a worker that is retrying the same broken call indefinitely.
 // AGENT_DISPATCH_CODEX_HEARTBEAT_S is a test seam (a test cannot wait 30 s for the first liveness line).
 const parsedHeartbeat = Number(

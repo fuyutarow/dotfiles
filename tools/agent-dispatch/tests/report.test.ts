@@ -3,6 +3,7 @@ import { z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
 import {
   parseReport,
+  parseReturn,
   renderReport,
   reportJsonSchema,
   withReportInstruction,
@@ -23,6 +24,29 @@ describe("report", () => {
     expect(parseReport(undefined, text)).toEqual({ ok: true, report: GOOD });
     expect(parseReport(undefined, `\`\`\`json\n${text}\n\`\`\``).ok).toBe(true);
     expect(parseReport(GOOD, "").ok).toBe(true);
+  });
+
+  test("parses the tagged RETURN record from a final message", () => {
+    const record = {
+      findings: [{ text: "Premise is false", fleet: true }],
+      evidence: ["tests/a.test.ts"],
+      impact_on_brief: "The requested method cannot establish the claim",
+      proposed_next: "Choose between the two approaches",
+      artifacts: ["notes.md"],
+    };
+    const message = `${JSON.stringify(GOOD)}\n\n\`\`\`agent-dispatch-return\n${JSON.stringify(record)}\n\`\`\``;
+    expect(parseReturn(message)).toEqual({ kind: "valid", record });
+    expect(parseReport(undefined, message)).toEqual({ ok: true, report: GOOD });
+  });
+
+  test("names malformed RETURN blocks", () => {
+    const parsed = parseReturn(
+      '```agent-dispatch-return\n{"findings":[]}\n```',
+    );
+    expect(parsed.kind).toBe("invalid");
+    expect(
+      parsed.kind === "invalid" ? parsed.error : "unexpected valid return",
+    ).toContain("agent-dispatch-return block has the wrong shape");
   });
 
   test("empty, non-JSON and wrong-shape messages are errors that say which", () => {
@@ -59,6 +83,14 @@ describe("report", () => {
       true,
     );
     expect(prompt).toContain('"for_coordinator": [string]');
+    expect(prompt).toContain(
+      "contradicts the brief's premise, scope or method",
+    );
+    expect(prompt).toContain(
+      "diverging outcomes the dispatcher should choose between",
+    );
+    expect(prompt).toContain("you are told the time box is ending");
+    expect(prompt).toContain("`agent-dispatch-return`");
   });
 
   test("renderReport prints every section, even empty ones", () => {

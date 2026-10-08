@@ -8,6 +8,7 @@
 //   verify = ["bun test tools/agent-dispatch/tests"]
 //   verify_timeout_s = 1200                  # optional; bound for all verify commands together
 //   timeout_s = 3600                         # optional; worker wall clock (60..14400)
+//   timeout_reason = "why this exceeds 1800 seconds" # required when timeout_s > 1800
 //   capabilities = ["long-tool-loop"]        # optional; handed to Jev as required capabilities
 //   +++
 //   <the prose the worker receives>
@@ -15,6 +16,9 @@ import { fromThrowable, z } from "../../shared/src/zod.ts";
 
 export const TICKET_SCHEMA = 1;
 export const DEFAULT_VERIFY_TIMEOUT_S = 1200;
+export const DEFAULT_TIMEOUT_S = 900;
+export const EXTENDED_TIMEOUT_THRESHOLD_S = 1800;
+export const MAX_TIMEOUT_S = 14400;
 
 const writeGlob = z
   .string()
@@ -23,14 +27,26 @@ const writeGlob = z
     message: "a write glob is relative to --cd and stays inside it",
   });
 
-export const TicketSchema = z.strictObject({
-  schema: z.literal(TICKET_SCHEMA),
-  writes: z.array(writeGlob),
-  verify: z.array(z.string().trim().min(1)).default([]),
-  verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),
-  timeout_s: z.number().int().min(60).max(14400).optional(),
-  capabilities: z.array(z.string().min(1)).default([]),
-});
+export const TicketSchema = z
+  .strictObject({
+    schema: z.literal(TICKET_SCHEMA),
+    writes: z.array(writeGlob),
+    verify: z.array(z.string().trim().min(1)).default([]),
+    verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),
+    timeout_s: z.number().int().min(60).max(MAX_TIMEOUT_S).optional(),
+    timeout_reason: z.string().trim().min(1).optional(),
+    capabilities: z.array(z.string().min(1)).default([]),
+  })
+  .refine(
+    (ticket) =>
+      ticket.timeout_s === undefined ||
+      ticket.timeout_s <= EXTENDED_TIMEOUT_THRESHOLD_S ||
+      ticket.timeout_reason !== undefined,
+    {
+      path: ["timeout_reason"],
+      message: `required when timeout_s exceeds ${EXTENDED_TIMEOUT_THRESHOLD_S} seconds`,
+    },
+  );
 export type Ticket = z.output<typeof TicketSchema>;
 
 export type ParsedBrief =

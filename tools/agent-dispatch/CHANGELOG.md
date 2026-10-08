@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 — 2026-10-08
+
+- Set the default worker time box to 900 seconds; require a recorded reason above 1800 seconds, up to the 14400-second hard maximum.
+- Add worker RETURN triggers and a validated `agent-dispatch-return` record; returned work is a success and remains eligible for ticket verification.
+- Preserve RETURN data or an explicit no-RETURN note in timeout partial reports.
+
 ## 1.2.1 — 2026-10-08
 
 - Add Codex guidance for safe `apply_patch` calls and stop workers after five identical consecutive tool errors, preserving a resumable partial report.

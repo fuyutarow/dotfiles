@@ -90,12 +90,20 @@ import {
 import { postJev, type JevTrace } from "./jev-client.ts";
 import {
   parseReport,
+  parseReturn,
   renderReport,
-  reportJsonSchema,
+  ReturnSchema,
   withReportInstruction,
   WorkerReport,
 } from "./report.ts";
-import { parseTicket, verifyLine, type Ticket } from "./ticket.ts";
+import {
+  DEFAULT_TIMEOUT_S,
+  EXTENDED_TIMEOUT_THRESHOLD_S,
+  MAX_TIMEOUT_S,
+  parseTicket,
+  verifyLine,
+  type Ticket,
+} from "./ticket.ts";
 import {
   killRunningVerify,
   runVerify,
@@ -861,6 +869,7 @@ interface RunFlags {
   choice: string;
   label: string | undefined;
   timeoutS: number | undefined;
+  timeoutReason: string | undefined;
 }
 
 function refuseUnrunnable(roster: Roster, id: string): Choice {
@@ -916,16 +925,12 @@ function workerArgs(
   progress: string,
   runId: string,
   resume: string | undefined,
-  schemaFile: string,
 ): string[] {
   if (row.route === "codex")
     return [
       CODEX_WORKER,
       "--choice",
       row.id,
-      // the typed report's JSON schema: `codex exec --output-schema` (fresh and resumed)
-      "--output-schema",
-      schemaFile,
       "--sandbox",
       flags.sandbox,
       "--cd",
@@ -958,12 +963,9 @@ function workerArgs(
     "--max-budget-usd",
     String(roster.claude_run.max_budget_usd),
     "--timeout-ms",
-    String((flags.timeoutS ?? 1800) * 1000),
+    String((flags.timeoutS ?? DEFAULT_TIMEOUT_S) * 1000),
     "--progress-file",
     progress,
-    // the typed report's JSON schema: `claude --json-schema`; the structured output lands in the relay
-    "--json-schema-file",
-    schemaFile,
     // router-dispatched claude sessions stay on disk so `agent-dispatch resume` can continue them
     "--persist-session",
     ...(resume === undefined ? [] : ["--resume", resume]),
@@ -1296,12 +1298,31 @@ interface Launch {
 /** Start the worker for a pick, wait for it, verify and grade; shared by `run` and `resume`. */
 async function launch(l: Launch): Promise<number> {
   const { roster, flags, brief, ticket, pick, label, resume } = l;
-  let timeout: { seconds: number; source: "cli" | "ticket" | "default" };
-  if (flags.timeoutS !== undefined)
-    timeout = { seconds: flags.timeoutS, source: "cli" };
-  else if (ticket?.timeout_s !== undefined)
-    timeout = { seconds: ticket.timeout_s, source: "ticket" };
-  else timeout = { seconds: 1800, source: "default" };
+  let timeout: {
+    seconds: number;
+    source: "cli" | "ticket" | "default";
+    reason?: string;
+  };
+  if (flags.timeoutS !== undefined) {
+    const reason =
+      flags.timeoutReason ??
+      (ticket?.timeout_s === flags.timeoutS
+        ? ticket.timeout_reason
+        : undefined);
+    timeout = {
+      seconds: flags.timeoutS,
+      source: "cli",
+      ...(reason === undefined ? {} : { reason }),
+    };
+  } else if (ticket?.timeout_s !== undefined) {
+    timeout = {
+      seconds: ticket.timeout_s,
+      source: "ticket",
+      ...(ticket.timeout_reason === undefined
+        ? {}
+        : { reason: ticket.timeout_reason }),
+    };
+  } else timeout = { seconds: DEFAULT_TIMEOUT_S, source: "default" };
   const row = refuseUnrunnable(roster, pick.choice);
   const routeStatus = hostRoutes()[row.route];
   if (!routeStatus.available)
@@ -1383,8 +1404,6 @@ async function launch(l: Launch): Promise<number> {
         : workerText,
     ),
   );
-  const schemaFile = join(STATE_DIR, "report.schema.json");
-  writeFileSync(schemaFile, reportJsonSchema());
   const args = workerArgs(
     roster,
     row,
@@ -1392,7 +1411,6 @@ async function launch(l: Launch): Promise<number> {
     progress,
     runId,
     resume?.session,
-    schemaFile,
   );
   const t0 = performance.now();
   const child = Bun.spawn([process.execPath, ...args], {
@@ -1431,6 +1449,9 @@ async function launch(l: Launch): Promise<number> {
       ...(ticket === undefined ? {} : { ticket }),
       timeout_s: timeout.seconds,
       timeout_source: timeout.source,
+      ...(timeout.reason === undefined
+        ? {}
+        : { timeout_reason: timeout.reason }),
       ...(resume === undefined ? {} : { resumed_from: resume.from }),
       started_at: active.started_at,
       ...(active.dispatcher_session === undefined
@@ -1444,6 +1465,10 @@ async function launch(l: Launch): Promise<number> {
         files_changed: filesChanged,
         last_message_tail: "",
         cause: `agent-dispatch received ${signal}`,
+        return: {
+          received: false,
+          note: "no RETURN was received before the worker stopped",
+        },
       },
       orphans_reaped: orphans.reaped,
       ...(orphans.left.length === 0 ? {} : { orphans_left: orphans.left }),
@@ -1468,7 +1493,7 @@ async function launch(l: Launch): Promise<number> {
   });
 
   const out = await new Response(child.stdout).text();
-  const exit = await child.exited;
+  const workerExit = await child.exited;
   const orphans = await reapWorkerGroup(child.pid);
   const done = progressAtEnd(progress);
   rmSync(progress, { force: true });
@@ -1485,10 +1510,19 @@ async function launch(l: Launch): Promise<number> {
           }),
         }
       : codexWorker;
+  const rawWorker = worker.success ? worker.data : undefined;
+  const lastMessage =
+    z.looseObject({ last_message: z.string().optional() }).safeParse(rawWorker)
+      .data?.last_message ?? "";
+  const parsedReturn = parseReturn(lastMessage);
+  let workerData = rawWorker;
+  if (parsedReturn.kind === "valid" && workerData !== undefined)
+    workerData = { ...workerData, outcome: "returned" };
+  const exit = parsedReturn.kind === "valid" ? 0 : workerExit;
   const progressField = done === undefined ? {} : { progress: done };
   const workerOutcome = z
     .looseObject({ outcome: z.string().optional() })
-    .safeParse(worker.success ? worker.data : undefined);
+    .safeParse(workerData);
   const outcomeName = workerOutcome.success
     ? workerOutcome.data.outcome
     : undefined;
@@ -1514,10 +1548,11 @@ async function launch(l: Launch): Promise<number> {
       : await verifyAfterWorker(ticket, active.cwd, outcomeName, done);
   const stoppedWith = z
     .looseObject({ outcome: z.string(), session: z.string() })
-    .safeParse(worker.success ? worker.data : undefined);
+    .safeParse(workerData);
   const resumeHint =
     stoppedWith.success &&
     stoppedWith.data.outcome !== "ok" &&
+    stoppedWith.data.outcome !== "returned" &&
     (row.route === "codex" ||
       existsSync(claudeTranscript(active.cwd, stoppedWith.data.session)))
       ? `agent-dispatch resume ${runId}`
@@ -1539,7 +1574,7 @@ async function launch(l: Launch): Promise<number> {
   }
   const stoppedSubtypes = z
     .looseObject({ stop_subtype: z.string().optional() })
-    .safeParse(worker.success ? worker.data : undefined);
+    .safeParse(workerData);
   const stopCause =
     outcomeName === "timeout" ||
     exit === 3 ||
@@ -1547,7 +1582,6 @@ async function launch(l: Launch): Promise<number> {
     outcomeName === "stopped" ||
     stoppedSubtypes.data?.stop_subtype === "error_max_turns" ||
     stoppedSubtypes.data?.stop_subtype?.includes("budget") === true;
-  const workerData = worker.success ? worker.data : undefined;
   const lastMessageTail =
     z
       .looseObject({ last_message: z.string().optional() })
@@ -1561,6 +1595,16 @@ async function launch(l: Launch): Promise<number> {
     (exit === 3 ? "timeout" : undefined) ??
     stoppedSubtypes.data?.stop_subtype ??
     "unknown cause";
+  let partialReturn: unknown = {
+    received: false,
+    note: "no RETURN was received before timeout",
+  };
+  if (parsedReturn.kind === "valid") partialReturn = parsedReturn.record;
+  else if (parsedReturn.kind === "invalid")
+    partialReturn = {
+      received: false,
+      note: `malformed RETURN: ${parsedReturn.error}`,
+    };
   const partialReport = stopCause
     ? {
         last_progress: done?.last ?? "no progress observed",
@@ -1568,8 +1612,13 @@ async function launch(l: Launch): Promise<number> {
         files_changed: delta.paths,
         last_message_tail: lastMessageTail,
         cause: workerCause ?? `worker stopped (${partialCause})`,
+        return: partialReturn,
       }
     : undefined;
+  const returnFields: Record<string, unknown> = {};
+  if (parsedReturn.kind === "valid") returnFields.return = parsedReturn.record;
+  else if (parsedReturn.kind === "invalid")
+    returnFields.return_error = parsedReturn.error;
   const receipt = {
     schema: SCHEMA,
     host: currentHost(),
@@ -1586,6 +1635,7 @@ async function launch(l: Launch): Promise<number> {
     ...(ticket === undefined ? {} : { ticket }),
     timeout_s: timeout.seconds,
     timeout_source: timeout.source,
+    ...(timeout.reason === undefined ? {} : { timeout_reason: timeout.reason }),
     ...(resume === undefined ? {} : { resumed_from: resume.from }),
     started_at: active.started_at,
     ...(active.dispatcher_session === undefined
@@ -1594,7 +1644,8 @@ async function launch(l: Launch): Promise<number> {
     ended_at: now(),
     exit,
     ...(resumeHint === undefined ? {} : { resume_with: resumeHint }),
-    ...reportFields(worker.success ? worker.data : undefined),
+    ...reportFields(workerData),
+    ...returnFields,
     ...(verified === undefined
       ? {}
       : { verify: verified.results, verify_summary: verified.summary }),
@@ -1608,7 +1659,7 @@ async function launch(l: Launch): Promise<number> {
         : "process group only; this router does not assign a per-run Linux cgroup or recover reparented descendants that called setsid",
     // agent-dispatch's own receipt carries progress; a claude worker's comes from its progress file
     worker: worker.success
-      ? { ...progressField, sandbox: flags.sandbox, ...worker.data }
+      ? { ...progressField, sandbox: flags.sandbox, ...workerData }
       : unreadable("agent-dispatch", "codex-failed", out),
   };
   const runStats = statsFor(
@@ -1636,6 +1687,8 @@ async function launch(l: Launch): Promise<number> {
             active.cwd,
             verified,
           );
+  } else if (parsedReturn.kind === "valid") {
+    recordWaiver(runId, "returned early with findings", "router");
   }
   process.stdout.write(`${JSON.stringify({ ...receipt, ...graded })}\n`);
   return writeViolations.length > 0 ? 1 : exit;
@@ -1829,6 +1882,7 @@ const LogLine = z.looseObject({
     .optional(),
   timeout_s: z.number().int().optional(),
   timeout_source: z.enum(["cli", "ticket", "default"]).optional(),
+  timeout_reason: z.string().optional(),
   writes_check: z.union([z.array(z.string()), z.string()]).optional(),
   writes_violations: z.array(z.string()).optional(),
   writes_unattributed: z.array(z.string()).optional(),
@@ -1846,6 +1900,8 @@ const LogLine = z.looseObject({
   // run recorded before it. report is unknown here so a malformed one never drops the whole line.
   report: z.unknown().optional(),
   report_error: z.string().optional(),
+  return: ReturnSchema.optional(),
+  return_error: z.string().optional(),
   report_partial: z.unknown().optional(),
   orphans_reaped: z
     .array(z.looseObject({ pid: z.number(), cmd: z.string() }))
@@ -2644,6 +2700,7 @@ async function resumeCommand(
   id: string,
   promptFile: string | undefined,
   timeoutS: number | undefined,
+  timeoutReason: string | undefined,
 ): Promise<number> {
   const roster = await loadRosterOrDie();
   const runId = resolveRunId(id);
@@ -2699,6 +2756,7 @@ async function resumeCommand(
       choice: "auto",
       label: undefined,
       timeoutS,
+      timeoutReason,
     },
     brief,
     ticket,
@@ -2762,7 +2820,11 @@ const argv = cli({
         timeoutS: {
           type: Number,
           description:
-            "worker wall clock in seconds (60..14400; default from ticket or 1800)",
+            "worker wall clock in seconds (60..14400; default from ticket or 900)",
+        },
+        timeoutReason: {
+          type: String,
+          description: "required justification when --timeout-s exceeds 1800",
         },
       },
       help: { description: "Jev picks a row; run the worker" },
@@ -2874,7 +2936,11 @@ const argv = cli({
         timeoutS: {
           type: Number,
           description:
-            "worker wall clock in seconds (60..14400; default from ticket or 1800)",
+            "worker wall clock in seconds (60..14400; default from ticket or 900)",
+        },
+        timeoutReason: {
+          type: String,
+          description: "required justification when --timeout-s exceeds 1800",
         },
       },
       help: {
@@ -2928,10 +2994,20 @@ async function main(): Promise<number | undefined> {
     const timeoutS = f.timeoutS;
     if (
       timeoutS !== undefined &&
-      (!Number.isInteger(timeoutS) || timeoutS < 1 || timeoutS > 14400)
+      (!Number.isInteger(timeoutS) || timeoutS < 60 || timeoutS > MAX_TIMEOUT_S)
     )
       fatal(
-        `--timeout-s must be a positive whole number no greater than 14400 seconds: ${timeoutS}`,
+        `--timeout-s must be a whole number from 60 through ${MAX_TIMEOUT_S} seconds: ${timeoutS}`,
+      );
+    if (f.timeoutReason !== undefined && f.timeoutReason.trim() === "")
+      fatal("--timeout-reason requires a non-empty reason");
+    if (
+      timeoutS !== undefined &&
+      timeoutS > EXTENDED_TIMEOUT_THRESHOLD_S &&
+      f.timeoutReason === undefined
+    )
+      fatal(
+        `--timeout-s above ${EXTENDED_TIMEOUT_THRESHOLD_S} seconds requires --timeout-reason <why>`,
       );
     if (
       f.promptFile === undefined ||
@@ -2950,6 +3026,7 @@ async function main(): Promise<number | undefined> {
       choice: f.choice,
       label: f.label,
       timeoutS,
+      timeoutReason: f.timeoutReason,
     });
   }
   if (argv.command === "pick") {
@@ -2974,16 +3051,26 @@ async function main(): Promise<number | undefined> {
       argv.flags.brief ?? false,
     );
   if (argv.command === "resume") {
-    const { promptFile, timeoutS } = argv.flags;
+    const { promptFile, timeoutS, timeoutReason } = argv.flags;
     if (promptFile === "") fatal("a value is required");
     if (
       timeoutS !== undefined &&
-      (!Number.isInteger(timeoutS) || timeoutS < 1 || timeoutS > 14400)
+      (!Number.isInteger(timeoutS) || timeoutS < 60 || timeoutS > MAX_TIMEOUT_S)
     )
       fatal(
-        `--timeout-s must be a positive whole number no greater than 14400 seconds: ${timeoutS}`,
+        `--timeout-s must be a whole number from 60 through ${MAX_TIMEOUT_S} seconds: ${timeoutS}`,
       );
-    return resumeCommand(argv._.runId, promptFile, timeoutS);
+    if (timeoutReason !== undefined && timeoutReason.trim() === "")
+      fatal("--timeout-reason requires a non-empty reason");
+    if (
+      timeoutS !== undefined &&
+      timeoutS > EXTENDED_TIMEOUT_THRESHOLD_S &&
+      timeoutReason === undefined
+    )
+      fatal(
+        `--timeout-s above ${EXTENDED_TIMEOUT_THRESHOLD_S} seconds requires --timeout-reason <why>`,
+      );
+    return resumeCommand(argv._.runId, promptFile, timeoutS, timeoutReason);
   }
   if (argv.command === "grade")
     return gradeCommand(argv._.runId, argv.flags.evidence, argv.flags.waive);
@@ -3061,11 +3148,17 @@ function resultCommand(
     `outcome=${outcome}`,
     `exit=${logged.exit ?? "?"}`,
     `elapsed=${worker?.elapsed_s === undefined ? "?" : `${worker.elapsed_s}s`}`,
-    ...(outcome === "ok" ? [] : [`cause=${cause ?? "not recorded"}`]),
+    ...(outcome === "ok" || outcome === "returned"
+      ? []
+      : [`cause=${cause ?? "not recorded"}`]),
     `progress=${JSON.stringify(worker?.progress ?? null)}`,
     `session=${worker?.session ?? "none"}`,
   ];
   process.stdout.write(`${fields.join(" ")}\n`);
+  if (logged.return !== undefined)
+    process.stdout.write(`RETURN: ${JSON.stringify(logged.return)}\n`);
+  if (logged.return_error !== undefined)
+    process.stdout.write(`RETURN error: ${logged.return_error}\n`);
   if (logged.report_partial !== undefined)
     process.stdout.write(
       `Partial (harness-written): ${JSON.stringify(logged.report_partial)}\n`,

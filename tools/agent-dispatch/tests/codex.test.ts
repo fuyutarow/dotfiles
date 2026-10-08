@@ -432,7 +432,7 @@ describe("agent-dispatch", () => {
     expect(env.success).toBe(true);
   });
 
-  test("the default timeout is 1800 seconds", () => {
+  test("the default timeout is 900 seconds", () => {
     const dir = scratch();
     const path = join(dir, "default.resource.json");
     const p = Bun.spawnSync(["bun", script, ...FULL, "--emit-envelope", path], {
@@ -443,7 +443,7 @@ describe("agent-dispatch", () => {
     const envelope = jsonOf(
       z.object({ walltime_seconds: z.number() }),
     ).safeParse(readFileSync(path, "utf8"));
-    expect(envelope.success && envelope.data.walltime_seconds).toBe(1830);
+    expect(envelope.success && envelope.data.walltime_seconds).toBe(930);
   });
 
   test("--run-id names the receipt file and its run_id field", () => {

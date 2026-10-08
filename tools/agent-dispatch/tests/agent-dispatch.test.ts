@@ -402,6 +402,10 @@ describe("agent-dispatch run", () => {
     const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("jev");
     expect(receipt.worker.outcome).toBe("ok");
+    expect(receipt).toMatchObject({
+      timeout_s: 900,
+      timeout_source: "default",
+    });
     expect(readFileSync(join(scratch, "argv.log"), "utf8")).toContain(
       '"--choice","luna-max"',
     );
@@ -460,6 +464,249 @@ describe("agent-dispatch run", () => {
     expect(decodedJson(Receipt, r.out.trim()).worker.outcome).toBe(
       "codex-failed",
     );
+  });
+
+  test("an extended CLI time box requires and records its reason", async () => {
+    const target = brief("timeout-reason", "Do bounded work.\n");
+    const refused = await router([
+      "run",
+      "--prompt-file",
+      target,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+      "--timeout-s",
+      "2000",
+    ]);
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain(
+      "--timeout-s above 1800 seconds requires --timeout-reason",
+    );
+
+    const accepted = await router([
+      "run",
+      "--prompt-file",
+      target,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+      "--timeout-s",
+      "2000",
+      "--timeout-reason",
+      "long integration check",
+    ]);
+    expect(accepted.code).toBe(0);
+    expect(
+      decodedJson(
+        z.looseObject({
+          timeout_s: z.number(),
+          timeout_source: z.string(),
+          timeout_reason: z.string(),
+        }),
+        accepted.out.trim(),
+      ),
+    ).toMatchObject({
+      timeout_s: 2000,
+      timeout_source: "cli",
+      timeout_reason: "long integration check",
+    });
+    expect(readFileSync(join(accepted.state, "runs.jsonl"), "utf8")).toContain(
+      '"timeout_reason":"long integration check"',
+    );
+  });
+
+  test("a ticket's extended timeout reason is recorded with its effective bound", async () => {
+    const target = brief(
+      "ticket-timeout-reason",
+      '+++\nschema = 1\nwrites = []\ntimeout_s = 1801\ntimeout_reason = "extended integration checks"\n+++\nDo bounded work.\n',
+    );
+    const r = await router([
+      "run",
+      "--prompt-file",
+      target,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+    ]);
+    expect(r.code).toBe(0);
+    expect(
+      decodedJson(
+        z.looseObject({
+          timeout_s: z.number(),
+          timeout_source: z.string(),
+          timeout_reason: z.string(),
+        }),
+        r.out.trim(),
+      ),
+    ).toMatchObject({
+      timeout_s: 1801,
+      timeout_source: "ticket",
+      timeout_reason: "extended integration checks",
+    });
+  });
+
+  test("a valid RETURN is successful, verified, and does not gate a later dispatch", async () => {
+    const state = join(scratch, "returned-state");
+    const returnRecord = {
+      findings: [
+        { text: "The brief's premise conflicts with the source", fleet: true },
+      ],
+      evidence: ["src/actual.ts: the premise is false"],
+      impact_on_brief: "The requested change would encode the wrong behavior",
+      proposed_next: "Choose whether to revise the premise or scope",
+      artifacts: ["src/actual.ts"],
+    };
+    const message = `{
+  "summary": "Returned with a finding",
+  "changes": [],
+  "checks": [],
+  "for_coordinator": [],
+  "open": []
+}\n\n\`\`\`agent-dispatch-return\n${JSON.stringify(returnRecord)}\n\`\`\``;
+    const ticket = brief(
+      "returned-verified",
+      '+++\nschema = 1\nwrites = []\nverify = ["true"]\n+++\nWork until a return trigger.\n',
+    );
+    const first = await router(
+      [
+        "run",
+        "--prompt-file",
+        ticket,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+        FAKE_LAST: message,
+        CLAUDE_CODE_SESSION_ID: "return-test",
+      },
+    );
+    expect(first.code).toBe(0);
+    expect(
+      decodedJson(
+        z.looseObject({
+          exit: z.number(),
+          worker: z.looseObject({ outcome: z.string() }),
+          return: z.unknown(),
+          verify_summary: z.string(),
+        }),
+        first.out.trim(),
+      ),
+    ).toMatchObject({
+      exit: 0,
+      worker: { outcome: "returned" },
+      return: returnRecord,
+      verify_summary: "1/1 passed",
+    });
+    expect(
+      decodedJson(
+        RunLogRecord,
+        readFileSync(join(state, "runs.jsonl"), "utf8").split("\n")[0] ?? "",
+      ).stats,
+    ).toMatchObject({ outcome: "returned", exit: 0 });
+    const runId = decodedJson(
+      z.looseObject({ run_id: z.string() }),
+      first.out.trim(),
+    ).run_id;
+    const shown = await router(["result", runId], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(shown.out).toContain("RETURN:");
+    const second = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      { AGENT_ROUTER_STATE_DIR: state, CLAUDE_CODE_SESSION_ID: "return-test" },
+    );
+    expect(second.code).toBe(0);
+  });
+
+  test("a RETURN without ticket verification does not gate a later dispatch", async () => {
+    const state = join(scratch, "returned-unverified-state");
+    const returned = `{
+  "summary": "Returned",
+  "changes": [],
+  "checks": [],
+  "for_coordinator": [],
+  "open": []
+}\n\n\`\`\`agent-dispatch-return\n${JSON.stringify({
+      findings: [{ text: "A premise is contradicted" }],
+      evidence: ["source"],
+      impact_on_brief: "The task must change",
+      proposed_next: "Coordinator chooses scope",
+      artifacts: [],
+    })}\n\`\`\``;
+    const first = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      { AGENT_ROUTER_STATE_DIR: state, FAKE_LAST: returned },
+    );
+    expect(first.code).toBe(0);
+    expect(
+      decodedJson(
+        z.looseObject({ worker: z.looseObject({ outcome: z.string() }) }),
+        first.out.trim(),
+      ).worker.outcome,
+    ).toBe("returned");
+    const second = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    expect(second.code).toBe(0);
+  });
+
+  test("a malformed RETURN is named and keeps the existing outcome", async () => {
+    const r = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      { FAKE_LAST: '```agent-dispatch-return\n{"findings":[]}\n```' },
+    );
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        worker: z.looseObject({ outcome: z.string() }),
+        return_error: z.string(),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.worker.outcome).toBe("ok");
+    expect(receipt.return_error).toContain(
+      "agent-dispatch-return block has the wrong shape",
+    );
+  });
+
+  test("Claude final messages are parsed for RETURN blocks", async () => {
+    const record = {
+      findings: [{ text: "Method conflicts with the brief" }],
+      evidence: ["source proves the conflict"],
+      impact_on_brief: "The requested result would be invalid",
+      proposed_next: "Select the intended method",
+      artifacts: [],
+    };
+    const message = `\n\`\`\`agent-dispatch-return\n${JSON.stringify(record)}\n\`\`\``;
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("claude-return", "PICK=sonnet-high\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      { AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE, FAKE_LAST: message },
+    );
+    expect(r.code).toBe(0);
+    expect(
+      decodedJson(
+        z.looseObject({
+          worker: z.looseObject({ outcome: z.string() }),
+          return: z.unknown(),
+        }),
+        r.out.trim(),
+      ),
+    ).toMatchObject({ worker: { outcome: "returned" }, return: record });
   });
 
   test("auto: a confident Jev answer picks its row", async () => {
@@ -624,7 +871,7 @@ describe("agent-dispatch run", () => {
         `"--permission-mode","${mode}"`,
         '"--max-budget-usd","2"',
         '"--max-turns","60"',
-        '"--timeout-ms","1800000"',
+        '"--timeout-ms","900000"',
       ])
         expect(`${sandbox}: ${argv ?? ""}`).toContain(word);
     }
@@ -662,7 +909,7 @@ describe("agent-dispatch run", () => {
         "--sandbox",
         "read-only",
         "--timeout-s",
-        "17",
+        "60",
       ],
       { AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE },
     );
@@ -671,7 +918,7 @@ describe("agent-dispatch run", () => {
       .trim()
       .split("\n")
       .at(-1);
-    expect(argv).toContain('"--timeout-ms","17000"');
+    expect(argv).toContain('"--timeout-ms","60000"');
   });
 
   test("the router run_id is used by agent-dispatch for its receipt file and receipt field", async () => {
@@ -766,7 +1013,10 @@ sleep 30
     const receipt = decodedJson(
       z.looseObject({
         worker: z.looseObject({ outcome: z.string(), cause: z.string() }),
-        report_partial: z.looseObject({ cause: z.string() }),
+        report_partial: z.looseObject({
+          cause: z.string(),
+          return: z.looseObject({ received: z.boolean(), note: z.string() }),
+        }),
         resume_with: z.string(),
       }),
       r.out.trim(),
@@ -833,6 +1083,10 @@ describe("agent-dispatch result", () => {
       run.out.trim(),
     );
     expect(receipt.report_partial.cause).toContain("timed out");
+    expect(receipt.report_partial.return).toEqual({
+      received: false,
+      note: "no RETURN was received before timeout",
+    });
     const shown = await router(["result", receipt.run_id], {
       AGENT_ROUTER_STATE_DIR: run.state,
     });
@@ -1822,9 +2076,9 @@ describe("agent-dispatch run: a brief with a ticket", () => {
   );
 
   test.each([
-    [undefined, undefined, 1800, "default"],
-    [3600, undefined, 3600, "ticket"],
-    [3600, 7200, 7200, "cli"],
+    [undefined, undefined, 900, "default"],
+    [1000, undefined, 1000, "ticket"],
+    [1000, 1500, 1500, "cli"],
   ] as const)(
     "timeout precedence and receipt record: ticket=%s cli=%s → %s (%s)",
     async (ticketTimeout, cliTimeout, expectedSeconds, expectedSource) => {
@@ -1873,15 +2127,15 @@ describe("agent-dispatch run: a brief with a ticket", () => {
   );
 
   test.each([
-    [undefined, 3600, "ticket"],
-    [7200, 7200, "cli"],
+    [undefined, 1000, "ticket"],
+    [1500, 1500, "cli"],
   ] as const)(
     "resume uses the declared timeout unless overridden: cli=%s → %s (%s)",
     async (cliTimeout, expectedSeconds, expectedSource) => {
       const state = join(scratch, `resume-timeout-${expectedSource}`);
       const ticket = brief(
         `resume-timeout-${expectedSource}`,
-        ticketText("writes = []\ntimeout_s = 3600", "Continue the work.\n"),
+        ticketText("writes = []\ntimeout_s = 1000", "Continue the work.\n"),
       );
       const first = await router(runArgs(ticket, freshCwd()), {
         AGENT_ROUTER_STATE_DIR: state,
@@ -2957,8 +3211,8 @@ describe("agent-dispatch: the typed final report", () => {
     );
   });
 
-  test("the schema reaches both CLIs: --output-schema (codex) and --json-schema-file (claude)", async () => {
-    const codex = await router(
+  test("worker output allows a final report followed by the fenced RETURN block", async () => {
+    await router(
       [
         "run",
         "--prompt-file",
@@ -2975,29 +3229,16 @@ describe("agent-dispatch: the typed final report", () => {
         .trim()
         .split("\n")
         .at(-1) ?? "";
-    expect(codexArgv).toContain('"--output-schema"');
-    const schemaPath = join(codex.state, "report.schema.json");
-    const schema = decodedJson(
-      z.looseObject({
-        required: z.array(z.string()),
-        additionalProperties: z.literal(false),
-      }),
-      readFileSync(schemaPath, "utf8"),
-    );
-    expect(schema.required).toEqual([
-      "summary",
-      "changes",
-      "checks",
-      "for_coordinator",
-      "open",
-    ]);
+    expect(codexArgv).not.toContain('"--output-schema"');
+    const codexPrompt = readFileSync(join(scratch, "prompt.log"), "utf8");
+    expect(codexPrompt).toContain("agent-dispatch-return");
     await runIn(claudeBrief("schema-claude"), {});
     const claudeArgv =
       readFileSync(join(scratch, "claude-argv.log"), "utf8")
         .trim()
         .split("\n")
         .at(-1) ?? "";
-    expect(claudeArgv).toContain('"--json-schema-file"');
+    expect(claudeArgv).not.toContain('"--json-schema-file"');
   });
 
   test("a valid report from the codex route is stored in the receipt and the run record", async () => {

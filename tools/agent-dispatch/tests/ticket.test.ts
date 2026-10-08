@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { globsOverlap, parseTicket, verifyLine } from "../src/ticket.ts";
+import {
+  DEFAULT_TIMEOUT_S,
+  globsOverlap,
+  parseTicket,
+  verifyLine,
+} from "../src/ticket.ts";
 
 // The work ticket: TOML front matter between `+++` lines at the top of a brief. A brief without one
 // is legacy mode and must come back untouched.
@@ -8,6 +13,10 @@ const valid = (body: string): string =>
   `+++\nschema = 1\n${body}\n+++\nthe prose\n`;
 
 describe("parseTicket", () => {
+  test("the default worker time box is 900 seconds", () => {
+    expect(DEFAULT_TIMEOUT_S).toBe(900);
+  });
+
   test("no front matter: legacy, the brief unchanged", () => {
     const text = "RESOURCE-CLASS(NONCOMPUTE): x\n# task\n";
     expect(parseTicket(text)).toEqual({ kind: "legacy", prose: text });
@@ -33,7 +42,7 @@ describe("parseTicket", () => {
   test("optional fields are read", () => {
     const r = parseTicket(
       valid(
-        'writes = []\nverify = ["x"]\nverify_timeout_s = 30\ntimeout_s = 3600\ncapabilities = ["long-tool-loop"]',
+        'writes = []\nverify = ["x"]\nverify_timeout_s = 30\ntimeout_s = 3600\ntimeout_reason = "long compile and integration run"\ncapabilities = ["long-tool-loop"]',
       ),
     );
     expect(r).toMatchObject({
@@ -41,6 +50,7 @@ describe("parseTicket", () => {
       ticket: {
         verify_timeout_s: 30,
         timeout_s: 3600,
+        timeout_reason: "long compile and integration run",
         capabilities: ["long-tool-loop"],
       },
     });
@@ -58,11 +68,24 @@ describe("parseTicket", () => {
     ["non-positive timeout", valid("writes = []\nverify_timeout_s = 0")],
     ["timeout below minimum", valid("writes = []\ntimeout_s = 59")],
     ["timeout above maximum", valid("writes = []\ntimeout_s = 14401")],
+    ["extended timeout without reason", valid("writes = []\ntimeout_s = 1801")],
     ["non-integer timeout", valid("writes = []\ntimeout_s = 60.5")],
   ])("invalid (%s) is refused with a reason", (_name, text) => {
     const r = parseTicket(text);
     expect(r.kind).toBe("invalid");
     expect(r.kind === "invalid" && r.reason !== "").toBe(true);
+  });
+
+  test("an extended ticket timeout is accepted only with a non-empty reason", () => {
+    const accepted = parseTicket(
+      valid(
+        'writes = []\ntimeout_s = 1801\ntimeout_reason = "database migration"',
+      ),
+    );
+    expect(accepted.kind).toBe("ticket");
+    expect(accepted.kind === "ticket" && accepted.ticket.timeout_reason).toBe(
+      "database migration",
+    );
   });
 });
 

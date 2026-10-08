@@ -103,7 +103,12 @@ writeFileSync(
   `import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
-await Bun.sleep(Number(process.env.FAKE_SLEEP_MS ?? "0"));
+const args = Bun.argv.slice(2);
+const resuming = args.includes("--resume");
+if (process.env.FAKE_CHECKPOINT === "1" && !resuming && process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE !== undefined)
+  appendFileSync(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: 1, files: 0, session: "thread-fake-checkpoint" }));
+if (!(process.env.FAKE_CHECKPOINT === "1" && resuming))
+  await Bun.sleep(Number(process.env.FAKE_SLEEP_MS ?? "0"));
 const timedOut = process.env.FAKE_TIMEOUT === "1";
 if (timedOut && process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE !== undefined)
   appendFileSync(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "checks complete", commands: 1, files: 0 }));
@@ -112,7 +117,6 @@ if (process.env.FAKE_ORPHAN_PID_FILE !== undefined) {
   const orphan = Bun.spawn(["sleep", "60"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
   await Bun.write(process.env.FAKE_ORPHAN_PID_FILE, String(orphan.pid));
 }
-const args = Bun.argv.slice(2);
 const promptAt = args.indexOf("--prompt-file");
 if (promptAt !== -1)
   appendFileSync(${JSON.stringify(join(scratch, "prompt.log"))}, "<<<" + await Bun.file(args[promptAt + 1] ?? "").text() + ">>>\\n");
@@ -124,7 +128,8 @@ if (touch !== undefined) {
 }
 const runIdAt = args.indexOf("--run-id");
 const runId = runIdAt === -1 ? "standalone-fake-run" : args[runIdAt + 1];
-const lastMessage = process.env.FAKE_LAST ?? (process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n");
+const checkpointReturn = '{"summary":"checkpoint","changes":[],"checks":[],"for_coordinator":[],"open":[]}\\n\`\`\`agent-dispatch-return\\n{"findings":[{"text":"checkpointed"}],"evidence":["fake"],"impact_on_brief":"none","proposed_next":"done","artifacts":[]}\\n\`\`\`';
+const lastMessage = process.env.FAKE_LAST ?? (process.env.FAKE_CHECKPOINT === "1" && resuming ? checkpointReturn : process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n");
 const usage = process.env.FAKE_USAGE === "missing" ? { input_tokens: 100 } : { input_tokens: 100, cached_input_tokens: 20, output_tokens: 7, reasoning_output_tokens: 3 };
 console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: timedOut ? "timeout" : exit === 0 ? "ok" : "codex-failed", elapsed_s: 1.5, usage, ...(process.env.FAKE_NO_SESSION === "1" ? {} : { session: "thread-fake-0001" }), last_message: lastMessage, ...(exit === 0 ? {} : { cause: timedOut ? "fake worker timed out" : "fake worker failed" }) }));
 process.exit(exit);
@@ -234,6 +239,7 @@ async function router(
 
 const Receipt = z.looseObject({
   exit: z.number(),
+  checkpoint: z.unknown(),
   pick: z.looseObject({
     source: z.string(),
     choice: z.string(),
@@ -403,7 +409,7 @@ describe("agent-dispatch run", () => {
     expect(receipt.pick.source).toBe("jev");
     expect(receipt.worker.outcome).toBe("ok");
     expect(receipt).toMatchObject({
-      timeout_s: 900,
+      timeout_s: 600,
       timeout_source: "default",
     });
     expect(readFileSync(join(scratch, "argv.log"), "utf8")).toContain(
@@ -481,7 +487,7 @@ describe("agent-dispatch run", () => {
     ]);
     expect(refused.code).toBe(2);
     expect(refused.err).toContain(
-      "--timeout-s above 1800 seconds requires --timeout-reason",
+      "--timeout-s above 600 seconds requires --timeout-reason",
     );
 
     const accepted = await router([
@@ -851,6 +857,10 @@ describe("agent-dispatch run", () => {
       const receipt = decodedJson(Receipt, r.out.trim());
       expect(receipt.pick.choice).toBe("sonnet-high");
       expect(receipt.worker.outcome).toBe("ok");
+      expect(receipt.checkpoint).toEqual({
+        supported: false,
+        reason: "claude worker takes its prompt at start; no live injection",
+      });
       const record = decodedJson(
         RunLogRecord,
         readFileSync(join(r.state, "runs.jsonl"), "utf8").trim(),
@@ -871,7 +881,7 @@ describe("agent-dispatch run", () => {
         `"--permission-mode","${mode}"`,
         '"--max-budget-usd","2"',
         '"--max-turns","60"',
-        '"--timeout-ms","900000"',
+        '"--timeout-ms","600000"',
       ])
         expect(`${sandbox}: ${argv ?? ""}`).toContain(word);
     }
@@ -2062,6 +2072,47 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     ).toBe(argvBefore);
   });
 
+  test("schema 2 remand is recorded and refuses before a worker starts", async () => {
+    const before = existsSync(join(scratch, "argv.log"))
+      ? readFileSync(join(scratch, "argv.log"), "utf8")
+      : "";
+    const b = brief(
+      "t-schema2-remand",
+      "+++\nschema = 2\nwrites = []\n+++\nDecide.\n",
+    );
+    const r = await router(runArgs(b, freshCwd()), {
+      CLAUDE_CODE_SESSION_ID: "",
+    });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("remand outcome:");
+    expect(r.err).toContain('outcome = "<decision/result this changes>"');
+    const after = existsSync(join(scratch, "argv.log"))
+      ? readFileSync(join(scratch, "argv.log"), "utf8")
+      : "";
+    expect(after).toBe(before);
+    expect(readFileSync(join(r.state, "runs.jsonl"), "utf8")).toContain(
+      '"kind":"refusal"',
+    );
+  });
+
+  test("schema 1 remand prints rule and fix, records grade, and still runs", async () => {
+    const b = brief("t-schema1-remand", ticketText("writes = []\nverify = []"));
+    const r = await router(runArgs(b, freshCwd()), {
+      CLAUDE_CODE_SESSION_ID: "",
+    });
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("remand outcome:");
+    expect(r.err).toContain('Fix: outcome = "<decision/result this changes>"');
+    const receipt = decodedJson(
+      z.looseObject({ ticket_grade: z.looseObject({ verdict: z.string() }) }),
+      r.out.trim(),
+    );
+    expect(receipt.ticket_grade.verdict).toBe("clarify");
+    expect(readFileSync(join(r.state, "runs.jsonl"), "utf8")).toContain(
+      '"ticket_grade"',
+    );
+  });
+
   test.each([59, 14401, 60.5])(
     "invalid timeout_s %s is refused with its field name and exit 2",
     async (seconds) => {
@@ -2076,7 +2127,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
   );
 
   test.each([
-    [undefined, undefined, 900, "default"],
+    [undefined, undefined, 600, "default"],
     [1000, undefined, 1000, "ticket"],
     [1000, 1500, 1500, "cli"],
   ] as const)(
@@ -2087,11 +2138,18 @@ describe("agent-dispatch run: a brief with a ticket", () => {
         ticketTimeout === undefined ? "" : `\ntimeout_s = ${ticketTimeout}`;
       const b = brief(
         `t-timeout-${expectedSource}`,
-        ticketText(`writes = []\nverify = []${ticketLine}`),
+        ticketText(
+          `writes = []\nverify = []${ticketLine}${ticketTimeout !== undefined && ticketTimeout > 600 ? '\ntimeout_reason = "long verify"' : ""}`,
+        ),
       );
       const args = runArgs(b, cwd);
       if (cliTimeout !== undefined)
-        args.push("--timeout-s", String(cliTimeout));
+        args.push(
+          "--timeout-s",
+          String(cliTimeout),
+          "--timeout-reason",
+          "long verify",
+        );
       const r = await router(args, { CLAUDE_CODE_SESSION_ID: "" });
       expect(r.code).toBe(0);
       const receipt = decodedJson(
@@ -2135,7 +2193,10 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       const state = join(scratch, `resume-timeout-${expectedSource}`);
       const ticket = brief(
         `resume-timeout-${expectedSource}`,
-        ticketText("writes = []\ntimeout_s = 1000", "Continue the work.\n"),
+        ticketText(
+          'writes = []\ntimeout_s = 1000\ntimeout_reason = "long task"',
+          "Continue the work.\n",
+        ),
       );
       const first = await router(runArgs(ticket, freshCwd()), {
         AGENT_ROUTER_STATE_DIR: state,
@@ -2144,7 +2205,12 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       const runId = decodedJson(RunIdSchema, first.out.trim()).run_id;
       const args = ["resume", runId];
       if (cliTimeout !== undefined)
-        args.push("--timeout-s", String(cliTimeout));
+        args.push(
+          "--timeout-s",
+          String(cliTimeout),
+          "--timeout-reason",
+          "long continuation",
+        );
       const resumed = await router(args, {
         AGENT_ROUTER_STATE_DIR: state,
         CLAUDE_CODE_SESSION_ID: "",
@@ -2171,8 +2237,76 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       runArgs(brief("t-legacy", "plain brief\n"), freshCwd()),
     );
     expect(r.code).toBe(0);
-    expect(r.out).not.toContain('"verify"');
+    expect(r.out).not.toContain('"verify_summary"');
     expect(logLines(r.state).map((l) => l.kind)).toEqual(["run"]);
+  });
+
+  test("codex checkpoint resumes once and a wrap-up RETURN is success", async () => {
+    const b = brief(
+      "t-checkpoint",
+      ticketText("writes = []\nverify = []\nfirst_return_s = 60"),
+    );
+    const before = existsSync(join(scratch, "argv.log"))
+      ? readFileSync(join(scratch, "argv.log"), "utf8").trim().split("\n")
+          .length
+      : 0;
+    const r = await router(runArgs(b, freshCwd()), {
+      AGENT_DISPATCH_CHECKPOINT_MS: "250",
+      FAKE_CHECKPOINT: "1",
+      FAKE_SLEEP_MS: "2000",
+    });
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        checkpoint: z.looseObject({
+          supported: z.boolean(),
+          fired_at_s: z.number().nullable().optional(),
+          return_followed: z.boolean().optional(),
+        }),
+        worker: z.looseObject({ outcome: z.string() }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.checkpoint).toMatchObject({
+      supported: true,
+      return_followed: true,
+    });
+    expect(typeof receipt.checkpoint.fired_at_s).toBe("number");
+    expect(receipt.worker.outcome).toBe("returned");
+    const args = readFileSync(join(scratch, "argv.log"), "utf8")
+      .trim()
+      .split("\n")
+      .slice(before)
+      .map((line) => decodedJson(z.array(z.string()), line));
+    expect(args).toHaveLength(2);
+    expect(args[1]).toContain("--resume");
+    expect(readFileSync(join(scratch, "prompt.log"), "utf8")).toContain(
+      "time box checkpoint: stop new work and RETURN now",
+    );
+  });
+
+  test("RETURN before the checkpoint prevents resume", async () => {
+    const b = brief(
+      "t-no-checkpoint-after-return",
+      "plain task that returns\n",
+    );
+    const r = await router(runArgs(b, freshCwd()), {
+      AGENT_DISPATCH_CHECKPOINT_MS: "500",
+      FAKE_LAST:
+        '{"summary":"done","changes":[],"checks":[],"for_coordinator":[],"open":[]}\n```agent-dispatch-return\n{"findings":[],"evidence":[],"impact_on_brief":"done","proposed_next":"none","artifacts":[]}\n```',
+    });
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        checkpoint: z.looseObject({
+          fired_at_s: z.unknown(),
+          return_followed: z.boolean(),
+        }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.checkpoint.fired_at_s).toBeNull();
+    expect(receipt.checkpoint.return_followed).toBe(true);
   });
 
   test("capabilities reach Jev as required_capabilities in the request state", async () => {
@@ -2187,6 +2321,8 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     await router(runArgs(b, freshCwd(), "read-only"));
     const pick = bodies.slice(before).find((x) => x.includes('"worker"'));
     expect(pick).toContain('"required_capabilities":["long-tool-loop"]');
+    expect(pick).toContain('"first_return_s":360');
+    expect(pick).toContain("xhigh/max effort rows are admissible only");
     expect(pick).toContain("CAPS-MARK");
     expect(pick).not.toContain("schema = 1");
   });

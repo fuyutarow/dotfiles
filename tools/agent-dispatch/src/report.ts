@@ -30,6 +30,39 @@ export const ReturnSchema = z.strictObject({
 });
 export type ReturnRecord = z.output<typeof ReturnSchema>;
 
+/** The pre-run remand record. Kept here as its single schema home so the later grader can fill it. */
+export const TicketGradeSchema = z.strictObject({
+  verdict: z.enum(["pass", "split", "clarify"]),
+  source: z.literal("floor"),
+  violations: z.array(
+    z.strictObject({
+      rule: z.string(),
+      quote_from_brief: z.string(),
+      why_it_blocks_a_6min_first_return: z.string(),
+      fix: z.string(),
+    }),
+  ),
+  pieces: z
+    .array(
+      z.strictObject({
+        title: z.string(),
+        outcome: z.string(),
+        consumer: z.string(),
+        first_return: z.string(),
+        writes: z.array(z.string()),
+        verify: z.array(z.string()),
+        depends_on: z.array(z.string()),
+      }),
+    )
+    .optional(),
+  questions: z
+    .array(z.strictObject({ question: z.string(), unblocks: z.string() }))
+    .optional(),
+  estimated_first_return_s: z.number().int().optional(),
+  basis: z.string().optional(),
+});
+export type TicketGrade = z.output<typeof TicketGradeSchema>;
+
 /** The schema as JSON-schema text (strict: every key required, no extra keys), for the CLIs' flags. */
 export const reportJsonSchema = (): string =>
   // Claude's validator rejects the 2020-12 meta-schema, so emit draft-07 for both CLIs.

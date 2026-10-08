@@ -353,9 +353,7 @@ describe("render-home: the rest of the rendered half", () => {
     expect(md).toContain(
       "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
     );
-    expect(md).toContain(
-      "Ticket worker time bound: the default is 900 seconds.",
-    );
+    expect(md).toContain("hard worker bound defaults to 600 seconds");
     expect(md).toContain("outcome `returned`");
     expect(md.endsWith("<!-- roster:end -->\n")).toBe(true);
     expect(

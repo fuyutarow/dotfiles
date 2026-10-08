@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_TIMEOUT_S,
+  DEFAULT_FIRST_RETURN_S,
   globsOverlap,
   parseTicket,
   verifyLine,
@@ -13,8 +14,9 @@ const valid = (body: string): string =>
   `+++\nschema = 1\n${body}\n+++\nthe prose\n`;
 
 describe("parseTicket", () => {
-  test("the default worker time box is 900 seconds", () => {
-    expect(DEFAULT_TIMEOUT_S).toBe(900);
+  test("worker and first-return defaults are 600 and 360 seconds", () => {
+    expect(DEFAULT_TIMEOUT_S).toBe(600);
+    expect(DEFAULT_FIRST_RETURN_S).toBe(360);
   });
 
   test("no front matter: legacy, the brief unchanged", () => {
@@ -34,6 +36,7 @@ describe("parseTicket", () => {
         writes: ["a/**"],
         verify: ["bun test", "tsc"],
         verify_timeout_s: 1200,
+        first_return_s: 360,
         capabilities: [],
       },
     });
@@ -68,7 +71,7 @@ describe("parseTicket", () => {
     ["non-positive timeout", valid("writes = []\nverify_timeout_s = 0")],
     ["timeout below minimum", valid("writes = []\ntimeout_s = 59")],
     ["timeout above maximum", valid("writes = []\ntimeout_s = 14401")],
-    ["extended timeout without reason", valid("writes = []\ntimeout_s = 1801")],
+    ["extended timeout without reason", valid("writes = []\ntimeout_s = 601")],
     ["non-integer timeout", valid("writes = []\ntimeout_s = 60.5")],
   ])("invalid (%s) is refused with a reason", (_name, text) => {
     const r = parseTicket(text);
@@ -85,6 +88,17 @@ describe("parseTicket", () => {
     expect(accepted.kind).toBe("ticket");
     expect(accepted.kind === "ticket" && accepted.ticket.timeout_reason).toBe(
       "database migration",
+    );
+  });
+
+  test.each([59, 361])("first_return_s rejects %s", (seconds) => {
+    const r = parseTicket(valid(`writes = []\nfirst_return_s = ${seconds}`));
+    expect(r.kind).toBe("invalid");
+  });
+
+  test("schema 2 accepts incomplete work fields for the remand grade", () => {
+    expect(parseTicket("+++\nschema = 2\nwrites = []\n+++\nprose").kind).toBe(
+      "ticket",
     );
   });
 });

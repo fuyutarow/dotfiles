@@ -14,10 +14,11 @@
 //   <the prose the worker receives>
 import { fromThrowable, z } from "../../shared/src/zod.ts";
 
-export const TICKET_SCHEMA = 1;
+export const TICKET_SCHEMA = 2;
 export const DEFAULT_VERIFY_TIMEOUT_S = 1200;
-export const DEFAULT_TIMEOUT_S = 900;
-export const EXTENDED_TIMEOUT_THRESHOLD_S = 1800;
+export const DEFAULT_TIMEOUT_S = 600;
+export const DEFAULT_FIRST_RETURN_S = 360;
+export const EXTENDED_TIMEOUT_THRESHOLD_S = 600;
 export const MAX_TIMEOUT_S = 14400;
 
 const writeGlob = z
@@ -27,15 +28,29 @@ const writeGlob = z
     message: "a write glob is relative to --cd and stays inside it",
   });
 
+const CommonTicket = {
+  writes: z.array(writeGlob).optional(),
+  verify: z.array(z.string().trim().min(1)).default([]),
+  verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),
+  timeout_s: z.number().int().min(60).max(MAX_TIMEOUT_S).optional(),
+  timeout_reason: z.string().trim().min(1).optional(),
+  first_return_s: z
+    .number()
+    .int()
+    .min(60)
+    .max(360)
+    .default(DEFAULT_FIRST_RETURN_S),
+  capabilities: z.array(z.string().min(1)).default([]),
+  outcome: z.string().trim().min(1).optional(),
+  consumer: z.string().trim().min(1).optional(),
+  first_return: z.string().trim().min(1).optional(),
+  read_only_diagnostic: z.boolean().optional(),
+};
+
 export const TicketSchema = z
   .strictObject({
-    schema: z.literal(TICKET_SCHEMA),
-    writes: z.array(writeGlob),
-    verify: z.array(z.string().trim().min(1)).default([]),
-    verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),
-    timeout_s: z.number().int().min(60).max(MAX_TIMEOUT_S).optional(),
-    timeout_reason: z.string().trim().min(1).optional(),
-    capabilities: z.array(z.string().min(1)).default([]),
+    schema: z.union([z.literal(1), z.literal(2)]),
+    ...CommonTicket,
   })
   .refine(
     (ticket) =>
@@ -46,7 +61,11 @@ export const TicketSchema = z
       path: ["timeout_reason"],
       message: `required when timeout_s exceeds ${EXTENDED_TIMEOUT_THRESHOLD_S} seconds`,
     },
-  );
+  )
+  .refine((ticket) => ticket.schema === 2 || ticket.writes !== undefined, {
+    path: ["writes"],
+    message: "required for schema 1 tickets",
+  });
 export type Ticket = z.output<typeof TicketSchema>;
 
 export type ParsedBrief =

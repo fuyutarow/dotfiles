@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1 — 2026-10-08
+
+- Set the default worker bound to 600 seconds, add a 360-second first-return window, and require a reason above 600 seconds.
+- Add model-free pre-run ticket remands and schema 2 enforcement; schema 1 and plain briefs receive warnings until refusal moves to 1.4.0.
+- Ask Jev to prefer the lowest family effort unless ticket capabilities explain what lower effort measurably lacks.
+- At `first_return_s`, Codex stops and resumes the same session with a RETURN prompt; a RETURN at that checkpoint is success. Claude receipts record `checkpoint: { supported: false, reason: "claude worker takes its prompt at start; no live injection" }` and Claude remains bounded by the hard timeout.
+
 ## 1.3.0 — 2026-10-08
 
 - Set the default worker time box to 900 seconds; require a recorded reason above 1800 seconds, up to the 14400-second hard maximum.

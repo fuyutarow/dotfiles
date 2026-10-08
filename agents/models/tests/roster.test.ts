@@ -100,9 +100,9 @@ describe("dispatch roster", () => {
       "claude only when codex rows measurably lack a needed capability",
     );
     const policy = rosterPolicy(loaded.value);
-    expect(policy).toContain("default is 900 seconds");
-    expect(policy).toContain("hard maximum of 14400 seconds");
-    expect(policy).toContain("above 1800 require a non-empty `timeout_reason`");
+    expect(policy).toContain("hard worker bound defaults to 600 seconds");
+    expect(policy).toContain("hard maximum 14400");
+    expect(policy).toContain("values above 600 require `timeout_reason`");
     expect(policy).toContain("outcome `returned`");
   });
 });

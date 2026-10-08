@@ -1,6 +1,6 @@
 import { cli } from "cleye";
-import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
@@ -19,6 +19,11 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 // PINNED-OR-ABSENT. A plugin is executable code run inside Obsidian, so a release asset whose
 // sha256 differs from plugins.json is FATAL, never installed. Bumping a plugin = new version and
 // new hashes in plugins.json, in one reviewed change.
+// Plugin settings are written against that pinned version's defaults. For example, Code View's
+// `extensions` is one string containing its full default list plus additions. Bumping `version`
+// requires re-deriving `settings` from the new release's DEFAULT_SETTINGS in the same review.
+// OBSIDIAN_APP_SOURCE and OBSIDIAN_PLUGINS_SOURCE may override the source JSON paths for isolated
+// runs; by default they point to this directory's app.json and plugins.json.
 //
 // NOT REACHABLE FROM FILES: Obsidian's "Restricted mode" (Settings → Community plugins) lives in
 // the app's own storage, not in the vault. Until it is turned off once per vault, installed
@@ -26,8 +31,10 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 //
 // Exit: 0 all vaults already matched or were updated / 1 --check found drift / 2 FATAL.
 
-const APP_SOURCE = join(import.meta.dir, "app.json");
-const PLUGINS_SOURCE = join(import.meta.dir, "plugins.json");
+const APP_SOURCE =
+  process.env.OBSIDIAN_APP_SOURCE ?? join(import.meta.dir, "app.json");
+const PLUGINS_SOURCE =
+  process.env.OBSIDIAN_PLUGINS_SOURCE ?? join(import.meta.dir, "plugins.json");
 const REGISTRY = join(
   process.env.HOME ?? "",
   "Library/Application Support/obsidian/obsidian.json",
@@ -69,6 +76,18 @@ async function readJsonObject(
   if (!record.success)
     return err(jsonFailure(path, "JSON object", record.error).message);
   return ok(record.data);
+}
+
+// Replace JSON files as one sibling rename so readers never observe a partial write.
+async function atomicWrite(path: string, contents: string | Uint8Array): Promise<void> {
+  mkdirSync(dirname(path), { recursive: true });
+  const temp = `${path}.${crypto.randomUUID()}.tmp`;
+  try {
+    await Bun.write(temp, contents);
+    renameSync(temp, path);
+  } finally {
+    if (existsSync(temp)) unlinkSync(temp);
+  }
 }
 
 function asPlugin(id: string, v: unknown): Result<Plugin, string> {
@@ -147,7 +166,7 @@ async function appFixes(
     {
       what: `app.json(${changed.join(",")})`,
       apply: async () => {
-        await Bun.write(
+        await atomicWrite(
           target,
           `${JSON.stringify({ ...have, ...want }, null, 2)}\n`,
         );
@@ -173,7 +192,7 @@ async function pluginFixes(
         const bytes = await asset(p, file);
         if (bytes.isErr()) return err(bytes.error);
         mkdirSync(pdir, { recursive: true });
-        await Bun.write(join(pdir, file), bytes.value);
+        await atomicWrite(join(pdir, file), bytes.value);
         return ok(undefined);
       },
     });
@@ -201,7 +220,7 @@ async function pluginSettingsFixes(
     {
       what: `${id}/data.json(${changed.join(",")})`,
       apply: async () => {
-        await Bun.write(
+        await atomicWrite(
           target,
           `${JSON.stringify({ ...have, ...want }, null, 2)}\n`,
         );
@@ -227,7 +246,7 @@ async function enableFix(
     {
       what: `enable(${missing.join(",")})`,
       apply: async () => {
-        await Bun.write(
+        await atomicWrite(
           target,
           `${JSON.stringify([...current, ...missing], null, 2)}\n`,
         );

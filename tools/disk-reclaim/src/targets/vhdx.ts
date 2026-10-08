@@ -118,7 +118,7 @@ export function createVhdxTarget(options: {
             result: null,
           },
         ];
-      const guest = options.host === "local" ? "local" : "r99-wsl";
+      const guest = options.host === "local" ? "local" : "r99-u24";
       const [usedResult, allocatedResult] = await Promise.all([
         options.runner(guest, "df -B1 --output=used / | awk 'NR==2{print $1}'"),
         ((): Promise<Awaited<ReturnType<VhdxRunner>>> => {

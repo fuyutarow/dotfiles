@@ -21,7 +21,7 @@ Include ~/.ssh/config.local
 # --- bandwidth: compress before the bytes reach a slow uplink -----------------------------
 # r99 is a compute box on an ASYMMETRIC line. Measured 2026-09-09: egress caps at ~1.3 MB/s
 # (~10.4 Mbps) while ingress reaches 145 Mbps — 40x. A remote TUI sends keystrokes UP the fast
-# path and receives redraws DOWN the slow one, which is exactly why `herdr --remote r99-wsl`
+# path and receives redraws DOWN the slow one, which is exactly why `herdr --remote r99-u24`
 # felt laggy while every latency metric read clean: RTT 33ms, 0% loss over 240 packets, ssh
 # round-trip p99 146ms with zero samples over 500ms in 60 trials.
 #
@@ -39,7 +39,7 @@ Include ~/.ssh/config.local
 # This reaches herdr WITHOUT changing how herdr is launched. `herdr --remote` writes its own ssh
 # config, and that file's first line is `Include "~/.ssh/config"` — so with first-value-wins,
 # a Host block here outranks herdr's own `Host *` defaults. Verified through herdr's generated
-# config: `ssh -F <herdr's config> -G r99-wsl` reports `compression yes`.
+# config: `ssh -F <herdr's config> -G r99-u24` reports `compression yes`.
 # NOTE: ControlPersist keeps an existing master alive, so an already-running `herdr --remote`
 # must be restarted before it picks this up.
 #
@@ -47,11 +47,11 @@ Include ~/.ssh/config.local
 # — host 53%, guest loadavg ~2), and a small LOSS on already-compressed payloads. Compression is
 # therefore scoped to this slow link, never `Host *`. For a bulk transfer of compressed data:
 #     ssh -o Compression=no ...
-Host r99-wsl r99-wsl-code r99
+Host r99-u24 r99-u24-code r99
     Compression yes
 
 # --- smart-open: open a URL on the machine you sit at, not on the box you drive ----------------
-# `o <url>` on r99-wsl (tools/smart-open/src/smart-open.ts) writes to /tmp/smart-open-$USER--<alias>.sock there;
+# `o <url>` on r99-u24 (tools/smart-open/src/smart-open.ts) writes to /tmp/smart-open-$USER--<alias>.sock there;
 # this forward carries it to the local receiver (smart-open/receive.ts, started at login on macOS by
 # smart-open/smart-open-receiver.plist.mac), which opens http(s) URLs and remote folders. herdr
 # --remote reads this file first, so its attach carries the forward too. With no receiver running
@@ -66,16 +66,16 @@ Host r99-wsl r99-wsl-code r99
 # name is read fresh on every `oo`. The receiver honours the alias only if it carries this forward
 # AND <alias>-code reaches the same box WITHOUT it — VS Code's own ssh would otherwise take the socket
 # over and leave a dead bind when its window closed. So `-code` gets NO block here, and
-# ~/.ssh/config.local names it beside the real one (`Host r99-wsl r99-wsl-code`) so it inherits
+# ~/.ssh/config.local names it beside the real one (`Host r99-u24 r99-u24-code`) so it inherits
 # HostName/Port/User. `mise run doctor` checks all of it.
 #
 # ONLY THE ATTACH CARRIES IT. Every connection that requests this forward re-binds the socket, and
-# a short one (an agent's `ssh r99-wsl cmd`, a mise task, Codex's app-server, VS Code) leaves a dead
+# a short one (an agent's `ssh r99-u24 cmd`, a mise task, Codex's app-server, VS Code) leaves a dead
 # bind when it exits: the still-attached terminal's `o` then finds a stale socket. Observed
 # 2026-10-03 — a `mise run pull` over ssh did exactly this. So Match (OpenSSH >= 9.9 client) scopes
-# it to the two sessions that ARE the screen you sit at: an interactive shell (`ssh r99-wsl`) and
+# it to the two sessions that ARE the screen you sit at: an interactive shell (`ssh r99-u24`) and
 # herdr's bridge (`herdr --remote`). `originalhost`, not `host`: config.local has already rewritten
-# the hostname to an address. `ssh -G r99-wsl` (no command = shell) still shows it, which is what
+# the hostname to an address. `ssh -G r99-u24` (no command = shell) still shows it, which is what
 # the receiver and doctor ask.
 #
 # THOSE TWO Match LINES LIVE IN ssh/smart-open-attach.conf, reached through config.d below, because

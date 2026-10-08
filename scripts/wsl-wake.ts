@@ -23,7 +23,7 @@ import { cli } from "cleye";
 //
 // THE ANCHOR IS NOT OPTIONAL. A bare `wsl.exe --exec /bin/true` returns, its attachment closes,
 // and WSL shuts the distro down ~60s later — measured. WSL counts a Windows-side wsl.exe
-// attachment as "in use"; work INSIDE the distro does not (see the r99-wsl-lifecycle memory). So
+// attachment as "in use"; work INSIDE the distro does not (see the WSL lifecycle memory). So
 // this launches a detached `tail -f /dev/null` to hold one open.
 //
 // RUNNING IS NOT REACHABLE — the second 2026-09-17 fix. The distro can be Running while `ssh
@@ -35,7 +35,7 @@ import { cli } from "cleye";
 // the goal.
 
 const HOST_FALLBACK = ["r99-lan", "r99"]; // r99-lan for the logon screen, r99 for everywhere else
-const GUEST_DEFAULT = "r99-wsl";
+const GUEST_DEFAULT = "r99-u24";
 const DISTRO_DEFAULT = "Ubuntu-24.04";
 const SSH_MS = 60_000; // interop on this host measured 0.85-1.9s; 60s is a bound, not an estimate
 const GUEST_MS = 15_000; // a guest `true` is a TCP connect + trivial exec; 15s catches a hang

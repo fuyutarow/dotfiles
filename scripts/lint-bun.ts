@@ -52,34 +52,21 @@ function check(paths: string[]): number {
 async function main(): Promise<number> {
   const context = jjContext();
   if (context === undefined) {
-    // J1 migration fallback; TODO(J1): remove after jj consumer rollout.
-    const listed = Bun.spawnSync(
-      [
-        "git",
-        "ls-files",
-        "-z",
-        "--",
-        ...PATTERNS.map((pattern) => `:(glob)${pattern}`),
-        `:(exclude)${EXCLUDE}`,
-      ],
-      {
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 30_000,
-      },
+    // A local verification run has no pre-commit candidate snapshot. Scan the declared production
+    // surfaces directly; this works in jj-only checkouts and includes newly created scripts.
+    const paths = await Promise.all(
+      PATTERNS.map(async (pattern) => {
+        const found: string[] = [];
+        for await (const path of new Bun.Glob(pattern).scan({
+          cwd: process.cwd(),
+          onlyFiles: true,
+        })) {
+          if (path !== EXCLUDE && existsSync(path)) found.push(path);
+        }
+        return found;
+      }),
     );
-    if (listed.exitCode !== 0) {
-      process.stderr.write(
-        `FATAL: lint:bun: git ls-files failed: ${listed.stderr.toString()}\n`,
-      );
-      return 2;
-    }
-    return check(
-      listed.stdout
-        .toString()
-        .split("\0")
-        .filter((path) => path !== "" && existsSync(path)),
-    );
+    return check([...new Set(paths.flat())].toSorted());
   }
   const candidate = jjCandidate(context);
   const globs = PATTERNS.map((pattern) => new Bun.Glob(pattern));

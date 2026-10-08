@@ -103,6 +103,7 @@ const CORPUS = [
   { path: "scripts/vendor-skill.ts" },
   { path: "scripts/wsl-audit.ts" },
   { path: "scripts/wsl-capacity-recover.ts" },
+  { path: "scripts/wsl-distro.ts" },
   { path: "scripts/wsl-reap.ts" },
   { path: "scripts/wsl-wake.ts" },
   { path: "scripts/wsl-winget.ts" },

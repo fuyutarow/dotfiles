@@ -375,7 +375,7 @@ function refusalHint(reply: string): string {
   if (reply.includes("only http(s) URLs"))
     return " — the client's receiver predates folder support; on the Mac: launchctl kickstart -k gui/$(id -u)/dotfiles.smart-open-receiver";
   if (reply.includes("without the smart-open forward"))
-    return " — on the Mac, give ~/.ssh/config.local's Host line for this box the -code alias too (e.g. `Host r99-wsl r99-wsl-code`)";
+    return " — on the Mac, give ~/.ssh/config.local's Host line for this box the -code alias too (e.g. `Host r99-u24 r99-u24-code`)";
   if (reply.includes("no ssh host"))
     return " — the alias rides in the forward's socket name (ssh/config: RemoteForward /tmp/smart-open-%r--%n.sock); reattach from the client so it is bound under that name";
   return "";

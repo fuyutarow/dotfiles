@@ -42,7 +42,12 @@ function applies(when: When, os: Os): boolean {
 }
 
 function under(path: string, root: string): boolean {
-  const rel = relative(resolve(root), resolve(path));
+  // macOS exposes /var as a symlink to /private/var. Missing targets cannot be passed directly
+  // to realpathSync, so canonicalize through their nearest existing parent before comparing.
+  const rel = relative(
+    resolveMissingPath(resolve(root)),
+    resolveMissingPath(resolve(path)),
+  );
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`));
 }
 

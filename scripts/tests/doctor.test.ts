@@ -16,16 +16,16 @@ import { join } from "node:path";
 import { sshSupportsAttachMatch } from "../link-dots.ts";
 
 // The smart-open fixtures scope the forward with Match sessiontype (OpenSSH >= 9.9; Ubuntu 24.04
-// ships 9.6, which rejects the line). The repo case also needs a machine that attaches to r99-wsl
+// ships 9.6, which rejects the line). The repo case also needs a machine that attaches to r99-u24
 // (its ~/.ssh/config.local names a HostName) — doctor SKIPs smart-open everywhere else.
 const sshV = Bun.spawnSync(["ssh", "-V"], { stderr: "pipe" }).stderr.toString();
 const OLD_SSH = !sshSupportsAttachMatch(sshV);
-const ATTACHES_TO_R99 = !Bun.spawnSync(["ssh", "-G", "r99-wsl"], {
+const ATTACHES_TO_R99 = !Bun.spawnSync(["ssh", "-G", "r99-u24"], {
   stdout: "pipe",
 })
   .stdout.toString()
   .split("\n")
-  .includes("hostname r99-wsl");
+  .includes("hostname r99-u24");
 
 const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "doctor.ts");
@@ -196,7 +196,7 @@ describe("doctor", () => {
   );
 
   /**
-   * A dotfiles fixture whose ssh/config gives `r99-wsl` one User and (optionally) one forward.
+   * A dotfiles fixture whose ssh/config gives `r99-u24` one User and (optionally) one forward.
    */
   function fixtureSshConfig(
     forward: string | null,
@@ -208,17 +208,17 @@ describe("doctor", () => {
     const box = "    HostName r99.invalid\n    User tester\n";
     const shared =
       editor === "absent"
-        ? `Host r99-wsl\n${box}`
-        : `Host r99-wsl r99-wsl-code\n${box}`;
+        ? `Host r99-u24\n${box}`
+        : `Host r99-u24 r99-u24-code\n${box}`;
     const fwd = forward === null ? "" : `    RemoteForward ${forward}\n`;
     const leak =
       editor === "forwards" && forward !== null
-        ? `Host r99-wsl-code\n${fwd}`
+        ? `Host r99-u24-code\n${fwd}`
         : "";
     // Scoped as ssh/config does it: only an interactive session carries the forward.
     const attach = scoped
-      ? "Match originalhost r99-wsl sessiontype shell\n"
-      : "Host r99-wsl\n";
+      ? "Match originalhost r99-u24 sessiontype shell\n"
+      : "Host r99-u24\n";
     writeFileSync(
       join(dir, "ssh", "config"),
       `${shared}${leak}${attach}${fwd}`,
@@ -230,14 +230,14 @@ describe("doctor", () => {
     "smart-open: a forward joining the paths the code uses PASSes; drift on either end FAILs naming both sides",
     () => {
       const home = tmp("doctor-home-");
-      const remote = "/tmp/smart-open-tester--r99-wsl.sock";
+      const remote = "/tmp/smart-open-tester--r99-u24.sock";
       const receiver = `${home}/.cache/smart-open/receiver.sock`;
       const pass = doctor("smart-open", {
         HOME: home,
         DOTFILES: fixtureSshConfig(`${remote} ${receiver}`),
       });
       expect(pass.code).toBe(0);
-      expect(pass.out).toMatch(/^PASS {2}smart-open {2}r99-wsl forwards /mu);
+      expect(pass.out).toMatch(/^PASS {2}smart-open {2}r99-u24 forwards /mu);
 
       for (const [name, forward] of [
         ["remote path drifted", `/tmp/smart-open-other.sock ${receiver}`],
@@ -264,29 +264,29 @@ describe("doctor", () => {
     "smart-open: an editor alias that is missing, or carries the forward, FAILs naming the fix",
     () => {
       const home = tmp("doctor-home-");
-      const forward = `/tmp/smart-open-tester--r99-wsl.sock ${home}/.cache/smart-open/receiver.sock`;
+      const forward = `/tmp/smart-open-tester--r99-u24.sock ${home}/.cache/smart-open/receiver.sock`;
       const ok = doctor("smart-open", {
         HOME: home,
         DOTFILES: fixtureSshConfig(forward),
       });
       expect(ok.code).toBe(0);
       expect(ok.out).toContain(
-        "r99-wsl-code reaches the same box without the forward",
+        "r99-u24-code reaches the same box without the forward",
       );
       const absent = doctor("smart-open", {
         HOME: home,
         DOTFILES: fixtureSshConfig(forward, "absent"),
       });
       expect(absent.code).toBe(1);
-      expect(absent.out).toContain("r99-wsl-code does not reach the same box");
-      expect(absent.out).toContain("Host r99-wsl r99-wsl-code");
+      expect(absent.out).toContain("r99-u24-code does not reach the same box");
+      expect(absent.out).toContain("Host r99-u24 r99-u24-code");
       const leaks = doctor("smart-open", {
         HOME: home,
         DOTFILES: fixtureSshConfig(forward, "forwards"),
       });
       expect(leaks.code).toBe(1);
       expect(leaks.out).toContain(
-        "r99-wsl-code carries the smart-open forward",
+        "r99-u24-code carries the smart-open forward",
       );
     },
   );
@@ -296,14 +296,14 @@ describe("doctor", () => {
     const r = doctor("smart-open", {
       HOME: home,
       DOTFILES: fixtureSshConfig(
-        `/tmp/smart-open-tester--r99-wsl.sock ${home}/.cache/smart-open/receiver.sock`,
+        `/tmp/smart-open-tester--r99-u24.sock ${home}/.cache/smart-open/receiver.sock`,
         "same",
         false,
       ),
     });
     expect(r.code).toBe(1);
     expect(r.out).toContain(
-      "a command session to r99-wsl carries the smart-open forward",
+      "a command session to r99-u24 carries the smart-open forward",
     );
   });
 

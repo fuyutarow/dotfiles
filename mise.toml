@@ -771,6 +771,10 @@ run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 description = "Start WSL and leave the guest ssh-reachable — for when Windows rebooted to the logon screen or the distro idle-terminated. Tries the LAN alias then the tailnet alias, holds the distro up with a detached anchor, then verifies the guest and starts its sshd if needed. --status to only report; --host to pin one route."
 run = 'bun ~/dotfiles/scripts/wsl-wake.ts'
 
+[tasks."wsl:distro"]
+description = "Create a named WSL distro and SSH alias; requires r99-u24 running because its Tailscale daemon owns the shared utility-VM address. --dry-run prints the plan."
+run = 'bun ~/dotfiles/scripts/wsl-distro.ts'
+
 # READ-ONLY resource evidence, both halves at once. It is the second half that carries the
 # signal: every r99 outage this repo debugged was INVISIBLE from inside the guest — C: at 1.08 MB
 # free while the guest read 38% used (the vhdx max, 1007 GB, is larger than C: itself, 931 GB);

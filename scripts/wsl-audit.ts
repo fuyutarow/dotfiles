@@ -36,7 +36,7 @@ import { cli } from "cleye";
 // leg is deliberately crooked: the host names the path (registry), the GUEST measures it (du over
 // /mnt/c). That is why it is a second guest round-trip and not one more PowerShell line.
 
-const GUEST_DEFAULT = "r99-wsl";
+const GUEST_DEFAULT = "r99-u24";
 const HOST_DEFAULT = "r99";
 const DISTRO_DEFAULT = "Ubuntu-24.04";
 

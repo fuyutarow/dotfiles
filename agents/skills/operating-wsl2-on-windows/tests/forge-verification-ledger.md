@@ -102,7 +102,7 @@ What happened on r99, in order:
    waited behind `sysinit.target`.
 4. The agent polled `initializing` and retried `wsl.exe` over ssh; eight `wsl.exe` piled up.
 5. `systemctl kill --signal=SIGKILL systemd-tmpfiles-setup.service` let boot finish within
-   20 s: state `degraded`, ssh and tailscaled active, `ssh r99-wsl` connected.
+   20 s: state `degraded`, ssh and tailscaled active, `ssh r99-u24` connected.
 6. Loss: uncommitted work in the 38 worktrees. Committed branches survive in the main repo.
 
 Distilled: a cause row, the `initializing` job table, the measure-first order, the /tmp rule,

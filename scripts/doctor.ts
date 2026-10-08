@@ -25,7 +25,7 @@
 //                                                this shell does (`ccc doctor` DB path mappings)
 //   edge-policy edge/policy.plist.mac (mac only) the live Edge managed policy is a byte-equal copy
 //   smart-open  ssh/config + tools/shared/src/sockets.ts
-//                                                r99-wsl's RemoteForward joins the two socket paths
+//                                                r99-u24's RemoteForward joins the two socket paths
 //                                                smart-open and its receiver actually use (the
 //                                                remote name carrying the alias), on attach only
 //   iterm2      iterm2/             (mac only)   iTerm2 loads its prefs from this repo
@@ -880,13 +880,13 @@ export async function checkEdgePolicy(ctx: Ctx): Promise<Finding> {
   );
 }
 
-// ssh/config's `Host r99-wsl` forwards the REMOTE's smart-open socket to THIS machine's receiver.
+// ssh/config's `Host r99-u24` forwards the REMOTE's smart-open socket to THIS machine's receiver.
 // Both ends are code (tools/shared/src/sockets.ts);the forward is ssh syntax (%r, %d) that cannot
 // import them, so the only guard against drift is to ask ssh what it RESOLVES and compare. A
 // mismatch is silent in use: `o <url>` finds no socket (or one nobody answers) and opens on the
 // remote's own screen. -F pins the declared source (this repo's ssh/config, not whatever
 // ~/.ssh/config currently links to); -G prints the resolved options without connecting.
-const SMART_OPEN_HOST = "r99-wsl";
+const SMART_OPEN_HOST = "r99-u24";
 export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
   const config = join(ctx.dotfiles, "ssh", "config");
   if (!existsSync(config))
@@ -906,7 +906,7 @@ export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
     resolved
       .filter((l) => l.startsWith(`${key} `))
       .map((l) => l.slice(key.length + 1).trim());
-  // The forward is the CLIENT's side: only a machine that attaches to r99-wsl (its config.local
+  // The forward is the CLIENT's side: only a machine that attaches to r99-u24 (its config.local
   // gives the alias a HostName) carries it. A rented box or R99 itself never attaches there —
   // `ssh -G` then echoes the alias back as the hostname, and there is nothing to check.
   if (value("hostname")[0] === SMART_OPEN_HOST)
@@ -958,7 +958,7 @@ async function checkEditorAlias(
       l.trim().endsWith(` ${receiverSocket(ctx.home)}`),
   );
   if (same && !forwards) {
-    // Only the attach may carry the forward: a command session (an agent's `ssh r99-wsl cmd`)
+    // Only the attach may carry the forward: a command session (an agent's `ssh r99-u24 cmd`)
     // would steal the socket and leave a dead bind behind when it exits (ssh/config, Match).
     const ex = await run(["ssh", "-G", "-F", config, SMART_OPEN_HOST, "true"], {
       ms: 10_000,

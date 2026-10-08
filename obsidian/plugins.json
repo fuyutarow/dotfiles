@@ -6,6 +6,9 @@
       "main.js": "fc6691db8c78cdc5adfdb55ebeb3c8ec7cd3f3033f9fb9834de570dc8f202ffb",
       "manifest.json": "eb7ef22aa69a40d9bfc2ac9aa6658fbde9e74fbcba661dfaea92b51c87b2d1a6",
       "styles.css": "0f394cade9fddb8908079c2d1749f46c458cc1348dca6ddb4e8af74179c6d94e"
+    },
+    "settings": {
+      "extensions": "py,ps1,psm1,sh,bash,zsh,fish,ts,tsx,js,jsx,mjs,cjs,cs,cpp,cc,c,h,hpp,sql,yml,yaml,toml,rs,go,lua,gd,gdshader,bat,cmd,rb,php,pl,r,dart,kt,swift,vue,svelte,ini,conf,env,xml,html,css,scss,less,json5,jsonc,tf,tfvars,hcl,proto,graphql,gql,txt,log,json,csv"
     }
   },
   "show-whitespace-cm6": {

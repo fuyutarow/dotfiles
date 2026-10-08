@@ -7,7 +7,8 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 // Bring EVERY registered Obsidian vault in line with this directory (single source):
 //   app.json     — keys merged into each vault's .obsidian/app.json
 //   plugins.json — community plugins installed into .obsidian/plugins/<id>/ and enabled in
-//                  .obsidian/community-plugins.json, pinned by release tag AND sha256 per file
+//                  .obsidian/community-plugins.json, pinned by release tag AND sha256 per file;
+//                  declared settings merged into each plugin's data.json
 // Run via `mise run mac:obsidian` (wired into `mise run mac:init`). Consumer: human, verdict lines.
 //
 // WHY MERGE, NOT SYMLINK. Obsidian rewrites .obsidian/*.json whenever a setting is touched in its
@@ -49,6 +50,7 @@ const PluginSchema = z.object({
   repo: z.string(),
   version: z.string(),
   sha256: z.record(z.string(), z.string()),
+  settings: RecordSchema.optional(),
 });
 type Plugin = z.output<typeof PluginSchema>;
 
@@ -179,6 +181,36 @@ async function pluginFixes(
   return ok(fixes);
 }
 
+async function pluginSettingsFixes(
+  dir: string,
+  id: string,
+  want: Record<string, unknown> | undefined,
+): Promise<Result<Fix[], string>> {
+  if (want === undefined) return ok([]);
+  const target = join(dir, "plugins", id, "data.json");
+  const haveResult = existsSync(target)
+    ? await readJsonObject(target)
+    : ok<Record<string, unknown>>({});
+  if (haveResult.isErr()) return err(haveResult.error);
+  const have = haveResult.value;
+  const changed = Object.keys(want).filter(
+    (k) => JSON.stringify(have[k]) !== JSON.stringify(want[k]),
+  );
+  if (changed.length === 0) return ok([]);
+  return ok([
+    {
+      what: `${id}/data.json(${changed.join(",")})`,
+      apply: async () => {
+        await Bun.write(
+          target,
+          `${JSON.stringify({ ...have, ...want }, null, 2)}\n`,
+        );
+        return ok(undefined);
+      },
+    },
+  ]);
+}
+
 async function enableFix(
   dir: string,
   ids: string[],
@@ -277,6 +309,12 @@ async function main(): Promise<Result<void, string>> {
     const pluginError = pluginResults.find((result) => result.isErr());
     if (pluginError !== undefined && pluginError.isErr())
       return err(pluginError.error);
+    const settingsResults = await Promise.all(
+      validPlugins.map(([id, p]) => pluginSettingsFixes(dir, id, p.settings)),
+    );
+    const settingsError = settingsResults.find((result) => result.isErr());
+    if (settingsError !== undefined && settingsError.isErr())
+      return err(settingsError.error);
     const enabled = await enableFix(
       dir,
       validPlugins.map(([id]) => id),
@@ -285,6 +323,9 @@ async function main(): Promise<Result<void, string>> {
     const fixes = [
       ...app.value,
       ...pluginResults.flatMap((result) => (result.isOk() ? result.value : [])),
+      ...settingsResults.flatMap((result) =>
+        result.isOk() ? result.value : [],
+      ),
       ...enabled.value,
     ];
     if (fixes.length === 0) {

@@ -319,7 +319,7 @@ run = "bun scripts/lint-ts-ratchet.ts"
 [tasks."lint:ts-no-disable"]
 dir = "{{config_root}}"
 description = "Fail on any oxlint-disable / eslint-disable comment in tracked TS (no lint exceptions)"
-run = "! git grep -n -E \"(oxlint|eslint)-disable\" -- \"*.ts\" \"*.tsx\""
+run = "bun scripts/lint-ts-no-disable.ts"
 
 # Type-check (tsconfig.json). Bun transpiles and never type-checks, so this task is the ONLY
 # place the strict flags bite. Same command and name as Coral-dpp's task. In `lint`'s depends

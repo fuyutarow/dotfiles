@@ -2291,6 +2291,44 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     );
   });
 
+  test.each([
+    ["file", 'premises = ["file:src/missing.ts"]', "file:src/missing.ts"],
+    [
+      "symbol",
+      'premises = ["symbol:routeThatDoesNotExist"]',
+      "symbol:routeThatDoesNotExist",
+    ],
+  ])(
+    "absent %s premise refuses before Jev or a worker",
+    async (_kind, declaration, premise) => {
+      const before = bodies.length;
+      const argvBefore = existsSync(join(scratch, "argv.log"))
+        ? readFileSync(join(scratch, "argv.log"), "utf8")
+        : "";
+      const cwd = freshCwd();
+      const b = brief(
+        `t-missing-premise-${_kind}`,
+        `+++\nschema = 2\nwrites = []\n${declaration}\n+++\nDecide.\n`,
+      );
+      const r = await router(runArgs(b, cwd), { CLAUDE_CODE_SESSION_ID: "" });
+      expect(r.code).toBe(2);
+      expect(r.err).toContain(`${premise} is absent`);
+      expect(r.err).toContain("correct the brief's premise or remove it");
+      expect(bodies.length).toBe(before);
+      expect(
+        existsSync(join(scratch, "argv.log"))
+          ? readFileSync(join(scratch, "argv.log"), "utf8")
+          : "",
+      ).toBe(argvBefore);
+      const refusal = logLines(r.state)[0];
+      expect(refusal?.ticket_grade).toMatchObject({
+        verdict: "clarify",
+        source: "floor",
+        violations: [{ rule: "premise", quote_from_brief: premise }],
+      });
+    },
+  );
+
   test("schema 1 floor remand is refused with fixes unless the recorded escape is supplied", async () => {
     const b = brief("t-schema1-remand", ticketText("writes = []\nverify = []"));
     const r = await router(runArgs(b, freshCwd()), {

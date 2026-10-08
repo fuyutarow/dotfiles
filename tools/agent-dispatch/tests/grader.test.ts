@@ -52,6 +52,12 @@ describe("grader prompt rules", () => {
     expect(prompt).toContain(
       "When there is one final deliverable, return pass even if it is underspecified; put needed questions in questions with verdict pass.",
     );
+    expect(prompt).toContain(
+      "When the brief names functions or files it relies on but declares no premises, add a warning-level question suggesting `premises = [...]` with those names.",
+    );
+    expect(prompt).toContain(
+      "When split pieces have depends_on, name one integration/acceptance piece that consumes the others; if none is named, add a question.",
+    );
   });
 });
 

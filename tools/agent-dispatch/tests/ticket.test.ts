@@ -59,6 +59,20 @@ describe("parseTicket", () => {
     });
   });
 
+  test("premises are accepted for both ticket schemas", () => {
+    for (const schema of [1, 2]) {
+      const parsed = parseTicket(
+        `+++\nschema = ${schema}\nwrites = []\npremises = ["file:src/main.ts", "symbol:run", "symbol:main@src/**"]\n+++\nprose`,
+      );
+      expect(parsed.kind).toBe("ticket");
+      expect(parsed.kind === "ticket" && parsed.ticket.premises).toEqual([
+        "file:src/main.ts",
+        "symbol:run",
+        "symbol:main@src/**",
+      ]);
+    }
+  });
+
   test.each([
     ["not TOML", "+++\nwrites = [\n+++\nprose"],
     ["unterminated", "+++\nschema = 1\nwrites = []\nprose"],
@@ -67,6 +81,7 @@ describe("parseTicket", () => {
     ["unknown key", valid("writes = []\nbogus = 1")],
     ["absolute write glob", valid('writes = ["/etc/**"]')],
     ["parent-escaping write glob", valid('writes = ["../x/**"]')],
+    ["empty premise glob", valid('writes = []\npremises = ["symbol:run@"]')],
     ["empty verify command", valid('writes = []\nverify = [""]')],
     ["non-positive timeout", valid("writes = []\nverify_timeout_s = 0")],
     ["timeout below minimum", valid("writes = []\ntimeout_s = 59")],

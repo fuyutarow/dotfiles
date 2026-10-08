@@ -104,6 +104,7 @@ import {
   WorkerReport,
 } from "./report.ts";
 import { floorTicketGrade } from "./ticket-grade.ts";
+import { checkPremises } from "./premises.ts";
 import {
   GRADE_WORKER_PROMPT,
   mergeTicketGrades,
@@ -1504,6 +1505,37 @@ async function run(flags: RunFlags): Promise<number> {
   const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
   if (flags.legacyBrief !== undefined && ticket?.schema === 2)
     fatal("--legacy-brief applies only to plain briefs and schema 1 tickets");
+  const premiseCheck = checkPremises(ticket?.premises, resolve(flags.cd));
+  if (premiseCheck.status === "missing") {
+    const violations = premiseCheck.premises.map((premise) => ({
+      rule: "premise",
+      quote_from_brief: premise,
+      why_it_blocks_a_6min_first_return: `The declared premise ${premise} could not be found in the --cd tree.`,
+      fix: "correct the brief's premise or remove it",
+    }));
+    const ticketGrade: TicketGrade = {
+      verdict: "clarify",
+      source: "floor",
+      violations,
+    };
+    for (const violation of violations)
+      console.error(
+        `agent-dispatch: remand premise: ${violation.quote_from_brief} is absent. Fix: ${violation.fix}`,
+      );
+    appendLog({
+      kind: "refusal",
+      at: now(),
+      cwd: resolve(flags.cd),
+      dispatcher_session: currentDispatcherSession(),
+      brief: {
+        path: resolve(flags.promptFile),
+        sha256: sha256(brief),
+        chars: brief.length,
+      },
+      ticket_grade: ticketGrade,
+    });
+    return 2;
+  }
   if (ticket === undefined || ticket.verify.length === 0)
     refuseOverUngraded(resolve(flags.cd));
   const pick = await pickFor(
@@ -1513,11 +1545,21 @@ async function run(flags: RunFlags): Promise<number> {
     ticket?.capabilities,
     ticket?.first_return_s,
   );
-  const ticketGrade = floorTicketGrade(
+  const floorGrade = floorTicketGrade(
     brief,
     parsed,
     roster.choice.find((choice) => choice.id === pick.choice)?.effort,
   );
+  const ticketGrade: TicketGrade =
+    premiseCheck.status === "timeout"
+      ? {
+          ...floorGrade,
+          warnings: [
+            ...(floorGrade.warnings ?? []),
+            "premise check skipped: timeout",
+          ],
+        }
+      : floorGrade;
   if (
     (ticket === undefined || ticket.schema === 1) &&
     ticketGrade.verdict !== "pass" &&
@@ -2382,11 +2424,41 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
   const parsed = parseTicket(brief);
   if (parsed.kind === "invalid")
     fatal(`invalid ticket in ${promptFile}: ${parsed.reason}`);
+  const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
+  const premiseCheck = checkPremises(ticket?.premises, resolve(cd));
+  if (premiseCheck.status === "missing") {
+    const ticketGrade: TicketGrade = {
+      verdict: "clarify",
+      source: "floor",
+      violations: premiseCheck.premises.map((premise) => ({
+        rule: "premise",
+        quote_from_brief: premise,
+        why_it_blocks_a_6min_first_return: `The declared premise ${premise} could not be found in the --cd tree.`,
+        fix: "correct the brief's premise or remove it",
+      })),
+    };
+    for (const violation of ticketGrade.violations)
+      console.error(
+        `agent-dispatch: remand premise: ${violation.quote_from_brief} is absent. Fix: ${violation.fix}`,
+      );
+    appendLog({
+      kind: "refusal",
+      at: now(),
+      cwd: resolve(cd),
+      brief: {
+        path: resolve(promptFile),
+        sha256: sha256(brief),
+        chars: brief.length,
+      },
+      ticket_grade: ticketGrade,
+    });
+    return 2;
+  }
   const pick = await pickFor(
     roster,
     parsed.prose,
     cd,
-    parsed.kind === "ticket" ? parsed.ticket.capabilities : [],
+    ticket?.capabilities ?? [],
   );
   appendLog({
     kind: "pick",

@@ -2,6 +2,8 @@
 
 ## Pre-spawn ticket grading
 
+Schema 1 and 2 tickets may declare `premises = ["file:<relative-path>", "symbol:<exact-text>", "symbol:<exact-text>@<path-glob>"]`; before Jev is asked, the router checks paths and exact-text symbol occurrences in tracked files for this checkout (or text files via `rg` elsewhere), bounded to five seconds total. Missing premises refuse with exit 2, a `premise` ticket-grade violation, and the fix `correct the brief's premise or remove it`; a timeout is recorded as `premise check skipped: timeout` and proceeds.
+
 Every parsed brief receives the model-free ticket floor before its real worker starts. Unless
 `--no-grader` is set, the dispatcher then asks Jev to pick a roster row for a short read-only
 grader worker bounded to 90 seconds. A schema 2 ticket refused by the floor skips the grader.

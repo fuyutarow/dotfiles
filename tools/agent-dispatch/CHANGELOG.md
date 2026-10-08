@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.0 — 2026-10-08
+
+- Add optional schema 1 and 2 ticket premises for file paths and exact-text symbols; check them before Jev with a five-second bound, refuse missing premises before spawning, and record timeout skips.
+- Ask the grader to suggest premises for named dependencies and require an integration/acceptance piece when split pieces depend on one another.
+
 ## 1.4.3 — 2026-10-08
 
 - Keep a change with its own acceptance check in one deliverable, including tests, seals, required params/config, and paired claim bounds; the firedancer field report said roughly 12 briefs were remanded as containers in an hour while the GPU idled, including an implementation split from its bit-identity test, an implementation split from its seal and params files (remanded twice), and a theorem split between lower and upper bounds.

@@ -50,6 +50,8 @@ export const GRADE_WORKER_PROMPT = (brief: string): string =>
   `- A queue held by one worker is still a container.\n` +
   `- A long run must not be obtained by chaining pieces.\n\n` +
   `- If two pieces' writes overlap, order them with depends_on, or merge them into one piece.\n` +
+  `- When split pieces have depends_on, name one integration/acceptance piece that consumes the others; if none is named, add a question.\n` +
+  `- When the brief names functions or files it relies on but declares no premises, add a warning-level question suggesting \`premises = [...]\` with those names.\n` +
   `- When there is one final deliverable, return pass even if it is underspecified; put needed questions in questions with verdict pass.\n\n` +
   `## Output\n` +
   `Return one JSON object in an \`\`\`agent-dispatch-grade fenced block. Use exactly this shape; omit optional keys when unused:\n` +
@@ -293,9 +295,10 @@ export function mergeTicketGrades(
     verdict,
     source: "floor+grader",
     violations: [...floor.violations, ...grader.violations],
-    ...(grader.warnings === undefined || grader.warnings.length === 0
+    ...((floor.warnings?.length ?? 0) === 0 &&
+    (grader.warnings?.length ?? 0) === 0
       ? {}
-      : { warnings: grader.warnings }),
+      : { warnings: [...(floor.warnings ?? []), ...(grader.warnings ?? [])] }),
     ...(grader.pieces === undefined ? {} : { pieces: grader.pieces }),
     ...(grader.questions === undefined ? {} : { questions: grader.questions }),
     ...(grader.estimated_first_return_s === undefined

@@ -28,6 +28,35 @@ const writeGlob = z
     message: "a write glob is relative to --cd and stays inside it",
   });
 
+const premise = z.string().refine(
+  (value) => {
+    if (value.startsWith("file:")) {
+      const path = value.slice("file:".length);
+      return (
+        path !== "" && !path.startsWith("/") && !path.split("/").includes("..")
+      );
+    }
+    if (value.startsWith("symbol:")) {
+      const reference = value.slice("symbol:".length);
+      const separator = reference.indexOf("@");
+      const name = separator < 0 ? reference : reference.slice(0, separator);
+      const glob = separator < 0 ? undefined : reference.slice(separator + 1);
+      return (
+        name !== "" &&
+        (glob === undefined ||
+          (glob !== "" &&
+            !glob.startsWith("/") &&
+            !glob.split("/").includes("..")))
+      );
+    }
+    return false;
+  },
+  {
+    message:
+      'expected "file:<relative-path>", "symbol:<name>", or "symbol:<name>@<path-glob>"',
+  },
+);
+
 const CommonTicket = {
   writes: z.array(writeGlob).optional(),
   verify: z.array(z.string().trim().min(1)).default([]),
@@ -41,6 +70,7 @@ const CommonTicket = {
     .max(360)
     .default(DEFAULT_FIRST_RETURN_S),
   capabilities: z.array(z.string().min(1)).default([]),
+  premises: z.array(premise).optional(),
   outcome: z.string().trim().min(1).optional(),
   consumer: z.string().trim().min(1).optional(),
   first_return: z.string().trim().min(1).optional(),

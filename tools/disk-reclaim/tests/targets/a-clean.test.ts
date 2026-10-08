@@ -104,7 +104,7 @@ describe("clean target", () => {
     ).toEqual([join(fixtureHome, ".cache/uv")]);
   });
 
-  test("a selected cache is actually deleted through the target action", () => {
+  test("a selected cache is actually deleted through the target action", async () => {
     const home = tempRoot("reclaim-clean-delete-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -121,7 +121,7 @@ describe("clean target", () => {
     expect(candidate).toBeDefined();
     if (candidate === undefined) return;
     expect(
-      target.act(candidate, { ...context, mode: "run", procDir }),
+      await target.act(candidate, { ...context, mode: "run", procDir }),
     ).toMatchObject({ ok: true });
     expect(existsSync(cache)).toBe(false);
   });
@@ -247,7 +247,7 @@ describe("clean target", () => {
     }
   });
 
-  test("uses Bun's cache gc for an idle Bun cache", () => {
+  test("uses Bun's cache gc for an idle Bun cache", async () => {
     const home = tempRoot("reclaim-clean-bun-gc-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -273,7 +273,7 @@ describe("clean target", () => {
     expect(candidate).toBeDefined();
     if (candidate === undefined) return;
     expect(
-      target.act(candidate, { ...context, mode: "run", procDir }),
+      await target.act(candidate, { ...context, mode: "run", procDir }),
     ).toMatchObject({ ok: true });
     expect(calls).toEqual([home]);
     expect(existsSync(cache)).toBe(false);

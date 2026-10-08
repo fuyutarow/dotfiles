@@ -9,6 +9,7 @@ import { loadConfig, plan, run, type EngineOptions } from "./engine.ts";
 import { Plan, Tier } from "./model.ts";
 import { errorMessage, readReceipts, stateDir, wrap } from "./receipt.ts";
 import { deleteApproved } from "./delete.ts";
+import { ProgressReporter } from "./lib/progress.ts";
 import { readHeadroom } from "./storage.ts";
 import { registry, type Context, type Target } from "./targets/index.ts";
 import { typedYes } from "./targets/purge.ts";
@@ -232,26 +233,17 @@ export async function main(
   }
   const loaded = loadConfig();
   if (loaded.config === null) return fail(loaded.error ?? "invalid config");
-  const progressTimes = new Map<string, number>();
-  let progressTarget: string | null = null;
   const progressTty = process.stderr.isTTY ?? false;
+  const progressReporter = new ProgressReporter({ tty: progressTty });
   const reportProgress = (
     target: string,
-    root: string,
+    _root: string,
     entries: number,
     bytes: number,
+    done = false,
+    phase: "scan" | "delete" = "scan",
   ): void => {
-    const now = Temporal.Now.instant().epochMilliseconds;
-    const last = progressTimes.get(target) ?? 0;
-    if (last !== 0 && now - last < (progressTty ? 250 : 2000)) return;
-    progressTimes.set(target, now);
-    const line = `[reclaim] ${target}: scanning ${root} · ${entries} entries · ${bytes} bytes so far`;
-    if (progressTty) {
-      if (progressTarget !== null && progressTarget !== target)
-        process.stderr.write("\n");
-      process.stderr.write(`\r${line}`);
-      progressTarget = target;
-    } else process.stderr.write(`${line}\n`);
+    progressReporter.report(target, phase, entries, bytes, done);
   };
   const context: Context = {
     mode: "plan",
@@ -365,7 +357,7 @@ export async function main(
     selectedCommand === "run"
       ? await run(picked, options)
       : await plan(picked, options);
-  if (progressTarget !== null) process.stderr.write("\n");
+  if (progressTty) process.stderr.write("\n");
   if (result.error !== null) process.stderr.write(`reclaim: ${result.error}\n`);
   if (result.plan !== null) {
     const validated = Plan.safeParse(result.plan);

@@ -383,7 +383,7 @@ export function createWorkspacesTarget(
         return candidate;
       });
     },
-    act: (candidate, ctx): ActionResult => {
+    act: async (candidate, ctx): Promise<ActionResult> => {
       const fail = failAction;
       const argv = candidate.action.argv;
       const [bin, flag, store, ...rest] = argv;
@@ -472,7 +472,7 @@ export function createWorkspacesTarget(
             ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
           },
         } satisfies Omit<RemoveTreeOptions, "progress">;
-        const preflight = removeTree(path, {
+        const preflight = await removeTree(path, {
           ...removalOptions,
           dryRun: true,
           allowListedWorkspace: path,
@@ -516,7 +516,7 @@ export function createWorkspacesTarget(
         );
       }
       // 4. real delete
-      const removed = removeTree(path, {
+      const removed = await removeTree(path, {
         uid: process.getuid?.() ?? 0,
         ...(options.owner === undefined ? {} : { owner: options.owner }),
         ...(options.immutable === undefined

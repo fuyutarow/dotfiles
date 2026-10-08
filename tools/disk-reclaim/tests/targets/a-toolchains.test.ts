@@ -222,7 +222,7 @@ describe("toolchains target and version stores", () => {
     ]);
   });
 
-  test("a selected superseded release is actually deleted through the target action", () => {
+  test("a selected superseded release is actually deleted through the target action", async () => {
     const store = STORES[0];
     expect(store).toBeDefined();
     if (store === undefined) return;
@@ -245,7 +245,11 @@ describe("toolchains target and version stores", () => {
     expect(candidate).toBeDefined();
     if (candidate === undefined) return;
     expect(
-      target.act(candidate, { ...contextFor(home), mode: "run", procDir }),
+      await target.act(candidate, {
+        ...contextFor(home),
+        mode: "run",
+        procDir,
+      }),
     ).toMatchObject({ ok: true });
     expect(existsSync(oldRelease)).toBe(false);
   });

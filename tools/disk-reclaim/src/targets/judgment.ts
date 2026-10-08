@@ -98,10 +98,10 @@ export const judgment: Target = {
       ...(ctx.procDir === undefined ? {} : { procDir: ctx.procDir }),
       ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
     }),
-  act: (c, ctx): ActionResult => {
+  act: async (c, ctx): Promise<ActionResult> => {
     if (c.path === null)
       return { ok: false, bytes_freed: null, error: "missing path" };
-    const r = removeTree(c.path, {
+    const r = await removeTree(c.path, {
       uid: process.getuid?.() ?? 0,
       protection: {
         ownerTarget: "judgment",

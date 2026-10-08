@@ -7,12 +7,13 @@ import {
   openSync,
   readdirSync,
   statfsSync,
-  unlinkSync,
-  rmdirSync,
+  type Stats,
 } from "node:fs";
+import { rmdir as removeDir, unlink as unlinkFile } from "node:fs/promises";
+import { fromAsyncThrowable } from "neverthrow";
 import { userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { dlopen, FFIType, ptr, read } from "bun:ffi";
 import { listWorkspaces, storeOf } from "../jj/discover.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
@@ -20,6 +21,7 @@ import { protectedReason } from "./protected.ts";
 import { countEntries } from "./purge-progress.ts";
 const message = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+const pathDepth = (item: string): number => item.split(sep).length;
 
 export type RemovalRefusal = {
   path: string;
@@ -57,8 +59,17 @@ export type RemoveTreeOptions = {
         bytes: number;
         tty: boolean;
         write?: (line: string) => void;
+        onProgress?: (entries: number, bytes: number, done: boolean) => void;
       };
 };
+type ContextProgress = (
+  target: string,
+  root: string,
+  entries: number,
+  bytes: number,
+  done?: boolean,
+  phase?: "scan" | "delete",
+) => void;
 
 function nameForUid(uid: number): string {
   return fromThrowable(() => userInfo())().match(
@@ -85,13 +96,31 @@ export function removeTreeProgress(
   context?: {
     progress?: boolean | undefined;
     progressTty?: boolean | undefined;
+    targetName?: string | undefined;
+    reportProgress?: ContextProgress | undefined;
   },
-): false | { entries: number; bytes: number; tty: boolean } {
+):
+  | false
+  | {
+      entries: number;
+      bytes: number;
+      tty: boolean;
+      onProgress: (entries: number, bytes: number, done: boolean) => void;
+    } {
   if (context?.progress === false) return false;
   return {
     entries: countEntries(path) + 1,
     bytes: bytes ?? estimatedBytes(path),
     tty: context?.progressTty === true,
+    onProgress: (entries, currentBytes, done) =>
+      context?.reportProgress?.(
+        context.targetName ?? path,
+        path,
+        entries,
+        currentBytes,
+        done,
+        "delete",
+      ),
   };
 }
 
@@ -209,15 +238,16 @@ const repairFor = (path: string, ownerName: string, reason: string): string => {
   return `sudo chown -R ${JSON.stringify(ownerName)} ${JSON.stringify(path)} && sudo rm -rf ${JSON.stringify(path)}`;
 };
 
-export function removeTree(
+export async function removeTree(
   path: string,
   options: RemoveTreeOptions,
-): RemoveTreeResult {
+): Promise<RemoveTreeResult> {
   const refused: RemovalRefusal[] = [];
   const errors: RemovalError[] = [];
   let bytesFreed = 0;
   let entriesDone = 0;
   let lastProgress = 0;
+  const pending: { path: string; stat: Stats }[] = [];
   const writeProgress = (final = false): void => {
     const progress = options.progress;
     if (options.dryRun === true || progress === undefined || progress === false)
@@ -231,6 +261,10 @@ export function removeTree(
         ? 100
         : Math.min(100, Math.floor((bytesFreed / progress.bytes) * 100));
     const line = `[reclaim] ${path}: deleting ${bytesFreed}/${progress.bytes} bytes · ${entriesDone}/${progress.entries} entries · ${percent}%`;
+    if (progress.onProgress !== undefined) {
+      progress.onProgress(entriesDone, bytesFreed, final);
+      return;
+    }
     const writer =
       progress.write ?? ((value: string) => process.stderr.write(value));
     writer(
@@ -384,32 +418,54 @@ export function removeTree(
       }
       if (!complete) return false;
       if (options.dryRun === true) return true;
-      const removed = fromThrowable(() => {
-        rmdirSync(entry);
-      })();
-      if (removed.isErr()) {
-        errors.push({ path: entry, error: message(removed.error) });
-        return false;
-      }
-      bytesFreed += stat.blocks * 512;
-      entriesDone += 1;
-      writeProgress();
+      pending.push({ path: entry, stat });
       return true;
     }
     if (options.dryRun === true) return true;
-    const removed = fromThrowable(() => {
-      unlinkSync(entry);
-    })();
-    if (removed.isErr()) {
-      errors.push({ path: entry, error: message(removed.error) });
-      return false;
-    }
-    bytesFreed += stat.blocks * 512;
-    entriesDone += 1;
-    writeProgress();
+    pending.push({ path: entry, stat });
     return true;
   };
   visit(path);
+  if (options.dryRun !== true && refused.length === 0 && errors.length === 0) {
+    const files = pending.filter(({ stat }) => !stat.isDirectory());
+    const directories = pending
+      .filter(({ stat }) => stat.isDirectory())
+      .toSorted((left, right) => right.path.length - left.path.length);
+    const unlink = async (entries: typeof pending): Promise<void> => {
+      let cursor = 0;
+      const workers = Math.min(24, entries.length);
+      await Promise.all(
+        Array.from({ length: workers }, async () => {
+          while (cursor < entries.length) {
+            const entry = entries[cursor];
+            cursor += 1;
+            if (entry === undefined) continue;
+            const removed = await fromAsyncThrowable(async () => {
+              if (entry.stat.isDirectory()) await removeDir(entry.path);
+              else await unlinkFile(entry.path);
+            })();
+            if (removed.isErr())
+              errors.push({ path: entry.path, error: message(removed.error) });
+            else {
+              bytesFreed += entry.stat.blocks * 512;
+              entriesDone += 1;
+              writeProgress();
+            }
+          }
+        }),
+      );
+    };
+    await unlink(files);
+    const maxDepth = directories.reduce(
+      (maximum, { path: item }) => Math.max(maximum, pathDepth(item)),
+      0,
+    );
+    for (let depth = maxDepth; depth >= 0; depth -= 1) {
+      await unlink(
+        directories.filter(({ path: item }) => pathDepth(item) === depth),
+      );
+    }
+  }
   writeProgress(true);
   const after = fromThrowable(() => statfsSync(parent))()
     .map((stat) => stat.bavail * stat.bsize)

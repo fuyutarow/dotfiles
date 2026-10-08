@@ -158,7 +158,7 @@ export function createHostTarget(options: {
           : []),
       ];
     },
-    act: (c: Candidate, ctx: Context): ActionResult => {
+    act: async (c: Candidate, ctx: Context): Promise<ActionResult> => {
       if (c.path === null)
         return {
           ok: false,
@@ -176,7 +176,7 @@ export function createHostTarget(options: {
       let ok = true;
       let freed = 0;
       for (const entry of entries) {
-        const r = removeTree(entry, {
+        const r = await removeTree(entry, {
           uid: process.getuid?.() ?? 0,
           protection: {
             ownerTarget: "host",

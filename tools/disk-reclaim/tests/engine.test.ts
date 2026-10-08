@@ -52,6 +52,27 @@ test("plan is read-only, validates reclaim.plan/1, and ASK/KEEP do not fail", as
   expect(existsSync(join(opts.state!, "lock"))).toBe(false);
   expect(existsSync(join(opts.state!, "log.jsonl"))).toBe(false);
 });
+test("concurrent scans preserve serial target results and refusals do not block peers", async () => {
+  const first = fakeTarget({
+    name: "first",
+    candidates: [candidate("refused", "ASK")],
+  });
+  const second = fakeTarget({ name: "second" });
+  const serialFirst = await plan([first.target], options());
+  const serialSecond = await plan([second.target], options());
+  const parallel = await plan([first.target, second.target], options());
+  expect(parallel.plan?.targets).toEqual([
+    ...(serialFirst.plan?.targets ?? []),
+    ...(serialSecond.plan?.targets ?? []),
+  ]);
+  expect(first.acted).toEqual([]);
+  expect(second.acted).toEqual([]);
+
+  const result = await run([first.target, second.target], options());
+  expect(result.exit).toBe(0);
+  expect(first.acted).toEqual([]);
+  expect(second.acted).toEqual(["delete"]);
+});
 test("plan reports progress while a slow target is discovering candidates", async () => {
   const { target } = fakeTarget();
   const lines: string[] = [];
@@ -89,6 +110,18 @@ test("plan reports overlapping owners as ASK and emits a valid JSON plan", async
     { verdict: "ASK", reason: "ownership conflict: first, second" },
   ]);
   expect(result.plan?.targets.map((row) => row.totals.ask)).toEqual([1, 1]);
+  const runFirst = fakeTarget({
+    name: "first",
+    candidates: [candidate("shared")],
+  });
+  const runSecond = fakeTarget({
+    name: "second",
+    candidates: [candidate("shared/child")],
+  });
+  const acted = await run([runFirst.target, runSecond.target], options());
+  expect(acted.exit).toBe(0);
+  expect(runFirst.acted).toEqual([]);
+  expect(runSecond.acted).toEqual([]);
 });
 test("run acts only on RECLAIM, records before/after free space, and writes v2 with action results", async () => {
   const { target, acted } = fakeTarget();

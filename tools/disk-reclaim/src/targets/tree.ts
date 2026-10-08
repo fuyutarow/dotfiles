@@ -37,10 +37,10 @@ export function keepTreeCandidate(path: string, reason: string): Candidate {
   };
 }
 
-export function deleteTree(candidate: Candidate, _ctx: Context) {
+export async function deleteTree(candidate: Candidate, _ctx: Context) {
   if (candidate.path === null)
     return { ok: false, bytes_freed: null, error: "missing path" };
-  const result = removeTree(candidate.path, {
+  const result = await removeTree(candidate.path, {
     uid: process.getuid?.() ?? 0,
     protection: {
       ownerTarget: _ctx.targetName,

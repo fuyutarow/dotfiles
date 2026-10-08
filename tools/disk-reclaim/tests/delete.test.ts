@@ -141,7 +141,7 @@ test("with --yes deletes under the lock and records freed bytes in a v2 receipt"
   expect(parsedReceipt.data.actions[0]?.bytes_freed).toBeGreaterThanOrEqual(0);
 });
 
-test("removes arena-like read-only trees, files, non-searchable dirs, and symlinks without following them", () => {
+test("removes arena-like read-only trees, files, non-searchable dirs, and symlinks without following them", async () => {
   const f = fixture();
   const target = join(f.path, "readonly");
   const outside = join(f.path, "outside");
@@ -158,7 +158,7 @@ test("removes arena-like read-only trees, files, non-searchable dirs, and symlin
   chmodSync(join(target, "locked"), 0o555);
   chmodSync(target, 0o555);
   const outsideMode = statSync(outside).mode & 0o777;
-  const result = removeTree(target, {
+  const result = await removeTree(target, {
     uid: process.getuid?.() ?? 0,
     protection: { procDir: f.procRoot },
     immutable: () => false,
@@ -170,7 +170,7 @@ test("removes arena-like read-only trees, files, non-searchable dirs, and symlin
   expect(statSync(outside).mode & 0o777).toBe(outsideMode);
 });
 
-test("removeTree repairs deep same-uid directories with restricted modes", () => {
+test("removeTree repairs deep same-uid directories with restricted modes", async () => {
   const f = fixture();
   for (const mode of [0o000, 0o500, 0o555, 0o600]) {
     const target = join(f.path, `deep-${mode.toString(8)}`);
@@ -184,7 +184,7 @@ test("removeTree repairs deep same-uid directories with restricted modes", () =>
     writeFileSync(join(current, "snapshot.bin"), "arena snapshot");
     for (const directory of directories.toReversed())
       chmodSync(directory, mode);
-    const result = removeTree(target, {
+    const result = await removeTree(target, {
       uid: process.getuid?.() ?? 0,
       protection: { procDir: f.procRoot },
       immutable: () => false,
@@ -196,12 +196,12 @@ test("removeTree repairs deep same-uid directories with restricted modes", () =>
   }
 });
 
-test("unknown immutable status refuses the subtree", () => {
+test("unknown immutable status refuses the subtree", async () => {
   const f = fixture();
   const target = join(f.path, "unknown-attributes");
   mkdirSync(target);
   writeFileSync(join(target, "data"), "keep");
-  const result = removeTree(target, {
+  const result = await removeTree(target, {
     uid: process.getuid?.() ?? 0,
     protection: { procDir: f.procRoot },
     immutable: () => null,
@@ -215,14 +215,14 @@ test("unknown immutable status refuses the subtree", () => {
   expect(existsSync(join(target, "data"))).toBe(true);
 });
 
-test("traversal refuses a nested repo store and continues with siblings", () => {
+test("traversal refuses a nested repo store without deleting the tree", async () => {
   const f = fixture();
   const target = join(f.path, "nested-store");
   const protectedDir = join(target, "keep-repo");
   mkdirSync(join(protectedDir, ".git"), { recursive: true });
   writeFileSync(join(protectedDir, "data"), "repo data");
   writeFileSync(join(target, "remove-me"), "safe sibling");
-  const result = removeTree(target, {
+  const result = await removeTree(target, {
     uid: process.getuid?.() ?? 0,
     protection: { procDir: f.procRoot },
     immutable: () => false,
@@ -231,7 +231,7 @@ test("traversal refuses a nested repo store and continues with siblings", () => 
   expect(JSON.stringify(result.refused)).toContain(protectedDir);
   expect(JSON.stringify(result.refused)).toContain("repo store holder");
   expect(existsSync(join(protectedDir, "data"))).toBe(true);
-  expect(existsSync(join(target, "remove-me"))).toBe(false);
+  expect(existsSync(join(target, "remove-me"))).toBe(true);
   expect(existsSync(target)).toBe(true);
 });
 
@@ -262,7 +262,7 @@ test("another uid is refused while sibling entries are removed and delete exits 
   });
   expect(result.refused[0]?.repair).toContain("sudo chown");
   expect(existsSync(foreign)).toBe(true);
-  expect(existsSync(join(target, "sibling"))).toBe(false);
+  expect(existsSync(join(target, "sibling"))).toBe(true);
   expect(readReceipts(1, f.state).receipts[0]).toMatchObject({
     schema: 2,
     exit: 1,

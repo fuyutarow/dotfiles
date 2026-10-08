@@ -29,7 +29,14 @@ export type Context = {
   progress?: boolean | undefined;
   progressTty?: boolean | undefined;
   reportProgress?:
-    | ((target: string, root: string, entries: number, bytes: number) => void)
+    | ((
+        target: string,
+        root: string,
+        entries: number,
+        bytes: number,
+        done?: boolean,
+        phase?: "scan" | "delete",
+      ) => void)
     | undefined;
   targetName?: string | undefined;
   procDir?: string | undefined;

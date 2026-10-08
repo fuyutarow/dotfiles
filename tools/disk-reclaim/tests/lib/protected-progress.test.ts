@@ -37,7 +37,7 @@ test("process cwd protects its containing candidate, not candidate descendants",
   expect(protectedReason(child, { home: root, procDir })).toBeNull();
 });
 
-test("removeTree emits throttled progress to its stderr writer on a fake TTY", () => {
+test("removeTree emits throttled progress to its stderr writer on a fake TTY", async () => {
   const root = tempRoot("reclaim-progress-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
@@ -49,7 +49,7 @@ test("removeTree emits throttled progress to its stderr writer on a fake TTY", (
   mkdirSync(tree);
   writeFileSync(join(tree, "entry"), "fixture");
   const stderr: string[] = [];
-  const result = removeTree(tree, {
+  const result = await removeTree(tree, {
     uid: process.getuid?.() ?? 0,
     owner: () => ({ uid: process.getuid?.() ?? 0, name: "fixture" }),
     immutable: () => false,

@@ -243,7 +243,7 @@ export async function deleteApproved(paths: string[], options: Options) {
       refused: [],
     };
     actions.push(action);
-    const result = removeTree(row.path, {
+    const result = await removeTree(row.path, {
       uid: process.getuid?.() ?? 0,
       protection: {
         ownerTarget: "delete",

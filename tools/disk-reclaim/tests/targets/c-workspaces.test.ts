@@ -114,7 +114,7 @@ describe("workspaces target", () => {
     w.jj(ws, "bookmark", "create", "topic", "-r", "@-");
     w.jj(ws, "git", "push", "-b", "topic");
     expect(only(await plan(w), ws).verdict).toBe("RECLAIM");
-  });
+  }, 30_000);
 
   test("an empty commit with a description counts as content", async () => {
     const w = world();

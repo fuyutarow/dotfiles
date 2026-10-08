@@ -1,5 +1,5 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir, hostname } from "node:os";
+import { cpus, homedir, hostname } from "node:os";
 import { resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
 import { fromThrowable, z } from "../../shared/src/zod.ts";
@@ -205,70 +205,102 @@ export async function plan(
   targets: Target[],
   options: EngineOptions,
 ): Promise<EngineResult> {
-  const rows: TargetPlan[] = [];
   const liveness = (
     options.captureLiveness ??
     ((config) => snapshotFor(config, options.context))
   )(options.context.config);
-  for (const target of targets) {
-    const reportProgress = options.context.reportProgress;
-    reportProgress?.(target.name, target.name, 0, 0);
-    const ctx = {
-      ...options.context,
-      mode: "plan",
-      liveness,
-      explicit: options.explicit?.includes(target.name) === true,
-    } satisfies Context;
-    const available = await fromAsyncThrowable(async () =>
-      target.available(ctx),
-    )();
-    if (available.isErr())
-      return {
-        exit: 2,
-        plan: null,
-        error: `${target.name}: ${errorMessage(available.error)}`,
+  const rows: (TargetPlan | null)[] = Array.from(
+    { length: targets.length },
+    () => null,
+  );
+  const errors: (string | null)[] = Array.from(
+    { length: targets.length },
+    () => null,
+  );
+  let cursor = 0;
+  const scan = async (): Promise<void> => {
+    while (cursor < targets.length) {
+      const index = cursor;
+      cursor += 1;
+      const target = targets[index];
+      if (target === undefined) continue;
+      const reportProgress = options.context.reportProgress;
+      reportProgress?.(target.name, target.name, 0, 0);
+      const ctx = {
+        ...options.context,
+        mode: "plan",
+        liveness,
+        explicit: options.explicit?.includes(target.name) === true,
+      } satisfies Context;
+      const available = await fromAsyncThrowable(async () =>
+        target.available(ctx),
+      )();
+      if (available.isErr()) {
+        errors[index] = `${target.name}: ${errorMessage(available.error)}`;
+        continue;
+      }
+      const { available: present, skip_reason } = available.value;
+      const heartbeat = setInterval(
+        () => reportProgress?.(target.name, target.name, 0, 0),
+        options.context.progressTty === true ? 250 : 2000,
+      );
+      const planned = await planTarget(target, ctx, heartbeat, present);
+      if (planned !== null && planned.isErr()) {
+        errors[index] = `${target.name}: ${errorMessage(planned.error)}`;
+        continue;
+      }
+      const parsed = Candidate.array().safeParse(
+        planned !== null && planned.isOk() ? planned.value : [],
+      );
+      if (!parsed.success) {
+        errors[index] = `${target.name}: ${parsed.error.message}`;
+        continue;
+      }
+      if (new Set(parsed.data.map((c) => c.id)).size !== parsed.data.length) {
+        errors[index] = `${target.name}: duplicate candidate id`;
+        continue;
+      }
+      reportProgress?.(
+        target.name,
+        target.name,
+        parsed.data.length,
+        parsed.data.reduce((sum, candidate) => sum + (candidate.bytes ?? 0), 0),
+      );
+      rows[index] = {
+        name: target.name,
+        tier: target.tier,
+        available: present,
+        skip_reason,
+        exit: null,
+        candidates: parsed.data,
+        totals: totals(parsed.data),
       };
-    const { available: present, skip_reason } = available.value;
-    const heartbeat = setInterval(
-      () => reportProgress?.(target.name, target.name, 0, 0),
-      options.context.progressTty === true ? 250 : 2000,
-    );
-    const planned = await planTarget(target, ctx, heartbeat, present);
-    if (planned !== null && planned.isErr())
-      return {
-        exit: 2,
-        plan: null,
-        error: `${target.name}: ${errorMessage(planned.error)}`,
-      };
-    const parsed = Candidate.array().safeParse(
-      planned !== null && planned.isOk() ? planned.value : [],
-    );
-    if (!parsed.success)
-      return {
-        exit: 2,
-        plan: null,
-        error: `${target.name}: ${parsed.error.message}`,
-      };
-    if (new Set(parsed.data.map((c) => c.id)).size !== parsed.data.length)
-      return {
-        exit: 2,
-        plan: null,
-        error: `${target.name}: duplicate candidate id`,
-      };
-    rows.push({
-      name: target.name,
-      tier: target.tier,
-      available: present,
-      skip_reason,
-      exit: null,
-      candidates: parsed.data,
-      totals: totals(parsed.data),
-    });
-  }
-  markOwnershipConflicts(rows);
+      reportProgress?.(
+        target.name,
+        target.name,
+        parsed.data.length,
+        parsed.data.reduce((sum, candidate) => sum + (candidate.bytes ?? 0), 0),
+        true,
+      );
+    }
+  };
+  const workers = Math.min(targets.length, cpus().length, 4);
+  await Promise.all(Array.from({ length: workers }, () => scan()));
+  const error = errors.find((item) => item !== null);
+  if (error !== undefined && error !== null)
+    return { exit: 2, plan: null, error };
+  const completeRows = rows.flatMap((row) => (row === null ? [] : [row]));
+  if (completeRows.length !== targets.length)
+    return { exit: 2, plan: null, error: "target scan did not complete" };
+  markOwnershipConflicts(completeRows);
   return {
     exit: 0,
-    plan: aggregate(rows, "plan", options.headroom ?? readHeadroom(), null),
+    plan: aggregate(
+      completeRows,
+      "plan",
+      options.headroom ?? readHeadroom(),
+      null,
+    ),
     error: null,
   };
 }
@@ -495,16 +527,50 @@ async function executeTarget(
 
 async function executeLocked(
   targets: Target[],
-  preview: Plan,
   options: EngineOptions,
   dir: string,
 ): Promise<EngineResult> {
+  const recheckedPreview = await plan(targets, options);
+  if (recheckedPreview.plan === null) return recheckedPreview;
+  const lockedPlan = recheckedPreview.plan;
+  if (
+    lockedPlan.targets.some((target) =>
+      target.candidates.some(
+        (candidate) =>
+          candidate.verdict === "ASK" &&
+          candidate.reason.startsWith("ownership conflict:"),
+      ),
+    )
+  )
+    return { exit: 0, plan: lockedPlan, error: null };
+  const owned = lockedPlan.targets.flatMap((target) =>
+    target.candidates.flatMap((candidate) =>
+      candidate.verdict === "RECLAIM" && candidate.path !== null
+        ? [{ target: target.name, candidate }]
+        : [],
+    ),
+  );
+  for (const [index, left] of owned.entries()) {
+    const right = owned
+      .slice(index + 1)
+      .find(
+        (item) =>
+          left.target !== item.target &&
+          pathsOverlap(left.candidate, item.candidate),
+      );
+    if (right !== undefined)
+      return {
+        exit: 2,
+        plan: lockedPlan,
+        error: `overlapping delete paths remain owned by ${left.target} and ${right.target}`,
+      };
+  }
   let receipt: string | null = null;
   for (const [index, target] of targets.entries()) {
-    const row = preview.targets[index];
+    const row = lockedPlan.targets[index];
     receipt = await executeTargetIfPresent(target, row, options, dir, receipt);
   }
-  const codes = new Set(preview.targets.map((t) => t.exit));
+  const codes = new Set(lockedPlan.targets.map((t) => t.exit));
   let exit = 0;
   if (codes.has(4)) exit = 4;
   if (codes.has(2)) exit = 2;
@@ -512,7 +578,7 @@ async function executeLocked(
   return {
     exit,
     plan: aggregate(
-      preview.targets,
+      lockedPlan.targets,
       "run",
       options.headroom ?? readHeadroom(),
       receipt,
@@ -562,9 +628,8 @@ export async function run(
   if (lock.release === null)
     return { exit: lock.exit, plan: preview.plan, error: lock.error };
   using _lock = { [Symbol.dispose]: lock.release };
-  const value = preview.plan;
   const execute = await fromAsyncThrowable(async () =>
-    executeLocked(targets, value, options, dir),
+    executeLocked(targets, options, dir),
   )();
   return execute.isOk()
     ? execute.value

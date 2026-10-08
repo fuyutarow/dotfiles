@@ -208,14 +208,14 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
         }),
       );
     },
-    act: (item, ctx) => {
+    act: async (item, ctx) => {
       if (item.path === null || item.verdict !== "RECLAIM")
         return {
           ok: false,
           bytes_freed: null,
           error: "scratch candidate is not reclaimable",
         };
-      const result = remove(item.path, uid(), ctx);
+      const result = await remove(item.path, uid(), ctx);
       return {
         ok: result.ok,
         bytes_freed: result.ok ? result.statfs_bytes_freed : null,

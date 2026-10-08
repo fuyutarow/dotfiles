@@ -140,7 +140,7 @@ export const purge = {
       config: ctx.config,
       ...(ctx.liveness === undefined ? {} : { liveness: ctx.liveness }),
     }),
-  act: (candidate, ctx): ActionResult => {
+  act: async (candidate, ctx): Promise<ActionResult> => {
     if (candidate.path === null)
       return { ok: false, bytes_freed: null, error: "missing graveyard path" };
     const plannedEntry = candidate.action.argv[1] === candidate.path;
@@ -152,7 +152,7 @@ export const purge = {
       ? [candidate.path]
       : graveyardEntries(candidate.path);
     for (const entry of entries) {
-      const result = removeTree(entry, {
+      const result = await removeTree(entry, {
         uid: process.getuid?.() ?? 0,
         protection: {
           ownerTarget: "purge",

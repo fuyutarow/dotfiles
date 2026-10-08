@@ -479,15 +479,18 @@ run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run --tier b
 
 [tasks."reclaim:clean"]
 description = "Reclaim disk: clear package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo/mise/julia) via each tool's OWN gc/prune command. Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run clean --yes'
 
 [tasks."reclaim:rust"]
 dir = "{{config_root}}"
 description = "Run disk-reclaim's Rust target cleanup for projects under AUDIT_PROJECTS (~/Workspace): candidates exceed RUST_TARGET_DAYS and have no cargo/rustc process inside. The safety predicate also skips targets containing an on-PATH binary. Use reclaim:audit to preview the plan; this task runs it."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run rust --yes'
 
 [tasks."reclaim:toolchains"]
 description = "Run disk-reclaim's toolchain cleanup for old rustup toolchains, vscode-server versions, and superseded Codex/Claude releases. Its safety predicates preserve defaults or pinned toolchains, and current, recent, or live-process releases. Use reclaim:audit to preview the plan; KEEP_DAYS/AUDIT_PROJECTS tune eligibility."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run toolchains --yes'
 
 # The Linux SYSTEM-state half of the 断捨離 pass; reclaim:clean owns the per-user package caches
@@ -499,6 +502,7 @@ run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run toolchai
 # at shutdown only, and .wslconfig has no storage key — so preventing GROWTH is the whole point.
 [tasks."reclaim:system"]
 description = "Reclaim disk inside WSL: apt archives, journald, snap disabled revisions, then fstrim. Needs sudo. Per-user package caches are reclaim:clean; freed blocks return to Windows only on `wsl.exe --shutdown`."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run system --yes'
 
 # --same-filesystem is not a nicety on WSL: without it a KONDO_DIR above the mount points walks
@@ -509,6 +513,7 @@ run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run system -
 # /home/linuxbrew/.linuxbrew/bin. Probe brew tools by absolute path, never by root's PATH.
 [tasks."reclaim:pick"]
 description = "Clean every project's regenerable build artifacts (node_modules/target/build…) via kondo — INTERACTIVE picker. Set KONDO_OLDER (for example 30d) to narrow candidates; KONDO_DIR changes the root. Blind/agent-safe form: reclaim:builds."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" wrap pick --interactive -- kondo --same-filesystem --older "${KONDO_OLDER:-0d}" ${KONDO_DIR:-$HOME}'
 
 # Why a blind twin of reclaim:pick exists: an interactive task never runs unattended, and that
@@ -518,6 +523,7 @@ run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" wrap pick --
 # every project's matching output is a candidate; KONDO_OLDER=30d (or any age) narrows it.
 [tasks."reclaim:builds"]
 description = "Reclaim every project's regenerable build artifacts (node_modules/target/build…) NON-interactively via kondo -a. Set KONDO_OLDER (for example 30d) to narrow candidates. Regenerable only — any agent may run it blind. Human picker: reclaim:pick."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run builds --yes'
 
 [tasks."reclaim:audit"]
@@ -527,18 +533,22 @@ run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan --all'
 
 [tasks."reclaim:judgment"]
 description = "READ-ONLY plan for owner-approved cleanup of Rust target/ directories of any age and optional rust-docs components. Skips active cargo/rustc projects and targets containing an on-PATH binary. Use reclaim:judgment:yes to act; disk-reclaim records each action and freed byte in its receipt."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan judgment'
 
 [tasks."reclaim:judgment:yes"]
 description = "Act on reclaim:judgment's owner-approved Rust target/docs plan: cargo clean eligible targets and remove installed rust-docs components. Per-action freed bytes and command output go to the reclaim receipt."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run judgment --yes'
 
 [tasks."reclaim:purge"]
 description = "IRREVERSIBLE: empty EVERY graveyard — rip's AND the XDG trash (~/.local/share/Trash). This is the ONLY step that actually frees disk: both delete by rename, so the bytes stay until purged. Prints every target with sizes and requires typing 'yes'. Non-interactive form: reclaim:purge:yes."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run purge --interactive'
 
 [tasks."reclaim:purge:yes"]
 description = "IRREVERSIBLE: reclaim:purge confirmed by argv (--yes) instead of a typed 'yes' — prints every target with sizes, then empties every graveyard; output kept in the reclaim receipt log. Owner's decision 2026-10-07: the human-only gate is removed."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run purge --yes'
 
 # The WINDOWS-HOST half of reclaim, for the C: space WSL leaves that no guest-side task can reach.
@@ -551,22 +561,27 @@ run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run purge --
 # elevated procedure rather than pretending to run what it cannot test.
 [tasks."reclaim:host"]
 description = "Reclaim Windows-host disk under WSL2 that guest-side tasks cannot: orphaned swap.vhdx (from dead distro instances) and the winget cache. READ-ONLY plan by default; --execute frees. Safe live — the OS locks the running swap. --host is an ssh alias."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan host'
 
 [tasks."reclaim:workspaces"]
 description = "READ-ONLY plan for fully-pushed, clean jj workspaces that disk-reclaim can safely forget and delete. Use reclaim:workspaces:yes to act."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan workspaces'
 
 [tasks."reclaim:workspaces:yes"]
 description = "Forget and delete jj workspaces only when disk-reclaim proves their contents are pushed, clean, and unused."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run workspaces --yes'
 
 [tasks."reclaim:scratch"]
 description = "READ-ONLY plan for reclaimable dead-session scratch directories. Use reclaim:scratch:yes to act."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan scratch'
 
 [tasks."reclaim:scratch:yes"]
 description = "Delete dead-session scratch directories only when disk-reclaim proves them safe."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run scratch --yes'
 
 # Remediation for what wsl:audit reports as "host process past 3600s CPU". Twice on r99 (2026-09-09
@@ -581,6 +596,7 @@ run = 'bun ~/dotfiles/scripts/wsl-reap.ts'
 
 [tasks."reclaim:vhdx"]
 description = "READ-ONLY: plan the offline compaction of a WSL2 ext4.vhdx — usually the largest single C: lever. Measures the allocated-vs-guest-used gap FRESH (it shrinks as the guest writes: 130GB on r99 2026-09-17 was 57GB by 09-21, so never quote a remembered number), detects Optimize-VHD (Pro) vs diskpart (Home), prints the elevated procedure. fstrim and --set-sparse were measured inert here; only compaction returns the gap."
+raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan vhdx'
 
 [tasks."install:tools"]

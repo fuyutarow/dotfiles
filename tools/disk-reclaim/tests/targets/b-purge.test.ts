@@ -75,7 +75,7 @@ async function purgeTty(
   return { code, out: raw, root };
 }
 
-test("purge removes 555/444 tree without following a symlink outside it", () => {
+test("purge removes 555/444 tree without following a symlink outside it", async () => {
   const root = tempRoot("disk-reclaim-purge-");
   const procDir = join(root, "proc");
   mkdirSync(procDir);
@@ -127,7 +127,7 @@ test("purge removes 555/444 tree without following a symlink outside it", () => 
       (item) => item.path === tree,
     )?.action.argv[0],
   ).toBe("removeTree");
-  const result = purge.act(candidate, ctx);
+  const result = await purge.act(candidate, ctx);
   expect(result.ok).toBe(true);
   expect(existsSync(tree)).toBe(false);
   expect(readFileSync(join(outside, "keep"), "utf8")).toBe("untouched");

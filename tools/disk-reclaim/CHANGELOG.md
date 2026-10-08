@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Render bounded scan and delete progress with TTY redraws or rate-limited plain lines, and connect disk-reclaim mise tasks directly to the terminal.
+- Scan independent targets concurrently and remove preflight-approved trees with a bounded unlink/rmdir work queue.
+- Refuse an entire tree before deletion when traversal finds an ownership, filesystem, immutable-flag, or protection failure.
+
 ## 0.2.2
 
 - Fix a workspace plan failing schema validation (exit 2) when a live same-uid cwd was found alongside an unreadable same-uid process (e.g. `systemd --user` on a shared host): the positive in-use fact now yields KEEP with a definite "not in use" failure, and the unreadable process is still reported in its detail. An unreadable process with no positive fact remains ASK, never idle.

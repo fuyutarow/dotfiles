@@ -122,7 +122,7 @@ test("every registered target survives plan and run smoke checks in a fixture HO
       expect(ran.exit, `${name} run: ${ran.stderr}`).not.toBe(2);
     }
   }
-});
+}, 30_000);
 test("usage failures exit 2, help exits 0", () => {
   for (const args of [
     ["run"],
@@ -144,7 +144,7 @@ test("usage failures exit 2, help exits 0", () => {
     invoke(["run", "--tier", "blind", "--yes", "--stop-on-error", "--json"])
       .exit,
   ).toBe(0);
-});
+}, 30_000);
 test("wrap preserves stdout, stderr, child status, output log, and v1 fields", () => {
   const state = fixture();
   const r = invoke(

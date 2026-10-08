@@ -21,13 +21,55 @@ describe("dispatch roster", () => {
       effort: "max",
     });
     const terra = loaded.value.choice.find((row) => row.id === "terra-low");
-    expect(terra?.price_in).toBeUndefined();
-    expect(terra?.price_out).toBeUndefined();
-    expect(
-      loaded.value.choice.find((row) => row.id === "astra-low")?.tb4,
-    ).toBeUndefined();
+    expect(terra).toMatchObject({
+      price_in: 2,
+      price_cached_in: 0.2,
+      price_out: 12,
+    });
+    expect(loaded.value.choice.find((row) => row.id === "astra-low")?.tb4).toBe(
+      41.9,
+    );
     expect(rosterTable(loaded.value)).toContain("$0.10/$0.01/$0.50");
-    expect(rosterTable(loaded.value)).toContain("—/—/—");
+    expect(rosterTable(loaded.value)).toContain("$2/—/$10");
+    const rendered = rosterTable(loaded.value);
+    const source =
+      "([AA](https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra))";
+    const expected = [
+      ["sol-low", 30.8, 53.2],
+      ["sol-medium", 48, 53.2],
+      ["sol-high", 51.5, 55.8],
+      ["sol-xhigh", 54, 55.7],
+      ["sol-max", 56.1, 54.2],
+      ["astra-low", 41.9, 54.1],
+      ["astra-medium", 49.5, 54.2],
+      ["astra-high", 54, 55.4],
+      ["astra-xhigh", 59.6, 55.7],
+      ["astra-max", 59.1, 56.5],
+    ] as const;
+    for (const [id, tb4, scicode] of expected) {
+      const row = rendered
+        .split("\n")
+        .find((line) => line.includes(`\`${id}\``));
+      expect(row).toContain(`${tb4} ${source}`);
+      expect(row).toContain(`${scicode} ${source}`);
+    }
+    const terraSource =
+      "([AA](https://artificialanalysis.ai/models/releases/comparisons/gpt-6-astra-vs-gpt-5-6-terra))";
+    const terraExpected = [
+      ["terra-low", 1.5, 49.9],
+      ["terra-medium", 1, 50.5],
+      ["terra-high", 1.5, 52.4],
+      ["terra-xhigh", 10.1, 52.3],
+      ["terra-max", 35.4, 55],
+    ] as const;
+    for (const [id, tb4, scicode] of terraExpected) {
+      const row = rendered
+        .split("\n")
+        .find((line) => line.includes(`\`${id}\``));
+      expect(row).toContain(`${tb4} ${terraSource}`);
+      expect(row).toContain(`${scicode} ${terraSource}`);
+    }
+    expect(rosterTable(loaded.value)).toContain("$2/$0.20/$12");
   });
 
   test("default must name a codex-route row", async () => {

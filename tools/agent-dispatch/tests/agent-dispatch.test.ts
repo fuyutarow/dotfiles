@@ -412,7 +412,7 @@ describe("agent-dispatch run", () => {
       exit: 0,
       tokens: { input: 100, cached_input: 20, output: 7, reasoning: 3 },
       cost_basis: "list_price_x_tokens",
-      price: { in: 0.1, out: 0.5, as_of: "2026-10-06" },
+      price: { in: 0.1, out: 0.5, as_of: "2026-10-08" },
       brief_chars: readFileSync(b, "utf8").length,
       cwd: scratch,
       jev_confidence: 0.9,
@@ -540,12 +540,20 @@ describe("agent-dispatch run", () => {
     ]);
     const sent = bodies.at(-1) ?? "";
     expect(sent).toContain("Choose the CHEAPEST worker");
+    expect(sent).toContain(
+      "A blank measurement means not published, not low: compare rows without TB4 on the AA index, and do not prefer a row only because its numbers are more complete.",
+    );
     expect(sent).toContain("about equally capable");
     expect(sent).toContain("choose the codex-route row");
     expect(sent).toContain("Route codex.");
     expect(sent).toContain("Route claude.");
     // every roster row reaches Jev with its benchmark numbers and price multiple, claude rows included
     expect(sent).toContain("TB4 43.9%");
+    expect(sent).toContain("TB4 48%");
+    expect(sent).toContain("SciCode 53.2%");
+    expect(sent).toContain(
+      "https://artificialanalysis.ai/models/releases/comparisons/gpt-6-1-sol-vs-gpt-6-astra",
+    );
     expect(sent).toContain("20x the cheapest row");
     expect(sent).toContain("40x the cheapest row");
     expect(sent).toContain("1x the cheapest row");
@@ -913,7 +921,7 @@ describe("agent-dispatch export", () => {
     expect(rows.find((row) => row.run_id === aId)).toMatchObject({
       grade: "pass",
       confidence: 0.9,
-      price: { in: 0.1, out: 0.5, as_of: "2026-10-06" },
+      price: { in: 0.1, out: 0.5, as_of: "2026-10-08" },
     });
     expect(rows.find((row) => row.run_id === "legacy-run")).toMatchObject({
       grade: null,

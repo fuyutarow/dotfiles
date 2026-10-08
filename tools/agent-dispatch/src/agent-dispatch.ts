@@ -373,6 +373,7 @@ function jevRequest(
           "and graded record are sufficient for what `task` actually needs. Pick a dearer worker only " +
           "when `task` needs a capability the cheaper ones measurably lack (for example a long " +
           "terminal or agentic session, where TB4 differs most), not because it is stronger in general. " +
+          "A blank measurement means not published, not low: compare rows without TB4 on the AA index, and do not prefer a row only because its numbers are more complete. " +
           "When a codex-route row and a claude-route row are about equally capable for this task " +
           "(comparable measured numbers for the capabilities it needs), choose the codex-route row. " +
           "Then choose the cheapest sufficient codex row as before. Choose a claude-route row only " +

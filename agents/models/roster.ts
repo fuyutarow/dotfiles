@@ -20,7 +20,9 @@ const ChoiceSchema = z.strictObject({
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
   aa_index: z.number().optional(),
   tb4: z.number().optional(),
+  tb4_source: z.url().optional(),
   scicode: z.number().optional(),
+  scicode_source: z.url().optional(),
   coding_agent: z.number().optional(),
   price_in: z.number().optional(),
   price_cached_in: z.number().optional(),
@@ -125,8 +127,10 @@ export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
     c.aa_index === undefined ? undefined : `AA ${c.aa_index}`,
     c.tb4 === undefined
       ? undefined
-      : `TB4 ${c.tb4}% (long terminal/agentic sessions)`,
-    c.scicode === undefined ? undefined : `SciCode ${c.scicode}%`,
+      : `TB4 ${c.tb4}% (long terminal/agentic sessions; source: ${c.tb4_source ?? r.sources.aa_releases})`,
+    c.scicode === undefined
+      ? undefined
+      : `SciCode ${c.scicode}% (source: ${c.scicode_source ?? r.sources.aa_releases})`,
   ].filter((x) => x !== undefined);
   const record =
     graded === undefined
@@ -145,7 +149,7 @@ export function rosterTable(r: Roster): string {
     "| :-: | --- | --- | --: | --: | --: | --- | --: | --- |";
   const rows = r.choice.map(
     (c) =>
-      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_cached_in)}/${price(c.price_out)} | ${costMultiple(r, c) === undefined ? "—" : `${costMultiple(r, c)}x`} | ${c.use_for} |`,
+      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route} | ${num(c.aa_index)} | ${num(c.tb4)}${c.tb4_source === undefined ? "" : ` ([AA](${c.tb4_source}))`} | ${num(c.scicode)}${c.scicode_source === undefined ? "" : ` ([AA](${c.scicode_source}))`} | ${price(c.price_in)}/${price(c.price_cached_in)}/${price(c.price_out)} | ${costMultiple(r, c) === undefined ? "—" : `${costMultiple(r, c)}x`} | ${c.use_for} |`,
   );
   return [head, ...rows].join("\n");
 }

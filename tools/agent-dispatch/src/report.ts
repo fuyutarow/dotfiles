@@ -42,6 +42,7 @@ export const TicketGradeSchema = z.strictObject({
       fix: z.string(),
     }),
   ),
+  warnings: z.array(z.string()).optional(),
   pieces: z
     .array(
       z.strictObject({

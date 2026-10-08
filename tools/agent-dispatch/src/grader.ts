@@ -16,6 +16,7 @@ const PieceSchema = z.strictObject({
 export const AgentGradeSchema = z.strictObject({
   verdict: z.enum(["pass", "split", "clarify"]),
   violations: TicketGradeSchema.shape.violations,
+  warnings: z.array(z.string()).optional(),
   pieces: z.array(PieceSchema).optional(),
   questions: z
     .array(
@@ -67,13 +68,17 @@ export function parseAgentGrade(
         ? "unterminated agent-dispatch-grade block"
         : "missing agent-dispatch-grade block",
     };
-  const decoded = jsonText.safeParse(match[1]);
-  if (!decoded.success)
+  const block = match[1] ?? "";
+  const decoded = jsonText.safeParse(block);
+  const tolerantDecoded = decoded.success
+    ? decoded
+    : jsonText.safeParse(stripTrailingCommas(block));
+  if (!tolerantDecoded.success)
     return {
       valid: false,
       reason: "agent-dispatch-grade block is not valid JSON",
     };
-  const parsed = AgentGradeSchema.safeParse(decoded.data);
+  const parsed = AgentGradeSchema.safeParse(tolerantDecoded.data);
   if (!parsed.success)
     return {
       valid: false,
@@ -85,10 +90,49 @@ export function parseAgentGrade(
         )
         .join("; ")}`,
     };
-  const validation = validateAgentGrade(parsed.data, parentBrief);
+  const normalized = normalizeDependencies(parsed.data);
+  const validation = validateAgentGrade(normalized.grade, parentBrief);
   return validation === undefined
-    ? { valid: true, grade: parsed.data }
+    ? { valid: true, grade: normalized.grade }
     : { valid: false, reason: validation };
+}
+
+function stripTrailingCommas(text: string): string {
+  return text.replaceAll(
+    /"(?:\\.|[^"\\])*"|(,)(\s*[}\]])/gu,
+    (match: string, comma: string | undefined, closing: string | undefined) =>
+      comma === undefined ? match : (closing ?? ""),
+  );
+}
+
+function normalizePieceDependencies(
+  piece: AgentPiece,
+  titles: Set<string>,
+  warnings: string[],
+): AgentPiece {
+  const depends_on = piece.depends_on.filter((title) => {
+    if (titles.has(title) && title !== piece.title) return true;
+    warnings.push(
+      `piece ${piece.title} has a dropped ${title === piece.title ? "self" : "unknown"} dependency: ${title}`,
+    );
+    return false;
+  });
+  return Object.assign({}, piece, { depends_on });
+}
+
+function normalizeDependencies(grade: AgentGrade): { grade: AgentGrade } {
+  const titles = new Set((grade.pieces ?? []).map((piece) => piece.title));
+  const warnings: string[] = [];
+  const pieces = (grade.pieces ?? []).map((piece) =>
+    normalizePieceDependencies(piece, titles, warnings),
+  );
+  return {
+    grade: {
+      ...grade,
+      ...(grade.pieces === undefined ? {} : { pieces }),
+      warnings: [...(grade.warnings ?? []), ...warnings],
+    },
+  };
 }
 
 const tomlStringArray = (values: string[]): string =>
@@ -164,10 +208,7 @@ function validateAgentGrade(
   grade: AgentGrade,
   parentBrief?: string,
 ): string | undefined {
-  if (grade.verdict === "pass")
-    return grade.violations.length === 0
-      ? undefined
-      : "a pass grade cannot contain violations";
+  if (grade.verdict === "pass") return undefined;
   if (grade.violations.length === 0)
     return "a remand must state violations with a reason and fix";
   if (grade.verdict === "clarify")
@@ -199,12 +240,6 @@ function validateAgentGrade(
   const titles = new Set(pieces.map((piece) => piece.title));
   if (titles.size !== pieces.length) return "piece titles must be unique";
   for (const piece of pieces) {
-    if (
-      piece.depends_on.some(
-        (title) => !titles.has(title) || title === piece.title,
-      )
-    )
-      return `piece ${piece.title} has an unknown or self dependency`;
     const parsed = parseTicket(pieceBrief(piece));
     if (parsed.kind !== "ticket")
       return `piece ${piece.title} is not a valid schema 2 ticket`;
@@ -231,6 +266,9 @@ export function mergeTicketGrades(
     verdict,
     source: "floor+grader",
     violations: [...floor.violations, ...grader.violations],
+    ...(grader.warnings === undefined || grader.warnings.length === 0
+      ? {}
+      : { warnings: grader.warnings }),
     ...(grader.pieces === undefined ? {} : { pieces: grader.pieces }),
     ...(grader.questions === undefined ? {} : { questions: grader.questions }),
     ...(grader.estimated_first_return_s === undefined
@@ -247,8 +285,10 @@ export function renderGradeRemand(
 ): string[] {
   const lines = grade.violations.map(
     (item) =>
-      `agent-dispatch: remand ${item.rule}: ${item.why_it_blocks_a_6min_first_return} Fix: ${item.fix}`,
+      `agent-dispatch: ${grade.verdict === "pass" ? "warning" : "remand"} ${item.rule}: ${item.why_it_blocks_a_6min_first_return} Fix: ${item.fix}`,
   );
+  for (const warning of grade.warnings ?? [])
+    lines.push(`agent-dispatch: warning: ${warning}`);
   for (const [index, piece] of (grade.pieces ?? []).entries()) {
     lines.push(
       [

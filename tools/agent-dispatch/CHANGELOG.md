@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.2 — 2026-10-08
+
+- Preserve grader pass violations as printed warnings, drop unknown/self split dependencies with recorded warnings, and tolerate trailing commas in grader JSON.
+
 ## 1.4.1 — 2026-10-08
 
 - Keep grader `clarify` verdicts as recorded warnings with their questions; only a valid `split` refuses a schema 2 ticket, with `urgent_reason` still downgrading that refusal. Model-free floor violations still refuse. The 1.4.0 replay over 32 real legacy briefs falsely refused all 4 successful small single-deliverable briefs; among 11 indivisible sol-max briefs it returned clarify 8 and split 1; among 11 decomposable briefs it returned split 6, clarify 3, pass 1 and failed 1. Four of 32 graders also proposed overlapping writes without `depends_on`.

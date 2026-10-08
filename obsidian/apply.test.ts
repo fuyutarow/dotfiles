@@ -111,8 +111,14 @@ test("merges declared settings atomically and keeps check read-only", async () =
     common: { language: "en", theme: "x" },
   });
   for (const file of ["manifest.json", "main.js"])
-    expect(readFileSync(join(obsidianDir, "plugins", "doc-view", file), "utf8"))
-      .toBe(readFileSync(join(import.meta.dir, "local-plugins", "doc-view", file), "utf8"));
+    expect(
+      readFileSync(join(obsidianDir, "plugins", "doc-view", file), "utf8"),
+    ).toBe(
+      readFileSync(
+        join(import.meta.dir, "local-plugins", "doc-view", file),
+        "utf8",
+      ),
+    );
   expect(readJson(enabledPath)).toEqual(["existing", "code-view", "doc-view"]);
   expect((await run()).stdout).toContain("OK");
   expect((await run("--check")).exitCode).toBe(0);

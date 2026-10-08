@@ -1,0 +1,12 @@
+{
+  "name": "@dotfiles/coredev",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "coredev": "src/coredev.ts"
+  },
+  "dependencies": {
+    "cleye": "2.6.0"
+  }
+}

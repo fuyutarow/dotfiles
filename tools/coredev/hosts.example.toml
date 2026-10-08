@@ -1,0 +1,9 @@
+# Copy to ~/.config/coredev/hosts.toml and add only approved SSH aliases.
+# No real host names or credentials belong in this example.
+[hosts.example-linux]
+kind = "linux"
+transfers = []
+
+[hosts.example-mac]
+kind = "mac"
+transfers = ["fnox", "codex-auth"]

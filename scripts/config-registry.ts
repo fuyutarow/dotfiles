@@ -322,6 +322,7 @@ const OTHER: readonly Surface[] = [
       "tools/statusline/package.json",
       "tools/serena-foreground/package.json",
       "tools/agent-dispatch/package.json",
+      "tools/coredev/package.json",
     ],
     deployed: "the checkout",
     consumer:

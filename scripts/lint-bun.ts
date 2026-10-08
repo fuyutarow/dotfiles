@@ -1,4 +1,4 @@
-// Production Bun script floor: selected jj snapshot bytes, or the legacy tracked-file scan.
+// Production Bun script floor: selected jj snapshot bytes, or local production-surface scan.
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

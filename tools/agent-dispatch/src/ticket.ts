@@ -59,6 +59,12 @@ const premise = z.string().refine(
 );
 
 const CommonTicket = {
+  name: z
+    .string()
+    .min(1)
+    .max(16)
+    .regex(/^[A-Za-z0-9_-]+$/u)
+    .optional(),
   writes: z.array(writeGlob).optional(),
   verify: z.array(z.string().trim().min(1)).default([]),
   verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),

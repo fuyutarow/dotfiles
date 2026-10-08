@@ -18,6 +18,10 @@ checks, explicit absence messages, 2 s enrichment limits, 3 s agent lookup limit
 render deadline, 5 s GPU cache and 30 s agent-name cache are preserved. The GPU sampler remains
 a bounded detached child of the local host-load module, using the original host-wide lock.
 
+Dispatch worker rows begin with the roster row and elapsed time, followed by the active display ID
+when present (for example, `luna-high 6m05s agt_lfix Repo: dotfiles…`). Older active markers
+without a display ID retain the worker session head/tail format.
+
 Storage still reads the canonical `agents/hooks/storage-headroom.toml` as runtime data, resolved
 relative to this package rather than cwd. Only `storageLine` is imported from shared storage code.
 Dispatch state is read-only: local schemas cite the source lines and contain no state writers.

@@ -48,6 +48,7 @@ function marker(
   dispatcherSession: string | null = SESSION,
   choice = "luna-high",
   pickSource = "jev",
+  displayId?: string,
 ): void {
   mkdirSync(join(dir, "active"), { recursive: true });
   writeFileSync(
@@ -55,6 +56,7 @@ function marker(
     JSON.stringify({
       schema: 1,
       run_id: name,
+      ...(displayId === undefined ? {} : { display_id: displayId }),
       pid,
       label,
       choice,
@@ -113,6 +115,37 @@ describe("statusline Run row", () => {
     expect(await render(dir)).toMatch(
       /^luna-high 1m3\d+s my worker │ no event yet$/mu,
     );
+  });
+
+  test("a display ID replaces the session ID while legacy markers keep their session ID", async () => {
+    const dir = join(scratch, "display-id-row");
+    marker(
+      dir,
+      "named",
+      process.pid,
+      "Repo: dotfiles",
+      90,
+      SESSION,
+      "luna-high",
+      "jev",
+      "agt_lfix",
+    );
+    writeFileSync(
+      join(dir, "active", "named.progress.json"),
+      progress("$ bun test", 2, "0191abcd-0000-7000-8000-11111111abcd"),
+    );
+    const out = await render(dir);
+    expect(out).toMatch(
+      /^luna-high 1m3\ds agt_lfix Repo: dotfiles │ \$ bun test/mu,
+    );
+
+    const legacyDir = join(scratch, "legacy-session-row");
+    marker(legacyDir, "legacy", process.pid, "legacy row");
+    writeFileSync(
+      join(legacyDir, "active", "legacy.progress.json"),
+      progress("$ ls", 2, "0191abcd-0000-7000-8000-11111111abcd"),
+    );
+    expect(await render(legacyDir)).toContain("0191..abcd legacy row");
   });
 
   test("a resumed ticketed worker from this session shows its full row", async () => {

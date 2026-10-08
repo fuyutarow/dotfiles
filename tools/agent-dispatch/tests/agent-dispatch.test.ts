@@ -104,7 +104,7 @@ afterAll(() => {
 const FAKE = join(scratch, "fake-agent-dispatch.ts");
 writeFileSync(
   FAKE,
-  `import { appendFileSync, mkdirSync } from "node:fs";
+  `import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 const args = Bun.argv.slice(2);
@@ -115,6 +115,8 @@ const resuming = args.includes("--resume");
 if (process.env.FAKE_CHECKPOINT === "1" && process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE !== undefined)
   appendFileSync(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: 1, files: 0, session: "thread-fake-checkpoint" }));
 await Bun.sleep(Number(isGrader ? process.env.FAKE_GRADER_SLEEP_MS ?? "0" : resuming ? process.env.FAKE_RESUME_SLEEP_MS ?? "0" : process.env.FAKE_SLEEP_MS ?? "0"));
+const releaseFile = process.env.FAKE_BLOCK_UNTIL_FILE;
+while (releaseFile !== undefined && !existsSync(releaseFile)) await Bun.sleep(10);
 const timedOut = isGrader ? process.env.FAKE_GRADER_TIMEOUT === "1" : process.env.FAKE_TIMEOUT === "1";
 if (timedOut && process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE !== undefined)
   appendFileSync(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "checks complete", commands: 1, files: 0 }));
@@ -4412,5 +4414,213 @@ describe("agent-dispatch: the typed final report", () => {
         .run_id,
     ).toBe(old.run_id);
     expect(exported.out).not.toContain("report");
+  });
+
+  test("display names come from the CLI or ticket, with CLI precedence", async () => {
+    const ticket = brief(
+      "ticket-display-name",
+      '+++\nschema = 1\nname = "MIX"\nwrites = []\nverify = ["true"]\n+++\nDo the work.\n',
+    );
+    const ticketRun = await router(
+      [
+        "run",
+        "--prompt-file",
+        ticket,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      {},
+    );
+    expect(ticketRun.code).toBe(0);
+    expect(
+      decodedJson(
+        z.looseObject({ display_id: z.string() }),
+        ticketRun.out.trim(),
+      ).display_id,
+    ).toBe("agt_MIX");
+
+    const cliRun = await router(
+      [
+        "run",
+        "--prompt-file",
+        ticket,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+        "--name",
+        "cli_name",
+      ],
+      {},
+    );
+    expect(cliRun.code).toBe(0);
+    expect(
+      decodedJson(z.looseObject({ display_id: z.string() }), cliRun.out.trim())
+        .display_id,
+    ).toBe("agt_cli_name");
+  });
+
+  test("invalid and duplicate live names are refused with the reason and holder", async () => {
+    const prompt = brief("invalid-display-name", "Plain brief.\n");
+    const invalid = await router([
+      "run",
+      "--prompt-file",
+      prompt,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+      "--name",
+      "bad.name",
+    ]);
+    expect(invalid.code).toBe(2);
+    expect(invalid.err).toContain("invalid --name/name 'bad.name'");
+
+    const state = join(scratch, "duplicate-display-id");
+    const releaseFile = join(state, "release-worker");
+    let duplicate: Awaited<ReturnType<typeof router>> | undefined;
+    const first = await router(
+      [
+        "run",
+        "--prompt-file",
+        prompt,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+        "--name",
+        "same",
+      ],
+      { AGENT_ROUTER_STATE_DIR: state, FAKE_BLOCK_UNTIL_FILE: releaseFile },
+      async () => {
+        const activeDir = join(state, "active");
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          const markers = existsSync(activeDir) ? readdirSync(activeDir) : [];
+          if (
+            markers.some(
+              (file) =>
+                file.endsWith(".json") &&
+                !file.endsWith(".progress.json") &&
+                readFileSync(join(activeDir, file), "utf8").includes(
+                  '"display_id":"agt_same"',
+                ),
+            )
+          )
+            break;
+          await Bun.sleep(10);
+        }
+        duplicate = await router(
+          [
+            "run",
+            "--prompt-file",
+            prompt,
+            "--cd",
+            scratch,
+            "--sandbox",
+            "read-only",
+            "--name",
+            "same",
+          ],
+          { AGENT_ROUTER_STATE_DIR: state },
+        );
+        writeFileSync(releaseFile, "release");
+      },
+    );
+    expect(first.code).toBe(0);
+    expect(duplicate?.code).toBe(2);
+    expect(duplicate?.err).toContain(
+      "display id agt_same is held by live run ",
+    );
+  });
+
+  test("finished runs release names and unnamed runs get four lowercase base36 characters", async () => {
+    const prompt = brief(
+      "released-display-name",
+      '+++\nschema = 1\nwrites = []\nverify = ["true"]\n+++\nDo the work.\n',
+    );
+    const state = join(scratch, "released-display-name");
+    const args = [
+      "run",
+      "--prompt-file",
+      prompt,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+      "--name",
+      "reused",
+    ];
+    expect((await router(args, { AGENT_ROUTER_STATE_DIR: state })).code).toBe(
+      0,
+    );
+    expect((await router(args, { AGENT_ROUTER_STATE_DIR: state })).code).toBe(
+      0,
+    );
+    const automatic = await router(
+      [
+        "run",
+        "--prompt-file",
+        prompt,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      { AGENT_ROUTER_STATE_DIR: join(scratch, "automatic-display-name") },
+    );
+    expect(automatic.code).toBe(0);
+    expect(
+      decodedJson(
+        z.looseObject({ display_id: z.string() }),
+        automatic.out.trim(),
+      ).display_id,
+    ).toMatch(/^agt_[0-9a-z]{4}$/u);
+  });
+
+  test("resume, grade and ack accept the display ID; resume retains it", async () => {
+    const prompt = brief(
+      "display-id-resume",
+      '+++\nschema = 1\nwrites = []\nverify = ["true"]\n+++\nDo the work.\n',
+    );
+    const state = join(scratch, "display-id-commands");
+    const first = await router(
+      [
+        "run",
+        "--prompt-file",
+        prompt,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+        "--name",
+        "resume_me",
+      ],
+      { AGENT_ROUTER_STATE_DIR: state, FAKE_TIMEOUT: "1" },
+    );
+    expect(first.code).toBe(3);
+    const resumed = await router(["resume", "agt_resume_me"], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(resumed.code).toBe(0);
+    expect(
+      decodedJson(z.looseObject({ display_id: z.string() }), resumed.out.trim())
+        .display_id,
+    ).toBe("agt_resume_me");
+    expect(
+      (
+        await router(["grade", "agt_resume_me", "--waive", "not needed"], {
+          AGENT_ROUTER_STATE_DIR: state,
+        })
+      ).code,
+    ).toBe(0);
+    expect(
+      (
+        await router(["ack", "agt_resume_me"], {
+          AGENT_ROUTER_STATE_DIR: state,
+        })
+      ).code,
+    ).toBe(0);
   });
 });

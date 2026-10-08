@@ -15,6 +15,7 @@ import { dur } from "./jobs.ts";
 // A marker is written at start and removed at exit, so a marker whose process is gone means
 // agent-dispatch itself was killed — counted as stale, never dropped (EXPLICIT-ABSENCE).
 export interface RouteRun {
+  displayId: string | undefined;
   choice: string;
   label: string;
   secs: number;
@@ -72,6 +73,7 @@ export function routeRuns(): Result<RouteRun[], string> | undefined {
         const a = parsed.data;
         return [
           {
+            displayId: a.display_id,
             choice: a.choice,
             label: a.label,
             secs: sinceSecs(a.started_at).unwrapOr(0),
@@ -125,6 +127,8 @@ function sessionDisplays(shown: RouteRun[]): string[] {
     id === "" ? 0 : Math.min(4, Math.max(0, id.length - 4)),
   );
   const displayFor = (index: number): string => {
+    const displayId = shown[index]?.displayId;
+    if (displayId !== undefined) return displayId;
     const id = ids[index] ?? "";
     if (id === "") return "";
     const tailLength = tailLengths[index] ?? 0;

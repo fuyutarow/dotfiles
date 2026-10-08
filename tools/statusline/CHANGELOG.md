@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5
+
+- Render an active dispatch's display ID in place of its worker session ID; older markers keep the session ID format.
+
 ## 0.2.4
 
 - Separate each rate window's reset countdown and elapsed share with a space.

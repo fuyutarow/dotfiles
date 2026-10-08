@@ -1,9 +1,13 @@
 # Changelog
 
+## 1.5.2 — 2026-10-08
+
+- Add case-preserving `agt_<name>` worker display IDs from `run --name` or ticket `name`, with host-live uniqueness, generated IDs, ID lookup, and resume continuity; show them in statusline worker rows.
+
 ## 1.5.1 — 2026-10-08
 
 - Route by expected useful throughput using recent per-row first-return, timeout, acceptance, and cost-per-accepted records, with benchmark scores used when the record is thin.
-- Add optional positive ticket `budget_usd` for Jev's cost exclusion decision; bound record loading to the recent log tail and record stats-read failures without stopping dispatch.
+- Add optional positive ticket `budget_usd` for the cost exclusion decision; bound record loading to the recent log tail and record stats-read failures without stopping dispatch.
 
 ## 1.5.0 — 2026-10-08
 

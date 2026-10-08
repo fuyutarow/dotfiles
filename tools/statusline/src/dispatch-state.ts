@@ -24,6 +24,7 @@ export const ActiveSchema = z.strictObject({
   schema: z.literal(STATE_SCHEMA),
   run_id: z.string(),
   pid: z.number().int(),
+  display_id: z.string().optional(),
   label: z.string(),
   choice: z.string(),
   pick_source: z.string(),

@@ -55,6 +55,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { randomInt } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { cli, command } from "cleye";
@@ -145,6 +146,19 @@ const CODEX_PATCH_GUIDANCE =
 const RUN_CLAUDE =
   process.env.AGENT_ROUTER_RUN_CLAUDE ??
   join(import.meta.dir, "workers/run-claude.ts");
+
+let stderrRun: { displayId: string; route?: string } | undefined;
+function dispatchError(message: string): void {
+  const detail = message.replace(/^agent-dispatch:\s*/u, "");
+  if (stderrRun === undefined) {
+    console.error(message);
+    return;
+  }
+  const route = stderrRun.route === undefined ? "" : ` ${stderrRun.route}`;
+  console.error(`agent-dispatch[${stderrRun.displayId}${route}]: ${detail}`);
+}
+
+const displayIdForName = (name: string): string => `agt_${name}`;
 
 const now = (): string => Temporal.Now.instant().toString();
 const currentDispatcherSession = (): string | undefined => {
@@ -437,7 +451,7 @@ function claudeTranscript(cwd: string, session: string): string {
 }
 
 function fatal(message: string): never {
-  console.error(`agent-dispatch: ${message}`);
+  dispatchError(`agent-dispatch: ${message}`);
   return process.exit(2);
 }
 
@@ -929,6 +943,37 @@ function readActive(): { active: Active; alive: boolean; file: string }[] {
     });
 }
 
+const validDisplayName = (name: string): boolean =>
+  /^[A-Za-z0-9_-]{1,16}$/u.test(name);
+
+function chooseDisplayId(name: string | undefined): string {
+  if (name !== undefined && !validDisplayName(name))
+    fatal(
+      `invalid --name/name '${name}': expected 1..16 characters from [A-Za-z0-9_-]`,
+    );
+  const live = readActive().filter((entry) => entry.alive);
+  if (name !== undefined) {
+    const displayId = displayIdForName(name);
+    stderrRun = { displayId };
+    const holder = live.find((entry) => entry.active.display_id === displayId);
+    if (holder !== undefined)
+      fatal(
+        `display id ${displayId} is held by live run ${holder.active.run_id}`,
+      );
+    return displayId;
+  }
+  for (;;) {
+    const suffix = randomInt(36 ** 4)
+      .toString(36)
+      .padStart(4, "0");
+    const displayId = displayIdForName(suffix);
+    if (!live.some((entry) => entry.active.display_id === displayId)) {
+      stderrRun = { displayId };
+      return displayId;
+    }
+  }
+}
+
 function overlappingWriterScopes(
   runId: string,
   cwd: string,
@@ -970,6 +1015,7 @@ interface RunFlags {
   sandbox: string;
   choice: string;
   label: string | undefined;
+  name: string | undefined;
   timeoutS: number | undefined;
   timeoutReason: string | undefined;
   noGrader: boolean;
@@ -1186,6 +1232,7 @@ async function gradeWithWorker(
       sandbox: "read-only",
       choice: "auto",
       label: "ticket grader",
+      name: undefined,
       timeoutS: GRADER_TIMEOUT_S,
       timeoutReason: undefined,
       noGrader: true,
@@ -1578,6 +1625,8 @@ async function run(flags: RunFlags): Promise<number> {
   if (parsed.kind === "invalid")
     fatal(`invalid ticket in ${flags.promptFile}: ${parsed.reason}`);
   const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
+  const displayId = chooseDisplayId(flags.name ?? ticket?.name);
+  stderrRun = { displayId };
   if (flags.legacyBrief !== undefined && ticket?.schema === 2)
     fatal("--legacy-brief applies only to plain briefs and schema 1 tickets");
   const premiseCheck = checkPremises(ticket?.premises, resolve(flags.cd));
@@ -1594,7 +1643,7 @@ async function run(flags: RunFlags): Promise<number> {
       violations,
     };
     for (const violation of violations)
-      console.error(
+      dispatchError(
         `agent-dispatch: remand premise: ${violation.quote_from_brief} is absent. Fix: ${violation.fix}`,
       );
     appendLog({
@@ -1641,8 +1690,8 @@ async function run(flags: RunFlags): Promise<number> {
     ticketGrade.verdict !== "pass" &&
     flags.legacyBrief === undefined
   ) {
-    for (const line of renderGradeRemand(ticketGrade)) console.error(line);
-    console.error(
+    for (const line of renderGradeRemand(ticketGrade)) dispatchError(line);
+    dispatchError(
       'agent-dispatch: plain briefs and schema 1 tickets with floor violations are refused; add schema = 2 and fix each violation, or use --legacy-brief "<why this must run once more release>"',
     );
     appendLog({
@@ -1715,9 +1764,9 @@ async function run(flags: RunFlags): Promise<number> {
     (finalGrade.pieces?.length ?? 0) > 0
   ) {
     for (const line of renderGradeRemand(finalGrade, splitParentTitle))
-      console.error(line);
+      dispatchError(line);
     if (urgentGraderOverride)
-      console.error(
+      dispatchError(
         `agent-dispatch: urgent override (${ticket.urgent_reason}): grader ${finalGrade.verdict} is recorded as a warning; proceeding with the run`,
       );
     if (ticket?.schema === 2 && ticketGrade.violations.length > 0) {
@@ -1774,6 +1823,7 @@ async function run(flags: RunFlags): Promise<number> {
     legacyBriefReason: flags.legacyBrief,
     pick,
     label: splitParentTitle,
+    displayId,
     workerText,
     resume: undefined,
   });
@@ -1794,6 +1844,7 @@ interface Launch {
   legacyBriefReason: string | undefined;
   pick: Pick;
   label: string;
+  displayId: string;
   /** what the worker is sent when it is not the brief file itself */
   workerText: string | undefined;
   /** the vendor session to continue, for a resume */
@@ -1811,6 +1862,7 @@ async function launch(l: Launch): Promise<number> {
     legacyBriefReason,
     pick,
     label,
+    displayId,
     resume,
   } = l;
   let timeout: {
@@ -1839,6 +1891,7 @@ async function launch(l: Launch): Promise<number> {
     };
   } else timeout = { seconds: DEFAULT_TIMEOUT_S, source: "default" };
   const row = refuseUnrunnable(roster, pick.choice);
+  stderrRun = { displayId, route: row.route };
   const routeStatus = hostRoutes()[row.route];
   if (!routeStatus.available)
     fatal(
@@ -1870,7 +1923,7 @@ async function launch(l: Launch): Promise<number> {
       now: epochMilliseconds,
       sleep: (ms) => Bun.sleep(ms),
       reportWait: (live, max, waited) => {
-        console.error(
+        dispatchError(
           `agent-dispatch: waiting for codex worker slot (${live}/${max} active; ${Math.round(waited / 1000)}s elapsed)`,
         );
       },
@@ -1880,13 +1933,14 @@ async function launch(l: Launch): Promise<number> {
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
   // the full text, ticket included, kept by its hash: the run record's brief.sha256 is the key
   storeBrief(sha256(brief), brief);
-  console.error(
+  dispatchError(
     `agent-dispatch: ${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
   );
 
   const active: Active = {
     schema: SCHEMA,
     run_id: runId,
+    display_id: displayId,
     pid: process.pid,
     label,
     choice: row.id,
@@ -1959,6 +2013,7 @@ async function launch(l: Launch): Promise<number> {
       host: currentHost(),
       route: row.route,
       run_id: runId,
+      display_id: displayId,
       label,
       cwd: active.cwd,
       brief: {
@@ -2148,11 +2203,11 @@ async function launch(l: Launch): Promise<number> {
   const writes = ticket === undefined ? undefined : delta;
   const writeViolations = writes?.violations ?? [];
   if (writes?.unavailable !== undefined)
-    console.error(
+    dispatchError(
       `agent-dispatch: writes check unavailable: ${writes.unavailable}`,
     );
   if (writeViolations.length > 0)
-    console.error(
+    dispatchError(
       `agent-dispatch: writes outside ticket scope: ${writeViolations.join(", ")}`,
     );
   const verified =
@@ -2185,7 +2240,7 @@ async function launch(l: Launch): Promise<number> {
     ? { claims_without_diff: { claimed: claimedPaths, diff_empty: true } }
     : {};
   if (claimsWithoutDiff)
-    console.error(
+    dispatchError(
       `agent-dispatch: worker claimed changes (${claimedPaths.join(", ")}) but the ticket writes diff is empty`,
     );
   const verifyProvesOtherwise =
@@ -2204,7 +2259,7 @@ async function launch(l: Launch): Promise<number> {
       ? `agent-dispatch resume ${runId}`
       : undefined;
   if (resumeHint !== undefined)
-    console.error(
+    dispatchError(
       `agent-dispatch: ${stoppedWith.data?.outcome ?? "stopped"} — continue it in its own context: ${resumeHint}`,
     );
   const writesFields: Record<string, unknown> = {};
@@ -2270,6 +2325,7 @@ async function launch(l: Launch): Promise<number> {
     host: currentHost(),
     route: row.route,
     run_id: runId,
+    display_id: displayId,
     label,
     cwd: active.cwd,
     brief: {
@@ -2382,7 +2438,7 @@ async function verifyAfterWorker(
     };
   const results = await runVerify(ticket.verify, cwd, ticket.verify_timeout_s);
   const summary = verifySummary(results);
-  console.error(`agent-dispatch: verify ${summary}`);
+  dispatchError(`agent-dispatch: verify ${summary}`);
   return { results, summary };
 }
 
@@ -2398,7 +2454,7 @@ async function autoGrade(
 ): Promise<Record<string, unknown>> {
   const waiveWith = (reason: string): Record<string, unknown> => {
     recordWaiver(runId, reason, "router");
-    console.error(`agent-dispatch: ${runId} waived — ${reason}`);
+    dispatchError(`agent-dispatch: ${runId} waived — ${reason}`);
     return { grade_waived: reason };
   };
   if (verified.skipped !== undefined)
@@ -2425,7 +2481,7 @@ async function autoGrade(
   mkdirSync(join(STATE_DIR, "evidence"), { recursive: true });
   writeFileSync(file, evidence);
   recordGrade(runId, asked.value, file, evidence, "router");
-  console.error(
+  dispatchError(
     `agent-dispatch: ${runId} graded ${asked.value.grade} by router (confidence ${asked.value.confidence.toFixed(2)})`,
   );
   return {
@@ -2458,7 +2514,7 @@ function recordWritesViolationGrade(
     graded_at: now(),
     graded_by: "router",
   });
-  console.error(`agent-dispatch: ${runId} graded fail by router — ${reason}`);
+  dispatchError(`agent-dispatch: ${runId} graded fail by router — ${reason}`);
   return {
     grade: { grade: "fail", confidence: 1, graded_by: "router", reason },
   };
@@ -2485,7 +2541,7 @@ function recordClaimsWithoutDiffGrade(
     graded_at: now(),
     graded_by: "router",
   });
-  console.error(`agent-dispatch: ${runId} graded fail by router — ${reason}`);
+  dispatchError(`agent-dispatch: ${runId} graded fail by router — ${reason}`);
   return {
     grade: { grade: "fail", confidence: 1, graded_by: "router", reason },
   };
@@ -2514,7 +2570,7 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
       })),
     };
     for (const violation of ticketGrade.violations)
-      console.error(
+      dispatchError(
         `agent-dispatch: remand premise: ${violation.quote_from_brief} is absent. Fix: ${violation.fix}`,
       );
     appendLog({
@@ -2547,7 +2603,7 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
     },
     pick,
   });
-  console.error(
+  dispatchError(
     `agent-dispatch: would run ${pick.choice} (${pick.source}: ${pick.reason})`,
   );
   process.stdout.write(`${JSON.stringify(pick)}\n`);
@@ -2737,20 +2793,20 @@ function ls(): number {
     Object.assign({}, r.active, { alive: r.alive }),
   );
   for (const r of rows)
-    console.error(
+    dispatchError(
       `${r.alive ? "running" : "STALE  "} ${r.choice.padEnd(12)} ${r.started_at}  ${r.label}`,
     );
-  if (rows.length === 0) console.error("agent-dispatch: nothing running");
+  if (rows.length === 0) dispatchError("agent-dispatch: nothing running");
   process.stdout.write(`${JSON.stringify({ schema: SCHEMA, active: rows })}\n`);
   return 0;
 }
 
 function doctor(): number {
   const routes = hostRoutes();
-  console.error(
+  dispatchError(
     `agent-dispatch: codex: ${routes.codex.available ? "available" : "unavailable"} — ${routes.codex.reason}`,
   );
-  console.error(
+  dispatchError(
     `agent-dispatch: claude: ${routes.claude.available ? "available" : "unavailable"} — ${routes.claude.reason}`,
   );
   process.stdout.write(`${JSON.stringify({ schema: SCHEMA, routes })}\n`);
@@ -3127,7 +3183,7 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
     ) {
       const reason = `auto-waived: ${reply.reason}`;
       const record = recordWaiver(runId, reason);
-      console.error(`agent-dispatch: ${runId} waived — ${reason}`);
+      dispatchError(`agent-dispatch: ${runId} waived — ${reason}`);
       process.stdout.write(
         `${JSON.stringify({ schema: SCHEMA, ...record })}\n`,
       );
@@ -3136,7 +3192,7 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
     if (reply.failure === "unavailable") {
       const reason = `auto-waived: ${reply.reason}`;
       const record = recordWaiver(runId, reason);
-      console.error(`agent-dispatch: ${runId} waived — ${reason}`);
+      dispatchError(`agent-dispatch: ${runId} waived — ${reason}`);
       process.stdout.write(
         `${JSON.stringify({ schema: SCHEMA, ...record })}\n`,
       );
@@ -3145,7 +3201,7 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
     fatal(`not graded: ${reply.reason}`);
   }
   const record = recordGrade(runId, reply, evidencePath, evidence);
-  console.error(
+  dispatchError(
     `agent-dispatch: ${runId} graded ${reply.grade} (confidence ${reply.confidence.toFixed(2)})`,
   );
   process.stdout.write(
@@ -3173,7 +3229,7 @@ function waive(runId: string, reason: string): number {
       `no run ${runId} in ${LOG_FILE} (agent-dispatch stats lists the log)`,
     );
   const record = recordWaiver(runId, reason);
-  console.error(`agent-dispatch: ${runId} waived — ${reason}`);
+  dispatchError(`agent-dispatch: ${runId} waived — ${reason}`);
   process.stdout.write(`${JSON.stringify({ schema: SCHEMA, ...record })}\n`);
   return 0;
 }
@@ -3183,8 +3239,9 @@ function ack(
   consumed: boolean,
   note: string | undefined,
 ): number {
+  const resolved = resolveRunId(runId);
   const logged = readLog().find(
-    (line) => line.kind === "run" && line.run_id === runId,
+    (line) => line.kind === "run" && line.run_id === resolved,
   );
   if (logged === undefined)
     fatal(
@@ -3288,7 +3345,7 @@ function stats(flags: {
     legacy,
     ...(replay === undefined ? {} : { replay }),
   };
-  console.error(
+  dispatchError(
     `agent-dispatch: ${lines.length} records — explicit ${bySource.explicit}, jev ${bySource.jev}, default ${bySource.default}`,
   );
   process.stdout.write(`${JSON.stringify(report)}\n`);
@@ -3562,7 +3619,7 @@ function askFailure(code: 2 | 3 | 4 | 5, reason: string): number {
     compact.length <= ASK_DIAGNOSTIC_CHARS
       ? compact
       : `${compact.slice(0, ASK_DIAGNOSTIC_CHARS)} [truncated: ${compact.length} chars]`;
-  console.error(`agent-dispatch: ${bounded === "" ? "ask failed" : bounded}`);
+  dispatchError(`agent-dispatch: ${bounded === "" ? "ask failed" : bounded}`);
   return code;
 }
 
@@ -3718,6 +3775,7 @@ async function resumeCommand(
       sandbox,
       choice: "auto",
       label: undefined,
+      name: undefined,
       timeoutS,
       timeoutReason,
       noGrader: false,
@@ -3733,6 +3791,10 @@ async function resumeCommand(
       reason: `continuing session ${session} of ${runId}`,
     },
     label: `resume: ${briefLabel(parsed.prose)}`,
+    displayId:
+      typeof logged.display_id === "string"
+        ? logged.display_id
+        : chooseDisplayId(undefined),
     workerText:
       ticket === undefined ? message : withVerifyLine(message, ticket),
     resume: { from: runId, session },
@@ -3783,6 +3845,10 @@ const argv = cli({
         label: {
           type: String,
           description: "short name shown by ls and the statusline",
+        },
+        name: {
+          type: String,
+          description: "worker display name (shown as agt_<name>)",
         },
         timeoutS: {
           type: Number,
@@ -4064,6 +4130,7 @@ async function main(): Promise<number | undefined> {
       sandbox: f.sandbox,
       choice: f.choice,
       label: f.label,
+      name: f.name,
       timeoutS,
       timeoutReason: f.timeoutReason,
       noGrader: f.noGrader ?? false,
@@ -4147,6 +4214,15 @@ async function main(): Promise<number | undefined> {
 function resolveRunId(id: string): string {
   const runs = readLog().filter((l) => l.kind === "run");
   if (id === "" || runs.some((l) => l.run_id === id)) return id;
+  const displayMatches = runs.filter((l) => l.display_id === id);
+  if (displayMatches.length > 0) {
+    const latest = displayMatches.at(-1);
+    if (displayMatches.length > 1)
+      dispatchError(
+        `agent-dispatch: display id ${id} matches ${displayMatches.length} finished runs; using most recent ${latest?.run_id ?? "?"}`,
+      );
+    return latest?.run_id ?? id;
+  }
   const hits = runs.filter((l) => (l.worker?.session ?? "").startsWith(id));
   if (hits.length > 1)
     fatal(
@@ -4183,7 +4259,7 @@ function resultCommand(
   if (showBrief) {
     const text = loggedBrief(logged);
     if (text === undefined) {
-      console.error(
+      dispatchError(
         `agent-dispatch: no stored brief for ${logged.run_id ?? id} (briefs/<sha256>.md missing, and the original file is gone)`,
       );
       return 1;
@@ -4200,9 +4276,9 @@ function resultCommand(
   if (asJson) {
     process.stdout.write(`${JSON.stringify(logged)}\n`);
     if (reportNote !== undefined)
-      console.error(`agent-dispatch: ${reportNote}`);
+      dispatchError(`agent-dispatch: ${reportNote}`);
     if (report.trim() === "" && !typed.success)
-      console.error(
+      dispatchError(
         `agent-dispatch: no final report (outcome=${outcome}; cause=${cause ?? "not recorded"})`,
       );
     return report.trim() === "" && !typed.success ? 1 : 0;

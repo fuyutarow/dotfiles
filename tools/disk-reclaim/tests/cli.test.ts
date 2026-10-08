@@ -111,7 +111,13 @@ test("every registered target survives plan and run smoke checks in a fixture HO
     const planned = invoke(["plan", name, "--json"]);
     expect(planned.exit, `${name} plan: ${planned.stderr}`).toBe(0);
     expect(jsonOf(Plan).safeParse(planned.stdout).success).toBe(true);
-    const ran = invoke(["run", name, "--yes", "--json"]);
+    const ran = invoke([
+      "run",
+      name,
+      "--yes",
+      ...(name === "purge" ? ["--under-pressure"] : []),
+      "--json",
+    ]);
     expect(ran.stderr, `${name} run: ${ran.stderr}`).not.toContain(
       "finally is not a function",
     );

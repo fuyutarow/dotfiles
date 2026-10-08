@@ -125,7 +125,13 @@ test("plan reports overlapping owners as ASK and emits a valid JSON plan", async
 });
 test("run acts only on RECLAIM, records before/after free space, and writes v2 with action results", async () => {
   const { target, acted } = fakeTarget();
-  const opts = options();
+  const opts = options({ underPressure: true });
+  const originalPlan = target.plan;
+  target.plan = (ctx) => {
+    expect(ctx.headroom).toEqual(opts.headroom);
+    expect(ctx.underPressure).toBe(true);
+    return originalPlan(ctx);
+  };
   const result = await run([target], opts);
   expect(result.exit).toBe(0);
   expect(acted).toEqual(["delete"]);
@@ -137,6 +143,9 @@ test("run acts only on RECLAIM, records before/after free space, and writes v2 w
   if (parsed.success) {
     expect(Number.isFinite(parsed.data.free_before)).toBe(true);
     expect(Number.isFinite(parsed.data.free_after)).toBe(true);
+    expect(parsed.data.headroom).toEqual(opts.headroom);
+    expect(parsed.data.under_pressure).toBe(true);
+    expect(parsed.data.command).toContain("--under-pressure");
     expect(parsed.data.actions[0]).toMatchObject({
       verdict_at_act: "RECLAIM",
       ok: true,

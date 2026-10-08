@@ -153,6 +153,8 @@ export const ReceiptV2 = ReceiptV1.extend({
   target: z.string(),
   tier: Tier,
   actions: z.array(ReceiptAction),
+  headroom: Headroom.optional(),
+  under_pressure: z.boolean().optional(),
 });
 export type ReceiptV2 = z.output<typeof ReceiptV2>;
 // A schema-bearing future version must never silently fall back to v1.
@@ -170,10 +172,12 @@ export const Config = z.object({
   protected: z.array(absolute).optional(),
   session_grace_hours: z.number().nonnegative(),
   graveyard_min_age_hours: z.number().nonnegative().default(24),
+  graveyard_pressure_undo_minutes: z.number().nonnegative().default(10),
 });
 export type Config = Omit<
   z.output<typeof Config>,
-  "graveyard_min_age_hours"
+  "graveyard_min_age_hours" | "graveyard_pressure_undo_minutes"
 > & {
   graveyard_min_age_hours?: number;
+  graveyard_pressure_undo_minutes?: number;
 };

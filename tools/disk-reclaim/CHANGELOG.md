@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Allow purging recent graveyard entries below the shared host deny line with `--under-pressure`, while preserving live, locked, and 10-minute undo-window entries; record headroom and the flag in receipts.
+
 ## 0.3.0
 
 - Render bounded scan and delete progress with TTY redraws or rate-limited plain lines, and connect disk-reclaim mise tasks directly to the terminal.

@@ -8,8 +8,8 @@ import {
 } from "../lib/graveyards.ts";
 import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import { countEntries } from "../lib/purge-progress.ts";
-import { relative, resolve, sep } from "node:path";
-import type { ActionResult, Candidate, Config } from "../model.ts";
+import { isAbsolute, relative, resolve, sep } from "node:path";
+import type { ActionResult, Candidate, Config, Headroom } from "../model.ts";
 import type { Target } from "./index.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
 import { judge } from "../liveness/predicate.ts";
@@ -17,6 +17,20 @@ import { scratchRef, type LivenessSnapshot } from "../liveness/facts.ts";
 
 export const typedYes = (answer: string | null): boolean =>
   answer?.trim() === "yes";
+
+function driveForPath(path: string, headroom: Headroom | undefined) {
+  return headroom?.drives
+    .filter((drive) => {
+      const fromDrive = relative(resolve(drive.path), resolve(path));
+      return (
+        fromDrive === "" ||
+        (!isAbsolute(fromDrive) &&
+          fromDrive !== ".." &&
+          !fromDrive.startsWith(`..${sep}`))
+      );
+    })
+    .toSorted((left, right) => right.path.length - left.path.length)[0];
+}
 
 function size(path: string): number {
   const stat = fromThrowable(() => lstatSync(path))();
@@ -33,17 +47,28 @@ export function purgeCandidates(
   env = process.env,
   home = homedir(),
   options: {
-    config?: Pick<Config, "graveyard_min_age_hours" | "scratch_roots">;
+    config?: Pick<
+      Config,
+      | "graveyard_min_age_hours"
+      | "graveyard_pressure_undo_minutes"
+      | "scratch_roots"
+    >;
     liveness?: LivenessSnapshot;
+    headroom?: Headroom;
+    underPressure?: boolean;
     now?: number;
   } = {},
 ): Candidate[] {
   const now = options.now ?? Temporal.Now.instant().epochMilliseconds;
   const minAgeMs =
     (options.config?.graveyard_min_age_hours ?? 24) * 60 * 60 * 1000;
+  const undoWindowMs =
+    (options.config?.graveyard_pressure_undo_minutes ?? 10) * 60 * 1000;
   const scratchRoots = options.config?.scratch_roots ?? [];
   const candidates: Candidate[] = [];
   for (const graveyard of existingGraveyards(graveyardCandidates(env, home))) {
+    const drive = driveForPath(graveyard.path, options.headroom);
+    const belowDenyLine = drive?.state === "deny";
     const entries = graveyardEntries(graveyard.path);
     const records = ripRecords(graveyard.path);
     const entryCandidates = entries.map((entry) => {
@@ -78,7 +103,12 @@ export function purgeCandidates(
           options.liveness !== undefined &&
           judge(ref, options.liveness.facts(ref)).verdict === "unknown",
       );
+      const openPaths = options.liveness?.openPaths(entry);
+      const isLocked =
+        openPaths !== undefined &&
+        (openPaths.open.length > 0 || openPaths.unknown.length > 0);
       const isRecent = now - newestTime < minAgeMs;
+      const insideUndoWindow = now - newestTime < undoWindowMs;
       const ageMs = Math.max(0, now - newestTime);
       let age: string;
       if (ageMs < 60_000) age = `${Math.floor(ageMs / 1000)} seconds`;
@@ -87,14 +117,28 @@ export function purgeCandidates(
         age = `${Math.floor(ageMs / 3_600_000)} hours`;
       else age = `${Math.floor(ageMs / 86_400_000)} days`;
       const verdict =
-        liveRef !== undefined || uncertainRef !== undefined || isRecent
+        liveRef !== undefined ||
+        uncertainRef !== undefined ||
+        isLocked ||
+        (isRecent &&
+          (!belowDenyLine ||
+            options.underPressure !== true ||
+            insideUndoWindow))
           ? "KEEP"
           : "RECLAIM";
       let reason: string;
       if (liveRef !== undefined) reason = `from live session ${liveRef.uuid}`;
       else if (uncertainRef !== undefined)
         reason = `session status unknown for ${uncertainRef.uuid}`;
-      else if (isRecent) reason = `recent: rip'd ${age} ago`;
+      else if (isLocked) {
+        const openPath = openPaths?.open[0]?.path;
+        reason = `entry is locked or in use${openPath === undefined ? "" : `: ${openPath}`}`;
+      } else if (insideUndoWindow && isRecent)
+        reason = `undo window: rip'd ${age} ago`;
+      else if (isRecent && belowDenyLine && options.underPressure !== true)
+        reason =
+          "recent; host is below the deny line: rerun with --under-pressure to purge";
+      else if (isRecent && !belowDenyLine) reason = `recent: rip'd ${age} ago`;
       else
         reason = `older than ${options.config?.graveyard_min_age_hours ?? 24}h; origin is not live`;
       return {
@@ -138,6 +182,8 @@ export const purge = {
   plan: (ctx) =>
     purgeCandidates(process.env, homedir(), {
       config: ctx.config,
+      ...(ctx.headroom === undefined ? {} : { headroom: ctx.headroom }),
+      underPressure: ctx.underPressure === true,
       ...(ctx.liveness === undefined ? {} : { liveness: ctx.liveness }),
     }),
   act: async (candidate, ctx): Promise<ActionResult> => {

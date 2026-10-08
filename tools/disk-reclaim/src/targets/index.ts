@@ -2,6 +2,7 @@ import type {
   ActionResult,
   Candidate,
   Config,
+  Headroom,
   ReceiptAction,
   Tier,
 } from "../model.ts";
@@ -24,6 +25,9 @@ export type Context = {
   /** Whether the user named this target instead of receiving it through a tier. */
   explicit?: boolean;
   config: Config;
+  /** The exact plan-scoped measurement; purge uses it to judge its own drive. */
+  headroom?: Headroom;
+  underPressure?: boolean;
   /** Opt-in remote refresh; omitted means off. */
   fetch?: boolean;
   progress?: boolean | undefined;

@@ -81,6 +81,7 @@ export function loadConfig(
 export type EngineOptions = {
   context: Context;
   headroom?: Headroom;
+  underPressure?: boolean;
   explicit?: string[];
   yes?: boolean;
   stopOnError?: boolean;
@@ -205,6 +206,7 @@ export async function plan(
   targets: Target[],
   options: EngineOptions,
 ): Promise<EngineResult> {
+  const headroom = options.headroom ?? readHeadroom();
   const liveness = (
     options.captureLiveness ??
     ((config) => snapshotFor(config, options.context))
@@ -229,6 +231,8 @@ export async function plan(
       const ctx = {
         ...options.context,
         mode: "plan",
+        headroom,
+        underPressure: options.underPressure === true,
         liveness,
         explicit: options.explicit?.includes(target.name) === true,
       } satisfies Context;
@@ -295,12 +299,7 @@ export async function plan(
   markOwnershipConflicts(completeRows);
   return {
     exit: 0,
-    plan: aggregate(
-      completeRows,
-      "plan",
-      options.headroom ?? readHeadroom(),
-      null,
-    ),
+    plan: aggregate(completeRows, "plan", headroom, null),
     error: null,
   };
 }
@@ -420,6 +419,7 @@ async function executeTarget(
   options: EngineOptions,
   dir: string,
 ): Promise<string> {
+  const headroom = options.headroom ?? readHeadroom();
   const started = now();
   const before = freeBytes();
   const output = outputPath(target.name, dir);
@@ -430,7 +430,13 @@ async function executeTarget(
     name: target.name,
     target: target.name,
     tier: target.tier,
-    command: ["disk-reclaim", "run", target.name, "--yes"],
+    command: [
+      "disk-reclaim",
+      "run",
+      target.name,
+      "--yes",
+      ...(options.underPressure === true ? ["--under-pressure"] : []),
+    ],
     host: hostname(),
     pid: process.pid,
     started,
@@ -440,11 +446,15 @@ async function executeTarget(
     free_after: freeBytes(),
     output,
     actions,
+    headroom,
+    under_pressure: options.underPressure === true,
   });
   const ctx: Context = {
     ...options.context,
     mode: "run",
     targetName: target.name,
+    headroom,
+    underPressure: options.underPressure === true,
     procDir: options.context.procDir,
     progress: options.context.progress,
     progressTty: options.context.progressTty,
@@ -618,7 +628,11 @@ export async function run(
       error:
         "run requires --yes; irreversible targets must be named; plan-only and interactive targets cannot run",
     };
-  const preview = await plan(targets, options);
+  const runOptions = {
+    ...options,
+    headroom: options.headroom ?? readHeadroom(),
+  };
+  const preview = await plan(targets, runOptions);
   if (preview.plan === null) return preview;
   const dir = options.state ?? stateDir();
   const lock = await waitForLock(
@@ -629,7 +643,7 @@ export async function run(
     return { exit: lock.exit, plan: preview.plan, error: lock.error };
   using _lock = { [Symbol.dispose]: lock.release };
   const execute = await fromAsyncThrowable(async () =>
-    executeLocked(targets, options, dir),
+    executeLocked(targets, runOptions, dir),
   )();
   return execute.isOk()
     ? execute.value

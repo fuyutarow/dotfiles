@@ -177,6 +177,115 @@ function livenessSnapshot(facts: LivenessFacts): LivenessSnapshot {
   };
 }
 
+function recentPurgeFixture(ageMinutes: number) {
+  const root = tempRoot("disk-reclaim-pressure-grave-");
+  const grave = join(root, "grave");
+  const entry = join(grave, "recent");
+  mkdirSync(entry, { recursive: true });
+  writeFileSync(join(entry, "data"), "fixture");
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const rippedAt = now - ageMinutes * 60_000;
+  const ripTime = Temporal.Instant.fromEpochMilliseconds(rippedAt);
+  utimesSync(entry, rippedAt / 1000, rippedAt / 1000);
+  writeFileSync(
+    join(grave, ".record"),
+    `${ripTime.toString()}\t/source\t${entry}\n`,
+  );
+  return {
+    root,
+    grave,
+    entry,
+    now,
+    env: {
+      HOME: join(root, "home"),
+      GRAVEYARD: grave,
+      USER: "fixture",
+      XDG_DATA_HOME: join(root, "xdg"),
+    },
+    headroom: (state: "ok" | "warn" | "deny") => ({
+      drives: [
+        {
+          label: "fixture",
+          path: root,
+          free: state === "deny" ? 1 : 100,
+          total: 100,
+          deny_line: 10,
+          warn_line: null,
+          stop_line: null,
+          state,
+        },
+      ],
+    }),
+  };
+}
+
+test("recent graveyard entries use the injected deny state and pressure flag", () => {
+  const aboveDeny = recentPurgeFixture(30);
+  const above = purgeCandidates(aboveDeny.env, aboveDeny.root, {
+    config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+    headroom: aboveDeny.headroom("ok"),
+    now: aboveDeny.now,
+  }).find((candidate) => candidate.path === aboveDeny.entry);
+  expect(above?.verdict).toBe("KEEP");
+
+  const belowDeny = recentPurgeFixture(30);
+  const noFlag = purgeCandidates(belowDeny.env, belowDeny.root, {
+    config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+    headroom: belowDeny.headroom("deny"),
+    now: belowDeny.now,
+  }).find((candidate) => candidate.path === belowDeny.entry);
+  expect(noFlag?.verdict).toBe("KEEP");
+  expect(noFlag?.reason).toBe(
+    "recent; host is below the deny line: rerun with --under-pressure to purge",
+  );
+
+  const pressured = purgeCandidates(belowDeny.env, belowDeny.root, {
+    config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+    headroom: belowDeny.headroom("deny"),
+    underPressure: true,
+    now: belowDeny.now,
+  }).find((candidate) => candidate.path === belowDeny.entry);
+  expect(pressured?.verdict).toBe("RECLAIM");
+});
+
+test("a graveyard entry with an open path stays kept under pressure", () => {
+  const fixture = recentPurgeFixture(30);
+  const base = liveFacts("3a2afd34-1111-4111-8111-111111111111");
+  const liveness: LivenessSnapshot = {
+    facts: () => base,
+    openPaths: () => ({
+      open: [{ pid: 123, via: "fd/1", path: join(fixture.entry, "data") }],
+      unknown: [],
+    }),
+    refresh: () => liveness,
+  };
+  const candidate = purgeCandidates(fixture.env, fixture.root, {
+    config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+    headroom: fixture.headroom("deny"),
+    underPressure: true,
+    liveness,
+    now: fixture.now,
+  }).find((item) => item.path === fixture.entry);
+  expect(candidate?.verdict).toBe("KEEP");
+  expect(candidate?.reason).toContain("locked or in use");
+});
+
+test("the configured pressure undo window keeps a newly ripped entry", () => {
+  const fixture = recentPurgeFixture(5);
+  const candidate = purgeCandidates(fixture.env, fixture.root, {
+    config: {
+      graveyard_min_age_hours: 24,
+      graveyard_pressure_undo_minutes: 10,
+      scratch_roots: [],
+    },
+    headroom: fixture.headroom("deny"),
+    underPressure: true,
+    now: fixture.now,
+  }).find((item) => item.path === fixture.entry);
+  expect(candidate?.verdict).toBe("KEEP");
+  expect(candidate?.reason).toContain("undo window");
+});
+
 test("rip graveyard keeps a recent entry from a live Claude session", () => {
   const root = tempRoot("disk-reclaim-live-grave-");
   const grave = join(root, "grave");
@@ -189,10 +298,14 @@ test("rip graveyard keeps a recent entry from a live Claude session", () => {
   );
   mkdirSync(dest, { recursive: true });
   writeFileSync(join(dest, "source"), "recover me");
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const rippedAt = now - 30 * 60_000;
+  const ripTime = Temporal.Instant.fromEpochMilliseconds(rippedAt);
   writeFileSync(
     join(grave, ".record"),
-    `Time\t Original\t Destination\n${Temporal.Now.instant().toString()}\t/tmp/claude-1002/project/${uuid}/scratchpad/ident/ws\t${dest}\n`,
+    `Time\t Original\t Destination\n${ripTime.toString()}\t/tmp/claude-1002/project/${uuid}/scratchpad/ident/ws\t${dest}\n`,
   );
+  utimesSync(join(grave, "tmp"), rippedAt / 1000, rippedAt / 1000);
   const liveness = livenessSnapshot(liveFacts(uuid));
 
   const candidates = purgeCandidates(
@@ -204,6 +317,22 @@ test("rip graveyard keeps a recent entry from a live Claude session", () => {
         scratch_roots: ["/tmp/claude-1002"],
       },
       liveness,
+      headroom: {
+        drives: [
+          {
+            label: "fixture",
+            path: root,
+            free: 1,
+            total: 100,
+            deny_line: 10,
+            warn_line: null,
+            stop_line: null,
+            state: "deny",
+          },
+        ],
+      },
+      underPressure: true,
+      now,
     },
   );
   const entry = candidates.find(

@@ -35,6 +35,12 @@ const flags = {
     description: "Plan all registered targets",
   },
   yes: { type: Boolean, default: false, description: "Authorize run" },
+  underPressure: {
+    type: Boolean,
+    default: false,
+    description:
+      "Allow recent graveyard entries past the 10-minute undo window when the host is below deny",
+  },
   noProgress: {
     type: Boolean,
     default: false,
@@ -73,6 +79,7 @@ const parsedFlags = z.object({
   tier: z.string().optional(),
   all: z.boolean().default(false),
   yes: z.boolean().default(false),
+  underPressure: z.boolean().default(false),
   noProgress: z.boolean().default(false),
   fetch: z.boolean().default(false),
   stopOnError: z.boolean().default(false),
@@ -94,6 +101,7 @@ const commands = [
       json: flags.json,
       tier: flags.tier,
       yes: flags.yes,
+      underPressure: flags.underPressure,
       noProgress: flags.noProgress,
       interactive: flags.interactive,
       stopOnError: flags.stopOnError,
@@ -346,6 +354,7 @@ export async function main(
     context,
     explicit: names,
     yes: authorized,
+    underPressure: f.underPressure,
     stopOnError: f.stopOnError,
     headroom: measured,
   };

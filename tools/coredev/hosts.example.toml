@@ -6,4 +6,4 @@ transfers = []
 
 [hosts.example-mac]
 kind = "mac"
-transfers = ["fnox", "codex-auth"]
+transfers = ["fnox", "codex", "claude", "gh"]

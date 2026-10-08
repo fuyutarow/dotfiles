@@ -10,19 +10,34 @@ describe("coredev planner", () => {
     const plan = planResult.value;
     expect(plan.steps.map((step) => step.id)).toEqual([
       "runtime",
+      "c-toolchain",
       "tools",
       "links",
       "login-shell",
+      "credentials",
       "herdr-server",
       "wsl-services",
     ]);
-    expect(plan.steps[1]?.adapter).toBe("wsl-tools");
+    expect(plan.steps[2]?.adapter).toBe("wsl-tools");
     expect(
       plan.steps.find((step) => step.id === "login-shell")?.prerequisites,
     ).toEqual(["links"]);
     expect(
       plan.steps.find((step) => step.id === "herdr-server")?.prerequisites,
     ).toEqual(["login-shell"]);
+  });
+
+  test("places credentials after links and the C toolchain before tools", () => {
+    const result = buildPlan("box", "linux");
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    const ids = result.value.steps.map((step) => step.id);
+    expect(ids.indexOf("c-toolchain")).toBeLessThan(ids.indexOf("tools"));
+    expect(ids.indexOf("links")).toBeLessThan(ids.indexOf("credentials"));
+    expect(
+      result.value.steps.find((step) => step.id === "credentials")
+        ?.prerequisites,
+    ).toEqual(["links"]);
   });
 
   test("overlay deterministically replaces duplicate step ids", () => {
@@ -55,9 +70,11 @@ describe("coredev planner", () => {
       [
         "target desk (wsl)",
         "runtime | wsl | probe:runtime-present | action:ensure-runtime | verify:runtime-version",
+        "c-toolchain | wsl | probe:cc-make-pkg-config-present | action:apt-install-build-essential-pkg-config | verify:cc-make-pkg-config-present",
         "tools | wsl | probe:wsl-tools-present | action:install-wsl-tools | verify:wsl-tools",
         "links | wsl | probe:dotfiles-linked | action:realize-dotfiles | verify:dotfiles-check",
         "login-shell | wsl | probe:passwd-zsh-listed-in-shells | action:sudo-chsh-zsh | verify:passwd-zsh-listed-in-shells",
+        "credentials | wsl | probe:configured-transfers-present | action:push-configured-credentials | verify:configured-transfers-present",
         "herdr-server | wsl | probe:herdr-server-shell-current | action:stop-stale-herdr-servers | verify:no-stale-herdr-server",
         "wsl-services | wsl | probe:services-ready | action:enable-wsl-services | verify:wsl-services",
       ].join("\n"),

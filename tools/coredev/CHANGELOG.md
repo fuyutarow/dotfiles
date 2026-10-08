@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- Replace the legacy auth transfer with configured CLI and fnox credential pushes.
+- Add the Linux C toolchain step before core tools.
+
 ## 0.2.0
 
 - Add login-shell and stale herdr server profile steps.

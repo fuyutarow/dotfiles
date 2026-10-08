@@ -8,7 +8,7 @@ import type { HostKind } from "./profiles.ts";
 export type ApprovedHost = {
   alias: string;
   kind: HostKind;
-  transfers: readonly string[];
+  transfers: readonly ("fnox" | "codex" | "claude" | "gh")[];
 };
 
 const hostKindSchema = z.enum(["linux", "wsl", "mac"]);
@@ -66,7 +66,14 @@ export function readApprovedHost(
   const residue = transfersText
     .replaceAll(/"[a-z-]+"/gu, "")
     .replaceAll(/[,[\]\s]/gu, "");
-  const transferSchema = z.array(z.enum(["fnox", "codex-auth"]));
+  const oldTransfer = transferTokens.includes("codex-auth");
+  if (oldTransfer)
+    return err(
+      new Error(
+        "invalid transfer 'codex-auth'; replace it with 'codex', 'claude' and/or 'gh'",
+      ),
+    );
+  const transferSchema = z.array(z.enum(["fnox", "codex", "claude", "gh"]));
   const parsedTransfers = stringTokens.success
     ? transferSchema.safeParse(stringTokens.data)
     : stringTokens;

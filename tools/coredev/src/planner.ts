@@ -14,7 +14,10 @@ export function buildPlan(
     return err(new Error(`+wsl requires a wsl target; '${target}' is ${kind}`));
   const selected = [...new Set(overlays)].toSorted();
   const byId = new Map<string, ProfileStep>();
-  for (const step of profiles.core) byId.set(step.id, { ...step, host: kind });
+  for (const step of profiles.core) {
+    if (step.id === "c-toolchain" && kind === "mac") continue;
+    byId.set(step.id, { ...step, host: kind });
+  }
   for (const name of selected)
     for (const step of profiles[name]) byId.set(step.id, step);
   const steps = [...byId.values()];

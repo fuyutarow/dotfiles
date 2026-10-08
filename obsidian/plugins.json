@@ -27,6 +27,14 @@
       "main.js": "b06eabdc137256985424c0bb02ddb22dae65df3d6b125574f8411a505ecf9fdc",
       "manifest.json": "45c79b41168a481ff14a104f11ff14648fc395660545f2c33cd625a0b13bd292",
       "styles.css": "875f8b1ca991226a16876460f420942226ca147bea9a1b3352b50551968f0f15"
+    },
+    "settings": {
+      "common": {
+        "language": "en"
+      }
     }
+  },
+  "doc-view": {
+    "local": "local-plugins/doc-view"
   }
 }

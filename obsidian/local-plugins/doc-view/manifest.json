@@ -1,0 +1,9 @@
+{
+  "id": "doc-view",
+  "name": "DOC View",
+  "version": "1.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "Read legacy .doc files without modifying them.",
+  "author": "Fuyu",
+  "isDesktopOnly": true
+}

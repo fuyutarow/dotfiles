@@ -47,8 +47,13 @@ test("merges declared settings atomically and keeps check read-only", async () =
         repo: "example/code-view",
         version: "1.0.0",
         sha256: {},
-        settings: { extensions: "a,b", flag: true },
+        settings: {
+          extensions: "a,b",
+          flag: true,
+          common: { language: "en" },
+        },
       },
+      "doc-view": { local: "local-plugins/doc-view" },
     }),
   );
   await Bun.write(
@@ -57,7 +62,11 @@ test("merges declared settings atomically and keeps check read-only", async () =
   );
   await Bun.write(
     dataPath,
-    JSON.stringify({ showLineNumbers: false, extensions: "old" }),
+    JSON.stringify({
+      showLineNumbers: false,
+      extensions: "old",
+      common: { language: "zh", theme: "x" },
+    }),
   );
   await Bun.write(enabledPath, JSON.stringify(["existing"]));
 
@@ -99,16 +108,40 @@ test("merges declared settings atomically and keeps check read-only", async () =
     showLineNumbers: false,
     extensions: "a,b",
     flag: true,
+    common: { language: "en", theme: "x" },
   });
-  expect(readJson(enabledPath)).toEqual(["existing", "code-view"]);
+  for (const file of ["manifest.json", "main.js"])
+    expect(readFileSync(join(obsidianDir, "plugins", "doc-view", file), "utf8"))
+      .toBe(readFileSync(join(import.meta.dir, "local-plugins", "doc-view", file), "utf8"));
+  expect(readJson(enabledPath)).toEqual(["existing", "code-view", "doc-view"]);
   expect((await run()).stdout).toContain("OK");
   expect((await run("--check")).exitCode).toBe(0);
+
+  await Bun.write(pluginsSource, JSON.stringify({ bad: { local: "../x" } }));
+  expect((await run("--check")).exitCode).toBe(2);
+  await Bun.write(
+    pluginsSource,
+    JSON.stringify({
+      "code-view": {
+        repo: "example/code-view",
+        version: "1.0.0",
+        sha256: {},
+        settings: {
+          extensions: "a,b",
+          flag: true,
+          common: { language: "en" },
+        },
+      },
+      "doc-view": { local: "local-plugins/doc-view" },
+    }),
+  );
 
   rmSync(dataPath);
   expect((await run()).exitCode).toBe(0);
   expect(readJson(dataPath)).toEqual({
     extensions: "a,b",
     flag: true,
+    common: { language: "en" },
   });
 
   const malformed = "{not-json";

@@ -1,6 +1,16 @@
 import { cli } from "cleye";
-import { existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
-import { dirname, join } from "node:path";
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+} from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
@@ -8,7 +18,8 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 //   app.json     — keys merged into each vault's .obsidian/app.json
 //   plugins.json — community plugins installed into .obsidian/plugins/<id>/ and enabled in
 //                  .obsidian/community-plugins.json, pinned by release tag AND sha256 per file;
-//                  declared settings merged into each plugin's data.json
+//                  declared settings merged into each plugin's data.json. Local plugins are
+//                  pinned by this repository commit.
 // Run via `mise run mac:obsidian` (wired into `mise run mac:init`). Consumer: human, verdict lines.
 //
 // WHY MERGE, NOT SYMLINK. Obsidian rewrites .obsidian/*.json whenever a setting is touched in its
@@ -53,13 +64,24 @@ function rejectPrototypeFlag(
 
 const RecordSchema = z.record(z.string(), z.unknown());
 const VaultSchema = z.object({ path: z.string() });
-const PluginSchema = z.object({
+const ReleasePluginSchema = z.object({
   repo: z.string(),
   version: z.string(),
   sha256: z.record(z.string(), z.string()),
   settings: RecordSchema.optional(),
 });
+const LocalPluginSchema = z.object({
+  local: z.string(),
+  settings: RecordSchema.optional(),
+});
+const PluginSchema = z.union([ReleasePluginSchema, LocalPluginSchema]);
 type Plugin = z.output<typeof PluginSchema>;
+
+function isLocalPlugin(
+  plugin: Plugin,
+): plugin is z.output<typeof LocalPluginSchema> {
+  return "local" in plugin;
+}
 
 // A JSON syntax error keeps its parser text; any other mismatch is "not a <what>".
 function jsonFailure(path: string, what: string, error: z.ZodError): Error {
@@ -97,7 +119,31 @@ async function atomicWrite(
 function asPlugin(id: string, v: unknown): Result<Plugin, string> {
   const plugin = PluginSchema.safeParse(v);
   if (!plugin.success)
-    return err(`plugins.json: ${id}: needs repo, version, sha256{file: hash}`);
+    return err(
+      `plugins.json: ${id}: needs local or repo, version, sha256{file: hash}`,
+    );
+  if (isLocalPlugin(plugin.data)) {
+    const base = realpathSync(import.meta.dir);
+    const source = resolve(base, plugin.data.local);
+    const declaredRel = relative(base, source);
+    if (
+      isAbsolute(declaredRel) ||
+      declaredRel === ".." ||
+      declaredRel.startsWith(`..${sep}`)
+    )
+      return err(`plugins.json: ${id}: local path must stay inside obsidian/`);
+    if (!existsSync(source) || !lstatSync(source).isDirectory())
+      return err(
+        `plugins.json: ${id}: local plugin directory not found: ${plugin.data.local}`,
+      );
+    const actualRel = relative(base, realpathSync(source));
+    if (
+      isAbsolute(actualRel) ||
+      actualRel === ".." ||
+      actualRel.startsWith(`..${sep}`)
+    )
+      return err(`plugins.json: ${id}: local path must stay inside obsidian/`);
+  }
   return ok(plugin.data);
 }
 
@@ -130,7 +176,7 @@ async function fileHash(path: string): Promise<string | null> {
 const assetCache = new Map<string, Uint8Array>();
 
 async function asset(
-  p: Plugin,
+  p: z.output<typeof ReleasePluginSchema>,
   file: string,
 ): Promise<Result<Uint8Array, string>> {
   const url = `https://github.com/${p.repo}/releases/download/${p.version}/${file}`;
@@ -186,6 +232,86 @@ async function pluginFixes(
   p: Plugin,
 ): Promise<Result<Fix[], string>> {
   const pdir = join(dir, "plugins", id);
+  if (isLocalPlugin(p)) {
+    const source = resolve(import.meta.dir, p.local);
+    const files: string[] = [];
+    const collect = (current: string, prefix = "") => {
+      for (const entry of readdirSync(current, { withFileTypes: true })) {
+        const rel = join(prefix, entry.name);
+        const path = join(current, entry.name);
+        if (entry.isDirectory()) collect(path, rel);
+        else if (entry.isFile()) files.push(rel);
+        else throw new Error(`unsupported local plugin entry: ${path}`);
+      }
+    };
+    try {
+      collect(source);
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+    const changed: string[] = [];
+    const destinationFiles: string[] = [];
+    if (existsSync(pdir)) {
+      const collectDestination = (current: string, prefix = "") => {
+        for (const entry of readdirSync(current, { withFileTypes: true })) {
+          const rel = join(prefix, entry.name);
+          const path = join(current, entry.name);
+          if (entry.isDirectory()) collectDestination(path, rel);
+          else destinationFiles.push(rel);
+        }
+      };
+      collectDestination(pdir);
+    }
+    for (const file of files) {
+      const from = join(source, file);
+      const to = join(pdir, file);
+      if (
+        !existsSync(to) ||
+        !lstatSync(to).isFile() ||
+        sha256(await Bun.file(from).bytes()) !== sha256(await Bun.file(to).bytes())
+      ) changed.push(file);
+    }
+    // data.json is the plugin's runtime state (preserved on install), never a stray file.
+    changed.push(
+      ...destinationFiles.filter(
+        (file) => !files.includes(file) && file !== "data.json",
+      ),
+    );
+    if (changed.length === 0) return ok([]);
+    return ok([
+      {
+        what: `${id}(local:${changed.join(",")})`,
+        apply: async () => {
+          const parent = dirname(pdir);
+          const stage = `${pdir}.${crypto.randomUUID()}.stage`;
+          const backup = `${pdir}.${crypto.randomUUID()}.backup`;
+          mkdirSync(parent, { recursive: true });
+          try {
+            cpSync(source, stage, { recursive: true, errorOnExist: true });
+            const dataFile = join(pdir, "data.json");
+            if (
+              existsSync(dataFile) &&
+              lstatSync(dataFile).isFile() &&
+              !files.includes("data.json")
+            )
+              cpSync(dataFile, join(stage, "data.json"));
+            if (existsSync(pdir)) renameSync(pdir, backup);
+            try {
+              renameSync(stage, pdir);
+            } catch (error) {
+              if (existsSync(backup)) renameSync(backup, pdir);
+              throw error;
+            }
+            if (existsSync(backup)) rmSync(backup, { recursive: true, force: true });
+            return ok(undefined);
+          } catch (error) {
+            if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
+            return err(error instanceof Error ? error.message : String(error));
+          }
+        },
+      },
+    ]);
+  }
   const fixes: Fix[] = [];
   for (const [file, hash] of Object.entries(p.sha256)) {
     if ((await fileHash(join(pdir, file))) === hash) continue;
@@ -204,6 +330,24 @@ async function pluginFixes(
   return ok(fixes);
 }
 
+function plainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function mergeDeclared(
+  have: Record<string, unknown>,
+  want: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged = { ...have };
+  for (const [key, value] of Object.entries(want)) {
+    merged[key] =
+      plainObject(value) && plainObject(have[key])
+        ? mergeDeclared(have[key], value)
+        : value;
+  }
+  return merged;
+}
+
 async function pluginSettingsFixes(
   dir: string,
   id: string,
@@ -216,8 +360,9 @@ async function pluginSettingsFixes(
     : ok<Record<string, unknown>>({});
   if (haveResult.isErr()) return err(haveResult.error);
   const have = haveResult.value;
+  const merged = mergeDeclared(have, want);
   const changed = Object.keys(want).filter(
-    (k) => JSON.stringify(have[k]) !== JSON.stringify(want[k]),
+    (k) => JSON.stringify(have[k]) !== JSON.stringify(merged[k]),
   );
   if (changed.length === 0) return ok([]);
   return ok([
@@ -226,7 +371,7 @@ async function pluginSettingsFixes(
       apply: async () => {
         await atomicWrite(
           target,
-          `${JSON.stringify({ ...have, ...want }, null, 2)}\n`,
+          `${JSON.stringify(merged, null, 2)}\n`,
         );
         return ok(undefined);
       },

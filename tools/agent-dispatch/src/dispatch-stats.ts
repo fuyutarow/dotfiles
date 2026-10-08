@@ -18,6 +18,7 @@ const RunSchema = z.looseObject({
 export type DispatchStatsInput = Readonly<{
   log: string;
   now: number;
+  sinceMs?: number;
 }>;
 
 type Bucket = {
@@ -33,7 +34,11 @@ function bucket(): Bucket {
   return { picks: 0, by_route: { codex: 0, claude: 0 }, by_row: {} };
 }
 
-export function dispatchStats({ log, now }: DispatchStatsInput) {
+export function dispatchStats({
+  log,
+  now,
+  sinceMs = now - WINDOWS["24h"],
+}: DispatchStatsInput) {
   const runs = log
     .split("\n")
     .filter((line) => line !== "")
@@ -62,10 +67,9 @@ export function dispatchStats({ log, now }: DispatchStatsInput) {
     hosts.map((host) => [
       host,
       Object.fromEntries(
-        Object.entries(WINDOWS).map(([window, duration]) => {
+        [["window", sinceMs] as const].map(([window, threshold]) => {
           const within = runs.filter(
-            (run) =>
-              run.host === host && run.at >= now - duration && run.at <= now,
+            (run) => run.host === host && run.at >= threshold && run.at <= now,
           );
           const bySource = Object.fromEntries(
             SOURCES.map((source) => {

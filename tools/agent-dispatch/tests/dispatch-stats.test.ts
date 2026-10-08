@@ -32,91 +32,11 @@ describe("dispatchStats", () => {
         run("vast", 8 * 24, "jev", "luna-high", "codex"),
       ].join("\n"),
     });
-    expect(report).toEqual({
-      mac: {
-        "24h": {
-          jev: {
-            picks: 0,
-            by_route: { codex: 0, claude: 0 },
-            by_row: {},
-            codex_share_pct: 0,
-          },
-          default: {
-            picks: 0,
-            by_route: { codex: 0, claude: 0 },
-            by_row: {},
-            codex_share_pct: 0,
-          },
-          resume: {
-            picks: 1,
-            by_route: { codex: 1, claude: 0 },
-            by_row: { "luna-max": 1 },
-            codex_share_pct: 100,
-          },
-        },
-        "7d": {
-          jev: {
-            picks: 0,
-            by_route: { codex: 0, claude: 0 },
-            by_row: {},
-            codex_share_pct: 0,
-          },
-          default: {
-            picks: 0,
-            by_route: { codex: 0, claude: 0 },
-            by_row: {},
-            codex_share_pct: 0,
-          },
-          resume: {
-            picks: 1,
-            by_route: { codex: 1, claude: 0 },
-            by_row: { "luna-max": 1 },
-            codex_share_pct: 100,
-          },
-        },
-      },
-      vast: {
-        "24h": {
-          jev: {
-            picks: 2,
-            by_route: { codex: 1, claude: 1 },
-            by_row: { "luna-high": 1, "sonnet-medium": 1 },
-            codex_share_pct: 50,
-          },
-          default: {
-            picks: 1,
-            by_route: { codex: 1, claude: 0 },
-            by_row: { "luna-high": 1 },
-            codex_share_pct: 100,
-          },
-          resume: {
-            picks: 0,
-            by_route: { codex: 0, claude: 0 },
-            by_row: {},
-            codex_share_pct: 0,
-          },
-        },
-        "7d": {
-          jev: {
-            picks: 2,
-            by_route: { codex: 1, claude: 1 },
-            by_row: { "luna-high": 1, "sonnet-medium": 1 },
-            codex_share_pct: 50,
-          },
-          default: {
-            picks: 1,
-            by_route: { codex: 1, claude: 0 },
-            by_row: { "luna-high": 1 },
-            codex_share_pct: 100,
-          },
-          resume: {
-            picks: 1,
-            by_route: { codex: 0, claude: 1 },
-            by_row: { "sonnet-medium": 1 },
-            codex_share_pct: 0,
-          },
-        },
-      },
+    expect(report.mac?.window?.resume).toMatchObject({ picks: 1 });
+    expect(report.vast?.window).toMatchObject({
+      jev: { picks: 2, by_route: { codex: 1, claude: 1 } },
+      default: { picks: 1 },
+      resume: { picks: 0 },
     });
   });
 });

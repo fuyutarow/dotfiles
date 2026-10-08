@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.3 — 2026-10-09
+
+- Apply the requested stats window consistently, report grading overhead by component while excluding ticket verification from `--check`, and explain that returned runs count as accepted only after acknowledgement.
+
 ## 1.5.2 — 2026-10-08
 
 - Add case-preserving `agt_<name>` worker display IDs from `run --name` or ticket `name`, with host-live uniqueness, generated IDs, ID lookup, and resume continuity; show them in statusline worker rows.

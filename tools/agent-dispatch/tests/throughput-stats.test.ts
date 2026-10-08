@@ -110,10 +110,20 @@ describe("throughputStats", () => {
       estimated_saves: 0.5,
       estimated_saved_worker_s: 5,
       estimated_saved_cost_usd: 0.05,
-      overhead_s: 6.5,
+      overhead_s: 2.5,
+      jev_pick_s: 0.5,
+      grader_s: 2,
+      grader_cost_usd: 0.06,
+      refusal_rebrief_s: 0,
+      verify_s: 4,
       overhead_cost_usd: 0.06,
       exceeds_saves: true,
     });
+    expect(result.grading?.overhead_s).toBe(
+      (result.grading?.jev_pick_s ?? 0) +
+        (result.grading?.grader_s ?? 0) +
+        (result.grading?.refusal_rebrief_s ?? 0),
+    );
   });
 
   test("counts a matching no-grader override after a grader split refusal as a likely false split", () => {
@@ -186,6 +196,72 @@ describe("throughputStats", () => {
       overhead_s: 240,
       overridden_splits: { urgent: 1, no_grader: 0 },
       urgent_override_reasons: ["Vast outage: mise is broken"],
+    });
+  });
+
+  test("filters runs and grading components by the window and excludes verify from --check", () => {
+    const recentRefusal = JSON.stringify({
+      kind: "refusal",
+      at: started,
+      pick: { choice: "row-a", jev: { latency_ms: 1000 } },
+      ticket_grade: { grader: { elapsed_s: 2, usage: { cost_usd: 0.1 } } },
+      verify: [{ elapsed_s: 100 }],
+    });
+    const oldRun = run({
+      run_id: "old",
+      started_at: "2026-10-06T00:00:00Z",
+      stats: { row: "old-row", elapsed_s: 10, outcome: "timeout" },
+    });
+    const result = throughputStats(
+      [run({}), recentRefusal, oldRun].join("\n"),
+      { now, sinceMs: now - 86_400_000, grading: true },
+    );
+    expect(result.window_ms).toBe(86_400_000);
+    expect(result.per_row).not.toHaveProperty("old-row");
+    expect(result.grading).toMatchObject({
+      jev_pick_s: 1,
+      grader_s: 2,
+      refusal_rebrief_s: 0,
+      verify_s: 100,
+      overhead_s: 3,
+      exceeds_saves: true,
+    });
+  });
+
+  test("a large verify_s alone does not make grading exceed estimated saves", () => {
+    const timeout = run({
+      run_id: "timeout-for-check",
+      stats: {
+        row: "row-a",
+        effort: "medium",
+        outcome: "timeout",
+        elapsed_s: 10,
+        cost_usd: 0.1,
+        tokens: { input: 1 },
+      },
+    });
+    const refusal = JSON.stringify({
+      kind: "refusal",
+      at: started,
+      effort: "medium",
+      pick: { choice: "row-a", confidence: 0.4, jev: { latency_ms: 1000 } },
+      ticket: { schema: 1, capabilities: [] },
+      ticket_grade: {
+        verdict: "clarify",
+        grader: { elapsed_s: 1, usage: { cost_usd: 0.01 } },
+      },
+      verify: [{ elapsed_s: 1000 }],
+    });
+    const result = throughputStats([timeout, refusal].join("\n"), {
+      now,
+      sinceMs: now - 86_400_000,
+      grading: true,
+    });
+    expect(result.grading).toMatchObject({
+      overhead_s: 2,
+      verify_s: 1000,
+      estimated_saved_worker_s: 10,
+      exceeds_saves: false,
     });
   });
 

@@ -60,6 +60,7 @@ import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { cli, command } from "cleye";
 import pkg from "../package.json" with { type: "json" };
+import { fromThrowable } from "neverthrow";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { jsonOf, jsonText, z } from "../../shared/src/zod.ts";
 import {
@@ -2821,6 +2822,7 @@ const LogLine = z.looseObject({
   dispatcher_session: z.string().optional(),
   started_at: z.string().optional(),
   ended_at: z.string().optional(),
+  at: z.string().optional(),
   brief: z
     .looseObject({ path: z.string(), sha256: z.string().optional() })
     .optional(),
@@ -3266,7 +3268,7 @@ function stats(flags: {
   check: boolean;
   replay: string | undefined;
 }): number {
-  const lines = readLog();
+  const allLines = readLog();
   const logText = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf8") : "";
   const nowMs = epochMilliseconds();
   const sinceMs = parseSince(flags.since, nowMs);
@@ -3275,9 +3277,22 @@ function stats(flags: {
       `invalid --since value '${flags.since ?? ""}': use an ISO instant or duration such as 24h`,
     );
   if (flags.check && !flags.grading) fatal("--check requires --grading");
+  const lines = allLines.filter((line) => {
+    const timestamp = line.kind === "run" ? line.started_at : line.at;
+    const parsedAt =
+      timestamp === undefined
+        ? undefined
+        : fromThrowable(
+            () => Temporal.Instant.from(timestamp).epochMilliseconds,
+            (error) => error,
+          )();
+    const at = parsedAt?.isOk() === true ? parsedAt.value : undefined;
+    return at !== undefined && at >= sinceMs && at <= nowMs;
+  });
   const routePicks = dispatchStats({
     log: logText,
-    now: epochMilliseconds(),
+    now: nowMs,
+    sinceMs,
   });
   const bySource = Object.fromEntries(
     ["explicit", "jev", "default", "resume"].map((s) => [

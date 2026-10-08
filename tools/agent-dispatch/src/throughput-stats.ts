@@ -166,8 +166,7 @@ export function throughputStats(
   const runs: Run[] = entries.flatMap((entry) => {
     if (entry.kind !== "run" || entry.run_id === undefined) return [];
     const started = epoch(entry.started_at);
-    if (started === undefined || started < now - sinceMs || started > now)
-      return [];
+    if (started === undefined || started < sinceMs || started > now) return [];
     const checkpointReturn =
       entry.checkpoint?.return_followed === true &&
       entry.checkpoint.fired_at_s !== undefined &&
@@ -231,7 +230,7 @@ export function throughputStats(
   const gradingRows = entries.filter(
     (entry) =>
       (entry.kind === "run" || entry.kind === "refusal") &&
-      (epoch(entry.started_at ?? entry.at) ?? -Infinity) >= now - sinceMs &&
+      (epoch(entry.started_at ?? entry.at) ?? -Infinity) >= sinceMs &&
       (epoch(entry.started_at ?? entry.at) ?? Infinity) <= now,
   );
   const refused = gradingRows.filter((entry) => entry.kind === "refusal");
@@ -294,10 +293,20 @@ export function throughputStats(
       gradingRows.map(
         (entry) =>
           (entry.pick?.jev?.latency_ms ?? 0) / 1000 +
-          (entry.ticket_grade?.grader?.elapsed_s ?? 0) +
-          sum((entry.verify ?? []).map((v) => v.elapsed_s ?? 0)),
+          (entry.ticket_grade?.grader?.elapsed_s ?? 0),
       ),
     );
+  const jevPickSeconds = sum(
+    gradingRows.map((entry) => (entry.pick?.jev?.latency_ms ?? 0) / 1000),
+  );
+  const graderSeconds = sum(
+    gradingRows.map((entry) => entry.ticket_grade?.grader?.elapsed_s ?? 0),
+  );
+  const verifySeconds = sum(
+    gradingRows.map((entry) =>
+      sum((entry.verify ?? []).map((v) => v.elapsed_s ?? 0)),
+    ),
+  );
   const overheadCost = sum(
     gradingRows.map(
       (entry) => entry.ticket_grade?.grader?.usage?.cost_usd ?? 0,
@@ -359,6 +368,9 @@ export function throughputStats(
   );
   const gradingReport = {
     overhead_s: overheadSeconds,
+    jev_pick_s: jevPickSeconds,
+    grader_s: graderSeconds,
+    grader_cost_usd: overheadCost,
     overhead_cost_usd: overheadCost,
     overhead_share_wall_time:
       totalWall === 0 ? null : overheadSeconds / (totalWall + overheadSeconds),
@@ -370,6 +382,9 @@ export function throughputStats(
     splits: decisionCounts.split,
     likely_false_splits: likelyFalseSplits,
     refusal_rebrief_s: refusalRebriefSeconds,
+    verify_s: verifySeconds,
+    overhead_excludes:
+      "verify_s is reported but excluded from grading overhead and --check",
     overridden_splits: {
       urgent: urgentOverrides.length,
       no_grader: likelyFalseSplits,
@@ -392,7 +407,7 @@ export function throughputStats(
       overheadSeconds > estimatedSavedTime || overheadCost > estimatedSavedCost,
   };
   return {
-    window_ms: sinceMs,
+    window_ms: now - sinceMs,
     per_row: Object.fromEntries(
       [...groups].map(([row, group]) => [row, summarize(group)]),
     ),
@@ -411,6 +426,7 @@ export function throughputStats(
     grading: grading ? gradingReport : undefined,
     replay_assumption:
       "row rates are independent of task; candidate picks use the recorded window rate for each alternative row",
+    note: "accepted counts returned runs only when acked (agent-dispatch ack <run_id> --consumed)",
   };
 }
 

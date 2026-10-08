@@ -77,6 +77,11 @@ import {
 } from "./routes.ts";
 import { dispatchStats } from "./dispatch-stats.ts";
 import {
+  parseSince,
+  replayStats,
+  throughputStats,
+} from "./throughput-stats.ts";
+import {
   activeDir,
   ActiveSchema,
   briefLabel,
@@ -892,6 +897,7 @@ interface RunFlags {
   timeoutS: number | undefined;
   timeoutReason: string | undefined;
   noGrader: boolean;
+  legacyBrief: string | undefined;
 }
 
 function refuseUnrunnable(roster: Roster, id: string): Choice {
@@ -1107,6 +1113,7 @@ async function gradeWithWorker(
       timeoutS: GRADER_TIMEOUT_S,
       timeoutReason: undefined,
       noGrader: true,
+      legacyBrief: undefined,
     },
     progress,
     runId,
@@ -1175,6 +1182,7 @@ async function gradeWithWorker(
   ) {
     parsed = parseAgentGrade(
       worker.data.last_message ?? worker.data.result ?? "",
+      brief,
     );
   } else if (signal.aborted) {
     parsed = {
@@ -1494,6 +1502,8 @@ async function run(flags: RunFlags): Promise<number> {
   if (parsed.kind === "invalid")
     fatal(`invalid ticket in ${flags.promptFile}: ${parsed.reason}`);
   const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
+  if (flags.legacyBrief !== undefined && ticket?.schema === 2)
+    fatal("--legacy-brief applies only to plain briefs and schema 1 tickets");
   if (ticket === undefined || ticket.verify.length === 0)
     refuseOverUngraded(resolve(flags.cd));
   const pick = await pickFor(
@@ -1508,7 +1518,34 @@ async function run(flags: RunFlags): Promise<number> {
     parsed,
     roster.choice.find((choice) => choice.id === pick.choice)?.effort,
   );
+  if (
+    (ticket === undefined || ticket.schema === 1) &&
+    ticketGrade.verdict !== "pass" &&
+    flags.legacyBrief === undefined
+  ) {
+    for (const line of renderGradeRemand(ticketGrade)) console.error(line);
+    console.error(
+      'agent-dispatch: plain briefs and schema 1 tickets with floor violations are refused; add schema = 2 and fix each violation, or use --legacy-brief "<why this must run once more release>"',
+    );
+    appendLog({
+      kind: "refusal",
+      at: now(),
+      cwd: resolve(flags.cd),
+      dispatcher_session: currentDispatcherSession(),
+      brief: {
+        path: resolve(flags.promptFile),
+        sha256: sha256(brief),
+        chars: brief.length,
+      },
+      pick,
+      effort: roster.choice.find((choice) => choice.id === pick.choice)?.effort,
+      ticket_grade: ticketGrade,
+    });
+    return 2;
+  }
   let finalGrade = ticketGrade;
+  const gradeRunId = `${now().replaceAll(/[:.]/gu, "-")}-${process.pid}`;
+  const splitParentTitle = flags.label ?? briefLabel(parsed.prose);
   if (flags.noGrader) {
     finalGrade = {
       ...ticketGrade,
@@ -1520,9 +1557,8 @@ async function run(flags: RunFlags): Promise<number> {
       grader: { status: "skipped", reason: "floor refused schema 2 ticket" },
     };
   } else {
-    const parentId = `${now().replaceAll(/[:.]/gu, "-")}-${process.pid}`;
     const attempted = await attempt(() =>
-      gradeWithWorker(roster, brief, resolve(flags.cd), parentId),
+      gradeWithWorker(roster, brief, resolve(flags.cd), gradeRunId),
     );
     if (!attempted.ok) {
       finalGrade = {
@@ -1549,39 +1585,60 @@ async function run(flags: RunFlags): Promise<number> {
       );
     }
   }
+  const urgentGraderOverride =
+    ticket?.schema === 2 &&
+    ticket.urgent_reason !== undefined &&
+    ticketGrade.verdict === "pass" &&
+    finalGrade.grader?.status === "ok" &&
+    (finalGrade.verdict === "split" || finalGrade.verdict === "clarify");
   if (finalGrade.violations.length > 0) {
-    for (const line of renderGradeRemand(finalGrade)) console.error(line);
-    if (ticket?.schema === 2 && finalGrade.verdict !== "pass") {
+    for (const line of renderGradeRemand(finalGrade, splitParentTitle))
+      console.error(line);
+    if (urgentGraderOverride)
+      console.error(
+        `agent-dispatch: urgent override (${ticket.urgent_reason}): grader ${finalGrade.verdict} is recorded as a warning; proceeding with the run`,
+      );
+    if (
+      ticket?.schema === 2 &&
+      finalGrade.verdict !== "pass" &&
+      !urgentGraderOverride
+    ) {
       appendLog({
         kind: "refusal",
         at: now(),
         cwd: resolve(flags.cd),
+        dispatcher_session: currentDispatcherSession(),
         brief: {
           path: resolve(flags.promptFile),
           sha256: sha256(brief),
           chars: brief.length,
         },
         pick,
+        effort: roster.choice.find((choice) => choice.id === pick.choice)
+          ?.effort,
         ticket_grade: finalGrade,
       });
       return 2;
     }
-    if (ticket?.schema !== 2 && finalGrade.verdict !== "pass")
-      console.error(
-        "agent-dispatch: remand is a warning for this brief; schema 1/plain refusal is planned for 1.4.0",
-      );
-  } else if (ticket?.schema === 2 && finalGrade.verdict !== "pass") {
-    for (const line of renderGradeRemand(finalGrade)) console.error(line);
+  } else if (
+    ticket?.schema === 2 &&
+    finalGrade.verdict !== "pass" &&
+    !urgentGraderOverride
+  ) {
+    for (const line of renderGradeRemand(finalGrade, splitParentTitle))
+      console.error(line);
     appendLog({
       kind: "refusal",
       at: now(),
       cwd: resolve(flags.cd),
+      dispatcher_session: currentDispatcherSession(),
       brief: {
         path: resolve(flags.promptFile),
         sha256: sha256(brief),
         chars: brief.length,
       },
       pick,
+      effort: roster.choice.find((choice) => choice.id === pick.choice)?.effort,
       ticket_grade: finalGrade,
     });
     return 2;
@@ -1596,8 +1653,9 @@ async function run(flags: RunFlags): Promise<number> {
     brief,
     ticket,
     ticketGrade: finalGrade,
+    legacyBriefReason: flags.legacyBrief,
     pick,
-    label: flags.label ?? briefLabel(parsed.prose),
+    label: splitParentTitle,
     workerText,
     resume: undefined,
   });
@@ -1615,6 +1673,7 @@ interface Launch {
   brief: string;
   ticket: Ticket | undefined;
   ticketGrade: TicketGrade;
+  legacyBriefReason: string | undefined;
   pick: Pick;
   label: string;
   /** what the worker is sent when it is not the brief file itself */
@@ -1625,7 +1684,17 @@ interface Launch {
 
 /** Start the worker for a pick, wait for it, verify and grade; shared by `run` and `resume`. */
 async function launch(l: Launch): Promise<number> {
-  const { roster, flags, brief, ticket, ticketGrade, pick, label, resume } = l;
+  const {
+    roster,
+    flags,
+    brief,
+    ticket,
+    ticketGrade,
+    legacyBriefReason,
+    pick,
+    label,
+    resume,
+  } = l;
   let timeout: {
     seconds: number;
     source: "cli" | "ticket" | "default";
@@ -1972,6 +2041,39 @@ async function launch(l: Launch): Promise<number> {
     ticket === undefined
       ? undefined
       : await verifyAfterWorker(ticket, active.cwd, outcomeName, done);
+  const workerOutput = z
+    .looseObject({ structured_output: z.unknown().optional() })
+    .safeParse(workerData);
+  const parsedReport = parseReport(
+    workerOutput.success ? workerOutput.data.structured_output : undefined,
+    lastMessage,
+  );
+  const claimedPaths = [
+    ...new Set([
+      ...(parsedReport.ok
+        ? parsedReport.report.changes.map((change) => change.path)
+        : []),
+      ...(parsedReturn.kind === "valid" ? parsedReturn.record.artifacts : []),
+    ]),
+  ];
+  // Without a ticket there are no declared writes, so claims-without-diff does not apply.
+  const claimsWithoutDiff =
+    ticket !== undefined &&
+    writes !== undefined &&
+    writes.unavailable === undefined &&
+    writes.paths.length === 0 &&
+    claimedPaths.length > 0;
+  const claimFields = claimsWithoutDiff
+    ? { claims_without_diff: { claimed: claimedPaths, diff_empty: true } }
+    : {};
+  if (claimsWithoutDiff)
+    console.error(
+      `agent-dispatch: worker claimed changes (${claimedPaths.join(", ")}) but the ticket writes diff is empty`,
+    );
+  const verifyProvesOtherwise =
+    verified !== undefined &&
+    verified.results.length > 0 &&
+    verified.results.every((result) => result.exit === 0 && !result.timed_out);
   const stoppedWith = z
     .looseObject({ outcome: z.string(), session: z.string() })
     .safeParse(workerData);
@@ -2060,6 +2162,9 @@ async function launch(l: Launch): Promise<number> {
     pick,
     ...(ticket === undefined ? {} : { ticket }),
     ticket_grade: ticketGrade,
+    ...(legacyBriefReason === undefined
+      ? {}
+      : { legacy_brief_reason: legacyBriefReason }),
     checkpoint,
     timeout_s: timeout.seconds,
     timeout_source: timeout.source,
@@ -2078,6 +2183,7 @@ async function launch(l: Launch): Promise<number> {
       ? {}
       : { verify: verified.results, verify_summary: verified.summary }),
     ...writesFields,
+    ...claimFields,
     ...(partialReport === undefined ? {} : { report_partial: partialReport }),
     orphans_reaped: orphans.reaped,
     ...(orphans.left.length === 0 ? {} : { orphans_left: orphans.left }),
@@ -2110,17 +2216,19 @@ async function launch(l: Launch): Promise<number> {
   rmSync(marker, { force: true });
   let graded: Record<string, unknown> = {};
   if (verified !== undefined) {
-    graded =
-      writeViolations.length > 0
-        ? recordWritesViolationGrade(runId, verified, writeViolations)
-        : await autoGrade(
-            roster,
-            runId,
-            brief,
-            receipt.worker,
-            active.cwd,
-            verified,
-          );
+    if (writeViolations.length > 0)
+      graded = recordWritesViolationGrade(runId, verified, writeViolations);
+    else if (claimsWithoutDiff && !verifyProvesOtherwise)
+      graded = recordClaimsWithoutDiffGrade(runId, verified, claimedPaths);
+    else
+      graded = await autoGrade(
+        roster,
+        runId,
+        brief,
+        receipt.worker,
+        active.cwd,
+        verified,
+      );
   } else if (parsedReturn.kind === "valid") {
     recordWaiver(runId, "returned early with findings", "router");
   }
@@ -2238,6 +2346,33 @@ function recordWritesViolationGrade(
   };
 }
 
+function recordClaimsWithoutDiffGrade(
+  runId: string,
+  verified: Verified,
+  claimed: string[],
+): Record<string, unknown> {
+  const reason = "claimed changes, no diff";
+  const evidence = `${reason}\nclaimed: ${claimed.join(", ")}\n\n${verifyEvidence(verified.results)}`;
+  const file = join(STATE_DIR, "evidence", `${runId}.txt`);
+  mkdirSync(join(STATE_DIR, "evidence"), { recursive: true });
+  writeFileSync(file, evidence);
+  appendLog({
+    kind: "grade",
+    run_id: runId,
+    grade: "fail",
+    confidence: 1,
+    probabilities: { fail: 1 },
+    reason,
+    evidence: { path: resolve(file), sha256: sha256(evidence) },
+    graded_at: now(),
+    graded_by: "router",
+  });
+  console.error(`agent-dispatch: ${runId} graded fail by router — ${reason}`);
+  return {
+    grade: { grade: "fail", confidence: 1, graded_by: "router", reason },
+  };
+}
+
 // --- pick / ls / stats -----------------------------------------------------------------------------
 
 async function pickOnly(promptFile: string, cd: string): Promise<number> {
@@ -2293,40 +2428,100 @@ function replayExpectations(expectFile: string): Map<string, ReplayVerdict> {
   return expected;
 }
 
+const replayFalseRate = (
+  falseRefusals: number,
+  expectedPass: number,
+): string =>
+  expectedPass === 0
+    ? "n/a"
+    : `${falseRefusals}/${expectedPass} (${Math.round((falseRefusals / expectedPass) * 100)}%)`;
+
+const replayAgreement = (n: number, denominator: number): string =>
+  denominator === 0
+    ? "n/a"
+    : `${n}/${denominator} (${Math.round((n / denominator) * 100)}%)`;
+
 async function gradeReplayBrief(
   roster: Roster,
   directory: string,
   file: string,
 ): Promise<{
   grade: TicketGrade;
-  status: "ok" | "failed" | "skipped";
+  floorViolationCount: number;
+  graderStatus: "ok" | "failed" | "skipped";
+  graderVerdict: TicketGrade["verdict"] | undefined;
+  nPieces: number;
+  piecesValid: boolean | undefined;
+  reason: string | undefined;
   valid: boolean;
 }> {
   const brief = readFileSync(join(directory, file), "utf8");
   const parsed = parseTicket(brief);
   const floor = floorTicketGrade(brief, parsed);
   if (parsed.kind === "invalid")
-    return { grade: floor, status: "skipped", valid: false };
+    return {
+      grade: floor,
+      floorViolationCount: floor.violations.length,
+      graderStatus: "skipped",
+      graderVerdict: undefined,
+      nPieces: 0,
+      piecesValid: undefined,
+      reason: `ticket parse failed: ${parsed.reason}`,
+      valid: false,
+    };
   if (
     parsed.kind === "ticket" &&
     parsed.ticket.schema === 2 &&
     floor.violations.length > 0
   )
-    return { grade: floor, status: "skipped", valid: false };
+    return {
+      grade: floor,
+      floorViolationCount: floor.violations.length,
+      graderStatus: "skipped",
+      graderVerdict: undefined,
+      nPieces: 0,
+      piecesValid: undefined,
+      reason: `schema 2 floor has ${floor.violations.length} violation(s); grader not run`,
+      valid: false,
+    };
   const replayId = `replay-${sha256(`${file}:${brief}`).slice(0, 16)}`;
   const result = await attempt(() =>
     gradeWithWorker(roster, brief, resolve(directory), replayId),
   );
-  if (!result.ok) return { grade: floor, status: "failed", valid: false };
+  if (!result.ok)
+    return {
+      grade: floor,
+      floorViolationCount: floor.violations.length,
+      graderStatus: "failed",
+      graderVerdict: undefined,
+      nPieces: 0,
+      piecesValid: undefined,
+      reason: errorMessage(result.error),
+      valid: false,
+    };
   if (!result.value.grade.valid)
-    return { grade: floor, status: "failed", valid: false };
+    return {
+      grade: floor,
+      floorViolationCount: floor.violations.length,
+      graderStatus: "failed",
+      graderVerdict: undefined,
+      nPieces: 0,
+      piecesValid: false,
+      reason: result.value.grade.reason,
+      valid: false,
+    };
   return {
     grade: mergeTicketGrades(
       floor,
       result.value.grade.grade,
       result.value.record,
     ),
-    status: "ok",
+    floorViolationCount: floor.violations.length,
+    graderStatus: "ok",
+    graderVerdict: result.value.grade.grade.verdict,
+    nPieces: result.value.grade.grade.pieces?.length ?? 0,
+    piecesValid: true,
+    reason: undefined,
     valid: true,
   };
 }
@@ -2345,30 +2540,46 @@ async function gradeReplay(
   const files = readdirSync(directory)
     .filter((file) => file.endsWith(".md"))
     .toSorted();
-  let agreement = 0;
-  let compared = 0;
-  let falseRefusals = 0;
-  let expectedPass = 0;
+  let mergedAgreement = 0;
+  let mergedCompared = 0;
+  let mergedFalseRefusals = 0;
+  let mergedExpectedPass = 0;
+  let graderAgreement = 0;
+  let graderCompared = 0;
+  let graderFalseRefusals = 0;
+  let graderExpectedPass = 0;
+  let graderExcluded = 0;
   for (const file of files) {
     const evaluation = await gradeReplayBrief(roster, directory, file);
-    const nPieces = evaluation.grade.pieces?.length ?? 0;
+    const reason =
+      evaluation.reason === undefined
+        ? "-"
+        : evaluation.reason.replaceAll(/[\t\r\n]+/gu, " ").slice(0, 240);
     process.stdout.write(
-      `${file}\t${evaluation.grade.verdict}\t${nPieces}\t${evaluation.valid}\t${evaluation.status}\n`,
+      `${file}\tmerged=${evaluation.grade.verdict}\tfloor_violations=${evaluation.floorViolationCount}\tgrader_status=${evaluation.graderStatus}\tgrader_verdict=${evaluation.graderVerdict ?? "n/a"}\tn_pieces=${evaluation.nPieces}\tpieces_valid=${evaluation.piecesValid?.toString() ?? "n/a"}\tgrader_reason=${reason}\n`,
     );
     const want = expected.get(file);
     if (want === undefined) continue;
-    compared += 1;
-    if (want === "pass") expectedPass += 1;
-    if (want === evaluation.grade.verdict) agreement += 1;
+    mergedCompared += 1;
+    if (want === "pass") mergedExpectedPass += 1;
+    if (want === evaluation.grade.verdict) mergedAgreement += 1;
     if (want === "pass" && evaluation.grade.verdict !== "pass")
-      falseRefusals += 1;
+      mergedFalseRefusals += 1;
+    if (
+      evaluation.graderStatus !== "ok" ||
+      evaluation.graderVerdict === undefined
+    ) {
+      graderExcluded += 1;
+      continue;
+    }
+    graderCompared += 1;
+    if (want === "pass") graderExpectedPass += 1;
+    if (want === evaluation.graderVerdict) graderAgreement += 1;
+    if (want === "pass" && evaluation.graderVerdict !== "pass")
+      graderFalseRefusals += 1;
   }
-  const falseRate =
-    expectedPass === 0
-      ? "n/a"
-      : `${falseRefusals}/${expectedPass} (${Math.round((falseRefusals / expectedPass) * 100)}%)`;
   process.stdout.write(
-    `TOTAL briefs=${files.length} agreement=${compared === 0 ? "n/a" : `${agreement}/${compared} (${Math.round((agreement / compared) * 100)}%)`} false_refusal_rate=${falseRate}\n`,
+    `TOTAL briefs=${files.length} merged_agreement=${replayAgreement(mergedAgreement, mergedCompared)} merged_false_refusal_rate=${replayFalseRate(mergedFalseRefusals, mergedExpectedPass)} grader_agreement=${replayAgreement(graderAgreement, graderCompared)} grader_false_refusal_rate=${replayFalseRate(graderFalseRefusals, graderExpectedPass)} grader_excluded=${graderExcluded}\n`,
   );
   return 0;
 }
@@ -2819,10 +3030,48 @@ function waive(runId: string, reason: string): number {
   return 0;
 }
 
-function stats(): number {
+function ack(
+  runId: string,
+  consumed: boolean,
+  note: string | undefined,
+): number {
+  const logged = readLog().find(
+    (line) => line.kind === "run" && line.run_id === runId,
+  );
+  if (logged === undefined)
+    fatal(
+      `no finished run ${runId} in ${LOG_FILE}; no acknowledgement recorded`,
+    );
+  const record = {
+    kind: "ack",
+    run_id: runId,
+    dispatcher_session: currentDispatcherSession() ?? null,
+    at: now(),
+    consumed,
+    ...(note === undefined ? {} : { note }),
+  };
+  appendLog(record);
+  process.stdout.write(`${JSON.stringify({ schema: SCHEMA, ...record })}\n`);
+  return 0;
+}
+
+function stats(flags: {
+  since: string | undefined;
+  grading: boolean;
+  check: boolean;
+  replay: string | undefined;
+}): number {
   const lines = readLog();
+  const logText = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf8") : "";
+  const nowMs = epochMilliseconds();
+  const sinceMs = parseSince(flags.since, nowMs);
+  if (!Number.isFinite(sinceMs))
+    fatal(
+      `invalid --since value '${flags.since ?? ""}': use an ISO instant or duration such as 24h`,
+    );
+  if (flags.check && !flags.grading) fatal("--check requires --grading");
   const routePicks = dispatchStats({
-    log: existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf8") : "",
+    log: logText,
     now: epochMilliseconds(),
   });
   const bySource = Object.fromEntries(
@@ -2833,7 +3082,7 @@ function stats(): number {
   );
   const conf = lines.flatMap((l) => l.pick.confidence ?? []);
   const latency = lines.flatMap((l) => l.pick.jev?.latency_ms ?? []);
-  const report = {
+  const legacy = {
     schema: SCHEMA,
     log: LOG_FILE,
     records: lines.length,
@@ -2864,11 +3113,38 @@ function stats(): number {
       ).length;
     })(),
   };
+  const throughput = throughputStats(logText, {
+    now: nowMs,
+    sinceMs,
+    grading: flags.grading,
+  });
+  const replay =
+    flags.replay === undefined
+      ? undefined
+      : (() => {
+          const candidate = jsonOf(z.unknown()).safeParse(
+            readFileSync(flags.replay, "utf8"),
+          );
+          if (!candidate.success)
+            fatal(`invalid candidate JSON: ${flags.replay}`);
+          return replayStats(logText, candidate.data, {
+            now: nowMs,
+            sinceMs,
+            grading: false,
+          });
+        })();
+  const report = {
+    ...legacy,
+    window: flags.since ?? "24h",
+    throughput,
+    legacy,
+    ...(replay === undefined ? {} : { replay }),
+  };
   console.error(
     `agent-dispatch: ${lines.length} records — explicit ${bySource.explicit}, jev ${bySource.jev}, default ${bySource.default}`,
   );
   process.stdout.write(`${JSON.stringify(report)}\n`);
-  return 0;
+  return flags.check && throughput.grading?.exceeds_saves === true ? 1 : 0;
 }
 
 const ExportRunLine = z.looseObject({
@@ -3297,10 +3573,12 @@ async function resumeCommand(
       timeoutS,
       timeoutReason,
       noGrader: false,
+      legacyBrief: undefined,
     },
     brief,
     ticket,
     ticketGrade,
+    legacyBriefReason: undefined,
     pick: {
       source: "resume",
       choice: row.id,
@@ -3371,6 +3649,11 @@ const argv = cli({
           type: Boolean,
           description:
             "skip the pre-spawn ticket grader (recorded in the receipt)",
+        },
+        legacyBrief: {
+          type: String,
+          description:
+            "one-release reason to run a plain/schema 1 brief with floor violations",
         },
       },
       help: { description: "Jev picks a row; run the worker" },
@@ -3445,7 +3728,49 @@ const argv = cli({
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       parameters: [],
-      help: { description: "pick and outcome statistics from runs.jsonl" },
+      flags: {
+        since: {
+          type: String,
+          description: "window start as ISO instant or duration (default 24h)",
+        },
+        grading: {
+          type: Boolean,
+          description: "include grading overhead and estimated saves",
+        },
+        check: {
+          type: Boolean,
+          description:
+            "with --grading, exit 1 when overhead exceeds estimated saves",
+        },
+        replay: {
+          type: String,
+          description: "offline candidate routing JSON file",
+        },
+      },
+      help: {
+        description:
+          "throughput statistics by row and dispatcher; legacy view is included",
+      },
+    }),
+    command({
+      name: "ack",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: ["<run_id>"],
+      flags: {
+        consumed: {
+          type: Boolean,
+          description: "the artifact was consumed (default)",
+        },
+        rejected: { type: Boolean, description: "the artifact was rejected" },
+        note: {
+          type: String,
+          description: "why the artifact was consumed or rejected",
+        },
+      },
+      help: {
+        description: "record whether a finished run's artifact was consumed",
+      },
     }),
     command({
       name: "export",
@@ -3540,6 +3865,7 @@ async function main(): Promise<number | undefined> {
   const positionals =
     argv.command === "grade-replay" ||
     argv.command === "grade" ||
+    argv.command === "ack" ||
     argv.command === "result" ||
     argv.command === "resume"
       ? 1
@@ -3564,6 +3890,8 @@ async function main(): Promise<number | undefined> {
       );
     if (f.timeoutReason !== undefined && f.timeoutReason.trim() === "")
       fatal("--timeout-reason requires a non-empty reason");
+    if (f.legacyBrief !== undefined && f.legacyBrief.trim() === "")
+      fatal("--legacy-brief requires a non-empty reason");
     if (
       timeoutS !== undefined &&
       timeoutS > EXTENDED_TIMEOUT_THRESHOLD_S &&
@@ -3591,6 +3919,7 @@ async function main(): Promise<number | undefined> {
       timeoutS,
       timeoutReason: f.timeoutReason,
       noGrader: f.noGrader ?? false,
+      legacyBrief: f.legacyBrief,
     });
   }
   if (argv.command === "pick") {
@@ -3611,7 +3940,25 @@ async function main(): Promise<number | undefined> {
   }
   if (argv.command === "ls") return ls();
   if (argv.command === "doctor") return doctor();
-  if (argv.command === "stats") return stats();
+  if (argv.command === "stats") {
+    const { since, grading, check, replay } = argv.flags;
+    if (since === "" || replay === "") fatal("a value is required");
+    if (check === true && grading !== true) fatal("--check requires --grading");
+    return stats({
+      since,
+      grading: grading ?? false,
+      check: check ?? false,
+      replay,
+    });
+  }
+  if (argv.command === "ack") {
+    if (argv._.length !== 1) fatal("ack needs <run_id>");
+    if (argv.flags.note === "")
+      fatal("--note requires a non-empty explanation");
+    if (argv.flags.consumed === true && argv.flags.rejected === true)
+      fatal("choose either --consumed or --rejected");
+    return ack(argv._.runId, argv.flags.rejected !== true, argv.flags.note);
+  }
   if (argv.command === "export") return exportRuns(argv.flags.since);
   if (argv.command === "result")
     return resultCommand(

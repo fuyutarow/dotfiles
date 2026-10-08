@@ -31,16 +31,18 @@ export const AgentGradeSchema = z.strictObject({
 export type AgentGrade = z.output<typeof AgentGradeSchema>;
 type AgentPiece = z.output<typeof PieceSchema>;
 
-const GRADE_FENCE = /```agent-dispatch-grade\s*\n([\s\S]*?)\n```/u;
-const GRADE_OPEN = /```agent-dispatch-grade\s*\n/u;
+const GRADE_FENCE =
+  /```agent-dispatch-grade[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*/u;
+const GRADE_OPEN = /```agent-dispatch-grade[ \t]*\r?\n/u;
 
 export const GRADE_WORKER_PROMPT = (brief: string): string =>
   `Grade this brief as a meaningful remand judgment. Decide whether it should pass, split, or clarify; for split, say what the pieces are and why. Do not edit or write files.\n\n` +
   `## Brief\n${brief}\n\n` +
   `## BIBIFI microticket rules\n` +
   `- One ticket has one consumed decision.\n` +
-  `- The first useful return is within 6 minutes.\n` +
-  `- Two or more independently checkable deliverables mean the brief is a container and should split.\n` +
+  `- first_return is the early checkpoint of the same final deliverable, never a separate deliverable; one artifact plus its first_return is a microticket.\n` +
+  `- Split only when there are at least two independently checkable FINAL deliverables.\n` +
+  `- A ticket with split_from in its front matter is already a piece and must not be split again.\n` +
   `- A queue held by one worker is still a container.\n` +
   `- A long run must not be obtained by chaining pieces.\n\n` +
   `## Output\n` +
@@ -51,7 +53,10 @@ export type ParsedAgentGrade =
   | { valid: true; grade: AgentGrade }
   | { valid: false; reason: string };
 
-export function parseAgentGrade(message: string): ParsedAgentGrade {
+export function parseAgentGrade(
+  message: string,
+  parentBrief?: string,
+): ParsedAgentGrade {
   const match = GRADE_FENCE.exec(message);
   if (match === null)
     return {
@@ -78,7 +83,7 @@ export function parseAgentGrade(message: string): ParsedAgentGrade {
         )
         .join("; ")}`,
     };
-  const validation = validateAgentGrade(parsed.data);
+  const validation = validateAgentGrade(parsed.data, parentBrief);
   return validation === undefined
     ? { valid: true, grade: parsed.data }
     : { valid: false, reason: validation };
@@ -136,7 +141,27 @@ function unorderedWriteOverlap(
   return undefined;
 }
 
-function validateAgentGrade(grade: AgentGrade): string | undefined {
+const filePath = /(?:\.{1,2}\/|\/)?(?:[\w.-]+\/)*[\w.-]+\.[a-z\d]{1,12}\b/giu;
+
+function normalizedOperation(piece: AgentPiece): string {
+  let outcome = piece.outcome.toLocaleLowerCase();
+  for (const write of [...piece.writes].toSorted((a, b) => b.length - a.length))
+    outcome = outcome.replaceAll(write.toLocaleLowerCase(), "<path>");
+  return outcome.replaceAll(filePath, "<path>").replaceAll(/\s+/gu, " ").trim();
+}
+
+function splitOnlyByFileList(pieces: AgentPiece[]): boolean {
+  return (
+    new Set(pieces.map((piece) => normalizedOperation(piece))).size === 1 &&
+    new Set(pieces.map((piece) => JSON.stringify(piece.writes))).size ===
+      pieces.length
+  );
+}
+
+function validateAgentGrade(
+  grade: AgentGrade,
+  parentBrief?: string,
+): string | undefined {
   if (grade.verdict === "pass")
     return grade.violations.length === 0
       ? undefined
@@ -150,6 +175,25 @@ function validateAgentGrade(grade: AgentGrade): string | undefined {
   const pieces = grade.pieces ?? [];
   if (pieces.length < 2)
     return "a split grade must contain at least two pieces";
+  if (splitOnlyByFileList(pieces))
+    return "split pieces repeat one operation over different file lists; file count is not a separate deliverable";
+  const parent =
+    parentBrief === undefined ? undefined : parseTicket(parentBrief);
+  if (parent?.kind === "ticket" && parent.ticket.split_from !== undefined)
+    return `ticket is already a split piece (split_from=${parent.ticket.split_from}) and cannot be split again`;
+  if (parent?.kind === "ticket" && parent.ticket.first_return !== undefined) {
+    const firstReturn = parent.ticket.first_return
+      .trim()
+      .toLocaleLowerCase()
+      .replaceAll(/\s+/gu, " ");
+    const checkpointPiece = pieces.find((piece) =>
+      firstReturn.includes(
+        piece.outcome.trim().toLocaleLowerCase().replaceAll(/\s+/gu, " "),
+      ),
+    );
+    if (checkpointPiece !== undefined)
+      return `piece ${checkpointPiece.title} outcome is the parent's first_return checkpoint, not a separate final deliverable`;
+  }
   const titles = new Set(pieces.map((piece) => piece.title));
   if (titles.size !== pieces.length) return "piece titles must be unique";
   for (const piece of pieces) {
@@ -179,7 +223,7 @@ export function mergeTicketGrades(
   let verdict: TicketGrade["verdict"] = "pass";
   if (floor.verdict === "split" || grader.verdict === "split")
     verdict = "split";
-  if (floor.verdict === "clarify" || grader.verdict === "clarify")
+  else if (floor.verdict === "clarify" || grader.verdict === "clarify")
     verdict = "clarify";
   return {
     verdict,
@@ -195,7 +239,10 @@ export function mergeTicketGrades(
   };
 }
 
-export function renderGradeRemand(grade: TicketGrade): string[] {
+export function renderGradeRemand(
+  grade: TicketGrade,
+  splitFrom?: string,
+): string[] {
   const lines = grade.violations.map(
     (item) =>
       `agent-dispatch: remand ${item.rule}: ${item.why_it_blocks_a_6min_first_return} Fix: ${item.fix}`,
@@ -204,14 +251,20 @@ export function renderGradeRemand(grade: TicketGrade): string[] {
     lines.push(
       [
         `agent-dispatch: split piece ${index + 1}: ${piece.title}`,
-        `  outcome: ${piece.outcome}`,
-        `  consumer: ${piece.consumer}`,
-        `  first_return: ${piece.first_return}`,
-        `  writes: ${JSON.stringify(piece.writes)}`,
-        `  verify: ${JSON.stringify(piece.verify)}`,
+        "+++",
+        "schema = 2",
+        ...(splitFrom === undefined
+          ? []
+          : [`split_from = ${JSON.stringify(splitFrom)}`]),
+        `outcome = ${JSON.stringify(piece.outcome)}`,
+        `consumer = ${JSON.stringify(piece.consumer)}`,
+        `first_return = ${JSON.stringify(piece.first_return)}`,
+        `writes = ${JSON.stringify(piece.writes)}`,
+        `verify = ${JSON.stringify(piece.verify)}`,
         ...(piece.depends_on.length === 0
           ? []
-          : [`  depends_on: ${JSON.stringify(piece.depends_on)}`]),
+          : [`# depends_on = ${JSON.stringify(piece.depends_on)}`]),
+        "+++",
       ].join("\n"),
     );
   }

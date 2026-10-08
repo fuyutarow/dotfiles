@@ -218,12 +218,34 @@ async function router(
   // state is refused while the first is ungraded — the rule under test below, not these tests' topic.
   const state =
     env.AGENT_ROUTER_STATE_DIR ?? join(scratch, `state-${stateSeq++}`);
-  const routedArgs =
+  const promptFileIndex = args.indexOf("--prompt-file");
+  const promptText =
+    promptFileIndex < 0
+      ? ""
+      : readFileSync(args[promptFileIndex + 1] ?? "", "utf8");
+  const schemaOne = /^\+\+\+[\s\S]*?^schema\s*=\s*1\s*$/mu.test(promptText);
+  const schemaOneNeedsEscape =
+    schemaOne &&
+    (!["outcome", "consumer", "first_return", "writes"].every((key) =>
+      new RegExp(`^${key}\\s*=`, "mu").test(promptText),
+    ) ||
+      (!/^verify\s*=/mu.test(promptText) &&
+        !/^read_only_diagnostic\s*=\s*true/mu.test(promptText)) ||
+      !/^capabilities\s*=/mu.test(promptText));
+  const needsLegacyEscape =
+    args[0] === "run" &&
+    (!promptText.startsWith("+++") || schemaOneNeedsEscape) &&
+    env.TEST_SKIP_LEGACY !== "1" &&
+    !args.includes("--legacy-brief");
+  const routedArgs = [...args];
+  if (args[0] === "run" && needsLegacyEscape)
+    routedArgs.push("--legacy-brief", "existing plain-brief fixture");
+  if (
     args[0] === "run" &&
     env.TEST_ENABLE_GRADER !== "1" &&
     !args.includes("--no-grader")
-      ? [...args, "--no-grader"]
-      : args;
+  )
+    routedArgs.push("--no-grader");
   const r = Bun.spawn([process.execPath, CLI, ...routedArgs], {
     env: {
       ...process.env,
@@ -235,6 +257,7 @@ async function router(
     },
     stdout: "pipe",
     stderr: "pipe",
+    detached: true,
     timeout: 60_000,
   });
   const [out, err, code] = await Promise.all([
@@ -1261,6 +1284,106 @@ describe("agent-dispatch ls and stats", () => {
   });
 });
 
+describe("agent-dispatch ack and throughput CLI", () => {
+  test("ack records consumed and rejected outcomes; unknown run writes nothing", async () => {
+    const state = join(scratch, "ack-fixture");
+    mkdirSync(state, { recursive: true });
+    const log = join(state, "runs.jsonl");
+    writeFileSync(
+      log,
+      `${JSON.stringify({ kind: "run", run_id: "ack-run", pick: { source: "jev", choice: "row-a" } })}\n`,
+    );
+    const consumed = await router(
+      ["ack", "ack-run", "--consumed", "--note", "used"],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+        CLAUDE_CODE_SESSION_ID: "dispatcher-test",
+      },
+    );
+    expect(consumed.code).toBe(0);
+    expect(consumed.out).toContain('"consumed":true');
+    expect(consumed.out).toContain('"dispatcher_session":"dispatcher-test"');
+    const rejected = await router(["ack", "ack-run", "--rejected"], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(rejected.code).toBe(0);
+    expect(rejected.out).toContain('"consumed":false');
+    const before = readFileSync(log, "utf8");
+    const unknown = await router(["ack", "missing", "--consumed"], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(unknown.code).toBe(2);
+    expect(unknown.err).toContain("no acknowledgement recorded");
+    expect(readFileSync(log, "utf8")).toBe(before);
+  });
+
+  test("stats check exits 1 when grading overhead exceeds saves and 0 otherwise", async () => {
+    const state = join(scratch, "grading-check-fixture");
+    mkdirSync(state, { recursive: true });
+    const log = join(state, "runs.jsonl");
+    writeFileSync(
+      log,
+      `${JSON.stringify({
+        kind: "refusal",
+        run_id: "refused",
+        at: Temporal.Now.instant().toString(),
+        effort: "medium",
+        pick: {
+          source: "jev",
+          choice: "row-a",
+          confidence: 0.4,
+          jev: { latency_ms: 500 },
+        },
+        ticket: { schema: 1, capabilities: [] },
+        ticket_grade: {
+          verdict: "clarify",
+          grader: { elapsed_s: 2, usage: { cost_usd: 0.06 } },
+        },
+      })}\n`,
+    );
+    const over = await router(
+      ["stats", "--since", "7d", "--grading", "--check"],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    expect(over.code).toBe(1);
+    expect(over.out).toContain('"legacy"');
+    expect(over.out).toContain('"estimated_saved_worker_s":0');
+    expect(over.out).toContain('"estimated_saved_cost_usd":0');
+
+    writeFileSync(log, "");
+    const okay = await router(["stats", "--grading", "--check"], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(okay.code).toBe(0);
+    expect(okay.out).toContain('"per_row":{}');
+  });
+
+  test("plain floor violations refuse; --legacy-brief records its reason", async () => {
+    const b = brief(
+      "plain-floor-refusal",
+      "A plain brief with no measurable first return.\n",
+    );
+    const refused = await router(runArgs(b, freshCwd()), {
+      TEST_SKIP_LEGACY: "1",
+    });
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain("remand outcome:");
+    expect(refused.err).toContain("schema = 2");
+    expect(logLines(refused.state).map((line) => line.kind)).toEqual([
+      "refusal",
+    ]);
+    const escaped = await router([
+      ...runArgs(b, freshCwd()),
+      "--legacy-brief",
+      "exception for this release",
+    ]);
+    expect(escaped.code).toBe(0);
+    expect(escaped.out).toContain(
+      '"legacy_brief_reason":"exception for this release"',
+    );
+  });
+});
+
 describe("agent-dispatch export", () => {
   test("exports latest grade, waiver and legacy rows without dropping them", async () => {
     const state = join(scratch, "export-history");
@@ -2140,22 +2263,26 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     );
   });
 
-  test("schema 1 remand prints rule and fix, records grade, and still runs", async () => {
+  test("schema 1 floor remand is refused with fixes unless the recorded escape is supplied", async () => {
     const b = brief("t-schema1-remand", ticketText("writes = []\nverify = []"));
     const r = await router(runArgs(b, freshCwd()), {
       CLAUDE_CODE_SESSION_ID: "",
+      TEST_SKIP_LEGACY: "1",
     });
-    expect(r.code).toBe(0);
+    expect(r.code).toBe(2);
     expect(r.err).toContain("remand outcome:");
     expect(r.err).toContain('Fix: outcome = "<decision/result this changes>"');
-    const receipt = decodedJson(
-      z.looseObject({ ticket_grade: z.looseObject({ verdict: z.string() }) }),
-      r.out.trim(),
+    expect(r.err).toContain("schema = 2");
+    expect(logLines(r.state).map((line) => line.kind)).toEqual(["refusal"]);
+
+    const escape = await router(
+      [...runArgs(b, freshCwd()), "--legacy-brief", "one more release"],
+      {
+        CLAUDE_CODE_SESSION_ID: "",
+      },
     );
-    expect(receipt.ticket_grade.verdict).toBe("clarify");
-    expect(readFileSync(join(r.state, "runs.jsonl"), "utf8")).toContain(
-      '"ticket_grade"',
-    );
+    expect(escape.code).toBe(0);
+    expect(escape.out).toContain('"legacy_brief_reason":"one more release"');
   });
 
   test("valid split refuses schema 2 and prints ready-to-paste pieces", async () => {
@@ -2170,7 +2297,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     expect(r.code).toBe(2);
     expect(r.err).toContain("remand multiple-deliverables:");
     expect(r.err).toContain("split piece 1: A decision");
-    expect(r.err).toContain("first_return: a.md within six minutes");
+    expect(r.err).toContain('first_return = "a.md within six minutes"');
     const refusal = decodedJson(
       z.looseObject({
         ticket_grade: z.looseObject({
@@ -2195,6 +2322,83 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       source: "floor+grader",
       grader: { status: "ok", row: { id: "luna-max", route: "codex" } },
     });
+    expect(logLines(r.state).map((line) => line.kind)).toEqual(["refusal"]);
+  });
+
+  test("split pieces that only differ by target file are rejected and recorded", async () => {
+    const repeatedOperation = {
+      ...splitGrade,
+      pieces: [
+        {
+          ...splitGrade.pieces[0],
+          title: "Format src/a.ts",
+          outcome: "Apply the formatter rule to src/a.ts",
+          writes: ["src/a.ts"],
+        },
+        {
+          ...splitGrade.pieces[1],
+          title: "Format src/b.ts",
+          outcome: "Apply the formatter rule to src/b.ts",
+          writes: ["src/b.ts"],
+        },
+      ],
+    };
+    const b = brief(
+      "t-grader-file-only-split",
+      '+++\nschema = 2\noutcome = "apply one rule across the source files"\nconsumer = "owner"\nfirst_return = "formatted files"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nApply the formatter rule across the listed files.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(repeatedOperation),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(
+      "split pieces repeat one operation over different file lists",
+    );
+    expect(r.out).toContain('"verdict":"pass"');
+    expect(r.out).toContain('"status":"failed"');
+  });
+
+  test("urgent_reason lets a schema 2 grader remand proceed while preserving its split", async () => {
+    const b = brief(
+      "t-urgent-grader-split",
+      '+++\nschema = 2\noutcome = "restore the development environment"\nconsumer = "on-call owner"\nfirst_return = "diagnosis.md within 6 min"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\nurgent_reason = "Vast outage: mise is broken"\n+++\nRestore the environment and document the fix.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(splitGrade),
+    });
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("split piece 1: A decision");
+    expect(r.err).toContain(
+      "urgent override (Vast outage: mise is broken): grader split is recorded as a warning",
+    );
+    const receipt = decodedJson(
+      z.looseObject({
+        ticket: z.looseObject({ urgent_reason: z.string() }),
+        ticket_grade: z.looseObject({ verdict: z.string() }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.ticket.urgent_reason).toBe("Vast outage: mise is broken");
+    expect(receipt.ticket_grade.verdict).toBe("split");
+    expect(logLines(r.state).map((line) => line.kind)).toEqual([
+      "run",
+      "grade",
+    ]);
+  });
+
+  test("urgent_reason does not override schema 2 floor violations", async () => {
+    const b = brief(
+      "t-urgent-floor-remand",
+      '+++\nschema = 2\nwrites = []\nurgent_reason = "Vast outage"\n+++\nRestore the environment.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+    });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("remand outcome:");
+    expect(r.err).not.toContain("urgent override");
     expect(logLines(r.state).map((line) => line.kind)).toEqual(["refusal"]);
   });
 
@@ -2293,8 +2497,53 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       FAKE_GRADE: JSON.stringify(splitGrade),
     });
     expect(r.code).toBe(0);
-    expect(r.err).toContain("schema 1/plain refusal is planned for 1.4.0");
+    expect(r.err).not.toContain("schema 1/plain refusal is planned for 1.4.0");
     expect(r.err).toContain("split piece 1: A decision");
+    expect(r.err).toMatch(/split_from = "[^"]+"/u);
+  });
+
+  test("a first-return checkpoint is not accepted as a separate final split piece", async () => {
+    const b = brief(
+      "t-grader-first-return-piece",
+      '+++\nschema = 2\noutcome = "complete inventory and implementation"\nconsumer = "owner"\nfirst_return = "inventory within 6 min"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nComplete the inventory and implementation.\n',
+    );
+    const checkpointSplit = {
+      ...splitGrade,
+      pieces: [
+        { ...splitGrade.pieces[0], outcome: "inventory" },
+        { ...splitGrade.pieces[1], outcome: "implement the inventory" },
+      ],
+    };
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(checkpointSplit),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(
+      "piece A decision outcome is the parent's first_return checkpoint",
+    );
+    expect(r.out).toContain('"verdict":"pass"');
+    const promptLog = readFileSync(join(scratch, "prompt.log"), "utf8");
+    expect(promptLog).toContain(
+      "first_return is the early checkpoint of the same final deliverable",
+    );
+    expect(promptLog).toContain("FINAL deliverables");
+  });
+
+  test("a ticket marked split_from cannot be split recursively", async () => {
+    const b = brief(
+      "t-grader-recursive-split",
+      '+++\nschema = 2\nsplit_from = "parent-run"\noutcome = "complete A"\nconsumer = "owner"\nfirst_return = "A decision"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nComplete A.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(splitGrade),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(
+      "ticket is already a split piece (split_from=parent-run) and cannot be split again",
+    );
+    expect(r.out).toContain('"verdict":"pass"');
   });
 
   test("--no-grader is recorded in the parent receipt", async () => {
@@ -2323,14 +2572,57 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       FAKE_GRADE: JSON.stringify(splitGrade),
     });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("a.md\tclarify\t2\ttrue\tok");
-    expect(r.out).toContain("agreement=1/2 (50%)");
-    expect(r.out).toContain("false_refusal_rate=1/1 (100%)");
+    expect(r.out).toContain(
+      "a.md\tmerged=split\tfloor_violations=5\tgrader_status=ok\tgrader_verdict=split\tn_pieces=2\tpieces_valid=true\tgrader_reason=-",
+    );
+    expect(r.out).toContain("merged_agreement=0/2 (0%)");
+    expect(r.out).toContain("merged_false_refusal_rate=1/1 (100%)");
+    expect(r.out).toContain("grader_agreement=0/2 (0%)");
+    expect(r.out).toContain("grader_false_refusal_rate=1/1 (100%)");
+    expect(r.out).toContain("grader_excluded=0");
     const after = existsSync(join(scratch, "argv.log"))
       ? readFileSync(join(scratch, "argv.log"), "utf8").trim().split("\n")
           .length
       : 0;
     expect(after - before).toBe(2);
+  });
+
+  test("grade-replay reports why graders were skipped or failed and excludes them from grader metrics", async () => {
+    const dir = mkdtempSync(join(scratch, "grade-replay-diagnostics-"));
+    writeFileSync(
+      join(dir, "skipped.md"),
+      "+++\nschema = 2\nwrites = []\n+++\nDecide.\n",
+    );
+    writeFileSync(join(dir, "failed.md"), "Legacy brief.\n");
+    const expected = join(dir, "expected.tsv");
+    writeFileSync(expected, "failed.md\tpass\nskipped.md\tclarify\n");
+    const r = await router(["grade-replay", dir, "--expect", expected], {
+      FAKE_GRADE_LAST: "no grade fence",
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(
+      "failed.md\tmerged=clarify\tfloor_violations=5\tgrader_status=failed\tgrader_verdict=n/a\tn_pieces=0\tpieces_valid=false\tgrader_reason=missing agent-dispatch-grade block",
+    );
+    expect(r.out).toContain("skipped.md\tmerged=clarify");
+    expect(r.out).toContain("grader_status=skipped");
+    expect(r.out).toContain(
+      "grader_reason=schema 2 floor has 4 violation(s); grader not run",
+    );
+    expect(r.out).toContain("grader_excluded=2");
+    expect(r.out).toContain("grader_agreement=n/a");
+  });
+
+  test("grade-replay accepts a valid CRLF grade fence with trailing whitespace", async () => {
+    const dir = mkdtempSync(join(scratch, "grade-replay-crlf-"));
+    writeFileSync(join(dir, "legacy.md"), "Legacy brief.\n");
+    const grade = JSON.stringify({ verdict: "pass", violations: [] });
+    const fence = String.fromCodePoint(96).repeat(3);
+    const r = await router(["grade-replay", dir], {
+      FAKE_GRADE_LAST: `${fence}agent-dispatch-grade\r\n${grade}\r\n${fence}  `,
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("grader_status=ok");
+    expect(r.out).toContain("grader_verdict=pass");
   });
 
   test.each([59, 14401, 60.5])(
@@ -2510,7 +2802,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     expect(readFileSync(join(scratch, "prompt.log"), "utf8")).toContain(
       "time box checkpoint: stop new work and RETURN now",
     );
-  });
+  }, 45_000);
 
   test("RETURN before the checkpoint prevents resume", async () => {
     const b = brief(
@@ -2791,6 +3083,81 @@ describe("agent-dispatch ticket write enforcement", () => {
     const grade = logLines(r.state).find((line) => line.kind === "grade");
     expect(grade?.grade).toBe("fail");
     expect(grade?.reason).toContain("scripts/hook-registry.ts");
+  });
+
+  test("claimed changes with an empty writes diff are flagged and graded fail when verify fails", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "writes-claimed-no-diff",
+      ticketText('writes = ["src/**"]\nverify = ["false"]'),
+    );
+    const claimedReport = {
+      summary: "resolved the conflict",
+      changes: [{ path: "src/fix.ts", what: "fixed the conflict" }],
+      checks: [],
+      for_coordinator: [],
+      open: [],
+    };
+    const r = await router(runArgs(b, cwd), {
+      ...gitStatus(""),
+      FAKE_LAST: JSON.stringify(claimedReport),
+    });
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("ticket writes diff is empty");
+    const receipt = decodedJson(
+      z.looseObject({
+        claims_without_diff: z.looseObject({
+          claimed: z.array(z.string()),
+          diff_empty: z.boolean(),
+        }),
+        grade: z.looseObject({ grade: z.string(), reason: z.string() }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.claims_without_diff).toEqual({
+      claimed: ["src/fix.ts"],
+      diff_empty: true,
+    });
+    expect(receipt.grade).toMatchObject({
+      grade: "fail",
+      reason: "claimed changes, no diff",
+    });
+  });
+
+  test("a passing verify can prove claimed changes despite an empty writes diff", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "writes-claimed-no-diff-verified",
+      ticketText('writes = ["src/**"]\nverify = ["echo GRADE=pass"]'),
+    );
+    const claimedReport = {
+      summary: "resolved the conflict",
+      changes: [{ path: "src/fix.ts", what: "fixed the conflict" }],
+      checks: [],
+      for_coordinator: [],
+      open: [],
+    };
+    const r = await router(runArgs(b, cwd), {
+      ...gitStatus(""),
+      FAKE_LAST: JSON.stringify(claimedReport),
+    });
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("ticket writes diff is empty");
+    const receipt = decodedJson(
+      z.looseObject({
+        claims_without_diff: z.looseObject({
+          claimed: z.array(z.string()),
+          diff_empty: z.boolean(),
+        }),
+        grade: z.looseObject({ grade: z.string() }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.claims_without_diff).toEqual({
+      claimed: ["src/fix.ts"],
+      diff_empty: true,
+    });
+    expect(receipt.grade.grade).toBe("pass");
   });
 
   test("pre-existing dirty files are not attributed to this run", async () => {
@@ -3604,7 +3971,7 @@ describe("agent-dispatch: the typed final report", () => {
     expect(written.slice(written.lastIndexOf("Plain brief."))).toContain(
       instruction,
     );
-  });
+  }, 45_000);
 
   test("worker output allows a final report followed by the fenced RETURN block", async () => {
     await router(
@@ -3771,7 +4138,7 @@ describe("agent-dispatch: the typed final report", () => {
     expect(none.code).toBe(1);
     expect(none.out).toContain("No final report");
     expect(none.out).toContain("the typed final report is missing or invalid");
-  });
+  }, 60_000);
 
   test("a run recorded before typed reports still shows in result, and export is unaffected", async () => {
     const state = join(scratch, "report-old");

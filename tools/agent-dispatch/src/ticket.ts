@@ -44,6 +44,8 @@ const CommonTicket = {
   outcome: z.string().trim().min(1).optional(),
   consumer: z.string().trim().min(1).optional(),
   first_return: z.string().trim().min(1).optional(),
+  split_from: z.string().trim().min(1).optional(),
+  urgent_reason: z.string().trim().min(1).optional(),
   read_only_diagnostic: z.boolean().optional(),
 };
 

@@ -63,6 +63,7 @@ import {
   codexHostDeclarationPath,
   readCodexHostDeclaration,
 } from "./codex-host.ts";
+import { resourceBriefFallback } from "./codex-resource-probe.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
@@ -341,8 +342,6 @@ const hostDeclaration = readCodexHostDeclaration(HOST_FILE);
 if (hostDeclaration.kind === "invalid") refuse(hostDeclaration.reason);
 if (hostDeclaration.kind === "valid")
   unsandboxedReason = hostDeclaration.declaration.unsandboxedReason;
-codexSandbox =
-  unsandboxedReason === undefined ? String(sandbox) : "danger-full-access";
 
 // Measured 2026-10-05 on macOS: agent-dispatch + codex (gpt-6-luna, effort low, read-only) peaked at
 // 191 MB RSS (`/usr/bin/time -l`) and used 1.7 s CPU in a 5.6 s run — a network-bound client.
@@ -398,6 +397,12 @@ if (!promptRead.ok)
 const prompt = promptRead.value.trim();
 if (prompt === "")
   refuse("empty prompt (give --prompt-file, or pipe the prompt on stdin)");
+if (unsandboxedReason === undefined) {
+  const blocked = resourceBriefFallback(prompt, String(sandbox));
+  if (blocked !== undefined) unsandboxedReason = `sandbox blocks ${blocked}`;
+}
+codexSandbox =
+  unsandboxedReason === undefined ? String(sandbox) : "danger-full-access";
 
 // --- run --------------------------------------------------------------------------------------
 const lastFile = join(argv.flags.receiptDir, `${runId}.last.txt`);
@@ -442,7 +447,7 @@ const cmd =
       ];
 if (unsandboxedReason !== undefined)
   say(
-    `UNSANDBOXED: asked for ${sandbox}, running danger-full-access — ${HOST_FILE} declares this box the isolation: ${unsandboxedReason}`,
+    `UNSANDBOXED: asked for ${sandbox}, running danger-full-access — ${unsandboxedReason}`,
   );
 say(
   `${resume === undefined ? "started" : `resuming ${resume}:`} ${model} effort=${effort} sandbox=${codexSandbox} in ${resolve(String(cd))}, bound ${timeoutS} s`,

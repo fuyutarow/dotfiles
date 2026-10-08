@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0 — 2026-10-09
+
+- For resource-envelope briefs, probe once per worker process whether Codex's sandbox blocks the host user bus or an available GPU device; fall back to unsandboxed execution with a recorded reason when it does. Noncompute briefs do not probe.
+
 ## 1.5.6 — 2026-10-09
 
 - Include compact recent per-row throughput in Jev pick requests; label rows with fewer than three runs UNMEASURED and retain picks when the run log cannot be read.

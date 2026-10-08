@@ -9,6 +9,9 @@
     "rr": "tools/repo-retrieve/src/repo-retrieve.ts",
     "repo-retrieve": "tools/repo-retrieve/src/repo-retrieve.ts",
     "smart-open": "tools/smart-open/src/smart-open.ts",
+    "disk-reclaim": "tools/disk-reclaim/src/reclaim.ts",
+    "storage-headroom": "tools/storage-headroom/src/storage-headroom.ts",
+    "statusline": "tools/statusline/src/statusline.ts",
     "agent-dispatch": "tools/agent-dispatch/src/agent-dispatch.ts",
     "agent-router": "tools/agent-dispatch/src/agent-dispatch.ts"
   },

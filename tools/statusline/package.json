@@ -1,0 +1,13 @@
+{
+  "name": "@dotfiles/statusline",
+  "version": "0.2.4",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "statusline": "src/statusline.ts"
+  },
+  "dependencies": {
+    "neverthrow": "8.2.0",
+    "zod": "4.6.5"
+  }
+}

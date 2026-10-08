@@ -8,11 +8,14 @@ import { decisionOf, runHook, tempDir } from "./helpers.ts";
 const HOOK = "enforce-storage-headroom.ts";
 
 const CONFIG = `schema = 1
+sparse_required_above_mb = 500
 [drive.host]
 label = "tmp"
 path = "/"
-deny_gib = 999999
-deny_pct = 100
+deny_gib = 0
+deny_pct = 0
+warn_gib = 999999
+warn_pct = 100
 [deny]
 advice = "free space"
 [[launcher]]

@@ -33,6 +33,16 @@ scratch_safety_gib = 1
 # Device VRAM kept outside every reservation (driver/context overhead, display).
 gpu_safety_mib = 512
 
+# A newly launched process has up to 30 seconds to initialize CUDA before its actual use replaces
+# its declared headroom. Any per-process reading above 64 MiB ends warm-up early; small context
+# noise below that threshold does not make admission treat a still-loading model as fully settled.
+gpu_vram_warmup_ms = 30000
+gpu_vram_warmup_threshold_mib = 64
+
+# Cap enforcement allows allocator/context overhead up to 5% of the declared cap. Two consecutive
+# over-tolerance samples are required to avoid killing on one transient driver reading.
+gpu_vram_cap_tolerance_fraction = 0.05
+
 # Utilization at or below this is idle; above it, the device holds unmanaged load unless the
 # board-power rule below says otherwise.
 gpu_idle_utilization_percent = 20

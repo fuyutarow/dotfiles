@@ -546,7 +546,7 @@ pp() {
   fi
 }
 
-alias s='bun ~/dotfiles/agents/claude/host-load.ts'  # the statusline's Sys row (CPU · RAM · VRAM · Disk), now — agents/claude/host-load.ts; was `start` until 2026-10-06
+alias s='bun ~/dotfiles/tools/statusline/src/host-load.ts'  # the statusline's Sys row (CPU · RAM · VRAM · Disk), now; was `start` until 2026-10-06
 
 # o / oo — one implementation for mac, WSL and Linux: tools/smart-open/src/smart-open.ts (PATH command `smart-open`,
 # a package.json bin). A URL opens on the client you sit at when it is reachable over ssh/herdr,

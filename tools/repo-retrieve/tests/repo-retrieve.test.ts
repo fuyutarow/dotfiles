@@ -143,6 +143,10 @@ function fakeTools(): { bin: string; log: string } {
 printf '%s\\n' '${name} '"$*" >> "$FAKE_SEARCH_LOG"
 if [ -n "\${FAKE_SEARCH_EXPECT_CWD:-}" ] && [ "$(pwd -P)" != "$(cd "$FAKE_SEARCH_EXPECT_CWD" && pwd -P)" ]; then exit 9; fi
 if [ "${name}" = ccc ] && [ "$1" = daemon ] && [ "$2" = status ]; then
+if [ "\${FAKE_CCC_DAEMON_DOWN:-0}" = 1 ]; then
+    printf 'daemon unavailable\n' >&2
+    exit 1
+fi
 if [ "\${FAKE_CCC_INDEXING:-0}" = 1 ]; then
     printf 'Projects:\\n%s [indexing]\\n' "$PWD"
   else
@@ -707,8 +711,67 @@ describe("repo-retrieve route contract", () => {
     expect(result.stderr).toContain(`index was built at HEAD=${staleHead}`);
     expect(result.stderr).toContain(`working tree is now at HEAD=${head}`);
     expect(result.stderr).toContain("Remedy: run 'repo-retrieve index'");
-    // The gate refuses BEFORE the child ever runs — no ccc invocation reaches the log.
-    expect(result.log).toBe("");
+    // The gate only probes daemon status; no semantic search is sent to ccc.
+    expect(result.log).not.toContain("ccc search");
+  });
+
+  for (const [route, resultRoute, args] of [
+    ["about", "concept", ["--query", "where authorization is enforced"]],
+    [
+      "absent",
+      "battery",
+      ["--query", "first", "--query", "second", "--query", "third"],
+    ],
+    ["exists", "exists", ["--query", "add without wrapping"]],
+  ] as const) {
+    test(`${route} reports NO_INDEX as UNVERIFIED JSON and gives recovery guidance`, () => {
+      const { dir } = registerGitProject();
+      const result = run(dir, [route, ...args, "--json"]);
+
+      expect(result.code).toBe(3);
+      expect(result.stderr).toContain(`RESULT: NO_INDEX route=${resultRoute}`);
+      expect(result.stderr).toContain("Cause: no current certified ccc index");
+      expect(result.stderr).toContain("'ccc init'");
+      expect(result.stderr).toContain("'repo-retrieve index'");
+      expect(result.stderr).toContain("rr text");
+      expect(result.stderr).toContain("rr regex");
+      expect(result.stderr).toContain("rr files");
+      expect(result.stdout).not.toContain("PASS");
+      expect(
+        decodedJson(
+          z.object({
+            status: z.string(),
+            verdict: z.string(),
+            route: z.string(),
+            project: z.string(),
+          }),
+          result.stdout,
+        ),
+      ).toMatchObject({
+        status: "NO_INDEX",
+        verdict: "UNVERIFIED",
+        route: resultRoute,
+        project: dir,
+      });
+      expect(result.log).not.toContain("ccc search");
+    });
+  }
+
+  test("NO_INDEX identifies an unavailable ccc daemon", () => {
+    const { dir } = registerGitProject();
+    const result = run(
+      dir,
+      ["about", "--query", "where authorization is enforced", "--json"],
+      { FAKE_CCC_DAEMON_DOWN: "1" },
+    );
+
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain(
+      "ccc daemon status failed (exit 1); the daemon is unavailable",
+    );
+    expect(
+      decodedJson(z.object({ verdict: z.string() }), result.stdout),
+    ).toMatchObject({ verdict: "UNVERIFIED" });
   });
 
   test("a head-drift NO_INDEX names the watermark's indexedAt, so a PI can cite it (row 7)", () => {
@@ -745,7 +808,7 @@ describe("repo-retrieve route contract", () => {
     expect(result.stderr).toContain(
       "RESULT: NO_INDEX route=battery engine=ccc",
     );
-    expect(result.log).toBe("");
+    expect(result.log).not.toContain("ccc search");
   });
 
   test("a missing watermark file is treated as stale, never as fresh", () => {
@@ -765,7 +828,7 @@ describe("repo-retrieve route contract", () => {
     );
     expect(result.stderr).toContain("no freshness watermark at");
     expect(result.stderr).toContain(`current HEAD=${head}`);
-    expect(result.log).toBe("");
+    expect(result.log).not.toContain("ccc search");
   });
 
   test("a corrupt watermark file is treated as stale, never as fresh", () => {
@@ -783,7 +846,7 @@ describe("repo-retrieve route contract", () => {
       "RESULT: NO_INDEX route=concept engine=ccc",
     );
     expect(result.stderr).toContain("unreadable/corrupt");
-    expect(result.log).toBe("");
+    expect(result.log).not.toContain("ccc search");
   });
 
   // --- Item 1 regressions: a project with no git HEAD is a RECORDABLE fact that only `index` may
@@ -813,7 +876,7 @@ describe("repo-retrieve route contract", () => {
       "RESULT: NO_INDEX route=concept engine=ccc",
     );
     expect(result.stderr).toContain("current HEAD=(none");
-    expect(result.log).toBe("");
+    expect(result.log).not.toContain("ccc search");
   });
 
   // (Coverage for "indexing a no-git project records a verified head:null watermark, and search
@@ -893,7 +956,7 @@ describe("repo-retrieve route contract", () => {
     expect(result.stderr).toContain('source="stamp"');
     expect(result.stderr).toContain("Remedy: run 'repo-retrieve index'");
     // The gate refuses BEFORE the child ever runs — no ccc invocation reaches the log.
-    expect(result.log).toBe("");
+    expect(result.log).not.toContain("ccc search");
   });
 
   test("a watermark matching current HEAD with no ccc index artifacts on disk is refused, not served as PASS", () => {
@@ -915,7 +978,7 @@ describe("repo-retrieve route contract", () => {
     );
     expect(result.stderr).toContain("no ccc index artifacts exist");
     expect(result.stderr).toContain("Remedy: run 'repo-retrieve index'");
-    expect(result.log).toBe("");
+    expect(result.log).not.toContain("ccc search");
   });
 
   test("an index-sourced watermark backed by a real index artifact is served at full confidence", () => {
@@ -1489,7 +1552,8 @@ describe("repo-retrieve route contract", () => {
   });
 
   test("NO_MATCH on a lexical route names the line-wrap failure as distinct from a vocabulary miss", () => {
-    const result = run(registerProject(), ["literal", "--query", "needle"], {
+    const dir = registerProject();
+    const result = run(dir, ["literal", "--query", "needle"], {
       FAKE_SEARCH_EXIT: "1",
     });
 
@@ -1502,6 +1566,46 @@ describe("repo-retrieve route contract", () => {
     );
     expect(result.stderr).toContain("改行またぎの可能性");
     expect(result.stderr).toContain("--multiline");
+    expect(result.stderr).toContain(
+      `SCOPE: searched root=${dir}; paths outside it were NOT searched.`,
+    );
+  });
+
+  test("regex NO_MATCH also names the searched root", () => {
+    const dir = registerProject();
+    const result = run(dir, ["regex", "needle.*"], { FAKE_SEARCH_EXIT: "1" });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      `SCOPE: searched root=${dir}; paths outside it were NOT searched.`,
+    );
+  });
+
+  test("lexical --path cannot widen the reported scope outside the selected repo", () => {
+    const dir = registerProject();
+    const result = run(dir, ["text", "needle", "--path", "../outside"]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(
+      "--path must stay inside selected project root",
+    );
+    expect(result.log).toBe("");
+  });
+
+  test("a scratch-looking file glob names the repo scope and allowed outside-repo lookup", () => {
+    const dir = registerProject();
+    const result = run(dir, ["files", "**/concept_2610.9*"], {
+      FAKE_SEARCH_EXIT: "1",
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      `SCOPE: searched root=${dir}; paths outside it were NOT searched.`,
+    );
+    expect(result.stderr).toContain("/tmp/claude-<uid>/ and $TMPDIR");
+    expect(result.stderr).toContain(
+      "From outside any registered ccc project, plain fd/rg with an explicit path there is allowed.",
+    );
   });
 
   for (const [route, flag, value] of [
@@ -1653,14 +1757,16 @@ describe("repo-retrieve route contract", () => {
   }
 
   test("files route pins the exact glob-miss NO_MATCH line on a genuine rg exit 1", () => {
-    const result = run(registerProject(), ["files"], {
+    const dir = registerProject();
+    const result = run(dir, ["files"], {
       FAKE_SEARCH_EXIT: "1",
     });
 
     expect(result.code).toBe(1);
     expect(result.stdout).not.toContain("RESULT: PASS");
     expect(result.stderr).toContain(
-      "RESULT: NO_MATCH route=files engine=rg; glob に一致する path が無い(内容は見ていない)\n",
+      `RESULT: NO_MATCH route=files engine=rg; glob に一致する path が無い(内容は見ていない)\n` +
+        `SCOPE: searched root=${dir}; paths outside it were NOT searched.\n`,
     );
   });
 });

@@ -23,6 +23,7 @@ import {
   decideAdmission as decideAdmissionResult,
   hasUnmanagedGpuLoad as hasUnmanagedGpuLoadResult,
   parseNvidiaSmiComputeAppRow,
+  vramAdmissionCharge,
   parseNvidiaSmiGpuRow as parseNvidiaSmiGpuRowResult,
   checkJob as checkJobResult,
   executeJob as executeJobResult,
@@ -334,6 +335,41 @@ describe("admission", () => {
     });
   });
 
+  test("admits the firedancer pattern using measured use instead of seven declarations", () => {
+    const held = Array.from({ length: 7 }, (_, index) => ({
+      ...gpuReservation(`firedancer-${index}`, 2 * GiB),
+      vram_measured_bytes: 0,
+    }));
+    const snapshot = hostSnapshot({
+      gpus: [
+        {
+          id: 0,
+          total_bytes: 24 * GiB,
+          used_bytes: 3 * GiB,
+          utilization_percent: 0,
+        },
+      ],
+    });
+    expect(decideAdmission(gpuManifest(), snapshot, held).ok).toBe(true);
+  });
+
+  test("counts declared VRAM through warm-up until use passes the allocation threshold", () => {
+    const policy = resourcePolicy();
+    const held = gpuReservation("warming", 2 * GiB);
+    const now =
+      Temporal.Instant.from(held.started_at).epochMilliseconds + 1_000;
+    expect(vramAdmissionCharge(held, 32 * MiB, policy, now)).toBe(2 * GiB);
+    expect(vramAdmissionCharge(held, 65 * MiB, policy, now)).toBe(65 * MiB);
+    expect(
+      vramAdmissionCharge(
+        { ...held, vram_warmed_up: true },
+        32 * MiB,
+        policy,
+        now,
+      ),
+    ).toBe(32 * MiB);
+  });
+
   test("aggregates declared VRAM and denies the job that overflows the device", () => {
     const snapshot = hostSnapshot({
       gpus: [
@@ -586,6 +622,9 @@ describe("resource policy", () => {
       host_ram_safety_fraction: 0.1,
       scratch_safety_bytes: GiB,
       gpu_safety_bytes: 512 * MiB,
+      gpu_vram_warmup_ms: 30_000,
+      gpu_vram_warmup_threshold_bytes: 64 * MiB,
+      gpu_vram_cap_tolerance_fraction: 0.05,
       gpu_idle_utilization_percent: 20,
       gpu_idle_power_watts: 30,
       gpu_max_concurrent_jobs: 8,
@@ -796,6 +835,35 @@ describe("kernel enforcement", () => {
       AGENT_RESOURCE_VRAM_BYTES: String(2 * GiB),
       JULIA_CUDA_HARD_MEMORY_LIMIT: String(2 * GiB),
       JULIA_CUDA_SOFT_MEMORY_LIMIT: String(Math.floor(2 * GiB * 0.9)),
+    });
+  });
+
+  test("binds GPU admission basis and measured use into the child receipt", () => {
+    const manifest = gpuManifest();
+    const reserved = reservation({
+      job_id: manifest.job_id,
+      host_ram_peak_bytes: manifest.host_ram_peak_bytes,
+      scratch_bytes: manifest.scratch_bytes,
+      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 2 * GiB },
+      admission_basis: "measured",
+      vram_measured_at_admission_bytes: 3 * GiB,
+    });
+    const receipt = createAdmissionReceipt(
+      manifestSourceFor(manifest),
+      reserved,
+      "admit-measured",
+    );
+    expect(
+      decodedJson(
+        z.object({
+          admission_basis: z.string(),
+          vram_measured_at_admission_bytes: z.number(),
+        }),
+        receipt.payload,
+      ),
+    ).toMatchObject({
+      admission_basis: "measured",
+      vram_measured_at_admission_bytes: 3 * GiB,
     });
   });
 
@@ -1326,6 +1394,140 @@ describe("bounded execution", () => {
       );
       expect(result).toMatchObject({ ok: true, exitCode: 0 });
       expect(readdirSync(stateDirectory)).toEqual([]);
+    },
+  );
+
+  test.skipIf(NO_UTIL_LINUX)(
+    "measurement failure warns and uses declared-sum admission",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const held = Array.from({ length: 7 }, (_, index) =>
+        gpuReservation(`fallback-${index}`),
+      );
+      for (const item of held) {
+        writeFileSync(
+          join(stateDirectory, `${item.reservation_id}.reservation.json`),
+          `${JSON.stringify(item)}\n`,
+        );
+      }
+      const reports: string[] = [];
+      const result = await checkJob(gpuManifest(), {
+        stateDirectory,
+        snapshot: hostSnapshot({
+          gpus: [
+            {
+              id: 0,
+              total_bytes: 16 * GiB,
+              used_bytes: 3 * GiB,
+              utilization_percent: 0,
+            },
+          ],
+        }),
+        gpuComputeAppsOutput: () => null,
+        report: (line) => {
+          reports.push(line);
+        },
+      });
+      expect(result).toMatchObject({ ok: false, reason: "admission" });
+      expect(reports.join("\n")).toContain("using declared-sum admission");
+      expect(reports.join("\n")).toContain("15032385536 bytes declared");
+    },
+  );
+
+  test.skipIf(NO_UTIL_LINUX)(
+    "kills after two over-cap VRAM samples and records the reason",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const manifestDirectory = temporaryStateDirectory();
+      const manifest = gpuManifest({
+        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 128 * MiB },
+        processes: 2,
+      });
+      const manifestPath = join(manifestDirectory, "cap.resource.json");
+      const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
+      writeFileSync(manifestPath, manifestBytes);
+      const reports: string[] = [];
+      const result = await executeJob(manifest, ["sh", "-c", "sleep 5"], {
+        stateDirectory,
+        snapshot: hostSnapshot({
+          gpus: [
+            {
+              id: 0,
+              total_bytes: 24 * GiB,
+              used_bytes: 0,
+              utilization_percent: 0,
+            },
+          ],
+        }),
+        kernelEnforcement: {
+          available: false,
+          reason: "test sampled enforcement",
+        },
+        hostOptIn: { sampled_enforcement_reason: "test" },
+        monitorIntervalMs: 20,
+        gpuComputeAppsOutput: (pids) =>
+          pids !== undefined && pids.length > 0 ? `${pids[0]},256` : "",
+        manifestSource: manifestSourceFromBytes(manifestPath, manifestBytes),
+        report: (line) => {
+          reports.push(line);
+        },
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        reason: "vram-cap",
+        vram_cap_bytes: 128 * MiB,
+      });
+      expect(reports.join("\n")).toContain("reason=VRAM_CAP_EXCEEDED");
+      expect(reports.join("\n")).toContain(`vram_cap_bytes=${128 * MiB}`);
+      expect(reports.join("\n")).toContain("breach_reason=VRAM_CAP_EXCEEDED");
+      expect(
+        parseJson(readFileSync(`${manifestPath}.peak.json`, "utf8")),
+      ).toMatchObject({
+        vram_peak_measured_bytes: 256 * MiB,
+        vram_cap_bytes: 128 * MiB,
+        vram_cap_exceeded: true,
+        breach_reason: "VRAM_CAP_EXCEEDED",
+      });
+    },
+  );
+
+  test.skipIf(NO_UTIL_LINUX)(
+    "does not kill on one over-cap VRAM sample",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const manifest = gpuManifest({
+        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 128 * MiB },
+        processes: 2,
+      });
+      let samples = 0;
+      const result = await executeJob(manifest, ["sh", "-c", "sleep 3"], {
+        stateDirectory,
+        snapshot: hostSnapshot({
+          gpus: [
+            {
+              id: 0,
+              total_bytes: 24 * GiB,
+              used_bytes: 0,
+              utilization_percent: 0,
+            },
+          ],
+        }),
+        kernelEnforcement: {
+          available: false,
+          reason: "test sampled enforcement",
+        },
+        hostOptIn: { sampled_enforcement_reason: "test" },
+        monitorIntervalMs: 20,
+        gpuComputeAppsOutput: (pids) => {
+          if (pids !== undefined && pids.length === 0) return "";
+          samples += 1;
+          return `${pids?.[0]},${samples === 1 ? 256 : 1}`;
+        },
+        manifestSource: manifestSourceFor(manifest),
+        report: () => {},
+      });
+      expect(result).toMatchObject({ ok: true, exitCode: 0 });
+      expect(samples).toBeGreaterThanOrEqual(2);
     },
   );
 

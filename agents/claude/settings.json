@@ -308,7 +308,7 @@
   "enableWorkflows": false,
   "statusLine": {
     "type": "command",
-    "command": "bun ~/.claude/statusline-command.ts",
+    "command": "~/.bun/bin/statusline",
     "refreshInterval": 5
   },
   "enabledPlugins": {

@@ -5,7 +5,6 @@
 // this repo's `mise tasks ls --json` integration, not a mock of it.
 import { describe, expect, test } from "bun:test";
 import {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
@@ -21,16 +20,9 @@ import { join } from "node:path";
 // to the real bun executable — resolving via the shim would just re-invoke mise,
 // which then needs HOME/mise-data-dir env this test deliberately does not pass.
 function resolveRealBun(): string {
-  for (const dir of (process.env.PATH ?? "").split(":").filter(Boolean)) {
-    const candidate = join(dir, "bun");
-    if (!existsSync(candidate)) continue;
-    if (!realpathSync(candidate).includes("mise")) return candidate;
-  }
-  expect(
-    false,
-    "no non-mise-shim `bun` found on PATH for the test harness",
-  ).toBe(true);
-  return "bun";
+  // A mise-managed Bun lives under a path containing "mise" too. The current interpreter
+  // is already the real executable, even when PATH exposes only its shim (INV-6).
+  return process.execPath;
 }
 
 const CONTRACT = new URL("../scripts/mise-contract.ts", import.meta.url)
@@ -78,7 +70,7 @@ describe("mise-contract floor", () => {
   test("current clean aggregate remains at zero hard findings", () => {
     const { out, code } = run(REPO_ROOT);
     expect(out).toContain(
-      `—     mise-contract: 0 hard, 1 warn (${REPO_ROOT})\n`,
+      `—     mise-contract: 0 hard, 2 warn (${REPO_ROOT})\n`,
     );
     expect(code).toBe(0);
   });
@@ -107,7 +99,7 @@ describe("mise-contract floor", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("a jj repo (.jj/ present) must resolve commit and pull; a git-only repo is not asked", () => {
+  test("a jj repo (.jj/ present) must resolve commit, pull and push; a git-only repo is not asked", () => {
     const toml = '[tasks.hello]\nrun = "echo hi"\n';
     const plain = makeRoot(toml);
     expect(run(plain).out).not.toContain("commit");
@@ -116,7 +108,8 @@ describe("mise-contract floor", () => {
     const { out } = run(jjRepo);
     expect(out).toContain("FAIL  commit — unresolved in a jj repo");
     expect(out).toContain("FAIL  pull — unresolved in a jj repo");
-    expect(out).toContain("9 hard, 7 warn");
+    expect(out).toContain("FAIL  push — unresolved in a jj repo");
+    expect(out).toContain("10 hard, 7 warn");
     const ok = makeRoot(
       toml + '[tasks.commit]\nrun = "true"\n[tasks.pull]\nrun = "true"\n',
     );

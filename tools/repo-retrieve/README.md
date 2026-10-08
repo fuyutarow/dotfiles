@@ -49,6 +49,20 @@ rerun the router without a filter before making an absence claim.
 Likewise, `| head -3` intentionally truncates output; the router exits quietly when the reader
 closes the pipe.
 
+## NO_INDEX and lexical NO_MATCH
+
+`about`, `absent`, and `exists` refuse to answer when the selected repo has no fresh certified ccc
+index. They exit 3 and write a NO_INDEX diagnostic to stderr with daemon status, the recovery
+command, and the lexical routes that remain available. `--json` adds a stdout object with
+`status: "NO_INDEX"` and `verdict: "UNVERIFIED"`; it never reports an unverified answer as PASS.
+For a new project, from its root run `ccc init && repo-retrieve index`. For an already registered
+project, run `repo-retrieve index` to execute `ccc index` and record the freshness watermark.
+
+Lexical NO_MATCH results from `text`, `regex`, and `files` name the repo root they searched and
+state that paths outside it were not searched. For path-like patterns and scratch-looking queries,
+they also point to `/tmp/claude-<uid>/` and `$TMPDIR`. The search hook permits plain `fd`/`rg` with
+an explicit outside path when run outside any registered ccc project.
+
 ```sh
 mise run test:retrieval-control   # fake ccc/rg executables; no real index needed
 ```

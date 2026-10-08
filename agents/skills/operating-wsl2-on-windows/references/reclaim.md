@@ -23,7 +23,7 @@ Only offline **compaction** returns the logical↔allocated gap. Confirm sparse 
 
 ## reclaim:host — orphaned swap.vhdx + winget cache (live-safe)
 
-`mise run reclaim:host` (repo: `scripts/reclaim-host.ts`). A fresh distro launch writes a new
+`disk-reclaim plan host` (or `mise run reclaim:host`). A fresh distro launch writes a new
 `%TEMP%\<guid>\swap.vhdx` and leaves the previous one behind. They accumulate across restarts (three
 present, 17 GB orphaned, on one box). READ-ONLY plan by default; `--execute` deletes.
 
@@ -33,7 +33,7 @@ lock is the backstop. It deletes rather than rips, because a graveyard on C: fre
 
 ## reclaim:vhdx — the offline compaction (the ~100GB-class prize)
 
-`mise run reclaim:vhdx` (repo: `scripts/reclaim-vhdx.ts`) is a READ-ONLY PLANNER. It resolves the
+`disk-reclaim plan vhdx` (or `mise run reclaim:vhdx`) is a READ-ONLY PLANNER. It resolves the
 vhdx path, measures logical-vs-guest-used, detects the method, and prints the elevated procedure. It
 does not run the compaction. That needs admin — an ssh session is not elevated. It also needs a
 stopped distro, since `wsl --shutdown` kills every job first. So it is operator-driven, run when the

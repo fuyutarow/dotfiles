@@ -185,6 +185,12 @@ contract verbs) is `wiring-repositories` HOOK-1; this section only says how mise
 
 ### `fmt:staged` — the commit-time formatter (2026-09-25)
 
+J1 (2026-10-08): under `PRECOMMIT_VCS=jj`, this verb verifies selected immutable snapshot
+bytes in a temporary candidate tree and refuses changes with a format-and-retry instruction.
+It never stages or invokes Git in jj mode. The consumer variables and candidate-tree rule live
+in [SKILL.md](../SKILL.md#j1-pre-commit-interface--dotfiles-firedancer-and-polysearch).
+The measured Git-index cases below remain the `TODO(J1)` migration fallback.
+
 | Fact | Consequence | Measured |
 |---|---|---|
 | A whole-tree `fmt:check` in the commit gate reads every session's worktree | any session's unstaged or untracked WIP refuses every session's commit | firedancer 2026-09-25: 4 blocks across ~20 sessions, 10–20 min each |

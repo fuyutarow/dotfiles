@@ -1,4 +1,4 @@
-// PreToolUse gate (matcher: Bash) — refuse to LAUNCH new work when storage headroom is gone.
+// PreToolUse gate — refuse tool calls that may write when storage headroom is gone.
 //
 // Why a hook and not prose: 2026-09-21 23:50 JST the Windows host drive that holds the WSL2
 // vhdx sat at 96% (46 GB free of 931 GB) while inside WSL `df /` still showed 483 GB free —
@@ -11,18 +11,17 @@
 // CONFIG vs MECHANISM. Everything that says WHAT is guarded lives in storage-headroom.toml next
 // to this file: the drives and their deny/warn sizes, the launcher commands, the per-language
 // artifact budgets and their advice, and the measuring bounds. This file is only the mechanism:
-// load and validate that config, match a command against the launchers, measure free space and
-// artifact sizes, and decide. Adding a budget or moving a threshold is a config edit.
+// load and validate that config, parse commands, measure free space and artifact sizes, and decide.
 // STORAGE_HEADROOM_CONFIG points the hook at another config (the test suite's fixtures).
 //
-// Decisions: a drive below its deny size → deny with every drive's measured numbers. A drive
-// below its warn size, or an artifact over its budget → allow, with the warnings in
+// Decisions: every non-allowlisted tool call below a drive's deny line is denied; launchers are
+// denied below the warn line. Between the deny and warn lines, calls are allowed with a warning.
+// An artifact over its budget → allow, with the warnings in
 // `additionalContext` (on PreToolUse, stderr with exit 0 reaches no one — measured 2026-09-22).
-// An invalid config → deny every Bash call with every config error: a silent fallback to
-// defaults would disarm the gate. STORAGE_ASSERT_OVERRIDE=1 in the command text bypasses all
-// of it, visibly, for a cleanup that must build.
+// An invalid config → deny every non-allowlisted tool call with every config error: a silent
+// fallback to defaults would disarm the gate. Cleanup and read-only commands remain available.
 //
-// FAIL CLOSED on hook errors (run.sh --fail-closed, matcher "Bash"). VENDOR-NEUTRAL since 2026-09-27:
+// FAIL CLOSED on hook errors (run.sh --fail-closed). VENDOR-NEUTRAL since 2026-09-27:
 // wired into Claude Code AND Codex from agents/hooks/hooks.toml (rendered by scripts/render-home.ts). Codex
 // canonicalizes its shell tools to tool_name "Bash" + tool_input.command, so this file reads one
 // payload shape for both. The 2026-09-26 near-miss that forced it: a Codex session rebuilt 145 GB
@@ -32,11 +31,16 @@
 
 import { createHash } from "node:crypto";
 import {
+  loadStorageHeadroom,
+  storageLine as effective,
+  type Drive,
+} from "../../tools/shared/src/storage-headroom.ts";
+import {
   existsSync,
   mkdirSync,
   readFileSync,
-  statSync,
   statfsSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -48,7 +52,6 @@ import {
   effective as effectiveCommand,
   parseShell,
 } from "./shell-syntax.ts";
-import { storageLine as effective } from "./storage-line.ts";
 import {
   type Obj,
   arr,
@@ -68,15 +71,6 @@ const CONFIG_PATH =
 
 // --- Config: shape and validation -------------------------------------------------------------
 
-type Drive = {
-  label: string;
-  path: string;
-  deny_gib: number;
-  deny_pct: number;
-  warn_gib?: number;
-  warn_pct?: number;
-  stop_gib?: number;
-};
 type Launcher = { command: string; subcommands?: string[]; tasks?: string[] };
 type Budget = {
   name: string;
@@ -90,6 +84,7 @@ type Budget = {
 };
 type Config = {
   schema: 1;
+  sparse_required_above_mb: number;
   drive: Record<string, Drive>;
   deny: { advice: string };
   launcher: Launcher[];
@@ -106,17 +101,6 @@ function nonNegative(v: unknown, where: string, errors: string[]): number {
   if (n === undefined || n < 0) {
     errors.push(
       `${where}: expected a non-negative number, got ${JSON.stringify(v)}`,
-    );
-    return 0;
-  }
-  return n;
-}
-
-function percent(v: unknown, where: string, errors: string[]): number {
-  const n = nonNegative(v, where, errors);
-  if (n > 100) {
-    errors.push(
-      `${where}: a percentage of the drive must be within 0..100, got ${n}`,
     );
     return 0;
   }
@@ -165,85 +149,6 @@ function onlyKeys(
 ): void {
   for (const k of Object.keys(o))
     if (!keys.includes(k)) errors.push(`${where}: unknown key '${k}'`);
-}
-
-function parseDrive(where: string, d: unknown, errors: string[]): Drive {
-  const t = obj(d);
-  if (t === undefined) {
-    errors.push(`${where}: expected a table`);
-    return { label: "", path: "", deny_gib: 0, deny_pct: 0 };
-  }
-  onlyKeys(
-    t,
-    [
-      "label",
-      "path",
-      "deny_gib",
-      "deny_pct",
-      "warn_gib",
-      "warn_pct",
-      "stop_gib",
-    ],
-    where,
-    errors,
-  );
-  const label = nonEmptyString(at(t, "label"), `${where}.label`, errors);
-  const path = nonEmptyString(at(t, "path"), `${where}.path`, errors);
-  const rawDeny = at(t, "deny_gib");
-  const deny = nonNegative(rawDeny, `${where}.deny_gib`, errors);
-  const warn = optionalNonNegative(
-    at(t, "warn_gib"),
-    `${where}.warn_gib`,
-    errors,
-  );
-  // Each line is the SMALLER of a size and a share of the drive (see effective()): both are
-  // required, so a drive is never judged by an absolute size meant for a much larger disk.
-  const denyPct = percent(at(t, "deny_pct"), `${where}.deny_pct`, errors);
-  const rawWarnPct = at(t, "warn_pct");
-  const warnPct =
-    rawWarnPct === undefined
-      ? undefined
-      : percent(rawWarnPct, `${where}.warn_pct`, errors);
-  if ((warn === undefined) !== (warnPct === undefined))
-    errors.push(
-      `${where}: warn_gib and warn_pct go together (both or neither)`,
-    );
-  const rawStop = at(t, "stop_gib");
-  const stop = optionalNonNegative(rawStop, `${where}.stop_gib`, errors);
-  if (
-    where === "drive.host" &&
-    typeof rawStop === "number" &&
-    typeof rawDeny === "number" &&
-    rawDeny > 0 &&
-    rawStop >= rawDeny
-  ) {
-    errors.push(`${where}.stop_gib: must be below deny_gib`);
-  }
-  return {
-    label,
-    path,
-    deny_gib: deny,
-    deny_pct: denyPct,
-    ...(warn === undefined ? {} : { warn_gib: warn }),
-    ...(warnPct === undefined ? {} : { warn_pct: warnPct }),
-    ...(stop === undefined ? {} : { stop_gib: stop }),
-  };
-}
-
-function parseDrives(raw: unknown, errors: string[]): Record<string, Drive> {
-  const table = obj(raw);
-  if (table === undefined || Object.keys(table).length === 0) {
-    errors.push("drive: expected at least one [drive.<name>] table");
-    return {};
-  }
-  if (obj(at(table, "host")) === undefined)
-    errors.push("drive.host: required Windows host drive table");
-  return Object.fromEntries(
-    Object.entries(table).map(([name, d]) => [
-      name,
-      parseDrive(`drive.${name}`, d, errors),
-    ]),
-  );
 }
 
 function parseDeny(raw: unknown, errors: string[]): { advice: string } {
@@ -408,21 +313,38 @@ function parseMeasure(raw: unknown, errors: string[]): Config["measure"] {
   };
 }
 
-function validate(raw: unknown): { config: Config | null; errors: string[] } {
-  const errors: string[] = [];
+function validate(
+  raw: unknown,
+  loadedDrives: Drive[],
+  driveErrors: string[],
+): { config: Config | null; errors: string[] } {
+  const errors: string[] = [...driveErrors];
   const top = obj(raw);
   if (top === undefined)
     return { config: null, errors: ["top level: expected a table"] };
   onlyKeys(
     top,
-    ["schema", "drive", "deny", "launcher", "budget", "measure"],
+    [
+      "schema",
+      "sparse_required_above_mb",
+      "drive",
+      "deny",
+      "launcher",
+      "budget",
+      "measure",
+    ],
     "top level",
     errors,
   );
   if (at(top, "schema") !== 1)
     errors.push(`schema: expected 1, got ${JSON.stringify(at(top, "schema"))}`);
 
-  const drive = parseDrives(at(top, "drive"), errors);
+  const rawDrives = obj(at(top, "drive"));
+  const drive: Record<string, Drive> = {};
+  Object.keys(rawDrives ?? {}).forEach((name, index) => {
+    const loadedDrive = loadedDrives[index];
+    if (loadedDrive !== undefined) drive[name] = loadedDrive;
+  });
   const deny = parseDeny(at(top, "deny"), errors);
   const rawLaunchers = arr(at(top, "launcher"));
   const launcher = parseLaunchers(rawLaunchers, errors);
@@ -432,10 +354,26 @@ function validate(raw: unknown): { config: Config | null; errors: string[] } {
   );
   const budget = parseBudgets(at(top, "budget") ?? [], known, errors);
   const measure = parseMeasure(at(top, "measure"), errors);
+  const sparseRequiredAboveMb = nonNegative(
+    at(top, "sparse_required_above_mb"),
+    "sparse_required_above_mb",
+    errors,
+  );
 
   return errors.length > 0
     ? { config: null, errors }
-    : { config: { schema: 1, drive, deny, launcher, budget, measure }, errors };
+    : {
+        config: {
+          schema: 1,
+          sparse_required_above_mb: sparseRequiredAboveMb,
+          drive,
+          deny,
+          launcher,
+          budget,
+          measure,
+        },
+        errors,
+      };
 }
 
 async function loadConfig(): Promise<{
@@ -458,7 +396,8 @@ async function loadConfig(): Promise<{
       ],
     };
   }
-  return validate(parsed.value);
+  const loaded = loadStorageHeadroom(CONFIG_PATH);
+  return validate(parsed.value, loaded.drives, loaded.errors);
 }
 
 // --- Launch matching --------------------------------------------------------------------------
@@ -554,6 +493,231 @@ function launcherByText(
   return null;
 }
 
+const READ_ONLY = new Set([
+  "df",
+  "du",
+  "dust",
+  "ls",
+  "cat",
+  "head",
+  "tail",
+  "rr",
+]);
+
+function cargoCleanInProject(c: ShellCommand): boolean {
+  const eff = effectiveCommand(c);
+  if (eff?.name !== "cargo" || eff.args[0] !== "clean") return false;
+  const args = eff.args.slice(1);
+  let manifestPath: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const next = args[i + 1];
+    if (
+      ((arg === "-p" || arg === "--package" || arg === "--manifest-path") &&
+        (next === undefined || next.startsWith("-"))) ||
+      (arg?.startsWith("--package=") === true &&
+        arg.length === "--package=".length) ||
+      (arg?.startsWith("--manifest-path=") === true &&
+        arg.length === "--manifest-path=".length)
+    ) {
+      return false;
+    }
+    if (arg === "-p" || arg === "--package") {
+      i++;
+      continue;
+    } else if (arg?.startsWith("--package=") === true) {
+      continue;
+    } else if (arg === "--manifest-path") {
+      manifestPath = next;
+      i++;
+      continue;
+    } else if (arg?.startsWith("--manifest-path=") === true) {
+      manifestPath = arg.slice("--manifest-path=".length);
+      continue;
+    } else {
+      return false;
+    }
+  }
+  return (
+    existsSync(join(c.cwd, "Cargo.toml")) ||
+    (manifestPath !== undefined &&
+      existsSync(join(dirname(resolve(c.cwd, manifestPath)), "Cargo.toml")))
+  );
+}
+
+type WorkspaceAdd = { cwd: string; args: string[] };
+
+function workspaceAdd(c: ShellCommand): WorkspaceAdd | null {
+  const eff = effectiveCommand(c);
+  return eff?.name === "jj" &&
+    eff.args[0] === "workspace" &&
+    eff.args[1] === "add"
+    ? { cwd: c.cwd, args: eff.args }
+    : null;
+}
+
+function workspaceRoot(path: string): string | null {
+  for (let dir = resolve(path); ; dir = dirname(dir)) {
+    if (existsSync(join(dir, ".jj"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+  }
+}
+
+async function checkoutSizeBytes(root: string): Promise<number | null> {
+  const cacheDir = join(
+    homedir(),
+    ".cache",
+    "claude-hooks",
+    "storage-headroom",
+  );
+  const cacheFile = join(
+    cacheDir,
+    `${createHash("sha1").update(root).digest("hex")}.checkout.json`,
+  );
+  const cached = await attemptOr(() => {
+    const value = parseJson(readFileSync(cacheFile, "utf8"));
+    const bytes = num(at(value, "bytes"));
+    const stamp = num(at(value, "at"));
+    const age =
+      stamp === undefined
+        ? undefined
+        : Temporal.Now.instant().epochMilliseconds - stamp;
+    return bytes !== undefined &&
+      age !== undefined &&
+      age >= 0 &&
+      age < 60 * 60_000
+      ? bytes
+      : null;
+  }, null);
+  if (cached !== null) return cached;
+
+  const result = Bun.spawnSync(["du", "-sk", "-I", ".jj", "-I", ".git", root], {
+    timeout: 50,
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  if (result.exitCode !== 0) return null;
+  const kib = Number(result.stdout.toString().trim().split(/\s/u)[0]);
+  if (!Number.isFinite(kib) || kib < 0) return null;
+  const bytes = kib * 1024;
+  await attempt(() => {
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      cacheFile,
+      JSON.stringify({
+        bytes,
+        at: Temporal.Now.instant().epochMilliseconds,
+      }),
+    );
+  });
+  return bytes;
+}
+
+function checkoutRoot(add: WorkspaceAdd): string | null {
+  let path = add.cwd;
+  for (let i = 0; i < add.args.length; i++) {
+    const repository = add.args[i + 1];
+    if (add.args[i] === "-R" && repository === undefined) return null;
+    if (add.args[i] === "-R") {
+      path = resolve(add.cwd, repository ?? "");
+      break;
+    }
+  }
+  return workspaceRoot(path);
+}
+
+async function fullCheckoutReason(
+  command: string,
+  cwd: string,
+  thresholdMb: number,
+): Promise<string | null> {
+  const parsed = parseShell(command, cwd);
+  if (parsed === undefined) {
+    return /\bjj\s+workspace\s+add\b/u.test(command)
+      ? "storage-headroom: refusing a full-checkout jj workspace because the repo size is unknown within the 50 ms probe budget. Use `jj workspace add --sparse-patterns empty <dir>`, then `jj sparse set --add <paths>`."
+      : null;
+  }
+  for (const c of parsed.commands) {
+    const add = workspaceAdd(c);
+    if (
+      add === null ||
+      add.args.some((arg) => arg === "--help" || arg === "-h") ||
+      add.args.some(
+        (arg, i) => arg === "--sparse-patterns" && add.args[i + 1] === "empty",
+      )
+    )
+      continue;
+    const root = checkoutRoot(add);
+    const bytes = root === null ? null : await checkoutSizeBytes(root);
+    if (bytes === null) {
+      return "storage-headroom: refusing a full-checkout jj workspace because the repo size is unknown within the 50 ms probe budget. Use `jj workspace add --sparse-patterns empty <dir>`, then `jj sparse set --add <paths>`.";
+    }
+    const mb = bytes / 1_000_000;
+    if (mb > thresholdMb) {
+      return (
+        `storage-headroom: refusing a full-checkout jj workspace; this repo is ${mb.toFixed(1)} MB ` +
+        `(> ${thresholdMb} MB threshold). Use ` +
+        "`jj workspace add --sparse-patterns empty <dir>`, then `jj sparse set --add <paths>`."
+      );
+    }
+  }
+  return null;
+}
+
+function isOnlyWorkspaceAddHelp(command: string, cwd: string): boolean {
+  const parsed = parseShell(command, cwd);
+  if (parsed === undefined || parsed.commands.length !== 1) return false;
+  const add = workspaceAdd(parsed.commands[0]!);
+  return (
+    add !== null && add.args.some((arg) => arg === "--help" || arg === "-h")
+  );
+}
+
+function isRecoveryOrRead(command: string, cwd: string): boolean {
+  const parsed = parseShell(command, cwd);
+  if (parsed === undefined || parsed.commands.length === 0) return false;
+  const commands = parsed.commands.filter(
+    (c) => effectiveCommand(c) !== undefined,
+  );
+  if (commands.length === 0) return false;
+  return (
+    commands.length === parsed.commands.length &&
+    commands.every((c) => {
+      const eff = effectiveCommand(c);
+      if (
+        eff === undefined ||
+        c.words[0] !== eff.name ||
+        c.redirects.some((r) => r.op !== "<" && r.op !== "<<" && r.op !== "<<<")
+      )
+        return false;
+      const [sub = "", third = ""] = eff.args;
+      if (eff.name === "cargo" && sub === "clean")
+        return cargoCleanInProject(c);
+      // Ticket write scope is not visible in this command line. Dispatch state is small, and
+      // every spawned worker still passes through its own storage gate.
+      if (
+        eff.name === "agent-dispatch" &&
+        ["run", "resume", "grade", "ack", "stats"].includes(sub)
+      )
+        return true;
+      if (eff.name === "disk-reclaim" || eff.name === "storage-headroom")
+        return true;
+      if (eff.name === "mise" && sub === "run")
+        return third.startsWith("reclaim");
+      if (eff.name === "m") return sub.startsWith("reclaim");
+      if (eff.name === "jj")
+        return (
+          (sub === "workspace" && (third === "forget" || third === "list")) ||
+          sub === "abandon" ||
+          sub === "st" ||
+          sub === "log"
+        );
+      return READ_ONLY.has(eff.name);
+    })
+  );
+}
+
 // --- Measuring --------------------------------------------------------------------------------
 
 async function freeBytes(path: string): Promise<number | null> {
@@ -563,10 +727,48 @@ async function freeBytes(path: string): Promise<number | null> {
 async function space(
   path: string,
 ): Promise<{ free: number; total: number } | null> {
-  return attemptOr(() => {
+  const cacheDir = join(
+    homedir(),
+    ".cache",
+    "claude-hooks",
+    "storage-headroom",
+  );
+  const cacheFile = join(
+    cacheDir,
+    `${createHash("sha1").update(path).digest("hex")}.statfs.json`,
+  );
+  const cached = await attemptOr(() => {
+    const value = parseJson(readFileSync(cacheFile, "utf8"));
+    const free = num(at(value, "free"));
+    const total = num(at(value, "total"));
+    const atMs = num(at(value, "at"));
+    const age = Temporal.Now.instant().epochMilliseconds - (atMs ?? 0);
+    return free !== undefined &&
+      total !== undefined &&
+      atMs !== undefined &&
+      age >= 0 &&
+      age <= 2_000
+      ? { free, total }
+      : null;
+  }, null);
+  if (cached !== null) return cached;
+
+  const measuredSpace = await attemptOr(() => {
     const s = statfsSync(path);
     return { free: s.bavail * s.bsize, total: s.blocks * s.bsize };
   }, null);
+  if (measuredSpace === null) return null;
+  await attempt(() => {
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      cacheFile,
+      JSON.stringify({
+        ...measuredSpace,
+        at: Temporal.Now.instant().epochMilliseconds,
+      }),
+    );
+  });
+  return measuredSpace;
 }
 
 // The hook only queues the bounded systemd recovery unit. A PreToolUse call must never wait for
@@ -590,6 +792,7 @@ async function requestRecovery(): Promise<string> {
     mkdirSync(dirname(stamp), { recursive: true });
     writeFileSync(stamp, `${Temporal.Now.instant().epochMilliseconds}\n`);
   });
+  // bounded: GNU timeout caps this non-blocking systemd recovery request at three seconds.
   const result = Bun.spawnSync(
     [
       "timeout",
@@ -772,6 +975,25 @@ async function budgetStatus(
   };
 }
 
+async function collectBudgetStatus(
+  budgets: Budget[],
+  hit: { command: string } | null,
+  command: string | undefined,
+  cwd: string,
+  measure: Config["measure"],
+): Promise<{ denials: string[]; warnings: string[] }> {
+  const denials: string[] = [];
+  const warnings: string[] = [];
+  if (hit === null || command === undefined) return { denials, warnings };
+  for (const budget of budgets) {
+    if (!budget.launchers.includes(hit.command)) continue;
+    const status = await budgetStatus(budget, command, cwd, measure);
+    if (status?.denial !== undefined) denials.push(status.denial);
+    if (status?.warning !== undefined) warnings.push(status.warning);
+  }
+  return { denials, warnings };
+}
+
 // --- Decision ---------------------------------------------------------------------------------
 
 async function main(): Promise<void> {
@@ -781,10 +1003,21 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  if (strAt(payload, "tool_name") !== "Bash") return;
-  const command = strAt(payload, "tool_input", "command");
-  if (command === undefined || command === "") return;
-  if (/\bSTORAGE_ASSERT_OVERRIDE=1\b/u.test(command)) return;
+  const toolName = strAt(payload, "tool_name") ?? "unknown";
+  // Codex canonicalizes exec_command, shell, and its code-mode exec wrapper to Bash. Every
+  // other tool is outside this disk-write gate unless it is one of the explicit file writers.
+  if (
+    toolName !== "Bash" &&
+    !["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(toolName)
+  ) {
+    return;
+  }
+  const command =
+    toolName === "Bash" ? strAt(payload, "tool_input", "command") : undefined;
+  const cwd = strAt(payload, "cwd") ?? process.cwd();
+  if (command !== undefined && isOnlyWorkspaceAddHelp(command, cwd)) return;
+  // Cleanup and explicit inspection commands remain available even if the declaration is broken.
+  if (command !== undefined && isRecoveryOrRead(command, cwd)) return;
 
   const { config, errors } = await loadConfig();
   if (config === null) {
@@ -793,13 +1026,22 @@ async function main(): Promise<void> {
     decidePre(
       "deny",
       `storage-headroom: config ${CONFIG_PATH} is invalid, so the storage gate cannot judge any ` +
-        `launch — refusing rather than guessing: ${errors.join("; ")}. Fix the config; ` +
-        `STORAGE_ASSERT_OVERRIDE=1 in the command text passes a command meanwhile.`,
+        `tool call — refusing rather than guessing: ${errors.join("; ")}.`,
     );
   }
 
-  const hit = matchLauncher(command, config.launcher);
-  if (hit === null) return;
+  if (command !== undefined) {
+    const reason = await fullCheckoutReason(
+      command,
+      cwd,
+      config.sparse_required_above_mb,
+    );
+    // SINGLE-AXIS: a non-sparse workspace add exceeds the checkout-size limit or its size is unknown.
+    if (reason !== null) decidePre("deny", reason);
+  }
+
+  const hit =
+    command === undefined ? null : matchLauncher(command, config.launcher);
 
   const drives = await Promise.all(
     Object.values(config.drive).map(async (d) => {
@@ -816,6 +1058,9 @@ async function main(): Promise<void> {
     }),
   );
   const low = drives.filter((d) => d.free !== null && d.free < d.denyAt);
+  const warningLine = drives.filter(
+    (d) => d.free !== null && d.free < (d.warnAt ?? d.denyAt),
+  );
   const wsl =
     process.platform === "linux" &&
     existsSync("/proc/sys/kernel/osrelease") &&
@@ -826,7 +1071,10 @@ async function main(): Promise<void> {
     wsl &&
     config.drive.host !== undefined &&
     (await freeBytes(config.drive.host.path)) === null;
-  if (low.length > 0 || hostUnreadable) {
+  if ((low.length > 0 || hostUnreadable) && hit === null) {
+    denyLowSpace(drives, config.drive);
+  }
+  if (hit !== null && (warningLine.length > 0 || hostUnreadable)) {
     const hostDrive = config.drive.host;
     const hostLow =
       hostDrive !== undefined &&
@@ -837,41 +1085,41 @@ async function main(): Promise<void> {
     const recovery = hostLow ? await requestRecovery() : "";
     // BATCHED(drives): every drive is measured before this point and all of them are in the one
     // reason below, so a caller short on both learns it from a single denial.
-    decidePre(
-      "deny",
-      `storage-headroom: refusing to launch ${hit.label} — ` +
-        drives
-          .map(
-            (d) =>
-              `${d.label} free ${gib(d.free)} (deny below ${gib(d.denyAt)}: the smaller of ${d.deny_gib} GiB and ${d.deny_pct}% of the drive)`,
-          )
-          .join(", ") +
-        `. ${hostUnreadable ? "Host C: could not be measured; refusing new compute until the host is visible. " : ""}${config.deny.advice}${recovery}`,
+    denyLowSpace(
+      drives,
+      config.drive,
+      `${hit.label} denied at its warn line.${hostUnreadable ? ` Host C could not be measured.${recovery}` : ""}`,
     );
   }
 
   const warnings: string[] = [];
   for (const d of drives) {
-    if (d.warnAt !== undefined && d.free !== null && d.free < d.warnAt) {
+    if (
+      hit === null &&
+      d.warnAt !== undefined &&
+      d.free !== null &&
+      d.free < d.warnAt
+    ) {
       const others = drives
         .filter((o) => o !== d)
         .map((o) => `${o.label} free ${gib(o.free)}`)
         .join(", ");
       warnings.push(
-        `storage-headroom: WARNING ${d.label} free ${gib(d.free)} (< ${gib(d.warnAt)})` +
-          `${others !== "" ? `; ${others}` : ""}. Launching ${hit.label} anyway — reclaim before it drops ` +
-          `below ${gib(d.denyAt)}.`,
+        `storage-headroom: WARNING ${d.label} free ${gib(d.free)} (< ${gib(d.warnAt)}); ` +
+          `${others}${others !== "" ? "; " : ""}run disk-reclaim plan.`,
       );
     }
   }
-  const cwd = strAt(payload, "cwd") ?? process.cwd();
   const budgetDenials: string[] = [];
-  for (const b of config.budget) {
-    if (!b.launchers.includes(hit.command)) continue;
-    const status = await budgetStatus(b, command, cwd, config.measure);
-    if (status?.denial !== undefined) budgetDenials.push(status.denial);
-    if (status?.warning !== undefined) warnings.push(status.warning);
-  }
+  const budgetStatusResults = await collectBudgetStatus(
+    config.budget,
+    hit,
+    command,
+    cwd,
+    config.measure,
+  );
+  budgetDenials.push(...budgetStatusResults.denials);
+  warnings.push(...budgetStatusResults.warnings);
   if (budgetDenials.length > 0) {
     // BATCHED(budgets): all matching artifact budgets are measured before this denial.
     decidePre("deny", budgetDenials.join("; "));
@@ -886,6 +1134,36 @@ async function main(): Promise<void> {
       })}\n`,
     );
   }
+}
+
+const ALLOWLIST =
+  "Allowlist: cleanup: disk-reclaim, storage-headroom, mise run reclaim*, m reclaim*, jj workspace forget, jj abandon; read-only: df, du, dust, ls, cat, head, tail, rr, jj st, jj log, jj workspace list.";
+
+function denyLowSpace(
+  drives: Array<{
+    label: string;
+    free: number | null;
+    denyAt: number;
+    warnAt?: number | undefined;
+  }>,
+  configured: Record<string, Drive>,
+  note = "",
+): never {
+  const first =
+    "free space: disk-reclaim plan, then disk-reclaim run --tier blind --yes";
+  const measuredDrives =
+    drives.length > 0
+      ? drives
+          .map((d) => `${d.label} ${gib(d.free)} (deny line ${gib(d.denyAt)})`)
+          .join(", ")
+      : Object.values(configured)
+          .map((d) => `${d.label} unmeasured (deny line ${d.deny_gib} GiB)`)
+          .join(", ");
+  // BATCHED(drives): the denial details include every measured drive in one message.
+  decidePre(
+    "deny",
+    `${first}\n${measuredDrives}\n${ALLOWLIST}${note === "" ? "" : `\n${note}`}`,
+  );
 }
 
 await main();

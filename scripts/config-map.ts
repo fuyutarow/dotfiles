@@ -11,12 +11,20 @@
 //
 // Exit: 0 ok · 1 --check found a finding (or Cleye rejected an unknown flag) · 2 usage/FATAL.
 
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { err, ok, type Result } from "neverthrow";
 import { errorMessage } from "../agents/hooks/attempt.ts";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { type Kind, type Surface, surfaces } from "./config-registry.ts";
+import {
+  jjCandidate,
+  jjContent,
+  jjContext,
+  type JjPrecommit,
+} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -75,6 +83,8 @@ const covers = (source: string, path: string): boolean =>
 export function findings(
   rows: readonly Surface[],
   files: readonly string[],
+  sourceExists: (source: string) => boolean = (source) =>
+    existsSync(join(ROOT, source)),
 ): string[] {
   const sources = rows.flatMap((r) => r.sources);
   const unregistered = files
@@ -85,7 +95,7 @@ export function findings(
         `unregistered: ${f} — add a row to scripts/config-registry.ts (or an EXCLUDED reason in scripts/config-map.ts)`,
     );
   const missing = [...new Set(sources)]
-    .filter((s) => !existsSync(join(ROOT, s)))
+    .filter((s) => !sourceExists(s))
     .map(
       (s) =>
         `missing: ${s} — a registry row names a source that does not exist`,
@@ -129,6 +139,52 @@ function render(rows: readonly Surface[]): string {
   return `${out.join("\n").trimStart()}\n`;
 }
 
+function snapshotRows(
+  context: JjPrecommit,
+  candidate: ReadonlyMap<string, string>,
+): Result<Surface[], Error> {
+  const path = "scripts/config-registry.ts";
+  const rev = candidate.get(path);
+  if (rev === undefined)
+    return err(new Error(`missing candidate registry: ${path}`));
+  // The registry is a zero-dependency TS declaration. Evaluate its candidate copy, not an
+  // unrelated worktree edit, and validate the subprocess result at this boundary.
+  const tmp = mkdtempSync(join(tmpdir(), "config-map-jj-"));
+  const source = join(tmp, "registry.ts");
+  writeFileSync(source, jjContent(context, path, rev));
+  const result = Bun.spawnSync(
+    [
+      "bun",
+      "-e",
+      `import {surfaces} from ${JSON.stringify(source)}; process.stdout.write(JSON.stringify(surfaces()));`,
+    ],
+    { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
+  );
+  rmSync(tmp, { recursive: true, force: true });
+  if (result.exitCode !== 0)
+    return err(
+      new Error(
+        `candidate registry failed: ${result.stderr.toString().trim()}`,
+      ),
+    );
+  const parsed = jsonOf(
+    z.array(
+      z.object({
+        kind: z.enum(ORDER),
+        when: z.enum(["all", "mac", "wsl", "linux", "not-mac"]),
+        sources: z.array(z.string()),
+        deployed: z.string(),
+        consumer: z.string(),
+        writer: z.string(),
+        verify: z.string(),
+      }),
+    ),
+  ).safeParse(result.stdout.toString());
+  return parsed.success
+    ? ok(parsed.data)
+    : err(new Error(`invalid candidate registry: ${parsed.error.message}`));
+}
+
 function main(): Result<number, Error> {
   const parsed = cli(
     {
@@ -158,26 +214,44 @@ function main(): Result<number, Error> {
   );
   if (parsed._.length > 0)
     return err(new UsageError(`unexpected argument: ${parsed._[0]}`));
-  const rows = surfaces();
   if (parsed.flags.check) {
-    // Tracked files only — an untracked cache or editor file is not configuration.
-    const ls = Bun.spawnSync(
-      ["bun", "scripts/tracked-files.ts", "--expect-non-empty"],
-      {
-        cwd: ROOT,
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 30_000,
-      },
-    );
-    if (ls.exitCode !== 0)
-      return err(new Error(`tracked-files failed: ${ls.stderr.toString()}`));
+    const context = jjContext();
+    const candidate = context === undefined ? undefined : jjCandidate(context);
+    const rowsResult =
+      context !== undefined && candidate !== undefined
+        ? snapshotRows(context, candidate)
+        : ok(surfaces());
+    if (rowsResult.isErr()) return err(rowsResult.error);
+    const rows = rowsResult.value;
+    // In jj precommit mode, candidate comes from PRECOMMIT_PATHS_FILE; otherwise enumerate
+    // tracked files through the shared helper.
+    const listing =
+      candidate === undefined
+        ? Bun.spawnSync(
+            ["bun", "scripts/tracked-files.ts", "--expect-non-empty"],
+            {
+              cwd: ROOT,
+              stdout: "pipe",
+              stderr: "pipe",
+              timeout: 30_000,
+            },
+          )
+        : undefined;
+    if (listing !== undefined && listing.exitCode !== 0)
+      return err(
+        new Error("tracked-files failed: " + listing.stderr.toString()),
+      );
     const glob = new Bun.Glob(CONFIG_GLOB);
-    const files = ls.stdout
-      .toString()
-      .split("\0")
-      .filter((f) => f !== "" && glob.match(f));
-    const found = findings(rows, files);
+    const tracked =
+      candidate === undefined
+        ? (listing?.stdout.toString().split("\0") ?? [])
+        : [...candidate.keys()];
+    const files = tracked.filter((f) => f !== "" && glob.match(f));
+    const found = findings(rows, files, (source) =>
+      context === undefined
+        ? existsSync(join(ROOT, source))
+        : tracked.some((path) => covers(source, path)),
+    );
     for (const f of found) process.stdout.write(`${f}\n`);
     process.stdout.write(
       found.length === 0
@@ -186,6 +260,7 @@ function main(): Result<number, Error> {
     );
     return ok(found.length === 0 ? 0 : 1);
   }
+  const rows = surfaces();
   process.stdout.write(
     parsed.flags.json ? `${JSON.stringify(rows, null, 2)}\n` : render(rows),
   );

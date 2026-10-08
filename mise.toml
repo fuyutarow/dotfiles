@@ -24,6 +24,7 @@
 # If a body ever really invokes uv or rust, it will FAIL again, and that FAIL will be true.
 [tools]
 bun = "1.4"
+rumdl = "0.2.78"
 
 [tasks.up]
 alias = "u"
@@ -114,7 +115,7 @@ run = "bunx --bun oxfmt --check '**/*.ts'"
 # Umbrella format-check for the auto-formatted languages (Markdown check = lint:md via
 # rumdl, kept there since rumdl check is a structural lint not a format-verify).
 [tasks."fmt:staged"]
-description = "Format only the STAGED files in place and re-stage exactly them; refuses a file that also has unstaged hunks (wiring-mise-tasks fmt:staged)"
+description = "Verify selected jj snapshot formatting; Git migration fallback formats staged files and refuses partial hunks (wiring-mise-tasks fmt:staged)"
 run = "bun agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool 'ts=bunx --bun oxfmt' --tool 'sh=shfmt -w -ln bash -i 2 -ci -sr -bn -s' --tool 'md=rumdl fmt' --exclude 'agents/skills/**/*.ts' --exclude 'archives/**'"
 
 [tasks."fmt:check"]
@@ -135,6 +136,7 @@ depends = [
   "vendor:deps:check",
   "lint:one-writer",
   "lint:config-map",
+  "lint:live-refs",
   "typecheck",
   "lint:skills-index",
   "lint:skills-wiring",
@@ -173,7 +175,7 @@ run = "bun ~/dotfiles/scripts/skills-doctor.ts"
 # what the collection charges every turn, against a declared ratchet.
 [tasks."lint:skills-floor"]
 dir = "{{config_root}}"
-description = "Structural floor over every skill AS STAGED (forging-skills F1/F4): frontmatter, naming, unreachable references, and the collection's per-turn listing budget. Reads the git index (HOOK-1c), so another session's unstaged skill never blocks a commit"
+description = "Structural skill floor and listing budget over the jj commit candidate (BASE plus selected REV paths), or the Git index during migration"
 run = "bun scripts/lint-skills-floor.ts"
 
 # operating-the-harness P3: a rule naming ONE repo belongs in that repo's .claude/, never in user
@@ -227,6 +229,11 @@ dir = "{{config_root}}"
 description = "Fail when a tracked config-shaped file is registered in no scripts/config-registry.ts row, or a row names a missing source"
 run = "bun scripts/config-map.ts --check"
 
+[tasks."lint:live-refs"]
+dir = "{{config_root}}"
+description = "Fail when a deployed or declared agent command, repo link, or package bin points at a missing checkout file"
+run = "bun scripts/live-refs.ts"
+
 [tasks."vendor:deps"]
 dir = "{{config_root}}"
 description = "Regenerate agents/hooks/vendor/deps.{js,d.ts}: the one zod (+ neverthrow fromThrowable) every file imports via agents/hooks/zod.ts — hooks run before bun install, so it is a committed bundle built from the pinned packages"
@@ -240,18 +247,7 @@ run = "bun scripts/vendor-deps.ts --check"
 [tasks."lint:bun"]
 dir = "{{config_root}}"
 description = "Enforce the writing-bun-scripts floor over every tracked production Bun CLI"
-run = '''
-bun scripts/tracked-files.ts --expect-non-empty \
-  ':(glob)scripts/*.ts' 'android/line-notifications.ts' ':(glob)tools/repo-retrieve/src/*.ts' \
-  ':(glob)agents/claude/*.ts' ':(glob)agents/claude/hooks/*.ts' ':(glob)agents/hooks/*.ts' \
-  ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \
-  'agents/goal-kernel/cli.ts' \
-  ':(glob)tools/agent-resource-run/src/*.ts' \
-  ':(glob)tools/agent-dispatch/src/*.ts' ':(glob)tools/agent-dispatch/src/workers/*.ts' \
-  ':(glob)tools/serena-foreground/src/*.ts' ':(glob)tools/smart-open/src/*.ts' \
-  ':(exclude)agents/claude/hooks/repo-retrieve.ts' |
-  xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
-'''
+run = "bun scripts/lint-bun.ts"
 
 # oxlint over the repo's own TS (config: .oxlintrc.json). Default correctness rules everywhere
 # tracked except agents/skills/** (vendored templates), plus the house syntax ban on EVERY
@@ -433,7 +429,7 @@ run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json
 # lint せず、1 日で lint 違反 5 件が入った。整形後の whole-file `git add` は部分 stage の hunk も
 # 巻き込んでいた)。event の hook(post-commit / post-merge)は対応する verb が無いので run を持つ。
 [tasks."hook:pre-commit"]
-description = "The commit gate — exactly what .githooks/pre-commit runs. Depends-only over contract verbs, never a run body (wiring-repositories HOOK-1). fmt:staged fixes only the staged files in place (HOOK-1c); the whole-tree fmt:check stays in check."
+description = "The commit gate — exactly what .githooks/pre-commit runs. Depends-only over contract verbs (wiring-repositories HOOK-1). fmt:staged verifies selected jj snapshot bytes; the Git migration branch formats staged files."
 depends = ["fmt:staged", "lint"]
 
 # 配線は tracked な core.hooksPath = .githooks(`git config core.hooksPath .githooks`)。
@@ -454,11 +450,10 @@ exec mise run link:skills
 '''
 
 # jj migration (2026-10-01, same shape as firedancer): agents never run git here — the project
-# .claude/settings.json denies it — and jj runs no Git hooks. So the two Git-hook events that matter
-# get one jj entrypoint each: commit runs hook:pre-commit over exactly the chosen paths (and
-# .githooks/post-commit afterwards); pull runs hook:post-merge after the fetch + rebase.
+# .claude/settings.json denies it — and jj runs no Git hooks. The commit and pull entrypoints
+# preserve the pre-commit and post-merge hooks; push provides the guarded alpha bookmark push.
 [tasks.commit]
-description = "jj gated commit: stage exactly the named paths, run hook:pre-commit, jj commit them, move alpha to @-, optionally --push. mise run commit -- -m '<msg>' [--push] -- <path>..."
+description = "jj gated commit: snapshot, run hook:pre-commit with PRECOMMIT_VCS/PATHS_FILE/REV/BASE, commit exactly the named paths, move alpha to @-, optionally --push. mise run commit -- -m '<msg>' [--push] -- <path>..."
 run = "bun agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
 
 [tasks.pull]
@@ -470,54 +465,30 @@ jj rebase -b @ -d 'trunk()'
 mise run hook:post-merge
 '''
 
+[tasks.push]
+description = "jj push: show alpha@origin..alpha, refuse divergence or conflicts, and push alpha to origin. Use --dry-run to print the list only."
+run = "bun agents/skills/wiring-mise-tasks/scripts/jj-push.ts"
+
 # ── reclaim ─────────────────────────────────────────────────────────────────
-# Disk-space recovery. Named for the PURPOSE, because the previous domain name was a lie: this
-# family lived under `cache:` while five of its six members touched no cache at all —
-# toolchains, build artifacts, stale dotdirs, rip's graveyard, and (outside the family entirely,
-# as `wsl:reclaim`) apt/journal/snap. The one honest member, cache:clean, kept its meaning as
-# reclaim:clean: "the part of reclaim that handles package caches". Renamed 2026-09-11.
-#
-# The family is split by WHO MAY DECIDE, crossed with HOW SAFETY IS PROVEN:
-#   reclaim:clean       tool-native gc/prune (the tool judges "unused")   → any agent, run blind
-#   reclaim:builds      kondo -a, every project's regenerable build output → any agent, run blind
-#   reclaim:toolchains  a WRITTEN predicate (busy-check / pin-scan) —     → any agent, run blind
-#                       no built-in gc exists, so the predicate errs toward keeping on missing
-#                       evidence (no fd -> skip rustup entirely) rather than guessing
-#   reclaim:system      root-owned Linux state + fstrim (WSL only)        → any agent, needs sudo
-#   reclaim:pick        kondo INTERACTIVE — a human picks projects        → human, by design
-#   reclaim:audit       evidence only, deletes NOTHING                    → any agent, run blind
-#   (rip)               accept a candidate — reversible, same-fs rename   → any agent, no space freed yet
-#   reclaim:purge       empty the graveyard — THE irreversible step       → human only
-# The gate sits on the ONE irreversible action, not on the delete. That is what makes the rest
-# delegatable: an agent working from reclaim:audit physically cannot lose data. Adding a new
-# target: if its own tool ships a trustworthy gc/prune, it goes in reclaim:clean; if not, write a
-# predicate that keeps on missing evidence and it goes in reclaim:toolchains. A target whose
-# safety is a genuine value judgment (which checkpoints matter, which clones still matter) belongs
-# in the interactive tier (reclaim:pick), never in a blind one.
-#
-# `reclaim` (bare) = the blind tier in one command: every member is safe to run unattended, and
-# nothing interactive or irreversible is reachable from it. The sudo tier (reclaim:system) is this
-# task's own `run`, NOT a sibling in `depends`: mise runs depends in parallel and a failed sibling
-# aborts the rest — on 2026-09-27 a missing passwordless sudo stopped the other three mid-run and
-# C: never moved. RECLAIM_TIER=blind turns an unmet precondition (no sudo, not WSL) into a SKIP
-# line with the human command, exit 0; `mise run reclaim:system` alone still fails loudly.
+# Thin task aliases for the disk-reclaim CLI. Target policy, safety checks, and configuration live
+# in tools/disk-reclaim/README.md; use `plan` to preview and named `run` commands to act.
 [tasks.reclaim]
-description = "Reclaim disk, blind tier: clean + builds + rust + toolchains, then system (WSL) — which SKIPs with the human command when passwordless sudo is unavailable, so it can never abort the others. Nothing interactive, nothing irreversible. Human tiers: reclaim:system (sudo), reclaim:vhdx, reclaim:pick, reclaim:purge."
-depends = ["reclaim:clean", "reclaim:builds", "reclaim:rust", "reclaim:toolchains"]
-run = 'RECLAIM_TIER=blind bun ~/dotfiles/scripts/reclaim-system.ts'
+description = "Run all blind-tier reclamation targets: clean, builds, Rust targets, toolchains, workspaces, scratch, and available system cleanup. Preview with reclaim:audit."
+raw = true
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run --tier blind --yes'
 
 [tasks."reclaim:clean"]
 description = "Reclaim disk: clear package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo/mise/julia) via each tool's OWN gc/prune command. Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts clean -- bun ~/dotfiles/scripts/reclaim-clean.ts'
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run clean --yes'
 
 [tasks."reclaim:rust"]
 dir = "{{config_root}}"
-description = "cargo clean every Rust target/ under AUDIT_PROJECTS (~/Workspace) not built for RUST_TARGET_DAYS (7; 30 without sccache) and with no cargo/rustc running inside it. Blind tier: sccache makes the rebuild cheap, so this goes sooner than reclaim:builds' 30 days. Frees space now (cargo's own clean, no graveyard). -- --dry-run to preview."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts rust -- bun ~/dotfiles/scripts/reclaim-rust-targets.ts'
+description = "Run disk-reclaim's Rust target cleanup for projects under AUDIT_PROJECTS (~/Workspace): candidates exceed RUST_TARGET_DAYS and have no cargo/rustc process inside. The safety predicate also skips targets containing an on-PATH binary. Use reclaim:audit to preview the plan; this task runs it."
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run rust --yes'
 
 [tasks."reclaim:toolchains"]
-description = "Prune rustup toolchains, vscode-server old versions and self-updating CLIs' superseded releases (codex, claude — scripts/version-stores.ts) — no tool-native gc exists for any, so this writes an explicit safety predicate instead (default/pin-scan for rustup; current/live-process/recency for the rest). Deletes via rip. KEEP_DAYS/AUDIT_PROJECTS to retune."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts toolchains -- bun ~/dotfiles/scripts/reclaim-toolchains.ts'
+description = "Run disk-reclaim's toolchain cleanup for old rustup toolchains, vscode-server versions, and superseded Codex/Claude releases. Its safety predicates preserve defaults or pinned toolchains, and current, recent, or live-process releases. Use reclaim:audit to preview the plan; KEEP_DAYS/AUDIT_PROJECTS tune eligibility."
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run toolchains --yes'
 
 # The Linux SYSTEM-state half of the 断捨離 pass; reclaim:clean owns the per-user package caches
 # and stays sudo-free so it also runs on macOS. Split on WHO OWNS THE BYTES, not on OS.
@@ -528,7 +499,7 @@ run = 'bun ~/dotfiles/scripts/reclaim-run.ts toolchains -- bun ~/dotfiles/script
 # at shutdown only, and .wslconfig has no storage key — so preventing GROWTH is the whole point.
 [tasks."reclaim:system"]
 description = "Reclaim disk inside WSL: apt archives, journald, snap disabled revisions, then fstrim. Needs sudo. Per-user package caches are reclaim:clean; freed blocks return to Windows only on `wsl.exe --shutdown`."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts system -- bun ~/dotfiles/scripts/reclaim-system.ts'
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run system --yes'
 
 # --same-filesystem is not a nicety on WSL: without it a KONDO_DIR above the mount points walks
 # /mnt/c and /mnt/e over the DrvFs bridge — ruinously slow, and it aims a build-artifact deleter
@@ -538,7 +509,7 @@ run = 'bun ~/dotfiles/scripts/reclaim-run.ts system -- bun ~/dotfiles/scripts/re
 # /home/linuxbrew/.linuxbrew/bin. Probe brew tools by absolute path, never by root's PATH.
 [tasks."reclaim:pick"]
 description = "Clean every project's regenerable build artifacts (node_modules/target/build…) via kondo — INTERACTIVE picker. Set KONDO_OLDER (for example 30d) to narrow candidates; KONDO_DIR changes the root. Blind/agent-safe form: reclaim:builds."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts pick --interactive -- kondo --same-filesystem --older "${KONDO_OLDER:-0d}" ${KONDO_DIR:-$HOME}'
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" wrap pick --interactive -- kondo --same-filesystem --older "${KONDO_OLDER:-0d}" ${KONDO_DIR:-$HOME}'
 
 # Why a blind twin of reclaim:pick exists: an interactive task never runs unattended, and that
 # is exactly why artifacts accumulate — measured on r99 2026-09-08 with the picker never having
@@ -547,27 +518,28 @@ run = 'bun ~/dotfiles/scripts/reclaim-run.ts pick --interactive -- kondo --same-
 # every project's matching output is a candidate; KONDO_OLDER=30d (or any age) narrows it.
 [tasks."reclaim:builds"]
 description = "Reclaim every project's regenerable build artifacts (node_modules/target/build…) NON-interactively via kondo -a. Set KONDO_OLDER (for example 30d) to narrow candidates. Regenerable only — any agent may run it blind. Human picker: reclaim:pick."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts builds -- kondo --all --same-filesystem --older "${KONDO_OLDER:-0d}" ${KONDO_DIR:-$HOME}'
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run builds --yes'
 
 [tasks."reclaim:audit"]
-description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, self-updating CLIs' version stores, the ~/.cache breakdown, and the judgment tier — the largest build dirs of ANY age and optional toolchain components (rust-docs). Use reclaim:judgment to preview owner-approved Rust target/docs cleanup; use reclaim:judgment:yes to act. Each audit item has size, last-touched date and age. Deletes nothing. STALE_DAYS=180 to retune."
-run = 'bun ~/dotfiles/scripts/reclaim-audit.ts'
+description = "READ-ONLY plan of all reclaim targets. Deletes nothing. Use reclaim:judgment to preview owner-approved Rust target/docs cleanup."
+raw = true
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan --all'
 
 [tasks."reclaim:judgment"]
-description = "READ-ONLY plan for owner-approved cleanup of Rust target/ directories of any age and optional rust-docs components. Skips active cargo/rustc projects and targets containing an on-PATH binary. Use reclaim:judgment:yes to act; every action and freed byte is captured by reclaim-run."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts judgment -- bun ~/dotfiles/scripts/reclaim-judgment.ts'
+description = "READ-ONLY plan for owner-approved cleanup of Rust target/ directories of any age and optional rust-docs components. Skips active cargo/rustc projects and targets containing an on-PATH binary. Use reclaim:judgment:yes to act; disk-reclaim records each action and freed byte in its receipt."
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan judgment'
 
 [tasks."reclaim:judgment:yes"]
 description = "Act on reclaim:judgment's owner-approved Rust target/docs plan: cargo clean eligible targets and remove installed rust-docs components. Per-action freed bytes and command output go to the reclaim receipt."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts judgment -- bun ~/dotfiles/scripts/reclaim-judgment.ts --yes'
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run judgment --yes'
 
 [tasks."reclaim:purge"]
 description = "IRREVERSIBLE: empty EVERY graveyard — rip's AND the XDG trash (~/.local/share/Trash). This is the ONLY step that actually frees disk: both delete by rename, so the bytes stay until purged. Prints every target with sizes and requires typing 'yes'. Non-interactive form: reclaim:purge:yes."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts purge --interactive -- bun ~/dotfiles/scripts/reclaim-purge.ts'
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run purge --interactive'
 
 [tasks."reclaim:purge:yes"]
 description = "IRREVERSIBLE: reclaim:purge confirmed by argv (--yes) instead of a typed 'yes' — prints every target with sizes, then empties every graveyard; output kept in the reclaim receipt log. Owner's decision 2026-10-07: the human-only gate is removed."
-run = 'bun ~/dotfiles/scripts/reclaim-run.ts purge -- bun ~/dotfiles/scripts/reclaim-purge.ts --yes'
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run purge --yes'
 
 # The WINDOWS-HOST half of reclaim, for the C: space WSL leaves that no guest-side task can reach.
 # reclaim:clean/builds/system free GUEST bytes; on a sparse vhdx those do not always return to C:
@@ -579,7 +551,23 @@ run = 'bun ~/dotfiles/scripts/reclaim-run.ts purge -- bun ~/dotfiles/scripts/rec
 # elevated procedure rather than pretending to run what it cannot test.
 [tasks."reclaim:host"]
 description = "Reclaim Windows-host disk under WSL2 that guest-side tasks cannot: orphaned swap.vhdx (from dead distro instances) and the winget cache. READ-ONLY plan by default; --execute frees. Safe live — the OS locks the running swap. --host is an ssh alias."
-run = 'bun ~/dotfiles/scripts/reclaim-host.ts'
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan host'
+
+[tasks."reclaim:workspaces"]
+description = "READ-ONLY plan for fully-pushed, clean jj workspaces that disk-reclaim can safely forget and delete. Use reclaim:workspaces:yes to act."
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan workspaces'
+
+[tasks."reclaim:workspaces:yes"]
+description = "Forget and delete jj workspaces only when disk-reclaim proves their contents are pushed, clean, and unused."
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run workspaces --yes'
+
+[tasks."reclaim:scratch"]
+description = "READ-ONLY plan for reclaimable dead-session scratch directories. Use reclaim:scratch:yes to act."
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan scratch'
+
+[tasks."reclaim:scratch:yes"]
+description = "Delete dead-session scratch directories only when disk-reclaim proves them safe."
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run scratch --yes'
 
 # Remediation for what wsl:audit reports as "host process past 3600s CPU". Twice on r99 (2026-09-09
 # and 2026-09-22) sshd left per-connection `sshd -R` processes busy-looping after C: filled — 9 of
@@ -593,15 +581,16 @@ run = 'bun ~/dotfiles/scripts/wsl-reap.ts'
 
 [tasks."reclaim:vhdx"]
 description = "READ-ONLY: plan the offline compaction of a WSL2 ext4.vhdx — usually the largest single C: lever. Measures the allocated-vs-guest-used gap FRESH (it shrinks as the guest writes: 130GB on r99 2026-09-17 was 57GB by 09-21, so never quote a remembered number), detects Optimize-VHD (Pro) vs diskpart (Home), prints the elevated procedure. fstrim and --set-sparse were measured inert here; only compaction returns the gap."
-run = 'bun ~/dotfiles/scripts/reclaim-vhdx.ts'
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan vhdx'
 
 [tasks."install:tools"]
 description = "Install the full CLI toolbox (single source: Brewfile)"
 run = 'brew bundle --file=~/dotfiles/Brewfile'
 
-# `bun link` after the install: package.json's `bin` entries (agent-resource-run,
-# serena-foreground, repo-retrieve) are this repo's PATH commands, and `bun link` is what turns a
-# `bin` entry into a symlink in bun's global bin dir (~/.bun/bin, on every shell's PATH via
+# `bun link` after the install: package.json's `bin` entries (agent-resource-run, disk-reclaim,
+# storage-headroom, statusline, serena-foreground, repo-retrieve) are this repo's PATH commands,
+# and `bun link` is what turns a `bin` entry into a symlink in bun's global bin dir (~/.bun/bin,
+# on every shell's PATH via
 # zsh/zshenv). Before 2026-09-13 link-dots.sh hand-symlinked the .ts files into ~/.local/bin —
 # a re-implementation of exactly this mechanism, minus the declaration that made their shebangs
 # legitimate. Idempotent: re-linking an already-linked package is a no-op.

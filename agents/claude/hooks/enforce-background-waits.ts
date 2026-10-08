@@ -20,9 +20,18 @@
 // An allowed foreground call has its start recorded, so its duration is measured too. A command
 // never measured passes once; from then on its own history decides. run_in_background is a Claude
 // Code tool field (Codex has no such mode), so this is a Claude hook (agents/claude/settings.json).
+//
+// THE OTHER DIRECTION (2026-10-08, firedancer coordinator): `agent-dispatch resume … &` run inside a
+// call that already had run_in_background:true. The harness observes the OUTER shell; the inner `&`
+// job outlives it unobserved, so its result never reached the session and nothing caught it. So when
+// run_in_background is true, a shell-level `&` whose job is never `wait`ed in the same script is
+// denied (unwaitedJobs below). setsid/nohup/disown are NOT this rule's: enforce-supervised-execution
+// already denies them. A nested shell string (`bash -c 'x &'`) is judged like the top level, the way
+// that hook judges a detacher in one; a string handed to another program (`ssh host 'x &'`) is data.
 // FAIL CLOSED (run.sh --fail-closed).
 
 import { at, num, strAt } from "../../hooks/narrow.ts";
+import { effective, parseShell } from "../../hooks/shell-syntax.ts";
 import {
   AGENT_ROUTER_WORKER_ENV,
   AGENT_ROUTER_WORKER_VALUE,
@@ -62,6 +71,270 @@ export function backgroundReason(
   return undefined;
 }
 
+// --- shell-level `&` inside an already-backgrounded call ---------------------------------------
+//
+// shell-syntax.ts cannot express this: it records the operator that ENDED the previous command
+// (`sep`), and the empty command after a trailing `&` — `a &`, or `a &⏎wait` — is dropped, so the
+// job is invisible to it. This is a small local scanner for the one question "which `&` jobs are
+// never waited?". It reads quotes, escapes, comments, heredoc bodies, `${…}`, `$((…))` and backticks
+// as data; `&&` `&>` `>&` `<&` `|&` are not jobs. A `wait` at command position clears the jobs of
+// its own scope (a `( … )` subshell is a scope of its own; a `{ … }` group is not). It never throws.
+
+const LEADING_WORDS = new Set([
+  "if",
+  "then",
+  "else",
+  "elif",
+  "do",
+  "while",
+  "until",
+  "!",
+  "{",
+]);
+const SHELL_NAMES = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
+const OPERATOR_CHARS = new Set([";", "&", "|", "(", ")", "<", ">"]);
+
+/** Index just after the `)` that closes the `(` at `open`; the end of `s` when it never closes. */
+function afterParen(s: string, open: number): number {
+  let depth = 0;
+  for (let k = open; k < s.length; k++) {
+    const ch = s.charAt(k);
+    if (ch === "(") depth++;
+    else if (ch === ")" && --depth === 0) return k + 1;
+  }
+  return s.length;
+}
+
+/** Index just after the `}` that closes the `{` at `open`; the end of `s` when it never closes. */
+function afterBrace(s: string, open: number): number {
+  let depth = 0;
+  for (let k = open; k < s.length; k++) {
+    const ch = s.charAt(k);
+    if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) return k + 1;
+  }
+  return s.length;
+}
+
+/** Index just after the `quote` that closes the one opened before `from`; backslash escapes unless single. */
+function afterQuote(s: string, from: number, quote: string): number {
+  for (let k = from; k < s.length; k++) {
+    const ch = s.charAt(k);
+    if (ch === "\\" && quote !== "'") k++;
+    else if (ch === quote) return k + 1;
+  }
+  return s.length;
+}
+
+class JobScanner {
+  private i = 0;
+  private word = "";
+  private cmdStart = true;
+  /** Unwaited-job count of each open scope; index 0 is the script itself. */
+  private readonly scopes: number[] = [0];
+  private unwaited = 0;
+  private heredocs: { delim: string; strip: boolean }[] = [];
+
+  constructor(private readonly s: string) {}
+
+  /** How many `&` jobs of the script are never waited in their scope. */
+  run(): number {
+    while (this.i < this.s.length) this.step();
+    this.endWord();
+    return this.unwaited + this.scopes.reduce((a, b) => a + b, 0);
+  }
+
+  private get top(): number {
+    return this.scopes.length - 1;
+  }
+
+  /** The text from the cursor to `to` is data: it joins the current word as an opaque piece. */
+  private opaque(to: number): void {
+    this.i = to;
+    this.word += "\0";
+  }
+
+  private endWord(): void {
+    if (this.word === "") return;
+    if (this.cmdStart && this.word === "wait") this.scopes[this.top] = 0;
+    this.cmdStart = this.cmdStart && LEADING_WORDS.has(this.word);
+    this.word = "";
+  }
+
+  private step(): void {
+    const c = this.s.charAt(this.i);
+    if (c === " " || c === "\t") {
+      this.endWord();
+      this.i++;
+    } else if (c === "\n") this.newline();
+    else if (c === "#" && this.word === "") this.skipComment();
+    else if (c === "\\") this.opaque(this.i + 2);
+    else if (c === "'" || c === '"' || c === "`")
+      this.opaque(afterQuote(this.s, this.i + 1, c));
+    else if (c === "$") this.dollar();
+    else if (OPERATOR_CHARS.has(c)) this.operator(c);
+    else {
+      this.word += c;
+      this.i++;
+    }
+  }
+
+  private skipComment(): void {
+    const nl = this.s.indexOf("\n", this.i);
+    this.i = nl === -1 ? this.s.length : nl;
+  }
+
+  private newline(): void {
+    this.endWord();
+    this.i++;
+    this.cmdStart = true;
+    const queue = this.heredocs;
+    this.heredocs = [];
+    for (const h of queue) this.skipHeredoc(h);
+  }
+
+  /** A heredoc body is data: skip lines up to the one that is the delimiter. */
+  private skipHeredoc(h: { delim: string; strip: boolean }): void {
+    while (this.i < this.s.length) {
+      let nl = this.s.indexOf("\n", this.i);
+      if (nl === -1) nl = this.s.length;
+      const raw = this.s.slice(this.i, nl);
+      this.i = Math.min(nl + 1, this.s.length);
+      if ((h.strip ? raw.replace(/^\t+/u, "") : raw) === h.delim) return;
+    }
+  }
+
+  private dollar(): void {
+    const next = this.s.charAt(this.i + 1);
+    if (next === "(" && this.s.charAt(this.i + 2) === "(")
+      this.opaque(afterParen(this.s, this.i + 1)); // $(( arithmetic ))
+    else if (next === "{") this.opaque(afterBrace(this.s, this.i + 1));
+    else if (next === "(") this.openScope(2);
+    else {
+      this.word += "$";
+      this.i++;
+    }
+  }
+
+  private openScope(width: number): void {
+    this.endWord();
+    this.scopes.push(0);
+    this.i += width;
+    this.cmdStart = true;
+  }
+
+  private closeScope(): void {
+    this.endWord();
+    if (this.scopes.length > 1) this.unwaited += this.scopes.pop() ?? 0;
+    this.cmdStart = false;
+    this.i++;
+  }
+
+  private operator(c: string): void {
+    const next = this.s.charAt(this.i + 1);
+    if (c === "(" && next === "(") {
+      // (( arithmetic )) at command position; `& ` in it is bitwise-and
+      this.endWord();
+      this.opaque(afterParen(this.s, this.i));
+      return;
+    }
+    if (c === "(") this.openScope(1);
+    else if (c === ")") this.closeScope();
+    else if (c === ";") this.separate(1);
+    else if (c === "|") this.separate(next === "|" || next === "&" ? 2 : 1);
+    else if (c === "&") this.ampersand(next);
+    else this.redirect(c, next);
+  }
+
+  /** `;` `|` `||` `|&`: the next word starts a command. */
+  private separate(width: number): void {
+    this.endWord();
+    this.i += width;
+    this.cmdStart = true;
+  }
+
+  private ampersand(next: string): void {
+    this.endWord();
+    if (next === "&") {
+      this.i += 2; // &&
+      this.cmdStart = true;
+    } else if (next === ">") {
+      this.i += this.s.charAt(this.i + 2) === ">" ? 3 : 2; // &> &>>
+      this.cmdStart = false;
+    } else if (this.i > 0 && /[<>]/u.test(this.s.charAt(this.i - 1))) {
+      this.i++; // >&2  2>&1  <&3
+      this.cmdStart = false;
+    } else {
+      this.scopes[this.top] = (this.scopes[this.top] ?? 0) + 1;
+      this.i++;
+      this.cmdStart = true;
+    }
+  }
+
+  private redirect(c: string, next: string): void {
+    this.endWord();
+    const heredoc =
+      c === "<" && next === "<" && this.s.charAt(this.i + 2) !== "<";
+    if (heredoc) this.readHeredocDelimiter();
+    else this.i += c === "<" && next === "<" ? 3 : 1;
+  }
+
+  /** `<<DELIM` / `<<-DELIM` / `<<'DELIM'`: queue the body to skip at the next newline. */
+  private readHeredocDelimiter(): void {
+    this.i += 2;
+    const strip = this.s.charAt(this.i) === "-";
+    if (strip) this.i++;
+    while (/[ \t]/u.test(this.s.charAt(this.i))) this.i++;
+    let raw = "";
+    while (this.i < this.s.length) {
+      const ch = this.s.charAt(this.i);
+      if (/[\s;&|()<>]/u.test(ch)) break;
+      raw += ch;
+      this.i++;
+    }
+    this.heredocs.push({ delim: raw.replaceAll(/["'\\]/gu, ""), strip });
+  }
+}
+
+/** The scripts a shell-feeding command runs from text: `sh -c STR`, a heredoc fed to a shell, `eval`. */
+function nestedScriptTexts(command: string): string[] {
+  const parsed = parseShell(command);
+  if (parsed === undefined) return [];
+  return parsed.commands.flatMap((c) => {
+    const eff = effective(c);
+    if (eff === undefined) return [];
+    if (eff.name === "eval") return [eff.args.join(" ")];
+    if (!SHELL_NAMES.has(eff.name)) return [];
+    const flag = eff.args.findIndex((a) => /^-[A-Za-z]*c[A-Za-z]*$/u.test(a));
+    const script = flag === -1 ? undefined : eff.args[flag + 1];
+    return (script === undefined ? [] : [script]).concat(c.heredocs);
+  });
+}
+
+/** Why a command that already runs in the background must not start a shell-level `&` job it never
+ *  waits, or undefined when it starts none. Judged by what the command EXECUTES. */
+export function unwaitedJobs(command: string): string | undefined {
+  if (!command.includes("&")) return undefined;
+  const top = new JobScanner(command).run();
+  const nested =
+    top > 0
+      ? 0
+      : nestedScriptTexts(command).reduce(
+          (n, script) => n + new JobScanner(script).run(),
+          0,
+        );
+  if (top === 0 && nested === 0) return undefined;
+  return (
+    `this call already runs with run_in_background: true, and its command starts ${top + nested} ` +
+    `shell-level background job${top + nested === 1 ? "" : "s"} (\`&\`)${top === 0 ? " inside a nested shell string" : ""} ` +
+    `that it never \`wait\`s for. The harness observes only the outer shell: the inner \`&\` job outlives it ` +
+    `unobserved, so its exit status and output never reach this session. Fix, in order: ` +
+    `(1) drop the \`&\` — the call is already backgrounded and you are re-invoked when it exits; ` +
+    `(2) to run several in parallel but observed, end the script with \`wait\` (\`a & b & wait\`); ` +
+    `(3) for work that must outlive this session, a NAMED transient unit: \`systemd-run --user --unit=<name> …\`.`
+  );
+}
+
 const payload = import.meta.main ? readStdinJson() : undefined;
 const input = at(payload, "tool_input");
 const isBash = strAt(payload, "tool_name") === "Bash";
@@ -80,6 +353,12 @@ const measured = [
     return ms === undefined ? [] : [{ key: k, ms }];
   })
   .toSorted((a, b) => b.ms - a.ms)[0];
+const inner =
+  isBash && at(input, "run_in_background") === true
+    ? unwaitedJobs(command)
+    : undefined;
+// SINGLE-AXIS: one question (may a backgrounded call start work the harness cannot see?)
+if (inner !== undefined) decidePre("deny", `background-waits: ${inner}`);
 const why = isBash ? backgroundReason(input, measured, isWorker) : undefined;
 // SINGLE-AXIS: one question (may this call hold the session?) — its triggers share one resend
 if (why !== undefined)

@@ -73,7 +73,7 @@ inside Japanese prose: **LAW**, **gate** (BG0–BG4), **shim**, **envelope**, **
 | Own named commands + generated command help | `cli({ commands: [command({ name, parameters, strictFlags: true, ignoreArgv: rejectPrototypeFlag })], … })`; every command repeats the prototype guard |
 | Accept excess positionals | declare a deliberate `<rest...>` / `[rest...]` schema; otherwise reject `parsed._.length` or use `rejectUnexpectedArguments(parsed.unknownFlags, parsed._)` |
 | Forward arbitrary downstream argv | exact `// argv-forwarding: <downstream>` marker; parse a copy with `typeFlag`, then relay the original argv unchanged including `--` |
-| Show a human progress, a spinner, or a confirmation prompt | `@clack/prompts` (exact pin; never in hooks): `progress` + `advance`, `spinner`, `text`/`confirm` + `isCancel`. No hand-drawn `\r` bar — it wraps on a narrow pane (2026-10-06). Off a TTY: plain lines; a human-only confirm refuses a non-TTY stdin. Example: `scripts/reclaim-purge.ts` |
+| Show a human progress, a spinner, or a confirmation prompt | `@clack/prompts` (exact pin; never in hooks): `progress` + `advance`, `spinner`, `text`/`confirm` + `isCancel`. No hand-drawn `\r` bar — it wraps on a narrow pane (2026-10-06). Off a TTY: plain lines; a human-only confirm refuses a non-TTY stdin. Example: `disk-reclaim run purge --interactive` |
 | Run a JS/TS CLI tool once | `bunx pkg@x.y.z` — never npx, never `npm i -g` |
 | Python payload (lib or tool) | STOP → `running-python-tools` (uvx / `uv run --with`) |
 | Import a library | BG3 graduation check FIRST |

@@ -9,7 +9,7 @@
 // 16 PreToolUse hook_success records with decision JSON in this session's transcript, none of it
 // in the model's context).
 //
-// Sampler: none here. statusline-command.ts samples (nvidia-smi, the /proc CPU delta) on every
+// Sampler: none here. tools/statusline/src/host-load.ts samples (nvidia-smi, the /proc CPU delta) on every
 // render and caches the plain row in ~/.cache/claude/statusline-sys.json; this hook only reads
 // it, so a tool call never pays for a sample. A reading older than STALE_MS is not shown — it
 // would be a claim about a moment it does not describe.

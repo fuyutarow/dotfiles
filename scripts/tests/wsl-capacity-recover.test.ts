@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   hasLiveBuildProcess,
+  loadRecoveryPolicy,
   memoryEmergency,
   parseHostMemory,
   selectStopTargets,
@@ -42,6 +43,17 @@ const GiB = 1024 ** 3;
 const policy = { denyBytes: 60 * GiB, stopBytes: 30 * GiB };
 
 describe("WSL capacity recovery decisions", () => {
+  test("loads the host thresholds from the canonical TOML path without WSL", () => {
+    const loaded = loadRecoveryPolicy();
+    expect(loaded.isOk()).toBe(true);
+    if (loaded.isErr()) return;
+    expect(loaded.value).toEqual({
+      path: "/mnt/c",
+      denyBytes: 20 * GiB,
+      stopBytes: 10 * GiB,
+    });
+  });
+
   test("Windows memory needs both low availability and sustained hard reads", () => {
     expect(parseHostMemory("available_mb=700\npage_reads_s=1923\n")).toEqual({
       availableMb: 700,

@@ -81,7 +81,10 @@ function makeDotfiles(base: object): string {
 }
 
 function makeHome(): string {
-  return mkdtempSync(join(tmpdir(), "render-settings-home-"));
+  const home = mkdtempSync(join(tmpdir(), "render-settings-home-"));
+  mkdirSync(join(home, ".bun", "bin"), { recursive: true });
+  writeFileSync(join(home, ".bun", "bin", "statusline"), "#!/bin/sh\n");
+  return home;
 }
 
 function dest(home: string): string {
@@ -207,6 +210,66 @@ describe("render-home: the legacy symlink", () => {
 });
 
 describe("render-home: failure modes", () => {
+  test("a present statusLine target renders with its declared command unchanged", () => {
+    const dotfiles = makeDotfiles({
+      statusLine: { type: "command", command: "~/.bun/bin/statusline" },
+    });
+    const home = makeHome();
+
+    const { code } = run({ HOME: home, DOTFILES: dotfiles });
+    expect(code).toBe(0);
+    expect(readDest(home).statusLine).toEqual({
+      type: "command",
+      command: "~/.bun/bin/statusline",
+    });
+    cleanup(dotfiles, home);
+  });
+
+  test("a missing statusLine target refuses the render and preserves deployed bytes", () => {
+    const dotfiles = makeDotfiles({
+      statusLine: { type: "command", command: "~/.bun/bin/missing" },
+    });
+    const home = makeHome();
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    const previous = "previous deployed settings, byte for byte\n";
+    writeFileSync(dest(home), previous);
+
+    const { out, code } = run({ HOME: home, DOTFILES: dotfiles });
+    expect(code).toBe(1);
+    expect(out).toContain('"~/.bun/bin/missing"');
+    expect(out).toContain(join(home, ".bun", "bin", "missing"));
+    expect(out).toContain("run `mise run deps` first");
+    expect(readFileSync(dest(home), "utf8")).toBe(previous);
+    cleanup(dotfiles, home);
+  });
+
+  test("a missing Bun hook script target refuses before any output is written", () => {
+    const dotfiles = makeDotfiles({ model: "opus" });
+    writeFileSync(
+      join(dotfiles, "agents", "codex", "hooks.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              hooks: [
+                { type: "command", command: "bun ~/.bun/bin/missing-hook" },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const home = makeHome();
+
+    const { out, code } = run({ HOME: home, DOTFILES: dotfiles });
+    expect(code).toBe(1);
+    expect(out).toContain("bun ~/.bun/bin/missing-hook");
+    expect(out).toContain(join(home, ".bun", "bin", "missing-hook"));
+    expect(existsSync(dest(home))).toBe(false);
+    expect(existsSync(join(home, ".codex", "hooks.json"))).toBe(false);
+    cleanup(dotfiles, home);
+  });
+
   test("a malformed overlay aborts and leaves the existing settings untouched", () => {
     const dotfiles = makeDotfiles({ model: "opus" });
     const home = makeHome();
@@ -332,7 +395,7 @@ describe("render-home: the rest of the rendered half", () => {
     const dotfiles = makeDotfiles({ model: "opus" });
     const home = makeHome();
     const overlay = join(home, "private.json");
-    const mine = { hooks: [{ type: "command", command: "mine" }] };
+    const mine = { hooks: [{ type: "command", command: "sh -c mine" }] };
     writeFileSync(overlay, JSON.stringify({ hooks: { Stop: [mine] } }));
     run({ HOME: home, DOTFILES: dotfiles, CLAUDE_SETTINGS_PRIVATE: overlay });
     expect(readDest(home).hooks).toEqual({

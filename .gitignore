@@ -5,7 +5,8 @@ agents/commands/.system/
 # Local overrides
 local/
 *.local
-**/settings.local.json   # Claude Code per-machine permission overrides — never commit
+# Claude Code per-machine permission overrides — never commit
+**/settings.local.json
 
 # Backups
 backups/

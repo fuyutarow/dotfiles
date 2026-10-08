@@ -1,13 +1,13 @@
 # storage-headroom — the declarative half of enforce-storage-headroom.ts.
 #
-# This file says WHAT is guarded and at what size; the hook says HOW (matching commands,
+# This file says WHAT is guarded and at what size; the hook says HOW (parsing commands,
 # measuring, caching, locating a cargo target dir). Change a number or add a budget here — no
-# code edit. The hook validates this file on every Bash call: an unknown key, a wrong type, or a
-# missing field DENIES the call with every error listed, rather than silently falling back to a
-# default that would disarm the gate (fix it with the Edit tool, which this gate never sees;
-# STORAGE_ASSERT_OVERRIDE=1 in a command still passes). Contract: storage-headroom.contract.md.
+# code edit. The hook validates this file on every non-allowlisted PreToolUse call: an unknown key,
+# wrong type, or missing field denies rather than silently falling back to defaults.
+# Cleanup and read-only exceptions are enforced by the hook. Contract: storage-headroom.contract.md.
 
 schema = 1
+sparse_required_above_mb = 500
 
 # Free space below which a launch is refused (deny) or allowed with a warning (warn). Each line is
 # the SMALLER of a size and a share of the drive: min(deny_gib, deny_pct% of the drive's size), and
@@ -40,14 +40,12 @@ deny_pct = 10
 # at once; without the trim the return is lazy and partial.
 [deny]
 advice = """\
-A full host drive takes down WSL and Windows together. The hook requests the automatic recovery \
-service. Inspect `mise run wsl:audit` and its journal, then continue safe, source-specific \
-reclaim yourself, and run `sudo fstrim -v /` after large deletes so the sparse vhdx hands the \
-freed blocks back to the host now rather than lazily; verify a positive C: free delta before \
-claiming recovery. Do not ask the human to run ordinary regenerable-cache cleanup. Never purge the \
-global Trash or remove research outputs without their retention rule. Offline vhdx compaction \
-requires an idle distro and host admin if live reclaim cannot free C:. \
-STORAGE_ASSERT_OVERRIDE=1 in the command text bypasses this gate only for a cleanup that must build."""
+Free space now: `disk-reclaim run --tier blind --yes` (caches, stale builds, finished-session scratch, fully-pushed jj workspaces — nothing that is not regenerable or already on a remote). Preview: `disk-reclaim plan`.
+Owner decisions: `disk-reclaim plan --tier owner` lists what needs a decision (Rust targets of any age, graveyard purge) with sizes. For an approved single path, use `disk-reclaim delete <path> --yes`.
+Verify a positive free delta (`disk-reclaim receipts --last 1`) before claiming recovery. Never purge the global Trash or remove research outputs without their retention rule.
+Do not free space with rip: on overlay filesystems it copies into the graveyard and frees nothing.
+STORAGE_ASSERT_OVERRIDE=1 does not bypass the tool-call allowlist or any deny line.
+WSL only: after large deletes, `disk-reclaim run system --yes` ends with fstrim so C: gets the blocks back now. If live reclaim cannot free C:, use `disk-reclaim plan vhdx`; offline vhdx compaction requires an idle distro and host admin."""
 
 # Commands that START work that writes bytes. A launch matches `command` at a command position
 # (after ; && || | ( then do, and through sudo/env/time/nice/timeout/VAR= prefixes), optionally

@@ -60,11 +60,7 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ["all", "herdr/config.toml", ".config/herdr/config.toml"],
 
   // --- claude code (user-level config; the repo's own project .claude/ is separate) ---
-  [
-    "all",
-    "agents/claude/statusline-command.ts",
-    ".claude/statusline-command.ts",
-  ],
+  // The statusline is tools/statusline (package `bin`, ~/.bun/bin/statusline); no link here.
   ["all", "agents/claude/hooks", ".claude/hooks"],
   // ~/.claude/CLAUDE.md, ~/.claude/settings.json and ~/.codex/hooks.json are RENDERED, not linked:
   // each is a function of several declarations (scripts/render-home.ts, renderHome below).
@@ -189,6 +185,8 @@ export const RETIRED = [
   ".local/bin/repo-search",
   ".local/bin/agent-resource-run",
   ".local/bin/serena-foreground",
+  // Linked until SL3 (2026-10-08); statusLine.command now runs the tools/statusline bin.
+  ".claude/statusline-command.ts",
 ] as const;
 
 // Tool-owned: files a tool rewrites on command (`git config --global`, `jj config set --user`),
@@ -319,6 +317,9 @@ const OTHER: readonly Surface[] = [
       "tools/smart-open/package.json",
       "tools/repo-retrieve/package.json",
       "tools/agent-resource-run/package.json",
+      "tools/disk-reclaim/package.json",
+      "tools/storage-headroom/package.json",
+      "tools/statusline/package.json",
       "tools/serena-foreground/package.json",
       "tools/agent-dispatch/package.json",
     ],
@@ -480,6 +481,15 @@ const OTHER: readonly Surface[] = [
     consumer: "agent-resource-run (admission)",
     writer: "human, in the repo",
     verify: "mise run test:resource-control",
+  },
+  {
+    kind: "in-place",
+    when: "all",
+    sources: ["tools/disk-reclaim/reclaim.toml"],
+    deployed: "the checkout",
+    consumer: "disk-reclaim",
+    writer: "human, in the repo",
+    verify: "bun test tools/disk-reclaim",
   },
   {
     kind: "in-place",

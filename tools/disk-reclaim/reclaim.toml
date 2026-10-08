@@ -1,0 +1,27 @@
+# Human-owned declarations. Paths are expanded by disk-reclaim, independently of cwd.
+repo_roots = ["~/Workspace/*", "~/dotfiles"]
+repos = []
+scratch_roots = ["/tmp/claude-{uid}"]
+delete_roots = ["/tmp", "~/.cache"]
+protected = [
+  "~/.bun/install/global",
+  "~/.bun/bin",
+  "~/.local/share/mise/installs",
+  "~/.local/share/mise/shims",
+  "~/.cargo/bin",
+  "~/.rustup/toolchains",
+  "~/.local/bin",
+  "~/.juliaup",
+]
+regenerable_ignored = [
+  "target",
+  "node_modules",
+  ".venv",
+  "build",
+  "dist",
+  "__pycache__",
+  ".julia/compiled",
+]
+session_grace_hours = 24
+graveyard_min_age_hours = 24
+ignore_unreadable_procs = ["sshd"]

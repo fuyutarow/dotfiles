@@ -17,7 +17,10 @@ import {
   ok,
   type Result,
 } from "neverthrow";
-import { z } from "../agents/hooks/zod.ts";
+import {
+  loadStorageHeadroom,
+  storageLine,
+} from "../tools/shared/src/storage-headroom.ts";
 
 // Consumer: a user-systemd timer and the Claude storage hook. One short run checks the Windows
 // drive and host RAM under WSL, reclaims only the repository's unattended-safe tiers, and stops
@@ -29,7 +32,7 @@ const REGULAR_RECLAIM_COOLDOWN_MS = 60 * 60 * 1000;
 const EMERGENCY_RECLAIM_COOLDOWN_MS = 5 * 60 * 1000;
 const POLICY_PATH = join(
   import.meta.dir,
-  "../agents/claude/hooks/storage-headroom.toml",
+  "../agents/hooks/storage-headroom.toml",
 );
 const STAMP_PATH = join(
   homedir(),
@@ -83,30 +86,13 @@ function rejectPrototypeFlag(
   }
 }
 
-const JsonRecord = z.record(z.string(), z.unknown());
-
-// A plain table as a string-keyed record; undefined for anything else.
-function record(value: unknown): Record<string, unknown> | undefined {
-  const parsed = JsonRecord.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
-}
-
-function policyFromToml(path: string): Result<Policy, Error> {
-  const decoded = fromThrowable((): unknown =>
-    Bun.TOML.parse(readFileSync(path, "utf8")),
-  )();
-  if (decoded.isErr()) return err(new Error(String(decoded.error)));
-  const parsed = decoded.value;
-  const host = record(record(record(parsed)?.drive)?.host);
-  if (host === undefined) {
-    return err(new Error(`missing drive.host in ${path}`));
-  }
+export function loadRecoveryPolicy(path = POLICY_PATH): Result<Policy, Error> {
+  const loaded = loadStorageHeadroom(path);
+  if (loaded.errors.length > 0) return err(new Error(loaded.errors.join("; ")));
+  const host = loaded.drives.find((drive) => drive.label.startsWith("host C:"));
   if (
-    typeof host.path !== "string" ||
-    typeof host.deny_gib !== "number" ||
-    typeof host.stop_gib !== "number" ||
-    !Number.isFinite(host.deny_gib) ||
-    !Number.isFinite(host.stop_gib) ||
+    host === undefined ||
+    host.stop_gib === undefined ||
     host.stop_gib <= 0 ||
     host.deny_gib <= host.stop_gib
   ) {
@@ -116,7 +102,7 @@ function policyFromToml(path: string): Result<Policy, Error> {
   }
   return ok({
     path: host.path,
-    denyBytes: host.deny_gib * GiB,
+    denyBytes: storageLine(host.deny_gib, host.deny_pct, null),
     stopBytes: host.stop_gib * GiB,
   });
 }
@@ -549,7 +535,7 @@ async function main(): Promise<void> {
     );
     process.exit(2);
   }
-  const policyResult = policyFromToml(parsed.flags.config);
+  const policyResult = loadRecoveryPolicy(parsed.flags.config);
   if (policyResult.isErr()) {
     process.stderr.write(`FATAL: ${String(policyResult.error)}\n`);
     process.exit(2);

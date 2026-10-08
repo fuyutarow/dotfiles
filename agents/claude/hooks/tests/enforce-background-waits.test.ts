@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   backgroundReason,
   FOREGROUND_MAX_MS,
+  unwaitedJobs,
 } from "../enforce-background-waits.ts";
 import { AGENT_ROUTER_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
 
@@ -71,5 +72,92 @@ describe("as a hook", () => {
 
   test("says nothing about a short foreground call", () => {
     expect(decide({ command: "ls" })).toBe("");
+  });
+});
+
+// A shell-level `&` inside a call that already has run_in_background:true outlives the observed
+// outer shell (firedancer coordinator, 2026-10-08): denied unless the script waits for the job.
+describe("unwaitedJobs", () => {
+  const INCIDENT =
+    "agent-dispatch resume run-123 --prompt-file /tmp/brief.md > /tmp/out.log 2>&1 &";
+
+  test.each([
+    ["the incident command", INCIDENT],
+    ["a bare trailing &", "sleep 30 &"],
+    ["& then a newline, no wait", "sleep 30 &\necho started"],
+    ["a job that is waited only BEFORE it starts", "wait\nsleep 30 &"],
+    ["a job in a subshell, waited outside it", "(sleep 30 &); wait"],
+    ["a job in a brace group, never waited", "{ sleep 30 & }"],
+    ["the unwaited one of several", "a & wait\nb &"],
+    ["a job in a nested shell string", "bash -c 'sleep 30 &'"],
+    ["a job in a heredoc fed to a shell", "bash <<EOF\nsleep 30 &\nEOF"],
+    ["a job in eval", `eval "sleep 30 &"`],
+    ["a job after &&", "cd /tmp && sleep 30 &"],
+  ])("denies %s", (_name, command) => {
+    const why = unwaitedJobs(command);
+    expect(why).toContain("run_in_background: true");
+    expect(why).toContain("drop the `&`");
+    expect(why).toContain("`a & b & wait`");
+    expect(why).toContain("systemd-run --user --unit=<name>");
+  });
+
+  test.each([
+    ["a & b & wait", "a & b & wait"],
+    ["& followed by a matching wait", "sleep 3 &\nwait"],
+    ["wait with a pid", "sleep 3 &\npid=$!\nwait $pid"],
+    ["wait inside the subshell", "(sleep 3 & wait)"],
+    ["wait after a brace group", "{ sleep 3 & }; wait"],
+    ["wait inside then", "sleep 3 & if true; then wait; fi"],
+    ["&&", "cd /tmp && ls && echo ok"],
+    ["&> redirect", "make &>/tmp/log"],
+    ["&>> redirect", "make &>>/tmp/log"],
+    [">&2", "echo oops >&2"],
+    ["2>&1", "make 2>&1 | tail -5"],
+    ["<&3", "cat <&3"],
+    ["|&", "make |& tail -5"],
+    ["& in single quotes", "echo 'a & b'"],
+    ["& in double quotes", `echo "a & b"`],
+    ["an escaped &", "echo a \\& b"],
+    ["& in a comment", "ls # run it & forget"],
+    ["& in a heredoc body", "cat <<EOF\nsleep 30 &\nEOF"],
+    ["& in a quoted-delimiter heredoc", "cat <<'EOF'\nsleep 30 &\nEOF"],
+    ["& in a tab-stripped heredoc", "cat <<-EOF\n\tsleep 30 &\n\tEOF"],
+    ["& in a parameter expansion", 'x=a; echo "${x//a/&}" ${x//a/&}'],
+    ["& in arithmetic", "echo $((3 & 1))"],
+    ["& in a string for another program", "ssh host 'sleep 30 &'"],
+    ["& in a nested string that waits", "bash -c 'a & b & wait'"],
+    ["no & at all", "ls -la"],
+  ])("allows %s", (_name, command) => {
+    expect(unwaitedJobs(command)).toBeUndefined();
+  });
+});
+
+describe("shell-level & as a hook", () => {
+  const INCIDENT =
+    "agent-dispatch resume run-123 --prompt-file /tmp/brief.md > /tmp/out.log 2>&1 &";
+
+  test("denies the incident command in a backgrounded call, naming the rule and the fixes", () => {
+    const out = decide({ command: INCIDENT, run_in_background: true });
+    expect(out).toContain('"permissionDecision":"deny"');
+    expect(out).toContain("background-waits:");
+    expect(out).toContain("drop the `&`");
+    expect(out).toContain("a & b & wait");
+    expect(out).toContain("systemd-run --user --unit=<name>");
+  });
+
+  test("allows `a & b & wait` in a backgrounded call", () => {
+    expect(decide({ command: "a & b & wait", run_in_background: true })).toBe(
+      "",
+    );
+  });
+
+  test("allows && and 2>&1 in a backgrounded call", () => {
+    expect(
+      decide({ command: "cd /tmp && ls 2>&1 | head", run_in_background: true }),
+    ).toBe("");
+  });
+
+  test("the rule is for backgrounded calls: a foreground & is left to the other rules", () => {
+    expect(decide({ command: "sleep 1 &" })).toBe("");
   });
 });

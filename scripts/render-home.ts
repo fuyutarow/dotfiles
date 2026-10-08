@@ -128,6 +128,88 @@ const json = (v: unknown): string => `${JSON.stringify(v, null, 2)}\n`;
 
 type Output = { dest: string; text: string; from: string };
 
+function firstToken(
+  command: string,
+): { token: string; rest: string } | undefined {
+  const match =
+    /^\s*(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^']*)'|(\S+))(?:\s+([\s\S]*))?$/u.exec(
+      command,
+    );
+  if (match === null) return undefined;
+  const token = (match[1] ?? match[2] ?? match[3] ?? "").replaceAll(
+    /\\([\\"'])/gu,
+    "$1",
+  );
+  return { token, rest: match[4] ?? "" };
+}
+
+function expandHome(path: string): string {
+  if (path === "~") return home;
+  if (path.startsWith("~/")) return `${home}/${path.slice(2)}`;
+  return path;
+}
+
+function missingTarget(command: string): string | undefined {
+  const first = firstToken(command);
+  if (first === undefined) return undefined;
+
+  // `bun script.ts` executes the script target, so validate that path rather than Bun itself.
+  const target =
+    first.token === "bun" ? firstToken(first.rest)?.token : first.token;
+  if (target === undefined) return undefined;
+  const expanded = expandHome(target);
+  const found = expanded.includes("/")
+    ? existsSync(expanded)
+    : Bun.which(expanded) !== null;
+  return found ? undefined : expanded;
+}
+
+function commandTargets(value: unknown): string[] {
+  const found: string[] = [];
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    const record = obj(node);
+    if (record === undefined) return;
+    if (record.type === "command" && typeof record.command === "string")
+      found.push(record.command);
+    for (const child of Object.values(record)) visit(child);
+  };
+  visit(value);
+  return found;
+}
+
+function validateCommandTargets(
+  settings: Record<string, unknown>,
+  codex: Record<string, unknown>,
+): void {
+  const statusLine = obj(settings.statusLine);
+  const commands: string[] = [];
+  if (typeof statusLine?.command === "string")
+    commands.push(statusLine.command);
+  commands.push(
+    ...commandTargets(settings.hooks),
+    ...commandTargets(codex.hooks),
+  );
+
+  for (const command of commands) {
+    const missing = missingTarget(command);
+    if (missing === undefined) continue;
+    let repair: string;
+    if (missing.startsWith(`${home}/.bun/bin/`)) {
+      repair = `run \`mise run deps\` first (it creates ${missing})`;
+    } else {
+      repair = `install or restore the executable at ${missing}`;
+    }
+    fatal(
+      `FATAL: command target is missing: ${JSON.stringify(command)} -> ${missing}`,
+      `  repair: ${repair}`,
+    );
+  }
+}
+
 // ── inputs ───────────────────────────────────────────────────────────────────────────────────
 const baseRead = await attempt(() => readJson(basePath));
 if (!baseRead.ok || baseRead.value instanceof Error) {
@@ -209,6 +291,8 @@ outputs.push({
   text: json(withHooks(codex.value, specs, "codex", codexPath)),
   from: `${codexPath} + agents/hooks/hooks.toml`,
 });
+
+validateCommandTargets(settings, codex.value);
 
 // ── ~/.claude/CLAUDE.md ──────────────────────────────────────────────────────────────────────
 const BEGIN = "<!-- roster:begin -->";

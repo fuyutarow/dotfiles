@@ -11,7 +11,7 @@ const soft = ["setup", "i", "fmt:staged", "l", "t", "u", "c"];
 // A colocated jj repo (a `.jj/` beside `.git/`) runs NO git hooks, so its commit gate and its
 // post-merge step exist only as these two verbs (wiring-repositories JJ-1). Hard there; not
 // checked in a git-only repo.
-const jj = ["commit", "pull"];
+const jj = ["commit", "pull", "push"];
 const unknownArrayOrEmpty = z.unknown().transform((value) => {
   const parsed = z.array(z.unknown()).safeParse(value);
   return parsed.success ? parsed.data : [];
@@ -418,9 +418,13 @@ function reportJjTokens(
       process.stdout.write(`WAIVE ${token} (mise.toml waiver)\n`);
       continue;
     }
+    let explanation = "the alpha bookmark has no guarded push entrypoint";
+    if (token === "commit") explanation = "every commit skips hook:pre-commit";
+    else if (token === "pull")
+      explanation = "a fetch never runs hook:post-merge";
     process.stdout.write(
       `FAIL  ${token} — unresolved in a jj repo: jj runs no git hooks, so without it ` +
-        `${token === "commit" ? "every commit skips hook:pre-commit" : "a fetch never runs hook:post-merge"} ` +
+        `${explanation} ` +
         `(template: templates/*.mise.toml [tasks.${token}])\n`,
     );
     failures += 1;

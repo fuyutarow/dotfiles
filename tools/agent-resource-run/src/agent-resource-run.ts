@@ -62,6 +62,9 @@ export type ResourcePolicy = {
   host_ram_safety_fraction: number;
   scratch_safety_bytes: number;
   gpu_safety_bytes: number;
+  gpu_vram_warmup_ms: number;
+  gpu_vram_warmup_threshold_bytes: number;
+  gpu_vram_cap_tolerance_fraction: number;
   gpu_idle_utilization_percent: number;
   gpu_idle_power_watts: number;
   gpu_max_concurrent_jobs: number;
@@ -97,6 +100,9 @@ const ResourcePolicySchema: z.ZodType<ResourcePolicy> = z.object({
   host_ram_safety_fraction: z.number(),
   scratch_safety_bytes: z.number(),
   gpu_safety_bytes: z.number(),
+  gpu_vram_warmup_ms: z.number(),
+  gpu_vram_warmup_threshold_bytes: z.number(),
+  gpu_vram_cap_tolerance_fraction: z.number(),
   gpu_idle_utilization_percent: z.number(),
   gpu_idle_power_watts: z.number(),
   gpu_max_concurrent_jobs: z.number(),
@@ -152,6 +158,24 @@ const POLICY_RULES: Record<string, PolicyRule> = {
     expected: "a positive integer (MiB)",
     valid: positiveInteger,
     scale: MiB,
+  },
+  gpu_vram_warmup_ms: {
+    field: "gpu_vram_warmup_ms",
+    expected: "a non-negative integer (ms)",
+    valid: nonNegativeInteger,
+    scale: 1,
+  },
+  gpu_vram_warmup_threshold_mib: {
+    field: "gpu_vram_warmup_threshold_bytes",
+    expected: "a non-negative integer (MiB)",
+    valid: nonNegativeInteger,
+    scale: MiB,
+  },
+  gpu_vram_cap_tolerance_fraction: {
+    field: "gpu_vram_cap_tolerance_fraction",
+    expected: "a fraction in [0, 1]",
+    valid: (value) => value >= 0 && value <= 1,
+    scale: 1,
   },
   gpu_idle_utilization_percent: {
     field: "gpu_idle_utilization_percent",
@@ -319,6 +343,36 @@ export function resourcePolicy(): Result<ResourcePolicy, UsageError> {
   return startupPolicy;
 }
 
+export function isVramWarming(
+  reservation: Reservation,
+  measuredBytes: number,
+  policy: ResourcePolicy,
+  nowMs = Temporal.Now.instant().epochMilliseconds,
+): boolean {
+  if (reservation.device.kind !== "gpu" || reservation.vram_warmed_up === true)
+    return false;
+  const startedAtMs = Temporal.Instant.from(
+    reservation.started_at,
+  ).epochMilliseconds;
+  const ageMs = nowMs - startedAtMs;
+  return (
+    (!Number.isFinite(startedAtMs) || ageMs < policy.gpu_vram_warmup_ms) &&
+    measuredBytes <= policy.gpu_vram_warmup_threshold_bytes
+  );
+}
+
+export function vramAdmissionCharge(
+  reservation: Reservation,
+  measuredBytes: number,
+  policy: ResourcePolicy,
+  nowMs = Temporal.Now.instant().epochMilliseconds,
+): number {
+  if (reservation.device.kind !== "gpu") return 0;
+  return isVramWarming(reservation, measuredBytes, policy, nowMs)
+    ? reservation.device.vram_peak_bytes
+    : measuredBytes;
+}
+
 type RunClass = "pilot" | "full" | "test" | "service";
 type CpuGpuStatus = "compatible" | "incompatible" | "not-beneficial";
 
@@ -385,6 +439,13 @@ export type Reservation = {
     | { kind: "cpu" }
     | { kind: "gpu"; gpu_id: number; vram_peak_bytes: number };
   started_at: string;
+  process_group_id?: number | undefined;
+  scope_unit?: string | undefined;
+  admission_basis?: "measured" | "declared-fallback" | undefined;
+  vram_measured_at_admission_bytes?: number | undefined;
+  vram_measured_bytes?: number | undefined;
+  vram_warming?: boolean | undefined;
+  vram_warmed_up?: boolean | undefined;
 };
 
 /**
@@ -414,6 +475,8 @@ export type AdmissionReceiptPayload = {
   scratch_bytes: number;
   device: Reservation["device"];
   started_at: string;
+  admission_basis?: "measured" | "declared-fallback" | undefined;
+  vram_measured_at_admission_bytes?: number | undefined;
 };
 
 export type AdmissionReceipt = {
@@ -445,8 +508,11 @@ export type ExecutionResult = {
     | "walltime"
     | "memory"
     | "processes"
+    | "vram-cap"
     | "interrupt"
     | "cleanup";
+  vram_peak_measured_bytes?: number;
+  vram_cap_bytes?: number;
 };
 
 export type KernelEnforcement =
@@ -471,6 +537,8 @@ type ExecuteOptions = {
   systemdScopeCleanup?: (scopeUnit: string) => boolean;
   /** Required for child execution so the receipt can name the exact admitted manifest bytes. */
   manifestSource?: ManifestSource;
+  /** Injected nvidia-smi query result for deterministic tests; production shells out to nvidia-smi. */
+  gpuComputeAppsOutput?: (jobPids?: number[]) => string | null;
 };
 
 type Lease = {
@@ -498,6 +566,11 @@ export type MeasuredPeak = {
   ram_peak_source: "cgroup" | "sampled";
   vram_peak_measured_bytes?: number;
   vram_peak_source?: "nvidia-smi";
+  admission_basis?: "measured" | "declared-fallback";
+  vram_measured_at_admission_bytes?: number;
+  vram_cap_bytes?: number;
+  vram_cap_exceeded?: boolean;
+  breach_reason?: "VRAM_CAP_EXCEEDED";
   released_at: string;
 };
 
@@ -1204,10 +1277,29 @@ function gpuLedger(
         : 0),
     0,
   );
-  const committed = Math.max(
-    reserved + standingPartitionBytes(gpu, policy),
-    gpu.used_bytes,
+  const allMeasured = held.every(
+    (reservation) => reservation.vram_measured_bytes !== undefined,
   );
+  const measured = held.reduce(
+    (sum, reservation) => sum + (reservation.vram_measured_bytes ?? 0),
+    0,
+  );
+  const warmingHeadroom = held.reduce((sum, reservation) => {
+    if (reservation.vram_warming !== true || reservation.device.kind !== "gpu")
+      return sum;
+    return (
+      sum +
+      Math.max(
+        0,
+        reservation.device.vram_peak_bytes -
+          (reservation.vram_measured_bytes ?? 0),
+      )
+    );
+  }, 0);
+  const committed = allMeasured
+    ? Math.max(gpu.used_bytes, measured, standingPartitionBytes(gpu, policy)) +
+      warmingHeadroom
+    : Math.max(reserved + standingPartitionBytes(gpu, policy), gpu.used_bytes);
   return {
     jobs: held.length,
     reserved_bytes: reserved,
@@ -1552,6 +1644,13 @@ const ReservationSchema: z.ZodType<Reservation> = z.object({
     }),
   ]),
   started_at: z.string(),
+  process_group_id: z.number().optional(),
+  scope_unit: z.string().optional(),
+  admission_basis: z.enum(["measured", "declared-fallback"]).optional(),
+  vram_measured_at_admission_bytes: z.number().optional(),
+  vram_measured_bytes: z.number().optional(),
+  vram_warming: z.boolean().optional(),
+  vram_warmed_up: z.boolean().optional(),
 });
 
 function reservationFrom(value: unknown): Reservation | null {
@@ -1596,7 +1695,9 @@ function liveReservations(
 async function acquireLease(
   manifest: ResourceManifest,
   snapshot: HostSnapshot,
+  policy: ResourcePolicy,
   requestedStateDirectory?: string,
+  gpuUsage: Map<number, number> | null = null,
 ): Promise<Result<Lease | AdmissionFailure, Error>> {
   const directoryResult = fromThrowable(() =>
     ensureStateDirectory(requestedStateDirectory ?? defaultStateDirectory()),
@@ -1609,15 +1710,49 @@ async function acquireLease(
     (): Result<Lease | AdmissionFailure, Error> => {
       const reservations = liveReservations(stateDirectory);
       if (reservations.isErr()) return err(reservations.error);
+      const measuredReservations = reservations.value.map((reservation) => {
+        if (reservation.device.kind !== "gpu" || gpuUsage === null)
+          return reservation;
+        let pids: number[] = [];
+        if (reservation.scope_unit !== undefined) {
+          pids = processIdsInScope(reservation.scope_unit);
+        } else if (reservation.process_group_id !== undefined) {
+          pids = processGroupUsage(reservation.process_group_id).pids;
+        }
+        const measured = pids.reduce(
+          (sum, pid) => sum + (gpuUsage.get(pid) ?? 0),
+          0,
+        );
+        const warming = isVramWarming(reservation, measured, policy);
+        const warmedUp = reservation.vram_warmed_up === true || !warming;
+        if (warmedUp && reservation.vram_warmed_up !== true) {
+          writeFileSync(
+            join(
+              stateDirectory,
+              `${reservation.reservation_id}.reservation.json`,
+            ),
+            `${JSON.stringify({ ...reservation, vram_warmed_up: true })}\n`,
+            { mode: 0o600 },
+          );
+        }
+        return Object.assign({}, reservation, {
+          vram_measured_bytes: measured,
+          vram_warming: warming,
+          vram_warmed_up: warmedUp,
+        });
+      });
       const admissionResult = decideAdmission(
         manifest,
         snapshot,
-        reservations.value,
+        measuredReservations,
+        policy,
       );
       if (admissionResult.isErr()) return err(admissionResult.error);
       const admission = admissionResult.value;
       if (!admission.ok) return ok(admission);
       const reservationId = `${process.pid}-${randomUUID()}`;
+      const measuredGpuId =
+        manifest.device.kind === "gpu" ? manifest.device.gpu_id : undefined;
       const reservation: Reservation = {
         schema: 1,
         reservation_id: reservationId,
@@ -1630,6 +1765,14 @@ async function acquireLease(
         started_at: Temporal.Now.instant().toString({
           fractionalSecondDigits: 3,
         }),
+        admission_basis: gpuUsage === null ? "declared-fallback" : "measured",
+        ...(measuredGpuId !== undefined
+          ? {
+              vram_measured_at_admission_bytes:
+                snapshot.gpus.find((gpu) => gpu.id === measuredGpuId)
+                  ?.used_bytes ?? 0,
+            }
+          : {}),
       };
       const reservationPath = join(
         stateDirectory,
@@ -1704,6 +1847,28 @@ function processGroupUsage(pgid: number): GroupUsage {
   return { processes, rssBytes, pids };
 }
 
+function processIdsInScope(scopeUnit: string): number[] {
+  const pids: number[] = [];
+  for (const entry of readdirSync("/proc")) {
+    if (!/^\d+$/u.test(entry)) continue;
+    const cgroup = fromThrowable(() =>
+      readFileSync(join("/proc", entry, "cgroup"), "utf8"),
+    )();
+    if (cgroup.isErr()) continue;
+    if (
+      cgroup.value
+        .split("\n")
+        .some(
+          (line) =>
+            line.split(":", 3)[2]?.split("/").includes(scopeUnit) === true,
+        )
+    ) {
+      pids.push(Number(entry));
+    }
+  }
+  return pids;
+}
+
 // One row of `nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits`:
 // a PID currently holding a CUDA context and its VRAM, across every GPU and every process on
 // the host (not scoped to our job — the caller cross-references against its own process
@@ -1730,17 +1895,38 @@ export function parseNvidiaSmiComputeAppRow(
   return { pid, usedBytes: usedMiB * MiB };
 }
 
+function computeAppsFromOutput(output: string): Map<number, number> | null {
+  const usage = new Map<number, number>();
+  const text = output.trim();
+  if (text === "") return usage;
+  const lines = text.split("\n");
+  for (const line of lines) {
+    const row = parseNvidiaSmiComputeAppRow(line);
+    if (row === null) return null;
+    usage.set(row.pid, row.usedBytes);
+  }
+  return usage;
+}
+
+function admissionGpuUsage(
+  options: ExecuteOptions,
+): Map<number, number> | null {
+  const gpuComputeAppsOutput = options.gpuComputeAppsOutput;
+  if (gpuComputeAppsOutput === undefined) return sampleGpuComputeApps();
+  const injected = gpuComputeAppsOutput([]);
+  return injected === null ? null : computeAppsFromOutput(injected);
+}
+
 // Always samples once; the once-a-second throttle lives at the one call site (executeJob's
 // onSample), via GPU_VRAM_SAMPLE_INTERVAL_MS — not in here.
-function sampleGpuComputeApps(): Map<number, number> {
-  const usage = new Map<number, number>();
+function sampleGpuComputeApps(): Map<number, number> | null {
   if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null) {
-    return usage;
+    return null;
   }
-  // bounded: GNU timeout caps this nvidia-smi probe at five seconds, same class as probeGpus().
   // no GPU / no driver / transient nvidia-smi failure -> this sample contributes nothing; the
   // running peak this job has already observed is unaffected.
   const spawned = fromThrowable(() =>
+    // bounded: GNU timeout caps this nvidia-smi probe at five seconds.
     Bun.spawnSync(
       [
         "timeout",
@@ -1752,16 +1938,8 @@ function sampleGpuComputeApps(): Map<number, number> {
       { stdout: "pipe", stderr: "ignore" },
     ),
   )();
-  if (spawned.isErr() || spawned.value.exitCode !== 0) return usage;
-  const rows = spawned.value.stdout
-    .toString()
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((row) => parseNvidiaSmiComputeAppRow(row))
-    .flatMap((row) => (row === null ? [] : [row]));
-  for (const row of rows) usage.set(row.pid, row.usedBytes);
-  return usage;
+  if (spawned.isErr() || spawned.value.exitCode !== 0) return null;
+  return computeAppsFromOutput(spawned.value.stdout.toString());
 }
 
 /**
@@ -1778,8 +1956,7 @@ function readScopeMemoryPeak(scopeUnit: string): number | undefined {
   if (Bun.which("systemctl") === null || Bun.which("timeout") === null) {
     return undefined;
   }
-  // bounded: GNU timeout caps this user-manager property query at five seconds, same class as
-  // every other boundedSystemctl call in this file.
+  // bounded: GNU timeout exits the property query after five seconds.
   const result = Bun.spawnSync(
     [
       "timeout",
@@ -1806,7 +1983,20 @@ function releaseDescription(peak: MeasuredPeak): string {
         `vram_peak_source=${peak.vram_peak_source}`;
   return (
     `RELEASE job=${peak.job_id} ram_peak_measured_bytes=${peak.ram_peak_measured_bytes} ` +
-    `ram_peak_source=${peak.ram_peak_source}${vram} released_at=${peak.released_at}`
+    `ram_peak_source=${peak.ram_peak_source}${vram}` +
+    (peak.admission_basis === undefined
+      ? ""
+      : ` admission_basis=${peak.admission_basis}`) +
+    (peak.vram_measured_at_admission_bytes === undefined
+      ? ""
+      : ` vram_measured_at_admission_bytes=${peak.vram_measured_at_admission_bytes}`) +
+    (peak.vram_cap_bytes === undefined
+      ? ""
+      : ` vram_cap_bytes=${peak.vram_cap_bytes}`) +
+    (peak.vram_cap_exceeded === true
+      ? " breach_reason=VRAM_CAP_EXCEEDED"
+      : "") +
+    ` released_at=${peak.released_at}`
   );
 }
 
@@ -1915,6 +2105,13 @@ export function createAdmissionReceipt(
     scratch_bytes: reservation.scratch_bytes,
     device: reservation.device,
     started_at: reservation.started_at,
+    ...(reservation.device.kind === "gpu"
+      ? {
+          admission_basis: reservation.admission_basis ?? "declared-fallback",
+          vram_measured_at_admission_bytes:
+            reservation.vram_measured_at_admission_bytes ?? 0,
+        }
+      : {}),
   };
   const canonicalPayload = JSON.stringify(payload);
   return {
@@ -1963,6 +2160,8 @@ const AdmissionReceiptPayloadSchema: z.ZodType<AdmissionReceiptPayload> = z
     scratch_bytes: safeIntIn(0),
     device: ReceiptDeviceSchema,
     started_at: textOf(64).refine(isCanonicalInstant),
+    admission_basis: z.enum(["measured", "declared-fallback"]).optional(),
+    vram_measured_at_admission_bytes: safeIntIn(0).optional(),
   })
   .refine(
     (receipt) =>
@@ -2186,6 +2385,10 @@ function admissionDescription(
     (enforcement.kind === "cgroup"
       ? "enforcement=systemd-cgroup+affinity+sampled-process-group"
       : `enforcement=affinity+sampled-process-group cgroup=none cgroup_reason=${JSON.stringify(enforcement.reason)}`) +
+    (lease.reservation.device.kind === "gpu"
+      ? ` admission_basis=${lease.reservation.admission_basis ?? "declared-fallback"}` +
+        ` vram_measured_at_admission_bytes=${lease.reservation.vram_measured_at_admission_bytes ?? 0}`
+      : "") +
     receiptFields
   );
 }
@@ -2216,15 +2419,25 @@ async function checkJobResult(
     return ok({ ok: false, exitCode: 69, reason: "admission" });
   }
   const cwd = resolve(options.cwd ?? process.cwd());
+  const loadedPolicy = resourcePolicy();
+  if (loadedPolicy.isErr()) return err(loadedPolicy.error);
   const probedSnapshot =
     options.snapshot === undefined
       ? probeHostSnapshot(cwd)
       : ok(options.snapshot);
   if (probedSnapshot.isErr()) return err(probedSnapshot.error);
+  const gpuUsage = admissionGpuUsage(options);
+  if (manifest.device.kind === "gpu" && gpuUsage === null) {
+    const warning = `WARN job=${manifest.job_id} VRAM measurement failed; using declared-sum admission (fail-closed basis)`;
+    process.stderr.write(`${warning}\n`);
+    report(warning);
+  }
   const acquired = await acquireLease(
     manifest,
     probedSnapshot.value,
+    loadedPolicy.value,
     options.stateDirectory,
+    gpuUsage,
   );
   if (acquired.isErr()) return err(acquired.error);
   if (!acquired.value.ok) {
@@ -2262,11 +2475,11 @@ async function monitorProcessGroup(
   exitedPromise: Promise<number>,
   intervalMs: number,
   isDone: () => boolean,
-  onSample?: (usage: GroupUsage) => void,
-): Promise<"memory" | "processes" | null> {
+  onSample?: (usage: GroupUsage) => "vram" | void,
+): Promise<"memory" | "processes" | "vram" | null> {
   while (!isDone()) {
     const usage = processGroupUsage(pgid);
-    onSample?.(usage);
+    if (onSample?.(usage) === "vram") return "vram";
     if (usage.rssBytes > manifest.host_ram_peak_bytes) return "memory";
     if (usage.processes > manifest.processes) return "processes";
     await Promise.race([exitedPromise, Bun.sleep(intervalMs)]);
@@ -2318,15 +2531,25 @@ async function executeJobResult(
     return ok({ ok: false, exitCode: 69, reason: "admission" });
   }
   const enforcement = resolved.value.enforcement;
+  const loadedPolicy = resourcePolicy();
+  if (loadedPolicy.isErr()) return err(loadedPolicy.error);
   const probedSnapshot =
     options.snapshot === undefined
       ? probeHostSnapshot(cwd)
       : ok(options.snapshot);
   if (probedSnapshot.isErr()) return err(probedSnapshot.error);
+  const gpuUsageAtAdmission = admissionGpuUsage(options);
+  if (manifest.device.kind === "gpu" && gpuUsageAtAdmission === null) {
+    const warning = `WARN job=${manifest.job_id} VRAM measurement failed; using declared-sum admission (fail-closed basis)`;
+    process.stderr.write(`${warning}\n`);
+    report(warning);
+  }
   const acquired = await acquireLease(
     manifest,
     probedSnapshot.value,
+    loadedPolicy.value,
     options.stateDirectory,
+    gpuUsageAtAdmission,
   );
   if (acquired.isErr()) return err(acquired.error);
   if (!acquired.value.ok) {
@@ -2356,21 +2579,47 @@ async function executeJobResult(
   // them after a breach return happens INSIDE that body, before cleanup ever runs.
   let peakRssBytes = 0;
   let peakVramBytes: number | undefined;
+  let vramCapExceededSamples = 0;
+  let vramCapExceeded = false;
   let lastGpuSampleAtMs = 0;
   let signalFailure: Error | undefined;
-  const onSample = (usage: GroupUsage): void => {
+  const onSample = (usage: GroupUsage): "vram" | void => {
     peakRssBytes = Math.max(peakRssBytes, usage.rssBytes);
     if (lease.reservation.device.kind !== "gpu") return;
     const now = performance.now();
     if (now - lastGpuSampleAtMs < policy.value.gpu_vram_sample_interval_ms)
       return;
     lastGpuSampleAtMs = now;
-    const gpuUsage = sampleGpuComputeApps();
-    const jobVramBytes = usage.pids.reduce(
+    const gpuComputeAppsOutput = options.gpuComputeAppsOutput;
+    let gpuUsage: Map<number, number> | null;
+    if (gpuComputeAppsOutput === undefined) {
+      gpuUsage = sampleGpuComputeApps();
+    } else {
+      const injectedOutput = gpuComputeAppsOutput(usage.pids);
+      gpuUsage =
+        injectedOutput === null ? null : computeAppsFromOutput(injectedOutput);
+    }
+    if (gpuUsage === null) return;
+    const jobPids =
+      scopeUnit === null ? usage.pids : processIdsInScope(scopeUnit);
+    const jobVramBytes = jobPids.reduce(
       (sum, pid) => sum + (gpuUsage.get(pid) ?? 0),
       0,
     );
     peakVramBytes = Math.max(peakVramBytes ?? 0, jobVramBytes);
+    const cap = lease.reservation.device.vram_peak_bytes;
+    if (
+      jobVramBytes >
+      cap * (1 + policy.value.gpu_vram_cap_tolerance_fraction)
+    ) {
+      vramCapExceededSamples += 1;
+      if (vramCapExceededSamples >= 2) {
+        vramCapExceeded = true;
+        return "vram";
+      }
+    } else {
+      vramCapExceededSamples = 0;
+    }
   };
   const onTimeout = (): void => {
     walltimeFired = true;
@@ -2415,9 +2664,7 @@ async function executeJobResult(
         scopeUnit = launch.scopeUnit;
         argv = launch.argv;
       }
-      // bounded: AbortSignal enforces manifest.walltime_seconds; the monitor additionally
-      // terminates the entire new session/process group for exact process-count breaches.
-      // systemd independently enforces CPU, RAM, zero job swap, and a coarse task ceiling.
+      // bounded: AbortSignal enforces manifest.walltime_seconds.
       return Bun.spawn(argv, {
         cwd,
         env: {
@@ -2445,6 +2692,13 @@ async function executeJobResult(
     const child = launched.value;
     const groupPid = child.pid;
     pgid = groupPid;
+    lease.reservation.process_group_id = groupPid;
+    if (scopeUnit !== null) lease.reservation.scope_unit = scopeUnit;
+    writeFileSync(
+      lease.reservationPath,
+      `${JSON.stringify(lease.reservation)}\n`,
+      { mode: 0o600 },
+    );
 
     let exited = false;
     let commandExitCode = 70;
@@ -2475,13 +2729,33 @@ async function executeJobResult(
       );
       if (terminated.isErr()) return err(terminated.error);
       await exitedPromise.catch(() => 70);
-      let reason: "walltime" | "interrupt" | "memory" | "processes" | undefined;
+      let reason:
+        | "walltime"
+        | "interrupt"
+        | "memory"
+        | "processes"
+        | "vram"
+        | undefined;
       if (walltimeFired) reason = "walltime";
       else if (interrupted) reason = "interrupt";
       else if (breach !== null) reason = breach;
       if (reason === undefined)
         return err(new StateError("monitor ended without a breach reason"));
       const exitCode = reason === "walltime" ? 124 : 137;
+      if (reason === "vram") {
+        const cap =
+          manifest.device.kind === "gpu" ? manifest.device.vram_peak_bytes : 0;
+        report(
+          `BREACH job=${manifest.job_id} reason=VRAM_CAP_EXCEEDED peak_bytes=${peakVramBytes ?? 0} cap_bytes=${cap}`,
+        );
+        return ok({
+          ok: false,
+          exitCode,
+          reason: "vram-cap",
+          vram_peak_measured_bytes: peakVramBytes ?? 0,
+          vram_cap_bytes: cap,
+        });
+      }
       report(`BREACH job=${manifest.job_id} reason=${reason}`);
       return ok({ ok: false, exitCode, reason });
     }
@@ -2526,6 +2800,12 @@ async function executeJobResult(
       // Read before scope teardown: MemoryPeak lives in the scope's cgroup.
       const cgroupPeakBytes =
         scopeUnit === null ? undefined : readScopeMemoryPeak(scopeUnit);
+      const vramCapExceededFields = vramCapExceeded
+        ? {
+            vram_cap_exceeded: true,
+            breach_reason: "VRAM_CAP_EXCEEDED" as const,
+          }
+        : {};
       const measuredPeak: MeasuredPeak = {
         schema: 1,
         job_id: manifest.job_id,
@@ -2537,6 +2817,16 @@ async function executeJobResult(
               vram_peak_measured_bytes: peakVramBytes,
               vram_peak_source: "nvidia-smi" as const,
             }),
+        ...(lease.reservation.device.kind === "gpu"
+          ? {
+              admission_basis:
+                lease.reservation.admission_basis ?? "declared-fallback",
+              vram_measured_at_admission_bytes:
+                lease.reservation.vram_measured_at_admission_bytes ?? 0,
+              vram_cap_bytes: lease.reservation.device.vram_peak_bytes,
+              ...vramCapExceededFields,
+            }
+          : {}),
         released_at: Temporal.Now.instant().toString({
           fractionalSecondDigits: 3,
         }),

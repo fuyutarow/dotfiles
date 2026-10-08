@@ -1,0 +1,13 @@
+{
+  "name": "@dotfiles/storage-headroom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "storage-headroom": "src/storage-headroom.ts"
+  },
+  "dependencies": {
+    "cleye": "2.6.0",
+    "neverthrow": "8.2.0"
+  }
+}

@@ -25,28 +25,33 @@ condition (2026-09-04, mistaken for live-dispatch harm twice in one evening). Ch
 `bun test tools/agent-resource-run/` ran around that time before assuming the kill came from a real
 dispatch — see that test's own comment for the incident history.
 
-Several declared GPU jobs may share one device: the controller aggregates the declared
-`vram_peak_bytes` of the live reservations on that GPU and admits against
-`total - max(declared, observed) - safety`, capped at `gpu_max_concurrent_jobs` concurrent jobs
-per device (see "Operator policy" below). The
-utilization gate screens unmanaged load only — it is skipped once a reservation is held there, so
+Several declared GPU jobs may share one device: the controller admits against measured device use
+plus declared headroom for jobs still warming up, plus the new job's declared cap, while retaining
+the configured device safety margin. It also caps at `gpu_max_concurrent_jobs` concurrent jobs per
+device (see "Operator policy" below). A reservation counts its declared VRAM during the first 30
+seconds, or until its per-process use exceeds 64 MiB; after that, admission uses measured use.
+`nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits` supplies per-PID
+use, joined to the job's scope PIDs or sampled process-group PIDs. If sampling fails or returns invalid output, the runner
+prints a warning to stderr and in `ADMIT`, and falls back to the prior declared-sum admission rule.
+The utilization gate screens unmanaged load only — it is skipped once a reservation is held there, so
 an admitted job cannot block the next admission with its own compute. Sharing is only sound
 because the budget is pushed into the job: a GPU reservation exports
 `JULIA_CUDA_HARD_MEMORY_LIMIT`, `JULIA_CUDA_SOFT_MEMORY_LIMIT`, and `AGENT_RESOURCE_VRAM_BYTES`.
-That ceiling is a runtime check, not a cgroup cap — CUDA.jl honours it before every allocation;
-other runtimes must honour `AGENT_RESOURCE_VRAM_BYTES` themselves. Scratch remains an admission
-reservation only. On WSL2 `nvidia-smi` reports no per-process VRAM (`--query-compute-apps` lists
-PIDs but its `used_memory` column reads literal `[N/A]`), so compliance cannot be audited after
-admission, and the measured `vram_peak_measured_bytes` below is simply absent there — not a bug
-in this runner, a WSL2 driver-passthrough limitation.
+The runner independently enforces the declared value as a per-job cap: two consecutive samples
+above 105% of the cap terminate the job's process group/scope with
+`reason=VRAM_CAP_EXCEEDED`. The five percent allowance absorbs allocator and driver reporting
+overhead; two samples avoid killing on one transient reading. Scratch remains an admission
+reservation only. On WSL2 `nvidia-smi` reports no per-process VRAM (`used_memory` is `[N/A]`), so
+the runner warns and uses declared-sum admission; its sampled cap enforcement is unavailable there.
 
 ## Operator policy: `resource-policy.toml`
 
 CONFIG vs MECHANISM, as in `agents/hooks/storage-headroom.toml`. Every operator-tunable threshold
 lives in `resource-policy.toml` next to the script, each with the reason for its value: the CPU,
 host-RAM, scratch, and VRAM safety headroom, the GPU idle rules (utilization and board power), the
-per-device GPU concurrency cap, the CUDA.jl soft-limit fraction, and the RSS/VRAM sampling
-intervals. `agent-resource-run.ts` keeps only implementation invariants (unit sizes, lock timing,
+per-device GPU concurrency cap, CUDA.jl soft-limit fraction, VRAM warm-up window/allocation
+threshold, cap tolerance, and RSS/VRAM sampling intervals. `agent-resource-run.ts` keeps only
+implementation invariants (unit sizes, lock timing,
 kernel task bounds). To change policy, edit the one key in the TOML — for example
 `gpu_max_concurrent_jobs = 8` — and update its comment with the measurement that justified it; no
 code edit, and the cap test derives its reservations from the loaded value.
@@ -58,7 +63,7 @@ refuses every admission with `USAGE:` exit 2, naming the file, the key, the bad 
 expected type. There is no fallback default: a silently wrong admission limit is worse than a
 refusal.
 
-## Measured peak, on release
+## Admission and measured peak, on release
 
 The manifest's `host_ram_peak_bytes`/`vram_peak_bytes` are what the job _declared_; a `RELEASE`
 line — printed once per run, whether the job passed or breached, right before the systemd scope
@@ -71,6 +76,9 @@ back to the highest `/proc` RSS the monitor sampled when cgroup accounting is un
 JSON to `<manifest path>.peak.json`, so a caller can read its own job's measured peak without
 capturing stdout at all; that file is overwritten per run, like every other piece of this
 runner's per-run state.
+GPU `ADMIT` and `RELEASE` lines and the peak JSON record `admission_basis` and
+`vram_measured_at_admission_bytes`; RELEASE also records `vram_cap_bytes` and, when enforcement
+terminates a job, `breach_reason=VRAM_CAP_EXCEEDED` with the observed peak.
 
 ## Machines without cgroup enforcement: the host opt-in
 

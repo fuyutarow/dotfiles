@@ -1,0 +1,14 @@
+{
+  "name": "@dotfiles/disk-reclaim",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "disk-reclaim": "src/reclaim.ts"
+  },
+  "dependencies": {
+    "cleye": "2.6.0",
+    "neverthrow": "8.2.0",
+    "zod": "4.6.5"
+  }
+}

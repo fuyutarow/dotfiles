@@ -275,6 +275,52 @@ function cccResultCount(stdout: string): number {
   return stdout.match(/^--- Result \d+ \(/gmu)?.length ?? 0;
 }
 
+async function daemonAvailability(project: string): Promise<string> {
+  const ccc = requireExecutable("ccc");
+  if (ccc.isErr()) return "ccc is not available on PATH";
+  const status = await fromAsyncThrowable(
+    () =>
+      runChildCaptured([ccc.value, "daemon", "status"], 2_000, false, project),
+    asError,
+  )();
+  if (status.isErr())
+    return `ccc daemon status could not be read: ${status.error.message}`;
+  if (status.value.exitCode !== 0)
+    return `ccc daemon status failed (exit ${status.value.exitCode}); the daemon is unavailable`;
+  const projectStatus = status.value.stdout
+    .split("\n")
+    .find((line) => line.startsWith(`${project} [`));
+  return projectStatus === undefined
+    ? "ccc daemon is available; this project has no listed index"
+    : `ccc daemon is available (${projectStatus.trim()})`;
+}
+
+async function writeNoIndexDiagnostic(
+  route: string,
+  project: string,
+  freshnessMessage: string,
+  json: boolean,
+): Promise<void> {
+  const daemon = await daemonAvailability(project);
+  process.stderr.write(
+    freshnessMessage +
+      `Cause: no current certified ccc index is recorded for this repo; ${daemon}.\n` +
+      `Repair: from this project root run 'ccc init' if it is not registered, then ` +
+      `'repo-retrieve index' to run ccc index and record the freshness watermark.\n` +
+      `Available now: lexical routes 'rr text', 'rr regex', and 'rr files' read the working tree.\n`,
+  );
+  if (json) {
+    process.stdout.write(
+      `${JSON.stringify({
+        status: "NO_INDEX",
+        verdict: "UNVERIFIED",
+        route,
+        project,
+      })}\n`,
+    );
+  }
+}
+
 // Same `| undefined` reasoning as SearchFlags above: this is always called with a SearchFlags
 // value (or a slice of one), whose optional fields are real present-with-undefined keys.
 function rgFlags(values: {
@@ -337,6 +383,7 @@ async function runCccSearch(
   refresh: boolean,
   cwd: string,
   explicitProject: boolean,
+  json: boolean,
 ): Promise<Result<number, Error>> {
   const project = findRegisteredProject(cwd);
   if (project === null || (explicitProject && project !== cwd)) {
@@ -352,7 +399,7 @@ async function runCccSearch(
   if (freshnessResult.isErr()) return err(freshnessResult.error);
   const freshness = freshnessResult.value;
   if (freshness.status === "stale") {
-    process.stderr.write(freshness.message);
+    await writeNoIndexDiagnostic(route, project, freshness.message, json);
     return ok(3);
   }
   // freshness.status === "fresh" here -- the branch above returns unconditionally. A watermark
@@ -456,6 +503,16 @@ async function runRg(
   timeoutMs: number,
   cwd: string,
 ): Promise<Result<number, Error>> {
+  if (
+    route !== "files" &&
+    paths.some((path) => isOutsideProjectPath(cwd, path))
+  ) {
+    return err(
+      new Error(
+        `${route} --path must stay inside selected project root ${cwd}`,
+      ),
+    );
+  }
   const rg = requireExecutable("rg");
   if (rg.isErr()) return err(rg.error);
   const flags = rgFlags(values);
@@ -486,9 +543,20 @@ async function runRg(
   if (exitCode === 0) {
     process.stdout.write(`RESULT: PASS route=${route} engine=rg\n`);
   } else if (exitCode === 1) {
-    process.stderr.write(lexicalMissLine(route, query));
+    process.stderr.write(
+      lexicalMissLine(route, query, paths, values.glob ?? [], cwd),
+    );
   }
   return ok(exitCode);
+}
+
+function isOutsideProjectPath(project: string, path: string): boolean {
+  const root = resolve(project);
+  const candidate = resolve(root, path);
+  const fromRoot = relative(root, candidate);
+  return (
+    fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)
+  );
 }
 
 async function runCccGrep(
@@ -575,14 +643,35 @@ async function runCccGrep(
  * ——実測: `--fixed-strings -U --multiline` の生の literal 文字列だけでは効かない
  * (2026-09-17 実測、rgFlags() のコメント参照)。
  */
-function lexicalMissLine(route: RgRoute, query: string | undefined): string {
+function lexicalMissLine(
+  route: RgRoute,
+  query: string | undefined,
+  paths: string[],
+  globs: string[],
+  cwd: string,
+): string {
   const head = `RESULT: NO_MATCH route=${route} engine=rg`;
+  const scope = `SCOPE: searched root=${cwd}; paths outside it were NOT searched.\n`;
+  const scopeInputs = [
+    ...paths,
+    ...globs,
+    ...(query === undefined ? [] : [query]),
+  ];
+  const scratchLooking = scopeInputs.some((value) =>
+    /[/\\]|(?:scratch|session|tmp|claude|concept[_-]\d)/iu.test(value),
+  );
+  const scratchHint = scratchLooking
+    ? `Outside this repo, also check the session scratchpad root /tmp/claude-<uid>/ and $TMPDIR. ` +
+      `From outside any registered ccc project, plain fd/rg with an explicit path there is allowed.\n`
+    : "";
   if (route === "files") {
-    return `${head}; glob に一致する path が無い(内容は見ていない)\n`;
+    return `${head}; glob に一致する path が無い(内容は見ていない)\n${scope}${scratchHint}`;
   }
   return (
     `${head}; **語彙で外しただけであって、不在の証明ではない。**` +
     `この repo の記録は同じ事柄を別の語で書く(日本語/英語、略号/正式名)。\n` +
+    scope +
+    scratchHint +
     `  不在を主張する前に: repo-retrieve battery --queries "<3本以上の言い換え>"` +
     (query === undefined
       ? ""
@@ -619,6 +708,7 @@ type SearchFlags = {
   count?: boolean | undefined;
   multiline?: boolean | undefined;
   multilineDotall?: boolean | undefined;
+  json?: boolean | undefined;
 };
 
 type RawSearchFlags = Omit<SearchFlags, "limit" | "timeoutMs" | "context"> & {
@@ -757,6 +847,7 @@ async function runRoute(
       values.refresh ?? false,
       cwd,
       values.project !== undefined,
+      values.json ?? false,
     );
   }
   if (rawRoute === "battery") {
@@ -776,6 +867,7 @@ async function runRoute(
       values.refresh ?? false,
       cwd,
       values.project !== undefined,
+      values.json ?? false,
     );
   }
   if (rawRoute === "structural") {
@@ -869,6 +961,7 @@ function routeCommand(route: Route) {
           limit: rawString,
           ...timeoutFlag(),
           refresh: Boolean,
+          json: Boolean,
         },
       },
       (parsed) => recordResult(runRouteCommand(route, parsed._, parsed.flags)),
@@ -963,6 +1056,17 @@ async function runDefinition(
         `definition requested, but ${cwd} is not inside a ccc-registered project`,
       ),
     );
+  }
+  const freshness = await checkIndexFreshness(project, "exists");
+  if (freshness.isErr()) return err(freshness.error);
+  if (freshness.value.status === "stale") {
+    await writeNoIndexDiagnostic(
+      "exists",
+      project,
+      freshness.value.message,
+      json,
+    );
+    return ok(3);
   }
   const answer = await findDefinitions(project, query, limit);
   if (answer.isErr()) return err(answer.error);

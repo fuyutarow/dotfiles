@@ -5,7 +5,7 @@
 // BG1 says a zero-dep tree that needs argv parsing must graduate first — zero-dep is never
 // permission to hand-parse process.argv. An env var needs no parser.
 //
-// A THIRD copy of the same cache-and-fetch logic already in statusline-command.ts's
+// A THIRD copy of the same cache-and-fetch logic already in tools/statusline/src/identity.ts's
 // agentName() and hooks/herdr-tab-name.ts's agentName() — deliberately not imported from
 // either: both are already shipped/tested and this file has a different call shape (one sync
 // input, no retry loop — /quote is a manual one-shot invocation, so paying the plain
@@ -22,7 +22,7 @@ const HOME = process.env.HOME ?? "";
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
 // 30s for both a hit and a miss — was 5min on a hit until 2026-09-02, when a stale hit right
 // after `/rename` (the exact moment someone is watching) turned out to matter more than the
-// rare extra `claude agents --json` call it now costs. See statusline-command.ts's agentName()
+// rare extra `claude agents --json` call it now costs. See tools/statusline/src/identity.ts's agentName()
 // for the fuller writeup — same cache file, same fix, kept in sync deliberately.
 const AGENT_NAME_TTL_MS = 30_000;
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH ?? "claude";

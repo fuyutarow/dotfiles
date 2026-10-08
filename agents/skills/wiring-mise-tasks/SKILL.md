@@ -20,7 +20,7 @@ description: >-
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2610.2.0 (2026-10-01) — notebook repos take the recipes §1 RULING NOTEBOOK-JULIA bodies.
+> **Version**: v2610.3.0 (2026-10-08) — J1 commit gates use immutable jj snapshots and explicit selected paths.
 > Owns the task graph, naming, template fragments and resolution gate.
 > Dated tool facts, provenance and rulings live in `references/recipes.md`.
 
@@ -59,20 +59,21 @@ skill now closes.
 |---|---|---|
 | `fmt` / `f` | HARD / HARD | format in place; >1 language → depends-only aggregate over `fmt:<lang>` |
 | `fmt:check` | HARD | non-mutating format verification (the CI form of fmt) |
-| `fmt:staged` | SOFT | format ONLY the staged files in place and re-stage exactly them; REFUSE a file that also has unstaged hunks. The commit-gate form of fmt; body = `scripts/fmt-staged.ts` (recipes §8) |
+| `fmt:staged` | SOFT | in jj mode, verify selected snapshot files in a temporary candidate copy and refuse files needing formatting; in Git migration mode, format staged files and re-stage exactly them, refusing partial hunks. Body = `scripts/fmt-staged.ts` (recipes §8) |
 | `lint` / `l` | HARD / SOFT | static analysis, report-only (fixes belong to fmt) |
 | `test` / `t` | HARD / SOFT | the test surface; blocked-with-pointer is legal (body may `exit 2` naming focused `test:*` — the TOKEN must still resolve) |
 | `up` / `u` | HARD / SOFT | dependency update — the lockfile-moving verb |
 | `check` / `c` | HARD / SOFT | ALL-GATES AGGREGATE: depends-only, never a body; CI = `mise run check` |
 | `setup` / `i` | SOFT / SOFT | instantiate deps/toolchain (Rust legitimately waives: cargo resolves at build) |
 
-**jj repos** (a `.jj/` beside `.git/`; the house default for a new repo) add two HARD verbs.
-jj runs no git hooks, so these are the only way the gate and post-merge step run:
+**jj repos** (a `.jj/`, with or without a colocated `.git/`) add three HARD verbs.
+jj runs no git hooks, so these provide the commit gate, post-merge step, and guarded bookmark push:
 
 | Token | Tier | Meaning |
 |---|---|---|
-| `commit` | HARD in a jj repo | stage exactly the named paths, run `hook:pre-commit`, `jj commit` them, move the bookmark (`BOOKMARK`, default `alpha`) to `@-`, `--push` pushes and checks the remote; then the `post-commit` shim. Body = `scripts/jj-commit.ts`, run, never copied |
+| `commit` | HARD in a jj repo | validate named paths, snapshot `@`, run `hook:pre-commit` with the J1 interface below, `jj commit` exactly those paths, move the bookmark (`BOOKMARK`, default `alpha`) to `@-`, `--push` pushes and checks the remote; then the `post-commit` shim. No Git binary or index is needed to commit. Body = `scripts/jj-commit.ts`, run, never copied |
 | `pull` | HARD in a jj repo | `jj git fetch`, then `jj rebase -b @ -d 'trunk()'`; a repo with `hook:post-merge` runs it last |
+| `push` | HARD in a jj repo | show `alpha@origin..alpha`, refuse divergence or conflicts, then `jj git push -b alpha`; `--dry-run` prints the list without pushing. Body = `scripts/jj-push.ts`, run, never copied |
 
 - **Resolution** = the token is a LOCAL task name or alias (`mise tasks ls --json`, source under
   the repo root — global `~/.config/mise` tasks do not count).
@@ -82,6 +83,46 @@ jj runs no git hooks, so these are the only way the gate and post-merge step run
 - **Waiver** = a visible hole: `# mise-contract: waive <token> -- <reason>` in mise.toml. Waiving
   a verb waives its standard alias (one decision per family). Silent absence is the failure mode;
   a waiver is a recorded decision.
+
+## J1 pre-commit interface — dotfiles, firedancer and polysearch
+
+Invoke `mise run commit -- -m '<message>' [--push] -- <repo-relative-path>...`.
+The wrapper snapshots the working copy before running `mise run --jobs 1 hook:pre-commit`.
+The hook receives:
+
+| Variable | Value |
+|---|---|
+| `PRECOMMIT_VCS` | `jj` |
+| `PRECOMMIT_PATHS_FILE` | Temporary file outside the checkout: UTF-8 paths separated and terminated by NUL. Explicit arguments after `--` are preserved exactly, including order, duplicates and directory paths. |
+| `PRECOMMIT_REV` | Full commit ID of the snapshotted `@`; immutable even if the worktree changes. |
+| `PRECOMMIT_BASE` | Full commit ID of `@-`; a single parent is required. |
+
+Consumers enumerate `jj diff --from "$PRECOMMIT_BASE" --to "$PRECOMMIT_REV" --name-only`,
+filter the result to the paths file, then read each file with
+`jj file show -r "$PRECOMMIT_REV" -- <path>`. Treat file arguments as literal jj filesets
+(`root-file:` plus a quoted string) when paths contain fileset metacharacters.
+Directory selections match their descendants; explicit filenames are literal, never globs.
+Deletions have no content at REV. Include both selected sides of a rename.
+For arbitrary filenames, the companion diff template `path ++ "\\0"` avoids newline ambiguity.
+Use `--ignore-working-copy` for consumer reads: the fixed revision is the authority.
+
+`scripts/jj-precommit.ts` implements context validation, enumeration and snapshot reads.
+Collection gates use BASE with selected REV paths overlaid (`jjCandidate`), so unrelated dirty
+skills and new files cannot enter the candidate. Read unchanged dependencies from BASE.
+In jj mode `fmt:staged` verifies a temporary candidate copy; if formatting would change selected
+bytes, it refuses and asks the caller to format and retry. Consumers must not rewrite the
+checked files. The wrapper also refuses selected-content or parent drift after a passing hook.
+
+A nonzero hook exit aborts without a commit, bookmark move or push. The paths file lives only
+through the hook and is removed on success or failure. `--records` appends resolved finished
+`research_record/` paths to any explicit selection; unfinished run directories stay excluded.
+After a passing gate, `jj commit` records the literal selection; other dirty paths remain in `@`.
+`--push` uses `jj git fetch` and `jj git push` with the existing fast-forward guard and remote
+receipt. The installed jj transport may itself require Git for remote operations.
+
+When `PRECOMMIT_VCS` is unset, a migrating consumer keeps its old Git-index/ tracked-file path.
+Mark each fallback `TODO(J1)` and remove it after firedancer and polysearch adopt this interface.
+Missing or malformed jj variables must fail closed; never silently use the Git fallback.
 
 ## The grammar
 
@@ -230,4 +271,6 @@ MUST NOT fire (route):
 | `scripts/mise-contract.ts` | the resolution gate — run, never read into context | after every mise.toml edit; per-repo in audits |
 | `scripts/fmt-staged.ts` | the `fmt:staged` body — run, never copied into a repo | wiring or debugging a commit gate |
 | `scripts/jj-commit.ts` | the `commit` body in a jj repo — run, never copied; `--help` lists flags | wiring or debugging a jj commit gate |
+| `scripts/jj-push.ts` | the guarded `push` body in a jj repo — run, never copied; `--help` lists flags | wiring or debugging jj bookmark pushes |
+| `scripts/jj-precommit.ts` | J1 consumer helpers for selected immutable snapshot bytes and candidate trees | migrating a pre-commit consumer to jj |
 | `tests/forge-verification-ledger.md` | F3 artifact: fleet findings, drift baseline 2026-07-17, provenance of this skill's own claims | reforging; auditing this skill |

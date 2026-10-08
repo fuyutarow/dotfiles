@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   existsSync,
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -8,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { attempt } from "../attempt.ts";
 import { z } from "../zod.ts";
 import { decisionOf, runHook } from "./helpers.ts";
 import { decoded } from "./decode.ts";
@@ -45,6 +48,32 @@ const bash = (command: string) => ({
   cwd: "/home/fuyu/dotfiles",
 });
 
+const GiB = 1024 ** 3;
+function cachedSpace(
+  home: string,
+  path: string,
+  free: number,
+  total: number,
+): void {
+  const dir = join(home, ".cache", "claude-hooks", "storage-headroom");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, `${createHash("sha1").update(path).digest("hex")}.statfs.json`),
+    JSON.stringify({
+      free,
+      total,
+      at: Temporal.Now.instant().epochMilliseconds,
+    }),
+  );
+}
+
+function cachedConfig(edit: (c: Doc) => void, free: number, total: number) {
+  const home = mkdtempSync(join(tmpdir(), "storage-cache-home-"));
+  cachedSpace(home, "/mnt/c", free, total);
+  cachedSpace(home, "/", free, total);
+  return { env: { ...config(edit), HOME: home }, home };
+}
+
 // Fixtures are CONFIG files, not env overrides: each preset is the real storage-headroom.toml
 // with a few numbers changed, written to a temp file the hook reads via STORAGE_HEADROOM_CONFIG.
 // A threshold no real drive can satisfy makes the gate go red deterministically; a zero
@@ -65,6 +94,7 @@ const Row = z.record(z.string(), Scalar);
 type Row = z.infer<typeof Row>;
 const Doc = z.object({
   schema: z.number(),
+  sparse_required_above_mb: z.number(),
   drive: z.record(z.string(), Row),
   deny: Row,
   launcher: z.array(Row),
@@ -85,7 +115,10 @@ const body = (row: Row): string[] =>
 
 // A minimal TOML writer for this schema (Bun parses TOML but does not emit it).
 function toToml(doc: Doc): string {
-  const out = [`schema = ${doc.schema}`];
+  const out = [
+    `schema = ${doc.schema}`,
+    `sparse_required_above_mb = ${doc.sparse_required_above_mb}`,
+  ];
   for (const [sub, t] of Object.entries(doc.drive))
     out.push(`[drive.${sub}]`, ...body(t));
   out.push("[deny]", ...body(doc.deny));
@@ -110,12 +143,43 @@ function config(edit: (c: Doc) => void): Record<string, string> {
   writeFileSync(path, toToml(c));
   return { STORAGE_HEADROOM_CONFIG: path };
 }
+
+function fakeCheckoutProbe(output: string): {
+  root: string;
+  env: Record<string, string>;
+} {
+  const root = mkdtempSync(join(tmpdir(), "jj-checkout-"));
+  mkdirSync(join(root, ".jj"));
+  const home = mkdtempSync(join(tmpdir(), "jj-checkout-home-"));
+  const bin = join(home, "bin");
+  mkdirSync(bin);
+  const calls = join(home, "du-calls");
+  const du = join(bin, "du");
+  writeFileSync(du, `#!/bin/sh\nprintf x >> '${calls}'\n${output}\n`);
+  chmodSync(du, 0o755);
+  return {
+    root,
+    env: {
+      ...config((c) => {
+        c.sparse_required_above_mb = 500;
+      }),
+      HOME: home,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      DU_CALLS: calls,
+    },
+  };
+}
+
+function workspaceAdd(root: string, command = "jj workspace add ../worker") {
+  return { ...bash(command), cwd: root };
+}
 // A line is min(GiB, pct% of the drive): to force a line at a size, the share must not undercut it,
 // so a non-zero size gets 100% and a zero size 0%.
 const pct = (gibLine: number): number => (gibLine > 0 ? 100 : 0);
 const drives = (host: number, guest: number, hostWarn: number) => (c: Doc) => {
   driveRow(c, "host").deny_gib = host;
   driveRow(c, "host").deny_pct = pct(host);
+  driveRow(c, "host").stop_gib = host > 0 ? host / 2 : 0;
   driveRow(c, "guest").deny_gib = guest;
   driveRow(c, "guest").deny_pct = pct(guest);
   driveRow(c, "host").warn_gib = hostWarn;
@@ -140,17 +204,17 @@ describe("enforce-storage-headroom", () => {
     expect(decisionOf(r.stdout)?.permissionDecision).not.toBe("deny");
   });
 
-  test("the deny reason names both halves of the line", () => {
+  test("the deny reason names the measured value and deny line", () => {
     const r = runHook(HOOK, bash("cargo build"), FULL);
-    expect(decisionOf(r.stdout)?.permissionDecisionReason).toMatch(
-      /the smaller of \d+ GiB and \d+% of the drive/u,
+    expect(decisionOf(r.stdout)?.permissionDecisionReason).toContain(
+      "deny line",
     );
   });
 
   test("warn_pct without warn_gib, and a share over 100, are config errors", () => {
     const r = runHook(
       HOOK,
-      bash("ls"),
+      bash("cp x y"),
       config((c) => {
         delete driveRow(c, "host").warn_gib;
         driveRow(c, "guest").deny_pct = 150;
@@ -183,7 +247,9 @@ describe("enforce-storage-headroom", () => {
       expect(r.code).toBe(0);
       const d = decisionOf(r.stdout);
       expect(d?.permissionDecision).toBe("deny");
-      expect(d?.permissionDecisionReason).toContain("storage-headroom");
+      expect(d?.permissionDecisionReason).toContain(
+        "free space: disk-reclaim plan",
+      );
       expect(d?.permissionDecisionReason).toMatch(
         /free \d+\.\d GiB|unmeasured/u,
       );
@@ -210,17 +276,26 @@ describe("enforce-storage-headroom", () => {
     },
   );
 
-  test("never blocks cleanup, reads, or git — even when full", () => {
+  test("allows only the cleanup and read-only allowlist when full", () => {
     for (const command of [
       "df -h / /mnt/c",
       "du -sh ~/.julia/compiled",
-      "rm -rf target",
-      "cargo clean",
-      "git status --short",
+      "dust -d 2 /",
       "mise run reclaim",
-      "mise run reclaim:builds",
-      "mise run doctor",
+      "m reclaim:builds",
+      "disk-reclaim",
+      "disk-reclaim plan --tier owner",
+      "disk-reclaim run --tier blind --yes",
+      "disk-reclaim delete /tmp/approved --yes",
+      "storage-headroom",
+      "storage-headroom --json",
       "ls -la",
+      "jj workspace forget x",
+      "jj abandon x",
+      "jj st",
+      "jj log",
+      "jj workspace list",
+      "rr text 'storage-headroom'",
     ]) {
       const r = runHook(HOOK, bash(command), FULL);
       expect(r.code).toBe(0);
@@ -228,13 +303,240 @@ describe("enforce-storage-headroom", () => {
     }
   });
 
-  test("STORAGE_ASSERT_OVERRIDE=1 in the command text bypasses, visibly", () => {
+  test("allows cargo clean only when cwd or manifest directory has Cargo.toml", () => {
+    const { root } = workspace();
+    const outside = mkdtempSync(join(tmpdir(), "not-cargo-"));
+    const { env } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    for (const command of [
+      "cargo clean",
+      "cargo clean -p a",
+      "cargo clean --package a",
+      `cargo clean --manifest-path ${join(root, "crates", "a", "Cargo.toml")}`,
+    ]) {
+      const cwd = command.includes("--manifest-path") ? outside : root;
+      expect(
+        decisionOf(runHook(HOOK, { ...bash(command), cwd }, env).stdout),
+      ).toBeNull();
+    }
+    for (const command of [
+      "cargo clean",
+      "cargo clean -p a",
+      "cargo clean --manifest-path missing/Cargo.toml",
+      "cargo clean --target-dir /tmp/target",
+    ]) {
+      const d = decisionOf(
+        runHook(HOOK, { ...bash(command), cwd: outside }, env).stdout,
+      );
+      expect(d?.permissionDecision).toBe("deny");
+    }
+  });
+
+  test("allows named agent-dispatch commands below the deny line", () => {
+    const { env } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    for (const subcommand of ["run", "resume", "grade", "ack", "stats"]) {
+      expect(
+        decisionOf(
+          runHook(HOOK, bash(`agent-dispatch ${subcommand}`), env).stdout,
+        ),
+      ).toBeNull();
+    }
+    expect(
+      decisionOf(runHook(HOOK, bash("agent-dispatch ask"), env).stdout)
+        ?.permissionDecision,
+    ).toBe("deny");
+    expect(
+      decisionOf(
+        runHook(HOOK, bash("agent-dispatch stats && cp x y"), env).stdout,
+      )?.permissionDecision,
+    ).toBe("deny");
+  });
+
+  test("jj workspace add help is allowed", () => {
+    const { root, env } = fakeCheckoutProbe("printf '600000\\t.\\n'");
+    const { env: lowDisk } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    const merged = { ...env, ...lowDisk };
+    for (const flag of ["--help", "-h"]) {
+      expect(
+        decisionOf(
+          runHook(HOOK, workspaceAdd(root, `jj workspace add ${flag}`), merged)
+            .stdout,
+        ),
+      ).toBeNull();
+    }
+  });
+
+  test("small full checkout add is allowed and its repo size is cached", () => {
+    const { root, env } = fakeCheckoutProbe("printf '100000\\t.\\n'");
+    for (let i = 0; i < 2; i++) {
+      expect(
+        decisionOf(runHook(HOOK, workspaceAdd(root), env).stdout),
+      ).toBeNull();
+    }
+    expect(readFileSync(env.DU_CALLS ?? "", "utf8")).toBe("x");
+  });
+
+  test("large full checkout add is denied with its measured size", () => {
+    const { root, env } = fakeCheckoutProbe("printf '600000\\t.\\n'");
+    const decision = decisionOf(runHook(HOOK, workspaceAdd(root), env).stdout);
+    expect(decision?.permissionDecision).toBe("deny");
+    expect(decision?.permissionDecisionReason).toContain(
+      "this repo is 614.4 MB (> 500 MB threshold)",
+    );
+    expect(decision?.permissionDecisionReason).toContain(
+      "jj workspace add --sparse-patterns empty <dir>",
+    );
+  });
+
+  test("unknown checkout size is denied", () => {
+    const { root, env } = fakeCheckoutProbe("sleep 1");
+    const decision = decisionOf(runHook(HOOK, workspaceAdd(root), env).stdout);
+    expect(decision?.permissionDecision).toBe("deny");
+    expect(decision?.permissionDecisionReason).toContain("size is unknown");
+  });
+
+  test("sparse jj workspace add follows the storage gate", () => {
+    const { env } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    const sparse = runHook(
+      HOOK,
+      bash("jj workspace add --sparse-patterns empty ../worker"),
+      EMPTY,
+    );
+    expect(decisionOf(sparse.stdout)).toBeNull();
+
+    const lowSparse = decisionOf(
+      runHook(
+        HOOK,
+        bash("jj workspace add --sparse-patterns empty ../worker"),
+        env,
+      ).stdout,
+    );
+    expect(lowSparse?.permissionDecision).toBe("deny");
+  });
+
+  test("denies every non-allowlisted tool call under the deny line", () => {
+    const { env } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    for (const payload of [
+      bash("cp -r source destination"),
+      {
+        tool_name: "Write",
+        tool_input: { file_path: "/tmp/file", content: "x" },
+      },
+      bash("ls && cp x y"),
+    ]) {
+      const d = decisionOf(runHook(HOOK, payload, env).stdout);
+      expect(d?.permissionDecision).toBe("deny");
+      expect(d?.permissionDecisionReason?.split("\n")[0]).toBe(
+        "free space: disk-reclaim plan, then disk-reclaim run --tier blind --yes",
+      );
+      expect(d?.permissionDecisionReason).toContain("deny line 10.0 GiB");
+      expect(d?.permissionDecisionReason).toContain("Allowlist:");
+    }
+    for (const command of [
+      "disk-reclaim delete /tmp/approved --yes",
+      "df -h",
+      "jj workspace forget x",
+    ]) {
+      expect(decisionOf(runHook(HOOK, bash(command), env).stdout)).toBeNull();
+    }
+  });
+
+  test("calls above warn pass silently, and between the lines carry a reclaim warning", () => {
+    const above = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      30 * GiB,
+      100 * GiB,
+    );
+    for (const payload of [
+      bash("cp x y"),
+      { tool_name: "Write", tool_input: {} },
+    ]) {
+      expect(decisionOf(runHook(HOOK, payload, above.env).stdout)).toBeNull();
+    }
+    const between = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      15 * GiB,
+      100 * GiB,
+    );
+    const d = decisionOf(runHook(HOOK, bash("cp x y"), between.env).stdout);
+    expect(d?.permissionDecision).toBeUndefined();
+    expect(d?.additionalContext).toContain("15.0 GiB");
+    expect(d?.additionalContext).toContain("disk-reclaim plan");
+    const launcher = decisionOf(
+      runHook(HOOK, bash("cargo build"), between.env).stdout,
+    );
+    expect(launcher?.permissionDecision).toBe("deny");
+  });
+
+  test("uses a fresh statfs cache entry", () => {
+    const { env } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    const d = decisionOf(runHook(HOOK, bash("cp x y"), env).stdout);
+    expect(d?.permissionDecision).toBe("deny");
+    expect(d?.permissionDecisionReason).toContain("5.0 GiB");
+  });
+
+  test("the first deny advice line points to disk-reclaim", async () => {
+    const parsed = await attempt(() =>
+      Bun.TOML.parse(readFileSync(REAL, "utf8")),
+    );
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      const parsedConfig = decoded(
+        z.object({ deny: z.object({ advice: z.string() }) }),
+        parsed.value,
+      );
+      expect(parsedConfig.deny.advice.split("\n")[0]).toContain(
+        "disk-reclaim run",
+      );
+    }
+  });
+
+  test("STORAGE_ASSERT_OVERRIDE does not bypass the universal deny line", () => {
     const r = runHook(
       HOOK,
       bash("STORAGE_ASSERT_OVERRIDE=1 cargo build"),
       FULL,
     );
-    expect(decisionOf(r.stdout)).toBeNull();
+    expect(decisionOf(r.stdout)?.permissionDecision).toBe("deny");
   });
 
   test("passes silently with headroom", () => {
@@ -245,13 +547,16 @@ describe("enforce-storage-headroom", () => {
   });
 
   test.skipIf(NO_WSL_HOST_DRIVE)(
-    "warns through additionalContext in the band below the warn line, without denying",
+    "warns non-launchers below the warn line and denies launchers",
     () => {
-      // stderr with exit 0 never reaches the model on PreToolUse; the warning must ride the JSON.
-      const r = runHook(HOOK, bash("julia probe.jl"), WARN_ONLY);
+      const r = runHook(HOOK, bash("cp x y"), WARN_ONLY);
       const d = decisionOf(r.stdout);
       expect(d?.permissionDecision).toBeUndefined();
       expect(d?.additionalContext).toContain("storage-headroom: WARNING");
+      expect(
+        decisionOf(runHook(HOOK, bash("julia probe.jl"), WARN_ONLY).stdout)
+          ?.permissionDecision,
+      ).toBe("deny");
     },
   );
 
@@ -373,19 +678,19 @@ describe("enforce-storage-headroom", () => {
   });
 
   describe("config", () => {
-    test("the committed storage-headroom.toml is valid (an invalid one denies every Bash call)", () => {
+    test("the committed storage-headroom.toml is valid", () => {
       const r = runHook(HOOK, bash("ls -la"), {});
       expect(r.code).toBe(0);
       expect(r.stdout).toBe("");
     });
 
-    test("an invalid config denies with EVERY error in one decision, and names the escape", () => {
+    test("an invalid config denies non-allowlisted calls with EVERY error in one decision", () => {
       const bad = config((c) => {
         driveRow(c, "host").deny_gib = "thirty"; // wrong type
         (c.launcher[0] ?? (expect(c.launcher[0]).toBeDefined(), {})).comand =
           "typo"; // unknown key
       });
-      const d = decisionOf(runHook(HOOK, bash("ls"), bad).stdout);
+      const d = decisionOf(runHook(HOOK, bash("cp x y"), bad).stdout);
       expect(d?.permissionDecision).toBe("deny");
       expect(d?.permissionDecisionReason).toContain(
         "drive.host.deny_gib: expected a non-negative number",
@@ -393,9 +698,7 @@ describe("enforce-storage-headroom", () => {
       expect(d?.permissionDecisionReason).toContain(
         "launcher[0]: unknown key 'comand'",
       );
-      expect(d?.permissionDecisionReason).toContain(
-        "STORAGE_ASSERT_OVERRIDE=1",
-      );
+      expect(d?.permissionDecisionReason).toContain("invalid");
     });
 
     test("omitting the Windows drive cannot silently disarm the gate", () => {
@@ -409,12 +712,21 @@ describe("enforce-storage-headroom", () => {
       expect(d?.permissionDecisionReason).toContain("drive.host: required");
     });
 
+    test("omitting deny.advice cannot silently disarm the gate", () => {
+      const bad = config((c) => {
+        delete c.deny.advice;
+      });
+      const d = decisionOf(runHook(HOOK, bash("cp x y"), bad).stdout);
+      expect(d?.permissionDecision).toBe("deny");
+      expect(d?.permissionDecisionReason).toContain("deny.advice");
+    });
+
     test("the emergency floor must remain below the launch-denial line", () => {
       const bad = config((c) => {
         driveRow(c, "host").deny_gib = 20;
         driveRow(c, "host").stop_gib = 30;
       });
-      const d = decisionOf(runHook(HOOK, bash("ls"), bad).stdout);
+      const d = decisionOf(runHook(HOOK, bash("cp x y"), bad).stdout);
       expect(d?.permissionDecision).toBe("deny");
       expect(d?.permissionDecisionReason).toContain(
         "drive.host.stop_gib: must be below deny_gib",
@@ -428,7 +740,7 @@ describe("enforce-storage-headroom", () => {
       );
       writeFileSync(path, "schema = = 1\n");
       const d = decisionOf(
-        runHook(HOOK, bash("ls"), { STORAGE_HEADROOM_CONFIG: path }).stdout,
+        runHook(HOOK, bash("cp x y"), { STORAGE_HEADROOM_CONFIG: path }).stdout,
       );
       expect(d?.permissionDecision).toBe("deny");
       expect(d?.permissionDecisionReason).toContain("is not valid TOML");
@@ -457,12 +769,47 @@ describe("enforce-storage-headroom", () => {
     });
   });
 
-  test("ignores non-Bash tools and empty commands", () => {
+  test("passes non-disk-writing tools below the deny line", () => {
+    const { env } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    for (const tool_name of [
+      "Read",
+      "Grep",
+      "Glob",
+      "SendMessage",
+      "ListAgents",
+      "AskUserQuestion",
+      "TaskStop",
+      "ToolSearch",
+      "mcp__example__read_resource",
+    ]) {
+      expect(
+        decisionOf(runHook(HOOK, { tool_name, tool_input: {} }, env).stdout),
+      ).toBeNull();
+    }
+  });
+
+  test("still gates disk-writing tools below the deny line", () => {
+    const { env } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    for (const tool_name of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
+      const d = decisionOf(
+        runHook(HOOK, { tool_name, tool_input: {} }, env).stdout,
+      );
+      expect(d?.permissionDecision).toBe("deny");
+    }
     expect(
-      decisionOf(
-        runHook(HOOK, { tool_name: "Edit", tool_input: {} }, FULL).stdout,
-      ),
-    ).toBeNull();
-    expect(decisionOf(runHook(HOOK, bash(""), FULL).stdout)).toBeNull();
+      decisionOf(runHook(HOOK, bash("cp x y"), env).stdout)?.permissionDecision,
+    ).toBe("deny");
   });
 });

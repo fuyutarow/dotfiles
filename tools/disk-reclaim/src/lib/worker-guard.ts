@@ -1,0 +1,28 @@
+import { homedir, tmpdir } from "node:os";
+import { isAbsolute, relative, resolve, sep } from "node:path";
+import {
+  AGENT_ROUTER_WORKER_ENV,
+  AGENT_ROUTER_WORKER_VALUE,
+} from "../../../shared/src/worker-env.ts";
+import { stateDir } from "../receipt.ts";
+
+const isWithin = (path: string, parent: string): boolean => {
+  const rel = relative(resolve(parent), resolve(path));
+  return (
+    rel === "" ||
+    (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+  );
+};
+
+const isSystemTmp = (path: string): boolean =>
+  [tmpdir(), "/tmp"].some((root) => isWithin(path, root));
+
+/** Return the refusal message when a worker's mutating command is not isolated. */
+export function workerMutationRefusal(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  if (env[AGENT_ROUTER_WORKER_ENV] !== AGENT_ROUTER_WORKER_VALUE) return null;
+  const home = env.HOME ?? homedir();
+  if (isSystemTmp(home) || isSystemTmp(stateDir(env))) return null;
+  return "agent-dispatch worker guard: mutating run and delete --yes commands require HOME or RECLAIM_STATE_DIR under the system tmp directory; run it from the owner's own shell, or set HOME to a tmp dir for tests";
+}

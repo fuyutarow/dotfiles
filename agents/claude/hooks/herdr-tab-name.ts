@@ -5,7 +5,7 @@
 // `herdr integration` update, per its own header comment.
 //
 // WRITES the shared cache file (~/.cache/claude/statusline-agent-names.json) that
-// ../statusline-command.ts's `agentName()` reads, warming it in the same format — but never
+// tools/statusline/src/identity.ts's `agentName()` reads, warming it in the same format — but never
 // reads it itself; see the note on agentName() below for why that asymmetry is the fix, not
 // an oversight.
 //
@@ -173,7 +173,7 @@ async function agentName(sid: string): Promise<string | undefined> {
   return undefined;
 }
 
-// Bonus, not required: statusline-command.ts re-reports $fullname on every render anyway
+// Bonus, not required: tools/statusline re-reports $fullname on every render anyway
 // (the same belt-and-suspenders reasoning as the tab rename above — see its own header
 // note), so a failure here just means the sidebar's full name fills in a render later
 // instead of immediately.

@@ -25,6 +25,24 @@
 // or a formatter failed or strayed · 2 usage or environment error.
 
 import { cli } from "cleye";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  jjCandidate,
+  jjChanged,
+  jjContent,
+  jjContext,
+  jjExport,
+  jjRead,
+  type JjPrecommit,
+} from "./jj-precommit.ts";
 
 type Tool = { exts: string[]; command: string; files: string[] };
 
@@ -56,6 +74,7 @@ async function git(
     stdout: "pipe",
     stderr: "pipe",
     env: process.env, // keeps GIT_INDEX_FILE: a commit may be using a temporary index
+    timeout: 120_000,
   });
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
@@ -100,6 +119,95 @@ function rejectPrototypeFlag(type: string, flag: string): void {
   }
 }
 
+async function checkSnapshot(
+  context: JjPrecommit,
+  tools: Tool[],
+  excludes: Bun.Glob[],
+): Promise<number> {
+  const candidate = jjCandidate(context);
+  const changed = jjChanged(context);
+  for (const path of changed) {
+    if (!candidate.has(path) || excludes.some((glob) => glob.match(path)))
+      continue;
+    const kind = jjRead(
+      [
+        "file",
+        "list",
+        "-r",
+        context.rev,
+        "-T",
+        "file_type",
+        "--",
+        `root-file:${JSON.stringify(path)}`,
+      ],
+      context.root,
+    ).toString();
+    if (kind !== "file") continue;
+    const ext = path.split(".").at(-1)?.toLowerCase() ?? "";
+    tools.find((tool) => tool.exts.includes(ext))?.files.push(path);
+  }
+  const targets = tools.flatMap((tool) => tool.files);
+  if (targets.length === 0) {
+    process.stdout.write(
+      "RESULT: fmt:staged — no selected snapshot file matches a --tool extension\n",
+    );
+    return 0;
+  }
+  const tmp = mkdtempSync(join(tmpdir(), "fmt-jj-"));
+  return Promise.try(async () => {
+    // Format a complete candidate copy, so formatters following module children are confined
+    // to the temporary tree. The checked revision and the user's working copy stay immutable.
+    jjExport(context, tmp, candidate);
+    if (existsSync(join(context.root, "node_modules")))
+      symlinkSync(
+        join(context.root, "node_modules"),
+        join(tmp, "node_modules"),
+      );
+    let failed = false;
+    for (const tool of tools) {
+      if (tool.files.length === 0) continue;
+      // bounded: the formatter has a 300s process timeout below the temporary trust environment.
+      const child = Bun.spawn(
+        ["sh", "-c", `${tool.command} "$@"`, "fmt-staged", ...tool.files],
+        {
+          cwd: tmp,
+          // The candidate copy comes from this already-trusted repository. Trust only this
+          // disposable path in the child; never persist a mise trust entry or change HOME.
+          env: {
+            ...process.env,
+            MISE_TRUSTED_CONFIG_PATHS: [
+              process.env.MISE_TRUSTED_CONFIG_PATHS,
+              tmp,
+            ]
+              .filter((path) => path !== undefined && path !== "")
+              .join(":"),
+          },
+          stdout: "inherit",
+          stderr: "inherit",
+          timeout: 300_000,
+        },
+      );
+      if ((await child.exited) !== 0) failed = true;
+    }
+    for (const path of targets) {
+      const same =
+        existsSync(join(tmp, path)) &&
+        readFileSync(join(tmp, path)).equals(jjContent(context, path));
+      if (same) continue;
+      failed = true;
+      process.stdout.write(
+        `REFUSE: ${path} needs formatting; run mise run fmt on it and retry the commit\n`,
+      );
+    }
+    process.stdout.write(
+      `RESULT: fmt:staged jj snapshot ${failed ? "refused" : "verified"} ${targets.length} selected file(s)\n`,
+    );
+    return failed ? 1 : 0;
+  }).finally(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+}
+
 async function main(): Promise<number> {
   const parsed = cli(
     {
@@ -139,6 +247,10 @@ async function main(): Promise<number> {
   }
   const excludes = parsed.flags.exclude.map((g) => new Bun.Glob(g));
 
+  const context = jjContext();
+  if (context !== undefined) return checkSnapshot(context, tools, excludes);
+
+  // J1 migration fallback; TODO(J1): remove after all consumers use the jj interface.
   const top = await git(process.cwd(), ["rev-parse", "--show-toplevel"]);
   if (top.code !== 0) {
     process.stderr.write("FATAL: not inside a git work tree\n");
@@ -213,6 +325,7 @@ async function main(): Promise<number> {
         cwd: root,
         stdout: "inherit",
         stderr: "inherit",
+        timeout: 300_000,
       },
     );
     const code = await child.exited;

@@ -1,5 +1,9 @@
 # Agent dispatch contract
 
+## Probabilistic row selection
+
+Jev returns a choice and per-row probabilities. The router first masks rows whose routes are unavailable, whose expected cost exceeds ticket `budget_usd`, or whose xhigh/max effort lacks a justifying ticket capability. It renormalizes remaining mass, then samples a row using `p_i^(1/T)`. Temperature defaults to roster `auto.pick_temperature` (currently 1.0), may be set by ticket `pick_temperature` or CLI `--pick-temperature` (0 ≤ T ≤ 5), and zero gives argmax. The seed defaults to a value derived from `run_id`; CLI `--pick-seed` overrides it. The run record and receipt keep `pick.choice` and add `mode`, `argmax_row`, `sampled_row`, `temperature`, `seed`, `masked_rows`, `sampled_probability`, and a fallback reason where applicable. Missing probabilities or zero remaining mass fall back to Jev's choice, or the roster default when Jev's choice is invalid. Resume preserves the original pick without resampling unless escalation asks Jev again. `--choice` remains refused.
+
 ## Worker display IDs
 
 `agent-dispatch run --name <name>` or ticket front matter `name = "<name>"` assigns the worker ID `agt_<name>`, name in [A-Za-z0-9_] (hyphens become underscores); the CLI value takes precedence. Names keep their typed case and must contain 1..16 ASCII letters, digits, `_` or `-`. A hyphenated name is normalized to underscores with one stderr note; other characters are refused with exit 2. Without either name, the dispatcher assigns `agt_` followed by four lowercase base36 characters. A live ID on this host cannot be reused; finished runs release it. Resume keeps the original display ID. `resume`, `result`, `grade` and `ack` accept the display ID, choosing the most recent run when finished history contains more than one match; hyphenated spelling resolves to the underscore ID.

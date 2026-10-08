@@ -11,6 +11,7 @@
 //   timeout_reason = "why this exceeds 1800 seconds" # required when timeout_s > 1800
 //   capabilities = ["long-tool-loop"]        # optional; handed to Jev as required capabilities
 //   budget_usd = 5.00                       # optional positive USD budget used to exclude over-budget rows
+//   pick_temperature = 1.0                  # optional sampling temperature (0 <= T <= 5)
 //   +++
 //   <the prose the worker receives>
 import { fromThrowable, z } from "../../shared/src/zod.ts";
@@ -77,6 +78,7 @@ const CommonTicket = {
     .max(360)
     .default(DEFAULT_FIRST_RETURN_S),
   budget_usd: z.number().positive().optional(),
+  pick_temperature: z.number().min(0).max(5).optional(),
   capabilities: z.array(z.string().min(1)).default([]),
   premises: z.array(premise).optional(),
   outcome: z.string().trim().min(1).optional(),

@@ -61,7 +61,7 @@ verified = "2026-07-25"
 slug = "claude-mythos-5"
 vendor = "anthropic"
 released = "2026-06-09"
-status = "limited"          # Project Glasswing, invitation only — not GA
+status = "limited" # Project Glasswing, invitation only — not GA
 source = "https://platform.claude.com/docs/en/about-claude/models/overview"
 verified = "2026-07-25"
 
@@ -147,7 +147,7 @@ slug = "gemini-3.1-flash-lite"
 vendor = "google"
 released = "2026-05-07"
 status = "stable"
-retires = "2027-05-07"      # shutdown announced at GA; replacement gemini-3.5-flash-lite
+retires = "2027-05-07" # shutdown announced at GA; replacement gemini-3.5-flash-lite
 source = "https://ai.google.dev/gemini-api/docs/deprecations"
 verified = "2026-07-25"
 
@@ -155,7 +155,7 @@ verified = "2026-07-25"
 slug = "gemini-3.1-pro-preview"
 vendor = "google"
 released = "2026-02-19"
-status = "preview"          # never reached GA; there is no non-preview gemini-3.1-pro id
+status = "preview" # never reached GA; there is no non-preview gemini-3.1-pro id
 # Reached through agy as `gemini-3.1-pro-high` / `-low`. Picked as the Google panel arm
 # on 2026-07-25 — two generations behind, and preview-only.
 source = "https://ai.google.dev/gemini-api/docs/models"
@@ -234,7 +234,7 @@ verified = "2026-07-25"
 [[model]]
 slug = "grok-4.3"
 vendor = "xai"
-released = "unknown"        # no vendor page states a date; deliberately NOT guessed
+released = "unknown" # no vendor page states a date; deliberately NOT guessed
 status = "unknown"
 source = "https://docs.x.ai"
 verified = "2026-07-25"

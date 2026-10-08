@@ -97,7 +97,7 @@ describe("dispatch roster", () => {
     expect(sentence).toContain(
       "when a codex and a claude row are comparable, pick codex",
     );
-    expect(sentence).toContain("--choice` is refused");
+    expect(sentence).toContain("--choice` stays refused");
     expect(sentence).toContain("the default `luna-high` runs");
     const policy = rosterPolicy(loaded.value);
     expect(policy).toContain("hard worker bound defaults to 600 seconds");

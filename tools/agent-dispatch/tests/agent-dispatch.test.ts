@@ -82,6 +82,18 @@ const server = Bun.serve({
     }
     // A brief saying PICK=<id> makes the fake Jev choose that row (a disabled or Claude row too).
     const choice = /PICK=([\w-]+)/u.exec(body)?.[1] ?? "luna-max";
+    const probabilityText = /PROBS=([A-Za-z0-9:.,-]+)/u.exec(body)?.[1];
+    const probabilities: Record<string, number> =
+      probabilityText === undefined
+        ? { [choice]: confidence }
+        : Object.fromEntries(
+            probabilityText.split(",").map((item): [string, number] => {
+              const separator = item.indexOf(":");
+              const row = item.slice(0, separator);
+              const probability = Number(item.slice(separator + 1));
+              return [row, probability];
+            }),
+          );
     return Response.json({
       model: "fake-jev",
       answers: {
@@ -89,7 +101,7 @@ const server = Bun.serve({
           type: "choice",
           choice,
           confidence,
-          probabilities: { [choice]: confidence },
+          ...(body.includes("NOPROBS") ? {} : { probabilities }),
         },
       },
       usage: { input_tokens: 10, output_tokens: 2 },
@@ -282,6 +294,14 @@ const Receipt = z.looseObject({
     source: z.string(),
     choice: z.string(),
     reason: z.string(),
+    mode: z.enum(["sample", "argmax", "fallback"]).optional(),
+    argmax_row: z.string().optional(),
+    sampled_row: z.string().optional(),
+    temperature: z.number().optional(),
+    seed: z.string().optional(),
+    masked_rows: z.array(z.unknown()).optional(),
+    sampled_probability: z.number().optional(),
+    pick_fallback_reason: z.string().optional(),
   }),
   worker: z.looseObject({ outcome: z.string() }),
 });
@@ -874,11 +894,12 @@ describe("agent-dispatch run", () => {
     ).toMatchObject({ worker: { outcome: "returned" }, return: record });
   });
 
-  test("auto: a confident Jev answer picks its row", async () => {
+  test("auto: a confident Jev answer with one nonzero row samples it", async () => {
+    const sampleBrief = brief("sample", "PICK=luna-high\n");
     const r = await router([
       "run",
       "--prompt-file",
-      b,
+      sampleBrief,
       "--cd",
       scratch,
       "--sandbox",
@@ -886,12 +907,20 @@ describe("agent-dispatch run", () => {
     ]);
     const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("jev");
-    expect(receipt.pick.choice).toBe("luna-max");
+    expect(receipt.pick.choice).toBe("luna-high");
+    expect(receipt.pick).toMatchObject({
+      mode: "sample",
+      argmax_row: "luna-high",
+      sampled_row: "luna-high",
+      temperature: 1,
+      sampled_probability: 1,
+    });
+    expect(typeof receipt.pick.seed).toBe("string");
+    expect(receipt.pick.masked_rows).toEqual([]);
   });
 
   test("auto: a low-confidence answer is still Jev's choice, its confidence recorded", async () => {
-    // Jev must name one row; its top choice is its decision however spread its probabilities are.
-    const low = brief("low", "LOWCONF something vague\n");
+    const low = brief("low", "LOWCONF NOPROBS something vague\n");
     const r = await router([
       "run",
       "--prompt-file",
@@ -904,7 +933,127 @@ describe("agent-dispatch run", () => {
     const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("jev");
     expect(receipt.pick.choice).toBe("luna-max");
-    expect(receipt.pick.reason).toContain("confidence 0.20");
+    expect(receipt.pick.mode).toBe("fallback");
+    expect(receipt.pick.pick_fallback_reason).toBe("no probabilities");
+    expect(receipt.pick.confidence).toBe(0.2);
+  });
+
+  test("auto: fake Jev distribution is recorded and zero temperature is argmax", async () => {
+    const target = brief(
+      "distribution-cold",
+      "PICK=luna-high PROBS=luna-high:0.75,luna-low:0.25\n",
+    );
+    const cold = await router([
+      "run",
+      "--prompt-file",
+      target,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+      "--pick-temperature",
+      "0",
+      "--pick-seed",
+      "cold-seed",
+    ]);
+    const coldPick = decodedJson(Receipt, cold.out.trim()).pick;
+    expect(coldPick.choice).toBe("luna-high");
+    expect(coldPick.mode).toBe("argmax");
+    expect(coldPick.temperature).toBe(0);
+    expect(coldPick.sampled_probability).toBe(1);
+
+    const ticket = brief(
+      "distribution-ticket-temperature",
+      ticketText(
+        "writes = []\nverify = []\npick_temperature = 0",
+        "PICK=luna-high PROBS=luna-high:0.75,luna-low:0.25\n",
+      ),
+    );
+    const ticketRun = await router([
+      ...runArgs(ticket, scratch, "read-only"),
+      "--pick-seed",
+      "ticket-seed",
+    ]);
+    const ticketPick = decodedJson(Receipt, ticketRun.out.trim()).pick;
+    expect(ticketPick.temperature).toBe(0);
+    expect(ticketPick.choice).toBe("luna-high");
+    expect(ticketPick.mode).toBe("argmax");
+
+    const repeated = async () => {
+      const r = await router([
+        "run",
+        "--prompt-file",
+        target,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+        "--pick-seed",
+        "repeatable-seed",
+      ]);
+      return decodedJson(Receipt, r.out.trim()).pick;
+    };
+    const [first, second] = await Promise.all([repeated(), repeated()]);
+    expect(first.choice).toBe(second.choice);
+    expect(first.mode).toBe("sample");
+    expect(first.seed).toBe("repeatable-seed");
+    expect(first.sampled_probability).toBe(
+      first.choice === "luna-high" ? 0.75 : 0.25,
+    );
+  });
+
+  test("auto: route masking renormalizes surviving Jev probability", async () => {
+    const target = brief(
+      "distribution-masked",
+      "PICK=sonnet-medium PROBS=luna-high:0.25,sonnet-medium:0.75\n",
+    );
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        target,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      {
+        AGENT_ROUTER_TEST_CODEX_ROUTE: "unavailable",
+        AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE,
+      },
+    );
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(Receipt, r.out.trim());
+    expect(receipt.pick.choice).toBe("sonnet-medium");
+    expect(receipt.pick.sampled_probability).toBe(1);
+    expect(receipt.pick.masked_rows).toContainEqual({
+      row: "luna-high",
+      reason: "route unavailable: injected sandbox denial",
+    });
+  });
+
+  test("auto: zero remaining mass falls back to Jev's named row with a reason", async () => {
+    const target = brief(
+      "distribution-zero",
+      "PICK=luna-high PROBS=luna-high:0\n",
+    );
+    const r = await router([
+      "run",
+      "--prompt-file",
+      target,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+    ]);
+    const receipt = decodedJson(Receipt, r.out.trim());
+    expect(receipt.pick.choice).toBe("luna-high");
+    expect(receipt.pick.mode).toBe("fallback");
+    expect(receipt.pick.pick_fallback_reason).toBe("zero mass after masking");
+    expect(receipt.pick.masked_rows).toContainEqual({
+      row: "luna-high",
+      reason: "probability is not positive",
+    });
   });
 
   test("auto: no key falls back to the default and names where it looked", async () => {
@@ -1000,7 +1149,7 @@ describe("agent-dispatch run", () => {
     ]);
     const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("default");
-    expect(receipt.pick.reason).toContain("not a roster row");
+    expect(receipt.pick.reason).toContain("is unavailable");
   });
 
   test("a claude row Jev picks runs run-claude with the roster's bounds and is logged like luna", async () => {
@@ -3989,7 +4138,17 @@ describe("agent-dispatch resume", () => {
     writeFileSync(join(projectDir, "sess-claude-0001.jsonl"), "{}\n");
     const claude = { AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE, HOME: home };
     const stopped = await router(
-      runArgs(brief("rs-claude", "PICK=sonnet-medium do it\n"), cwd),
+      [
+        ...runArgs(
+          brief(
+            "rs-claude",
+            "PICK=sonnet-medium PROBS=sonnet-medium:0.6,sonnet-high:0.4 do it\n",
+          ),
+          cwd,
+        ),
+        "--pick-seed",
+        "resume-seed",
+      ],
       { FAKE_CLAUDE_MODE: "timeout", ...claude },
     );
     expect(stopped.code).toBe(124);
@@ -3998,6 +4157,8 @@ describe("agent-dispatch resume", () => {
     const firstArgv = lastArgv("claude-argv.log");
     expect(firstArgv).toContain("--persist-session"); // router-dispatched sessions stay on disk
     expect(firstArgv).not.toContain("--resume");
+    const jevCallsBeforeResume = bodies.length;
+    const firstPick = runsOf(stopped.state)[0]?.pick;
     const r = await router(["resume", id], {
       AGENT_ROUTER_STATE_DIR: stopped.state,
       ...claude,
@@ -4011,8 +4172,13 @@ describe("agent-dispatch resume", () => {
     expect(after(argv, "--target")).toBe(cwd);
     expect(runsOf(stopped.state)[1]).toMatchObject({
       resumed_from: id,
-      pick: { source: "resume", choice: "sonnet-medium" },
+      pick: {
+        source: "resume",
+        choice: firstPick?.choice,
+        seed: "resume-seed",
+      },
     });
+    expect(bodies).toHaveLength(jevCallsBeforeResume);
   });
 
   test("claude without its persisted transcript is not advertised or resumed", async () => {

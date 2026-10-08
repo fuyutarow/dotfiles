@@ -26,6 +26,7 @@ default = "luna-high"
 max_task_chars = 6000
 timeout_ms = 20000
 no_egress = []
+pick_temperature = 1.0
 
 [auto.jev]
 api = "typesafe"

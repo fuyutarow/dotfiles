@@ -6,7 +6,7 @@
 //
 // CLI CONTRACT (designing-command-line-interfaces C0–C5)
 //   C1  agent-dispatch run  --prompt-file F --cd DIR --sandbox read-only|workspace-write
-//                     [--label TEXT]   (--choice is refused: Jev alone picks) [--timeout-s N]
+//                     [--label TEXT]   (--choice is refused: router samples Jev probabilities) [--timeout-s N]
 //       agent-dispatch pick --prompt-file F [--cd DIR]     the auto pick only; starts nothing
 //       agent-dispatch ask  --request F|-                  a typed question to Jev; its answer, never acted on
 //       agent-dispatch ls                                  running workers (stale ones flagged)
@@ -40,8 +40,8 @@
 //   C4  outcomes exit = the worker's (0 ok, 1 failed, 3 timeout); 2 refused/usage before any start.
 //   AUTO PICK  Jev answers one Choice question over every roster row, codex and claude (criteria =
 //              use_for, measured AA/TB4/SciCode, cost multiple, graded record; roster.ts criterionFor).
-//              Jev's choice is used as made; on any Jev failure, a choice outside the roster, or a cwd under no_egress, the
-//              roster default runs and the reason is recorded — never a silent substitute.
+//              The router masks unavailable, over-budget and unjustified xhigh/max rows, then samples
+//              Jev probabilities at the recorded temperature and seed; unusable answers fall back.
 //   C5  evolution  receipt and log records carry `schema`; fields are additive.
 // Test seams: AGENT_ROUTER_STATE_DIR, DISPATCH_ROSTER_PATH, AGENT_ROUTER_CODEX_WORKER (a fake agent-dispatch).
 import {
@@ -55,7 +55,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { randomInt } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { cli, command } from "cleye";
@@ -72,6 +72,7 @@ import {
   type Roster,
 } from "../../../agents/models/roster.ts";
 import { admitCodexWorker, codexWorkerLimit } from "./admission.ts";
+import { sampleRow } from "./selection.ts";
 import {
   currentHost,
   probeRoutes,
@@ -504,6 +505,14 @@ const JevAnswer = z.looseObject({
 export interface Pick {
   source: "explicit" | "jev" | "default" | "resume";
   choice: string;
+  mode?: "sample" | "argmax" | "fallback";
+  argmax_row?: string;
+  sampled_row?: string;
+  temperature?: number;
+  seed?: string;
+  masked_rows?: { row: string; reason: string }[];
+  sampled_probability?: number;
+  pick_fallback_reason?: string;
   reason: string;
   confidence?: number;
   probabilities?: Record<string, number>;
@@ -828,12 +837,22 @@ async function askJev(
   firstReturnS: number,
   budgetUsd: number | undefined,
   criteria: Record<string, string>,
-  throughputLines?: string[],
+  throughputLines: string[] | undefined,
+  temperature: number,
+  seed: string,
 ): Promise<Pick> {
   const fallback = (reason: string, jev?: JevTrace): Pick => ({
     source: "default",
     choice: roster.default,
     reason,
+    mode: "fallback",
+    argmax_row: roster.default,
+    sampled_row: roster.default,
+    temperature,
+    seed,
+    masked_rows: [],
+    sampled_probability: 0,
+    pick_fallback_reason: reason,
     ...(jev === undefined ? {} : { jev }),
   });
   const reply = await askJevChoice(
@@ -851,7 +870,12 @@ async function askJev(
     "worker",
   );
   if (!reply.ok) return fallback(reply.reason, reply.trace);
-  return judge(roster, reply.answer, reply.trace, fallback);
+  return judge(roster, reply.answer, reply.trace, {
+    temperature,
+    seed,
+    budgetUsd,
+    capabilities,
+  });
 }
 
 function judge(
@@ -862,24 +886,133 @@ function judge(
     confidence?: number | undefined;
   },
   trace: JevTrace,
-  fallback: (reason: string, jev?: JevTrace) => Pick,
+  options: {
+    temperature: number;
+    seed: string;
+    budgetUsd?: number | undefined;
+    capabilities: string[];
+  },
 ): Pick {
-  // Jev's pick stands as made: it chose ONE row from the brief and the table (jevRequest), and its
-  // top choice is its decision however its probability mass was spread (owner 2026-10-06: 「迷ったって
-  // どういう意味？…一つに決めないといけないのだから」 — a hand-set confidence floor overrode that
-  // decision with the cheapest row). Its confidence and probabilities are logged so graded runs can
-  // later show how low-confidence picks fare. The default runs only when there is no usable answer:
-  // Jev unreachable (askJevChoice) or a choice outside the roster.
-  const row = roster.choice.find((c) => c.id === answer.choice);
-  if (row === undefined)
-    return fallback(`jev chose '${answer.choice}', not a roster row`, trace);
+  const maskedRows: { row: string; reason: string }[] = [];
+  const mass = new Map<string, number>();
+  const priced = roster.choice.flatMap((c) =>
+    c.price_in === undefined || c.price_out === undefined
+      ? []
+      : [c.price_in + c.price_out],
+  );
+  const cheapest = priced.length === 0 ? undefined : Math.min(...priced);
+  for (const [id, probability] of Object.entries(answer.probabilities ?? {})) {
+    const candidate = roster.choice.find((c) => c.id === id);
+    let reason: string | undefined;
+    if (candidate === undefined)
+      reason = "unavailable route or not a roster row";
+    else if (!Number.isFinite(probability) || probability <= 0)
+      reason = "probability is not positive";
+    else if (
+      candidate.route === "codex" &&
+      process.env.AGENT_ROUTER_TEST_CODEX_ROUTE === "unavailable"
+    )
+      reason = "route unavailable";
+    else if (
+      candidate.route === "claude" &&
+      process.env.AGENT_ROUTER_TEST_CLAUDE_ROUTE === "unavailable"
+    )
+      reason = "route unavailable";
+    else if (
+      options.budgetUsd !== undefined &&
+      cheapest !== undefined &&
+      candidate.price_in !== undefined &&
+      candidate.price_out !== undefined &&
+      ((candidate.price_in + candidate.price_out) / cheapest) * 0.01 >
+        options.budgetUsd
+    )
+      reason = "exceeds ticket budget";
+    else if (
+      candidate !== undefined &&
+      ["xhigh", "max"].includes(candidate.effort) &&
+      options.capabilities.length === 0
+    )
+      reason = "xhigh/max lacks a justifying capability";
+    if (reason !== undefined) maskedRows.push({ row: id, reason });
+    else if (candidate !== undefined) mass.set(id, probability);
+  }
+  const totalMass = [...mass.values()].reduce((sum, p) => sum + p, 0);
+  if (answer.probabilities === undefined || totalMass === 0) {
+    const why =
+      answer.probabilities === undefined
+        ? "no probabilities"
+        : "zero mass after masking";
+    const row = roster.choice.find((c) => c.id === answer.choice);
+    const fallbackRow = row?.id ?? roster.default;
+    const invalidChoiceReason =
+      row === undefined
+        ? `; Jev choice '${answer.choice}' is unavailable, using default`
+        : "";
+    return {
+      source: row === undefined ? "default" : "jev",
+      choice: fallbackRow,
+      reason: `fallback to ${row === undefined ? "default" : "Jev choice"}: ${why}${invalidChoiceReason}`,
+      mode: "fallback",
+      argmax_row: fallbackRow,
+      sampled_row: fallbackRow,
+      temperature: options.temperature,
+      seed: options.seed,
+      masked_rows: maskedRows,
+      sampled_probability: answer.probabilities?.[fallbackRow] ?? 0,
+      pick_fallback_reason: `${why}${invalidChoiceReason}`,
+      ...(answer.confidence === undefined
+        ? {}
+        : { confidence: answer.confidence }),
+      ...(answer.probabilities === undefined
+        ? {}
+        : { probabilities: answer.probabilities }),
+      jev: trace,
+    };
+  }
+  const sample = sampleRow(
+    Object.fromEntries(mass),
+    options.temperature,
+    options.seed,
+  );
+  if (sample === undefined) {
+    const row = roster.choice.find(
+      (candidate) => candidate.id === answer.choice,
+    );
+    const fallbackRow = row?.id ?? roster.default;
+    const reason = "zero mass after masking";
+    return {
+      source: row === undefined ? "default" : "jev",
+      choice: fallbackRow,
+      reason: `fallback to ${row === undefined ? "default" : "Jev choice"}: ${reason}`,
+      mode: "fallback",
+      argmax_row: fallbackRow,
+      sampled_row: fallbackRow,
+      temperature: options.temperature,
+      seed: options.seed,
+      masked_rows: maskedRows,
+      sampled_probability: 0,
+      pick_fallback_reason: reason,
+      ...(answer.confidence === undefined
+        ? {}
+        : { confidence: answer.confidence }),
+      ...(answer.probabilities === undefined
+        ? {}
+        : { probabilities: answer.probabilities }),
+      jev: trace,
+    };
+  }
+  const sampledProbability = sample.probability;
   return {
     source: "jev",
-    choice: row.id,
-    reason:
-      answer.confidence === undefined
-        ? "jev's choice (no confidence reported)"
-        : `jev's choice (confidence ${answer.confidence.toFixed(2)})`,
+    choice: sample.row,
+    mode: sample.mode,
+    argmax_row: sample.argmaxRow,
+    sampled_row: sample.row,
+    temperature: options.temperature,
+    seed: options.seed,
+    masked_rows: maskedRows,
+    sampled_probability: sampledProbability,
+    reason: `${sample.row} (sampled p=${sampledProbability.toFixed(2)} from jev; argmax ${sample.argmaxRow})`,
     ...(answer.confidence === undefined
       ? {}
       : { confidence: answer.confidence }),
@@ -897,6 +1030,8 @@ async function pickFor(
   capabilities: string[] = [],
   firstReturnS = 360,
   budgetUsd?: number,
+  temperatureOverride?: number,
+  seedOverride?: string,
 ): Promise<Pick> {
   const routes = hostRoutes();
   const available = availableRoster(roster, routes);
@@ -906,6 +1041,19 @@ async function pickFor(
       source: "default",
       choice: available.roster.default,
       reason: `cwd is under no_egress '${blocked}'; the brief stays on this machine`,
+      mode: "fallback",
+      argmax_row: available.roster.default,
+      sampled_row: available.roster.default,
+      temperature: temperatureOverride ?? roster.auto.pick_temperature,
+      seed:
+        seedOverride ??
+        createHash("sha256")
+          .update(`${process.env.AGENT_ROUTER_RUN_ID ?? "pick"}:${brief}`)
+          .digest("hex")
+          .slice(0, 16),
+      masked_rows: [],
+      sampled_probability: 0,
+      pick_fallback_reason: "cwd under no_egress",
       ...(Object.keys(available.unavailable).length === 0
         ? {}
         : { routes_unavailable: available.unavailable }),
@@ -925,6 +1073,12 @@ async function pickFor(
     budgetUsd,
     routing.criteria,
     routing.throughputLines,
+    temperatureOverride ?? roster.auto.pick_temperature,
+    seedOverride ??
+      createHash("sha256")
+        .update(`${process.env.AGENT_ROUTER_RUN_ID ?? "pick"}:${brief}`)
+        .digest("hex")
+        .slice(0, 16),
   );
   if (routing.failure !== undefined)
     dispatchError(
@@ -942,6 +1096,23 @@ async function pickFor(
       : {};
   return {
     ...pick,
+    ...(Object.keys(available.unavailable).length === 0
+      ? {}
+      : { routes_unavailable: available.unavailable }),
+    ...(pick.masked_rows === undefined
+      ? {}
+      : {
+          masked_rows: pick.masked_rows.map((masked) => {
+            const row = roster.choice.find(
+              (choice) => choice.id === masked.row,
+            );
+            if (row === undefined) return masked;
+            const routeReason = available.unavailable[row.route];
+            if (routeReason === undefined) return masked;
+            masked.reason = `route unavailable: ${routeReason}`;
+            return masked;
+          }),
+        }),
     ...(routing.failure === undefined
       ? {}
       : { selection_record_unavailable: routing.failure }),
@@ -1070,6 +1241,9 @@ interface RunFlags {
   timeoutReason: string | undefined;
   noGrader: boolean;
   legacyBrief: string | undefined;
+  pickTemperature?: number | undefined;
+  pickSeed?: string | undefined;
+  runId?: string;
 }
 
 function refuseUnrunnable(roster: Roster, id: string): Choice {
@@ -1719,6 +1893,12 @@ async function run(flags: RunFlags): Promise<number> {
     ticket?.capabilities,
     ticket?.first_return_s,
     ticket?.budget_usd,
+    flags.pickTemperature ?? ticket?.pick_temperature,
+    flags.pickSeed ??
+      createHash("sha256")
+        .update(flags.runId ?? `${now().replaceAll(":", "-")}-${process.pid}`)
+        .digest("hex")
+        .slice(0, 16),
   );
   const floorGrade = floorTicketGrade(
     brief,
@@ -1980,11 +2160,14 @@ async function launch(l: Launch): Promise<number> {
     });
     if (!admitted.ok) fatal(admitted.reason);
   }
-  const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
+  const runId = flags.runId ?? `${now().replaceAll(":", "-")}-${process.pid}`;
   // the full text, ticket included, kept by its hash: the run record's brief.sha256 is the key
   storeBrief(sha256(brief), brief);
   dispatchError(
-    `agent-dispatch: ${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
+    pick.source !== "resume" &&
+      (pick.mode === "sample" || pick.mode === "argmax")
+      ? `${row.id} (sampled p=${(pick.sampled_probability ?? 0).toFixed(2)} from jev; argmax ${pick.argmax_row ?? pick.choice})`
+      : `${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
   );
 
   const active: Active = {
@@ -2893,6 +3076,16 @@ const LogLine = z.looseObject({
   pick: z.looseObject({
     source: z.string(),
     choice: z.string(),
+    mode: z.enum(["sample", "argmax", "fallback"]).optional(),
+    argmax_row: z.string().optional(),
+    sampled_row: z.string().optional(),
+    temperature: z.number().optional(),
+    seed: z.string().optional(),
+    masked_rows: z
+      .array(z.looseObject({ row: z.string(), reason: z.string() }))
+      .optional(),
+    sampled_probability: z.number().optional(),
+    pick_fallback_reason: z.string().optional(),
     confidence: z.number().optional(),
     jev: z
       .looseObject({ latency_ms: z.number(), response: z.unknown().optional() })
@@ -3841,6 +4034,26 @@ async function resumeCommand(
     pick: {
       source: "resume",
       choice: row.id,
+      ...(logged.pick.mode === undefined ? {} : { mode: logged.pick.mode }),
+      ...(logged.pick.argmax_row === undefined
+        ? {}
+        : { argmax_row: logged.pick.argmax_row }),
+      ...(logged.pick.sampled_row === undefined
+        ? {}
+        : { sampled_row: logged.pick.sampled_row }),
+      ...(logged.pick.temperature === undefined
+        ? {}
+        : { temperature: logged.pick.temperature }),
+      ...(logged.pick.seed === undefined ? {} : { seed: logged.pick.seed }),
+      ...(logged.pick.masked_rows === undefined
+        ? {}
+        : { masked_rows: logged.pick.masked_rows }),
+      ...(logged.pick.sampled_probability === undefined
+        ? {}
+        : { sampled_probability: logged.pick.sampled_probability }),
+      ...(logged.pick.pick_fallback_reason === undefined
+        ? {}
+        : { pick_fallback_reason: logged.pick.pick_fallback_reason }),
       reason: `continuing session ${session} of ${runId}`,
     },
     label: `resume: ${briefLabel(parsed.prose)}`,
@@ -3922,8 +4135,18 @@ const argv = cli({
           description:
             "one-release reason to run a plain/schema 1 brief with floor violations",
         },
+        pickTemperature: {
+          type: Number,
+          description: "sampling temperature (0 < T <= 5; near zero is argmax)",
+        },
+        pickSeed: {
+          type: String,
+          description: "seed for reproducible row sampling",
+        },
       },
-      help: { description: "Jev picks a row; run the worker" },
+      help: {
+        description: "Sample a row from Jev probabilities; run the worker",
+      },
     }),
     command({
       name: "pick",
@@ -4149,6 +4372,11 @@ async function main(): Promise<number | undefined> {
       fatal("a value is required");
     const timeoutS = f.timeoutS;
     if (
+      f.pickTemperature !== undefined &&
+      (!(f.pickTemperature >= 0) || f.pickTemperature > 5)
+    )
+      fatal("--pick-temperature must be from 0 through 5");
+    if (
       timeoutS !== undefined &&
       (!Number.isInteger(timeoutS) || timeoutS < 60 || timeoutS > MAX_TIMEOUT_S)
     )
@@ -4188,6 +4416,9 @@ async function main(): Promise<number | undefined> {
       timeoutReason: f.timeoutReason,
       noGrader: f.noGrader ?? false,
       legacyBrief: f.legacyBrief,
+      pickTemperature: f.pickTemperature,
+      pickSeed: f.pickSeed,
+      runId: `${now().replaceAll(":", "-")}-${process.pid}`,
     });
   }
   if (argv.command === "pick") {

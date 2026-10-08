@@ -542,8 +542,9 @@ const JevAnswer = z.looseObject({
 });
 
 export interface Pick {
-  source: "explicit" | "jev" | "default" | "resume";
+  source: "explicit" | "jev" | "default" | "resume" | "override";
   choice: string;
+  approval?: string;
   mode?: "sample" | "argmax" | "fallback";
   argmax_row?: string;
   sampled_row?: string;
@@ -1430,6 +1431,8 @@ interface RunFlags {
   cd: string;
   sandbox: string;
   choice: string;
+  row: string | undefined;
+  approval: string | undefined;
   label: string | undefined;
   name: string | undefined;
   timeoutS: number | undefined;
@@ -1650,6 +1653,8 @@ async function gradeWithWorker(
       cd: cwd,
       sandbox: "read-only",
       choice: "auto",
+      row: undefined,
+      approval: undefined,
       label: "ticket grader",
       name: undefined,
       timeoutS: GRADER_TIMEOUT_S,
@@ -2033,11 +2038,17 @@ async function run(flags: RunFlags): Promise<number> {
   if (!existsSync(flags.promptFile))
     fatal(`no such brief: ${flags.promptFile}`);
   if (!existsSync(flags.cd)) fatal(`no such --cd directory: ${flags.cd}`);
+  const overrideRow =
+    flags.row === undefined ? undefined : refuseUnrunnable(roster, flags.row);
+  if (overrideRow !== undefined && (flags.approval ?? "").trim() === "")
+    fatal("--row requires a non-empty --approval");
+  if (overrideRow === undefined && flags.approval !== undefined)
+    fatal("--approval requires --row <id>");
   // Owner 2026-10-06 「jev routingに一元化しろ、何度目だ」: the coordinator kept naming rows itself.
   // A wrong pick is fixed where Jev reads, the brief or the row use_for, never by overriding Jev.
-  if (flags.choice !== "auto")
+  if (flags.choice !== "auto" && overrideRow === undefined)
     fatal(
-      `--choice ${flags.choice} refused: Jev alone picks the row. If Jev picks wrong, say more in the brief (scope, files, risk) or fix that row use_for in agents/models/dispatch-roster.toml`,
+      `--choice ${flags.choice} refused: Jev alone picks the row. If Jev picks wrong, say more in the brief (scope, files, risk) or fix that row use_for in agents/models/dispatch-roster.toml; for an owner-approved override, use --row <id> --approval "<owner approval>"`,
     );
   const brief = readFileSync(flags.promptFile, "utf8");
   const parsed = parseTicket(brief);
@@ -2081,22 +2092,32 @@ async function run(flags: RunFlags): Promise<number> {
   }
   if (ticket === undefined || ticket.verify.length === 0)
     warnOverUngraded(resolve(flags.cd));
-  const pick = await pickFor(
-    roster,
-    parsed.prose,
-    flags.cd,
-    ticket?.capabilities,
-    ticket?.first_return_s,
-    ticket?.budget_usd,
-    flags.pickTemperature ?? ticket?.pick_temperature,
-    flags.pickSeed ??
-      createHash("sha256")
-        .update(flags.runId ?? `${now().replaceAll(":", "-")}-${process.pid}`)
-        .digest("hex")
-        .slice(0, 16),
-    ticket?.name ?? flags.name,
-    ticket?.writes?.length ?? 0,
-  );
+  const pick: Pick =
+    overrideRow === undefined
+      ? await pickFor(
+          roster,
+          parsed.prose,
+          flags.cd,
+          ticket?.capabilities,
+          ticket?.first_return_s,
+          ticket?.budget_usd,
+          flags.pickTemperature ?? ticket?.pick_temperature,
+          flags.pickSeed ??
+            createHash("sha256")
+              .update(
+                flags.runId ?? `${now().replaceAll(":", "-")}-${process.pid}`,
+              )
+              .digest("hex")
+              .slice(0, 16),
+          ticket?.name ?? flags.name,
+          ticket?.writes?.length ?? 0,
+        )
+      : {
+          source: "override",
+          choice: overrideRow.id,
+          approval: flags.approval ?? "",
+          reason: "owner-approved row override",
+        };
   const floorGrade = floorTicketGrade(
     brief,
     parsed,
@@ -4284,6 +4305,8 @@ async function resumeCommand(
       cd: cwd,
       sandbox,
       choice: "auto",
+      row: undefined,
+      approval: undefined,
       label: undefined,
       name: undefined,
       timeoutS,
@@ -4374,6 +4397,14 @@ const argv = cli({
           default: "auto",
           description:
             "refused unless auto: Jev alone picks the row (kept so the refusal can say why)",
+        },
+        row: {
+          type: String,
+          description: "owner-approved roster row override",
+        },
+        approval: {
+          type: String,
+          description: "non-empty owner approval for --row",
         },
         label: {
           type: String,
@@ -4690,6 +4721,8 @@ async function main(): Promise<number | undefined> {
       cd: f.cd,
       sandbox: f.sandbox,
       choice: f.choice,
+      row: f.row,
+      approval: f.approval,
       label: f.label,
       name: f.name,
       timeoutS,

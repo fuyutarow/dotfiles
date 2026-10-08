@@ -358,6 +358,96 @@ const RunIdSchema = z.looseObject({ run_id: z.string() });
 describe("agent-dispatch run", () => {
   const b = brief("task", "Fix the flaky test in scripts/tests.\n");
 
+  test("--row runs the named roster row without a Jev call and records approval", async () => {
+    const before = bodies.length;
+    const target = brief("approved-row", "Run the approved task.\n");
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        target,
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+        "--row",
+        "luna-max",
+        "--approval",
+        "owner approved this row",
+      ],
+      { AGENT_ROUTER_STATE_DIR: join(scratch, "approved-row-state") },
+    );
+    expect(r.code, r.err).toBe(0);
+    expect(bodies).toHaveLength(before);
+    const logged = decodedJson(
+      z.looseObject({
+        pick: z.looseObject({
+          source: z.string(),
+          choice: z.string(),
+          approval: z.string(),
+        }),
+      }),
+      readFileSync(join(r.state, "runs.jsonl"), "utf8").trim().split("\n")[0] ??
+        "",
+    );
+    expect(logged.pick).toEqual({
+      source: "override",
+      choice: "luna-max",
+      approval: "owner approved this row",
+      reason: "owner-approved row override",
+    });
+  });
+
+  test("--row requires an approval", async () => {
+    const r = await router([
+      "run",
+      "--prompt-file",
+      b,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+      "--row",
+      "luna-max",
+    ]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("--row requires a non-empty --approval");
+  });
+
+  test("--row rejects an unknown roster id", async () => {
+    const r = await router([
+      "run",
+      "--prompt-file",
+      b,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+      "--row",
+      "unknown-row",
+      "--approval",
+      "approved",
+    ]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("'unknown-row' is not a roster row");
+  });
+
+  test("--choice refusal points to the approved --row override", async () => {
+    const r = await router([
+      "run",
+      "--prompt-file",
+      b,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+      "--choice",
+      "luna-max",
+    ]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain('--row <id> --approval "<owner approval>"');
+  });
+
   test("filters unavailable codex rows and records the claude fallback default", async () => {
     const state = join(scratch, "routes-codex-unavailable");
     const target = brief("routes-codex-unavailable", "HTTP500\n");

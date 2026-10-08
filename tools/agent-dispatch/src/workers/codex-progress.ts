@@ -68,6 +68,98 @@ const ErrorEvent = z.union([
 const messageOf = (e: z.output<typeof ErrorEvent>): string =>
   e.type === "error" ? e.message : e.error.message;
 
+const ToolItem = z.looseObject({
+  type: z.string(),
+  name: z.string().optional(),
+  tool: z.string().optional(),
+  tool_name: z.string().optional(),
+  command: z.string().optional(),
+  status: z.string().optional(),
+  error: z.unknown().optional(),
+  message: z.string().optional(),
+  output: z.unknown().optional(),
+  aggregated_output: z.unknown().optional(),
+  result: z.unknown().optional(),
+});
+const ToolEvent = z.looseObject({
+  type: z.string(),
+  item: ToolItem.optional(),
+});
+
+type ToolResult =
+  | { kind: "error"; tool: string; text: string }
+  | { kind: "success" };
+
+const scalarText = (value: unknown): string | undefined => {
+  if (typeof value === "string") return value;
+  if (typeof value !== "object" || value === null) return undefined;
+  const parsed = z
+    .looseObject({ message: z.string().optional() })
+    .safeParse(value);
+  return parsed.success ? parsed.data.message : undefined;
+};
+
+/** A tool result, if this JSONL event reports a completed or failed tool call. */
+function toolResult(line: string): ToolResult | undefined {
+  const parsed = jsonOf(ToolEvent).safeParse(line);
+  if (!parsed.success || parsed.data.item === undefined) return undefined;
+  const { type, item } = parsed.data;
+  const toolItem = /tool|command_execution/u.test(item.type);
+  if (!toolItem) return undefined;
+  const tool = item.name ?? item.tool_name ?? item.tool ?? item.type;
+  const failed =
+    type === "item.failed" ||
+    item.status === "failed" ||
+    item.status === "error" ||
+    item.error !== undefined;
+  const error = failed
+    ? (scalarText(item.error) ??
+      item.message ??
+      scalarText(item.output) ??
+      scalarText(item.aggregated_output) ??
+      scalarText(item.result))
+    : undefined;
+  if (error !== undefined && error.trim() !== "")
+    return {
+      kind: "error",
+      tool,
+      text: error.trim().replaceAll(/\s+/gu, " "),
+    };
+  if (
+    type === "item.completed" &&
+    item.status !== "failed" &&
+    item.status !== "error"
+  )
+    return { kind: "success" };
+  return undefined;
+}
+
+/** Stop after identical consecutive tool errors; any successful tool call or different error resets the streak. */
+export function toolErrorStreak(
+  limit: number,
+): (line: string) => string | null {
+  let previous: { tool: string; text: string } | undefined;
+  let count = 0;
+  return (line) => {
+    const result = toolResult(line);
+    if (result === undefined) return null;
+    if (result.kind === "success") {
+      previous = undefined;
+      count = 0;
+      return null;
+    }
+    if (previous?.tool === result.tool && previous.text === result.text) {
+      count++;
+    } else {
+      previous = { tool: result.tool, text: result.text };
+      count = 1;
+    }
+    return count >= limit
+      ? `stopped: ${count} identical consecutive tool errors: ${result.text}`
+      : null;
+  };
+}
+
 /** The message of the LAST error event in codex's stdout, or undefined when it printed none. */
 export function lastError(events: string): string | undefined {
   return events

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 — 2026-10-08
+
+- Add Codex guidance for safe `apply_patch` calls and stop workers after five identical consecutive tool errors, preserving a resumable partial report.
+
 ## 1.2.0 — 2026-10-08
 
 - Add ticket and CLI worker wall-clock bounds up to 14400 seconds, with effective bound and source recorded per run.

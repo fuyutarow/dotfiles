@@ -721,6 +721,69 @@ describe("agent-dispatch run", () => {
     );
   });
 
+  test("five identical Codex tool errors stop early and retain a named harness partial report", async () => {
+    const dir = join(scratch, "real-codex-spin");
+    mkdirSync(dir, { recursive: true });
+    const codex = join(dir, "codex");
+    const argvLog = join(dir, "argv.log");
+    writeFileSync(
+      codex,
+      `#!/bin/sh
+printf '%s\\n' "$@" > "${argvLog}"
+echo '{"type":"thread.started","thread_id":"thread-spin-test"}'
+i=0
+while [ "$i" -lt 5 ]; do
+  echo '{"type":"item.completed","item":{"type":"tool_call","name":"apply_patch","status":"failed","error":"apply_patch verification failed: invalid patch: multiple operations target <same file>"}}'
+  i=$((i + 1))
+done
+sleep 30
+`,
+    );
+    chmodSync(codex, 0o755);
+    const t0 = performance.now();
+    const r = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("real-codex-spin", "PICK=luna-high Keep working.\\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      {
+        AGENT_ROUTER_CODEX_WORKER: join(
+          import.meta.dir,
+          "../src/workers/codex.ts",
+        ),
+        AGENT_DISPATCH_CODEX_BIN: codex,
+        AGENT_DISPATCH_CODEX_HOST_FILE: join(dir, "no-host.toml"),
+        TMPDIR: dir,
+      },
+    );
+    expect(performance.now() - t0).toBeLessThan(10_000);
+    expect(r.code).toBe(3);
+    const receipt = decodedJson(
+      z.looseObject({
+        worker: z.looseObject({ outcome: z.string(), cause: z.string() }),
+        report_partial: z.looseObject({ cause: z.string() }),
+        resume_with: z.string(),
+      }),
+      r.out.trim(),
+    );
+    const cause =
+      "stopped: 5 identical consecutive tool errors: apply_patch verification failed: invalid patch: multiple operations target <same file>";
+    expect(receipt.worker.outcome).toBe("timeout");
+    expect(receipt.worker.cause).toBe(cause);
+    expect(receipt.report_partial.cause).toBe(cause);
+    expect(receipt.resume_with).toContain("agent-dispatch resume ");
+    const codexArgs = readFileSync(argvLog, "utf8");
+    expect(codexArgs).toContain(
+      "For apply_patch, use at most one operation per file in a call",
+    );
+    expect(codexArgs).toContain("After a tool error, change approach");
+  }, 20_000);
+
   test("a bad --sandbox is refused", async () => {
     const r = await router([
       "run",
@@ -2871,7 +2934,7 @@ describe("agent-dispatch: the typed final report", () => {
     );
     expect(r.code).toBe(0);
     const prompts = readFileSync(join(scratch, "prompt.log"), "utf8");
-    const mine = prompts.slice(prompts.lastIndexOf("<<<Do the work."));
+    const mine = prompts.slice(prompts.lastIndexOf("Do the work."));
     expect(mine.indexOf("true")).toBeGreaterThan(-1);
     expect(mine.indexOf(instruction)).toBeGreaterThan(mine.indexOf("true"));
     // a legacy brief (no ticket) gets it too
@@ -2889,7 +2952,7 @@ describe("agent-dispatch: the typed final report", () => {
     );
     expect(legacy.code).toBe(0);
     const written = readFileSync(join(scratch, "prompt.log"), "utf8");
-    expect(written.slice(written.lastIndexOf("<<<Plain brief."))).toContain(
+    expect(written.slice(written.lastIndexOf("Plain brief."))).toContain(
       instruction,
     );
   });

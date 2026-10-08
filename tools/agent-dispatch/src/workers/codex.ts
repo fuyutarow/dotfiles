@@ -57,6 +57,7 @@ import {
   progressWriter,
   sessionOf,
   tallyOf,
+  toolErrorStreak,
 } from "./codex-progress.ts";
 import {
   codexHostDeclarationPath,
@@ -67,6 +68,7 @@ const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
 const MAX_TIMEOUT_S = 14400;
 const DEFAULT_TIMEOUT_S = 1800;
+const IDENTICAL_TOOL_ERROR_LIMIT = 5; // Stop a worker that is retrying the same broken call indefinitely.
 // AGENT_DISPATCH_CODEX_HEARTBEAT_S is a test seam (a test cannot wait 30 s for the first liveness line).
 const parsedHeartbeat = Number(
   process.env.AGENT_DISPATCH_CODEX_HEARTBEAT_S ?? "",
@@ -485,6 +487,8 @@ const progress =
     ? undefined
     : progressWriter(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE);
 let streamed = "";
+let spinCause: string | undefined;
+const detectToolSpin = toolErrorStreak(IDENTICAL_TOOL_ERROR_LIMIT);
 function readEvents(): Promise<string> {
   const decoder = new TextDecoder();
   let pending = "";
@@ -494,7 +498,14 @@ function readEvents(): Promise<string> {
       streamed += text;
       const lines = `${pending}${text}`.split("\n");
       pending = lines.pop() ?? "";
-      for (const line of lines) progress?.feed(line);
+      for (const line of lines) {
+        progress?.feed(line);
+        const detectedCause = detectToolSpin(line);
+        if (spinCause === undefined && detectedCause !== null) {
+          spinCause = detectedCause;
+          deadline.abort();
+        }
+      }
     },
   });
   return proc.stdout.pipeTo(sink).then(() => streamed);
@@ -570,6 +581,12 @@ const common = {
   stderr_tail: stderrTail,
 };
 
+if (spinCause !== undefined)
+  emit("timeout", {
+    ...common,
+    why: spinCause,
+    cause: spinCause,
+  });
 if (boundFired)
   emit("timeout", {
     ...common,

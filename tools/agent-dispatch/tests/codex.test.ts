@@ -56,6 +56,30 @@ case "$FAKE_CODEX_MODE" in
     echo '{"type":"item.started","item":{"type":"command_execution","command":"bun test"}}'
     echo '{"type":"error","message":"Reconnecting... waiting for network (Connection failed: error sending request)"}'
     sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
+  spin-five)
+    i=0
+    while [ "$i" -lt 5 ]; do
+      echo '{"type":"item.completed","item":{"type":"tool_call","name":"apply_patch","status":"failed","error":"apply_patch verification failed: invalid patch: multiple operations target <same file>"}}'
+      i=$((i + 1))
+    done
+    sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
+  spin-reset)
+    i=0
+    while [ "$i" -lt 4 ]; do
+      echo '{"type":"item.completed","item":{"type":"tool_call","name":"apply_patch","status":"failed","error":"apply_patch verification failed: invalid patch: multiple operations target <same file>"}}'
+      i=$((i + 1))
+    done
+    echo '{"type":"item.completed","item":{"type":"tool_call","name":"apply_patch","status":"completed"}}' ;;
+  spin-alternating)
+    i=0
+    while [ "$i" -lt 6 ]; do
+      if [ "$((i % 2))" -eq 0 ]; then
+        echo '{"type":"item.completed","item":{"type":"tool_call","name":"apply_patch","status":"failed","error":"invalid patch A"}}'
+      else
+        echo '{"type":"item.completed","item":{"type":"tool_call","name":"apply_patch","status":"failed","error":"invalid patch B"}}'
+      fi
+      i=$((i + 1))
+    done ;;
   pwd) pwd > "$out"; exit 0 ;;
   nolast) echo '{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0}}'; exit 0 ;;
 esac
@@ -606,6 +630,42 @@ describe("agent-dispatch", () => {
     });
     expect(r.receipt.cause).toContain("waiting for network");
   }, 20_000);
+
+  test("five identical tool errors stop early with a resumable timeout receipt naming the cause", () => {
+    const { bin } = fakeCodex(scratch());
+    const t0 = performance.now();
+    const r = run([...FULL, "--timeout-s", "10"], {
+      AGENT_DISPATCH_CODEX_BIN: bin,
+      FAKE_CODEX_MODE: "spin-five",
+      FAKE_CODEX_SLEEP: "30",
+    });
+    expect(performance.now() - t0).toBeLessThan(5_000);
+    expect(r.code).toBe(3);
+    expect(r.receipt.outcome).toBe("timeout");
+    expect(r.receipt.cause).toBe(
+      "stopped: 5 identical consecutive tool errors: apply_patch verification failed: invalid patch: multiple operations target <same file>",
+    );
+  }, 20_000);
+
+  test("four identical tool errors followed by success do not stop the worker", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run(FULL, {
+      AGENT_DISPATCH_CODEX_BIN: bin,
+      FAKE_CODEX_MODE: "spin-reset",
+    });
+    expect(r.code).toBe(0);
+    expect(r.receipt.outcome).toBe("ok");
+  });
+
+  test("alternating different tool errors do not stop the worker", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run(FULL, {
+      AGENT_DISPATCH_CODEX_BIN: bin,
+      FAKE_CODEX_MODE: "spin-alternating",
+    });
+    expect(r.code).toBe(0);
+    expect(r.receipt.outcome).toBe("ok");
+  });
 
   test("--resume: `codex exec resume <thread>` with the same model/effort, sandbox as -c, cwd as the spawn cwd", () => {
     const dir = scratch();

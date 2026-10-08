@@ -111,6 +111,8 @@ const LOG_FILE = join(STATE_DIR, "runs.jsonl");
 const CODEX_WORKER =
   process.env.AGENT_ROUTER_CODEX_WORKER ??
   join(import.meta.dir, "workers/codex.ts");
+const CODEX_PATCH_GUIDANCE =
+  "For apply_patch, use at most one operation per file in a call: put all hunks for that file in one Update File block, or split into separate calls. After a tool error, change approach; do not resend the same call.";
 // A claude row runs `claude -p` through tools/agent-dispatch/src/workers/run-claude.ts (test seam: a fake).
 const RUN_CLAUDE =
   process.env.AGENT_ROUTER_RUN_CLAUDE ??
@@ -1372,7 +1374,15 @@ async function launch(l: Launch): Promise<number> {
   // report instruction after the ticket's verify line (a legacy brief is its own text).
   const workerBrief = join(STATE_DIR, "briefs", `${runId}.md`);
   mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
-  writeFileSync(workerBrief, withReportInstruction(l.workerText ?? brief));
+  const workerText = l.workerText ?? brief;
+  writeFileSync(
+    workerBrief,
+    withReportInstruction(
+      row.route === "codex"
+        ? `${CODEX_PATCH_GUIDANCE}\n\n${workerText}`
+        : workerText,
+    ),
+  );
   const schemaFile = join(STATE_DIR, "report.schema.json");
   writeFileSync(schemaFile, reportJsonSchema());
   const args = workerArgs(

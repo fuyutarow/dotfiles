@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { loadRoster, rosterPolicy, rosterTable } from "../roster.ts";
 
 describe("dispatch roster", () => {
-  test("loads all 35 route and effort rows with optional prices and benchmarks", async () => {
+  test("loads all 40 route and effort rows with optional prices and benchmarks", async () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    expect(loaded.value.choice).toHaveLength(35);
+    expect(loaded.value.choice).toHaveLength(40);
     expect(new Set(loaded.value.choice.map((row) => row.route))).toEqual(
       new Set(["codex", "claude"]),
     );

@@ -604,7 +604,39 @@ function jevRequest(
 
 type JevReply =
   | { ok: true; answer: z.output<typeof JevChoice>; trace: JevTrace }
-  | { ok: false; reason: string; trace: JevTrace };
+  | {
+      ok: false;
+      failure: "unavailable" | "http" | "invalid";
+      reason: string;
+      trace: JevTrace;
+      status?: number;
+    };
+
+const JevErrorBody = z.looseObject({
+  error: z
+    .looseObject({
+      type: z.string().optional(),
+      code: z.string().optional(),
+      message: z.string().optional(),
+    })
+    .optional(),
+  message: z.string().optional(),
+});
+
+function jevErrorMessage(text: string): string {
+  const parsed = jsonOf(JevErrorBody).safeParse(text);
+  const kind = parsed.success
+    ? (parsed.data.error?.type ?? parsed.data.error?.code)
+    : undefined;
+  const message = parsed.success
+    ? (parsed.data.error?.message ?? parsed.data.message)
+    : undefined;
+  const detail = [kind, message ?? (kind === undefined ? text : undefined)]
+    .filter((part) => part !== undefined && part !== "")
+    .join(": ")
+    .slice(0, 200);
+  return detail;
+}
 
 /** One Choice question to Jev — the routing pick and the grade both go through here. */
 async function askJevChoice(
@@ -617,15 +649,38 @@ async function askJevChoice(
     request,
     roster.auto.timeout_ms,
   );
-  if (!post.ok) return post;
+  if (!post.ok) {
+    const status = post.trace.status;
+    return {
+      ok: false,
+      failure: status === undefined ? "unavailable" : "http",
+      reason: post.reason,
+      trace: post.trace,
+      ...(status === undefined ? {} : { status }),
+    };
+  }
   const { trace } = post;
+  if (post.status !== 200) {
+    const detail = jevErrorMessage(post.text);
+    trace.response = detail;
+    return {
+      ok: false,
+      failure: "http",
+      reason: `jev HTTP ${post.status}${detail === "" ? "" : ` ${detail}`}`,
+      status: post.status,
+      trace,
+    };
+  }
   const parsed = jsonOf(JevAnswer).safeParse(post.text);
-  trace.response = parsed.success ? parsed.data : post.text.slice(0, 2000);
-  if (post.status !== 200)
-    return { ok: false, reason: `jev HTTP ${post.status}`, trace };
+  trace.response = parsed.success ? parsed.data : post.text.slice(0, 200);
   const answer = parsed.success ? parsed.data.answers[question] : undefined;
   if (answer === undefined)
-    return { ok: false, reason: "jev answer did not parse", trace };
+    return {
+      ok: false,
+      failure: "invalid",
+      reason: "jev answer did not parse",
+      trace,
+    };
   return { ok: true, answer, trace };
 }
 
@@ -1975,7 +2030,12 @@ type GradeReply =
       probabilities: Record<string, number>;
       trace: JevTrace;
     }
-  | { ok: false; reason: string };
+  | {
+      ok: false;
+      failure: "unavailable" | "http" | "invalid";
+      reason: string;
+      status?: number;
+    };
 
 /** Jev's grade of a run from its brief, the worker's report and the evidence — one question, shared
  *  by `grade` (the coordinator's evidence) and the automatic grade (the router's own verify output). */
@@ -2002,12 +2062,19 @@ async function requestGrade(
   };
   if (roster.auto.jev.api === "typesafe") request.model = roster.auto.jev.model;
   const reply = await askJevChoice(roster, request, "grade");
-  if (!reply.ok) return { ok: false, reason: reply.reason };
+  if (!reply.ok)
+    return {
+      ok: false,
+      failure: reply.failure,
+      reason: reply.reason,
+      ...(reply.status === undefined ? {} : { status: reply.status }),
+    };
   const answer = reply.answer;
   const graded = GradeEnum.safeParse(answer.choice);
   if (!graded.success)
     return {
       ok: false,
+      failure: "invalid",
       reason: `jev answered '${answer.choice}', not pass|partial|fail`,
     };
   return {
@@ -2074,7 +2141,32 @@ async function grade(runId: string, evidencePath: string): Promise<number> {
     logged.worker?.last_message ?? "(no report)",
     evidence,
   );
-  if (!reply.ok) fatal(`not graded: ${reply.reason}`);
+  if (!reply.ok) {
+    if (
+      reply.failure === "http" &&
+      reply.status !== undefined &&
+      reply.status !== 400 &&
+      reply.status !== 422
+    ) {
+      const reason = `auto-waived: ${reply.reason}`;
+      const record = recordWaiver(runId, reason);
+      console.error(`agent-dispatch: ${runId} waived — ${reason}`);
+      process.stdout.write(
+        `${JSON.stringify({ schema: SCHEMA, ...record })}\n`,
+      );
+      return 0;
+    }
+    if (reply.failure === "unavailable") {
+      const reason = `auto-waived: ${reply.reason}`;
+      const record = recordWaiver(runId, reason);
+      console.error(`agent-dispatch: ${runId} waived — ${reason}`);
+      process.stdout.write(
+        `${JSON.stringify({ schema: SCHEMA, ...record })}\n`,
+      );
+      return 0;
+    }
+    fatal(`not graded: ${reply.reason}`);
+  }
   const record = recordGrade(runId, reply, evidencePath, evidence);
   console.error(
     `agent-dispatch: ${runId} graded ${reply.grade} (confidence ${reply.confidence.toFixed(2)})`,

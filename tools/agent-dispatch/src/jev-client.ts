@@ -3,7 +3,7 @@
 // bound, the failure reasons and the trace that runs.jsonl keeps — before 2026-10-06 the same
 // transport was written twice (here and a separate jev CLI, now retired) and the two drifted (key
 // sources, reasons). What a caller asks and how it reads the answer stay with the caller.
-import { attempt, errorMessage } from "../../shared/src/attempt.ts";
+import { attempt } from "../../shared/src/attempt.ts";
 import { typesafeKey } from "../../shared/src/typesafe-key.ts";
 
 /** What runs.jsonl keeps about one Jev call (never the key). */
@@ -21,6 +21,43 @@ export interface JevTrace {
 export type JevPost =
   | { ok: true; status: number; text: string; trace: JevTrace }
   | { ok: false; reason: string; trace: JevTrace };
+
+function errorDetail(error: unknown, depth = 0): string {
+  if (depth > 3) return "";
+  if (error instanceof Error)
+    return [
+      error.name,
+      error.message,
+      error.cause === undefined ? "" : errorDetail(error.cause, depth + 1),
+    ]
+      .filter((part) => part !== "")
+      .join(" ");
+  return String(error);
+}
+
+function transportFailure(error: unknown): string {
+  const detail = errorDetail(error);
+  const normalized = detail.toLowerCase();
+  if (normalized.includes("timeout") || normalized.includes("timed out"))
+    return "timeout";
+  if (
+    normalized.includes("enotfound") ||
+    normalized.includes("eai_again") ||
+    normalized.includes("getaddrinfo")
+  )
+    return "DNS lookup failed";
+  if (
+    normalized.includes("econnreset") ||
+    normalized.includes("connection reset")
+  )
+    return "connection reset";
+  if (normalized.includes("socket") && normalized.includes("closed"))
+    return "connection closed";
+  if (normalized.includes("abort")) return "timeout or aborted request";
+  return error instanceof Error
+    ? `network error (${error.name})`
+    : "network error";
+}
 
 /** POST `request` to `url` with the TypeSafe key, bounded by `timeoutMs`. */
 export async function postJev(
@@ -40,6 +77,9 @@ export async function postJev(
       headers: {
         authorization: `Bearer ${key.key}`,
         "content-type": "application/json",
+        // Jev's gateway can close idle keep-alive sockets. Avoid reusing one so a stale
+        // pooled connection cannot hide the HTTP status that the server sent.
+        connection: "close",
       },
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(timeoutMs),
@@ -47,11 +87,20 @@ export async function postJev(
   );
   if (!res.ok) {
     trace.latency_ms = Math.round(performance.now() - started);
-    trace.error = errorMessage(res.error);
-    return { ok: false, reason: `jev request failed: ${trace.error}`, trace };
+    trace.error = transportFailure(res.error);
+    return { ok: false, reason: `jev transport failed: ${trace.error}`, trace };
   }
-  const text = await res.value.text();
-  trace.latency_ms = Math.round(performance.now() - started);
   trace.status = res.value.status;
+  const body = await attempt(() => res.value.text());
+  trace.latency_ms = Math.round(performance.now() - started);
+  if (!body.ok) {
+    trace.error = transportFailure(body.error);
+    return {
+      ok: false,
+      reason: `jev HTTP ${res.value.status}; response body failed: ${trace.error}`,
+      trace,
+    };
+  }
+  const text = body.value.replaceAll(key.key, "[REDACTED]");
   return { ok: true, status: res.value.status, text, trace };
 }

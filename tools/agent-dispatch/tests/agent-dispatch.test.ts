@@ -33,11 +33,23 @@ const server = Bun.serve({
     bodies.push(body);
     const confidence = body.includes("LOWCONF") ? 0.2 : 0.9;
     // A marker in the state makes the fake answer like a failing provider (the ask exit classes).
-    const status = /HTTP(401|429|500)/u.exec(body)?.[1];
-    if (status !== undefined)
-      return new Response(`provider says ${status}`, {
-        status: Number(status),
-      });
+    const status = /HTTP(401|402|403|422|429|500)/u.exec(body)?.[1];
+    if (status !== undefined) {
+      let errorType = "provider_error";
+      if (status === "401") errorType = "authentication_error";
+      else if (status === "422") errorType = "invalid_request_error";
+      return Response.json(
+        {
+          error: {
+            type: errorType,
+            message: `provider says ${status}`,
+          },
+        },
+        {
+          status: Number(status),
+        },
+      );
+    }
     if (body.includes("NOTJSON")) return new Response("plain text, no json");
     // An ask: any question id other than the pick's and the grade's is echoed back as a choice.
     const asked = Object.keys(
@@ -990,12 +1002,16 @@ describe("agent-dispatch grade", () => {
   // Each test gets its own state dir and one real (fake-worker) run to grade.
   async function oneRun(
     name: string,
+    session?: string,
   ): Promise<{ state: string; runId: string }> {
     const state = join(scratch, `grade-${name}`);
     const b = brief(`grade-${name}`, "Remove every throw from x.ts.\n");
     const r = await router(
       ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
-      { AGENT_ROUTER_STATE_DIR: state },
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+        ...(session === undefined ? {} : { CLAUDE_CODE_SESSION_ID: session }),
+      },
     );
     const runId = decodedJson(
       z.looseObject({ run_id: z.string() }),
@@ -1078,6 +1094,59 @@ describe("agent-dispatch grade", () => {
     expect(g.err).toContain(`${runId} graded pass (confidence 0.20)`);
   });
 
+  test("HTTP 401 records a waiver and clears the dispatcher-session gate", async () => {
+    const session = "grade-401-session";
+    const { state, runId } = await oneRun("401", session);
+    const evidence = evidenceFile("401", "HTTP401\n");
+    const result = await router(["grade", runId, "--evidence", evidence], {
+      AGENT_ROUTER_STATE_DIR: state,
+      CLAUDE_CODE_SESSION_ID: session,
+    });
+    expect(result.code).toBe(0);
+    expect(result.err).toContain(
+      `${runId} waived — auto-waived: jev HTTP 401 authentication_error: provider says 401`,
+    );
+    const lines = readFileSync(join(state, "runs.jsonl"), "utf8")
+      .trim()
+      .split("\n");
+    expect(
+      lines.some(
+        (line) =>
+          line.includes('"kind":"grade-waived"') &&
+          line.includes("authentication_error"),
+      ),
+    ).toBe(true);
+    const next = await router(
+      [
+        "run",
+        "--prompt-file",
+        brief("after-401", "another task\n"),
+        "--cd",
+        scratch,
+        "--sandbox",
+        "read-only",
+      ],
+      { AGENT_ROUTER_STATE_DIR: state, CLAUDE_CODE_SESSION_ID: session },
+    );
+    expect(next.code).toBe(0);
+    expect(next.err).not.toContain("are not graded");
+  });
+
+  test("HTTP 422 keeps grade as a hard failure with status and body", async () => {
+    const { state, runId } = await oneRun("422");
+    const evidence = evidenceFile("422", "HTTP422\n");
+    const result = await router(["grade", runId, "--evidence", evidence], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(result.code).not.toBe(0);
+    expect(result.err).toContain(
+      "not graded: jev HTTP 422 invalid_request_error: provider says 422",
+    );
+    expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
+      '"kind":"grade-waived"',
+    );
+  });
+
   test("refused, nothing recorded: unknown run, missing evidence, Jev unavailable", async () => {
     const { state, runId } = await oneRun("refused");
     const ev = evidenceFile("refused", "GRADE=pass\n");
@@ -1089,11 +1158,6 @@ describe("agent-dispatch grade", () => {
         "no such evidence file",
       ],
       [["grade", runId], {}, "grade needs --evidence"],
-      [
-        ["grade", runId, "--evidence", ev],
-        { TYPESAFE_API_KEY: "", PATH: "/usr/bin:/bin", HOME: scratch },
-        "not graded: jev unavailable",
-      ],
     ];
     for (const [args, env, why] of cases) {
       const r = await router(args, { AGENT_ROUTER_STATE_DIR: state, ...env });
@@ -1103,6 +1167,14 @@ describe("agent-dispatch grade", () => {
     expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
       '"kind":"grade"',
     );
+    const unavailable = await router(["grade", runId, "--evidence", ev], {
+      AGENT_ROUTER_STATE_DIR: state,
+      TYPESAFE_API_KEY: "",
+      PATH: "/usr/bin:/bin",
+      HOME: scratch,
+    });
+    expect(unavailable.code).toBe(0);
+    expect(unavailable.err).toContain("waived — auto-waived: jev unavailable");
   });
 });
 

@@ -13,6 +13,8 @@ import { cleanupTempDirs, tempHome, tempDir } from "./helpers.ts";
 
 const REPO = join(import.meta.dir, "..", "..", "..");
 const STATUSLINE = join(import.meta.dir, "..", "src", "statusline.ts");
+const PRELOAD = join(import.meta.dir, "parity-preload.ts");
+const HOST = "fixture-host";
 const SGR = new RegExp(`${String.fromCodePoint(27)}\\[([0-9;]*)m`, "u");
 
 type Part = { color: string; text: string };
@@ -39,6 +41,7 @@ const HEAD_PARTS = 8; // user @ host : time zone | cwd
 
 function zshHead(home: string): Part[] {
   const zdot = tempDir("prompt-parity-");
+  writeFileSync(join(zdot, ".zshenv"), "");
   writeFileSync(
     join(zdot, ".zshrc"),
     `source ${JSON.stringify(join(REPO, "zsh", "zshrc"))}\n`,
@@ -51,7 +54,14 @@ function zshHead(home: string): Part[] {
     ],
     {
       cwd: REPO,
-      env: { ...process.env, HOME: home, ZDOTDIR: zdot, PWD: REPO },
+      env: {
+        ...process.env,
+        HOME: home,
+        ZDOTDIR: zdot,
+        HOST,
+        PWD: REPO,
+        TZ: "UTC",
+      },
       timeout: 30_000,
     },
   );
@@ -59,21 +69,24 @@ function zshHead(home: string): Part[] {
 }
 
 function statuslineHead(home: string): Part[] {
-  const r = Bun.spawnSync([process.execPath, STATUSLINE], {
-    cwd: REPO,
-    stdin: new Blob(["{}"]),
-    env: {
-      ...process.env,
-      HOME: home,
-      HERDR_ENV: "0",
-      CLAUDE_CODE_EXECPATH: "",
-      AGENT_ROUTER_STATE_DIR: join(home, "state"),
-      PATH: tempDir("prompt-bin-"),
-      PWD: REPO,
-      TZ: process.env.TZ ?? "UTC",
+  const r = Bun.spawnSync(
+    [process.execPath, "--preload", PRELOAD, STATUSLINE],
+    {
+      cwd: REPO,
+      stdin: new Blob(["{}"]),
+      env: {
+        ...process.env,
+        HOME: home,
+        HERDR_ENV: "0",
+        CLAUDE_CODE_EXECPATH: "",
+        AGENT_ROUTER_STATE_DIR: join(home, "state"),
+        PATH: tempDir("prompt-bin-"),
+        PWD: REPO,
+        TZ: process.env.TZ ?? "UTC",
+      },
+      timeout: 30_000,
     },
-    timeout: 30_000,
-  });
+  );
   return parts(r.stdout.toString().split("\n")[0] ?? "").slice(0, HEAD_PARTS);
 }
 

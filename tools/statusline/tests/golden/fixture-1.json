@@ -1,3 +1,3 @@
 {
-  "stdout": "\u001b[35munknown\u001b[0m@\u001b[33m5ab1a046da60\u001b[0m:\u001b[36m10-08 12:34\u001b[38;5;240m+00\u001b[0m|\u001b[32m/fixture\u001b[0m\n\u001b[2mModel: ? | invalid statusline payload: context_window.total_input_tokens: Invalid input: expected number, received string\u001b[0m"
+  "stdout": "\u001b[35munknown\u001b[0m@\u001b[33mfixture-host\u001b[0m:\u001b[36m10-08 12:34\u001b[38;5;240m+00\u001b[0m|\u001b[32m/fixture\u001b[0m\n\u001b[2mModel: ? | invalid statusline payload: context_window.total_input_tokens: Invalid input: expected number, received string\u001b[0m"
 }

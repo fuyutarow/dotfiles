@@ -2,7 +2,7 @@
 
 ## 0.2.5
 
-- Render an active dispatch's display ID in place of its worker session ID; older markers keep the session ID format.
+- Make prompt and entry parity fixtures independent of the test host's hostname and GPU tooling.
 
 ## 0.2.4
 

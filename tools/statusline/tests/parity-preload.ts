@@ -30,6 +30,7 @@ await mock.module("node:fs", () => ({
 }));
 await mock.module("node:os", () => ({
   ...os,
+  hostname: () => "fixture-host",
   totalmem: () => 16 * 1024 ** 3,
   cpus: () => [{ times: { user: 100, nice: 0, sys: 100, idle: 800, irq: 0 } }],
 }));

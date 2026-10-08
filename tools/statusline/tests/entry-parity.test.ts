@@ -6,7 +6,6 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { hostname } from "node:os";
 import { join } from "node:path";
 import { decodedJson } from "./decode.ts";
 import { cleanupTempDirs, tempHome } from "./helpers.ts";
@@ -52,7 +51,7 @@ const fixtures = [
 ];
 
 const FULL_INPUT = fixtures[4] ?? "";
-const HOST = hostname();
+const HOST = "fixture-host";
 const runLine = (
   at: number,
   route: "codex" | "claude",
@@ -278,6 +277,7 @@ function expectGolden(
       "vm_stat",
       "echo 'Mach Virtual Memory Statistics: (page size of 4096 bytes)'\necho 'Pages wired down: 1048576.'\necho 'Pages occupied by compressor: 0.'\necho 'Anonymous pages: 1048576.'\necho 'Pages purgeable: 0.'",
     );
+    fake("nvidia-smi", "echo '3584, 12288'");
     writeFileSync(
       join(home, ".claude.json"),
       JSON.stringify({

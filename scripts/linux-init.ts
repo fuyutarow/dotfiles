@@ -32,16 +32,22 @@ import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { $ } from "bun";
+import { buildLinuxInitEnv } from "./linux-init-env.ts";
 import {
   declareRentedCodexHost,
   hostDeclarationProbes,
 } from "./agent-dispatch-host.ts";
 import { sudoIsOurs } from "./sudo-group.ts";
 
-const DOTFILES = join(homedir(), "dotfiles");
-const BIN = join(homedir(), ".local/bin");
+const HOME = homedir();
+const DOTFILES = join(HOME, "dotfiles");
+const BIN = join(HOME, ".local/bin");
 const MISE = join(BIN, "mise");
-const RUNTIME_BIN = join(homedir(), ".local/share/dotfiles/runtime/bin");
+const RUNTIME_BIN = join(HOME, ".local/share/dotfiles/runtime/bin");
+const CHILD_ENV = buildLinuxInitEnv(HOME, process.env);
+process.env.HOME = HOME;
+process.env.PATH = CHILD_ENV.PATH ?? "";
+$.env(CHILD_ENV);
 // sccache rides with cargo: the profiles set RUSTC_WRAPPER=sccache, so it must reach every shell cargo does.
 const RUNTIMES = new Set(["bun", "uv", "rustup", "sccache"]);
 // Core agent CLIs that are not Brewfile entries on Linux (on the Mac agy is a cask). Same mise path.

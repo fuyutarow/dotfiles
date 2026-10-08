@@ -77,6 +77,11 @@ type ServerEntry = {
   command?: unknown;
   args?: unknown;
 };
+type SkippedServer = {
+  name: string;
+  command: string;
+  missingTool: string;
+};
 // .mcp.json is parsed, not asserted: a server entry is read as a record and only the four fields
 // this script uses are kept (each stays `unknown` — jqOr() decides how it prints).
 const ServerEntrySchema = z.record(z.string(), z.unknown()).transform((r) => ({
@@ -194,6 +199,39 @@ export function loadMcpServers(
     .map((text) => jsonOf(McpJsonSchema).safeParse(text))
     .unwrapOr(undefined);
   return parsed?.success === true ? (parsed.data.mcpServers ?? {}) : {};
+}
+
+const RUNTIME_FOR_COMMAND: Readonly<Record<string, string>> = {
+  bunx: "bun",
+  npx: "node",
+  uv: "uv",
+  uvx: "uv",
+};
+
+/** Split configured stdio servers by runtime availability; the lookup is injected for tests. */
+export function partitionAvailableServers(
+  servers: Record<string, ServerEntry>,
+  hasTool: (tool: string) => boolean,
+): { available: Record<string, ServerEntry>; skipped: SkippedServer[] } {
+  const available: Record<string, ServerEntry> = {};
+  const skipped: SkippedServer[] = [];
+
+  for (const [name, entry] of Object.entries(servers)) {
+    const command = jqOr(entry.command, "");
+    if (command === "" || jqOr(entry.url, "") !== "") {
+      available[name] = entry;
+      continue;
+    }
+
+    const missingTool = RUNTIME_FOR_COMMAND[command] ?? command;
+    if (hasTool(missingTool)) {
+      available[name] = entry;
+    } else {
+      skipped.push({ name, command, missingTool });
+    }
+  }
+
+  return { available, skipped };
 }
 
 export function buildPlan(name: string, entry: ServerEntry): Plan {
@@ -472,30 +510,41 @@ function main(): AbortError | UsageError | undefined {
   const prune = process.env.MCP_PRUNE === "1";
   const mcpJsonPath = `${dotfiles}/.mcp.json`;
 
-  // cocoindex-code's MCP server is the binary `ccc` (a separate uv tool); ensure it exists.
-  // Unguarded in the original (`command -v ccc || uv tool install …`) — a failed install aborts
-  // the whole task before a single server is touched.
+  // cocoindex-code is an optional uv tool used by the repository's retrieval skill.
+  // A missing uv runtime should skip this optional server, not abort dotfile deployment.
   const cccAvailable = which(cccBin);
-  const installFailure =
-    isUnavailable(cccAvailable) && !dryRun
-      ? runOrAbort(uvBin, [
-          "tool",
-          "install",
-          "--upgrade",
-          "cocoindex-code[full]",
-        ])
-      : undefined;
-  if (isUnavailable(cccAvailable) && dryRun) {
+  const uvAvailable = which(uvBin);
+  let installFailure: AbortError | undefined;
+  if (isUnavailable(cccAvailable) && isUnavailable(uvAvailable)) {
+    print(
+      "skipped: cocoindex-code — missing required tool 'uv' (needed to install cocoindex-code[full])",
+    );
+  } else if (isUnavailable(cccAvailable) && dryRun) {
     const uvArgs = ["tool", "install", "--upgrade", "cocoindex-code[full]"];
     print(`[dry-run] would run: ${uvBin} ${uvArgs.join(" ")}`);
+  } else if (isUnavailable(cccAvailable)) {
+    installFailure = runOrAbort(uvBin, [
+      "tool",
+      "install",
+      "--upgrade",
+      "cocoindex-code[full]",
+    ]);
   }
   if (installFailure !== undefined) return installFailure;
 
   const servers = loadMcpServers(mcpJsonPath);
   const names = Object.keys(servers).toSorted();
+  const partition = partitionAvailableServers(servers, (tool) =>
+    which(tool === "uv" ? uvBin : tool),
+  );
+  for (const skipped of partition.skipped) {
+    print(
+      `skipped: ${skipped.name} — missing required tool '${skipped.missingTool}' (server command '${skipped.command}')`,
+    );
+  }
 
-  for (const name of names) {
-    const plan = buildPlan(name, servers[name] ?? {});
+  for (const name of Object.keys(partition.available).toSorted()) {
+    const plan = buildPlan(name, partition.available[name] ?? {});
 
     if (dryRun) {
       print(

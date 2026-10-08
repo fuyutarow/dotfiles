@@ -11,6 +11,7 @@ import {
   commOnlyInSecond,
   jqOr,
   loadMcpServers,
+  partitionAvailableServers,
   shellWords,
 } from "../install-mcp.ts";
 
@@ -168,6 +169,30 @@ describe("install-mcp: pure helpers", () => {
       url: "https://mcp.exa.ai/mcp",
     });
     expect(plan.display).toBe("https://mcp.exa.ai/mcp");
+  });
+
+  test("missing runtime skips only its server with a named reason", () => {
+    const lookup: string[] = [];
+    const result = partitionAvailableServers(
+      {
+        fetch: { command: "uvx", args: ["mcp-server-fetch"] },
+        context7: { command: "bunx", args: ["context7"] },
+        exa: { type: "http", url: "https://mcp.exa.ai/mcp" },
+      },
+      (tool) => {
+        lookup.push(tool);
+        return tool !== "uv";
+      },
+    );
+
+    expect(lookup).toEqual(["uv", "bun"]);
+    expect(result.skipped).toEqual([
+      { name: "fetch", command: "uvx", missingTool: "uv" },
+    ]);
+    expect(Object.keys(result.available).toSorted()).toEqual([
+      "context7",
+      "exa",
+    ]);
   });
 });
 
@@ -346,6 +371,30 @@ describe("install-mcp: ccc/uv bootstrap", () => {
     expect(out).toContain("fake uv: install failed");
     expect(out).not.toContain("registered:");
     expect(out).not.toContain("CALL claude");
+    cleanup(dotfiles);
+  });
+
+  test("missing uv skips its named server and continues registering other servers", () => {
+    const dotfiles = makeDotfiles({
+      fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
+      exa: { type: "http", url: "https://mcp.exa.ai/mcp" },
+    });
+    const args = baseArgs(dotfiles).map((arg, i, all) =>
+      all[i - 1] === "--uv-bin" || all[i - 1] === "--ccc-bin"
+        ? "/nonexistent/runtime"
+        : arg,
+    );
+    const { out, code } = run(args, { FAKE_CLAUDE_LIST: "" });
+
+    expect(code).toBe(0);
+    expect(out).toContain(
+      "skipped: cocoindex-code — missing required tool 'uv'",
+    );
+    expect(out).toContain(
+      "skipped: fetch — missing required tool 'uv' (server command 'uvx')",
+    );
+    expect(out).not.toContain("registered: fetch");
+    expect(out).toContain("registered: exa");
     cleanup(dotfiles);
   });
 });

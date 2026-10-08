@@ -448,6 +448,7 @@ describe("agent-dispatch run", () => {
             criteria: z.record(z.string(), z.string()),
           }),
         }),
+        state: z.looseObject({ recent_throughput: z.string() }),
       }),
       lastJevBody(),
     );
@@ -460,6 +461,15 @@ describe("agent-dispatch run", () => {
     expect(request.questions.worker.criteria["terra-max"]).toContain("n=2;");
     expect(request.questions.worker.criteria["terra-max"]).toContain(
       "little record (fewer than 5 runs)",
+    );
+    expect(request.questions.worker.instructions).toContain(
+      "Maximize accepted returns per worker hour. Treat UNMEASURED rows as worth trying when their benchmark capability fits the ticket.",
+    );
+    expect(request.state.recent_throughput).toContain(
+      "luna-max | runs 5 | accepted/h 48.00 | p50 first return 60.0s | accepted 80.0% | timeout 20.0%",
+    );
+    expect(request.state.recent_throughput).toContain(
+      "terra-max | UNMEASURED | runs 2 | accepted/h 0.00 | p50 first return 45.0s | accepted 0.0% | timeout 0.0%",
     );
   });
 
@@ -481,6 +491,12 @@ describe("agent-dispatch run", () => {
       },
     );
     expect(r.code).toBe(0);
+    expect(bodies.slice(requestStart).at(-1)).not.toContain(
+      "recent_throughput",
+    );
+    expect(r.err).toContain(
+      "recent throughput log unavailable; continuing pick:",
+    );
     const receipt = decodedJson(
       z.looseObject({
         pick: z.looseObject({ selection_record_unavailable: z.string() }),

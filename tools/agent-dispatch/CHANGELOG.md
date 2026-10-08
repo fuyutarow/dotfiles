@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.6 — 2026-10-09
+
+- Include compact recent per-row throughput in Jev pick requests; label rows with fewer than three runs UNMEASURED and retain picks when the run log cannot be read.
+
 ## 1.5.5 — 2026-10-09
 
 - Make `first_return_s` observational: record whether a RETURN or progress appeared by its deadline without interrupting Codex or forcing a wrap-up turn; `timeout_s` remains the worker kill bound. Keep process-group reaping after worker exit; this release cannot safely distinguish every tool-call descendant from other group members, and records any survivors.

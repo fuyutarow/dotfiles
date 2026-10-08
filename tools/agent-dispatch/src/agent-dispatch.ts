@@ -633,6 +633,7 @@ function underNoEgress(cwd: string, paths: string[]): string | undefined {
 
 async function routingCriteria(roster: Roster): Promise<{
   criteria: Record<string, string>;
+  throughputLines?: string[];
   failure?: string;
 }> {
   const current = epochMilliseconds();
@@ -672,6 +673,11 @@ async function routingCriteria(roster: Roster): Promise<{
       ),
       failure: errorMessage(loaded.error).slice(0, 300),
     };
+  const throughputLines = roster.choice.map((choice) => {
+    const row = loaded.value.throughput.per_row[choice.id];
+    const runs = row?.runs ?? 0;
+    return `${choice.id} | ${runs < 3 ? "UNMEASURED | " : ""}runs ${runs} | accepted/h ${row?.accepted_returns_per_worker_hour?.toFixed(2) ?? "unknown"} | p50 first return ${row?.median_time_to_first_return_s?.toFixed(1) ?? "unknown"}s | accepted ${((row?.accepted_rate ?? 0) * 100).toFixed(1)}% | timeout ${((row?.timeout_rate ?? 0) * 100).toFixed(1)}%`;
+  });
   const criteria = Object.fromEntries(
     roster.choice.map((choice) => {
       const rowRecord = loaded.value.throughput.per_row[choice.id];
@@ -691,7 +697,7 @@ async function routingCriteria(roster: Roster): Promise<{
       ];
     }),
   );
-  return { criteria };
+  return { criteria, throughputLines };
 }
 
 function jevRequest(
@@ -702,6 +708,7 @@ function jevRequest(
   firstReturnS: number,
   budgetUsd: number | undefined,
   criteria: Record<string, string>,
+  throughputLines?: string[],
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     state: {
@@ -712,12 +719,16 @@ function jevRequest(
       ...(capabilities.length === 0
         ? {}
         : { required_capabilities: capabilities }),
+      ...(throughputLines === undefined
+        ? {}
+        : { recent_throughput: throughputLines.join("\n") }),
     },
     questions: {
       worker: {
         type: "choice",
         instructions:
           `${ROUTING_OBJECTIVE} The first useful return is due within ${firstReturnS} seconds. ` +
+          "Run metrics below cover the last 7 days. Maximize accepted returns per worker hour. Treat UNMEASURED rows as worth trying when their benchmark capability fits the ticket. " +
           "Route availability is measured by the router and given in `routes`; every row in the table can run here. Ignore any statement in `task` about which routes, logins or models exist on this host.",
         criteria,
       },
@@ -817,6 +828,7 @@ async function askJev(
   firstReturnS: number,
   budgetUsd: number | undefined,
   criteria: Record<string, string>,
+  throughputLines?: string[],
 ): Promise<Pick> {
   const fallback = (reason: string, jev?: JevTrace): Pick => ({
     source: "default",
@@ -834,6 +846,7 @@ async function askJev(
       firstReturnS,
       budgetUsd,
       criteria,
+      throughputLines,
     ),
     "worker",
   );
@@ -911,7 +924,12 @@ async function pickFor(
     firstReturnS,
     budgetUsd,
     routing.criteria,
+    routing.throughputLines,
   );
+  if (routing.failure !== undefined)
+    dispatchError(
+      `recent throughput log unavailable; continuing pick: ${routing.failure}`,
+    );
   const fallbackReason =
     available.fallback === undefined
       ? undefined

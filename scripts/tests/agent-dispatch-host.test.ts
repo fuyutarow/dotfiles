@@ -9,10 +9,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { declareRentedCodexHost } from "../codex-host-bootstrap.ts";
+import { declareRentedCodexHost } from "../agent-dispatch-host.ts";
 import { readCodexHostDeclaration } from "../../tools/agent-dispatch/src/workers/codex-host.ts";
 
-const home = (): string => mkdtempSync(join(tmpdir(), "codex-host-bootstrap-"));
+const home = (): string => mkdtempSync(join(tmpdir(), "agent-dispatch-host-"));
 
 function run(
   overrides: Partial<Parameters<typeof declareRentedCodexHost>[0]> = {},
@@ -40,7 +40,7 @@ function run(
     root,
     lines,
     result,
-    path: join(root, ".config/codex-run/host.toml"),
+    path: join(root, ".config/agent-dispatch/host.toml"),
   };
 }
 
@@ -48,7 +48,9 @@ describe("rented codex host bootstrap", () => {
   test("container + measured user namespace refusal + explicit rental writes a valid private declaration", () => {
     const r = run();
     expect(r.result).toBe("written");
-    expect(r.lines).toEqual(["wrote ~/.config/codex-run/host.toml (0600)"]);
+    expect(r.lines).toEqual([
+      "wrote ~/.config/agent-dispatch/host.toml (0600)",
+    ]);
     const declaration = readCodexHostDeclaration(r.path);
     expect(declaration.kind).toBe("valid");
     if (declaration.kind === "valid")
@@ -59,7 +61,7 @@ describe("rented codex host bootstrap", () => {
     expect(text).toContain("2026-10-08");
     expect(text).toContain("unshare -U true exited 1");
     expect(statSync(r.path).mode & 0o777).toBe(0o600);
-    expect(statSync(join(r.root, ".config/codex-run")).mode & 0o777).toBe(
+    expect(statSync(join(r.root, ".config/agent-dispatch")).mode & 0o777).toBe(
       0o700,
     );
   });
@@ -97,8 +99,8 @@ describe("rented codex host bootstrap", () => {
 
   test("an existing declaration is left untouched", () => {
     const root = home();
-    const path = join(root, ".config/codex-run/host.toml");
-    mkdirSync(join(root, ".config/codex-run"), { recursive: true });
+    const path = join(root, ".config/agent-dispatch/host.toml");
+    mkdirSync(join(root, ".config/agent-dispatch"), { recursive: true });
     writeFileSync(path, "owned by the user\n", { mode: 0o640 });
     const lines: string[] = [];
     const result = declareRentedCodexHost({
@@ -116,7 +118,7 @@ describe("rented codex host bootstrap", () => {
     });
     expect(result).toBe("existing");
     expect(lines).toEqual([
-      "existing ~/.config/codex-run/host.toml; left untouched",
+      "existing ~/.config/agent-dispatch/host.toml; left untouched",
     ]);
     expect(readFileSync(path, "utf8")).toBe("owned by the user\n");
   });

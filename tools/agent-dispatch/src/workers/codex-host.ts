@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { errorMessage } from "../../../shared/src/attempt.ts";
 import { z } from "../../../shared/src/zod.ts";
@@ -23,16 +23,16 @@ export type CodexHostDeclarationResult =
 
 export function codexHostDeclarationPath(): string {
   return (
-    process.env.CODEX_RUN_HOST_FILE ??
+    process.env.AGENT_DISPATCH_CODEX_HOST_FILE ??
     join(
       process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-      "codex-run",
+      "agent-dispatch",
       "host.toml",
     )
   );
 }
 
-/** Parse the one codex-run host declaration schema and retain codex-run's diagnostic. */
+/** Parse the one agent-dispatch host declaration schema. */
 export function readCodexHostDeclaration(
   path: string,
 ): CodexHostDeclarationResult {
@@ -40,7 +40,24 @@ export function readCodexHostDeclaration(
     () => readFileSync(path, "utf8"),
     (error) => errorMessage(error),
   )();
-  if (hostText.isErr()) return { kind: "absent" };
+  if (hostText.isErr()) {
+    const hostDirectory = dirname(path);
+    const legacyPath = join(
+      dirname(hostDirectory),
+      ["codex", "-run"].join(""),
+      "host.toml",
+    );
+    if (
+      basename(hostDirectory) === "agent-dispatch" &&
+      !existsSync(path) &&
+      existsSync(legacyPath)
+    )
+      return {
+        kind: "invalid",
+        reason: `legacy host declaration found; run: mv "${legacyPath}" "${path}"`,
+      };
+    return { kind: "absent" };
+  }
 
   const toml = fromThrowable(
     () => Bun.TOML.parse(hostText.value),

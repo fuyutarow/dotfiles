@@ -446,7 +446,8 @@ const OTHER: readonly Surface[] = [
       "agents/models/dispatch-roster.contract.md",
     ],
     deployed: "the checkout; rendered into ~/.claude/CLAUDE.md",
-    consumer: "dispatch hook, agent-dispatch, codex-run --choice, render-home",
+    consumer:
+      "dispatch hook, agent-dispatch, agent-dispatch --choice, render-home",
     writer:
       "human, in the repo (CONFIGURATION CONTRACT: dispatch-roster.contract.md)",
     verify: `mise run test:hooks · test:agent-dispatch · ${DOCTOR} (rendered)`,

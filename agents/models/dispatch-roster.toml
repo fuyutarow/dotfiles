@@ -2,7 +2,7 @@
 #
 # Every dispatch is `agent-dispatch run --prompt-file … --cd … --sandbox …`, and Jev alone picks
 # the row (AUTO PICK below); `--choice` is refused. The route says how the picked row runs:
-#   route = "codex"  — codex-run --choice <id>; Codex is the worker's own harness.
+#   route = "codex"  — agent-dispatch --choice <id>; Codex is the worker's own harness.
 #   route = "claude" — claude -p through tools/agent-dispatch/src/workers/run-claude.ts.
 # The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints the table.
 #

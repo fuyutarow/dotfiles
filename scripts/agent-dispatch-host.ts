@@ -28,7 +28,7 @@ type DeclarationOptions = Readonly<{
 
 export type DeclarationResult = "written" | "existing" | "skipped" | "invalid";
 
-const RELATIVE_PATH = ".config/codex-run/host.toml";
+const RELATIVE_PATH = ".config/agent-dispatch/host.toml";
 
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
@@ -63,7 +63,7 @@ export function hostDeclarationProbes(): ProbeSet {
   };
 }
 
-/** Write codex-run's self-isolation declaration only after every explicit gate is measured. */
+/** Write agent-dispatch's self-isolation declaration only after every explicit gate is measured. */
 export function declareRentedCodexHost(
   options: DeclarationOptions,
 ): DeclarationResult {
@@ -91,7 +91,7 @@ export function declareRentedCodexHost(
     return "skipped";
   }
 
-  const directory = join(home, ".config/codex-run");
+  const directory = join(home, ".config/agent-dispatch");
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
   const refusal = `unshare -U true exited ${unshare.code}${unshare.detail === "" ? "" : ` (${unshare.detail})`}`;
@@ -105,7 +105,7 @@ export function declareRentedCodexHost(
   const validated = readCodexHostDeclaration(path);
   if (validated.kind !== "valid") {
     say(
-      `generated codex-run host declaration failed validation: ${validated.kind === "invalid" ? validated.reason : path}`,
+      `generated agent-dispatch host declaration failed validation: ${validated.kind === "invalid" ? validated.reason : path}`,
     );
     return "invalid";
   }
@@ -116,7 +116,7 @@ export function declareRentedCodexHost(
 function main(): void {
   const parsed = cli(
     {
-      name: "codex-host-bootstrap.ts",
+      name: "agent-dispatch-host.ts",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       parameters: [],
@@ -128,7 +128,7 @@ function main(): void {
         check: { type: Boolean, description: "check for a valid declaration" },
       },
       help: {
-        description: "Write or check codex-run's Linux host declaration.",
+        description: "Write or check agent-dispatch's Linux host declaration.",
       },
     },
     undefined,
@@ -139,7 +139,7 @@ function main(): void {
     (parsed.flags.check === true && parsed.flags.rented === true)
   ) {
     process.stderr.write(
-      "usage: codex-host-bootstrap.ts [--rented | --check]\n",
+      "usage: agent-dispatch-host.ts [--rented | --check]\n",
     );
     process.exitCode = 2;
     return;

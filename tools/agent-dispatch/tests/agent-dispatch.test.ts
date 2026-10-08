@@ -18,7 +18,7 @@ import { ROSTER_PATH } from "../../../agents/models/roster.ts";
 import { decodedJson } from "./decode.ts";
 import { attemptOr } from "../../shared/src/attempt.ts";
 
-// agent-dispatch: the one entry point. A fake codex-run stands in for the worker (it records its argv and
+// agent-dispatch: the one entry point. A fake agent-dispatch stands in for the worker (it records its argv and
 // prints a receipt), a local server stands in for Jev, and every state file goes to a scratch dir.
 
 const CLI = join(import.meta.dir, "..", "src", "agent-dispatch.ts");
@@ -97,7 +97,7 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-const FAKE = join(scratch, "fake-codex-run.ts");
+const FAKE = join(scratch, "fake-agent-dispatch.ts");
 writeFileSync(
   FAKE,
   `import { appendFileSync } from "node:fs";
@@ -204,7 +204,7 @@ async function router(
     env: {
       ...process.env,
       AGENT_ROUTER_STATE_DIR: state,
-      AGENT_ROUTER_CODEX_RUN: FAKE,
+      AGENT_ROUTER_CODEX_WORKER: FAKE,
       DISPATCH_ROSTER_PATH: LIVE_JEV,
       TYPESAFE_API_KEY: "fixture-key",
       ...env,
@@ -378,7 +378,7 @@ describe("agent-dispatch run", () => {
     );
   });
 
-  test("Jev's row runs codex-run with that row, logs, and leaves no running marker", async () => {
+  test("Jev's row runs agent-dispatch with that row, logs, and leaves no running marker", async () => {
     const r = await router([
       "run",
       "--prompt-file",
@@ -643,8 +643,8 @@ describe("agent-dispatch run", () => {
     expect(argv).toContain('"--timeout-ms","17000"');
   });
 
-  test("the router run_id is used by codex-run for its receipt file and receipt field", async () => {
-    const dir = join(scratch, "real-codex-run");
+  test("the router run_id is used by agent-dispatch for its receipt file and receipt field", async () => {
+    const dir = join(scratch, "real-agent-dispatch");
     mkdirSync(dir, { recursive: true });
     const codex = join(dir, "codex");
     writeFileSync(
@@ -656,19 +656,19 @@ describe("agent-dispatch run", () => {
       [
         "run",
         "--prompt-file",
-        brief("real-run", "Use the real codex-run wrapper.\n"),
+        brief("real-run", "Use the real agent-dispatch wrapper.\n"),
         "--cd",
         scratch,
         "--sandbox",
         "read-only",
       ],
       {
-        AGENT_ROUTER_CODEX_RUN: join(
+        AGENT_ROUTER_CODEX_WORKER: join(
           import.meta.dir,
-          "../src/workers/codex-run.ts",
+          "../src/workers/codex.ts",
         ),
-        CODEX_RUN_BIN: codex,
-        CODEX_RUN_HOST_FILE: join(dir, "no-host.toml"),
+        AGENT_DISPATCH_CODEX_BIN: codex,
+        AGENT_DISPATCH_CODEX_HOST_FILE: join(dir, "no-host.toml"),
         TMPDIR: dir,
       },
     );

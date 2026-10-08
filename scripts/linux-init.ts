@@ -35,7 +35,7 @@ import { $ } from "bun";
 import {
   declareRentedCodexHost,
   hostDeclarationProbes,
-} from "./codex-host-bootstrap.ts";
+} from "./agent-dispatch-host.ts";
 import { sudoIsOurs } from "./sudo-group.ts";
 
 const DOTFILES = join(homedir(), "dotfiles");
@@ -89,7 +89,7 @@ const parsed = cli(
     flags: {
       rented: {
         type: Boolean,
-        description: "declare this owner's rented box for codex-run",
+        description: "declare this owner's rented box for agent-dispatch",
       },
     },
   },

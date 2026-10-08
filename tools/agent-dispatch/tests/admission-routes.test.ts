@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { admitCodexWorker, codexWorkerLimit } from "../src/admission.ts";
@@ -87,7 +87,7 @@ describe("route capability cache", () => {
     });
   });
 
-  test("an invalid host declaration is unavailable with codex-run validation", () => {
+  test("an invalid host declaration is unavailable with agent-dispatch validation", () => {
     const dir = mkdtempSync(join(tmpdir(), "agent-dispatch-routes-"));
     dirs.push(dir);
     const hostFile = join(dir, "host.toml");
@@ -109,6 +109,34 @@ describe("route capability cache", () => {
     );
     expect(routes.codex.reason).toContain(
       "unsandboxed_reason: Too small: expected string to have >=1 characters",
+    );
+  });
+
+  test("a legacy host declaration refuses the route with the exact move command", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-dispatch-routes-"));
+    dirs.push(dir);
+    const hostFile = join(dir, "agent-dispatch", "host.toml");
+    const legacyDirectory = ["codex", "-run"].join("");
+    const legacyFile = join(dir, legacyDirectory, "host.toml");
+    mkdirSync(join(dir, legacyDirectory), { recursive: true });
+    writeFileSync(
+      legacyFile,
+      'schema = 1\nunsandboxed_reason = "This host is the isolation"\n',
+    );
+    const routes = probeRoutes({
+      host: "host-legacy",
+      version: "1",
+      cachePath: join(dir, "cache.json"),
+      hostFile,
+      now: () => 1,
+      codexLoggedIn: () => true,
+      codexProbe: () => ({ available: true, reason: "sandbox available" }),
+      claudePath: noClaude,
+    });
+
+    expect(routes.codex.available).toBe(false);
+    expect(routes.codex.reason).toBe(
+      `legacy host declaration found; run: mv "${legacyFile}" "${hostFile}"`,
     );
   });
 

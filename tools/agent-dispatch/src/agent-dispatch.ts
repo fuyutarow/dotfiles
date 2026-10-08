@@ -24,12 +24,12 @@
 //           = legacy mode: today's behaviour, byte for byte.
 //   RESUME  a run record carries the vendor session id (worker.session); `resume` starts a NEW run
 //           (resumed_from, pick.source "resume") on the original's row, sandbox and cwd, continuing that
-//           session (codex-run --resume → `codex exec resume`; run-claude --resume → `claude --resume`,
+//           session (agent-dispatch --resume → `codex exec resume`; run-claude --resume → `claude --resume`,
 //           which is why router-dispatched claude sessions are persisted). A run that ends timeout /
 //           codex-failed / claude-failed with a session says `agent-dispatch resume <run_id>` in its receipt
 //           (resume_with) and on stderr. SIGINT/SIGTERM kills the worker AND a running verify group and
 //           records the run as stopped (with a waiver).
-//   C2  effects  run starts `codex-run --choice <row>` for a codex row or
+//   C2  effects  run starts `agent-dispatch --choice <row>` for a codex row or
 //                `run-claude.ts` for a Claude row. State lives outside the repo:
 //                $XDG_STATE_HOME/agent-router (~/.local/state/agent-router): active/<run_id>.json
 //                while running, runs.jsonl forever.
@@ -42,7 +42,7 @@
 //              Jev's choice is used as made; on any Jev failure, a choice outside the roster, or a cwd under no_egress, the
 //              roster default runs and the reason is recorded — never a silent substitute.
 //   C5  evolution  receipt and log records carry `schema`; fields are additive.
-// Test seams: AGENT_ROUTER_STATE_DIR, DISPATCH_ROSTER_PATH, AGENT_ROUTER_CODEX_RUN (a fake codex-run).
+// Test seams: AGENT_ROUTER_STATE_DIR, DISPATCH_ROSTER_PATH, AGENT_ROUTER_CODEX_WORKER (a fake agent-dispatch).
 import {
   appendFileSync,
   existsSync,
@@ -111,9 +111,9 @@ const SCHEMA = STATE_SCHEMA;
 const STATE_DIR = stateDir();
 const ACTIVE_DIR = activeDir();
 const LOG_FILE = join(STATE_DIR, "runs.jsonl");
-const CODEX_RUN =
-  process.env.AGENT_ROUTER_CODEX_RUN ??
-  join(import.meta.dir, "workers/codex-run.ts");
+const CODEX_WORKER =
+  process.env.AGENT_ROUTER_CODEX_WORKER ??
+  join(import.meta.dir, "workers/codex.ts");
 // A claude row runs `claude -p` through tools/agent-dispatch/src/workers/run-claude.ts (test seam: a fake).
 const RUN_CLAUDE =
   process.env.AGENT_ROUTER_RUN_CLAUDE ??
@@ -262,7 +262,7 @@ function hostRoutes(): Routes {
     codexProbe: () => {
       if (process.env.AGENT_ROUTER_TEST_CODEX_ROUTE === "unavailable")
         return { available: false, reason: "injected sandbox denial" };
-      if (process.env.AGENT_ROUTER_CODEX_RUN !== undefined)
+      if (process.env.AGENT_ROUTER_CODEX_WORKER !== undefined)
         return { available: true, reason: "test worker override" };
       if (codexPath === null)
         return { available: false, reason: "codex is not on PATH" };
@@ -285,7 +285,7 @@ function hostRoutes(): Routes {
       return { available: false, reason };
     },
     codexLoggedIn: () => {
-      if (process.env.AGENT_ROUTER_CODEX_RUN !== undefined) return true;
+      if (process.env.AGENT_ROUTER_CODEX_WORKER !== undefined) return true;
       if (codexPath === null) return false;
       return (
         Bun.spawnSync([codexPath, "login", "status"], {
@@ -578,7 +578,7 @@ function refuseUnrunnable(roster: Roster, id: string): Choice {
 // and the caller learned why only by reading the run's stderr (a rented box, 2026-10-06: two
 // workers "failed to start"). Ask Codex first, and refuse with the fix and where to run it.
 function refuseUnauthenticatedCodex(): void {
-  if (process.env.AGENT_ROUTER_CODEX_RUN !== undefined) return; // test seam: a fake codex-run
+  if (process.env.AGENT_ROUTER_CODEX_WORKER !== undefined) return; // test seam: a fake agent-dispatch
   if (Bun.which("codex") === null)
     fatal(
       `codex is not installed on ${hostname()}: every codex worker would fail — install it there: mise run install:ai-clis (dotfiles)`,
@@ -613,7 +613,7 @@ const CLAUDE_MODE: Record<string, { mode: string; tools?: string }> = {
   "workspace-write": { mode: "acceptEdits", tools: "Bash" },
 };
 
-/** The worker command for a row: codex-run for codex, run-claude for claude. */
+/** The worker command for a row: agent-dispatch for codex, run-claude for claude. */
 function workerArgs(
   roster: Roster,
   row: Choice,
@@ -625,7 +625,7 @@ function workerArgs(
 ): string[] {
   if (row.route === "codex")
     return [
-      CODEX_RUN,
+      CODEX_WORKER,
       "--choice",
       row.id,
       // the typed report's JSON schema: `codex exec --output-schema` (fresh and resumed)
@@ -1062,7 +1062,7 @@ async function launch(l: Launch): Promise<number> {
   mkdirSync(ACTIVE_DIR, { recursive: true });
   const marker = join(ACTIVE_DIR, `${runId}.json`);
   writeFileSync(marker, JSON.stringify(active));
-  // The worker folds its own events into this file (codex-run via CODEX_RUN_PROGRESS_FILE,
+  // The worker folds its own events into this file (agent-dispatch via AGENT_DISPATCH_CODEX_PROGRESS_FILE,
   // run-claude via --progress-file); the statusline Run rows read it.
   const progress = progressFile(runId);
 
@@ -1087,7 +1087,7 @@ async function launch(l: Launch): Promise<number> {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "inherit",
-    env: { ...process.env, CODEX_RUN_PROGRESS_FILE: progress },
+    env: { ...process.env, AGENT_DISPATCH_CODEX_PROGRESS_FILE: progress },
   });
   const stop = (signal: NodeJS.Signals, code: number): void => {
     child.kill(signal);
@@ -1224,10 +1224,10 @@ async function launch(l: Launch): Promise<number> {
       ? {}
       : { verify: verified.results, verify_summary: verified.summary }),
     ...writesFields,
-    // codex-run's own receipt carries progress; a claude worker's comes from its progress file
+    // agent-dispatch's own receipt carries progress; a claude worker's comes from its progress file
     worker: worker.success
       ? { ...progressField, sandbox: flags.sandbox, ...worker.data }
-      : unreadable("codex-run", "codex-failed", out),
+      : unreadable("agent-dispatch", "codex-failed", out),
   };
   const runStats = statsFor(
     row,
@@ -2207,7 +2207,7 @@ function errorLine(error: z.ZodError): string {
 //
 // 2026-10-06: about half of one coordinator's workers were killed at their time bound with 80-90% of
 // the work done, and every follow-up worker re-read everything from zero. A run record carries the
-// vendor's own session id (worker.session); both CLIs resume by it (codex-run --resume → `codex exec
+// vendor's own session id (worker.session); both CLIs resume by it (agent-dispatch --resume → `codex exec
 // resume`, run-claude --resume → `claude --resume`). The new run is a run of its own on the original's
 // row, sandbox and cwd; Jev picks nothing.
 

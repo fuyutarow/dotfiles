@@ -131,7 +131,7 @@
       "date": "2026-10-05",
       "from": 56059,
       "to": 53106,
-      "reason": "MECE reorganization of fan-out guidance. The launch mechanics for parallel work (luna rows as background codex-run, Claude rows as Agent, other CLIs as background Bash, no Workflow, P7 on Linux) now have one home: orchestrating-agents, 並列化の運び方. The per-skill description clauses (Fan-out:/Workflow-native:/Execution:) were removed from 29 descriptions; each body keeps its own solo/fan-out rule (two bodies that lacked it gained one line). The working-tree floor measures 59 active skills and 53,106 name-plus-description characters; the ceiling is pinned to that static proxy, not to measured per-turn tokens."
+      "reason": "MECE reorganization of fan-out guidance. The launch mechanics for parallel work (luna rows as background agent-dispatch, Claude rows as Agent, other CLIs as background Bash, no Workflow, P7 on Linux) now have one home: orchestrating-agents, 並列化の運び方. The per-skill description clauses (Fan-out:/Workflow-native:/Execution:) were removed from 29 descriptions; each body keeps its own solo/fan-out rule (two bodies that lacked it gained one line). The working-tree floor measures 59 active skills and 53,106 name-plus-description characters; the ceiling is pinned to that static proxy, not to measured per-turn tokens."
     },
     {
       "date": "2026-10-06",

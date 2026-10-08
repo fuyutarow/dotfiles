@@ -15,7 +15,7 @@ type CorpusEntry = Readonly<{
 const CORPUS = [
   { path: "agents/goal-kernel/cli.ts" },
   { path: "tools/agent-dispatch/src/agent-dispatch.ts" },
-  { path: "tools/agent-dispatch/src/workers/codex-run.ts" },
+  { path: "tools/agent-dispatch/src/workers/codex.ts" },
   { path: "scripts/render-oxlintrc.ts" },
   { path: "scripts/vendor-deps.ts" },
   { path: "agents/models/check-releases.ts" },
@@ -90,7 +90,7 @@ const CORPUS = [
   { path: "scripts/doctor-remote.ts" },
   { path: "scripts/linux-init.ts" },
   { path: "scripts/box-init.ts" },
-  { path: "scripts/codex-host-bootstrap.ts" },
+  { path: "scripts/agent-dispatch-host.ts" },
   { path: "scripts/config-map.ts" },
   { path: "scripts/reclaim-purge.ts" },
   { path: "scripts/reclaim-run.ts" },

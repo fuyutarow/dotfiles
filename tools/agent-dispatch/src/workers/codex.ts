@@ -1,16 +1,14 @@
-#!/usr/bin/env bun
-// codex-run — run ONE `codex exec` as a bounded, observable worker and print its receipt.
-// Consumers: the main loop (one background call per codex-route worker, its receipt read directly) and a
-// human. PATH command via package.json `bin` (`mise run deps`).
+// Internal agent-dispatch module — run ONE `codex exec` as a bounded, observable worker and print its receipt.
+// The main loop invokes this file directly; tests also exercise it as a child process.
 //
 // WHY A COMMAND, not a recipe pasted into every relay prompt: the recipe drifted (a dropped
 // `</dev/null` hung two runs for their whole budget), relays summarized instead of relaying, and a
 // wrapped `codex` escapes the model-floor hook, which only sees the Bash command line. This file
-// owns the invocation so a caller only has to read the receipt (codex-run C2/C3).
+// owns the invocation so a caller only has to read the receipt (agent-dispatch C2/C3).
 //
-// CLI CONTRACT (designing-command-line-interfaces C0–C5)
-//   C0  consumers   main loop (primary), human; never interactive (stdin is closed).
-//   C1  invocation  codex-run (--choice ID | --model M --effort E) --sandbox S --cd DIR [--timeout-s N]
+// Internal CLI contract (designing-command-line-interfaces C0–C5)
+//   C0  consumers   agent-dispatch main loop; tests invoke the internal file directly.
+//   C1  invocation  `bun tools/agent-dispatch/src/workers/codex.ts` (--choice ID | --model M --effort E) --sandbox S --cd DIR [--timeout-s N]
 //                   [--receipt-dir D] (--prompt-file F | prompt on stdin)
 //                   model, effort, sandbox and cd are REQUIRED: a bare codex inherits config.toml.
 //                   --resume THREAD continues that codex session in place of a fresh one: same flags,
@@ -37,9 +35,9 @@
 //   C5  evolution   receipt fields are additive; `schema` bumps on any removal or meaning change.
 // --emit-envelope PATH writes the P7 resource envelope for exactly this call (same checks, no
 // codex) and exits 0: the main loop creates one per parallel worker before launching it, so each
-// envelope exists before admission. The main loop then runs `agent-resource-run --manifest PATH -- codex-run …` (Linux; P7 is a Linux
+// envelope exists before admission. The main loop then runs `agent-resource-run --manifest PATH -- agent-dispatch …` (Linux; P7 is a Linux
 // admission). Its numbers are measured, not guessed: see ENVELOPE below.
-// The receipt is also written to --receipt-dir (default $TMPDIR/codex-run) so the main loop can
+// The receipt is also written to --receipt-dir (default $TMPDIR/agent-dispatch) so the main loop can
 // re-read it after the call: a summary can paraphrase stdout, not the file.
 import { mkdirSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -69,8 +67,10 @@ const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
 const MAX_TIMEOUT_S = 1800;
 const DEFAULT_TIMEOUT_S = 1800;
-// CODEX_RUN_HEARTBEAT_S is a test seam (a test cannot wait 30 s for the first liveness line).
-const parsedHeartbeat = Number(process.env.CODEX_RUN_HEARTBEAT_S ?? "");
+// AGENT_DISPATCH_CODEX_HEARTBEAT_S is a test seam (a test cannot wait 30 s for the first liveness line).
+const parsedHeartbeat = Number(
+  process.env.AGENT_DISPATCH_CODEX_HEARTBEAT_S ?? "",
+);
 const HEARTBEAT_S =
   parsedHeartbeat !== 0 && !Number.isNaN(parsedHeartbeat)
     ? parsedHeartbeat
@@ -88,7 +88,7 @@ const FLOOR_CONFIG =
     "model-floor.toml",
   );
 // Test seam: the codex binary to run (a fake in tests). Never a model or sandbox override.
-const CODEX_BIN = process.env.CODEX_RUN_BIN ?? "codex";
+const CODEX_BIN = process.env.AGENT_DISPATCH_CODEX_BIN ?? "codex";
 
 type Outcome = "ok" | "codex-failed" | "refused" | "timeout" | "killed";
 const EXIT: Record<Outcome, number> = {
@@ -107,7 +107,8 @@ type Usage = {
 
 // Synchronous writes: every exit path ends in process.exit, and an async write to a pipe can be
 // lost at exit — the receipt is the one thing this command must not lose.
-const say = (text: string): void => void writeSync(2, `codex-run: ${text}\n`);
+const say = (text: string): void =>
+  void writeSync(2, `agent-dispatch[codex]: ${text}\n`);
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
     say(`unknown option '--${flag}'`);
@@ -116,7 +117,7 @@ const rejectPrototypeFlag = (type: string, flag: string): void => {
 };
 const argv = cli(
   {
-    name: "codex-run",
+    name: "agent-dispatch codex (internal)",
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
     parameters: [],
@@ -124,8 +125,8 @@ const argv = cli(
       description:
         "Run one bounded `codex exec` and print a JSON receipt (exit, tokens, last message, duration).",
       examples: [
-        "codex-run --model gpt-6-luna --effort medium --sandbox read-only --cd . --prompt-file brief.md",
-        "echo 'Reply OK' | codex-run --model gpt-6-luna --effort low --sandbox read-only --cd /tmp",
+        "bun tools/agent-dispatch/src/workers/codex.ts --model gpt-6-luna --effort medium --sandbox read-only --cd . --prompt-file brief.md",
+        "echo 'Reply OK' | bun tools/agent-dispatch/src/workers/codex.ts --model gpt-6-luna --effort low --sandbox read-only --cd /tmp",
       ],
     },
     flags: {
@@ -159,7 +160,7 @@ const argv = cli(
       },
       receiptDir: {
         type: String,
-        default: join(tmpdir(), "codex-run"),
+        default: join(tmpdir(), "agent-dispatch"),
         description: "directory the receipt file is written to",
       },
       promptFile: {
@@ -296,7 +297,7 @@ if (!EFFORTS.includes(String(effort)))
 if (!SANDBOXES.includes(String(sandbox)))
   refuse(
     sandbox === "danger-full-access"
-      ? "sandbox danger-full-access is for an isolated runner only; the host declaration in ~/.config/codex-run/host.toml identifies that isolation"
+      ? "sandbox danger-full-access is for an isolated runner only; the host declaration in ~/.config/agent-dispatch/host.toml identifies that isolation"
       : `sandbox '${sandbox}' is not one of ${SANDBOXES.join(", ")}`,
   );
 if (!Number.isInteger(timeoutS) || timeoutS < 1 || timeoutS > MAX_TIMEOUT_S)
@@ -330,7 +331,7 @@ if (floorProblem.value !== undefined) refuse(floorProblem.value);
 // Linux, which needs an unprivileged user namespace; a Docker-default container (seccomp filter, no
 // CAP_SYS_ADMIN — Vast.ai, measured 2026-10-06: `unshare -U` = EPERM) refuses that to every process,
 // so every run there died before its first command. Such a box opts in, per box, with
-// ~/.config/codex-run/host.toml (`schema = 1`, `unsandboxed_reason = "<why this box is itself the
+// ~/.config/agent-dispatch/host.toml (`schema = 1`, `unsandboxed_reason = "<why this box is itself the
 // isolation>"`): the run then uses danger-full-access, says so on stderr every time, and records the
 // reason in the receipt. No file = the sandbox asked for; a malformed file = refused, never guessed.
 const HOST_FILE = codexHostDeclarationPath();
@@ -341,11 +342,11 @@ if (hostDeclaration.kind === "valid")
 codexSandbox =
   unsandboxedReason === undefined ? String(sandbox) : "danger-full-access";
 
-// Measured 2026-10-05 on macOS: codex-run + codex (gpt-6-luna, effort low, read-only) peaked at
+// Measured 2026-10-05 on macOS: agent-dispatch + codex (gpt-6-luna, effort low, read-only) peaked at
 // 191 MB RSS (`/usr/bin/time -l`) and used 1.7 s CPU in a 5.6 s run — a network-bound client.
 const MEASURED_PEAK_BYTES = 191_217_664;
 if (argv.flags.emitEnvelope !== undefined) {
-  const jobId = argv.flags.jobId ?? `codex-run-${runId}`;
+  const jobId = argv.flags.jobId ?? `agent-dispatch-${runId}`;
   const envelope = {
     schema: 1,
     job_id: jobId,
@@ -354,7 +355,7 @@ if (argv.flags.emitEnvelope !== undefined) {
     processes: 16,
     host_ram_peak_bytes: MEASURED_PEAK_BYTES * 5,
     memory_bound:
-      "measured 191 MB peak RSS for codex-run + codex (gpt-6-luna, low, read-only, 2026-10-05) x5 for tool subprocesses in the sandbox; nothing local scales with the prompt",
+      "measured 191 MB peak RSS for agent-dispatch + codex (gpt-6-luna, low, read-only, 2026-10-05) x5 for tool subprocesses in the sandbox; nothing local scales with the prompt",
     device: {
       kind: "cpu",
       gpu_status: "not-beneficial",
@@ -380,7 +381,7 @@ if (argv.flags.emitEnvelope !== undefined) {
     `${JSON.stringify({ envelope_file: path, job_id: jobId, walltime_seconds: envelope.walltime_seconds })}\n`,
   );
   say(
-    `envelope for ${model} (bound ${timeoutS} s) written to ${path} — run: agent-resource-run --manifest ${path} -- codex-run …`,
+    `envelope for ${model} (bound ${timeoutS} s) written to ${path} — run: agent-resource-run --manifest ${path} -- agent-dispatch …`,
   );
   process.exit(0);
 }
@@ -477,12 +478,12 @@ const graced = (r: Promise<string>): Promise<string> =>
     Promise.race([r, Bun.sleep(PIPE_GRACE_MS).then(() => "")]),
   );
 // stdout is read as it arrives: every JSONL line also feeds the statusline's progress file when
-// agent-dispatch asked for one (CODEX_RUN_PROGRESS_FILE; codex-progress.ts). What was read before a
+// agent-dispatch asked for one (AGENT_DISPATCH_CODEX_PROGRESS_FILE; codex-progress.ts). What was read before a
 // grace cut-off is kept, not dropped.
 const progress =
-  process.env.CODEX_RUN_PROGRESS_FILE === undefined
+  process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE === undefined
     ? undefined
-    : progressWriter(process.env.CODEX_RUN_PROGRESS_FILE);
+    : progressWriter(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE);
 let streamed = "";
 function readEvents(): Promise<string> {
   const decoder = new TextDecoder();
@@ -510,7 +511,7 @@ clearTimeout(boundTimer);
 progress?.flush();
 if (progress !== undefined && progress.failedWrites() > 0)
   say(
-    `progress file ${process.env.CODEX_RUN_PROGRESS_FILE}: ${progress.failedWrites()} write(s) failed — the Run: row was not live for them`,
+    `progress file ${process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE}: ${progress.failedWrites()} write(s) failed — the Run: row was not live for them`,
   );
 
 // Usage is the sum over every turn.completed event (`--json` JSONL); a line that is not JSON, or
@@ -587,7 +588,7 @@ if (signal !== undefined) {
     sleepSeconds > 60 ? `; the machine slept about ${sleepSeconds} s` : "";
   emit("killed", {
     ...common,
-    why: `killed by ${signal} from outside codex-run after ${elapsed()} s (not its bound)${sleepNote}`,
+    why: `killed by ${signal} from outside agent-dispatch after ${elapsed()} s (not its bound)${sleepNote}`,
     cause,
   });
 }

@@ -1089,7 +1089,7 @@ interface RouteRun {
   secs: number;
   alive: boolean;
   dispatcherSession: string | undefined;
-  // what the worker is doing (codex-run progress file); undefined until its first event lands
+  // what the worker is doing (agent-dispatch progress file); undefined until its first event lands
   doing:
     | {
         last: string;

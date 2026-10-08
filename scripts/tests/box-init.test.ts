@@ -174,9 +174,7 @@ describe("plan", () => {
       (item) => item.name === "codex host",
     );
     expect(step?.probe?.argv.at(-1)).toContain("--check");
-    expect(step?.act?.argv.at(-1)).toContain(
-      "codex-host-bootstrap.ts --rented",
-    );
+    expect(step?.act?.argv.at(-1)).toContain("agent-dispatch-host.ts --rented");
     expect(step?.log).toBe("codex-host");
   });
 });

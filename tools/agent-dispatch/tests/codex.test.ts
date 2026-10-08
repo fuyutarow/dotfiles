@@ -14,18 +14,18 @@ import { jsonOf, z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
 
 /**
- * codex-run.ts as a real child process against a fake `codex` (CODEX_RUN_BIN). The fake logs its
- * argv and plays one mode: ok | fail | nolast | slow. SAFETY: CODEX_RUN_BIN is set in every run, so
+ * agent-dispatch.ts as a real child process against a fake `codex` (AGENT_DISPATCH_CODEX_BIN). The fake logs its
+ * argv and plays one mode: ok | fail | nolast | slow. SAFETY: AGENT_DISPATCH_CODEX_BIN is set in every run, so
  * the real, billed codex on PATH is never reachable from this suite.
  */
 
-const script = resolve(import.meta.dir, "../src/workers/codex-run.ts");
+const script = resolve(import.meta.dir, "../src/workers/codex.ts");
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 function scratch(): string {
-  const d = mkdtempSync(join(tmpdir(), "codex-run-"));
+  const d = mkdtempSync(join(tmpdir(), "agent-dispatch-"));
   dirs.push(d);
   return d;
 }
@@ -123,12 +123,12 @@ function run(
       promptFile,
       ...args,
     ],
-    // CODEX_RUN_HOST_FILE defaults to a path that does not exist: a box that really carries a host
+    // AGENT_DISPATCH_CODEX_HOST_FILE defaults to a path that does not exist: a box that really carries a host
     // declaration (a rented container) must not flip every sandbox assertion in this suite.
     {
       env: {
         ...process.env,
-        CODEX_RUN_HOST_FILE: join(dir, "no-host.toml"),
+        AGENT_DISPATCH_CODEX_HOST_FILE: join(dir, "no-host.toml"),
         ...env,
       },
       stdin: "ignore",
@@ -155,10 +155,10 @@ const FULL = [
   tmpdir(),
 ];
 
-describe("codex-run", () => {
+describe("agent-dispatch", () => {
   test("ok: one receipt line, usage summed over every turn, last message, and the same receipt on disk", () => {
     const { bin, log } = fakeCodex(scratch());
-    const r = run(FULL, { CODEX_RUN_BIN: bin });
+    const r = run(FULL, { AGENT_DISPATCH_CODEX_BIN: bin });
     expect(r.code).toBe(0);
     expect(r.stdout.trim().split("\n")).toHaveLength(1);
     expect(r.receipt.outcome).toBe("ok");
@@ -188,9 +188,11 @@ describe("codex-run", () => {
     ])
       expect(argv).toContain(w);
     expect(r.stderr).toContain(
-      "codex-run: started gpt-6-luna effort=medium sandbox=read-only",
+      "agent-dispatch[codex]: started gpt-6-luna effort=medium sandbox=read-only",
     );
-    expect(r.stderr).toMatch(/codex-run: ok after \d+(\.\d)? s — receipt /u);
+    expect(r.stderr).toMatch(
+      /agent-dispatch\[codex\]: ok after \d+(\.\d)? s — receipt /u,
+    );
   });
 
   test.each([
@@ -264,7 +266,7 @@ describe("codex-run", () => {
     "refuses %s before codex starts (exit 2, the reason in the receipt)",
     (_name, args, why) => {
       const { bin, log } = fakeCodex(scratch());
-      const r = run(args, { CODEX_RUN_BIN: bin });
+      const r = run(args, { AGENT_DISPATCH_CODEX_BIN: bin });
       expect(r.code).toBe(2);
       expect(r.receipt.outcome).toBe("refused");
       expect(r.receipt.why).toContain(why);
@@ -280,7 +282,10 @@ describe("codex-run", () => {
       host,
       'schema = 1\nunsandboxed_reason = "Vast container: seccomp blocks user namespaces"\n',
     );
-    const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_HOST_FILE: host });
+    const r = run(FULL, {
+      AGENT_DISPATCH_CODEX_BIN: bin,
+      AGENT_DISPATCH_CODEX_HOST_FILE: host,
+    });
     expect(r.code).toBe(0);
     const argv = readFileSync(log, "utf8").split("\n");
     expect(argv).toContain("danger-full-access");
@@ -301,11 +306,14 @@ describe("codex-run", () => {
     });
   });
 
-  test("CODEX_RUN_PROGRESS_FILE gets the final progress record (the statusline Run: row's source)", () => {
+  test("AGENT_DISPATCH_CODEX_PROGRESS_FILE gets the final progress record (the statusline Run: row's source)", () => {
     const dir = scratch();
     const { bin } = fakeCodex(dir);
     const file = join(dir, "run.progress.json");
-    const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_PROGRESS_FILE: file });
+    const r = run(FULL, {
+      AGENT_DISPATCH_CODEX_BIN: bin,
+      AGENT_DISPATCH_CODEX_PROGRESS_FILE: file,
+    });
     expect(r.code).toBe(0);
     const Progress = z.object({
       schema: z.literal(1),
@@ -325,7 +333,7 @@ describe("codex-run", () => {
 
   test("no host declaration: the asked sandbox, and the receipt says so", () => {
     const { bin } = fakeCodex(scratch());
-    const r = run(FULL, { CODEX_RUN_BIN: bin });
+    const r = run(FULL, { AGENT_DISPATCH_CODEX_BIN: bin });
     const Sandbox = z.object({
       sandbox_effective: z.string(),
       unsandboxed_reason: z.null(),
@@ -351,7 +359,10 @@ describe("codex-run", () => {
       const { bin, log } = fakeCodex(dir);
       const host = join(dir, "host.toml");
       writeFileSync(host, text);
-      const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_HOST_FILE: host });
+      const r = run(FULL, {
+        AGENT_DISPATCH_CODEX_BIN: bin,
+        AGENT_DISPATCH_CODEX_HOST_FILE: host,
+      });
       expect(r.code).toBe(2);
       expect(r.receipt.why).toContain("is not a valid host declaration");
       expect(existsSync(log)).toBe(false);
@@ -375,7 +386,7 @@ describe("codex-run", () => {
         "luna-verify-1",
       ],
       {
-        env: { ...process.env, CODEX_RUN_BIN: bin },
+        env: { ...process.env, AGENT_DISPATCH_CODEX_BIN: bin },
         stdin: "ignore",
         timeout: 30_000,
       },
@@ -414,7 +425,7 @@ describe("codex-run", () => {
   test("--run-id names the receipt file and its run_id field", () => {
     const { bin } = fakeCodex(scratch());
     const id = "router-run-2026-10-06-1234";
-    const r = run([...FULL, "--run-id", id], { CODEX_RUN_BIN: bin });
+    const r = run([...FULL, "--run-id", id], { AGENT_DISPATCH_CODEX_BIN: bin });
     expect(r.code).toBe(0);
     expect(r.receipt.run_id).toBe(id);
     expect(r.receipt.receipt_file?.split("/").at(-1)).toBe(`${id}.json`);
@@ -452,7 +463,7 @@ describe("codex-run", () => {
     const { bin, log } = fakeCodex(scratch());
     const r = run(
       ["--choice", "luna-max", "--sandbox", "read-only", "--cd", tmpdir()],
-      { CODEX_RUN_BIN: bin },
+      { AGENT_DISPATCH_CODEX_BIN: bin },
     );
     expect(r.code).toBe(0);
     expect(r.receipt.model).toBe("gpt-6-luna");
@@ -466,7 +477,7 @@ describe("codex-run", () => {
   ])("--choice %p is refused before codex starts", (args, why) => {
     const { bin, log } = fakeCodex(scratch());
     const r = run([...args, "--sandbox", "read-only", "--cd", tmpdir()], {
-      CODEX_RUN_BIN: bin,
+      AGENT_DISPATCH_CODEX_BIN: bin,
     });
     expect(r.code).toBe(2);
     expect(r.receipt.why).toContain(why);
@@ -475,7 +486,7 @@ describe("codex-run", () => {
 
   test("an empty prompt is refused", () => {
     const { bin, log } = fakeCodex(scratch());
-    const r = run(FULL, { CODEX_RUN_BIN: bin }, "   \n");
+    const r = run(FULL, { AGENT_DISPATCH_CODEX_BIN: bin }, "   \n");
     expect(r.code).toBe(2);
     expect(r.receipt.why).toContain("empty prompt");
     expect(existsSync(log)).toBe(false);
@@ -483,7 +494,10 @@ describe("codex-run", () => {
 
   test("codex failing is exit 1 with its exit code and stderr tail in the receipt", () => {
     const { bin } = fakeCodex(scratch());
-    const r = run(FULL, { CODEX_RUN_BIN: bin, FAKE_CODEX_MODE: "fail" });
+    const r = run(FULL, {
+      AGENT_DISPATCH_CODEX_BIN: bin,
+      FAKE_CODEX_MODE: "fail",
+    });
     expect(r.code).toBe(1);
     expect(r.receipt.outcome).toBe("codex-failed");
     expect(r.receipt.codex_exit).toBe(7);
@@ -493,13 +507,13 @@ describe("codex-run", () => {
   test("a signal death before the bound is killed by the outside signal, not a timeout", () => {
     const { bin } = fakeCodex(scratch());
     const r = run([...FULL, "--timeout-s", "10"], {
-      CODEX_RUN_BIN: bin,
+      AGENT_DISPATCH_CODEX_BIN: bin,
       FAKE_CODEX_MODE: "kill",
     });
     expect(r.code).toBe(1);
     expect(r.receipt.outcome).toBe("killed");
     expect(r.receipt.why).toMatch(
-      /killed by SIGKILL from outside codex-run after .* s \(not its bound\)/u,
+      /killed by SIGKILL from outside agent-dispatch after .* s \(not its bound\)/u,
     );
   });
 
@@ -508,7 +522,10 @@ describe("codex-run", () => {
   // failure on Vast was only "Reading additional input from stdin...".
   test("O1: a codex failure names codex's own error event as the cause", () => {
     const { bin } = fakeCodex(scratch());
-    const r = run(FULL, { CODEX_RUN_BIN: bin, FAKE_CODEX_MODE: "errfail" });
+    const r = run(FULL, {
+      AGENT_DISPATCH_CODEX_BIN: bin,
+      FAKE_CODEX_MODE: "errfail",
+    });
     expect(r.code).toBe(1);
     expect(r.receipt.outcome).toBe("codex-failed");
     expect(r.receipt.cause).toBe(
@@ -518,14 +535,17 @@ describe("codex-run", () => {
 
   test("O1: with no error event the cause says so, with the stderr line — never empty", () => {
     const { bin } = fakeCodex(scratch());
-    const r = run(FULL, { CODEX_RUN_BIN: bin, FAKE_CODEX_MODE: "fail" });
+    const r = run(FULL, {
+      AGENT_DISPATCH_CODEX_BIN: bin,
+      FAKE_CODEX_MODE: "fail",
+    });
     expect(r.receipt.cause).toContain("codex printed no error event");
     expect(r.receipt.cause).toContain("stream disconnected");
   });
 
   test("progress: every receipt says what the worker did (ok here: one command, one file)", () => {
     const { bin } = fakeCodex(scratch());
-    const r = run(FULL, { CODEX_RUN_BIN: bin });
+    const r = run(FULL, { AGENT_DISPATCH_CODEX_BIN: bin });
     expect(r.receipt.progress).toEqual({
       last: "✎ kernel.ts",
       commands: 1,
@@ -535,13 +555,16 @@ describe("codex-run", () => {
 
   test("I1: the receipt names codex's thread as the worker's session", () => {
     const { bin } = fakeCodex(scratch());
-    const r = run(FULL, { CODEX_RUN_BIN: bin });
+    const r = run(FULL, { AGENT_DISPATCH_CODEX_BIN: bin });
     expect(r.receipt.session).toBe("thread-fake-0001");
   });
 
   test("exit 0 with no last message is a failure, not success", () => {
     const { bin } = fakeCodex(scratch());
-    const r = run(FULL, { CODEX_RUN_BIN: bin, FAKE_CODEX_MODE: "nolast" });
+    const r = run(FULL, {
+      AGENT_DISPATCH_CODEX_BIN: bin,
+      FAKE_CODEX_MODE: "nolast",
+    });
     expect(r.code).toBe(1);
     expect(r.receipt.why).toContain("wrote no last message");
   });
@@ -550,17 +573,17 @@ describe("codex-run", () => {
     const { bin } = fakeCodex(scratch());
     const t0 = performance.now();
     const r = run([...FULL, "--timeout-s", "3"], {
-      CODEX_RUN_BIN: bin,
+      AGENT_DISPATCH_CODEX_BIN: bin,
       FAKE_CODEX_MODE: "slow",
       FAKE_CODEX_SLEEP: "20",
-      CODEX_RUN_HEARTBEAT_S: "1",
+      AGENT_DISPATCH_CODEX_HEARTBEAT_S: "1",
     });
     expect(performance.now() - t0).toBeLessThan(10_000);
     expect(r.code).toBe(3);
     expect(r.receipt.outcome).toBe("timeout");
     expect(r.receipt.why).toContain("3 s bound");
     expect(r.stderr).toMatch(
-      /codex-run: waiting for gpt-6-luna \(\d+(\.\d)? s of 3 s\)…/u,
+      /agent-dispatch\[codex\]: waiting for gpt-6-luna \(\d+(\.\d)? s of 3 s\)…/u,
     );
   }, 20_000);
 
@@ -570,7 +593,7 @@ describe("codex-run", () => {
   test("O2: a timeout keeps the progress at the kill and codex's last error as the cause", () => {
     const { bin } = fakeCodex(scratch());
     const r = run([...FULL, "--timeout-s", "3"], {
-      CODEX_RUN_BIN: bin,
+      AGENT_DISPATCH_CODEX_BIN: bin,
       FAKE_CODEX_MODE: "netwait",
       FAKE_CODEX_SLEEP: "20",
     });
@@ -589,7 +612,7 @@ describe("codex-run", () => {
     const { bin, log } = fakeCodex(dir);
     const r = run(
       [...FULL, "--resume", "thread-abc-123"],
-      { CODEX_RUN_BIN: bin },
+      { AGENT_DISPATCH_CODEX_BIN: bin },
       "Carry on.",
     );
     expect(r.code).toBe(0);
@@ -614,7 +637,7 @@ describe("codex-run", () => {
     const { bin } = fakeCodex(dir);
     const r = run(
       [...FULL.slice(0, -1), dir, "--resume", "thread-abc-123"],
-      { CODEX_RUN_BIN: bin, FAKE_CODEX_MODE: "pwd" },
+      { AGENT_DISPATCH_CODEX_BIN: bin, FAKE_CODEX_MODE: "pwd" },
       "Carry on.",
     );
     expect(r.code).toBe(0);
@@ -623,7 +646,7 @@ describe("codex-run", () => {
 
   test("--resume with an empty id is refused", () => {
     const { bin } = fakeCodex(scratch());
-    const r = run([...FULL, "--resume", ""], { CODEX_RUN_BIN: bin });
+    const r = run([...FULL, "--resume", ""], { AGENT_DISPATCH_CODEX_BIN: bin });
     expect(r.code).toBe(2);
     expect(r.receipt.outcome).toBe("refused");
   });

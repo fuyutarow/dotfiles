@@ -26,7 +26,7 @@ a PI session is considered launched; re-run after any resume.
    stalls this checklist traces to (it was numbered 2 before the 2026-09-04 row 1 addition
    shifted it); only what it now checks, and now its position, changed
    (`tests/forge-verification-ledger.md` §3).
-4. **PI fan-out is available to the PI's session.** The PI can dispatch background `codex-run`
+4. **PI fan-out is available to the PI's session.** The PI can dispatch background `agent-dispatch`
    workers and Agent subagents under its own charter; without this fan-out, it is single-threaded
    and bound to one context window.
 5. **The seven closure layers and rnd's verbs are honored, and no arm-specific state file

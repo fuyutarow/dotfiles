@@ -9,7 +9,6 @@
     "rr": "tools/repo-retrieve/src/repo-retrieve.ts",
     "repo-retrieve": "tools/repo-retrieve/src/repo-retrieve.ts",
     "smart-open": "tools/smart-open/src/smart-open.ts",
-    "codex-run": "tools/agent-dispatch/src/workers/codex-run.ts",
     "agent-dispatch": "tools/agent-dispatch/src/agent-dispatch.ts",
     "agent-router": "tools/agent-dispatch/src/agent-dispatch.ts"
   },

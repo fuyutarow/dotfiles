@@ -1,6 +1,6 @@
 // The dispatch roster (agents/models/dispatch-roster.toml), read and rendered in ONE place.
-// Consumers: the dispatch hook (agents/claude/hooks/enforce-dispatch-contract.ts), `codex-run
-// --choice` (tools/agent-dispatch/src/workers/codex-run.ts) and scripts/render-home.ts (which
+// Consumers: the dispatch hook (agents/claude/hooks/enforce-dispatch-contract.ts), `agent-dispatch
+// --choice` (tools/agent-dispatch/src/workers/codex.ts) and scripts/render-home.ts (which
 // writes rosterPolicy into the deployed ~/.claude/CLAUDE.md).
 // Zero-install like the hooks: zod comes from agents/hooks/zod.ts (the committed bundle).
 import { readFileSync } from "node:fs";

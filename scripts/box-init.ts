@@ -151,17 +151,17 @@ export function buildPlan(o: Opts): Step[] {
       group: "",
       probe: onBox(
         alias,
-        "bun $HOME/dotfiles/scripts/codex-host-bootstrap.ts --check",
+        "bun $HOME/dotfiles/scripts/agent-dispatch-host.ts --check",
       ),
       act: onBox(
         alias,
         logged(
           "codex-host",
-          "bun $HOME/dotfiles/scripts/codex-host-bootstrap.ts --rented",
+          "bun $HOME/dotfiles/scripts/agent-dispatch-host.ts --rented",
           2 * MIN,
         ),
       ),
-      done: "codex-run host declaration",
+      done: "agent-dispatch host declaration",
       timeoutMs: 2 * MIN,
       log: "codex-host",
       fix: "the rented Linux box must have Bun available and pass the measured container and user-namespace checks",

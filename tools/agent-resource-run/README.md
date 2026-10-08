@@ -71,11 +71,15 @@ is torn down — reports what it _measured_: `ram_peak_measured_bytes` (preferri
 cgroup `MemoryPeak`, kernel-tracked and unaffected by the monitor's own polling interval; falling
 back to the highest `/proc` RSS the monitor sampled when cgroup accounting is unavailable —
 `ram_peak_source` says which) and, for a `gpu` job, `vram_peak_measured_bytes` sampled from
-`nvidia-smi --query-compute-apps` once a second and cross-referenced against the job's own PIDs
-(omitted on WSL2, see above, or on any host without `nvidia-smi`). The same fields are written as
-JSON to `<manifest path>.peak.json`, so a caller can read its own job's measured peak without
-capturing stdout at all; that file is overwritten per run, like every other piece of this
-runner's per-run state.
+`nvidia-smi` once a second. When compute-app rows include the job's PIDs, the method is
+`per-process`; otherwise the runner samples the admitted GPU's `memory.used` and records the
+non-negative peak delta from a pre-launch baseline as `device-delta`. Device-wide deltas may
+include other processes on that GPU. `vram_measure_method` says which source was used, and
+device-delta artifacts include `vram_baseline_raw_bytes` and `vram_peak_raw_bytes`. When neither
+query provides usable data, the measured peak is `null` and the method is `unavailable`. These
+fields are written as JSON to `<manifest path>.peak.json`, so a caller can read its own job's
+measured peak without capturing stdout at all; that file is overwritten per run, like every other
+piece of this runner's per-run state.
 GPU `ADMIT` and `RELEASE` lines and the peak JSON record `admission_basis` and
 `vram_measured_at_admission_bytes`; RELEASE also records `vram_cap_bytes` and, when enforcement
 terminates a job, `breach_reason=VRAM_CAP_EXCEEDED` with the observed peak.

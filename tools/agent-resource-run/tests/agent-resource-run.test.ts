@@ -1492,6 +1492,75 @@ describe("bounded execution", () => {
   );
 
   test.skipIf(NO_UTIL_LINUX)(
+    "records injected VRAM sampling methods and device deltas",
+    async () => {
+      const run = async (
+        computeApps: (pids?: number[]) => string | null,
+        deviceSamples: Array<string | null>,
+        jobId: string,
+      ) => {
+        const stateDirectory = temporaryStateDirectory();
+        const manifestDirectory = temporaryStateDirectory();
+        const manifest = gpuManifest({ job_id: jobId });
+        const manifestPath = join(manifestDirectory, `${jobId}.resource.json`);
+        const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
+        writeFileSync(manifestPath, manifestBytes);
+        let deviceSampleIndex = 0;
+        await executeJob(manifest, ["sh", "-c", "sleep 1.3"], {
+          stateDirectory,
+          snapshot: hostSnapshot(),
+          kernelEnforcement: {
+            available: false,
+            reason: "test sampled enforcement",
+          },
+          hostOptIn: { sampled_enforcement_reason: "test" },
+          monitorIntervalMs: 20,
+          gpuComputeAppsOutput: computeApps,
+          gpuDeviceMemoryOutput: () =>
+            deviceSamples[deviceSampleIndex++] ?? null,
+          manifestSource: manifestSourceFromBytes(manifestPath, manifestBytes),
+        });
+        return parseJson(readFileSync(`${manifestPath}.peak.json`, "utf8"));
+      };
+
+      const perProcess = await run(
+        (pids) =>
+          pids !== undefined && pids.length > 0 ? `${pids[0]},512` : "",
+        ["0, 100", "0, 900"],
+        "per-process-sample",
+      );
+      expect(perProcess).toMatchObject({
+        vram_peak_measured_bytes: 512 * MiB,
+        vram_measure_method: "per-process",
+      });
+
+      const deviceDelta = await run(
+        () => "",
+        ["0, 100", "0, 150", "0, 300"],
+        "device-delta-sample",
+      );
+      expect(deviceDelta).toMatchObject({
+        vram_peak_measured_bytes: 200 * MiB,
+        vram_measure_method: "device-delta",
+        vram_baseline_raw_bytes: 100 * MiB,
+        vram_peak_raw_bytes: 300 * MiB,
+        vram_measure_note:
+          "Device-wide delta may include other processes on the GPU.",
+      });
+
+      const unavailable = await run(
+        () => null,
+        [null, null],
+        "unavailable-sample",
+      );
+      expect(unavailable).toMatchObject({
+        vram_peak_measured_bytes: null,
+        vram_measure_method: "unavailable",
+      });
+    },
+  );
+
+  test.skipIf(NO_UTIL_LINUX)(
     "does not kill on one over-cap VRAM sample",
     async () => {
       const stateDirectory = temporaryStateDirectory();

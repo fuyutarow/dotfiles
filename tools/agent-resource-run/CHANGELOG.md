@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 — 2026-10-09
+
+- Fall back from missing per-process GPU rows to the admitted device's used-VRAM delta from a
+  pre-launch baseline. Peak artifacts record the measurement method and raw device values; the
+  report notes that device-wide deltas may include other GPU processes. Unavailable measurements
+  are explicit `null` values.
+
 ## 1.1.0 — 2026-10-08
 
 - Changed GPU admission from summing every live declaration to measured device use plus declared

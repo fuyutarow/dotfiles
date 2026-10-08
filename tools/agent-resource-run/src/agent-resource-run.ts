@@ -511,7 +511,7 @@ export type ExecutionResult = {
     | "vram-cap"
     | "interrupt"
     | "cleanup";
-  vram_peak_measured_bytes?: number;
+  vram_peak_measured_bytes?: number | null;
   vram_cap_bytes?: number;
 };
 
@@ -539,6 +539,8 @@ type ExecuteOptions = {
   manifestSource?: ManifestSource;
   /** Injected nvidia-smi query result for deterministic tests; production shells out to nvidia-smi. */
   gpuComputeAppsOutput?: (jobPids?: number[]) => string | null;
+  /** Injected `index,memory.used` query result for deterministic device-delta tests. */
+  gpuDeviceMemoryOutput?: (gpuId: number) => string | null;
 };
 
 type Lease = {
@@ -556,16 +558,20 @@ type GroupUsage = { processes: number; rssBytes: number; pids: number[] };
  * `vram_peak_bytes` in the ADMIT line above). `ram_peak_source` is "cgroup" when the scope's own
  * `MemoryPeak` accounting was readable (the authoritative number: kernel-tracked, immune to the
  * monitor loop's own sampling gaps) and "sampled" when it was not (falls back to the highest
- * `/proc` RSS reading the monitor loop itself took). VRAM has no such fallback — nvidia-smi is
- * the only source, so its absence just omits the field, same as `power_watts` on GpuSnapshot.
+ * `/proc` RSS reading the monitor loop itself took). VRAM can be measured per process or as the
+ * admitted GPU's device-memory delta from a pre-launch baseline; device deltas may include other
+ * processes on that GPU.
  */
 export type MeasuredPeak = {
   schema: 1;
   job_id: string;
   ram_peak_measured_bytes: number;
   ram_peak_source: "cgroup" | "sampled";
-  vram_peak_measured_bytes?: number;
-  vram_peak_source?: "nvidia-smi";
+  vram_peak_measured_bytes?: number | null;
+  vram_measure_method?: "per-process" | "device-delta" | "unavailable";
+  vram_baseline_raw_bytes?: number;
+  vram_peak_raw_bytes?: number;
+  vram_measure_note?: string;
   admission_basis?: "measured" | "declared-fallback";
   vram_measured_at_admission_bytes?: number;
   vram_cap_bytes?: number;
@@ -1876,8 +1882,8 @@ function processIdsInScope(scopeUnit: string): number[] {
 // for `memory.total`/`memory.used`. On WSL2, `used_memory` reads literal `[N/A]` for every row
 // (confirmed live 2026-09-26 on this host: PIDs list, memory does not) — see this package's
 // README, "On WSL2 nvidia-smi reports no per-process VRAM". `Number("[N/A]")` is `NaN`, which
-// the `Number.isFinite` check below already rejects, so this degrades the same way an absent
-// GPU does: `vram_peak_measured_bytes` is simply omitted, not a wrong zero.
+// the `Number.isFinite` check below already rejects, so the sampler falls back to device-wide
+// memory when the job has no usable per-process row.
 export function parseNvidiaSmiComputeAppRow(
   line: string,
 ): { pid: number; usedBytes: number } | null {
@@ -1906,6 +1912,80 @@ function computeAppsFromOutput(output: string): Map<number, number> | null {
     usage.set(row.pid, row.usedBytes);
   }
   return usage;
+}
+
+function parseNvidiaSmiDeviceMemoryOutput(
+  output: string,
+  gpuId: number,
+): number | null {
+  const rows = output.trim();
+  if (rows === "") return null;
+  for (const line of rows.split("\n")) {
+    const fields = line.split(",").map((field) => Number(field.trim()));
+    if (fields.length !== 2 || fields.some((field) => !Number.isFinite(field)))
+      return null;
+    const [id, usedMiB] = fields;
+    if (id === gpuId && usedMiB !== undefined && usedMiB >= 0)
+      return usedMiB * MiB;
+  }
+  return null;
+}
+
+function sampleGpuDeviceMemory(gpuId: number): number | null {
+  if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null)
+    return null;
+  const spawned = fromThrowable(() =>
+    Bun.spawnSync(
+      [
+        "timeout",
+        "5s",
+        "nvidia-smi",
+        "--query-gpu=index,memory.used",
+        "--format=csv,noheader,nounits",
+      ],
+      { stdout: "pipe", stderr: "ignore" },
+    ),
+  )();
+  if (spawned.isErr() || spawned.value.exitCode !== 0) return null;
+  return parseNvidiaSmiDeviceMemoryOutput(
+    spawned.value.stdout.toString(),
+    gpuId,
+  );
+}
+
+function injectedOrSampledDeviceMemory(
+  options: ExecuteOptions,
+  gpuId: number,
+): number | null {
+  if (options.gpuDeviceMemoryOutput === undefined)
+    return sampleGpuDeviceMemory(gpuId);
+  const output = options.gpuDeviceMemoryOutput(gpuId);
+  if (output === null) return null;
+  return parseNvidiaSmiDeviceMemoryOutput(output, gpuId);
+}
+
+function measuredVramFields(
+  peakBytes: number | undefined,
+  method: MeasuredPeak["vram_measure_method"],
+  baselineBytes: number | null,
+  rawPeakBytes: number | undefined,
+): Partial<MeasuredPeak> {
+  if (peakBytes === undefined)
+    return {
+      vram_peak_measured_bytes: null,
+      vram_measure_method: "unavailable",
+    };
+  const fields: Partial<MeasuredPeak> = {
+    vram_peak_measured_bytes: peakBytes,
+    vram_measure_method: method ?? "unavailable",
+  };
+  if (method === "device-delta") {
+    if (baselineBytes !== null) fields.vram_baseline_raw_bytes = baselineBytes;
+    if (rawPeakBytes !== undefined) fields.vram_peak_raw_bytes = rawPeakBytes;
+    fields.vram_measure_note =
+      "Device-wide delta may include other processes on the GPU.";
+  }
+  return fields;
 }
 
 function admissionGpuUsage(
@@ -1976,11 +2056,14 @@ function readScopeMemoryPeak(scopeUnit: string): number | undefined {
 }
 
 function releaseDescription(peak: MeasuredPeak): string {
-  const vram =
-    peak.vram_peak_measured_bytes === undefined
-      ? ""
-      : ` vram_peak_measured_bytes=${peak.vram_peak_measured_bytes} ` +
-        `vram_peak_source=${peak.vram_peak_source}`;
+  let vram = "";
+  if (peak.vram_peak_measured_bytes !== undefined) {
+    vram =
+      ` vram_peak_measured_bytes=${peak.vram_peak_measured_bytes} ` +
+      `vram_measure_method=${peak.vram_measure_method ?? "unavailable"}`;
+    if (peak.vram_measure_note !== undefined)
+      vram += ` vram_measure_note=${JSON.stringify(peak.vram_measure_note)}`;
+  }
   return (
     `RELEASE job=${peak.job_id} ram_peak_measured_bytes=${peak.ram_peak_measured_bytes} ` +
     `ram_peak_source=${peak.ram_peak_source}${vram}` +
@@ -2579,6 +2662,12 @@ async function executeJobResult(
   // them after a breach return happens INSIDE that body, before cleanup ever runs.
   let peakRssBytes = 0;
   let peakVramBytes: number | undefined;
+  let vramMeasureMethod: MeasuredPeak["vram_measure_method"];
+  let vramPeakRawBytes: number | undefined;
+  const deviceVramBaselineBytes =
+    lease.reservation.device.kind === "gpu"
+      ? injectedOrSampledDeviceMemory(options, lease.reservation.device.gpu_id)
+      : null;
   let vramCapExceededSamples = 0;
   let vramCapExceeded = false;
   let lastGpuSampleAtMs = 0;
@@ -2599,18 +2688,38 @@ async function executeJobResult(
       gpuUsage =
         injectedOutput === null ? null : computeAppsFromOutput(injectedOutput);
     }
-    if (gpuUsage === null) return;
     const jobPids =
       scopeUnit === null ? usage.pids : processIdsInScope(scopeUnit);
-    const jobVramBytes = jobPids.reduce(
-      (sum, pid) => sum + (gpuUsage.get(pid) ?? 0),
-      0,
-    );
-    peakVramBytes = Math.max(peakVramBytes ?? 0, jobVramBytes);
+    const hasProcessRows =
+      gpuUsage !== null && jobPids.some((pid) => gpuUsage.has(pid));
+    let jobVramBytes: number | undefined;
+    let sampleMethod: MeasuredPeak["vram_measure_method"];
+    if (hasProcessRows && gpuUsage !== null) {
+      jobVramBytes = jobPids.reduce(
+        (sum, pid) => sum + (gpuUsage.get(pid) ?? 0),
+        0,
+      );
+      sampleMethod = "per-process";
+    } else {
+      const gpuId = lease.reservation.device.gpu_id;
+      const deviceUsedBytes = injectedOrSampledDeviceMemory(options, gpuId);
+      if (deviceUsedBytes === null || deviceVramBaselineBytes === null) return;
+      sampleMethod = "device-delta";
+      vramPeakRawBytes = Math.max(
+        vramPeakRawBytes ?? deviceUsedBytes,
+        deviceUsedBytes,
+      );
+      jobVramBytes = Math.max(0, deviceUsedBytes - deviceVramBaselineBytes);
+    }
+    if (jobVramBytes === undefined) return;
+    if (peakVramBytes === undefined || jobVramBytes > peakVramBytes) {
+      peakVramBytes = jobVramBytes;
+      vramMeasureMethod = sampleMethod;
+    }
     const cap = lease.reservation.device.vram_peak_bytes;
     if (
-      jobVramBytes >
-      cap * (1 + policy.value.gpu_vram_cap_tolerance_fraction)
+      sampleMethod === "per-process" &&
+      jobVramBytes > cap * (1 + policy.value.gpu_vram_cap_tolerance_fraction)
     ) {
       vramCapExceededSamples += 1;
       if (vramCapExceededSamples >= 2) {
@@ -2752,7 +2861,7 @@ async function executeJobResult(
           ok: false,
           exitCode,
           reason: "vram-cap",
-          vram_peak_measured_bytes: peakVramBytes ?? 0,
+          vram_peak_measured_bytes: peakVramBytes ?? null,
           vram_cap_bytes: cap,
         });
       }
@@ -2811,12 +2920,14 @@ async function executeJobResult(
         job_id: manifest.job_id,
         ram_peak_measured_bytes: cgroupPeakBytes ?? peakRssBytes,
         ram_peak_source: cgroupPeakBytes !== undefined ? "cgroup" : "sampled",
-        ...(peakVramBytes === undefined
-          ? {}
-          : {
-              vram_peak_measured_bytes: peakVramBytes,
-              vram_peak_source: "nvidia-smi" as const,
-            }),
+        ...(lease.reservation.device.kind === "gpu"
+          ? measuredVramFields(
+              peakVramBytes,
+              vramMeasureMethod,
+              deviceVramBaselineBytes,
+              vramPeakRawBytes,
+            )
+          : {}),
         ...(lease.reservation.device.kind === "gpu"
           ? {
               admission_basis:

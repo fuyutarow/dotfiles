@@ -100,18 +100,26 @@ afterAll(() => {
 const FAKE = join(scratch, "fake-agent-dispatch.ts");
 writeFileSync(
   FAKE,
-  `import { appendFileSync } from "node:fs";
+  `import { appendFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 await Bun.sleep(Number(process.env.FAKE_SLEEP_MS ?? "0"));
 const timedOut = process.env.FAKE_TIMEOUT === "1";
 const exit = timedOut ? 3 : Number(process.env.FAKE_EXIT ?? "0");
+if (process.env.FAKE_ORPHAN_PID_FILE !== undefined) {
+  const orphan = Bun.spawn(["sleep", "60"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  await Bun.write(process.env.FAKE_ORPHAN_PID_FILE, String(orphan.pid));
+}
 const args = Bun.argv.slice(2);
 const promptAt = args.indexOf("--prompt-file");
 if (promptAt !== -1)
   appendFileSync(${JSON.stringify(join(scratch, "prompt.log"))}, "<<<" + await Bun.file(args[promptAt + 1] ?? "").text() + ">>>\\n");
 const touch = process.env.FAKE_TOUCH;
-if (touch !== undefined)
-  await Bun.write((args[args.indexOf("--cd") + 1] ?? ".") + "/" + touch, "worker-was-here");
+if (touch !== undefined) {
+  const path = (args[args.indexOf("--cd") + 1] ?? ".") + "/" + touch;
+  mkdirSync(dirname(path), { recursive: true });
+  await Bun.write(path, "worker-was-here");
+}
 const runIdAt = args.indexOf("--run-id");
 const runId = runIdAt === -1 ? "standalone-fake-run" : args[runIdAt + 1];
 const lastMessage = process.env.FAKE_LAST ?? (process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n");
@@ -723,6 +731,32 @@ describe("agent-dispatch result", () => {
     expect(r.out.endsWith("final report from fake worker\n")).toBe(true);
   });
 
+  test("prints the harness-written partial report for a timed-out worker", async () => {
+    const b = brief(
+      "result-partial",
+      ticketText("writes = []\nverify = []", "Do bounded work.\n"),
+    );
+    const run = await router(runArgs(b, freshCwd()), { FAKE_TIMEOUT: "1" });
+    const receipt = decodedJson(
+      z.looseObject({
+        run_id: z.string(),
+        report_partial: z.looseObject({
+          last_progress: z.string(),
+          commands: z.number(),
+          files_changed: z.array(z.string()),
+          last_message_tail: z.string(),
+          cause: z.string(),
+        }),
+      }),
+      run.out.trim(),
+    );
+    expect(receipt.report_partial.cause).toContain("timed out");
+    const shown = await router(["result", receipt.run_id], {
+      AGENT_ROUTER_STATE_DIR: run.state,
+    });
+    expect(shown.out).toContain("Partial (harness-written):");
+  });
+
   test("an empty final report is explicit and exits 1", async () => {
     const state = join(scratch, "result-empty");
     const b = brief("result-empty", "Do the work.\n");
@@ -802,15 +836,16 @@ describe("agent-dispatch ls and stats", () => {
   test("stats counts picks by source and runs by row", async () => {
     const state = join(scratch, "state-stats");
     const b = brief("stats", "Fix the flaky test.\n");
-    for (const env of [
+    for (const [index, env] of [
       {},
       { TYPESAFE_API_KEY: "", PATH: "/usr/bin:/bin", HOME: scratch },
-    ]) {
+    ].entries()) {
       const cwd = mkdtempSync(join(scratch, "stats-cwd-"));
       await router(
         ["run", "--prompt-file", b, "--cd", cwd, "--sandbox", "read-only"],
         {
           AGENT_ROUTER_STATE_DIR: state,
+          CLAUDE_CODE_SESSION_ID: `stats-session-${index}`,
           ...env,
         },
       );
@@ -1071,8 +1106,8 @@ describe("agent-dispatch grade", () => {
   });
 });
 
-// O3 (Tiger ledger, 2026-10-06): a finished run is owed a grade before more work is dispatched from
-// the same cwd. On Vast 38 runs were logged and none graded, so Jev's "graded record" criterion was
+// O3 (Tiger ledger, 2026-10-06): a finished plain run is owed a grade before more work is dispatched from
+// the same dispatcher session. On Vast 38 runs were logged and none graded, so Jev's "graded record" criterion was
 // empty and the same mis-pick (luna on long edit-and-test loops, killed at its bound) repeated. The
 // gate is at dispatch, before Jev is asked: nothing is spent on a run that will be refused.
 describe("O3: no dispatch over ungraded work", () => {
@@ -1082,7 +1117,11 @@ describe("O3: no dispatch over ungraded work", () => {
     return p;
   };
   const RunId = z.looseObject({ run_id: z.string() });
-  async function first(state: string, cwd: string): Promise<string> {
+  async function first(
+    state: string,
+    cwd: string,
+    session = "o3-session",
+  ): Promise<string> {
     const r = await router(
       [
         "run",
@@ -1093,12 +1132,12 @@ describe("O3: no dispatch over ungraded work", () => {
         "--sandbox",
         "read-only",
       ],
-      { AGENT_ROUTER_STATE_DIR: state },
+      { AGENT_ROUTER_STATE_DIR: state, CLAUDE_CODE_SESSION_ID: session },
     );
     expect(r.code).toBe(0);
     return decodedJson(RunId, r.out.trim()).run_id;
   }
-  const again = (state: string, cwd: string) =>
+  const again = (state: string, cwd: string, session = "o3-session") =>
     router(
       [
         "run",
@@ -1109,7 +1148,7 @@ describe("O3: no dispatch over ungraded work", () => {
         "--sandbox",
         "read-only",
       ],
-      { AGENT_ROUTER_STATE_DIR: state },
+      { AGENT_ROUTER_STATE_DIR: state, CLAUDE_CODE_SESSION_ID: session },
     );
 
   test("an ungraded run in the same cwd refuses the next dispatch before Jev or a worker is reached", async () => {
@@ -1183,17 +1222,18 @@ describe("O3: no dispatch over ungraded work", () => {
     );
   });
 
-  test("an ungraded run in another cwd does not block this one", async () => {
+  test("a different dispatcher session is not blocked, even in another cwd", async () => {
     const state = join(scratch, "o3-othercwd");
-    await first(state, mkdtempSync(join(scratch, "o3-cwd-")));
+    await first(state, mkdtempSync(join(scratch, "o3-cwd-")), "session-one");
     expect(
-      (await again(state, mkdtempSync(join(scratch, "o3-cwd-")))).code,
+      (await again(state, mkdtempSync(join(scratch, "o3-cwd-")), "session-two"))
+        .code,
     ).toBe(0);
   });
 
   test("stats reports how many finished runs are still owed a grade", async () => {
     const state = join(scratch, "o3-stats");
-    await first(state, mkdtempSync(join(scratch, "o3-cwd-")));
+    await first(state, mkdtempSync(join(scratch, "o3-cwd-")), "session-stats");
     const r = await router(["stats"], { AGENT_ROUTER_STATE_DIR: state });
     expect(r.out).toContain('"ungraded":1');
   });
@@ -1297,13 +1337,17 @@ describe("a worker is named by its vendor session id", () => {
   test("a prefix two runs share is refused, naming both", async () => {
     const state = join(scratch, "ids-ambiguous");
     const ids: string[] = [];
-    for (const cwd of [
+    for (const [index, cwd] of [
       mkdtempSync(join(scratch, "ids-a-")),
       mkdtempSync(join(scratch, "ids-b-")),
-    ]) {
+    ].entries()) {
       const r = await router(
         ["run", "--prompt-file", pick, "--cd", cwd, "--sandbox", "read-only"],
-        { AGENT_ROUTER_STATE_DIR: state, AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE },
+        {
+          AGENT_ROUTER_STATE_DIR: state,
+          AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE,
+          CLAUDE_CODE_SESSION_ID: `ids-session-${index}`,
+        },
       );
       ids.push(decodedJson(Worker, r.out.trim()).run_id);
     }
@@ -1787,6 +1831,9 @@ describe("agent-dispatch ticket write enforcement", () => {
     const git = join(bin, "git");
     writeFileSync(git, "#!/bin/sh\nprintf '%s' \"$FAKE_STATUS_OUTPUT\"\n");
     chmodSync(git, 0o755);
+    const jj = join(bin, "jj");
+    writeFileSync(jj, "#!/bin/sh\necho 'not a jj workspace' >&2\nexit 1\n");
+    chmodSync(jj, 0o755);
     return {
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       FAKE_STATUS_OUTPUT: status,
@@ -1797,6 +1844,7 @@ describe("agent-dispatch ticket write enforcement", () => {
     writes: string,
     env: Record<string, string> = {},
     status = "",
+    cwd = freshCwd(),
   ) =>
     router(
       runArgs(
@@ -1804,7 +1852,7 @@ describe("agent-dispatch ticket write enforcement", () => {
           name,
           ticketText(`writes = ${writes}\nverify = ["echo VERIFY-RAN"]`),
         ),
-        freshCwd(),
+        cwd,
       ),
       { ...gitStatus(status), ...env },
     );
@@ -1858,6 +1906,72 @@ describe("agent-dispatch ticket write enforcement", () => {
     expect(grade?.reason).toContain("scripts/hook-registry.ts");
   });
 
+  test("pre-existing dirty files are not attributed to this run", async () => {
+    const cwd = freshCwd();
+    writeFileSync(join(cwd, "already-dirty.ts"), "existing content");
+    const r = await scopeRun(
+      "writes-preexisting",
+      "[]",
+      {},
+      " M already-dirty.ts\n",
+      cwd,
+    );
+    const receipt = decodedJson(
+      z.looseObject({
+        writes_check: z.array(z.string()),
+        writes_violations: z.array(z.string()).optional(),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.writes_check).toEqual([]);
+    expect(receipt.writes_violations).toBeUndefined();
+    expect(r.code).toBe(0);
+  });
+
+  test("a concurrently live sibling ticket path is recorded as unattributed without failing", async () => {
+    const cwd = freshCwd();
+    const state = join(scratch, "writes-sibling");
+    mkdirSync(state, { recursive: true });
+    appendFileSync(
+      join(state, "runs.jsonl"),
+      `${JSON.stringify({
+        schema: 1,
+        kind: "run",
+        run_id: "sibling-live",
+        cwd,
+        started_at: "2000-01-01T00:00:00Z",
+        ended_at: "2999-01-01T00:00:00Z",
+        pick: { source: "jev", choice: "luna-high" },
+        ticket: { schema: 1, writes: ["tools/reclaim/**"] },
+        worker: { outcome: "ok" },
+      })}\n`,
+    );
+    const r = await router(
+      runArgs(
+        brief(
+          "writes-sibling",
+          ticketText('writes = ["tools/statusline/**"]\nverify = ["true"]'),
+        ),
+        cwd,
+      ),
+      {
+        ...gitStatus("?? tools/reclaim/file.ts\n"),
+        AGENT_ROUTER_STATE_DIR: state,
+        FAKE_TOUCH: "tools/reclaim/file.ts",
+      },
+    );
+    const receipt = decodedJson(
+      z.looseObject({
+        writes_unattributed: z.array(z.string()),
+        writes_violations: z.array(z.string()).optional(),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.writes_unattributed).toContain("tools/reclaim/file.ts");
+    expect(receipt.writes_violations).toBeUndefined();
+    expect(r.code).toBe(0);
+  });
+
   test("read-only ticket with changes is a violation", async () => {
     const b = brief(
       "writes-readonly",
@@ -1899,15 +2013,48 @@ describe("agent-dispatch ticket write enforcement", () => {
   });
 });
 
-describe("agent-dispatch run: the gate per write scope", () => {
+describe("agent-dispatch worker teardown", () => {
+  test("reaps a process left in the worker process group and records it", async () => {
+    const pidFile = join(scratch, "orphan-pid.txt");
+    const r = await router(
+      runArgs(
+        brief("orphan-group", "Finish and exit.\n"),
+        freshCwd(),
+        "read-only",
+      ),
+      { FAKE_ORPHAN_PID_FILE: pidFile },
+    );
+    const receipt = decodedJson(
+      z.looseObject({
+        orphans_reaped: z.array(
+          z.looseObject({ pid: z.number(), cmd: z.string() }),
+        ),
+      }),
+      r.out.trim(),
+    );
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    expect(receipt.orphans_reaped.length).toBeGreaterThan(0);
+    await attemptOr(() => process.kill(pid, "SIGKILL"), undefined);
+  });
+});
+
+describe("agent-dispatch run: the ungraded-run gate", () => {
   let seq = 0;
   /** An ungraded finished run in `cwd`; `writes` undefined = a legacy run (no ticket). */
   function seed(
     state: string,
     cwd: string,
     writes: string[] | undefined,
+    verify?: string[],
+    dispatcherSession: string | null = process.env.CLAUDE_CODE_SESSION_ID ??
+      null,
   ): string {
     const runId = `seeded-${seq++}`;
+    const seededTicket = (): Record<string, unknown> | undefined => {
+      if (writes === undefined) return undefined;
+      if (verify !== undefined) return { schema: 1, writes, verify };
+      return { schema: 1, writes };
+    };
     mkdirSync(state, { recursive: true });
     appendFileSync(
       join(state, "runs.jsonl"),
@@ -1916,10 +2063,13 @@ describe("agent-dispatch run: the gate per write scope", () => {
         kind: "run",
         run_id: runId,
         cwd,
+        ...(dispatcherSession === null
+          ? {}
+          : { dispatcher_session: dispatcherSession }),
         pick: { source: "jev", choice: "luna-high" },
         exit: 0,
         worker: { outcome: "ok" },
-        ...(writes === undefined ? {} : { ticket: { schema: 1, writes } }),
+        ...(seededTicket() === undefined ? {} : { ticket: seededTicket() }),
       })}\n`,
     );
     return runId;
@@ -1936,7 +2086,7 @@ describe("agent-dispatch run: the gate per write scope", () => {
       sandbox,
     );
 
-  test("overlapping writes in the same cwd: blocked, naming the run and both globs", async () => {
+  test("ungraded no-verify ticket blocks by same cwd fallback and names grading command", async () => {
     const cwd = freshCwd();
     const state = gate("overlap");
     const id = seed(state, cwd, ["tools/agent-dispatch/**"]);
@@ -1948,47 +2098,80 @@ describe("agent-dispatch run: the gate per write scope", () => {
     );
     expect(r.code).toBe(2);
     expect(r.err).toContain(id);
-    expect(r.err).toContain("tools/agent-dispatch/**");
-    expect(r.err).toContain("tools/agent-dispatch/tests/**");
+    expect(r.err).toContain(`agent-dispatch grade ${id} --evidence`);
   });
 
-  test("disjoint writes in the same cwd: allowed", async () => {
+  test("disjoint write globs still block when a no-verify run is ungraded", async () => {
     const cwd = freshCwd();
     const state = gate("disjoint");
     seed(state, cwd, ["tools/agent-dispatch/**"]);
     const r = await router(ticketRun(cwd, '["agents/models/roster.ts"]'), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(r.code).toBe(0);
+    expect(r.code).toBe(2);
   });
 
-  test("overlapping writes in another cwd: allowed (the gate is per cwd)", async () => {
+  test("dispatcher-session gate spans cwd boundaries", async () => {
     const state = gate("othercwd");
     seed(state, freshCwd(), ["a/**"]);
     const r = await router(ticketRun(freshCwd(), '["a/**"]'), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(r.code).toBe(0);
+    expect(r.code).toBe(2);
   });
 
-  test("a read-only ticket is never blocked, and never blocks", async () => {
+  test("read-only no-verify tickets participate in the grading gate", async () => {
     const cwd = freshCwd();
     const state = gate("readonly");
     seed(state, cwd, ["a/**"]);
     const ro = await router(ticketRun(cwd, "[]", "read-only"), {
       AGENT_ROUTER_STATE_DIR: state,
     });
-    expect(ro.code).toBe(0);
+    expect(ro.code).toBe(2);
     const state2 = gate("readonly2");
     seed(state2, cwd, []);
     const rw = await router(ticketRun(cwd, '["a/**"]'), {
       AGENT_ROUTER_STATE_DIR: state2,
     });
-    expect(rw.code).toBe(0);
+    expect(rw.code).toBe(2);
     const legacy = await router(runArgs(brief(`g-${seq++}`, "legacy\n"), cwd), {
       AGENT_ROUTER_STATE_DIR: state2,
     });
-    expect(legacy.code).toBe(0);
+    expect(legacy.code).toBe(2);
+  });
+
+  test("an ungraded ticket with verify never gates a later dispatch", async () => {
+    const cwd = freshCwd();
+    const state = gate("verified-ticket");
+    seed(state, cwd, ["a/**"], ["true"]);
+    const r = await router(ticketRun(cwd, '["a/**"]'), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(r.code).toBe(0);
+  });
+
+  test("an ungraded run in another dispatcher session does not block", async () => {
+    const cwd = freshCwd();
+    const state = gate("dispatcher-session");
+    const id = seed(state, cwd, undefined);
+    const r = await router(runArgs(brief(`g-${seq++}`, "plain\n"), cwd), {
+      AGENT_ROUTER_STATE_DIR: state,
+      CLAUDE_CODE_SESSION_ID: "session-b",
+    });
+    expect(r.code).toBe(0);
+    expect(r.err).not.toContain(id);
+  });
+
+  test("cwd is the gate key when no dispatcher session is available", async () => {
+    const cwd = freshCwd();
+    const state = gate("cwd-fallback");
+    const id = seed(state, cwd, undefined, undefined, null);
+    const r = await router(runArgs(brief(`g-${seq++}`, "plain\n"), cwd), {
+      AGENT_ROUTER_STATE_DIR: state,
+      CLAUDE_CODE_SESSION_ID: "",
+    });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain(id);
   });
 
   test("legacy mode unchanged: an ungraded legacy run blocks a legacy run and a writing ticket run in its cwd", async () => {
@@ -2067,12 +2250,14 @@ describe("agent-dispatch: the stored brief", () => {
     const b = brief("s-once", "STORE-ONCE twice\n");
     await router(runArgs(b, freshCwd(), "read-only"), {
       AGENT_ROUTER_STATE_DIR: state,
+      CLAUDE_CODE_SESSION_ID: "store-once-first",
     });
     const file = join(state, "briefs", `${sha("STORE-ONCE twice\n")}.md`);
     const first = statSync(file).mtimeMs;
     await Bun.sleep(30);
     const second = await router(runArgs(b, freshCwd(), "read-only"), {
       AGENT_ROUTER_STATE_DIR: state,
+      CLAUDE_CODE_SESSION_ID: "store-once-second",
     });
     expect(second.code).toBe(0);
     expect(readdirSync(join(state, "briefs"))).toEqual([basename(file)]);
@@ -2426,6 +2611,15 @@ const Worker = z.looseObject({
   }),
   report: z.unknown().optional(),
   report_error: z.string().optional(),
+  report_partial: z
+    .looseObject({
+      last_progress: z.string(),
+      commands: z.number(),
+      files_changed: z.array(z.string()),
+      last_message_tail: z.string(),
+      cause: z.string(),
+    })
+    .optional(),
 });
 
 describe("agent-dispatch: a claude worker's stop reason", () => {
@@ -2458,6 +2652,10 @@ describe("agent-dispatch: a claude worker's stop reason", () => {
       expect(parsed.worker.outcome).toBe("claude-failed");
       expect(parsed.worker.cause ?? "").toContain(cause);
       expect(parsed.worker.cause ?? "").not.toContain("reported no cause");
+      if (mode === "max_turns" || mode === "budget")
+        expect(parsed.report_partial?.cause).toContain(
+          cause.split(" ")[3] ?? "stopped",
+        );
     });
 });
 
@@ -2641,7 +2839,7 @@ describe("agent-dispatch: the typed final report", () => {
               "--sandbox",
               "read-only",
             ],
-            { ...env, ...extra },
+            { ...env, CLAUDE_CODE_SESSION_ID: name, ...extra },
           )
         ).out.trim(),
       ).run_id;

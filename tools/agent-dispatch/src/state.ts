@@ -75,6 +75,7 @@ export const ActiveSchema = z.strictObject({
   started_at: z.string(),
   cwd: z.string(),
   dispatcher_session: z.string().optional(),
+  ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
 });
 export type Active = z.output<typeof ActiveSchema>;
 

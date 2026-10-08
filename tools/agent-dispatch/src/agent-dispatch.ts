@@ -20,15 +20,16 @@
 //   TICKET  a brief may open with TOML front matter between `+++` lines (ticket.ts): `writes` globs, `verify`
 //           commands, `verify_timeout_s`, `capabilities`. The router then strips it for the worker, runs
 //           the verify commands after the worker exits (verify.ts), grades the run itself (graded_by
-//           "router", or a recorded waiver), and gates only runs whose `writes` overlap. No front matter
-//           = legacy mode: today's behaviour, byte for byte.
+//           "router", or a recorded waiver); verified runs never gate. A plain brief or ticket with no
+//           verify that remains ungraded gates the next dispatch from the same dispatcher session, or
+//           the same cwd when no session id is available. No front matter = plain-run gate behavior.
 //   RESUME  a run record carries the vendor session id (worker.session); `resume` starts a NEW run
 //           (resumed_from, pick.source "resume") on the original's row, sandbox and cwd, continuing that
 //           session (agent-dispatch --resume → `codex exec resume`; run-claude --resume → `claude --resume`,
 //           which is why router-dispatched claude sessions are persisted). A run that ends timeout /
 //           codex-failed / claude-failed with a session says `agent-dispatch resume <run_id>` in its receipt
-//           (resume_with) and on stderr. SIGINT/SIGTERM kills the worker AND a running verify group and
-//           records the run as stopped (with a waiver).
+//           (resume_with) and on stderr. SIGINT/SIGTERM cleans up the worker group and a running verify
+//           group; the router records its own partial report and a waiver.
 //   C2  effects  run starts `agent-dispatch --choice <row>` for a codex row or
 //                `run-claude.ts` for a Claude row. State lives outside the repo:
 //                $XDG_STATE_HOME/agent-router (~/.local/state/agent-router): active/<run_id>.json
@@ -94,12 +95,7 @@ import {
   withReportInstruction,
   WorkerReport,
 } from "./report.ts";
-import {
-  overlappingGlobs,
-  parseTicket,
-  verifyLine,
-  type Ticket,
-} from "./ticket.ts";
+import { parseTicket, verifyLine, type Ticket } from "./ticket.ts";
 import {
   killRunningVerify,
   runVerify,
@@ -121,6 +117,10 @@ const RUN_CLAUDE =
   join(import.meta.dir, "workers/run-claude.ts");
 
 const now = (): string => Temporal.Now.instant().toString();
+const currentDispatcherSession = (): string | undefined => {
+  const id = process.env.CLAUDE_CODE_SESSION_ID?.trim();
+  return id === undefined || id === "" ? undefined : id;
+};
 const epochMilliseconds = (): number =>
   Temporal.Now.instant().epochMilliseconds;
 const sha256 = (s: string): string =>
@@ -130,6 +130,13 @@ interface WritesCheck {
   paths: string[];
   unavailable?: string;
   violations?: string[];
+  unattributed?: string[];
+}
+
+interface ChangeSnapshot {
+  paths: string[];
+  hashes: Map<string, string | undefined>;
+  unavailable?: string;
 }
 
 interface ReadOnlyCommand {
@@ -185,19 +192,213 @@ async function changedPaths(cwd: string): Promise<WritesCheck> {
   };
 }
 
-async function checkedWrites(
+async function contentHash(
   cwd: string,
-  writes: string[],
-): Promise<WritesCheck> {
+  path: string,
+): Promise<string | undefined> {
+  const read = await attempt(() => readFileSync(join(cwd, path)));
+  return read.ok ? sha256(read.value.toString("base64")) : undefined;
+}
+
+async function snapshotChanges(cwd: string): Promise<ChangeSnapshot> {
   const listed = await changedPaths(cwd);
-  if (listed.unavailable !== undefined) return listed;
   const paths = [
     ...new Set(listed.paths.map((p) => p.replaceAll("\\", "/"))),
   ].filter((p) => !p.split("/").includes("node_modules"));
-  const violations = paths.filter(
-    (path) => !writes.some((glob) => new Bun.Glob(glob).match(path)),
+  return {
+    paths,
+    hashes: new Map(
+      await Promise.all(
+        paths.map(
+          async (path) => [path, await contentHash(cwd, path)] as const,
+        ),
+      ),
+    ),
+    ...(listed.unavailable === undefined
+      ? {}
+      : { unavailable: listed.unavailable }),
+  };
+}
+
+function pathMatchesGlobs(path: string, globs: string[]): boolean {
+  return globs.some((glob) => new Bun.Glob(glob).match(path));
+}
+
+async function checkedWrites(
+  cwd: string,
+  writes: string[],
+  before: ChangeSnapshot,
+  siblingWrites: string[][],
+): Promise<WritesCheck> {
+  if (before.unavailable !== undefined)
+    return { paths: [], unavailable: before.unavailable };
+  const listed = await changedPaths(cwd);
+  if (listed.unavailable !== undefined)
+    return { paths: [], unavailable: listed.unavailable };
+  const paths = [
+    ...new Set([
+      ...before.paths,
+      ...listed.paths.map((p) => p.replaceAll("\\", "/")),
+    ]),
+  ].filter((p) => !p.split("/").includes("node_modules"));
+  const hashes = await Promise.all(
+    paths.map(async (path) => [path, await contentHash(cwd, path)] as const),
   );
-  return { paths, ...(violations.length === 0 ? {} : { violations }) };
+  const delta = hashes
+    .filter(([path, hash]) => hash !== before.hashes.get(path))
+    .map(([path]) => path);
+  const violations = delta.filter(
+    (path) =>
+      !pathMatchesGlobs(path, writes) &&
+      !siblingWrites.some((globs) => pathMatchesGlobs(path, globs)),
+  );
+  const unattributed = delta.filter((path) => !violations.includes(path));
+  return {
+    paths: delta,
+    ...(violations.length === 0 ? {} : { violations }),
+    ...(unattributed.length === 0 ? {} : { unattributed }),
+  };
+}
+
+async function changedSince(
+  cwd: string,
+  before: ChangeSnapshot,
+): Promise<string[]> {
+  if (before.unavailable !== undefined) return [];
+  const after = await changedPaths(cwd);
+  if (after.unavailable !== undefined) return [];
+  const paths = [...new Set([...before.paths, ...after.paths])]
+    .map((p) => p.replaceAll("\\", "/"))
+    .filter((p) => !p.split("/").includes("node_modules"));
+  const hashes = await Promise.all(
+    paths.map(async (path) => [path, await contentHash(cwd, path)] as const),
+  );
+  return hashes
+    .filter(([path, hash]) => hash !== before.hashes.get(path))
+    .map(([path]) => path);
+}
+
+type ProcessInfo = { pid: number; ppid: number; pgid: number; cmd: string };
+
+async function processGroup(
+  pgid: number,
+): Promise<{ processes: ProcessInfo[]; unavailable?: string }> {
+  const ps = await runReadOnly(
+    ["ps", "-axo", "pid=,ppid=,pgid=,command="],
+    process.cwd(),
+  );
+  if (ps.exitCode !== 0)
+    return {
+      processes: [],
+      unavailable:
+        ps.stderr.length > 0 ? ps.stderr : `ps exited ${ps.exitCode}`,
+    };
+  return {
+    processes: ps.stdout.split("\n").flatMap((line) => {
+      const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/u.exec(line);
+      if (match === null || Number(match[3]) !== pgid) return [];
+      return [
+        {
+          pid: Number(match[1]),
+          ppid: Number(match[2]),
+          pgid,
+          cmd: match[4] ?? "",
+        },
+      ];
+    }),
+  };
+}
+
+async function reapWorkerGroup(pgid: number): Promise<{
+  reaped: { pid: number; cmd: string }[];
+  left: { pid: number; cmd: string; why: string }[];
+}> {
+  const listed = await processGroup(pgid);
+  const found = listed.processes;
+  const runnerOwnsScope = process.env.AGENT_RESOURCE_JOB_ID !== undefined;
+  if (listed.unavailable !== undefined) {
+    if (runnerOwnsScope)
+      return {
+        reaped: [],
+        left: [
+          {
+            pid: pgid,
+            cmd: "unknown process group",
+            why: "agent-resource-run owns this process scope",
+          },
+        ],
+      };
+    const term = await attempt(() => process.kill(-pgid, "SIGTERM"));
+    if (!term.ok && errorMessage(term.error).includes("ESRCH"))
+      return { reaped: [], left: [] };
+    const stopped = await waitForGroupExit(pgid, 5_000);
+    if (stopped)
+      return {
+        reaped: [{ pid: pgid, cmd: "unlisted process group member" }],
+        left: [],
+      };
+    const killed = await attempt(() => process.kill(-pgid, "SIGKILL"));
+    return killed.ok || errorMessage(killed.error).includes("ESRCH")
+      ? {
+          reaped: [{ pid: pgid, cmd: "unlisted process group member" }],
+          left: [],
+        }
+      : {
+          reaped: [],
+          left: [
+            {
+              pid: pgid,
+              cmd: "unknown process group",
+              why: `cannot inspect process group: ${listed.unavailable}; signal failed: ${errorMessage(killed.error)}`,
+            },
+          ],
+        };
+  }
+  if (found.length === 0) return { reaped: [], left: [] };
+  const left = found.filter(
+    (p) => runnerOwnsScope || p.cmd.includes("agent-resource-run"),
+  );
+  const targets = found.filter((p) => !left.includes(p));
+  if (targets.length > 0) {
+    void attempt(() => process.kill(-pgid, "SIGTERM"));
+    const deadline = performance.now() + 5_000;
+    while (
+      performance.now() < deadline &&
+      (await processGroup(pgid)).processes.some(
+        (p) => !left.some((x) => x.pid === p.pid),
+      )
+    )
+      await Bun.sleep(100);
+    if (
+      (await processGroup(pgid)).processes.some(
+        (p) => !left.some((x) => x.pid === p.pid),
+      )
+    )
+      void attempt(() => process.kill(-pgid, "SIGKILL"));
+  }
+  return {
+    reaped: targets,
+    left: left.map((p) => ({
+      pid: p.pid,
+      cmd: p.cmd,
+      why: runnerOwnsScope
+        ? "agent-resource-run owns this process scope"
+        : "agent-resource-run process excluded from teardown",
+    })),
+  };
+}
+
+async function waitForGroupExit(
+  pgid: number,
+  graceMs: number,
+): Promise<boolean> {
+  const deadline = performance.now() + graceMs;
+  while (performance.now() < deadline) {
+    const probe = await attempt(() => process.kill(-pgid, 0));
+    if (!probe.ok && errorMessage(probe.error).includes("ESRCH")) return true;
+    await Bun.sleep(100);
+  }
+  return false;
 }
 
 function claudeTranscript(cwd: string, session: string): string {
@@ -559,6 +760,37 @@ function readActive(): { active: Active; alive: boolean; file: string }[] {
         ? [{ active: parsed.data, alive: alive(parsed.data.pid), file }]
         : [];
     });
+}
+
+function overlappingWriterScopes(
+  runId: string,
+  cwd: string,
+  startedAt: string,
+  endedAt: string,
+): string[][] {
+  const intervals = readLog()
+    .filter(
+      (entry) =>
+        entry.kind === "run" && entry.run_id !== runId && entry.cwd === cwd,
+    )
+    .flatMap((entry) => {
+      const writes = entry.ticket?.writes;
+      const start = entry.started_at;
+      const end = entry.ended_at;
+      return writes !== undefined &&
+        start !== undefined &&
+        end !== undefined &&
+        start <= endedAt &&
+        end >= startedAt
+        ? [writes]
+        : [];
+    });
+  const live = readActive()
+    .filter(({ active }) => active.run_id !== runId && active.cwd === cwd)
+    .flatMap(({ active }) =>
+      active.ticket?.writes === undefined ? [] : [active.ticket.writes],
+    );
+  return [...intervals, ...live];
 }
 
 // --- run ------------------------------------------------------------------------------------------
@@ -961,7 +1193,8 @@ async function run(flags: RunFlags): Promise<number> {
   if (parsed.kind === "invalid")
     fatal(`invalid ticket in ${flags.promptFile}: ${parsed.reason}`);
   const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
-  refuseOverUngraded(resolve(flags.cd), ticket?.writes);
+  if (ticket === undefined || ticket.verify.length === 0)
+    refuseOverUngraded(resolve(flags.cd));
   const pick = await pickFor(
     roster,
     parsed.prose,
@@ -1061,10 +1294,12 @@ async function launch(l: Launch): Promise<number> {
     pick_source: pick.source,
     started_at: now(),
     cwd: resolve(flags.cd),
-    ...(process.env.CLAUDE_CODE_SESSION_ID === undefined
+    ...(currentDispatcherSession() === undefined
       ? {}
-      : { dispatcher_session: process.env.CLAUDE_CODE_SESSION_ID }),
+      : { dispatcher_session: currentDispatcherSession() }),
+    ...(ticket === undefined ? {} : { ticket: { writes: ticket.writes } }),
   };
+  const changesBefore = await snapshotChanges(active.cwd);
   mkdirSync(ACTIVE_DIR, { recursive: true });
   const marker = join(ACTIVE_DIR, `${runId}.json`);
   writeFileSync(marker, JSON.stringify(active));
@@ -1094,11 +1329,19 @@ async function launch(l: Launch): Promise<number> {
     stdout: "pipe",
     stderr: "inherit",
     env: { ...process.env, AGENT_DISPATCH_CODEX_PROGRESS_FILE: progress },
+    detached: true,
   });
-  const stop = (signal: NodeJS.Signals, code: number): void => {
-    child.kill(signal);
+  let stopping = false;
+  const stop = async (signal: NodeJS.Signals, code: number): Promise<void> => {
+    if (stopping) return;
+    stopping = true;
+    void attempt(() => process.kill(-child.pid, signal));
     // a verify that is running is in its own process group (verify.ts): it survives unless killed here
     killRunningVerify();
+    await child.exited;
+    const orphans = await reapWorkerGroup(child.pid);
+    const done = progressAtEnd(progress);
+    const filesChanged = await changedSince(active.cwd, changesBefore);
     const session = progressSession(progress);
     // recorded as stopped; a waiver, because a stopped run has no work to grade and must not block the cwd
     appendLog({
@@ -1122,6 +1365,15 @@ async function launch(l: Launch): Promise<number> {
         : { dispatcher_session: active.dispatcher_session }),
       ended_at: now(),
       exit: code,
+      report_partial: {
+        last_progress: done?.last ?? "no progress observed",
+        commands: done?.commands ?? 0,
+        files_changed: filesChanged,
+        last_message_tail: "",
+        cause: `agent-dispatch received ${signal}`,
+      },
+      orphans_reaped: orphans.reaped,
+      ...(orphans.left.length === 0 ? {} : { orphans_left: orphans.left }),
       worker: {
         outcome: "stopped",
         cause: `agent-dispatch received ${signal}`,
@@ -1136,16 +1388,16 @@ async function launch(l: Launch): Promise<number> {
     process.exit(code);
   };
   process.on("SIGINT", () => {
-    stop("SIGINT", 130);
+    void stop("SIGINT", 130);
   });
   process.on("SIGTERM", () => {
-    stop("SIGTERM", 143);
+    void stop("SIGTERM", 143);
   });
 
   const out = await new Response(child.stdout).text();
   const exit = await child.exited;
+  const orphans = await reapWorkerGroup(child.pid);
   const done = progressAtEnd(progress);
-  rmSync(marker, { force: true });
   rmSync(progress, { force: true });
   rmSync(workerBrief, { force: true });
   const elapsedS = Math.round((performance.now() - t0) / 100) / 10;
@@ -1167,10 +1419,13 @@ async function launch(l: Launch): Promise<number> {
   const outcomeName = workerOutcome.success
     ? workerOutcome.data.outcome
     : undefined;
-  const writes =
-    ticket === undefined
-      ? undefined
-      : await checkedWrites(active.cwd, ticket.writes);
+  const delta = await checkedWrites(
+    active.cwd,
+    ticket?.writes ?? [],
+    changesBefore,
+    overlappingWriterScopes(runId, active.cwd, active.started_at, now()),
+  );
+  const writes = ticket === undefined ? undefined : delta;
   const writeViolations = writes?.violations ?? [];
   if (writes?.unavailable !== undefined)
     console.error(
@@ -1206,7 +1461,38 @@ async function launch(l: Launch): Promise<number> {
         : `unavailable: ${writes.unavailable}`;
     if (writeViolations.length > 0)
       writesFields.writes_violations = writeViolations;
+    if ((writes?.unattributed?.length ?? 0) > 0)
+      writesFields.writes_unattributed = writes?.unattributed;
   }
+  const stoppedSubtypes = z
+    .looseObject({ stop_subtype: z.string().optional() })
+    .safeParse(worker.success ? worker.data : undefined);
+  const stopCause =
+    outcomeName === "timeout" ||
+    outcomeName === "killed" ||
+    outcomeName === "stopped" ||
+    stoppedSubtypes.data?.stop_subtype === "error_max_turns" ||
+    stoppedSubtypes.data?.stop_subtype?.includes("budget") === true;
+  const workerData = worker.success ? worker.data : undefined;
+  const lastMessageTail =
+    z
+      .looseObject({ last_message: z.string().optional() })
+      .safeParse(workerData)
+      .data?.last_message?.slice(-1000) ?? "";
+  const workerCause = z
+    .looseObject({ cause: z.string().optional() })
+    .safeParse(workerData).data?.cause;
+  const partialCause =
+    outcomeName ?? stoppedSubtypes.data?.stop_subtype ?? "unknown cause";
+  const partialReport = stopCause
+    ? {
+        last_progress: done?.last ?? "no progress observed",
+        commands: done?.commands ?? 0,
+        files_changed: delta.paths,
+        last_message_tail: lastMessageTail,
+        cause: workerCause ?? `worker stopped (${partialCause})`,
+      }
+    : undefined;
   const receipt = {
     schema: SCHEMA,
     host: currentHost(),
@@ -1234,6 +1520,13 @@ async function launch(l: Launch): Promise<number> {
       ? {}
       : { verify: verified.results, verify_summary: verified.summary }),
     ...writesFields,
+    ...(partialReport === undefined ? {} : { report_partial: partialReport }),
+    orphans_reaped: orphans.reaped,
+    ...(orphans.left.length === 0 ? {} : { orphans_left: orphans.left }),
+    orphan_detection:
+      process.platform === "darwin"
+        ? "process group only; macOS cannot recover reparented descendants that called setsid"
+        : "process group only; this router does not assign a per-run Linux cgroup or recover reparented descendants that called setsid",
     // agent-dispatch's own receipt carries progress; a claude worker's comes from its progress file
     worker: worker.success
       ? { ...progressField, sandbox: flags.sandbox, ...worker.data }
@@ -1250,6 +1543,7 @@ async function launch(l: Launch): Promise<number> {
     roster.as_of,
   );
   appendLog({ kind: "run", ...receipt, stats: runStats });
+  rmSync(marker, { force: true });
   let graded: Record<string, unknown> = {};
   if (verified !== undefined) {
     graded =
@@ -1440,13 +1734,22 @@ const LogLine = z.looseObject({
   kind: z.string(),
   run_id: z.string().optional(),
   cwd: z.string().optional(),
+  dispatcher_session: z.string().optional(),
+  started_at: z.string().optional(),
+  ended_at: z.string().optional(),
   brief: z
     .looseObject({ path: z.string(), sha256: z.string().optional() })
     .optional(),
   // present on a run dispatched with a ticket; absent = legacy
-  ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
+  ticket: z
+    .looseObject({
+      writes: z.array(z.string()),
+      verify: z.array(z.string()).optional(),
+    })
+    .optional(),
   writes_check: z.union([z.array(z.string()), z.string()]).optional(),
   writes_violations: z.array(z.string()).optional(),
+  writes_unattributed: z.array(z.string()).optional(),
   pick: z.looseObject({
     source: z.string(),
     choice: z.string(),
@@ -1461,6 +1764,14 @@ const LogLine = z.looseObject({
   // run recorded before it. report is unknown here so a malformed one never drops the whole line.
   report: z.unknown().optional(),
   report_error: z.string().optional(),
+  report_partial: z.unknown().optional(),
+  orphans_reaped: z
+    .array(z.looseObject({ pid: z.number(), cmd: z.string() }))
+    .optional(),
+  orphans_left: z
+    .array(z.looseObject({ pid: z.number(), cmd: z.string(), why: z.string() }))
+    .optional(),
+  orphan_detection: z.string().optional(),
   worker: z
     .looseObject({
       outcome: z.string().optional(),
@@ -1589,64 +1900,48 @@ function readWaivers(): Set<string> {
 }
 
 // O3 (Tiger ledger, owner 2026-10-06 「tiger styleが徹底されているべき。fail firstでなければ」): a
-// finished run is owed a grade, or a waiver with its reason, before more work is dispatched from
-// the same cwd. On Vast 38 runs were logged and none graded: Jev's "graded record" criterion stayed
+// finished plain run is owed a grade, or a waiver with its reason, before more work is dispatched from
+// the same dispatcher session (cwd only when the session id is absent). On Vast 38 runs were logged and none graded: Jev's "graded record" criterion stayed
 // empty, a run that deleted a file it was asked to lint stayed "ok", and the same mis-pick (luna on
 // long edit-and-test loops, killed at its bound) repeated. Grading was available and optional, so
-// it never happened; the gate makes the owed grade the coordinator's next step.
-function owedGrades(cwd: string, except?: string): Logged[] {
+// it never happened; the gate makes the owed grade the coordinator's next step. Router-verified
+// ticket runs are excluded from the gate.
+function owedGrades(cwd: string, sessionId?: string): Logged[] {
   const graded = readGrades();
   const waived = readWaivers();
   return readLog().filter(
     (l) =>
       l.kind === "run" &&
       l.run_id !== undefined &&
-      l.cwd === cwd &&
-      l.run_id !== except &&
+      (sessionId === undefined
+        ? l.cwd === cwd && l.dispatcher_session === undefined
+        : l.dispatcher_session === sessionId) &&
+      (l.ticket === undefined || (l.ticket.verify?.length ?? 0) === 0) &&
       !graded.has(l.run_id) &&
       !waived.has(l.run_id),
   );
 }
 
-// The gate per write scope. `mine` is this run's declared writes (undefined = a legacy run, no ticket).
-//   - a read-only ticket (writes = []) is never blocked, and an ungraded read-only run never blocks;
-//   - a legacy run's scope is unknown, so it is treated as "may write anywhere": it blocks and is
-//     blocked by every writing run in the same cwd (today's same-cwd rule);
-//   - two ticket runs conflict only when some pair of their write globs overlaps (ticket.ts globsOverlap).
-function conflict(
-  mine: string[] | undefined,
-  theirs: string[] | undefined,
-): string | undefined {
-  if (mine?.length === 0 || theirs?.length === 0) return undefined;
-  if (mine === undefined || theirs === undefined)
-    return "same-cwd rule: one of the two runs has no ticket, so its write scope is unknown";
-  const pairs = overlappingGlobs(mine, theirs);
-  return pairs.length === 0
-    ? undefined
-    : pairs.map(([m, t]) => `${t} overlaps ${m}`).join(", ");
-}
-
 function refuseOverUngraded(
   cwd: string,
-  mine?: string[],
+  session = currentDispatcherSession(),
   except?: string,
 ): void {
-  const owed = owedGrades(cwd, except).flatMap((l) => {
-    const why = conflict(mine, l.ticket?.writes);
-    return why === undefined ? [] : [{ run: l, why }];
-  });
+  const owed = owedGrades(cwd, session).filter(
+    (entry) => entry.run_id !== except,
+  );
   if (owed.length === 0) return;
   const lines = owed
     .slice(0, 10)
     .map(
-      ({ run: l, why }) =>
-        `  ${l.run_id ?? ""}  ${l.pick.choice}  ${l.worker?.outcome ?? `exit ${l.exit ?? "?"}`}  (${why})`,
+      (l) =>
+        `  ${l.run_id ?? ""}  ${l.pick.choice}  ${l.worker?.outcome ?? `exit ${l.exit ?? "?"}`}`,
     );
   const more = owed.length > 10 ? [`  … and ${owed.length - 10} more`] : [];
-  const id = owed[0]?.run.run_id ?? "<run_id>";
+  const id = owed[0]?.run_id ?? "<run_id>";
   fatal(
     [
-      `${owed.length} finished run(s) in ${cwd} are not graded; grade each before dispatching more work here:`,
+      `${owed.length} finished run(s) in ${session === undefined ? cwd : `dispatcher session ${session}`} are not graded; grade each before dispatching more work from this session:`,
       ...lines,
       ...more,
       `Run the checks on its work, then: agent-dispatch grade ${id} --evidence <checks file>`,
@@ -2270,7 +2565,8 @@ async function resumeCommand(
   if (promptFile !== undefined && !existsSync(promptFile))
     fatal(`no such message file: ${promptFile}`);
   // the original is the run being continued: its own ungraded record must not block its continuation
-  refuseOverUngraded(cwd, ticket?.writes, runId);
+  if (ticket === undefined || ticket.verify.length === 0)
+    refuseOverUngraded(cwd, currentDispatcherSession(), runId);
   const message =
     promptFile === undefined
       ? defaultResumeMessage(
@@ -2647,6 +2943,10 @@ function resultCommand(
     `session=${worker?.session ?? "none"}`,
   ];
   process.stdout.write(`${fields.join(" ")}\n`);
+  if (logged.report_partial !== undefined)
+    process.stdout.write(
+      `Partial (harness-written): ${JSON.stringify(logged.report_partial)}\n`,
+    );
   if (typed.success) {
     process.stdout.write(`${renderReport(typed.data)}\n`);
     return 0;

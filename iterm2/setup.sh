@@ -8,8 +8,16 @@
 # (like karabiner/); do not source this on WSL.
 set -euo pipefail
 
+# Owner decision (2026-10-09): disable iTerm2's Claude Code integration; the renderer remains the sole writer of ~/.claude/settings.json, so iTerm2 hooks are never restored there.
 defaults write com.googlecode.iterm2 PrefsCustomFolder -string "$HOME/dotfiles/iterm2"
 defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
+defaults write com.googlecode.iterm2 NoSyncSuppressClaudeCodeIntegrationRepairPrompt -bool true
+defaults write com.googlecode.iterm2 NoSyncClaudeCodeWorkgroupUpsellSuppressed -bool true
+
+toolbelt_tools="$(defaults read com.googlecode.iterm2 ToolbeltTools 2> /dev/null | tr -d '[:space:]' || true)"
+if [[ $toolbelt_tools == '("SessionStatus")' ]]; then
+  defaults write com.googlecode.iterm2 ToolbeltTools -array
+fi
 
 echo "✅ iTerm2 pointed at $HOME/dotfiles/iterm2 for preferences."
 echo "   Quit and relaunch iTerm2 for this to take effect (tmux sessions survive — just detach)."

@@ -24,3 +24,8 @@ Optional: `Settings (⌘,) → General → Preferences → "Save changes to fold
 auto-persists every GUI change on quit. There's no known `defaults(1)` key for that specific
 checkbox, so it's the one manual step `setup.sh` can't do for you — without it, iTerm2 just
 prompts to save on quit instead, which still works.
+
+`mise run mac:iterm2` also suppresses iTerm2's Claude Code integration repair prompt and
+workgroup upsell, and removes its Session Status Toolbelt entry when that is the only entry.
+The repo renderer remains the sole writer of `~/.claude/settings.json`, so iTerm2's integration
+hooks are not restored there.

@@ -550,6 +550,61 @@ describe("enforce-storage-headroom", () => {
     }
   });
 
+  test("allows only small Write/Edit operations under the session scratchpad below deny", () => {
+    const { env } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    const scratchpad = `/tmp/claude-${process.getuid?.() ?? ""}/session/scratchpad`;
+    for (const payload of [
+      {
+        tool_name: "Write",
+        tool_input: { file_path: scratchpad, content: "small recovery brief" },
+      },
+      {
+        tool_name: "Edit",
+        tool_input: { file_path: scratchpad, new_string: "small replacement" },
+      },
+    ]) {
+      const d = decisionOf(runHook(HOOK, payload, env).stdout);
+      expect(d?.permissionDecision).toBe("allow");
+      expect(d?.permissionDecisionReason).toContain("session scratchpad");
+    }
+
+    const large = decisionOf(
+      runHook(
+        HOOK,
+        {
+          tool_name: "Write",
+          tool_input: {
+            file_path: scratchpad,
+            content: "x".repeat(64 * 1024 + 1),
+          },
+        },
+        env,
+      ).stdout,
+    );
+    expect(large?.permissionDecision).toBe("deny");
+
+    const repoFile = decisionOf(
+      runHook(
+        HOOK,
+        {
+          tool_name: "Write",
+          tool_input: {
+            file_path: "/workspace/recovery.md",
+            content: "small recovery brief",
+          },
+        },
+        env,
+      ).stdout,
+    );
+    expect(repoFile?.permissionDecision).toBe("deny");
+  });
+
   test("calls above warn pass silently, and between the lines carry a reclaim warning", () => {
     const above = cachedConfig(
       (c) => {
@@ -561,6 +616,13 @@ describe("enforce-storage-headroom", () => {
     for (const payload of [
       bash("cp x y"),
       { tool_name: "Write", tool_input: {} },
+      {
+        tool_name: "Write",
+        tool_input: {
+          file_path: `/tmp/claude-${process.getuid?.() ?? ""}/session/scratchpad`,
+          content: "small recovery brief",
+        },
+      },
     ]) {
       expect(decisionOf(runHook(HOOK, payload, above.env).stdout)).toBeNull();
     }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3
+
+- Allow small hook writes to the current user's session scratchpad below the storage deny line.
+
 ## 0.1.2
 
 - Replace the detached checkout-size measurement with bounded synchronous probes and a shared per-repository cache entry.

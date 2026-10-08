@@ -65,6 +65,7 @@ import {
 } from "./narrow.ts";
 
 const GiB = 1024 ** 3;
+const MAX_SCRATCHPAD_WRITE_BYTES = 64 * 1024;
 const CONFIG_PATH =
   process.env.STORAGE_HEADROOM_CONFIG ??
   join(import.meta.dir, "storage-headroom.toml");
@@ -1150,6 +1151,18 @@ async function main(): Promise<void> {
   ) {
     return;
   }
+  const fileInput = obj(at(payload, "tool_input"));
+  const filePath = strAt(fileInput, "file_path");
+  const fileContent =
+    strAt(fileInput, "content") ?? strAt(fileInput, "new_string");
+  const scratchpadRoot = resolve("/tmp", `claude-${process.getuid?.() ?? ""}`);
+  const fileTarget = filePath === undefined ? "" : resolve(filePath);
+  const fileBytes =
+    fileContent === undefined ? Infinity : Buffer.byteLength(fileContent);
+  const smallScratchpadWrite =
+    (toolName === "Write" || toolName === "Edit") &&
+    fileTarget.startsWith(`${scratchpadRoot}/`) &&
+    fileBytes <= MAX_SCRATCHPAD_WRITE_BYTES;
   const command =
     toolName === "Bash" ? strAt(payload, "tool_input", "command") : undefined;
   const cwd = strAt(payload, "cwd") ?? process.cwd();
@@ -1209,6 +1222,12 @@ async function main(): Promise<void> {
     wsl &&
     config.drive.host !== undefined &&
     (await freeBytes(config.drive.host.path)) === null;
+  if (low.length > 0 && smallScratchpadWrite) {
+    decidePre(
+      "allow",
+      `storage-headroom: allowing ${toolName} to write ${fileBytes} bytes under the session scratchpad (${scratchpadRoot}); limit ${MAX_SCRATCHPAD_WRITE_BYTES} bytes.`,
+    );
+  }
   if ((low.length > 0 || hostUnreadable) && hit === null) {
     denyLowSpace(drives, config.drive);
   }

@@ -91,13 +91,21 @@ function workingCopyOf(p: string): string | null {
     if (found === undefined && isWorkingCopyRoot(dir)) found = dir;
     if (found === undefined && dirname(dir) === dir) found = null;
     if (found !== undefined) {
-      for (const w of walked) rootOf.set(w, found);
-      rootOf.set(dir, found);
-      return found;
+      return cacheWorkingCopy(dir, walked, found);
     }
     walked.push(dir);
     dir = dirname(dir);
   }
+}
+
+function cacheWorkingCopy(
+  dir: string,
+  walked: string[],
+  found: string | null,
+): string | null {
+  for (const w of walked) rootOf.set(w, found);
+  rootOf.set(dir, found);
+  return found;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -212,7 +220,18 @@ const WRAPPER_ARGS: Record<string, (args: string[]) => string[]> = {
   "systemd-run": (a) =>
     dropFlags(
       a,
-      new Set(["-p", "--property", "-u", "--unit", "-E", "--setenv", "-H", "-M", "--slice", "-G"]),
+      new Set([
+        "-p",
+        "--property",
+        "-u",
+        "--unit",
+        "-E",
+        "--setenv",
+        "-H",
+        "-M",
+        "--slice",
+        "-G",
+      ]),
     ),
   ionice: (a) => dropFlags(a, new Set(["-c", "-n", "-p", "-P", "-u"])),
   stdbuf: (a) => dropFlags(a, new Set(["-i", "-o", "-e"])),
@@ -228,31 +247,41 @@ function shellString(args: string[], cwd: string): ShellCommand[] | undefined {
 /** Every julia launch in `commands` (shell strings are followed up to MAX_DEPTH). */
 function juliaLaunches(commands: ShellCommand[], depth: number): Launch[] {
   const out: Launch[] = [];
-  for (const c of commands) {
-    let words = c.words;
-    const env = [...c.assignments];
-    for (let guard = 0; guard < 12 && words.length > 0; guard++) {
-      const eff = effective({ ...c, words });
-      if (eff === undefined) break;
-      // env X=… and friends: the words the wrapper strip consumed before the program
-      const consumed = words.slice(0, words.length - eff.args.length - 1);
-      env.push(...consumed.filter((w) => ENV_ASSIGNMENT.test(w)));
-      if (JULIA_NAME.test(eff.name)) {
-        out.push({ args: eff.args, env, cwd: c.cwd });
-        break;
-      }
-      if (/^(?:ba|z|da|k)?sh$/u.test(eff.name)) {
-        const inner =
-          depth < MAX_DEPTH ? shellString(eff.args, c.cwd) : undefined;
-        if (inner !== undefined) out.push(...juliaLaunches(inner, depth + 1));
-        break;
-      }
-      const unwrap = WRAPPER_ARGS[eff.name];
-      if (unwrap === undefined) break;
-      words = unwrap(eff.args);
-    }
+  for (const command of commands) {
+    out.push(...juliaLaunchesInCommand(command, depth));
   }
   return out;
+}
+
+function juliaLaunchesInCommand(c: ShellCommand, depth: number): Launch[] {
+  const out: Launch[] = [];
+  let words = c.words;
+  const env = [...c.assignments];
+  for (let guard = 0; guard < 12 && words.length > 0; guard++) {
+    const eff = effective({ ...c, words });
+    if (eff === undefined) return out;
+    // env X=… and friends: the words the wrapper strip consumed before the program
+    const consumed = words.slice(0, words.length - eff.args.length - 1);
+    env.push(...consumed.filter((w) => ENV_ASSIGNMENT.test(w)));
+    if (JULIA_NAME.test(eff.name)) {
+      out.push({ args: eff.args, env, cwd: c.cwd });
+      return out;
+    }
+    if (/^(?:ba|z|da|k)?sh$/u.test(eff.name)) {
+      out.push(...shellLaunches(eff.args, c.cwd, depth));
+      return out;
+    }
+    const unwrap = WRAPPER_ARGS[eff.name];
+    if (unwrap === undefined) return out;
+    words = unwrap(eff.args);
+  }
+  return out;
+}
+
+function shellLaunches(args: string[], cwd: string, depth: number): Launch[] {
+  if (depth >= MAX_DEPTH) return [];
+  const inner = shellString(args, cwd);
+  return inner === undefined ? [] : juliaLaunches(inner, depth + 1);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -304,15 +333,7 @@ function parseJuliaArgs(args: string[]): JuliaArgs {
       return r;
     }
     if (a.startsWith("--")) {
-      const eq = a.indexOf("=");
-      const name = (eq === -1 ? a : a.slice(0, eq)).slice(2);
-      let value = eq === -1 ? undefined : a.slice(eq + 1);
-      if (value === undefined && !LONG_NO_NEXT.has(name)) value = args[++i];
-      if (name === "project") r.project = value ?? "";
-      else if (name === "eval" || name === "print") r.inline = true;
-      else if (name === "load" && value !== undefined) r.loads.push(value);
-      else if (name === "version" || name === "help" || name === "help-hidden")
-        r.query = true;
+      i = parseLongJuliaOption(args, i, r);
       continue;
     }
     if (a === "-v" || a === "-h") r.query = true;
@@ -323,6 +344,28 @@ function parseJuliaArgs(args: string[]): JuliaArgs {
     else if (flag === "L" && value !== undefined) r.loads.push(value);
   }
   return r;
+}
+
+function parseLongJuliaOption(
+  args: string[],
+  index: number,
+  result: JuliaArgs,
+): number {
+  const option = args[index] ?? "";
+  const eq = option.indexOf("=");
+  const name = (eq === -1 ? option : option.slice(0, eq)).slice(2);
+  let value = eq === -1 ? undefined : option.slice(eq + 1);
+  let nextIndex = index;
+  if (value === undefined && !LONG_NO_NEXT.has(name)) {
+    nextIndex++;
+    value = args[nextIndex];
+  }
+  if (name === "project") result.project = value ?? "";
+  else if (name === "eval" || name === "print") result.inline = true;
+  else if (name === "load" && value !== undefined) result.loads.push(value);
+  else if (name === "version" || name === "help" || name === "help-hidden")
+    result.query = true;
+  return nextIndex;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -379,17 +422,22 @@ function judgeProgram(
       : undefined;
   const abs = resolve(cwd, expandHome(program));
   const root = workingCopyOf(abs);
-  if (root === null)
-    return context
-      ? `${abs} is a julia script outside every firedancer working copy`
-      : undefined;
+  if (root === null) return outsideWorkingCopyReason(abs, context);
   const rel = relative(root, realish(abs));
   const tracked = isTracked(root, rel);
   if (tracked === undefined)
     return `could not verify that ${rel} is tracked in ${root} (jj/git failed) — failing closed`;
-  return tracked
-    ? undefined
-    : `${rel} is untracked in ${root} (not in @-/HEAD${existsSync(abs) ? "" : "; the file does not exist on disk"}): commit it first`;
+  if (tracked) return undefined;
+  const missing = existsSync(abs) ? "" : "; the file does not exist on disk";
+  return `${rel} is untracked in ${root} (not in @-/HEAD${missing}): commit it first`;
+}
+
+function outsideWorkingCopyReason(
+  abs: string,
+  context: boolean,
+): string | undefined {
+  if (!context) return undefined;
+  return `${abs} is a julia script outside every firedancer working copy`;
 }
 
 /** Why this Bash command must be refused, or undefined. `cwd` is where the shell starts. */
@@ -432,6 +480,7 @@ function main(): void {
     command,
     cwd !== undefined && cwd !== "" ? cwd : process.cwd(),
   );
+  // SINGLE-AXIS: this deny decides only whether a Julia launch follows the official execution route.
   if (why !== undefined)
     decidePre("deny", `official-execution: ${why}. ${OFFICIAL_ROUTE}`);
 }

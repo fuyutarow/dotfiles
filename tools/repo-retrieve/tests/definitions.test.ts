@@ -93,23 +93,7 @@ describe("retrieval.toml", () => {
       local: { strong: 4, likely: 1.5, hook: 7.5 },
       jev: { strong: 2.2, likely: 0, hook: 3.5 },
     }); // pool 40 -> 25: bench 2026-10-01
-    const endpointUrl = loadRetrievalConfig().match(
-      (config) => config.jevEndpoint.url,
-      (error) => `ERROR: ${error.message}`,
-    );
-    const whenExhausted = loadRetrievalConfig().match(
-      (config) => config.jevEndpoint.whenExhausted ?? "missing",
-      (error) => `ERROR: ${error.message}`,
-    );
-    expect(endpointUrl).toBe("https://jevtypesafeai.com/api/v1/decide");
-    expect(whenExhausted).toContain('jev_provider = "typesafe"');
-    // Owner decision 2026-10-01: an exhausted reseller balance points to the official API.
-    const officialEndpoint = loadFromText(
-      shipped.replace(
-        'jev_provider = "jevtypesafeai"',
-        'jev_provider = "typesafe"',
-      ),
-    )().match(
+    const officialEndpoint = loadRetrievalConfig().match(
       (config) => config.jevEndpoint,
       (error) => `ERROR: ${error.message}`,
     );
@@ -117,13 +101,27 @@ describe("retrieval.toml", () => {
       url: "https://api.typesafe.ai/v1/systemone",
       model: "jev-latest",
     });
+    const resellerEndpoint = loadFromText(
+      shipped.replace(
+        'jev_provider = "typesafe"',
+        'jev_provider = "jevtypesafeai"',
+      ),
+    )().match(
+      (config) => [
+        config.jevEndpoint.url,
+        config.jevEndpoint.whenExhausted ?? "missing",
+      ],
+      (error) => [`ERROR: ${error.message}`, ""],
+    );
+    expect(resellerEndpoint[0]).toBe("https://jevtypesafeai.com/api/v1/decide");
+    expect(resellerEndpoint[1]).toContain('jev_provider = "typesafe"');
   });
   test("a bad value stops and names its key", () => {
     const cases: [string, string, RegExp][] = [
       ["pool = 25", "pool = 41", /definition\.pool must be at most recall/u],
       ["recall = 40", "recall = 0", /definition\.recall must be an integer/u],
       [
-        'jev_provider = "jevtypesafeai"',
+        'jev_provider = "typesafe"',
         'jev_provider = "other"',
         /definition\.jev_provider must be one of/u,
       ],
@@ -150,14 +148,7 @@ describe("retrieval.toml", () => {
     ];
     for (const [from, to, err] of cases) {
       expect(shipped.includes(from)).toBe(true);
-      const text = from.startsWith("url")
-        ? shipped
-            .replace(from, to)
-            .replace(
-              'jev_provider = "jevtypesafeai"',
-              'jev_provider = "typesafe"',
-            )
-        : shipped.replace(from, to);
+      const text = shipped.replace(from, to);
       const message = loadFromText(text)().match(
         () => "valid config unexpectedly accepted",
         (error) => error.message,

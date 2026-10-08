@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2 — 2026-10-08
+
+- Use the official TypeSafe API for Jev definition judging.
+
 ## 1.0.1 — 2026-10-07
 
 - Directory renamed from tools/rr/; no behavior change.

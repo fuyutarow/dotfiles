@@ -28,8 +28,9 @@ timeout_ms = 20000
 no_egress = []
 
 [auto.jev]
-api = "reseller"
-url = "https://jevtypesafeai.com/api/v1/decide"
+api = "typesafe"
+url = "https://api.typesafe.ai/v1/systemone"
+model = "jev-latest"
 
 [claude_run]
 max_budget_usd = 2.0

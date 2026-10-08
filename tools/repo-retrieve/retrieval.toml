@@ -27,12 +27,12 @@ judge = "jev"
 # Where Jev is reached: one of [definition.jev_endpoints.*]. Same request shape, different operator.
 # An endpoint's optional `when_exhausted` is the instruction shown when it answers HTTP 402 (no credit).
 #   "typesafe"       TypeSafe AI itself, $0.042 per M input tokens.
-#   "jevtypesafeai"  CODEFASHION TECH LTD, an independent reseller ("not affiliated with TypeSafe
-#                    AI"); forwards to TypeSafe or, on failover, an unnamed AI gateway; does not store
-#                    request bodies; $0.25-0.42 per M; prepaid.
-# The key in ~/.config/typesafe/.env must come from the chosen operator. Current key: the reseller's
-# (2026-10-01). Recommended: an official TypeSafe key — one party fewer, 6-10x cheaper.
-jev_provider = "jevtypesafeai"
+#   "jevtypesafeai"  CODEFASHION TECH LTD, an independent reseller. Retired 2026-10-08; do not use
+#                    or top up.
+# Current key: the official TypeSafe key, created 2026-10-08. It is looked up from TYPESAFE_API_KEY
+# in the environment, then fnox, then the legacy ~/.config/typesafe/.env file. See
+# tools/shared/src/typesafe-key.ts for the exact lookup order.
+jev_provider = "typesafe"
 
 # Projects whose code must never leave this machine: the local judge is used there regardless of
 # `judge`. Paths are home-relative (~/…) or absolute; a project matches if it is or lies under one.
@@ -68,10 +68,9 @@ url = "https://api.typesafe.ai/v1/systemone"
 model = "jev-latest"
 
 [definition.jev_endpoints.jevtypesafeai]
-url = "https://jevtypesafeai.com/api/v1/decide" # takes no `model` field
-# Owner decision 2026-10-01: the prepaid reseller balance is used up, never topped up again.
-when_exhausted = """do NOT top up the reseller — switch to official TypeSafe: get a key at \
-console.typesafe.ai, put it in ~/.config/typesafe/.env as TYPESAFE_API_KEY, and set \
+url = "https://jevtypesafeai.com/api/v1/decide" # takes no `model` field; retired 2026-10-08
+when_exhausted = """do NOT top up the retired reseller — switch to official TypeSafe: get a key at \
+console.typesafe.ai, store TYPESAFE_API_KEY in fnox, and set \
 jev_provider = "typesafe" in tools/repo-retrieve/retrieval.toml"""
 
 # The local judge (rerank_server.py, started by repo-retrieve-rerank.socket). idle_seconds: how long

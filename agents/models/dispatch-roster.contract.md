@@ -23,9 +23,9 @@ describes the configuration system; the roster itself is the configuration.
 
 ## Residual
 
-- `[auto]` sends the head of each brief, and every row's criterion, to the Jev endpoint named in
-  `[auto.jev]` (2026-10-05: the reseller jevtypesafeai.com, owner-approved until an official
-  TypeSafe key exists). The record of what was sent and answered is
+- `[auto]` sends the head of each brief, and every row's criterion, to the official TypeSafe
+  api.typesafe.ai endpoint named in `[auto.jev]` since 2026-10-08 (the jevtypesafeai.com reseller is
+  retired). The record of what was sent and answered is
   ~/.local/state/agent-dispatch/runs.jsonl on each machine.
 - A claude worker has no OS sandbox (tools/agent-dispatch/src/workers/run-claude.ts: permissions are not containment): plan mode
   for read-only, acceptEdits plus Bash for workspace-write, under the same hooks every Claude

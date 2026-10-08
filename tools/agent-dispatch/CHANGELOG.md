@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 — 2026-10-08
+
+- Route Jev auto-picks through the official TypeSafe API.
+
 ## 1.1.0 — 2026-10-08
 
 - Folded the Codex worker into agent-dispatch: removed the `codex-run` bin and moved the host declaration to `~/.config/agent-dispatch/host.toml`.

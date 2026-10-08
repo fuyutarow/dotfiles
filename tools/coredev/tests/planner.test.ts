@@ -15,7 +15,9 @@ describe("coredev planner", () => {
       "links",
       "login-shell",
       "credentials",
+      "sccache",
       "herdr-server",
+      "soks-govern",
       "wsl-services",
     ]);
     expect(plan.steps[2]?.adapter).toBe("wsl-tools");
@@ -38,6 +40,20 @@ describe("coredev planner", () => {
       result.value.steps.find((step) => step.id === "credentials")
         ?.prerequisites,
     ).toEqual(["links"]);
+  });
+
+  test("orders sccache after c-toolchain and soks-govern after credentials", () => {
+    const result = buildPlan("box", "linux");
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    const ids = result.value.steps.map((step) => step.id);
+    expect(ids.indexOf("c-toolchain")).toBeLessThan(ids.indexOf("sccache"));
+    expect(ids.indexOf("c-toolchain")).toBeLessThan(ids.indexOf("soks-govern"));
+    expect(ids.indexOf("credentials")).toBeLessThan(ids.indexOf("soks-govern"));
+    expect(
+      result.value.steps.find((step) => step.id === "soks-govern")
+        ?.prerequisites,
+    ).toEqual(["c-toolchain", "credentials"]);
   });
 
   test("overlay deterministically replaces duplicate step ids", () => {
@@ -75,7 +91,9 @@ describe("coredev planner", () => {
         "links | wsl | probe:dotfiles-linked | action:realize-dotfiles | verify:dotfiles-check",
         "login-shell | wsl | probe:passwd-zsh-listed-in-shells | action:sudo-chsh-zsh | verify:passwd-zsh-listed-in-shells",
         "credentials | wsl | probe:configured-transfers-present | action:push-configured-credentials | verify:configured-transfers-present",
+        "sccache | wsl | probe:real-sccache-on-path | action:install-sccache-runtime-bin | verify:real-sccache-on-path",
         "herdr-server | wsl | probe:herdr-server-shell-current | action:stop-stale-herdr-servers | verify:no-stale-herdr-server",
+        "soks-govern | wsl | probe:soks-govern-version | action:clone-and-cargo-install-soks-govern | verify:soks-govern-version",
         "wsl-services | wsl | probe:services-ready | action:enable-wsl-services | verify:wsl-services",
       ].join("\n"),
     );

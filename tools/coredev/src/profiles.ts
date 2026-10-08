@@ -80,6 +80,17 @@ const core: readonly ProfileStep[] = [
     verifier: "configured-transfers-present",
   },
   {
+    id: "sccache",
+    host: "target",
+    prerequisites: ["tools"],
+    adapter: "sccache",
+    probe: "real-sccache-on-path",
+    action: "install-sccache-runtime-bin",
+    timeoutSeconds: 120,
+    failure: "sccache-install-failed",
+    verifier: "real-sccache-on-path",
+  },
+  {
     id: "herdr-server",
     host: "target",
     prerequisites: ["login-shell"],
@@ -93,6 +104,17 @@ const core: readonly ProfileStep[] = [
 ];
 
 const wsl: readonly ProfileStep[] = [
+  {
+    id: "soks-govern",
+    host: "wsl",
+    prerequisites: ["c-toolchain", "credentials"],
+    adapter: "soks-govern",
+    probe: "soks-govern-version",
+    action: "clone-and-cargo-install-soks-govern",
+    timeoutSeconds: 900,
+    failure: "soks-govern-install-failed",
+    verifier: "soks-govern-version",
+  },
   {
     id: "tools",
     host: "wsl",
@@ -114,6 +136,20 @@ const wsl: readonly ProfileStep[] = [
     timeoutSeconds: 120,
     failure: "wsl-services-failed",
     verifier: "wsl-services",
+  },
+];
+
+const linux: readonly ProfileStep[] = [
+  {
+    id: "soks-govern",
+    host: "linux",
+    prerequisites: ["c-toolchain", "credentials"],
+    adapter: "soks-govern",
+    probe: "soks-govern-version",
+    action: "clone-and-cargo-install-soks-govern",
+    timeoutSeconds: 900,
+    failure: "soks-govern-install-failed",
+    verifier: "soks-govern-version",
   },
 ];
 
@@ -142,4 +178,4 @@ const mac: readonly ProfileStep[] = [
   },
 ];
 
-export const profiles = { core, wsl, mac } as const;
+export const profiles = { core, linux, wsl, mac } as const;

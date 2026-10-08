@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- Add sccache and soks-govern profile steps.
+
 ## 0.3.0
 
 - Replace the legacy auth transfer with configured CLI and fnox credential pushes.

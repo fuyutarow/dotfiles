@@ -18,6 +18,8 @@ export function buildPlan(
     if (step.id === "c-toolchain" && kind === "mac") continue;
     byId.set(step.id, { ...step, host: kind });
   }
+  if (kind === "linux")
+    for (const step of profiles.linux) byId.set(step.id, step);
   for (const name of selected)
     for (const step of profiles[name]) byId.set(step.id, step);
   const steps = [...byId.values()];

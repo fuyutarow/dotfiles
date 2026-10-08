@@ -564,7 +564,64 @@ function workspaceRoot(path: string): string | null {
   }
 }
 
-async function checkoutSizeBytes(root: string): Promise<number | null> {
+const CHECKOUT_PROBE_BUDGET_MS = 50;
+const SMALL_CHECKOUT_FILE_LIMIT = 10_000;
+const BACKGROUND_CHECKOUT_TIMEOUT_MS = 10_000;
+const SPARSE_WORKSPACE_ADVICE =
+  "Use `jj workspace add --sparse-patterns empty <dir>`, then `jj sparse set --add <paths>`.";
+
+export type CheckoutProbeResult = { bytes: number | null; elapsedMs: number };
+export type CheckoutPolicyDeps = {
+  now: () => number;
+  cachedSize: (root: string, now: () => number) => Promise<number | null>;
+  saveSize: (root: string, bytes: number, at: number) => void;
+  probeSize: (root: string, budgetMs: number) => CheckoutProbeResult;
+  trackedFileCount: (root: string, budgetMs: number) => number | null;
+  measureInBackground: (root: string) => void;
+  note: () => void;
+};
+
+function probeCheckoutSize(
+  root: string,
+  budgetMs: number,
+): CheckoutProbeResult {
+  const started = performance.now();
+  const result = Bun.spawnSync(["du", "-sk", "-I", ".jj", "-I", ".git", root], {
+    timeout: budgetMs,
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  if (result.exitCode !== 0)
+    return { bytes: null, elapsedMs: performance.now() - started };
+  const kib = Number(result.stdout.toString().trim().split(/\s/u)[0]);
+  return {
+    bytes: Number.isFinite(kib) && kib >= 0 ? kib * 1024 : null,
+    elapsedMs: performance.now() - started,
+  };
+}
+
+// `jj file list` avoids walking file contents. Its bounded output count is a cheap proxy for
+// whether a full checkout is safe to start while the byte measurement runs off the hook path.
+function probeTrackedFileCount(root: string, budgetMs: number): number | null {
+  const result = Bun.spawnSync(
+    ["jj", "--ignore-working-copy", "-R", root, "file", "list", "-T", '"x\\n"'],
+    {
+      timeout: budgetMs,
+      stdout: "pipe",
+      stderr: "ignore",
+      maxBuffer: 256 * 1024,
+    },
+  );
+  if (result.exitCode !== 0) return null;
+  const output = result.stdout.toString();
+  return output === "" ? 0 : output.split("\n").length - 1;
+}
+
+function writeCheckoutCache(
+  root: string,
+  bytes: number,
+  timestamp: number,
+): void {
   const cacheDir = join(
     homedir(),
     ".cache",
@@ -575,14 +632,60 @@ async function checkoutSizeBytes(root: string): Promise<number | null> {
     cacheDir,
     `${createHash("sha1").update(root).digest("hex")}.checkout.json`,
   );
-  const cached = await attemptOr(() => {
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(cacheFile, JSON.stringify({ bytes, at: timestamp }));
+}
+
+function measureCheckoutInBackground(root: string): void {
+  const proc = Bun.spawn(["du", "-sk", "-I", ".jj", "-I", ".git", root], {
+    timeout: BACKGROUND_CHECKOUT_TIMEOUT_MS,
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  proc.unref();
+  void proc.exited.then(async (exitCode) => {
+    if (exitCode !== 0) return;
+    const output = await new Response(proc.stdout).text();
+    const kib = Number(output.trim().split(/\s/u)[0]);
+    if (!Number.isFinite(kib) || kib < 0) return;
+    void attempt(() => {
+      writeCheckoutCache(
+        root,
+        kib * 1024,
+        Temporal.Now.instant().epochMilliseconds,
+      );
+    });
+  });
+}
+
+const defaultCheckoutPolicyDeps: CheckoutPolicyDeps = {
+  now: () => Temporal.Now.instant().epochMilliseconds,
+  cachedSize: cachedCheckoutSizeBytes,
+  saveSize: writeCheckoutCache,
+  probeSize: probeCheckoutSize,
+  trackedFileCount: probeTrackedFileCount,
+  measureInBackground: measureCheckoutInBackground,
+  note: () => {
+    process.stderr.write("storage-headroom: repo size unknown; measuring\n");
+  },
+};
+
+async function cachedCheckoutSizeBytes(
+  root: string,
+  now: () => number,
+): Promise<number | null> {
+  const cacheFile = join(
+    homedir(),
+    ".cache",
+    "claude-hooks",
+    "storage-headroom",
+    `${createHash("sha1").update(root).digest("hex")}.checkout.json`,
+  );
+  return attemptOr(() => {
     const value = parseJson(readFileSync(cacheFile, "utf8"));
     const bytes = num(at(value, "bytes"));
     const stamp = num(at(value, "at"));
-    const age =
-      stamp === undefined
-        ? undefined
-        : Temporal.Now.instant().epochMilliseconds - stamp;
+    const age = stamp === undefined ? undefined : now() - stamp;
     return bytes !== undefined &&
       age !== undefined &&
       age >= 0 &&
@@ -590,28 +693,18 @@ async function checkoutSizeBytes(root: string): Promise<number | null> {
       ? bytes
       : null;
   }, null);
-  if (cached !== null) return cached;
+}
 
-  const result = Bun.spawnSync(["du", "-sk", "-I", ".jj", "-I", ".git", root], {
-    timeout: 50,
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  if (result.exitCode !== 0) return null;
-  const kib = Number(result.stdout.toString().trim().split(/\s/u)[0]);
-  if (!Number.isFinite(kib) || kib < 0) return null;
-  const bytes = kib * 1024;
-  await attempt(() => {
-    mkdirSync(cacheDir, { recursive: true });
-    writeFileSync(
-      cacheFile,
-      JSON.stringify({
-        bytes,
-        at: Temporal.Now.instant().epochMilliseconds,
-      }),
-    );
-  });
-  return bytes;
+function unknownCheckoutReason(
+  root: string,
+  deps: CheckoutPolicyDeps,
+  reason: string,
+): string | null {
+  deps.measureInBackground(root);
+  const count = deps.trackedFileCount(root, CHECKOUT_PROBE_BUDGET_MS);
+  if (count === null || count > SMALL_CHECKOUT_FILE_LIMIT) return reason;
+  deps.note();
+  return null;
 }
 
 function checkoutRoot(add: WorkspaceAdd): string | null {
@@ -627,16 +720,16 @@ function checkoutRoot(add: WorkspaceAdd): string | null {
   return workspaceRoot(path);
 }
 
-async function fullCheckoutReason(
+export async function fullCheckoutReason(
   command: string,
   cwd: string,
   thresholdMb: number,
+  deps: CheckoutPolicyDeps = defaultCheckoutPolicyDeps,
 ): Promise<string | null> {
+  const unknownReason = `storage-headroom: refusing a full-checkout jj workspace because its size is unknown; retry in a few seconds while it is being measured. ${SPARSE_WORKSPACE_ADVICE}`;
   const parsed = parseShell(command, cwd);
   if (parsed === undefined) {
-    return /\bjj\s+workspace\s+add\b/u.test(command)
-      ? "storage-headroom: refusing a full-checkout jj workspace because the repo size is unknown within the 50 ms probe budget. Use `jj workspace add --sparse-patterns empty <dir>`, then `jj sparse set --add <paths>`."
-      : null;
+    return /\bjj\s+workspace\s+add\b/u.test(command) ? unknownReason : null;
   }
   for (const c of parsed.commands) {
     const add = workspaceAdd(c);
@@ -649,9 +742,27 @@ async function fullCheckoutReason(
     )
       continue;
     const root = checkoutRoot(add);
-    const bytes = root === null ? null : await checkoutSizeBytes(root);
+    if (root === null) return unknownReason;
+    const cachedBytes = await deps.cachedSize(root, deps.now);
+    const probe =
+      cachedBytes === null
+        ? deps.probeSize(root, CHECKOUT_PROBE_BUDGET_MS)
+        : { bytes: cachedBytes, elapsedMs: 0 };
+    const timedOut = probe.elapsedMs > CHECKOUT_PROBE_BUDGET_MS;
+    const pendingReason =
+      cachedBytes === null && (timedOut || probe.bytes === null)
+        ? unknownCheckoutReason(root, deps, unknownReason)
+        : undefined;
+    if (pendingReason === null) continue;
+    if (pendingReason !== undefined) return pendingReason;
+    const bytes = probe.bytes;
     if (bytes === null) {
-      return "storage-headroom: refusing a full-checkout jj workspace because the repo size is unknown within the 50 ms probe budget. Use `jj workspace add --sparse-patterns empty <dir>`, then `jj sparse set --add <paths>`.";
+      return unknownReason;
+    }
+    if (cachedBytes === null) {
+      await attempt(() => {
+        deps.saveSize(root, bytes, deps.now());
+      });
     }
     const mb = bytes / 1_000_000;
     if (mb > thresholdMb) {
@@ -1166,4 +1277,4 @@ function denyLowSpace(
   );
 }
 
-await main();
+if (import.meta.main) await main();

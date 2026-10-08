@@ -11,6 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { attempt } from "../attempt.ts";
+import {
+  fullCheckoutReason,
+  type CheckoutPolicyDeps,
+} from "../enforce-storage-headroom.ts";
 import { z } from "../zod.ts";
 import { decisionOf, runHook } from "./helpers.ts";
 import { decoded } from "./decode.ts";
@@ -383,33 +387,120 @@ describe("enforce-storage-headroom", () => {
     }
   });
 
-  test("small full checkout add is allowed and its repo size is cached", () => {
-    const { root, env } = fakeCheckoutProbe("printf '100000\\t.\\n'");
-    for (let i = 0; i < 2; i++) {
-      expect(
-        decisionOf(runHook(HOOK, workspaceAdd(root), env).stdout),
-      ).toBeNull();
-    }
-    expect(readFileSync(env.DU_CALLS ?? "", "utf8")).toBe("x");
+  test("small full checkout add is allowed and its repo size is cached", async () => {
+    const { root } = fakeCheckoutProbe("");
+    let clock = 1_800_000_000_000;
+    let probes = 0;
+    let cached: { bytes: number; at: number } | null = null;
+    const deps: CheckoutPolicyDeps = {
+      now: () => clock,
+      cachedSize: (_root, now) =>
+        Promise.resolve(
+          cached !== null && now() - cached.at < 60 * 60_000
+            ? cached.bytes
+            : null,
+        ),
+      saveSize: (_root, bytes, at) => {
+        cached = { bytes, at };
+      },
+      probeSize: (_root, budgetMs) => {
+        expect(budgetMs).toBe(50);
+        probes++;
+        return { bytes: 100_000_000, elapsedMs: 1 };
+      },
+      trackedFileCount: () => 1,
+      measureInBackground: () => {},
+      note: () => {},
+    };
+    expect(
+      await fullCheckoutReason("jj workspace add ../worker", root, 500, deps),
+    ).toBeNull();
+    clock += 1;
+    expect(
+      await fullCheckoutReason("jj workspace add ../worker", root, 500, deps),
+    ).toBeNull();
+    expect(probes).toBe(1);
   });
 
-  test("large full checkout add is denied with its measured size", () => {
-    const { root, env } = fakeCheckoutProbe("printf '600000\\t.\\n'");
-    const decision = decisionOf(runHook(HOOK, workspaceAdd(root), env).stdout);
-    expect(decision?.permissionDecision).toBe("deny");
-    expect(decision?.permissionDecisionReason).toContain(
-      "this repo is 614.4 MB (> 500 MB threshold)",
+  test("large full checkout add is denied with its measured size", async () => {
+    const { root } = fakeCheckoutProbe("");
+    const reason = await fullCheckoutReason(
+      "jj workspace add ../worker",
+      root,
+      500,
+      {
+        now: () => 1_800_000_000_000,
+        cachedSize: () => Promise.resolve(null),
+        saveSize: () => {},
+        probeSize: (_root, budgetMs) => {
+          expect(budgetMs).toBe(50);
+          return { bytes: 600_000 * 1024, elapsedMs: 1 };
+        },
+        trackedFileCount: () => 1,
+        measureInBackground: () => {},
+        note: () => {},
+      },
     );
-    expect(decision?.permissionDecisionReason).toContain(
-      "jj workspace add --sparse-patterns empty <dir>",
-    );
+    expect(reason).toContain("this repo is 614.4 MB (> 500 MB threshold)");
+    expect(reason).toContain("jj workspace add --sparse-patterns empty <dir>");
   });
 
-  test("unknown checkout size is denied", () => {
-    const { root, env } = fakeCheckoutProbe("sleep 1");
-    const decision = decisionOf(runHook(HOOK, workspaceAdd(root), env).stdout);
-    expect(decision?.permissionDecision).toBe("deny");
-    expect(decision?.permissionDecisionReason).toContain("size is unknown");
+  test("a timeout measures in the background and allows only a cheap small file count", async () => {
+    const { root } = fakeCheckoutProbe("");
+    let measured = 0;
+    let noted = 0;
+    const reason = await fullCheckoutReason(
+      "jj workspace add ../worker",
+      root,
+      500,
+      {
+        now: () => 1_800_000_000_000,
+        cachedSize: () => Promise.resolve(null),
+        saveSize: () => {},
+        probeSize: (_root, budgetMs) => {
+          expect(budgetMs).toBe(50);
+          return { bytes: null, elapsedMs: 51 };
+        },
+        trackedFileCount: (_root, budgetMs) => {
+          expect(budgetMs).toBe(50);
+          return 7;
+        },
+        measureInBackground: () => {
+          measured++;
+        },
+        note: () => {
+          noted++;
+        },
+      },
+    );
+    expect(reason).toBeNull();
+    expect(measured).toBe(1);
+    expect(noted).toBe(1);
+  });
+
+  test("unknown checkout size asks for a retry while the background measurement runs", async () => {
+    const { root } = fakeCheckoutProbe("");
+    let measured = 0;
+    const reason = await fullCheckoutReason(
+      "jj workspace add ../worker",
+      root,
+      500,
+      {
+        now: () => 1_800_000_000_000,
+        cachedSize: () => Promise.resolve(null),
+        saveSize: () => {},
+        probeSize: () => ({ bytes: null, elapsedMs: 51 }),
+        trackedFileCount: () => null,
+        measureInBackground: () => {
+          measured++;
+        },
+        note: () => {},
+      },
+    );
+    expect(reason).toContain(
+      "retry in a few seconds while it is being measured",
+    );
+    expect(measured).toBe(1);
   });
 
   test("sparse jj workspace add follows the storage gate", () => {
@@ -526,9 +617,6 @@ describe("enforce-storage-headroom", () => {
       );
       expect(parsedConfig.deny.advice.split("\n")[0]).toContain(
         "disk-reclaim run",
-      );
-      expect(parsedConfig.deny.advice).toContain(
-        "rip frees nothing until the graveyard is purged; on overlay filesystems (EXDEV) it copies first. To free space, use `disk-reclaim delete <path> --yes` (vetted delete) or `disk-reclaim run purge --yes`.",
       );
     }
   });

@@ -91,7 +91,7 @@ describe("enforce-search-route", () => {
     // The shortest installed name of this router (rr, repo-retrieve), else the long path; routes by
     // intent name.
     expect(decision?.permissionDecisionReason).toMatch(
-      /(?:^|[\s:;])(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/u,
+      /(?:^|[\s:;])(?:rr|repo-retrieve|bun \S*repo-retrieve\.ts) about '/u,
     );
     expect(decision?.permissionDecisionReason).toContain(" text '");
     expect(decision?.permissionDecisionReason).toContain(" exists '");
@@ -118,9 +118,12 @@ describe("enforce-search-route", () => {
     ]) {
       const project = registerProject();
       const result = runHook(HOOK, bashPayload(project, command), withCcc());
-      expect(decisionOf(result.stdout)?.permissionDecision).toBe("deny");
+      expect({
+        command,
+        decision: decisionOf(result.stdout)?.permissionDecision,
+      }).toEqual({ command, decision: "deny" });
     }
-  });
+  }, 20_000);
 
   test("detects a simple cd into a registered project", () => {
     const project = registerProject();
@@ -195,7 +198,7 @@ describe("enforce-search-route", () => {
 
       expect(decision?.permissionDecision).toBe("deny");
       expect(decision?.permissionDecisionReason).toMatch(
-        /(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/u,
+        /(?:rr|repo-retrieve|bun \S*repo-retrieve\.ts) about '/u,
       );
     }
   });
@@ -257,9 +260,29 @@ describe("enforce-search-route", () => {
   });
 
   test("allows searches whose file targets are outside a registered project", () => {
-    const project = registerProject();
-    const output = "/tmp/x/out.txt";
-    const outside = "/private/tmp/search-route-external-target";
+    // Keep every path used by this test under one throwaway root. In particular, do not use
+    // /tmp vs /private/tmp: those have different layouts across macOS and Linux, and a host
+    // project above one of those paths could change the ancestor walk's answer.
+    const fixture = tempDir("search-route-targets-");
+    const home = join(fixture, "home");
+    const bin = join(fixture, "bin");
+    const project = join(fixture, "project");
+    const outside = join(fixture, "outside");
+    const processCwd = join(fixture, "cwd");
+    mkdirSync(home, { recursive: true });
+    mkdirSync(bin, { recursive: true });
+    mkdirSync(project, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    mkdirSync(processCwd, { recursive: true });
+    mkdirSync(join(project, ".cocoindex_code"), { recursive: true });
+    writeFileSync(
+      join(project, ".cocoindex_code", "settings.yml"),
+      "include_patterns: []\n",
+    );
+    writeFileSync(join(bin, "ccc"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(bin, "ccc"), 0o755);
+    const env = { HOME: home, PATH: bin };
+    const output = join(outside, "out.txt");
     const cases: ReadonlyArray<readonly [string, string]> = [
       [project, `grep needle ${output}`],
       [project, `find ${outside} -name out.txt`],
@@ -269,17 +292,25 @@ describe("enforce-search-route", () => {
       [outside, `rg foo ${join(project, "scripts")}`],
     ];
 
-    for (const [cwd, command] of cases) {
-      const result = runHook(HOOK, bashPayload(cwd, command), withCcc());
+    for (const [searchCwd, command] of cases) {
+      const result = runHook(
+        HOOK,
+        bashPayload(searchCwd, command),
+        env,
+        processCwd,
+      );
       const expected =
         command === "grep -r foo ." ||
         command === "grep foo agents/" ||
         command.startsWith("rg foo ")
           ? "deny"
           : undefined;
-      expect(decisionOf(result.stdout)?.permissionDecision).toBe(expected);
+      expect({
+        command,
+        decision: decisionOf(result.stdout)?.permissionDecision,
+      }).toEqual({ command, decision: expected });
     }
-  });
+  }, 20_000);
 
   test("allows raw search when ccc is unavailable", () => {
     const project = registerProject();

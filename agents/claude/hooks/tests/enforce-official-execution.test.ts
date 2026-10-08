@@ -44,20 +44,51 @@ function run(cmd: string, args: string[], cwd: string): void {
 }
 
 beforeAll(() => {
-  for (const d of [jj, gt, scratch, elsewhere]) mkdirSync(d, { recursive: true });
+  for (const d of [jj, gt, scratch, elsewhere])
+    mkdirSync(d, { recursive: true });
   seed(jj);
   run("jj", ["git", "init", "--colocate", "."], jj);
-  run("jj", ["--config", "user.name=t", "--config", "user.email=t@t", "commit", "-m", "base"], jj);
+  run(
+    "jj",
+    [
+      "--config",
+      "user.name=t",
+      "--config",
+      "user.email=t@t",
+      "commit",
+      "-m",
+      "base",
+    ],
+    jj,
+  );
   run("jj", ["workspace", "add", "--name", "ws", ws], jj);
   mkdirSync(join(ws, "packages/FireOps.jl/test"), { recursive: true });
-  writeFileSync(join(ws, "packages/FireOps.jl/test/ws_only.jl"), "# committed in the workspace only\n");
-  run("jj", ["--config", "user.name=t", "--config", "user.email=t@t", "commit", "-m", "ws"], ws);
+  writeFileSync(
+    join(ws, "packages/FireOps.jl/test/ws_only.jl"),
+    "# committed in the workspace only\n",
+  );
+  run(
+    "jj",
+    [
+      "--config",
+      "user.name=t",
+      "--config",
+      "user.email=t@t",
+      "commit",
+      "-m",
+      "ws",
+    ],
+    ws,
+  );
   seed(gt);
   run("git", ["init", "-q"], gt);
   run("git", ["add", "-A"], gt);
   run("git", ["commit", "-q", "-m", "base"], gt);
   for (const root of [jj, gt]) {
-    writeFileSync(join(root, "packages/FireOps.jl/test/edited.jl"), "# edited\n");
+    writeFileSync(
+      join(root, "packages/FireOps.jl/test/edited.jl"),
+      "# edited\n",
+    );
     writeFileSync(join(root, "scratch.jl"), "# untracked\n");
   }
   writeFileSync(join(ws, "packages/FireOps.jl/test/edited.jl"), "# edited\n");
@@ -82,81 +113,375 @@ async function verdict(command: string, cwd: string) {
   };
 }
 
-type Case = [label: string, command: () => string, cwd: () => string, deny: boolean];
+type Case = [
+  label: string,
+  command: () => string,
+  cwd: () => string,
+  deny: boolean,
+];
 const cases: Case[] = [
   // --- allowed ---------------------------------------------------------------------------
-  ["launcher via bun", () => "bun launcher/launch.ts --rev abc arena launcher/model_interface_runner.jl p.toml m cause", () => jj, false],
-  ["launcher via mise", () => "mise exec -- bun launcher/launch.ts --rev abc arena launcher/model_interface_runner.jl p.toml m c", () => jj, false],
-  ["launcher via agent-resource-run", () => "agent-resource-run --manifest /tmp/m.resource.json -- mise exec -- bun launcher/launch.ts --rev a b c d e", () => jj, false],
-  ["tracked repo test (jj)", () => "julia --project=envs/gpu packages/FireOps.jl/test/x.jl", () => jj, false],
-  ["tracked repo test (git)", () => "julia --project=envs/gpu packages/FireOps.jl/test/x.jl", () => gt, false],
-  ["modified tracked file (jj)", () => "julia --project=envs/gpu packages/FireOps.jl/test/edited.jl", () => jj, false],
-  ["modified tracked file (git)", () => "julia --project=envs/gpu packages/FireOps.jl/test/edited.jl", () => gt, false],
-  ["tracked test by absolute path from outside", () => `julia --project=${jj}/envs/gpu ${jj}/packages/FireOps.jl/test/x.jl`, () => elsewhere, false],
+  [
+    "launcher via bun",
+    () =>
+      "bun launcher/launch.ts --rev abc arena launcher/model_interface_runner.jl p.toml m cause",
+    () => jj,
+    false,
+  ],
+  [
+    "launcher via mise",
+    () =>
+      "mise exec -- bun launcher/launch.ts --rev abc arena launcher/model_interface_runner.jl p.toml m c",
+    () => jj,
+    false,
+  ],
+  [
+    "launcher via agent-resource-run",
+    () =>
+      "agent-resource-run --manifest /tmp/m.resource.json -- mise exec -- bun launcher/launch.ts --rev a b c d e",
+    () => jj,
+    false,
+  ],
+  [
+    "tracked repo test (jj)",
+    () => "julia --project=envs/gpu packages/FireOps.jl/test/x.jl",
+    () => jj,
+    false,
+  ],
+  [
+    "tracked repo test (git)",
+    () => "julia --project=envs/gpu packages/FireOps.jl/test/x.jl",
+    () => gt,
+    false,
+  ],
+  [
+    "modified tracked file (jj)",
+    () => "julia --project=envs/gpu packages/FireOps.jl/test/edited.jl",
+    () => jj,
+    false,
+  ],
+  [
+    "modified tracked file (git)",
+    () => "julia --project=envs/gpu packages/FireOps.jl/test/edited.jl",
+    () => gt,
+    false,
+  ],
+  [
+    "tracked test by absolute path from outside",
+    () => `julia --project=${jj}/envs/gpu ${jj}/packages/FireOps.jl/test/x.jl`,
+    () => elsewhere,
+    false,
+  ],
   ["--version inside firedancer", () => "julia --version", () => jj, false],
-  ["--version with project", () => "julia --project=envs/gpu --version", () => jj, false],
-  ["julia, no firedancer project, cwd outside, script", () => `julia ${scratch}/s.jl`, () => elsewhere, false],
-  ["julia -e outside firedancer", () => `julia -e 'println(1)'`, () => elsewhere, false],
-  ["julia REPL-ish --project=@temp outside", () => `julia --project=@temp ${elsewhere}/e.jl`, () => elsewhere, false],
+  [
+    "--version with project",
+    () => "julia --project=envs/gpu --version",
+    () => jj,
+    false,
+  ],
+  [
+    "julia, no firedancer project, cwd outside, script",
+    () => `julia ${scratch}/s.jl`,
+    () => elsewhere,
+    false,
+  ],
+  [
+    "julia -e outside firedancer",
+    () => `julia -e 'println(1)'`,
+    () => elsewhere,
+    false,
+  ],
+  [
+    "julia REPL-ish --project=@temp outside",
+    () => `julia --project=@temp ${elsewhere}/e.jl`,
+    () => elsewhere,
+    false,
+  ],
   ["word julia as an argument", () => "rr text julia", () => jj, false],
   ["pgrep julia", () => "pgrep -f julia", () => jj, false],
-  ["tracked test chained", () => "cd /tmp && cd " + jj + " && julia --project=envs/gpu packages/FireOps.jl/test/x.jl | tail -3", () => elsewhere, false],
+  [
+    "tracked test chained",
+    () =>
+      "cd /tmp && cd " +
+      jj +
+      " && julia --project=envs/gpu packages/FireOps.jl/test/x.jl | tail -3",
+    () => elsewhere,
+    false,
+  ],
   // --- jj secondary workspace (no .git; the commit stack is the workspace's own) -------------
-  ["tracked test in a jj secondary workspace", () => "julia --project=envs/gpu packages/FireOps.jl/test/x.jl", () => ws, false],
-  ["test committed only in the workspace", () => "julia --project=envs/gpu packages/FireOps.jl/test/ws_only.jl", () => ws, false],
-  ["modified tracked file in the workspace", () => "julia --project=envs/gpu packages/FireOps.jl/test/edited.jl", () => ws, false],
-  ["workspace test by absolute path from outside", () => `julia --project=${ws}/envs/gpu ${ws}/packages/FireOps.jl/test/ws_only.jl`, () => elsewhere, false],
-  ["workspace test run from a subdirectory", () => "julia --project=../../../envs/gpu ws_only.jl", () => join(ws, "packages/FireOps.jl/test"), false],
-  ["(c) untracked file in the workspace", () => "julia --project=envs/gpu scratch.jl", () => ws, true],
-  ["(c) file that exists in no commit of the workspace", () => "julia --project=envs/gpu packages/FireOps.jl/test/nowhere.jl", () => ws, true],
-  ["(c) test committed only in the workspace is untracked in the main checkout", () => "julia --project=envs/gpu packages/FireOps.jl/test/ws_only.jl", () => jj, true],
-  ["(a) scratch script from the workspace", () => `julia --project=envs/gpu ${scratch}/s.jl`, () => ws, true],
-  ["(b) -e in the workspace", () => `julia --project=envs/gpu -e '1'`, () => ws, true],
+  [
+    "tracked test in a jj secondary workspace",
+    () => "julia --project=envs/gpu packages/FireOps.jl/test/x.jl",
+    () => ws,
+    false,
+  ],
+  [
+    "test committed only in the workspace",
+    () => "julia --project=envs/gpu packages/FireOps.jl/test/ws_only.jl",
+    () => ws,
+    false,
+  ],
+  [
+    "modified tracked file in the workspace",
+    () => "julia --project=envs/gpu packages/FireOps.jl/test/edited.jl",
+    () => ws,
+    false,
+  ],
+  [
+    "workspace test by absolute path from outside",
+    () =>
+      `julia --project=${ws}/envs/gpu ${ws}/packages/FireOps.jl/test/ws_only.jl`,
+    () => elsewhere,
+    false,
+  ],
+  [
+    "workspace test run from a subdirectory",
+    () => "julia --project=../../../envs/gpu ws_only.jl",
+    () => join(ws, "packages/FireOps.jl/test"),
+    false,
+  ],
+  [
+    "(c) untracked file in the workspace",
+    () => "julia --project=envs/gpu scratch.jl",
+    () => ws,
+    true,
+  ],
+  [
+    "(c) file that exists in no commit of the workspace",
+    () => "julia --project=envs/gpu packages/FireOps.jl/test/nowhere.jl",
+    () => ws,
+    true,
+  ],
+  [
+    "(c) test committed only in the workspace is untracked in the main checkout",
+    () => "julia --project=envs/gpu packages/FireOps.jl/test/ws_only.jl",
+    () => jj,
+    true,
+  ],
+  [
+    "(a) scratch script from the workspace",
+    () => `julia --project=envs/gpu ${scratch}/s.jl`,
+    () => ws,
+    true,
+  ],
+  [
+    "(b) -e in the workspace",
+    () => `julia --project=envs/gpu -e '1'`,
+    () => ws,
+    true,
+  ],
   // --- (a) script outside every working copy, firedancer project or cwd ----------------------
-  ["(a) scratch script, cwd in firedancer", () => `julia ${scratch}/s.jl`, () => jj, true],
-  ["(a) scratch script, --project into firedancer", () => `julia --project=${jj}/envs/gpu ${scratch}/s.jl`, () => elsewhere, true],
-  ["(a) relative scratch path, project relative", () => "julia --project=envs/gpu ../scratchpad/s.jl", () => jj, true],
-  ["(a) JULIA_PROJECT env", () => `JULIA_PROJECT=${jj}/envs/gpu julia ${scratch}/s.jl`, () => elsewhere, true],
+  [
+    "(a) scratch script, cwd in firedancer",
+    () => `julia ${scratch}/s.jl`,
+    () => jj,
+    true,
+  ],
+  [
+    "(a) scratch script, --project into firedancer",
+    () => `julia --project=${jj}/envs/gpu ${scratch}/s.jl`,
+    () => elsewhere,
+    true,
+  ],
+  [
+    "(a) relative scratch path, project relative",
+    () => "julia --project=envs/gpu ../scratchpad/s.jl",
+    () => jj,
+    true,
+  ],
+  [
+    "(a) JULIA_PROJECT env",
+    () => `JULIA_PROJECT=${jj}/envs/gpu julia ${scratch}/s.jl`,
+    () => elsewhere,
+    true,
+  ],
   ["(a) /tmp script", () => "julia /tmp/probe.jl", () => gt, true],
   ["(a) home script", () => "julia ~/probe.jl", () => jj, true],
-  ["(a) --project bare", () => `julia --project ${scratch}/s.jl`, () => jj, true],
-  ["(a) -L load of scratch", () => `julia --project=envs/gpu -L ${scratch}/s.jl packages/FireOps.jl/test/x.jl`, () => jj, true],
-  ["(a) $VAR path in firedancer", () => "julia --project=envs/gpu $SCRIPT", () => jj, true],
+  [
+    "(a) --project bare",
+    () => `julia --project ${scratch}/s.jl`,
+    () => jj,
+    true,
+  ],
+  [
+    "(a) -L load of scratch",
+    () =>
+      `julia --project=envs/gpu -L ${scratch}/s.jl packages/FireOps.jl/test/x.jl`,
+    () => jj,
+    true,
+  ],
+  [
+    "(a) $VAR path in firedancer",
+    () => "julia --project=envs/gpu $SCRIPT",
+    () => jj,
+    true,
+  ],
   // --- (b) inline, stdin, REPL ---------------------------------------------------------------
   ["(b) -e", () => `julia --project=envs/gpu -e 'println(1)'`, () => jj, true],
   ["(b) -E", () => `julia --project=envs/gpu -E '1+1'`, () => jj, true],
-  ["(b) --eval", () => `julia --project=envs/gpu --eval 'using Pkg'`, () => jj, true],
-  ["(b) --eval= outside cwd, project inside", () => `julia --project=${jj}/envs/gpu --eval='1'`, () => elsewhere, true],
+  [
+    "(b) --eval",
+    () => `julia --project=envs/gpu --eval 'using Pkg'`,
+    () => jj,
+    true,
+  ],
+  [
+    "(b) --eval= outside cwd, project inside",
+    () => `julia --project=${jj}/envs/gpu --eval='1'`,
+    () => elsewhere,
+    true,
+  ],
   ["(b) -e attached", () => `julia -e'1'`, () => gt, true],
-  ["(b) heredoc", () => "julia --project=envs/gpu <<'EOF'\nprintln(1)\nEOF", () => jj, true],
+  [
+    "(b) heredoc",
+    () => "julia --project=envs/gpu <<'EOF'\nprintln(1)\nEOF",
+    () => jj,
+    true,
+  ],
   ["(b) stdin dash", () => "julia --project=envs/gpu -", () => jj, true],
-  ["(b) pipe into julia", () => "echo 'println(1)' | julia --project=envs/gpu", () => jj, true],
+  [
+    "(b) pipe into julia",
+    () => "echo 'println(1)' | julia --project=envs/gpu",
+    () => jj,
+    true,
+  ],
   ["(b) bare REPL", () => "julia --project=envs/gpu", () => jj, true],
   ["(b) bare julia in firedancer cwd", () => "julia", () => gt, true],
   // --- (c) untracked in a working copy -------------------------------------------------------
-  ["(c) untracked jj", () => "julia --project=envs/gpu scratch.jl", () => jj, true],
-  ["(c) untracked git", () => "julia --project=envs/gpu scratch.jl", () => gt, true],
-  ["(c) untracked, cwd and project outside", () => `julia ${jj}/scratch.jl`, () => elsewhere, true],
-  ["(c) not yet written (heredoc then run)", () => "cat > new.jl <<'EOF'\nprintln(1)\nEOF\njulia --project=envs/gpu new.jl", () => jj, true],
+  [
+    "(c) untracked jj",
+    () => "julia --project=envs/gpu scratch.jl",
+    () => jj,
+    true,
+  ],
+  [
+    "(c) untracked git",
+    () => "julia --project=envs/gpu scratch.jl",
+    () => gt,
+    true,
+  ],
+  [
+    "(c) untracked, cwd and project outside",
+    () => `julia ${jj}/scratch.jl`,
+    () => elsewhere,
+    true,
+  ],
+  [
+    "(c) not yet written (heredoc then run)",
+    () =>
+      "cat > new.jl <<'EOF'\nprintln(1)\nEOF\njulia --project=envs/gpu new.jl",
+    () => jj,
+    true,
+  ],
   // --- wrapped and chained forms -------------------------------------------------------------
-  ["wrap: agent-resource-run", () => `agent-resource-run --manifest /tmp/m.json -- julia --project=envs/gpu ${scratch}/s.jl`, () => jj, true],
-  ["wrap: mise exec", () => `mise exec -- julia --project=envs/gpu -e '1'`, () => jj, true],
-  ["wrap: mise x with tool spec", () => `mise x julia@1.13 -- julia -e '1'`, () => jj, true],
-  ["wrap: env assignment", () => `env JULIA_NUM_THREADS=4 julia --project=envs/gpu -e '1'`, () => jj, true],
-  ["wrap: inline assignment", () => `JULIA_NUM_THREADS=4 julia --project=envs/gpu -e '1'`, () => jj, true],
-  ["wrap: timeout", () => `timeout 60 julia --project=envs/gpu scratch.jl`, () => jj, true],
-  ["wrap: nice", () => `nice -n 10 julia --project=envs/gpu scratch.jl`, () => jj, true],
-  ["wrap: setsid --wait", () => `setsid --wait julia --project=envs/gpu scratch.jl`, () => jj, true],
-  ["wrap: taskset", () => `taskset -c 0,1 julia --project=envs/gpu scratch.jl`, () => jj, true],
-  ["wrap: bash -c", () => `bash -c 'julia --project=envs/gpu -e "1"'`, () => jj, true],
-  ["wrap: sh -c in agent-resource-run in mise", () => `mise exec -- agent-resource-run --manifest /tmp/m.json -- sh -c 'julia --project=envs/gpu scratch.jl'`, () => jj, true],
-  ["wrap: full julia path", () => `/home/fuyu/.local/share/mise/installs/julia/1.13/bin/julia --project=envs/gpu scratch.jl`, () => jj, true],
-  ["chain: ;", () => `echo hi; julia --project=envs/gpu scratch.jl`, () => jj, true],
+  [
+    "wrap: agent-resource-run",
+    () =>
+      `agent-resource-run --manifest /tmp/m.json -- julia --project=envs/gpu ${scratch}/s.jl`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: mise exec",
+    () => `mise exec -- julia --project=envs/gpu -e '1'`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: mise x with tool spec",
+    () => `mise x julia@1.13 -- julia -e '1'`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: env assignment",
+    () => `env JULIA_NUM_THREADS=4 julia --project=envs/gpu -e '1'`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: inline assignment",
+    () => `JULIA_NUM_THREADS=4 julia --project=envs/gpu -e '1'`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: timeout",
+    () => `timeout 60 julia --project=envs/gpu scratch.jl`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: nice",
+    () => `nice -n 10 julia --project=envs/gpu scratch.jl`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: setsid --wait",
+    () => `setsid --wait julia --project=envs/gpu scratch.jl`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: taskset",
+    () => `taskset -c 0,1 julia --project=envs/gpu scratch.jl`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: bash -c",
+    () => `bash -c 'julia --project=envs/gpu -e "1"'`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: sh -c in agent-resource-run in mise",
+    () =>
+      `mise exec -- agent-resource-run --manifest /tmp/m.json -- sh -c 'julia --project=envs/gpu scratch.jl'`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrap: full julia path",
+    () =>
+      `/home/fuyu/.local/share/mise/installs/julia/1.13/bin/julia --project=envs/gpu scratch.jl`,
+    () => jj,
+    true,
+  ],
+  [
+    "chain: ;",
+    () => `echo hi; julia --project=envs/gpu scratch.jl`,
+    () => jj,
+    true,
+  ],
   ["chain: &&", () => `cd ${jj} && julia scratch.jl`, () => elsewhere, true],
-  ["chain: pipeline", () => `julia --project=envs/gpu scratch.jl | tee out.log`, () => jj, true],
-  ["chain: second julia bad", () => `julia --version && julia --project=envs/gpu -e '1'`, () => jj, true],
-  ["wrapped tracked still allowed", () => `agent-resource-run --manifest /tmp/m.json -- julia --project=envs/gpu packages/FireOps.jl/test/x.jl`, () => jj, false],
-  ["chained tracked still allowed", () => `echo hi; timeout 60 julia --project=envs/gpu packages/FireOps.jl/test/x.jl && echo ok`, () => gt, false],
+  [
+    "chain: pipeline",
+    () => `julia --project=envs/gpu scratch.jl | tee out.log`,
+    () => jj,
+    true,
+  ],
+  [
+    "chain: second julia bad",
+    () => `julia --version && julia --project=envs/gpu -e '1'`,
+    () => jj,
+    true,
+  ],
+  [
+    "wrapped tracked still allowed",
+    () =>
+      `agent-resource-run --manifest /tmp/m.json -- julia --project=envs/gpu packages/FireOps.jl/test/x.jl`,
+    () => jj,
+    false,
+  ],
+  [
+    "chained tracked still allowed",
+    () =>
+      `echo hi; timeout 60 julia --project=envs/gpu packages/FireOps.jl/test/x.jl && echo ok`,
+    () => gt,
+    false,
+  ],
 ];
 
 describe("enforce-official-execution", () => {
@@ -176,14 +501,23 @@ describe("enforce-official-execution", () => {
   });
 
   test("a script that is in no commit says so (a missing file is not 'hidden' by the vcs)", async () => {
-    const v = await verdict("julia --project=envs/gpu packages/FireOps.jl/test/nowhere.jl", ws);
+    const v = await verdict(
+      "julia --project=envs/gpu packages/FireOps.jl/test/nowhere.jl",
+      ws,
+    );
     expect(v.reason).toContain("does not exist on disk");
     const u = await verdict("julia --project=envs/gpu scratch.jl", ws);
     expect(u.reason).not.toContain("does not exist on disk");
   });
 
   test("ignores non-Bash tools and commands without julia", async () => {
-    expect(runHook(HOOK, { tool_name: "Read", tool_input: { command: "julia -e 1" }, cwd: jj }).stdout).toBe("");
+    expect(
+      runHook(HOOK, {
+        tool_name: "Read",
+        tool_input: { command: "julia -e 1" },
+        cwd: jj,
+      }).stdout,
+    ).toBe("");
     expect((await verdict("ls -la", jj)).denied).toBe(false);
   });
 

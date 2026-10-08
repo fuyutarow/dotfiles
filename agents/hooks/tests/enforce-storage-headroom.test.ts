@@ -527,6 +527,9 @@ describe("enforce-storage-headroom", () => {
       expect(parsedConfig.deny.advice.split("\n")[0]).toContain(
         "disk-reclaim run",
       );
+      expect(parsedConfig.deny.advice).toContain(
+        "rip frees nothing until the graveyard is purged; on overlay filesystems (EXDEV) it copies first. To free space, use `disk-reclaim delete <path> --yes` (vetted delete) or `disk-reclaim run purge --yes`.",
+      );
     }
   });
 

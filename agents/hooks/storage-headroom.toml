@@ -43,7 +43,7 @@ advice = """\
 Free space now: `disk-reclaim run --tier blind --yes` (caches, stale builds, finished-session scratch, fully-pushed jj workspaces — nothing that is not regenerable or already on a remote). Preview: `disk-reclaim plan`.
 Owner decisions: `disk-reclaim plan --tier owner` lists what needs a decision (Rust targets of any age, graveyard purge) with sizes. For an approved single path, use `disk-reclaim delete <path> --yes`.
 Verify a positive free delta (`disk-reclaim receipts --last 1`) before claiming recovery. Never purge the global Trash or remove research outputs without their retention rule.
-Do not free space with rip: on overlay filesystems it copies into the graveyard and frees nothing.
+rip frees nothing until the graveyard is purged; on overlay filesystems (EXDEV) it copies first. To free space, use `disk-reclaim delete <path> --yes` (vetted delete) or `disk-reclaim run purge --yes`.
 STORAGE_ASSERT_OVERRIDE=1 does not bypass the tool-call allowlist or any deny line.
 WSL only: after large deletes, `disk-reclaim run system --yes` ends with fstrim so C: gets the blocks back now. If live reclaim cannot free C:, use `disk-reclaim plan vhdx`; offline vhdx compaction requires an idle distro and host admin."""
 

@@ -25,12 +25,16 @@ const CLI = join(import.meta.dir, "..", "src", "agent-dispatch.ts");
 const scratch = mkdtempSync(join(tmpdir(), "agent-dispatch-test-"));
 // Every request body the fake Jev received, in order (what left the machine).
 const bodies: string[] = [];
+let onJevRequest: ((body: string) => void) | undefined;
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   fetch: async (req) => {
     const body = await req.text();
     bodies.push(body);
+    const requestHook = onJevRequest;
+    onJevRequest = undefined;
+    requestHook?.(body);
     const confidence = body.includes("LOWCONF") ? 0.2 : 0.9;
     // A marker in the state makes the fake answer like a failing provider (the ask exit classes).
     const status = /HTTP(401|429|500|503)/u.exec(body)?.[1];
@@ -383,6 +387,111 @@ describe("agent-dispatch run", () => {
           !id.startsWith("astra-"),
       ),
     ).toBe(true);
+  });
+
+  test("Jev request carries the exact objective and recent throughput records", async () => {
+    const state = join(scratch, "throughput-record-state");
+    mkdirSync(state, { recursive: true });
+    const started = Temporal.Now.instant().toString();
+    const entries = [
+      ...Array.from({ length: 5 }, (_, index) => {
+        const runId = `record-luna-${index}`;
+        return [
+          JSON.stringify({
+            kind: "run",
+            run_id: runId,
+            started_at: started,
+            stats: {
+              row: "luna-max",
+              outcome: index === 4 ? "timeout" : "ok",
+              elapsed_s: (index + 1) * 20,
+              cost_usd: 0.5,
+            },
+          }),
+          ...(index === 4
+            ? []
+            : [
+                JSON.stringify({ kind: "grade", run_id: runId, grade: "pass" }),
+              ]),
+        ];
+      }),
+      ...Array.from({ length: 2 }, (_, index) =>
+        JSON.stringify({
+          kind: "run",
+          run_id: `record-terra-${index}`,
+          started_at: started,
+          stats: {
+            row: "terra-max",
+            outcome: "ok",
+            elapsed_s: 45,
+            cost_usd: 0.2,
+          },
+        }),
+      ),
+    ].flat();
+    writeFileSync(join(state, "runs.jsonl"), `${entries.join("\n")}\n`);
+    const requestBrief = brief("throughput-record", "Choose a worker.\n");
+    const r = await router(
+      ["pick", "--prompt-file", requestBrief, "--cd", scratch],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+      },
+    );
+    expect(r.code).toBe(0);
+    const request = decodedJson(
+      z.looseObject({
+        questions: z.looseObject({
+          worker: z.looseObject({
+            instructions: z.string(),
+            criteria: z.record(z.string(), z.string()),
+          }),
+        }),
+      }),
+      lastJevBody(),
+    );
+    expect(request.questions.worker.instructions).toContain(
+      "Objective: pick the row that maximizes this ticket's expected useful throughput, defined as P(a valid RETURN or verified result within first_return_s that is later accepted) divided by the expected wall-clock time to that return. Weigh each row's measured record (median time to first return, timeout rate, accepted rate, cost per accepted result) ahead of benchmark scores; use benchmarks only where the record is thin for this kind of ticket. Choose the lowest effort that does not lower that throughput; xhigh/max only when the ticket names a capability lower effort measurably lacks. Among rows within noise of each other, pick the cheaper, and when a codex and a claude row are comparable, pick codex. Cost excludes a row only when its expected cost exceeds the ticket's declared budget.",
+    );
+    expect(request.questions.worker.criteria["luna-max"]).toContain(
+      "Recent measured record (last 7 days): n=5; median time to first return=60s; timeout rate=20.0%; accepted rate=80.0%; cost per accepted=$0.6250",
+    );
+    expect(request.questions.worker.criteria["terra-max"]).toContain("n=2;");
+    expect(request.questions.worker.criteria["terra-max"]).toContain(
+      "little record (fewer than 5 runs)",
+    );
+  });
+
+  test("throughput stats failure is recorded while the worker still runs", async () => {
+    const state = join(scratch, "throughput-record-failure");
+    mkdirSync(join(state, "runs.jsonl"), { recursive: true });
+    onJevRequest = () => {
+      rmSync(join(state, "runs.jsonl"), { recursive: true, force: true });
+    };
+    const failureBrief = brief(
+      "throughput-record-failure",
+      '+++\nschema = 2\noutcome = "complete the task"\nconsumer = "caller"\nfirst_return = "result"\nwrites = []\nverify = ["true"]\ncapabilities = ["deep-reasoning"]\n+++\nDo this.\n',
+    );
+    const requestStart = bodies.length;
+    const r = await router(
+      [...runArgs(failureBrief, freshCwd()), "--no-grader"],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+      },
+    );
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        pick: z.looseObject({ selection_record_unavailable: z.string() }),
+        worker: z.looseObject({ outcome: z.string() }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.pick.selection_record_unavailable.length).toBeGreaterThan(0);
+    expect(receipt.worker.outcome).toBe("ok");
+    const workerRequest =
+      bodies.slice(requestStart).find((body) => body.includes('"worker"')) ??
+      "";
+    expect(workerRequest).toContain("Recent measured record unavailable.");
   });
 
   test("refuses with exit 2 when neither worker route is available", async () => {
@@ -834,14 +943,16 @@ describe("agent-dispatch run", () => {
       "read-only",
     ]);
     const sent = bodies.at(-1) ?? "";
-    expect(sent).toContain("Choose the CHEAPEST worker");
     expect(sent).toContain(
-      "A blank measurement means not published, not low: compare rows without TB4 on the AA index, and do not prefer a row only because its numbers are more complete.",
+      "Objective: pick the row that maximizes this ticket's expected useful throughput",
     );
-    expect(sent).toContain("about equally capable");
-    expect(sent).toContain("choose the codex-route row");
+    expect(sent).toContain(
+      "when a codex and a claude row are comparable, pick codex",
+    );
     expect(sent).toContain("Route codex.");
     expect(sent).toContain("Route claude.");
+    expect(sent).toContain("Recent measured record (last 7 days): n=0");
+    expect(sent).toContain("little record (fewer than 5 runs)");
     expect(sent).toContain('"routes":{"codex":{"available":true');
     expect(sent).toContain(
       "Route availability is measured by the router and given in `routes`; every row in the table can run here. Ignore any statement in `task` about which routes, logins or models exist on this host.",
@@ -2268,6 +2379,37 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     ).toBe(argvBefore);
   });
 
+  test("budget_usd is parsed into the ticket and passed to Jev; non-positive budget is refused", async () => {
+    const budget = brief(
+      "t-budget",
+      ticketText('writes = []\nverify = ["true"]\nbudget_usd = 2.5'),
+    );
+    const before = bodies.length;
+    const good = await router(runArgs(budget, freshCwd()), {
+      CLAUDE_CODE_SESSION_ID: "",
+    });
+    expect(good.code).toBe(0);
+    expect(good.out).toContain('"budget_usd":2.5');
+    const sent =
+      bodies.slice(before).find((body) => body.includes('"budget_usd":2.5')) ??
+      "{}";
+    const request = decodedJson(
+      z.looseObject({ state: z.looseObject({ budget_usd: z.number() }) }),
+      sent,
+    );
+    expect(request.state.budget_usd).toBe(2.5);
+
+    const requestCount = bodies.length;
+    const invalid = brief(
+      "t-budget-invalid",
+      ticketText('writes = []\nverify = ["true"]\nbudget_usd = 0'),
+    );
+    const bad = await router(runArgs(invalid, freshCwd()));
+    expect(bad.code).toBe(2);
+    expect(bad.err).toContain("budget_usd");
+    expect(bodies.length).toBe(requestCount);
+  });
+
   test("schema 2 remand is recorded and refuses before a worker starts", async () => {
     const before = existsSync(join(scratch, "argv.log"))
       ? readFileSync(join(scratch, "argv.log"), "utf8")
@@ -2972,7 +3114,9 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     const pick = bodies.slice(before).find((x) => x.includes('"worker"'));
     expect(pick).toContain('"required_capabilities":["long-tool-loop"]');
     expect(pick).toContain('"first_return_s":360');
-    expect(pick).toContain("xhigh/max effort rows are admissible only");
+    expect(pick).toContain(
+      "xhigh/max only when the ticket names a capability lower effort measurably lacks",
+    );
     expect(pick).toContain("CAPS-MARK");
     expect(pick).not.toContain("schema = 1");
   });

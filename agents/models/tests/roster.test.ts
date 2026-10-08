@@ -94,11 +94,11 @@ describe("dispatch roster", () => {
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     const sentence = rosterPolicy(loaded.value).split("\n")[0] ?? "";
-    expect(sentence).toContain("prefer codex");
-    expect(sentence).toContain("comparably capable for needed capabilities");
     expect(sentence).toContain(
-      "claude only when codex rows measurably lack a needed capability",
+      "when a codex and a claude row are comparable, pick codex",
     );
+    expect(sentence).toContain("--choice` is refused");
+    expect(sentence).toContain("the default `luna-high` runs");
     const policy = rosterPolicy(loaded.value);
     expect(policy).toContain("hard worker bound defaults to 600 seconds");
     expect(policy).toContain("hard maximum 14400");

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.1 — 2026-10-08
+
+- Route by expected useful throughput using recent per-row first-return, timeout, acceptance, and cost-per-accepted records, with benchmark scores used when the record is thin.
+- Add optional positive ticket `budget_usd` for Jev's cost exclusion decision; bound record loading to the recent log tail and record stats-read failures without stopping dispatch.
+
 ## 1.5.0 — 2026-10-08
 
 - Add optional schema 1 and 2 ticket premises for file paths and exact-text symbols; check them before Jev with a five-second bound, refuse missing premises before spawning, and record timeout skips.

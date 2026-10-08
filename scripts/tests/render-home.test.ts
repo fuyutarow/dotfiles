@@ -416,6 +416,9 @@ describe("render-home: the rest of the rendered half", () => {
     expect(md).toContain(
       "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
     );
+    expect(md).toContain(
+      "Objective: pick the row that maximizes this ticket's expected useful throughput, defined as P(a valid RETURN or verified result within first_return_s that is later accepted) divided by the expected wall-clock time to that return. Weigh each row's measured record (median time to first return, timeout rate, accepted rate, cost per accepted result) ahead of benchmark scores; use benchmarks only where the record is thin for this kind of ticket. Choose the lowest effort that does not lower that throughput; xhigh/max only when the ticket names a capability lower effort measurably lacks. Among rows within noise of each other, pick the cheaper, and when a codex and a claude row are comparable, pick codex. Cost excludes a row only when its expected cost exceeds the ticket's declared budget.",
+    );
     expect(md).toContain("hard worker bound defaults to 600 seconds");
     expect(md).toContain("outcome `returned`");
     expect(md.endsWith("<!-- roster:end -->\n")).toBe(true);

@@ -117,6 +117,9 @@ export function costMultiple(r: Roster, c: Choice): number | undefined {
 
 export type Graded = Readonly<{ pass: number; partial: number; fail: number }>;
 
+export const ROUTING_OBJECTIVE =
+  "Objective: pick the row that maximizes this ticket's expected useful throughput, defined as P(a valid RETURN or verified result within first_return_s that is later accepted) divided by the expected wall-clock time to that return. Weigh each row's measured record (median time to first return, timeout rate, accepted rate, cost per accepted result) ahead of benchmark scores; use benchmarks only where the record is thin for this kind of ticket. Choose the lowest effort that does not lower that throughput; xhigh/max only when the ticket names a capability lower effort measurably lacks. Among rows within noise of each other, pick the cheaper, and when a codex and a claude row are comparable, pick codex. Cost excludes a row only when its expected cost exceeds the ticket's declared budget.";
+
 /** What Jev reads about one row: what it is for, its measured capability, its price relative to the
  *  cheapest row, and how its graded runs here went. SELECTION (owner 2026-10-06: 「model パフォーマン
  *  ステーブルと task brief によって選択されるべき」): the pick comes from these numbers against the
@@ -159,7 +162,7 @@ export function rosterTable(r: Roster): string {
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
   return [
-    `- **Every dispatch goes through \`agent-dispatch run\` (\`agent-router\` is its alias for one release): Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record); it is asked for the cheapest row sufficient for the task, so a dearer row is picked only for a capability the task needs and cheaper rows measurably lack. When codex and claude rows are comparably capable for needed capabilities, prefer codex; choose claude only when codex rows measurably lack a needed capability. \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unreachable or answers outside the roster the default \`${r.default}\` runs, and the receipt says why.**`,
+    `- **Every dispatch goes through \`agent-dispatch run\` (\`agent-router\` is its alias for one release): Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record). ${ROUTING_OBJECTIVE} \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unreachable or answers outside the roster the default \`${r.default}\` runs, and the receipt says why.**`,
     `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; as of ${r.as_of}.`,
     `  Ticket premises: declare relied-on files or exact-text symbols as \`premises = ["file:<path>", "symbol:<name>", "symbol:<name>@<path-glob>"]\`; missing premises refuse before Jev, and checks time out after five seconds.`,
     "",

@@ -389,7 +389,7 @@ function judgeProgram(
     return `could not verify that ${rel} is tracked in ${root} (jj/git failed) — failing closed`;
   return tracked
     ? undefined
-    : `${rel} is untracked in ${root} (not in @-/HEAD): commit it first`;
+    : `${rel} is untracked in ${root} (not in @-/HEAD${existsSync(abs) ? "" : "; the file does not exist on disk"}): commit it first`;
 }
 
 /** Why this Bash command must be refused, or undefined. `cwd` is where the shell starts. */

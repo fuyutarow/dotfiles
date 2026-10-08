@@ -12,6 +12,7 @@ const HOOK = "enforce-official-execution.ts";
 const base = tempDir("fd-official-");
 const jj = join(base, "fd-jj");
 const gt = join(base, "fd-git");
+const ws = join(base, "fd-ws"); // a jj SECONDARY workspace of `jj`: no .git, its own commit stack
 const scratch = join(base, "scratchpad");
 const elsewhere = join(base, "elsewhere");
 
@@ -47,6 +48,10 @@ beforeAll(() => {
   seed(jj);
   run("jj", ["git", "init", "--colocate", "."], jj);
   run("jj", ["--config", "user.name=t", "--config", "user.email=t@t", "commit", "-m", "base"], jj);
+  run("jj", ["workspace", "add", "--name", "ws", ws], jj);
+  mkdirSync(join(ws, "packages/FireOps.jl/test"), { recursive: true });
+  writeFileSync(join(ws, "packages/FireOps.jl/test/ws_only.jl"), "# committed in the workspace only\n");
+  run("jj", ["--config", "user.name=t", "--config", "user.email=t@t", "commit", "-m", "ws"], ws);
   seed(gt);
   run("git", ["init", "-q"], gt);
   run("git", ["add", "-A"], gt);
@@ -55,6 +60,8 @@ beforeAll(() => {
     writeFileSync(join(root, "packages/FireOps.jl/test/edited.jl"), "# edited\n");
     writeFileSync(join(root, "scratch.jl"), "# untracked\n");
   }
+  writeFileSync(join(ws, "packages/FireOps.jl/test/edited.jl"), "# edited\n");
+  writeFileSync(join(ws, "scratch.jl"), "# untracked\n");
   writeFileSync(join(scratch, "s.jl"), "println(1)\n");
   writeFileSync(join(elsewhere, "e.jl"), "println(2)\n");
 });
@@ -94,6 +101,17 @@ const cases: Case[] = [
   ["word julia as an argument", () => "rr text julia", () => jj, false],
   ["pgrep julia", () => "pgrep -f julia", () => jj, false],
   ["tracked test chained", () => "cd /tmp && cd " + jj + " && julia --project=envs/gpu packages/FireOps.jl/test/x.jl | tail -3", () => elsewhere, false],
+  // --- jj secondary workspace (no .git; the commit stack is the workspace's own) -------------
+  ["tracked test in a jj secondary workspace", () => "julia --project=envs/gpu packages/FireOps.jl/test/x.jl", () => ws, false],
+  ["test committed only in the workspace", () => "julia --project=envs/gpu packages/FireOps.jl/test/ws_only.jl", () => ws, false],
+  ["modified tracked file in the workspace", () => "julia --project=envs/gpu packages/FireOps.jl/test/edited.jl", () => ws, false],
+  ["workspace test by absolute path from outside", () => `julia --project=${ws}/envs/gpu ${ws}/packages/FireOps.jl/test/ws_only.jl`, () => elsewhere, false],
+  ["workspace test run from a subdirectory", () => "julia --project=../../../envs/gpu ws_only.jl", () => join(ws, "packages/FireOps.jl/test"), false],
+  ["(c) untracked file in the workspace", () => "julia --project=envs/gpu scratch.jl", () => ws, true],
+  ["(c) file that exists in no commit of the workspace", () => "julia --project=envs/gpu packages/FireOps.jl/test/nowhere.jl", () => ws, true],
+  ["(c) test committed only in the workspace is untracked in the main checkout", () => "julia --project=envs/gpu packages/FireOps.jl/test/ws_only.jl", () => jj, true],
+  ["(a) scratch script from the workspace", () => `julia --project=envs/gpu ${scratch}/s.jl`, () => ws, true],
+  ["(b) -e in the workspace", () => `julia --project=envs/gpu -e '1'`, () => ws, true],
   // --- (a) script outside every working copy, firedancer project or cwd ----------------------
   ["(a) scratch script, cwd in firedancer", () => `julia ${scratch}/s.jl`, () => jj, true],
   ["(a) scratch script, --project into firedancer", () => `julia --project=${jj}/envs/gpu ${scratch}/s.jl`, () => elsewhere, true],
@@ -155,6 +173,13 @@ describe("enforce-official-execution", () => {
     expect(v.reason).toContain(
       "scratch execution is banned in firedancer: measure through `mise exec -- bun launcher/launch.ts --rev <sealed sha> <arena> launcher/model_interface_runner.jl <params.toml> <manifest> <cause>`; put diagnostics in a tracked, committed script.",
     );
+  });
+
+  test("a script that is in no commit says so (a missing file is not 'hidden' by the vcs)", async () => {
+    const v = await verdict("julia --project=envs/gpu packages/FireOps.jl/test/nowhere.jl", ws);
+    expect(v.reason).toContain("does not exist on disk");
+    const u = await verdict("julia --project=envs/gpu scratch.jl", ws);
+    expect(u.reason).not.toContain("does not exist on disk");
   });
 
   test("ignores non-Bash tools and commands without julia", async () => {

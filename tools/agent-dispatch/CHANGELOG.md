@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.0 — 2026-10-09
+
+- Smooth eligible Jev row probabilities with default epsilon 0.1 before temperature sampling, preserving hard masks and recording epsilon plus sampled probability.
+
 ## 1.8.0 — 2026-10-09
 
 - Add portable per-row record export/import and merge imported records into pick requests when local evidence has fewer than three runs.

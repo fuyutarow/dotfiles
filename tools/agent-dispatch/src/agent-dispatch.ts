@@ -531,6 +531,7 @@ export interface Pick {
   seed?: string;
   masked_rows?: { row: string; reason: string }[];
   sampled_probability?: number;
+  epsilon?: number;
   pick_fallback_reason?: string;
   reason: string;
   confidence?: number;
@@ -967,8 +968,8 @@ function judge(
     let reason: string | undefined;
     if (candidate === undefined)
       reason = "unavailable route or not a roster row";
-    else if (!Number.isFinite(probability) || probability <= 0)
-      reason = "probability is not positive";
+    else if (!Number.isFinite(probability) || probability < 0)
+      reason = "probability is invalid";
     else if (
       candidate.route === "codex" &&
       process.env.AGENT_ROUTER_TEST_CODEX_ROUTE === "unavailable"
@@ -1073,6 +1074,7 @@ function judge(
     seed: options.seed,
     masked_rows: maskedRows,
     sampled_probability: sampledProbability,
+    epsilon: sample.epsilon,
     reason: `${sample.row} (sampled p=${sampledProbability.toFixed(2)} from jev; argmax ${sample.argmaxRow})`,
     ...(answer.confidence === undefined
       ? {}
@@ -3146,6 +3148,7 @@ const LogLine = z.looseObject({
       .array(z.looseObject({ row: z.string(), reason: z.string() }))
       .optional(),
     sampled_probability: z.number().optional(),
+    epsilon: z.number().optional(),
     pick_fallback_reason: z.string().optional(),
     confidence: z.number().optional(),
     jev: z
@@ -4156,6 +4159,9 @@ async function resumeCommand(
       ...(logged.pick.sampled_probability === undefined
         ? {}
         : { sampled_probability: logged.pick.sampled_probability }),
+      ...(logged.pick.epsilon === undefined
+        ? {}
+        : { epsilon: logged.pick.epsilon }),
       ...(logged.pick.pick_fallback_reason === undefined
         ? {}
         : { pick_fallback_reason: logged.pick.pick_fallback_reason }),

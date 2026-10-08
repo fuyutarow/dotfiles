@@ -17,15 +17,15 @@ describe("seeded row selection", () => {
       }
       counts.set(sample.row, (counts.get(sample.row) ?? 0) + 1);
       expect(sample.probability).toBeCloseTo(
-        sample.row === "luna-high" ? 0.75 : 0.25,
+        sample.row === "luna-high" ? 0.725 : 0.275,
       );
     }
     expect(
-      Math.abs((counts.get("luna-high") ?? 0) / draws - 0.75),
+      Math.abs((counts.get("luna-high") ?? 0) / draws - 0.725),
     ).toBeLessThan(0.05);
-    expect(Math.abs((counts.get("luna-low") ?? 0) / draws - 0.25)).toBeLessThan(
-      0.05,
-    );
+    expect(
+      Math.abs((counts.get("luna-low") ?? 0) / draws - 0.275),
+    ).toBeLessThan(0.05);
   });
 
   test("the same seed reproduces the same draw", () => {
@@ -43,5 +43,37 @@ describe("seeded row selection", () => {
       probability: 1,
       mode: "argmax",
     });
+  });
+
+  test("epsilon smoothing explores a one-hot answer across five rows", () => {
+    const probabilities = { a: 1, b: 0, c: 0, d: 0, e: 0 };
+    const counts = new Map<string, number>();
+    for (let i = 0; i < 2000; i++) {
+      const sample = sampleRow(probabilities, 1, `smooth-${i}`);
+      expect(sample).toBeDefined();
+      if (sample === undefined) continue;
+      counts.set(sample.row, (counts.get(sample.row) ?? 0) + 1);
+      expect(sample.epsilon).toBe(0.1);
+    }
+    for (const row of ["b", "c", "d", "e"])
+      expect(Math.abs((counts.get(row) ?? 0) / 2000 - 0.02)).toBeLessThan(0.01);
+  });
+
+  test("epsilon zero preserves the unsmoothed distribution", () => {
+    expect(sampleRow({ a: 1, b: 0 }, 1, "epsilon-zero", 0)).toMatchObject({
+      row: "a",
+      probability: 1,
+      epsilon: 0,
+    });
+  });
+
+  test("zero-probability eligible rows can be drawn after smoothing", () => {
+    const probabilities = { a: 1, b: 0 };
+    expect(
+      Array.from(
+        { length: 500 },
+        (_, i) => sampleRow(probabilities, 1, `zero-row-${i}`)?.row,
+      ),
+    ).toContain("b");
   });
 });

@@ -4,6 +4,7 @@ export type SampledRow = Readonly<{
   row: string;
   argmaxRow: string;
   probability: number;
+  epsilon: number;
   mode: "sample" | "argmax";
 }>;
 
@@ -12,8 +13,16 @@ export function sampleRow(
   probabilities: Readonly<Record<string, number>>,
   temperature: number,
   seed: string,
+  epsilon = 0.1,
 ): SampledRow | undefined {
-  const entries = Object.entries(probabilities);
+  const entries = Object.entries(probabilities).filter(
+    ([, probability]) => probability >= 0 && Number.isFinite(probability),
+  );
+  if (entries.length === 0 || epsilon < 0 || epsilon > 1) return undefined;
+  const smoothed = entries.map(
+    ([row, probability]) =>
+      [row, (1 - epsilon) * probability + epsilon / entries.length] as const,
+  );
   const argmax = entries.toSorted((a, b) => b[1] - a[1])[0];
   if (argmax === undefined) return undefined;
   if (temperature < 0.01)
@@ -21,11 +30,12 @@ export function sampleRow(
       row: argmax[0],
       argmaxRow: argmax[0],
       probability: 1,
+      epsilon,
       mode: "argmax",
     };
 
-  const maxLogProbability = Math.log(argmax[1]);
-  const weighted = entries.map(
+  const maxLogProbability = Math.log(Math.max(...smoothed.map(([, p]) => p)));
+  const weighted = smoothed.map(
     ([row, p]) =>
       [row, Math.exp((Math.log(p) - maxLogProbability) / temperature)] as const,
   );
@@ -49,6 +59,7 @@ export function sampleRow(
     row: selected,
     argmaxRow: argmax[0],
     probability: (weighted.find(([row]) => row === selected)?.[1] ?? 0) / total,
+    epsilon,
     mode: "sample",
   };
 }

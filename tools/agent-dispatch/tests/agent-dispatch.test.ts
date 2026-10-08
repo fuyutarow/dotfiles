@@ -301,6 +301,7 @@ const Receipt = z.looseObject({
     seed: z.string().optional(),
     masked_rows: z.array(z.unknown()).optional(),
     sampled_probability: z.number().optional(),
+    epsilon: z.number().optional(),
     pick_fallback_reason: z.string().optional(),
   }),
   worker: z.looseObject({ outcome: z.string() }),
@@ -1059,6 +1060,7 @@ describe("agent-dispatch run", () => {
       sampled_row: "luna-high",
       temperature: 1,
       sampled_probability: 1,
+      epsilon: 0.1,
     });
     expect(typeof receipt.pick.seed).toBe("string");
     expect(receipt.pick.masked_rows).toEqual([]);
@@ -1142,8 +1144,9 @@ describe("agent-dispatch run", () => {
     expect(first.choice).toBe(second.choice);
     expect(first.mode).toBe("sample");
     expect(first.seed).toBe("repeatable-seed");
-    expect(first.sampled_probability).toBe(
-      first.choice === "luna-high" ? 0.75 : 0.25,
+    expect(first.sampled_probability).toBeCloseTo(
+      first.choice === "luna-high" ? 0.725 : 0.275,
+      12,
     );
   });
 
@@ -1177,10 +1180,10 @@ describe("agent-dispatch run", () => {
     });
   });
 
-  test("auto: zero remaining mass falls back to Jev's named row with a reason", async () => {
+  test("auto: zero Jev probabilities remain eligible through smoothing", async () => {
     const target = brief(
       "distribution-zero",
-      "PICK=luna-high PROBS=luna-high:0\n",
+      "PICK=luna-high PROBS=luna-high:1,luna-low:0\n",
     );
     const r = await router([
       "run",
@@ -1192,13 +1195,11 @@ describe("agent-dispatch run", () => {
       "read-only",
     ]);
     const receipt = decodedJson(Receipt, r.out.trim());
-    expect(receipt.pick.choice).toBe("luna-high");
-    expect(receipt.pick.mode).toBe("fallback");
-    expect(receipt.pick.pick_fallback_reason).toBe("zero mass after masking");
-    expect(receipt.pick.masked_rows).toContainEqual({
-      row: "luna-high",
-      reason: "probability is not positive",
-    });
+    expect(["luna-high", "luna-low"]).toContain(receipt.pick.choice);
+    expect(receipt.pick.mode).toBe("sample");
+    expect(receipt.pick.epsilon).toBe(0.1);
+    expect(receipt.pick.sampled_probability).toBeGreaterThan(0);
+    expect(receipt.pick.masked_rows).toEqual([]);
   });
 
   test("auto: no key falls back to the default and names where it looked", async () => {

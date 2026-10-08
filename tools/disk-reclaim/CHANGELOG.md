@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Fix a workspace plan failing schema validation (exit 2) when a live same-uid cwd was found alongside an unreadable same-uid process (e.g. `systemd --user` on a shared host): the positive in-use fact now yields KEEP with a definite "not in use" failure, and the unreadable process is still reported in its detail. An unreadable process with no positive fact remains ASK, never idle.
+
 ## 0.2.1
 
 - Resolve the process root in one place and report unavailable process scans explicitly; all mutating paths remain fail-closed when idleness cannot be established.

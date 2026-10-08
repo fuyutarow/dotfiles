@@ -41,6 +41,19 @@ const emptyCheck = (
   return { name, ok: ids.length === 0, detail };
 };
 const openCheck = (paths: OpenPaths): Check => {
+  // A process seen using the workspace is a positive fact; an unreadable
+  // unrelated process must not hide it (that would leave KEEP with an unknown check).
+  if (paths.open.length > 0) {
+    const used = paths.open
+      .slice(0, 3)
+      .map((entry) => `pid ${entry.pid} ${entry.via}`)
+      .join("; ");
+    const unreadable =
+      paths.unknown.length > 0
+        ? `; also unreadable: ${paths.unknown.slice(0, 3).join("; ")}`
+        : "";
+    return { name: "not in use", ok: false, detail: `${used}${unreadable}` };
+  }
   if (paths.unknown.length > 0)
     return {
       name: "not in use",

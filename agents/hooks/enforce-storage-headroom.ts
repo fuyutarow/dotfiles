@@ -564,21 +564,31 @@ function workspaceRoot(path: string): string | null {
   }
 }
 
-const CHECKOUT_PROBE_BUDGET_MS = 50;
+const TRACKED_FILE_COUNT_TIMEOUT_MS = 2_000;
+const CHECKOUT_SIZE_TIMEOUT_MS = 5_000;
 const SMALL_CHECKOUT_FILE_LIMIT = 10_000;
-const BACKGROUND_CHECKOUT_TIMEOUT_MS = 10_000;
 const SPARSE_WORKSPACE_ADVICE =
   "Use `jj workspace add --sparse-patterns empty <dir>`, then `jj sparse set --add <paths>`.";
 
 export type CheckoutProbeResult = { bytes: number | null; elapsedMs: number };
+export type TrackedFileCountResult = {
+  count: number | null;
+  elapsedMs: number;
+};
+export type CheckoutCacheEntry = {
+  bytes?: number;
+  trackedFileCount?: number;
+  at: number;
+};
 export type CheckoutPolicyDeps = {
   now: () => number;
-  cachedSize: (root: string, now: () => number) => Promise<number | null>;
-  saveSize: (root: string, bytes: number, at: number) => void;
+  cachedSize: (
+    root: string,
+    now: () => number,
+  ) => Promise<CheckoutCacheEntry | null>;
+  saveCache: (root: string, entry: CheckoutCacheEntry) => void;
   probeSize: (root: string, budgetMs: number) => CheckoutProbeResult;
-  trackedFileCount: (root: string, budgetMs: number) => number | null;
-  measureInBackground: (root: string) => void;
-  note: () => void;
+  trackedFileCount: (root: string, budgetMs: number) => TrackedFileCountResult;
 };
 
 function probeCheckoutSize(
@@ -601,8 +611,12 @@ function probeCheckoutSize(
 }
 
 // `jj file list` avoids walking file contents. Its bounded output count is a cheap proxy for
-// whether a full checkout is safe to start while the byte measurement runs off the hook path.
-function probeTrackedFileCount(root: string, budgetMs: number): number | null {
+// whether a full checkout is safe to start without walking file contents.
+function probeTrackedFileCount(
+  root: string,
+  budgetMs: number,
+): TrackedFileCountResult {
+  const started = performance.now();
   const result = Bun.spawnSync(
     ["jj", "--ignore-working-copy", "-R", root, "file", "list", "-T", '"x\\n"'],
     {
@@ -612,99 +626,85 @@ function probeTrackedFileCount(root: string, budgetMs: number): number | null {
       maxBuffer: 256 * 1024,
     },
   );
-  if (result.exitCode !== 0) return null;
+  if (result.exitCode !== 0)
+    return { count: null, elapsedMs: performance.now() - started };
   const output = result.stdout.toString();
-  return output === "" ? 0 : output.split("\n").length - 1;
+  return {
+    count: output === "" ? 0 : output.split("\n").length - 1,
+    elapsedMs: performance.now() - started,
+  };
 }
 
-function writeCheckoutCache(
-  root: string,
-  bytes: number,
-  timestamp: number,
-): void {
-  const cacheDir = join(
-    homedir(),
+export function checkoutCachePath(root: string, home = homedir()): string {
+  return join(
+    home,
     ".cache",
     "claude-hooks",
     "storage-headroom",
-  );
-  const cacheFile = join(
-    cacheDir,
     `${createHash("sha1").update(root).digest("hex")}.checkout.json`,
   );
-  mkdirSync(cacheDir, { recursive: true });
-  writeFileSync(cacheFile, JSON.stringify({ bytes, at: timestamp }));
 }
 
-function measureCheckoutInBackground(root: string): void {
-  const proc = Bun.spawn(["du", "-sk", "-I", ".jj", "-I", ".git", root], {
-    timeout: BACKGROUND_CHECKOUT_TIMEOUT_MS,
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  proc.unref();
-  void proc.exited.then(async (exitCode) => {
-    if (exitCode !== 0) return;
-    const output = await new Response(proc.stdout).text();
-    const kib = Number(output.trim().split(/\s/u)[0]);
-    if (!Number.isFinite(kib) || kib < 0) return;
-    void attempt(() => {
-      writeCheckoutCache(
-        root,
-        kib * 1024,
-        Temporal.Now.instant().epochMilliseconds,
-      );
-    });
-  });
+export function writeCheckoutCache(
+  root: string,
+  entry: CheckoutCacheEntry,
+  home = homedir(),
+): void {
+  const cacheFile = checkoutCachePath(root, home);
+  const cacheDir = dirname(cacheFile);
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(cacheFile, JSON.stringify(entry));
 }
 
 const defaultCheckoutPolicyDeps: CheckoutPolicyDeps = {
   now: () => Temporal.Now.instant().epochMilliseconds,
   cachedSize: cachedCheckoutSizeBytes,
-  saveSize: writeCheckoutCache,
+  saveCache: writeCheckoutCache,
   probeSize: probeCheckoutSize,
-  trackedFileCount: probeTrackedFileCount,
-  measureInBackground: measureCheckoutInBackground,
-  note: () => {
-    process.stderr.write("storage-headroom: repo size unknown; measuring\n");
+  trackedFileCount: (root, budgetMs) => {
+    const result = probeTrackedFileCount(root, budgetMs);
+    return { count: result.count, elapsedMs: result.elapsedMs };
   },
 };
 
-async function cachedCheckoutSizeBytes(
+export async function cachedCheckoutSizeBytes(
   root: string,
   now: () => number,
-): Promise<number | null> {
-  const cacheFile = join(
-    homedir(),
-    ".cache",
-    "claude-hooks",
-    "storage-headroom",
-    `${createHash("sha1").update(root).digest("hex")}.checkout.json`,
-  );
+  home = homedir(),
+): Promise<CheckoutCacheEntry | null> {
+  const cacheFile = checkoutCachePath(root, home);
   return attemptOr(() => {
     const value = parseJson(readFileSync(cacheFile, "utf8"));
     const bytes = num(at(value, "bytes"));
+    const trackedFileCount = num(at(value, "trackedFileCount"));
     const stamp = num(at(value, "at"));
-    const age = stamp === undefined ? undefined : now() - stamp;
-    return bytes !== undefined &&
-      age !== undefined &&
-      age >= 0 &&
-      age < 60 * 60_000
-      ? bytes
-      : null;
+    if (stamp === undefined) return null;
+    const age = now() - stamp;
+    if (age < 0 || age >= 60 * 60_000) return null;
+    if (bytes === undefined && trackedFileCount === undefined) return null;
+    return {
+      ...(bytes === undefined ? {} : { bytes }),
+      ...(trackedFileCount === undefined ? {} : { trackedFileCount }),
+      at: stamp,
+    };
   }, null);
 }
 
-function unknownCheckoutReason(
+async function probeAndCacheTrackedFileCount(
   root: string,
   deps: CheckoutPolicyDeps,
-  reason: string,
-): string | null {
-  deps.measureInBackground(root);
-  const count = deps.trackedFileCount(root, CHECKOUT_PROBE_BUDGET_MS);
-  if (count === null || count > SMALL_CHECKOUT_FILE_LIMIT) return reason;
-  deps.note();
-  return null;
+): Promise<TrackedFileCountResult> {
+  const result = deps.trackedFileCount(root, TRACKED_FILE_COUNT_TIMEOUT_MS);
+  if (result.count !== null) {
+    const entry: CheckoutCacheEntry = {
+      trackedFileCount: result.count,
+      at: deps.now(),
+    };
+    await attempt(() => {
+      deps.saveCache(root, entry);
+    });
+  }
+  return result;
 }
 
 function checkoutRoot(add: WorkspaceAdd): string | null {
@@ -726,7 +726,7 @@ export async function fullCheckoutReason(
   thresholdMb: number,
   deps: CheckoutPolicyDeps = defaultCheckoutPolicyDeps,
 ): Promise<string | null> {
-  const unknownReason = `storage-headroom: refusing a full-checkout jj workspace because its size is unknown; retry in a few seconds while it is being measured. ${SPARSE_WORKSPACE_ADVICE}`;
+  const unknownReason = `storage-headroom: refusing a full-checkout jj workspace because its size is unknown; retry after a bounded size probe succeeds. ${SPARSE_WORKSPACE_ADVICE}`;
   const parsed = parseShell(command, cwd);
   if (parsed === undefined) {
     return /\bjj\s+workspace\s+add\b/u.test(command) ? unknownReason : null;
@@ -743,28 +743,55 @@ export async function fullCheckoutReason(
       continue;
     const root = checkoutRoot(add);
     if (root === null) return unknownReason;
-    const cachedBytes = await deps.cachedSize(root, deps.now);
-    const probe =
-      cachedBytes === null
-        ? deps.probeSize(root, CHECKOUT_PROBE_BUDGET_MS)
-        : { bytes: cachedBytes, elapsedMs: 0 };
-    const timedOut = probe.elapsedMs > CHECKOUT_PROBE_BUDGET_MS;
-    const pendingReason =
-      cachedBytes === null && (timedOut || probe.bytes === null)
-        ? unknownCheckoutReason(root, deps, unknownReason)
-        : undefined;
-    if (pendingReason === null) continue;
-    if (pendingReason !== undefined) return pendingReason;
-    const bytes = probe.bytes;
-    if (bytes === null) {
-      return unknownReason;
+    const cached = await deps.cachedSize(root, deps.now);
+    if (
+      cached?.trackedFileCount !== undefined &&
+      cached.trackedFileCount <= SMALL_CHECKOUT_FILE_LIMIT
+    )
+      continue;
+
+    const countProbe =
+      cached?.trackedFileCount === undefined
+        ? await probeAndCacheTrackedFileCount(root, deps)
+        : { count: cached.trackedFileCount, elapsedMs: 0 };
+    const trackedFileCount = countProbe.count ?? undefined;
+    const countTimedOut =
+      trackedFileCount === undefined &&
+      countProbe.elapsedMs >= TRACKED_FILE_COUNT_TIMEOUT_MS;
+    if (
+      trackedFileCount !== undefined &&
+      trackedFileCount <= SMALL_CHECKOUT_FILE_LIMIT
+    )
+      continue;
+
+    const bytes = cached?.bytes ?? undefined;
+    const sizeProbe =
+      bytes === undefined
+        ? deps.probeSize(root, CHECKOUT_SIZE_TIMEOUT_MS)
+        : { bytes, elapsedMs: 0 };
+    const sizeTimedOut =
+      bytes === undefined && sizeProbe.elapsedMs >= CHECKOUT_SIZE_TIMEOUT_MS;
+    if (sizeProbe.bytes === null) {
+      const timedOut = [
+        ...(countTimedOut ? ["tracked-file count (2 s)"] : []),
+        ...(sizeTimedOut ? ["checkout byte size (5 s)"] : []),
+      ];
+      return timedOut.length > 0
+        ? `${unknownReason} Timed out: ${timedOut.join(" and ")}.`
+        : unknownReason;
     }
-    if (cachedBytes === null) {
+    if (bytes === undefined) {
+      const entry: CheckoutCacheEntry = {
+        ...(trackedFileCount === undefined ? {} : { trackedFileCount }),
+        bytes: sizeProbe.bytes,
+        at: deps.now(),
+      };
       await attempt(() => {
-        deps.saveSize(root, bytes, deps.now());
+        deps.saveCache(root, entry);
       });
     }
-    const mb = bytes / 1_000_000;
+    const measuredBytes = sizeProbe.bytes;
+    const mb = measuredBytes / 1_000_000;
     if (mb > thresholdMb) {
       return (
         `storage-headroom: refusing a full-checkout jj workspace; this repo is ${mb.toFixed(1)} MB ` +

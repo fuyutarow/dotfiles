@@ -12,8 +12,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { attempt } from "../attempt.ts";
 import {
+  cachedCheckoutSizeBytes,
+  checkoutCachePath,
   fullCheckoutReason,
   type CheckoutPolicyDeps,
+  writeCheckoutCache,
 } from "../enforce-storage-headroom.ts";
 import { z } from "../zod.ts";
 import { decisionOf, runHook } from "./helpers.ts";
@@ -387,68 +390,85 @@ describe("enforce-storage-headroom", () => {
     }
   });
 
-  test("small full checkout add is allowed and its repo size is cached", async () => {
+  test("writer and reader use the same per-repo cache key", async () => {
     const { root } = fakeCheckoutProbe("");
-    let clock = 1_800_000_000_000;
-    let probes = 0;
-    let cached: { bytes: number; at: number } | null = null;
+    const home = mkdtempSync(join(tmpdir(), "checkout-cache-home-"));
+    const at = 1_800_000_000_000;
+    writeCheckoutCache(root, { trackedFileCount: 37, at }, home);
+    expect(existsSync(checkoutCachePath(root, home))).toBe(true);
+    expect(await cachedCheckoutSizeBytes(root, () => at + 1, home)).toEqual({
+      trackedFileCount: 37,
+      at,
+    });
+  });
+
+  test("small full checkout add is allowed on its first call and the second call hits cache", async () => {
+    const { root } = fakeCheckoutProbe("");
+    const home = mkdtempSync(join(tmpdir(), "checkout-cache-home-"));
+    const now = 1_800_000_000_000;
+    let countProbes = 0;
+    let sizeProbes = 0;
     const deps: CheckoutPolicyDeps = {
-      now: () => clock,
-      cachedSize: (_root, now) =>
-        Promise.resolve(
-          cached !== null && now() - cached.at < 60 * 60_000
-            ? cached.bytes
-            : null,
-        ),
-      saveSize: (_root, bytes, at) => {
-        cached = { bytes, at };
+      now: () => now,
+      cachedSize: (repo, clock) => cachedCheckoutSizeBytes(repo, clock, home),
+      saveCache: (repo, entry) => {
+        writeCheckoutCache(repo, entry, home);
       },
-      probeSize: (_root, budgetMs) => {
-        expect(budgetMs).toBe(50);
-        probes++;
-        return { bytes: 100_000_000, elapsedMs: 1 };
+      probeSize: () => {
+        sizeProbes++;
+        return { bytes: null, elapsedMs: 5_001 };
       },
-      trackedFileCount: () => 1,
-      measureInBackground: () => {},
-      note: () => {},
+      trackedFileCount: (_root, budgetMs) => {
+        expect(budgetMs).toBe(2_000);
+        countProbes++;
+        return { count: 7, elapsedMs: 170 };
+      },
     };
     expect(
       await fullCheckoutReason("jj workspace add ../worker", root, 500, deps),
     ).toBeNull();
-    clock += 1;
     expect(
       await fullCheckoutReason("jj workspace add ../worker", root, 500, deps),
     ).toBeNull();
-    expect(probes).toBe(1);
+    expect(countProbes).toBe(1);
+    expect(sizeProbes).toBe(0);
   });
 
-  test("large full checkout add is denied with its measured size", async () => {
+  test("large full checkout add measures bytes and applies the configured threshold", async () => {
     const { root } = fakeCheckoutProbe("");
+    const cached: { trackedFileCount?: number; bytes?: number; at: number }[] =
+      [];
     const reason = await fullCheckoutReason(
       "jj workspace add ../worker",
       root,
       500,
       {
         now: () => 1_800_000_000_000,
-        cachedSize: () => Promise.resolve(null),
-        saveSize: () => {},
-        probeSize: (_root, budgetMs) => {
-          expect(budgetMs).toBe(50);
-          return { bytes: 600_000 * 1024, elapsedMs: 1 };
+        cachedSize: () => Promise.resolve(cached.at(-1) ?? null),
+        saveCache: (_root, entry) => {
+          cached.push(entry);
         },
-        trackedFileCount: () => 1,
-        measureInBackground: () => {},
-        note: () => {},
+        probeSize: (_root, budgetMs) => {
+          expect(budgetMs).toBe(5_000);
+          return { bytes: 600_000 * 1024, elapsedMs: 300 };
+        },
+        trackedFileCount: (_root, budgetMs) => {
+          expect(budgetMs).toBe(2_000);
+          return { count: 10_001, elapsedMs: 200 };
+        },
       },
     );
     expect(reason).toContain("this repo is 614.4 MB (> 500 MB threshold)");
     expect(reason).toContain("jj workspace add --sparse-patterns empty <dir>");
+    expect(cached.at(-1)).toEqual({
+      trackedFileCount: 10_001,
+      bytes: 600_000 * 1024,
+      at: 1_800_000_000_000,
+    });
   });
 
-  test("a timeout measures in the background and allows only a cheap small file count", async () => {
+  test("when both bounded probes time out, denial names both probes", async () => {
     const { root } = fakeCheckoutProbe("");
-    let measured = 0;
-    let noted = 0;
     const reason = await fullCheckoutReason(
       "jj workspace add ../worker",
       root,
@@ -456,51 +476,20 @@ describe("enforce-storage-headroom", () => {
       {
         now: () => 1_800_000_000_000,
         cachedSize: () => Promise.resolve(null),
-        saveSize: () => {},
+        saveCache: () => {},
         probeSize: (_root, budgetMs) => {
-          expect(budgetMs).toBe(50);
-          return { bytes: null, elapsedMs: 51 };
+          expect(budgetMs).toBe(5_000);
+          return { bytes: null, elapsedMs: 5_001 };
         },
         trackedFileCount: (_root, budgetMs) => {
-          expect(budgetMs).toBe(50);
-          return 7;
-        },
-        measureInBackground: () => {
-          measured++;
-        },
-        note: () => {
-          noted++;
+          expect(budgetMs).toBe(2_000);
+          return { count: null, elapsedMs: 2_001 };
         },
       },
     );
-    expect(reason).toBeNull();
-    expect(measured).toBe(1);
-    expect(noted).toBe(1);
-  });
-
-  test("unknown checkout size asks for a retry while the background measurement runs", async () => {
-    const { root } = fakeCheckoutProbe("");
-    let measured = 0;
-    const reason = await fullCheckoutReason(
-      "jj workspace add ../worker",
-      root,
-      500,
-      {
-        now: () => 1_800_000_000_000,
-        cachedSize: () => Promise.resolve(null),
-        saveSize: () => {},
-        probeSize: () => ({ bytes: null, elapsedMs: 51 }),
-        trackedFileCount: () => null,
-        measureInBackground: () => {
-          measured++;
-        },
-        note: () => {},
-      },
-    );
-    expect(reason).toContain(
-      "retry in a few seconds while it is being measured",
-    );
-    expect(measured).toBe(1);
+    expect(reason).toContain("refusing a full-checkout jj workspace");
+    expect(reason).toContain("tracked-file count (2 s)");
+    expect(reason).toContain("checkout byte size (5 s)");
   });
 
   test("sparse jj workspace add follows the storage gate", () => {

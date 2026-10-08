@@ -2,7 +2,14 @@
 // function. No ssh anywhere: the plan only NAMES the commands.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { buildPlan, logged, parseOpts, sq } from "../box-init.ts";
+import {
+  buildPlan,
+  dotfilesIndexScript,
+  dotfilesIndexSkipReason,
+  logged,
+  parseOpts,
+  sq,
+} from "../box-init.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "box-init.ts");
 
@@ -85,6 +92,7 @@ describe("plan", () => {
       "reach",
       "auth:push",
       "codex host",
+      "index dotfiles",
       "doctor:remote",
     ]);
   });
@@ -94,6 +102,7 @@ describe("plan", () => {
       "reach",
       "auth:push",
       "codex host",
+      "index dotfiles",
       "clone a",
       "mise a",
       "jj a",
@@ -176,6 +185,40 @@ describe("plan", () => {
     expect(step?.probe?.argv.at(-1)).toContain("--check");
     expect(step?.act?.argv.at(-1)).toContain("agent-dispatch-host.ts --rented");
     expect(step?.log).toBe("codex-host");
+  });
+
+  test("dotfiles index step uses ccc index with the router's 120 second bound", () => {
+    const step = buildPlan({ alias: "box", repos: [] }).find(
+      (item) => item.name === "index dotfiles",
+    );
+    const command = step?.act?.argv.at(-1) ?? "";
+    expect(command).toContain("timeout -k 10 120 sh -c");
+    expect(command).toContain("ccc index");
+    expect(command).toContain('cd "$HOME/dotfiles"');
+    expect(command).toContain("ccc status");
+    expect(command).toContain("RESULT: indexed file count=%s");
+    expect(command).toContain("RESULT: SKIP reason=settings-missing");
+    expect(command).toContain("RESULT: SKIP reason=ccc-missing");
+    expect(step?.timeoutMs).toBe(125_000);
+    expect(step?.surface?.test("RESULT: indexed file count=12")).toBe(true);
+  });
+
+  test("dotfiles index skip decision names absent settings before absent ccc", () => {
+    expect(dotfilesIndexSkipReason(false, false)).toBe("settings-missing");
+    expect(dotfilesIndexSkipReason(false, true)).toBe("settings-missing");
+    expect(dotfilesIndexSkipReason(true, false)).toBe("ccc-missing");
+    expect(dotfilesIndexSkipReason(true, true)).toBeUndefined();
+  });
+
+  test("dotfiles index script runs ccc index and reports the ccc status file count", () => {
+    const script = dotfilesIndexScript();
+    expect(script).toContain(
+      'if [ ! -f "$HOME/dotfiles/.cocoindex_code/settings.yml" ]',
+    );
+    expect(script).toContain("command -v ccc >/dev/null 2>&1");
+    expect(script).toContain("ccc index || exit $?\n");
+    expect(script).toContain("status=$(ccc status) || exit $?");
+    expect(script).toContain("awk '/^  Files:/");
   });
 });
 

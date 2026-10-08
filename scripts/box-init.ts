@@ -55,6 +55,8 @@ export type Opts = {
 };
 
 const MIN = 60_000;
+// Match repo-retrieve's bounded automatic `ccc index` run (AUTO_INDEX_MS).
+const DOTFILES_INDEX_TIMEOUT_MS = 120_000;
 const SSH = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15"] as const;
 const BOOTSTRAP_URL =
   "https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh";
@@ -66,6 +68,37 @@ const DOCTOR_REMOTE = join(import.meta.dir, "doctor-remote.ts");
 
 /** POSIX single-quote for the box's shell. */
 export const sq = (s: string): string => `'${s.replaceAll("'", `'\\''`)}'`;
+
+export type DotfilesIndexSkipReason = "settings-missing" | "ccc-missing";
+
+/** Pure branch decision, also used to keep the remote skip output named and stable. */
+export function dotfilesIndexSkipReason(
+  settingsExists: boolean,
+  cccOnPath: boolean,
+): DotfilesIndexSkipReason | undefined {
+  if (!settingsExists) return "settings-missing";
+  if (!cccOnPath) return "ccc-missing";
+  return undefined;
+}
+
+/** POSIX script for the optional, bounded dotfiles index build on the box. */
+export function dotfilesIndexScript(): string {
+  const settingsSkip =
+    dotfilesIndexSkipReason(false, true) ?? "settings-missing";
+  const cccSkip = dotfilesIndexSkipReason(true, false) ?? "ccc-missing";
+  return [
+    `if [ ! -f "$HOME/dotfiles/.cocoindex_code/settings.yml" ]; then`,
+    `  printf '%s\\n' ${sq(`RESULT: SKIP reason=${settingsSkip}`)}`,
+    `elif ! command -v ccc >/dev/null 2>&1; then`,
+    `  printf '%s\\n' ${sq(`RESULT: SKIP reason=${cccSkip}`)}`,
+    `else`,
+    `  cd "$HOME/dotfiles" || exit`,
+    `  ccc index || exit $?`,
+    `  status=$(ccc status) || exit $?`,
+    `  printf '%s\\n' "$status" | awk '/^  Files:/ { printf "RESULT: indexed file count=%s\\n", $2; found=1 } END { if (!found) exit 1 }'`,
+    `fi`,
+  ].join("\n");
+}
 
 /** `ssh <alias> <script>` — the box's login shell (zsh) runs it, so the script is POSIX-only. */
 const onBox = (alias: string, script: string): Cmd => ({
@@ -165,6 +198,24 @@ export function buildPlan(o: Opts): Step[] {
       timeoutMs: 2 * MIN,
       log: "codex-host",
       fix: "the rented Linux box must have Bun available and pass the measured container and user-namespace checks",
+    },
+    {
+      name: "index dotfiles",
+      group: "",
+      act: onBox(
+        alias,
+        logged(
+          "ccc-index",
+          dotfilesIndexScript(),
+          DOTFILES_INDEX_TIMEOUT_MS + 5_000,
+          `grep -a 'RESULT:' "${LOG_DIR}/ccc-index.log" | tail -n 1; `,
+        ),
+      ),
+      done: "dotfiles semantic index",
+      timeoutMs: DOTFILES_INDEX_TIMEOUT_MS + 5_000,
+      log: "ccc-index",
+      surface: /^RESULT:/u,
+      fix: "read the box log; ccc index must finish within 120 seconds and ccc status must report its file count",
     },
   );
   for (const repo of o.repos) {

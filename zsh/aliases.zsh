@@ -702,20 +702,24 @@ _term_drain() {
 
 # ssh: hand the terminal back usable however the session ended. No message: on a healthy exit
 # there is nothing to report, and a warning here would fire on every typo'd hostname too.
-ssh() {
-  command ssh "$@"
-  local ec=$?
-  _term_restore
-  # 255 is ssh's OWN error status — a dropped link included. That is the case where the remote app
-  # never got to leave the alternate screen. Sent blind; see _TERM_LEAVE_ALTSCREEN for why that is
-  # safe even when we were never on it, and the LAW above for why we must not ask instead.
-  (( ec == 255 )) && [[ -t 1 ]] && print -rn -- "$_TERM_LEAVE_ALTSCREEN"
-  # ssh restores termios itself on every NORMAL exit, its own 255 included; only a signal kill
-  # leaves the tty raw. Running `stty sane` after every ssh would fork each time and silently undo
-  # a user's own `stty -ixon` / custom erase / intr, so pay for it only where it is the cure.
-  (( ec >= 128 && ec != 255 )) && [[ -t 0 ]] && stty sane 2>/dev/null
-  return $ec
-}
+# Scripts and non-interactive shells get the real binary; only an interactive shell has the
+# terminal repair helper and prompt hook that give this wrapper its contract.
+if [[ -o interactive ]]; then
+  ssh() {
+    command ssh "$@"
+    local ec=$?
+    _term_restore
+    # 255 is ssh's OWN error status — a dropped link included. That is the case where the remote app
+    # never got to leave the alternate screen. Sent blind; see _TERM_LEAVE_ALTSCREEN for why that is
+    # safe even when we were never on it, and the LAW above for why we must not ask instead.
+    (( ec == 255 )) && [[ -t 1 ]] && print -rn -- "$_TERM_LEAVE_ALTSCREEN"
+    # ssh restores termios itself on every NORMAL exit, its own 255 included; only a signal kill
+    # leaves the tty raw. Running `stty sane` after every ssh would fork each time and silently undo
+    # a user's own `stty -ixon` / custom erase / intr, so pay for it only where it is the cure.
+    (( ec >= 128 && ec != 255 )) && [[ -t 0 ]] && stty sane 2>/dev/null
+    return $ec
+  }
+fi
 
 # Manual sledgehammer for a terminal wrecked by anything else (a crashed TUI, a cat'ed binary, a
 # killed ssh). Unlike the automatic paths this MAY read input, fork, move the cursor and clear the

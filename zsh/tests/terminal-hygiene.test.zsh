@@ -35,7 +35,7 @@ pty_run() {
   local out chunk line
   zpty -d TH 2>/dev/null
   zpty TH zsh -f || { print -r -- "[FAIL] zpty could not start zsh"; exit 1 }
-  zpty -w TH "IS_MAC=true IS_WSL=false; source $ROOT/zsh/aliases.zsh >/dev/null 2>&1"
+  zpty -w TH "setopt interactive; IS_MAC=true IS_WSL=false; source $ROOT/zsh/aliases.zsh >/dev/null 2>&1"
   for line in "$@"; do zpty -w TH "$line"; done
   zpty -w TH 'exit'
   while zpty -r TH chunk; do out+=$chunk; done
@@ -61,6 +61,13 @@ wantnot "automatic path never leaves alt screen"     "$ALT_OFF"   "$out"
 wantnot "automatic path never issues RIS"            $'\ec'       "$out"   # RIS wipes the screen
 
 # --- 3. ssh: exit status decides the alternate-screen repair, and passes through ------------
+# Non-interactive shells must keep the executable `ssh`, never install a wrapper whose terminal
+# repair dependency is only meaningful in an interactive shell.
+zsh -f -c "source $ROOT/zsh/aliases.zsh >/dev/null 2>&1; type ssh; [[ \$(whence -w ssh) != 'ssh: function' ]]" \
+  >/dev/null 2>&1 \
+  && ok "non-interactive sourcing leaves ssh as a command" \
+  || bad "non-interactive sourcing must not install the ssh wrapper"
+
 # Bare `ssh` prints usage and exits 255 — a real 255 with no network involved.
 out=$(pty_run 'ssh; print -r -- "EC=$?"')
 want "ssh exit 255 leaves the alternate screen" "$ALT_OFF" "$out"

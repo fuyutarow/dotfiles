@@ -381,8 +381,12 @@ function expectGolden(
     }
     expect(existsSync(golden), `missing ${golden}`).toBe(true);
     // JSON round-trip: undefined snapshots drop out on both sides.
+    const expected = readFileSync(golden, "utf8").replaceAll(
+      "5ab1a046da60",
+      HOST,
+    );
     expect(decodedJson(z.json(), JSON.stringify(run(NEW)) ?? "")).toEqual(
-      decodedJson(z.json(), readFileSync(golden, "utf8")),
+      decodedJson(z.json(), expected),
     );
   }
 }

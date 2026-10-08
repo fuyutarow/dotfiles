@@ -1,4 +1,8 @@
-import { ENRICHMENT_TIMEOUT_MS, execBounded } from "./bounded.ts";
+import {
+  ENRICHMENT_TIMEOUT_MS,
+  execAsyncBounded,
+  execBounded,
+} from "./bounded.ts";
 import { DIM, RST } from "./ansi.ts";
 import { pad2 } from "./prompt-stamp.ts";
 
@@ -85,6 +89,35 @@ export function scanOutOfHarness(): {
     const secs = etimeSecs(etime);
     if (name !== null && name !== undefined && secs !== undefined)
       jobs.push({ name, secs });
+    else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
+  }
+  return { jobs, orphans };
+}
+/** Render-path variant: the process-table scan is asynchronous and time bounded. */
+export async function scanOutOfHarnessAsync(): Promise<{
+  jobs: Admitted[];
+  orphans: number;
+  failed?: string;
+}> {
+  const rawResult = await execAsyncBounded(
+    "ps",
+    "ps",
+    ["-eo", "ppid=,etime=,args="],
+    2000,
+  );
+  if (rawResult.isErr())
+    return { jobs: [], orphans: 0, failed: rawResult.error.why };
+  const jobs: Admitted[] = [];
+  let orphans = 0;
+  for (const line of rawResult.value.split("\n")) {
+    const m = line.match(/^\s*(\d+)\s+([\d:-]+)\s+(\S.*)$/u);
+    if (m === null) continue;
+    const [, ppid, etime, args] = m;
+    if (ppid === undefined || etime === undefined || args === undefined)
+      continue;
+    const name = admittedName(args.split(/\s+/u));
+    const secs = etimeSecs(etime);
+    if (name !== undefined && secs !== undefined) jobs.push({ name, secs });
     else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
   }
   return { jobs, orphans };

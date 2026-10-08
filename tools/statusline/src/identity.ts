@@ -1,9 +1,17 @@
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "./zod.ts";
 import { maybe } from "./input.ts";
-import { execBounded, readJson, writeCache } from "./bounded.ts";
+import {
+  execAsyncWithin,
+  execBounded,
+  readJson,
+  readJsonAsync,
+  writeCache,
+  writeCacheAsync,
+} from "./bounded.ts";
 
 const HOME = process.env.HOME ?? "";
 // Which Claude account this CLI is authenticated as, AND the per-model weekly caps below —
@@ -25,6 +33,14 @@ export function readClaudeJson(): Result<unknown, string> {
   if (text.isErr()) return err(text.error);
   const parsed = jsonText.safeParse(text.value);
   return parsed.success ? ok(parsed.data) : err(unreadable);
+}
+export async function readClaudeJsonAsync(): Promise<Result<unknown, string>> {
+  const text = await Bun.file(`${HOME}/.claude.json`)
+    .text()
+    .catch(() => null);
+  if (text === null) return err("~/.claude.json unreadable");
+  const parsed = jsonText.safeParse(text);
+  return parsed.success ? ok(parsed.data) : err("~/.claude.json unreadable");
 }
 const AccountSchema = z.object({
   oauthAccount: maybe(z.object({ emailAddress: maybe(z.string()) })),
@@ -53,6 +69,12 @@ export function ultracodeConfigured(): boolean {
   return (
     readJson(`${HOME}/.claude/settings.json`, SettingsSchema)?.ultracode ===
     true
+  );
+}
+export async function ultracodeConfiguredAsync(): Promise<boolean> {
+  return (
+    (await readJsonAsync(`${HOME}/.claude/settings.json`, SettingsSchema))
+      ?.ultracode === true
   );
 }
 
@@ -170,6 +192,46 @@ export function rcState(): RcState {
   if ((process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ?? "") !== "") return "on";
   return rcProbeValid() === true ? "off" : "unknown";
 }
+async function binaryContainsAsync(
+  path: string,
+  needle: string,
+  budgetMs: number,
+): Promise<boolean | undefined> {
+  const file = Bun.file(path);
+  const pattern = Buffer.from(needle);
+  const chunkSize = 8 << 20;
+  const started = performance.now();
+  let carry = Buffer.alloc(0);
+  for (let offset = 0; offset < file.size; offset += chunkSize) {
+    if (performance.now() - started >= budgetMs) return undefined;
+    const data = await file
+      .slice(offset, offset + chunkSize)
+      .arrayBuffer()
+      .catch(() => new ArrayBuffer(0));
+    const joined = Buffer.concat([carry, Buffer.from(data)]);
+    if (joined.indexOf(pattern) !== -1) return true;
+    carry = joined.subarray(Math.max(0, joined.length - pattern.length + 1));
+  }
+  return file.size === 0 ? undefined : false;
+}
+async function rcProbeValidAsync(): Promise<boolean | undefined> {
+  const exe = process.env.CLAUDE_CODE_EXECPATH;
+  if (exe === undefined || exe === "") return undefined;
+  const st = await stat(exe).catch(() => null);
+  if (st === null) return undefined;
+  const key = `${exe}\u0000${st.size}\u0000${st.mtimeMs}`;
+  const cache = (await readJsonAsync(RC_PROBE_CACHE, RcProbeCacheSchema)) ?? {};
+  const hit = cache[key];
+  if (hit !== undefined) return hit;
+  const valid = await binaryContainsAsync(exe, RC_NEEDLE, 350);
+  if (valid === undefined) return undefined;
+  await writeCacheAsync(RC_PROBE_CACHE, { ...cache, [key]: valid });
+  return valid;
+}
+export async function rcStateAsync(): Promise<RcState> {
+  if ((process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ?? "") !== "") return "on";
+  return (await rcProbeValidAsync()) === true ? "off" : "unknown";
+}
 
 /** Plain text for herdr's $rc token — same three states, no ANSI (herdr styles its own rows). */
 const RC_TOKEN: Record<RcState, string> = {
@@ -247,7 +309,7 @@ export function agentName(
     "claude agents",
     CLAUDE_BIN,
     ["agents", "--json"],
-    AGENT_LIST_TIMEOUT_MS,
+    850,
   );
   if (outResult.isErr()) return err(outResult.error.why); // `claude` missing/slow/errored/over budget
   const listResult = jsonOf(AgentListSchema).safeParse(outResult.value);
@@ -263,6 +325,41 @@ export function agentName(
   // best-effort write, result discarded on purpose: cache write failed (e.g. read-only fs) ->
   // value below still returned, just not persisted.
   writeCache(AGENT_NAME_CACHE, next);
+  return ok(next[sid]?.name);
+}
+export async function agentNameAsync(
+  sid: string,
+  hint?: string,
+): Promise<Result<string | undefined, string>> {
+  const cache =
+    (await readJsonAsync(AGENT_NAME_CACHE, AgentNameCacheSchema)) ?? {};
+  const hit = cache[sid];
+  const renamed =
+    hit?.hint !== undefined && hint !== undefined && hit.hint !== hint;
+  if (
+    hit !== null &&
+    hit !== undefined &&
+    !renamed &&
+    Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
+  )
+    return ok(hit.name);
+  const outResult = await execAsyncWithin(
+    "claude agents",
+    CLAUDE_BIN,
+    ["agents", "--json"],
+    AGENT_LIST_TIMEOUT_MS,
+  );
+  if (outResult.isErr()) return err(outResult.error.why);
+  const listResult = jsonOf(AgentListSchema).safeParse(outResult.value);
+  if (!listResult.success) return err("claude agents output unparsable");
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const next = agentNameEntries(listResult.data, now);
+  if (!Object.hasOwn(next, sid)) next[sid] = { at: now };
+  for (const [id, entry] of Object.entries(next)) {
+    const seen = id === sid ? hint : cache[id]?.hint;
+    if (seen !== undefined) entry.hint = seen;
+  }
+  await writeCacheAsync(AGENT_NAME_CACHE, next);
   return ok(next[sid]?.name);
 }
 
@@ -330,6 +427,7 @@ function herdrSend(socketPath: string, req: unknown): Promise<void> {
       resolve();
     };
     const timer = setTimeout(finish, 200);
+    timer.unref();
     const socketResult = fromThrowable(() => {
       const socket = createConnection(socketPath, () => {
         socket.write(`${JSON.stringify(req)}\n`, () => {
@@ -338,6 +436,7 @@ function herdrSend(socketPath: string, req: unknown): Promise<void> {
           finish();
         });
       });
+      socket.unref();
       return socket;
     })();
     if (socketResult.isErr()) {
@@ -356,6 +455,7 @@ export async function reportToHerdr(
   m: string,
   sessionName?: string,
   effortDisplay?: string, // plain-text "xhigh" / "xhigh+WF"
+  rc: RcState = rcState(),
 ): Promise<void> {
   const socketPath = process.env.HERDR_SOCKET_PATH;
   const paneId = process.env.HERDR_PANE_ID;
@@ -379,7 +479,7 @@ export async function reportToHerdr(
   // Always set, never omitted — see the pane.report_metadata header note above for why
   // $effort and $rc need an active off-toggle instead of an absent key.
   tokens.effort = effortDisplay ?? "";
-  tokens.rc = RC_TOKEN[rcState()];
+  tokens.rc = RC_TOKEN[rc];
   await herdrSend(socketPath, {
     id: `dotfiles:statusline-model:${stamp}`,
     method: "pane.report_metadata",

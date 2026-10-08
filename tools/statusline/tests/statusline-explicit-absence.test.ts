@@ -627,11 +627,9 @@ describe("statusline resource bounds", () => {
       }).text;
       const took = nowMs() - started;
       expect(took).toBeLessThan(6000); // budget 4 s + herdr + process start; unbudgeted ≥ 9 s
-      expect(text).toContain("name n/a (claude agents timeout 3000ms)");
+      expect(text).toContain("name n/a (name timeout 3000ms)");
       expect(text).toMatch(/branch n\/a \(git timeout \d+ms\)/u);
-      expect(text).toContain(
-        "scan n/a (ps not run, render budget 4000ms spent)",
-      );
+      expect(text).toContain("scan n/a (process scan timeout 2000ms)");
       // nvidia-smi is not a render child any more (O4): its hang costs the render nothing, and the
       // bar says the sample is still being taken.
       expect(sysRow(text)).toContain("VRAM n/a (sampling in progress)");

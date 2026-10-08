@@ -2,6 +2,7 @@
 // Split out of the former Claude statusline (2026-10-06); the render budget below starts when this module
 // is first loaded, which is process start for both consumers — the same moment as before.
 import { execFileSync } from "node:child_process";
+import { mkdir, rename, unlink } from "node:fs/promises";
 import {
   mkdirSync,
   readFileSync,
@@ -10,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import { err, fromThrowable, type Result } from "neverthrow";
+import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
 
 export const recoverInvalid = <T extends z.ZodType>(schema: T) =>
@@ -24,6 +25,18 @@ export function readJson<S extends z.ZodType>(
   const text = fromThrowable(() => readFileSync(path, "utf8"))();
   if (text.isErr()) return undefined;
   const checked = jsonOf(schema).safeParse(text.value);
+  return checked.success ? checked.data : undefined;
+}
+/** Async counterpart for the render path; unreadable or invalid files remain unknown. */
+export async function readJsonAsync<S extends z.ZodType>(
+  path: string,
+  schema: S,
+): Promise<z.output<S> | undefined> {
+  const text = await Bun.file(path)
+    .text()
+    .catch(() => null);
+  if (text === null) return undefined;
+  const checked = jsonOf(schema).safeParse(text);
   return checked.success ? checked.data : undefined;
 }
 // Tiger-Style bound (see the header note above): the timeout shared by every "nice-to-have
@@ -126,6 +139,83 @@ export function execWithin(
     }),
   )();
 }
+/** Run a child without blocking the event loop, killing it when its signal deadline expires. */
+export async function execAsyncWithin(
+  tool: string,
+  file: string,
+  args: string[],
+  boundMs: number,
+  env?: NodeJS.ProcessEnv,
+): Promise<Result<string, ExecFailure>> {
+  const timeout = AbortSignal.timeout(boundMs);
+  const started = fromThrowable(() =>
+    Bun.spawn({
+      cmd: [file, ...args],
+      ...(env !== undefined ? { env } : {}),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: timeout,
+    }),
+  )();
+  if (started.isErr())
+    return err({
+      why: failWhy(started.error, tool, boundMs),
+      stderr: "",
+      ran: true,
+    });
+  const child = started.value;
+  const completed = Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]).then(([stdout, stderr, status]) => ({
+    kind: "complete" as const,
+    stdout,
+    stderr,
+    status,
+  }));
+  let onAbort: (() => void) | undefined;
+  const deadline = new Promise<{ kind: "timeout" }>((resolve) => {
+    onAbort = () => {
+      resolve({ kind: "timeout" });
+    };
+    timeout.addEventListener("abort", onAbort, { once: true });
+  });
+  const outcome = await Promise.race([completed, deadline]);
+  if (onAbort !== undefined) timeout.removeEventListener("abort", onAbort);
+  if (outcome.kind === "timeout") {
+    child.kill("SIGKILL");
+    return err({ why: `${tool} timeout ${boundMs}ms`, stderr: "", ran: true });
+  }
+  const { stdout, stderr, status } = outcome;
+  const trimmed = stderr.trim();
+  if (timeout.aborted)
+    return err({
+      why: `${tool} timeout ${boundMs}ms`,
+      stderr: trimmed,
+      ran: true,
+    });
+  if (status !== 0)
+    return err({ why: `${tool} exit ${status}`, stderr: trimmed, ran: true });
+  return ok(stdout);
+}
+/** Apply the shared enrichment bound without consuming the synchronous render budget. */
+export function execAsyncBounded(
+  tool: string,
+  file: string,
+  args: string[],
+  ownBoundMs: number,
+  env?: NodeJS.ProcessEnv,
+): Promise<Result<string, ExecFailure>> {
+  return execAsyncWithin(
+    tool,
+    file,
+    args,
+    Math.min(ownBoundMs, ENRICHMENT_TIMEOUT_MS),
+    env,
+  );
+}
 // Write a cache file so no reader ever sees half of it: the whole file goes to a private temp
 // name and is renamed into place (atomic on one filesystem). A plain writeFileSync truncates
 // first, and these files are read by every other session on the host every 5 s — a reader landing
@@ -142,6 +232,19 @@ export function writeCache(path: string, value: unknown): void {
       unlinkSync(tmp);
     })();
   });
+}
+/** Atomic best-effort cache write for async render sources. */
+export async function writeCacheAsync(
+  path: string,
+  value: unknown,
+): Promise<void> {
+  const tmp = `${path}.${process.pid}.tmp`;
+  await mkdir(dirname(path), { recursive: true })
+    .then(() => Bun.write(tmp, JSON.stringify(value)))
+    .then(() => rename(tmp, path))
+    .catch(async () => {
+      await unlink(tmp).catch(() => null);
+    });
 }
 // A timestamp is "within" a window only if it is not in the future: a clock stepped backwards
 // (WSL2 time sync after sleep) must not keep an old entry fresh for hours or print a negative age.

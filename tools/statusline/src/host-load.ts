@@ -11,6 +11,7 @@ import {
   rmdirSync,
   statSync,
 } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
@@ -20,13 +21,16 @@ import { z } from "./zod.ts";
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
+  execAsyncBounded,
   type ExecFailure,
   execBounded,
   execWithin,
   failWhy,
   readJson,
+  readJsonAsync,
   within,
   writeCache,
+  writeCacheAsync,
 } from "./bounded.ts";
 
 const HOME = process.env.HOME ?? "";
@@ -508,6 +512,153 @@ export function readHostLoad(): HostLoad {
     vram: vramGated(),
     disks: diskReadings(),
   };
+}
+/** Async render-path sample; host readings run independently and retain explicit unknowns. */
+export async function readHostLoadAsync(): Promise<Omit<HostLoad, "disks">> {
+  const [cpu, ram, vram] = await Promise.all([
+    cpuPctAsync(),
+    ramFracAsync(),
+    vramGatedAsync(),
+  ]);
+  return { cpuPct: cpu, ram, vram };
+}
+async function readCpuSampleAsync(): Promise<Result<CpuSample, string>> {
+  if (process.platform === "darwin") return macCpuSample();
+  const raw = await readFile("/proc/stat", "utf8").catch(() => null);
+  if (raw === null) return err("no /proc/stat");
+  const line = raw.split("\n").find((part) => part.startsWith("cpu "));
+  if (line === undefined || line === "")
+    return err("/proc/stat has no cpu line");
+  const fields = line.trim().split(/\s+/u).slice(1).map(Number);
+  const idle = (fields[3] ?? 0) + (fields[4] ?? 0);
+  const total = fields.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
+  return Number.isFinite(idle) && total > 0
+    ? ok({ total, idle })
+    : err("/proc/stat cpu line unparsable");
+}
+async function cpuPctAsync(): Promise<Result<number, string>> {
+  const sampled = await readCpuSampleAsync();
+  if (sampled.isErr()) return err(sampled.error);
+  const sample = sampled.value;
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const prev = await readJsonAsync(CPU_CACHE, CpuSampleSchema);
+  const keep =
+    prev?.at !== undefined && within(prev.at, now, CPU_BASELINE_MIN_MS);
+  if (!keep) await writeCacheAsync(CPU_CACHE, { ...sample, at: now });
+  if (prev === undefined) return err("no earlier sample to diff against");
+  if (prev.at === undefined || !within(prev.at, now, CPU_BASELINE_MAX_MS))
+    return err("no earlier sample from the last 60s");
+  const dTotal = sample.total - prev.total;
+  const dIdle = sample.idle - prev.idle;
+  if (dTotal <= 0) return err("no ticks since the last sample");
+  return ok(Math.max(0, Math.min(100, (1 - dIdle / dTotal) * 100)));
+}
+async function ramFracAsync(): Promise<Result<MemReading, string>> {
+  if (process.platform === "darwin") {
+    const rawResult = await execAsyncBounded("vm_stat", "vm_stat", [], 2000);
+    if (rawResult.isErr()) return err(rawResult.error.why);
+    const raw = rawResult.value;
+    const size = raw.match(/page size of (\d+) bytes/u)?.[1];
+    const pages = (label: string): number | undefined => {
+      const line = raw.split("\n").find((part) => part.startsWith(`${label}:`));
+      const value = VmStatPage.safeParse(
+        line?.split(/\s+/u).pop()?.replace(/\.$/u, ""),
+      );
+      return value.success ? value.data : undefined;
+    };
+    const wired = pages("Pages wired down");
+    const compressed = pages("Pages occupied by compressor");
+    const anonymous = pages("Anonymous pages");
+    const purgeable = pages("Pages purgeable");
+    if (
+      size === undefined ||
+      wired === undefined ||
+      compressed === undefined ||
+      anonymous === undefined ||
+      purgeable === undefined
+    )
+      return err("vm_stat output unparsable");
+    const usedBytes =
+      (wired + compressed + Math.max(0, anonymous - purgeable)) * Number(size);
+    const reading = memReading(usedBytes / 1024 ** 3, totalmem() / 1024 ** 3);
+    return reading === undefined
+      ? err("vm_stat output unparsable")
+      : ok(reading);
+  }
+  const raw = await readFile("/proc/meminfo", "utf8").catch(() => null);
+  if (raw === null) return err("no /proc/meminfo");
+  let totalKb: number | undefined;
+  let availKb: number | undefined;
+  for (const line of raw.split("\n")) {
+    if (line.startsWith("MemTotal:")) totalKb = Number(line.split(/\s+/u)[1]);
+    else if (line.startsWith("MemAvailable:"))
+      availKb = Number(line.split(/\s+/u)[1]);
+    if (totalKb !== undefined && availKb !== undefined) break;
+  }
+  if (totalKb === undefined || availKb === undefined)
+    return err("meminfo lacks MemTotal/MemAvailable");
+  const cgPaths = [
+    "/sys/fs/cgroup/memory.max",
+    "/sys/fs/cgroup/memory.current",
+    "/sys/fs/cgroup/memory.stat",
+    "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+    "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+    "/sys/fs/cgroup/memory/memory.stat",
+  ];
+  const cgTexts = await Promise.all(
+    cgPaths.map((path) => readFile(path, "utf8").catch(() => null)),
+  );
+  const cgMap = new Map<string, string>();
+  cgTexts.forEach((text, index) => {
+    const path = cgPaths[index];
+    if (text !== null && path !== undefined) cgMap.set(path, text);
+  });
+  const cg = cgroupMemory((path) => cgMap.get(path), totalKb * 1024);
+  if (cg !== undefined) {
+    const capped = memReading(
+      cg.usedBytes / 1024 ** 3,
+      cg.limitBytes / 1024 ** 3,
+    );
+    return capped === undefined
+      ? err("cgroup memory unparsable")
+      : ok({ ...capped, frac: `${capped.frac} cgroup` });
+  }
+  const reading = memReading(
+    (totalKb - availKb) / 1024 / 1024,
+    totalKb / 1024 / 1024,
+  );
+  return reading === undefined ? err("meminfo unparsable") : ok(reading);
+}
+async function vramFracAsync(): Promise<Result<MemReading, string>> {
+  if (Bun.which("nvidia-smi") === null) return err("no nvidia-smi");
+  const cached: GpuCache =
+    (await readJsonAsync(GPU_CACHE, GpuCacheSchema)) ?? {};
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const fresh =
+    cached.at !== undefined &&
+    within(cached.at, now, GPU_SAMPLE_TTL_MS) &&
+    ((cached.reading !== null && cached.reading !== undefined) ||
+      cached.why !== undefined);
+  if (fresh && cached.reading !== null && cached.reading !== undefined)
+    return ok(cached.reading);
+  const started = fresh ? ok(undefined) : ensureSampler();
+  const why = started.isErr() ? started.error : (cached.why ?? SAMPLING_WHY);
+  const good = cached.good;
+  if (good !== undefined && within(good.at, now, GPU_STALE_MAX_MS)) {
+    const secs = Math.round((now - good.at) / 1000);
+    return ok({ ...good.reading, stale: { secs, why } });
+  }
+  return err(why);
+}
+async function vramGatedAsync(): Promise<
+  Result<MemReading, string> | undefined
+> {
+  const vram = await vramFracAsync();
+  return process.platform === "darwin" &&
+    vram.isErr() &&
+    vram.error === "no nvidia-smi"
+    ? undefined
+    : vram;
 }
 /** The Sys row exactly as the statusline prints it. */
 export function sysRow(h: HostLoad): string {

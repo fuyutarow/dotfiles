@@ -1,4 +1,5 @@
 import { readFileSync, statfsSync } from "node:fs";
+import { statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { storageLine } from "../../shared/src/storage-headroom.ts";
@@ -103,6 +104,64 @@ export function diskReadings(): Result<DiskEntry[], string> {
     // The storage-headroom gate (agents/hooks/enforce-storage-headroom.ts), on its own measure: free =
     // bavail, size = blocks. The gate validates that each _pct is present; this reader is not the
     // authority, so a missing share leaves the absolute size alone (100% of the drive never undercuts).
+    const free = bavail * bsize;
+    const size = blocks * bsize;
+    const line = (gib: number | undefined, pct: number | undefined): number =>
+      gib === undefined ? 0 : storageLine(gib, pct ?? 100, size);
+    let col = "38;5;71";
+    if (free < line(d.warn_gib, d.warn_pct)) col = "38;5;178";
+    if (free < line(d.deny_gib, d.deny_pct)) col = "38;5;167";
+    out.push({
+      kind: "reading",
+      label: diskLabel(path),
+      usedG,
+      totalG,
+      freeG,
+      col,
+    });
+  }
+  return ok(out);
+}
+/** Async render-path disk read, so config and filesystem probes do not block rendering. */
+export async function diskReadingsAsync(): Promise<
+  Result<DiskEntry[], string>
+> {
+  const text = await Bun.file(STORAGE_CONFIG)
+    .text()
+    .catch(() => null);
+  if (text === null) return err("storage-headroom.toml unreadable");
+  const raw = fromThrowable((): unknown => Bun.TOML.parse(text))();
+  if (raw.isErr()) return err("storage-headroom.toml unreadable");
+  const parsed = StorageConfigSchema.safeParse(raw.value);
+  if (!parsed.success)
+    return err("storage-headroom.toml has an unexpected shape");
+  const drives = Object.values(parsed.data.drive ?? {});
+  if (drives.length === 0) return err("no [drive.*] in storage-headroom.toml");
+  const out: DiskEntry[] = [];
+  for (const d of drives) {
+    if (d.path === undefined) {
+      out.push({ kind: "miss", label: "Disk", why: "drive entry has no path" });
+      continue;
+    }
+    const path = d.path;
+    const result = (await Promise.allSettled([statfs(path)]))[0];
+    if (result?.status === "rejected") {
+      const why = execError(result.reason).code ?? "statfs failed";
+      const missing: DiskEntry[] =
+        why === "ENOENT" && !IS_WSL
+          ? []
+          : [{ kind: "miss", label: diskLabel(path), why }];
+      out.push(...missing);
+      continue;
+    }
+    if (result?.status !== "fulfilled") {
+      out.push({ kind: "miss", label: diskLabel(path), why: "statfs failed" });
+      continue;
+    }
+    const { bsize, blocks, bfree, bavail } = result.value;
+    const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
+    const freeG = (bavail * bsize) / 1024 ** 3;
+    const totalG = usedG + freeG;
     const free = bavail * bsize;
     const size = blocks * bsize;
     const line = (gib: number | undefined, pct: number | undefined): number =>

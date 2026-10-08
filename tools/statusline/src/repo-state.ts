@@ -1,4 +1,8 @@
-import { ENRICHMENT_TIMEOUT_MS, execBounded } from "./bounded.ts";
+import {
+  ENRICHMENT_TIMEOUT_MS,
+  execAsyncBounded,
+  execBounded,
+} from "./bounded.ts";
 import { firstNonEmpty } from "./model-context.ts";
 
 export function repoState(cwd: string): {
@@ -33,4 +37,35 @@ export function repoState(cwd: string): {
       ? firstNonEmpty(gitReason, branchResult.error.why)
       : undefined;
   return { branch, branchWhy };
+}
+
+/** Render-path variant: git is asynchronous and cannot hold the statusline event loop. */
+export async function repoStateAsync(cwd: string): Promise<{
+  branch: string | undefined;
+  branchWhy: string | undefined;
+}> {
+  const branchResult = await execAsyncBounded(
+    "git",
+    "git",
+    ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
+    2000,
+    { ...process.env, LC_ALL: "C" },
+  );
+  const notRepo =
+    branchResult.isErr() &&
+    branchResult.error.stderr.includes("not a git repository");
+  const branch = branchResult.isOk() ? branchResult.value.trim() : undefined;
+  const gitReason = branchResult.isErr()
+    ? branchResult.error.stderr
+        .split("\n")[0]
+        ?.replace(/^fatal: /u, "")
+        .slice(0, 60)
+    : undefined;
+  return {
+    branch,
+    branchWhy:
+      branchResult.isErr() && !notRepo
+        ? firstNonEmpty(gitReason, branchResult.error.why)
+        : undefined,
+  };
 }

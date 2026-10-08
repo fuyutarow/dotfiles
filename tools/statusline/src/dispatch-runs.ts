@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
-import { jsonOf } from "./zod.ts";
+import { jsonOf, z } from "./zod.ts";
 import {
   activeDir,
   ActiveSchema,
@@ -84,6 +85,63 @@ export function routeRuns(): Result<RouteRun[], string> | undefined {
         ];
       }),
   );
+}
+/** Async render-path version; marker and progress files are read without blocking the line. */
+export async function routeRunsAsync(): Promise<
+  Result<RouteRun[], string> | undefined
+> {
+  const dir = activeDir();
+  const names = await readdir(dir).catch(() => null);
+  if (names === null) return undefined;
+  const markers = names.filter(
+    (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
+  );
+  const runs = await Promise.all(
+    markers.map(async (name) => {
+      const text = await Bun.file(join(dir, name))
+        .text()
+        .catch(() => null);
+      if (text === null) return null;
+      const parsed = jsonOf(ActiveSchema).safeParse(text);
+      if (!parsed.success) return null;
+      const a = parsed.data;
+      const progressText = await Bun.file(progressFile(a.run_id))
+        .text()
+        .catch(() => null);
+      let p: z.output<typeof ProgressSchema> | undefined;
+      if (progressText !== null) {
+        const progress = jsonOf(ProgressSchema).safeParse(progressText);
+        if (progress.success) p = progress.data;
+      }
+      const progressSession = p?.session;
+      let doing: RouteRun["doing"];
+      if (p !== undefined) {
+        doing = {
+          last: p.last,
+          commands: p.commands,
+          files: p.files,
+          ageSecs: sinceSecs(p.at).unwrapOr(0),
+          ...(progressSession === undefined
+            ? {}
+            : { session: progressSession }),
+        };
+      }
+      return {
+        displayId: a.display_id,
+        choice: a.choice,
+        label: a.label,
+        secs: sinceSecs(a.started_at).unwrapOr(0),
+        alive: pidAlive(a.pid).isOk(),
+        dispatcherSession: a.dispatcher_session,
+        doing,
+      } satisfies RouteRun;
+    }),
+  );
+  const resolved: RouteRun[] = [];
+  for (const run of runs) {
+    if (run !== null) resolved.push(run);
+  }
+  return ok(resolved);
 }
 // This session's Run rows: one line per worker, like Claude Code's own background panel — "<row>
 // <elapsed> <label> │ <doing>". Other sessions' workers are one count. No "Run:" head (owner

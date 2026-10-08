@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { fromThrowable } from "neverthrow";
-import { readJson } from "./bounded.ts";
+import { readJson, readJsonAsync } from "./bounded.ts";
 import { stateDir } from "./dispatch-state.ts";
 import { nowEpochSec } from "./prompt-stamp.ts";
 import { jsonOf, z } from "./zod.ts";
@@ -79,4 +79,21 @@ export function readDispatchWarning(): string | undefined {
         nowEpochSec() * 1000,
       )
     : undefined;
+}
+export async function readDispatchWarningAsync(): Promise<string | undefined> {
+  const state = stateDir();
+  const cachePath = join(state, "route-capability.json");
+  const cache = await readJsonAsync(cachePath, CacheSchema);
+  if (cache?.host !== hostname()) return undefined;
+  const log = await Bun.file(join(state, "runs.jsonl"))
+    .text()
+    .catch(() => null);
+  return log === null
+    ? undefined
+    : dispatchWarning(
+        log,
+        JSON.stringify(cache),
+        hostname(),
+        nowEpochSec() * 1000,
+      );
 }

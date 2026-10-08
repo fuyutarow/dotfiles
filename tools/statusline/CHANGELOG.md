@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.7
+
+- Keep parity fixtures portable across machine hostnames after the alpha rebase.
+
+## 0.2.6
+
+- Build statusline data from concurrent, budgeted async sources; timed-out readings render named unknown placeholders and herdr reporting no longer gates the line.
+
 ## 0.2.5
 
 - Make prompt and entry parity fixtures independent of the test host's hostname and GPU tooling.

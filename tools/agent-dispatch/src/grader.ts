@@ -45,6 +45,8 @@ export const GRADE_WORKER_PROMPT = (brief: string): string =>
   `- A ticket with split_from in its front matter is already a piece and must not be split again.\n` +
   `- A queue held by one worker is still a container.\n` +
   `- A long run must not be obtained by chaining pieces.\n\n` +
+  `- If two pieces' writes overlap, order them with depends_on, or merge them into one piece.\n` +
+  `- When there is one final deliverable, return pass even if it is underspecified; put needed questions in questions with verdict pass.\n\n` +
   `## Output\n` +
   `Return one JSON object in an \`\`\`agent-dispatch-grade fenced block. Use exactly this shape; omit optional keys when unused:\n` +
   `\`\`\`json\n{ "verdict": "pass|split|clarify", "violations": [{ "rule": "...", "quote_from_brief": "...", "why_it_blocks_a_6min_first_return": "...", "fix": "..." }], "pieces": [{ "title": "...", "outcome": "...", "consumer": "...", "first_return": "...", "writes": ["..."], "verify": ["..."], "depends_on": [] }], "questions": [{ "question": "...", "unblocks": "..." }], "estimated_first_return_s": 120, "basis": "..." }\n\`\`\``;

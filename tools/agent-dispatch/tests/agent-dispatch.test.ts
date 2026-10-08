@@ -2154,6 +2154,34 @@ const splitGrade = {
   estimated_first_return_s: 180,
   basis: "Two independent checkable outcomes.",
 };
+const graderClarify = {
+  verdict: "clarify",
+  violations: [
+    {
+      rule: "implementation-detail",
+      quote_from_brief: "Choose A.",
+      why_it_blocks_a_6min_first_return:
+        "The preferred retry policy is unclear.",
+      fix: "Tell the worker which policy to choose.",
+    },
+  ],
+  questions: [
+    {
+      question: "Which retry policy should be chosen?",
+      unblocks: "The implementation recommendation.",
+    },
+  ],
+};
+const passWithQuestion = {
+  verdict: "pass",
+  violations: [],
+  questions: [
+    {
+      question: "Which retry policy should be chosen?",
+      unblocks: "The implementation recommendation.",
+    },
+  ],
+};
 const freshCwd = (): string => mkdtempSync(join(scratch, "cwd-"));
 const runArgs = (
   promptFile: string,
@@ -2283,6 +2311,39 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     );
     expect(escape.code).toBe(0);
     expect(escape.out).toContain('"legacy_brief_reason":"one more release"');
+  });
+
+  test("schema 2 grader clarify is recorded and warned without refusing", async () => {
+    const b = brief(
+      "t-grader-clarify-warning",
+      '+++\nschema = 2\noutcome = "choose retry behavior"\nconsumer = "runtime owner"\nfirst_return = "decision.md"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nChoose a retry policy.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(graderClarify),
+    });
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("remand implementation-detail:");
+    expect(r.err).toContain("clarify: Which retry policy should be chosen?");
+    expect(r.out).toContain('"verdict":"clarify"');
+    expect(logLines(r.state).map((line) => line.kind)).toEqual([
+      "run",
+      "grade",
+    ]);
+  });
+
+  test("pass questions are printed as warnings", async () => {
+    const b = brief(
+      "t-grader-pass-question",
+      '+++\nschema = 2\noutcome = "choose retry behavior"\nconsumer = "runtime owner"\nfirst_return = "decision.md"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nChoose a retry policy.\n',
+    );
+    const r = await router(runArgs(b, freshCwd(), "read-only"), {
+      TEST_ENABLE_GRADER: "1",
+      FAKE_GRADE: JSON.stringify(passWithQuestion),
+    });
+    expect(r.code).toBe(0);
+    expect(r.err).toContain("clarify: Which retry policy should be chosen?");
+    expect(r.out).toContain('"verdict":"pass"');
   });
 
   test("valid split refuses schema 2 and prints ready-to-paste pieces", async () => {

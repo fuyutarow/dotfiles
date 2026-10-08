@@ -1590,19 +1590,19 @@ async function run(flags: RunFlags): Promise<number> {
     ticket.urgent_reason !== undefined &&
     ticketGrade.verdict === "pass" &&
     finalGrade.grader?.status === "ok" &&
-    (finalGrade.verdict === "split" || finalGrade.verdict === "clarify");
-  if (finalGrade.violations.length > 0) {
+    finalGrade.verdict === "split";
+  if (
+    finalGrade.violations.length > 0 ||
+    (finalGrade.questions?.length ?? 0) > 0 ||
+    (finalGrade.pieces?.length ?? 0) > 0
+  ) {
     for (const line of renderGradeRemand(finalGrade, splitParentTitle))
       console.error(line);
     if (urgentGraderOverride)
       console.error(
         `agent-dispatch: urgent override (${ticket.urgent_reason}): grader ${finalGrade.verdict} is recorded as a warning; proceeding with the run`,
       );
-    if (
-      ticket?.schema === 2 &&
-      finalGrade.verdict !== "pass" &&
-      !urgentGraderOverride
-    ) {
+    if (ticket?.schema === 2 && ticketGrade.violations.length > 0) {
       appendLog({
         kind: "refusal",
         at: now(),
@@ -1620,13 +1620,13 @@ async function run(flags: RunFlags): Promise<number> {
       });
       return 2;
     }
-  } else if (
+  }
+  if (
     ticket?.schema === 2 &&
-    finalGrade.verdict !== "pass" &&
+    finalGrade.verdict === "split" &&
+    finalGrade.grader?.status === "ok" &&
     !urgentGraderOverride
   ) {
-    for (const line of renderGradeRemand(finalGrade, splitParentTitle))
-      console.error(line);
     appendLog({
       kind: "refusal",
       at: now(),

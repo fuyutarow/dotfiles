@@ -67,6 +67,27 @@ describe("seeded row selection", () => {
     });
   });
 
+  test("epsilon is limited to cost-eligible rows", () => {
+    const lowArgmax = sampleRow(
+      { "luna-low": 1, "opus-max": 0, "fable-max": 0 },
+      1,
+      "low-cost",
+      0.1,
+      ["luna-low"],
+    );
+    expect(lowArgmax?.epsilonRows).toEqual(["luna-low"]);
+    expect(lowArgmax?.probability).toBe(1);
+
+    const sonnetArgmax = sampleRow(
+      { "sonnet-high": 1, "opus-max": 0, "fable-max": 0 },
+      1,
+      "sonnet-cost",
+      0.1,
+      ["sonnet-high", "opus-max"],
+    );
+    expect(sonnetArgmax?.epsilonRows).toEqual(["sonnet-high", "opus-max"]);
+  });
+
   test("zero-probability eligible rows can be drawn after smoothing", () => {
     const probabilities = { a: 1, b: 0 };
     expect(

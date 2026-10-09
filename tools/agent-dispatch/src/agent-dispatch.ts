@@ -114,7 +114,7 @@ import {
   withReportInstruction,
   WorkerReport,
 } from "./report.ts";
-import { floorTicketGrade } from "./ticket-grade.ts";
+import { floorTicketGrade, hasXhighMaxJustification } from "./ticket-grade.ts";
 import { checkPremises } from "./premises.ts";
 import {
   GRADE_WORKER_PROMPT,
@@ -553,6 +553,7 @@ export interface Pick {
   masked_rows?: { row: string; reason: string }[];
   sampled_probability?: number;
   epsilon?: number;
+  epsilon_rows?: string[];
   pick_fallback_reason?: string;
   reason: string;
   confidence?: number;
@@ -1058,6 +1059,20 @@ function judge(
       options.hardMaskReasons?.get(row) ??
       "stalled row or same family at lower/equal effort",
   }));
+  const unjustifiedRows = new Set(
+    hasXhighMaxJustification(options.capabilities)
+      ? []
+      : roster.choice
+          .filter((candidate) => ["xhigh", "max"].includes(candidate.effort))
+          .map((candidate) => candidate.id),
+  );
+  const recordedMasks = new Set(maskedRows.map(({ row }) => row));
+  for (const row of unjustifiedRows)
+    if (!recordedMasks.has(row))
+      maskedRows.push({
+        row,
+        reason: "xhigh/max lacks a free-text justification",
+      });
   const mass = new Map<string, number>();
   const priced = roster.choice.flatMap((c) =>
     c.price_in === undefined || c.price_out === undefined
@@ -1092,12 +1107,7 @@ function judge(
         options.budgetUsd
     )
       reason = "exceeds ticket budget";
-    else if (
-      candidate !== undefined &&
-      ["xhigh", "max"].includes(candidate.effort) &&
-      options.capabilities.length === 0
-    )
-      reason = "xhigh/max lacks a justifying capability";
+    else if (unjustifiedRows.has(id)) continue;
     if (reason !== undefined) maskedRows.push({ row: id, reason });
     else if (candidate !== undefined) mass.set(id, probability);
   }
@@ -1108,7 +1118,10 @@ function judge(
         ? "no probabilities"
         : "zero mass after masking";
     const row = roster.choice.find(
-      (c) => c.id === answer.choice && options.hardMasks?.has(c.id) !== true,
+      (c) =>
+        c.id === answer.choice &&
+        options.hardMasks?.has(c.id) !== true &&
+        !unjustifiedRows.has(c.id),
     );
     const fallbackRow = row?.id ?? roster.default;
     const invalidChoiceReason =
@@ -1136,14 +1149,39 @@ function judge(
       jev: trace,
     };
   }
+  const argmaxRow = [...mass.entries()].toSorted((a, b) => b[1] - a[1])[0]?.[0];
+  const argmaxCandidate = roster.choice.find(
+    (candidate) => candidate.id === argmaxRow,
+  );
+  const argmaxCost =
+    argmaxCandidate?.price_in === undefined ||
+    argmaxCandidate.price_out === undefined ||
+    cheapest === undefined
+      ? undefined
+      : (argmaxCandidate.price_in + argmaxCandidate.price_out) / cheapest;
+  const epsilonRows =
+    argmaxCost === undefined
+      ? []
+      : [...mass.keys()].filter((id) => {
+          const candidate = roster.choice.find((row) => row.id === id);
+          return (
+            candidate?.price_in !== undefined &&
+            candidate.price_out !== undefined &&
+            (candidate.price_in + candidate.price_out) / cheapest! <=
+              4 * argmaxCost
+          );
+        });
   const sample = sampleRow(
     Object.fromEntries(mass),
     options.temperature,
     options.seed,
+    0.1,
+    epsilonRows,
   );
   if (sample === undefined) {
     const row = roster.choice.find(
-      (candidate) => candidate.id === answer.choice,
+      (candidate) =>
+        candidate.id === answer.choice && !unjustifiedRows.has(candidate.id),
     );
     const fallbackRow = row?.id ?? roster.default;
     const reason = "zero mass after masking";
@@ -1180,6 +1218,7 @@ function judge(
     masked_rows: maskedRows,
     sampled_probability: sampledProbability,
     epsilon: sample.epsilon,
+    epsilon_rows: sample.epsilonRows,
     reason: `${sample.row} (sampled p=${sampledProbability.toFixed(2)} from jev; argmax ${sample.argmaxRow})`,
     ...(answer.confidence === undefined
       ? {}
@@ -3558,6 +3597,7 @@ const LogLine = z.looseObject({
       .optional(),
     sampled_probability: z.number().optional(),
     epsilon: z.number().optional(),
+    epsilon_rows: z.array(z.string()).optional(),
     pick_fallback_reason: z.string().optional(),
     confidence: z.number().optional(),
     jev: z
@@ -4589,6 +4629,9 @@ async function resumeCommand(
       ...(logged.pick.epsilon === undefined
         ? {}
         : { epsilon: logged.pick.epsilon }),
+      ...(logged.pick.epsilon_rows === undefined
+        ? {}
+        : { epsilon_rows: logged.pick.epsilon_rows }),
       ...(logged.pick.pick_fallback_reason === undefined
         ? {}
         : { pick_fallback_reason: logged.pick.pick_fallback_reason }),

@@ -5,6 +5,7 @@ export type SampledRow = Readonly<{
   argmaxRow: string;
   probability: number;
   epsilon: number;
+  epsilonRows: string[];
   mode: "sample" | "argmax";
 }>;
 
@@ -14,14 +15,27 @@ export function sampleRow(
   temperature: number,
   seed: string,
   epsilon = 0.1,
+  epsilonRows?: readonly string[],
 ): SampledRow | undefined {
   const entries = Object.entries(probabilities).filter(
     ([, probability]) => probability >= 0 && Number.isFinite(probability),
   );
   if (entries.length === 0 || epsilon < 0 || epsilon > 1) return undefined;
+  const rowsReceivingEpsilon = entries
+    .map(([row]) => row)
+    .filter((row) => epsilonRows === undefined || epsilonRows.includes(row));
+  const epsilonMass =
+    rowsReceivingEpsilon.length === 0
+      ? 0
+      : epsilon / rowsReceivingEpsilon.length;
   const smoothed = entries.map(
     ([row, probability]) =>
-      [row, (1 - epsilon) * probability + epsilon / entries.length] as const,
+      [
+        row,
+        rowsReceivingEpsilon.includes(row)
+          ? (1 - epsilon) * probability + epsilonMass
+          : probability,
+      ] as const,
   );
   const argmax = entries.toSorted((a, b) => b[1] - a[1])[0];
   if (argmax === undefined) return undefined;
@@ -31,6 +45,7 @@ export function sampleRow(
       argmaxRow: argmax[0],
       probability: 1,
       epsilon,
+      epsilonRows: rowsReceivingEpsilon,
       mode: "argmax",
     };
 
@@ -60,6 +75,7 @@ export function sampleRow(
     argmaxRow: argmax[0],
     probability: (weighted.find(([row]) => row === selected)?.[1] ?? 0) / total,
     epsilon,
+    epsilonRows: rowsReceivingEpsilon,
     mode: "sample",
   };
 }

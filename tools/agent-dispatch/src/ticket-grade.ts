@@ -28,6 +28,14 @@ function violation(brief: string, rule: string, why: string, fix: string) {
   };
 }
 
+export function hasXhighMaxJustification(
+  capabilities: readonly string[],
+): boolean {
+  return capabilities.some(
+    (capability) => capability.trim().split(/\s+/u).length >= 4,
+  );
+}
+
 /** Mechanical, model-free floor. `pieces` and `questions` are intentionally left to a later grader. */
 export function floorTicketGrade(
   brief: string,
@@ -65,7 +73,7 @@ export function floorTicketGrade(
 
   if (
     (selectedEffort === "xhigh" || selectedEffort === "max") &&
-    (ticket?.capabilities.length ?? 0) === 0
+    !hasXhighMaxJustification(ticket?.capabilities ?? [])
   ) {
     violations.push(
       violation(

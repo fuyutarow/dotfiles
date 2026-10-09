@@ -56,4 +56,32 @@ describe("floor ticket grade", () => {
     expect(grade.violations.at(-1)?.rule).toBe("effort");
     expect(grade.violations.at(-1)?.fix).toContain("capabilities =");
   });
+
+  test("xhigh/max needs a free-text capability justification", () => {
+    const base = [
+      'outcome = "choose retry behavior"',
+      'consumer = "runtime owner"',
+      'first_return = "decision.md within 6 min"',
+      "writes = []",
+      "read_only_diagnostic = true",
+    ].join("\n");
+    for (const capability of [
+      "merge-conflicts",
+      "typescript",
+      "three word tag",
+    ]) {
+      const brief = schema2(`${base}\ncapabilities = ["${capability}"]`);
+      expect(
+        floorTicketGrade(brief, parseTicket(brief), "max").violations.map(
+          (item) => item.rule,
+        ),
+      ).toContain("effort");
+    }
+    const brief = schema2(
+      `${base}\ncapabilities = ["debugging a hang across a 4000-line file where four luna attempts failed"]`,
+    );
+    expect(floorTicketGrade(brief, parseTicket(brief), "xhigh").verdict).toBe(
+      "pass",
+    );
+  });
 });

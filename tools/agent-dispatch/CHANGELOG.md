@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.0 — 2026-10-09
+
+- Require a four-word free-text justification for xhigh/max rows and make epsilon exploration cost-aware, recording the rows that receive smoothing mass.
+
 ## 1.15.0 — 2026-10-09
 
 - Persist cumulative worker token usage and row-priced live cost in progress files; prefer Claude's reported billed cost.

@@ -81,7 +81,9 @@ const server = Bun.serve({
       });
     }
     // A brief saying PICK=<id> makes the fake Jev choose that row (a disabled or Claude row too).
-    const choice = /PICK=([\w-]+)/u.exec(body)?.[1] ?? "luna-max";
+    const choice =
+      /PICK=([\w-]+)/u.exec(body)?.[1] ??
+      (body.includes("NOPROBS") ? "luna-max" : "luna-low");
     const probabilityText = /PROBS=([A-Za-z0-9:.,-]+)/u.exec(body)?.[1];
     const probabilities: Record<string, number> =
       probabilityText === undefined
@@ -329,6 +331,7 @@ const Receipt = z.looseObject({
     masked_rows: z.array(z.unknown()).optional(),
     sampled_probability: z.number().optional(),
     epsilon: z.number().optional(),
+    epsilon_rows: z.array(z.string()).optional(),
     pick_fallback_reason: z.string().optional(),
   }),
   worker: z.looseObject({ outcome: z.string() }),
@@ -946,7 +949,7 @@ describe("agent-dispatch run", () => {
       timeout_source: "default",
     });
     expect(readFileSync(join(scratch, "argv.log"), "utf8")).toContain(
-      '"--choice","luna-max"',
+      '"--choice","luna-low"',
     );
     expect(readFileSync(join(r.state, "runs.jsonl"), "utf8")).toContain(
       '"kind":"run"',
@@ -956,11 +959,11 @@ describe("agent-dispatch run", () => {
       readFileSync(join(r.state, "runs.jsonl"), "utf8").trim(),
     );
     expect(runRecord.stats).toMatchObject({
-      row: "luna-max",
+      row: "luna-low",
       family: "luna",
       route: "codex",
       model: "gpt-6-luna",
-      effort: "max",
+      effort: "low",
       outcome: "ok",
       exit: 0,
       tokens: { input: 100, cached_input: 20, output: 7, reasoning: 3 },
@@ -1271,7 +1274,10 @@ describe("agent-dispatch run", () => {
       epsilon: 0.1,
     });
     expect(typeof receipt.pick.seed).toBe("string");
-    expect(receipt.pick.masked_rows).toEqual([]);
+    expect(receipt.pick.masked_rows).toContainEqual({
+      row: "luna-max",
+      reason: "xhigh/max lacks a free-text justification",
+    });
   });
 
   test("auto: a low-confidence answer is still Jev's choice, its confidence recorded", async () => {
@@ -1286,10 +1292,12 @@ describe("agent-dispatch run", () => {
       "read-only",
     ]);
     const receipt = decodedJson(Receipt, r.out.trim());
-    expect(receipt.pick.source).toBe("jev");
-    expect(receipt.pick.choice).toBe("luna-max");
+    expect(receipt.pick.source).toBe("default");
+    expect(receipt.pick.choice).toBe("luna-high");
     expect(receipt.pick.mode).toBe("fallback");
-    expect(receipt.pick.pick_fallback_reason).toBe("no probabilities");
+    expect(receipt.pick.pick_fallback_reason).toBe(
+      "no probabilities; Jev choice 'luna-max' is unavailable, using default",
+    );
     expect(receipt.pick.confidence).toBe(0.2);
   });
 
@@ -1444,12 +1452,73 @@ describe("agent-dispatch run", () => {
     expect(lastJevBody()).toContain(
       "Claude rows are bounded at $2 and 60 turns per run; do not prefer them for long multi-file implementation.",
     );
+    const masked = decodedJson(
+      z.looseObject({
+        masked_rows: z.array(z.looseObject({ row: z.string() })),
+      }),
+      r.out.trim(),
+    ).masked_rows;
     expect(
-      decodedJson(
-        z.looseObject({ masked_rows: z.array(z.unknown()) }),
-        r.out.trim(),
-      ).masked_rows,
-    ).toEqual([]);
+      masked.some(({ row }) =>
+        /^(haiku|sonnet|opus|fable)-(low|medium|high)$/u.test(row),
+      ),
+    ).toBe(false);
+  });
+
+  test("pick requires free-text justification and limits epsilon by relative cost", async () => {
+    const pick = async (name: string, capabilities: string, jev: string) => {
+      const target = brief(
+        name,
+        ticketText(
+          `writes = []\nverify = []\ncapabilities = ["${capabilities}"]`,
+          jev,
+        ),
+      );
+      const result = await router([
+        "pick",
+        "--prompt-file",
+        target,
+        "--cd",
+        scratch,
+      ]);
+      expect(result.code).toBe(0);
+      return decodedJson(
+        z.looseObject({
+          masked_rows: z.array(z.looseObject({ row: z.string() })),
+          epsilon_rows: z.array(z.string()),
+        }),
+        result.out.trim(),
+      );
+    };
+
+    const bareTag = await pick(
+      "bare-capability",
+      "typescript",
+      "PICK=luna-low PROBS=luna-low:1,luna-max:0,opus-max:0",
+    );
+    expect(bareTag.masked_rows.map((row) => row.row)).toContain("luna-max");
+    expect(bareTag.masked_rows.map((row) => row.row)).toContain("opus-max");
+
+    const justified =
+      "debugging a hang across a 4000-line file where four luna attempts failed";
+    const lowArgmax = await pick(
+      "cheap-argmax",
+      justified,
+      "PICK=luna-low PROBS=luna-low:1,opus-max:0,fable-max:0",
+    );
+    expect(lowArgmax.masked_rows).toEqual([]);
+    expect(lowArgmax.epsilon_rows).toEqual(["luna-low"]);
+    expect(lowArgmax.epsilon_rows).not.toContain("opus-max");
+    expect(lowArgmax.epsilon_rows).not.toContain("fable-max");
+
+    const sonnetArgmax = await pick(
+      "sonnet-argmax",
+      justified,
+      "PICK=sonnet-high PROBS=sonnet-high:1,opus-max:0,fable-max:0",
+    );
+    expect(sonnetArgmax.epsilon_rows).toContain("sonnet-high");
+    expect(sonnetArgmax.epsilon_rows).toContain("opus-max");
+    expect(sonnetArgmax.epsilon_rows).not.toContain("fable-max");
   });
 
   test("pick falls back to the roster default when Claude is the only available route and is masked", async () => {
@@ -1492,7 +1561,10 @@ describe("agent-dispatch run", () => {
     expect(receipt.pick.mode).toBe("sample");
     expect(receipt.pick.epsilon).toBe(0.1);
     expect(receipt.pick.sampled_probability).toBeGreaterThan(0);
-    expect(receipt.pick.masked_rows).toEqual([]);
+    expect(receipt.pick.masked_rows).toContainEqual({
+      row: "luna-max",
+      reason: "xhigh/max lacks a free-text justification",
+    });
   });
 
   test("auto: no key falls back to the default and names where it looked", async () => {
@@ -1821,7 +1893,7 @@ describe("agent-dispatch result", () => {
     const r = await router(["result", id], { AGENT_ROUTER_STATE_DIR: state });
     expect(r.code).toBe(0);
     expect(r.out).toMatch(
-      /row=luna-max outcome=ok exit=0 elapsed=\d+(?:\.\d+)?s/u,
+      /row=luna-low outcome=ok exit=0 elapsed=\d+(?:\.\d+)?s/u,
     );
     expect(r.out.endsWith("final report from fake worker\n")).toBe(true);
   });
@@ -1984,7 +2056,7 @@ describe("agent-dispatch ls and stats", () => {
     expect(report.by_source.explicit).toBe(0);
     expect(report.by_source.jev).toBeGreaterThan(0);
     expect(report.by_source.default).toBeGreaterThan(0);
-    expect(Object.keys(report.per_choice)).toContain("luna-max");
+    expect(Object.keys(report.per_choice)).toContain("luna-low");
   });
 
   test("no state dir yet: ls and stats still answer", async () => {
@@ -2262,7 +2334,7 @@ describe("agent-dispatch grade", () => {
       ),
     });
     expect(
-      decodedJson(Report, s.out.trim()).per_choice["luna-max"]?.graded,
+      decodedJson(Report, s.out.trim()).per_choice["luna-low"]?.graded,
     ).toEqual({ pass: 1, partial: 0, fail: 0 });
   });
 
@@ -3168,7 +3240,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     expect(refusal.ticket_grade).toMatchObject({
       verdict: "split",
       source: "floor+grader",
-      grader: { status: "ok", row: { id: "luna-max", route: "codex" } },
+      grader: { status: "ok", row: { id: "luna-low", route: "codex" } },
     });
     expect(logLines(r.state).map((line) => line.kind)).toEqual(["refusal"]);
   });

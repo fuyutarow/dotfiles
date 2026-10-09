@@ -421,6 +421,8 @@ describe("render-home: the rest of the rendered half", () => {
     );
     expect(md).toContain("hard worker bound defaults to 600 seconds");
     expect(md).toContain("outcome `returned`");
+    expect(md).toContain("--sandbox none|read-only|workspace-write");
+    expect(md).toContain("workers that need network or ssh");
     expect(md.endsWith("<!-- roster:end -->\n")).toBe(true);
     expect(
       readFileSync(join(dotfiles, "agents", "claude", "CLAUDE.md"), "utf8"),

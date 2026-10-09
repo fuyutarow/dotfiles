@@ -102,6 +102,8 @@ const Receipt = z.object({
   run_id: z.string(),
   outcome: z.enum(["ok", "codex-failed", "refused", "timeout", "killed"]),
   model: z.string().nullable(),
+  sandbox: z.string().nullable(),
+  sandbox_effective: z.string().nullable(),
   elapsed_s: z.number(),
   receipt_file: z.string().nullable(),
   why: z.string().optional(),
@@ -215,6 +217,53 @@ describe("agx", () => {
       "agx[codex]: started gpt-6-luna effort=medium sandbox=read-only",
     );
     expect(r.stderr).toMatch(/agx\[codex\]: ok after \d+(\.\d)? s — receipt /u);
+  });
+
+  test.each(["none", "read-only", "workspace-write"])(
+    "explicit sandbox %s reaches Codex and the receipt, including resume",
+    (sandbox) => {
+      for (const resume of [false, true]) {
+        const { bin, log } = fakeCodex(scratch());
+        const r = run(
+          [
+            ...FULL,
+            "--sandbox",
+            sandbox,
+            ...(resume ? ["--resume", "thread-test"] : []),
+          ],
+          { AGX_CODEX_BIN: bin },
+        );
+        expect(r.code).toBe(0);
+        const effective = sandbox === "none" ? "danger-full-access" : sandbox;
+        const argv = readFileSync(log, "utf8").split("\n");
+        if (resume) expect(argv).toContain(`sandbox_mode="${effective}"`);
+        else expect(argv[argv.indexOf("--sandbox") + 1]).toBe(effective);
+        expect(r.receipt.sandbox).toBe(sandbox);
+        expect(r.receipt.sandbox_effective).toBe(effective);
+        expect(
+          decodedJson(
+            Receipt,
+            readFileSync(r.receipt.receipt_file ?? "", "utf8"),
+          ),
+        ).toEqual(r.receipt);
+        expect(
+          r.stderr
+            .split("\n")
+            .filter((line) => line === "agx: sandbox none (unsandboxed)"),
+        ).toHaveLength(sandbox === "none" ? 1 : 0);
+      }
+    },
+  );
+
+  test("omitting sandbox remains refused before Codex starts", () => {
+    const { bin, log } = fakeCodex(scratch());
+    const r = run([...FULL.slice(0, 4), ...FULL.slice(6)], {
+      AGX_CODEX_BIN: bin,
+    });
+    expect(r.code).toBe(2);
+    expect(r.receipt.why).toContain("missing --sandbox");
+    expect(r.receipt.sandbox).toBeNull();
+    expect(existsSync(log)).toBe(false);
   });
 
   test.each([

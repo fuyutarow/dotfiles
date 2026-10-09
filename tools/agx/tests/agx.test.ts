@@ -181,7 +181,7 @@ const gradeReply = process.env.FAKE_GRADE ?? '{"verdict":"pass","violations":[]}
 const fence = String.fromCharCode(96).repeat(3);
 const lastMessage = isGrader ? process.env.FAKE_GRADE_LAST ?? fence + "agx-grade\\n" + gradeReply + "\\n" + fence : process.env.FAKE_LAST ?? (process.env.FAKE_CHECKPOINT === "1" && resuming ? checkpointReturn : process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n");
 const usage = process.env.FAKE_USAGE === "missing" ? { input_tokens: 100 } : { input_tokens: 100, cached_input_tokens: 20, output_tokens: 7, reasoning_output_tokens: 3 };
-console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: timedOut ? "timeout" : exit === 0 ? "ok" : "codex-failed", elapsed_s: Number(process.env.FAKE_ELAPSED_S ?? "1.5"), usage, ...(process.env.FAKE_NO_SESSION === "1" ? {} : { session: "thread-fake-0001" }), last_message: lastMessage, ...(exit === 0 ? {} : { cause: timedOut ? "fake worker timed out" : "fake worker failed" }) }));
+console.log(JSON.stringify({ schema: 1, run_id: runId, sandbox: args[args.indexOf("--sandbox") + 1], outcome: timedOut ? "timeout" : exit === 0 ? "ok" : "codex-failed", elapsed_s: Number(process.env.FAKE_ELAPSED_S ?? "1.5"), usage, ...(process.env.FAKE_NO_SESSION === "1" ? {} : { session: "thread-fake-0001" }), last_message: lastMessage, ...(exit === 0 ? {} : { cause: timedOut ? "fake worker timed out" : "fake worker failed" }) }));
 process.exit(exit);
 `,
 );
@@ -1753,6 +1753,7 @@ describe("agx dispatch", () => {
     // The fake Jev rates only sonnet-high, so it wins even after the claude weight.
     const pick = brief("pick-claude", "PICK=sonnet-high do the thing\n");
     for (const [sandbox, mode] of [
+      ["none", "acceptEdits"],
       ["read-only", "plan"],
       ["workspace-write", "acceptEdits"],
     ] as const) {
@@ -1772,6 +1773,17 @@ describe("agx dispatch", () => {
       const receipt = decodedJson(Receipt, r.out.trim());
       expect(receipt.pick.choice).toBe("sonnet-high");
       expect(receipt.worker.outcome).toBe("ok");
+      expect(
+        decodedJson(
+          z.looseObject({ worker: z.looseObject({ sandbox: z.string() }) }),
+          r.out.trim(),
+        ).worker.sandbox,
+      ).toBe(sandbox);
+      expect(
+        r.err
+          .split("\n")
+          .filter((line) => line === "agx: sandbox none (unsandboxed)"),
+      ).toHaveLength(sandbox === "none" ? 1 : 0);
       expect(receipt.checkpoint).toEqual({
         supported: false,
         reason: "claude worker takes its prompt at start; no live injection",
@@ -1960,6 +1972,58 @@ sleep 30
     );
     expect(codexArgs).toContain("After a tool error, change approach");
   }, 20_000);
+
+  test("omitting --sandbox stays refused rather than defaulting to none", async () => {
+    const before = existsSync(join(scratch, "argv.log"))
+      ? readFileSync(join(scratch, "argv.log"), "utf8")
+      : "";
+    const r = await router(["dispatch", "--prompt-file", b, "--cd", scratch]);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("dispatch needs --prompt-file, --cd and --sandbox");
+    expect(readFileSync(join(scratch, "argv.log"), "utf8")).toBe(before);
+  });
+
+  test.each(["none", "read-only", "workspace-write"])(
+    "explicit %s passes through the Codex route and resume",
+    async (sandbox) => {
+      const lastArgs = (): string[] =>
+        decodedJson(
+          z.array(z.string()),
+          readFileSync(join(scratch, "argv.log"), "utf8")
+            .trim()
+            .split("\n")
+            .at(-1) ?? "",
+        );
+      const r = await router([
+        "dispatch",
+        "--prompt-file",
+        b,
+        "--cd",
+        scratch,
+        "--sandbox",
+        sandbox,
+      ]);
+      expect(r.code).toBe(0);
+      const argv = lastArgs();
+      expect(argv[argv.indexOf("--sandbox") + 1]).toBe(sandbox);
+      const id = decodedJson(
+        z.looseObject({ run_id: z.string() }),
+        r.out.trim(),
+      ).run_id;
+      expect(
+        decodedJson(
+          z.looseObject({ worker: z.looseObject({ sandbox: z.string() }) }),
+          r.out.trim(),
+        ).worker.sandbox,
+      ).toBe(sandbox);
+      const resumed = await router(["dispatch", "--resume", id], {
+        AGX_STATE_DIR: r.state,
+      });
+      expect(resumed.code).toBe(0);
+      const resumedArgs = lastArgs();
+      expect(resumedArgs[resumedArgs.indexOf("--sandbox") + 1]).toBe(sandbox);
+    },
+  );
 
   test("a bad --sandbox is refused", async () => {
     const r = await router([

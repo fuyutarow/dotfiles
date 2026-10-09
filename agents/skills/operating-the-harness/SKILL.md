@@ -26,7 +26,7 @@ description: >-
 > discipline, the verification loop, hooks, permissions/settings, MCP, Skills/commands,
 > subagents/parallelism, plan-mode & context workflow. Host-agnostic.
 > **Out of scope**: the Anthropic *API/SDK* (→ `claude-api` skill); `claude -p` as a subprocess
-> driven by Codex (→ `dispatch`, `tools/dispatch`); mechanical settings.json
+> driven by Codex (→ `agx dispatch`, `tools/agx`; `--sandbox none|read-only|workspace-write`, explicit `none` for workers that need network or ssh); mechanical settings.json
 > edits the harness performs for you (→ `update-config` skill); writing domain skills like
 > Julia (→ that skill). This skill is the *strategy* layer; those are the *mechanics*.
 > The CRAFT of skill content — what deserves a skill, distillation, sibling cuts, trigger test

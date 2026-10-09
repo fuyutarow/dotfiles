@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.0 — 2026-10-09
+
+- Accept explicit `--sandbox none` for workers that need network or ssh: Codex runs with `danger-full-access`, Claude has no sandbox restriction, and stderr announces the unsandboxed run. Keep `--sandbox` required and preserve existing Codex fallbacks with requested and effective modes in receipts, including resumed runs.
+
 ## 2.0.1 — 2026-10-09
 
 - Merge previous state into an existing agx directory with deduplicated, timestamp-ordered JSONL logs and byte-checked file conflicts. Commit through temporary files and rename for crash-safe, idempotent retries.

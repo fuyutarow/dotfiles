@@ -5,7 +5,7 @@
 // package.json `bin` (`mise run deps`).
 //
 // CLI CONTRACT (designing-command-line-interfaces C0–C5)
-//   C1  agx dispatch  --prompt-file F --cd DIR --sandbox read-only|workspace-write
+//   C1  agx dispatch  --prompt-file F --cd DIR --sandbox none|read-only|workspace-write
 //                     [--label TEXT]   (--choice is refused: router samples Jev probabilities) [--timeout-s N]
 //       agx pick --prompt-file F [--cd DIR]     the auto pick only; starts nothing
 //       agx pick ask  --request F|-                  a typed question to Jev; its answer, never acted on
@@ -1648,6 +1648,7 @@ function refuseMissingClaude(): void {
 // read-only task from editing, and a workspace-write task may edit and run Bash under the same hooks
 // every Claude session runs under.
 const CLAUDE_MODE: Record<string, { mode: string; tools?: string }> = {
+  none: { mode: "acceptEdits", tools: "Bash" },
   "read-only": { mode: "plan" },
   "workspace-write": { mode: "acceptEdits", tools: "Bash" },
 };
@@ -2620,6 +2621,8 @@ async function launch(l: Launch): Promise<number> {
   );
   const workerStartedAt = performance.now();
   const t0 = workerStartedAt;
+  if (row.route === "claude" && flags.sandbox === "none")
+    process.stderr.write("agx: sandbox none (unsandboxed)\n");
   const spawnWorker = (workerArgs_: string[]) =>
     Bun.spawn([process.execPath, ...workerArgs_], {
       stdin: "ignore",
@@ -4648,7 +4651,11 @@ async function resumeCommand(
       );
   }
   const sandbox = worker?.sandbox;
-  if (sandbox !== "read-only" && sandbox !== "workspace-write")
+  if (
+    sandbox !== "none" &&
+    sandbox !== "read-only" &&
+    sandbox !== "workspace-write"
+  )
     fatal(`run ${runId}: its sandbox was not recorded, cannot continue it`);
   const brief = loggedBrief(logged);
   if (brief === undefined) fatal(`run ${runId}: its brief is no longer stored`);
@@ -4830,7 +4837,7 @@ async function parseAgx() {
               },
               sandbox: {
                 type: String,
-                description: "read-only | workspace-write",
+                description: "none | read-only | workspace-write",
               },
               choice: {
                 type: String,
@@ -5214,9 +5221,13 @@ async function main(): Promise<number | undefined> {
       f.sandbox === undefined
     )
       fatal("dispatch needs --prompt-file, --cd and --sandbox");
-    if (f.sandbox !== "read-only" && f.sandbox !== "workspace-write")
+    if (
+      f.sandbox !== "none" &&
+      f.sandbox !== "read-only" &&
+      f.sandbox !== "workspace-write"
+    )
       fatal(
-        `--sandbox must be read-only or workspace-write, not '${f.sandbox}'`,
+        `--sandbox must be none, read-only or workspace-write, not '${f.sandbox}'`,
       );
     return run({
       promptFile: f.promptFile,

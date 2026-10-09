@@ -15,9 +15,9 @@
 //                   the receipt, progress and cause handling are those of a fresh run.
 //                   --choice names a codex-route row of agents/models/dispatch-roster.toml (the roster
 //                   choice a coordinator makes) and supplies its model and effort.
-//   C2  effects     one codex subprocess, sandboxed as asked. read-only | workspace-write only;
-//                   danger-full-access is never asked for here (refused); the one way codex runs
-//                   unsandboxed is a box's own host declaration (HOST DECLARATION below), stated
+//   C2  effects     one codex subprocess: none | read-only | workspace-write; explicit none maps
+//                   to danger-full-access. A host declaration or resource probe may also fall back
+//                   to unsandboxed execution (HOST DECLARATION below), stated
 //                   on stderr and in the receipt (sandbox_effective, unsandboxed_reason).
 //                   effort ultra (codex's own unbounded fan-out) is refused: P7 cannot admit it.
 //   C3  channels    stdout: exactly one JSON receipt line (schema 1, additive-only).
@@ -31,7 +31,7 @@
 //                      "codex printed no error event" + the last stderr line); every receipt has
 //                      `progress` {last, commands, files} — at a timeout, where the worker was.
 //   Waits / liveness     bounded by --timeout-s (default 900; this runs in the background).
-//   Fallbacks / handoffs none — never another model, never another sandbox. A refusal says why.
+//   Fallbacks / handoffs never another model; sandbox fallbacks record the effective mode and reason.
 //   C5  evolution   receipt fields are additive; `schema` bumps on any removal or meaning change.
 // --emit-envelope PATH writes the P7 resource envelope for exactly this call (same checks, no
 // codex) and exits 0: the main loop creates one per parallel worker before launching it, so each
@@ -67,7 +67,7 @@ import { resourceBriefFallback } from "./codex-resource-probe.ts";
 import { costUsd } from "../dispatch-cost.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
-const SANDBOXES = ["read-only", "workspace-write"];
+const SANDBOXES = ["none", "read-only", "workspace-write"];
 const MAX_TIMEOUT_S = 14400;
 const DEFAULT_TIMEOUT_S = 900;
 const IDENTICAL_TOOL_ERROR_LIMIT = 5; // Stop a worker that is retrying the same broken call indefinitely.
@@ -400,12 +400,14 @@ if (!promptRead.ok)
 const prompt = promptRead.value.trim();
 if (prompt === "")
   refuse("empty prompt (give --prompt-file, or pipe the prompt on stdin)");
-if (unsandboxedReason === undefined) {
+if (sandbox !== "none" && unsandboxedReason === undefined) {
   const blocked = resourceBriefFallback(prompt, String(sandbox));
   if (blocked !== undefined) unsandboxedReason = `sandbox blocks ${blocked}`;
 }
 codexSandbox =
-  unsandboxedReason === undefined ? String(sandbox) : "danger-full-access";
+  sandbox === "none" || unsandboxedReason !== undefined
+    ? "danger-full-access"
+    : String(sandbox);
 
 // --- run --------------------------------------------------------------------------------------
 const lastFile = join(argv.flags.receiptDir, `${runId}.last.txt`);
@@ -448,7 +450,9 @@ const cmd =
         resume,
         prompt,
       ];
-if (unsandboxedReason !== undefined)
+if (sandbox === "none")
+  process.stderr.write("agx: sandbox none (unsandboxed)\n");
+else if (unsandboxedReason !== undefined)
   say(
     `UNSANDBOXED: asked for ${sandbox}, running danger-full-access — ${unsandboxedReason}`,
   );

@@ -124,5 +124,7 @@ describe("dispatch roster", () => {
     expect(policy).toContain("hard maximum 14400");
     expect(policy).toContain("values above 600 require `timeout_reason`");
     expect(policy).toContain("outcome `returned`");
+    expect(policy).toContain("--sandbox none|read-only|workspace-write");
+    expect(policy).toContain("workers that need network or ssh");
   });
 });

@@ -685,7 +685,10 @@ run = 'bun ~/dotfiles/scripts/repos-audit.ts'
 
 [tasks."link:dots"]
 description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.ts)"
-run = 'bun ~/dotfiles/scripts/link-dots.ts --force'
+run = '''
+bun ~/dotfiles/scripts/link-dots.ts --force
+bun ~/dotfiles/agents/codex/codex-sandbox-network.ts
+'''
 
 [tasks."tmux:plugins"]
 description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"

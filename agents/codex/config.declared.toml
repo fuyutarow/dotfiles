@@ -1,3 +1,7 @@
 # Codex CLI configuration keys maintained by dotfiles.
+# 2026-10-09 evidence: gpt-6-luna accepted 483,584 input tokens and Codex reported a window of 828,400.
+model_context_window = 1000000
+model_auto_compact_token_limit = 950000
+
 [sandbox_workspace_write]
 network_access = true

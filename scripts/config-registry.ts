@@ -286,9 +286,10 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: ["agents/codex/config.declared.toml"],
     deployed:
-      "the Codex-owned ~/.codex/config.toml workspace-write network setting",
+      "the Codex-owned ~/.codex/config.toml model limits and workspace-write network setting",
     consumer: "Codex workers using workspace-write sandbox",
-    writer: "human, in the repo; mise run codex:sandbox-network converges",
+    writer:
+      "human, in the repo; mise run codex:sandbox-network converges model_context_window, model_auto_compact_token_limit, and sandbox_workspace_write.network_access",
     verify: `${DOCTOR} (codex-sandbox-network)`,
   },
   {

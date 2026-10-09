@@ -95,6 +95,26 @@ describe("doctor", () => {
     expect(readdirSync(join(home, ".local", "bin"))).toEqual(["gone"]);
   });
 
+  test("codex-sandbox-network: reports drift for every declared Codex key", () => {
+    if (Bun.which("codex") === undefined) return;
+    const home = tmp("doctor-home-");
+    mkdirSync(join(home, ".codex"), { recursive: true });
+    writeFileSync(
+      join(home, ".codex/config.toml"),
+      `model_context_window = 100000
+model_auto_compact_token_limit = 940000
+[sandbox_workspace_write]
+network_access = true
+`,
+    );
+    const r = doctor("codex-sandbox-network", { HOME: home, DOTFILES: REPO });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("model_context_window=100000, declared 1000000");
+    expect(r.out).toContain(
+      "model_auto_compact_token_limit=940000, declared 950000",
+    );
+  });
+
   test("bins: missing and dangling-renamed bins FAIL; a resolving bin PASSes", () => {
     const dotfiles = fixtureDotfiles();
     const home = tmp("doctor-home-");

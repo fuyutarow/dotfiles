@@ -846,11 +846,11 @@ export async function checkCodexSandboxNetwork(ctx: Ctx): Promise<Finding> {
   if (lines.length === 0)
     return pass(
       "codex-sandbox-network",
-      `workspace network access ${declared} as declared`,
+      "Codex settings match agents/codex/config.declared.toml",
     );
   return fail(
     "codex-sandbox-network",
-    "Codex workspace-write network access differs from agents/codex/config.declared.toml",
+    "Codex settings differ from agents/codex/config.declared.toml",
     "mise run codex:sandbox-network",
     lines,
   );

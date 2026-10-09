@@ -1,62 +1,71 @@
 import { describe, expect, test } from "bun:test";
-import { drift, edit } from "../sandbox-network.ts";
+import { drift, edit, readLive } from "../sandbox-network.ts";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-function live(contents: string | null, networkAccess: boolean | null) {
-  return { contents, networkAccess };
-}
+const declared = {
+  networkAccess: true,
+  modelContextWindow: 1000000,
+  modelAutoCompactTokenLimit: 950000,
+};
 
-describe("Codex sandbox network config", () => {
-  test("drift is empty only when the declared boolean matches live state", () => {
-    expect(drift(true, live("", true))).toEqual([]);
-    expect(drift(false, live("", false))).toEqual([]);
-    expect(drift(true, live(null, null))).toHaveLength(1);
-    expect(drift(true, live("", false))).toHaveLength(1);
-  });
-
-  test("creates an absent file with the declared table", () => {
-    expect(edit(null, true)).toBe(
-      "[sandbox_workspace_write]\nnetwork_access = true\n",
+describe("Codex settings convergence", () => {
+  test("inserts missing model settings before tables and preserves other bytes", () => {
+    const source =
+      '# user comment\nother = "unchanged"\n\n[sandbox_workspace_write]\nnetwork_access = true\n';
+    const result = edit(source, declared);
+    expect(result).toBe(
+      '# user comment\nother = "unchanged"\n\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n\n[sandbox_workspace_write]\nnetwork_access = true\n',
     );
   });
 
-  test("appends a table after existing content without changing it", () => {
+  test("updates wrong values and preserves inline comments", () => {
     const source =
-      '# keep this\n[projects]\n"/tmp/a" = { trust_level = "trusted" }\n';
-    expect(edit(source, true)).toBe(
-      `${source}\n[sandbox_workspace_write]\nnetwork_access = true\n`,
+      "model_context_window = 100000\nmodel_auto_compact_token_limit = 900000 # retain\n[sandbox_workspace_write]\nnetwork_access = false\n";
+    expect(edit(source, declared)).toBe(
+      "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000 # retain\n[sandbox_workspace_write]\nnetwork_access = true\n",
     );
   });
 
-  test("changes false to true and preserves inline comments", () => {
+  test("a converged file is a byte-identical no-op", () => {
     const source =
-      "[sandbox_workspace_write]\nnetwork_access = false # keep comment\n";
-    expect(edit(source, true)).toBe(
-      "[sandbox_workspace_write]\nnetwork_access = true # keep comment\n",
+      "# leading\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true # note\n";
+    expect(edit(source, declared)).toBe(source);
+    expect(
+      drift(declared, {
+        contents: source,
+        networkAccess: true,
+        modelContextWindow: 1000000,
+        modelAutoCompactTokenLimit: 950000,
+      }),
+    ).toEqual([]);
+  });
+
+  test("same-named model keys inside tables are not changed", () => {
+    const source =
+      "[custom]\nmodel_context_window = 123\nmodel_auto_compact_token_limit = 456\n[sandbox_workspace_write]\nnetwork_access = true\n";
+    const result = edit(source, declared);
+    expect(result).toContain(
+      "[custom]\nmodel_context_window = 123\nmodel_auto_compact_token_limit = 456\n",
+    );
+    expect(result).toContain(
+      "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n\n[custom]",
     );
   });
 
-  test("an already true value is byte-identical", () => {
-    const source =
-      "# leading\n[sandbox_workspace_write] # table note\nnetwork_access = true  # note\n";
-    expect(edit(source, true)).toBe(source);
-  });
-
-  test("preserves comments and tables before and after the target table", () => {
-    const source =
-      '# beginning\n[projects]\nname = "before"\n\n[sandbox_workspace_write]\n# retained\nnetwork_access = false\n\n[tui]\n' +
-      "# trailing\n";
-    const expected = source.replace(
-      "network_access = false",
-      "network_access = true",
+  test("live values are read as TOML top-level keys", async () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-settings-"));
+    mkdirSync(join(home, ".codex"));
+    writeFileSync(
+      join(home, ".codex/config.toml"),
+      "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n",
     );
-    expect(edit(source, true)).toBe(expected);
-    expect(edit(expected, true)).toBe(expected);
-  });
-
-  test("adds a missing assignment inside an existing table before the next table", () => {
-    const source = "[sandbox_workspace_write]\n# retained\n\n[tui]\n";
-    expect(edit(source, true)).toBe(
-      "[sandbox_workspace_write]\n# retained\n\nnetwork_access = true\n[tui]\n",
+    const live = await readLive(home);
+    expect(live).not.toBeInstanceOf(Error);
+    if (!(live instanceof Error)) expect(drift(declared, live)).toEqual([]);
+    expect(readFileSync(join(home, ".codex/config.toml"), "utf8")).toContain(
+      "model_context_window",
     );
   });
 });

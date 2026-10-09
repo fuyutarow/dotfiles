@@ -13,7 +13,7 @@ afterEach(async () => {
   else process.env.AGENT_ROUTER_STATE_DIR = previous;
 });
 
-test("reads seven-day Jev response usage and formats the no-price fallback", async () => {
+test("reads seven-day Jev response usage and prices spend", async () => {
   const root = await mkdtemp(join(tmpdir(), "statusline-jev-"));
   roots.push(root);
   process.env.AGENT_ROUTER_STATE_DIR = root;
@@ -47,15 +47,15 @@ test("reads seven-day Jev response usage and formats the no-price fallback", asy
       }),
     ].join("\n"),
   );
-  const usage = readJevUsage(now);
+  const usage = await readJevUsage(now);
   expect(usage.isOk()).toBe(true);
-  if (usage.isOk()) expect(jevUsageSegment(usage.value)).toBe("Jev 1.2M tok");
+  if (usage.isOk()) expect(jevUsageSegment(usage.value)).toBe("Jev $0.0378");
 });
 
-test("omits Jev when runs.jsonl is absent", () => {
+test("omits Jev when runs.jsonl is absent", async () => {
   const root = "/definitely/missing/statusline-jev";
   process.env.AGENT_ROUTER_STATE_DIR = root;
-  const usage = readJevUsage();
+  const usage = await readJevUsage();
   expect(usage.isOk()).toBe(true);
   if (usage.isOk()) expect(jevUsageSegment(usage.value)).toBe("");
 });

@@ -59,7 +59,7 @@ type Sources = {
     rc?: RcState,
   ) => Promise<void>;
   codexRate: () => ReturnType<typeof readCodexRate>;
-  jevUsage: () => Promise<ReturnType<typeof readJevUsage>>;
+  jevUsage: () => ReturnType<typeof readJevUsage>;
 };
 export interface BuildDataframeOptions {
   sources?: Partial<Sources>;
@@ -137,7 +137,7 @@ const DEFAULT_SOURCES: Sources = {
   storage: diskReadingsAsync,
   herdrReport: reportToHerdr,
   codexRate: readCodexRate,
-  jevUsage: () => Promise.resolve(readJevUsage()),
+  jevUsage: () => readJevUsage(),
 };
 
 // --- buildDataframe: stdin -> every displayable value, already computed. No ANSI, no rows. ---

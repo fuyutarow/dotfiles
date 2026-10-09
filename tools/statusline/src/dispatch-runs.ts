@@ -15,6 +15,7 @@ import { readCodexUsage } from "./codex-rate.ts";
 import {
   costUsd,
   dispatchRowPrice,
+  formatCostUsd,
 } from "../../shared/src/dispatch-pricing.ts";
 import { homedir } from "node:os";
 
@@ -260,17 +261,8 @@ function costText(value: number | undefined, width: number): string {
   if (value === undefined) return " ".repeat(width + 1);
   return `${padDisplay(costLabel(value), width)} `;
 }
-const costFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  notation: "compact",
-  minimumSignificantDigits: 3,
-  maximumSignificantDigits: 3,
-});
 function costLabel(value: number): string {
-  if (value === 0) return "$0";
-  if (value < 0.1) return "<$0.1";
-  return costFormatter.format(value).replace(/K$/u, "k");
+  return formatCostUsd(value);
 }
 const RUN_LABEL_WIDTH = 32;
 function truncateDisplay(value: string, width: number): string {

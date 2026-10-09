@@ -62,14 +62,14 @@ test("rate row prefixes Claude windows and appends Codex elapsed share and Jev t
         mtimeMs: Temporal.Now.instant().epochMilliseconds,
       },
       codexRateWhy: undefined,
-      jevUsage: { tokens: 1_200_000 },
+      jevUsage: { costUsd: 0.042 },
     },
     now,
   );
   expect(stripAnsi(row)).toContain("claude 5h 15% ⟳");
   expect(stripAnsi(row)).toContain(" · 7d 50% ⟳");
   expect(stripAnsi(row)).toContain(" | codex 7d 12% ⟳");
-  expect(stripAnsi(row)).toContain(" | Jev 1.2M tok");
+  expect(stripAnsi(row)).toContain(" | Jev $0.0420");
   expect(stripAnsi(row)).not.toContain("cr ");
 });
 
@@ -93,12 +93,12 @@ test.each([
             mtimeMs: Temporal.Now.instant().epochMilliseconds,
           }
         : undefined,
-      jevUsage: hasJev ? { tokens: 48_100 } : undefined,
+      jevUsage: hasJev ? { costUsd: 0.002 } : undefined,
     }),
   );
   let expected = "Rate: claude 5h 15% · 7d 50% · Fable 20%";
   if (hasCodex) expected += " | codex 5h 10% · codex 7d 12%";
-  if (hasJev) expected += " | Jev 48.1K tok";
+  if (hasJev) expected += " | Jev <$0.01";
   expect(row).toBe(expected);
 });
 
@@ -106,9 +106,9 @@ test("missing Claude rates retain their placeholders without dangling provider s
   const row = stripAnsi(
     rateRow({
       rlModel: [],
-      jevUsage: { tokens: 48_100 },
+      jevUsage: { costUsd: 0.002 },
     }),
   );
-  expect(row).toBe("Rate: claude 5h n/a · 7d n/a | Jev 48.1K tok");
+  expect(row).toBe("Rate: claude 5h n/a · 7d n/a | Jev <$0.01");
   expect(stripAnsi(rateRow({ rlModel: [] }))).not.toContain(" | ");
 });

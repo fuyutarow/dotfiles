@@ -29,6 +29,9 @@ no_egress = []
 pick_temperature = 1.0
 
 [auto.jev]
+# Jev list price from archives/skills/driving-jev/references/model-and-api.md, verified 2026-09-21.
+price_per_mtok_input = 0.042
+price_per_mtok_output = 0.0
 api = "typesafe"
 url = "https://api.typesafe.ai/v1/systemone"
 model = "jev-latest"

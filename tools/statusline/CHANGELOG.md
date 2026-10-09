@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0 — 2026-10-09
+
+- Show seven-day Jev spend using roster prices and lower the shared cost display floor to $0.01.
+
 ## 0.6.1 — 2026-10-09
 
 - Render known costs below $0.10 as `<$0.1` and zero as `$0`.

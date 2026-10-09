@@ -10,6 +10,10 @@ describe("dispatch roster", () => {
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     expect(loaded.value.choice).toHaveLength(40);
+    expect(loaded.value.auto.jev).toMatchObject({
+      price_per_mtok_input: 0.042,
+      price_per_mtok_output: 0,
+    });
     expect(new Set(loaded.value.choice.map((row) => row.route))).toEqual(
       new Set(["codex", "claude"]),
     );
@@ -72,6 +76,18 @@ describe("dispatch roster", () => {
     expect(rosterTable(loaded.value)).toContain("$2/$0.20/$12");
   });
 
+  test("requires both Jev price fields", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "dispatch-roster-price-"));
+    const original = await Bun.file(
+      join(import.meta.dir, "..", "dispatch-roster.toml"),
+    ).text();
+    const path = join(folder, "missing-price.toml");
+    writeFileSync(path, original.replace("price_per_mtok_output = 0.0\n", ""));
+    const loaded = await loadRoster(path);
+    expect(loaded.ok).toBe(false);
+    rmSync(folder, { recursive: true, force: true });
+  });
+
   test("default must name a codex-route row", async () => {
     const folder = mkdtempSync(join(tmpdir(), "dispatch-roster-test-"));
     const original = await Bun.file(
@@ -93,13 +109,13 @@ describe("dispatch roster", () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    const sentence = rosterPolicy(loaded.value).split("\n")[0] ?? "";
+    const policy = rosterPolicy(loaded.value);
+    const sentence = policy.split("\n")[0] ?? "";
     expect(sentence).toContain(
       "when a codex and a claude row are comparable, pick codex",
     );
-    expect(sentence).toContain("--choice` stays refused");
-    expect(sentence).toContain("the default `luna-high` runs");
-    const policy = rosterPolicy(loaded.value);
+    expect(policy).toContain("`--choice` is refused");
+    expect(policy).toContain("the default `luna-high` runs");
     expect(policy).toContain("hard worker bound defaults to 600 seconds");
     expect(policy).toContain("hard maximum 14400");
     expect(policy).toContain("values above 600 require `timeout_reason`");

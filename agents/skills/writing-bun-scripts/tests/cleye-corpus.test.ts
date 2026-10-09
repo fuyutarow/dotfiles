@@ -6,6 +6,7 @@ const ROOT = new URL("../../../../", import.meta.url).pathname;
 type CorpusEntry = Readonly<{
   path: string;
   command?: string;
+  prototypeFlag?: Readonly<{ exit: number; message: string }>;
   // A CLI whose OWN contract differs from Cleye's default for an unknown flag (exit 1, "Unknown
   // flag") declares it here, and the test then holds it to THAT. tex-oracle reserves exit 1 for
   // "the oracle does not hold", so its usage errors are exit 2 (see rejectPrototypeFlag there).
@@ -21,6 +22,11 @@ const CORPUS = [
   { path: "agents/models/check-releases.ts" },
   { path: "agents/research-control/cli.ts" },
   { path: "tools/agent-resource-run/src/agent-resource-run.ts" },
+  {
+    path: "tools/coredev/src/coredev.ts",
+    // The prototype flag is parsed before the required positional command check.
+    prototypeFlag: { exit: 1, message: "Missing required parameter" },
+  },
   {
     path: "tools/disk-reclaim/src/reclaim.ts",
     unknownFlag: { exit: 2, message: "Unknown flag" },
@@ -104,6 +110,7 @@ const CORPUS = [
   { path: "scripts/wsl-audit.ts" },
   { path: "scripts/wsl-capacity-recover.ts" },
   { path: "scripts/wsl-distro.ts" },
+  { path: "scripts/wsl-keepalive.ts" },
   { path: "scripts/wsl-reap.ts" },
   { path: "scripts/wsl-wake.ts" },
   { path: "scripts/wsl-winget.ts" },
@@ -183,10 +190,14 @@ describe("production Cleye corpus boundary", () => {
       expect(unknown.stderr.toString()).toContain(expected.message);
 
       const prototype = run(entry, ["--__proto__"]);
-      expect(prototype.exitCode).toBe(2);
+      const expectedPrototype = entry.prototypeFlag ?? {
+        exit: 2,
+        message: "__proto__",
+      };
+      expect(prototype.exitCode).toBe(expectedPrototype.exit);
       expect(
         prototype.stdout.toString() + prototype.stderr.toString(),
-      ).toContain("__proto__");
+      ).toContain(expectedPrototype.message);
     });
   }
 });

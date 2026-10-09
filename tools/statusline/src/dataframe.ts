@@ -3,6 +3,7 @@ import type { MemReading } from "./host-load.ts";
 import type { DiskEntry } from "./storage.ts";
 import type { RcState } from "./identity.ts";
 import type { ModelLimit } from "./rate-limits.ts";
+import type { CodexRate } from "./codex-rate.ts";
 import type { Admitted } from "./jobs.ts";
 import type { RouteRun } from "./dispatch-runs.ts";
 
@@ -34,6 +35,8 @@ export interface Dataframe {
   rlModel: ModelLimit[];
   accountWhy?: string | undefined; // ~/.claude.json unreadable / unexpected shape: email unknown
   modelCapsWhy?: string | undefined; // same, for the per-model weekly caps
+  codexRate?: CodexRate | undefined;
+  codexRateWhy?: string | undefined;
   branch?: string | undefined; // undefined with no branchWhy = cwd is not a repo (nothing to show)
   branchWhy?: string | undefined; // the lookup itself failed — shown as n/a, never dropped
   add?: number | undefined; // undefined = the payload carried no cost block (NOT zero lines)

@@ -10,6 +10,7 @@ import {
 } from "./prompt-stamp.ts";
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
+import { codexRateSegment } from "./codex-rate.ts";
 
 const RSET = "⟳";
 // the account's own /usage screen ("Current week (Fable)"). This is NOT in the statusline's own
@@ -165,7 +166,14 @@ function rlModelSegment(m: ModelLimit, now: number): string {
 export function rateRow(
   df: Pick<
     Dataframe,
-    "rl5" | "rl5Reset" | "rl7" | "rl7Reset" | "rlModel" | "modelCapsWhy"
+    | "rl5"
+    | "rl5Reset"
+    | "rl7"
+    | "rl7Reset"
+    | "rlModel"
+    | "modelCapsWhy"
+    | "codexRate"
+    | "codexRateWhy"
   >,
   now = nowEpochSec(),
 ): string {
@@ -173,7 +181,9 @@ export function rateRow(
   if (
     (df.rl5 === null || df.rl5 === undefined) &&
     (df.rl7 === null || df.rl7 === undefined) &&
-    df.rlModel.length === 0
+    df.rlModel.length === 0 &&
+    df.codexRate === undefined &&
+    df.codexRateWhy === undefined
   )
     return `${label} ${NA_COLOR}n/a${RST} ${DIM}(no rate_limits in the payload)${RST}`;
   const parts: string[] = [
@@ -185,6 +195,8 @@ export function rateRow(
       : `7d ${NA_COLOR}n/a${RST}`,
   ];
   for (const m of df.rlModel) parts.push(rlModelSegment(m, now));
+  const codex = codexRateSegment(df.codexRate, df.codexRateWhy, now);
+  if (codex !== "") parts.push(codex);
   if (df.modelCapsWhy !== undefined && df.modelCapsWhy !== "")
     parts.push(naSegment("model caps", df.modelCapsWhy));
   // Independent sibling windows, so the middot (see render()'s header note on MID).

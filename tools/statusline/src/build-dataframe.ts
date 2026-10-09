@@ -23,6 +23,7 @@ import { readHostLoadAsync } from "./host-load.ts";
 import { routeRunsAsync } from "./dispatch-runs.ts";
 import { readDispatchWarningAsync } from "./dispatch-warning.ts";
 import { diskReadingsAsync } from "./storage.ts";
+import { readCodexRate } from "./codex-rate.ts";
 
 type IdentityFacts = {
   email: string | undefined;
@@ -56,6 +57,7 @@ type Sources = {
     effort?: string,
     rc?: RcState,
   ) => Promise<void>;
+  codexRate: () => ReturnType<typeof readCodexRate>;
 };
 export interface BuildDataframeOptions {
   sources?: Partial<Sources>;
@@ -72,6 +74,7 @@ const BUDGETS_MS: Record<keyof Sources, number> = {
   dispatchWarning: 1500,
   storage: 1500,
   herdrReport: 200,
+  codexRate: 1000,
 };
 type Outcome<T> = { ok: true; value: T } | { ok: false; why: string };
 async function runBounded<T>(
@@ -130,6 +133,7 @@ const DEFAULT_SOURCES: Sources = {
   dispatchWarning: readDispatchWarningAsync,
   storage: diskReadingsAsync,
   herdrReport: reportToHerdr,
+  codexRate: readCodexRate,
 };
 
 // --- buildDataframe: stdin -> every displayable value, already computed. No ANSI, no rows. ---
@@ -188,6 +192,7 @@ export async function buildDataframe(
     routesResult,
     warningResult,
     storageResult,
+    codexRateResult,
   ] = await Promise.allSettled([
     runBounded("account", budget("identity"), sources.identity),
     runBounded("name", budget("agentName"), () =>
@@ -206,6 +211,7 @@ export async function buildDataframe(
       sources.dispatchWarning,
     ),
     runBounded("storage", budget("storage"), sources.storage),
+    runBounded("codex rate", budget("codexRate"), sources.codexRate),
   ]);
   const identity = settled(
     identityResult,
@@ -242,6 +248,11 @@ export async function buildDataframe(
   const routes = settled(routesResult, undefined, "dispatch");
   const warning = settled(warningResult, undefined, "dispatch warning");
   const storage = settled(storageResult, err("storage unavailable"), "storage");
+  const codexRate = settled(
+    codexRateResult,
+    err("codex rate unavailable"),
+    "codex rate",
+  );
   const identityWhy = identity.why;
   const nameResultValue = name.value;
   const sessionName = nameResultValue.isOk()
@@ -281,6 +292,13 @@ export async function buildDataframe(
     rlModel: identity.value.rlModel,
     accountWhy: identityWhy ?? identity.value.accountWhy,
     modelCapsWhy: identityWhy ?? identity.value.modelCapsWhy,
+    codexRate:
+      codexRate.why === undefined && codexRate.value.isOk()
+        ? codexRate.value.value
+        : undefined,
+    codexRateWhy:
+      codexRate.why ??
+      (codexRate.value.isErr() ? codexRate.value.error : undefined),
     branch,
     branchWhy,
     add: data.cost?.total_lines_added,

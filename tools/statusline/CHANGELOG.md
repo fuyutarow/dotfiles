@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+
+- Show Codex usage windows and credits from the newest session rollout, with stale age and bounded reads.
+
 ## 0.2.7
 
 - Keep parity fixtures portable across machine hostnames after the alpha rebase.

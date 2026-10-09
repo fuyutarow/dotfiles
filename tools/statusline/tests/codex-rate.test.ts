@@ -53,8 +53,8 @@ test("renders a 7d only window and integer credits", async () => {
       undefined,
       1791496800,
     ).replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");
-    expect(text).toContain("codex 7d 11% ⟳10-14 12:28(5d5h)");
-    expect(text).toContain("cr 62500");
+    expect(text).toContain("codex 7d 11% ⟳10-14 12:28(5d5h 25%)");
+    expect(text).not.toContain("cr ");
   }
 });
 

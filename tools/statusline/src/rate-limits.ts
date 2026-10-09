@@ -11,6 +11,7 @@ import {
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { codexRateSegment } from "./codex-rate.ts";
+import { jevUsageSegment } from "./jev-usage.ts";
 
 const RSET = "⟳";
 // the account's own /usage screen ("Current week (Fable)"). This is NOT in the statusline's own
@@ -174,6 +175,7 @@ export function rateRow(
     | "modelCapsWhy"
     | "codexRate"
     | "codexRateWhy"
+    | "jevUsage"
   >,
   now = nowEpochSec(),
 ): string {
@@ -183,23 +185,38 @@ export function rateRow(
     (df.rl7 === null || df.rl7 === undefined) &&
     df.rlModel.length === 0 &&
     df.codexRate === undefined &&
-    df.codexRateWhy === undefined
+    df.codexRateWhy === undefined &&
+    df.jevUsage === undefined
   )
     return `${label} ${NA_COLOR}n/a${RST} ${DIM}(no rate_limits in the payload)${RST}`;
-  const parts: string[] = [
-    df.rl5 !== null && df.rl5 !== undefined
-      ? rl5Segment(df.rl5, df.rl5Reset, now)
-      : `5h ${NA_COLOR}n/a${RST}`,
-    df.rl7 !== null && df.rl7 !== undefined
-      ? rl7Segment(df.rl7, df.rl7Reset, now)
-      : `7d ${NA_COLOR}n/a${RST}`,
-  ];
+  const hasClaudeRates =
+    (df.rl5 !== null && df.rl5 !== undefined) ||
+    (df.rl7 !== null && df.rl7 !== undefined);
+  const parts: string[] = [];
+  if (hasClaudeRates) {
+    const claude: string[] = [
+      df.rl5 !== null && df.rl5 !== undefined
+        ? rl5Segment(df.rl5, df.rl5Reset, now)
+        : `5h ${NA_COLOR}n/a${RST}`,
+      df.rl7 !== null && df.rl7 !== undefined
+        ? rl7Segment(df.rl7, df.rl7Reset, now)
+        : `7d ${NA_COLOR}n/a${RST}`,
+    ];
+    parts.push(`claude ${claude.join(` ${DIM}${MID}${RST} `)}`);
+  } else {
+    parts.push(
+      `claude 5h ${NA_COLOR}n/a${RST} ${DIM}${MID}${RST} 7d ${NA_COLOR}n/a${RST}`,
+    );
+  }
   for (const m of df.rlModel) parts.push(rlModelSegment(m, now));
+  let row = `${label} ${parts.join(` ${DIM}${MID}${RST} `)}`;
   const codex = codexRateSegment(df.codexRate, df.codexRateWhy, now);
-  if (codex !== "") parts.push(codex);
+  if (codex !== "") row += ` ${DIM}|${RST} ${codex}`;
+  const jev = jevUsageSegment(df.jevUsage);
+  if (jev !== "") row += ` ${DIM}|${RST} ${jev}`;
   if (df.modelCapsWhy !== undefined && df.modelCapsWhy !== "")
-    parts.push(naSegment("model caps", df.modelCapsWhy));
-  // Independent sibling windows, so the middot (see render()'s header note on MID).
-  return `${label} ${parts.join(` ${DIM}${MID}${RST} `)}`;
+    row += ` ${DIM}${MID}${RST} ${naSegment("model caps", df.modelCapsWhy)}`;
+  // Provider boundaries use pipes; windows within each provider keep middots.
+  return row;
 }
 // Job row, admitted-work half: "<name>[+N] <elapsed> [orphan×N]" — extracted out of render() only

@@ -4,6 +4,7 @@ import type { DiskEntry } from "./storage.ts";
 import type { RcState } from "./identity.ts";
 import type { ModelLimit } from "./rate-limits.ts";
 import type { CodexRate } from "./codex-rate.ts";
+import type { JevUsage } from "./jev-usage.ts";
 import type { Admitted } from "./jobs.ts";
 import type { RouteRun } from "./dispatch-runs.ts";
 
@@ -37,6 +38,7 @@ export interface Dataframe {
   modelCapsWhy?: string | undefined; // same, for the per-model weekly caps
   codexRate?: CodexRate | undefined;
   codexRateWhy?: string | undefined;
+  jevUsage?: JevUsage | undefined;
   branch?: string | undefined; // undefined with no branchWhy = cwd is not a repo (nothing to show)
   branchWhy?: string | undefined; // the lookup itself failed — shown as n/a, never dropped
   add?: number | undefined; // undefined = the payload carried no cost block (NOT zero lines)

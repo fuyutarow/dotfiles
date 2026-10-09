@@ -234,6 +234,54 @@ const stateVariants: [string, (state: string) => void][] = [
       extraWorker(state, "w4", "----");
     },
   ],
+  [
+    "Claude, Codex and Jev providers use pipes between groups",
+    (state) => {
+      const sessions = join(
+        state,
+        "..",
+        ".codex",
+        "sessions",
+        "2026",
+        "10",
+        "08",
+      );
+      mkdirSync(sessions, { recursive: true });
+      writeFileSync(
+        join(sessions, "rollout-providers.jsonl"),
+        `${JSON.stringify({
+          type: "event_msg",
+          payload: {
+            type: "token_count",
+            rate_limits: {
+              primary: {
+                used_percent: 15,
+                window_minutes: 300,
+                resets_at: NOW / 1000 + 7200,
+              },
+              secondary: {
+                used_percent: 12,
+                window_minutes: 10080,
+                resets_at: NOW / 1000 + 172800,
+              },
+            },
+          },
+        })}\n`,
+      );
+      writeFileSync(
+        join(state, "runs.jsonl"),
+        `${JSON.stringify({
+          kind: "run",
+          started_at: "2026-10-08T12:33:00Z",
+          pick: {
+            jev: {
+              response: { usage: { input_tokens: 48_000, output_tokens: 100 } },
+            },
+          },
+        })}\n`,
+      );
+    },
+  ],
 ];
 
 test.each(stateVariants.map(([name, setup], i) => [i, name, setup] as const))(

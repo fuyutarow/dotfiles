@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- Group Claude windows under `claude`, show Codex elapsed window shares, and replace Codex credits with seven-day Jev token usage when the router log is available.
+
 ## 0.3.0
 
 - Show Codex usage windows and credits from the newest session rollout, with stale age and bounded reads.

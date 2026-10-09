@@ -185,11 +185,19 @@ export function codexRateSegment(
       const local = localFromEpochSec(window.reset);
       let stamp = stampMDHM(local);
       if (window.minutes === 300) stamp = clockHM(local);
-      item += ` ${DIM}⟳${stamp}(${remaining(window.reset, now)})${RST}`;
+      const elapsed = Math.round(
+        Math.max(
+          0,
+          Math.min(
+            100,
+            (1 - Math.max(0, window.reset - now) / (window.minutes * 60)) * 100,
+          ),
+        ),
+      );
+      item += ` ${DIM}⟳${stamp}(${remaining(window.reset, now)} ${elapsed}%)${RST}`;
     }
     return item;
   });
-  if (rate.credits !== undefined) parts.push(`cr ${rate.credits}`);
   if (parts.length === 0) return "";
   const ageMs = Temporal.Now.instant().epochMilliseconds - rate.mtimeMs;
   if (ageMs > STALE_MS) parts[parts.length - 1] += ` (as of ${ageText(ageMs)})`;

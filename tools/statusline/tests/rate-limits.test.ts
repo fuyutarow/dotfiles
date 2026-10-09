@@ -46,3 +46,69 @@ test("7d rate usage stays plain and reset includes elapsed share", () => {
   expect(stripAnsi(row)).toMatch(/7d 40% ⟳\d\d-\d\d \d\d:\d\d\(5d02h 27%\)/u);
   expect(row).toContain(`${ESC}[38;5;178m40%${RST}`);
 });
+
+test("rate row prefixes Claude windows and appends Codex elapsed share and Jev token fallback", () => {
+  const now = 1791496800;
+  const row = rateRow(
+    {
+      rl5: 15,
+      rl5Reset: now + 3480,
+      rl7: 50,
+      rl7Reset: 1792335600,
+      rlModel: [],
+      modelCapsWhy: undefined,
+      codexRate: {
+        windows: [{ minutes: 10080, percent: 12, reset: 1792335600 }],
+        mtimeMs: Temporal.Now.instant().epochMilliseconds,
+      },
+      codexRateWhy: undefined,
+      jevUsage: { tokens: 1_200_000 },
+    },
+    now,
+  );
+  expect(stripAnsi(row)).toContain("claude 5h 15% ⟳");
+  expect(stripAnsi(row)).toContain(" · 7d 50% ⟳");
+  expect(stripAnsi(row)).toContain(" | codex 7d 12% ⟳");
+  expect(stripAnsi(row)).toContain(" | Jev 1.2M tok");
+  expect(stripAnsi(row)).not.toContain("cr ");
+});
+
+test.each([
+  [false, false],
+  [true, false],
+  [false, true],
+  [true, true],
+])("provider separators with Codex=%s and Jev=%s", (hasCodex, hasJev) => {
+  const row = stripAnsi(
+    rateRow({
+      rl5: 15,
+      rl7: 50,
+      rlModel: [{ name: "Fable", pct: 20, resetEpoch: undefined }],
+      codexRate: hasCodex
+        ? {
+            windows: [
+              { minutes: 300, percent: 10 },
+              { minutes: 10080, percent: 12 },
+            ],
+            mtimeMs: Temporal.Now.instant().epochMilliseconds,
+          }
+        : undefined,
+      jevUsage: hasJev ? { tokens: 48_100 } : undefined,
+    }),
+  );
+  let expected = "Rate: claude 5h 15% · 7d 50% · Fable 20%";
+  if (hasCodex) expected += " | codex 5h 10% · codex 7d 12%";
+  if (hasJev) expected += " | Jev 48.1K tok";
+  expect(row).toBe(expected);
+});
+
+test("missing Claude rates retain their placeholders without dangling provider separators", () => {
+  const row = stripAnsi(
+    rateRow({
+      rlModel: [],
+      jevUsage: { tokens: 48_100 },
+    }),
+  );
+  expect(row).toBe("Rate: claude 5h n/a · 7d n/a | Jev 48.1K tok");
+  expect(stripAnsi(rateRow({ rlModel: [] }))).not.toContain(" | ");
+});

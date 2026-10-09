@@ -24,6 +24,8 @@ export type Drive = {
   warn_gib?: number;
   warn_pct?: number;
   stop_gib?: number;
+  rate_red_minutes?: number;
+  rate_yellow_minutes?: number;
 };
 
 export type StorageMeasurement = { free: number; total: number | null };
@@ -85,11 +87,23 @@ function parseDrive(name: string, value: unknown, errors: string[]): Drive {
     "warn_gib",
     "warn_pct",
     "stop_gib",
+    "rate_red_minutes",
+    "rate_yellow_minutes",
   ]);
   for (const key of Object.keys(table))
     if (!allowed.has(key)) errors.push(`${where}: unknown key '${key}'`);
 
   const label = nonEmptyString(table.label, `${where}.label`, errors);
+  // Accepted for the statusline; enforcement still depends only on free-space thresholds.
+  const durations: { rate_red_minutes?: number; rate_yellow_minutes?: number } =
+    {};
+  for (const key of ["rate_red_minutes", "rate_yellow_minutes"] as const) {
+    if (table[key] === undefined) continue;
+    const duration = z.number().positive().safeParse(table[key]);
+    if (duration.success) durations[key] = duration.data;
+    else
+      errors.push(`${where}.${key}: expected a positive duration in minutes`);
+  }
   const path = nonEmptyString(table.path, `${where}.path`, errors);
   const rawDeny = table.deny_gib;
   const denyGib = nonNegative(rawDeny, `${where}.deny_gib`, errors);
@@ -121,6 +135,7 @@ function parseDrive(name: string, value: unknown, errors: string[]): Drive {
   }
   return {
     label,
+    ...durations,
     path,
     deny_gib: denyGib,
     deny_pct: denyPct,

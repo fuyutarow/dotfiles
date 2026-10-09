@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0 — 2026-10-09
+
+- Show free disk space in GiB and a smoothed fill/free rate from atomically persisted samples, after at least 30 seconds.
+- Colour filling rates by time to full using the canonical storage thresholds; gate enforcement remains unchanged.
+
 ## 0.7.3 — 2026-10-09
 
 - Dim Jev's seven-day spend detail like the Rate-line reset text.

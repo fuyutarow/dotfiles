@@ -24,6 +24,15 @@ without a display ID retain the worker session head/tail format.
 
 Storage still reads the canonical `agents/hooks/storage-headroom.toml` as runtime data, resolved
 relative to this package rather than cwd. Only `storageLine` is imported from shared storage code.
+Disk secondary text shows three significant figures of free GiB. A fill/free rate appears at
+0.05 GiB/min or more, with two significant figures and ↓/↑ arrows. Each render atomically updates
+`$XDG_STATE_HOME/statusline/disk-rate.json` (default `~/.local/state/statusline/disk-rate.json`).
+Linear regression over the last five minutes smooths short bursts; samples are spaced at least
+five seconds apart, capped at 61 per drive, and must span at least 30 seconds. Missing or corrupt
+state starts a new window silently. A capacity change, backwards clock step, or five-minute gap
+also resets the window. Filling rates turn red/yellow below the drive's `rate_red_minutes` /
+`rate_yellow_minutes` time-to-full thresholds. The gate validates these positive durations but
+does not enforce them yet.
 Dispatch state is read-only: local schemas cite the source lines and contain no state writers.
 The JSON codec is copied locally; its Zod primitive comes from the allowed shared entrypoint,
 which satisfies the repository rule against direct Zod imports and keeps the original schema engine.

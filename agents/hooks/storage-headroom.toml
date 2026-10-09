@@ -27,12 +27,17 @@ deny_pct = 5
 warn_gib = 40
 warn_pct = 10
 stop_gib = 10
+# Display-only time-to-full colours; accepted by the gate but not enforced yet.
+rate_red_minutes = 30
+rate_yellow_minutes = 120
 
 [drive.guest]
 label = "guest /"
 path = "/"
 deny_gib = 40
 deny_pct = 10
+rate_red_minutes = 30
+rate_yellow_minutes = 120
 
 # Appended to every deny. The agent owns further safe diagnosis if the automatic recovery unit
 # cannot restore the floor; neither global trash purge nor stopping WSL is delegated here.

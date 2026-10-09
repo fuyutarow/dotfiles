@@ -205,6 +205,53 @@ const SMALL_SHARE = config((c) => {
 });
 
 describe("enforce-storage-headroom", () => {
+  test("positive rate durations are accepted without changing gate decisions", () => {
+    for (const freeGib of [5, 15, 30]) {
+      const fixture = (durations: boolean) =>
+        cachedConfig(
+          (c) => {
+            drives(10, 10, 20)(c);
+            for (const row of Object.values(c.drive)) {
+              delete row.rate_red_minutes;
+              delete row.rate_yellow_minutes;
+              if (durations) {
+                row.rate_red_minutes = 0.001;
+                row.rate_yellow_minutes = 100_000;
+              }
+            }
+          },
+          freeGib * GiB,
+          100 * GiB,
+        ).env;
+      const baseline = runHook(HOOK, bash("cp x y"), fixture(false));
+      const withRate = runHook(HOOK, bash("cp x y"), fixture(true));
+      expect(withRate.code).toBe(baseline.code);
+      expect(withRate.stdout).toBe(baseline.stdout);
+      expect(withRate.stderr).toBe(baseline.stderr);
+    }
+  });
+
+  test.each([0, -1, "thirty"])(
+    "rate durations reject non-positive or non-numeric value %s",
+    (value) => {
+      const r = runHook(
+        HOOK,
+        bash("cp x y"),
+        config((c) => {
+          driveRow(c, "host").rate_red_minutes = value;
+          driveRow(c, "guest").rate_yellow_minutes = value;
+        }),
+      );
+      const reason = decisionOf(r.stdout)?.permissionDecisionReason ?? "";
+      expect(reason).toContain(
+        "drive.host.rate_red_minutes: expected a positive duration",
+      );
+      expect(reason).toContain(
+        "drive.guest.rate_yellow_minutes: expected a positive duration",
+      );
+    },
+  );
+
   test("a line is the smaller of its size and its share: a huge size with a 0% share does not deny", () => {
     const r = runHook(HOOK, bash("cargo build"), SMALL_SHARE);
     expect(r.code).toBe(0);

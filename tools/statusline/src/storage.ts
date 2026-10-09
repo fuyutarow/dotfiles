@@ -4,7 +4,18 @@ import { join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { storageLine } from "../../shared/src/storage-headroom.ts";
 import { z } from "./zod.ts";
-import { execError } from "./bounded.ts";
+import {
+  execError,
+  readJson,
+  readJsonAsync,
+  writeCache,
+  writeCacheAsync,
+} from "./bounded.ts";
+import {
+  DiskRateStateSchema,
+  diskRateStatePath,
+  updateDiskRates,
+} from "./disk-rate.ts";
 import { DIM, ESC, RST, naSegment, pctFmt } from "./ansi.ts";
 
 // they are read from agents/hooks/storage-headroom.toml ([drive.*]: path, deny_gib, warn_gib),
@@ -27,6 +38,10 @@ export interface DiskReading {
   totalG: number;
   freeG: number;
   col: string; // green / yellow (below warn_gib) / red (below deny_gib)
+  path?: string;
+  rateGibPerMin?: number | undefined; // positive = filling, negative = freeing
+  rateRedMinutes?: number | undefined;
+  rateYellowMinutes?: number | undefined;
 }
 // "Disk C:" (a Windows drive under WSL, /mnt/<letter>), "Disk WSL" (the WSL guest root), or
 // "Disk <path>" elsewhere — a bare "C:" or "/" beside CPU/RAM/VRAM did not say what it was.
@@ -58,13 +73,25 @@ export const StorageConfigSchema = z.object({
         deny_pct: z.number().optional(),
         warn_gib: z.number().optional(),
         warn_pct: z.number().optional(),
+        rate_red_minutes: z.number().positive().optional(),
+        rate_yellow_minutes: z.number().positive().optional(),
       }),
     )
     .optional(),
 });
-export function diskReadings(): Result<DiskEntry[], string> {
+export interface DiskReadOptions {
+  configPath?: string;
+  statePath?: string;
+  now?: number;
+}
+export function diskReadings(
+  options: DiskReadOptions = {},
+): Result<DiskEntry[], string> {
   const raw = fromThrowable(
-    (): unknown => Bun.TOML.parse(readFileSync(STORAGE_CONFIG, "utf8")),
+    (): unknown =>
+      Bun.TOML.parse(
+        readFileSync(options.configPath ?? STORAGE_CONFIG, "utf8"),
+      ),
     () => "storage-headroom.toml unreadable",
   )();
   if (raw.isErr()) return err(raw.error);
@@ -114,19 +141,29 @@ export function diskReadings(): Result<DiskEntry[], string> {
     out.push({
       kind: "reading",
       label: diskLabel(path),
+      path,
+      rateRedMinutes: d.rate_red_minutes,
+      rateYellowMinutes: d.rate_yellow_minutes,
       usedG,
       totalG,
       freeG,
       col,
     });
   }
-  return ok(out);
+  const statePath = options.statePath ?? diskRateStatePath();
+  const rated = updateDiskRates(
+    out,
+    readJson(statePath, DiskRateStateSchema),
+    options.now ?? Temporal.Now.instant().epochMilliseconds,
+  );
+  writeCache(statePath, rated.state);
+  return ok(rated.entries);
 }
 /** Async render-path disk read, so config and filesystem probes do not block rendering. */
-export async function diskReadingsAsync(): Promise<
-  Result<DiskEntry[], string>
-> {
-  const text = await Bun.file(STORAGE_CONFIG)
+export async function diskReadingsAsync(
+  options: DiskReadOptions = {},
+): Promise<Result<DiskEntry[], string>> {
+  const text = await Bun.file(options.configPath ?? STORAGE_CONFIG)
     .text()
     .catch(() => null);
   if (text === null) return err("storage-headroom.toml unreadable");
@@ -172,18 +209,56 @@ export async function diskReadingsAsync(): Promise<
     out.push({
       kind: "reading",
       label: diskLabel(path),
+      path,
+      rateRedMinutes: d.rate_red_minutes,
+      rateYellowMinutes: d.rate_yellow_minutes,
       usedG,
       totalG,
       freeG,
       col,
     });
   }
-  return ok(out);
+  const statePath = options.statePath ?? diskRateStatePath();
+  const rated = updateDiskRates(
+    out,
+    await readJsonAsync(statePath, DiskRateStateSchema),
+    options.now ?? Temporal.Now.instant().epochMilliseconds,
+  );
+  await writeCacheAsync(statePath, rated.state);
+  return ok(rated.entries);
 }
 export function diskSegment(d: DiskEntry): string {
   if (d.kind === "miss") return naSegment(d.label, d.why);
   const pct = pctFmt((d.usedG / d.totalG) * 100).text;
-  const total = String(Math.round(d.totalG));
-  const used = String(Math.round(d.usedG)).padStart(total.length);
-  return `${d.label} ${ESC}[${d.col}m${pct}%${RST} ${DIM}(${used}/${total}G)${RST}`;
+  const free = significant(d.freeG, 3);
+  let rate = "";
+  const fill = d.rateGibPerMin;
+  if (fill !== undefined && Number.isFinite(fill) && Math.abs(fill) >= 0.05) {
+    let colour = "";
+    const minutes = d.freeG / fill;
+    if (
+      fill > 0 &&
+      d.rateYellowMinutes !== undefined &&
+      minutes < d.rateYellowMinutes
+    )
+      colour = `${ESC}[38;5;178m`;
+    if (
+      fill > 0 &&
+      d.rateRedMinutes !== undefined &&
+      minutes < d.rateRedMinutes
+    )
+      colour = `${ESC}[38;5;167m`;
+    rate = ` ${colour}${fill > 0 ? "↓" : "↑"}${significant(Math.abs(fill), 2)}GiB/min`;
+  }
+  return `${d.label} ${ESC}[${d.col}m${pct}%${RST} ${DIM}${free}GiB free${rate}${RST}`;
+}
+
+function significant(value: number, digits: number): string {
+  if (value === 0) return "0";
+  const rounded = Number(value.toPrecision(digits));
+  const decimals = Math.max(
+    0,
+    digits - 1 - Math.floor(Math.log10(Math.abs(rounded))),
+  );
+  return rounded.toFixed(Math.min(decimals, 100));
 }

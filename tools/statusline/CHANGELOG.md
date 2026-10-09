@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2 — 2026-10-09
+
+- Match Jev provider and spend coloring to the existing Rate-line styles.
+
 ## 0.7.1 — 2026-10-09
 
 - Label Jev's computed seven-day spend and keep unknown agent costs visible as `$–`.

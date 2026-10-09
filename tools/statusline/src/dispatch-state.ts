@@ -1,4 +1,4 @@
-// Read-only wire contract ported from tools/agent-dispatch/src/state.ts:
+// Read-only wire contract ported from tools/agx/src/state.ts:
 // state directory: lines 9-20; marker path: 47-49; ActiveSchema: 68-79;
 // progress path/schema: 81-100. No marker, progress, brief or run-log writers.
 import { homedir } from "node:os";
@@ -10,12 +10,12 @@ export const STATE_SCHEMA = 1;
 const nonEmpty = (v: string | undefined): string | undefined =>
   v === undefined || v === "" ? undefined : v;
 
-/** $AGENT_ROUTER_STATE_DIR (test seam), else $XDG_STATE_HOME/agent-router, else ~/.local/state/agent-router. */
+/** $AGX_STATE_DIR (test seam), else $XDG_STATE_HOME/agx, else ~/.local/state/agx. */
 export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
-  const explicit = nonEmpty(env.AGENT_ROUTER_STATE_DIR);
+  const explicit = nonEmpty(env.AGX_STATE_DIR);
   if (explicit !== undefined) return explicit;
   const base = nonEmpty(env.XDG_STATE_HOME) ?? join(homedir(), ".local/state");
-  return join(base, "agent-router");
+  return join(base, "agx");
 }
 /** One JSON marker per running worker: written at start, removed at exit. */
 export const activeDir = (env: NodeJS.ProcessEnv = process.env): string =>
@@ -31,7 +31,7 @@ export const ActiveSchema = z.strictObject({
   started_at: z.string(),
   cwd: z.string(),
   dispatcher_session: z.string().optional(),
-  // Ticket metadata is written on current agent-dispatch markers; the statusline ignores it,
+  // Ticket metadata is written on current agx markers; the statusline ignores it,
   // but the strict wire schema must accept it or the entire live marker disappears.
   ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
 });
@@ -39,7 +39,7 @@ export type Active = z.output<typeof ActiveSchema>;
 
 /** What a running worker is doing, beside its marker: `<run_id>.progress.json` in activeDir.
  *  Codex and Claude workers write activity, cumulative usage when reported, and known cost here;
- *  the statusline Run rows read it, and agent-dispatch removes it with the active marker. */
+ *  the statusline Run rows read it, and agx removes it with the active marker. */
 export const progressFile = (
   runId: string,
   env: NodeJS.ProcessEnv = process.env,

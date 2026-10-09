@@ -19,11 +19,11 @@ authorとverifierを同じbearerにしない。outside observerはtechnical trut
 | delegated executor / verifier / outside observer | Opus 5.5 @ medium (`subagent_type:"opus-medium"`) | 仕様が曖昧、複数リポジトリや大規模リファクタ、設計判断、事実の正確さ、Sonnet が同じ作業で詰まった | authorならverifierはgpt-5.6-terra。 |
 | delegated executor / verifier / outside observer | gpt-5.6-terra @ high (`model:"gpt-5.6-terra", reasoning_effort:"high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
 | delegated executor / verifier / outside observer | gpt-6.1-sol 以上 @ medium or high (`model:"gpt-6.1-sol", reasoning_effort:"medium" or "high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
-| delegated executor / verifier / outside observer | gpt-6-luna @ any effort — Claude 側からは `agent-dispatch --choice luna-<effort>`(既定 `luna-high`)、Codex 側は `model:"gpt-6-luna", reasoning_effort:<any>` | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | gpt-6-luna @ any effort — Claude 側からは `agx dispatch`(既定 `luna-high`)、Codex 側は `model:"gpt-6-luna", reasoning_effort:<any>` | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
 
 Claude 側の dispatch は `agents/models/dispatch-roster.toml`(2026-10-05、luna first)の表から1行を
 選ぶ。理由の記述はいらない(ラジオボタン式)。各行の `enabled` がconfigのスイッチで、`false` の行は実装を残したまま表から外れ、hook が「disabled」として拒否する(2026-10-05 の config は luna のみ。Claude の行は off、`enabled = true` 一行で戻る)。luna の行は main の Bash から
-`agent-dispatch --choice <id>`(並列なら背景で複数)、Claude の行は Agent ツールの
+`agx dispatch --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write`(並列なら背景で複数)、Claude の行は Agent ツールの
 `subagent_type:"<id>"`。Workflow ツールは使わない。`enforce-dispatch-contract.ts` が、Workflow、
 表にない `subagent_type`、luna の id を Agent に渡したものを拒否し、表を示す。
 Codex側の`spawn_agent`も同様に`model`と`reasoning_effort`を必ず明示する(上の三系統のみ、

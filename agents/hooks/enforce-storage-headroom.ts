@@ -836,7 +836,7 @@ function isRecoveryOrRead(command: string, cwd: string): boolean {
       // Ticket write scope is not visible in this command line. Dispatch state is small, and
       // every spawned worker still passes through its own storage gate.
       if (
-        eff.name === "agent-dispatch" &&
+        eff.name === "agx" &&
         ["run", "resume", "grade", "ack", "stats"].includes(sub)
       )
         return true;

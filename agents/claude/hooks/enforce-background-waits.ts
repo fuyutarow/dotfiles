@@ -14,14 +14,14 @@
 //     - timeout > FOREGROUND_MAX_MS (asking for more than the default bound announces a long call), or
 //     - the command is a wait loop: `until`/`while` … `sleep`.
 // A dispatched `claude -p` worker has no human session to hold and cannot receive a background
-// completion notice. `run-claude.ts` marks that child with AGENT_ROUTER_WORKER=1; in that
+// completion notice. `run-claude.ts` marks that child with AGX_WORKER=1; in that
 // session all three background rules are lifted. The worker's own run-claude timeout still bounds it.
 //
 // An allowed foreground call has its start recorded, so its duration is measured too. A command
 // never measured passes once; from then on its own history decides. run_in_background is a Claude
 // Code tool field (Codex has no such mode), so this is a Claude hook (agents/claude/settings.json).
 //
-// THE OTHER DIRECTION (2026-10-08, firedancer coordinator): `agent-dispatch resume … &` run inside a
+// THE OTHER DIRECTION (2026-10-08, firedancer coordinator): `agx dispatch --resume … &` run inside a
 // call that already had run_in_background:true. The harness observes the OUTER shell; the inner `&`
 // job outlives it unobserved, so its result never reached the session and nothing caught it. So when
 // run_in_background is true, a shell-level `&` whose job is never `wait`ed in the same script is
@@ -35,8 +35,8 @@ import { effective, parseShell } from "../../hooks/shell-syntax.ts";
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import {
-  AGENT_ROUTER_WORKER_ENV,
-  AGENT_ROUTER_WORKER_VALUE,
+  AGX_WORKER_ENV,
+  AGX_WORKER_VALUE,
 } from "../../../tools/shared/src/worker-env.ts";
 import {
   commandKey,
@@ -402,8 +402,7 @@ export function unwaitedJobs(command: string): string | undefined {
 const payload = import.meta.main ? readStdinJson() : undefined;
 const input = at(payload, "tool_input");
 const isBash = strAt(payload, "tool_name") === "Bash";
-const isWorker =
-  process.env[AGENT_ROUTER_WORKER_ENV] === AGENT_ROUTER_WORKER_VALUE;
+const isWorker = process.env[AGX_WORKER_ENV] === AGX_WORKER_VALUE;
 const command = isBash ? (strAt(input, "command") ?? "") : "";
 const key = isBash ? commandKey(command) : undefined;
 const dir = stateDir();

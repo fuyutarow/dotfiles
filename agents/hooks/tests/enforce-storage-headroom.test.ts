@@ -344,7 +344,7 @@ describe("enforce-storage-headroom", () => {
     }
   });
 
-  test("allows named agent-dispatch commands below the deny line", () => {
+  test("allows named agx commands below the deny line", () => {
     const { env } = cachedConfig(
       (c) => {
         drives(10, 10, 20)(c);
@@ -354,19 +354,16 @@ describe("enforce-storage-headroom", () => {
     );
     for (const subcommand of ["run", "resume", "grade", "ack", "stats"]) {
       expect(
-        decisionOf(
-          runHook(HOOK, bash(`agent-dispatch ${subcommand}`), env).stdout,
-        ),
+        decisionOf(runHook(HOOK, bash(`agx ${subcommand}`), env).stdout),
       ).toBeNull();
     }
     expect(
-      decisionOf(runHook(HOOK, bash("agent-dispatch ask"), env).stdout)
+      decisionOf(runHook(HOOK, bash("agx pick ask"), env).stdout)
         ?.permissionDecision,
     ).toBe("deny");
     expect(
-      decisionOf(
-        runHook(HOOK, bash("agent-dispatch stats && cp x y"), env).stdout,
-      )?.permissionDecision,
+      decisionOf(runHook(HOOK, bash("agx ledger stats && cp x y"), env).stdout)
+        ?.permissionDecision,
     ).toBe("deny");
   });
 

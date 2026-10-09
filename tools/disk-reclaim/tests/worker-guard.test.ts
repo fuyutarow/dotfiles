@@ -3,25 +3,25 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { realTmpdir } from "./fixtures/temp.ts";
 import {
-  AGENT_ROUTER_WORKER_ENV,
-  AGENT_ROUTER_WORKER_VALUE,
+  AGX_WORKER_ENV,
+  AGX_WORKER_VALUE,
 } from "../../shared/src/worker-env.ts";
 import { workerMutationRefusal } from "../src/lib/worker-guard.ts";
 
 test("worker guard rejects when HOME and reclaim state are both outside tmp", () => {
   expect(
     workerMutationRefusal({
-      [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+      [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
       HOME: homedir(),
       RECLAIM_STATE_DIR: join(homedir(), ".local/state/reclaim"),
     }),
-  ).toContain("agent-dispatch worker guard");
+  ).toContain("agx worker guard");
 });
 
 test("worker guard permits a tmp HOME", () => {
   expect(
     workerMutationRefusal({
-      [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+      [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
       HOME: join(realTmpdir, "disk-reclaim-test-home"),
       RECLAIM_STATE_DIR: join(homedir(), ".local/state/reclaim"),
     }),
@@ -31,7 +31,7 @@ test("worker guard permits a tmp HOME", () => {
 test("worker guard permits reclaim state under tmp", () => {
   expect(
     workerMutationRefusal({
-      [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+      [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
       HOME: homedir(),
       RECLAIM_STATE_DIR: join(realTmpdir, "disk-reclaim-test-state"),
     }),

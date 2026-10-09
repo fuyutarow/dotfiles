@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { decoded } from "../../../hooks/tests/decode.ts";
-import { AGENT_ROUTER_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
+import { AGX_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
 
@@ -24,7 +24,7 @@ export function runHook(
     CLAUDE_HOOK_QUIET: "1",
     ...env,
   };
-  delete childEnv[AGENT_ROUTER_WORKER_ENV];
+  delete childEnv[AGX_WORKER_ENV];
   const r = spawnSync(process.execPath, [join(HOOKS_DIR, name)], {
     input: typeof payload === "string" ? payload : JSON.stringify(payload),
     encoding: "utf8",

@@ -778,9 +778,7 @@ function nameAModel(order: Order, floors: Floors): string {
   const e = example === undefined ? "" : `, e.g. -m ${exampleSlug(example)}`;
   const skill = order.cli === "agy" ? "antigravity" : order.cli;
   const contract =
-    order.cli === "codex"
-      ? "agent-dispatch CLI contract C1"
-      : `driving-${skill} C2`;
+    order.cli === "codex" ? "agx CLI contract C1" : `driving-${skill} C2`;
   return `\`${order.label}\` names no model — a bare ${order.cli} call silently inherits its own configured default, which is not necessarily a current one (${contract}: every embedded call passes the model explicitly). Add -m <slug> of the current generation${e}`;
 }
 

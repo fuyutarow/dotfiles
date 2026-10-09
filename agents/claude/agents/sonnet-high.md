@@ -3,7 +3,7 @@ name: sonnet-high
 description: >-
   Claude row of the dispatch roster (agents/models/dispatch-roster.toml): Sonnet at high
   effort. For hard agentic work, long tool loops, and live harness edits that luna
-  (agent-dispatch --choice luna-*) does poorly. Pick by the roster table, not by justification.
+  (agx dispatch) does poorly. Pick by the roster table, not by justification.
 model: sonnet
 effort: high
 ---

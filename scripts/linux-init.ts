@@ -33,10 +33,7 @@ import { join } from "node:path";
 import { cli } from "cleye";
 import { $ } from "bun";
 import { buildLinuxInitEnv } from "./linux-init-env.ts";
-import {
-  declareRentedCodexHost,
-  hostDeclarationProbes,
-} from "./agent-dispatch-host.ts";
+import { declareRentedCodexHost, hostDeclarationProbes } from "./agx-host.ts";
 import { sudoIsOurs } from "./sudo-group.ts";
 
 const HOME = homedir();
@@ -95,7 +92,7 @@ const parsed = cli(
     flags: {
       rented: {
         type: Boolean,
-        description: "declare this owner's rented box for agent-dispatch",
+        description: "declare this owner's rented box for agx",
       },
     },
   },

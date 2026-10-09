@@ -104,8 +104,8 @@ agents/skills/writing-bun-scripts/tests/cleye-corpus.test.ts:107
 tools/smart-open/src/smart-open.ts:361
 tools/smart-open/src/smart-open.ts:378
 wsl/sshd-dotfiles.conf:3
-scripts/agent-dispatch-host.ts:119
-scripts/agent-dispatch-host.ts:142
+scripts/agx-host.ts:119
+scripts/agx-host.ts:142
 scripts/secrets-push.ts:1
 scripts/secrets-push.ts:38
 scripts/secrets-push.ts:45
@@ -148,11 +148,11 @@ scripts/tests/doctor.test.ts:299
 scripts/tests/doctor.test.ts:306
 scripts/tests/secrets-push.test.ts:6
 scripts/tests/secrets-push.test.ts:8
-tools/agent-dispatch/src/routes.ts:49
+tools/agx/src/routes.ts:49
 agents/skills/driving-cocoindex/tests/forge-verification-ledger.md:530
 agents/skills/driving-cocoindex/tests/forge-verification-ledger.md:532
 agents/claude/hooks/enforce-no-new-bash.ts:21
-tools/agent-dispatch/tests/admission-routes.test.ts:190
+tools/agx/tests/admission-routes.test.ts:190
 scripts/tests/bootstrap-linux.test.ts:13
 scripts/tests/bootstrap-linux.test.ts:26
 scripts/tests/bootstrap-linux.test.ts:31
@@ -192,8 +192,8 @@ scripts/tests/box-init.test.ts:173
 scripts/tests/box-init.test.ts:186
 scripts/tests/wsl-wake.test.ts:1
 scripts/tests/wsl-wake.test.ts:10
-scripts/tests/agent-dispatch-host.test.ts:12
-scripts/tests/agent-dispatch-host.test.ts:15
+scripts/tests/agx-host.test.ts:12
+scripts/tests/agx-host.test.ts:15
 scripts/wsl-wake.ts:4
 scripts/wsl-wake.ts:19
 scripts/wsl-wake.ts:26

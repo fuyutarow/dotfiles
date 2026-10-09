@@ -1,0 +1,9 @@
+{
+  "name": "agx",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agx": "src/agx.ts"
+  }
+}

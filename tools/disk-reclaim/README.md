@@ -37,7 +37,7 @@ same-uid `cargo`, `rustc`, or `rust-analyzer` process is live.
 `--fetch` is opt-in for plan/run: it refreshes jj Git remotes before judging workspaces; failure
 leaves them ASK. The pushed-content revset excludes the colocated `@git` pseudo-remote.
 
-Inside an agent-dispatch worker, `run` and `delete --yes` are refused unless either `HOME` or the
+Inside an agx worker, `run` and `delete --yes` are refused unless either `HOME` or the
 reclaim state directory is under the system tmp directory. Run mutating commands from the owner's
 own shell, or set `HOME` to a tmp directory for tests. `plan`, `targets`, and `receipts` remain
 available in workers.

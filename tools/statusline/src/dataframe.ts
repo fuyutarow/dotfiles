@@ -47,7 +47,7 @@ export interface Dataframe {
   jobs: Admitted[];
   orphans: number;
   jobScanWhy?: string | undefined; // the process scan failed: jobs/orphans are unknown, not zero
-  // agent-dispatch workers. undefined = agent-dispatch has never run on this machine (no state dir).
+  // agx workers. undefined = agx has never run on this machine (no state dir).
   routes?: Result<RouteRun[], string> | undefined;
   dispatchWarning?: string | undefined; // codex-share warning for this host, see dispatch-warning.ts
   // Host readings are Results, not optionals: "could not be taken" carries its reason, and

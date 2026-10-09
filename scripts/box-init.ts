@@ -182,19 +182,16 @@ export function buildPlan(o: Opts): Step[] {
     {
       name: "codex host",
       group: "",
-      probe: onBox(
-        alias,
-        "bun $HOME/dotfiles/scripts/agent-dispatch-host.ts --check",
-      ),
+      probe: onBox(alias, "bun $HOME/dotfiles/scripts/agx-host.ts --check"),
       act: onBox(
         alias,
         logged(
           "codex-host",
-          "bun $HOME/dotfiles/scripts/agent-dispatch-host.ts --rented",
+          "bun $HOME/dotfiles/scripts/agx-host.ts --rented",
           2 * MIN,
         ),
       ),
-      done: "agent-dispatch host declaration",
+      done: "agx host declaration",
       timeoutMs: 2 * MIN,
       log: "codex-host",
       fix: "the rented Linux box must have Bun available and pass the measured container and user-namespace checks",

@@ -11,8 +11,8 @@ import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import {
-  AGENT_ROUTER_WORKER_ENV,
-  AGENT_ROUTER_WORKER_VALUE,
+  AGX_WORKER_ENV,
+  AGX_WORKER_VALUE,
 } from "../../shared/src/worker-env.ts";
 import { Plan, ReceiptV1 } from "../src/model.ts";
 import { readReceipts, stateDir, writeReceipt } from "../src/receipt.ts";
@@ -40,7 +40,7 @@ function invoke(
         ...cliEnv(fixture()),
         RECLAIM_STATE_DIR: state,
       };
-      delete isolated[AGENT_ROUTER_WORKER_ENV];
+      delete isolated[AGX_WORKER_ENV];
       return { ...isolated, ...env };
     })(),
     timeout: 10_000,
@@ -277,7 +277,7 @@ test("worker mutating commands refuse non-tmp HOME and state before touching any
   const testConfig = cliEnv(root);
   const workerEnv = {
     ...testConfig,
-    [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+    [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
     HOME: realHome,
     RECLAIM_STATE_DIR: join(
       realHome,
@@ -292,7 +292,7 @@ test("worker mutating commands refuse non-tmp HOME and state before touching any
     const result = invoke(args, join(root, "state"), workerEnv);
     expect(result.exit).toBe(2);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("agent-dispatch worker guard");
+    expect(result.stderr).toContain("agx worker guard");
     expect(result.stderr).toContain("owner's own shell");
     expect(result.stderr).toContain("set HOME to a tmp dir for tests");
   }
@@ -303,7 +303,7 @@ test("worker with tmp HOME reaches run and delete actions", () => {
   const root = fixture();
   const worker = {
     ...cliEnv(root),
-    [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+    [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
   };
   const run = invoke(["run", "rust", "--yes"], join(root, "state"), worker);
   expect(run.exit).toBe(0);
@@ -318,7 +318,7 @@ test("worker with tmp HOME reaches run and delete actions", () => {
   );
   expect(deleted.exit).toBe(0);
   expect(deleted.stdout).toContain(candidate);
-  expect(deleted.stderr).not.toContain("agent-dispatch worker guard");
+  expect(deleted.stderr).not.toContain("agx worker guard");
   expect(deleted.stdout).not.toContain("process usage is unknown");
   expect(existsSync(candidate)).toBe(false);
 });
@@ -346,7 +346,7 @@ test("worker read-only commands stay isolated under a tmp HOME", () => {
   const root = fixture();
   const workerEnv = {
     ...cliEnv(root),
-    [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+    [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
     HOME: root,
     RECLAIM_STATE_DIR: join(root, "readonly-state"),
   };

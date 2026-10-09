@@ -1,2 +1,2 @@
-export const AGENT_ROUTER_WORKER_ENV = "AGENT_ROUTER_WORKER";
-export const AGENT_ROUTER_WORKER_VALUE = "1";
+export const AGX_WORKER_ENV = "AGX_WORKER";
+export const AGX_WORKER_VALUE = "1";

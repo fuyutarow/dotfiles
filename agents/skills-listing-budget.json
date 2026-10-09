@@ -46,7 +46,7 @@
       "from": 62517,
       "to": 63355,
       "spentBy": "Jev CLI skill (retired 2026-10-06)",
-      "reason": "A new 897-character name+description entry; the 69-skill collection measured 63,355 characters after admission, with the prior collection at 62,458 (59 below its 62,517 ratchet). Admission closed an ownership void around Jev's non-generative state-plus-typed-questions to probabilities boundary, primitive choice, caller-side abstention policy, and exact JSON relay. Retiring or merging a sibling was rejected because doing so would collapse JUDGMENT-NOT-AGENT into a tool-using/generative worker contract. The vendor typesafe-ai skill remained the application-integration owner; the Jev guide owned immediate agent/shell operation through the bundled official-API runner. Its worker and Jev implementation moved into agents/routing-control, and the single entrypoint is agent-router."
+      "reason": "A new 897-character name+description entry; the 69-skill collection measured 63,355 characters after admission, with the prior collection at 62,458 (59 below its 62,517 ratchet). Admission closed an ownership void around Jev's non-generative state-plus-typed-questions to probabilities boundary, primitive choice, caller-side abstention policy, and exact JSON relay. Retiring or merging a sibling was rejected because doing so would collapse JUDGMENT-NOT-AGENT into a tool-using/generative worker contract. The vendor typesafe-ai skill remained the application-integration owner; the Jev guide owned immediate agent/shell operation through the bundled official-API runner. Its worker and Jev implementation moved into agents/routing-control, and the single entrypoint is agx."
     },
     {
       "date": "2026-09-17",
@@ -131,13 +131,13 @@
       "date": "2026-10-05",
       "from": 56059,
       "to": 53106,
-      "reason": "MECE reorganization of fan-out guidance. The launch mechanics for parallel work (luna rows as background agent-dispatch, Claude rows as Agent, other CLIs as background Bash, no Workflow, P7 on Linux) now have one home: orchestrating-agents, 並列化の運び方. The per-skill description clauses (Fan-out:/Workflow-native:/Execution:) were removed from 29 descriptions; each body keeps its own solo/fan-out rule (two bodies that lacked it gained one line). The working-tree floor measures 59 active skills and 53,106 name-plus-description characters; the ceiling is pinned to that static proxy, not to measured per-turn tokens."
+      "reason": "MECE reorganization of fan-out guidance. The launch mechanics for parallel work (luna rows as background agx, Claude rows as Agent, other CLIs as background Bash, no Workflow, P7 on Linux) now have one home: orchestrating-agents, 並列化の運び方. The per-skill description clauses (Fan-out:/Workflow-native:/Execution:) were removed from 29 descriptions; each body keeps its own solo/fan-out rule (two bodies that lacked it gained one line). The working-tree floor measures 59 active skills and 53,106 name-plus-description characters; the ceiling is pinned to that static proxy, not to measured per-turn tokens."
     },
     {
       "date": "2026-10-06",
       "from": 53867,
       "to": 50782,
-      "reason": "Retire three runner/Jev skill manuals after their implementations moved into agents/routing-control and dispatch/Jev gained the single entrypoint agent-router. The active collection measures 57 skills and 50,782 name+description characters; the ceiling is lowered to that measured total. The archive index records the individual admission dates and retirement decisions."
+      "reason": "Retire three runner/Jev skill manuals after their implementations moved into agents/routing-control and dispatch/Jev gained the single entrypoint agx. The active collection measures 57 skills and 50,782 name+description characters; the ceiling is lowered to that measured total. The archive index records the individual admission dates and retirement decisions."
     }
   ]
 }

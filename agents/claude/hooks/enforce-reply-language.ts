@@ -12,13 +12,13 @@ import {
   stripNonProse,
   japaneseShare,
   hasEnglishProseSegment,
-} from "../../../tools/use-hooks/src/english.ts";
+} from "../../../tools/agx-usehooks/src/english.ts";
 export {
   stripNonProse,
   proseSegments,
   identifierHeavy,
   hasEnglishProseSegment,
-} from "../../../tools/use-hooks/src/english.ts";
+} from "../../../tools/agx-usehooks/src/english.ts";
 
 const MIN_LETTERS = 40;
 // WHY 0.3: allow Japanese prose that contains ordinary English identifiers while still catching

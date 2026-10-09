@@ -850,7 +850,7 @@ export async function judgeJev(
 ): Promise<RerankResult> {
   // One key lookup for every Jev caller (tools/shared/src/typesafe-key.ts: env, then fnox, then the
   // dotenv file). This file had its own copy without fnox, so on a machine whose key lives in fnox
-  // `rr` reported "Jev unavailable" while agent-dispatch used Jev (2026-10-06).
+  // `rr` reported "Jev unavailable" while agx used Jev (2026-10-06).
   const lookup = typesafeKey();
   if (!lookup.ok) return { reason: lookup.reason };
   const apiKey = lookup.key;

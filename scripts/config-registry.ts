@@ -315,7 +315,7 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: [
       "tools/shared/package.json",
-      "tools/use-hooks/package.json",
+      "tools/agx-usehooks/package.json",
       "tools/smart-open/package.json",
       "tools/repo-retrieve/package.json",
       "tools/agent-resource-run/package.json",
@@ -323,7 +323,7 @@ const OTHER: readonly Surface[] = [
       "tools/storage-headroom/package.json",
       "tools/statusline/package.json",
       "tools/serena-foreground/package.json",
-      "tools/agent-dispatch/package.json",
+      "tools/agx/package.json",
       "tools/coredev/package.json",
     ],
     deployed: "the checkout",
@@ -460,11 +460,10 @@ const OTHER: readonly Surface[] = [
       "agents/models/dispatch-roster.contract.md",
     ],
     deployed: "the checkout; rendered into ~/.claude/CLAUDE.md",
-    consumer:
-      "dispatch hook, agent-dispatch, agent-dispatch --choice, render-home",
+    consumer: "dispatch hook, agx dispatch, codex worker, render-home",
     writer:
       "human, in the repo (CONFIGURATION CONTRACT: dispatch-roster.contract.md)",
-    verify: `mise run test:hooks · test:agent-dispatch · ${DOCTOR} (rendered)`,
+    verify: `mise run test:hooks · test:agx · ${DOCTOR} (rendered)`,
   },
   {
     kind: "in-place",

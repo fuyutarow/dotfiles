@@ -126,21 +126,19 @@ async function checkSshCmd(host: string): Promise<Finding> {
 }
 
 async function checkCodexRoute(host: string): Promise<Finding> {
-  const r = await run([...SSH, host, "agent-dispatch doctor"], null, 30_000);
-  const status = /agent-dispatch: codex: (available|unavailable) — (.*)/u.exec(
-    r.err,
-  );
+  const r = await run([...SSH, host, "agx pick doctor"], null, 30_000);
+  const status = /agx: codex: (available|unavailable) — (.*)/u.exec(r.err);
   if (status?.[1] === "available")
     return finding(
       "codex-route",
       "PASS",
-      `agent-dispatch doctor: codex available — ${status[2]}`,
+      `agx pick doctor: codex available — ${status[2]}`,
     );
   if (status?.[1] === "unavailable")
     return finding(
       "codex-route",
       "FAIL",
-      `agent-dispatch doctor: codex unavailable — ${status[2]}`,
+      `agx pick doctor: codex unavailable — ${status[2]}`,
       status[2]?.includes("not logged in") === true
         ? `from the Mac: mise run auth:push -- ${host}`
         : `on ${host}: cd ~/dotfiles && mise run linux:init -- --rented (only for an owner's disposable Vast container; never on a shared server)`,
@@ -150,13 +148,13 @@ async function checkCodexRoute(host: string): Promise<Finding> {
   return finding(
     "codex-route",
     "FAIL",
-    `agent-dispatch doctor did not report Codex route status (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${detail}`,
+    `agx pick doctor did not report Codex route status (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${detail}`,
     `on ${host}: cd ~/dotfiles && mise run linux:init; use --rented only for an owner's disposable Vast container`,
   );
 }
 
 // The agents can work there: Codex and Claude logged in (a luna worker fails at launch without
-// Codex's login — 2026-10-06), and Jev's key opens through fnox (else agent-dispatch uses its default
+// Codex's login — 2026-10-06), and Jev's key opens through fnox (else agx uses its default
 // row and rr its local judge: stated, not silent).
 async function checkAgents(host: string): Promise<Finding> {
   const probe = [
@@ -203,7 +201,7 @@ async function checkAgents(host: string): Promise<Finding> {
         "agents",
         "WARN",
         stateDetails.join("; ") +
-          "; no Jev key here — agent-dispatch uses its default row, rr its local judge",
+          "; no Jev key here — agx uses its default row, rr its local judge",
         `if ${host}'s root is trusted: mise run secrets:push -- ${host}`,
       );
 }

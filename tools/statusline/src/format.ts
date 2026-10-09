@@ -125,10 +125,10 @@ export function render(df: Dataframe): string {
     }
   }
 
-  // Run rows: present while agent-dispatch has workers (or stale markers); n/a when unreadable.
+  // Run rows: present while agx has workers (or stale markers); n/a when unreadable.
   let runLines: string[] = [];
   if (df.routes !== undefined && df.routes.isErr())
-    runLines = [naSegment("agent-dispatch", df.routes.error)];
+    runLines = [naSegment("agx", df.routes.error)];
   else if (df.routes !== undefined)
     runLines = routeLines(df.routes.value, df.sid);
   if (df.dispatchWarning !== undefined)

@@ -98,7 +98,7 @@ What the bootstrap step runs, by hand if the task itself is the thing broken:
 ssh -p <port> root@<host> 'curl -fsSL https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh | bash'
 ```
 
-`mise run box:init -- <alias>` also writes the agent-dispatch host declaration on this owner's rented box when its measured container and user-namespace checks pass.
+`mise run box:init -- <alias>` also writes the agx host declaration on this owner's rented box when its measured container and user-namespace checks pass.
 
 Right after pushing a change to it, use the commit in the URL instead of `alpha`
 (`…/dotfiles/<commit>/scripts/bootstrap-linux.sh`): raw.githubusercontent.com served the

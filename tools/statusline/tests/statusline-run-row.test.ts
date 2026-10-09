@@ -10,8 +10,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// The statusline Run rows (no "Run:" head; each line starts with its row id): agent-dispatch's running workers, read from its markers
-// (tools/agent-dispatch/src/state.ts). One line per live worker (row, elapsed time, label), the
+// The statusline Run rows (no "Run:" head; each line starts with its row id): agx's running workers, read from its markers
+// (tools/agx/src/state.ts). One line per live worker (row, elapsed time, label), the
 // longest-running first; a marker whose process is gone is counted as stale, never hidden; more
 // than RUN_LINES workers say `+N more`; no state dir at all means no row.
 
@@ -113,7 +113,7 @@ async function render(stateDir: string): Promise<string> {
       HOME: scratch,
       PATH: bin,
       TZ: "UTC",
-      AGENT_ROUTER_STATE_DIR: stateDir,
+      AGX_STATE_DIR: stateDir,
     },
     timeout: 30_000,
   });
@@ -629,7 +629,7 @@ describe("statusline Run row", () => {
     expect(out).not.toMatch(/^luna-high .* killed/mu);
   });
 
-  test("no agent-dispatch state on this machine: no Run row at all", async () => {
+  test("no agx state on this machine: no Run row at all", async () => {
     const out = await render(join(scratch, "never"));
     expect(out).not.toContain("stale×");
     expect(out).not.toContain(" │ ");

@@ -331,7 +331,7 @@ run = "bunx --bun tsgo --noEmit"
 [tasks.test]
 alias = "t"
 description = "Test the repo: hooks, resource control, repo-retrieve, Bun script floor, skills, zsh terminal hygiene, and toolchain scope"
-depends = ["test:hooks", "test:resource-control", "test:agent-dispatch", "test:scripts", "test:skills", "test:android", "test:zsh", "test:mise-scope"]
+depends = ["test:hooks", "test:resource-control", "test:agx", "test:scripts", "test:skills", "test:android", "test:zsh", "test:mise-scope"]
 
 [tasks."test:android"]
 dir = "{{config_root}}"
@@ -357,10 +357,15 @@ dir = "{{config_root}}"
 description = "repo-retrieve route and CLI contract tests (fake ccc/rg executables); also run by test:scripts via tools/*/tests"
 run = "bun test tools/repo-retrieve/tests"
 
-[tasks."test:agent-dispatch"]
+[tasks."agx:migrate-state"]
 dir = "{{config_root}}"
-description = "agent-dispatch (the one worker entry point) tests: fake agent-dispatch, fake Jev, scratch state dir"
-run = "bun test tools/agent-dispatch/tests"
+description = "Move previous dispatch state to ~/.local/state/agx once; refuse live runs or two state directories"
+run = "bun tools/agx/src/migrate-state.ts"
+
+[tasks."test:agx"]
+dir = "{{config_root}}"
+description = "agx (the one worker entry point) tests: fake agx, fake Jev, scratch state dir"
+run = "bun test tools/agx/tests"
 
 [tasks."test:skills"]
 dir = "{{config_root}}"
@@ -732,7 +737,7 @@ run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 # (it ends by calling this as the target user), or run it bare where there is no root (sol).
 # Only Brewfile.core, downloaded by mise; no Homebrew, no systemd.
 [tasks."linux:init"]
-description = "Core dev utilities for a throwaway Linux box (experiment toolchains stay with each repo's mise.toml): Brewfile.core via mise prebuilt releases into ~/.local/bin (root or not), agent CLIs, dotfile links. For an owner's disposable Vast container only, pass --rented to declare agent-dispatch isolation when measured checks pass; never use on a shared server. Entry point from scratch: curl …/scripts/bootstrap-linux.sh | bash as root; without root see the scripts/linux-init.ts header. Check from your machine: mise run doctor:remote -- <host>"
+description = "Core dev utilities for a throwaway Linux box (experiment toolchains stay with each repo's mise.toml): Brewfile.core via mise prebuilt releases into ~/.local/bin (root or not), agent CLIs, dotfile links. For an owner's disposable Vast container only, pass --rented to declare agx isolation when measured checks pass; never use on a shared server. Entry point from scratch: curl …/scripts/bootstrap-linux.sh | bash as root; without root see the scripts/linux-init.ts header. Check from your machine: mise run doctor:remote -- <host>"
 run = "bun ~/dotfiles/scripts/linux-init.ts"
 
 # Run FROM THE MAC after a rental is reachable. Renting itself (offer, cap, tier) stays a judgment.

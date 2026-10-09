@@ -106,7 +106,7 @@ const extraWorker = (
     writeFileSync(join(active, `${name}.progress.json`), progressFor(session));
 };
 
-// Extra agent-dispatch state on top of the base worker, written before both entries run.
+// Extra agx state on top of the base worker, written before both entries run.
 const stateVariants: [string, (state: string) => void][] = [
   [
     "codex-share warning shown: five recent Jev picks, none codex, codex route available",
@@ -396,7 +396,7 @@ function expectGolden(
       PATH: bin,
       PWD: "/fixture",
       TZ: "UTC",
-      AGENT_ROUTER_STATE_DIR: join(home, "state"),
+      AGX_STATE_DIR: join(home, "state"),
       CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge",
     };
     const run = (entry: string) => {

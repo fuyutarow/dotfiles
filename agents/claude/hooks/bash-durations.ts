@@ -6,7 +6,7 @@
 // PreToolUse (enforce-background-waits) records the start of every foreground Bash call by its
 // tool_use_id; PostToolUse (record-bash-duration) turns that into a duration and keeps the last
 // KEEP durations per command key. A key is the leading words of the command (`mise run commit`,
-// `bun test`, `agent-dispatch run`), so every call of the same tool shares one history.
+// `bun test`, `agx dispatch`), so every call of the same tool shares one history.
 // Zero-dep (hooks run before node_modules exist): node fs and the vendored zod bundle.
 
 import {

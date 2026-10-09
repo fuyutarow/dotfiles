@@ -9,14 +9,14 @@ import {
   unwaitedJobs,
 } from "../enforce-background-waits.ts";
 import { recordEnd, recordStart } from "../bash-durations.ts";
-import { AGENT_ROUTER_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
+import { AGX_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
 
 // enforce-background-waits: a long or waiting foreground Bash call is denied with the resend to make.
 
 const HOOK = join(import.meta.dir, "..", "enforce-background-waits.ts");
 const decide = (tool_input: Record<string, unknown>): string => {
   const env = { ...process.env };
-  delete env[AGENT_ROUTER_WORKER_ENV];
+  delete env[AGX_WORKER_ENV];
   const p = Bun.spawnSync(["bun", HOOK], {
     stdin: new Blob([JSON.stringify({ tool_name: "Bash", tool_input })]),
     env,
@@ -94,7 +94,7 @@ describe("small-file viewer history exemption", () => {
       ...process.env,
       CLAUDE_BASH_DURATIONS_DIR: dir,
     };
-    delete env[AGENT_ROUTER_WORKER_ENV];
+    delete env[AGX_WORKER_ENV];
     for (const key of ["cat", "tail -n", "wc", "jq", "sed -n"]) {
       recordStart(dir, `${key}-slow`, key, 0);
       recordEnd(dir, `${key}-slow`, 7000);
@@ -131,7 +131,7 @@ describe("small-file viewer history exemption", () => {
       ...process.env,
       CLAUDE_BASH_DURATIONS_DIR: dir,
     };
-    delete env[AGENT_ROUTER_WORKER_ENV];
+    delete env[AGX_WORKER_ENV];
     expect(decideWithEnv(`cat ${large}`, env)).toContain(
       '"permissionDecision":"deny"',
     );
@@ -159,7 +159,7 @@ function decideWithEnv(command: string, env: NodeJS.ProcessEnv): string {
 // outer shell (firedancer coordinator, 2026-10-08): denied unless the script waits for the job.
 describe("unwaitedJobs", () => {
   const INCIDENT =
-    "agent-dispatch resume run-123 --prompt-file /tmp/brief.md > /tmp/out.log 2>&1 &";
+    "agx dispatch --resume run-123 --prompt-file /tmp/brief.md > /tmp/out.log 2>&1 &";
 
   test.each([
     ["the incident command", INCIDENT],
@@ -214,7 +214,7 @@ describe("unwaitedJobs", () => {
 
 describe("shell-level & as a hook", () => {
   const INCIDENT =
-    "agent-dispatch resume run-123 --prompt-file /tmp/brief.md > /tmp/out.log 2>&1 &";
+    "agx dispatch --resume run-123 --prompt-file /tmp/brief.md > /tmp/out.log 2>&1 &";
 
   test("denies the incident command in a backgrounded call, naming the rule and the fixes", () => {
     const out = decide({ command: INCIDENT, run_in_background: true });

@@ -1,6 +1,6 @@
 // Codex-share warning, ported from agents/claude/dispatch-warning.ts (ef73a9c4) plus the reading
 // half of the old buildDataframe. Read-only: runs.jsonl and route-capability.json are written by
-// agent-dispatch (tools/agent-dispatch/src/routes.ts: routeCachePath = <state>/route-capability.json).
+// agx (tools/agx/src/routes.ts: routeCachePath = <state>/route-capability.json).
 import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";

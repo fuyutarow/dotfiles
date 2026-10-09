@@ -19,9 +19,9 @@ import {
 } from "../../shared/src/dispatch-pricing.ts";
 import { homedir } from "node:os";
 
-// Run row source: one marker per worker agent-dispatch started (tools/agent-dispatch/src/state.ts).
+// Run row source: one marker per worker agx started (tools/agx/src/state.ts).
 // A marker is written at start and removed at exit, so a marker whose process is gone means
-// agent-dispatch itself was killed — counted as stale, never dropped (EXPLICIT-ABSENCE).
+// agx itself was killed — counted as stale, never dropped (EXPLICIT-ABSENCE).
 export interface RouteRun {
   displayId: string | undefined;
   choice: string;
@@ -29,7 +29,7 @@ export interface RouteRun {
   secs: number;
   alive: boolean;
   dispatcherSession: string | undefined;
-  // what the worker is doing (agent-dispatch progress file); undefined until its first event lands
+  // what the worker is doing (agx progress file); undefined until its first event lands
   doing:
     | {
         last: string;

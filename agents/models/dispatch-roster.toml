@@ -1,9 +1,9 @@
 # dispatch-roster — the ONE home of the models a coordinator may dispatch work to.
 #
-# Every dispatch is `agent-dispatch run --prompt-file … --cd … --sandbox …`, and Jev alone picks
+# Every dispatch is `agx dispatch --prompt-file … --cd … --sandbox …`, and Jev alone picks
 # the row (AUTO PICK below); `--choice` is refused. The route says how the picked row runs:
-#   route = "codex"  — agent-dispatch --choice <id>; Codex is the worker's own harness.
-#   route = "claude" — claude -p through tools/agent-dispatch/src/workers/run-claude.ts.
+#   route = "codex"  — bun tools/agx/src/workers/codex.ts --choice <id>; Codex is the worker's own harness.
+#   route = "claude" — claude -p through tools/agx/src/workers/run-claude.ts.
 # The Agent and Workflow tools dispatch nothing: the dispatch hook denies both and prints the table.
 #
 # CONFIGURATION CONTRACT: agents/models/dispatch-roster.contract.md.

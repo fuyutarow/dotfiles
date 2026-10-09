@@ -1,9 +1,9 @@
 // PreToolUse gate — the Agent, Task and Workflow tools dispatch nothing; every worker starts
-// through `agent-dispatch run`. matcher: Agent|Task|Workflow   (settings.json: run.sh --fail-closed)
+// through `agx dispatch`. matcher: Agent|Task|Workflow   (settings.json: run.sh --fail-closed)
 //
 // THE ROSTER (agents/models/dispatch-roster.toml, read through agents/models/roster.ts) is the one
-// home of what may be dispatched, and agent-dispatch is the one entry point: Jev picks a row from the
-// brief, codex rows run `codex exec` (agent-dispatch), claude rows run `claude -p` (tools/agent-dispatch/src/workers/run-claude.ts,
+// home of what may be dispatched, and agx is the one entry point: Jev picks a row from the
+// brief, codex rows run `codex exec` (agx), claude rows run `claude -p` (tools/agx/src/workers/run-claude.ts,
 // run-claude.ts, bounded by the roster's [claude_run]). Every run is logged, shown on the statusline
 // Run: row and gradable — none of which an Agent or Workflow call would be.
 //
@@ -22,7 +22,7 @@ import { decidePre, readStdinJson } from "./lib.ts";
 
 const ROSTER_FILE = "agents/models/dispatch-roster.toml";
 const ENTRY =
-  "`agent-dispatch run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` " +
+  "`agx dispatch --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` " +
   "from Bash with run_in_background: true";
 
 async function main(): Promise<void> {

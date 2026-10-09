@@ -79,7 +79,7 @@ function statuslineHead(home: string): Part[] {
         HOME: home,
         HERDR_ENV: "0",
         CLAUDE_CODE_EXECPATH: "",
-        AGENT_ROUTER_STATE_DIR: join(home, "state"),
+        AGX_STATE_DIR: join(home, "state"),
         PATH: tempDir("prompt-bin-"),
         PWD: REPO,
         TZ: process.env.TZ ?? "UTC",

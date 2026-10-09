@@ -1,10 +1,79 @@
 // bun test for scripts/config-map.ts — the completeness gate over scripts/config-registry.ts.
 // The negative half matters: an unregistered config file and a row naming a missing source must
 // each be reported, all in one run; exclusions must stay narrow.
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { surfaces, type Surface } from "../config-registry.ts";
-import { findings } from "../config-map.ts";
+import { findings, workingTreeConfigFiles } from "../config-map.ts";
+
+const scratch: string[] = [];
+afterEach(() => {
+  for (const path of scratch.splice(0))
+    rmSync(path, { recursive: true, force: true });
+});
+
+test("working-tree inventory follows moves and new files without any VCS metadata", () => {
+  const root = mkdtempSync(join(tmpdir(), "config-map-worktree-"));
+  scratch.push(root);
+  mkdirSync(join(root, "tools/old"), { recursive: true });
+  writeFileSync(join(root, "tools/old/package.json"), "{}");
+  renameSync(join(root, "tools/old"), join(root, "tools/new"));
+  writeFileSync(join(root, "new.toml"), "");
+  mkdirSync(join(root, "node_modules/dependency"), { recursive: true });
+  writeFileSync(join(root, "node_modules/dependency/package.json"), "{}");
+  const listing = workingTreeConfigFiles(root);
+  expect(listing.isOk()).toBe(true);
+  const files = listing.unwrapOr<string[]>([]);
+  expect(files).toEqual(["new.toml", "tools/new/package.json"]);
+  expect(
+    findings(
+      [row(["tools/new", "new.toml"])],
+      files,
+      (source) => source === "tools/new" || source === "new.toml",
+    ),
+  ).toEqual([]);
+});
+
+test("ignored cache files and deleted configuration files are not reported in a temp checkout", () => {
+  const root = mkdtempSync(join(tmpdir(), "config-map-ignore-"));
+  scratch.push(root);
+  // A non-colocated workspace has no .git directory; .gitignore must still be honored.
+  mkdirSync(join(root, ".jj"));
+  writeFileSync(
+    join(root, ".gitignore"),
+    ".rumdl_cache/\n/cache/*.json\n!/cache/keep.json\n",
+  );
+  mkdirSync(join(root, ".rumdl_cache/0.2.78"), { recursive: true });
+  writeFileSync(join(root, ".rumdl_cache/0.2.78/hash.json"), "{}");
+  mkdirSync(join(root, "cache"));
+  writeFileSync(join(root, "cache/ignored.json"), "{}");
+  writeFileSync(join(root, "cache/keep.json"), "{}");
+  mkdirSync(join(root, "nested"));
+  writeFileSync(join(root, "nested/.gitignore"), "*.json\n!keep.json\n");
+  writeFileSync(join(root, "nested/ignored.json"), "{}");
+  writeFileSync(join(root, "nested/keep.json"), "{}");
+  writeFileSync(join(root, "deleted-tracked.toml"), "");
+  expect(workingTreeConfigFiles(root).unwrapOr<string[]>([])).toContain(
+    "deleted-tracked.toml",
+  );
+  rmSync(join(root, "deleted-tracked.toml"));
+  const listing = workingTreeConfigFiles(root);
+  expect(listing.isOk()).toBe(true);
+  const files = listing.unwrapOr<string[]>([]);
+  expect(files).toEqual(["cache/keep.json", "nested/keep.json"]);
+  expect(
+    findings([row(files)], files, (source) => files.includes(source)),
+  ).toEqual([]);
+  expect(findings([], files)).toHaveLength(2);
+});
 
 const row = (sources: string[]): Surface => ({
   kind: "in-place",

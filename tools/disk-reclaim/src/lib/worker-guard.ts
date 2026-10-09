@@ -2,8 +2,8 @@ import { realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
-  AGENT_ROUTER_WORKER_ENV,
-  AGENT_ROUTER_WORKER_VALUE,
+  AGX_WORKER_ENV,
+  AGX_WORKER_VALUE,
 } from "../../../shared/src/worker-env.ts";
 import { stateDir } from "../receipt.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
@@ -28,8 +28,8 @@ const isSystemTmp = (path: string): boolean =>
 export function workerMutationRefusal(
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {
-  if (env[AGENT_ROUTER_WORKER_ENV] !== AGENT_ROUTER_WORKER_VALUE) return null;
+  if (env[AGX_WORKER_ENV] !== AGX_WORKER_VALUE) return null;
   const home = env.HOME ?? homedir();
   if (isSystemTmp(home) || isSystemTmp(stateDir(env))) return null;
-  return "agent-dispatch worker guard: mutating run and delete --yes commands require HOME or RECLAIM_STATE_DIR under the system tmp directory; run it from the owner's own shell, or set HOME to a tmp dir for tests";
+  return "agx worker guard: mutating run and delete --yes commands require HOME or RECLAIM_STATE_DIR under the system tmp directory; run it from the owner's own shell, or set HOME to a tmp dir for tests";
 }

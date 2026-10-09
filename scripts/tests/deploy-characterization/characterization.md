@@ -19,7 +19,7 @@ implementation that owns the action order.
 | `box:init` / `buildPlan` | injected plan | `scripts/box-init.ts:143-220, 221-317, 318-329`; default order: reach probe; auth:push; codex host check/declare; dotfiles index; then, per requested repo, clone, mise trust/install, jj setup/colocation, setup, doctor; finish doctor:remote. `scripts/tests/box-init.test.ts` exercises plan ordering without SSH. `--root-host/--root-port` adds bootstrap as the reach action. |
 | `auth:push` / `pushAuth` | injected runner | For each selected CLI in order: read source; remote hash probe; transfer only if different and allowed; remote login-status probe. See `scripts/auth-push.ts:139-184`; the runner and file reads are injected. |
 | `secrets:push` | static | Validate one host (129-145); remote fnox/config probe (146-154); refuse existing config unless a valid `--rotate` path, then rotate/verify and return (156-179); otherwise reject rotate-without-config and check age-keygen (181-189); generate temporary identity/config (191-212); read and age-encrypt each declared secret locally (213-229); send identity and config over SSH stdin (231-242); verify each secret opens remotely (244-258); clean temporary directory (192-195). Existing tests characterize argument/security guards; the command runner is not injected here. |
-| `agent-dispatch-host.ts` | injected probes | Check existing declaration; probe container; probe user namespace; require `--rented`; create directory and exclusive mode-0600 file; validate the written declaration (66-114). Probe functions are injectable. |
+| `agx-host.ts` | injected probes | Check existing declaration; probe container; probe user namespace; require `--rented`; create directory and exclusive mode-0600 file; validate the written declaration (66-114). Probe functions are injectable. |
 | `doctor:remote` | static | Run `scripts/doctor-remote.ts` for the host (mise.toml:715-717); implementation checks reach, SSH command tools, interactive shell/herdr behavior, auth, fnox, timezone and forwarding through ordered finding checks (scripts/doctor-remote.ts:90-124 and subsequent check functions). |
 | `wsl:wslconfig` | static | Verify WSL and source (62-82); query Windows user profile via PowerShell and map with wslpath (88-114); read requested memory and Windows RAM, refuse unsafe sizing (116-144); compare destination, then back up drift and copy source when needed (146 onward). |
 | `wsl:wake` | static | Parse options/check ssh (134-168); probe host candidates in order and read distro state (170-183); `--status` probes guest and exits (188-193); otherwise start a stopped distro with detached anchor, wait and re-read state (195-219); probe guest; if unreachable start sshd through host, wait, and probe again (224-249). Host-selection helpers are injected/tested; process execution is not injected. |
@@ -28,7 +28,7 @@ implementation that owns the action order.
 
 - `scripts/tests/box-init.test.ts` calls the pure `buildPlan` and asserts step order.
 - `scripts/tests/auth-push.test.ts` supplies `AuthPushDependencies` to `pushAuth`.
-- `scripts/tests/agent-dispatch-host.test.ts` injects measured probes and a temporary home.
+- `scripts/tests/agx-host.test.ts` injects measured probes and a temporary home.
 - `scripts/tests/bootstrap-linux.test.ts` uses a fake PATH and captures argv passed to linux-init.
 - `scripts/tests/wsl-wake.test.ts` covers candidate selection helpers, not host commands.
 - `scripts/link-dots.ts` has `HOME`, `DOTFILES`, and `--check` fixture seams; the task itself invokes `--force`.

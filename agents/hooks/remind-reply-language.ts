@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { onPrompt } from "../../tools/use-hooks/src/index.ts";
+import { onPrompt } from "../../tools/agx-usehooks/src/index.ts";
 import { parseJson, strAt } from "./narrow.ts";
 
 const CONTEXT =

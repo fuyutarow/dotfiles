@@ -12,8 +12,8 @@ import {
 } from "../bash-durations.ts";
 import { backgroundReason } from "../enforce-background-waits.ts";
 import {
-  AGENT_ROUTER_WORKER_ENV,
-  AGENT_ROUTER_WORKER_VALUE,
+  AGX_WORKER_ENV,
+  AGX_WORKER_VALUE,
 } from "../../../../tools/shared/src/worker-env.ts";
 
 // bash-durations: a command kind's measured duration decides whether it may run in front.
@@ -24,7 +24,7 @@ const ordinarySessionEnv = (
   extra: Record<string, string>,
 ): NodeJS.ProcessEnv => {
   const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
-  delete env[AGENT_ROUTER_WORKER_ENV];
+  delete env[AGX_WORKER_ENV];
   return env;
 };
 
@@ -34,8 +34,8 @@ describe("commandKey", () => {
     ["cd /Users/fuyu/dotfiles && mise run commit -- -m x", "mise run commit"],
     ["FOO=1 bun test scripts/tests/x.test.ts", "bun test"],
     [
-      "agent-dispatch run --prompt-file b.md --cd x",
-      "agent-dispatch run --prompt-file --cd",
+      "agx dispatch --prompt-file b.md --cd x",
+      "agx dispatch --prompt-file --cd",
     ],
     [
       "polysearch leaderboard --all --format json",
@@ -186,7 +186,7 @@ test("a dispatched worker may keep measured-slow and long-timeout Bash calls in 
     env: {
       ...process.env,
       CLAUDE_BASH_DURATIONS_DIR: dir,
-      [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+      [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
     },
     timeout: 30_000,
   }).stdout.toString();
@@ -202,7 +202,7 @@ test("a dispatched worker may keep measured-slow and long-timeout Bash calls in 
     env: {
       ...process.env,
       CLAUDE_BASH_DURATIONS_DIR: dir,
-      [AGENT_ROUTER_WORKER_ENV]: AGENT_ROUTER_WORKER_VALUE,
+      [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
     },
     timeout: 30_000,
   }).stdout.toString();

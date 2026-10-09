@@ -1,5 +1,5 @@
 // `mise run secrets:push -- <host> [--rotate]` — give a box the secrets its agents use, through fnox (KEY-VIA-FNOX),
-// never as a plaintext file or argv. Today: TYPESAFE_API_KEY (Jev: agent-dispatch's row pick and
+// never as a plaintext file or argv. Today: TYPESAFE_API_KEY (Jev: agx's row pick and
 // `rr`'s judge). Run on the machine whose fnox holds the secrets (the Mac: Keychain).
 //
 // WHERE IT IS SAFE (owner, 2026-10-06: "fnox が安全にできる環境なら配りなよ"). On the box the secret

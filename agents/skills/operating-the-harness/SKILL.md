@@ -188,7 +188,7 @@ evidence** (command + output, test result, screenshot), never a bare "done."
 
 ## §3. Hooks essentials — deterministic enforcement
 
-Project hooks use [use-hooks](../../../tools/use-hooks/README.md) for lifecycle helpers and conditions.
+Project hooks use [agx-usehooks](../../../tools/agx-usehooks/README.md) for lifecycle helpers and conditions.
 The library supplies values; projects write their own actions in TypeScript.
 See that README for the API, project example, imports, and settings wiring.
 
@@ -285,7 +285,7 @@ the source, gate only the residue that is deterministically always-wrong.
   settings can still produce ZERO tools in-session (server exits before the handshake; e.g. a
   cwd-gated stdio server spawned in the wrong directory). Diagnose with `claude mcp list` +
   the per-server client log, never by re-reading the config; a tool-specific `driving-*` skill
-  (driving-cocoindex, agent-dispatch) supplies the expected surface + fallback AFTER liveness
+  (driving-cocoindex, agx) supplies the expected surface + fallback AFTER liveness
   is settled here.
 
 ---

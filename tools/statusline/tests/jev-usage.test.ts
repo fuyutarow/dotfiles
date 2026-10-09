@@ -5,18 +5,18 @@ import { join } from "node:path";
 import { jevUsageSegment, readJevUsage } from "../src/jev-usage.ts";
 
 const roots: string[] = [];
-const previous = process.env.AGENT_ROUTER_STATE_DIR;
+const previous = process.env.AGX_STATE_DIR;
 afterEach(async () => {
   for (const root of roots.splice(0))
     await rm(root, { recursive: true, force: true });
-  if (previous === undefined) delete process.env.AGENT_ROUTER_STATE_DIR;
-  else process.env.AGENT_ROUTER_STATE_DIR = previous;
+  if (previous === undefined) delete process.env.AGX_STATE_DIR;
+  else process.env.AGX_STATE_DIR = previous;
 });
 
 test("reads seven-day Jev response usage and prices spend", async () => {
   const root = await mkdtemp(join(tmpdir(), "statusline-jev-"));
   roots.push(root);
-  process.env.AGENT_ROUTER_STATE_DIR = root;
+  process.env.AGX_STATE_DIR = root;
   const now = Math.floor(
     Temporal.Instant.from("2026-10-09T00:00:00Z").epochMilliseconds / 1000,
   );
@@ -61,7 +61,7 @@ test("labels seven-day spend for small and larger amounts", () => {
 
 test("omits Jev when runs.jsonl is absent", async () => {
   const root = "/definitely/missing/statusline-jev";
-  process.env.AGENT_ROUTER_STATE_DIR = root;
+  process.env.AGX_STATE_DIR = root;
   const usage = await readJevUsage();
   expect(usage.isOk()).toBe(true);
   if (usage.isOk()) expect(jevUsageSegment(usage.value)).toBe("");

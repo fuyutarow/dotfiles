@@ -31,7 +31,68 @@ const ROOT = join(import.meta.dir, "..");
 // What "config-shaped" means for the gate: the extensions a declaration in this repo uses. A file
 // without one (zsh/zshenv, git/gitconfig, Brewfile) is still registered; the gate just cannot
 // discover it by name.
-const CONFIG_GLOB = "**/*.{toml,json,jsonc,yml,yaml,conf,plist,win,mac,wsl}";
+const CONFIG_PATH = /\.(?:toml|json|jsonc|yml|yaml|conf|plist|win|mac|wsl)$/u;
+
+// Installed, private and runtime trees are not configuration declarations.
+const LOCAL_TREES = new Set([
+  "node_modules",
+  ".git",
+  ".jj",
+  ".serena",
+  ".agent-state",
+  "__pycache__",
+  "local",
+  "backups",
+  ".vscode",
+  ".idea",
+  "automatic_backups",
+]);
+
+/** Files inventory: current, non-ignored paths; never consults a VCS index. */
+export function workingTreeConfigFiles(
+  root: string = ROOT,
+): Result<string[], Error> {
+  // Use the ignore engine for nested/negated .gitignore rules and global/local Git exclusions.
+  // --no-require-git also applies these rules in non-colocated jj workspaces.
+  // Positive -g globs would override ignores, so filter configuration extensions afterward.
+  const listing = Bun.spawnSync(
+    [
+      "rg",
+      "--no-config",
+      "--files",
+      "--hidden",
+      "--no-require-git",
+      "--null",
+      ...[...LOCAL_TREES].flatMap((directory) => ["-g", `!**/${directory}/**`]),
+    ],
+    { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 30_000 },
+  );
+  if (listing.exitCode !== 0 && listing.exitCode !== 1)
+    return err(
+      new Error(
+        `working-tree inventory failed: ${listing.stderr.toString().trim()}`,
+      ),
+    );
+  const files = listing.stdout
+    .toString()
+    .split("\0")
+    .filter((path) => isWorkingConfig(path, existsSync(join(root, path))));
+  return ok(files.toSorted());
+}
+
+function isWorkingConfig(path: string, isFile: boolean): boolean {
+  if (!isFile || !CONFIG_PATH.test(path)) return false;
+  if (
+    path.startsWith(".cocoindex_code/") &&
+    path !== ".cocoindex_code/settings.yml"
+  )
+    return false;
+  if (path.startsWith("agents/commands/.system/")) return false;
+  return (
+    !path.endsWith("/settings.local.json") &&
+    !path.endsWith(".resource.json.peak.json")
+  );
+}
 
 // Paths the gate does not ask about, each with its reason.
 const EXCLUDED: readonly {
@@ -223,34 +284,18 @@ function main(): Result<number, Error> {
         : ok(surfaces());
     if (rowsResult.isErr()) return err(rowsResult.error);
     const rows = rowsResult.value;
-    // In jj precommit mode, candidate comes from PRECOMMIT_PATHS_FILE; otherwise enumerate
-    // tracked files through the shared helper.
-    const listing =
+    // A precommit candidate remains immutable; ordinary checks judge current working-tree files.
+    const pathsResult =
       candidate === undefined
-        ? Bun.spawnSync(
-            ["bun", "scripts/tracked-files.ts", "--expect-non-empty"],
-            {
-              cwd: ROOT,
-              stdout: "pipe",
-              stderr: "pipe",
-              timeout: 30_000,
-            },
-          )
-        : undefined;
-    if (listing !== undefined && listing.exitCode !== 0)
-      return err(
-        new Error("tracked-files failed: " + listing.stderr.toString()),
-      );
-    const glob = new Bun.Glob(CONFIG_GLOB);
-    const tracked =
-      candidate === undefined
-        ? (listing?.stdout.toString().split("\0") ?? [])
-        : [...candidate.keys()];
-    const files = tracked.filter((f) => f !== "" && glob.match(f));
+        ? workingTreeConfigFiles()
+        : ok([...candidate.keys()]);
+    if (pathsResult.isErr()) return err(pathsResult.error);
+    const paths = pathsResult.value;
+    const files = paths.filter((f) => CONFIG_PATH.test(f));
     const found = findings(rows, files, (source) =>
       context === undefined
         ? existsSync(join(ROOT, source))
-        : tracked.some((path) => covers(source, path)),
+        : paths.some((path) => covers(source, path)),
     );
     for (const f of found) process.stdout.write(`${f}\n`);
     process.stdout.write(

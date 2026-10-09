@@ -156,7 +156,7 @@ Sharp edges (each is a rule):
   jest-like API ("not everything is implemented"); subset by path or `-t <regex>`; setup via
   bunfig `[test] preload = ["./setup.ts"]`. `[docs]`
 - House shape: zero-config, `tests/` sibling of `scripts/`, fixture-binary pattern (a real
-  shebanged executable substituted for the driven binary). `[corpus agent-dispatch worker]`
+  shebanged executable substituted for the driven binary). `[corpus agx worker]`
 
 ## §9 Node compat — what actually bites scripts
 

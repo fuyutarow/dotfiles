@@ -64,7 +64,7 @@ const ROSTER_PRICES = z.object({
   ),
 });
 
-/** Read the chosen row's route and token prices from the same roster agent-dispatch uses. */
+/** Read the chosen row's route and token prices from the same roster agx uses. */
 export function dispatchRowPrice(
   choice: string,
   path = process.env.DISPATCH_ROSTER_PATH ??

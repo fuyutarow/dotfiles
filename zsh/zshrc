@@ -66,8 +66,11 @@ case "$HOST" in
   # clear-screen redraws only PROMPT, so preserve the header explicitly after clearing.
   _prompt_clear_screen() {
     zle .clear-screen
-    # The builtin has cleared the display and redrawn the one-line prompt at row 1. Replace
-    # that row with the header, then advance to row 2 so reset-prompt draws `$` and the buffer.
+    # clear-screen schedules a refresh; force it now so it cannot erase the header we print
+    # below when this widget (or an autosuggestions wrapper) returns to ZLE.
+    zle -R
+    # Replace the one-line prompt at row 1 with the header, then advance to row 2 so
+    # reset-prompt draws `$` and the buffer.
     print -rn -- $'\e[H'
     print -rP -- "$_prompt_header"
     print -rn -- $'\e[K\r\n'

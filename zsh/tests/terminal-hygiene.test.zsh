@@ -133,6 +133,8 @@ cat >| "$tmp/.zshrc" <<EOF
 cd "$tmp"
 source $ROOT/zsh/aliases.zsh
 source $ROOT/zsh/zshrc
+# R99's active main keymap is emacs; exercise the same Ctrl-L binding.
+bindkey -e
 _prompt_test_count() { print -rn -- x >>| "$tmp/prompt-count" }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd _prompt_test_count
@@ -145,7 +147,7 @@ zpty -w PROMPT_TEST $'\n'
 zpty -w PROMPT_TEST 'stty rows 24 cols 80; kill -WINCH $$'
 zpty -w PROMPT_TEST $'\n'
 zpty -w PROMPT_TEST 'print -rn -- PARTIAL'
-zpty -w PROMPT_TEST $'\x0c'
+zpty -w -n PROMPT_TEST $'\x0c'
 zpty -w PROMPT_TEST $'\n'
 zpty -w PROMPT_TEST 'exit'
 out=''
@@ -168,6 +170,9 @@ fi
 want "partial-line output is followed by zsh's marker" $'PARTIAL\e[1m\e[7m%\e[27m\e[1m' "$out"
 clear_sequence=$'\e[H\e[2J'
 after_clear=${out##*"$clear_sequence"}
+# Stop at the next precmd's terminal repair. A later prompt's header cannot prove that
+# Ctrl-L restored it: on R99 the widget printed the header BEFORE ZLE's deferred clear.
+after_clear=${after_clear%%"$MODES_OFF"*}
 want "Ctrl-L redraws the header after clearing the screen" "$header_marker" "$after_clear"
 command rm -rf "$tmp" 2>/dev/null
 

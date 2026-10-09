@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+- Converge declared Codex settings as a target-host profile step.
+
 ## 0.4.0
 
 - Add sccache and soks-govern profile steps.

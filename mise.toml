@@ -446,6 +446,7 @@ cd "${DOTFILES:-$HOME/dotfiles}"
 bun install --frozen-lockfile
 bun link
 bun "${DOTFILES:-$HOME/dotfiles}/scripts/link-dots.ts"
+mise run codex:config
 exec mise run link:skills
 '''
 
@@ -685,10 +686,7 @@ run = 'bun ~/dotfiles/scripts/repos-audit.ts'
 
 [tasks."link:dots"]
 description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.ts)"
-run = '''
-bun ~/dotfiles/scripts/link-dots.ts --force
-bun ~/dotfiles/agents/codex/codex-sandbox-network.ts
-'''
+run = 'bun ~/dotfiles/scripts/link-dots.ts --force'
 
 [tasks."tmux:plugins"]
 description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"
@@ -865,6 +863,6 @@ run = 'bun ~/dotfiles/scripts/vendor-skill.ts'
 description = "Converge the Codex app-server daemon's remote control (how the ChatGPT mobile app reaches this machine) to agents/codex/app-server.toml. Idempotent; on drift it persists the setting and restarts a running daemon. `mise run doctor` (codex-remote) reports the drift."
 run = "bun agents/codex/codex-remote-control.ts"
 
-[tasks."codex:sandbox-network"]
-description = "Converge the declared Codex workspace-write network setting into the Codex-owned ~/.codex/config.toml; `mise run doctor` reports drift."
-run = "bun agents/codex/codex-sandbox-network.ts"
+[tasks."codex:config"]
+description = "Converge declared Codex model limits and workspace-write network settings into ~/.codex/config.toml."
+run = "bun agents/codex/codex-config.ts"

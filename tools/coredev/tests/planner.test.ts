@@ -15,6 +15,7 @@ describe("coredev planner", () => {
       "links",
       "login-shell",
       "credentials",
+      "codex-config",
       "sccache",
       "herdr-server",
       "soks-govern",
@@ -40,6 +41,20 @@ describe("coredev planner", () => {
       result.value.steps.find((step) => step.id === "credentials")
         ?.prerequisites,
     ).toEqual(["links"]);
+  });
+
+  test("runs Codex config after links and credentials with check as verifier", () => {
+    const result = buildPlan("box", "linux");
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    const step = result.value.steps.find((item) => item.id === "codex-config");
+    expect(step).toMatchObject({
+      host: "linux",
+      prerequisites: ["links", "credentials"],
+      probe: "codex-config-no-drift",
+      action: "run-codex-config",
+      verifier: "codex-config-no-drift",
+    });
   });
 
   test("orders sccache after c-toolchain and soks-govern after credentials", () => {
@@ -91,6 +106,7 @@ describe("coredev planner", () => {
         "links | wsl | probe:dotfiles-linked | action:realize-dotfiles | verify:dotfiles-check",
         "login-shell | wsl | probe:passwd-zsh-listed-in-shells | action:sudo-chsh-zsh | verify:passwd-zsh-listed-in-shells",
         "credentials | wsl | probe:configured-transfers-present | action:push-configured-credentials | verify:configured-transfers-present",
+        "codex-config | wsl | probe:codex-config-no-drift | action:run-codex-config | verify:codex-config-no-drift",
         "sccache | wsl | probe:real-sccache-on-path | action:install-sccache-runtime-bin | verify:real-sccache-on-path",
         "herdr-server | wsl | probe:herdr-server-shell-current | action:stop-stale-herdr-servers | verify:no-stale-herdr-server",
         "soks-govern | wsl | probe:soks-govern-version | action:clone-and-cargo-install-soks-govern | verify:soks-govern-version",

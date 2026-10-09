@@ -8,6 +8,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -71,6 +72,18 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("post-merge runs codex:config after relinking dotfiles", () => {
+    const mise = readFileSync(join(REPO, "mise.toml"), "utf8");
+    const hook =
+      mise.match(
+        /\[tasks\."hook:post-merge"\]([\s\S]*?)(?=\n\[tasks\.|$)/u,
+      )?.[1] ?? "";
+    expect(hook).toContain("mise run codex:config");
+    expect(hook.indexOf("scripts/link-dots.ts")).toBeLessThan(
+      hook.indexOf("mise run codex:config"),
+    );
+  });
+
   test("links: an empty HOME is all drift, reported without writing anything", () => {
     const home = tmp("doctor-home-");
     const r = doctor("links", { HOME: home, DOTFILES: REPO });
@@ -95,8 +108,7 @@ describe("doctor", () => {
     expect(readdirSync(join(home, ".local", "bin"))).toEqual(["gone"]);
   });
 
-  test("codex-sandbox-network: reports drift for every declared Codex key", () => {
-    if (Bun.which("codex") === undefined) return;
+  test("codex-config: reports drift for every declared Codex key", () => {
     const home = tmp("doctor-home-");
     mkdirSync(join(home, ".codex"), { recursive: true });
     writeFileSync(
@@ -107,12 +119,20 @@ model_auto_compact_token_limit = 940000
 network_access = true
 `,
     );
-    const r = doctor("codex-sandbox-network", { HOME: home, DOTFILES: REPO });
+    const r = doctor("codex-config", { HOME: home, DOTFILES: REPO });
     expect(r.code).toBe(1);
     expect(r.out).toContain("model_context_window=100000, declared 1000000");
     expect(r.out).toContain(
       "model_auto_compact_token_limit=940000, declared 950000",
     );
+  });
+
+  test("codex-config: skips when ~/.codex does not exist", () => {
+    const home = tmp("doctor-home-");
+    const r = doctor("codex-config", { HOME: home, DOTFILES: REPO });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("SKIP  codex-config");
+    expect(r.out).toContain("~/.codex does not exist yet");
   });
 
   test("bins: missing and dangling-renamed bins FAIL; a resolving bin PASSes", () => {

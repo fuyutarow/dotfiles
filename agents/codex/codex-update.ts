@@ -129,7 +129,7 @@ const converge = Bun.spawn(
 await converge.exited;
 
 const sandboxNetwork = Bun.spawn(
-  ["bun", `${import.meta.dir}/codex-sandbox-network.ts`],
+  ["bun", `${import.meta.dir}/codex-config.ts`],
   {
     stdout: "inherit",
     stderr: "inherit",

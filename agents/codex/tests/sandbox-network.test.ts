@@ -3,6 +3,8 @@ import { drift, edit, readLive } from "../sandbox-network.ts";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readdirSync, readFileSync as readRepoFile } from "node:fs";
+import { resolve } from "node:path";
 
 const declared = {
   networkAccess: true,
@@ -10,7 +12,34 @@ const declared = {
   modelAutoCompactTokenLimit: 950000,
 };
 
+function visit(path: string): string[] {
+  const entries = readdirSync(path, { withFileTypes: true });
+  return entries.flatMap((entry) => {
+    const child = join(path, entry.name);
+    if (entry.isDirectory()) {
+      if ([".git", ".jj", "node_modules"].includes(entry.name)) return [];
+      return visit(child);
+    }
+    return /\.(?:md|toml|ts|json)$/u.test(entry.name) ? [child] : [];
+  });
+}
+
 describe("Codex settings convergence", () => {
+  test("the old task and executable names are absent from repository text", () => {
+    const root = resolve(import.meta.dir, "../../..");
+    const stale = [
+      ["codex", "sandbox-network"].join(":"),
+      ["codex", "sandbox-network.ts"].join("-"),
+    ];
+    const hits = visit(root).flatMap((path) => {
+      const body = readRepoFile(path, "utf8");
+      return stale
+        .filter((name) => body.includes(name))
+        .map((name) => `${path}: ${name}`);
+    });
+    expect(hits).toEqual([]);
+  });
+
   test("inserts missing model settings before tables and preserves other bytes", () => {
     const source =
       '# user comment\nother = "unchanged"\n\n[sandbox_workspace_write]\nnetwork_access = true\n';

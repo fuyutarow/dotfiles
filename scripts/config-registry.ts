@@ -289,8 +289,8 @@ const OTHER: readonly Surface[] = [
       "the Codex-owned ~/.codex/config.toml model limits and workspace-write network setting",
     consumer: "Codex workers using workspace-write sandbox",
     writer:
-      "human, in the repo; mise run codex:sandbox-network converges model_context_window, model_auto_compact_token_limit, and sandbox_workspace_write.network_access",
-    verify: `${DOCTOR} (codex-sandbox-network)`,
+      "human, in the repo; mise run codex:config converges model_context_window, model_auto_compact_token_limit, and sandbox_workspace_write.network_access",
+    verify: `${DOCTOR} (codex-config)`,
   },
   {
     kind: "applied",

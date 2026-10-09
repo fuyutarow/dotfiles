@@ -80,6 +80,17 @@ const core: readonly ProfileStep[] = [
     verifier: "configured-transfers-present",
   },
   {
+    id: "codex-config",
+    host: "target",
+    prerequisites: ["links", "credentials"],
+    adapter: "codex-config",
+    probe: "codex-config-no-drift",
+    action: "run-codex-config",
+    timeoutSeconds: 120,
+    failure: "codex-config-failed",
+    verifier: "codex-config-no-drift",
+  },
+  {
     id: "sccache",
     host: "target",
     prerequisites: ["tools"],

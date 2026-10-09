@@ -14,6 +14,55 @@ export type ToolStepDependencies = {
   home: string;
 };
 
+export type CodexConfigDependencies = {
+  run(command: StepCommand, options?: { cwd?: string }): StepResult;
+  exists(path: string): boolean;
+  home: string;
+  dotfiles: string;
+};
+
+export function probeCodexConfig(
+  dependencies: Pick<
+    CodexConfigDependencies,
+    "run" | "exists" | "home" | "dotfiles"
+  >,
+): Probe {
+  if (!dependencies.exists(join(dependencies.home, ".codex")))
+    return { status: "skipped", reason: "~/.codex does not exist yet" };
+  const result = dependencies.run(
+    {
+      command: "bun",
+      args: [
+        join(dependencies.dotfiles, "agents/codex/codex-config.ts"),
+        "--check",
+      ],
+    },
+    { cwd: dependencies.dotfiles },
+  );
+  if (result.status === 0)
+    return { status: "satisfied", reason: "Codex config matches declaration" };
+  if (result.status === 1)
+    return { status: "not-satisfied", reason: "Codex config has drift" };
+  return { status: "not-satisfied", reason: result.output };
+}
+
+export function ensureCodexConfig(
+  dependencies: Pick<
+    CodexConfigDependencies,
+    "run" | "exists" | "home" | "dotfiles"
+  >,
+): StepResult {
+  if (!dependencies.exists(join(dependencies.home, ".codex")))
+    return { status: 0, output: "skipped: ~/.codex does not exist yet" };
+  return dependencies.run(
+    {
+      command: "bun",
+      args: [join(dependencies.dotfiles, "agents/codex/codex-config.ts")],
+    },
+    { cwd: dependencies.dotfiles },
+  );
+}
+
 const underMiseShims = (path: string): boolean =>
   path
     .split("/")

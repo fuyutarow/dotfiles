@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   ensureSoksGovern,
+  ensureCodexConfig,
+  probeCodexConfig,
   probeSccache,
   probeSoksGovern,
   verifySoksGovern,
@@ -9,6 +11,45 @@ import {
 import type { StepCommand } from "../src/transfer-steps.ts";
 
 describe("coredev tool steps", () => {
+  test("probes, runs, and skips Codex config based on ~/.codex", () => {
+    const calls: { command: StepCommand; cwd?: string }[] = [];
+    let codexDir = true;
+    const dependencies = {
+      home: "/home/test",
+      dotfiles: "/repo/dotfiles",
+      exists: () => codexDir,
+      run(command: StepCommand, options?: { cwd?: string }) {
+        calls.push({
+          command,
+          ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
+        });
+        return { status: 0, output: "" };
+      },
+    };
+    expect(probeCodexConfig(dependencies).status).toBe("satisfied");
+    expect(calls[0]).toEqual({
+      command: {
+        command: "bun",
+        args: ["/repo/dotfiles/agents/codex/codex-config.ts", "--check"],
+      },
+      cwd: "/repo/dotfiles",
+    });
+    expect(ensureCodexConfig(dependencies).status).toBe(0);
+    expect(calls[1]?.command.args).toEqual([
+      "/repo/dotfiles/agents/codex/codex-config.ts",
+    ]);
+    codexDir = false;
+    expect(probeCodexConfig(dependencies)).toEqual({
+      status: "skipped",
+      reason: "~/.codex does not exist yet",
+    });
+    expect(ensureCodexConfig(dependencies)).toEqual({
+      status: 0,
+      output: "skipped: ~/.codex does not exist yet",
+    });
+    expect(calls).toHaveLength(2);
+  });
+
   test("rejects mise shim sccache and accepts a working standalone binary", () => {
     const calls: StepCommand[] = [];
     let resolved = "/home/test/.local/share/mise/shims/sccache";

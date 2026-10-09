@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.1 — 2026-10-09
+
+- Merge previous state into an existing agx directory with deduplicated, timestamp-ordered JSONL logs and byte-checked file conflicts. Commit through temporary files and rename for crash-safe, idempotent retries.
+- Preserve live run markers and owned files while migrating unrelated state; report remaining files with exit 3. Add `--wait` with 30-second polling and `--wait-max` (default four hours), and remove the old directory only after a complete merge empties it.
+
 ## 2.0.0 — 2026-10-09
 
 - Rename the suite to `agx` with exactly four nouns: `ticket`, `pick`, `dispatch`, and `ledger`. Resume with `agx dispatch --resume`; replay tickets with `agx ticket replay`; acknowledge artifacts with `agx ledger note`. Remove the former command aliases.
@@ -78,7 +83,6 @@
 
 - Include seven-day per-capability records beside each row's overall record in Jev's request, marking records below five runs as little; cache the latest bounded statistics snapshot.
 - Mask rows with two lineage failures, partial grades, or returned runs without acknowledgement from Jev's candidates; record reasons and keep the overall-record argmax available when every row would be masked.
-
 
 ## 1.5.5 — 2026-10-09
 

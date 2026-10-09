@@ -40,7 +40,7 @@ const commandNames = (output: string): string[] => {
 
 test("the suite has one bin and a major version for the CLI break", () => {
   expect(pkg.name).toBe("agx");
-  expect(pkg.version).toBe("2.0.0");
+  expect(pkg.version).toMatch(/^2\./u);
   expect(pkg.bin).toEqual({ agx: "src/agx.ts" });
 });
 

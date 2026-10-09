@@ -462,6 +462,10 @@ exec mise run link:skills
 description = "jj gated commit: snapshot, run hook:pre-commit with PRECOMMIT_VCS/PATHS_FILE/REV/BASE, commit exactly the named paths, move alpha to @-, optionally --push. mise run commit -- -m '<msg>' [--push] -- <path>..."
 run = "bun agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
 
+[tasks.land]
+description = "Land a worker workspace onto alpha, format its paths, gated commit and push, then deploy declared hosts; --dry-run previews in disposable copies"
+run = "bun scripts/land.ts"
+
 [tasks.pull]
 description = "jj pull: fetch origin, rebase the working-copy branch onto trunk() (= alpha@origin, jj/config.toml), then run hook:post-merge (relink dotfiles + skills) — what .githooks/post-merge did for git pull."
 run = '''

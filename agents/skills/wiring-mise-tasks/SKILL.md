@@ -75,6 +75,9 @@ jj runs no git hooks, so these provide the commit gate, post-merge step, and gua
 | `pull` | HARD in a jj repo | `jj git fetch`, then `jj rebase -b @ -d 'trunk()'`; a repo with `hook:post-merge` runs it last |
 | `push` | HARD in a jj repo | show `alpha@origin..alpha`, refuse divergence or conflicts, then `jj git push -b alpha`; `--dry-run` prints the list without pushing. Body = `scripts/jj-push.ts`, run, never copied |
 
+Dotfiles landing: `mise run land -- <workspace-name> -m '<message>' [--hosts sol,r99-u26] [--smoke '<cmd>'] [--dry-run]` checks overlap, rebases onto alpha and formats exactly the changed paths before the gated commit and push.
+Defaults live in `scripts/config-registry.ts` (`LAND_HOSTS`); deployment runs pull then deps per host only after push succeeds, and dry-run previews in disposable copies without changing the original checkouts.
+
 - **Resolution** = the token is a LOCAL task name or alias (`mise tasks ls --json`, source under
   the repo root — global `~/.config/mise` tasks do not count).
 - **Always invoke via `mise run`** (user alias `m`). NEVER bare `mise <token>`: `fmt`, `i`, `t`,

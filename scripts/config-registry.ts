@@ -23,6 +23,9 @@
 // Where a link applies. Required on every row: no row is "everywhere" by omission.
 export type When = "all" | "mac" | "wsl" | "linux" | "not-mac";
 
+// Landing targets are SSH aliases; connection details remain in ~/.ssh/config.local.
+export const LAND_HOSTS: readonly string[] = ["sol", "r99-u26"];
+
 // [when, repo-relative source, home-relative destination]
 export const LINKS: readonly (readonly [When, string, string])[] = [
   // --- zsh ---

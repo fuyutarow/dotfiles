@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.11.0 — 2026-10-09
+
+- Add an owner-approved row override: `agent-dispatch run --row <id> --approval "<owner approval>"` runs the worker on that roster row without a Jev pick and records the pick as source `override` with the approval note.
+- Refuse `--row` without `--approval`, or with an unknown row id, with exit 2 and a named reason; `--choice` stays refused and its message points at `--row/--approval`.
+
 ## 1.10.0 — 2026-10-09
 
 - Give Jev per-kind records and label thin history as “record thin → weigh benchmarks.”

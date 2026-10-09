@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1 — 2026-10-09
+
+- Label Jev's computed seven-day spend and keep unknown agent costs visible as `$–`.
+
 ## 0.7.0 — 2026-10-09
 
 - Show seven-day Jev spend using roster prices and lower the shared cost display floor to $0.01.

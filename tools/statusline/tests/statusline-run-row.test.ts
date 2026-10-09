@@ -129,14 +129,16 @@ describe("statusline Run row", () => {
     const dir = join(scratch, "live");
     marker(dir, "a", process.pid, "lint batch 7");
     const out = await render(dir);
-    expect(out).toMatch(/^luna-high 1m3\d+s lint batch 7 │ no event yet$/mu);
+    expect(out).toMatch(
+      /^luna-high 1m3\d+s \$– lint batch 7 │ no event yet$/mu,
+    );
   });
 
   test("a worker from this session shows its full row", async () => {
     const dir = join(scratch, "own-session");
     marker(dir, "own", process.pid, "my worker", 90, SESSION);
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s my worker │ no event yet$/mu,
+      /^luna-high 1m3\d+s \$– my worker │ no event yet$/mu,
     );
   });
 
@@ -176,7 +178,7 @@ describe("statusline Run row", () => {
     expect(line).toContain(` ${expected} priced worker │`);
   });
 
-  test("omits the cost when usage is unknown", async () => {
+  test("marks the cost unknown when usage is unknown", async () => {
     const unknown = join(scratch, "unknown-cost-column");
     marker(unknown, "unknown", process.pid, "unknown worker");
     writeFileSync(
@@ -184,8 +186,7 @@ describe("statusline Run row", () => {
       progress("$ bun test", 1),
     );
     const out = await render(unknown);
-    expect(out).toMatch(/^luna-high 1m3\ds unknown worker │/mu);
-    expect(out).not.toContain("$0");
+    expect(out).toMatch(/^luna-high 1m3\ds \$– unknown worker │/mu);
   });
 
   test("prices the latest live rollout token total for a Codex row", async () => {
@@ -254,7 +255,7 @@ describe("statusline Run row", () => {
     );
     const out = await render(dir);
     expect(out).toMatch(
-      /^luna-high 1m3\ds agt_lfix Repo: dotfiles │ \$ bun test/mu,
+      /^luna-high 1m3\ds \$– agt_lfix Repo: dotfiles │ \$ bun test/mu,
     );
 
     const legacyDir = join(scratch, "legacy-session-row");
@@ -280,7 +281,7 @@ describe("statusline Run row", () => {
     );
     const out = await render(dir);
     expect(out).toMatch(
-      /^sol-max 1m3\d+s resume: J1 gated commit │ no event yet$/mu,
+      /^sol-max 1m3\d+s \$– resume: J1 gated commit │ no event yet$/mu,
     );
     expect(out).not.toContain("in other sessions");
   });
@@ -308,7 +309,7 @@ describe("statusline Run row", () => {
     marker(dir, "other", process.pid, "other worker", 80, "other-session-id");
     marker(dir, "none", process.pid, "unowned worker", 70, null);
     const out = await render(dir);
-    expect(out).toMatch(/^luna-high 1m3\d+s my worker │ no event yet$/mu);
+    expect(out).toMatch(/^luna-high 1m3\d+s \$– my worker │ no event yet$/mu);
     expect(out).toContain("+2 in other sessions");
     expect(out).not.toContain("other worker");
     expect(out).not.toContain("unowned worker");
@@ -320,9 +321,11 @@ describe("statusline Run row", () => {
     marker(dir, "long", process.pid, "long one", 600);
     const lines = (await render(dir)).split("\n");
     const at = lines.findIndex((l) => l.startsWith("luna-high "));
-    expect(lines[at]).toMatch(/^luna-high 10m0\ds long one +│ no event yet$/u);
+    expect(lines[at]).toMatch(
+      /^luna-high 10m0\ds \$– long one +│ no event yet$/u,
+    );
     expect(lines[at + 1]).toMatch(
-      /^luna-high +0m3\ds short one │ no event yet$/u,
+      /^luna-high +0m3\ds \$– short one │ no event yet$/u,
     );
   });
 
@@ -389,7 +392,7 @@ describe("statusline Run row", () => {
       progress("$ bun test kernel.test.ts", 2),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s nothrow-0 │ \$ bun test kernel\.test\.ts · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$– nothrow-0 │ \$ bun test kernel\.test\.ts · 12 cmd · 3 files$/mu,
     );
     // a quiet worker (reasoning) is shown with the age of its last event, not as if it were live
     writeFileSync(
@@ -414,7 +417,7 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "01a1111b-7dab-7d61-8f9b-231c4cc9568a"),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s 01a1\.\.568a nothrow-1 │ \$ ls · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$– 01a1\.\.568a nothrow-1 │ \$ ls · 12 cmd · 3 files$/mu,
     );
   });
 
@@ -485,7 +488,7 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "01a11a74-cd83-7de1-b627-16537d8de67d"),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s 01a1\.\.e67d resume: continued worker │ \$ ls · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$– 01a1\.\.e67d resume: continued worker │ \$ ls · 12 cmd · 3 files$/mu,
     );
   });
 

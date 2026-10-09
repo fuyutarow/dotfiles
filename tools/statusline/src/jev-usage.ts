@@ -95,5 +95,5 @@ export async function readJevUsage(
 
 export function jevUsageSegment(usage: JevUsage | undefined): string {
   if (usage === undefined) return "";
-  return `Jev ${formatCostUsd(usage.costUsd)}`;
+  return `Jev 7d spend ${formatCostUsd(usage.costUsd)}`;
 }

@@ -258,7 +258,7 @@ function sessionText(value: string, width: number, reserve: boolean): string {
 }
 function costText(value: number | undefined, width: number): string {
   if (width === 0) return "";
-  if (value === undefined) return " ".repeat(width + 1);
+  if (value === undefined) return `${padDisplay("$–", width)} `;
   return `${padDisplay(costLabel(value), width)} `;
 }
 function costLabel(value: number): string {
@@ -298,7 +298,7 @@ export function routeLines(
   const elapsed = shown.map((r) => dur(r.secs));
   const costs = shown.map((r) => r.doing?.costUsd);
   const costLabels = costs.map((value) =>
-    value === undefined ? "" : costLabel(value),
+    value === undefined ? "$–" : costLabel(value),
   );
   const costWidth = Math.max(
     0,

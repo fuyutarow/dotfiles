@@ -37,14 +37,14 @@ const JevEndpointSchema = z.discriminatedUnion("api", [
     api: z.literal("typesafe"),
     url: z.url(),
     model: z.string().min(1),
-    price_per_mtok_input: z.number().nonnegative(),
-    price_per_mtok_output: z.number().nonnegative(),
+    price_per_mtok_input: z.number().nonnegative().optional(),
+    price_per_mtok_output: z.number().nonnegative().optional(),
   }),
   z.strictObject({
     api: z.literal("reseller"),
     url: z.url(),
-    price_per_mtok_input: z.number().nonnegative(),
-    price_per_mtok_output: z.number().nonnegative(),
+    price_per_mtok_input: z.number().nonnegative().optional(),
+    price_per_mtok_output: z.number().nonnegative().optional(),
   }),
 ]);
 export type JevEndpoint = z.output<typeof JevEndpointSchema>;

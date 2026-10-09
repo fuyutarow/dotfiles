@@ -194,7 +194,7 @@ function roster(name: string, edit: (t: string) => string): string {
 const withJev = (t: string): string =>
   t.replace(
     /^\[auto\.jev\][\s\S]*?(?=\n\[)/mu,
-    `[auto.jev]\napi = "reseller"\nurl = "${server.url.href}"\n`,
+    `[auto.jev]\napi = "reseller"\nurl = "${server.url.href}"\nprice_per_mtok_input = 0.042\nprice_per_mtok_output = 0.0\n`,
   );
 const LIVE_JEV = roster("live", withJev);
 // A fake run-claude: records its argv, prints the relay shape the real one prints.
@@ -295,7 +295,15 @@ async function router(
     routedArgs.push("--no-grader");
   const r = Bun.spawn([process.execPath, CLI, ...routedArgs], {
     env: {
-      ...process.env,
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([name]) =>
+            !name.startsWith("AGENT_DISPATCH_") &&
+            !name.startsWith("AGENT_ROUTER_") &&
+            !name.startsWith("FAKE_") &&
+            name !== "DISPATCH_ROSTER_PATH",
+        ),
+      ),
       AGENT_ROUTER_STATE_DIR: state,
       AGENT_ROUTER_CODEX_WORKER: FAKE,
       DISPATCH_ROSTER_PATH: LIVE_JEV,

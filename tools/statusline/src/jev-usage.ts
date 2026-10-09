@@ -24,7 +24,7 @@ const TAIL_BYTES = 256 * 1024;
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
 const WINDOW_SECONDS = 7 * 24 * 60 * 60;
 
-export type JevUsage = { costUsd: number };
+export type JevUsage = { costUsd: number | undefined };
 
 function parseTail(
   path: string,
@@ -85,15 +85,20 @@ export async function readJevUsage(
   const prices = await loadRoster();
   if (!prices.ok) return err("Jev price unavailable");
   const jev = prices.value.auto.jev;
+  const costUsd =
+    jev.price_per_mtok_input === undefined ||
+    jev.price_per_mtok_output === undefined
+      ? undefined
+      : (result.value.input * jev.price_per_mtok_input +
+          result.value.output * jev.price_per_mtok_output) /
+        1_000_000;
   return ok({
-    costUsd:
-      (result.value.input * jev.price_per_mtok_input +
-        result.value.output * jev.price_per_mtok_output) /
-      1_000_000,
+    costUsd,
   });
 }
 
 export function jevUsageSegment(usage: JevUsage | undefined): string {
   if (usage === undefined) return "";
-  return `Jev 7d spend ${formatCostUsd(usage.costUsd)}`;
+  const cost = usage.costUsd === undefined ? "—" : formatCostUsd(usage.costUsd);
+  return `Jev 7d spend ${cost}`;
 }

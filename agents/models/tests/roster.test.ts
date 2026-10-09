@@ -76,7 +76,7 @@ describe("dispatch roster", () => {
     expect(rosterTable(loaded.value)).toContain("$2/$0.20/$12");
   });
 
-  test("requires both Jev price fields", async () => {
+  test("allows unknown Jev list prices", async () => {
     const folder = mkdtempSync(join(tmpdir(), "dispatch-roster-price-"));
     const original = await Bun.file(
       join(import.meta.dir, "..", "dispatch-roster.toml"),
@@ -84,7 +84,11 @@ describe("dispatch roster", () => {
     const path = join(folder, "missing-price.toml");
     writeFileSync(path, original.replace("price_per_mtok_output = 0.0\n", ""));
     const loaded = await loadRoster(path);
-    expect(loaded.ok).toBe(false);
+    expect(loaded.ok).toBe(true);
+    if (loaded.ok) {
+      expect(loaded.value.auto.jev.price_per_mtok_input).toBe(0.042);
+      expect(loaded.value.auto.jev.price_per_mtok_output).toBeUndefined();
+    }
     rmSync(folder, { recursive: true, force: true });
   });
 

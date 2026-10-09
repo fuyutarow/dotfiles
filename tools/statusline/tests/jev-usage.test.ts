@@ -56,6 +56,7 @@ test("reads seven-day Jev response usage and prices spend", async () => {
 test("labels seven-day spend for small and larger amounts", () => {
   expect(jevUsageSegment({ costUsd: 0.001 })).toBe("Jev 7d spend <$0.01");
   expect(jevUsageSegment({ costUsd: 1.23 })).toBe("Jev 7d spend $1.23");
+  expect(jevUsageSegment({ costUsd: undefined })).toBe("Jev 7d spend —");
 });
 
 test("omits Jev when runs.jsonl is absent", async () => {

@@ -23,6 +23,11 @@ const rejectPrototypeFlag = (type: string, flag: string): void => {
   }
 };
 const flags = {
+  host: { type: String, description: "Windows host SSH alias (default r99)" },
+  approve: {
+    type: [String] satisfies [StringConstructor],
+    description: "Explicit host approval: recycle-bin or hibernate-off",
+  },
   json: {
     type: Boolean,
     default: false,
@@ -68,6 +73,7 @@ const usageExit = (code: number) => {
 };
 const common = { strictFlags: true, ignoreArgv: rejectPrototypeFlag };
 const planFlags = {
+  host: flags.host,
   json: flags.json,
   tier: flags.tier,
   all: flags.all,
@@ -75,6 +81,11 @@ const planFlags = {
   noProgress: flags.noProgress,
 };
 const parsedFlags = z.object({
+  host: z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u)
+    .optional(),
+  approve: z.array(z.enum(["recycle-bin", "hibernate-off"])).default([]),
   json: z.boolean().default(false),
   tier: z.string().optional(),
   all: z.boolean().default(false),
@@ -98,6 +109,8 @@ const commands = [
     name: "run",
     parameters: ["[targets...]"],
     flags: {
+      host: flags.host,
+      approve: flags.approve,
       json: flags.json,
       tier: flags.tier,
       yes: flags.yes,
@@ -142,7 +155,9 @@ const fail = (message: string): number => {
 };
 
 function planTable(value: Plan): string {
-  const lines = ["TARGET\tTIER\tVERDICT\tPATH\tBYTES\tREASON"];
+  const lines = [
+    "TARGET\tTIER\tVERDICT\tPATH\tBYTES\tLIVE-SAFE\tAPPROVAL\tC: DELTA\tREASON",
+  ];
   for (const target of value.targets) {
     if (!target.available)
       process.stderr.write(
@@ -151,7 +166,7 @@ function planTable(value: Plan): string {
     lines.push(
       ...target.candidates.map(
         (c) =>
-          `${target.name}\t${target.tier}\t${c.verdict}\t${c.path ?? "-"}\t${c.bytes ?? "-"}\t${c.reason}`,
+          `${target.name}\t${c.host_lever?.tier ?? target.tier}\t${c.verdict}\t${c.host_lever?.path ?? c.path ?? "-"}\t${c.bytes ?? "-"}\t${c.host_lever?.live_safe ?? "-"}\t${c.host_lever?.approval ?? "-"}\t${c.result?.c_free_delta ?? "-"}\t${c.reason}`,
       ),
     );
   }
@@ -254,6 +269,8 @@ export async function main(
     progressReporter.report(target, phase, entries, bytes, done);
   };
   const context: Context = {
+    ...(f.host === undefined ? {} : { host: f.host }),
+    approve: f.approve,
     mode: "plan",
     explicit: false,
     fetch: f.fetch,

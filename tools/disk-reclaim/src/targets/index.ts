@@ -30,6 +30,8 @@ export type Context = {
   underPressure?: boolean;
   /** Opt-in remote refresh; omitted means off. */
   fetch?: boolean;
+  host?: string;
+  approve?: string[];
   progress?: boolean | undefined;
   progressTty?: boolean | undefined;
   reportProgress?:
@@ -133,7 +135,7 @@ export const registry: Target[] = [
   {
     ...host,
     description: {
-      what: "Windows swap and winget cache",
+      what: "Windows host cleanup tiers over SSH",
       why: "requires an owner decision",
     },
   },

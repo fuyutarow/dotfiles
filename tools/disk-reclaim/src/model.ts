@@ -25,6 +25,9 @@ export const ActionResult = z.object({
   ok: z.boolean(),
   bytes_freed: bytes,
   error: z.string().nullable(),
+  c_free_before: z.number().nonnegative().optional(),
+  c_free_after: z.number().nonnegative().optional(),
+  c_free_delta: z.number().optional(),
 });
 export type ActionResult = z.output<typeof ActionResult>;
 export const Candidate = z
@@ -42,6 +45,14 @@ export const Candidate = z
     ),
     bytes,
     bytes_kind: z.enum(["freed_now", "to_graveyard", "estimate"]),
+    host_lever: z
+      .object({
+        path: z.string(),
+        tier: z.string(),
+        live_safe: z.boolean(),
+        approval: z.string().nullable(),
+      })
+      .optional(),
     action: z.object({ kind: ActionKind, argv: z.array(z.string()) }),
     result: ActionResult.nullable(),
   })

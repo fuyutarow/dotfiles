@@ -1,205 +1,296 @@
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
-import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
+import { hostAction, hostProbe } from "./host-powershell.ts";
 
 export type Swap = { path: string; mtimeMs: number; bytes: number };
+type Lever = { id: string; path: string; bytes: number | null };
+type Vhdx = {
+  path: string;
+  bytes: number | null;
+  distro: string;
+  state: string;
+};
 export type HostSnapshot = {
   swaps: Swap[];
   cFree: number | null;
   cTotal: number | null;
   wingetCache: number | null;
   wingetPath: string | null;
+  levers: Lever[];
+  vhdx: Vhdx[];
 };
 export type CommandResult = { code: number; out: string; timedOut: boolean };
 export type HostRunner = (
   host: string,
   script: string,
 ) => Promise<CommandResult>;
-
-export function classifySwaps(swaps: Swap[]): {
-  live: Swap | null;
-  orphans: Swap[];
-  reclaimBytes: number;
-} {
-  if (swaps.length === 0) return { live: null, orphans: [], reclaimBytes: 0 };
+export function classifySwaps(swaps: Swap[]) {
   const [live, ...orphans] = swaps.toSorted((a, b) => b.mtimeMs - a.mtimeMs);
   return {
     live: live ?? null,
     orphans,
-    reclaimBytes: orphans.reduce((sum, s) => sum + s.bytes, 0),
+    reclaimBytes: orphans.reduce((n, s) => n + s.bytes, 0),
   };
 }
-
+const numeric = (text: string | undefined): number | null =>
+  text !== undefined && /^\d+$/u.test(text) ? Number(text) : null;
 export function parseProbe(out: string): HostSnapshot {
-  const swaps: Swap[] = [];
-  let cFree: number | null = null,
-    cTotal: number | null = null,
-    wingetCache: number | null = null,
-    wingetPath: string | null = null;
-  for (const line of out.split("\n")) {
-    const [, mt, bytes, path] =
-      /^swap=(\d+)\|(\d+)\|(.+)$/u.exec(line.trim()) ?? [];
-    if (mt !== undefined && bytes !== undefined && path !== undefined) {
-      swaps.push({ mtimeMs: Number(mt), bytes: Number(bytes), path });
-      continue;
-    }
+  const s: HostSnapshot = {
+    swaps: [],
+    cFree: null,
+    cTotal: null,
+    wingetCache: null,
+    wingetPath: null,
+    levers: [],
+    vhdx: [],
+  };
+  for (const raw of out.replaceAll("\r", "").split("\n")) {
+    const line = raw.trim();
+    const [, mt, bytes, path] = /^swap=(\d+)\|(\d+)\|(.+)$/u.exec(line) ?? [];
+    if (mt !== undefined && bytes !== undefined && path !== undefined)
+      s.swaps.push({ mtimeMs: Number(mt), bytes: Number(bytes), path });
     const [, key, value] =
-      /^(c_free|c_total|winget_cache)=(\d+)$/u.exec(line.trim()) ?? [];
-    if (key === "c_free") cFree = Number(value);
-    if (key === "c_total") cTotal = Number(value);
-    if (key === "winget_cache") wingetCache = Number(value);
-    const [, wp] = /^winget_path=(.*)$/u.exec(line.trim()) ?? [];
-    if (wp !== undefined && wp !== "") wingetPath = wp;
+      /^(c_free|c_total|winget_cache)=(\d+)$/u.exec(line) ?? [];
+    if (key === "c_free") s.cFree = numeric(value);
+    if (key === "c_total") s.cTotal = numeric(value);
+    if (key === "winget_cache") s.wingetCache = numeric(value);
+    const [, wp] = /^winget_path=(.+)$/u.exec(line) ?? [];
+    if (wp !== undefined) s.wingetPath = wp;
+    const [, id, size, location] =
+      /^lever=([^|]+)\|(\d+|\?)\|(.+)$/u.exec(line) ?? [];
+    if (id !== undefined && location !== undefined)
+      s.levers.push({ id, bytes: numeric(size), path: location });
+    const [, allocated, distro, state, disk] =
+      /^vhdx=(\d+|\?)\|([^|]+)\|([^|]+)\|(.+)$/u.exec(line) ?? [];
+    if (distro !== undefined && state !== undefined && disk !== undefined)
+      s.vhdx.push({ path: disk, bytes: numeric(allocated), distro, state });
   }
-  return { swaps, cFree, cTotal, wingetCache, wingetPath };
+  return s;
 }
-
-const HOST_PROBE = `$ErrorActionPreference='SilentlyContinue'; $c=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"; "c_free="+$c.FreeSpace; "c_total="+$c.Size; Get-ChildItem $env:TEMP -Recurse -Filter swap.vhdx -File | % { "swap="+[int64]($_.LastWriteTime.ToUniversalTime()-(Get-Date '1970-01-01Z')).TotalMilliseconds+"|"+$_.Length+"|"+$_.FullName }; $wg="$env:LOCALAPPDATA\\Microsoft\\WinGet"; if(Test-Path $wg){ "winget_path="+$wg; "winget_cache="+((Get-ChildItem $wg -Recurse -File|Measure-Object Length -Sum).Sum+0) }`;
 const sshRunner: HostRunner = async (host, script) => {
+  const signal = AbortSignal.timeout(
+    script.includes("dism.exe") ? 3_600_000 : 120_000,
+  );
   const encoded = Buffer.from(
-    script === "$probe" ? HOST_PROBE : script,
+    script === "$probe" ? hostProbe : script,
     "utf16le",
   ).toString("base64");
   const proc = Bun.spawn(
     [
       "ssh",
       "-o",
+      "BatchMode=yes",
+      "-o",
       "ConnectTimeout=10",
       host,
-      `powershell.exe -NoProfile -EncodedCommand ${encoded}`,
+      `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
     ],
-    { stdout: "pipe", stderr: "pipe" },
+    { stdout: "pipe", stderr: "pipe", signal },
   );
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
-  return { code, out: `${out}${err}`.replaceAll("\r", ""), timedOut: false };
+  return {
+    code,
+    out: `${out}${err}`.replaceAll("\r", ""),
+    timedOut: signal.aborted,
+  };
 };
-
-const winToWsl = (path: string): string | null => {
-  const match = /^([A-Za-z]):\\(.*)$/u.exec(path);
-  return match?.[1] === undefined || match[2] === undefined
-    ? null
-    : `/mnt/${match[1].toLowerCase()}/${match[2].replaceAll("\\", "/")}`;
+const definitions: Record<
+  string,
+  { live: boolean; approval: string | null; note: string }
+> = {
+  "orphan-swap": {
+    live: true,
+    approval: null,
+    note: "OS locks the running swap",
+  },
+  "winget-cache": {
+    live: true,
+    approval: null,
+    note: "regenerable winget cache",
+  },
+  "user-temp": {
+    live: true,
+    approval: null,
+    note: "files older than 1 day only; virtual disks excluded",
+  },
+  "windows-temp": {
+    live: true,
+    approval: null,
+    note: "files older than 1 day only; virtual disks excluded",
+  },
+  "delivery-optimization": {
+    live: true,
+    approval: null,
+    note: "Delivery Optimization cache; may require elevation",
+  },
+  "wer-dumps": {
+    live: true,
+    approval: null,
+    note: "WER and crash dumps; may require elevation",
+  },
+  "windows-update": {
+    live: true,
+    approval: null,
+    note: "DISM StartComponentCleanup is slow; plan-only without --yes; requires elevation",
+  },
+  "recycle-bin": {
+    live: true,
+    approval: "recycle-bin",
+    note: "permanently empties C: Recycle Bin",
+  },
+  "hibernate-off": {
+    live: false,
+    approval: "hibernate-off",
+    note: "powercfg /h off changes the hibernation setting; requires elevation",
+  },
 };
-const candidate = (
-  id: string,
-  windowsPath: string,
-  bytes: number,
-): Candidate => ({
-  id,
-  path: winToWsl(windowsPath),
-  verdict: winToWsl(windowsPath) === null ? "ASK" : "RECLAIM",
-  reason: "orphaned host swap or regenerable winget cache",
-  checks: [
-    {
-      name: "windows-path-mapped",
-      ok: winToWsl(windowsPath) !== null,
-      detail: "mapped Windows volume into WSL",
+function candidate(lever: Lever, ctx: Context, tier = lever.id): Candidate {
+  const def = definitions[tier];
+  const approved =
+    def !== undefined &&
+    (def.approval === null || ctx.approve?.includes(def.approval) === true);
+  return {
+    id: lever.id,
+    path: null,
+    verdict: def === undefined || !approved ? "ASK" : "RECLAIM",
+    reason: `${def?.note ?? "unknown host lever"}${approved ? "" : `; requires --approve ${def?.approval}`}`,
+    checks: [
+      { name: "host-tier", ok: def !== undefined && approved, detail: tier },
+    ],
+    bytes: lever.bytes,
+    bytes_kind: "estimate",
+    host_lever: {
+      path: lever.path,
+      tier,
+      live_safe: def?.live ?? false,
+      approval: def?.approval ?? null,
     },
-  ],
-  bytes,
-  bytes_kind: "estimate",
-  action: { kind: "delete", argv: ["removeTree", windowsPath] },
-  result: null,
-});
-
+    action: { kind: "command", argv: [tier, lever.path] },
+    result: null,
+  };
+}
 export function createHostTarget(options: {
   host?: string;
   runner: HostRunner;
   snapshot?: () => Promise<HostSnapshot>;
 }): Target {
-  let probeError: string | null = null;
-  const snapshot = async () => {
-    if (options.snapshot !== undefined) return options.snapshot();
-    const result = await options.runner(options.host ?? "r99", "$probe");
-    if (result.timedOut) probeError = "host probe timed out";
-    else if (result.code !== 0) probeError = `host probe exited ${result.code}`;
-    else if (result.out.trim().length === 0)
-      probeError = "host probe returned nothing";
-    else probeError = null;
-    return parseProbe(result.out);
-  };
+  const hostname = (ctx: Context) => ctx.host ?? options.host ?? "r99";
   return {
     name: "host",
     tier: "owner",
     available: () => ({
       available:
-        process.platform === "linux" &&
-        process.env.WSL_DISTRO_NAME !== undefined,
-      skip_reason: "host target requires WSL",
+        options.snapshot !== undefined ||
+        options.runner !== sshRunner ||
+        Bun.which("ssh") !== null,
+      skip_reason: null,
     }),
-    plan: async () => {
-      const s = await snapshot();
-      if (probeError !== null)
+    plan: async (ctx) => {
+      const result =
+        options.snapshot === undefined
+          ? await options.runner(hostname(ctx), "$probe")
+          : null;
+      const s =
+        result === null ? await options.snapshot!() : parseProbe(result.out);
+      if (
+        result?.timedOut === true ||
+        (result !== null && result.code !== 0) ||
+        (s.cFree === null && result !== null)
+      )
         return [
           {
-            id: "host-probe",
-            path: null,
-            verdict: "ASK",
-            reason: probeError,
-            checks: [{ name: "host-probe", ok: null, detail: probeError }],
-            bytes: null,
-            bytes_kind: "estimate",
-            action: { kind: "command", argv: [] },
-            result: null,
+            ...candidate(
+              { id: "host-probe", path: hostname(ctx), bytes: null },
+              ctx,
+            ),
+            reason: "host probe failed or C: free measurement missing",
           },
         ];
       const { orphans } = classifySwaps(s.swaps);
+      const levers = s.levers.slice();
+      if (
+        s.wingetCache !== null &&
+        s.wingetCache > 0 &&
+        s.wingetPath !== null &&
+        !levers.some((l) => l.id === "winget-cache")
+      )
+        levers.push({
+          id: "winget-cache",
+          path: s.wingetPath,
+          bytes: s.wingetCache,
+        });
       return [
-        ...orphans.map((o) => candidate(o.path, o.path, o.bytes)),
-        ...(s.wingetCache !== null && s.wingetCache > 0 && s.wingetPath !== null
-          ? [candidate("winget-cache", s.wingetPath, s.wingetCache)]
-          : []),
+        ...orphans.map((o) =>
+          candidate(
+            { id: o.path, path: o.path, bytes: o.bytes },
+            ctx,
+            "orphan-swap",
+          ),
+        ),
+        ...levers.map((l) => candidate(l, ctx)),
+        ...s.vhdx.map((v): Candidate => {
+          const report = candidate(
+            { id: `vhdx:${v.path}`, path: v.path, bytes: v.bytes },
+            ctx,
+          );
+          report.verdict = "KEEP";
+          report.checks = [];
+          report.action = { kind: "command", argv: [] };
+          report.reason = `report only: allocated bytes; distro ${v.distro}; state ${v.state}; use disk-reclaim plan vhdx for compaction`;
+          return report;
+        }),
       ];
     },
-    act: async (c: Candidate, ctx: Context): Promise<ActionResult> => {
-      if (c.path === null)
+    act: async (c, ctx): Promise<ActionResult> => {
+      const tier = c.host_lever?.tier;
+      const def = tier === undefined ? undefined : definitions[tier];
+      if (def === undefined || tier === undefined || c.host_lever === undefined)
         return {
           ok: false,
           bytes_freed: null,
-          error: "Windows path cannot be mapped to WSL",
+          error: "unknown or report-only host lever",
         };
-      let entries = [c.path];
-      if (c.id === "winget-cache") {
-        const cachePath = c.path;
-        const names = fromThrowable(() => readdirSync(cachePath))();
-        if (names.isErr())
-          return { ok: false, bytes_freed: null, error: String(names.error) };
-        entries = names.value.map((name) => join(cachePath, name));
-      }
-      let ok = true;
-      let freed = 0;
-      for (const entry of entries) {
-        const r = await removeTree(entry, {
-          uid: process.getuid?.() ?? 0,
-          protection: {
-            ownerTarget: "host",
-            procDir: ctx.procDir,
-            repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
-            protectedPaths: ctx.config.protected ?? [],
-            ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
-          },
-          progress: removeTreeProgress(entry, c.bytes, ctx),
-        });
-        freed += r.statfs_bytes_freed;
-        for (const x of r.refused)
-          ctx.log(`${x.path}: refused; repair: ${x.repair}`);
-        for (const x of r.errors) ctx.log(`${x.path}: ${x.error}`);
-        ok &&= r.ok;
-      }
+      if (
+        ctx.mode !== "run" ||
+        (def.approval !== null && ctx.approve?.includes(def.approval) !== true)
+      )
+        return {
+          ok: false,
+          bytes_freed: null,
+          error: `requires run authorization${def.approval === null ? "" : ` and --approve ${def.approval}`}`,
+        };
+      const r = await options.runner(
+        hostname(ctx),
+        hostAction(tier, c.host_lever.path),
+      );
+      const before = numeric(/^c_before=(\d+)$/mu.exec(r.out)?.[1]);
+      const after = numeric(/^c_after=(\d+)$/mu.exec(r.out)?.[1]);
+      if (before === null || after === null)
+        return {
+          ok: false,
+          bytes_freed: null,
+          error: "missing C: before/after measurement",
+        };
+      const delta = after - before;
+      const inert = Math.abs(delta) < 1024 ** 2 ? "; inert here" : "";
+      ctx.log(
+        `${tier}: C: free ${before} -> ${after}; delta ${delta} bytes${inert}`,
+      );
+      c.reason += `; C: delta ${delta} bytes${inert}`;
+      const ok = r.code === 0 && !r.timedOut;
       return {
         ok,
-        bytes_freed: freed,
-        error: ok ? null : "host delete failed",
+        bytes_freed: Math.max(0, delta),
+        c_free_before: before,
+        c_free_after: after,
+        c_free_delta: delta,
+        error: ok ? null : `${tier} failed: ${r.out.slice(-2000)}`,
       };
     },
   };
 }
-
 export const host = createHostTarget({ runner: sshRunner });

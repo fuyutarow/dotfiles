@@ -21,11 +21,12 @@ below.
 Only offline **compaction** returns the logical↔allocated gap. Confirm sparse with
 `fsutil sparse queryflag <vhdx>` before assuming set-sparse would help.
 
-## reclaim:host — orphaned swap.vhdx + winget cache (live-safe)
+## reclaim:host — separate Windows cleanup tiers over SSH
 
 `disk-reclaim plan host` (or `mise run reclaim:host`). A fresh distro launch writes a new
 `%TEMP%\<guid>\swap.vhdx` and leaves the previous one behind. They accumulate across restarts (three
-present, 17 GB orphaned, on one box). READ-ONLY plan by default; `--execute` deletes.
+present, 17 GB orphaned, on one box). READ-ONLY plan from macOS or WSL; `--host` defaults to `r99`.
+`run host --yes` / `reclaim:host:yes` runs swap, winget, temp files older than 1 day, Delivery Optimization, WER/dumps and slow DISM cleanup. Recycle Bin and hibernation require `--approve recycle-bin` / `--approve hibernate-off`. Each lever reports C: free delta; near-zero is "inert here". VHDX allocation/distro/state are report-only; guest `system` cleanup remains optional and separate.
 
 Safe on a live box **by construction**. The running instance holds its swap.vhdx open, so Windows
 refuses to delete it (a sharing violation). Even if the newest-is-live heuristic were wrong, the OS

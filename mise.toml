@@ -570,9 +570,14 @@ run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run purge --
 # the method for this Windows edition (Optimize-VHD on Pro, diskpart on Home), and prints the
 # elevated procedure rather than pretending to run what it cannot test.
 [tasks."reclaim:host"]
-description = "Reclaim Windows-host disk under WSL2 that guest-side tasks cannot: orphaned swap.vhdx (from dead distro instances) and the winget cache. READ-ONLY plan by default; --execute frees. Safe live — the OS locks the running swap. --host is an ssh alias."
+description = "Plan Windows host cleanup over SSH from macOS or WSL (--host r99 by default). Run host --yes executes ordinary tiers; recycle-bin and hibernate-off need --approve. C: free deltas are the result; VHDX is report-only."
 raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan host'
+
+[tasks."reclaim:host:yes"]
+description = "Execute ordinary host cleanup tiers over SSH; --approve recycle-bin or --approve hibernate-off adds only the named approval tier."
+raw = true
+run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run host --yes'
 
 [tasks."reclaim:workspaces"]
 description = "READ-ONLY plan for fully-pushed, clean jj workspaces that disk-reclaim can safely forget and delete. Use reclaim:workspaces:yes to act."

@@ -72,6 +72,10 @@ There is no single "clean up WSL". The bytes live in four different places, each
 | guest package/build caches | `reclaim:clean`, `reclaim:builds`, `reclaim:system` | GB–tens | only if the vhdx later compacts |
 | the vhdx's sparse gap (logical ≫ used) | `reclaim:vhdx` (planner → offline compact) | **the biggest**, ~100GB-class | directly, after `wsl --shutdown` |
 | orphaned `swap.vhdx` (dead distro instances) | `reclaim:host` | tens of GB, recurring | directly, live-safe (OS locks the live one) |
+| winget cache, temp files older than 1 day, Delivery Optimization, WER/dumps | `reclaim:host` → `reclaim:host:yes` | per-tier plan bytes | SSH from macOS/WSL; measure C: delta per lever; near-zero = inert here |
+| Windows Update component store | `reclaim:host:yes` (DISM) | unknown until measured | slow; plan-only without `--yes`; needs elevation |
+| Recycle Bin / `hiberfil.sys` | `run host --yes --approve recycle-bin` / `--approve hibernate-off` | plan includes size | explicit approval only; hibernation changes a system setting |
+| WSL distro VHDX files | `plan host --host r99` | allocated bytes, distro, state | report only; use `plan vhdx` for compaction; never delete |
 | Windows-side app bloat | winget uninstall + `wsl:winget:dump` | tens of GB | directly |
 | an unused distro | `wsl.exe --unregister <name>` | its whole vhdx | directly |
 | C: is simply too small | relocate: `wsl --manage <distro> --move <D:\path>` | **the whole vhdx**, durable | moves it off C: entirely |

@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   backgroundReason,
   FOREGROUND_MAX_MS,
+  isSmallFileViewer,
   unwaitedJobs,
 } from "../enforce-background-waits.ts";
+import { recordEnd, recordStart } from "../bash-durations.ts";
 import { AGENT_ROUTER_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
 
 // enforce-background-waits: a long or waiting foreground Bash call is denied with the resend to make.
@@ -74,6 +78,82 @@ describe("as a hook", () => {
     expect(decide({ command: "ls" })).toBe("");
   });
 });
+
+describe("small-file viewer history exemption", () => {
+  test("allows small read-only viewers regardless of a slow command history", () => {
+    const root = mkdtempSync(join(tmpdir(), "background-viewers-"));
+    const dir = join(root, "history");
+    const file = join(root, "small.json");
+    writeFileSync(file, '{"ok":true}\n');
+    mkdirSync(dir, { recursive: true });
+    for (const [i, ms] of [7000, 7000].entries()) {
+      recordStart(dir, `cat-${i}`, "cat", 0);
+      recordEnd(dir, `cat-${i}`, ms);
+    }
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      CLAUDE_BASH_DURATIONS_DIR: dir,
+    };
+    delete env[AGENT_ROUTER_WORKER_ENV];
+    for (const key of ["cat", "tail -n", "wc", "jq", "sed -n"]) {
+      recordStart(dir, `${key}-slow`, key, 0);
+      recordEnd(dir, `${key}-slow`, 7000);
+    }
+    for (const command of [
+      `cat ${file}`,
+      `tail -n 5 ${file}`,
+      `wc ${file}`,
+      `jq . ${file}`,
+      `sed -n 1,5p ${file}`,
+    ]) {
+      expect(isSmallFileViewer(command)).toBe(true);
+      expect(decideWithEnv(command, env)).toBe("");
+    }
+  });
+
+  test("does not exempt a 5 MiB file, tail -f, or a pipeline from slow history", () => {
+    const root = mkdtempSync(join(tmpdir(), "background-viewers-slow-"));
+    const dir = join(root, "history");
+    const large = join(root, "large.txt");
+    const small = join(root, "small.txt");
+    writeFileSync(large, "x".repeat(5 * 1024 * 1024));
+    writeFileSync(small, "small\n");
+    mkdirSync(dir, { recursive: true });
+    for (const [key, ms] of [
+      ["cat", 7000],
+      ["tail -f", 7000],
+      ["cat -c", 7000],
+    ] as const) {
+      recordStart(dir, key, key, 0);
+      recordEnd(dir, key, ms);
+    }
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      CLAUDE_BASH_DURATIONS_DIR: dir,
+    };
+    delete env[AGENT_ROUTER_WORKER_ENV];
+    expect(decideWithEnv(`cat ${large}`, env)).toContain(
+      '"permissionDecision":"deny"',
+    );
+    expect(decideWithEnv(`tail -f ${small}`, env)).toContain(
+      '"permissionDecision":"deny"',
+    );
+    expect(decideWithEnv(`cat ${small} | wc -c`, env)).toContain(
+      '"permissionDecision":"deny"',
+    );
+  });
+});
+
+function decideWithEnv(command: string, env: NodeJS.ProcessEnv): string {
+  const p = Bun.spawnSync(["bun", HOOK], {
+    stdin: new Blob([
+      JSON.stringify({ tool_name: "Bash", tool_input: { command } }),
+    ]),
+    env,
+    timeout: 30_000,
+  });
+  return p.stdout.toString();
+}
 
 // A shell-level `&` inside a call that already has run_in_background:true outlives the observed
 // outer shell (firedancer coordinator, 2026-10-08): denied unless the script waits for the job.

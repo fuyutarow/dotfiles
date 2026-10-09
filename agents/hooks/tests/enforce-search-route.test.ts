@@ -82,6 +82,23 @@ describe("**統治下では黙って抜ける**(2026-09-01、発注者の裁定)
 });
 
 describe("enforce-search-route", () => {
+  test("allows grep and rg scoped to explicit regular files", () => {
+    const project = registerProject();
+    writeFileSync(join(project, "one.log"), "foo\n");
+    writeFileSync(join(project, "a.txt"), "foo a\n");
+    writeFileSync(join(project, "b.txt"), "foo b\n");
+    for (const command of ["grep -e foo one.log", "rg foo a.txt b.txt"]) {
+      const result = runHook(HOOK, bashPayload(project, command), withCcc());
+      expect({
+        command,
+        decision: decisionOf(result.stdout)?.permissionDecision,
+      }).toEqual({
+        command,
+        decision: undefined,
+      });
+    }
+  });
+
   test("denies built-in Grep in an operational ccc project", () => {
     const result = runHook(HOOK, grepPayload(registerProject()), withCcc());
     const decision = decisionOf(result.stdout);

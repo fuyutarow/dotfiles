@@ -32,6 +32,8 @@
 
 import { at, num, strAt } from "../../hooks/narrow.ts";
 import { effective, parseShell } from "../../hooks/shell-syntax.ts";
+import { existsSync, statSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import {
   AGENT_ROUTER_WORKER_ENV,
   AGENT_ROUTER_WORKER_VALUE,
@@ -50,6 +52,7 @@ export const FOREGROUND_MAX_MS = 120_000;
 // owner's bound (2026-10-06: 「5sで終わらなかったら bg送りにしたい」 after a 20 s `bun test` showed
 // "ctrl+b to run in background"); a quick read, sed or ssh probe stays under it.
 export const FOREGROUND_MEASURED_MAX_MS = 5000;
+const SMALL_VIEWER_MAX_BYTES = 1024 * 1024;
 const WAIT_LOOP = /\b(?:until|while)\b[\s\S]*?\bsleep\b/u;
 
 /** Why this Bash call must go to the background, or undefined when it may stay in front.
@@ -69,6 +72,67 @@ export function backgroundReason(
   if (WAIT_LOOP.test(strAt(input, "command") ?? ""))
     return "it is a wait loop (until/while … sleep)";
   return undefined;
+}
+
+/** A small, read-only file view should not inherit a slow run from the command history. */
+export function isSmallFileViewer(command: string): boolean {
+  const parsed = parseShell(command);
+  if (parsed === undefined || parsed.commands.length !== 1) return false;
+  const c = parsed.commands[0];
+  if (c === undefined || c.nested || c.dynamic || c.redirects.length > 0)
+    return false;
+  const eff = effective(c);
+  if (eff === undefined) return false;
+  const operands = viewerOperands(eff.name, eff.args);
+  if (operands.length === 0) return false;
+  return operands.every((operand) => {
+    const path = isAbsolute(operand) ? operand : resolve(c.cwd, operand);
+    if (!existsSync(path)) return false;
+    const st = statSync(path);
+    return st.isFile() && st.size < SMALL_VIEWER_MAX_BYTES;
+  });
+}
+
+function viewerOperands(name: string, args: string[]): string[] {
+  if (name === "cat")
+    return args.some((a) => a.startsWith("-") && a !== "--")
+      ? []
+      : args.filter((a) => a !== "--");
+  if (
+    name === "tail" &&
+    args.some(
+      (a) => a === "-f" || a === "--follow" || a.startsWith("--follow="),
+    )
+  )
+    return [];
+  if (name === "head" || name === "tail" || name === "wc")
+    return optionOperands(args);
+  if (name === "jq") {
+    const filter = args.findIndex((arg) => !arg.startsWith("-"));
+    return filter < 0
+      ? []
+      : args.slice(filter + 1).filter((arg) => arg !== "-");
+  }
+  if (name === "sed" && args.includes("-n")) {
+    const script = args.findIndex((a) => a !== "-n" && !a.startsWith("-"));
+    return script < 0 ? [] : args.slice(script + 1).filter((a) => a !== "-");
+  }
+  return [];
+}
+
+function optionOperands(args: string[]): string[] {
+  const skipNext = new Set(["-n", "-c", "--lines", "--bytes", "--files0-from"]);
+  const files: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "--") return [...files, ...args.slice(i + 1)];
+    if (skipNext.has(arg)) {
+      i++;
+      continue;
+    }
+    if (!arg.startsWith("-") && arg !== "-") files.push(arg);
+  }
+  return files;
 }
 
 // --- shell-level `&` inside an already-backgrounded call ---------------------------------------
@@ -359,7 +423,10 @@ const inner =
     : undefined;
 // SINGLE-AXIS: one question (may a backgrounded call start work the harness cannot see?)
 if (inner !== undefined) decidePre("deny", `background-waits: ${inner}`);
-const why = isBash ? backgroundReason(input, measured, isWorker) : undefined;
+const historyForCall = isSmallFileViewer(command) ? undefined : measured;
+const why = isBash
+  ? backgroundReason(input, historyForCall, isWorker)
+  : undefined;
 // SINGLE-AXIS: one question (may this call hold the session?) — its triggers share one resend
 if (why !== undefined)
   decidePre(

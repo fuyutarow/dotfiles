@@ -186,7 +186,9 @@ function isRoutedStreamFilter(commands: ShellCommand[]): boolean {
 function rawSearchBySyntax(parsed: ParsedShell, command: string): boolean {
   if (isRoutedStreamFilter(parsed.commands.filter((c) => !c.nested)))
     return false;
-  return parsed.commands.some((c) => commandSearches(c, command));
+  return parsed.commands.some(
+    (c) => commandSearches(c, command) && !fileScopedSearch(c),
+  );
 }
 
 function commandSearches(c: ShellCommand, command: string): boolean {
@@ -214,6 +216,22 @@ function commandSearches(c: ShellCommand, command: string): boolean {
       ? command
       : [...args, ...c.heredocs].join("\n");
   return FILE_SCAN_PRIMITIVE.test(text);
+}
+
+/** One nonrecursive grep/rg over explicit regular files is a file lookup, not a repo search. */
+function fileScopedSearch(c: ShellCommand): boolean {
+  const eff = effective(c);
+  if (eff === undefined || (eff.name !== "grep" && eff.name !== "rg"))
+    return false;
+  if (eff.args.some(isRecursiveOption)) return false;
+  const operands = searchOperands(c);
+  return (
+    operands.length > 0 &&
+    operands.every((operand) => {
+      const path = resolveSearchTarget(operand, c.cwd);
+      return existsSync(path) && statSync(path).isFile();
+    })
+  );
 }
 
 function isRawSearch(command: string | undefined): boolean {
@@ -385,7 +403,7 @@ function searchTargets(payload: unknown): string[] {
   if (parsed === undefined) return [startPath(payload)];
   if (isRoutedStreamFilter(parsed.commands.filter((c) => !c.nested))) return [];
   const targets = parsed.commands.flatMap((c) =>
-    commandSearches(c, command)
+    commandSearches(c, command) && !fileScopedSearch(c)
       ? searchOperands(c).map((operand) => resolveSearchTarget(operand, c.cwd))
       : [],
   );

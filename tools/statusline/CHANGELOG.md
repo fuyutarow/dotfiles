@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1 — 2026-10-10
+
+- Render other-session, unattributed, and stale run counts together on one dim-separated summary line.
+
 ## 0.9.0 — 2026-10-10
 
 - Attribute live workers only by the statusline payload's session id; show missing dispatcher sessions as dim `unattributed N` and dead markers as `stale N`.

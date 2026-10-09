@@ -349,8 +349,11 @@ export function routeLines(
   );
   if (own.length > RUN_LINES)
     lines.push(`${DIM}+${own.length - RUN_LINES} more${RST}`);
-  if (other > 0) lines.push(`${DIM}+${other} in other sessions${RST}`);
-  if (unattributed > 0) lines.push(`${DIM}unattributed ${unattributed}${RST}`);
-  if (stale > 0) lines.push(`${ESC}[38;5;167mstale ${stale}${RST}`);
+  const summary = [
+    ...(other > 0 ? [`${DIM}+${other} in other sessions${RST}`] : []),
+    ...(unattributed > 0 ? [`${DIM}unattributed ${unattributed}${RST}`] : []),
+    ...(stale > 0 ? [`${ESC}[38;5;167mstale ${stale}${RST}`] : []),
+  ];
+  if (summary.length > 0) lines.push(summary.join(` ${DIM}·${RST} `));
   return lines;
 }

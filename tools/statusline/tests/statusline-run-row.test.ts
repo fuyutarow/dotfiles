@@ -295,6 +295,12 @@ describe("statusline Run row", () => {
     marker(dir, "other", process.pid, "private worker", 90, "other-session-id");
     const out = await render(dir);
     expect(out).toContain("+1 in other sessions");
+    expect(
+      out
+        .split("\n")
+        .map((line) => line.replace(ANSI, ""))
+        .filter((line) => line.includes("in other sessions")),
+    ).toEqual(["+1 in other sessions"]);
     expect(out).not.toContain("private worker");
     expect(out).not.toContain("luna-high");
   });
@@ -326,14 +332,24 @@ describe("statusline Run row", () => {
     marker(dir, "dead-none", 2_147_483_000, "dead none", 70, null);
     const out = await render(dir);
     expect(out).toMatch(/^luna-high 1m3\d+s \$– my worker │ no event yet$/mu);
-    expect(out).toContain("+1 in other sessions");
-    expect(out).toContain("unattributed 2");
-    expect(out).toContain("stale 3");
+    expect(
+      out
+        .split("\n")
+        .map((line) => line.replace(ANSI, ""))
+        .filter((line) => line.includes("in other sessions")),
+    ).toEqual(["+1 in other sessions · unattributed 2 · stale 3"]);
     expect(out).not.toContain("other worker");
     expect(out).not.toContain("unowned worker");
     expect(out).not.toContain("dead own");
     expect(out).not.toContain("dead other");
     expect(out).not.toContain("dead none");
+  });
+
+  test("no attribution summary is rendered when every count is zero", async () => {
+    const dir = join(scratch, "no-attribution-summary");
+    marker(dir, "own", process.pid, "my worker", 90, SESSION);
+    const out = await render(dir);
+    expect(out).not.toMatch(/in other sessions|unattributed|stale/u);
   });
 
   test("both migration directories count a duplicate run_id once and read local progress", async () => {

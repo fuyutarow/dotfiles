@@ -287,7 +287,7 @@ const stateVariants: [string, (state: string) => void][] = [
     },
   ],
   [
-    "own, other, unattributed and stale markers render separate rows",
+    "other, unattributed and stale markers render one summary row",
     (state) => {
       extraWorker(
         state,
@@ -310,6 +310,20 @@ const stateVariants: [string, (state: string) => void][] = [
       );
     },
   ],
+  [
+    "one summary item renders without extra separators",
+    (state) => {
+      extraWorker(
+        state,
+        "other",
+        undefined,
+        "fixture",
+        "other",
+        "other-session",
+      );
+    },
+  ],
+  ["no summary row renders when every count is zero", () => {}],
 ];
 
 test.each(stateVariants.map(([name, setup], i) => [i, name, setup] as const))(

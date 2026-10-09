@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseJson } from "../../../hooks/narrow.ts";
 import {
   assistant,
   runHook,
@@ -26,6 +27,190 @@ function settingsHome(language: string | undefined): string {
 
 describe("enforce-reply-language", () => {
   const HOOK = "enforce-reply-language.ts";
+
+  test("Stop payload blocks the live English reply before its transcript entry is flushed", () => {
+    const transcript = writeTranscript([
+      user(
+        "だからいつになったら結果出すおん？？ agentが1つしか起動していないけど",
+      ),
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", id: "dispatch", name: "Bash", input: {} },
+          ],
+        },
+      },
+    ]);
+    const home = settingsHome("japanese");
+    const text =
+      "I've dispatched 6 workers at once, on top of the throughput worker (gkdlin) that's already running. That makes 7 in total.";
+    const result = runHook(
+      HOOK,
+      {
+        ...stopPayload(transcript),
+        session_id: "xj15-regression",
+        last_assistant_message: text,
+      },
+      { HOME: home },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('"decision":"block"');
+    expect(result.stderr).toBe("");
+    const record = parseJson(
+      readFileSync(
+        join(home, ".local/state/claude-hooks/reply-language.jsonl"),
+        "utf8",
+      ).trim(),
+    );
+    expect(record).toMatchObject({
+      session_id: "xj15-regression",
+      stop_hook_active: false,
+      home,
+      language: "japanese",
+      text_source: "last_assistant_message",
+      message_chars: text.length,
+      decision: "block",
+      reason: "english_prose",
+    });
+    expect(JSON.stringify(record)).not.toContain(text);
+  });
+
+  test("empty payload response is authoritative over stale English transcript text", () => {
+    const transcript = writeTranscript([
+      assistant(
+        "This is an older English response which must not be treated as the current final response.",
+      ),
+    ]);
+    const result = runHook(
+      HOOK,
+      {
+        ...stopPayload(transcript),
+        last_assistant_message: "",
+      },
+      { HOME: settingsHome("japanese") },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  test("payload response does not require a readable or well-formed transcript", () => {
+    const result = runHook(
+      HOOK,
+      {
+        ...stopPayload(join(tempDir("unflushed-reply-"), "missing.jsonl")),
+        last_assistant_message:
+          "The current final response is fully English and should block even while the transcript file is unavailable.",
+      },
+      { HOME: settingsHome("japanese") },
+    );
+
+    expect(result.stdout).toContain('"decision":"block"');
+    expect(result.stderr).toBe("");
+  });
+
+  test("Japanese payload response wins over stale English transcript text", () => {
+    const transcript = writeTranscript([
+      assistant(
+        "This older English response was already checked and is not the final response for this turn.",
+      ),
+    ]);
+    const result = runHook(
+      HOOK,
+      {
+        ...stopPayload(transcript),
+        last_assistant_message:
+          "今回は日本語で返答しています。古い英語のメッセージを判定に使わず、現在の返答だけを確認してください。",
+      },
+      { HOME: settingsHome("japanese") },
+    );
+
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  test.each([
+    { active: true, language: "japanese", reason: "stop_hook_active" },
+    { active: false, language: "english", reason: "language_not_japanese" },
+    { active: false, language: "japanese", reason: "no_language_violation" },
+  ])("logs silent allow: $reason", ({ active, language, reason }) => {
+    const home = settingsHome(language);
+    const result = runHook(
+      HOOK,
+      {
+        stop_hook_active: active,
+        session_id: "allow-audit",
+        last_assistant_message: "確認しました。",
+      },
+      { HOME: home },
+    );
+
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+    expect(
+      parseJson(
+        readFileSync(
+          join(home, ".local/state/claude-hooks/reply-language.jsonl"),
+          "utf8",
+        ).trim(),
+      ),
+    ).toMatchObject({
+      decision: "allow",
+      reason,
+      home,
+      settings_path: join(home, ".claude/settings.json"),
+      stop_hook_active: active,
+    });
+  });
+
+  test("decision-log write failure preserves the language block", () => {
+    const home = settingsHome("japanese");
+    writeFileSync(
+      join(home, ".local"),
+      "cannot create the state directory here",
+    );
+    const result = runHook(
+      HOOK,
+      {
+        stop_hook_active: false,
+        last_assistant_message:
+          "This English final response must still block even if the diagnostic decision log cannot be written.",
+      },
+      { HOME: home },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('"decision":"block"');
+    expect(result.stderr).toContain("decision log failed");
+  });
+
+  test("check errors are recorded while preserving fail-open behavior", () => {
+    const home = settingsHome("japanese");
+    const result = runHook(
+      HOOK,
+      stopPayload(join(tempDir("audit-missing-transcript-"), "missing.jsonl")),
+      { HOME: home },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("check failed open");
+    expect(
+      parseJson(
+        readFileSync(
+          join(home, ".local/state/claude-hooks/reply-language.jsonl"),
+          "utf8",
+        ).trim(),
+      ),
+    ).toMatchObject({
+      decision: "allow",
+      reason: "check_error",
+      text_source: "transcript",
+    });
+  });
 
   test("English prose reply -> blocks with a Japanese rewrite reason", () => {
     const transcript = writeTranscript([

@@ -63,18 +63,16 @@ case "$HOST" in
     print -rP -- "$_prompt_header"
     PROMPT="$prompt"
   }
-  # clear-screen redraws only PROMPT, so preserve the header explicitly after clearing.
+  # The header lives above PROMPT. Invalidate ZLE before printing there, then let it redraw
+  # the input itself (including BUFFER/CURSOR and plugin highlights) when the widget returns.
+  zmodload zsh/terminfo
   _prompt_clear_screen() {
-    zle .clear-screen
-    # clear-screen schedules a refresh; force it now so it cannot erase the header we print
-    # below when this widget (or an autosuggestions wrapper) returns to ZLE.
-    zle -R
-    # Replace the one-line prompt at row 1 with the header, then advance to row 2 so
-    # reset-prompt draws `$` and the buffer.
-    print -rn -- $'\e[H'
+    zle -I
+    # Use the terminal's clear capability directly: .clear-screen schedules a deferred ZLE
+    # clear that would erase output printed by this widget. No cursor coordinates or forced
+    # refresh/reset-prompt are needed; print supplies the header's single terminating newline.
+    echoti clear
     print -rP -- "$_prompt_header"
-    print -rn -- $'\e[K\r\n'
-    zle .reset-prompt
   }
   autoload -Uz add-zsh-hook
   add-zsh-hook precmd _prompt_stamp

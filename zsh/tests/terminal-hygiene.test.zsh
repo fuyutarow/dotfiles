@@ -10,6 +10,7 @@
 
 emulate -L zsh
 setopt no_unset
+setopt extended_glob
 zmodload zsh/zpty || { print -r -- "[FAIL] zsh/zpty unavailable — cannot test tty behaviour"; exit 1 }
 
 typeset -g PASS=0 FAIL=0
@@ -175,6 +176,137 @@ after_clear=${out##*"$clear_sequence"}
 after_clear=${after_clear%%"$MODES_OFF"*}
 want "Ctrl-L redraws the header after clearing the screen" "$header_marker" "$after_clear"
 command rm -rf "$tmp" 2>/dev/null
+
+# --- 10. assert the rendered screen, not just the stream of terminal escapes ----------------
+# tmux is the terminal emulator here: a byte stream containing the header can still render a
+# blank row, overwrite the buffer, or stack headers. Use a private server, never the user's.
+if ! (( $+commands[tmux] )); then
+  bad "tmux is required for rendered prompt regression tests (Brewfile)"
+else
+  zmodload zsh/zselect || exit 1
+  # A timeout/startup failure must not leave a private tmux server behind.
+  TRAPEXIT() {
+    [[ -n ${socket-} ]] && tmux -L "$socket" kill-server 2>/dev/null
+    [[ -n ${tmp-} ]] && command rm -rf "$tmp" 2>/dev/null
+    return 0
+  }
+  plugins_script=''
+  if (( $+commands[sheldon] )) && [[ -f ${XDG_DATA_HOME:-$HOME/.local/share}/sheldon/plugins.lock ]]; then
+    # Replay the installed sheldon source list without linking its writable cache into the
+    # throwaway HOME. The common-configs entry is replaced by this checkout's aliases below.
+    plugins_script=$(sheldon source) || { bad "cannot read the installed sheldon plugin set"; exit 1 }
+  fi
+
+  # Wait for the actual expected screen/cursor, with a bounded deadline. capture-pane retains
+  # the space in `$ ` with -N; ordinary capture trims it and cannot assert an empty input row.
+  screen_expect() {
+    local label=$1 first=$2 input=$3 cursor=$4 attempt row count header_row expected_cursor
+    local supply_suggestion=${5:-false}
+    local screen='' actual_cursor=''
+    local expected_count=$(( (first + 1) / 2 ))
+    (( first == 0 )) && expected_count=1
+    local -a rows
+    for attempt in {1..60}; do
+      if [[ $supply_suggestion == true ]]; then
+        tmux -L "$socket" send-keys -t prompt:0.0 C-x C-t
+      fi
+      screen=$(tmux -L "$socket" capture-pane -p -N -t prompt:0.0) || break
+      rows=("${(@f)screen}")
+      count=0
+      header_row=$first
+      for row in {1..${#rows}}; do
+        if [[ ${rows[$row]} =~ $header_pattern ]]; then
+          (( count++ ))
+          (( first == 0 )) && header_row=$row
+        fi
+      done
+      # Growing a tmux pane may restore older scrollback above the pair. For resize cases
+      # (first=0), assert one header immediately above input and the cursor relative to it.
+      expected_cursor=$cursor
+      (( first == 0 )) && expected_cursor="${cursor%%,*},$header_row"
+      actual_cursor=$(tmux -L "$socket" display-message -p -t prompt:0.0 '#{cursor_x},#{cursor_y}')
+      if [[ ${rows[$header_row]-} =~ $header_pattern && ${rows[$(( header_row + 1 ))]-} == "$input"[[:space:]]# &&
+            $count == $expected_count && $actual_cursor == "$expected_cursor" ]]; then
+        ok "$variant: $label"
+        return 0
+      fi
+      zselect -t 5
+    done
+    bad "$variant: $label (cursor=$actual_cursor; screen=${(qqq)screen})"
+  }
+
+  for variant in minimal sheldon; do
+    if [[ $variant == sheldon && -z $plugins_script ]]; then
+      print -r -- "[SKIP] sheldon rendered-screen variant: no installed plugin cache"
+      continue
+    fi
+    tmp=$(mktemp -d) || exit 1
+    socket="dotfiles-prompt-$$-$variant-${tmp:t}"
+    # Quoted paths remain valid when a checkout or temporary directory contains spaces.
+    {
+      print -r -- "cd ${(q)tmp}"
+      # Sandboxed macOS disallows nice(5); this affects mise's background hook, not ZLE.
+      print -r -- 'unsetopt bgnice'
+      print -r -- "source ${(q)ROOT}/zsh/aliases.zsh"
+      if [[ $variant == sheldon ]]; then
+        while IFS= read -r line; do
+          [[ $line == *'/zsh/aliases.zsh"' ]] || print -r -- "$line"
+        done <<< "$plugins_script"
+      fi
+      print -r -- "source ${(q)ROOT}/zsh/zshrc"
+      print -r -- 'bindkey -e'
+      if [[ $variant == sheldon ]]; then
+        # Wait for any natural async fetch to finish before offering a known suggestion
+        # through the plugin's public widget. No history or async setting is changed.
+        print -r -- '_prompt_test_suggest() { [[ -n ${_ZSH_AUTOSUGGEST_ASYNC_FD-} ]] && return; zle autosuggest-suggest -- "abc tail"; }'
+        print -r -- "zle -N _prompt_test_suggest; bindkey '^X^T' _prompt_test_suggest"
+      fi
+      print -r -- "_prompt_test_plugins() { print -r -- \"\${+functions[_zsh_autosuggest_start]} \${widgets[clear-screen]}\" >| ${(q)tmp}/plugins; }"
+      print -r -- 'add-zsh-hook precmd _prompt_test_plugins'
+    } >| "$tmp/.zshrc"
+    # Explicit -f /dev/null ignores host tmux config and its status bar, hooks and keymaps.
+    tmux -L "$socket" -f /dev/null new-session -d -x 100 -y 20 -s prompt \
+      "env HOME=${(q)tmp} ZDOTDIR=${(q)tmp} XDG_CONFIG_HOME=${(q)tmp}/.config XDG_DATA_HOME=${(q)tmp}/.local/share XDG_CACHE_HOME=${(q)tmp}/.cache TERM=xterm-256color zsh -i" \
+      || { bad "$variant: tmux could not start zsh"; command rm -rf "$tmp"; continue }
+    header_pattern='^[^@]+@[^:]+:[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}[+-][0-9]{2}([0-9]{2})?\|~[[:space:]]*$'
+    screen_expect "startup has adjacent header and input" 1 '$ ' '2,1'
+    if [[ $variant == sheldon ]]; then
+      [[ $(<"$tmp/plugins") == '1 user:_zsh_autosuggest_bound_'* ]] \
+        && ok "sheldon: autosuggestions loaded and wrapped clear-screen" \
+        || bad "sheldon: autosuggestions must wrap clear-screen"
+    fi
+    tmux -L "$socket" send-keys -t prompt:0.0 C-l
+    screen_expect "Ctrl-L with empty buffer has no blank row" 1 '$ ' '2,1'
+    tmux -L "$socket" send-keys -t prompt:0.0 -l abc
+    tmux -L "$socket" send-keys -t prompt:0.0 Left Left C-l
+    screen_expect "Ctrl-L preserves abc and its interior cursor" 1 '$ abc' '3,1'
+    tmux -L "$socket" send-keys -t prompt:0.0 -l X
+    screen_expect "typing after Ctrl-L inserts at the preserved cursor" 1 '$ aXbc' '4,1'
+    tmux -L "$socket" resize-window -t prompt:0 -x 80 -y 16
+    screen_expect "narrower resize leaves exactly one header" 0 '$ aXbc' '4,1'
+    tmux -L "$socket" resize-window -t prompt:0 -x 120 -y 24
+    screen_expect "wider resize leaves exactly one header" 0 '$ aXbc' '4,1'
+    tmux -L "$socket" send-keys -t prompt:0.0 C-l
+    screen_expect "Ctrl-L after resize restores rows one and two" 1 '$ aXbc' '4,1'
+    tmux -L "$socket" send-keys -t prompt:0.0 C-u Enter
+    screen_expect "empty Enter adds one adjacent header and input" 3 '$ ' '2,3'
+    tmux -L "$socket" send-keys -t prompt:0.0 C-l
+    screen_expect "Ctrl-L after empty Enter restores rows one and two" 1 '$ ' '2,1'
+    if [[ $variant == sheldon ]]; then
+      # The suggested suffix belongs to POSTDISPLAY; the cursor must stay after `abc`.
+      tmux -L "$socket" send-keys -t prompt:0.0 -l abc
+      screen_expect "autosuggestion displays its suffix" 1 '$ abc tail' '5,1' true
+      tmux -L "$socket" send-keys -t prompt:0.0 C-l
+      screen_expect "Ctrl-L preserves the active autosuggestion and cursor" 1 '$ abc tail' '5,1'
+      tmux -L "$socket" resize-window -t prompt:0 -x 90 -y 18
+      screen_expect "resize with active autosuggestion leaves one header" 0 '$ abc tail' '5,1'
+    fi
+    tmux -L "$socket" kill-server
+    command rm -rf "$tmp" 2>/dev/null
+    socket=''
+    tmp=''
+  done
+fi
 
 print -r -- "---"
 print -r -- "passed=$PASS failed=$FAIL"

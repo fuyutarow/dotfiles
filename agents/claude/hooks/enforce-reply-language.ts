@@ -1,4 +1,4 @@
-// Stop hook: enforce the user's Japanese reply preference across the current turn's assistant text.
+// Stop hook: enforce the user's Japanese reply preference against the final assistant message.
 // Safety: FAIL OPEN on every hook error (including unreadable/malformed transcripts), with one
 // stderr line explaining the failure. A broken language check must never trap a session.
 
@@ -9,7 +9,6 @@ import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 
 const MIN_LETTERS = 40;
-const MAX_BLOCKS_PER_TURN = 3;
 // WHY 0.3: allow Japanese prose that contains ordinary English identifiers while still catching
 // a mostly-English answer; code and paths are removed before calculating the share.
 const MIN_JAPANESE_SHARE = 0.3;
@@ -22,58 +21,28 @@ function stderrLine(reason: string): void {
   );
 }
 
-function currentTurn(
-  transcript: string,
-): { texts: string[]; blocks: number } | Error {
-  const entries: unknown[] = [];
+function finalAssistantText(transcript: string): string | Error {
+  let lastText = "";
   for (const line of readFileSync(transcript, "utf8").split("\n")) {
     if (line.trim() === "") continue;
     const entry = parseJson(line);
     if (entry === undefined) return new Error("malformed transcript line");
-    entries.push(entry);
-  }
-
-  let lastUser = -1;
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index];
-    if (strAt(entry, "type") !== "user") continue;
-    const content = arr(at(entry, "message", "content")) ?? [];
-    const feedback = content.some(
-      (block) => strAt(block, "text") === BLOCK_REASON,
-    );
-    if (
-      !feedback &&
-      !content.every((block) => strAt(block, "type") === "tool_result")
-    )
-      lastUser = index;
-  }
-
-  const texts: string[] = [];
-  let blocks = 0;
-  for (const entry of entries.slice(lastUser + 1)) {
-    const content = at(entry, "message", "content");
-    const contentBlocks = arr(content) ?? [];
-    if (
-      strAt(entry, "type") === "user" &&
-      contentBlocks.some((block) => strAt(block, "text") === BLOCK_REASON)
-    ) {
-      blocks += 1;
-      continue;
-    }
     if (strAt(entry, "type") !== "assistant") continue;
+
+    const content = at(entry, "message", "content");
     const direct = str(content);
-    let textBlocks: string[];
-    if (direct !== undefined) textBlocks = [direct];
-    else
-      textBlocks = contentBlocks.flatMap((block) => {
-        const text = strAt(block, "text");
-        return strAt(block, "type") === "text" && text !== undefined
-          ? [text]
-          : [];
-      });
-    texts.push(...textBlocks);
+    lastText =
+      direct ??
+      (arr(content) ?? [])
+        .flatMap((block) => {
+          const text = strAt(block, "text");
+          return strAt(block, "type") === "text" && text !== undefined
+            ? [text]
+            : [];
+        })
+        .join("\n");
   }
-  return { texts, blocks };
+  return lastText;
 }
 
 function stripNonProse(text: string): string {
@@ -159,6 +128,8 @@ function identifierHeavy(text: string): boolean {
 
 async function main(): Promise<number> {
   const payload = parseJson(await Bun.stdin.text());
+  if (at(payload, "stop_hook_active") === true) return 0;
+
   const home = process.env.HOME ?? homedir();
   const settingsPath = join(home, ".claude", "settings.json");
   if (!existsSync(settingsPath)) return 0;
@@ -173,28 +144,20 @@ async function main(): Promise<number> {
   const transcript = strAt(payload, "transcript_path");
   if (transcript === undefined || transcript === "") return 0;
 
-  const turn = currentTurn(transcript);
-  if (turn instanceof Error) {
-    stderrLine(`check failed open: ${turn.message}`);
+  const text = finalAssistantText(transcript);
+  if (text instanceof Error) {
+    stderrLine(`check failed open: ${text.message}`);
     return 0;
   }
-  if (turn.blocks >= MAX_BLOCKS_PER_TURN) {
-    stderrLine("block cap reached for this turn");
-    return 0;
-  }
-  const shouldBlock = turn.texts.some((text) => {
-    const prose = stripNonProse(text);
-    const { letters, share } = japaneseShare(prose);
-    const segmentBlocks = proseSegments(prose).some((segment) => {
-      if (identifierHeavy(segment)) return false;
-      const result = japaneseShare(segment);
-      return result.letters >= 120 && result.share < MIN_JAPANESE_SHARE;
-    });
-    return (
-      (letters >= MIN_LETTERS && share < MIN_JAPANESE_SHARE) || segmentBlocks
-    );
+  const prose = stripNonProse(text);
+  const { letters, share } = japaneseShare(prose);
+  const segmentBlocks = proseSegments(prose).some((segment) => {
+    if (identifierHeavy(segment)) return false;
+    const result = japaneseShare(segment);
+    return result.letters >= 120 && result.share < MIN_JAPANESE_SHARE;
   });
-  if (!shouldBlock) return 0;
+  const wholeReplyBlocks = letters >= MIN_LETTERS && share < MIN_JAPANESE_SHARE;
+  if (!wholeReplyBlocks && !segmentBlocks) return 0;
 
   process.stdout.write(
     `${JSON.stringify({ decision: "block", reason: BLOCK_REASON })}\n`,

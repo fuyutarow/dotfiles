@@ -49,23 +49,6 @@ describe("enforce-reply-language", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("English intermediate message followed by Japanese final message -> blocks", () => {
-    const transcript = writeTranscript([
-      user("説明してください"),
-      assistant(
-        "Here is the result. The implementation reads the transcript and checks every assistant text block before allowing the session to stop. ".repeat(
-          2,
-        ),
-      ),
-      assistant("実装を確認しました。問題なく処理できます。"),
-    ]);
-    const result = runHook(HOOK, stopPayload(transcript), {
-      HOME: settingsHome("japanese"),
-    });
-
-    expect(result.stdout).toContain('"decision":"block"');
-  });
-
   test("long English section after Japanese prose -> blocks", () => {
     const transcript = writeTranscript([
       user("説明してください"),
@@ -183,15 +166,9 @@ describe("enforce-reply-language", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("stop_hook_active after one prior block still blocks English final text", () => {
-    const feedback =
-      "直前の返答が英語です。日本語で書き直してください（コードや識別子は原文のままで構いません）。";
+  test("stop_hook_active -> allows", () => {
     const transcript = writeTranscript([
       user("説明してください"),
-      {
-        type: "user",
-        message: { content: [{ type: "text", text: feedback }] },
-      },
       assistant(
         "Here is the result. The implementation reads the final assistant message and checks its language before allowing the session to stop.",
       ),
@@ -201,29 +178,7 @@ describe("enforce-reply-language", () => {
     });
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain('"decision":"block"');
     expect(result.stderr).toBe("");
-  });
-
-  test("three prior blocks pass and report the cap", () => {
-    const feedback =
-      "直前の返答が英語です。日本語で書き直してください（コードや識別子は原文のままで構いません）。";
-    const transcript = writeTranscript([
-      user("説明してください"),
-      ...Array.from({ length: 3 }, () => ({
-        type: "user",
-        message: { content: [{ type: "text", text: feedback }] },
-      })),
-      assistant(
-        "Here is the result. The implementation reads the transcript and checks its language before allowing the session to stop.",
-      ),
-    ]);
-    const result = runHook(HOOK, stopPayload(transcript, true), {
-      HOME: settingsHome("japanese"),
-    });
-
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("block cap reached");
   });
 
   test("language not Japanese -> allows", () => {

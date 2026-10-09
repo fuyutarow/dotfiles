@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { jsonOf, z } from "../../shared/src/zod.ts";
 import {
   emptyTally,
   foldEvent,
+  progressWriter,
   toProgress,
 } from "../src/workers/codex-progress.ts";
 
@@ -97,7 +102,7 @@ describe("foldEvent", () => {
     ]);
     const after = [
       "not json",
-      ev({ type: "turn.completed", usage: { input_tokens: 1 } }),
+      ev({ type: "turn.completed" }),
       ev({ type: "item.started", item: { type: "reasoning" } }),
       ev({
         type: "item.completed",
@@ -106,6 +111,60 @@ describe("foldEvent", () => {
     ].reduce((t, l) => foldEvent(t, l), before);
     expect(after).toEqual(before);
   });
+});
+
+test("turn completion adds cumulative usage to progress", () => {
+  const t = fold([
+    ev({
+      type: "turn.completed",
+      usage: {
+        input_tokens: 100,
+        cached_input_tokens: 40,
+        output_tokens: 20,
+        reasoning_output_tokens: 5,
+      },
+    }),
+  ]);
+  expect(toProgress(t, "2026-10-06T00:00:00Z").usage).toEqual({
+    input_tokens: 100,
+    cached_input_tokens: 40,
+    output_tokens: 20,
+    reasoning_output_tokens: 5,
+  });
+});
+
+test("progress writer persists usage and row-priced cost immediately", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codex-progress-cost-"));
+  using _cleanup = {
+    [Symbol.dispose]: () => {
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+  const path = join(dir, "worker.progress.json");
+  const writer = progressWriter(path, undefined, {
+    input: 2,
+    cachedInput: 0.2,
+    output: 10,
+  });
+  writer.feed(
+    ev({
+      type: "turn.completed",
+      usage: { input_tokens: 1_000_000, output_tokens: 100_000 },
+    }),
+  );
+  const progress = jsonOf(
+    z.looseObject({
+      usage: z.looseObject({ input_tokens: z.number() }).optional(),
+      cost_usd: z.number().optional(),
+    }),
+  ).safeParse(readFileSync(path, "utf8"));
+  expect(progress.success ? progress.data.usage?.input_tokens : undefined).toBe(
+    1_000_000,
+  );
+  expect(progress.success ? progress.data.cost_usd : undefined).toBeCloseTo(
+    3,
+    10,
+  );
 });
 
 test("toProgress is the state.ts record: counts, not the path set", () => {

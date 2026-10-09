@@ -64,6 +64,7 @@ import {
   readCodexHostDeclaration,
 } from "./codex-host.ts";
 import { resourceBriefFallback } from "./codex-resource-probe.ts";
+import { costUsd } from "../dispatch-cost.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
@@ -199,6 +200,13 @@ const argv = cli(
 // Declared before emit() so every receipt, refusals included, shows what was actually ordered.
 let model = argv.flags.model;
 let effort = argv.flags.effort;
+let selectedPrices:
+  | {
+      price_in?: number | undefined;
+      price_cached_in?: number | undefined;
+      price_out?: number | undefined;
+    }
+  | undefined;
 // Set once the host declaration is read (below); null in a receipt emitted before that.
 let codexSandbox: string | undefined;
 let unsandboxedReason: string | undefined;
@@ -280,6 +288,7 @@ if (choice !== undefined) {
     );
   model = row?.model;
   effort = row?.effort;
+  selectedPrices = row;
 }
 const missing = [
   ["--model", model],
@@ -495,10 +504,20 @@ const graced = (r: Promise<string>): Promise<string> =>
 // stdout is read as it arrives: every JSONL line also feeds the statusline's progress file when
 // agent-dispatch asked for one (AGENT_DISPATCH_CODEX_PROGRESS_FILE; codex-progress.ts). What was read before a
 // grace cut-off is kept, not dropped.
-const progress =
-  process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE === undefined
+const tokenPrices =
+  selectedPrices?.price_in === undefined ||
+  selectedPrices.price_out === undefined
     ? undefined
-    : progressWriter(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE);
+    : {
+        input: selectedPrices.price_in,
+        cachedInput: selectedPrices.price_cached_in ?? selectedPrices.price_in,
+        output: selectedPrices.price_out,
+      };
+const progressPath = process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE;
+const progress =
+  progressPath === undefined
+    ? undefined
+    : progressWriter(progressPath, undefined, tokenPrices);
 let streamed = "";
 let spinCause: string | undefined;
 const detectToolSpin = toolErrorStreak(IDENTICAL_TOOL_ERROR_LIMIT);
@@ -592,11 +611,16 @@ const cause =
   lastError(events) ??
   `codex printed no error event; last stderr line: ${errText.trim().split("\n").at(-1) ?? ""}`;
 const session = sessionOf(events);
+const workerCostUsd =
+  turns === 0 || selectedPrices === undefined
+    ? undefined
+    : costUsd(selectedPrices, usage);
 const common = {
   ...(session === undefined ? {} : { session }),
   codex_exit: code,
   turns,
   usage,
+  ...(workerCostUsd === undefined ? {} : { cost_usd: workerCostUsd }),
   progress: progressSoFar,
   last_message: lastMessage,
   stderr_tail: stderrTail,

@@ -117,6 +117,51 @@ describe("statusline Run row", () => {
     );
   });
 
+  test.each([
+    [0, "$0.00"],
+    [0.004567, "$0.00457"],
+    [0.0312, "$0.0312"],
+    [0.31, "$0.310"],
+    [1.234, "$1.23"],
+    [12.34, "$12.3"],
+    [123.4, "$123"],
+    [1234, "$1.23k"],
+    [12345, "$12.3k"],
+    [123456, "$123k"],
+    [1234567, "$1.23M"],
+  ])("formats reported cost %s as %s", async (costUsd, expected) => {
+    const dir = join(scratch, `cost-column-${costUsd}`);
+    marker(dir, "priced", process.pid, "priced worker");
+    writeFileSync(
+      join(dir, "active", "priced.progress.json"),
+      JSON.stringify({
+        schema: 1,
+        at: Temporal.Now.instant().toString(),
+        last: "$ bun test",
+        commands: 1,
+        files: 0,
+        usage: { input_tokens: 1_000_000, output_tokens: 100_000 },
+        cost_usd: costUsd,
+      }),
+    );
+    const line = (await render(dir))
+      .split("\n")
+      .find((value) => value.startsWith("luna-high "));
+    expect(line).toContain(` ${expected} priced worker │`);
+  });
+
+  test("omits the cost when usage is unknown", async () => {
+    const unknown = join(scratch, "unknown-cost-column");
+    marker(unknown, "unknown", process.pid, "unknown worker");
+    writeFileSync(
+      join(unknown, "active", "unknown.progress.json"),
+      progress("$ bun test", 1),
+    );
+    const out = await render(unknown);
+    expect(out).toMatch(/^luna-high 1m3\ds unknown worker │/mu);
+    expect(out).not.toContain("$0.00");
+  });
+
   test("a display ID replaces the session ID while legacy markers keep their session ID", async () => {
     const dir = join(scratch, "display-id-row");
     marker(

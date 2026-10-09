@@ -38,11 +38,8 @@ export const ActiveSchema = z.strictObject({
 export type Active = z.output<typeof ActiveSchema>;
 
 /** What a running worker is doing, beside its marker: `<run_id>.progress.json` in activeDir.
- *  Written by agent-dispatch from codex's own `--json` events (agent-router passes the path in
- *  AGENT_DISPATCH_CODEX_PROGRESS_FILE) and by run-claude from claude's stream-json (--progress-file), read by
- *  the statusline Run rows, removed with the marker. codex
- *  reports token usage only when a turn completes (a luna run is one turn), so live tokens do not
- *  exist; the counts here are commands run and distinct files changed so far. */
+ *  Codex and Claude workers write activity, cumulative usage when reported, and known cost here;
+ *  the statusline Run rows read it, and agent-dispatch removes it with the active marker. */
 export const progressFile = (
   runId: string,
   env: NodeJS.ProcessEnv = process.env,
@@ -54,6 +51,15 @@ export const ProgressSchema = z.strictObject({
   last: z.string(),
   commands: z.number().int().nonnegative(),
   files: z.number().int().nonnegative(),
+  usage: z
+    .looseObject({
+      input_tokens: z.number().nonnegative().optional(),
+      cached_input_tokens: z.number().nonnegative().optional(),
+      output_tokens: z.number().nonnegative().optional(),
+      reasoning_output_tokens: z.number().nonnegative().optional(),
+    })
+    .optional(),
+  cost_usd: z.number().nonnegative().optional(),
   session: z.string().optional(), // the vendor's id for the worker (codex thread, claude session)
 });
 export type Progress = z.output<typeof ProgressSchema>;

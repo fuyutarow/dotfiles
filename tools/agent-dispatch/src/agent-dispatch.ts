@@ -1634,6 +1634,13 @@ function workerArgs(
     String((flags.timeoutS ?? DEFAULT_TIMEOUT_S) * 1000),
     "--progress-file",
     progress,
+    ...(row.price_in === undefined ? [] : ["--price-in", String(row.price_in)]),
+    ...(row.price_cached_in === undefined
+      ? []
+      : ["--price-cached-in", String(row.price_cached_in)]),
+    ...(row.price_out === undefined
+      ? []
+      : ["--price-out", String(row.price_out)]),
     // router-dispatched claude sessions stay on disk so `agent-dispatch resume` can continue them
     "--persist-session",
     ...(resume === undefined ? [] : ["--resume", resume]),
@@ -1953,6 +1960,14 @@ function claudeWorker(
   const failed =
     r.exit_code === 0 && !claudeStopped(r) ? "ok" : "claude-failed";
   const outcome = r.timed_out === true ? "timeout" : failed;
+  let billedCost: number | undefined;
+  if (typeof r.total_cost_usd === "number" && Number.isFinite(r.total_cost_usd))
+    billedCost = r.total_cost_usd;
+  else if (
+    typeof r.total_cost_usd === "string" &&
+    Number.isFinite(Number(r.total_cost_usd))
+  )
+    billedCost = Number(r.total_cost_usd);
   return {
     ...(typeof r.session_id === "string" ? { session: r.session_id } : {}),
     ...(outcome === "ok" ? {} : { cause: claudeCause(r, bounds) }),
@@ -1971,6 +1986,7 @@ function claudeWorker(
     elapsed_s: elapsedS,
     exit_code: r.exit_code,
     total_cost_usd: r.total_cost_usd ?? null,
+    ...(billedCost === undefined ? {} : { cost_usd: billedCost }),
     usage: r.usage ?? null,
     last_message: claudeLastMessage(r),
   };
@@ -2941,7 +2957,7 @@ async function launch(l: Launch): Promise<number> {
   if (parsedReturn.kind === "valid") returnFields.return = parsedReturn.record;
   else if (parsedReturn.kind === "invalid")
     returnFields.return_error = parsedReturn.error;
-  const receipt = {
+  const receiptBase = {
     schema: SCHEMA,
     host: currentHost(),
     route: row.route,
@@ -3003,7 +3019,7 @@ async function launch(l: Launch): Promise<number> {
   const runStats = statsFor(
     row,
     pick,
-    receipt.worker,
+    receiptBase.worker,
     exit,
     elapsedS,
     brief.length,
@@ -3011,6 +3027,10 @@ async function launch(l: Launch): Promise<number> {
     roster.as_of,
     ticketGrade.grader?.usage?.cost_usd ?? null,
   );
+  const receipt = {
+    ...receiptBase,
+    ...(runStats.cost_usd === null ? {} : { cost_usd: runStats.cost_usd }),
+  };
   appendLog({ kind: "run", ...receipt, stats: runStats });
   rmSync(marker, { force: true });
   if (stalled || nonDelivery) {

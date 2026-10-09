@@ -58,6 +58,9 @@ export type RunConfig = Readonly<{
   // When set, claude runs with stream-json and what it is doing is kept in this file (the
   // statusline Run rows read it; agent-dispatch passes it); its `result` event is the answer.
   progressFile?: string | undefined;
+  priceIn?: number | undefined;
+  priceCachedIn?: number | undefined;
+  priceOut?: number | undefined;
   // Keep the session on disk (~/.claude/projects/<cwd>/<session>.jsonl) so `--resume` can continue
   // it. agent-dispatch passes this for every worker it dispatches; probes and direct callers keep the
   // old no-persistence default.
@@ -164,10 +167,18 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     },
   };
 
+  const progressPrices =
+    config.priceIn === undefined || config.priceOut === undefined
+      ? undefined
+      : {
+          input: config.priceIn,
+          cachedInput: config.priceCachedIn ?? config.priceIn,
+          output: config.priceOut,
+        };
   const progress =
     config.progressFile === undefined
       ? undefined
-      : progressWriter(config.progressFile, foldClaudeEvent);
+      : progressWriter(config.progressFile, foldClaudeEvent, progressPrices);
   const AssistantText = z.looseObject({
     type: z.literal("assistant"),
     message: z.looseObject({
@@ -362,6 +373,17 @@ function directory(path: string): Result<string, Error> {
   return ok(path);
 }
 
+function parsePrice(
+  raw: string | undefined,
+  name: string,
+): Result<number | undefined, Error> {
+  if (raw === undefined) return ok(undefined);
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0
+    ? ok(value)
+    : err(new Error(`${name} must be a non-negative number`));
+}
+
 async function configFromCli(): Promise<Result<RunConfig, Error>> {
   // Schema keys are camelCase; Cleye accepts the kebab-case spelling on the command
   // line (e.g. `promptFile` here is set by `--prompt-file`) — the CLI spelling is unchanged.
@@ -382,6 +404,9 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
         jsonSchemaFile: nonEmptyString("--json-schema-file"),
         claudeBin: nonEmptyString("--claude-bin"),
         progressFile: nonEmptyString("--progress-file"),
+        priceIn: String,
+        priceCachedIn: String,
+        priceOut: String,
         resume: nonEmptyString("--resume"),
         persistSession: Boolean,
         safeMode: Boolean,
@@ -406,6 +431,12 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
   }
 
   const values = parsed.flags;
+  const priceIn = parsePrice(values.priceIn, "--price-in");
+  const priceCachedIn = parsePrice(values.priceCachedIn, "--price-cached-in");
+  const priceOut = parsePrice(values.priceOut, "--price-out");
+  if (priceIn.isErr()) return err(priceIn.error);
+  if (priceCachedIn.isErr()) return err(priceCachedIn.error);
+  if (priceOut.isErr()) return err(priceOut.error);
   const targetValue = requiredValue(values.target, "--target");
   if (targetValue.isErr()) return err(targetValue.error);
   const target = directory(targetValue.value);
@@ -469,6 +500,11 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
     ...(values.progressFile === undefined
       ? {}
       : { progressFile: values.progressFile }),
+    ...(priceIn.value === undefined ? {} : { priceIn: priceIn.value }),
+    ...(priceCachedIn.value === undefined
+      ? {}
+      : { priceCachedIn: priceCachedIn.value }),
+    ...(priceOut.value === undefined ? {} : { priceOut: priceOut.value }),
     ...(values.resume === undefined ? {} : { resume: values.resume }),
     persistSession: values.persistSession ?? false,
     claudeBin,

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.15.0 — 2026-10-09
+
+- Persist cumulative worker token usage and row-priced live cost in progress files; prefer Claude's reported billed cost.
+- Write worker cost to receipts and run records so the statusline can show the live dispatch cost.
+
 ## 1.14.0 — 2026-10-09
 
 - Record declared-write runs with an empty checked delta as `non_delivery`, record an incident, and reuse the one-time stall escalation path; exclude non-delivery from accepted throughput and count it as a lineage failure.

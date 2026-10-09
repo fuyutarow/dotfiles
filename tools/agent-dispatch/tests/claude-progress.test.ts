@@ -82,3 +82,39 @@ test("the init event's session_id is the session id", () => {
   );
   expect(t.session).toBe("a5e888f6-1dfb-4888-8e89-74b256840cac");
 });
+
+test("the final Claude billed amount is retained alongside usage", () => {
+  const result = JSON.stringify({
+    type: "result",
+    total_cost_usd: 0.42,
+    usage: { input_tokens: 100, output_tokens: 20 },
+  });
+  const tally = foldClaudeEvent(emptyTally(), result);
+  expect(tally.totalCostUsd).toBe(0.42);
+  expect(tally.usage).toEqual({
+    input_tokens: 100,
+    cached_input_tokens: 0,
+    output_tokens: 20,
+    reasoning_output_tokens: 0,
+  });
+});
+
+test("assistant stream events expose usage before the final result arrives", () => {
+  const event = JSON.stringify({
+    type: "assistant",
+    message: {
+      usage: {
+        input_tokens: 80,
+        output_tokens: 12,
+        cache_read_input_tokens: 30,
+      },
+      content: [],
+    },
+  });
+  expect(foldClaudeEvent(emptyTally(), event).usage).toEqual({
+    input_tokens: 80,
+    cached_input_tokens: 30,
+    output_tokens: 12,
+    reasoning_output_tokens: 0,
+  });
+});

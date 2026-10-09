@@ -27,7 +27,32 @@ const Block = z.looseObject({
 const Event = z.looseObject({
   type: z.string(),
   session_id: z.string().optional(),
-  message: z.looseObject({ content: z.array(Block).optional() }).optional(),
+  total_cost_usd: z.union([z.number(), z.string()]).optional(),
+  usage: z
+    .looseObject({
+      input_tokens: z.number().nonnegative().optional(),
+      cached_input_tokens: z.number().nonnegative().optional(),
+      output_tokens: z.number().nonnegative().optional(),
+      reasoning_output_tokens: z.number().nonnegative().optional(),
+      cache_read_input_tokens: z.number().nonnegative().optional(),
+      cache_creation_input_tokens: z.number().nonnegative().optional(),
+    })
+    .optional(),
+  message: z
+    .looseObject({
+      content: z.array(Block).optional(),
+      usage: z
+        .looseObject({
+          input_tokens: z.number().nonnegative().optional(),
+          cached_input_tokens: z.number().nonnegative().optional(),
+          output_tokens: z.number().nonnegative().optional(),
+          reasoning_output_tokens: z.number().nonnegative().optional(),
+          cache_read_input_tokens: z.number().nonnegative().optional(),
+          cache_creation_input_tokens: z.number().nonnegative().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 const EDITS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
@@ -63,6 +88,55 @@ export function foldClaudeEvent(t: Tally, line: string): Tally {
   const sessionId = parsed.data.session_id;
   if (parsed.data.type === "system" && sessionId !== undefined)
     return { ...t, session: sessionId };
+  const usage = parsed.data.usage ?? parsed.data.message?.usage;
+  const costValue = parsed.data.total_cost_usd;
+  let totalCostUsd: number | undefined;
+  if (typeof costValue === "number") totalCostUsd = costValue;
+  else if (costValue !== undefined && costValue.trim() !== "")
+    totalCostUsd = Number(costValue);
+  if (parsed.data.type === "result")
+    return {
+      ...t,
+      ...(usage === undefined
+        ? {}
+        : {
+            usage: {
+              input_tokens: usage.input_tokens ?? 0,
+              cached_input_tokens:
+                usage.cached_input_tokens ??
+                (usage.cache_read_input_tokens ?? 0) +
+                  (usage.cache_creation_input_tokens ?? 0),
+              output_tokens: usage.output_tokens ?? 0,
+              reasoning_output_tokens: usage.reasoning_output_tokens ?? 0,
+            },
+          }),
+      ...(totalCostUsd === undefined || !Number.isFinite(totalCostUsd)
+        ? {}
+        : { totalCostUsd }),
+    };
+  if (parsed.data.type === "assistant" && usage !== undefined) {
+    const previous = t.usage ?? {
+      input_tokens: 0,
+      cached_input_tokens: 0,
+      output_tokens: 0,
+      reasoning_output_tokens: 0,
+    };
+    t = {
+      ...t,
+      usage: {
+        input_tokens: previous.input_tokens + (usage.input_tokens ?? 0),
+        cached_input_tokens:
+          previous.cached_input_tokens +
+          (usage.cached_input_tokens ??
+            (usage.cache_read_input_tokens ?? 0) +
+              (usage.cache_creation_input_tokens ?? 0)),
+        output_tokens: previous.output_tokens + (usage.output_tokens ?? 0),
+        reasoning_output_tokens:
+          previous.reasoning_output_tokens +
+          (usage.reasoning_output_tokens ?? 0),
+      },
+    };
+  }
   if (parsed.data.type !== "assistant") return t;
   return (parsed.data.message?.content ?? []).reduce(
     (acc, b) => foldBlock(acc, b),

@@ -171,10 +171,20 @@ describe("tools/agent-dispatch runner: --progress-file", () => {
     expect(asRecord(run.claude)?.result).toBe("OK");
     expect(toRelay(run).session_id).toBe("fixture-session");
     const progress = decodedJson(
-      z.object({ last: z.string(), commands: z.number(), files: z.number() }),
+      z.object({
+        last: z.string(),
+        commands: z.number(),
+        files: z.number(),
+        cost_usd: z.number(),
+      }),
       await Bun.file(progressFile).text(),
     );
-    expect(progress).toEqual({ last: "“done”", commands: 1, files: 1 });
+    expect(progress).toEqual({
+      last: "“done”",
+      commands: 1,
+      files: 1,
+      cost_usd: 0,
+    });
     await rm(dir, { recursive: true, force: true });
   });
 });

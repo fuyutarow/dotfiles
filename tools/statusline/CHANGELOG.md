@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 — 2026-10-09
+
+- Show known per-worker dispatch cost after elapsed time, formatting small amounts to two significant digits and larger amounts to one decimal.
+
 ## 0.4.0
 
 - Group Claude windows under `claude`, show Codex elapsed window shares, and replace Codex credits with seven-day Jev token usage when the router log is available.

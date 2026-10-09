@@ -24,12 +24,27 @@ const Event = z.looseObject({
   type: z.string(),
   item: Item.optional(),
   thread_id: z.string().optional(),
+  usage: z
+    .looseObject({
+      input_tokens: z.number().int().nonnegative().optional(),
+      cached_input_tokens: z.number().int().nonnegative().optional(),
+      output_tokens: z.number().int().nonnegative().optional(),
+      reasoning_output_tokens: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
 });
 
 export type Tally = {
   last: string;
   commands: number;
   files: ReadonlySet<string>;
+  usage?: {
+    input_tokens: number;
+    cached_input_tokens: number;
+    output_tokens: number;
+    reasoning_output_tokens: number;
+  };
+  totalCostUsd?: number;
   // The vendor's own id for this worker (codex thread_id, claude session_id), once it has printed
   // it: how a coordinator names the worker, and what `codex exec resume` / `claude --resume` take.
   session?: string;
@@ -193,6 +208,27 @@ export function foldEvent(t: Tally, line: string): Tally {
   const { type, item, thread_id: threadId } = parsed.data;
   if (type === "thread.started" && threadId !== undefined)
     return { ...t, session: threadId };
+  if (type === "turn.completed" && parsed.data.usage !== undefined) {
+    const usage = parsed.data.usage;
+    const previous = t.usage ?? {
+      input_tokens: 0,
+      cached_input_tokens: 0,
+      output_tokens: 0,
+      reasoning_output_tokens: 0,
+    };
+    return {
+      ...t,
+      usage: {
+        input_tokens: previous.input_tokens + (usage.input_tokens ?? 0),
+        cached_input_tokens:
+          previous.cached_input_tokens + (usage.cached_input_tokens ?? 0),
+        output_tokens: previous.output_tokens + (usage.output_tokens ?? 0),
+        reasoning_output_tokens:
+          previous.reasoning_output_tokens +
+          (usage.reasoning_output_tokens ?? 0),
+      },
+    };
+  }
   if (item === undefined) return t;
   if (type === "item.started" && item.type === "command_execution")
     return {
@@ -224,6 +260,8 @@ export const toProgress = (t: Tally, at: string): Progress => ({
   last: t.last,
   commands: t.commands,
   files: t.files.size,
+  ...(t.usage === undefined ? {} : { usage: t.usage }),
+  ...(t.totalCostUsd === undefined ? {} : { cost_usd: t.totalCostUsd }),
   ...(t.session === undefined ? {} : { session: t.session }),
 });
 
@@ -237,6 +275,7 @@ const WRITE_EVERY_MS = 1_000;
 export function progressWriter(
   path: string,
   fold: (t: Tally, line: string) => Tally = foldEvent,
+  prices?: { input: number; cachedInput: number; output: number },
 ): {
   feed: (line: string) => void;
   flush: () => void;
@@ -244,23 +283,45 @@ export function progressWriter(
 } {
   let tally = emptyTally();
   let lastWrite = 0;
+  let lastWrittenCommands = -1;
+  let lastWrittenUsage = "";
   let failed = 0;
   const write = (): void => {
     const tmp = `${path}.tmp`;
-    const body = JSON.stringify(
-      toProgress(tally, Temporal.Now.instant().toString()),
-    );
+    const costUsd =
+      tally.totalCostUsd ??
+      (tally.usage === undefined || prices === undefined
+        ? undefined
+        : ((tally.usage.input_tokens - tally.usage.cached_input_tokens) *
+            prices.input +
+            tally.usage.cached_input_tokens * prices.cachedInput +
+            (tally.usage.output_tokens + tally.usage.reasoning_output_tokens) *
+              prices.output) /
+          1_000_000);
+    const progress = toProgress(tally, Temporal.Now.instant().toString());
+    const body = JSON.stringify({
+      ...progress,
+      ...(costUsd === undefined ? {} : { cost_usd: costUsd }),
+    });
     const done = fromThrowable(() => {
       writeFileSync(tmp, body);
       renameSync(tmp, path);
     })();
     if (done.isErr()) failed++;
     lastWrite = performance.now();
+    lastWrittenCommands = tally.commands;
+    lastWrittenUsage = JSON.stringify(tally.usage ?? null);
   };
   return {
     feed: (line) => {
       tally = fold(tally, line);
-      if (performance.now() - lastWrite >= WRITE_EVERY_MS) write();
+      const usage = JSON.stringify(tally.usage ?? null);
+      if (
+        tally.commands > lastWrittenCommands ||
+        usage !== lastWrittenUsage ||
+        performance.now() - lastWrite >= WRITE_EVERY_MS
+      )
+        write();
     },
     flush: write,
     failedWrites: () => failed,

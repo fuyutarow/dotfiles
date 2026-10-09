@@ -29,6 +29,7 @@ export interface RouteRun {
         commands: number;
         files: number;
         ageSecs: number;
+        costUsd?: number;
         session?: string; // the vendor's id for the worker (codex thread, claude session)
       }
     | undefined;
@@ -45,6 +46,7 @@ function doingOf(runId: string): RouteRun["doing"] {
     commands: p.commands,
     files: p.files,
     ageSecs: sinceSecs(p.at).unwrapOr(0),
+    ...(p.cost_usd === undefined ? {} : { costUsd: p.cost_usd }),
     ...(p.session === undefined ? {} : { session: p.session }),
   };
 }
@@ -121,6 +123,7 @@ export async function routeRunsAsync(): Promise<
           commands: p.commands,
           files: p.files,
           ageSecs: sinceSecs(p.at).unwrapOr(0),
+          ...(p.cost_usd === undefined ? {} : { costUsd: p.cost_usd }),
           ...(progressSession === undefined
             ? {}
             : { session: progressSession }),
@@ -217,6 +220,21 @@ function sessionText(value: string, width: number, reserve: boolean): string {
   if (value === "") return reserve ? " ".repeat(width + 1) : "";
   return `${ESC}[38;5;240m${padDisplay(value, width)}${RST} `;
 }
+function costText(value: number | undefined, width: number): string {
+  if (width === 0) return "";
+  if (value === undefined) return " ".repeat(width + 1);
+  return `${padDisplay(costLabel(value), width)} `;
+}
+const costFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  notation: "compact",
+  minimumSignificantDigits: 3,
+  maximumSignificantDigits: 3,
+});
+function costLabel(value: number): string {
+  return costFormatter.format(value).replace(/K$/u, "k");
+}
 const RUN_LABEL_WIDTH = 32;
 function truncateDisplay(value: string, width: number): string {
   let result = "";
@@ -249,6 +267,14 @@ export function routeLines(
   );
   const choices = shown.map((r) => r.choice);
   const elapsed = shown.map((r) => dur(r.secs));
+  const costs = shown.map((r) => r.doing?.costUsd);
+  const costLabels = costs.map((value) =>
+    value === undefined ? "" : costLabel(value),
+  );
+  const costWidth = Math.max(
+    0,
+    ...costLabels.map((value) => Bun.stringWidth(value)),
+  );
   const labels = shown.map((r) => truncateDisplay(r.label, RUN_LABEL_WIDTH));
   const choiceWidth = Math.max(
     0,
@@ -265,7 +291,7 @@ export function routeLines(
   const reserveSession = sessionWidth > 0;
   const lines = shown.map(
     (r, i) =>
-      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing)}`,
+      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing)}`,
   );
   if (own.length > RUN_LINES)
     lines.push(`${DIM}+${own.length - RUN_LINES} more${RST}`);

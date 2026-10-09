@@ -51,6 +51,7 @@ import {
   readFileSync,
   renameSync,
   readdirSync,
+  lstatSync,
   realpathSync,
   rmSync,
   statSync,
@@ -214,6 +215,7 @@ const sha256 = (s: string): string =>
 interface WritesCheck {
   paths: string[];
   unavailable?: string;
+  note?: string;
   violations?: string[];
   unattributed?: string[];
 }
@@ -309,21 +311,53 @@ function pathMatchesGlobs(path: string, globs: string[]): boolean {
   return globs.some((glob) => new Bun.Glob(glob).match(path));
 }
 
+function scanWrittenPaths(
+  cwd: string,
+  writes: string[],
+  startedAt: string,
+): string[] {
+  if (writes.length === 0) return [];
+  const startedMs = Temporal.Instant.from(startedAt).epochMilliseconds;
+  const paths: string[] = [];
+  let entries = 0;
+  const visit = (directory: string, prefix: string): void => {
+    if (entries >= 5000) return;
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entries >= 5000) break;
+      entries += 1;
+      if (
+        entry.isDirectory() &&
+        [".git", ".jj", "node_modules"].includes(entry.name)
+      )
+        continue;
+      const relative = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+      const absolute = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(absolute, relative);
+        continue;
+      }
+      if (!entry.isFile() || lstatSync(absolute).mtimeMs < startedMs) continue;
+      const matches = writes.some((glob) => new Bun.Glob(glob).match(relative));
+      if (matches) paths.push(relative);
+    }
+  };
+  visit(cwd, "");
+  return paths;
+}
+
 async function checkedWrites(
   cwd: string,
   writes: string[],
   before: ChangeSnapshot,
   siblingWrites: string[][],
+  startedAt: string,
 ): Promise<WritesCheck> {
-  if (before.unavailable !== undefined)
-    return { paths: [], unavailable: before.unavailable };
   const listed = await changedPaths(cwd);
-  if (listed.unavailable !== undefined)
-    return { paths: [], unavailable: listed.unavailable };
   const paths = [
     ...new Set([
       ...before.paths,
       ...listed.paths.map((p) => p.replaceAll("\\", "/")),
+      ...scanWrittenPaths(cwd, writes, startedAt),
     ]),
   ].filter((p) => !p.split("/").includes("node_modules"));
   const hashes = await Promise.all(
@@ -342,17 +376,26 @@ async function checkedWrites(
     paths: delta,
     ...(violations.length === 0 ? {} : { violations }),
     ...(unattributed.length === 0 ? {} : { unattributed }),
+    ...(listed.unavailable === undefined
+      ? {}
+      : { note: "vcs: none; mtime scan" }),
   };
 }
 
 async function changedSince(
   cwd: string,
   before: ChangeSnapshot,
+  writes: string[],
+  startedAt: string,
 ): Promise<string[]> {
-  if (before.unavailable !== undefined) return [];
   const after = await changedPaths(cwd);
-  if (after.unavailable !== undefined) return [];
-  const paths = [...new Set([...before.paths, ...after.paths])]
+  const paths = [
+    ...new Set([
+      ...before.paths,
+      ...after.paths,
+      ...scanWrittenPaths(cwd, writes, startedAt),
+    ]),
+  ]
     .map((p) => p.replaceAll("\\", "/"))
     .filter((p) => !p.split("/").includes("node_modules"));
   const hashes = await Promise.all(
@@ -2633,7 +2676,12 @@ async function launch(l: Launch): Promise<number> {
     await child.exited;
     const orphans = await reapWorkerGroup(child.pid);
     const done = progressAtEnd(progress);
-    const filesChanged = await changedSince(active.cwd, changesBefore);
+    const filesChanged = await changedSince(
+      active.cwd,
+      changesBefore,
+      ticket?.writes ?? [],
+      active.started_at,
+    );
     const session = progressSession(progress);
     // recorded as stopped; a waiver, because a stopped run has no work to grade and must not block the cwd
     appendLog({
@@ -2856,6 +2904,7 @@ async function launch(l: Launch): Promise<number> {
     ticket?.writes ?? [],
     changesBefore,
     overlappingWriterScopes(runId, active.cwd, active.started_at, now()),
+    active.started_at,
   );
   const writes = ticket === undefined ? undefined : delta;
   const nonDelivery =
@@ -2939,10 +2988,10 @@ async function launch(l: Launch): Promise<number> {
     );
   const writesFields: Record<string, unknown> = {};
   if (writes !== undefined) {
-    writesFields.writes_check =
-      writes.unavailable === undefined
-        ? writes.paths
-        : `unavailable: ${writes.unavailable}`;
+    if (writes.unavailable !== undefined)
+      writesFields.writes_check = `unavailable: ${writes.unavailable}`;
+    else if (writes.paths.length > 0) writesFields.writes_check = writes.paths;
+    else writesFields.writes_check = writes.note ?? writes.paths;
     if (writeViolations.length > 0)
       writesFields.writes_violations = writeViolations;
     if ((writes?.unattributed?.length ?? 0) > 0)

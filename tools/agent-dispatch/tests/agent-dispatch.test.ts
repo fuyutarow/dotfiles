@@ -3022,7 +3022,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     const cwd = freshCwd();
     const b = brief(
       "t-prose",
-      ticketText('writes = ["x/**"]\nverify = ["true"]', "PROSE-MARK do it\n"),
+      ticketText('writes = []\nverify = ["true"]', "PROSE-MARK do it\n"),
     );
     const r = await router(runArgs(b, cwd));
     expect(r.code).toBe(0);
@@ -3975,6 +3975,62 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     expect(existsSync(join(r.state, "incidents.jsonl"))).toBe(false);
   });
 
+  test("non-repo mtime scan counts a file matching declared writes", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "scan-matching-write",
+      ticketText('writes = ["notes/*.md"]\nverify = []'),
+    );
+    const r = await router(runArgs(b, cwd), { FAKE_TOUCH: "notes/a.md" });
+    expect(r.code).toBe(0);
+    const run = logLines(r.state).find((line) => line.kind === "run");
+    expect(run).toMatchObject({ writes_check: ["notes/a.md"] });
+    expect(JSON.stringify(run)).not.toContain("non_delivery");
+    expect(JSON.stringify(run)).not.toContain("stalled");
+  });
+
+  test("non-repo mtime scan ignores files outside declared writes", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "scan-outside-write",
+      ticketText('writes = ["notes/*.md"]\nverify = []'),
+    );
+    const r = await router(runArgs(b, cwd), { FAKE_TOUCH: "other/b.md" });
+    const run = logLines(r.state).find((line) => line.kind === "run");
+    expect(r.code).toBe(1);
+    expect(run).toMatchObject({ writes_check: "vcs: none; mtime scan" });
+    expect(JSON.stringify(run)).not.toContain("other/b.md");
+    expect(run).toMatchObject({
+      worker: {
+        outcome: "non_delivery",
+        cause: "ticket declared writes but no files changed",
+      },
+    });
+    expect(JSON.stringify(run)).not.toContain("stalled");
+  });
+
+  test("mtime scan includes an ignored write inside a jj workspace", async () => {
+    const cwd = freshCwd();
+    mkdirSync(join(cwd, ".jj"));
+    const fakeBin = join(scratch, `ignored-jj-${stateSeq++}`);
+    mkdirSync(fakeBin);
+    writeFileSync(join(fakeBin, "jj"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(fakeBin, "jj"), 0o755);
+    const b = brief(
+      "scan-ignored-write",
+      ticketText('writes = [".agent-notes/*.md"]\nverify = []'),
+    );
+    const r = await router(runArgs(b, cwd), {
+      PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+      FAKE_TOUCH: ".agent-notes/n.md",
+    });
+    const run = logLines(r.state).find((line) => line.kind === "run");
+    expect(r.code).toBe(0);
+    expect(run).toMatchObject({ writes_check: [".agent-notes/n.md"] });
+    expect(JSON.stringify(run)).not.toContain("non_delivery");
+    expect(JSON.stringify(run)).not.toContain("stalled");
+  });
+
   test("RETURN before the deadline is recorded as observed", async () => {
     const b = brief(
       "t-no-checkpoint-after-return",
@@ -4164,10 +4220,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
   test("a hand grade after the automatic one wins (latest grade)", async () => {
     const cwd = freshCwd();
     const state = join(scratch, "state-regrade");
-    const b = brief(
-      "t-regrade",
-      ticketText('writes = ["r/**"]\nverify = ["true"]'),
-    );
+    const b = brief("t-regrade", ticketText('writes = []\nverify = ["true"]'));
     const first = await router(runArgs(b, cwd), {
       AGENT_ROUTER_STATE_DIR: state,
     });
@@ -4442,9 +4495,7 @@ describe("agent-dispatch ticket write enforcement", () => {
       z.looseObject({ writes_check: z.string() }),
       r.out.trim(),
     );
-    expect(receipt.writes_check).toStartWith("unavailable: ");
-    expect(receipt.writes_check).toContain("jj disabled by test");
-    expect(receipt.writes_check).toContain("git disabled by test");
+    expect(receipt.writes_check).toBe("vcs: none; mtime scan");
   });
 });
 
@@ -4527,12 +4578,9 @@ describe("agent-dispatch run: ungraded no-verify warnings", () => {
     const cwd = freshCwd();
     const state = gate("overlap");
     seed(state, cwd, ["tools/agent-dispatch/**"]);
-    const r = await router(
-      ticketRun(cwd, '["tools/agent-dispatch/tests/**"]'),
-      {
-        AGENT_ROUTER_STATE_DIR: state,
-      },
-    );
+    const r = await router(ticketRun(cwd, "[]"), {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
     expect(r.code).toBe(0);
     expect(r.err).toContain("warning:");
     expect(r.err).toContain("remain ungraded");
@@ -4545,7 +4593,7 @@ describe("agent-dispatch run: ungraded no-verify warnings", () => {
     const cwd = freshCwd();
     const state = gate("all-blockers");
     for (let index = 0; index < 12; index += 1) seed(state, cwd, ["a/**"]);
-    const r = await router(ticketRun(cwd, '["a/**"]'), {
+    const r = await router(ticketRun(cwd, "[]"), {
       AGENT_ROUTER_STATE_DIR: state,
     });
     expect(r.code).toBe(0);
@@ -4561,6 +4609,7 @@ describe("agent-dispatch run: ungraded no-verify warnings", () => {
     seed(state, cwd, ["tools/agent-dispatch/**"]);
     const r = await router(ticketRun(cwd, '["agents/models/roster.ts"]'), {
       AGENT_ROUTER_STATE_DIR: state,
+      FAKE_TOUCH: "agents/models/roster.ts",
     });
     expect(r.code).toBe(0);
     expect(r.err).toContain("warning:");
@@ -4569,7 +4618,7 @@ describe("agent-dispatch run: ungraded no-verify warnings", () => {
   test("dispatcher-session warning spans cwd boundaries", async () => {
     const state = gate("othercwd");
     seed(state, freshCwd(), ["a/**"]);
-    const r = await router(ticketRun(freshCwd(), '["a/**"]'), {
+    const r = await router(ticketRun(freshCwd(), "[]"), {
       AGENT_ROUTER_STATE_DIR: state,
     });
     expect(r.code).toBe(0);
@@ -4587,7 +4636,7 @@ describe("agent-dispatch run: ungraded no-verify warnings", () => {
     expect(ro.err).toContain("warning:");
     const state2 = gate("readonly2");
     seed(state2, cwd, []);
-    const rw = await router(ticketRun(cwd, '["a/**"]'), {
+    const rw = await router(ticketRun(cwd, "[]"), {
       AGENT_ROUTER_STATE_DIR: state2,
     });
     expect(rw.code).toBe(0);
@@ -4603,7 +4652,7 @@ describe("agent-dispatch run: ungraded no-verify warnings", () => {
     const cwd = freshCwd();
     const state = gate("verified-ticket");
     seed(state, cwd, ["a/**"], ["true"]);
-    const r = await router(ticketRun(cwd, '["a/**"]'), {
+    const r = await router(ticketRun(cwd, "[]"), {
       AGENT_ROUTER_STATE_DIR: state,
     });
     expect(r.code).toBe(0);
@@ -4642,7 +4691,7 @@ describe("agent-dispatch run: ungraded no-verify warnings", () => {
     });
     expect(legacy.code).toBe(0);
     expect(legacy.err).toContain("warning:");
-    const ticket = await router(ticketRun(cwd, '["z/**"]'), {
+    const ticket = await router(ticketRun(cwd, "[]"), {
       AGENT_ROUTER_STATE_DIR: state,
     });
     expect(ticket.code).toBe(0);
@@ -4988,7 +5037,7 @@ describe("agent-dispatch resume", () => {
     const b = brief(
       "rs-ticket",
       ticketText(
-        'writes = ["rw/**"]\nverify = ["echo RESUMEVERIFY && echo GRADE=pass"]',
+        'writes = []\nverify = ["echo RESUMEVERIFY && echo GRADE=pass"]',
         "PICK=luna-high do it\n",
       ),
     );
@@ -5001,7 +5050,7 @@ describe("agent-dispatch resume", () => {
     expect(receipt.verify_summary).toBe("1/1 passed");
     expect(receipt.verify[0]?.output_tail).toContain("RESUMEVERIFY");
     expect(receipt.grade).toMatchObject({ grade: "pass", graded_by: "router" });
-    expect(runsOf(stopped.state)[1]?.ticket?.writes).toEqual(["rw/**"]); // the gate sees it
+    expect(runsOf(stopped.state)[1]?.ticket?.writes).toEqual([]); // the gate sees it
     expect(
       records(stopped.state).filter((x) => x.kind === "grade"),
     ).toHaveLength(2);

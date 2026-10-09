@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.18.0 — 2026-10-09
+
+- Include declared-write filesystem mtime scans in progress and write-scope checks, including files ignored by VCS; use the scan when the target is not a repository.
+
 ## 1.17.0 — 2026-10-09
 
 - Share Codex token pricing with the statusline and keep streaming usage/cost in progress files when the worker stream reports it.

@@ -98,6 +98,7 @@ test("bad input, wrong event and callback errors fail open with one line", async
     "null",
     "[]",
     '{"cwd":1}',
+    '{"session_id":1}',
     '{"stop_hook_active":"true"}',
     '{"hook_event_name":"Stop"}',
   ]) {
@@ -147,7 +148,14 @@ test("context discovers ancestor repo root and preserves payload", async () => {
   const fixture = hook("return JSON.stringify(ctx);");
   const cwd = join(fixture.root, "nested");
   const child = Bun.spawn([process.execPath, fixture.path], {
-    stdin: new Blob([JSON.stringify({ cwd, prompt: "hi", custom: 42 })]),
+    stdin: new Blob([
+      JSON.stringify({
+        cwd,
+        prompt: "hi",
+        session_id: "session-a",
+        custom: 42,
+      }),
+    ]),
     stdout: "pipe",
     stderr: "pipe",
     timeout: 5_000,
@@ -168,7 +176,7 @@ test("context discovers ancestor repo root and preserves payload", async () => {
   ).toEqual({
     cwd,
     repoRoot: fixture.root,
-    payload: { cwd, prompt: "hi", custom: 42 },
+    payload: { cwd, prompt: "hi", session_id: "session-a", custom: 42 },
   });
   expect(exit).toBe(0);
   rmSync(fixture.dir, { recursive: true, force: true });

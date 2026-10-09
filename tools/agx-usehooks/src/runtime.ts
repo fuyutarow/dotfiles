@@ -4,6 +4,7 @@ import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const Payload = z.looseObject({
+  session_id: z.string().optional(),
   cwd: z.string().min(1).optional(),
   hook_event_name: z.enum(["UserPromptSubmit", "Stop"]).optional(),
   prompt: z.string().optional(),

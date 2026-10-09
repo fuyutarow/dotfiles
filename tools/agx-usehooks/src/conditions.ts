@@ -8,10 +8,12 @@ import { jsonOf, z } from "../../shared/src/zod.ts";
 import type { HookContext } from "./runtime.ts";
 
 export type Run = { id: string; lane: string; row: string };
+export type RunFilter = { session?: string };
 const Marker = z.object({
   run_id: z.string(),
   pid: z.number().int().positive(),
   choice: z.string(),
+  dispatcher_session: z.string().optional(),
   ticket: z.object({ lane: z.string().optional() }).optional(),
 });
 const Record = z.object({
@@ -65,9 +67,20 @@ async function bounded<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   return value;
 }
 
-async function liveMarker(path: string): Promise<Run[]> {
+async function liveMarker(
+  path: string,
+  session: string | null | undefined,
+): Promise<Run[]> {
   const parsed = jsonOf(Marker).safeParse(await Bun.file(path).text());
   if (!parsed.success) return [];
+  if (session === null && parsed.data.dispatcher_session !== undefined)
+    return [];
+  if (
+    session !== undefined &&
+    session !== null &&
+    parsed.data.dispatcher_session !== session
+  )
+    return [];
   const alive = await attempt(() => process.kill(parsed.data.pid, 0));
   if (!alive.ok) return [];
   return [
@@ -79,8 +92,7 @@ async function liveMarker(path: string): Promise<Run[]> {
   ];
 }
 
-/** Live marker PIDs only; stale and malformed markers are ignored. */
-export function runningRuns(_ctx: HookContext): Promise<Run[]> {
+function selectRuns(session: string | null | undefined): Promise<Run[]> {
   return bounded(async () => {
     const dir = join(dispatchStateDir(), "active");
     const names = await readdir(dir);
@@ -90,17 +102,34 @@ export function runningRuns(_ctx: HookContext): Promise<Run[]> {
         .filter(
           (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
         )
-        .map((name) => attemptOr(() => liveMarker(join(dir, name)), [])),
+        .map((name) =>
+          attemptOr(() => liveMarker(join(dir, name), session), []),
+        ),
     );
     return rows.flat();
   }, []);
 }
 
+/** Live PIDs, optionally restricted to the dispatcher's exact Claude session ID. */
+export function runningRuns(
+  _ctx: HookContext,
+  filter: RunFilter = {},
+): Promise<Run[]> {
+  return selectRuns(filter.session);
+}
+
+/** Live runs without dispatcher_session; never attributed to a filtered session. */
+export function unattributedRuns(_ctx: HookContext): Promise<Run[]> {
+  return selectRuns(null);
+}
+
 export async function laneCount(
   ctx: HookContext,
   lane: string,
+  filter: RunFilter = {},
 ): Promise<number> {
-  return (await runningRuns(ctx)).filter((run) => run.lane === lane).length;
+  return (await runningRuns(ctx, filter)).filter((run) => run.lane === lane)
+    .length;
 }
 
 async function command(

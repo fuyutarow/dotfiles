@@ -15,6 +15,7 @@ import {
   gpu,
   laneCount,
   runningRuns,
+  unattributedRuns,
   unackedReturns,
 } from "../src/index.ts";
 
@@ -69,6 +70,50 @@ test("runningRuns and laneCount use live PIDs, ticket lanes, and choice rows", a
   ]);
   expect(await laneCount(ctx, "theory")).toBe(1);
   expect(await laneCount(ctx, "missing")).toBe(0);
+});
+
+test("session selectors separate two dispatchers and unattributed live runs", async () => {
+  const { dir, ctx } = world();
+  for (const [id, session, pid] of [
+    ["a-bench", "session-a", process.pid],
+    ["a-theory", "session-a", process.pid],
+    ["b-theory", "session-b", process.pid],
+    ["dead-a", "session-a", 2_147_483_647],
+    ["dead-unattributed", undefined, 2_147_483_647],
+    ["unattributed", undefined, process.pid],
+  ] satisfies [string, string | undefined, number][]) {
+    writeFileSync(
+      join(dir, "active", `${id}.json`),
+      JSON.stringify({
+        run_id: id,
+        choice: "terra",
+        pid,
+        dispatcher_session: session,
+        ticket: { lane: id === "a-bench" ? "bench" : "theory" },
+      }),
+    );
+  }
+  expect(
+    (await runningRuns(ctx, { session: "session-a" })).map((run) => run.id),
+  ).toEqual(["a-bench", "a-theory"]);
+  expect(
+    (await runningRuns(ctx, { session: "session-b" })).map((run) => run.id),
+  ).toEqual(["b-theory"]);
+  expect(await runningRuns(ctx, { session: "fake" })).toEqual([]);
+  expect(await runningRuns(ctx, { session: "" })).toEqual([]);
+  expect((await runningRuns(ctx)).map((run) => run.id)).toEqual([
+    "a-bench",
+    "a-theory",
+    "b-theory",
+    "unattributed",
+  ]);
+  expect(await laneCount(ctx, "theory", { session: "session-a" })).toBe(1);
+  expect(await laneCount(ctx, "theory")).toBe(3);
+  expect(await unattributedRuns(ctx)).toEqual([
+    { id: "unattributed", lane: "theory", row: "terra" },
+  ]);
+  process.env.AGX_STATE_DIR = join(dir, "missing");
+  expect(await unattributedRuns(ctx)).toEqual([]);
 });
 
 test("GPU resolves WSL fallback and returns unknown when none is executable", async () => {

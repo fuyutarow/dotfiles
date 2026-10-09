@@ -79,14 +79,19 @@ describe("~/.ssh/config.local writer", () => {
       `${unrelated}\nHost ${previous} ${previousCode}\n    Tag smart-open\n    HostName 100.110.117.86\n    Port 2222\n    User fuyu\n\n# Windows host block note\nHost r99\n    HostName host.invalid\n    User fuyutarow\n`,
     );
 
-    const first = await updateConfigLocal(path, "r99-test", 2233);
+    const first = await updateConfigLocal(
+      path,
+      "r99-test",
+      "Ubuntu-Test",
+      2233,
+    );
     expect(first).toBeUndefined();
     const once = readFileSync(path, "utf8");
     expect(once).toContain(
-      "# BEGIN dotfiles-wsl:r99-u24\nHost r99-u24 r99-u24-code",
+      "# BEGIN dotfiles-wsl:r99-u24\n# WSL-Distro: Ubuntu-24.04\nHost r99-u24 r99-u24-code",
     );
     expect(once).toContain(
-      "# BEGIN dotfiles-wsl:r99-test\nHost r99-test r99-test-code",
+      "# BEGIN dotfiles-wsl:r99-test\n# WSL-Distro: Ubuntu-Test\nHost r99-test r99-test-code",
     );
     expect(once).toContain(
       "HostName 100.110.117.86\n    Port 2233\n    User fuyu",
@@ -98,7 +103,12 @@ describe("~/.ssh/config.local writer", () => {
     );
     expect(once).not.toContain(`${previous} ${previousCode}`);
 
-    const second = await updateConfigLocal(path, "r99-test", 2233);
+    const second = await updateConfigLocal(
+      path,
+      "r99-test",
+      "Ubuntu-Test",
+      2233,
+    );
     expect(second).toBeUndefined();
     expect(readFileSync(path, "utf8")).toBe(once);
     rmSync(root, { recursive: true, force: true });

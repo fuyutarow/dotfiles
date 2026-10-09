@@ -1,12 +1,13 @@
 import { cli } from "cleye";
+import { managedDistrosFromConfig, type ManagedDistro } from "./wsl-keepalive";
 
 // Start the WSL distro on a Windows host, and leave the GUEST actually reachable, from the Mac.
 // Consumer: human/agent running `mise run wsl:wake`; output is verdict lines.
 //
 // WHY THIS EXISTS, and why the obvious answer was wrong. When Windows Update reboots the box
-// overnight it stops at the logon screen, and the two recovery tasks (WSL-keepalive, WSL-revive)
-// are `onlogon`-triggered, so WSL never starts. That fact was read as "unattended recovery needs
-// auto-logon", and a long detour followed (Sysinternals Autologon, LsaStorePrivateData by
+// overnight it stops at the logon screen; logon-triggered recovery cannot help until a user signs
+// in. That fact was read as "unattended recovery needs auto-logon", and a long detour followed
+// (Sysinternals Autologon, LsaStorePrivateData by
 // P/Invoke, AutoLogonSID removal) — none of it logs in a MicrosoftAccount that has Windows Hello.
 // Measured 2026-09-12 with Windows parked at the logon screen: `wsl.exe` over ssh STARTS THE
 // DISTRO ANYWAY, exit 0. The onlogon limit belongs to Task Scheduler, not to WSL.
@@ -35,8 +36,6 @@ import { cli } from "cleye";
 // the goal.
 
 const HOST_FALLBACK = ["r99-lan", "r99"]; // r99-lan for the logon screen, r99 for everywhere else
-const GUEST_DEFAULT = "r99-u24";
-const DISTRO_DEFAULT = "Ubuntu-24.04";
 const SSH_MS = 60_000; // interop on this host measured 0.85-1.9s; 60s is a bound, not an estimate
 const GUEST_MS = 15_000; // a guest `true` is a TCP connect + trivial exec; 15s catches a hang
 const SETTLE_MS = 5_000; // let the distro finish booting before the state read
@@ -131,70 +130,40 @@ function rejectPrototypeFlag(type: string, flag: string): void {
   }
 }
 
-async function main(): Promise<number | Error> {
-  const parsed = cli(
-    {
-      name: "wsl-wake.ts",
-      strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
-      parameters: [],
-      help: {
-        description:
-          "Start the WSL distro and leave the guest ssh-reachable. Tries the LAN alias then the tailnet alias; no logon required.",
-      },
-      flags: {
-        host: {
-          type: String,
-          default: "",
-          description:
-            "pin ONE ssh alias for the host; default tries r99-lan then r99",
-        },
-        guest: { type: String, default: GUEST_DEFAULT },
-        distro: { type: String, default: DISTRO_DEFAULT },
-        status: { type: Boolean, default: false },
-      },
-    },
-    undefined,
-    Bun.argv.slice(2),
-  );
-  if (parsed._.length > 0) {
-    return new UsageError(`Unexpected argument '${parsed._[0]}'`);
-  }
-  const { guest, distro } = parsed.flags;
-
-  if (Bun.which("ssh") === undefined) {
-    console.log("no ssh on PATH");
-    return 1;
-  }
-
-  const candidates = hostCandidates(parsed.flags.host);
-  const reached = await firstReachable(candidates, (h) =>
-    probeState(h, distro),
-  );
-  if (reached === null) {
-    console.log(`cannot reach the host via ${candidates.join(" or ")}`);
-    console.log(
-      "  The LAN alias needs the same subnet; the tailnet alias needs the box logged in or",
+export async function wakeManagedDistros(
+  distros: ManagedDistro[],
+  wake: (distro: ManagedDistro) => Promise<string | Error>,
+): Promise<string[]> {
+  const results: string[] = [];
+  for (const distro of distros) {
+    const result = await Promise.try(() => wake(distro)).then(
+      (value) =>
+        value instanceof Error
+          ? `${distro.alias}: FAILED — ${value.message}`
+          : value,
+      (error: unknown) =>
+        `${distro.alias}: FAILED — ${error instanceof Error ? error.message : String(error)}`,
     );
-    console.log(
-      "  Tailscale unattended. Override HostName in ~/.ssh/config.local if the name will not resolve.",
-    );
-    return 1;
+    results.push(result);
   }
+  return results;
+}
+
+async function wakeOne(
+  managed: ManagedDistro,
+  candidates: string[],
+  statusOnly: boolean,
+): Promise<string> {
+  const { alias, distro } = managed;
+  const reached = await firstReachable(candidates, (host) =>
+    probeState(host, distro),
+  );
+  if (reached === null) return `${alias}: FAILED — host unreachable`;
   const { host } = reached;
-  console.log(`host:   ${host}`);
-  console.log(`before: ${reached.out}`);
-
-  if (parsed.flags.status) {
-    console.log(
-      `guest:  ${(await guestReachable(guest)) ? "reachable" : "unreachable"}`,
-    );
-    return 0;
-  }
+  if (statusOnly)
+    return `${alias}: ${(await guestReachable(alias)) ? "reachable" : "unreachable"}`;
 
   if (!reached.out.includes("Running")) {
-    // Detached and hidden: the anchor must outlive this ssh session, and there is no desktop to
-    // draw a window on at the logon screen anyway.
     const wakeCmd =
       `Start-Process -FilePath "C:\\Windows\\System32\\wsl.exe" ` +
       `-ArgumentList "-d ${distro} -u root --exec /usr/bin/tail -f /dev/null" -WindowStyle Hidden`;
@@ -202,33 +171,16 @@ async function main(): Promise<number | Error> {
       ["ssh", "-o", "ConnectTimeout=10", host, wakeCmd],
       SSH_MS,
     );
-    if (wake.timedOut) {
-      console.log(
-        `ssh timed out after ${SSH_MS / 1000}s while starting the distro`,
-      );
-      return 1;
-    }
+    if (wake.timedOut || wake.code !== 0)
+      return `${alias}: FAILED — host wake command failed`;
     await Bun.sleep(SETTLE_MS);
     const after = await probeState(host, distro);
-    console.log(`after:  ${after ?? "(state read failed)"}`);
-    if (after === null || !after.includes("Running")) {
-      console.log(
-        `FAILED: ${distro} did not reach Running${wake.out !== "" ? ` — ${wake.out}` : ""}`,
-      );
-      return 1;
-    }
-  } else {
-    console.log("already running");
+    if (after === null || !after.includes("Running"))
+      return `${alias}: FAILED — distro did not reach Running`;
   }
 
-  // Running is not reachable. Give the guest a moment (a fresh boot needs sshd + tailscaled), then
-  // verify; if it is silent, start sshd through the host — the distro being up is not the goal.
-  if (await guestReachable(guest)) {
-    console.log(`guest:  ${guest} reachable`);
-    return 0;
-  }
-  console.log(`guest:  ${guest} not answering — starting sshd via ${host}`);
-  await run(
+  if (await guestReachable(alias)) return `${alias}: reachable`;
+  const started = await run(
     [
       "ssh",
       "-o",
@@ -238,15 +190,52 @@ async function main(): Promise<number | Error> {
     ],
     SSH_MS,
   );
+  if (started.timedOut || started.code !== 0)
+    return `${alias}: FAILED — could not start guest sshd`;
   await Bun.sleep(SETTLE_MS);
-  if (await guestReachable(guest)) {
-    console.log(`guest:  ${guest} reachable after sshd start`);
-    return 0;
-  }
-  console.log(
-    `guest:  ${guest} STILL unreachable — distro is Running but ssh is not; check tailscaled inside the guest`,
+  return (await guestReachable(alias))
+    ? `${alias}: reachable after sshd start`
+    : `${alias}: FAILED — guest remains unreachable`;
+}
+
+async function main(): Promise<number | Error> {
+  const parsed = cli(
+    {
+      name: "wsl-wake.ts",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: {
+        description:
+          "Start every managed WSL distro and leave each guest ssh-reachable. Tries the LAN alias then the tailnet alias.",
+      },
+      flags: {
+        host: {
+          type: String,
+          default: "",
+          description:
+            "pin ONE ssh alias for the host; default tries r99-lan then r99",
+        },
+        status: { type: Boolean, default: false },
+      },
+    },
+    undefined,
+    Bun.argv.slice(2),
   );
-  return 1;
+  if (parsed._.length > 0) {
+    return new UsageError(`Unexpected argument '${parsed._[0]}'`);
+  }
+  if (Bun.which("ssh") === undefined) {
+    return new Error("ssh must be on PATH");
+  }
+  const distros = await managedDistrosFromConfig();
+  if (distros instanceof Error) return distros;
+  const candidates = hostCandidates(parsed.flags.host);
+  const results = await wakeManagedDistros(distros, (managed) =>
+    wakeOne(managed, candidates, parsed.flags.status),
+  );
+  for (const result of results) process.stdout.write(`${result}\n`);
+  return results.every((result) => !result.includes(": FAILED")) ? 0 : 1;
 }
 
 if (import.meta.main) {

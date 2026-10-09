@@ -1,10 +1,10 @@
 # Lifecycle — why the box goes unreachable, and how to bring it back
 
-This owns RECOVERY: the box is down or unreachable, diagnose which layer and restore it. It does NOT
-own the standing config that keeps it reachable. The ssh anchor, Tailscale placement, the keepalive
-pin, and unattended Tailscale are **prevention config**. That is owned by `securing-remote-access`,
-in its `wsl2-mac.md` Setup 4. This file points there, not duplicates it. The cut: configure it to
-stay up → there; it went down anyway → here.
+This owns RECOVERY: the box is down or unreachable, diagnose which layer and restore it. Standing
+keepalive configuration is per managed distro and runs at Windows startup and user logon; install
+or refresh it with `mise run wsl:keepalive`. Tailscale placement and unattended Tailscale remain
+**prevention config** owned by `securing-remote-access`, in its `wsl2-mac.md` Setup 4. The cut:
+configure it to stay up → there; it went down anyway → here.
 
 ## The three ways it goes unreachable
 

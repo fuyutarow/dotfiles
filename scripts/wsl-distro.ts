@@ -14,6 +14,7 @@ export type Options = {
 type PlannedCommand = { label: string; argv: string[] };
 
 const PRIMARY = "r99-u24";
+export const PRIMARY_DISTRO_RECORD = { alias: PRIMARY, distro: "Ubuntu-24.04" };
 const PRIMARY_CODE = `${PRIMARY}-code`;
 const OLD_PRIMARY = ["r99", "wsl"].join("-");
 const OLD_PRIMARY_CODE = `${OLD_PRIMARY}-code`;
@@ -36,12 +37,14 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 function markedBlock(
   id: string,
   aliases: string[],
+  distro: string,
   hostName: string,
   port: number,
   smartOpen: boolean,
 ): string {
   return [
     `# BEGIN dotfiles-wsl:${id}`,
+    `# WSL-Distro: ${distro}`,
     `Host ${aliases.join(" ")}`,
     ...(smartOpen ? ["    Tag smart-open"] : []),
     `    HostName ${hostName}`,
@@ -153,9 +156,13 @@ export function migratePrimaryConfig(
       return new Error(`the ${PRIMARY} config block has no HostName`);
     const currentPort =
       /^\s*Port\s+(\d+)\s*$/imu.exec(currentMarked)?.[1] ?? "2222";
+    const distro =
+      /^\s*# WSL-Distro:\s*(\S+)\s*$/imu.exec(currentMarked)?.[1] ??
+      PRIMARY_DISTRO_RECORD.distro;
     const currentBlock = markedBlock(
       PRIMARY,
       [PRIMARY, PRIMARY_CODE],
+      distro,
       hostName,
       Number(currentPort),
       /^\s*Tag\s+smart-open\s*$/imu.test(currentMarked),
@@ -187,10 +194,14 @@ export function migratePrimaryConfig(
   if (hostName === undefined)
     return new Error(`the ${PRIMARY} config block has no HostName`);
   const port = /^\s*Port\s+(\d+)\s*$/imu.exec(source.text)?.[1] ?? "2222";
+  const distro =
+    /^\s*# WSL-Distro:\s*(\S+)\s*$/imu.exec(source.text)?.[1] ??
+    PRIMARY_DISTRO_RECORD.distro;
   const smartOpen = /^\s*Tag\s+smart-open\s*$/imu.test(source.text);
   const replacement = markedBlock(
     PRIMARY,
     [PRIMARY, PRIMARY_CODE],
+    distro,
     hostName,
     Number(port),
     smartOpen,
@@ -210,12 +221,14 @@ export function migratePrimaryConfig(
 export function writeAliasBlock(
   contents: string,
   alias: string,
+  distro: string,
   hostName: string,
   port: number,
 ): string {
   const replacement = markedBlock(
     alias,
     [alias, `${alias}-code`],
+    distro,
     hostName,
     port,
     true,
@@ -230,6 +243,7 @@ export function writeAliasBlock(
 export async function updateConfigLocal(
   path: string,
   alias: string,
+  distro: string,
   port: number,
 ): Promise<void | Error> {
   const contents = await Bun.file(path)
@@ -240,6 +254,7 @@ export async function updateConfigLocal(
   const updated = writeAliasBlock(
     migrated.contents,
     alias,
+    distro,
     migrated.hostName,
     port,
   );
@@ -525,6 +540,7 @@ async function main(): Promise<number | Error> {
   const configResult = await updateConfigLocal(
     join(homedir(), ".ssh", "config.local"),
     options.alias,
+    options.name,
     options.port,
   );
   if (configResult instanceof Error) return configResult;

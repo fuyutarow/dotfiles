@@ -454,10 +454,16 @@ say(
 );
 const deadline = new AbortController();
 let boundFired = false;
-const boundTimer = setTimeout(() => {
+const expire = (): void => {
   boundFired = true;
   deadline.abort();
-}, timeoutS * 1000);
+};
+const boundTimer = setTimeout(expire, timeoutS * 1000);
+process.on("SIGUSR1", expire);
+const clearDeadline = (): void => {
+  clearTimeout(boundTimer);
+  process.removeListener("SIGUSR1", expire);
+};
 const spawned = await attempt(() =>
   // stdin "ignore" is the `</dev/null` of the recipe: codex exec reads stdin and would hang on an
   // open pipe for the whole budget.
@@ -470,8 +476,10 @@ const spawned = await attempt(() =>
     killSignal: "SIGKILL",
   }),
 );
-if (!spawned.ok)
+if (!spawned.ok) {
+  clearDeadline();
   refuse(`cannot start ${CODEX_BIN}: ${errorMessage(spawned.error)}`);
+}
 const proc = spawned.value;
 const heartbeat = setInterval(() => {
   say(`waiting for ${model} (${elapsed()} s of ${timeoutS} s)…`);
@@ -516,14 +524,22 @@ function readEvents(): Promise<string> {
   return proc.stdout.pipeTo(sink).then(() => streamed);
 }
 // Both readers start now; each is cut PIPE_GRACE_MS after the child exits (graced waits for that).
-const [code, eventsRead, errText] = await Promise.all([
-  proc.exited,
-  graced(readEvents()),
-  graced(new Response(proc.stderr).text()),
-]);
-const events = eventsRead === "" ? streamed : eventsRead;
+const completed = await attempt(() =>
+  Promise.all([
+    proc.exited,
+    graced(readEvents()),
+    graced(new Response(proc.stderr).text()),
+  ]),
+);
 clearInterval(heartbeat);
-clearTimeout(boundTimer);
+clearDeadline();
+if (!completed.ok) {
+  deadline.abort();
+  await proc.exited;
+  refuse(`cannot read ${CODEX_BIN}: ${errorMessage(completed.error)}`);
+}
+const [code, eventsRead, errText] = completed.value;
+const events = eventsRead === "" ? streamed : eventsRead;
 progress?.flush();
 if (progress !== undefined && progress.failedWrites() > 0)
   say(

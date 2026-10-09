@@ -987,6 +987,7 @@ async function askJev(
   throughputLines: string[] | undefined,
   temperature: number,
   seed: string,
+  hardMasks: ReadonlySet<string> = new Set(),
 ): Promise<Pick> {
   const fallback = (reason: string, jev?: JevTrace): Pick => ({
     source: "default",
@@ -997,7 +998,10 @@ async function askJev(
     sampled_row: roster.default,
     temperature,
     seed,
-    masked_rows: [],
+    masked_rows: [...hardMasks].map((row) => ({
+      row,
+      reason: "stall escalation",
+    })),
     sampled_probability: 0,
     pick_fallback_reason: reason,
     ...(jev === undefined ? {} : { jev }),
@@ -1022,6 +1026,7 @@ async function askJev(
     seed,
     budgetUsd,
     capabilities,
+    hardMasks,
   });
 }
 
@@ -1038,9 +1043,15 @@ function judge(
     seed: string;
     budgetUsd?: number | undefined;
     capabilities: string[];
+    hardMasks?: ReadonlySet<string>;
   },
 ): Pick {
-  const maskedRows: { row: string; reason: string }[] = [];
+  const maskedRows: { row: string; reason: string }[] = [
+    ...(options.hardMasks ?? []),
+  ].map((row) => ({
+    row,
+    reason: "stalled row or same family at lower/equal effort",
+  }));
   const mass = new Map<string, number>();
   const priced = roster.choice.flatMap((c) =>
     c.price_in === undefined || c.price_out === undefined
@@ -1049,6 +1060,7 @@ function judge(
   );
   const cheapest = priced.length === 0 ? undefined : Math.min(...priced);
   for (const [id, probability] of Object.entries(answer.probabilities ?? {})) {
+    if (options.hardMasks?.has(id) === true) continue;
     const candidate = roster.choice.find((c) => c.id === id);
     let reason: string | undefined;
     if (candidate === undefined)
@@ -1089,7 +1101,9 @@ function judge(
       answer.probabilities === undefined
         ? "no probabilities"
         : "zero mass after masking";
-    const row = roster.choice.find((c) => c.id === answer.choice);
+    const row = roster.choice.find(
+      (c) => c.id === answer.choice && options.hardMasks?.has(c.id) !== true,
+    );
     const fallbackRow = row?.id ?? roster.default;
     const invalidChoiceReason =
       row === undefined
@@ -1171,6 +1185,8 @@ function judge(
   };
 }
 
+const rowFamily = (id: string): string => id.slice(0, id.lastIndexOf("-"));
+
 async function pickFor(
   roster: Roster,
   brief: string,
@@ -1182,9 +1198,29 @@ async function pickFor(
   seedOverride?: string,
   lineageName?: string,
   writesCount = 0,
+  stalledRow?: Choice,
 ): Promise<Pick> {
   const routes = hostRoutes();
   const available = availableRoster(roster, routes);
+  const effortOrder = ["low", "medium", "high", "xhigh", "max"];
+  const hardMasks = new Set(
+    roster.choice
+      .filter(
+        (row) =>
+          stalledRow !== undefined &&
+          (row.id === stalledRow.id ||
+            (rowFamily(row.id) === rowFamily(stalledRow.id) &&
+              effortOrder.indexOf(row.effort) <=
+                effortOrder.indexOf(stalledRow.effort))),
+      )
+      .map((row) => row.id),
+  );
+  const eligible = available.roster.choice.filter(
+    (row) => !hardMasks.has(row.id),
+  );
+  if (eligible.length === 0) fatal("no eligible row after stall masks");
+  if (hardMasks.has(available.roster.default))
+    available.roster = { ...available.roster, default: eligible[0]!.id };
   const blocked = underNoEgress(cwd, roster.auto.no_egress);
   if (blocked !== undefined)
     return {
@@ -1201,7 +1237,10 @@ async function pickFor(
           .update(`${process.env.AGENT_ROUTER_RUN_ID ?? "pick"}:${brief}`)
           .digest("hex")
           .slice(0, 16),
-      masked_rows: [],
+      masked_rows: [...hardMasks].map((row) => ({
+        row,
+        reason: "stall escalation",
+      })),
       sampled_probability: 0,
       pick_fallback_reason: "cwd under no_egress",
       ...(Object.keys(available.unavailable).length === 0
@@ -1228,7 +1267,8 @@ async function pickFor(
   if (candidates.length > 0) {
     const defaultRow =
       candidates.find((row) => row.id === available.roster.default) ??
-      candidates[0]!;
+      candidates.find((row) => !hardMasks.has(row.id)) ??
+      eligible[0]!;
     routedRoster = {
       ...available.roster,
       choice: candidates,
@@ -1236,7 +1276,7 @@ async function pickFor(
     };
   }
   let requestRoster = routedRoster;
-  if (routing.fallback !== undefined)
+  if (routing.fallback !== undefined && !hardMasks.has(routing.fallback))
     requestRoster = {
       ...routedRoster,
       choice: routedRoster.choice.filter((row) => row.id === routing.fallback),
@@ -1261,6 +1301,7 @@ async function pickFor(
         .update(`${process.env.AGENT_ROUTER_RUN_ID ?? "pick"}:${brief}`)
         .digest("hex")
         .slice(0, 16),
+    hardMasks,
   );
   if (routing.failure !== undefined)
     dispatchError(
@@ -2297,6 +2338,7 @@ interface Launch {
   workerText: string | undefined;
   /** the vendor session to continue, for a resume */
   resume: { from: string; session: string } | undefined;
+  escalatedFrom?: string;
 }
 
 /** Start the worker for a pick, wait for it, verify and grade; shared by `run` and `resume`. */
@@ -2441,14 +2483,40 @@ async function launch(l: Launch): Promise<number> {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "inherit",
-      env: { ...process.env, AGENT_DISPATCH_CODEX_PROGRESS_FILE: progress },
+      env: {
+        ...process.env,
+        AGENT_DISPATCH_CODEX_PROGRESS_FILE: progress,
+        AGENT_DISPATCH_LAST_MESSAGE_FILE: join(
+          STATE_DIR,
+          "worker-receipts",
+          `${runId}.last.txt`,
+        ),
+      },
       detached: true,
     });
-  let child = spawnWorker(args);
+  const spawned = await attempt(() => spawnWorker(args));
+  if (!spawned.ok) {
+    rmSync(workerBrief, { force: true });
+    rmSync(marker, { force: true });
+    fatal(`cannot start worker: ${errorMessage(spawned.error)}`);
+  }
+  const child = spawned.value;
+  let checkpointTimer: ReturnType<typeof setTimeout> | undefined;
+  let firstReturnPoll: ReturnType<typeof setInterval> | undefined;
+  const clearObservation = (): void => {
+    if (checkpointTimer !== undefined) clearTimeout(checkpointTimer);
+    if (firstReturnPoll !== undefined) clearInterval(firstReturnPoll);
+  };
+  const cleanup = (): void => {
+    clearObservation();
+    process.removeListener("SIGINT", onInterrupt);
+    process.removeListener("SIGTERM", onTerminate);
+  };
   let stopping = false;
   const stop = async (signal: NodeJS.Signals, code: number): Promise<void> => {
     if (stopping) return;
     stopping = true;
+    cleanup();
     void attempt(() => process.kill(-child.pid, signal));
     // a verify that is running is in its own process group (verify.ts): it survives unless killed here
     killRunningVerify();
@@ -2512,19 +2580,22 @@ async function launch(l: Launch): Promise<number> {
     rmSync(progress, { force: true });
     process.exit(code);
   };
-  process.on("SIGINT", () => {
+  const onInterrupt = (): void => {
     void stop("SIGINT", 130);
-  });
-  process.on("SIGTERM", () => {
+  };
+  const onTerminate = (): void => {
     void stop("SIGTERM", 143);
-  });
+  };
+  process.on("SIGINT", onInterrupt);
+  process.on("SIGTERM", onTerminate);
+  using _workerLifecycle = { [Symbol.dispose]: cleanup };
 
   let firstReturnAtS: number | undefined;
   let firstReturnByDeadline = false;
   let firstReturnWindowS = ticket?.first_return_s ?? 360;
-  let checkpointTimer: ReturnType<typeof setTimeout> | undefined;
-  let firstReturnPoll: ReturnType<typeof setInterval> | undefined;
-  if (row.route === "codex") {
+  let validReturnObserved = false;
+  let stalled = false;
+  if (row.route === "codex" || resume === undefined) {
     const firstReturnS = ticket?.first_return_s ?? 360;
     const testDelay = Number(process.env.AGENT_DISPATCH_CHECKPOINT_MS ?? "");
     const checkpointDelayMs =
@@ -2546,6 +2617,7 @@ async function launch(l: Launch): Promise<number> {
         ? readFileSync(lastMessageFile, "utf8")
         : "";
       const currentProgress = progressAtEnd(progress);
+      validReturnObserved ||= parseReturn(currentMessage).kind === "valid";
       const progressObserved =
         currentProgress !== undefined &&
         (currentProgress.commands > 0 ||
@@ -2563,12 +2635,33 @@ async function launch(l: Launch): Promise<number> {
       observeFirstReturn();
       firstReturnByDeadline =
         firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
+      if (
+        resume === undefined &&
+        !validReturnObserved &&
+        (progressAtEnd(progress)?.files ?? 0) === 0
+      ) {
+        stalled = true;
+        clearObservation();
+        // Both worker wrappers handle SIGUSR1 through their existing timeout abort path.
+        void attempt(() => process.kill(child.pid, "SIGUSR1"));
+      }
     }, timerDelayMs);
   }
-  let out = await new Response(child.stdout).text();
-  let workerExit = await child.exited;
-  if (checkpointTimer !== undefined) clearTimeout(checkpointTimer);
-  if (firstReturnPoll !== undefined) clearInterval(firstReturnPoll);
+  const completed = await attempt(() =>
+    Promise.all([new Response(child.stdout).text(), child.exited]),
+  );
+  clearObservation();
+  if (!completed.ok) {
+    cleanup();
+    void attempt(() => process.kill(-child.pid, "SIGKILL"));
+    await child.exited;
+    await reapWorkerGroup(child.pid);
+    rmSync(workerBrief, { force: true });
+    rmSync(marker, { force: true });
+    rmSync(progress, { force: true });
+    fatal(`worker read failed: ${errorMessage(completed.error)}`);
+  }
+  const [out, workerExit] = completed.value;
   if (row.route === "codex" && firstReturnAtS === undefined) {
     const lastMessageFile = join(
       STATE_DIR,
@@ -2635,9 +2728,17 @@ async function launch(l: Launch): Promise<number> {
           first_return_at_s: firstReturnAtS ?? null,
         };
   let workerData = rawWorker;
-  if (parsedReturn.kind === "valid" && workerData !== undefined)
+  if (stalled)
+    workerData = {
+      ...rawWorker,
+      outcome: "stalled",
+      cause: "stalled at first_return_s",
+    };
+  else if (parsedReturn.kind === "valid" && workerData !== undefined)
     workerData = { ...workerData, outcome: "returned" };
-  const exit = parsedReturn.kind === "valid" ? 0 : workerExit;
+  let exit = workerExit;
+  if (stalled) exit = 1;
+  else if (parsedReturn.kind === "valid") exit = 0;
   const progressField = done === undefined ? {} : { progress: done };
   const workerOutcome = z
     .looseObject({ outcome: z.string().optional() })
@@ -2662,7 +2763,7 @@ async function launch(l: Launch): Promise<number> {
       `agent-dispatch: writes outside ticket scope: ${writeViolations.join(", ")}`,
     );
   const verified =
-    ticket === undefined
+    ticket === undefined || stalled
       ? undefined
       : await verifyAfterWorker(ticket, active.cwd, outcomeName, done);
   const workerOutput = z
@@ -2732,6 +2833,7 @@ async function launch(l: Launch): Promise<number> {
     exit === 3 ||
     outcomeName === "killed" ||
     outcomeName === "stopped" ||
+    outcomeName === "stalled" ||
     stoppedSubtypes.data?.stop_subtype === "error_max_turns" ||
     stoppedSubtypes.data?.stop_subtype?.includes("budget") === true;
   const lastMessageTail =
@@ -2777,6 +2879,9 @@ async function launch(l: Launch): Promise<number> {
     route: row.route,
     run_id: runId,
     display_id: displayId,
+    ...(l.escalatedFrom === undefined
+      ? {}
+      : { escalated_from: l.escalatedFrom }),
     label,
     cwd: active.cwd,
     brief: {
@@ -2817,14 +2922,15 @@ async function launch(l: Launch): Promise<number> {
         ? "process group only; macOS cannot recover reparented descendants that called setsid"
         : "process group only; this router does not assign a per-run Linux cgroup or recover reparented descendants that called setsid",
     // agent-dispatch's own receipt carries progress; a claude worker's comes from its progress file
-    worker: worker.success
-      ? {
-          ...progressField,
-          sandbox: flags.sandbox,
-          ...workerData,
-          elapsed_s: elapsedS,
-        }
-      : unreadable("agent-dispatch", "codex-failed", out),
+    worker:
+      worker.success || stalled
+        ? {
+            ...progressField,
+            sandbox: flags.sandbox,
+            ...workerData,
+            elapsed_s: elapsedS,
+          }
+        : unreadable("agent-dispatch", "codex-failed", out),
   };
   const runStats = statsFor(
     row,
@@ -2839,6 +2945,39 @@ async function launch(l: Launch): Promise<number> {
   );
   appendLog({ kind: "run", ...receipt, stats: runStats });
   rmSync(marker, { force: true });
+  if (stalled) {
+    cleanup();
+    appendFileSync(
+      join(STATE_DIR, "incidents.jsonl"),
+      `${JSON.stringify({ kind: "stalled_at_first_return", at: now(), run_id: runId, display_id: displayId, row: row.id, first_return_s: ticket?.first_return_s ?? 360, commands: done?.commands ?? 0 })}\n`,
+    );
+    recordWaiver(runId, "stalled at first_return_s", "router");
+    if (l.escalatedFrom !== undefined) {
+      process.stdout.write(`${JSON.stringify(receipt)}\n`);
+      return 1;
+    }
+    const parsedBrief = parseTicket(brief);
+    if (parsedBrief.kind === "invalid") fatal(parsedBrief.reason);
+    const nextPick = await pickFor(
+      roster,
+      parsedBrief.prose,
+      flags.cd,
+      ticket?.capabilities,
+      ticket?.first_return_s,
+      ticket?.budget_usd,
+      flags.pickTemperature ?? ticket?.pick_temperature,
+      flags.pickSeed,
+      ticket?.name ?? flags.name,
+      ticket?.writes?.length ?? 0,
+      row,
+    );
+    return await launch({
+      ...l,
+      pick: nextPick,
+      flags: { ...flags, runId: `${runId}-escalated` },
+      escalatedFrom: row.id,
+    });
+  }
   let graded: Record<string, unknown> = {};
   if (verified !== undefined) {
     if (writeViolations.length > 0)

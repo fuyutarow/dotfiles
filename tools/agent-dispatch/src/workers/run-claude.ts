@@ -1,7 +1,9 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { cli } from "cleye";
 import { err, ok, type Result } from "neverthrow";
-import { jsonText, z } from "../../../shared/src/zod.ts";
+import { jsonOf, jsonText, z } from "../../../shared/src/zod.ts";
+import { parseReturn } from "../report.ts";
 import {
   AGENT_ROUTER_WORKER_ENV,
   AGENT_ROUTER_WORKER_VALUE,
@@ -131,7 +133,18 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
   if (config.jsonSchema !== undefined)
     args.push("--json-schema", config.jsonSchema);
 
-  const signal = AbortSignal.timeout(config.timeoutMs);
+  const deadline = new AbortController();
+  const expire = (): void => {
+    deadline.abort();
+  };
+  const boundTimer = setTimeout(expire, config.timeoutMs);
+  process.on("SIGUSR1", expire);
+  const cleanup = (): void => {
+    clearTimeout(boundTimer);
+    process.removeListener("SIGUSR1", expire);
+  };
+  const signal = deadline.signal;
+  using _deadlineLifecycle = { [Symbol.dispose]: cleanup };
   const child = Bun.spawn([config.claudeBin, ...args], {
     cwd: config.target,
     stdin: "ignore",
@@ -144,18 +157,48 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     signal: signal,
     killSignal: "SIGTERM",
   });
+  await using _childLifecycle = {
+    [Symbol.asyncDispose]: async () => {
+      deadline.abort();
+      await child.exited;
+    },
+  };
 
   const progress =
     config.progressFile === undefined
       ? undefined
       : progressWriter(config.progressFile, foldClaudeEvent);
+  const AssistantText = z.looseObject({
+    type: z.literal("assistant"),
+    message: z.looseObject({
+      content: z.array(
+        z.looseObject({ type: z.string(), text: z.string().optional() }),
+      ),
+    }),
+  });
+  let returnedText = "";
+  const feed = (line: string): void => {
+    progress?.feed(line);
+    const messageFile = process.env.AGENT_DISPATCH_LAST_MESSAGE_FILE;
+    if (messageFile === undefined) return;
+    const event = jsonOf(AssistantText).safeParse(line);
+    if (!event.success) return;
+    returnedText += event.data.message.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text ?? "")
+      .join("\n");
+    if (parseReturn(returnedText).kind !== "valid") return;
+    mkdirSync(dirname(messageFile), { recursive: true });
+    writeFileSync(messageFile, returnedText);
+  };
   const [stdout, stderr, exitCode] = await Promise.all([
     progress === undefined
       ? readStream(child.stdout)
-      : readLines(child.stdout, progress.feed),
+      : readLines(child.stdout, feed),
     readStream(child.stderr),
     child.exited,
   ]);
+  cleanup();
   const timedOut = signal.aborted;
   progress?.flush();
   if (config.progressFile !== undefined) {

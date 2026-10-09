@@ -125,7 +125,30 @@ const promptText = promptAt === -1 ? "" : await Bun.file(args[promptAt + 1] ?? "
 const isGrader = promptText.includes("Grade this brief as a meaningful remand judgment");
 const resuming = args.includes("--resume");
 if (process.env.FAKE_CHECKPOINT === "1" && process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE !== undefined)
-  appendFileSync(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: 1, files: 0, session: "thread-fake-checkpoint" }));
+  appendFileSync(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: 1, files: Number(process.env.FAKE_CHECKPOINT_FILES ?? "0"), session: "thread-fake-checkpoint" }));
+if (process.env.FAKE_STALL_MODE !== undefined && !isGrader) {
+  const log = process.env.FAKE_STALL_LOG;
+  const prior = existsSync(log) ? (await Bun.file(log).text()).trim().split("\\n").length : 0;
+  const row = args[args.indexOf("--choice") + 1];
+  appendFileSync(log, JSON.stringify({ pid: process.pid, row }) + "\\n");
+  const mode = process.env.FAKE_STALL_MODE;
+  const files = mode === "files" || (prior > 0 && mode !== "twice") ? 1 : 0;
+  await Bun.write(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: mode === "commands" ? 3 : 0, files }));
+  const runId = args[args.indexOf("--run-id") + 1];
+  if (mode === "return") {
+    const last = process.env.AGENT_ROUTER_STATE_DIR + "/worker-receipts/" + runId + ".last.txt";
+    mkdirSync(dirname(last), { recursive: true });
+    await Bun.write(last, process.env.FAKE_LAST);
+  }
+  process.on("SIGUSR1", () => {
+    appendFileSync(log + ".stopped", row + "\\n");
+    console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "timeout", last_message: "" }));
+    process.exit(3);
+  });
+  await Bun.sleep(files > 0 || mode === "return" ? 450 : 3000);
+  console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", last_message: process.env.FAKE_LAST ?? "done" }));
+  process.exit(0);
+}
 await Bun.sleep(Number(isGrader ? process.env.FAKE_GRADER_SLEEP_MS ?? "0" : resuming ? process.env.FAKE_RESUME_SLEEP_MS ?? "0" : process.env.FAKE_SLEEP_MS ?? "0"));
 const releaseFile = process.env.FAKE_BLOCK_UNTIL_FILE;
 while (releaseFile !== undefined && !existsSync(releaseFile)) await Bun.sleep(10);
@@ -3489,7 +3512,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     expect(logLines(r.state).map((l) => l.kind)).toEqual(["run"]);
   });
 
-  test("first-return deadline observes progress without signaling or resuming Codex", async () => {
+  test("first-return deadline observes file progress without signaling or resuming Codex", async () => {
     const b = brief(
       "t-checkpoint",
       ticketText("writes = []\nverify = []\nfirst_return_s = 60"),
@@ -3501,6 +3524,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     const r = await router(runArgs(b, freshCwd()), {
       AGENT_DISPATCH_CHECKPOINT_MS: "250",
       FAKE_CHECKPOINT: "1",
+      FAKE_CHECKPOINT_FILES: "1",
       FAKE_SLEEP_MS: "2000",
       FAKE_ELAPSED_S: "0.01",
     });
@@ -3533,6 +3557,137 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       "time box checkpoint: stop new work and RETURN now",
     );
   }, 45_000);
+
+  const stalledRun = async (mode: string, override = false) => {
+    const cwd = freshCwd();
+    const log = join(cwd, "spawns.jsonl");
+    const b = brief(
+      `stall-${mode}`,
+      ticketText("writes = []\nverify = []\nfirst_return_s = 60") +
+        "\nPICK=luna-high PROBS=luna-low:0.2,luna-medium:0.2,luna-high:0.3,luna-xhigh:0.2,terra-high:0.1\n",
+    );
+    const args = runArgs(b, cwd);
+    args.push("--pick-temperature", "0");
+    if (override)
+      args.push("--row", "luna-high", "--approval", "test owner approval");
+    const started = performance.now();
+    const r = await router(args, {
+      AGENT_DISPATCH_CHECKPOINT_MS: "250",
+      FAKE_STALL_MODE: mode,
+      FAKE_STALL_LOG: log,
+      FAKE_LAST:
+        '```agent-dispatch-return\n{"findings":[],"evidence":[],"impact_on_brief":"done","proposed_next":"none","artifacts":[]}\n```',
+    });
+    expect(performance.now() - started).toBeLessThan(5000);
+    const spawns = readFileSync(log, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) =>
+        decodedJson(z.object({ pid: z.number(), row: z.string() }), line),
+      );
+    const incidentFile = join(r.state, "incidents.jsonl");
+    const incidents = existsSync(incidentFile)
+      ? readFileSync(incidentFile, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) =>
+            decodedJson(
+              z.looseObject({
+                kind: z.string(),
+                commands: z.number(),
+                row: z.string(),
+                first_return_s: z.number(),
+                run_id: z.string(),
+                display_id: z.string(),
+                at: z.string(),
+              }),
+              line,
+            ),
+          )
+      : [];
+    return {
+      r,
+      spawns,
+      incidents,
+      stopped: existsSync(`${log}.stopped`)
+        ? readFileSync(`${log}.stopped`, "utf8").trim().split("\n")
+        : [],
+    };
+  };
+
+  const expectEscalation = (result: Awaited<ReturnType<typeof stalledRun>>) => {
+    expect(result.r.code).toBe(0);
+    expect(result.spawns).toHaveLength(2);
+    expect(result.spawns[0]?.row).toBe("luna-high");
+    expect(["luna-low", "luna-medium", "luna-high"]).not.toContain(
+      result.spawns[1]?.row,
+    );
+    expect(result.stopped).toEqual(["luna-high"]);
+    expect(result.incidents).toHaveLength(1);
+    expect(result.incidents[0]).toMatchObject({
+      kind: "stalled_at_first_return",
+      row: "luna-high",
+      first_return_s: 60,
+    });
+    const receipt = decodedJson(
+      z.looseObject({
+        escalated_from: z.string(),
+        pick: z.looseObject({ source: z.string(), mode: z.string() }),
+      }),
+      result.r.out.trim(),
+    );
+    expect(receipt.escalated_from).toBe("luna-high");
+    expect(receipt.pick.source).toBe("jev");
+    expect(receipt.pick.mode).toBe("argmax");
+    expect(
+      logLines(result.r.state)
+        .filter((line) => line.kind === "run")
+        .map(
+          (line) => decodedJson(Receipt, JSON.stringify(line)).worker.outcome,
+        ),
+    ).toEqual(["stalled", "returned"]);
+  };
+
+  test("stall at first return stops worker and escalates once outside hard masks", async () => {
+    expectEscalation(await stalledRun("stall"));
+  });
+
+  test("files at first return prevent stall and escalation", async () => {
+    const result = await stalledRun("files");
+    expect(result.r.code).toBe(0);
+    expect(result.spawns).toHaveLength(1);
+    expect(result.incidents).toEqual([]);
+    expect(result.stopped).toEqual([]);
+  });
+
+  test("valid RETURN at first return prevents stall and escalation", async () => {
+    const result = await stalledRun("return");
+    expect(result.r.code).toBe(0);
+    expect(result.spawns).toHaveLength(1);
+    expect(result.incidents).toEqual([]);
+    expect(result.stopped).toEqual([]);
+  });
+
+  test("commands without files at first return stall even an override row", async () => {
+    const result = await stalledRun("commands", true);
+    expectEscalation(result);
+    expect(result.incidents[0]?.commands).toBe(3);
+  });
+
+  test("second first-return stall exits nonzero without a third spawn", async () => {
+    const result = await stalledRun("twice");
+    expect(result.r.code).toBe(1);
+    expect(result.spawns).toHaveLength(2);
+    expect(result.stopped).toHaveLength(2);
+    expect(result.incidents).toHaveLength(2);
+    expect(
+      logLines(result.r.state)
+        .filter((line) => line.kind === "run")
+        .map(
+          (line) => decodedJson(Receipt, JSON.stringify(line)).worker.outcome,
+        ),
+    ).toEqual(["stalled", "stalled"]);
+  });
 
   test("RETURN before the deadline is recorded as observed", async () => {
     const b = brief(

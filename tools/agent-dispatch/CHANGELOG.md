@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.0 — 2026-10-09
+
+- Stop a run at first_return_s when it has neither a valid RETURN nor any changed file (commands alone are not progress), record it as `stalled` with a `stalled_at_first_return` incident, and re-dispatch it once on a pick that masks the stalled row and every lower-or-equal effort of its model family; the receipt carries `escalated_from`.
+- A second stall is recorded and exits non-zero without another escalation; runs with a RETURN or changed files keep running to their hard bound, and `resume` is unchanged.
+
 ## 1.11.0 — 2026-10-09
 
 - Add an owner-approved row override: `agent-dispatch run --row <id> --approval "<owner approval>"` runs the worker on that roster row without a Jev pick and records the pick as source `override` with the approval note.

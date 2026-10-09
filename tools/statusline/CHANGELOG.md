@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 — 2026-10-09
+
+- Show live Codex worker cost from the session rollout when progress usage is not yet available.
+
 ## 0.5.0 — 2026-10-09
 
 - Show known per-worker dispatch cost after elapsed time, formatting small amounts to two significant digits and larger amounts to one decimal.

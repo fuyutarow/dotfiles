@@ -13,6 +13,7 @@ import {
   stampMDHM,
 } from "./prompt-stamp.ts";
 import { DIM, ESC, RST, pctFmt } from "./ansi.ts";
+import type { TokenUsage } from "../../shared/src/dispatch-pricing.ts";
 
 const WINDOW = z.object({
   used_percent: maybe(z.number()),
@@ -47,6 +48,19 @@ export type CodexRate = {
 const TAIL_BYTES = 256 * 1024;
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
 const STALE_MS = 30 * 60 * 1000;
+const TOKEN_USAGE = z.object({
+  input_tokens: z.number().nonnegative(),
+  cached_input_tokens: z.number().nonnegative().optional(),
+  output_tokens: z.number().nonnegative(),
+  reasoning_output_tokens: z.number().nonnegative().optional(),
+});
+const TOKEN_COUNT = z.object({
+  type: z.literal("event_msg"),
+  payload: z.object({
+    type: z.literal("token_count"),
+    info: z.object({ total_token_usage: TOKEN_USAGE }),
+  }),
+});
 
 function selectRateFromTail(
   path: string,
@@ -63,6 +77,72 @@ function selectRateFromTail(
     if (line.trim() === "") continue;
     const parsed = jsonOf(TOKEN_COUNT_EVENT).safeParse(line);
     if (parsed.success) return parsed.data.payload.rate_limits;
+  }
+  return undefined;
+}
+
+function selectUsageFromTail(
+  path: string,
+  size: number,
+  length: number,
+): TokenUsage | undefined {
+  const fd = openSync(path, "r");
+  const buffer = Buffer.alloc(length);
+  readSync(fd, buffer, 0, length, size - length);
+  closeSync(fd);
+  const lines = buffer.toString("utf8").split("\n");
+  if (length < size) lines.shift();
+  for (const line of lines.toReversed()) {
+    if (line.trim() === "") continue;
+    const parsed = jsonOf(TOKEN_COUNT).safeParse(line);
+    if (parsed.success) return parsed.data.payload.info.total_token_usage;
+  }
+  return undefined;
+}
+
+function usageFromRollout(path: string): TokenUsage | undefined {
+  const infoResult = fromThrowable(
+    () => statSync(path),
+    () => null,
+  )();
+  if (infoResult.isErr() || !infoResult.value.isFile()) return undefined;
+  const size = infoResult.value.size;
+  const maxLength = Math.min(size, MAX_TAIL_BYTES);
+  const lengths = new Set([
+    Math.min(size, TAIL_BYTES),
+    Math.min(size, 512 * 1024),
+    maxLength,
+  ]);
+  for (const length of lengths) {
+    const attempt = fromThrowable(() =>
+      selectUsageFromTail(path, size, length),
+    )();
+    if (attempt.isOk() && attempt.value !== undefined) return attempt.value;
+    if (length === maxLength) break;
+  }
+  return undefined;
+}
+
+/** Last cumulative token total for a Codex session, read from a bounded rollout tail. */
+export async function readCodexUsage(
+  root: string,
+  session: string,
+): Promise<TokenUsage | undefined> {
+  const today = Temporal.Now.plainDateISO();
+  const dates = [today, today.subtract({ days: 1 })];
+  for (let offset = 2; offset <= 366; offset++)
+    dates.push(today.subtract({ days: offset }));
+  for (const day of dates) {
+    const dir = join(root, String(day.year), pad2(day.month), pad2(day.day));
+    const names = await readdir(dir).catch(() => []);
+    const name = names.find(
+      (item) =>
+        item.startsWith("rollout-") && item.endsWith(`-${session}.jsonl`),
+    );
+    if (name === undefined) continue;
+    const path = join(dir, name);
+    const usage = usageFromRollout(path);
+    if (usage !== undefined) return usage;
   }
   return undefined;
 }

@@ -2,7 +2,11 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readCodexRate, codexRateSegment } from "../src/codex-rate.ts";
+import {
+  readCodexRate,
+  readCodexUsage,
+  codexRateSegment,
+} from "../src/codex-rate.ts";
 
 const roots: string[] = [];
 const ESC = String.fromCodePoint(27);
@@ -149,4 +153,39 @@ test("expands the tail when the only rate event is before 256 KiB", async () => 
   expect(parsed.isOk()).toBe(true);
   if (parsed.isOk() && parsed.value !== undefined)
     expect(parsed.value.windows[0]?.percent).toBe(31);
+});
+
+test("live usage tail skips a partial first line", async () => {
+  const { root } = await fixture();
+  const day = Temporal.Now.plainDateISO();
+  const dir = join(
+    root,
+    String(day.year),
+    String(day.month).padStart(2, "0"),
+    String(day.day).padStart(2, "0"),
+  );
+  const session = "tail-session";
+  const file = join(dir, `rollout-any-${session}.jsonl`);
+  const usageEvent = JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        total_token_usage: {
+          input_tokens: 88,
+          cached_input_tokens: 12,
+          output_tokens: 9,
+          reasoning_output_tokens: 2,
+          total_tokens: 99,
+        },
+      },
+    },
+  });
+  await writeFile(file, `${"x".repeat(256 * 1024 + 10)}\n${usageEvent}\n`);
+  expect(await readCodexUsage(root, session)).toEqual({
+    input_tokens: 88,
+    cached_input_tokens: 12,
+    output_tokens: 9,
+    reasoning_output_tokens: 2,
+  });
 });

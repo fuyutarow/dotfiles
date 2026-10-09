@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.0 — 2026-10-09
+
+- Share Codex token pricing with the statusline and keep streaming usage/cost in progress files when the worker stream reports it.
+
 ## 1.16.0 — 2026-10-09
 
 - Require a four-word free-text justification for xhigh/max rows and make epsilon exploration cost-aware, recording the rows that receive smoothing mass.

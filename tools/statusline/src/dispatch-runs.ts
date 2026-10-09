@@ -11,6 +11,12 @@ import {
 } from "./dispatch-state.ts";
 import { DIM, ESC, RST } from "./ansi.ts";
 import { dur } from "./jobs.ts";
+import { readCodexUsage } from "./codex-rate.ts";
+import {
+  costUsd,
+  dispatchRowPrice,
+} from "../../shared/src/dispatch-pricing.ts";
+import { homedir } from "node:os";
 
 // Run row source: one marker per worker agent-dispatch started (tools/agent-dispatch/src/state.ts).
 // A marker is written at start and removed at exit, so a marker whose process is gone means
@@ -60,6 +66,28 @@ const sinceSecs = fromThrowable((iso: string) =>
   ),
 );
 const listDir = fromThrowable((dir: string) => readdirSync(dir));
+async function liveCodexCost(
+  choice: string,
+  session: string | undefined,
+  progressCost: number | undefined,
+  usage: z.output<typeof ProgressSchema>["usage"],
+  alive: boolean,
+): Promise<number | undefined> {
+  if (
+    progressCost !== undefined ||
+    usage !== undefined ||
+    session === undefined ||
+    !alive
+  )
+    return progressCost;
+  const price = dispatchRowPrice(choice);
+  if (price?.route !== "codex") return progressCost;
+  const tokens = await readCodexUsage(
+    join(homedir(), ".codex", "sessions"),
+    session,
+  );
+  return tokens === undefined ? progressCost : costUsd(price, tokens);
+}
 export function routeRuns(): Result<RouteRun[], string> | undefined {
   const dir = activeDir();
   if (!existsSync(dir)) return undefined;
@@ -118,12 +146,19 @@ export async function routeRunsAsync(): Promise<
       const progressSession = p?.session;
       let doing: RouteRun["doing"];
       if (p !== undefined) {
+        const liveCost = await liveCodexCost(
+          a.choice,
+          progressSession,
+          p.cost_usd,
+          p.usage,
+          pidAlive(a.pid).isOk(),
+        );
         doing = {
           last: p.last,
           commands: p.commands,
           files: p.files,
           ageSecs: sinceSecs(p.at).unwrapOr(0),
-          ...(p.cost_usd === undefined ? {} : { costUsd: p.cost_usd }),
+          ...(liveCost === undefined ? {} : { costUsd: liveCost }),
           ...(progressSession === undefined
             ? {}
             : { session: progressSession }),

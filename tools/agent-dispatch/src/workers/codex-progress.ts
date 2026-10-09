@@ -12,6 +12,7 @@ import { basename } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { STATE_SCHEMA, type Progress } from "../state.ts";
+import { costUsd } from "../../../shared/src/dispatch-pricing.ts";
 
 const Item = z.looseObject({
   type: z.string(),
@@ -288,20 +289,15 @@ export function progressWriter(
   let failed = 0;
   const write = (): void => {
     const tmp = `${path}.tmp`;
-    const costUsd =
+    const computedCostUsd =
       tally.totalCostUsd ??
       (tally.usage === undefined || prices === undefined
         ? undefined
-        : ((tally.usage.input_tokens - tally.usage.cached_input_tokens) *
-            prices.input +
-            tally.usage.cached_input_tokens * prices.cachedInput +
-            (tally.usage.output_tokens + tally.usage.reasoning_output_tokens) *
-              prices.output) /
-          1_000_000);
+        : calculateCost(prices, tally.usage));
     const progress = toProgress(tally, Temporal.Now.instant().toString());
     const body = JSON.stringify({
       ...progress,
-      ...(costUsd === undefined ? {} : { cost_usd: costUsd }),
+      ...(computedCostUsd === undefined ? {} : { cost_usd: computedCostUsd }),
     });
     const done = fromThrowable(() => {
       writeFileSync(tmp, body);
@@ -327,3 +323,16 @@ export function progressWriter(
     failedWrites: () => failed,
   };
 }
+
+const calculateCost = (
+  prices: { input: number; cachedInput: number; output: number },
+  usage: NonNullable<Tally["usage"]>,
+): number | undefined =>
+  costUsd(
+    {
+      price_in: prices.input,
+      price_cached_in: prices.cachedInput,
+      price_out: prices.output,
+    },
+    usage,
+  );

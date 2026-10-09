@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 — 2026-10-09
+
+- Share roster row price lookup and Codex token cost calculation across tools.
+
 ## 0.3.0 — 2026-10-08
 
 - Added shared storage-headroom threshold loading, assessment, and statfs measurement, plus a

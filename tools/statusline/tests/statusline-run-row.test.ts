@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   rmSync,
+  writeFileSync as writeFile,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -79,6 +80,28 @@ const progress = (last: string, ageS: number, session?: string): string =>
     commands: 12,
     files: 3,
     ...(session === undefined ? {} : { session }),
+  });
+
+const tokenLine = (
+  input: number,
+  cached: number,
+  output: number,
+  reasoning: number,
+): string =>
+  JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        total_token_usage: {
+          input_tokens: input,
+          cached_input_tokens: cached,
+          output_tokens: output,
+          reasoning_output_tokens: reasoning,
+          total_tokens: input + output + reasoning,
+        },
+      },
+    },
   });
 
 async function render(stateDir: string): Promise<string> {
@@ -160,6 +183,53 @@ describe("statusline Run row", () => {
     const out = await render(unknown);
     expect(out).toMatch(/^luna-high 1m3\ds unknown worker │/mu);
     expect(out).not.toContain("$0.00");
+  });
+
+  test("prices the latest live rollout token total for a Codex row", async () => {
+    const dir = join(scratch, "rollout-cost");
+    const session = "livecost-unique-session-20261009";
+    marker(dir, "rollout", process.pid, "live codex", 10, SESSION, "luna-high");
+    writeFileSync(
+      join(dir, "active", "rollout.progress.json"),
+      progress("$ bun test", 1, session),
+    );
+    const day = Temporal.Now.plainDateISO();
+    const rolloutDir = join(
+      scratch,
+      ".codex",
+      "sessions",
+      String(day.year),
+      String(day.month).padStart(2, "0"),
+      String(day.day).padStart(2, "0"),
+    );
+    mkdirSync(rolloutDir, { recursive: true });
+    writeFile(
+      join(rolloutDir, `rollout-2026-10-09T00-00-00-${session}.jsonl`),
+      [
+        tokenLine(100_000, 40_000, 7_000, 3_000),
+        tokenLine(500_000, 200_000, 30_000, 10_000),
+        tokenLine(1_000_000, 400_000, 100_000, 50_000),
+      ].join("\n") + "\n",
+    );
+    const line = (await render(dir))
+      .split("\n")
+      .find((value) => value.startsWith("luna-high "));
+    expect(line).toContain("$0.139");
+    expect(line).toContain("live codex");
+  });
+
+  test("does not invent a cost when the session rollout is absent", async () => {
+    const dir = join(scratch, "no-rollout-cost");
+    marker(dir, "norollout", process.pid, "missing rollout");
+    writeFileSync(
+      join(dir, "active", "norollout.progress.json"),
+      progress("$ bun test", 1, "session-with-no-rollout"),
+    );
+    const line = (await render(dir))
+      .split("\n")
+      .find((value) => value.startsWith("luna-high "));
+    expect(line).toContain("missing rollout");
+    expect(line).not.toMatch(/\$\d/u);
   });
 
   test("a display ID replaces the session ID while legacy markers keep their session ID", async () => {

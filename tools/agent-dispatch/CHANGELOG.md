@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.0 — 2026-10-09
+
+- Record declared-write runs with an empty checked delta as `non_delivery`, record an incident, and reuse the one-time stall escalation path; exclude non-delivery from accepted throughput and count it as a lineage failure.
+
 ## 1.13.0 — 2026-10-09
 
 - Hard-mask Claude rows for tickets whose capabilities, write scopes, or timeout exceed their $2 and 60-turn run bound; record the reason in the pick receipt and fall back when all rows are masked.

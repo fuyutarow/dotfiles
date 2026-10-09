@@ -309,8 +309,10 @@ function calculateThroughputStats(
   const summarize = (group: Run[]) => {
     const accepted = group.filter(
       (run) =>
-        grades.get(run.run_id) === "pass" ||
-        (run.outcome === "returned" && acks.get(run.run_id)?.consumed === true),
+        run.outcome !== "non_delivery" &&
+        (grades.get(run.run_id) === "pass" ||
+          (run.outcome === "returned" &&
+            acks.get(run.run_id)?.consumed === true)),
     );
     const acceptedIds = new Set(accepted.map((run) => run.run_id));
     const time = sum(group.map((run) => run.elapsed_s));
@@ -717,6 +719,7 @@ export function lineageMasks(
     if (!selected.has(id)) continue;
     const row = run.stats?.row ?? run.pick?.choice ?? "unknown";
     const bad =
+      (run.stats?.outcome ?? "") === "non_delivery" ||
       grades.get(id) === "fail" ||
       grades.get(id) === "partial" ||
       ((run.stats?.outcome ?? "") === "returned" && acks.get(id) !== true);
@@ -729,7 +732,7 @@ export function lineageMasks(
         row,
         {
           failures: count,
-          reason: `${count} lineage runs ended fail/partial or returned without ack-consumed`,
+          reason: `${count} lineage runs ended fail/partial, non_delivery, or returned without ack-consumed`,
         },
       ]),
   );

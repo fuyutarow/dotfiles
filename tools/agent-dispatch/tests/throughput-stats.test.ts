@@ -121,6 +121,52 @@ describe("throughputStats", () => {
     expect(result.per_tag["gpu-kernels"]?.["luna-high"]?.timeout_rate).toBe(1);
     expect(result.per_tag["typescript"]?.["luna-high"]?.accepted_rate).toBe(1);
   });
+  test("non_delivery is rejected even with a passing grade and counts as a row failure", () => {
+    const nowMs = Temporal.Now.instant().epochMilliseconds;
+    const startedAt = Temporal.Instant.fromEpochMilliseconds(
+      nowMs - 1_000,
+    ).toString();
+    const log = ["non-delivery-a", "non-delivery-b"]
+      .flatMap((run_id) => [
+        {
+          kind: "run",
+          run_id,
+          started_at: startedAt,
+          ticket: {
+            schema: 2,
+            name: "named",
+            capabilities: ["typescript"],
+          },
+          pick: { choice: "luna-high" },
+          stats: {
+            row: "luna-high",
+            outcome: "non_delivery",
+            elapsed_s: 10,
+          },
+        },
+        { kind: "grade", run_id, grade: "pass" },
+      ])
+      .map((entry) => JSON.stringify(entry))
+      .join("\n");
+    const report = throughputStats(log, {
+      now: nowMs,
+      sinceMs: 0,
+      grading: false,
+    });
+    expect(report.per_row["luna-high"]).toMatchObject({
+      runs: 2,
+      accepted: 0,
+      accepted_rate: 0,
+    });
+    expect(report.per_tag.typescript?.["luna-high"]).toMatchObject({
+      runs: 2,
+      accepted: 0,
+      accepted_rate: 0,
+    });
+    expect(lineageMasks(log, { name: "named", now: nowMs })).toMatchObject({
+      "luna-high": { failures: 2 },
+    });
+  });
   test("builds ticket-size cohorts from exact capability tags and caches them", () => {
     const startedAt = Temporal.Now.instant().toString();
     const entries = [

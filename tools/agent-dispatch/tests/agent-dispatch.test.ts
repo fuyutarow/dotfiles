@@ -132,20 +132,24 @@ if (process.env.FAKE_STALL_MODE !== undefined && !isGrader) {
   const row = args[args.indexOf("--choice") + 1];
   appendFileSync(log, JSON.stringify({ pid: process.pid, row }) + "\\n");
   const mode = process.env.FAKE_STALL_MODE;
-  const files = mode === "files" || (prior > 0 && mode !== "twice") ? 1 : 0;
+  const files = mode === "files" || (prior > 0 && mode !== "twice" && mode !== "non_delivery_twice") ? 1 : 0;
   await Bun.write(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: mode === "commands" ? 3 : 0, files }));
   const runId = args[args.indexOf("--run-id") + 1];
-  if (mode === "return") {
+  if (mode === "return" || mode.startsWith("non_delivery")) {
     const last = process.env.AGENT_ROUTER_STATE_DIR + "/worker-receipts/" + runId + ".last.txt";
     mkdirSync(dirname(last), { recursive: true });
     await Bun.write(last, process.env.FAKE_LAST);
+  }
+  if (mode === "non_delivery" && prior > 0) {
+    const cwd = args[args.indexOf("--cd") + 1] ?? ".";
+    await Bun.write(cwd + "/delivered.txt", "delivered");
   }
   process.on("SIGUSR1", () => {
     appendFileSync(log + ".stopped", row + "\\n");
     console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "timeout", last_message: "" }));
     process.exit(3);
   });
-  await Bun.sleep(files > 0 || mode === "return" ? 450 : 3000);
+  await Bun.sleep(files > 0 || mode === "return" || mode.startsWith("non_delivery") ? 450 : 3000);
   console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", last_message: process.env.FAKE_LAST ?? "done" }));
   process.exit(0);
 }
@@ -3774,6 +3778,131 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     ).toEqual(["stalled", "stalled"]);
   });
 
+  const nonDeliveryRun = async (
+    mode: "non_delivery" | "non_delivery_twice",
+  ) => {
+    const cwd = freshCwd();
+    const log = join(cwd, "spawns.jsonl");
+    const gitBin = join(scratch, `non-delivery-git-${stateSeq++}`);
+    mkdirSync(gitBin, { recursive: true });
+    writeFileSync(
+      join(gitBin, "git"),
+      "#!/bin/sh\nif [ -f \"$FAKE_CWD/delivered.txt\" ]; then printf '?? delivered.txt\\n'; fi\n",
+    );
+    writeFileSync(join(gitBin, "jj"), "#!/bin/sh\nexit 1\n");
+    chmodSync(join(gitBin, "git"), 0o755);
+    chmodSync(join(gitBin, "jj"), 0o755);
+    const b = brief(
+      `non-delivery-${mode}`,
+      ticketText(
+        'outcome = "deliver file"\nconsumer = "owner"\nfirst_return = "RETURN"\nwrites = ["delivered.txt"]\nverify = []\ncapabilities = ["typescript"]\nfirst_return_s = 60',
+      ) +
+        "\nPICK=luna-high PROBS=luna-low:0.2,luna-medium:0.2,luna-high:0.3,luna-xhigh:0.2,terra-high:0.1\n",
+    );
+    const args = runArgs(b, cwd);
+    args.push("--pick-temperature", "0");
+    const r = await router(args, {
+      PATH: `${gitBin}:${process.env.PATH ?? ""}`,
+      FAKE_CWD: cwd,
+      AGENT_DISPATCH_CHECKPOINT_MS: "250",
+      FAKE_STALL_MODE: mode,
+      FAKE_STALL_LOG: log,
+      FAKE_LAST:
+        '```agent-dispatch-return\n{"findings":[],"evidence":[],"impact_on_brief":"done","proposed_next":"none","artifacts":[]}\n```',
+    });
+    return { r, cwd, log };
+  };
+
+  test("declared writes plus RETURN and an empty delta records non_delivery and escalates", async () => {
+    const { r, log } = await nonDeliveryRun("non_delivery");
+    expect(r.code).toBe(0);
+    const spawns = readFileSync(log, "utf8").trim().split("\n");
+    expect(spawns).toHaveLength(2);
+    const spawnedRows = spawns.map(
+      (line) => decodedJson(z.looseObject({ row: z.string() }), line).row,
+    );
+    expect(spawnedRows[0]).toBe("luna-high");
+    expect(["luna-low", "luna-medium", "luna-high"]).not.toContain(
+      spawnedRows[1],
+    );
+    const runs = logLines(r.state).filter((line) => line.kind === "run");
+    expect(
+      runs.map(
+        (line) => decodedJson(Receipt, JSON.stringify(line)).worker.outcome,
+      ),
+    ).toEqual(["non_delivery", "returned"]);
+    expect(runs[1]).toMatchObject({ escalated_from: "luna-high" });
+    const incident = decodedJson(
+      z.looseObject({
+        kind: z.string(),
+        at: z.string(),
+        run_id: z.string(),
+        display_id: z.string(),
+        row: z.string(),
+        returned: z.boolean(),
+      }),
+      readFileSync(join(r.state, "incidents.jsonl"), "utf8").trim(),
+    );
+    expect(incident).toMatchObject({
+      kind: "non_delivery",
+      returned: true,
+      row: "luna-high",
+    });
+    expect(r.out).toContain('"escalated_from":"luna-high"');
+  });
+
+  test("second non_delivery exits nonzero without a third spawn", async () => {
+    const { r, log } = await nonDeliveryRun("non_delivery_twice");
+    expect(r.code).toBe(1);
+    expect(readFileSync(log, "utf8").trim().split("\n")).toHaveLength(2);
+    expect(
+      logLines(r.state)
+        .filter((line) => line.kind === "run")
+        .map(
+          (line) => decodedJson(Receipt, JSON.stringify(line)).worker.outcome,
+        ),
+    ).toEqual(["non_delivery", "non_delivery"]);
+  });
+
+  test("read_only_diagnostic RETURN remains normal for declared writes", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "non-delivery-read-only",
+      ticketText(
+        'outcome = "diagnose"\nconsumer = "owner"\nfirst_return = "RETURN"\nwrites = ["delivered.txt"]\nverify = []\ncapabilities = ["typescript"]\nread_only_diagnostic = true',
+      ),
+    );
+    const r = await router(runArgs(b, cwd), {
+      FAKE_LAST:
+        '```agent-dispatch-return\n{"findings":[],"evidence":[],"impact_on_brief":"done","proposed_next":"none","artifacts":[]}\n```',
+    });
+    expect(r.code).toBe(0);
+    expect(
+      logLines(r.state).filter((line) => line.kind === "run"),
+    ).toHaveLength(1);
+    expect(existsSync(join(r.state, "incidents.jsonl"))).toBe(false);
+  });
+
+  test("declared writes with a changed file remain normal", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "non-delivery-with-files",
+      ticketText(
+        'outcome = "deliver file"\nconsumer = "owner"\nfirst_return = "RETURN"\nwrites = ["delivered.txt"]\nverify = []\ncapabilities = ["typescript"]',
+      ),
+    );
+    const r = await router(runArgs(b, cwd), {
+      FAKE_TOUCH: "delivered.txt",
+      FAKE_LAST:
+        '```agent-dispatch-return\n{"findings":[],"evidence":[],"impact_on_brief":"done","proposed_next":"none","artifacts":[]}\n```',
+    });
+    expect(r.code).toBe(0);
+    expect(readFileSync(join(cwd, "delivered.txt"), "utf8")).toBe(
+      "worker-was-here",
+    );
+    expect(existsSync(join(r.state, "incidents.jsonl"))).toBe(false);
+  });
+
   test("RETURN before the deadline is recorded as observed", async () => {
     const b = brief(
       "t-no-checkpoint-after-return",
@@ -4082,7 +4211,7 @@ describe("agent-dispatch ticket write enforcement", () => {
       ...gitStatus(""),
       FAKE_LAST: JSON.stringify(claimedReport),
     });
-    expect(r.code).toBe(0);
+    expect(r.code).toBe(1);
     expect(r.err).toContain("ticket writes diff is empty");
     const receipt = decodedJson(
       z.looseObject({
@@ -4090,7 +4219,7 @@ describe("agent-dispatch ticket write enforcement", () => {
           claimed: z.array(z.string()),
           diff_empty: z.boolean(),
         }),
-        grade: z.looseObject({ grade: z.string(), reason: z.string() }),
+        worker: z.looseObject({ outcome: z.string() }),
       }),
       r.out.trim(),
     );
@@ -4098,10 +4227,10 @@ describe("agent-dispatch ticket write enforcement", () => {
       claimed: ["src/fix.ts"],
       diff_empty: true,
     });
-    expect(receipt.grade).toMatchObject({
-      grade: "fail",
-      reason: "claimed changes, no diff",
-    });
+    expect(receipt.worker.outcome).toBe("non_delivery");
+    expect(
+      logLines(r.state).filter((line) => line.kind === "run"),
+    ).toHaveLength(2);
   });
 
   test("a passing verify can prove claimed changes despite an empty writes diff", async () => {
@@ -4121,7 +4250,7 @@ describe("agent-dispatch ticket write enforcement", () => {
       ...gitStatus(""),
       FAKE_LAST: JSON.stringify(claimedReport),
     });
-    expect(r.code).toBe(0);
+    expect(r.code).toBe(1);
     expect(r.err).toContain("ticket writes diff is empty");
     const receipt = decodedJson(
       z.looseObject({
@@ -4129,7 +4258,7 @@ describe("agent-dispatch ticket write enforcement", () => {
           claimed: z.array(z.string()),
           diff_empty: z.boolean(),
         }),
-        grade: z.looseObject({ grade: z.string() }),
+        worker: z.looseObject({ outcome: z.string() }),
       }),
       r.out.trim(),
     );
@@ -4137,7 +4266,7 @@ describe("agent-dispatch ticket write enforcement", () => {
       claimed: ["src/fix.ts"],
       diff_empty: true,
     });
-    expect(receipt.grade.grade).toBe("pass");
+    expect(receipt.worker.outcome).toBe("non_delivery");
   });
 
   test("pre-existing dirty files are not attributed to this run", async () => {

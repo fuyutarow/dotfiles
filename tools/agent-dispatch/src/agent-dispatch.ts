@@ -2795,12 +2795,7 @@ async function launch(l: Launch): Promise<number> {
   if (stalled) exit = 1;
   else if (parsedReturn.kind === "valid") exit = 0;
   const progressField = done === undefined ? {} : { progress: done };
-  const workerOutcome = z
-    .looseObject({ outcome: z.string().optional() })
-    .safeParse(workerData);
-  const outcomeName = workerOutcome.success
-    ? workerOutcome.data.outcome
-    : undefined;
+  let outcomeName: string | undefined;
   const delta = await checkedWrites(
     active.cwd,
     ticket?.writes ?? [],
@@ -2808,6 +2803,24 @@ async function launch(l: Launch): Promise<number> {
     overlappingWriterScopes(runId, active.cwd, active.started_at, now()),
   );
   const writes = ticket === undefined ? undefined : delta;
+  const nonDelivery =
+    ticket !== undefined &&
+    ticket.read_only_diagnostic !== true &&
+    (ticket.writes?.length ?? 0) > 0 &&
+    writes?.unavailable === undefined &&
+    writes?.paths.length === 0;
+  if (nonDelivery) {
+    workerData = {
+      ...workerData,
+      outcome: "non_delivery",
+      cause: "ticket declared writes but no files changed",
+    };
+    exit = 1;
+  }
+  const workerOutcome = z
+    .looseObject({ outcome: z.string().optional() })
+    .safeParse(workerData);
+  outcomeName = workerOutcome.success ? workerOutcome.data.outcome : undefined;
   const writeViolations = writes?.violations ?? [];
   if (writes?.unavailable !== undefined)
     dispatchError(
@@ -2978,7 +2991,7 @@ async function launch(l: Launch): Promise<number> {
         : "process group only; this router does not assign a per-run Linux cgroup or recover reparented descendants that called setsid",
     // agent-dispatch's own receipt carries progress; a claude worker's comes from its progress file
     worker:
-      worker.success || stalled
+      worker.success || stalled || nonDelivery
         ? {
             ...progressField,
             sandbox: flags.sandbox,
@@ -3000,13 +3013,31 @@ async function launch(l: Launch): Promise<number> {
   );
   appendLog({ kind: "run", ...receipt, stats: runStats });
   rmSync(marker, { force: true });
-  if (stalled) {
+  if (stalled || nonDelivery) {
     cleanup();
+    const incident = nonDelivery
+      ? {
+          kind: "non_delivery",
+          at: now(),
+          run_id: runId,
+          display_id: displayId,
+          row: row.id,
+          returned: parsedReturn.kind === "valid",
+        }
+      : {
+          kind: "stalled_at_first_return",
+          at: now(),
+          run_id: runId,
+          display_id: displayId,
+          row: row.id,
+          first_return_s: ticket?.first_return_s ?? 360,
+          commands: done?.commands ?? 0,
+        };
     appendFileSync(
       join(STATE_DIR, "incidents.jsonl"),
-      `${JSON.stringify({ kind: "stalled_at_first_return", at: now(), run_id: runId, display_id: displayId, row: row.id, first_return_s: ticket?.first_return_s ?? 360, commands: done?.commands ?? 0 })}\n`,
+      `${JSON.stringify(incident)}\n`,
     );
-    recordWaiver(runId, "stalled at first_return_s", "router");
+    if (stalled) recordWaiver(runId, "stalled at first_return_s", "router");
     if (l.escalatedFrom !== undefined) {
       process.stdout.write(`${JSON.stringify(receipt)}\n`);
       return 1;

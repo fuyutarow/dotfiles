@@ -49,6 +49,48 @@ describe("enforce-reply-language", () => {
     expect(result.stderr).toBe("");
   });
 
+  test("long English section after Japanese prose -> blocks", () => {
+    const transcript = writeTranscript([
+      user("説明してください"),
+      assistant(
+        `これは日本語の前半です。仕組みの概要を説明し、必要な情報をまとめました。\n\n## Your frustrations, in your voice\n\n${"I understand how frustrating this can be, and I want to explain what happened and what you can do next. ".repeat(6)}`,
+      ),
+    ]);
+    const result = runHook(HOOK, stopPayload(transcript), {
+      HOME: settingsHome("japanese"),
+    });
+
+    expect(result.stdout).toContain('"decision":"block"');
+  });
+
+  test("Japanese prose with identifiers, paths, and a command table -> allows", () => {
+    const transcript = writeTranscript([
+      user("説明してください"),
+      assistant(
+        `この変更は設定を更新し、関連する処理を確認します。\n\n| 項目 | 内容 |\n| --- | --- |\n| ファイル | agents/claude/hooks/enforce-reply-language.ts |\n| コマンド | bunx tsgo --noEmit -p . |\n| フラグ | --stop-hook-active |`,
+      ),
+    ]);
+    const result = runHook(HOOK, stopPayload(transcript), {
+      HOME: settingsHome("japanese"),
+    });
+
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  test("one short English sentence under 120 letters -> allows", () => {
+    const transcript = writeTranscript([
+      user("説明してください"),
+      assistant("処理を確認しました。 The change is ready."),
+    ]);
+    const result = runHook(HOOK, stopPayload(transcript), {
+      HOME: settingsHome("japanese"),
+    });
+
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
   test("Japanese prose with English identifiers and a code block -> allows", () => {
     const transcript = writeTranscript([
       user("説明してください"),

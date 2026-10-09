@@ -103,10 +103,12 @@ Measure C: free FIRST, before any restart: a nearly full host drive explains eve
 guest. It starts sshd when the guest is silent — Running is not reachable. Root causes and the
 unattended-Tailscale fix: `references/lifecycle.md`.
 
-New distros created with `mise run wsl:distro` use the same utility VM network namespace as
-`r99-u24`. Tailscale runs in `r99-u24` and owns the shared address, so keep `r99-u24` running for
-the new distro's SSH alias to remain reachable. `wsl:distro` wakes it through `wsl:wake`; do not
-configure port proxies, firewall rules, or another Tailscale daemon for each distro.
+New distros created with `mise run wsl:distro` are reached through the Windows host's OpenSSH
+using WSL localhost forwarding: each alias uses `HostName localhost`, its guest SSH port, and
+`ProxyJump r99` or `ProxyJump r99-lan` (the selected Windows host alias). The Windows host has
+`localhostForwarding=true` in `wsl/wslconfig.win`. A new distro does not depend on `r99-u24` or
+another guest's Tailscale being up; `wsl:distro` provisions it over the Windows host connection
+and does not wake another distro.
 
 ## MUST-NOT-FIRE
 

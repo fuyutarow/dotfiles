@@ -3,12 +3,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
-import {
-  activeDir,
-  ActiveSchema,
-  progressFile,
-  ProgressSchema,
-} from "./dispatch-state.ts";
+import { activeDirs, ActiveSchema, ProgressSchema } from "./dispatch-state.ts";
 import { DIM, ESC, RST } from "./ansi.ts";
 import { dur } from "./jobs.ts";
 import { readCodexUsage } from "./codex-rate.ts";
@@ -42,8 +37,8 @@ export interface RouteRun {
     | undefined;
 }
 const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
-function doingOf(runId: string): RouteRun["doing"] {
-  const text = readText(progressFile(runId));
+function doingOf(dir: string, runId: string): RouteRun["doing"] {
+  const text = readText(join(dir, `${runId}.progress.json`));
   if (text.isErr()) return undefined;
   const parsed = jsonOf(ProgressSchema).safeParse(text.value);
   if (!parsed.success) return undefined;
@@ -89,54 +84,84 @@ async function liveCodexCost(
   );
   return tokens === undefined ? progressCost : costUsd(price, tokens);
 }
-export function routeRuns(): Result<RouteRun[], string> | undefined {
-  const dir = activeDir();
-  if (!existsSync(dir)) return undefined;
-  const names = listDir(dir);
-  if (names.isErr()) return err(`cannot list ${dir}`);
-  return ok(
-    names.value
-      .filter((n) => n.endsWith(".json") && !n.endsWith(".progress.json"))
-      .flatMap((n) => {
-        const parsed = jsonOf(ActiveSchema).safeParse(
-          readFileSync(join(dir, n), "utf8"),
-        );
-        if (!parsed.success) return [];
-        const a = parsed.data;
-        return [
-          {
-            displayId: a.display_id,
-            choice: a.choice,
-            label: a.label,
-            secs: sinceSecs(a.started_at).unwrapOr(0),
-            alive: pidAlive(a.pid).isOk(),
-            dispatcherSession: a.dispatcher_session,
-            doing: doingOf(a.run_id),
-          },
-        ];
-      }),
-  );
+export function routeRuns(
+  env: NodeJS.ProcessEnv = process.env,
+): Result<RouteRun[], string> | undefined {
+  const dirs = activeDirs(env).filter((dir) => existsSync(dir));
+  if (dirs.length === 0) return undefined;
+  const seen = new Set<string>();
+  const runs: RouteRun[] = [];
+  const markers: { dir: string; name: string }[] = [];
+  for (const dir of dirs) {
+    const names = listDir(dir);
+    if (names.isErr()) return err(`cannot list ${dir}`);
+    markers.push(
+      ...names.value
+        .filter(
+          (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
+        )
+        .map((name) => ({ dir, name })),
+    );
+  }
+  for (const { dir, name } of markers) {
+    const text = readText(join(dir, name));
+    if (text.isErr()) continue;
+    const parsed = jsonOf(ActiveSchema).safeParse(text.value);
+    if (!parsed.success || seen.has(parsed.data.run_id)) continue;
+    const a = parsed.data;
+    seen.add(a.run_id);
+    runs.push({
+      displayId: a.display_id,
+      choice: a.choice,
+      label: a.label,
+      secs: sinceSecs(a.started_at).unwrapOr(0),
+      alive: pidAlive(a.pid).isOk(),
+      dispatcherSession: a.dispatcher_session,
+      doing: doingOf(dir, a.run_id),
+    });
+  }
+  return ok(runs);
 }
 /** Async render-path version; marker and progress files are read without blocking the line. */
-export async function routeRunsAsync(): Promise<
-  Result<RouteRun[], string> | undefined
-> {
-  const dir = activeDir();
-  const names = await readdir(dir).catch(() => null);
-  if (names === null) return undefined;
-  const markers = names.filter(
-    (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
+export async function routeRunsAsync(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Result<RouteRun[], string> | undefined> {
+  const listings = await Promise.all(
+    activeDirs(env).map(async (dir) => ({
+      dir,
+      names: await readdir(dir).catch(() => null),
+    })),
   );
-  const runs = await Promise.all(
-    markers.map(async (name) => {
+  if (listings.every(({ names }) => names === null)) return undefined;
+  const markers = listings.flatMap(({ dir, names }) =>
+    (names ?? [])
+      .filter(
+        (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
+      )
+      .map((name) => ({ dir, name })),
+  );
+  const parsedMarkers = await Promise.all(
+    markers.map(async ({ dir, name }) => {
       const text = await Bun.file(join(dir, name))
         .text()
         .catch(() => null);
       if (text === null) return null;
       const parsed = jsonOf(ActiveSchema).safeParse(text);
-      if (!parsed.success) return null;
-      const a = parsed.data;
-      const progressText = await Bun.file(progressFile(a.run_id))
+      return parsed.success ? { dir, active: parsed.data } : null;
+    }),
+  );
+  const seen = new Set<string>();
+  const unique = parsedMarkers.flatMap((marker) => {
+    if (marker === null || seen.has(marker.active.run_id)) return [];
+    seen.add(marker.active.run_id);
+    return [marker];
+  });
+  const runs = await Promise.all(
+    unique.map(async ({ dir, active: a }) => {
+      const alive = pidAlive(a.pid).isOk();
+      const progressText = await Bun.file(
+        join(dir, `${a.run_id}.progress.json`),
+      )
         .text()
         .catch(() => null);
       let p: z.output<typeof ProgressSchema> | undefined;
@@ -152,7 +177,7 @@ export async function routeRunsAsync(): Promise<
           progressSession,
           p.cost_usd,
           p.usage,
-          pidAlive(a.pid).isOk(),
+          alive,
         );
         doing = {
           last: p.last,
@@ -170,17 +195,13 @@ export async function routeRunsAsync(): Promise<
         choice: a.choice,
         label: a.label,
         secs: sinceSecs(a.started_at).unwrapOr(0),
-        alive: pidAlive(a.pid).isOk(),
+        alive,
         dispatcherSession: a.dispatcher_session,
         doing,
       } satisfies RouteRun;
     }),
   );
-  const resolved: RouteRun[] = [];
-  for (const run of runs) {
-    if (run !== null) resolved.push(run);
-  }
-  return ok(resolved);
+  return ok(runs);
 }
 // This session's Run rows: one line per worker, like Claude Code's own background panel — "<row>
 // <elapsed> <label> │ <doing>". Other sessions' workers are one count. No "Run:" head (owner
@@ -283,11 +304,15 @@ export function routeLines(
 ): string[] {
   const live = runs.filter((r) => r.alive).toSorted((a, b) => b.secs - a.secs);
   const stale = runs.length - live.length;
+  const attributed = live.filter(
+    (r) => r.dispatcherSession !== undefined && r.dispatcherSession !== "",
+  );
+  const unattributed = live.length - attributed.length;
   const own =
-    sessionId === undefined
+    sessionId === undefined || sessionId === ""
       ? []
-      : live.filter((r) => r.dispatcherSession === sessionId);
-  const other = live.length - own.length;
+      : attributed.filter((r) => r.dispatcherSession === sessionId);
+  const other = attributed.length - own.length;
   const shown = own.slice(0, RUN_LINES);
   const sessions = sessionDisplays(shown);
   const sessionWidth = Math.max(
@@ -325,6 +350,7 @@ export function routeLines(
   if (own.length > RUN_LINES)
     lines.push(`${DIM}+${own.length - RUN_LINES} more${RST}`);
   if (other > 0) lines.push(`${DIM}+${other} in other sessions${RST}`);
-  if (stale > 0) lines.push(`${ESC}[38;5;167mstale×${stale}${RST}`);
+  if (unattributed > 0) lines.push(`${DIM}unattributed ${unattributed}${RST}`);
+  if (stale > 0) lines.push(`${ESC}[38;5;167mstale ${stale}${RST}`);
   return lines;
 }

@@ -165,6 +165,7 @@ test("live usage tail skips a partial first line", async () => {
     String(day.day).padStart(2, "0"),
   );
   const session = "tail-session";
+  await mkdir(dir, { recursive: true });
   const file = join(dir, `rollout-any-${session}.jsonl`);
   const usageEvent = JSON.stringify({
     type: "event_msg",

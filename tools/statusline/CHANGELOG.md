@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.0 — 2026-10-10
+
+- Attribute live workers only by the statusline payload's session id; show missing dispatcher sessions as dim `unattributed N` and dead markers as `stale N`.
+- Read both agx and legacy agent-router markers during migration, deduplicating by run id with agx taking precedence and reading progress beside its marker. State paths now have one shared home.
+
 ## 0.8.0 — 2026-10-09
 
 - Show free disk space in GiB and a smoothed fill/free rate from atomically persisted samples, after at least 30 seconds.

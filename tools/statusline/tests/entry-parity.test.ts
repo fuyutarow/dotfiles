@@ -86,6 +86,8 @@ const extraWorker = (
   session: string | undefined,
   pickSource = "fixture",
   label = name,
+  dispatcherSession: string | null = "parity-session",
+  pid = process.pid,
 ): void => {
   const active = join(state, "active");
   writeFileSync(
@@ -93,13 +95,15 @@ const extraWorker = (
     JSON.stringify({
       schema: 1,
       run_id: name,
-      pid: process.pid,
+      pid,
       label,
       choice: "luna-high",
       pick_source: pickSource,
       started_at: "2026-10-08T12:31:00Z",
       cwd: "/fixture",
-      dispatcher_session: "parity-session",
+      ...(dispatcherSession === null
+        ? {}
+        : { dispatcher_session: dispatcherSession }),
     }),
   );
   if (session !== undefined)
@@ -279,6 +283,30 @@ const stateVariants: [string, (state: string) => void][] = [
             },
           },
         })}\n`,
+      );
+    },
+  ],
+  [
+    "own, other, unattributed and stale markers render separate rows",
+    (state) => {
+      extraWorker(
+        state,
+        "other",
+        undefined,
+        "fixture",
+        "other",
+        "other-session",
+      );
+      extraWorker(state, "none", undefined, "fixture", "none", null);
+      extraWorker(state, "empty", undefined, "fixture", "empty", "");
+      extraWorker(
+        state,
+        "dead",
+        undefined,
+        "fixture",
+        "dead",
+        null,
+        2_147_483_000,
       );
     },
   ],

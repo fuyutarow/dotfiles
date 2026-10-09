@@ -1,25 +1,22 @@
 // Read-only wire contract ported from tools/agx/src/state.ts:
 // state directory: lines 9-20; marker path: 47-49; ActiveSchema: 68-79;
 // progress path/schema: 81-100. No marker, progress, brief or run-log writers.
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "./zod.ts";
+import {
+  dispatchStateDir,
+  dispatchStateReadDirs,
+} from "../../shared/src/dispatch-state.ts";
 
 export const STATE_SCHEMA = 1;
 
-const nonEmpty = (v: string | undefined): string | undefined =>
-  v === undefined || v === "" ? undefined : v;
-
 /** $AGX_STATE_DIR (test seam), else $XDG_STATE_HOME/agx, else ~/.local/state/agx. */
-export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
-  const explicit = nonEmpty(env.AGX_STATE_DIR);
-  if (explicit !== undefined) return explicit;
-  const base = nonEmpty(env.XDG_STATE_HOME) ?? join(homedir(), ".local/state");
-  return join(base, "agx");
-}
+export const stateDir = dispatchStateDir;
 /** One JSON marker per running worker: written at start, removed at exit. */
 export const activeDir = (env: NodeJS.ProcessEnv = process.env): string =>
   join(stateDir(env), "active");
+export const activeDirs = (env: NodeJS.ProcessEnv = process.env): string[] =>
+  dispatchStateReadDirs(env).map((dir) => join(dir, "active"));
 export const ActiveSchema = z.strictObject({
   schema: z.literal(STATE_SCHEMA),
   run_id: z.string(),

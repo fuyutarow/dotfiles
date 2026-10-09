@@ -104,7 +104,10 @@ const tokenLine = (
     },
   });
 
-async function render(stateDir: string): Promise<string> {
+async function render(
+  stateDir?: string,
+  xdgStateHome?: string,
+): Promise<string> {
   const p = Bun.spawn([process.execPath, STATUSLINE], {
     stdin: new Blob([PAYLOAD]),
     stdout: "pipe",
@@ -114,6 +117,7 @@ async function render(stateDir: string): Promise<string> {
       PATH: bin,
       TZ: "UTC",
       AGX_STATE_DIR: stateDir,
+      XDG_STATE_HOME: xdgStateHome,
     },
     timeout: 30_000,
   });
@@ -197,7 +201,7 @@ describe("statusline Run row", () => {
       join(dir, "active", "rollout.progress.json"),
       progress("$ bun test", 1, session),
     );
-    const day = Temporal.Now.plainDateISO();
+    const day = Temporal.Now.plainDateISO("UTC");
     const rolloutDir = join(
       scratch,
       ".codex",
@@ -295,24 +299,80 @@ describe("statusline Run row", () => {
     expect(out).not.toContain("luna-high");
   });
 
-  test("a live worker without a dispatcher is counted as other", async () => {
+  test("a live worker without a dispatcher is unattributed", async () => {
     const dir = join(scratch, "no-dispatcher");
     marker(dir, "unowned", process.pid, "undispatched worker", 90, null);
     const out = await render(dir);
-    expect(out).toContain("+1 in other sessions");
+    expect(out).toContain("unattributed 1");
+    expect(out).not.toContain("in other sessions");
     expect(out).not.toContain("undispatched worker");
   });
 
-  test("mixed sessions show this session's rows and count all other live workers", async () => {
+  test("mixed markers separate own, other, unattributed and stale workers", async () => {
     const dir = join(scratch, "mixed-sessions");
     marker(dir, "own", process.pid, "my worker", 90, SESSION);
     marker(dir, "other", process.pid, "other worker", 80, "other-session-id");
     marker(dir, "none", process.pid, "unowned worker", 70, null);
+    marker(dir, "empty", process.pid, "empty dispatcher", 70, "");
+    marker(dir, "dead-own", 2_147_483_000, "dead own", 70, SESSION);
+    marker(
+      dir,
+      "dead-other",
+      2_147_483_000,
+      "dead other",
+      70,
+      "other-session-id",
+    );
+    marker(dir, "dead-none", 2_147_483_000, "dead none", 70, null);
     const out = await render(dir);
     expect(out).toMatch(/^luna-high 1m3\d+s \$– my worker │ no event yet$/mu);
-    expect(out).toContain("+2 in other sessions");
+    expect(out).toContain("+1 in other sessions");
+    expect(out).toContain("unattributed 2");
+    expect(out).toContain("stale 3");
     expect(out).not.toContain("other worker");
     expect(out).not.toContain("unowned worker");
+    expect(out).not.toContain("dead own");
+    expect(out).not.toContain("dead other");
+    expect(out).not.toContain("dead none");
+  });
+
+  test("both migration directories count a duplicate run_id once and read local progress", async () => {
+    const base = join(scratch, "migration");
+    const current = join(base, "agx");
+    const legacy = join(base, "agent-router");
+    marker(current, "duplicate", process.pid, "current copy");
+    marker(legacy, "duplicate", process.pid, "legacy copy");
+    marker(legacy, "legacy-own", process.pid, "legacy worker");
+    marker(
+      legacy,
+      "legacy-other",
+      process.pid,
+      "other",
+      80,
+      "other-session-id",
+    );
+    marker(legacy, "legacy-none", process.pid, "none", 70, null);
+    marker(legacy, "legacy-dead", 2_147_483_000, "dead");
+    writeFileSync(
+      join(legacy, "active", "legacy-own.progress.json"),
+      progress("$ legacy progress", 1),
+    );
+    const out = await render(undefined, base);
+    expect(
+      out.split("\n").filter((line) => line.startsWith("luna-high ")),
+    ).toHaveLength(2);
+    expect(out).toContain("current copy");
+    expect(out).not.toContain("legacy copy");
+    expect(out).toContain("$ legacy progress");
+    expect(out).toContain("+1 in other sessions");
+    expect(out).toContain("unattributed 1");
+    expect(out).toContain("stale 1");
+  });
+
+  test("the legacy directory is read when the new directory is absent", async () => {
+    const base = join(scratch, "legacy-only");
+    marker(join(base, "agent-router"), "legacy", process.pid, "legacy only");
+    expect(await render(undefined, base)).toContain("legacy only");
   });
 
   test("several workers: one line each, longest-running first", async () => {
@@ -625,13 +685,13 @@ describe("statusline Run row", () => {
     const dir = join(scratch, "stale");
     marker(dir, "b", 2_147_483_000, "killed");
     const out = await render(dir);
-    expect(out).toMatch(/^stale×1$/mu);
+    expect(out).toMatch(/^stale 1$/mu);
     expect(out).not.toMatch(/^luna-high .* killed/mu);
   });
 
   test("no agx state on this machine: no Run row at all", async () => {
     const out = await render(join(scratch, "never"));
-    expect(out).not.toContain("stale×");
+    expect(out).not.toContain("stale ");
     expect(out).not.toContain(" │ ");
   });
 });

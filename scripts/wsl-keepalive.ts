@@ -72,7 +72,7 @@ Write-Output ('${alias}: keepalive installed; {0}' -f $DistroState.Trim())`;
 $ProgressPreference = 'SilentlyContinue'
 ${install.join("\n\n")}
 $TaskNames = @(Get-ScheduledTask -TaskName 'dotfiles-wsl-keepalive-*' | ForEach-Object { $_.TaskName })
-$WslState = (wsl.exe -l -v | Out-String).Replace([char]0, '')
+$WslState = (wsl.exe -l -v | Out-String) -replace "\`0", ''
 if ($LASTEXITCODE -ne 0) { throw 'wsl.exe -l -v failed' }
 ${checks.join("\n")}
 `;

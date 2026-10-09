@@ -72,6 +72,7 @@ describe("managed WSL keepalive", () => {
       "Get-ScheduledTask -TaskName 'dotfiles-wsl-keepalive-*'",
     );
     expect(script).toContain("wsl.exe -l -v");
+    expect(script).not.toContain(".Replace([char]0");
   });
 
   test("encoded command round-trips as UTF-16LE PowerShell text", () => {

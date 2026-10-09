@@ -1,8 +1,10 @@
 # Lifecycle — why the box goes unreachable, and how to bring it back
 
 This owns RECOVERY: the box is down or unreachable, diagnose which layer and restore it. Standing
-keepalive configuration is per managed distro and runs at Windows startup and user logon; install
-or refresh it with `mise run wsl:keepalive`. Tailscale placement and unattended Tailscale remain
+keepalive configuration is per managed distro and restores distros after user logon; install or
+refresh it with `mise run wsl:keepalive`. Its startup trigger runs only after logon because the task
+principal uses `LogonType Interactive`, so a host left at the logon screen after reboot still needs
+`mise run wsl:wake`. Tailscale placement and unattended Tailscale remain
 **prevention config** owned by `securing-remote-access`, in its `wsl2-mac.md` Setup 4. The cut:
 configure it to stay up → there; it went down anyway → here.
 

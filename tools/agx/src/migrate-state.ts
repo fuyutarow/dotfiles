@@ -9,6 +9,7 @@ import {
   renameSync,
   rmdirSync,
   unlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -26,6 +27,63 @@ const Timestamp = z.union([z.string(), z.number()]);
 const TIMESTAMP_KEYS = ["timestamp", "at", "started_at", "created_at", "ts"];
 const WAIT_MAX_SECONDS = 4 * 60 * 60;
 const POLL_MS = 30_000;
+const CounterValue = z.number().nonnegative();
+const Counter = z.preprocess(
+  (value) => {
+    if (value !== null && typeof value === "object" && !Array.isArray(value))
+      return Object.entries(value);
+    return value;
+  },
+  z.union([
+    CounterValue,
+    z
+      .array(z.tuple([z.string(), CounterValue]))
+      .transform((entries) => new Map(entries)),
+  ]),
+);
+const PER_RUN_DIRECTORIES = new Set([
+  "active",
+  "worker-receipts",
+  "grader",
+  "evidence",
+  "briefs",
+]);
+const CONTENT_NAME = /^[a-f\d]{64}(?:\.[^.]+)*$/iu;
+const LOCK_NAME = /(?:^|[._-])lock(?:$|[._-])/u;
+const COUNTER_NAME = /(?:^|[._-])(?:counters?|count|sequence|seq)(?:$|[._-])/u;
+const CACHE_NAME = /(?:^|[._-])cache(?:$|[._-])/u;
+const SINGLETON_SNAPSHOTS = new Set([
+  "route-capability.json",
+  "imported-record.json",
+]);
+
+// See contract.md's state inventory: immutable/run files retain strict conflict checks.
+function mutableKind(
+  path: string,
+  content: Buffer,
+): "snapshot" | "lock" | "counter" | "temporary" | null {
+  if (path.endsWith(".jsonl")) return null;
+  if (path.endsWith(".tmp")) return "temporary";
+  const parts = path.split(sep);
+  if (
+    PER_RUN_DIRECTORIES.has(parts[0] ?? "") ||
+    CONTENT_NAME.test(basename(path))
+  )
+    return null;
+  if (parts.some((part) => LOCK_NAME.test(part))) return "lock";
+  if (SINGLETON_SNAPSHOTS.has(path)) return "snapshot";
+  if (rowRunId(content.toString("utf8")) !== undefined) return null;
+  if (COUNTER_NAME.test(basename(path))) return "counter";
+  if (
+    parts.some((part) => part === "cache" || part === "caches") ||
+    CACHE_NAME.test(basename(path))
+  )
+    return "snapshot";
+  if (parts.length !== 1) return null;
+  const counter = jsonOf(CounterValue).safeParse(content.toString("utf8"));
+  if (counter.success) return "counter";
+  return path.endsWith(".json") ? "snapshot" : null;
+}
 
 export type MigrationOptions = {
   wait?: boolean;
@@ -135,11 +193,14 @@ async function atomicWrite(
   path: string,
   content: Buffer | string,
   options: MigrationOptions,
+  times?: { atimeMs: number; mtimeMs: number },
 ): Promise<void> {
   mkdirSync(dirname(path), { recursive: true });
   // A deterministic sibling is overwritten on retry. The source stays intact until rename succeeds.
   const temporary = `${path}.agx-migrate.tmp`;
   writeFileSync(temporary, content);
+  if (times !== undefined)
+    utimesSync(temporary, times.atimeMs / 1000, times.mtimeMs / 1000);
   await options.beforeRename?.(path, temporary);
   renameSync(temporary, path);
 }
@@ -162,6 +223,65 @@ function removeEmptyDirectories(path: string): void {
   if (readdirSync(path).length === 0) rmdirSync(path);
 }
 
+function counterText(value: z.output<typeof Counter>): string {
+  const json = typeof value === "number" ? value : Object.fromEntries(value);
+  return `${JSON.stringify(json)}\n`;
+}
+
+function counterUnion(
+  previous: Buffer,
+  current: Buffer | undefined,
+): string | null {
+  const old = jsonOf(Counter).safeParse(previous.toString("utf8"));
+  const existing = jsonOf(Counter).safeParse(current?.toString("utf8") ?? "");
+  if (!old.success) return existing.success ? counterText(existing.data) : null;
+  if (!existing.success) return counterText(old.data);
+  if (typeof old.data === "number" && typeof existing.data === "number")
+    return `${Math.max(old.data, existing.data)}\n`;
+  if (typeof old.data === "number" || typeof existing.data === "number")
+    return null;
+  const oldCounters = old.data;
+  const currentCounters = existing.data;
+  const keys = new Set([...oldCounters.keys(), ...currentCounters.keys()]);
+  const merged = Object.fromEntries(
+    [...keys].map((key) => [
+      key,
+      Math.max(oldCounters.get(key) ?? 0, currentCounters.get(key) ?? 0),
+    ]),
+  );
+  return `${JSON.stringify(merged)}\n`;
+}
+
+async function mergeMutable(
+  source: string,
+  destination: string,
+  content: Buffer,
+  kind: "snapshot" | "counter",
+  live: Live,
+  options: MigrationOptions,
+): Promise<void> {
+  const sourceTimes = lstatSync(source);
+  const existing = existsSync(destination)
+    ? readFileSync(destination)
+    : undefined;
+  const newer =
+    existing === undefined ||
+    sourceTimes.mtimeMs > lstatSync(destination).mtimeMs;
+  const counter = kind === "counter" ? counterUnion(content, existing) : null;
+  if (counter !== null) {
+    if (existing === undefined || existing.toString("utf8") !== counter)
+      await atomicWrite(destination, counter, options);
+  } else if (newer && (existing === undefined || !existing.equals(content))) {
+    await atomicWrite(destination, content, options, sourceTimes);
+  }
+  if (kind === "counter" && counter === null)
+    options.report?.(
+      `WARN: unreadable or incompatible counter ${source}; kept the newer snapshot`,
+    );
+  // Shared mutable state can still be rewritten by old workers, just like JSONL logs.
+  if (live.ids.length === 0) unlinkSync(source);
+}
+
 async function mergeFile(
   previous: string,
   current: string,
@@ -175,8 +295,18 @@ async function mergeFile(
     return `REFUSED: unsupported state file ${source}`;
   const content = readFileSync(source);
   if (ownedByLiveRun(path, content, live)) return null;
+  const kind = mutableKind(path, content);
+  if (kind === "lock" || kind === "temporary") {
+    // Never install an old lock or an uncommitted write; old workers may still hold them.
+    if (live.ids.length === 0) unlinkSync(source);
+    return null;
+  }
   if (existsSync(destination) && !lstatSync(destination).isFile())
     return `REFUSED: conflicting state file ${destination}`;
+  if (kind !== null) {
+    await mergeMutable(source, destination, content, kind, live, options);
+    return null;
+  }
   const existing = existsSync(destination)
     ? readFileSync(destination)
     : undefined;

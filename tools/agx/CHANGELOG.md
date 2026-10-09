@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.0 — 2026-10-10
+
+- Reconcile mutable state during migration: keep the newer route-capability cache, imported routing record, and other singleton JSON/cache files by mtime; skip old locks and unfinished temporary writes; merge numeric counters with maximum values. Preserve strict conflicts for per-run and content-addressed files.
+- Document the state writer inventory and cover mutable merges, live-run preservation, and crash recovery.
+
 ## 2.1.0 — 2026-10-09
 
 - Accept explicit `--sandbox none` for workers that need network or ssh: Codex runs with `danger-full-access`, Claude has no sandbox restriction, and stderr announces the unsandboxed run. Keep `--sandbox` required and preserve existing Codex fallbacks with requested and effective modes in receipts, including resumed runs.

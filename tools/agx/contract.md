@@ -4,26 +4,54 @@
 
 The suite has exactly four nouns; there are no former command aliases.
 
-| Operation | Command |
-|---|---|
-| Run a worker | `agx dispatch --prompt-file <brief> --cd <dir> --sandbox …` |
-| Resume a worker | `agx dispatch --resume <run_id>` |
-| Choose a row | `agx pick --prompt-file <brief> [--cd <dir>]` |
-| Ask typed selection questions | `agx pick ask --request <file|->` |
-| Inspect route availability | `agx pick doctor` |
-| Replay ticket grading | `agx ticket replay <dir> [--expect <file.tsv>]` |
-| Grade or waive a finished run | `agx ticket grade <run_id> --evidence <file>|--waive <why>` |
-| List workers | `agx ledger ls` |
-| Show statistics | `agx ledger stats` |
-| Export/import the routing record | `agx ledger record export|import` |
-| Note artifact consumption/rejection | `agx ledger note <run_id> --consumed|--rejected [--note …]` |
-| Export runs | `agx ledger export` |
-| Show a run result or stored brief | `agx ledger result <run_id> [--json|--brief]` |
+| Operation                           | Command                                                     |
+| ----------------------------------- | ----------------------------------------------------------- |
+| Run a worker                        | `agx dispatch --prompt-file <brief> --cd <dir> --sandbox …` |
+| Resume a worker                     | `agx dispatch --resume <run_id>`                            |
+| Choose a row                        | `agx pick --prompt-file <brief> [--cd <dir>]`               |
+| Ask typed selection questions       | `agx pick ask --request <file                               | ->`                    |
+| Inspect route availability          | `agx pick doctor`                                           |
+| Replay ticket grading               | `agx ticket replay <dir> [--expect <file.tsv>]`             |
+| Grade or waive a finished run       | `agx ticket grade <run_id> --evidence <file>                | --waive <why>`         |
+| List workers                        | `agx ledger ls`                                             |
+| Show statistics                     | `agx ledger stats`                                          |
+| Export/import the routing record    | `agx ledger record export                                   | import`                |
+| Note artifact consumption/rejection | `agx ledger note <run_id> --consumed                        | --rejected [--note …]` |
+| Export runs                         | `agx ledger export`                                         |
+| Show a run result or stored brief   | `agx ledger result <run_id> [--json                         | --brief]`              |
 
 Flags and output retain their existing meanings. Runtime state is only in
 `$XDG_STATE_HOME/agx` (default `~/.local/state/agx`), with `AGX_STATE_DIR` as the test seam.
-The owner may run `mise run agx:migrate-state` once to move the previous directory.
-It names live run IDs and refuses to move their state; it also refuses when both directories exist.
+The owner may run `mise run agx:migrate-state` to merge the previous directory into agx,
+including when both directories exist. JSONL logs are deduplicated by exact line and ordered
+by timestamp. Content-addressed and per-run files require identical bytes on name collisions.
+Live run IDs and owned files remain in place; unrelated state merges with exit 3 until a rerun
+can finish. `--wait` polls every 30 seconds, bounded by `--wait-max` (default four hours).
+
+### Mutable state inventory and migration rules
+
+The state writers in `src/agx.ts`, `src/routes.ts`, `src/state.ts`, and `src/workers/`
+currently produce two singleton mutable files. The other files are JSONL logs,
+content-addressed briefs, or per-run markers, progress, receipts, briefs and evidence.
+
+| File or kind                                                                                                          | Writer / purpose                                                                    | Migration rule                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `route-capability.json`                                                                                               | `probeRoutes` in `src/routes.ts`; regenerable route probe cache                     | Keep the newer mtime; retain the agx copy on ties.                                                                                                                                                                          |
+| `imported-record.json`                                                                                                | `importRecord` in `src/agx.ts`; replaceable snapshot of exported routing statistics | Keep the newer mtime, matching the last-import replacement behavior. Preserve the winning snapshot rather than combining statistics from different hosts/windows.                                                           |
+| Other root `*.json` singletons without `run_id`; files named `cache` or in `cache/` or `caches/`                      | Compatibility with additional cached state                                          | Keep the newer mtime; copy if absent. Preserve the source mtime when it wins.                                                                                                                                               |
+| Lock files named `lock`, `.lock`, `*.lock`, `*.lock.json` or another `lock` filename component                        | Compatibility rule; the current router has no singleton lock writer                 | Never copy or overwrite an agx lock. Discard the old lock only after old live runs exit.                                                                                                                                    |
+| Counter files with `counter`, `counters`, `count`, `sequence` or `seq` filename components; root numeric scalar files | Compatibility rule; the current router has no singleton counter writer              | Take the maximum scalar, or maximum per key for numeric JSON maps. Preserve keys from both maps. If one copy is unreadable, keep the valid copy; if both are unreadable or shapes differ, keep the newer snapshot and warn. |
+
+Temporary write siblings (`*.tmp`) are produced by `importRecord`, `storeBrief`, progress
+writers and the migration routine. They are unfinished writes: never copy them from the old
+directory, and discard them only after old live runs exit. This also applies inside per-run
+directories; live-owned files remain protected before applying any rule.
+
+The cache, lock and counter compatibility rules do not classify files in `active/`, `worker-receipts/`, `grader/`,
+`evidence/`, or `briefs/`, or files named by a SHA-256 digest, as mutable singletons.
+Live-owned files are protected before applying any merge rule. Mutable file content differences
+never cause a conflict refusal; writes still use a temporary file and rename before removing
+the old source. No migration runs against the real HOME are needed for verification.
 
 ## Probabilistic row selection
 

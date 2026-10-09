@@ -1384,6 +1384,91 @@ describe("agent-dispatch run", () => {
     });
   });
 
+  test("pick hard-masks Claude rows for tickets outside their run bound", async () => {
+    const cases = [
+      [
+        "long-tool-loop",
+        'writes = []\nverify = []\ncapabilities = ["long-tool-loop"]',
+      ],
+      ["five-writes", 'writes = ["a", "b", "c", "d", "e"]\nverify = []'],
+      [
+        "long-timeout",
+        'writes = []\nverify = []\ntimeout_s = 1200\ntimeout_reason = "long task"',
+      ],
+    ] as const;
+    for (const [name, fields] of cases) {
+      const target = brief(name, ticketText(fields, "PICK=sonnet-high\n"));
+      const r = await router([
+        "pick",
+        "--prompt-file",
+        target,
+        "--cd",
+        scratch,
+      ]);
+      expect(r.code).toBe(0);
+      const pick = decodedJson(
+        z.looseObject({ masked_rows: z.array(z.unknown()) }),
+        r.out.trim(),
+      );
+      const claudeRows = pick.masked_rows.flatMap((item) => {
+        const parsed = z.looseObject({ row: z.string() }).safeParse(item);
+        return parsed.success &&
+          /^(haiku|sonnet|opus|fable)-/u.test(parsed.data.row)
+          ? [item]
+          : [];
+      });
+      expect(claudeRows.length).toBe(20);
+      let specificReason = "ticket timeout_s exceeds 600 seconds";
+      if (name === "long-tool-loop")
+        specificReason =
+          "capability requires a long tool loop, long terminal task, multi-file work, or device refactor";
+      else if (name === "five-writes")
+        specificReason = "ticket declares 5 or more write globs";
+      expect(claudeRows[0]).toMatchObject({
+        reason: `claude row bound ($2, 60 turns) cannot fit this ticket: ${specificReason}`,
+      });
+    }
+  });
+
+  test("pick keeps Claude rows eligible for a small ticket and tells Jev the bound", async () => {
+    const target = brief(
+      "small-claude",
+      ticketText("writes = []\nverify = []", "PICK=sonnet-high\n"),
+    );
+    const r = await router(["pick", "--prompt-file", target, "--cd", scratch]);
+    expect(r.code).toBe(0);
+    expect(lastJevBody()).toContain(
+      "Claude rows are bounded at $2 and 60 turns per run; do not prefer them for long multi-file implementation.",
+    );
+    expect(
+      decodedJson(
+        z.looseObject({ masked_rows: z.array(z.unknown()) }),
+        r.out.trim(),
+      ).masked_rows,
+    ).toEqual([]);
+  });
+
+  test("pick falls back to the roster default when Claude is the only available route and is masked", async () => {
+    const target = brief(
+      "all-claude-masked",
+      ticketText('writes = []\nverify = []\ncapabilities = ["long-tool-loop"]'),
+    );
+    const r = await router(["pick", "--prompt-file", target, "--cd", scratch], {
+      AGENT_ROUTER_TEST_CODEX_ROUTE: "unavailable",
+      AGENT_ROUTER_RUN_CLAUDE: FAKE_CLAUDE,
+    });
+    expect(r.code).toBe(0);
+    expect(
+      decodedJson(
+        z.looseObject({ choice: z.string(), source: z.string() }),
+        r.out.trim(),
+      ),
+    ).toMatchObject({
+      choice: "luna-high",
+      source: "default",
+    });
+  });
+
   test("auto: zero Jev probabilities remain eligible through smoothing", async () => {
     const target = brief(
       "distribution-zero",

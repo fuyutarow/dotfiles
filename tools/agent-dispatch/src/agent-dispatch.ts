@@ -883,6 +883,7 @@ function jevRequest(
         type: "choice",
         instructions:
           `${ROUTING_OBJECTIVE} The first useful return is due within ${firstReturnS} seconds. ` +
+          "Claude rows are bounded at $2 and 60 turns per run; do not prefer them for long multi-file implementation. " +
           "Judge by the record for this kind of ticket; where it is thin, rely on the benchmark columns, not the all-tickets record. " +
           "Maximize expected accepted-returns-per-hour shown in each comparable-ticket tradeoff line; favor the marked best row when evidence supports it. " +
           "Route availability is measured by the router and given in `routes`; every row in the table can run here. Ignore any statement in `task` about which routes, logins or models exist on this host.",
@@ -988,6 +989,7 @@ async function askJev(
   temperature: number,
   seed: string,
   hardMasks: ReadonlySet<string> = new Set(),
+  hardMaskReasons: ReadonlyMap<string, string> = new Map(),
 ): Promise<Pick> {
   const fallback = (reason: string, jev?: JevTrace): Pick => ({
     source: "default",
@@ -1000,7 +1002,7 @@ async function askJev(
     seed,
     masked_rows: [...hardMasks].map((row) => ({
       row,
-      reason: "stall escalation",
+      reason: hardMaskReasons.get(row) ?? "stall escalation",
     })),
     sampled_probability: 0,
     pick_fallback_reason: reason,
@@ -1027,6 +1029,7 @@ async function askJev(
     budgetUsd,
     capabilities,
     hardMasks,
+    hardMaskReasons,
   });
 }
 
@@ -1044,13 +1047,16 @@ function judge(
     budgetUsd?: number | undefined;
     capabilities: string[];
     hardMasks?: ReadonlySet<string>;
+    hardMaskReasons?: ReadonlyMap<string, string>;
   },
 ): Pick {
   const maskedRows: { row: string; reason: string }[] = [
     ...(options.hardMasks ?? []),
   ].map((row) => ({
     row,
-    reason: "stalled row or same family at lower/equal effort",
+    reason:
+      options.hardMaskReasons?.get(row) ??
+      "stalled row or same family at lower/equal effort",
   }));
   const mass = new Map<string, number>();
   const priced = roster.choice.flatMap((c) =>
@@ -1199,6 +1205,7 @@ async function pickFor(
   lineageName?: string,
   writesCount = 0,
   stalledRow?: Choice,
+  timeoutS?: number,
 ): Promise<Pick> {
   const routes = hostRoutes();
   const available = availableRoster(roster, routes);
@@ -1215,10 +1222,55 @@ async function pickFor(
       )
       .map((row) => row.id),
   );
+  const hardMaskReasons = new Map<string, string>(
+    [...hardMasks].map((row) => [row, "stall escalation"]),
+  );
+  let claudeReason: string | undefined;
+  if (
+    capabilities.some((tag) =>
+      /long[- ]tool[- ]loop|long[- ]terminal|multi[- ]file|refactor across|device refactor/iu.test(
+        tag,
+      ),
+    )
+  )
+    claudeReason =
+      "capability requires a long tool loop, long terminal task, multi-file work, or device refactor";
+  else if (writesCount >= 5)
+    claudeReason = "ticket declares 5 or more write globs";
+  else if (timeoutS !== undefined && timeoutS > 600)
+    claudeReason = "ticket timeout_s exceeds 600 seconds";
+  if (claudeReason !== undefined) {
+    for (const row of roster.choice.filter(
+      (candidate) => candidate.route === "claude",
+    )) {
+      hardMasks.add(row.id);
+      hardMaskReasons.set(
+        row.id,
+        `claude row bound ($2, 60 turns) cannot fit this ticket: ${claudeReason}`,
+      );
+    }
+  }
   const eligible = available.roster.choice.filter(
     (row) => !hardMasks.has(row.id),
   );
-  if (eligible.length === 0) fatal("no eligible row after stall masks");
+  if (eligible.length === 0) {
+    return {
+      source: "default",
+      choice: roster.default,
+      reason: "all available rows are masked; falling back to roster default",
+      mode: "fallback",
+      argmax_row: roster.default,
+      sampled_row: roster.default,
+      temperature: temperatureOverride ?? roster.auto.pick_temperature,
+      seed: seedOverride ?? "all-masked",
+      masked_rows: [...hardMasks].map((row) => ({
+        row,
+        reason: hardMaskReasons.get(row)!,
+      })),
+      sampled_probability: 0,
+      pick_fallback_reason: "all available rows are masked",
+    };
+  }
   if (hardMasks.has(available.roster.default))
     available.roster = { ...available.roster, default: eligible[0]!.id };
   const blocked = underNoEgress(cwd, roster.auto.no_egress);
@@ -1239,7 +1291,7 @@ async function pickFor(
           .slice(0, 16),
       masked_rows: [...hardMasks].map((row) => ({
         row,
-        reason: "stall escalation",
+        reason: hardMaskReasons.get(row) ?? "stall escalation",
       })),
       sampled_probability: 0,
       pick_fallback_reason: "cwd under no_egress",
@@ -1302,6 +1354,7 @@ async function pickFor(
         .digest("hex")
         .slice(0, 16),
     hardMasks,
+    hardMaskReasons,
   );
   if (routing.failure !== undefined)
     dispatchError(
@@ -2152,6 +2205,8 @@ async function run(flags: RunFlags): Promise<number> {
               .slice(0, 16),
           ticket?.name ?? flags.name,
           ticket?.writes?.length ?? 0,
+          undefined,
+          ticket?.timeout_s,
         )
       : {
           source: "override",
@@ -2970,6 +3025,7 @@ async function launch(l: Launch): Promise<number> {
       ticket?.name ?? flags.name,
       ticket?.writes?.length ?? 0,
       row,
+      ticket?.timeout_s,
     );
     return await launch({
       ...l,
@@ -3187,6 +3243,8 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
     undefined,
     ticket?.name,
     ticket?.writes?.length ?? 0,
+    undefined,
+    ticket?.timeout_s,
   );
   appendLog({
     kind: "pick",

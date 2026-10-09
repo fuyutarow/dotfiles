@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3 — 2026-10-09
+
+- Dim Jev's seven-day spend detail like the Rate-line reset text.
+
 ## 0.7.2 — 2026-10-09
 
 - Match Jev provider and spend coloring to the existing Rate-line styles.

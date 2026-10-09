@@ -8,16 +8,7 @@ import {
   pad2,
   stampMDHM,
 } from "./prompt-stamp.ts";
-import {
-  DIM,
-  ESC,
-  MID,
-  NA_COLOR,
-  RST,
-  naSegment,
-  pctFmt,
-  pctColor,
-} from "./ansi.ts";
+import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { codexRateSegment } from "./codex-rate.ts";
 import { jevUsageSegment } from "./jev-usage.ts";
@@ -223,8 +214,8 @@ export function rateRow(
   if (codex !== "") row += ` ${DIM}|${RST} ${codex}`;
   if (df.jevUsage !== undefined) {
     const jev = jevUsageSegment(df.jevUsage);
-    const amount = jev.slice("Jev 7d spend ".length);
-    row += ` ${DIM}|${RST} Jev 7d spend ${ESC}[${pctColor(0)}m${amount}${RST}`;
+    const detail = jev.slice("Jev ".length);
+    row += ` ${DIM}|${RST} Jev ${DIM}${detail}${RST}`;
   }
   if (df.modelCapsWhy !== undefined && df.modelCapsWhy !== "")
     row += ` ${DIM}${MID}${RST} ${naSegment("model caps", df.modelCapsWhy)}`;

@@ -1,5 +1,98 @@
 import { describe, expect, test } from "bun:test";
-import { sampleRow } from "../src/selection.ts";
+import { escalationRow, sampleRow } from "../src/selection.ts";
+import { loadRoster } from "../../../agents/models/roster.ts";
+
+describe("deterministic escalation", () => {
+  test("sol-high and luna-low prefer capable next-effort rows at the cheapest price", async () => {
+    const loaded = await loadRoster();
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    for (const [failedId, expectedId] of [
+      ["sol-high", "sol-xhigh"],
+      ["luna-low", "luna-medium"],
+    ]) {
+      const failed = loaded.value.choice.find((row) => row.id === failedId);
+      expect(failed).toBeDefined();
+      if (failed === undefined) continue;
+      const selected = escalationRow(loaded.value.choice, failed);
+      expect(selected?.id).toBe(expectedId);
+      expect(selected?.aa_index).toBeGreaterThanOrEqual(failed.aa_index ?? 0);
+      expect(escalationRow(loaded.value.choice.toReversed(), failed)).toEqual(
+        selected,
+      );
+    }
+  });
+
+  test("cheap rows and same-family next effort cannot bypass the AA floor", () => {
+    const failed = {
+      id: "sol-high",
+      model: "sol",
+      effort: "high",
+      aa_index: 50,
+    };
+    const lower = {
+      id: "sol-xhigh",
+      model: "sol",
+      effort: "xhigh",
+      aa_index: 49,
+      price_in: 2,
+      price_out: 10,
+    };
+    const rows = [
+      {
+        id: "luna-medium",
+        model: "luna",
+        effort: "medium",
+        aa_index: 30,
+        price_in: 0.1,
+        price_out: 0.5,
+      },
+      lower,
+    ];
+    expect(escalationRow(rows, failed)).toBeUndefined();
+    expect(
+      escalationRow(
+        [...rows, { ...lower, id: "sol-max", aa_index: 51 }],
+        failed,
+      )?.id,
+    ).toBe("sol-max");
+  });
+
+  test("unknown capability or price cannot establish a safe cheapest escalation", () => {
+    const row = { id: "sol-high", model: "sol", effort: "high" };
+    expect(escalationRow([row], row)).toBeUndefined();
+    expect(
+      escalationRow([{ ...row, id: "sol-max", aa_index: 51 }], {
+        ...row,
+        aa_index: 50,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("a budget excluding every capable row cannot force a cheaper downgrade", () => {
+    const failed = {
+      id: "sol-high",
+      model: "sol",
+      effort: "high",
+      aa_index: 50,
+      price_in: 2,
+      price_out: 10,
+    };
+    const rows = [
+      {
+        id: "luna-low",
+        model: "luna",
+        effort: "low",
+        aa_index: 22,
+        price_in: 0.1,
+        price_out: 0.5,
+      },
+      failed,
+      { ...failed, id: "sol-xhigh", effort: "xhigh", aa_index: 51 },
+    ];
+    expect(escalationRow(rows, failed, 0.02)).toBeUndefined();
+  });
+});
 
 describe("seeded row selection", () => {
   test("1000 fixed seeds track the probability distribution", () => {

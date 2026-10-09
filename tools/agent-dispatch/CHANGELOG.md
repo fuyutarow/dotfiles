@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.19.0 — 2026-10-09
+
+- Preserve `returned` for valid RETURN blocks even with no changed files or failing verification; record verification separately and identify the first coordinator question in receipts and stderr. RETURNs never auto-escalate.
+- Resume owner-approved rows in the same session on escalation. Other escalations deterministically choose the cheapest available row at or above the failed row's AA index, preferring the same family's next effort on price ties, without Jev sampling or epsilon. Assert and record the capability rule; stop for the coordinator when no safe escalation exists.
+- Cover RETURN precedence, override resumes, sol-high/luna-low escalation, and downgrade rejection; align the fake Jev roster with required pricing fields.
+
 ## 1.18.0 — 2026-10-09
 
 - Include declared-write filesystem mtime scans in progress and write-scope checks, including files ignored by VCS; use the scan when the target is not a repository.

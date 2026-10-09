@@ -58,6 +58,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash, randomInt } from "node:crypto";
+import assert from "node:assert/strict";
 import { homedir, hostname } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { cli, command } from "cleye";
@@ -74,7 +75,7 @@ import {
   type Roster,
 } from "../../../agents/models/roster.ts";
 import { admitCodexWorker, codexWorkerLimit } from "./admission.ts";
-import { sampleRow } from "./selection.ts";
+import { escalationRow, sampleRow } from "./selection.ts";
 import {
   currentHost,
   probeRoutes,
@@ -585,7 +586,7 @@ const JevAnswer = z.looseObject({
 });
 
 export interface Pick {
-  source: "explicit" | "jev" | "default" | "resume" | "override";
+  source: "explicit" | "jev" | "default" | "resume" | "override" | "escalation";
   choice: string;
   approval?: string;
   mode?: "sample" | "argmax" | "fallback";
@@ -1273,7 +1274,24 @@ function judge(
   };
 }
 
-const rowFamily = (id: string): string => id.slice(0, id.lastIndexOf("-"));
+function claudeBoundReason(
+  capabilities: string[],
+  writesCount: number,
+  timeoutS?: number,
+): string | undefined {
+  if (
+    capabilities.some((tag) =>
+      /long[- ]tool[- ]loop|long[- ]terminal|multi[- ]file|refactor across|device refactor/iu.test(
+        tag,
+      ),
+    )
+  )
+    return "capability requires a long tool loop, long terminal task, multi-file work, or device refactor";
+  if (writesCount >= 5) return "ticket declares 5 or more write globs";
+  if (timeoutS !== undefined && timeoutS > 600)
+    return "ticket timeout_s exceeds 600 seconds";
+  return undefined;
+}
 
 async function pickFor(
   roster: Roster,
@@ -1286,41 +1304,13 @@ async function pickFor(
   seedOverride?: string,
   lineageName?: string,
   writesCount = 0,
-  stalledRow?: Choice,
   timeoutS?: number,
 ): Promise<Pick> {
   const routes = hostRoutes();
   const available = availableRoster(roster, routes);
-  const effortOrder = ["low", "medium", "high", "xhigh", "max"];
-  const hardMasks = new Set(
-    roster.choice
-      .filter(
-        (row) =>
-          stalledRow !== undefined &&
-          (row.id === stalledRow.id ||
-            (rowFamily(row.id) === rowFamily(stalledRow.id) &&
-              effortOrder.indexOf(row.effort) <=
-                effortOrder.indexOf(stalledRow.effort))),
-      )
-      .map((row) => row.id),
-  );
-  const hardMaskReasons = new Map<string, string>(
-    [...hardMasks].map((row) => [row, "stall escalation"]),
-  );
-  let claudeReason: string | undefined;
-  if (
-    capabilities.some((tag) =>
-      /long[- ]tool[- ]loop|long[- ]terminal|multi[- ]file|refactor across|device refactor/iu.test(
-        tag,
-      ),
-    )
-  )
-    claudeReason =
-      "capability requires a long tool loop, long terminal task, multi-file work, or device refactor";
-  else if (writesCount >= 5)
-    claudeReason = "ticket declares 5 or more write globs";
-  else if (timeoutS !== undefined && timeoutS > 600)
-    claudeReason = "ticket timeout_s exceeds 600 seconds";
+  const hardMasks = new Set<string>();
+  const hardMaskReasons = new Map<string, string>();
+  const claudeReason = claudeBoundReason(capabilities, writesCount, timeoutS);
   if (claudeReason !== undefined) {
     for (const row of roster.choice.filter(
       (candidate) => candidate.route === "claude",
@@ -2303,7 +2293,6 @@ async function run(flags: RunFlags): Promise<number> {
               .slice(0, 16),
           ticket?.name ?? flags.name,
           ticket?.writes?.length ?? 0,
-          undefined,
           ticket?.timeout_s,
         )
       : {
@@ -2492,6 +2481,11 @@ interface Launch {
   /** the vendor session to continue, for a resume */
   resume: { from: string; session: string } | undefined;
   escalatedFrom?: string;
+  escalation?: {
+    rule: string;
+    failed_aa_index: number | null;
+    selected_aa_index: number | null;
+  };
 }
 
 /** Start the worker for a pick, wait for it, verify and grade; shared by `run` and `resume`. */
@@ -2886,17 +2880,17 @@ async function launch(l: Launch): Promise<number> {
           first_return_at_s: firstReturnAtS ?? null,
         };
   let workerData = rawWorker;
-  if (stalled)
+  if (parsedReturn.kind === "valid" && workerData !== undefined)
+    workerData = { ...workerData, outcome: "returned" };
+  else if (stalled)
     workerData = {
       ...rawWorker,
       outcome: "stalled",
       cause: "stalled at first_return_s",
     };
-  else if (parsedReturn.kind === "valid" && workerData !== undefined)
-    workerData = { ...workerData, outcome: "returned" };
   let exit = workerExit;
-  if (stalled) exit = 1;
-  else if (parsedReturn.kind === "valid") exit = 0;
+  if (parsedReturn.kind === "valid") exit = 0;
+  else if (stalled) exit = 1;
   const progressField = done === undefined ? {} : { progress: done };
   let outcomeName: string | undefined;
   const delta = await checkedWrites(
@@ -2908,6 +2902,7 @@ async function launch(l: Launch): Promise<number> {
   );
   const writes = ticket === undefined ? undefined : delta;
   const nonDelivery =
+    parsedReturn.kind !== "valid" &&
     ticket !== undefined &&
     ticket.read_only_diagnostic !== true &&
     (ticket.writes?.length ?? 0) > 0 &&
@@ -2935,7 +2930,7 @@ async function launch(l: Launch): Promise<number> {
       `agent-dispatch: writes outside ticket scope: ${writeViolations.join(", ")}`,
     );
   const verified =
-    ticket === undefined || stalled
+    ticket === undefined || (stalled && parsedReturn.kind !== "valid")
       ? undefined
       : await verifyAfterWorker(ticket, active.cwd, outcomeName, done);
   const workerOutput = z
@@ -2945,6 +2940,19 @@ async function launch(l: Launch): Promise<number> {
     workerOutput.success ? workerOutput.data.structured_output : undefined,
     lastMessage,
   );
+  const firstQuestion = parsedReport.ok
+    ? parsedReport.report.for_coordinator[0]
+    : undefined;
+  const coordinatorQuestion =
+    parsedReturn.kind === "valid"
+      ? (firstQuestion ?? parsedReturn.record.proposed_next)
+      : undefined;
+  const returnSummary =
+    coordinatorQuestion === undefined
+      ? undefined
+      : `returned — needs the coordinator: ${coordinatorQuestion}`;
+  if (returnSummary !== undefined)
+    dispatchError(`agent-dispatch: ${returnSummary}`);
   const claimedPaths = [
     ...new Set([
       ...(parsedReport.ok
@@ -3054,6 +3062,7 @@ async function launch(l: Launch): Promise<number> {
     ...(l.escalatedFrom === undefined
       ? {}
       : { escalated_from: l.escalatedFrom }),
+    ...(l.escalation === undefined ? {} : { escalation: l.escalation }),
     label,
     cwd: active.cwd,
     brief: {
@@ -3081,6 +3090,7 @@ async function launch(l: Launch): Promise<number> {
     ...(resumeHint === undefined ? {} : { resume_with: resumeHint }),
     ...reportFields(workerData),
     ...returnFields,
+    ...(returnSummary === undefined ? {} : { outcome_summary: returnSummary }),
     ...(verified === undefined
       ? {}
       : { verify: verified.results, verify_summary: verified.summary }),
@@ -3121,7 +3131,7 @@ async function launch(l: Launch): Promise<number> {
   };
   appendLog({ kind: "run", ...receipt, stats: runStats });
   rmSync(marker, { force: true });
-  if (stalled || nonDelivery) {
+  if (parsedReturn.kind !== "valid" && (stalled || nonDelivery)) {
     cleanup();
     const incident = nonDelivery
       ? {
@@ -3130,7 +3140,7 @@ async function launch(l: Launch): Promise<number> {
           run_id: runId,
           display_id: displayId,
           row: row.id,
-          returned: parsedReturn.kind === "valid",
+          returned: false,
         }
       : {
           kind: "stalled_at_first_return",
@@ -3150,27 +3160,64 @@ async function launch(l: Launch): Promise<number> {
       process.stdout.write(`${JSON.stringify(receipt)}\n`);
       return 1;
     }
-    const parsedBrief = parseTicket(brief);
-    if (parsedBrief.kind === "invalid") fatal(parsedBrief.reason);
-    const nextPick = await pickFor(
-      roster,
-      parsedBrief.prose,
-      flags.cd,
-      ticket?.capabilities,
-      ticket?.first_return_s,
-      ticket?.budget_usd,
-      flags.pickTemperature ?? ticket?.pick_temperature,
-      flags.pickSeed,
-      ticket?.name ?? flags.name,
+    const overridden =
+      pick.source === "override" || pick.approval !== undefined;
+    const session = z
+      .looseObject({ session: z.string().min(1) })
+      .safeParse(workerData);
+    const routes = hostRoutes();
+    const claudeReason = claudeBoundReason(
+      ticket?.capabilities ?? [],
       ticket?.writes?.length ?? 0,
-      row,
       ticket?.timeout_s,
     );
+    const nextRow = overridden
+      ? row
+      : escalationRow(
+          roster.choice.filter(
+            (candidate) =>
+              routes[candidate.route].available &&
+              (candidate.route !== "claude" || claudeReason === undefined),
+          ),
+          row,
+          ticket?.budget_usd,
+        );
+    if (nextRow === undefined || (overridden && !session.success)) {
+      dispatchError(
+        "agent-dispatch: escalation unavailable — needs the coordinator: no capable row or resumable approved session",
+      );
+      process.stdout.write(
+        `${JSON.stringify({ ...receipt, escalation_error: "no capable row or resumable approved session" })}\n`,
+      );
+      return 1;
+    }
+    assert.ok(
+      nextRow.id === row.id ||
+        (nextRow.aa_index !== undefined &&
+          row.aa_index !== undefined &&
+          nextRow.aa_index >= row.aa_index),
+      "escalation must never lower the failed row's AA index",
+    );
+    const rule = overridden
+      ? "owner-approved row: resume the same row and session; no resampling; AA index unchanged"
+      : "cheapest available row with AA index >= failed row; same-family next effort breaks price ties; no Jev or epsilon";
+    const nextPick: Pick = overridden
+      ? { ...pick, reason: rule }
+      : { source: "escalation", choice: nextRow.id, reason: rule };
     return await launch({
       ...l,
       pick: nextPick,
       flags: { ...flags, runId: `${runId}-escalated` },
       escalatedFrom: row.id,
+      escalation: {
+        rule,
+        failed_aa_index: row.aa_index ?? null,
+        selected_aa_index: nextRow.aa_index ?? null,
+      },
+      resume:
+        overridden && session.success
+          ? { from: runId, session: session.data.session }
+          : undefined,
     });
   }
   let graded: Record<string, unknown> = {};
@@ -3382,7 +3429,6 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
     undefined,
     ticket?.name,
     ticket?.writes?.length ?? 0,
-    undefined,
     ticket?.timeout_s,
   );
   appendLog({

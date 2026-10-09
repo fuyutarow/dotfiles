@@ -132,7 +132,7 @@ if (process.env.FAKE_STALL_MODE !== undefined && !isGrader) {
   const log = process.env.FAKE_STALL_LOG;
   const prior = existsSync(log) ? (await Bun.file(log).text()).trim().split("\\n").length : 0;
   const row = args[args.indexOf("--choice") + 1];
-  appendFileSync(log, JSON.stringify({ pid: process.pid, row }) + "\\n");
+  appendFileSync(log, JSON.stringify({ pid: process.pid, row, resume: resuming }) + "\\n");
   const mode = process.env.FAKE_STALL_MODE;
   const files = mode === "files" || (prior > 0 && mode !== "twice" && mode !== "non_delivery_twice") ? 1 : 0;
   await Bun.write(process.env.AGENT_DISPATCH_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: mode === "commands" ? 3 : 0, files }));
@@ -140,7 +140,7 @@ if (process.env.FAKE_STALL_MODE !== undefined && !isGrader) {
   if (mode === "return" || mode.startsWith("non_delivery")) {
     const last = process.env.AGENT_ROUTER_STATE_DIR + "/worker-receipts/" + runId + ".last.txt";
     mkdirSync(dirname(last), { recursive: true });
-    await Bun.write(last, process.env.FAKE_LAST);
+    await Bun.write(last, mode === "return" ? process.env.FAKE_LAST : "done");
   }
   if (mode === "non_delivery" && prior > 0) {
     const cwd = args[args.indexOf("--cd") + 1] ?? ".";
@@ -148,11 +148,11 @@ if (process.env.FAKE_STALL_MODE !== undefined && !isGrader) {
   }
   process.on("SIGUSR1", () => {
     appendFileSync(log + ".stopped", row + "\\n");
-    console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "timeout", last_message: "" }));
+    console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "timeout", session: "thread-fake-stall", last_message: "" }));
     process.exit(3);
   });
   await Bun.sleep(files > 0 || mode === "return" || mode.startsWith("non_delivery") ? 450 : 3000);
-  console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", last_message: process.env.FAKE_LAST ?? "done" }));
+  console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", session: "thread-fake-stall", last_message: mode.startsWith("non_delivery") ? "done" : process.env.FAKE_LAST ?? "done" }));
   process.exit(0);
 }
 await Bun.sleep(Number(isGrader ? process.env.FAKE_GRADER_SLEEP_MS ?? "0" : resuming ? process.env.FAKE_RESUME_SLEEP_MS ?? "0" : process.env.FAKE_SLEEP_MS ?? "0"));
@@ -922,7 +922,7 @@ describe("agent-dispatch run", () => {
       },
       async () => {
         const active = join(state, "active");
-        for (let attempt = 0; attempt < 100 && markerText === ""; attempt++) {
+        for (let attempt = 0; attempt < 1000 && markerText === ""; attempt++) {
           const file = existsSync(active)
             ? readdirSync(active).find((name) => name.endsWith(".json"))
             : undefined;
@@ -2755,7 +2755,7 @@ describe("agent-dispatch ask", () => {
     const typesafe = roster("typesafe", (t) =>
       t.replace(
         /^\[auto\.jev\][\s\S]*?(?=\n\[)/mu,
-        `[auto.jev]\napi = "typesafe"\nmodel = "m-from-roster"\nurl = "${server.url.href}"\n`,
+        `[auto.jev]\napi = "typesafe"\nmodel = "m-from-roster"\nurl = "${server.url.href}"\nprice_per_mtok_input = 0.042\nprice_per_mtok_output = 0.0\n`,
       ),
     );
     const before = bodies.length;
@@ -2890,7 +2890,7 @@ describe("agent-dispatch ask", () => {
     const dead = roster("dead", (t) =>
       t.replace(
         /^\[auto\.jev\][\s\S]*?(?=\n\[)/mu,
-        `[auto.jev]\napi = "reseller"\nurl = "http://127.0.0.1:1/"\n`,
+        `[auto.jev]\napi = "reseller"\nurl = "http://127.0.0.1:1/"\nprice_per_mtok_input = 0.042\nprice_per_mtok_output = 0.0\n`,
       ),
     );
     const r = await router(["ask", "--request", requestFile("dead", valid)], {
@@ -3801,13 +3801,12 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     const receipt = decodedJson(
       z.looseObject({
         escalated_from: z.string(),
-        pick: z.looseObject({ source: z.string(), mode: z.string() }),
+        pick: z.looseObject({ source: z.string() }),
       }),
       result.r.out.trim(),
     );
     expect(receipt.escalated_from).toBe("luna-high");
-    expect(receipt.pick.source).toBe("jev");
-    expect(receipt.pick.mode).toBe("argmax");
+    expect(receipt.pick.source).toBe("escalation");
     expect(
       logLines(result.r.state)
         .filter((line) => line.kind === "run")
@@ -3839,7 +3838,20 @@ describe("agent-dispatch run: a brief with a ticket", () => {
 
   test("commands without files at first return stall even an override row", async () => {
     const result = await stalledRun("commands", true);
-    expectEscalation(result);
+    expect(result.r.code).toBe(0);
+    expect(result.spawns.map((spawn) => spawn.row)).toEqual([
+      "luna-high",
+      "luna-high",
+    ]);
+    expect(
+      decodedJson(
+        z.looseObject({
+          pick: z.looseObject({ source: z.string() }),
+          resumed_from: z.string(),
+        }),
+        result.r.out.trim(),
+      ).pick.source,
+    ).toBe("override");
     expect(result.incidents[0]?.commands).toBe(3);
   });
 
@@ -3860,6 +3872,8 @@ describe("agent-dispatch run: a brief with a ticket", () => {
 
   const nonDeliveryRun = async (
     mode: "non_delivery" | "non_delivery_twice",
+    row = "luna-high",
+    override = false,
   ) => {
     const cwd = freshCwd();
     const log = join(cwd, "spawns.jsonl");
@@ -3876,11 +3890,11 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       `non-delivery-${mode}`,
       ticketText(
         'outcome = "deliver file"\nconsumer = "owner"\nfirst_return = "RETURN"\nwrites = ["delivered.txt"]\nverify = []\ncapabilities = ["typescript"]\nfirst_return_s = 60',
-      ) +
-        "\nPICK=luna-high PROBS=luna-low:0.2,luna-medium:0.2,luna-high:0.3,luna-xhigh:0.2,terra-high:0.1\n",
+      ) + `\nPICK=${row} PROBS=${row}:1\n`,
     );
     const args = runArgs(b, cwd);
     args.push("--pick-temperature", "0");
+    if (override) args.push("--row", row, "--approval", "test owner approval");
     const r = await router(args, {
       PATH: `${gitBin}:${process.env.PATH ?? ""}`,
       FAKE_CWD: cwd,
@@ -3893,7 +3907,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     return { r, cwd, log };
   };
 
-  test("declared writes plus RETURN and an empty delta records non_delivery and escalates", async () => {
+  test("true non_delivery escalates deterministically without Jev sampling", async () => {
     const { r, log } = await nonDeliveryRun("non_delivery");
     expect(r.code).toBe(0);
     const spawns = readFileSync(log, "utf8").trim().split("\n");
@@ -3910,7 +3924,7 @@ describe("agent-dispatch run: a brief with a ticket", () => {
       runs.map(
         (line) => decodedJson(Receipt, JSON.stringify(line)).worker.outcome,
       ),
-    ).toEqual(["non_delivery", "returned"]);
+    ).toEqual(["non_delivery", "ok"]);
     expect(runs[1]).toMatchObject({ escalated_from: "luna-high" });
     const incident = decodedJson(
       z.looseObject({
@@ -3925,10 +3939,149 @@ describe("agent-dispatch run: a brief with a ticket", () => {
     );
     expect(incident).toMatchObject({
       kind: "non_delivery",
-      returned: true,
+      returned: false,
       row: "luna-high",
     });
     expect(r.out).toContain('"escalated_from":"luna-high"');
+  });
+
+  test("owner-approved non_delivery resumes the same row and session", async () => {
+    const before = bodies.length;
+    const { r, log } = await nonDeliveryRun("non_delivery", "sol-high", true);
+    expect(r.code).toBe(0);
+    const spawns = readFileSync(log, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) =>
+        decodedJson(z.object({ row: z.string(), resume: z.boolean() }), line),
+      );
+    expect(spawns).toEqual([
+      { row: "sol-high", resume: false },
+      { row: "sol-high", resume: true },
+    ]);
+    const receipt = decodedJson(
+      z.looseObject({
+        pick: z.looseObject({
+          source: z.string(),
+          choice: z.string(),
+          approval: z.string(),
+        }),
+        resumed_from: z.string(),
+        escalation: z.looseObject({
+          rule: z.string(),
+          failed_aa_index: z.number(),
+          selected_aa_index: z.number(),
+        }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.pick).toMatchObject({
+      source: "override",
+      choice: "sol-high",
+      approval: "test owner approval",
+    });
+    expect(receipt.escalation.selected_aa_index).toBe(
+      receipt.escalation.failed_aa_index,
+    );
+    expect(receipt.escalation.rule).toContain(
+      "resume the same row and session",
+    );
+    expect(
+      bodies
+        .slice(before)
+        .filter((body) => body.includes('"worker":{"type":"choice"')),
+    ).toEqual([]);
+  });
+
+  test.each(["sol-high", "luna-low"])(
+    "non-override %s escalation never lowers AA capability",
+    async (row) => {
+      const before = bodies.length;
+      const { r, log } = await nonDeliveryRun("non_delivery", row);
+      expect(r.code).toBe(0);
+      const spawns = readFileSync(log, "utf8")
+        .trim()
+        .split("\n")
+        .map(
+          (line) => decodedJson(z.looseObject({ row: z.string() }), line).row,
+        );
+      expect(spawns).toEqual([
+        row,
+        row === "sol-high" ? "sol-xhigh" : "luna-medium",
+      ]);
+      const receipt = decodedJson(
+        z.looseObject({
+          pick: z.looseObject({
+            source: z.string(),
+            epsilon: z.number().optional(),
+            jev: z.unknown().optional(),
+          }),
+          escalation: z.looseObject({
+            rule: z.string(),
+            failed_aa_index: z.number(),
+            selected_aa_index: z.number(),
+          }),
+        }),
+        r.out.trim(),
+      );
+      expect(receipt.pick.source).toBe("escalation");
+      expect(receipt.pick.epsilon).toBeUndefined();
+      expect(receipt.pick.jev).toBeUndefined();
+      expect(receipt.escalation.selected_aa_index).toBeGreaterThanOrEqual(
+        receipt.escalation.failed_aa_index,
+      );
+      expect(receipt.escalation.rule).toContain("AA index >= failed row");
+      expect(
+        bodies
+          .slice(before)
+          .filter((body) => body.includes('"worker":{"type":"choice"')),
+      ).toHaveLength(1);
+    },
+  );
+
+  test("valid RETURN with no changes and failing verify needs the coordinator and never escalates", async () => {
+    const cwd = freshCwd();
+    const question = "Clarify whether to extend the command-recognition hook.";
+    const report = {
+      summary: "RETURN: contradiction in the brief",
+      changes: [],
+      checks: [],
+      for_coordinator: [question],
+      open: [],
+    };
+    const returned = {
+      findings: [{ text: "The hook handles only Agent, Task and Workflow." }],
+      evidence: ["hook source"],
+      impact_on_brief: "Requested behavior exceeds the rename scope",
+      proposed_next: "Choose hook scope",
+      artifacts: [],
+    };
+    const b = brief(
+      "returned-failing-verify",
+      ticketText('writes = ["src/**"]\nverify = ["false"]'),
+    );
+    const r = await router(runArgs(b, cwd), {
+      FAKE_LAST: `${JSON.stringify(report)}\n\n\`\`\`agent-dispatch-return\n${JSON.stringify(returned)}\n\`\`\``,
+    });
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        worker: z.looseObject({ outcome: z.string() }),
+        outcome_summary: z.string(),
+        verify: z.array(z.looseObject({ exit: z.number() })),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.worker.outcome).toBe("returned");
+    expect(receipt.verify[0]?.exit).toBe(1);
+    expect(receipt.outcome_summary).toBe(
+      `returned — needs the coordinator: ${question}`,
+    );
+    expect(r.err).toContain(receipt.outcome_summary);
+    expect(
+      logLines(r.state).filter((line) => line.kind === "run"),
+    ).toHaveLength(1);
+    expect(existsSync(join(r.state, "incidents.jsonl"))).toBe(false);
   });
 
   test("second non_delivery exits nonzero without a third spawn", async () => {

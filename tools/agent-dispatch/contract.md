@@ -2,7 +2,31 @@
 
 ## Probabilistic row selection
 
-Jev returns a choice and per-row probabilities. The router first masks rows whose routes are unavailable, whose expected cost exceeds ticket `budget_usd`, or whose xhigh/max effort lacks a justifying ticket capability. For the remaining n eligible rows, it smooths each probability as `(1 - epsilon) * p_jev + epsilon / n` (epsilon defaults to 0.1; zero disables smoothing), then samples proportionally to `p'^(1/T)`. Temperature defaults to roster `auto.pick_temperature` (currently 1.0), may be set by ticket `pick_temperature` or CLI `--pick-temperature` (0 ≤ T ≤ 5), and zero gives argmax of Jev's original probabilities. The seed defaults to a value derived from `run_id`; CLI `--pick-seed` overrides it. The run record and receipt keep `pick.choice` and add `mode`, `argmax_row`, `sampled_row`, `temperature`, `epsilon`, `seed`, `masked_rows`, `sampled_probability` (after smoothing and temperature), and a fallback reason where applicable. Missing probabilities fall back to Jev's choice, or the roster default when Jev's choice is invalid. Resume preserves the original pick without resampling unless escalation asks Jev again. `--choice` remains refused.
+Jev returns a choice and per-row probabilities. The router first masks rows whose routes are unavailable, whose expected cost exceeds ticket `budget_usd`, or whose xhigh/max effort lacks a justifying ticket capability. For the remaining n eligible rows, it smooths each probability as `(1 - epsilon) * p_jev + epsilon / n` (epsilon defaults to 0.1; zero disables smoothing), then samples proportionally to `p'^(1/T)`. Temperature defaults to roster `auto.pick_temperature` (currently 1.0), may be set by ticket `pick_temperature` or CLI `--pick-temperature` (0 ≤ T ≤ 5), and zero gives argmax of Jev's original probabilities. The seed defaults to a value derived from `run_id`; CLI `--pick-seed` overrides it. The run record and receipt keep `pick.choice` and add `mode`, `argmax_row`, `sampled_row`, `temperature`, `epsilon`, `seed`, `masked_rows`, `sampled_probability` (after smoothing and temperature), and a fallback reason where applicable. Missing probabilities fall back to Jev's choice, or the roster default when Jev's choice is invalid. Resume preserves the original pick without resampling. `--choice` remains refused.
+
+## RETURN outcomes and escalation
+
+A final message containing a valid `agent-dispatch-return` block has worker outcome `returned`
+and exit 0, including a RETURN with no changed files and a `for_coordinator` question. Verification
+still runs and its results and summary are recorded beside the outcome; a failed verify does not
+turn a RETURN into non-delivery. Receipts (`outcome_summary`) and stderr say
+`returned — needs the coordinator: <first question>`, using the first report `for_coordinator`
+entry or the RETURN's `proposed_next` when no question is supplied. RETURNs never auto-escalate.
+The strict RETURN schema remains unchanged; both incident messages from 2026-10-09 fit it.
+
+True `non_delivery` (declared writes with an empty checked delta and no valid RETURN) and
+first-return stalls may escalate once. An owner-approved `--row` preserves its row and approval
+and resumes its own vendor session. Without a session, the dispatcher stops for the coordinator.
+Other escalations use `pick.source = "escalation"`: among available rows that fit the ticket's
+budget and Claude run bounds, other than the failed
+row, require a known AA index at least the failed row's and known input/output prices, then
+minimize `price_in + price_out`. Price ties prefer the same model family's next effort up,
+then the lowest sufficient AA index, effort order, and row ID. No Jev call, sampling, epsilon,
+or weaker default fallback is used. Escalation itself permits the higher effort after a failure.
+The dispatcher asserts that the selected AA index cannot be lower and records `escalation.rule`,
+`failed_aa_index`, and `selected_aa_index` alongside `escalated_from`. Missing capability evidence
+or no capable available row stops escalation for the coordinator. A second failure exits nonzero
+without a third worker.
 
 ## Worker display IDs
 

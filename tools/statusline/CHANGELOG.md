@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 — 2026-10-09
+
+- Render known costs below $0.10 as `<$0.1` and zero as `$0`.
+
 ## 0.6.0 — 2026-10-09
 
 - Show live Codex worker cost from the session rollout when progress usage is not yet available.

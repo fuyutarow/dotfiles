@@ -268,6 +268,8 @@ const costFormatter = new Intl.NumberFormat("en-US", {
   maximumSignificantDigits: 3,
 });
 function costLabel(value: number): string {
+  if (value === 0) return "$0";
+  if (value < 0.1) return "<$0.1";
   return costFormatter.format(value).replace(/K$/u, "k");
 }
 const RUN_LABEL_WIDTH = 32;

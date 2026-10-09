@@ -141,9 +141,11 @@ describe("statusline Run row", () => {
   });
 
   test.each([
-    [0, "$0.00"],
-    [0.004567, "$0.00457"],
-    [0.0312, "$0.0312"],
+    [0, "$0"],
+    [0.004567, "<$0.1"],
+    [0.0312, "<$0.1"],
+    [0.0999, "<$0.1"],
+    [0.1, "$0.100"],
     [0.31, "$0.310"],
     [1.234, "$1.23"],
     [12.34, "$12.3"],
@@ -182,7 +184,7 @@ describe("statusline Run row", () => {
     );
     const out = await render(unknown);
     expect(out).toMatch(/^luna-high 1m3\ds unknown worker │/mu);
-    expect(out).not.toContain("$0.00");
+    expect(out).not.toContain("$0");
   });
 
   test("prices the latest live rollout token total for a Codex row", async () => {

@@ -13,7 +13,7 @@ emit no stdout, and report one stderr line.
 Conditions return values:
 
 - `await runningRuns(ctx)`: live `{ id, lane, row }[]`; missing ticket lanes are `"other"`.
-- `await runningRuns(ctx, { session })`: live runs whose `dispatcher_session` equals `session`.
+- `await runningRuns(ctx, { session, stateDirs })`: live runs whose `dispatcher_session` equals `session`, from optional explicit state directories.
 - `await unattributedRuns(ctx)`: live runs without `dispatcher_session`, separately from session counts.
 - `await laneCount(ctx, lane, { session })`: number of live runs in that lane, optionally filtered by session.
 - `await gpu(ctx)`: `{ utilPct, freeGiB } | "unknown"` (first GPU, 1 s timeout).
@@ -23,6 +23,11 @@ Conditions return values:
 
 State uses exported `STATE_DIR`, under `$XDG_STATE_HOME` or `~/.local/state`;
 `AGX_STATE_DIR` overrides the full path. State reads have a 1 s budget.
+`runningRuns`, `unattributedRuns`, and `laneCount` accept optional `stateDirs: string[]`
+per call, so callers can read migration roots without changing `process.env`. Omitting it
+reads only the shared default home; an empty array reads no roots. Missing or unreadable
+roots are ignored. Duplicate `run_id` values among selected live runs count once, with
+the first directory winning. The 1 s budget covers the entire selection.
 
 `agx` writes `dispatcher_session` from the trimmed `CLAUDE_CODE_SESSION_ID` environment
 variable. For Claude dispatches this is the same UUID as the hook payload's `session_id`,

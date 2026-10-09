@@ -13,6 +13,7 @@ export {
   dirtyFor,
   unackedReturns,
   type Run,
+  type RunStateOptions,
   type RunFilter,
 } from "./conditions.ts";
 export { englishSegments } from "./english.ts";

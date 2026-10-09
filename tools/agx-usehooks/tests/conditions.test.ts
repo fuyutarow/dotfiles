@@ -46,6 +46,20 @@ function binary(dir: string, name: string, body: string): void {
   process.env.PATH = bin;
 }
 
+function stateMarker(root: string, file: string, values: object): void {
+  writeFileSync(
+    join(root, "active", `${file}.json`),
+    JSON.stringify({
+      run_id: file,
+      choice: "terra",
+      pid: process.pid,
+      dispatcher_session: "session-a",
+      ticket: { lane: "theory" },
+      ...values,
+    }),
+  );
+}
+
 test("runningRuns and laneCount use live PIDs, ticket lanes, and choice rows", async () => {
   const { dir, ctx } = world();
   const marker = (id: string, values: object) => {
@@ -114,6 +128,62 @@ test("session selectors separate two dispatchers and unattributed live runs", as
   ]);
   process.env.AGX_STATE_DIR = join(dir, "missing");
   expect(await unattributedRuns(ctx)).toEqual([]);
+});
+
+test("explicit state directories merge live runs by run_id and retain session filters", async () => {
+  const { dir, ctx } = world();
+  const legacy = join(dir, "legacy");
+  mkdirSync(join(legacy, "active"), { recursive: true });
+  stateMarker(dir, "shared", {});
+  stateMarker(legacy, "different-filename", {
+    run_id: "shared",
+    choice: "legacy-choice",
+  });
+  stateMarker(legacy, "legacy-only", {});
+  stateMarker(legacy, "session-b", { dispatcher_session: "session-b" });
+  stateMarker(legacy, "unattributed", { dispatcher_session: undefined });
+  stateMarker(legacy, "dead", { pid: 2_147_483_647 });
+  stateMarker(legacy, "invalid", { pid: -1 });
+  stateMarker(legacy, "ignored.progress", {});
+  writeFileSync(join(legacy, "active", "broken.json"), "{");
+  const stateDirs = [dir, join(dir, "missing"), legacy, dir];
+  expect(await runningRuns(ctx, { stateDirs, session: "session-a" })).toEqual([
+    { id: "shared", lane: "theory", row: "terra" },
+    { id: "legacy-only", lane: "theory", row: "terra" },
+  ]);
+  expect(
+    await laneCount(ctx, "theory", { stateDirs, session: "session-a" }),
+  ).toBe(2);
+  expect(await unattributedRuns(ctx, { stateDirs })).toEqual([
+    { id: "unattributed", lane: "theory", row: "terra" },
+  ]);
+  expect(await runningRuns(ctx, { stateDirs: [] })).toEqual([]);
+  expect(await unattributedRuns(ctx, { stateDirs: [] })).toEqual([]);
+  expect(await laneCount(ctx, "theory", { stateDirs: [] })).toBe(0);
+  expect((await runningRuns(ctx)).map((run) => run.id)).toEqual(["shared"]);
+  expect(process.env.AGX_STATE_DIR).toBe(dir);
+});
+
+test("concurrent explicit selectors stay isolated from each other and the environment", async () => {
+  const { dir, ctx } = world();
+  const other = join(dir, "other");
+  mkdirSync(join(other, "active"), { recursive: true });
+  for (const [root, id] of [
+    [dir, "first"],
+    [other, "second"],
+  ] satisfies [string, string][]) {
+    writeFileSync(
+      join(root, "active", `${id}.json`),
+      JSON.stringify({ run_id: id, choice: "terra", pid: process.pid }),
+    );
+  }
+  const [first, second] = await Promise.all([
+    runningRuns(ctx, { stateDirs: [dir] }),
+    unattributedRuns(ctx, { stateDirs: [other] }),
+  ]);
+  expect(first.map((run) => run.id)).toEqual(["first"]);
+  expect(second.map((run) => run.id)).toEqual(["second"]);
+  expect(process.env.AGX_STATE_DIR).toBe(dir);
 });
 
 test("GPU resolves WSL fallback and returns unknown when none is executable", async () => {

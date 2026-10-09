@@ -8,7 +8,8 @@ import { jsonOf, z } from "../../shared/src/zod.ts";
 import type { HookContext } from "./runtime.ts";
 
 export type Run = { id: string; lane: string; row: string };
-export type RunFilter = { session?: string };
+export type RunStateOptions = { stateDirs?: string[] };
+export type RunFilter = RunStateOptions & { session?: string };
 const Marker = z.object({
   run_id: z.string(),
   pid: z.number().int().positive(),
@@ -92,21 +93,37 @@ async function liveMarker(
   ];
 }
 
-function selectRuns(session: string | null | undefined): Promise<Run[]> {
+async function runsInDir(
+  root: string,
+  session: string | null | undefined,
+): Promise<Run[]> {
+  const dir = join(root, "active");
+  const names = await readdir(dir);
+  const rows = await Promise.all(
+    names
+      .toSorted()
+      .filter(
+        (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
+      )
+      .map((name) => attemptOr(() => liveMarker(join(dir, name), session), [])),
+  );
+  return rows.flat();
+}
+
+function selectRuns(
+  session: string | null | undefined,
+  options: RunStateOptions,
+): Promise<Run[]> {
   return bounded(async () => {
-    const dir = join(dispatchStateDir(), "active");
-    const names = await readdir(dir);
+    const roots = [...new Set(options.stateDirs ?? [dispatchStateDir()])];
     const rows = await Promise.all(
-      names
-        .toSorted()
-        .filter(
-          (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
-        )
-        .map((name) =>
-          attemptOr(() => liveMarker(join(dir, name), session), []),
-        ),
+      roots.map((root) => attemptOr(() => runsInDir(root, session), [])),
     );
-    return rows.flat();
+    const runs = new Map<string, Run>();
+    for (const run of rows.flat()) {
+      if (!runs.has(run.id)) runs.set(run.id, run);
+    }
+    return [...runs.values()];
   }, []);
 }
 
@@ -115,12 +132,15 @@ export function runningRuns(
   _ctx: HookContext,
   filter: RunFilter = {},
 ): Promise<Run[]> {
-  return selectRuns(filter.session);
+  return selectRuns(filter.session, filter);
 }
 
 /** Live runs without dispatcher_session; never attributed to a filtered session. */
-export function unattributedRuns(_ctx: HookContext): Promise<Run[]> {
-  return selectRuns(null);
+export function unattributedRuns(
+  _ctx: HookContext,
+  options: RunStateOptions = {},
+): Promise<Run[]> {
+  return selectRuns(null, options);
 }
 
 export async function laneCount(

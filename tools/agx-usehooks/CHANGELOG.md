@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- Add optional per-call `stateDirs` to `runningRuns`, `unattributedRuns`, and `laneCount`, without changing the shared default state home.
+- Merge live runs by `run_id` across directories (first directory wins); tolerate missing directories and retain session filters within the existing 1 s read budget.
+
 ## 0.2.0
 
 - Add optional exact dispatcher-session filters to `runningRuns` and `laneCount`, retaining live-PID exclusion.

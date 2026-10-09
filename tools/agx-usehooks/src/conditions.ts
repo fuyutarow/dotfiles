@@ -1,3 +1,5 @@
+import { access } from "node:fs/promises";
+import { constants } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { attempt, attemptOr } from "../../shared/src/attempt.ts";
@@ -25,6 +27,31 @@ const Record = z.object({
     .optional(),
 });
 const LIMIT_MS = 1_000;
+let nvidiaSmiPath: string | undefined;
+
+async function executable(path: string): Promise<boolean> {
+  return (
+    await attempt(async () => {
+      await access(path, constants.X_OK);
+      return true;
+    })
+  ).ok;
+}
+
+async function findNvidiaSmi(
+  path = process.env.PATH ?? "",
+  fallbacks = ["/usr/lib/wsl/lib/nvidia-smi", "/usr/bin/nvidia-smi"],
+): Promise<string | undefined> {
+  const candidates = path
+    .split(process.platform === "win32" ? ";" : ":")
+    .filter(Boolean)
+    .map((dir) => join(dir, "nvidia-smi"));
+  candidates.push(...fallbacks);
+  for (const candidate of candidates) {
+    if (await executable(candidate)) return candidate;
+  }
+  return undefined;
+}
 
 async function bounded<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -103,10 +130,13 @@ async function command(
 /** First NVIDIA GPU, or unknown when unavailable, malformed, or slow. */
 export async function gpu(
   ctx: HookContext,
+  search: { path?: string; fallbacks?: string[] } = {},
 ): Promise<{ utilPct: number; freeGiB: number } | "unknown"> {
+  nvidiaSmiPath ??= await findNvidiaSmi(search.path, search.fallbacks);
+  if (nvidiaSmiPath === undefined) return "unknown";
   const out = await command(
     [
-      "nvidia-smi",
+      nvidiaSmiPath,
       "--query-gpu=utilization.gpu,memory.free",
       "--format=csv,noheader,nounits",
     ],

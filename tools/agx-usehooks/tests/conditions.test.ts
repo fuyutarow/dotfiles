@@ -71,21 +71,33 @@ test("runningRuns and laneCount use live PIDs, ticket lanes, and choice rows", a
   expect(await laneCount(ctx, "missing")).toBe(0);
 });
 
-test("GPU CSV converts MiB to GiB and handles unavailable/malformed commands", async () => {
+test("GPU resolves WSL fallback and returns unknown when none is executable", async () => {
   const { dir, ctx } = world();
-  binary(dir, "nvidia-smi", 'process.stdout.write("19, 8192\\n80, 1024\\n");');
-  expect(await gpu(ctx)).toEqual({ utilPct: 19, freeGiB: 8 });
-  binary(dir, "nvidia-smi", 'process.stdout.write("N/A, 8192\\n");');
+  process.env.PATH = join(dir, "empty-path");
+  expect(await gpu(ctx, { fallbacks: [] })).toBe("unknown");
+  const wslLib = join(dir, "usr", "lib", "wsl", "lib");
+  mkdirSync(wslLib, { recursive: true });
+  const wslSmi = join(wslLib, "nvidia-smi");
+  writeFileSync(
+    wslSmi,
+    `#!${process.execPath}\nprocess.stdout.write("19, 8192\\n");\n`,
+  );
+  chmodSync(wslSmi, 0o755);
+  expect(await gpu(ctx, { fallbacks: [wslSmi] })).toEqual({
+    utilPct: 19,
+    freeGiB: 8,
+  });
+  writeFileSync(
+    wslSmi,
+    `#!${process.execPath}\nprocess.stdout.write("N/A, 8192\\n");\n`,
+  );
   expect(await gpu(ctx)).toBe("unknown");
-  binary(dir, "nvidia-smi", 'process.stdout.write("101, 8192\\n");');
+  writeFileSync(
+    wslSmi,
+    `#!${process.execPath}\nprocess.stdout.write("101, 8192\\n");\n`,
+  );
   expect(await gpu(ctx)).toBe("unknown");
-  process.env.PATH = dir;
-  expect(await gpu(ctx)).toBe("unknown");
-});
-
-test("GPU timeout returns unknown within its one second budget", async () => {
-  const { dir, ctx } = world();
-  binary(dir, "nvidia-smi", "await Bun.sleep(10_000);");
+  writeFileSync(wslSmi, `#!${process.execPath}\nawait Bun.sleep(10_000);\n`);
   const started = performance.now();
   expect(await gpu(ctx)).toBe("unknown");
   expect(performance.now() - started).toBeLessThan(1_500);

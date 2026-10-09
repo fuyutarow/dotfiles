@@ -45,3 +45,10 @@ event = "PreToolUse"
 matcher = "Bash"
 fail_closed = true
 vendors = ["codex"]
+
+# Claude only: remind each submitted prompt of the configured reply language.
+[[hook]]
+script = "remind-reply-language.ts"
+event = "UserPromptSubmit"
+fail_closed = false
+vendors = ["claude"]

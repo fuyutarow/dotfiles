@@ -315,6 +315,7 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: [
       "tools/shared/package.json",
+      "tools/use-hooks/package.json",
       "tools/smart-open/package.json",
       "tools/repo-retrieve/package.json",
       "tools/agent-resource-run/package.json",
@@ -447,8 +448,7 @@ const OTHER: readonly Surface[] = [
       "agents/hooks/model-floor.toml",
     ],
     deployed: "the checkout, via ~/.agents/hooks",
-    consumer:
-      "the storage-headroom and model-floor PreToolUse gates (Claude Code, Codex)",
+    consumer: "the storage-headroom and model-floor hooks (Claude Code, Codex)",
     writer: "human, in the repo",
     verify: "mise run test:hooks",
   },

@@ -2,21 +2,15 @@
 // marker per running worker, appends runs.jsonl) and the statusline Run rows (read the markers).
 // Outside the repo by design: briefs and picks may be private. Zero-dep beyond the repo's zod bundle.
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
+import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
 
 export const STATE_SCHEMA = 1;
 
-const nonEmpty = (v: string | undefined): string | undefined =>
-  v === undefined || v === "" ? undefined : v;
-
 /** $AGENT_ROUTER_STATE_DIR (test seam), else $XDG_STATE_HOME/agent-router, else ~/.local/state/agent-router. */
 export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
-  const explicit = nonEmpty(env.AGENT_ROUTER_STATE_DIR);
-  if (explicit !== undefined) return explicit;
-  const base = nonEmpty(env.XDG_STATE_HOME) ?? join(homedir(), ".local/state");
-  return join(base, "agent-router");
+  return dispatchStateDir(env);
 }
 
 /** Every brief's full original text (ticket included), once per content: `briefs/<sha256>.md`. The

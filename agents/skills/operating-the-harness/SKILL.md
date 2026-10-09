@@ -188,6 +188,10 @@ evidence** (command + output, test result, screenshot), never a bare "done."
 
 ## §3. Hooks essentials — deterministic enforcement
 
+Project hooks use [use-hooks](../../../tools/use-hooks/README.md) for lifecycle helpers and conditions.
+The library supplies values; projects write their own actions in TypeScript.
+See that README for the API, project example, imports, and settings wiring.
+
 A hook **guarantees** an action at a lifecycle point; use it for "must happen every time, zero
 exceptions." Canonical auto-format (note: **PostToolUse runs *after* the tool — it formats
 post-hoc, it cannot block or undo**):

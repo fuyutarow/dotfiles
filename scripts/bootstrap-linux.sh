@@ -10,8 +10,9 @@ id "$U" > /dev/null 2>&1 || {
   echo "$U ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$U"
 }
 [ -f /root/.ssh/authorized_keys ] && install -d -m 700 -o "$U" -g "$U" "/home/$U/.ssh" && install -m 600 -o "$U" -g "$U" /root/.ssh/authorized_keys "/home/$U/.ssh/" # -D would leave ~/.ssh root-owned and link-dots could not write ~/.ssh/config
-apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq procps curl git zsh > /dev/null
+apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential procps curl file git zsh sudo > /dev/null
 RENTED=""
 if [ "${1:-}" = "--rented" ]; then RENTED="--rented"; fi
-sudo -iu "$U" bash -c 'set -e; [ -x ~/.local/bin/mise ] || curl -fsSL https://mise.run | sh; [ -d ~/dotfiles ] || git clone https://github.com/fuyutarow/dotfiles ~/dotfiles; ~/.local/bin/mise x bun@1.4 -- bun ~/dotfiles/scripts/linux-init.ts "$@"' _ ${RENTED:+"$RENTED"}
+# Root prepares the account/prerequisites once; the installer and brew bundle run as the user.
+sudo -iu "$U" bash -c 'set -e; [ -x /home/linuxbrew/.linuxbrew/bin/brew ] || NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"; [ -d ~/dotfiles ] || git clone https://github.com/fuyutarow/dotfiles ~/dotfiles; brew install bun mise; cd ~/dotfiles; bun install --frozen-lockfile; bun scripts/linux-init.ts "$@"' _ ${RENTED:+"$RENTED"}
 chsh -s "$(command -v zsh)" "$U"

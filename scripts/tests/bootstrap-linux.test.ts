@@ -46,7 +46,7 @@ describe("bootstrap linux:init argv forwarding", () => {
       executable(join(bin, "id"), "#!/bin/bash\nexit 0\n");
       executable(
         join(bin, "sudo"),
-        '#!/bin/bash\nshift 2\nexport HOME="$TEST_TARGET_HOME"\nexec "$@"\n',
+        '#!/bin/bash\nshift 2\n[ "$1" = bash ] && [ "$2" = -c ] || exit 90\ncase "$3" in *Homebrew/install*"brew install bun mise"*) ;; *) exit 91;; esac\nshift 4\nfor arg do printf \'%s\\0\' "$arg"; done > "$TEST_CAPTURE"\n',
       );
       executable(
         join(miseBin, "mise"),

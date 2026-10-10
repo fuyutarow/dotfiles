@@ -492,8 +492,16 @@ function previewCopies(
 ): { main: string; worker: string } {
   const copyMain = join(tmp, "main");
   const copyWorker = join(tmp, "worker");
-  cpSync(primary, copyMain, { recursive: true, filter: previewFilter });
-  cpSync(worker, copyWorker, { recursive: true, filter: previewFilter });
+  cpSync(primary, copyMain, {
+    recursive: true,
+    filter: previewFilter,
+    verbatimSymlinks: true,
+  });
+  cpSync(worker, copyWorker, {
+    recursive: true,
+    filter: previewFilter,
+    verbatimSymlinks: true,
+  });
   // Colocated stores may use an absolute Git target. Keep every preview write in the copy.
   writeFileSync(
     join(copyMain, ".jj", "repo", "store", "git_target"),
@@ -514,7 +522,8 @@ function format(root: string, changed: string[]): ResultAsync<void, Error> {
       { extensions: [".ts"], command: ["bunx", "--bun", "oxfmt"] },
       { extensions: [".md"], command: ["rumdl", "fmt"] },
       {
-        extensions: [".sh", ".bash", ".zsh"],
+        // shfmt's Bash parser cannot parse zsh parameter expansions; lint:sh uses zsh -n there.
+        extensions: [".sh", ".bash"],
         command: [
           "shfmt",
           "-w",
@@ -566,6 +575,12 @@ async function main(): Promise<number> {
         default: false,
         description:
           "Preview the landing and host results without committing or deploying.",
+      },
+      keepWorkspace: {
+        type: Boolean,
+        default: false,
+        description:
+          "Keep the accepted workspace for post-deployment verification or a long host migration.",
       },
     },
   });
@@ -823,7 +838,7 @@ async function main(): Promise<number> {
           status.startsWith("FAIL ") || status.startsWith("unreachable "),
       );
       if (failedHosts) return reject("one or more host deployments failed");
-      if (!parsed.flags.dryRun) {
+      if (!parsed.flags.dryRun && !parsed.flags.keepWorkspace) {
         yield* jj(root, ["workspace", "forget", workspaceName]);
         rmSync(workerRoot, { recursive: true, force: true });
         emit(`[land] workspace: removed ${workspaceName}`);

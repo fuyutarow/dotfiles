@@ -744,11 +744,14 @@ description = "Model-release SSOT floor (agents/models/releases.toml): staleness
 run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 
 # A throwaway Linux box (rented GPU container, fresh VM): run scripts/bootstrap-linux.sh as root
-# (it ends by calling this as the target user), or run it bare where there is no root (sol).
-# Only Brewfile.core, downloaded by mise; no Homebrew, no systemd.
+# (it ends by calling this as the target user). Homebrew owns core; mise owns repo toolchains.
 [tasks."linux:init"]
-description = "Core dev utilities for a throwaway Linux box (experiment toolchains stay with each repo's mise.toml): Brewfile.core via mise prebuilt releases into ~/.local/bin (root or not), agent CLIs, dotfile links. For an owner's disposable Vast container only, pass --rented to declare agx isolation when measured checks pass; never use on a shared server. Entry point from scratch: curl …/scripts/bootstrap-linux.sh | bash as root; without root see the scripts/linux-init.ts header. Check from your machine: mise run doctor:remote -- <host>"
+description = "Core utilities via Homebrew bundle Brewfile.core at the declared Linux prefix; source builds allowed. Agent native CLIs and dotfile links follow. Experiments stay per repo. --rented declares only a measured owner's disposable host."
 run = "bun ~/dotfiles/scripts/linux-init.ts"
+
+[tasks."linux:migrate-brew"]
+description = "Migrate core to Homebrew at LAND_HOSTS' prefix; --dry-run prints plan. Verify new shell PATH before cleanup; defer links used by existing processes and never delete mise installs."
+run = "bun scripts/linux-init.ts --migrate-brew"
 
 # Run FROM THE MAC after a rental is reachable. Renting itself (offer, cap, tier) stays a judgment.
 [tasks."box:init"]

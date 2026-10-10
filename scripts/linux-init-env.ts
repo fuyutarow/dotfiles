@@ -1,12 +1,19 @@
 /** Build the environment used by every command spawned during linux:init. */
+import { brewPrefix, prefixPaths } from "./core-tools.ts";
+
 export function buildLinuxInitEnv(
   home: string,
   inherited: NodeJS.ProcessEnv,
+  prefix = brewPrefix(home),
 ): NodeJS.ProcessEnv {
   const localBin = `${home}/.local/bin`;
-  const runtimeBin = `${home}/.local/share/dotfiles/runtime/bin`;
   const inheritedPath = inherited.PATH;
-  const path = [runtimeBin, localBin, inheritedPath]
+  const path = [
+    ...prefixPaths(prefix),
+    localBin,
+    `${home}/.bun/bin`,
+    inheritedPath,
+  ]
     .filter((part) => part !== undefined && part !== "")
     .join(":");
 

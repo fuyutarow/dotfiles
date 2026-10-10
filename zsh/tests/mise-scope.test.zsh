@@ -184,15 +184,14 @@ done
 unset _sh _bin _lp _hits _vm
 
 # --- 8. end to end, in the real ssh-cmd environment ------------------------------------------
-# Declared → runs. Undeclared → refuses. Both halves matter: the first is why the shim dir
-# survives at all, the second IS the law.
+# Brewfile.core declares bun in every cwd; this is distinct from mise's repo-scoped versions.
 if [[ -d $SHIMS && -f $ROOT/mise.toml && -e $SHIMS/bun ]]; then
-  out=$(env -i HOME=$HOME TERM=dumb PATH=$BASE $ZSH_BIN -c "cd ${(q)ROOT} && bun --version" 2>&1)
+  out=$(env -i HOME=$HOME TERM=dumb PATH=$BASE $ZSH_BIN -c "source ${(q)ROOT}/zsh/zshenv; cd ${(q)ROOT} && bun --version" 2>&1)
   [[ $out == [0-9]*.[0-9]* ]] && ok "ssh-cmd env, declared dir: bun runs ($out)" \
                               || bad "ssh-cmd env, declared dir: bun did not run ($out)"
-  out=$(env -i HOME=$HOME TERM=dumb PATH=$BASE $ZSH_BIN -c "cd ${(q)HOME} && bun --version" 2>&1)
-  [[ $out == *"No version is set"* ]] && ok "ssh-cmd env, undeclared dir: bun correctly refuses" \
-                                      || bad "ssh-cmd env, undeclared dir: bun resolved anyway ($out)"
+  out=$(env -i HOME=$HOME TERM=dumb PATH=$BASE $ZSH_BIN -c "source ${(q)ROOT}/zsh/zshenv; cd ${(q)HOME} && bun --version" 2>&1)
+  [[ $out == [0-9]*.[0-9]* ]] && ok "ssh-cmd env, HOME: declared core bun runs ($out)" \
+                              || bad "ssh-cmd env, HOME: core bun unavailable ($out)"
 else
   skip "mise shim dir or bun shim absent — end-to-end delivery cases not run"
 fi

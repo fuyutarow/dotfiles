@@ -8,6 +8,14 @@ case ":$PATH:" in
   *) PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH" ;;
 esac
 export PATH
+# The same rendered declaration as zshenv; no brew invocation in an SSH command shell.
+if [ -r "$HOME/.config/dotfiles/brew-prefix" ]; then
+  IFS= read -r HOMEBREW_PREFIX < "$HOME/.config/dotfiles/brew-prefix"
+  if [ -x "$HOMEBREW_PREFIX/bin/brew" ]; then
+    PATH="$HOMEBREW_PREFIX/bin:$HOMEBREW_PREFIX/sbin:$HOMEBREW_PREFIX/opt/rustup/bin:$PATH"
+    export PATH HOMEBREW_PREFIX
+  fi
+fi
 # The human's time zone, as in zsh/zshenv (a bash ssh-cmd shell must agree with zsh): the name is
 # read from zsh/timezone beside this file. `read` is a builtin; the one readlink resolves ~/.bashrc.
 if [ -z "${TZ:-}" ]; then

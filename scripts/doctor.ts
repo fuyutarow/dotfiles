@@ -62,6 +62,7 @@ import {
 } from "../tools/repo-retrieve/src/ccc-db-dir.ts";
 import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
 import { RENDERED } from "./config-registry.ts";
+import { brewPrefix, coreCommands, corePathProblems } from "./core-tools.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText } from "../agents/hooks/zod.ts";
 import {
@@ -93,7 +94,7 @@ export type Ctx = {
   dotfiles: string;
   isMac: boolean;
   isWsl: boolean;
-  /** Linux using linux:init / Brewfile.core via mise, including WSL opted into that installer. */
+  /** Plain Linux carries core only; desktop extras remain in Brewfile. */
   isCoreBox: boolean;
 };
 
@@ -334,18 +335,14 @@ export async function checkSkills(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkBrew(ctx: Ctx): Promise<Finding> {
-  if (ctx.isCoreBox)
-    return skip(
-      "brew",
-      "linux:init installs Brewfile.core through mise; Homebrew is not required — see core-tools",
-    );
+  const file = ctx.isMac ? "Brewfile" : "Brewfile.core";
   const r = await run(
     [
       "brew",
       "bundle",
       "check",
       "--file",
-      join(ctx.dotfiles, "Brewfile"),
+      join(ctx.dotfiles, file),
       "--no-upgrade",
       "--verbose",
     ],
@@ -355,10 +352,10 @@ export async function checkBrew(ctx: Ctx): Promise<Finding> {
     return fail(
       "brew",
       "Homebrew is required by this host's Brewfile mode but is not on PATH",
-      "install Homebrew (README → bootstrap), then mise run install:tools",
+      "install Homebrew (README → bootstrap), then mise run install:tools; Linux: mise run linux:migrate-brew",
     );
   if (r.timedOut) return warn("brew", "brew bundle check timed out after 180s");
-  if (r.code === 0) return pass("brew", "every Brewfile entry is installed");
+  if (r.code === 0) return pass("brew", `every ${file} entry is installed`);
   const missing = (r.out + r.err)
     .split("\n")
     .map((l) => l.trim())
@@ -367,7 +364,7 @@ export async function checkBrew(ctx: Ctx): Promise<Finding> {
   return fail(
     "brew",
     `${missing.length > 0 ? missing.length : "some"} Brewfile entr(y/ies) not installed`,
-    "mise run install:tools",
+    ctx.isMac ? "mise run install:tools" : "mise run linux:migrate-brew",
     missing,
   );
 }
@@ -1054,49 +1051,38 @@ async function checkEditorAlias(
   );
 }
 
-// Brewfile name -> the command it puts on PATH, where they differ.
-const CORE_COMMAND: Readonly<Record<string, string>> = {
-  "git-delta": "delta",
-  ripgrep: "rg",
-  "rm-improved": "rip",
-  "choose-rust": "choose",
-  bottom: "btm",
-  rustup: "cargo",
-};
-// Where linux:init puts the runtimes (bun, uv, cargo, sccache): interactive shells only (INV-6).
-const RUNTIME_BIN = ".local/share/dotfiles/runtime/bin";
-
-// A core box has no Homebrew: linux:init downloads Brewfile.core through mise into ~/.local/bin
-// (runtimes into RUNTIME_BIN). So the question is not "is the formula installed" but "does every
-// core command resolve" — the thing a missing alias or a failed hook actually depends on.
+// Installed is insufficient: every declared command must resolve from this host's Homebrew.
+// Probe a login shell in HOME so a doctor launched via mise does not mistake its repo toolchain
+// PATH for the owner's core environment. SSH command reach is additionally tested by migration.
 export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
-  const text = await attemptOr(
-    () => readFileSync(join(ctx.dotfiles, "Brewfile.core"), "utf8"),
-    null,
-  );
-  if (text === null)
+  if (!existsSync(join(ctx.dotfiles, "Brewfile.core")))
     return fail(
       "core-tools",
       "no Brewfile.core in this checkout",
       "jj/git pull",
     );
-  const names = text
-    .split("\n")
-    .flatMap((l) => /^brew "([^"]+)"/u.exec(l)?.[1] ?? []);
-  const path = [
-    join(ctx.home, ".local/bin"),
-    join(ctx.home, RUNTIME_BIN),
-    process.env.PATH ?? "",
-  ].join(":");
-  const missing = names
-    .map((n) => CORE_COMMAND[n] ?? n)
-    .filter((cmd) => Bun.which(cmd, { PATH: path }) === null);
+  const names = await coreCommands(ctx.dotfiles);
+  const prefix = brewPrefix(ctx.home);
+  const shell = await run(["zsh", "-lc", "cd ~; print -r -- $PATH"], {
+    ms: 30_000,
+    env: { HOME: ctx.home, PATH: "/usr/bin:/bin" },
+  });
+  if (shell.missing || shell.timedOut || shell.code !== 0)
+    return warn("core-tools", "cannot inspect login shell PATH");
+  const path = shell.out.trim().split("\n").at(-1) ?? "";
+  const missing = corePathProblems(names, prefix, path);
+  const repair = ctx.isMac
+    ? "mise run install:tools"
+    : "mise run linux:migrate-brew";
   return missing.length === 0
-    ? pass("core-tools", `all ${names.length} Brewfile.core commands resolve`)
+    ? pass(
+        "core-tools",
+        `all ${names.length} Brewfile.core commands resolve from ${prefix}`,
+      )
     : fail(
         "core-tools",
-        `${missing.length} Brewfile.core command(s) missing`,
-        "mise run linux:init",
+        `${missing.length} Brewfile.core command(s) missing or outside ${prefix}`,
+        repair,
         missing,
       );
 }
@@ -1114,16 +1100,12 @@ export const CHECKS: Check[] = [
   {
     name: "brew",
     run: checkBrew,
-    applies: (c) =>
-      c.isCoreBox
-        ? "linux:init installs Brewfile.core through mise; Homebrew is not required — see core-tools"
-        : null,
+    applies: always,
   },
   {
     name: "core-tools",
     run: checkCoreTools,
-    applies: (c) =>
-      c.isCoreBox ? null : "Homebrew mode: the brew check covers it",
+    applies: always,
   },
   { name: "deps", run: checkDeps, applies: always },
   { name: "bins", run: checkBins, applies: always },
@@ -1195,9 +1177,7 @@ async function main(): Promise<void> {
     dotfiles: process.env.DOTFILES ?? join(home, "dotfiles"),
     isMac: process.platform === "darwin",
     isWsl: /microsoft/iu.test(release()), // same test as link-dots.ts: `uname -r`
-    isCoreBox:
-      process.platform === "linux" &&
-      (!/microsoft/iu.test(release()) || existsSync(join(home, RUNTIME_BIN))),
+    isCoreBox: process.platform === "linux" && !/microsoft/iu.test(release()),
   };
   const only = (process.env.DOCTOR_ONLY ?? "")
     .split(",")

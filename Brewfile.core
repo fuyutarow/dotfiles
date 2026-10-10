@@ -1,9 +1,9 @@
 # The core dev utilities (README invariant 7): what EVERY machine gets — the Mac, WSL, a rented GPU
-# box, a shared server. Brewfile reads this file first, so the Mac and WSL install it with brew;
-# a throwaway Linux box gets the same names through `mise run linux:init`, which downloads each
-# one's prebuilt release (no Homebrew there; scripts/linux-init.ts says why). One list, two
-# installers. Experiment toolchains are not here: each repo's mise.toml declares its own.
-# Plain `brew "<name>"` lines only — scripts/linux-init.ts reads them without Ruby.
+# box, a shared server. ONE installer everywhere: `brew bundle --file=Brewfile.core`.
+# Linux uses /home/linuxbrew/.linuxbrew; LAND_HOSTS declares ~/.linuxbrew on no-root hosts.
+# Prefer bottles at the standard prefix; source builds (including herdr) are allowed.
+# Experiment toolchains belong to each repo's mise.toml; no global mise [tools].
+# Plain `brew "<name>"` lines keep command-path checks independent of Ruby.
 
 brew "bat"          # better cat (alias: p)
 brew "eza"          # better ls (l, ll, la)
@@ -19,11 +19,11 @@ brew "sheldon"      # zsh plugins → zsh/aliases.zsh
 brew "herdr"        # agent multiplexer; `herdr --remote <host>` needs it on the remote too
 brew "topgrade"     # `mise run up` (m up)
 brew "zoxide"       # better cd (,)
-brew "rustup"       # cargo (cake = cargo make): Rust toolchain manager; a toolchain, so INV-6 rules as for bun
+brew "rustup"       # Rust manager and cargo proxies; opt/rustup/bin is exposed, toolchains stay per repo
 brew "sccache"      # cargo's compiler cache — RUSTC_WRAPPER=sccache is set unconditionally in the profiles
 brew "fnox"         # secrets: Keychain (mac), age files elsewhere — scripts/secrets-push.ts fills a box
-brew "bun"          # JS runtime: brew on Mac/WSL; on a throwaway box repos declare it (INV-6)
-brew "uv"           # Python tool runner: `uvx` + `uv tool install`; same INV-6 note as bun
+brew "bun"          # declared core JS runtime everywhere: hooks, SSH commands and repo bins
+brew "uv"           # declared core Python runner everywhere; Python versions stay per repo
 brew "atuin"        # shell history (Ctrl+R)
 brew "lazygit"      # git TUI (lg)
 brew "jj"           # Jujutsu (config: jj/)

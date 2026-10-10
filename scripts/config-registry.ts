@@ -28,18 +28,29 @@ export type When = "all" | "mac" | "wsl" | "linux" | "not-mac";
 export const LAND_HOSTS: readonly {
   alias: string;
   deploy: boolean;
+  brewPrefix: "/home/linuxbrew/.linuxbrew" | "~/.linuxbrew";
+  hostnames?: readonly string[];
   reason?: string;
 }[] = [
-  { alias: "sol", deploy: true },
-  { alias: "r99-u26", deploy: true },
-  { alias: "r99-u24", deploy: false, reason: "damaged" },
+  { alias: "sol", deploy: true, brewPrefix: "~/.linuxbrew" },
+  {
+    alias: "r99-u26",
+    deploy: true,
+    brewPrefix: "/home/linuxbrew/.linuxbrew",
+    hostnames: ["R99"],
+  },
+  {
+    alias: "r99-u24",
+    deploy: false,
+    brewPrefix: "/home/linuxbrew/.linuxbrew",
+    reason: "damaged",
+  },
 ];
 
 // [when, repo-relative source, home-relative destination]
 export const LINKS: readonly (readonly [When, string, string])[] = [
   // --- zsh ---
-  // `#!/usr/bin/env bun` package bins use the dotfiles-declared Bun from any SSH-command cwd.
-  ["all", "scripts/bun-exec.sh", ".local/bin/bun"],
+  // Bun is a Brewfile.core utility. The exec wrapper remains for temporary-HOME renders only.
   ["all", "zsh/zshenv", ".zshenv"],
   ["all", "zsh/zshrc", ".zshrc"],
   ["mac", "zsh/zprofile.mac", ".zprofile"],
@@ -231,6 +242,13 @@ export type Surface = {
 /** The rendered half of $HOME: render-home.ts writes exactly these (home-relative), nothing else. */
 export const RENDERED = [
   {
+    dest: ".config/dotfiles/brew-prefix",
+    inputs: ["scripts/config-registry.ts"],
+    machine:
+      "OS and hostname; home-relative prefixes expand against the target HOME",
+    consumer: "zshenv, zprofile, bashrc (quiet Homebrew PATH delivery)",
+  },
+  {
     dest: ".claude/settings.json",
     inputs: [
       "agents/claude/settings.json",
@@ -314,9 +332,10 @@ const OTHER: readonly Surface[] = [
     kind: "applied",
     when: "all",
     sources: ["Brewfile", "Brewfile.core"],
-    deployed: "installed CLIs (brew; mise on a plain Linux box)",
+    deployed:
+      "installed CLIs (Homebrew everywhere; LAND_HOSTS declares Linux prefixes)",
     consumer: "every shell",
-    writer: "human, in the repo; brew bundle / mise run linux:init install",
+    writer: "human, in the repo; brew bundle --file=Brewfile.core",
     verify: `${DOCTOR} (brew) · mise run tools:audit`,
   },
   {

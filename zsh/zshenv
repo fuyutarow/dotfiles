@@ -12,8 +12,8 @@
 #   deps`). It belongs on EVERY shell's PATH for the same reason ~/.local/bin does — a
 #   hook, an agent, or `ssh host 'agent-resource-run …'` runs in exactly this thin
 #   environment. Until 2026-09-13 only .zprofile added it, so those commands existed in a
-#   terminal and vanished one process down. ~/.local/bin stays FIRST: official standalone
-#   CLIs there (codex) must beat any stale npm/Bun shim of the same name.
+#   terminal and vanished one process down. Homebrew's declared core comes first; ~/.local/bin
+#   precedes ~/.bun/bin for vendor agents. No tool download or brew shellenv happens here.
 #
 # ── CA bundle on hosts with unreadable system certs ──────────────────────────
 # sol (2026-10-05) keeps files in /etc/pki/tls/certs that a user cannot read, and every
@@ -58,10 +58,9 @@ unset _zshenv_tzf _zshenv_tz
 #
 # The shim dir stays for the non-interactive case because that is the one thing it is
 # load-bearing for: `ssh host 'cmd'` skips .zshrc, so `mise activate` never runs and a
-# DECLARED tool would otherwise be unreachable. Measured in that exact environment:
-#   cd ~          → `bun --version` = "No version is set for shim" (correctly refuses)
-#   cd ~/dotfiles → `bun --version` = 1.3.14                        (mise.toml declares it)
-# Both halves are asserted by `mise run test:mise-scope`.
+# DECLARED experiment tool would otherwise be unreachable. Brewfile.core also declares bun/uv
+# for every cwd, including SSH commands and Claude hooks; this is not a global mise version.
+# Both delivery paths are asserted by `mise run test:mise-scope`.
 #
 # Corollary, enforced by the same test: no second version manager may hook a login shell.
 # fnm was removed 2026-08-06 for exactly this reason — it held no node yet ran `fnm env`
@@ -127,7 +126,21 @@ fi
 export MISE_ACTIVATE_SHIMS=false
 
 _zshenv_shims="$HOME/.local/share/mise/shims"
+# Rendered from LAND_HOSTS by link:dots. Only read data here: no executable startup hook.
+_zshenv_brew_file="$HOME/.config/dotfiles/brew-prefix"
+if [[ -r $_zshenv_brew_file ]]; then
+  HOMEBREW_PREFIX=$(<$_zshenv_brew_file)
+else
+  # First bootstrap has not rendered yet; use only existing standard locations.
+  for _zshenv_brew in /opt/homebrew /home/linuxbrew/.linuxbrew "$HOME/.linuxbrew" /usr/local; do
+    [[ -x $_zshenv_brew/bin/brew ]] && { HOMEBREW_PREFIX=$_zshenv_brew; break; }
+  done
+fi
+export HOMEBREW_PREFIX
 _zshenv_cand=(
+  "${HOMEBREW_PREFIX}/bin"
+  "${HOMEBREW_PREFIX}/sbin"
+  "${HOMEBREW_PREFIX}/opt/rustup/bin"
   "$HOME/.local/bin"
   "$HOME/.bun/bin"
   "$_zshenv_shims"
@@ -165,7 +178,7 @@ if [[ -o interactive ]] && [[ -n "${__MISE_ORIG_PATH:-}" ]]; then
 fi
 
 typeset -U path
-unset _zshenv_dir _zshenv_cand _zshenv_shims _zshenv_path_prefix
+unset _zshenv_dir _zshenv_cand _zshenv_shims _zshenv_path_prefix _zshenv_brew_file _zshenv_brew
 export PATH
 
 # ── WSL interop for sshd-spawned shells ──────────────────────────────────────

@@ -59,8 +59,9 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    should be callable by name (`agent-resource-run`, `serena-foreground`, `repo-retrieve`) is a
    `package.json` `bin` entry, installed into `~/.bun/bin` by `bun link` (`mise run deps`) —
    never a hand-made symlink of a `.ts` into `~/.local/bin`, which holds standalone binaries
-   and shell scripts only. **Three files are RENDERED, not linked** (each is a function of several
-   declarations): `~/.claude/settings.json`, `~/.codex/hooks.json` and `~/.claude/CLAUDE.md`, by
+   and shell scripts only. **Four files are RENDERED, not linked** (each is a function of several
+   declarations): `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.claude/CLAUDE.md` and
+   `~/.config/dotfiles/brew-prefix`, by
    `scripts/render-home.ts` (called from `link-dots.ts`). Inputs: the committed vendor files, an
    untracked `~/.claude/settings.private.json`, `zsh/timezone` (→ `env.TZ`),
    `agents/hooks/hooks.toml` (wired at render time) and the dispatch roster (→ CLAUDE.md block).
@@ -76,17 +77,20 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    (retired); never reintroduce one.
 4. `zsh/mac.zsh` / `zsh/wsl.zsh` load **after** the common aliases, so they may override.
    sheldon sources ONLY `zsh/aliases.zsh` (never `*.zsh` glob — OS files are conditional).
-5. `zsh/zshenv` is deliberately tiny and quiet because zsh reads it for **every** invocation,
+5. `zsh/zshenv` is deliberately quiet because zsh reads it for **every** invocation,
    including `ssh host 'cmd'`. It exists so user CLIs in `~/.local/bin` (notably Codex remote
    bootstrap) and bun's global bins in `~/.bun/bin` (this repo's `bin` commands, `bun add -g`
-   tools) work in non-login SSH command shells. Do not put Homebrew shellenv, plugins, prompts,
+   tools) work in non-login SSH command shells. It reads the rendered Homebrew prefix and adds
+   existing bin/sbin and opt/rustup/bin ahead of legacy links. Bash reads the same declaration.
+   Brewfile.core declares bun/uv for all cwd, including Claude hooks. Do not put Homebrew shellenv, plugins, prompts,
    completions, or anything that can print/hang there.
 6. **No implicit global toolchain (INV-6).** A managed tool is reachable where a config
    DECLARES it, or not at all. mise's two delivery paths must never merge: `mise activate`
    (`zsh/zshrc`) = interactive shells, per-directory; the shim dir (`zsh/zshenv`) =
    non-interactive ONLY, because `ssh host 'cmd'` skips `.zshrc`. Never `mise use -g`, never
    add a second version manager to a login shell (fnm removed 2026-08-06), never put the shim
-   dir on an interactive PATH. `mise run test:mise-scope` fails on all three.
+   dir on an interactive PATH. Core utilities are Homebrew-managed and declared by Brewfile.core;
+   mise stays per repo. `mise run test:mise-scope` fails on the mise violations.
    6a. **Data flows one way (INV-8).** declaration (repo) → render (`link:dots`) → deployed (`$HOME`)
    → runtime; every file has ONE writer. Never generate INTO a hand-written file (no wired hook
    entries in `agents/claude/settings.json` / `agents/codex/hooks.json`, no rendered roster in
@@ -115,7 +119,13 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - **mac bootstrap**: `mise run mac:init` · **WSL bootstrap**: `mise run wsl:init` (see README)
 - **Throwaway Linux box** (rented GPU, fresh VM): as root `curl -fsSL https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh | bash`
   → `mise run linux:init`, then `herdr --remote <alias>`. dotfiles installs the **core dev utilities**
-  only (`Brewfile.core`, via mise; no root needed — see `scripts/linux-init.ts`); experiment toolchains are each repo's `mise.toml`, never dotfiles.
+  only (`brew bundle --file=Brewfile.core` as the user). ONE core installer on all OSes: Homebrew.
+  Linux defaults to `/home/linuxbrew/.linuxbrew`; LAND_HOSTS in scripts/config-registry.ts declares
+  `~/.linuxbrew` on no-root hosts (sol). Source builds are allowed and timed. Existing hosts use
+  `mise run linux:migrate-brew -- --dry-run`, then the same task without --dry-run. Cleanup checks
+  executable/mapped-file/PATH use, prints deferred links and never removes mise runtime installs
+  or experiment toolchains. Bun/uv come from brew; hooks and SSH commands reach them via the quiet
+  prefix PATH rule. Experiment toolchains are each repo's `mise.toml`, never dotfiles.
   Renting/destroying: `renting-cloud-gpus` skill.
 - **Relink dotfiles**: `mise run link:dots` · **Install tools**: `mise run install:tools`
 - **Audit tools**: `mise run tools:audit` · **Update everything**: `mise run up`

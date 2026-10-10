@@ -18,6 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { brewPrefix } from "../core-tools.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "render-home.ts");
 const ROOT = join(import.meta.dir, "..", "..");
@@ -127,6 +128,10 @@ describe("render-home: base only", () => {
       command: "~/.bun/bin/statusline",
     });
     expect(existsSync(dest(live))).toBe(false);
+    expect(
+      readFileSync(join(scratch, ".config/dotfiles/brew-prefix"), "utf8"),
+    ).toBe(`${brewPrefix(live)}\n`);
+    expect(existsSync(join(live, ".config/dotfiles/brew-prefix"))).toBe(false);
     expect(readFileSync(join(live, ".bun/bin/statusline"), "utf8")).toBe(
       "#!/bin/sh\n",
     );

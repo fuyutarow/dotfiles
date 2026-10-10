@@ -5,10 +5,10 @@ _dbg "Starting .zprofile"
 
 # Homebrew
 _dbg "Setting up Homebrew"
-if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
-  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+if [[ -n $HOMEBREW_PREFIX && -x $HOMEBREW_PREFIX/bin/brew ]]; then
+  eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
 else
-  _dbg "Homebrew not found at /home/linuxbrew/.linuxbrew/bin/brew"
+  _dbg "Homebrew not found at the declared prefix"
 fi
 
 # PATH exports
@@ -154,5 +154,10 @@ fi
 # box without it is broken and cargo must say so — a guard here would quietly build without the
 # cache and look normal (owner, 2026-10-06). doctor:remote checks sccache is there.
 export RUSTC_WRAPPER="sccache"
+
+# Keep core ahead of legacy downloader/cargo links; mise activate later can select repo versions.
+if [[ -n $HOMEBREW_PREFIX && -x $HOMEBREW_PREFIX/bin/brew ]]; then
+  path=("$HOMEBREW_PREFIX/bin" "$HOMEBREW_PREFIX/sbin" "$HOMEBREW_PREFIX/opt/rustup/bin" $path)
+fi
 
 _dbg "Finished .zprofile"

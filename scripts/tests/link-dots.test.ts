@@ -268,7 +268,7 @@ test("assertRoots: relative or foreign roots are refused before any mutation", (
 
 describe("CLI", () => {
   function cli(args: string[], home: string): { code: number; out: string } {
-    const r = Bun.spawnSync(["bun", SCRIPT, ...args], {
+    const r = Bun.spawnSync([process.execPath, SCRIPT, ...args], {
       env: { ...process.env, HOME: home, DOTFILES: REPO },
     });
     return {
@@ -297,7 +297,7 @@ describe("CLI", () => {
 
   test("a foreign DOTFILES is FATAL before anything is linked", () => {
     const home = tmp("link-dots-cli-");
-    const r = Bun.spawnSync(["bun", SCRIPT, "--force"], {
+    const r = Bun.spawnSync([process.execPath, SCRIPT, "--force"], {
       env: { ...process.env, HOME: home, DOTFILES: tmp("not-a-repo-") },
     });
     expect(r.exitCode).toBe(2);

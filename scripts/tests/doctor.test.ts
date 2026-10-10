@@ -109,18 +109,18 @@ describe("doctor", () => {
       DOTFILES: REPO,
       PATH: tmp("doctor-empty-path-"),
     });
-    if (process.platform === "linux" && !/microsoft/iu.test(release())) {
-      expect(r.out).toContain("SKIP");
-    } else {
-      expect(r.code).toBe(1);
-      expect(r.out).toContain("Homebrew is required");
-      expect(r.out).toContain("mise run install:tools");
-    }
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("Homebrew is required");
+    expect(r.out).toContain(
+      process.platform === "linux"
+        ? "mise run linux:migrate-brew"
+        : "mise run install:tools",
+    );
     expect(r.out).not.toContain("check crashed");
   });
 
   test.skipIf(process.platform !== "linux")(
-    "brew: linux:init's runtime directory declares mise core mode",
+    "brew: a legacy runtime directory never exempts Linux from Homebrew",
     () => {
       const home = tmp("doctor-home-");
       mkdirSync(join(home, ".local/share/dotfiles/runtime/bin"), {
@@ -131,8 +131,8 @@ describe("doctor", () => {
         DOTFILES: REPO,
         PATH: tmp("doctor-empty-path-"),
       });
-      expect(r.code).toBe(0);
-      expect(r.out).toContain("SKIP");
+      expect(r.code).toBe(1);
+      expect(r.out).toContain("Homebrew is required");
     },
   );
 

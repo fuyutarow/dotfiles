@@ -75,6 +75,7 @@ import { jsonText } from "../agents/hooks/zod.ts";
 import { loadSlugs } from "../agents/hooks/slugs.ts";
 import { loadRoster, rosterPolicy } from "../agents/models/roster.ts";
 import { RENDERED } from "./config-registry.ts";
+import { brewPrefix } from "./core-tools.ts";
 import {
   type HookSpec,
   loadRegistry,
@@ -296,6 +297,11 @@ if (existsSync(tzPath)) {
 }
 
 const outputs: Output[] = [
+  {
+    dest: `${home}/.config/dotfiles/brew-prefix`,
+    text: `${brewPrefix(commandTargetHome)}\n`,
+    from: "scripts/config-registry.ts LAND_HOSTS + machine OS/hostname",
+  },
   {
     dest: `${home}/.claude/settings.json`,
     text: json(withHooks(settings, specs, "claude", basePath)),

@@ -121,7 +121,9 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    shared files never hard-code a machine-absolute path.
 4. **A quiet `zshenv`.** `zsh/zshenv` stays tiny — zsh reads it on _every_ invocation, including
    `ssh host 'cmd'`, so user CLIs in `~/.local/bin` and bun's global bins in `~/.bun/bin`
-   (this repo's own `bin` commands) work in non-login SSH shells.
+   (this repo's own `bin` commands) work in non-login SSH shells. It reads the rendered
+   `~/.config/dotfiles/brew-prefix` and quietly adds Homebrew bin/sbin and rustup proxies;
+   `brew shellenv` belongs in login profiles, never zshenv. Bash SSH shells read the same prefix.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
 6. **No implicit global toolchain.** A managed tool is reachable where a config _declares_ it,
    or not at all: no global default version, and no second version manager hooking a login
@@ -129,11 +131,17 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    per-directory; the shim directory serves _only_ non-interactive ones (`ssh host 'cmd'`
    never reads `.zshrc`, so it has no other way to reach a declared tool). Merging them puts a
    name like `npm` on every PATH for a tool nothing declared, which then refuses to run.
-   Enforced by `mise run test:mise-scope`.
+   `Brewfile.core` declares bun/uv and the other core utilities for every cwd; these are
+   Homebrew tools, not global mise versions. Enforced by `mise run test:mise-scope`.
 7. **Core dev utilities, everywhere, at once; experiments belong to the repo.** On any machine —
    the Mac, R99, a rented GPU box, a fresh VM — dotfiles' job is to make the core dev utilities
    (brew, herdr, mise, jj, gh, the shell and its aliases, the search/VCS CLIs — `Brewfile.core` — Rust's cargo, and the agent CLIs Claude Code, Codex and Antigravity's agy)
-   usable immediately, reachable with `herdr --remote`. It is not a portable container image, and
+   usable immediately, reachable with `herdr --remote`. **ONE installer: Homebrew**, through
+   `brew bundle --file=Brewfile.core` on every OS. Linux defaults to `/home/linuxbrew/.linuxbrew`;
+   `scripts/config-registry.ts`'s `LAND_HOSTS` declares `~/.linuxbrew` for no-root hosts such as sol.
+   Standard-prefix bottles are preferred; source builds are allowed, including herdr and
+   non-standard-prefix dependencies. The agent CLIs use their native self-updating installers.
+   It is not a portable container image, and
    it never builds an experiment environment: Julia, CUDA, Python and their versions are each
    repo's `mise.toml` (`mise install` in that repo). A machine where an alias is missing is a
    dotfiles bug, not a property of the machine. Entry points: _Setup_ below.
@@ -143,7 +151,8 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    - A deployed path is a **link** when it is one declaration verbatim, and **rendered** when it
      is a function of several (`scripts/render-home.ts`: `~/.claude/settings.json` = base +
      private overlay + `zsh/timezone` + the hook registry; `~/.codex/hooks.json`;
-     `~/.claude/CLAUDE.md` = template + dispatch roster). A generator never writes INTO a
+     `~/.claude/CLAUDE.md` = template + dispatch roster; `~/.config/dotfiles/brew-prefix` = host
+     declaration + OS + HOME). A generator never writes INTO a
      hand-written file — `mise run lint:one-writer` fails on registry hooks in a committed vendor
      file or a rendered roster in the CLAUDE.md template.
    - A file a tool rewrites on command is **tool-owned**: a real machine-local file, never a link
@@ -181,11 +190,23 @@ exec zsh
 ### Throwaway Linux box (rented GPU, fresh VM, container)
 
 dotfiles gives such a box the **core dev utilities** only — `Brewfile.core` (shell, search, VCS,
-herdr, mise …) as prebuilt releases via mise, root or not, plus the agent CLIs and the dotfile
+herdr, mise …) via `brew bundle --file=Brewfile.core`, plus the agent CLIs and the dotfile
 links — so it is usable at once and reachable with `herdr --remote`. Verify it from your machine with
 `mise run doctor:remote -- <alias>`; `mise run box:init -- <alias> [--gh] [--repo owner/name …]`
 runs the bootstrap, the repos' setup and both doctors in one idempotent pass. It does **not** build experiment environments: Julia, CUDA, Python
 and their versions belong to each repo's `mise.toml` (`mise install` inside that repo).
+
+Root bootstrap prepares the user and build prerequisites once; Homebrew and bundle run as the
+user. On an existing host, run `mise run linux:migrate-brew -- --dry-run`, then
+`mise run linux:migrate-brew`. A declared no-root host installs Homebrew into its home-relative
+prefix without sudo; longer HOME paths use Homebrew's manual Git checkout layout. Source builds
+may take a long time; migration reports elapsed install/build time.
+
+Migration verifies core command provenance in login and SSH command shells before retiring
+legacy downloader links. It checks `/proc` executable links, mapped files and inherited PATHs,
+prints deferred links, and leaves them until their jobs/sessions finish. It never deletes mise
+installations, including Julia experiment toolchains. Re-run migration later to complete cleanup.
+Doctor requires brew and checks core command paths against the host's declared prefix.
 
 ```bash
 # as root on the box (one line; creates user fuyu, then runs `mise run linux:init` as that user)

@@ -10,6 +10,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -316,6 +317,35 @@ describe("land workspace", () => {
     });
   });
 
+  test("dry-run preserves tracked relative symlinks instead of inventing overlap", () => {
+    const f = fixture();
+    symlinkSync("keep.txt", join(f.main, "relative-link"));
+    f.jj(f.main, ["commit", "-m", "Fixture relative link"]);
+    f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    f.jj(f.worker, ["rebase", "-r", "@", "-o", "alpha"]);
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land(["--dry-run"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).not.toContain(
+      "dirty main checkout overlaps",
+    );
+    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
+      "keep content\n",
+    );
+  });
+
+  test("--keep-workspace preserves an accepted workspace for live migration checks", () => {
+    const f = fixture();
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land(["--keep-workspace"]);
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(f.worker)).toBe(true);
+    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
+      "worker version\n",
+    );
+    expect(result.stdout.toString()).not.toContain("workspace: removed");
+  });
+
   test("invocation in a worker checkout discovers the main checkout", () => {
     const f = fixture();
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
@@ -334,6 +364,7 @@ describe("land workspace", () => {
       writeFileSync(join(f.worker, "added.ts"), "const added=1;\n");
       writeFileSync(join(f.worker, "added.md"), "# Added\n");
       writeFileSync(join(f.worker, "added.sh"), "echo added\n");
+      writeFileSync(join(f.worker, "added.zsh"), 'print -r -- "${(q)HOME}"\n');
       rmSync(join(f.worker, "remove.md"));
       const result = f.land();
       expect(result.exitCode).toBe(0);
@@ -356,6 +387,12 @@ describe("land workspace", () => {
         ],
       ]);
       expect(f.log()[3]?.slice(0, 2)).toEqual(["run", "commit"]);
+      expect(
+        f
+          .log()
+          .filter((event) => event[0] === "format")
+          .flat(),
+      ).not.toContain("./added.zsh");
     },
     LAND_FORMATTER_TEST_TIMEOUT_MS,
   );

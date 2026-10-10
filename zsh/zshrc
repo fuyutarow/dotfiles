@@ -7,18 +7,10 @@ _dbg "Starting .zshrc"
 # A non-login shell also skipped .zprofile's `brew shellenv`, so where sheldon lives in Homebrew
 # (linuxbrew on a rented box) it is not on PATH yet and this fallback silently loaded no aliases
 # (doctor:remote, 2026-10-05: zsh, but no `l`). Put Homebrew on PATH first when a prefix exists.
-if [[ -z $HOMEBREW_PREFIX ]]; then
-  for _brew in /opt/homebrew/bin/brew /home/linuxbrew/.linuxbrew/bin/brew; do
-    [[ -x $_brew ]] && { eval "$($_brew shellenv)"; break; }
-  done
-  unset _brew
+if [[ -n $HOMEBREW_PREFIX && -x $HOMEBREW_PREFIX/bin/brew ]]; then
+  eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
 fi
-# Runtimes on a box without Homebrew (scripts/linux-init.ts: bun, uv). Interactive shells only —
-# the same reach a brew-installed bun has on the Mac — so Claude Code's hooks (`bun …`) work, while
-# `ssh host 'cmd'` still finds no undeclared bun (INV-6; zshenv never adds this dir).
-_rt="$HOME/.local/share/dotfiles/runtime/bin"
-[[ -d $_rt && ":$PATH:" != *":$_rt:"* ]] && export PATH="$_rt:$PATH"
-unset _rt
+# Bun/uv are declared core tools from Homebrew. Legacy runtime links remain only for old jobs.
 if ! type z &>/dev/null && command -v sheldon &>/dev/null; then
   _dbg "Loading sheldon from .zshrc"
   eval "$(sheldon source)"
@@ -135,6 +127,10 @@ _dbg "Finished .zshrc"
 # cross-OS scan. mise bakes its own absolute path into the generated hook, so the hook stays
 # self-contained even where mise is not otherwise on PATH.
 _mise_bin=""
+# Core takes precedence over legacy links in new shells, including Mac cargo env additions.
+if [[ -n $HOMEBREW_PREFIX && -x $HOMEBREW_PREFIX/bin/brew ]]; then
+  path=("$HOMEBREW_PREFIX/bin" "$HOMEBREW_PREFIX/sbin" "$HOMEBREW_PREFIX/opt/rustup/bin" $path)
+fi
 if command -v mise &>/dev/null; then
   _mise_bin=mise
 else

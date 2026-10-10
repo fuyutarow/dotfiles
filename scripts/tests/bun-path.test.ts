@@ -45,7 +45,7 @@ test("a non-interactive bin selects dotfiles Bun config and keeps caller cwd wit
   const mise = join(fakeBin, "mise");
   writeFileSync(
     mise,
-    `#!/bin/sh\n[ "$MISE_CONFIG_FILE" = "$HOME/dotfiles/mise.toml" ] || exit 21\n[ "$1" = exec ] || exit 22\n[ "$2" = -- ] || exit 23\n[ "$3" = env ] || exit 24\n[ "$4" = -u ] || exit 25\n[ "$5" = MISE_CONFIG_FILE ] || exit 26\nshift 2\nPATH="$HOME/dotfiles/.runtime:$PATH"\nexport PATH\nexec "$@"\n`,
+    `#!/bin/sh\n[ "$MISE_CONFIG_FILE" = "$HOME/dotfiles/mise.toml" ] || exit 21\n[ "$1" = which ] || exit 22\n[ "$2" = bun ] || exit 23\nprintf '%s\\n' "$HOME/dotfiles/.runtime/bun"\n`,
   );
   chmodSync(mise, 0o755);
 

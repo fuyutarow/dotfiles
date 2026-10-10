@@ -3529,6 +3529,91 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(bodies.length).toBe(before);
   });
 
+  test("ticket amend keeps one file and dispatch --ticket resumes its session with the amendment", async () => {
+    const root = freshCwd();
+    const nested = join(root, "nested");
+    const bin = join(root, "bin");
+    const home = join(root, "coordinator-tickets");
+    mkdirSync(nested);
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "jj"),
+      `#!/usr/bin/env bun\nprocess.stdout.write(${JSON.stringify(root)} + "\\n");\n`,
+    );
+    chmodSync(join(bin, "jj"), 0o755);
+    mkdirSync(home);
+    const ticket = join(home, "261010-session.md");
+    writeFileSync(
+      ticket,
+      ticketText(
+        'name = "session"\nwrites = []\nverify = ["true"]',
+        "RESOURCE-CLASS(NONCOMPUTE): fixture ticket dispatch\nInitial task.",
+      ),
+    );
+    const env = {
+      AGX_STATE_DIR: join(root, "state"),
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+    };
+    const first = await router(
+      [
+        "dispatch",
+        "--ticket",
+        "session",
+        "--home",
+        home,
+        "--cd",
+        nested,
+        "--sandbox",
+        "read-only",
+      ],
+      env,
+    );
+    expect(first.code, first.err).toBe(0);
+    const amendment = join(root, "amend.md");
+    writeFileSync(amendment, "Continue with the amended acceptance check.");
+    const amended = await router(
+      [
+        "ticket",
+        "amend",
+        "session",
+        "--home",
+        home,
+        "--cd",
+        nested,
+        "--file",
+        amendment,
+      ],
+      env,
+    );
+    expect(amended.code, amended.err).toBe(0);
+    const second = await router(
+      [
+        "dispatch",
+        "--ticket",
+        "session",
+        "--home",
+        home,
+        "--cd",
+        nested,
+        "--sandbox",
+        "read-only",
+      ],
+      env,
+    );
+    expect(second.code, second.err).toBe(0);
+    expect(readFileSync(ticket, "utf8")).toContain("## AMEND");
+    const argv = readFileSync(join(scratch, "argv.log"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => decodedJson(z.array(z.string()), line))
+      .at(-1);
+    expect(argv).toContain("--resume");
+    const prompts = readFileSync(join(scratch, "prompt.log"), "utf8");
+    expect(prompts.slice(prompts.lastIndexOf("<<<"))).toContain(
+      "Continue with the amended acceptance check.",
+    );
+  }, 20_000);
+
   test("the worker gets the prose without the front matter, plus the verify line", async () => {
     const cwd = freshCwd();
     const b = brief(

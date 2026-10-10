@@ -9,7 +9,14 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { lintTicket } from "../src/ticket-lint.ts";
-import { listTickets, newTicket, ticketRoot } from "../src/ticket-home.ts";
+import {
+  amendTicket,
+  listTickets,
+  newTicket,
+  newTicketAtHome,
+  ticketHome,
+  ticketRoot,
+} from "../src/ticket-home.ts";
 import { parseTicket, promiseBlock, resourceKind } from "../src/ticket.ts";
 import { ActiveSchema } from "../src/state.ts";
 
@@ -117,6 +124,42 @@ describe("local lint", () => {
 });
 
 describe("repository ticket home", () => {
+  test("home precedence and two amendments preserve one file and ticket id", () => {
+    const root = join(scratch, "override-repo");
+    const nested = join(root, "nested", "deeper");
+    const configured = join(root, "configured-tickets");
+    const envHome = join(scratch, "env-tickets");
+    const cliHome = join(scratch, "cli-tickets");
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(
+      join(root, ".agx.toml"),
+      'ticket_home = "configured-tickets"\n',
+    );
+    expect(ticketHome(root, nested)).toBe(configured);
+    const prior = process.env.AGX_TICKET_HOME;
+    process.env.AGX_TICKET_HOME = envHome;
+    expect(ticketHome(root, nested)).toBe(envHome);
+    expect(ticketHome(root, nested, cliHome)).toBe(cliHome);
+    if (prior === undefined) delete process.env.AGX_TICKET_HOME;
+    else process.env.AGX_TICKET_HOME = prior;
+    const path = newTicketAtHome(configured, "same-id", [], "2026-10-10");
+    if (path instanceof Error) {
+      expect(path).not.toBeInstanceOf(Error);
+      return;
+    }
+    expect(
+      amendTicket(path, "first amendment", "2026-10-10T01:00:00Z"),
+    ).toBeUndefined();
+    expect(
+      amendTicket(path, "second amendment", "2026-10-10T02:00:00Z"),
+    ).toBeUndefined();
+    const text = readFileSync(path, "utf8");
+    expect(text).toContain('name = "same-id"');
+    expect(text.match(/^## AMEND /gmu)).toHaveLength(2);
+    expect(text).toContain("first amendment");
+    expect(text).toContain("second amendment");
+  });
+
   test("new creates one skeleton with repeated labels; ls joins the latest ledger run", () => {
     const root = join(scratch, "repo");
     mkdirSync(root);
@@ -136,7 +179,7 @@ describe("repository ticket home", () => {
       ]),
     ).toEqual([
       {
-        name: "261010-retry",
+        name: "retry",
         path,
         kind: "token",
         labels,

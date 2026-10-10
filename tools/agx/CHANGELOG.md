@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.7.0 — 2026-10-10
+
+- Keep one ticket id and file through append-only `ticket amend`; ticket homes may be declared by CLI, environment, or `.agx.toml`.
+- Dispatch named tickets, gracefully interrupt and amend live workers before resuming their vendor session, and allow `resume --repick` to start a fresh selected row with a compact handoff.
+- Tell workers that a tool-specific stop is not a task-wide stop.
+
 ## 2.6.0 — 2026-10-10
 
 - Derive one run result from recorded worker, verification, change, and RETURN facts; keep scope violations as warnings and historical grades readable.

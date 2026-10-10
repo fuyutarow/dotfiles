@@ -118,11 +118,14 @@ from this run's changed paths and scope violations, including when both tickets 
 
 ## Ticket home and worker promises
 
-`agx ticket new <name> [--label L ...] [--cd DIR]` locates the jj/git root and creates
-`.agents/tickets/<YYMMDD>-<name>.md` with placeholders and examples, refusing overwrites.
-`agx ticket ls [--cd DIR]` lists names, RESOURCE-derived kind, opaque labels, latest run ID,
-and its ledger outcome. `agx ticket lint <file> [--cd DIR]` reports all local violations and
-fixes without network or Jev (exit 1 for findings). Dispatch still accepts any prompt-file path.
+`agx ticket new <name> [--label L ...] [--home DIR] [--cd DIR]` creates one ticket file with
+front-matter `name`. Home precedence is `--home`, `AGX_TICKET_HOME`, nearest upward `.agx.toml`
+`ticket_home`, then `.agents/tickets`; `ticket ls` prints the resolved home. `agx ticket amend
+<name> --file F|-` appends a dated AMEND section without rewriting earlier instructions. `agx
+dispatch --ticket <name>` resolves that home and continues the prior vendor session when one exists;
+`agx dispatch --amend <run|name> --file F` SIGINTs a live router, waits up to 30 seconds, appends,
+and resumes the same vendor session. `agx dispatch --resume <run|name> --repick` starts a fresh
+row selection with the prior report and open items as a compact handoff.
 
 The worker receives a compact promise before the body: outcome, consumer, absolute write
 paths/globs, first-return artifact and seconds, verify, kind, labels, and sandbox mode.

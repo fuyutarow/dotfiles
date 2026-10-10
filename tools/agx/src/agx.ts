@@ -143,7 +143,14 @@ import { buildDetachedLaunch, type DetachPlatform } from "./detach.ts";
 import { planWorkspace } from "./workspaces.ts";
 import { progressIntervalMs, progressThrottle } from "./progress.ts";
 import { lintTicket, renderTicketLint } from "./ticket-lint.ts";
-import { ticketRoot, newTicket, listTickets } from "./ticket-home.ts";
+import {
+  amendTicket,
+  listTicketsAtHome,
+  newTicketAtHome,
+  ticketHome,
+  ticketPath,
+  ticketRoot,
+} from "./ticket-home.ts";
 import {
   GRADE_WORKER_PROMPT,
   mergeTicketGrades,
@@ -212,6 +219,8 @@ const CODEX_WORKER =
   process.env.AGX_CODEX_WORKER ?? join(import.meta.dir, "workers/codex.ts");
 const CODEX_PATCH_GUIDANCE =
   "For apply_patch, use at most one operation per file in a call: put all hunks for that file in one Update File block, or split into separate calls. After a tool error, change approach; do not resend the same call. At the declared first_return_s (T), send an interim RETURN by T if you can; never stop running jobs to do so.";
+const TOOL_BOUNDARY_GUIDANCE =
+  "A tool's own stop, unavailable, or 'do not work around' message limits only that tool. Continue the task with another permitted method; stop the whole task only when the brief, a safety boundary, or the coordinator requires it.";
 // A claude row runs `claude -p` through tools/agx/src/workers/run-claude.ts (test seam: a fake).
 const RUN_CLAUDE =
   process.env.AGX_RUN_CLAUDE ?? join(import.meta.dir, "workers/run-claude.ts");
@@ -2541,7 +2550,7 @@ async function launch(l: Launch): Promise<number> {
       : { dispatcher_session: currentDispatcherSession() }),
     ...(ticket === undefined
       ? {}
-      : { ticket: { writes: ticket.writes ?? [] } }),
+      : { ticket: { writes: ticket.writes ?? [], name: ticket.name } }),
   };
   const writesRoot = workspaceRoot(active.cwd);
   const changesBefore = await snapshotChanges(writesRoot, ticket?.writes ?? []);
@@ -2578,8 +2587,8 @@ async function launch(l: Launch): Promise<number> {
     workerBrief,
     withReportInstruction(
       row.route === "codex"
-        ? `${CODEX_PATCH_GUIDANCE}\n\n${workerText}`
-        : workerText,
+        ? `${CODEX_PATCH_GUIDANCE}\n\n${TOOL_BOUNDARY_GUIDANCE}\n\n${workerText}`
+        : `${TOOL_BOUNDARY_GUIDANCE}\n\n${workerText}`,
     ),
   );
   const args = workerArgs(
@@ -5311,6 +5320,169 @@ async function resumeCommand(
   });
 }
 
+function resolveTicketFile(name: string, cd: string, home?: string): string {
+  const root = ticketRoot(cd);
+  if (root === undefined) fatal(`no jj/git repository at ${cd}`);
+  const path = ticketPath(ticketHome(root, cd, home), name);
+  if (path instanceof Error) fatal(path.message);
+  return path;
+}
+
+function lastAmendment(text: string): string {
+  const marker = text.lastIndexOf("\n## AMEND ");
+  return marker < 0 ? text : text.slice(marker + 1);
+}
+
+function latestTicketRun(path: string): Logged | undefined {
+  const resolved = resolve(path);
+  return readAllLog()
+    .toReversed()
+    .find((line) => line.kind === "run" && line.brief?.path === resolved);
+}
+
+function amendmentMessage(path: string, runId: string): string {
+  const message = lastAmendment(readFileSync(path, "utf8"));
+  const file = join(STATE_DIR, "briefs", `${runId}.amend.md`);
+  mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
+  writeFileSync(file, message);
+  return file;
+}
+
+async function ticketAmendCommand(
+  name: string,
+  file: string | undefined,
+  cd: string,
+  home: string | undefined,
+): Promise<number> {
+  if (file === undefined) fatal("ticket amend needs --file <path|->");
+  const text =
+    file === "-" ? await Bun.stdin.text() : readFileSync(file, "utf8");
+  const path = resolveTicketFile(name, cd, home);
+  const amended = amendTicket(path, text);
+  if (amended instanceof Error) fatal(amended.message);
+  process.stdout.write(`${path}\n`);
+  return 0;
+}
+
+async function amendRunningCommand(
+  target: string,
+  file: string | undefined,
+  cd: string | undefined,
+  home: string | undefined,
+  timeoutS: number | undefined,
+  timeoutReason: string | undefined,
+): Promise<number> {
+  if (file === undefined || file === "-")
+    fatal("dispatch --amend needs --file <path>");
+  const active = readActive().find(
+    (entry) =>
+      entry.alive &&
+      (entry.active.run_id === target || entry.active.ticket?.name === target),
+  );
+  if (active === undefined)
+    fatal(
+      `no running run or ticket named ${target}; --amend only interrupts a live worker`,
+    );
+  const name = active.active.ticket?.name;
+  if (name === undefined)
+    fatal(
+      `run ${active.active.run_id} has no ticket id; --amend requires a ticket dispatch`,
+    );
+  const path = resolveTicketFile(name, cd ?? active.active.cwd, home);
+  const started = performance.now();
+  const sent = fromThrowable(
+    () => process.kill(active.active.pid, "SIGINT"),
+    errorMessage,
+  )();
+  if (sent.isErr())
+    fatal(`cannot interrupt ${active.active.run_id}: ${sent.error}`);
+  const deadline = performance.now() + 30_000;
+  while (existsSync(active.file) && performance.now() < deadline)
+    await Bun.sleep(100);
+  if (existsSync(active.file))
+    fatal(
+      `worker ${active.active.run_id} did not stop within 30s; it remains running`,
+    );
+  const amended = amendTicket(path, readFileSync(file, "utf8"));
+  if (amended instanceof Error) fatal(amended.message);
+  const gap = Math.round((performance.now() - started) / 100) / 10;
+  process.stderr.write(
+    `agx: appended amendment to ${name}; graceful-stop gap ${gap}s; resuming vendor session\n`,
+  );
+  return resumeCommand(
+    active.active.run_id,
+    amendmentMessage(path, active.active.run_id),
+    timeoutS,
+    timeoutReason,
+  );
+}
+
+async function repickResumeCommand(
+  id: string,
+  timeoutS: number | undefined,
+  timeoutReason: string | undefined,
+): Promise<number> {
+  const runId = resolveRunId(id);
+  const logged = readAllLog().find(
+    (line) => line.kind === "run" && line.run_id === runId,
+  );
+  if (logged === undefined) fatal(`no run ${id} in ${LOG_FILE}`);
+  const cwd = logged.cwd;
+  const sandbox = logged.worker?.sandbox;
+  if (cwd === undefined || !existsSync(cwd))
+    fatal(`run ${runId}: its directory ${cwd ?? "(not recorded)"} is gone`);
+  if (
+    sandbox !== "none" &&
+    sandbox !== "read-only" &&
+    sandbox !== "workspace-write"
+  )
+    fatal(`run ${runId}: its sandbox was not recorded, cannot repick`);
+  const brief = loggedBrief(logged);
+  if (brief === undefined) fatal(`run ${runId}: its brief is no longer stored`);
+  const handoff = [
+    "## COMPACT HANDOFF",
+    "This is a fresh vendor session selected because --repick was requested.",
+    `Previous run: ${runId}`,
+    `Last report: ${logged.worker?.last_message ?? "(none recorded)"}`,
+    `Open items: ${JSON.stringify(logged.report ?? logged.report_partial ?? "(none recorded)")}`,
+  ].join("\n");
+  const path = join(STATE_DIR, "briefs", `${runId}.repick.md`);
+  mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
+  writeFileSync(path, `${brief.trimEnd()}\n\n${handoff}\n`);
+  process.stderr.write(
+    `agx: --repick starts a fresh vendor session after ${runId}; prior session is not continued\n`,
+  );
+  return run({
+    promptFile: path,
+    cd: cwd,
+    sandbox,
+    choice: "auto",
+    row: undefined,
+    approval: undefined,
+    label: undefined,
+    name: undefined,
+    timeoutS,
+    timeoutReason,
+    noGrader: false,
+    legacyBrief: undefined,
+    runId: newRunId(),
+    verbose: false,
+  });
+}
+
+function resumeMode(
+  id: string,
+  promptFile: string | undefined,
+  timeoutS: number | undefined,
+  timeoutReason: string | undefined,
+  repick: boolean,
+): Promise<number> {
+  if (!repick) return resumeCommand(id, promptFile, timeoutS, timeoutReason);
+  if (promptFile !== undefined)
+    fatal("--repick derives its handoff; do not also pass --prompt-file");
+  return repickResumeCommand(id, timeoutS, timeoutReason);
+}
+
 // --- argv -----------------------------------------------------------------------------------------
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -5461,6 +5633,30 @@ async function parseAgx() {
                 type: String,
                 description:
                   "continue a stopped run by run_id or session-id prefix",
+              },
+              ticket: {
+                type: String,
+                description:
+                  "ticket name from the resolved home; resumes its prior vendor session when possible",
+              },
+              amend: {
+                type: String,
+                description:
+                  "stop a running run or ticket, append --file, then resume its vendor session",
+              },
+              file: {
+                type: String,
+                description: "amendment file for --amend",
+              },
+              home: {
+                type: String,
+                description:
+                  "ticket home (overrides AGX_TICKET_HOME and .agx.toml ticket_home)",
+              },
+              repick: {
+                type: Boolean,
+                description:
+                  "start fresh with a handoff and a new row selection instead of resuming",
               },
               promptFile: {
                 type: String,
@@ -5636,9 +5832,10 @@ async function parseAgx() {
             flags: {
               label: { type: [String] },
               cd: { type: String, default: process.cwd() },
+              home: { type: String },
             },
             help: {
-              description: "create a skeleton in <repo>/.agents/tickets",
+              description: "create a skeleton in the resolved ticket home",
             },
           }),
           command({
@@ -5646,7 +5843,10 @@ async function parseAgx() {
             strictFlags: true,
             ignoreArgv: rejectPrototypeFlag,
             parameters: [],
-            flags: { cd: { type: String, default: process.cwd() } },
+            flags: {
+              cd: { type: String, default: process.cwd() },
+              home: { type: String },
+            },
             help: {
               description:
                 "list repository tickets with their latest ledger outcome",
@@ -5657,9 +5857,27 @@ async function parseAgx() {
             strictFlags: true,
             ignoreArgv: rejectPrototypeFlag,
             parameters: ["<file>"],
-            flags: { cd: { type: String, default: process.cwd() } },
+            flags: {
+              cd: { type: String, default: process.cwd() },
+              home: { type: String },
+            },
             help: {
               description: "check all local floor rules without Jev or network",
+            },
+          }),
+          command({
+            name: "amend",
+            strictFlags: true,
+            ignoreArgv: rejectPrototypeFlag,
+            parameters: ["<name>"],
+            flags: {
+              file: { type: String },
+              cd: { type: String, default: process.cwd() },
+              home: { type: String },
+            },
+            help: {
+              description:
+                "append a dated AMEND section without changing the ticket id",
             },
           }),
           command({
@@ -5733,6 +5951,16 @@ async function parseAgx() {
         _: parsed._,
       } satisfies {
         command: "ticket-lint";
+        flags: typeof parsed.flags;
+        _: typeof parsed._;
+      };
+    if (parsed.command === "amend")
+      return {
+        command: "ticket-amend",
+        flags: parsed.flags,
+        _: parsed._,
+      } satisfies {
+        command: "ticket-amend";
         flags: typeof parsed.flags;
         _: typeof parsed._;
       };
@@ -6036,6 +6264,43 @@ async function main(): Promise<number | undefined> {
         `agx: marked ${gc.removed} abandoned run(s) and removed ${gc.removed} stale marker(s)`,
       );
   }
+  if (argv.command === "ticket-amend")
+    return ticketAmendCommand(
+      argv._.name,
+      argv.flags.file,
+      argv.flags.cd,
+      argv.flags.home,
+    );
+  if (argv.command === "dispatch" && argv.flags.amend !== undefined)
+    return amendRunningCommand(
+      argv.flags.amend,
+      argv.flags.file,
+      argv.flags.cd,
+      argv.flags.home,
+      argv.flags.timeoutS,
+      argv.flags.timeoutReason,
+    );
+  if (argv.command === "dispatch" && argv.flags.ticket !== undefined) {
+    if (argv.flags.promptFile !== undefined)
+      fatal("dispatch accepts --ticket or --prompt-file, not both");
+    const path = resolveTicketFile(
+      argv.flags.ticket,
+      argv.flags.cd ?? process.cwd(),
+      argv.flags.home,
+    );
+    const previous = latestTicketRun(path);
+    if (
+      previous?.run_id !== undefined &&
+      previous.worker?.session !== undefined
+    )
+      return resumeCommand(
+        previous.run_id,
+        amendmentMessage(path, previous.run_id),
+        argv.flags.timeoutS,
+        argv.flags.timeoutReason,
+      );
+    argv.flags.promptFile = path;
+  }
   // Cleye leaves excess positionals in argv._ (writing-bun-scripts BG1); result and grade take one.
   let positionals = 0;
   if (argv.command === "record") positionals = 2;
@@ -6128,8 +6393,11 @@ async function main(): Promise<number | undefined> {
     return f.detach === true ? detachDispatch(flags, rawArgs) : run(flags);
   }
   if (argv.command === "ticket-lint") {
+    const lintPath = existsSync(argv._.file)
+      ? argv._.file
+      : resolveTicketFile(argv._.file, argv.flags.cd, argv.flags.home);
     const lintGrade = lintTicket(
-      readFileSync(argv._.file, "utf8"),
+      readFileSync(lintPath, "utf8"),
       resolve(argv.flags.cd),
     );
     for (const line of renderTicketLint(lintGrade))
@@ -6143,18 +6411,20 @@ async function main(): Promise<number | undefined> {
   if (argv.command === "ticket-new" || argv.command === "ticket-ls") {
     const root = ticketRoot(argv.flags.cd);
     if (root === undefined) fatal(`no jj/git repository at ${argv.flags.cd}`);
+    const home = ticketHome(root, argv.flags.cd, argv.flags.home);
     if (argv.command === "ticket-ls") {
+      process.stderr.write(`agx: ticket home: ${home}\n`);
       process.stdout.write(
         `${JSON.stringify(
-          listTickets(
-            root,
+          listTicketsAtHome(
+            home,
             readAllLog().filter((line) => line.kind === "run"),
           ),
         )}\n`,
       );
       return 0;
     }
-    const path = newTicket(root, argv._.name, argv.flags.label ?? []);
+    const path = newTicketAtHome(home, argv._.name, argv.flags.label ?? []);
     if (path instanceof Error) fatal(path.message);
     process.stdout.write(`${path}\n`);
     return 0;
@@ -6267,11 +6537,12 @@ async function main(): Promise<number | undefined> {
       fatal(
         `--timeout-s above ${EXTENDED_TIMEOUT_THRESHOLD_S} seconds requires --timeout-reason <why>`,
       );
-    return resumeCommand(
+    return resumeMode(
       argv.flags.resume,
       promptFile,
       timeoutS,
       timeoutReason,
+      argv.flags.repick === true,
     );
   }
   if (argv.command === "grade")

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2
+
+- Restrict the Windows winget-cache cleanup root to `%TEMP%\WinGet`, excluding installed portable packages and links under `%LOCALAPPDATA%\Microsoft\WinGet`.
+
 ## 0.4.1
 
 - Run Windows host PowerShell probes from a temporary script file over SSH and ignore WSL registry entries without a BasePath, preserving the C: measurement.

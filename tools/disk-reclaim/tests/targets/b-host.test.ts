@@ -5,7 +5,11 @@ import { jsonOf } from "../../../shared/src/zod.ts";
 import { Plan } from "../../src/model.ts";
 import { cliEnv } from "../fixtures/cli-env.ts";
 import { tempRoot } from "../fixtures/temp.ts";
-import { hostAction, hostProbe } from "../../src/targets/host-powershell.ts";
+import {
+  hostAction,
+  hostFunctions,
+  hostProbe,
+} from "../../src/targets/host-powershell.ts";
 import {
   classifySwaps,
   createHostTarget,
@@ -82,6 +86,23 @@ test("PowerShell selection preserves young temp files, junctions, and all virtua
     "powercfg.exe /h off",
   );
   expect(hostAction("orphan-swap", "C:\\it's\\swap.vhdx")).toContain("it''s");
+});
+test("host cleanup roots exclude installed WinGet portable packages and links", () => {
+  const rootBlock = hostFunctions.match(/\$roots=@\{([\s\S]*?)\n\}/u)?.[1];
+  expect(rootBlock).toBeDefined();
+  if (rootBlock === undefined) return;
+  const rootPaths = [...rootBlock.matchAll(/@\(([^)]*)\)/gu)].flatMap((entry) =>
+    [...(entry[1] ?? "").matchAll(/"([^"]+)"|'([^']+)'/gu)].map(
+      (path) => path[1] ?? path[2] ?? "",
+    ),
+  );
+  expect(rootPaths).toContain("$env:TEMP\\WinGet");
+  expect(
+    rootPaths.filter((path) =>
+      /\\WinGet\\(?:Packages|Links)(?:\\|$)/iu.test(path),
+    ),
+  ).toEqual([]);
+  expect(rootPaths).not.toContain("$env:LOCALAPPDATA\\Microsoft\\WinGet");
 });
 test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gates approvals", async () => {
   const root = tempRoot("reclaim-host-");

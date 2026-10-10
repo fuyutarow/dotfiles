@@ -15,7 +15,9 @@ function Files($root) {
   }
 }
 $roots=@{
-  'winget-cache'=@("$env:LOCALAPPDATA\Microsoft\WinGet")
+  # WinGet's transient cache lives under TEMP. The LOCALAPPDATA\Microsoft\WinGet
+  # tree also contains persistent portable installs in Packages and Links.
+  'winget-cache'=@("$env:TEMP\WinGet")
   'user-temp'=@($env:TEMP)
   'windows-temp'=@("$env:WINDIR\Temp")
   'delivery-optimization'=@("$env:WINDIR\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache", "$env:ProgramData\Microsoft\Windows\DeliveryOptimization\Cache")

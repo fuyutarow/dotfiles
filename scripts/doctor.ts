@@ -92,7 +92,7 @@ export type Ctx = {
   dotfiles: string;
   isMac: boolean;
   isWsl: boolean;
-  /** Plain Linux (neither macOS nor WSL): a box scripts/linux-init.ts sets up with Brewfile.core only. */
+  /** Linux using linux:init / Brewfile.core via mise, including WSL opted into that installer. */
   isCoreBox: boolean;
 };
 
@@ -126,7 +126,7 @@ async function run(
   timedOut: boolean;
   missing: boolean;
 }> {
-  if (Bun.which(cmd[0] ?? "") === undefined) {
+  if (Bun.which(cmd[0] ?? "") === null) {
     return { code: 127, out: "", err: "", timedOut: false, missing: true };
   }
   const sig = AbortSignal.timeout(opts.ms);
@@ -259,18 +259,27 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
       rmSync(scratch, { recursive: true, force: true });
     },
   };
-  const r = await run(["bun", join(ctx.dotfiles, "scripts/render-home.ts")], {
-    ms: 30_000,
-    env: {
-      HOME: scratch,
-      DOTFILES: ctx.dotfiles,
-      CLAUDE_SETTINGS_PRIVATE: join(
-        ctx.home,
-        ".claude",
-        "settings.private.json",
-      ),
+  const r = await run(
+    [
+      join(ctx.dotfiles, "scripts/bun-exec.sh"),
+      join(ctx.dotfiles, "scripts/render-home.ts"),
+    ],
+    {
+      ms: 30_000,
+      env: {
+        HOME: scratch,
+        COMMAND_TARGET_HOME: ctx.home,
+        MISE_DATA_DIR:
+          process.env.MISE_DATA_DIR ?? join(ctx.home, ".local/share/mise"),
+        DOTFILES: ctx.dotfiles,
+        CLAUDE_SETTINGS_PRIVATE: join(
+          ctx.home,
+          ".claude",
+          "settings.private.json",
+        ),
+      },
     },
-  });
+  );
   if (r.timedOut || r.code !== 0) {
     return warn(
       "rendered",
@@ -325,6 +334,11 @@ export async function checkSkills(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkBrew(ctx: Ctx): Promise<Finding> {
+  if (ctx.isCoreBox)
+    return skip(
+      "brew",
+      "linux:init installs Brewfile.core through mise; Homebrew is not required — see core-tools",
+    );
   const r = await run(
     [
       "brew",
@@ -338,7 +352,11 @@ export async function checkBrew(ctx: Ctx): Promise<Finding> {
     { ms: 180_000 },
   );
   if (r.missing)
-    return fail("brew", "Homebrew is not on PATH", "see README → bootstrap");
+    return fail(
+      "brew",
+      "Homebrew is required by this host's Brewfile mode but is not on PATH",
+      "install Homebrew (README → bootstrap), then mise run install:tools",
+    );
   if (r.timedOut) return warn("brew", "brew bundle check timed out after 180s");
   if (r.code === 0) return pass("brew", "every Brewfile entry is installed");
   const missing = (r.out + r.err)
@@ -832,7 +850,7 @@ export async function checkBunFloor(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
-  if (Bun.which("codex") === undefined)
+  if (Bun.which("codex") === null)
     return skip("codex-remote", "codex not installed");
   const declared = await readDeclared(ctx.dotfiles);
   if (declared instanceof Error)
@@ -841,7 +859,17 @@ export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
       declared.message,
       "fix agents/codex/app-server.toml",
     );
-  const lines = drift(declared, await readLive(ctx.home));
+  const live = await readLive(ctx.home);
+  const lines = drift(declared, live);
+  if (live.unmanaged === true)
+    return {
+      ...warn(
+        "codex-remote",
+        "running app-server is not managed by codex app-server daemon; it may belong to a desktop SSH session, so daemon settings cannot repair it safely",
+      ),
+      lines,
+      fix: "restart it as a managed daemon when the desktop session is not in use",
+    };
   if (lines.length === 0)
     return pass(
       "codex-remote",
@@ -1088,16 +1116,14 @@ export const CHECKS: Check[] = [
     run: checkBrew,
     applies: (c) =>
       c.isCoreBox
-        ? "plain Linux gets Brewfile.core from mise (linux:init), not brew — see core-tools"
+        ? "linux:init installs Brewfile.core through mise; Homebrew is not required — see core-tools"
         : null,
   },
   {
     name: "core-tools",
     run: checkCoreTools,
     applies: (c) =>
-      c.isCoreBox
-        ? null
-        : "plain Linux only (Mac/WSL: the brew check covers it)",
+      c.isCoreBox ? null : "Homebrew mode: the brew check covers it",
   },
   { name: "deps", run: checkDeps, applies: always },
   { name: "bins", run: checkBins, applies: always },
@@ -1137,7 +1163,7 @@ export const CHECKS: Check[] = [
     name: "ccc-db-map",
     run: checkCccDbMap,
     applies: (c) =>
-      c.isCoreBox ? "ccc is not a core tool (Brewfile.core)" : null,
+      c.isCoreBox && !c.isWsl ? "ccc is not a core tool (Brewfile.core)" : null,
   },
   {
     name: "iterm2",
@@ -1169,7 +1195,9 @@ async function main(): Promise<void> {
     dotfiles: process.env.DOTFILES ?? join(home, "dotfiles"),
     isMac: process.platform === "darwin",
     isWsl: /microsoft/iu.test(release()), // same test as link-dots.ts: `uname -r`
-    isCoreBox: process.platform === "linux" && !/microsoft/iu.test(release()),
+    isCoreBox:
+      process.platform === "linux" &&
+      (!/microsoft/iu.test(release()) || existsSync(join(home, RUNTIME_BIN))),
   };
   const only = (process.env.DOCTOR_ONLY ?? "")
     .split(",")

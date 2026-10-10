@@ -40,7 +40,7 @@ function doctor(
   only: string,
   env: { HOME: string; DOTFILES: string; PATH?: string },
 ): { code: number; out: string } {
-  const proc = Bun.spawnSync(["bun", SCRIPT], {
+  const proc = Bun.spawnSync([process.execPath, SCRIPT], {
     // bun >= 1.4 writes its runtime transpiler cache to $HOME/.bun/install/cache/@t@/*.pile
     // (measured 2026-09-27; 1.3.14 did not). That is the runtime writing, not the doctor, so it
     // is pointed outside the fixture HOME to keep the "writes nothing" assertions about doctor.
@@ -73,6 +73,57 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("brew: missing executable gives a named repair rather than a crash", () => {
+    const home = tmp("doctor-home-");
+    const r = doctor("brew", {
+      HOME: home,
+      DOTFILES: REPO,
+      PATH: tmp("doctor-empty-path-"),
+    });
+    if (process.platform === "linux" && !/microsoft/iu.test(release())) {
+      expect(r.out).toContain("SKIP");
+    } else {
+      expect(r.code).toBe(1);
+      expect(r.out).toContain("Homebrew is required");
+      expect(r.out).toContain("mise run install:tools");
+    }
+    expect(r.out).not.toContain("check crashed");
+  });
+
+  test.skipIf(process.platform !== "linux")(
+    "brew: linux:init's runtime directory declares mise core mode",
+    () => {
+      const home = tmp("doctor-home-");
+      mkdirSync(join(home, ".local/share/dotfiles/runtime/bin"), {
+        recursive: true,
+      });
+      const r = doctor("brew", {
+        HOME: home,
+        DOTFILES: REPO,
+        PATH: tmp("doctor-empty-path-"),
+      });
+      expect(r.code).toBe(0);
+      expect(r.out).toContain("SKIP");
+    },
+  );
+
+  test("codex-remote: unmanaged server warns without taking it over", () => {
+    const home = tmp("doctor-home-");
+    const bin = tmp("doctor-fake-path-");
+    writeFileSync(join(bin, "codex"), "#!/bin/sh\nexit 99\n");
+    writeFileSync(
+      join(bin, "ps"),
+      "#!/bin/sh\nprintf '%s\\n' 'codex -c features.code_mode_host=true app-server --listen unix://'\n",
+    );
+    chmodSync(join(bin, "codex"), 0o755);
+    chmodSync(join(bin, "ps"), 0o755);
+    const r = doctor("codex-remote", { HOME: home, DOTFILES: REPO, PATH: bin });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("WARN  codex-remote");
+    expect(r.out).toContain(
+      "restart it as a managed daemon when the desktop session is not in use",
+    );
+  });
   test("post-merge runs codex:config after relinking dotfiles", () => {
     const mise = readFileSync(join(REPO, "mise.toml"), "utf8");
     const hook =

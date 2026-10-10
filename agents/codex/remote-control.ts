@@ -16,7 +16,11 @@ import { attempt } from "../hooks/attempt.ts";
 
 const RecordSchema = z.record(z.string(), z.unknown());
 
-export type Live = { persisted: boolean; running: boolean | null };
+export type Live = {
+  persisted: boolean;
+  running: boolean | null;
+  unmanaged?: boolean;
+};
 
 const DAEMON_DIR = (home: string) => join(home, ".codex/app-server-daemon");
 
@@ -49,7 +53,31 @@ export async function readLive(home: string): Promise<Live> {
   const pidFile = await readJson(join(DAEMON_DIR(home), "app-server.pid"));
   const persisted = settings?.remoteControlEnabled === true;
   const pid = pidFile?.pid;
-  if (typeof pid !== "number") return { persisted, running: null };
+  if (typeof pid !== "number") {
+    const proc = Bun.spawn(
+      ["ps", "-u", String(process.getuid?.() ?? 0), "-o", "args="],
+      {
+        stdout: "pipe",
+        stderr: "ignore",
+        timeout: 10_000,
+      },
+    );
+    const [args, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      proc.exited,
+    ]);
+    const unmanaged =
+      code === 0 &&
+      args
+        .split("\n")
+        .some(
+          (line) =>
+            /^(?:\S*\/)?codex(?:\s+-c\s+\S+)*\s+app-server(?:\s|$)/u.test(
+              line.trim(),
+            ) && !/(?:^|\s)app-server\s+(?:daemon|proxy)(?:\s|$)/u.test(line),
+        );
+    return { persisted, running: null, unmanaged };
+  }
   // `ps -o args=` is the same on Linux and macOS; a dead pid prints nothing and exits 1.
   const proc = Bun.spawn(["ps", "-o", "args=", "-p", String(pid)], {
     stdout: "pipe",

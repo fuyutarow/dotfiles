@@ -24,6 +24,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   symlinkSync,
   unlinkSync,
@@ -198,7 +199,12 @@ await $`${MISE} run cc:install-mcp`.cwd(DOTFILES);
 // connection drops (a container's sshd has no systemd unit to reload).
 const SSHD_DROPIN = "/etc/ssh/sshd_config.d/50-dotfiles.conf";
 if (await sudoIsOurs()) {
-  await $`sudo -n install -m 644 ${join(DOTFILES, "wsl/sshd-dotfiles.conf")} ${SSHD_DROPIN}`;
+  const source = join(DOTFILES, "wsl/sshd-dotfiles.conf");
+  // WSL's link:dots already links this destination to the source; GNU install refuses itself.
+  const alreadyLinked =
+    existsSync(SSHD_DROPIN) &&
+    realpathSync(SSHD_DROPIN) === realpathSync(source);
+  if (!alreadyLinked) await $`sudo -n install -m 644 ${source} ${SSHD_DROPIN}`;
   const listener = (await $`pgrep -f "^sshd: .*\[listener\]"`.nothrow().text())
     .trim()
     .split("\n")[0];

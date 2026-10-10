@@ -23,7 +23,7 @@ const SCRIPT = join(import.meta.dir, "..", "render-home.ts");
 const ROOT = join(import.meta.dir, "..", "..");
 
 function run(env: Record<string, string>): { out: string; code: number } {
-  const proc = Bun.spawnSync(["bun", SCRIPT], {
+  const proc = Bun.spawnSync([process.execPath, SCRIPT], {
     env: { ...process.env, ...env },
     maxBuffer: 4 * 1024 * 1024,
   });
@@ -109,6 +109,29 @@ function cleanup(...dirs: string[]): void {
 }
 
 describe("render-home: base only", () => {
+  test("reference render validates commands in live HOME and writes only scratch HOME", () => {
+    const dotfiles = makeDotfiles({
+      statusLine: { type: "command", command: "~/.bun/bin/statusline" },
+    });
+    const live = makeHome();
+    const scratch = mkdtempSync(join(tmpdir(), "render-reference-"));
+    expect(run({ HOME: scratch, DOTFILES: dotfiles }).code).toBe(1);
+    const r = run({
+      HOME: scratch,
+      DOTFILES: dotfiles,
+      COMMAND_TARGET_HOME: live,
+    });
+    expect(r.code).toBe(0);
+    expect(readDest(scratch).statusLine).toEqual({
+      type: "command",
+      command: "~/.bun/bin/statusline",
+    });
+    expect(existsSync(dest(live))).toBe(false);
+    expect(readFileSync(join(live, ".bun/bin/statusline"), "utf8")).toBe(
+      "#!/bin/sh\n",
+    );
+    cleanup(dotfiles, live, scratch);
+  });
   test("renders the committed base verbatim when no overlay exists", () => {
     const dotfiles = makeDotfiles({ model: "opus", hooks: { PreToolUse: [] } });
     const home = makeHome();

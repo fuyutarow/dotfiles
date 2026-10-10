@@ -38,6 +38,7 @@
 // it at fixtures:
 //   DOTFILES                  repo root            (default: $HOME/dotfiles)
 //   HOME                      destination root     (default: os.homedir())
+//   COMMAND_TARGET_HOME       command validation root (default: HOME; doctor uses the live HOME)
 //   CLAUDE_SETTINGS_PRIVATE   overlay path         (default: $HOME/.claude/settings.private.json)
 //
 // MERGE SEMANTICS (settings): top-level keys only, and an overlay key REPLACES the base key
@@ -93,6 +94,7 @@ function fatal(line: string, ...more: string[]): never {
 }
 
 const home = process.env.HOME ?? homedir();
+const commandTargetHome = process.env.COMMAND_TARGET_HOME ?? home;
 const dotfiles = process.env.DOTFILES ?? `${home}/dotfiles`;
 const basePath = `${dotfiles}/agents/claude/settings.json`;
 const overlayPath =
@@ -166,8 +168,8 @@ function firstToken(
 }
 
 function expandHome(path: string): string {
-  if (path === "~") return home;
-  if (path.startsWith("~/")) return `${home}/${path.slice(2)}`;
+  if (path === "~") return commandTargetHome;
+  if (path.startsWith("~/")) return `${commandTargetHome}/${path.slice(2)}`;
   return path;
 }
 
@@ -220,7 +222,7 @@ function validateCommandTargets(
     const missing = missingTarget(command);
     if (missing === undefined) continue;
     let repair: string;
-    if (missing.startsWith(`${home}/.bun/bin/`)) {
+    if (missing.startsWith(`${commandTargetHome}/.bun/bin/`)) {
       repair = `run \`mise run deps\` first (it creates ${missing})`;
     } else {
       repair = `install or restore the executable at ${missing}`;

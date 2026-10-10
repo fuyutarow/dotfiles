@@ -18,6 +18,13 @@ import { attempt, errorMessage } from "./attempt.ts";
 import { bashCwd, decidePre, findExe, readStdinJson } from "./lib.ts";
 import { strAt } from "./narrow.ts";
 import {
+  coordinatorPath,
+  insidePath,
+  physicalPath,
+  readPath,
+  shellQuote,
+} from "./read-path.ts";
+import {
   type ParsedShell,
   type ShellCommand,
   effective,
@@ -187,7 +194,11 @@ function rawSearchBySyntax(parsed: ParsedShell, command: string): boolean {
   if (isRoutedStreamFilter(parsed.commands.filter((c) => !c.nested)))
     return false;
   return parsed.commands.some(
-    (c) => commandSearches(c, command) && !fileScopedSearch(c),
+    (c) =>
+      commandSearches(c, command) &&
+      ((c.dynamic &&
+        parsed.commands.some((step) => step.assignments.length > 0)) ||
+        !fileScopedSearch(c)),
   );
 }
 
@@ -228,15 +239,18 @@ function fileScopedSearch(c: ShellCommand): boolean {
   return (
     operands.length > 0 &&
     operands.every((operand) => {
-      const path = resolveSearchTarget(operand, c.cwd);
-      return existsSync(path) && statSync(path).isFile();
+      const target = readPath(operand, c);
+      return (
+        target.resolved &&
+        statSync(target.path, { throwIfNoEntry: false })?.isFile() === true
+      );
     })
   );
 }
 
-function isRawSearch(command: string | undefined): boolean {
+function isRawSearch(command: string | undefined, cwd: string): boolean {
   if (command === undefined || command === "") return false;
-  const parsed = parseShell(command);
+  const parsed = parseShell(command, cwd);
   if (parsed !== undefined) return rawSearchBySyntax(parsed, command);
   if (ROUTED_STREAM_FILTER.test(command)) return false;
   return (
@@ -312,16 +326,8 @@ function isRecursiveOption(arg: string): boolean {
     arg === "--dereference-recursive" ||
     arg === "-r" ||
     arg === "-R" ||
-    (arg.includes("r") && /^-[^-]/u.test(arg))
+    (/[rR]/u.test(arg) && /^-[^-]/u.test(arg))
   );
-}
-
-function resolveSearchTarget(operand: string, cwd: string): string {
-  let expanded = operand;
-  if (operand === "~") expanded = homedir();
-  else if (operand.startsWith("~/"))
-    expanded = join(homedir(), operand.slice(2));
-  return isAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded);
 }
 
 /** File/directory operands searched by one parsed search command; empty means stdin. */
@@ -402,11 +408,25 @@ function searchTargets(payload: unknown): string[] {
   const parsed = parseShell(command, cwd);
   if (parsed === undefined) return [startPath(payload)];
   if (isRoutedStreamFilter(parsed.commands.filter((c) => !c.nested))) return [];
-  const targets = parsed.commands.flatMap((c) =>
-    commandSearches(c, command) && !fileScopedSearch(c)
-      ? searchOperands(c).map((operand) => resolveSearchTarget(operand, c.cwd))
-      : [],
-  );
+  const targets = parsed.commands.flatMap((c) => {
+    if (!commandSearches(c, command)) return [];
+    // Shell-local assignments are not the hook environment. Do not reuse its values after one.
+    if (
+      c.dynamic &&
+      parsed.commands.some((step) => step.assignments.length > 0)
+    )
+      return [physicalPath(c.cwd)];
+    if (fileScopedSearch(c)) return [];
+    const root = registeredProject(c.cwd);
+    return searchOperands(c).flatMap((operand) => {
+      const target = readPath(operand, c);
+      if (!target.resolved && !coordinatorPath(target.path))
+        return [physicalPath(c.cwd)];
+      if (root !== null && !insidePath(target.path, physicalPath(root)))
+        return [];
+      return [target.path];
+    });
+  });
   // A malformed router/filter pipeline is still a repository search attempt. Only the one
   // explicitly accepted stream-filter shape above is exempt; preserve the gate for other forms.
   const hasRouter = parsed.commands.some((c) => {
@@ -415,7 +435,12 @@ function searchTargets(payload: unknown): string[] {
       eff !== undefined && (eff.name === "rr" || eff.name === "repo-retrieve")
     );
   });
-  return targets.length === 0 && hasRouter ? [resolve(cwd)] : targets;
+  const unroutedFilter = parsed.commands.some(
+    (c) => commandSearches(c, command) && searchOperands(c).length === 0,
+  );
+  return targets.length === 0 && hasRouter && unroutedFilter
+    ? [resolve(cwd)]
+    : targets;
 }
 
 /**
@@ -471,6 +496,37 @@ function cccIsAvailable(): boolean {
   );
 }
 
+/** Concrete repair for the observed query, rather than a menu of placeholder commands. */
+function searchPattern(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "-e" || arg === "--regexp" || arg === "--") return args[i + 1];
+    if (arg.startsWith("--regexp=")) return arg.slice(9);
+    if (/^-e.+/u.test(arg)) return arg.slice(2);
+    if (arg.startsWith("-")) i += optionValue(args, i);
+    else return arg;
+  }
+  return undefined;
+}
+
+function rewrittenSearch(payload: unknown, project?: string): string {
+  const command = strAt(payload, "tool_input", "command") ?? "";
+  const parsed = parseShell(command, strAt(payload, "cwd") ?? process.cwd());
+  const c = parsed?.commands.find(
+    (segment) =>
+      commandSearches(segment, command) && !fileScopedSearch(segment),
+  );
+  const eff = c === undefined ? undefined : effective(c);
+  const scope =
+    project === undefined ? "" : ` --project ${shellQuote(project)}`;
+  if (eff !== undefined && ENUMERATORS.has(eff.name))
+    return `${ROUTER_COMMAND} files '*'${scope}`;
+  let query = strAt(payload, "tool_input", "pattern");
+  if (eff !== undefined && SEARCH_PROGRAMS.has(eff.name))
+    query = searchPattern(eff.args);
+  return `${ROUTER_COMMAND} regex ${shellQuote(query ?? command)}${scope}`;
+}
+
 function main(): void {
   const payload = readStdinJson();
   if (payload === undefined) {
@@ -478,7 +534,7 @@ function main(): void {
     decidePre(
       "deny",
       "search-route: hook error while classifying search (invalid JSON payload) — failing closed. " +
-        "Fix agents/hooks/enforce-search-route.ts in dotfiles before retrying raw search.",
+        `Fix agents/hooks/enforce-search-route.ts in dotfiles before retrying raw search. Rewrite: ${ROUTER_COMMAND} files '*'.`,
     );
   }
   const tool = strAt(payload, "tool_name");
@@ -486,7 +542,10 @@ function main(): void {
 
   if (
     tool === "Bash" &&
-    !isRawSearch(strAt(payload, "tool_input", "command"))
+    !isRawSearch(
+      strAt(payload, "tool_input", "command"),
+      strAt(payload, "cwd") ?? process.cwd(),
+    )
   ) {
     return;
   }
@@ -514,7 +573,7 @@ function main(): void {
       "deny",
       `search-route: configuration fault — required router is missing at ${ROUTER}. ` +
         `Do not bypass this gate with Python, Node, shell loops, or another search ` +
-        `implementation. Restore tools/repo-retrieve/src/repo-retrieve.ts in dotfiles, then retry.`,
+        `implementation. Restore tools/repo-retrieve/src/repo-retrieve.ts in dotfiles, then retry. Rewrite: repo-retrieve files '*'.`,
     );
   }
 
@@ -523,6 +582,7 @@ function main(): void {
   decidePre(
     "deny",
     `search-route: raw ${tool} search is disabled in operational ccc project ${project}. ` +
+      `Rewrite: ${rewrittenSearch(payload, project)}. ` +
       `Declare the query shape through ${ROUTER_COMMAND}: ` +
       `${ROUTER_COMMAND} text '<exact text>'; ` +
       `${ROUTER_COMMAND} regex '<regex>'; ` +
@@ -549,7 +609,7 @@ if (!r.ok) {
     "deny",
     `search-route: hook error while classifying search ` +
       `(${errorMessage(r.error)}) — failing closed. ` +
-      `Fix agents/hooks/enforce-search-route.ts in dotfiles before retrying raw search.`,
+      `Fix agents/hooks/enforce-search-route.ts in dotfiles before retrying raw search. Rewrite: ${ROUTER_COMMAND} files '*'.`,
   );
 }
 process.exit(0);

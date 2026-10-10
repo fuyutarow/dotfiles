@@ -31,9 +31,19 @@
 // FAIL CLOSED (run.sh --fail-closed).
 
 import { at, num, strAt } from "../../hooks/narrow.ts";
-import { effective, parseShell } from "../../hooks/shell-syntax.ts";
-import { existsSync, statSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import {
+  type ShellCommand,
+  effective,
+  parseShell,
+} from "../../hooks/shell-syntax.ts";
+import {
+  coordinatorPath,
+  insidePath,
+  readPath,
+  readRepositoryRoot,
+  shellQuote,
+} from "../../hooks/read-path.ts";
+import { statSync } from "node:fs";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
@@ -75,22 +85,46 @@ export function backgroundReason(
 }
 
 /** A small, read-only file view should not inherit a slow run from the command history. */
-export function isSmallFileViewer(command: string): boolean {
-  const parsed = parseShell(command);
-  if (parsed === undefined || parsed.commands.length !== 1) return false;
-  const c = parsed.commands[0];
-  if (c === undefined || c.nested || c.dynamic || c.redirects.length > 0)
-    return false;
-  const eff = effective(c);
-  if (eff === undefined) return false;
-  const operands = viewerOperands(eff.name, eff.args);
-  if (operands.length === 0) return false;
-  return operands.every((operand) => {
-    const path = isAbsolute(operand) ? operand : resolve(c.cwd, operand);
-    if (!existsSync(path)) return false;
-    const st = statSync(path);
-    return st.isFile() && st.size < SMALL_VIEWER_MAX_BYTES;
+export function isSmallFileViewer(
+  command: string,
+  cwd = process.cwd(),
+): boolean {
+  const parsed = parseShell(command, cwd);
+  if (parsed === undefined || parsed.commands.length === 0) return false;
+  const compound = parsed.commands.length > 1;
+  const repo = readRepositoryRoot(cwd);
+  let viewed = false;
+  const allowed = parsed.commands.every((c) => {
+    if (
+      c.nested ||
+      c.header ||
+      c.leading.length > 0 ||
+      c.assignments.length > 0 ||
+      c.redirects.length > 0 ||
+      c.heredocs.length > 0 ||
+      !["", ";", "&&", "||", "|", "\n"].includes(c.sep)
+    )
+      return false;
+    const eff = effective(c);
+    if (eff === undefined) return false;
+    if (compound && eff.name === "echo")
+      return !c.dynamic || eff.args.every((arg) => readPath(arg, c).resolved);
+    const operands = viewerOperands(eff.name, eff.args);
+    if (operands.length === 0) return false;
+    viewed = true;
+    return operands.every((operand) => {
+      const target = readPath(operand, c);
+      if (!target.resolved) return false; // Size must be measured, never inferred for unknown paths.
+      if (
+        (compound || c.dynamic) &&
+        (!coordinatorPath(target.path) || insidePath(target.path, repo))
+      )
+        return false;
+      const st = statSync(target.path, { throwIfNoEntry: false });
+      return st?.isFile() === true && st.size < SMALL_VIEWER_MAX_BYTES;
+    });
   });
+  return allowed && viewed && new JobScanner(command).run() === 0;
 }
 
 function viewerOperands(name: string, args: string[]): string[] {
@@ -101,7 +135,8 @@ function viewerOperands(name: string, args: string[]): string[] {
   if (
     name === "tail" &&
     args.some(
-      (a) => a === "-f" || a === "--follow" || a.startsWith("--follow="),
+      (a) =>
+        /^-[^-]*[fF]/u.test(a) || a === "--follow" || a.startsWith("--follow="),
     )
   )
     return [];
@@ -113,7 +148,11 @@ function viewerOperands(name: string, args: string[]): string[] {
       ? []
       : args.slice(filter + 1).filter((arg) => arg !== "-");
   }
-  if (name === "sed" && args.includes("-n")) {
+  if (
+    name === "sed" &&
+    args.includes("-n") &&
+    !args.some((a) => /^-i|^--in-place/u.test(a))
+  ) {
     const script = args.findIndex((a) => a !== "-n" && !a.startsWith("-"));
     return script < 0 ? [] : args.slice(script + 1).filter((a) => a !== "-");
   }
@@ -197,6 +236,7 @@ class JobScanner {
   /** Unwaited-job count of each open scope; index 0 is the script itself. */
   private readonly scopes: number[] = [0];
   private unwaited = 0;
+  private readonly jobOperators: number[] = [];
   private heredocs: { delim: string; strip: boolean }[] = [];
 
   constructor(private readonly s: string) {}
@@ -206,6 +246,14 @@ class JobScanner {
     while (this.i < this.s.length) this.step();
     this.endWord();
     return this.unwaited + this.scopes.reduce((a, b) => a + b, 0);
+  }
+
+  /** Run first; each actual job operator becomes a sequential separator, quotes stay data. */
+  observedCommand(): string {
+    return this.s
+      .split("")
+      .map((ch, index) => (this.jobOperators.includes(index) ? ";" : ch))
+      .join("");
   }
 
   private get top(): number {
@@ -329,6 +377,7 @@ class JobScanner {
       this.i++; // >&2  2>&1  <&3
       this.cmdStart = false;
     } else {
+      this.jobOperators.push(this.i);
       this.scopes[this.top] = (this.scopes[this.top] ?? 0) + 1;
       this.i++;
       this.cmdStart = true;
@@ -399,6 +448,42 @@ export function unwaitedJobs(command: string): string | undefined {
   );
 }
 
+function observedBackgroundCommand(command: string, depth = 0): string {
+  const scanner = new JobScanner(command);
+  scanner.run();
+  let rewritten = scanner.observedCommand();
+  if (depth >= 6) return rewritten;
+  const parsed = parseShell(command);
+  for (const c of parsed?.commands.filter((segment) => !segment.nested) ?? []) {
+    const eff = effective(c);
+    if (
+      eff === undefined ||
+      (!SHELL_NAMES.has(eff.name) && eff.name !== "eval")
+    )
+      continue;
+    const texts = [
+      ...new Set([...nestedScriptTexts(c.rawWords.join(" ")), ...c.heredocs]),
+    ];
+    for (const script of texts)
+      rewritten = replaceNestedScript(rewritten, c, script, depth);
+  }
+  return rewritten;
+}
+
+function replaceNestedScript(
+  command: string,
+  c: ShellCommand,
+  script: string,
+  depth: number,
+): string {
+  const rewritten = observedBackgroundCommand(script, depth + 1);
+  const raw = c.rawWords[c.words.indexOf(script)];
+  return command.replace(
+    raw ?? script,
+    raw === undefined ? rewritten : shellQuote(rewritten),
+  );
+}
+
 const payload = import.meta.main ? readStdinJson() : undefined;
 const input = at(payload, "tool_input");
 const isBash = strAt(payload, "tool_name") === "Bash";
@@ -421,8 +506,17 @@ const inner =
     ? unwaitedJobs(command)
     : undefined;
 // SINGLE-AXIS: one question (may a backgrounded call start work the harness cannot see?)
-if (inner !== undefined) decidePre("deny", `background-waits: ${inner}`);
-const historyForCall = isSmallFileViewer(command) ? undefined : measured;
+if (inner !== undefined)
+  decidePre(
+    "deny",
+    `background-waits: ${inner} Rewrite command: ${JSON.stringify(observedBackgroundCommand(command))} with run_in_background: true.`,
+  );
+const historyForCall = isSmallFileViewer(
+  command,
+  strAt(payload, "cwd") ?? process.cwd(),
+)
+  ? undefined
+  : measured;
 const why = isBash
   ? backgroundReason(input, historyForCall, isWorker)
   : undefined;
@@ -432,6 +526,7 @@ if (why !== undefined)
     "deny",
     `background-waits: this Bash call must not hold the session — ${why}. Resend it with ` +
       `run_in_background: true (you are re-invoked when it exits; read its output file then). ` +
+      `Rewrite command: ${JSON.stringify(command)} with run_in_background: true. ` +
       `The human should never have to press ctrl+b on a wait you started.`,
   );
 // Allowed in front: measure it (record-bash-duration.ts closes the record on PostToolUse).

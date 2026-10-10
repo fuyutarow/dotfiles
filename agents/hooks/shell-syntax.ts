@@ -32,6 +32,8 @@ export type Redirect = { readonly op: string; readonly target: string };
 export type ShellCommand = {
   /** Words after leading `NAME=value` assignments, quotes and escapes resolved. */
   words: string[];
+  /** Original word spelling, aligned with words, for quote-aware path expansion. */
+  rawWords: string[];
   assignments: string[];
   redirects: Redirect[];
   /** Heredoc bodies attached to this command — DATA, not commands. */
@@ -91,7 +93,7 @@ const REDIRECT_OPS = [
   "<",
 ];
 
-type Word = { text: string; quoted: boolean };
+type Word = { text: string; quoted: boolean; raw: string };
 type Pending = { delim: string; quoted: boolean; strip: boolean };
 type Operator = { op: string; len: number };
 /** The command being read, shared with the helpers that replace it at an operator. */
@@ -148,6 +150,7 @@ class Parser {
     this.carry = [];
     return {
       words: [],
+      rawWords: [],
       assignments: [],
       redirects: [],
       heredocs: [],
@@ -289,6 +292,7 @@ class Parser {
     const atStart = cur.words.length === 0 && !cur.header;
     if (atStart && !word.quoted && this.addReserved(cur, word.text)) return;
     cur.words.push(word.text);
+    cur.rawWords.push(word.raw);
   }
 
   /** A reserved word or `NAME=value` at the start of a command: true when it was consumed. */
@@ -349,10 +353,12 @@ class Parser {
   // --- words ---------------------------------------------------------------------------------
 
   private word(cur: ShellCommand): Word {
-    const w: Word = { text: "", quoted: false };
+    const start = this.i;
+    const w: Word = { text: "", quoted: false, raw: "" };
     while (this.i < this.src.length && this.err === undefined) {
       if (!this.wordPart(cur, w)) break;
     }
+    w.raw = this.src.slice(start, this.i);
     return w;
   }
 

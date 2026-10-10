@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,8 +8,14 @@ import {
   isSmallFileViewer,
   unwaitedJobs,
 } from "../enforce-background-waits.ts";
-import { recordEnd, recordStart } from "../bash-durations.ts";
+import {
+  commandKey,
+  recordEnd,
+  recordStart,
+  stepKeys,
+} from "../bash-durations.ts";
 import { AGX_WORKER_ENV } from "../../../../tools/shared/src/worker-env.ts";
+import { parseJson, strAt } from "../../../hooks/narrow.ts";
 
 // enforce-background-waits: a long or waiting foreground Bash call is denied with the resend to make.
 
@@ -80,6 +86,93 @@ describe("as a hook", () => {
 });
 
 describe("small-file viewer history exemption", () => {
+  test("compound reads inside a temporary repo remain subject to history from subdirectories", () => {
+    const root = realpathSync(mkdtempSync("/tmp/coordinator-repo-"));
+    const sub = join(root, "src");
+    mkdirSync(sub);
+    mkdirSync(join(root, ".cocoindex_code"));
+    writeFileSync(
+      join(root, ".cocoindex_code/settings.yml"),
+      "include_patterns: []\n",
+    );
+    const file = join(root, "output");
+    writeFileSync(file, "small\n");
+    expect(isSmallFileViewer(`cat ${file}; head ${file}`, sub)).toBe(false);
+    expect(isSmallFileViewer(`cat ${file}`, sub)).toBe(true); // Preserve the original single-file exemption.
+  });
+
+  test("coordinator variables, home paths and compound reads ignore slow history; other commands retain it", () => {
+    const root = realpathSync(mkdtempSync("/tmp/coordinator-reads-"));
+    const home = join(root, "home");
+    const scratch = join(root, "scratchpad");
+    const receipts = join(home, ".local/state/agx/worker-receipts");
+    const projectFiles = join(home, ".claude/projects/session");
+    const dir = join(root, "history");
+    for (const path of [scratch, receipts, projectFiles, dir])
+      mkdirSync(path, { recursive: true });
+    for (const file of [
+      join(scratch, "router-x.err"),
+      join(scratch, "x.output"),
+      join(scratch, "y.output"),
+      join(receipts, "r.json"),
+      join(projectFiles, "x.json"),
+    ])
+      writeFileSync(file, '{"x":1}\n');
+    writeFileSync(join(scratch, "large"), "x".repeat(1024 * 1024));
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: home,
+      S: scratch,
+      CLAUDE_BASH_DURATIONS_DIR: dir,
+    };
+    delete env[AGX_WORKER_ENV];
+    const allowed = [
+      "tail -n 3 $S/router-x.err",
+      'head -c 600 "${S}/router-x.err"',
+      `cat ${scratch}/x.output; tail -c 600 ${scratch}/y.output`,
+      "jq -r .x ~/.local/state/agx/worker-receipts/r.json",
+      "cat ~/.claude/projects/session/x.json && echo done && tail -n 3 $S/router-x.err",
+      'echo "$S"; cat $S/x.output',
+      "wc $S/x.output || head $S/y.output",
+      "sed -n 1p $S/x.output | cat $S/y.output",
+    ];
+    const denied = [
+      "sleep 200; cat x",
+      "grep -r foo .",
+      "rg foo",
+      "find . -name x",
+      "cat $S/large",
+      "tail -f $S/x.output",
+      "tail -F $S/x.output",
+      "tail -nf 3 $S/x.output",
+      "cat $UNKNOWN/x",
+      "cat $S/x.output; bun test",
+      "cat $S/x.output &",
+      "sed -n -i 1p $S/x.output",
+    ];
+    const keys = new Set(
+      [...allowed, ...denied].flatMap((command) =>
+        [commandKey(command)].concat(stepKeys(command)),
+      ),
+    );
+    for (const key of keys) {
+      if (key === undefined) continue;
+      recordStart(dir, key, key, 0);
+      recordEnd(dir, key, 7000);
+    }
+    for (const command of allowed)
+      expect({ command, output: decideWithEnv(command, env) }).toEqual({
+        command,
+        output: "",
+      });
+    for (const command of denied) {
+      const output = decideWithEnv(command, env);
+      expect(output).toContain('"permissionDecision":"deny"');
+      expect(output).toContain("Rewrite command:");
+      expect(output).toContain("run_in_background: true");
+    }
+  });
+
   test("allows small read-only viewers regardless of a slow command history", () => {
     const root = mkdtempSync(join(tmpdir(), "background-viewers-"));
     const dir = join(root, "history");
@@ -215,6 +308,26 @@ describe("unwaitedJobs", () => {
 describe("shell-level & as a hook", () => {
   const INCIDENT =
     "agx dispatch --resume run-123 --prompt-file /tmp/brief.md > /tmp/out.log 2>&1 &";
+
+  test.each([
+    INCIDENT,
+    "sleep 30 &\necho started",
+    "(sleep 30 &); wait",
+    "bash -c 'sleep 30 &'",
+    "bash <<EOF\nsleep 30 &\nEOF",
+    'eval "sleep 30 &"',
+  ])("prints an executable repair that passes for %s", (command) => {
+    const out = decide({ command, run_in_background: true });
+    const reason =
+      strAt(parseJson(out), "hookSpecificOutput", "permissionDecisionReason") ??
+      "";
+    const match = /Rewrite command: ("(?:\\.|[^"\\])*") with/u.exec(reason);
+    const rewritten = parseJson(match?.[1] ?? "");
+    expect(typeof rewritten).toBe("string");
+    if (typeof rewritten !== "string") return;
+    expect(unwaitedJobs(rewritten)).toBeUndefined();
+    expect(decide({ command: rewritten, run_in_background: true })).toBe("");
+  });
 
   test("denies the incident command in a backgrounded call, naming the rule and the fixes", () => {
     const out = decide({ command: INCIDENT, run_in_background: true });

@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { decisionOf, runHook, tempDir } from "./helpers.ts";
@@ -82,6 +82,62 @@ describe("**統治下では黙って抜ける**(2026-09-01、発注者の裁定)
 });
 
 describe("enforce-search-route", () => {
+  test("allows coordinator variables and compounds, retaining repository protection and concrete repairs", () => {
+    const project = registerProject();
+    const scratch = tempDir("coordinator-scratch-");
+    const home = tempDir("coordinator-home-");
+    const env = { ...withCcc(), S: scratch, HOME: home };
+    for (const command of [
+      "tail -n 3 $S/router-x.err",
+      "grep foo $S/router-x.err",
+      'rg foo "${S}/router-x.err"',
+      "cat /private/tmp/coordinator/tasks/x.output; tail -c 600 /private/tmp/coordinator/y.output",
+      "jq -r .x ~/.local/state/agx/worker-receipts/r.json",
+      "grep foo $S/x; rg foo ${S}/y",
+      "grep foo $S/x && rg foo ${S}/y || echo missing",
+      "rr files; grep foo $S/x",
+      "grep foo /tmp/coordinator/$UNKNOWN/x | head",
+      "grep foo ~/.claude/projects/$UNKNOWN/x",
+      "grep foo ~/.local/state/agx/$UNKNOWN/x",
+    ]) {
+      expect({
+        command,
+        decision: decisionOf(
+          runHook(HOOK, bashPayload(project, command), env).stdout,
+        ),
+      }).toEqual({ command, decision: null });
+    }
+    symlinkSync(project, join(scratch, "repo"));
+    for (const command of [
+      "grep -r foo .",
+      "rg foo",
+      "find . -name x",
+      "fd foo .",
+      "tree .",
+      "grep foo $UNKNOWN/x",
+      "rg foo $S/x; rg foo .",
+      "grep -r foo $S/repo",
+      "grep foo '$S/x'",
+      "rg foo /tmp/$UNKNOWN/../../repo",
+      "grep -r foo ${REPO}",
+      `S=${project}; grep -r foo $S`,
+    ]) {
+      const result = runHook(HOOK, bashPayload(project, command), {
+        ...env,
+        REPO: project,
+      });
+      const decision = decisionOf(result.stdout);
+      expect({ command, decision: decision?.permissionDecision }).toEqual({
+        command,
+        decision: "deny",
+      });
+      expect(decision?.permissionDecisionReason).toContain("Rewrite:");
+      expect(decision?.permissionDecisionReason).toMatch(
+        /(?:rr|repo-retrieve|bun \S*repo-retrieve\.ts) (?:regex|files) '(?:foo|\*)'/u,
+      );
+    }
+  });
+
   test("allows grep and rg scoped to explicit regular files", () => {
     const project = registerProject();
     writeFileSync(join(project, "one.log"), "foo\n");

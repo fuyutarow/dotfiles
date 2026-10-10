@@ -580,7 +580,7 @@ describe("enforce-storage-headroom", () => {
       const d = decisionOf(runHook(HOOK, payload, env).stdout);
       expect(d?.permissionDecision).toBe("deny");
       expect(d?.permissionDecisionReason?.split("\n")[0]).toBe(
-        "[storage-headroom] free space: disk-reclaim plan, then disk-reclaim run --tier blind --yes",
+        "[dotfiles:storage-headroom] free space: disk-reclaim plan, then disk-reclaim run --tier blind --yes",
       );
       expect(d?.permissionDecisionReason).toContain("deny line 10.0 GiB");
       expect(d?.permissionDecisionReason).toContain("Allowlist:");
@@ -738,7 +738,9 @@ describe("enforce-storage-headroom", () => {
       const r = runHook(HOOK, bash("cp x y"), WARN_ONLY);
       const d = decisionOf(r.stdout);
       expect(d?.permissionDecision).toBeUndefined();
-      expect(d?.additionalContext).toContain("[storage-headroom] WARNING");
+      expect(d?.additionalContext).toContain(
+        "[dotfiles:storage-headroom] WARNING",
+      );
       expect(
         decisionOf(runHook(HOOK, bash("julia probe.jl"), WARN_ONLY).stdout)
           ?.permissionDecision,
@@ -857,7 +859,7 @@ describe("enforce-storage-headroom", () => {
           { ...budget(0.001, 1_000_000), HOME: home },
         );
         const ctx = decisionOf(r.stdout)?.additionalContext ?? "";
-        expect(ctx).toContain("[storage-headroom] WARNING host C:");
+        expect(ctx).toContain("[dotfiles:storage-headroom] WARNING host C:");
         expect(ctx).toContain("cargo target");
       },
     );

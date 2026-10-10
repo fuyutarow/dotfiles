@@ -36,7 +36,7 @@ describe("remind-reply-language", () => {
       data: {
         hookSpecificOutput: {
           hookEventName: "UserPromptSubmit",
-          additionalContext: `[reply-language-reminder] ${CONTEXT}`,
+          additionalContext: `[dotfiles:reply-language-reminder] ${CONTEXT}`,
         },
       },
     });

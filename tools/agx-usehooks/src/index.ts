@@ -4,6 +4,7 @@ export {
   type HookContext,
   type HookResult,
   type HookPayload,
+  type HookOptions,
 } from "./runtime.ts";
 export {
   runningRuns,

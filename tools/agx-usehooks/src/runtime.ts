@@ -33,15 +33,20 @@ function repoRoot(cwd: string): string {
   return dir;
 }
 
-function message(slug: string, text: string): string {
-  return `[${slug}] ${text}`;
+export type HookOptions = { namespace?: string; slug?: string };
+
+function message(namespace: string, slug: string, text: string): string {
+  const prefix = `[${namespace}:${slug}] `;
+  return text.startsWith(prefix) ? text : `${prefix}${text}`;
 }
 
-function failure(slug: string, reason: string): void {
-  process.stderr.write(`${message(slug, reason.replaceAll(/\s+/gu, " "))}\n`);
+function failure(namespace: string, slug: string, reason: string): void {
+  process.stderr.write(
+    `${message(namespace, slug, reason.replaceAll(/\s+/gu, " "))}\n`,
+  );
 }
 
-function defaultSlug(event: "UserPromptSubmit" | "Stop", cwd: string): string {
+function defaultNamespace(cwd: string): string {
   const name = basename(repoRoot(cwd))
     .replaceAll(/([a-z0-9])([A-Z])/gu, "$1-$2")
     .toLowerCase()
@@ -49,29 +54,47 @@ function defaultSlug(event: "UserPromptSubmit" | "Stop", cwd: string): string {
     .replaceAll(/^-+|-+$/gu, "");
   let project = name === "" ? "project" : name;
   if (/^[0-9]/u.test(project)) project = `project-${project}`;
-  return `${project}-${event === "Stop" ? "stop" : "prompt"}`;
+  return project;
 }
 
 async function run(
   event: "UserPromptSubmit" | "Stop",
   fn: Callback,
-  slug?: string,
+  options?: string | HookOptions,
 ): Promise<void> {
-  if (slug !== undefined && !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(slug)) {
-    failure("agx-usehooks", "hook slug must be kebab-case; fail open");
+  const { slug, namespace } =
+    typeof options === "string" ? { slug: options } : (options ?? {});
+  const valid = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+  let effectiveNamespace = defaultNamespace(process.cwd());
+  const eventSlug = event === "Stop" ? "stop" : "prompt";
+  const effectiveSlug =
+    slug !== undefined && valid.test(slug) ? slug : eventSlug;
+  if (
+    (slug !== undefined && !valid.test(slug)) ||
+    (namespace !== undefined && !valid.test(namespace))
+  ) {
+    failure(
+      effectiveNamespace,
+      effectiveSlug,
+      "hook namespace and slug must be kebab-case; fail open",
+    );
     process.exit(0);
   }
-  let effectiveSlug = slug ?? defaultSlug(event, process.cwd());
+  effectiveNamespace = namespace ?? effectiveNamespace;
   const started = performance.now();
   const timer = setTimeout(() => {
-    failure(effectiveSlug, "3 s budget exceeded; fail open");
+    failure(
+      effectiveNamespace,
+      effectiveSlug,
+      "3 s budget exceeded; fail open",
+    );
     process.exit(0);
   }, BUDGET_MS);
   const result = await attempt(async () => {
     const parsed = jsonOf(Payload).safeParse(await Bun.stdin.text());
     if (!parsed.success) return new Error("invalid hook payload; fail open");
     const cwd = resolve(parsed.data.cwd ?? process.cwd());
-    effectiveSlug = slug ?? defaultSlug(event, cwd);
+    effectiveNamespace = namespace ?? defaultNamespace(cwd);
     if (
       parsed.data.hook_event_name !== undefined &&
       parsed.data.hook_event_name !== event
@@ -94,28 +117,38 @@ async function run(
     )
       return null;
     return event === "Stop"
-      ? { decision: "block", reason: message(effectiveSlug, text) }
+      ? {
+          decision: "block",
+          reason: message(effectiveNamespace, effectiveSlug, text),
+        }
       : {
           hookSpecificOutput: {
             hookEventName: event,
-            additionalContext: message(effectiveSlug, text),
+            additionalContext: message(effectiveNamespace, effectiveSlug, text),
           },
         };
   });
   clearTimeout(timer);
-  if (!result.ok) failure(effectiveSlug, errorMessage(result.error));
+  if (!result.ok)
+    failure(effectiveNamespace, effectiveSlug, errorMessage(result.error));
   else if (result.value instanceof Error)
-    failure(effectiveSlug, result.value.message);
+    failure(effectiveNamespace, effectiveSlug, result.value.message);
   else if (result.value !== null)
     process.stdout.write(`${JSON.stringify(result.value)}\n`);
   process.exit(0);
 }
 
 /** Read stdin, call project code, and emit one additionalContext block; exits 0. */
-export function onPrompt(fn: Callback, slug?: string): Promise<void> {
-  return run("UserPromptSubmit", fn, slug);
+export function onPrompt(
+  fn: Callback,
+  options?: string | HookOptions,
+): Promise<void> {
+  return run("UserPromptSubmit", fn, options);
 }
 /** Read stdin and block once with project reasons; exits 0, including on failure. */
-export function onStop(fn: Callback, slug?: string): Promise<void> {
-  return run("Stop", fn, slug);
+export function onStop(
+  fn: Callback,
+  options?: string | HookOptions,
+): Promise<void> {
+  return run("Stop", fn, options);
 }

@@ -7,21 +7,74 @@ import { z } from "../../shared/src/zod.ts";
 
 const entry = resolve(import.meta.dir, "../src/index.ts");
 
+test.each([
+  ['{ namespace: "qoed", slug: "review" }', "[qoed:review] notice"],
+  ['{ namespace: "qoed" }', "[qoed:stop] notice"],
+  ['{ slug: "review" }', "[repo:review] notice"],
+])("namespace options %s preserve Stop JSON", (options, expected) => {
+  const fixture = hook(
+    `return ${JSON.stringify(expected === "[qoed:review] notice" ? expected : "notice")};`,
+    "{}",
+    "onStop",
+    false,
+    false,
+    options,
+  );
+  const result = Bun.spawnSync([process.execPath, fixture.path], {
+    cwd: fixture.root,
+    stdin: Buffer.from("{}"),
+    timeout: 5_000,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(result.stderr.toString()).toBe("");
+  expect(decodedJson(z.unknown(), result.stdout.toString())).toEqual({
+    decision: "block",
+    reason: expected,
+  });
+  rmSync(fixture.dir, { recursive: true, force: true });
+});
+
+test.each(['{ namespace: "bad:ns" }', '{ slug: "bad:slug" }'])(
+  "invalid options %s fail open with a namespaced diagnostic",
+  (options) => {
+    const fixture = hook(
+      'return "bad";',
+      "{}",
+      "onStop",
+      false,
+      false,
+      options,
+    );
+    const result = Bun.spawnSync([process.execPath, fixture.path], {
+      cwd: fixture.root,
+      stdin: Buffer.from("{}"),
+      timeout: 5_000,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toBe("");
+    expect(result.stderr.toString()).toStartWith("[repo:stop] ");
+    rmSync(fixture.dir, { recursive: true, force: true });
+  },
+);
+
 function hook(
   body: string,
   input = "{}",
   event = "onPrompt",
   openStdin = false,
   omitSlug = false,
+  options?: string,
 ) {
   const dir = mkdtempSync(join(tmpdir(), "agx-usehooks-runtime-"));
   const root = join(dir, "repo");
   mkdirSync(join(root, ".git"), { recursive: true });
   mkdirSync(join(root, "nested"));
   const path = join(dir, "hook.ts");
+  let argument = omitSlug ? "" : ', "fixture-hook"';
+  if (options !== undefined) argument = `, ${options}`;
   writeFileSync(
     path,
-    `import { ${event} } from ${JSON.stringify(entry)}; await ${event}(async (ctx) => { ${body} }${omitSlug ? "" : ', "fixture-hook"'});`,
+    `import { ${event} } from ${JSON.stringify(entry)}; await ${event}(async (ctx) => { ${body} }${argument});`,
   );
   return { dir, root, path, input, openStdin };
 }
@@ -29,6 +82,7 @@ function hook(
 async function invoke(body: string, input = "{}", event = "onPrompt") {
   const fixture = hook(body, input, event);
   const child = Bun.spawn([process.execPath, fixture.path], {
+    cwd: fixture.root,
     stdin: new Blob([input]),
     stdout: "pipe",
     stderr: "pipe",
@@ -51,7 +105,7 @@ test("prompt joins only strings in one matching output block", async () => {
   expect(decodedJson(z.unknown(), result.stdout)).toEqual({
     hookSpecificOutput: {
       hookEventName: "UserPromptSubmit",
-      additionalContext: "[fixture-hook] one\ntwo",
+      additionalContext: "[repo:fixture-hook] one\ntwo",
     },
   });
 });
@@ -64,7 +118,7 @@ test("stop blocks once and never blocks an active Stop", async () => {
   );
   expect(decodedJson(z.unknown(), first.stdout)).toEqual({
     decision: "block",
-    reason: "[fixture-hook] one\ntwo",
+    reason: "[repo:fixture-hook] one\ntwo",
   });
   const active = await invoke(
     'return "one";',
@@ -76,7 +130,7 @@ test("stop blocks once and never blocks an active Stop", async () => {
 
 test("scalar strings and empty results share the same output contract", async () => {
   expect((await invoke('return "scalar";')).stdout).toContain(
-    '"additionalContext":"[fixture-hook] scalar"',
+    '"additionalContext":"[repo:fixture-hook] scalar"',
   );
   for (const value of [
     "false",
@@ -149,6 +203,7 @@ test("context discovers ancestor repo root and preserves payload", async () => {
   const fixture = hook("return JSON.stringify(ctx);");
   const cwd = join(fixture.root, "nested");
   const child = Bun.spawn([process.execPath, fixture.path], {
+    cwd: fixture.root,
     stdin: new Blob([
       JSON.stringify({
         cwd,
@@ -176,7 +231,7 @@ test("context discovers ancestor repo root and preserves payload", async () => {
     decodedJson(
       z.unknown(),
       result.hookSpecificOutput.additionalContext.replace(
-        "[fixture-hook] ",
+        "[repo:fixture-hook] ",
         "",
       ),
     ),
@@ -206,15 +261,15 @@ test.each(["onPrompt", "onStop"])(
     expect(result.exitCode).toBe(0);
     expect(result.stderr.toString()).toBe("");
     expect(result.stdout.toString()).toContain(
-      `[firedancer-project-${suffix}] notice`,
+      `[firedancer-project:${suffix}] notice`,
     );
     expect(decodedJson(z.unknown(), result.stdout.toString())).toEqual(
       event === "onStop"
-        ? { decision: "block", reason: "[firedancer-project-stop] notice" }
+        ? { decision: "block", reason: "[firedancer-project:stop] notice" }
         : {
             hookSpecificOutput: {
               hookEventName: "UserPromptSubmit",
-              additionalContext: "[firedancer-project-prompt] notice",
+              additionalContext: "[firedancer-project:prompt] notice",
             },
           },
     );
@@ -226,7 +281,7 @@ test.each(["onPrompt", "onStop"])(
     expect(malformed.exitCode).toBe(0);
     expect(malformed.stdout.toString()).toBe("");
     expect(malformed.stderr.toString()).toStartWith(
-      `[firedancer-project-${suffix}] `,
+      `[firedancer-project:${suffix}] `,
     );
     const noCwd = Bun.spawnSync([process.execPath, fixture.path], {
       cwd: nested,
@@ -235,7 +290,7 @@ test.each(["onPrompt", "onStop"])(
     });
     expect(noCwd.exitCode).toBe(0);
     expect(noCwd.stdout.toString()).toContain(
-      `[firedancer-project-${suffix}] notice`,
+      `[firedancer-project:${suffix}] notice`,
     );
     rmSync(fixture.dir, { recursive: true, force: true });
   },

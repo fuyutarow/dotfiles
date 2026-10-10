@@ -29,10 +29,14 @@ hook_slug() {
   ' "$slug_registry"
 }
 
+hook_prefix() {
+  printf '[dotfiles:%s] ' "$HOOK_SLUG"
+}
+
 hook_stderr() {
-  printf '[%s] %s\n' "$HOOK_SLUG" "$1" >&2
+  printf '%s%s\n' "$(hook_prefix)" "$1" >&2
 }
 
 hook_deny() {
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"[%s] %s"}}\n' "$HOOK_SLUG" "$1"
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s%s"}}\n' "$(hook_prefix)" "$1"
 }

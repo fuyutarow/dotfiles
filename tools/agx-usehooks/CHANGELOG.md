@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0 — 2026-10-10
+
+- Prefix context, Stop reasons and diagnostics with `[<namespace>:<slug>]`.
+- Accept `{ namespace, slug }` options; default to the project basename and `prompt` or `stop`. Existing string-slug arguments remain supported.
+
 ## 0.6.1 — 2026-10-10
 
 - Read unacknowledged-return history from a bounded tail of `runs.jsonl`.

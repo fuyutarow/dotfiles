@@ -228,7 +228,7 @@ describe("enforce-reply-language", () => {
       JSON.stringify({
         decision: "block",
         reason:
-          "[reply-language] 直前の返答が英語です。日本語で書き直してください（コードや識別子は原文のままで構いません）。",
+          "[dotfiles:reply-language] 直前の返答が英語です。日本語で書き直してください（コードや識別子は原文のままで構いません）。",
       }),
     );
     expect(result.stderr).toBe("");

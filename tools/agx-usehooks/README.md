@@ -3,9 +3,7 @@
 “usehooks” names React-style `useXX` selectors: the IF side of an agent hook.
 Projects own the THEN side and write their actions in TypeScript.
 
-Projects write their actions in TypeScript. The optional second argument supplies an explicit kebab-case slug and wins over the default. When omitted, the project root directory basename is converted to kebab case and followed by `-prompt` or `-stop` (for example, `firedancer-prompt` and `firedancer-stop`). The root is discovered from the payload cwd, or the process cwd when unavailable; diagnostics before input is read use the process cwd. Context, Stop reasons, and diagnostics start with `[<slug>]`. `await onPrompt(fn, slug)` adds returned strings as
-one `additionalContext` block; `await onStop(fn, slug)` blocks with their joined reason, except
-when `stop_hook_active` is true. Callbacks receive `{ repoRoot, cwd, payload }` and return
+Projects write their actions in TypeScript. The optional second argument accepts `{ namespace, slug }`, or a string slug for existing callers. Explicit values win. The namespace defaults to the project root directory basename converted to kebab case, and the slug defaults to `prompt` or `stop` (for example, `[firedancer:stop]`). The root is discovered from the payload cwd, or the process cwd when unavailable; diagnostics before input is read use the process cwd. Context, Stop reasons, and diagnostics start with `[<namespace>:<slug>]`. `await onPrompt(fn, options)` adds returned strings as one `additionalContext` block; `await onStop(fn, options)` blocks with their joined reason, except when `stop_hook_active` is true. Callbacks receive `{ repoRoot, cwd, payload }` and return
 `string | false | null | undefined` or an array, synchronously or asynchronously. Empty
 entries disappear. Input errors, callback failures and the total 3 s timeout exit 0,
 emit no stdout, and report one stderr line.

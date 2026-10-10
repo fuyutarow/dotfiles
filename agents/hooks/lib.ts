@@ -23,14 +23,22 @@ export function hookSlug(): string {
   return process.env.HOOK_SLUG ?? slugForScript(Bun.main);
 }
 
+export const HOOK_NAMESPACE = "dotfiles";
+
+export function hookPrefix(slug = hookSlug()): string {
+  return `[${HOOK_NAMESPACE}:${slug}] `;
+}
+
 export function hookMessage(text: string, slug = hookSlug()): string {
   // Replace historic ad-hoc labels, preserving everything after them.
   const old = text.replace(
     /^(?:enforce-|detect-|remind-|log-|suggest-|record-)?(?:storage-headroom|model-floor|search-route|repo-bash-deny|reply-language|dispatch-contract|supervised-execution|official-execution|background-waits|no-new-bash|ccc-gpu-hold|goal-kernel|task-continuity|agx-usehooks):\s*/u,
     "",
   );
-  if (old.startsWith(`[${slug}] `)) return old;
-  return `[${slug}] ${old}`;
+  const prefix = hookPrefix(slug);
+  if (old.startsWith(prefix)) return old;
+  const bare = `[${slug}] `;
+  return `${prefix}${old.startsWith(bare) ? old.slice(bare.length) : old}`;
 }
 
 const MESSAGE_KEYS = new Set([

@@ -21,6 +21,23 @@ import { jsonText } from "../../agents/hooks/zod.ts";
 
 const root = resolve(import.meta.dir, "../..");
 
+test("lint rejects bare prefixes in both shared emitters", () => {
+  const dir = fixture();
+  for (const path of ["agents/hooks/lib.ts", "agents/hooks/slug.sh"]) {
+    const file = join(dir, path);
+    const original = readFileSync(file, "utf8");
+    writeFileSync(
+      file,
+      original
+        .replaceAll("${HOOK_NAMESPACE}:", "")
+        .replaceAll("dotfiles:%s", "%s"),
+    );
+    expect(lintHookSlugs(dir).join("\n")).toContain("lacks namespaced");
+    writeFileSync(file, original);
+  }
+  rmSync(dir, { recursive: true, force: true });
+});
+
 function fixture(): string {
   const dir = mkdtempSync(join(tmpdir(), "hook-slug-"));
   mkdirSync(join(dir, "agents"));
@@ -143,12 +160,15 @@ test("encoder preserves each vendor event shape and prefixes all message fields"
       const encoded = hookJson(payload, slug);
       const parsed = jsonText.safeParse(encoded);
       expect(parsed.success).toBe(true);
-      expect(encoded).toContain(`[${slug}] `);
+      expect(encoded).toContain(`[dotfiles:${slug}] `);
       expect(hookJson(parsed.success ? parsed.data : null, slug)).toBe(encoded);
     }
   }
   expect(hookMessage("search-route: retain text", "search-route")).toBe(
-    "[search-route] retain text",
+    "[dotfiles:search-route] retain text",
+  );
+  expect(hookMessage("[search-route] retain text", "search-route")).toBe(
+    "[dotfiles:search-route] retain text",
   );
 });
 
@@ -167,7 +187,7 @@ test("real hook process emits prefixed valid deny JSON", () => {
   );
   expect(result.exitCode).toBe(0);
   expect(jsonText.safeParse(result.stdout.toString()).success).toBe(true);
-  expect(result.stdout.toString()).toContain("[dispatch-contract] ");
+  expect(result.stdout.toString()).toContain("[dotfiles:dispatch-contract] ");
 });
 
 test("both Goal Kernel launchers prefix missing-runtime stderr without changing exits", () => {
@@ -194,7 +214,9 @@ test("both Goal Kernel launchers prefix missing-runtime stderr without changing 
     );
     expect(result.exitCode).toBe(2);
     expect(result.stdout.toString()).toBe("");
-    expect(result.stderr.toString()).toStartWith(`[${vendor}-goal-kernel] `);
+    expect(result.stderr.toString()).toStartWith(
+      `[dotfiles:${vendor}-goal-kernel] `,
+    );
   }
   rmSync(dir, { recursive: true, force: true });
 });
@@ -211,7 +233,7 @@ test("Goal Kernel adapters retain malformed-input exits and diagnostic text", ()
     expect(result.exitCode).toBe(1);
     expect(result.stdout.toString()).toBe("");
     expect(result.stderr.toString()).toBe(
-      `[${vendor}-goal-kernel] GK_HOOK_PAYLOAD: input must be an object\n`,
+      `[dotfiles:${vendor}-goal-kernel] GK_HOOK_PAYLOAD: input must be an object\n`,
     );
   }
 });

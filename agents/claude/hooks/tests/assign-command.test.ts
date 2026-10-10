@@ -123,7 +123,7 @@ describe("assign-command: fleet_policy.toml resolution (2026-09-07 migration)", 
     expect(r.code).toBe(0);
     const out = await decisionOf(r.stdout);
     expect(out.additionalContext).toBe(
-      "[assign-command] PROJECT-LOCAL CHARTER",
+      "[dotfiles:assign-command] PROJECT-LOCAL CHARTER",
     );
   });
 

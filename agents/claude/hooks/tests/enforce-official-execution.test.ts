@@ -494,7 +494,7 @@ describe("enforce-official-execution", () => {
 
   test("the denial names the official route", async () => {
     const v = await verdict(`julia --project=envs/gpu ${scratch}/s.jl`, jj);
-    expect(v.reason).toContain("[official-execution]");
+    expect(v.reason).toContain("[dotfiles:official-execution]");
     expect(v.reason).toContain(
       "scratch execution is banned in firedancer: measure through `mise exec -- bun launcher/launch.ts --rev <sealed sha> <arena> launcher/model_interface_runner.jl <params.toml> <manifest> <cause>`; put diagnostics in a tracked, committed script.",
     );

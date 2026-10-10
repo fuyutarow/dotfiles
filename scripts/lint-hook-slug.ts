@@ -59,6 +59,39 @@ export function lintHookSlugs(root: string): string[] {
   if (registry instanceof Error)
     return [`missing or invalid slug: ${registry.message}`];
   const errors: string[] = [];
+  // Exercise the actual shared emitters, including the missing-Bun shell fallback.
+  const emitter = Bun.spawnSync(
+    [
+      process.execPath,
+      "--eval",
+      `import { hookJson, hookMessage } from ${JSON.stringify(join(root, "agents/hooks/lib.ts"))}; console.log(hookMessage("probe", "lint-probe")); console.log(hookJson({reason:"probe"}, "lint-probe"));`,
+    ],
+    { timeout: 5_000 },
+  );
+  if (
+    emitter.exitCode !== 0 ||
+    emitter.stdout.toString() !==
+      '[dotfiles:lint-probe] probe\n{"reason":"[dotfiles:lint-probe] probe"}\n'
+  )
+    errors.push("shared emitter lacks namespaced [dotfiles:<slug>] prefix");
+  const shell = Bun.spawnSync(
+    [
+      "sh",
+      "-c",
+      '. "$1"; HOOK_SLUG=lint-probe; hook_stderr probe; hook_deny probe',
+      "sh",
+      join(root, "agents/hooks/slug.sh"),
+    ],
+    { timeout: 5_000 },
+  );
+  if (
+    shell.exitCode !== 0 ||
+    shell.stderr.toString() !== "[dotfiles:lint-probe] probe\n" ||
+    !shell.stdout
+      .toString()
+      .includes('"permissionDecisionReason":"[dotfiles:lint-probe] probe"')
+  )
+    errors.push("shell emitter lacks namespaced [dotfiles:<slug>] prefix");
   const slugs = new Set<string>();
   const scripts = new Set<string>();
   for (const identity of registry.identities) {
@@ -130,7 +163,7 @@ async function main(): Promise<void> {
       process.stdout.write(`FAIL hook-slug: ${error}\n`);
     if (result.value.length === 0)
       process.stdout.write(
-        "OK hook-slug: all owned hooks have unique slugs and prefixed emitters\n",
+        "OK hook-slug: all owned hooks have unique bare slugs and namespaced emitters\n",
       );
     process.exitCode = result.value.length === 0 ? 0 : 1;
   }

@@ -121,7 +121,9 @@ All repo tasks go through **mise** (`mise tasks` to list):
   → `mise run linux:init`, then `herdr --remote <alias>`. dotfiles installs the **core dev utilities**
   only (`brew bundle --file=Brewfile.core` as the user). ONE core installer on all OSes: Homebrew.
   Linux defaults to `/home/linuxbrew/.linuxbrew`; LAND_HOSTS in scripts/config-registry.ts declares
-  `~/.linuxbrew` on no-root hosts (sol). Source builds are allowed and timed. Existing hosts use
+  `~/.linuxbrew` on no-root hosts (sol). Nonstandard Linux prefixes use `oven-sh/bun/bun`
+  (the vendor-prebuilt release, still Homebrew-managed); Bundle supplies its bunx alias.
+  Other source builds are allowed and timed. Existing hosts use
   `mise run linux:migrate-brew -- --dry-run`, then the same task without --dry-run. Cleanup checks
   executable/mapped-file/PATH use, prints deferred links and never removes mise runtime installs
   or experiment toolchains. Bun/uv come from brew; hooks and SSH commands reach them via the quiet

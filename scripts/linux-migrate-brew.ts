@@ -18,6 +18,7 @@ const say = (line: string): void => {
 export async function migrateLinuxbrew(
   home: string,
   dryRun: boolean,
+  relink = true,
 ): Promise<void> {
   if (!dryRun && process.platform !== "linux") process.exit(2);
   const root = resolve(import.meta.dir, "..");
@@ -41,7 +42,11 @@ export async function migrateLinuxbrew(
   say(
     `Homebrew install/build elapsed: ${((performance.now() - started) / 1000).toFixed(1)} seconds`,
   );
-  await $`${prefix}/bin/mise run link:dots`.cwd(root);
+  if (relink) await $`${prefix}/bin/mise run link:dots`.cwd(root);
+  else
+    say(
+      "using already-deployed shell links; temporary workspace does not deploy dotfiles; PATH verification still required",
+    );
   const commands = await coreCommands(root);
   for (const mode of ["-lc", "-lic", "-c"]) {
     // A clean base PATH means .zshenv/.zprofile, not this launcher's PATH, proves delivery.

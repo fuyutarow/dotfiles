@@ -3,7 +3,7 @@
 # Linux uses /home/linuxbrew/.linuxbrew; LAND_HOSTS declares ~/.linuxbrew on no-root hosts.
 # Prefer bottles at the standard prefix; source builds (including herdr) are allowed.
 # Experiment toolchains belong to each repo's mise.toml; no global mise [tools].
-# Plain `brew "<name>"` lines keep command-path checks independent of Ruby.
+# Command-path checks normalize qualified formula names and deduplicate conditional providers.
 
 brew "bat"          # better cat (alias: p)
 brew "eza"          # better ls (l, ll, la)
@@ -22,7 +22,15 @@ brew "zoxide"       # better cd (,)
 brew "rustup"       # Rust manager and cargo proxies; opt/rustup/bin is exposed, toolchains stay per repo
 brew "sccache"      # cargo's compiler cache — RUSTC_WRAPPER=sccache is set unconditionally in the profiles
 brew "fnox"         # secrets: Keychain (mac), age files elsewhere — scripts/secrets-push.ts fills a box
-brew "bun"          # declared core JS runtime everywhere: hooks, SSH commands and repo bins
+# A nonstandard Linux prefix would build core Bun/WebKit from source. The vendor's official
+# Homebrew tap installs a verified release instead; Homebrew Bundle also owns its bunx alias.
+if OS.linux? && HOMEBREW_PREFIX.to_s != "/home/linuxbrew/.linuxbrew"
+  tap "oven-sh/bun"
+  brew "oven-sh/bun/bun", trusted: true,
+       postinstall: 'test -e "${HOMEBREW_PREFIX}/bin/bunx" || ln -s bun "${HOMEBREW_PREFIX}/bin/bunx"'
+else
+  brew "bun"        # declared core JS runtime everywhere: hooks, SSH commands and repo bins
+end
 brew "uv"           # declared core Python runner everywhere; Python versions stay per repo
 brew "atuin"        # shell history (Ctrl+R)
 brew "lazygit"      # git TUI (lg)

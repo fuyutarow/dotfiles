@@ -139,3 +139,15 @@ test("command count includes extra runtime entrypoints", async () => {
     "cargo",
   ]);
 });
+
+test("conditional Bun providers retain one pair of Homebrew runtime commands", async () => {
+  const root = fixture();
+  writeFileSync(
+    join(root, "Brewfile.core"),
+    'if OS.linux?\n  brew "oven-sh/bun/bun", trusted: true\nelse\n  brew "bun"\nend\nbrew "uv"\n',
+  );
+  expect(await coreCommands(root)).toEqual(["bun", "bunx", "uv", "uvx"]);
+  const commands = await coreCommands(join(import.meta.dir, "../.."));
+  expect(commands).toHaveLength(39);
+  expect(commands.filter((name) => name.includes("/"))).toEqual([]);
+});

@@ -16,12 +16,13 @@ const COMMANDS: Readonly<Record<string, readonly string[]>> = {
   uv: ["uv", "uvx"],
 };
 export async function coreCommands(root: string): Promise<string[]> {
-  return (await Bun.file(join(root, "Brewfile.core")).text())
+  const names = (await Bun.file(join(root, "Brewfile.core")).text())
     .split("\n")
     .flatMap((line) => {
-      const name = /^brew "([^"]+)"/u.exec(line)?.[1];
+      const name = /^\s*brew "([^"]+)"/u.exec(line)?.[1]?.split("/").at(-1);
       return name === undefined ? [] : (COMMANDS[name] ?? [name]);
     });
+  return [...new Set(names)];
 }
 export function brewPrefix(
   home = homedir(),

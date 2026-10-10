@@ -140,7 +140,9 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    `brew bundle --file=Brewfile.core` on every OS. Linux defaults to `/home/linuxbrew/.linuxbrew`;
    `scripts/config-registry.ts`'s `LAND_HOSTS` declares `~/.linuxbrew` for no-root hosts such as sol.
    Standard-prefix bottles are preferred; source builds are allowed, including herdr and
-   non-standard-prefix dependencies. The agent CLIs use their native self-updating installers.
+   non-standard-prefix dependencies. At a nonstandard Linux prefix, Bun uses its official
+   `oven-sh/bun/bun` Homebrew tap release instead of compiling WebKit; Bundle supplies its bunx
+   alias. Both providers are Homebrew-managed. The agent CLIs use their native self-updating installers.
    It is not a portable container image, and
    it never builds an experiment environment: Julia, CUDA, Python and their versions are each
    repo's `mise.toml` (`mise install` in that repo). A machine where an alias is missing is a
@@ -204,8 +206,8 @@ may take a long time; migration reports elapsed install/build time.
 Downloads and source-build scratch use a private `/var/tmp` directory rather than HOME quota.
 The installer uses at most two allowed CPUs, with Make/Go worker limits, and streams verbose
 progress. Scratch is removed on success and its location is reported on failure.
-If Clang would select an incomplete system GCC installation, an installer-scoped Clang driver
-hint selects the newest complete GCC development directory; system compiler files are not edited.
+Brewfile.core selects Bun's official Homebrew tap at nonstandard Linux prefixes; no system
+compiler repair is needed for Bun. Other formulas may still build from source.
 
 Migration verifies core command provenance in login and SSH command shells before retiring
 legacy downloader links. It checks `/proc` executable links, mapped files and inherited PATHs,

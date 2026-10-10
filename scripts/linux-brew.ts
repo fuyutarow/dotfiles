@@ -28,23 +28,6 @@ export function buildCpuList(allowed: string): string {
   return cpus.slice(0, 2).join(",");
 }
 
-async function completeGccHint(): Promise<string | undefined> {
-  const triplet =
-    process.arch === "arm64" ? "aarch64-linux-gnu" : "x86_64-linux-gnu";
-  const base = `/usr/lib/gcc/${triplet}`;
-  const versions = (await attemptOr(() => readdir(base), []))
-    .filter((version) => /^\d+$/u.test(version))
-    .toSorted((a, b) => Number(b) - Number(a));
-  for (const version of versions) {
-    const dir = join(base, version);
-    const complete =
-      (await Bun.file(join(dir, "libstdc++.so")).exists()) &&
-      (await Bun.file(`/usr/include/c++/${version}/string`).exists());
-    if (complete) return version === versions[0] ? undefined : dir;
-  }
-  return undefined;
-}
-
 export async function bundleCore(
   prefix: string,
   root: string,
@@ -61,22 +44,8 @@ export async function bundleCore(
   );
   const taskset = Bun.which("taskset");
   const launcher = taskset !== null && cpus !== "" ? [taskset, "-c", cpus] : [];
-  const gcc =
-    inherited.CCC_OVERRIDE_OPTIONS === undefined
-      ? await completeGccHint()
-      : undefined;
-  if (gcc !== undefined) {
-    say(
-      `Scoped Clang driver hint: complete GCC development installation ${gcc}`,
-    );
-  }
   const env = {
     ...inherited,
-    // Clang's driver option injection reaches nested WebKit builds which reset CMake hints.
-    // It is scoped to this installer child; no global compiler files or environment are edited.
-    ...(gcc === undefined
-      ? {}
-      : { CCC_OVERRIDE_OPTIONS: `+--gcc-install-dir=${gcc}` }),
     HOMEBREW_CACHE: join(scratch, "cache"),
     HOMEBREW_TEMP: join(scratch, "tmp"),
     HOMEBREW_MAKE_JOBS: "2",

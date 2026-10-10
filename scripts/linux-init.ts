@@ -2,7 +2,8 @@
 // and dotfile links. Bootstrap root once with scripts/bootstrap-linux.sh; brew always runs as
 // the target user. Existing hosts use linux:migrate-brew. Standard prefix is
 // /home/linuxbrew/.linuxbrew; LAND_HOSTS declares ~/.linuxbrew for shared no-root hosts.
-// Source builds are permitted and timed. Bun/uv come from Homebrew, including hook/SSH runtime
+// Source builds are permitted and timed; Bun uses its official Homebrew tap at nonstandard
+// Linux prefixes. Bun/uv come from Homebrew, including hook/SSH runtime
 // reach. ~/.local/bin holds vendor agents, not a second core downloader. Experiment versions
 // (Julia, CUDA, Python) stay in each repo's mise.toml; no global mise [tools] (INV-6).
 // Exit: 0 done · 1 a step failed (its output says which).

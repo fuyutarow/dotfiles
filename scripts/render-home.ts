@@ -37,7 +37,9 @@
 // attempt.ts, narrow.ts, the committed zod bundle, and the two pure modules built on them
 // (hook-registry.ts, agents/models/roster.ts). Inputs come from the environment so tests can point
 // it at fixtures:
-//   DOTFILES                  repo root            (default: $HOME/dotfiles)
+//   DOTFILES                  repo root            (default: this script's checkout)
+//   DOTFILES_RENDER_REV       landed commit        (default: alpha in a jj checkout)
+//   DOTFILES_RENDER_FROM_WORKING_COPY=1             explicit local render; forbidden with REV
 //   HOME                      destination root     (default: os.homedir())
 //   COMMAND_TARGET_HOME       command validation root (default: HOME; doctor uses the live HOME)
 //   CLAUDE_SETTINGS_PRIVATE   overlay path         (default: $HOME/.claude/settings.private.json)
@@ -66,10 +68,11 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   unlinkSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText } from "../agents/hooks/zod.ts";
@@ -77,6 +80,7 @@ import { loadSlugs } from "../agents/hooks/slugs.ts";
 import { loadRoster, rosterPolicy } from "../agents/models/roster.ts";
 import { RENDERED } from "./config-registry.ts";
 import { brewPrefix } from "./core-tools.ts";
+import { prepareRenderSource } from "./render-source.ts";
 import {
   type HookSpec,
   loadRegistry,
@@ -90,14 +94,53 @@ function print(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
+let cleanupSource = (): void => {};
+
 function fatal(line: string, ...more: string[]): never {
   for (const l of [line, ...more]) process.stderr.write(`${l}\n`);
+  cleanupSource();
   return process.exit(1);
 }
 
 const home = process.env.HOME ?? homedir();
 const commandTargetHome = process.env.COMMAND_TARGET_HOME ?? home;
-const dotfiles = process.env.DOTFILES ?? `${home}/dotfiles`;
+const liveDotfiles = process.env.DOTFILES ?? join(import.meta.dir, "..");
+const prepared = await attempt(() =>
+  prepareRenderSource(
+    liveDotfiles,
+    process.env.DOTFILES_RENDER_FROM_WORKING_COPY === "1",
+    process.env.DOTFILES_RENDER_REV,
+  ),
+);
+if (!prepared.ok)
+  fatal(`FATAL: render inputs: ${errorMessage(prepared.error)}`);
+if (prepared.value instanceof Error) fatal(`warn: ${prepared.value.message}`);
+const source = prepared.value;
+cleanupSource = () => {
+  if (source.root !== liveDotfiles)
+    rmSync(source.root, { recursive: true, force: true });
+};
+await using _source = { [Symbol.asyncDispose]: source.release };
+const dotfiles = source.root;
+print(`render source: ${source.description}`);
+const committedRenderer = join(dotfiles, "scripts/render-home.ts");
+if (dotfiles !== liveDotfiles && existsSync(committedRenderer)) {
+  // Execute the landed renderer too: a later clean alpha may have changed rosterPolicy/wire.
+  // The exported tree has no jj metadata, so the child reads only these already pinned bytes.
+  const rendered = Bun.spawnSync([process.execPath, committedRenderer], {
+    stdout: "inherit",
+    stderr: "inherit",
+    timeout: 60_000,
+    env: {
+      ...process.env,
+      DOTFILES: dotfiles,
+      DOTFILES_RENDER_REV: undefined,
+      DOTFILES_RENDER_FROM_WORKING_COPY: "0",
+    },
+  });
+  await source.release();
+  process.exit(rendered.exitCode ?? 1);
+}
 const basePath = `${dotfiles}/agents/claude/settings.json`;
 const overlayPath =
   process.env.CLAUDE_SETTINGS_PRIVATE ??

@@ -85,6 +85,9 @@ describe("doctor", () => {
         HOME: scratch,
         COMMAND_TARGET_HOME: process.env.HOME ?? userInfo().homedir,
         DOTFILES: REPO,
+        // This fixture checks Bun resolution against WIP code, explicitly into scratch HOME.
+        DOTFILES_RENDER_FROM_WORKING_COPY: "1",
+        DOTFILES_RENDER_REV: undefined,
         DOTFILES_BUN_PATH: process.execPath,
         MISE_DATA_DIR: join(scratch, "empty-mise-data"),
         MISE_CACHE_DIR: join(scratch, "empty-mise-cache"),
@@ -96,7 +99,7 @@ describe("doctor", () => {
       timeout: 30_000,
     });
     const output = proc.stdout.toString() + proc.stderr.toString();
-    expect(proc.exitCode).toBe(0);
+    expect(proc.exitCode, output).toBe(0);
     expect(output).not.toContain("bun-exec: cannot resolve bun");
     expect(output).toContain("rendered");
     rmSync(scratch, { recursive: true, force: true });

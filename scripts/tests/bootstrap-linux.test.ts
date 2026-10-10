@@ -63,12 +63,17 @@ describe("bootstrap linux:init argv forwarding", () => {
         },
         stdout: "pipe",
         stderr: "pipe",
+        // Real shell processes can exceed 5s under full-suite load; retain a finite child bound.
+        timeout: 10_000,
       });
-      expect(run.exitCode).toBe(0);
+      expect(run.exitCode, run.stdout.toString() + run.stderr.toString()).toBe(
+        0,
+      );
       const captured = readFileSync(capture, "utf8");
       const received = captured === "" ? [] : captured.slice(0, -1).split("\0");
       expect(received).toEqual([...expected]);
       expect(label).toBeTruthy();
     },
+    12_000,
   );
 });

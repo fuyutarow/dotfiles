@@ -24,6 +24,9 @@ import {
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
 import { LAND_HOSTS } from "./config-registry.ts";
 import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
+import { enqueue, landLock, queueStatus, runQueue } from "./land-queue.ts";
+import { renderRefusal } from "./render-source.ts";
+import { doctorReport, doctorStep } from "./land-doctor.ts";
 
 function recordWorkspaceAcceptance(workspace: string): number {
   const state = dispatchStateDir();
@@ -318,7 +321,11 @@ const rejectPrototypeFlag = (type: string, flag: string): void => {
   }
 };
 
-function run(cwd: string, argv: string[]): ResultAsync<string, Error> {
+function run(
+  cwd: string,
+  argv: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): ResultAsync<string, Error> {
   return safeTry(async function* () {
     const signal = AbortSignal.timeout(600_000);
     const child = Bun.spawn(argv, {
@@ -327,6 +334,7 @@ function run(cwd: string, argv: string[]): ResultAsync<string, Error> {
       stdout: "pipe",
       stderr: "pipe",
       signal,
+      env,
     });
     const [stdout, stderr, code] = yield* ResultAsync.fromPromise(
       Promise.all([
@@ -362,15 +370,18 @@ type HostExecutionResult =
 async function runHost(
   cwd: string,
   argv: string[],
+  timeoutMs = 600_000,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<HostExecutionResult> {
   const result = await attempt(async () => {
-    const signal = AbortSignal.timeout(600_000);
+    const signal = AbortSignal.timeout(timeoutMs);
     const child = Bun.spawn(argv, {
       cwd,
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
       signal,
+      env,
     });
     const [stdout, stderr, code] = await Promise.all([
       new Response(child.stdout).text(),
@@ -553,40 +564,138 @@ function format(root: string, changed: string[]): ResultAsync<void, Error> {
   });
 }
 
-async function main(): Promise<number> {
-  const parsed = cli({
-    name: "land",
-    strictFlags: true,
-    ignoreArgv: rejectPrototypeFlag,
-    parameters: ["<workspace-name>"],
-    flags: {
-      message: {
-        type: String,
-        alias: "m",
-        description: "Commit message for the landed workspace.",
-      },
-      smoke: {
-        type: String,
-        description:
-          "Run this command on each deployed host after pull and deps, and print its output.",
-      },
-      dryRun: {
-        type: Boolean,
-        default: false,
-        description:
-          "Preview the landing and host results without committing or deploying.",
-      },
-      keepWorkspace: {
-        type: Boolean,
-        default: false,
-        description:
-          "Keep the accepted workspace for post-deployment verification or a long host migration.",
+function mainCheckout(root: string): string {
+  const repoEntry = join(root, ".jj", "repo");
+  const repo = lstatSync(repoEntry).isFile()
+    ? realpathSync(
+        resolve(dirname(repoEntry), readFileSync(repoEntry, "utf8").trim()),
+      )
+    : realpathSync(repoEntry);
+  return dirname(dirname(repo));
+}
+
+async function main(
+  argv = Bun.argv.slice(2),
+  queueLockHeld = false,
+): Promise<number> {
+  const parsed = cli(
+    {
+      name: "land",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: ["[workspace-name]"],
+      flags: {
+        enqueue: {
+          type: String,
+          description:
+            "Append a workspace to the serial land queue; requires -m.",
+        },
+        runQueue: {
+          type: Boolean,
+          default: false,
+          description:
+            "Drain queued work, waiting for the land lock and a clean main checkout.",
+        },
+        queueStatus: {
+          type: Boolean,
+          default: false,
+          description: "Print the queue journal and lock owners as JSON.",
+        },
+        message: {
+          type: String,
+          alias: "m",
+          description: "Commit message for the landed workspace.",
+        },
+        smoke: {
+          type: String,
+          description:
+            "Run this command on each deployed host after pull and deps, and print its output.",
+        },
+        dryRun: {
+          type: Boolean,
+          default: false,
+          description:
+            "Preview the landing and host results without committing or deploying.",
+        },
+        keepWorkspace: {
+          type: Boolean,
+          default: false,
+          description:
+            "Keep the accepted workspace for post-deployment verification or a long host migration.",
+        },
       },
     },
-  });
+    undefined,
+    argv,
+  );
+  const queueModes = [
+    parsed.flags.enqueue !== undefined,
+    parsed.flags.runQueue,
+    parsed.flags.queueStatus,
+  ].filter(Boolean).length;
+  if (queueModes > 0) {
+    const invalid =
+      queueModes !== 1 ||
+      parsed._.length > 0 ||
+      parsed.flags.dryRun ||
+      (parsed.flags.enqueue === undefined &&
+        (parsed.flags.message !== undefined ||
+          parsed.flags.smoke !== undefined ||
+          parsed.flags.keepWorkspace));
+    if (invalid) {
+      emit(
+        "[land] queue: FAIL select exactly one queue mode; positional workspace and --dry-run are not allowed",
+      );
+      return 2;
+    }
+    const root = await read(process.cwd(), ["workspace", "root"]);
+    if (root.isErr()) {
+      emit(`[land] queue: FAIL ${errorMessage(root.error)}`);
+      return 2;
+    }
+    const mainRoot = mainCheckout(root.value.trim());
+    const queued = await attempt(async () => {
+      if (parsed.flags.queueStatus) return (await queueStatus(mainRoot)) ?? 0;
+      if (parsed.flags.enqueue !== undefined) {
+        if ((parsed.flags.message?.trim() ?? "") === "")
+          return new Error("--enqueue requires -m <message>");
+        const result = await enqueue(mainRoot, {
+          ws: parsed.flags.enqueue,
+          msg: parsed.flags.message ?? "",
+          ...(parsed.flags.smoke === undefined
+            ? {}
+            : { smoke: parsed.flags.smoke }),
+          keep_workspace: parsed.flags.keepWorkspace,
+        });
+        return result instanceof Error ? result : 0;
+      }
+      return runQueue(mainRoot, (item) =>
+        main(
+          [
+            item.ws,
+            "-m",
+            item.msg,
+            ...(item.smoke === undefined ? [] : ["--smoke", item.smoke]),
+            ...(item.keep_workspace ? ["--keep-workspace"] : []),
+          ],
+          true,
+        ),
+      );
+    });
+    const result = queued.ok
+      ? queued.value
+      : new Error(errorMessage(queued.error));
+    if (result instanceof Error) {
+      emit(`[land] queue: FAIL ${result.message}`);
+      return 2;
+    }
+    return result;
+  }
   let stage = "preflight";
   let commit: string | undefined;
   let tmp: string | undefined;
+  let landedRoot: string | undefined;
+  let restoredPaths: string[] = [];
   const hostResults = new Map<string, string>();
   const captured = await attempt(() =>
     safeTry(async function* () {
@@ -601,13 +710,11 @@ async function main(): Promise<number> {
           host.deploy ? "pending" : `skipped (${host.reason ?? "disabled"})`,
         );
       const root = (yield* read(process.cwd(), ["workspace", "root"])).trim();
-      const repoEntry = join(root, ".jj", "repo");
-      const repo = lstatSync(repoEntry).isFile()
-        ? realpathSync(
-            resolve(dirname(repoEntry), readFileSync(repoEntry, "utf8").trim()),
-          )
-        : realpathSync(repoEntry);
-      let mainRoot = dirname(dirname(repo));
+      let mainRoot = mainCheckout(root);
+      const release = queueLockHeld ? () => {} : await landLock(mainRoot);
+      if (release instanceof Error) return reject(release.message);
+      using _landLock = { [Symbol.dispose]: release };
+      landedRoot = mainRoot;
       const requestedWorkspace = parsed._[0] ?? "";
       const workspaceBasename = basename(requestedWorkspace);
       const directWorkspace = await read(root, [
@@ -665,6 +772,8 @@ async function main(): Promise<number> {
       const initial = yield* paths(workerRoot, "@-", "@");
       if (initial.length === 0) return reject("workspace change is empty");
       const dirty = yield* paths(mainRoot, "@-", "@");
+      const renderDirty = await renderRefusal(mainRoot);
+      if (renderDirty !== undefined) return reject(renderDirty.message);
       const refused = overlap(initial, dirty);
       if (refused.length > 0)
         return reject(
@@ -713,6 +822,7 @@ async function main(): Promise<number> {
       emit(`[land] paths: ok ${JSON.stringify(changed)}`);
       stage = "restore";
       const rev = yield* at(workerRoot, "@");
+      if (!parsed.flags.dryRun) restoredPaths = changed;
       if (!parsed.flags.dryRun)
         yield* jj(mainRoot, [
           "restore",
@@ -764,6 +874,39 @@ async function main(): Promise<number> {
         stage = "deps";
         yield* run(mainRoot, [process.env.LAND_MISE ?? "mise", "run", "deps"]);
         emit("[land] deps: ok local main checkout");
+        const deployEnv = {
+          ...process.env,
+          DOTFILES_RENDER_REV: commit,
+          DOTFILES_RENDER_FROM_WORKING_COPY: "0",
+          DOCTOR_ONLY: "",
+        };
+        yield* run(
+          mainRoot,
+          [process.env.LAND_MISE ?? "mise", "run", "hook:post-merge"],
+          deployEnv,
+        );
+        const proof = await runHost(
+          mainRoot,
+          [process.env.LAND_MISE ?? "mise", "run", "doctor"],
+          90_000,
+          deployEnv,
+        );
+        const proofExit = proof.ok ? proof.value.code : 2;
+        const doctorExit = proof.ok && proof.value.timedOut ? 124 : proofExit;
+        const localDoctor = doctorReport(
+          proof.ok
+            ? `${proof.value.stdout}\n__LAND_DOCTOR_EXIT_${doctorExit}__`
+            : undefined,
+        );
+        for (const line of localDoctor.lines)
+          emit(`[land] doctor: local ${line}`);
+        hostResults.set(
+          "local",
+          `${localDoctor.status}; doctor PASS ${localDoctor.pass} / FAIL ${localDoctor.fail}`,
+        );
+        emit(
+          `[land] deploy: ${localDoctor.status} local; doctor PASS ${localDoctor.pass} / FAIL ${localDoctor.fail}`,
+        );
         const accepted = recordWorkspaceAcceptance(workerRoot);
         emit(
           `[land] acceptance: recorded ${accepted} run(s) from this workspace`,
@@ -788,7 +931,7 @@ async function main(): Promise<number> {
           parsed.flags.smoke === undefined
             ? ""
             : ` && { printf '\\n${smokeBegin}\\n'; ( ${parsed.flags.smoke}\n ) 2>&1; _land_smoke_status=$?; printf '\\n${smokeEnd}\\n'; exit "$_land_smoke_status"; }`;
-        const remoteWork = `cd ~/dotfiles && mise run pull && mise run deps${smokeStep}`;
+        const remoteWork = `cd ~/dotfiles && export DOTFILES_RENDER_REV=${shellQuote(commit ?? "alpha")} && mise run pull && mise run deps${doctorStep(smokeBegin, smokeEnd)}${smokeStep}`;
         const locked = `flock -w 600 ~/.cache/dotfiles-land.lock sh -c ${shellQuote(remoteWork)}`;
         const command = `mkdir -p ~/.cache; setsid sh -c ${shellQuote(locked)} & _land_pid=$!; trap 'kill -TERM -$_land_pid 2>/dev/null || true; wait $_land_pid 2>/dev/null || true' HUP TERM INT; wait $_land_pid; _land_status=$?; trap - HUP TERM INT; exit $_land_status`;
         emit(`[land] deploy: waiting for host lock ${host.alias}`);
@@ -805,8 +948,16 @@ async function main(): Promise<number> {
           emit(`[land] deploy: FAIL ${host.alias}: ${deployed.reason}`);
           continue;
         }
-        const capturedSmoke = extractSmoke(
+        const capturedDoctor = extractSmoke(
           deployed.value.stdout,
+          `${smokeBegin}_DOCTOR`,
+          `${smokeEnd}_DOCTOR`,
+        );
+        const doctor = doctorReport(capturedDoctor.smoke);
+        for (const line of doctor.lines)
+          emit(`[land] doctor: ${host.alias} ${line}`);
+        const capturedSmoke = extractSmoke(
+          capturedDoctor.output,
           smokeBegin,
           smokeEnd,
         );
@@ -830,8 +981,13 @@ async function main(): Promise<number> {
           emit(`[land] deploy: FAIL ${host.alias}: ${reason}`);
           continue;
         }
-        hostResults.set(host.alias, "ok");
-        emit(`[land] deploy: ok ${host.alias}`);
+        hostResults.set(
+          host.alias,
+          `${doctor.status}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`,
+        );
+        emit(
+          `[land] deploy: ${doctor.status} ${host.alias}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`,
+        );
       }
       const failedHosts = [...hostResults.values()].some(
         (status) =>
@@ -853,6 +1009,25 @@ async function main(): Promise<number> {
     : reject(errorMessage(captured.error));
   if (result.isErr())
     emit(`[land] ${stage}: FAIL ${errorMessage(result.error)}`);
+  if (
+    result.isErr() &&
+    queueLockHeld &&
+    landedRoot !== undefined &&
+    restoredPaths.length > 0
+  ) {
+    const cleaned = await jj(landedRoot, [
+      "restore",
+      "--from",
+      "@-",
+      "--",
+      ...filesets(restoredPaths),
+    ]);
+    emit(
+      cleaned.isOk()
+        ? `[land] queue: restored ${restoredPaths.length} residue path(s)`
+        : `[land] queue: residue restore FAIL ${errorMessage(cleaned.error)}`,
+    );
+  }
   emit(
     `[land] summary: ${result.isOk() ? "ok" : "FAIL"} commit=${commit ?? "none"} hosts=${JSON.stringify(Object.fromEntries(hostResults))}`,
   );

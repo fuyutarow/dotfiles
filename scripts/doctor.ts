@@ -35,7 +35,7 @@
 // diagnosed may be half set up (no node_modules yet), and that is exactly when this must run.
 // With no argv read there is no Cleye boundary to owe (writing-bun-scripts BG1). Inputs come from
 // the environment so tests can point it at fixtures:
-//   DOTFILES      repo root         (default: $HOME/dotfiles)
+//   DOTFILES      repo root         (default: this script's checkout)
 //   HOME          machine root      (default: os.homedir())
 //   DOCTOR_ONLY   comma list of check names to run (default: all that apply to this OS)
 //
@@ -1174,7 +1174,7 @@ async function main(): Promise<void> {
   const home = process.env.HOME ?? homedir();
   const ctx: Ctx = {
     home,
-    dotfiles: process.env.DOTFILES ?? join(home, "dotfiles"),
+    dotfiles: process.env.DOTFILES ?? join(import.meta.dir, ".."),
     isMac: process.platform === "darwin",
     isWsl: /microsoft/iu.test(release()), // same test as link-dots.ts: `uname -r`
     isCoreBox: process.platform === "linux" && !/microsoft/iu.test(release()),

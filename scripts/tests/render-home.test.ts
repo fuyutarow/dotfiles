@@ -498,3 +498,130 @@ describe("render-home: the rest of the rendered half", () => {
     cleanup(dotfiles, home);
   });
 });
+
+describe("render-home: committed jj inputs", () => {
+  function committedFixture() {
+    const dotfiles = makeDotfiles({ model: "committed-model" });
+    const home = makeHome();
+    const config = join(home, "jj-config.toml");
+    writeFileSync(
+      config,
+      '[user]\nname = "Render Test"\nemail = "render@example.test"\n',
+    );
+    const env = { HOME: home, DOTFILES: dotfiles, JJ_CONFIG: config };
+    mkdirSync(join(dotfiles, "scripts"));
+    for (const path of [
+      "scripts/render-home.ts",
+      "scripts/render-source.ts",
+      "scripts/config-registry.ts",
+      "scripts/core-tools.ts",
+      "scripts/hook-registry.ts",
+      "agents/models/roster.ts",
+      "agents/hooks/attempt.ts",
+      "agents/hooks/narrow.ts",
+      "agents/hooks/slugs.ts",
+      "agents/hooks/zod.ts",
+      "agents/hooks/vendor/deps.js",
+      "tools/shared/src/attempt.ts",
+      "tools/shared/src/narrow.ts",
+      "tools/shared/src/zod.ts",
+    ]) {
+      const target = join(dotfiles, path);
+      mkdirSync(join(target, ".."), { recursive: true });
+      writeFileSync(target, readFileSync(join(ROOT, path)));
+    }
+    writeFileSync(join(dotfiles, "scripts/link-dots.ts"), "// root fixture\n");
+    function jj(args: string[]): string {
+      const result = Bun.spawnSync(["jj", "--no-pager", ...args], {
+        cwd: dotfiles,
+        env: { ...process.env, ...env },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      });
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+      return result.stdout.toString().trim();
+    }
+    jj(["git", "init", "--colocate"]);
+    jj(["commit", "-m", "committed render inputs"]);
+    jj(["bookmark", "set", "alpha", "-r", "@-"]);
+    const commit = jj(["log", "--no-graph", "-r", "alpha", "-T", "commit_id"]);
+    return { dotfiles, home, env, jj, commit };
+  }
+
+  test("a pinned landed commit renders its bytes even after clean alpha advances", () => {
+    const f = committedFixture();
+    writeFileSync(
+      join(f.dotfiles, "agents/claude/settings.json"),
+      '{"model":"newer-model"}\n',
+    );
+    const rosterCode = join(f.dotfiles, "agents/models/roster.ts");
+    writeFileSync(
+      rosterCode,
+      readFileSync(rosterCode, "utf8").replaceAll(
+        "Run control:",
+        "Newer renderer:",
+      ),
+    );
+    f.jj(["commit", "-m", "newer alpha inputs"]);
+    f.jj(["bookmark", "set", "alpha", "-r", "@-"]);
+    const result = run({ ...f.env, DOTFILES_RENDER_REV: f.commit });
+    expect(result.code, result.out).toBe(0);
+    expect(result.out).toContain(`render source: commit ${f.commit}`);
+    expect(readDest(f.home).model).toBe("committed-model");
+    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
+      "Run control:",
+    );
+    expect(
+      readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8"),
+    ).not.toContain("Newer renderer:");
+    expect(run(f.env).code).toBe(0);
+    expect(readDest(f.home).model).toBe("newer-model");
+    expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
+      "Newer renderer:",
+    );
+    cleanup(f.dotfiles, f.home);
+  }, 15_000);
+
+  test("dirty hooks refuse before links or renders; an explicit local override renders them", () => {
+    const f = committedFixture();
+    expect(run(f.env).code).toBe(0);
+    const previous = readFileSync(join(f.home, ".codex/hooks.json"), "utf8");
+    writeFileSync(
+      join(f.dotfiles, "agents/codex/hooks.json"),
+      '{"fixture":"dirty-hook-input","hooks":{}}\n',
+    );
+    const refused = run(f.env);
+    expect(refused.code).toBe(1);
+    expect(refused.out).toContain("uncommitted render inputs");
+    expect(readFileSync(join(f.home, ".codex/hooks.json"), "utf8")).toBe(
+      previous,
+    );
+    const links = Bun.spawnSync(
+      [process.execPath, join(ROOT, "scripts/link-dots.ts")],
+      {
+        env: { ...process.env, ...f.env },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      },
+    );
+    expect(links.exitCode).toBe(2);
+    expect(links.stderr.toString()).toContain("--from-working-copy");
+    expect(existsSync(join(f.home, ".gitconfig"))).toBe(false);
+    expect(run({ ...f.env, DOTFILES_RENDER_FROM_WORKING_COPY: "1" }).code).toBe(
+      0,
+    );
+    expect(readObject(join(f.home, ".codex/hooks.json")).fixture).toBe(
+      "dirty-hook-input",
+    );
+    const deployed = run({
+      ...f.env,
+      DOTFILES_RENDER_REV: f.commit,
+      DOTFILES_RENDER_FROM_WORKING_COPY: "1",
+    });
+    expect(deployed.code).toBe(1);
+    expect(deployed.out).toContain("cannot be combined");
+    cleanup(f.dotfiles, f.home);
+  }, 15_000);
+});

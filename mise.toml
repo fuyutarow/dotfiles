@@ -462,7 +462,7 @@ description = "jj gated commit: snapshot, run hook:pre-commit with PRECOMMIT_VCS
 run = "bun agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
 
 [tasks.land]
-description = "Land a worker workspace onto alpha, format its paths, gated commit and push, then deploy declared hosts; --dry-run previews in disposable copies"
+description = "Land a workspace with one shared lock, commit/push alpha, deploy committed inputs and report host doctor counts; --enqueue <ws> -m <msg>, --run-queue, --queue-status; --dry-run previews in disposable copies"
 run = "bun scripts/land.ts"
 
 [tasks.pull]
@@ -698,8 +698,9 @@ description = "~/Workspace の全 git repo の配線健全性を一望する (sc
 run = 'bun ~/dotfiles/scripts/repos-audit.ts'
 
 [tasks."link:dots"]
-description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.ts)"
-run = 'bun ~/dotfiles/scripts/link-dots.ts --force'
+description = "Create dotfile symlinks and render committed alpha inputs; dirty render inputs refuse unless --from-working-copy explicitly selects a local render"
+dir = "{{config_root}}"
+run = 'bun scripts/link-dots.ts --force'
 
 [tasks."tmux:plugins"]
 description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"
@@ -715,7 +716,8 @@ run = 'bash ~/dotfiles/scripts/check-tools.sh'
 
 [tasks.doctor]
 description = "READ-ONLY: does this machine realize what the dotfiles declare? Links, rendered settings, skills wiring, Brewfile, pinned deps, PATH bins, git hooks, login shell, INV-6, MCP registrations, the smart-open ssh forward, the Edge managed policy, and the per-OS pieces — one PASS/FAIL/WARN/SKIP line each, with the repairing command on every FAIL. DOCTOR_ONLY=links,bins to narrow."
-run = 'bun ~/dotfiles/scripts/doctor.ts'
+dir = "{{config_root}}"
+run = 'bun scripts/doctor.ts'
 
 [tasks."secrets:push"]
 description = "Push this machine's fnox secrets (TYPESAFE_API_KEY) to an ssh host, age-encrypted, and prove they open there. Use --rotate to update secrets in an existing config written by this script. Only to a box whose root you trust (a rented box of your own, R99) — not a shared server. Usage: mise run secrets:push -- <host> [--rotate]"

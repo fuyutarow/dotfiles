@@ -42,6 +42,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { deployCccDaemon } from "../cocoindex/deploy-daemon.ts";
+import { renderRefusal } from "./render-source.ts";
 import {
   ETC_LINKS,
   LINKS,
@@ -225,20 +226,24 @@ function linkEtc(ctx: Ctx, rel: string, dst: string, apply: string): void {
 // each is a function of several declarations plus machine facts, and a symlink can point at only
 // one of them. scripts/render-home.ts is zero-dependency (it runs before `mise run deps` on a fresh
 // machine) and all-or-nothing (a bad input leaves every deployed file as it was).
-function renderHome(ctx: Ctx): void {
+function renderHome(ctx: Ctx, fromWorkingCopy: boolean): Error | undefined {
   const r = Bun.spawnSync(
     [process.execPath, join(ctx.dotfiles, "scripts/render-home.ts")],
     {
       stdout: "inherit",
       stderr: "inherit",
       timeout: 60_000,
-      env: { ...process.env, HOME: ctx.home, DOTFILES: ctx.dotfiles },
+      env: {
+        ...process.env,
+        HOME: ctx.home,
+        DOTFILES: ctx.dotfiles,
+        DOTFILES_RENDER_FROM_WORKING_COPY: fromWorkingCopy ? "1" : "0",
+      },
     },
   );
   if (r.exitCode !== 0)
-    process.stderr.write(
-      "warn: render-home failed — every rendered file in $HOME left as-is\n",
-    );
+    return new Error("render-home failed; link:dots did not complete");
+  return undefined;
 }
 
 type LaunchctlResult = { exitCode: number; stdout: string };
@@ -423,7 +428,7 @@ function rejectPrototypeFlag(type: string, flag: string): void {
   }
 }
 
-function main(): Error | void {
+async function main(): Promise<Error | void> {
   const parsed = cli(
     {
       name: "link-dots.ts",
@@ -435,6 +440,12 @@ function main(): Error | void {
           "Create the dotfile symlinks this repo declares (SAFE by default).",
       },
       flags: {
+        fromWorkingCopy: {
+          type: Boolean,
+          default: false,
+          description:
+            "explicitly render local working-copy inputs (refused during deploy)",
+        },
         force: {
           type: Boolean,
           default: false,
@@ -455,7 +466,7 @@ function main(): Error | void {
   if (parsed.flags.force && parsed.flags.check)
     return new Error("--force and --check are mutually exclusive");
   const home = process.env.HOME ?? homedir();
-  // Empty counts as unset, like the .sh's ${DOTFILES:-…} (callers export DOTFILES= in places).
+  // Empty counts as unset. Resolve the declaring checkout from the script, including workspaces.
   const envDotfiles = process.env.DOTFILES;
   const mode: Mode = parsed.flags.check ? "check" : "safe";
   const detectedOs = detectOs();
@@ -464,7 +475,7 @@ function main(): Error | void {
     home,
     dotfiles:
       envDotfiles === undefined || envDotfiles === ""
-        ? join(home, "dotfiles")
+        ? join(import.meta.dir, "..")
         : envDotfiles,
     os: detectedOs,
     mode: parsed.flags.force ? "force" : mode,
@@ -473,13 +484,22 @@ function main(): Error | void {
   };
   const rootsError = assertRoots(ctx.home, ctx.dotfiles);
   if (rootsError !== undefined) return rootsError;
+  if (ctx.mode !== "check") {
+    const refused = await renderRefusal(
+      ctx.dotfiles,
+      parsed.flags.fromWorkingCopy,
+      process.env.DOTFILES_RENDER_REV,
+    );
+    if (refused !== undefined) return refused;
+  }
   linkAll(ctx, sshVersion());
   if (ctx.mode === "check") {
     say(`check: ${ctx.drift.length} drift(s)`);
     process.exitCode = ctx.drift.length > 0 ? 1 : 0;
     return;
   }
-  renderHome(ctx);
+  const renderError = renderHome(ctx, parsed.flags.fromWorkingCopy);
+  if (renderError !== undefined) return renderError;
   const daemonError = deployCccDaemon(ctx);
   if (daemonError !== undefined) return daemonError;
   if (ctx.os === "mac") loadSmartOpenReceiver(ctx);

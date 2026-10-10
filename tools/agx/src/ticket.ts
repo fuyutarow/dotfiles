@@ -14,7 +14,20 @@
 //   pick_temperature = 1.0                  # optional sampling temperature (0 <= T <= 5)
 //   +++
 //   <the prose the worker receives>
+import { resolve } from "node:path";
 import { fromThrowable, z } from "../../shared/src/zod.ts";
+
+export const KindSchema = z.enum(["token", "compute"]);
+export type Kind = z.output<typeof KindSchema>;
+
+/** Classification comes only from the worker's resource declaration. */
+export function resourceKind(prose: string): Kind | undefined {
+  if (/^RESOURCE-CLASS\(NONCOMPUTE\):\s*\S[^\r\n]*$/mu.test(prose))
+    return "token";
+  if (/^RESOURCE-ENVELOPE\([^\r\n)]+\):\s*\S[^\r\n]*$/mu.test(prose))
+    return "compute";
+  return undefined;
+}
 
 export const TICKET_SCHEMA = 2;
 export const DEFAULT_VERIFY_TIMEOUT_S = 1200;
@@ -60,6 +73,7 @@ const premise = z.string().refine(
 );
 
 const CommonTicket = {
+  labels: z.array(z.string()).default([]),
   name: z
     .string()
     .min(1)
@@ -123,6 +137,40 @@ const parseToml = fromThrowable(
   (text: string): unknown => Bun.TOML.parse(text),
   (e) => (e instanceof Error ? e.message : String(e)),
 );
+
+/** Raw fields allow lint to report independent floor failures even when the schema fails. */
+export function ticketFields(text: string): Record<string, unknown> {
+  const lines = text.split("\n");
+  if (!isFence(lines[0])) return {};
+  const end = lines.findIndex((line, i) => i > 0 && isFence(line));
+  if (end < 0) return {};
+  const parsed = parseToml(lines.slice(1, end).join("\n"));
+  if (parsed.isErr()) return {};
+  const fields = z.record(z.string(), z.unknown()).safeParse(parsed.value);
+  return fields.success ? fields.data : {};
+}
+
+const compact = (value: string): string => value.replaceAll(/[\r\n]+/gu, " ");
+
+/** Compact worker-facing promise; paths retain glob syntax and are rooted in the checkout. */
+export function promiseBlock(
+  ticket: Ticket,
+  cwd: string,
+  sandbox: string,
+  kind: Kind | undefined,
+): string {
+  return [
+    "Promise:",
+    `outcome: ${compact(ticket.outcome ?? "see body")}`,
+    `consumer: ${compact(ticket.consumer ?? "coordinator")}`,
+    `writes: ${JSON.stringify((ticket.writes ?? []).map((glob) => resolve(cwd, glob)))}`,
+    `first_return: ${compact(ticket.first_return ?? "useful interim RETURN")} (${ticket.first_return_s} seconds)`,
+    `verify: ${JSON.stringify(ticket.verify)}${ticket.read_only_diagnostic === true ? " (read_only_diagnostic)" : ""}`,
+    `kind: ${kind ?? "undeclared"}`,
+    `labels: ${JSON.stringify(ticket.labels)}`,
+    `Sandbox mode: ${sandbox}${sandbox === "none" ? " (unsandboxed)" : ""}.`,
+  ].join("\n");
+}
 
 /** Split a brief into its ticket and the prose after it. Front matter is recognized only when the
  *  very first line is `+++`; once it is, a malformed ticket is `invalid`, never silently legacy. */

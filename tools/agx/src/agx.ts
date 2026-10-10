@@ -118,6 +118,8 @@ import {
 } from "./report.ts";
 import { floorTicketGrade, hasXhighMaxJustification } from "./ticket-grade.ts";
 import { checkPremises } from "./premises.ts";
+import { lintTicket, renderTicketLint } from "./ticket-lint.ts";
+import { ticketRoot, newTicket, listTickets } from "./ticket-home.ts";
 import {
   GRADE_WORKER_PROMPT,
   mergeTicketGrades,
@@ -130,6 +132,8 @@ import {
   EXTENDED_TIMEOUT_THRESHOLD_S,
   MAX_TIMEOUT_S,
   parseTicket,
+  promiseBlock,
+  resourceKind,
   verifyLine,
   type Ticket,
 } from "./ticket.ts";
@@ -2212,48 +2216,18 @@ function statsFor(
 }
 
 async function run(flags: RunFlags): Promise<number> {
-  const roster = await loadRosterOrDie();
   if (!existsSync(flags.promptFile))
     fatal(`no such brief: ${flags.promptFile}`);
   if (!existsSync(flags.cd)) fatal(`no such --cd directory: ${flags.cd}`);
-  const overrideRow =
-    flags.row === undefined ? undefined : refuseUnrunnable(roster, flags.row);
-  if (overrideRow !== undefined && (flags.approval ?? "").trim() === "")
-    fatal("--row requires a non-empty --approval");
-  if (overrideRow === undefined && flags.approval !== undefined)
-    fatal("--approval requires --row <id>");
-  // Owner 2026-10-06 「jev routingに一元化しろ、何度目だ」: the coordinator kept naming rows itself.
-  // A wrong pick is fixed where Jev reads, the brief or the row use_for, never by overriding Jev.
-  if (flags.choice !== "auto" && overrideRow === undefined)
-    fatal(
-      `--choice ${flags.choice} refused: Jev alone picks the row. If Jev picks wrong, say more in the brief (scope, files, risk) or fix that row use_for in agents/models/dispatch-roster.toml; for an owner-approved override, use --row <id> --approval "<owner approval>"`,
-    );
   const brief = readFileSync(flags.promptFile, "utf8");
   const parsed = parseTicket(brief);
-  if (parsed.kind === "invalid")
-    fatal(`invalid ticket in ${flags.promptFile}: ${parsed.reason}`);
-  const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
-  const displayId = chooseDisplayId(flags.name ?? ticket?.name);
-  stderrRun = { displayId };
-  if (flags.legacyBrief !== undefined && ticket?.schema === 2)
-    fatal("--legacy-brief applies only to plain briefs and schema 1 tickets");
-  const premiseCheck = checkPremises(ticket?.premises, resolve(flags.cd));
-  if (premiseCheck.status === "missing") {
-    const violations = premiseCheck.premises.map((premise) => ({
-      rule: "premise",
-      quote_from_brief: premise,
-      why_it_blocks_a_6min_first_return: `The declared premise ${premise} could not be found in the --cd tree.`,
-      fix: "correct the brief's premise or remove it",
-    }));
-    const ticketGrade: TicketGrade = {
-      verdict: "clarify",
-      source: "floor",
-      violations,
-    };
-    for (const violation of violations)
-      dispatchError(
-        `agx: remand premise: ${violation.quote_from_brief} is absent. Fix: ${violation.fix}`,
-      );
+  const ticketGrade = lintTicket(
+    brief,
+    resolve(flags.cd),
+    flags.legacyBrief !== undefined,
+  );
+  if (ticketGrade.violations.length > 0) {
+    for (const line of renderTicketLint(ticketGrade)) dispatchError(line);
     appendLog({
       kind: "refusal",
       at: now(),
@@ -2268,6 +2242,25 @@ async function run(flags: RunFlags): Promise<number> {
     });
     return 2;
   }
+  if (parsed.kind === "invalid") fatal(parsed.reason);
+  const roster = await loadRosterOrDie();
+  const overrideRow =
+    flags.row === undefined ? undefined : refuseUnrunnable(roster, flags.row);
+  if (overrideRow !== undefined && (flags.approval ?? "").trim() === "")
+    fatal("--row requires a non-empty --approval");
+  if (overrideRow === undefined && flags.approval !== undefined)
+    fatal("--approval requires --row <id>");
+  // Owner 2026-10-06 「jev routingに一元化しろ、何度目だ」: the coordinator kept naming rows itself.
+  // A wrong pick is fixed where Jev reads, the brief or the row use_for, never by overriding Jev.
+  if (flags.choice !== "auto" && overrideRow === undefined)
+    fatal(
+      `--choice ${flags.choice} refused: Jev alone picks the row. If Jev picks wrong, say more in the brief (scope, files, risk) or fix that row use_for in agents/models/dispatch-roster.toml; for an owner-approved override, use --row <id> --approval "<owner approval>"`,
+    );
+  const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
+  const displayId = chooseDisplayId(flags.name ?? ticket?.name);
+  stderrRun = { displayId };
+  if (flags.legacyBrief !== undefined && ticket?.schema === 2)
+    fatal("--legacy-brief applies only to plain briefs and schema 1 tickets");
   if (ticket === undefined || ticket.verify.length === 0)
     warnOverUngraded(resolve(flags.cd));
   const pick: Pick =
@@ -2297,46 +2290,6 @@ async function run(flags: RunFlags): Promise<number> {
           approval: flags.approval ?? "",
           reason: "owner-approved row override",
         };
-  const floorGrade = floorTicketGrade(
-    brief,
-    parsed,
-    roster.choice.find((choice) => choice.id === pick.choice)?.effort,
-  );
-  const ticketGrade: TicketGrade =
-    premiseCheck.status === "timeout"
-      ? {
-          ...floorGrade,
-          warnings: [
-            ...(floorGrade.warnings ?? []),
-            "premise check skipped: timeout",
-          ],
-        }
-      : floorGrade;
-  if (
-    (ticket === undefined || ticket.schema === 1) &&
-    ticketGrade.verdict !== "pass" &&
-    flags.legacyBrief === undefined
-  ) {
-    for (const line of renderGradeRemand(ticketGrade)) dispatchError(line);
-    dispatchError(
-      'agx: plain briefs and schema 1 tickets with floor violations are refused; add schema = 2 and fix each violation, or use --legacy-brief "<why this must run once more release>"',
-    );
-    appendLog({
-      kind: "refusal",
-      at: now(),
-      cwd: resolve(flags.cd),
-      dispatcher_session: currentDispatcherSession(),
-      brief: {
-        path: resolve(flags.promptFile),
-        sha256: sha256(brief),
-        chars: brief.length,
-      },
-      pick,
-      effort: roster.choice.find((choice) => choice.id === pick.choice)?.effort,
-      ticket_grade: ticketGrade,
-    });
-    return 2;
-  }
   let finalGrade = ticketGrade;
   const gradeRunId = `${now().replaceAll(/[:.]/gu, "-")}-${process.pid}`;
   const splitParentTitle = flags.label ?? briefLabel(parsed.prose);
@@ -2379,63 +2332,17 @@ async function run(flags: RunFlags): Promise<number> {
       );
     }
   }
-  const urgentGraderOverride =
-    ticket?.schema === 2 &&
-    ticket.urgent_reason !== undefined &&
-    ticketGrade.verdict === "pass" &&
-    finalGrade.grader?.status === "ok" &&
-    finalGrade.verdict === "split";
   if (
+    finalGrade.verdict !== "pass" ||
     finalGrade.violations.length > 0 ||
     (finalGrade.questions?.length ?? 0) > 0 ||
     (finalGrade.pieces?.length ?? 0) > 0
   ) {
+    dispatchError(
+      `agx: warning: grader ${finalGrade.verdict}; proceeding with the run`,
+    );
     for (const line of renderGradeRemand(finalGrade, splitParentTitle))
-      dispatchError(line);
-    if (urgentGraderOverride)
-      dispatchError(
-        `agx: urgent override (${ticket.urgent_reason}): grader ${finalGrade.verdict} is recorded as a warning; proceeding with the run`,
-      );
-    if (ticket?.schema === 2 && ticketGrade.violations.length > 0) {
-      appendLog({
-        kind: "refusal",
-        at: now(),
-        cwd: resolve(flags.cd),
-        dispatcher_session: currentDispatcherSession(),
-        brief: {
-          path: resolve(flags.promptFile),
-          sha256: sha256(brief),
-          chars: brief.length,
-        },
-        pick,
-        effort: roster.choice.find((choice) => choice.id === pick.choice)
-          ?.effort,
-        ticket_grade: finalGrade,
-      });
-      return 2;
-    }
-  }
-  if (
-    ticket?.schema === 2 &&
-    finalGrade.verdict === "split" &&
-    finalGrade.grader?.status === "ok" &&
-    !urgentGraderOverride
-  ) {
-    appendLog({
-      kind: "refusal",
-      at: now(),
-      cwd: resolve(flags.cd),
-      dispatcher_session: currentDispatcherSession(),
-      brief: {
-        path: resolve(flags.promptFile),
-        sha256: sha256(brief),
-        chars: brief.length,
-      },
-      pick,
-      effort: roster.choice.find((choice) => choice.id === pick.choice)?.effort,
-      ticket_grade: finalGrade,
-    });
-    return 2;
+      dispatchError(`agx: warning: ${line}`);
   }
   // A ticket's front matter is the router's, not the worker's: the worker gets the prose and the
   // verify line, from a copy under the state dir. A legacy brief goes to the worker as the file itself.
@@ -2573,10 +2480,16 @@ async function launch(l: Launch): Promise<number> {
       : `${row.id} (${pick.source}: ${pick.reason}) — ${label}`,
   );
 
+  const parsedBrief = parseTicket(brief);
+  const taskKind = resourceKind(
+    parsedBrief.kind === "invalid" ? brief : parsedBrief.prose,
+  );
   const active: Active = {
     schema: SCHEMA,
     run_id: runId,
     display_id: displayId,
+    kind: taskKind,
+    labels: ticket?.labels ?? [],
     pid: process.pid,
     label,
     choice: row.id,
@@ -2602,7 +2515,11 @@ async function launch(l: Launch): Promise<number> {
   // report instruction after the ticket's verify line (a legacy brief is its own text).
   const workerBrief = join(STATE_DIR, "briefs", `${runId}.md`);
   mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
-  const workerText = l.workerText ?? brief;
+  const rawWorkerText = l.workerText ?? brief;
+  const workerText =
+    ticket === undefined
+      ? rawWorkerText
+      : `${promiseBlock(ticket, active.cwd, flags.sandbox, taskKind)}\n\n${rawWorkerText}`;
   writeFileSync(
     workerBrief,
     withReportInstruction(
@@ -2678,6 +2595,7 @@ async function launch(l: Launch): Promise<number> {
     // recorded as stopped; a waiver, because a stopped run has no work to grade and must not block the cwd
     appendLog({
       kind: "run",
+      resource: { kind: active.kind, labels: active.labels },
       host: currentHost(),
       route: row.route,
       run_id: runId,
@@ -3050,6 +2968,7 @@ async function launch(l: Launch): Promise<number> {
     returnFields.return_error = parsedReturn.error;
   const receiptBase = {
     schema: SCHEMA,
+    resource: { kind: active.kind, labels: active.labels },
     host: currentHost(),
     route: row.route,
     run_id: runId,
@@ -4974,6 +4893,40 @@ async function parseAgx() {
         parameters: [],
         commands: [
           command({
+            name: "new",
+            strictFlags: true,
+            ignoreArgv: rejectPrototypeFlag,
+            parameters: ["<name>"],
+            flags: {
+              label: { type: [String] },
+              cd: { type: String, default: process.cwd() },
+            },
+            help: {
+              description: "create a skeleton in <repo>/.agents/tickets",
+            },
+          }),
+          command({
+            name: "ls",
+            strictFlags: true,
+            ignoreArgv: rejectPrototypeFlag,
+            parameters: [],
+            flags: { cd: { type: String, default: process.cwd() } },
+            help: {
+              description:
+                "list repository tickets with their latest ledger outcome",
+            },
+          }),
+          command({
+            name: "lint",
+            strictFlags: true,
+            ignoreArgv: rejectPrototypeFlag,
+            parameters: ["<file>"],
+            flags: { cd: { type: String, default: process.cwd() } },
+            help: {
+              description: "check all local floor rules without Jev or network",
+            },
+          }),
+          command({
             name: "replay",
             strictFlags: true,
             ignoreArgv: rejectPrototypeFlag,
@@ -5017,6 +4970,36 @@ async function parseAgx() {
       rawArgs.slice(1),
     );
     await parsed;
+    if (parsed.command === "new")
+      return {
+        command: "ticket-new",
+        flags: parsed.flags,
+        _: parsed._,
+      } satisfies {
+        command: "ticket-new";
+        flags: typeof parsed.flags;
+        _: typeof parsed._;
+      };
+    if (parsed.command === "ls")
+      return {
+        command: "ticket-ls",
+        flags: parsed.flags,
+        _: parsed._,
+      } satisfies {
+        command: "ticket-ls";
+        flags: typeof parsed.flags;
+        _: typeof parsed._;
+      };
+    if (parsed.command === "lint")
+      return {
+        command: "ticket-lint",
+        flags: parsed.flags,
+        _: parsed._,
+      } satisfies {
+        command: "ticket-lint";
+        flags: typeof parsed.flags;
+        _: typeof parsed._;
+      };
     if (parsed.command === "replay")
       return { command: parsed.command, flags: parsed.flags, _: parsed._ };
     if (parsed.command === "grade")
@@ -5172,6 +5155,8 @@ async function main(): Promise<number | undefined> {
   let positionals = 0;
   if (argv.command === "record") positionals = 2;
   if (
+    argv.command === "ticket-new" ||
+    argv.command === "ticket-lint" ||
     argv.command === "replay" ||
     argv.command === "grade" ||
     argv.command === "note" ||
@@ -5246,6 +5231,38 @@ async function main(): Promise<number | undefined> {
       pickSeed: f.pickSeed,
       runId: `${now().replaceAll(":", "-")}-${process.pid}`,
     });
+  }
+  if (argv.command === "ticket-lint") {
+    const lintGrade = lintTicket(
+      readFileSync(argv._.file, "utf8"),
+      resolve(argv.flags.cd),
+    );
+    for (const line of renderTicketLint(lintGrade))
+      process.stdout.write(`${line}\n`);
+    for (const warning of lintGrade.warnings ?? [])
+      process.stdout.write(`agx: warning: ${warning}\n`);
+    if (lintGrade.violations.length === 0)
+      process.stdout.write("agx: ticket lint passed\n");
+    return lintGrade.violations.length === 0 ? 0 : 1;
+  }
+  if (argv.command === "ticket-new" || argv.command === "ticket-ls") {
+    const root = ticketRoot(argv.flags.cd);
+    if (root === undefined) fatal(`no jj/git repository at ${argv.flags.cd}`);
+    if (argv.command === "ticket-ls") {
+      process.stdout.write(
+        `${JSON.stringify(
+          listTickets(
+            root,
+            readLog().filter((line) => line.kind === "run"),
+          ),
+        )}\n`,
+      );
+      return 0;
+    }
+    const path = newTicket(root, argv._.name, argv.flags.label ?? []);
+    if (path instanceof Error) fatal(path.message);
+    process.stdout.write(`${path}\n`);
+    return 0;
   }
   if (argv.command === "pick") {
     if (argv.flags.promptFile === "" || argv.flags.cd === "")

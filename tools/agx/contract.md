@@ -85,6 +85,21 @@ without a third worker.
 
 `agx dispatch --name <name>` or ticket front matter `name = "<name>"` assigns the worker ID `agt_<name>`, name in [A-Za-z0-9_] (hyphens become underscores); the CLI value takes precedence. Names keep their typed case and must contain 1..16 ASCII letters, digits, `_` or `-`. A hyphenated name is normalized to underscores with one stderr note; other characters are refused with exit 2. Without either name, the dispatcher assigns `agt_` followed by four lowercase base36 characters. A live ID on this host cannot be reused; finished runs release it. Resume keeps the original display ID. `resume`, `result`, `grade` and `ack` accept the display ID, choosing the most recent run when finished history contains more than one match; hyphenated spelling resolves to the underscore ID.
 
+## Ticket home and worker promises
+
+`agx ticket new <name> [--label L ...] [--cd DIR]` locates the jj/git root and creates
+`.agents/tickets/<YYMMDD>-<name>.md` with placeholders and examples, refusing overwrites.
+`agx ticket ls [--cd DIR]` lists names, RESOURCE-derived kind, opaque labels, latest run ID,
+and its ledger outcome. `agx ticket lint <file> [--cd DIR]` reports all local violations and
+fixes without network or Jev (exit 1 for findings). Dispatch still accepts any prompt-file path.
+
+The worker receives a compact promise before the body: outcome, consumer, absolute write
+paths/globs, first-return artifact and seconds, verify, kind, labels, and sandbox mode.
+RESOURCE-CLASS(NONCOMPUTE) derives `token`; RESOURCE-ENVELOPE derives `compute`. Kind is
+computed, never a user field. Optional labels are opaque strings; active markers store
+`kind`/`labels`, and ledger run rows store `resource: { kind, labels }` because ledger `kind`
+already identifies the event type.
+
 ## Pre-spawn ticket grading
 
 Schema 1 and 2 tickets may declare `premises = ["file:<relative-path>", "symbol:<exact-text>", "symbol:<exact-text>@<path-glob>"]`; before Jev is asked, the router checks paths and exact-text symbol occurrences in tracked files for this checkout (or text files via `rg` elsewhere), bounded to five seconds total. Missing premises refuse with exit 2, a `premise` ticket-grade violation, and the fix `correct the brief's premise or remove it`; a timeout is recorded as `premise check skipped: timeout` and proceeds.
@@ -106,19 +121,17 @@ ticket and must pass the model-free floor. A piece whose outcome is contained in
 with that marker cannot be split again. Piece write globs must be disjoint or ordered by a
 transitive `depends_on` relation.
 
-A ticket may include `urgent_reason = "<why>"`. If the floor passes but the grader returns a valid
-split or clarify, the dispatcher prints the remand and proceeds with the run; the receipt retains
-the reason and grader verdict. Floor violations still refuse. In `stats --grading`, each refusal
+A ticket may include `urgent_reason = "<why>"`; the receipt retains it. All grader split/clarify
+verdicts proceed with warnings, regardless of urgency. Hard local floor violations still refuse. In `stats --grading`, each refusal
 adds wall time through the next dispatch by the same dispatcher to grading overhead. The report
 shows urgent and matching `--no-grader` split overrides separately under `overridden_splits`.
 
 Malformed output, invalid pieces, process failure, or timeout records grader status `failed` and
 uses the floor verdict. A grader failure never refuses the run. A valid grade merges floor and
-grader violations with source `floor+grader`. Schema 2 split/clarify grades refuse with exit 2 and
-print actionable violations plus ready-to-paste piece headers or clarifying questions. Plain briefs
-and schema 1 tickets whose model-free floor verdict is not `pass` are refused with named violations
-and fixes; `--legacy-brief "<why>"` records a one-release exception. Schema 1 floor-pass tickets
-continue to run. The parent receipt carries grader status, reason, Jev pick, chosen row, elapsed
+grader violations with source `floor+grader`. Grader split/clarify verdicts print warnings with ready-to-paste piece headers or clarifying
+questions, remain in the receipt, and run. Shared local lint checks schema (including timeout),
+RESOURCE, verification/diagnostic declarations, and missing premises together before routing;
+violations refuse with exit 2 and all fixes. Optional promise fields receive compatible defaults. The parent receipt carries grader status, reason, Jev pick, chosen row, elapsed
 time, usage and cost.
 
 `--no-grader` records status `skipped` and its reason. `agx ticket replay <dir>

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.0 — 2026-10-10
+
+- Prepend the worker promise block, derive token/compute kind from RESOURCE, and preserve opaque labels in active markers and ledger resource metadata.
+- Add repository-local `.agents/tickets` skeletons and inventory with `agx ticket new/ls/lint`; lint reports all local admission violations before routing without Jev or network.
+- Grader split and clarify verdicts now warn, record pieces/questions in receipts, and run instead of refusing. Hard local schema, resource, timeout, verification and premise failures still refuse.
+
 ## 2.2.0 — 2026-10-10
 
 - Reconcile mutable state during migration: keep the newer route-capability cache, imported routing record, and other singleton JSON/cache files by mtime; skip old locks and unfinished temporary writes; merge numeric counters with maximum values. Preserve strict conflicts for per-run and content-addressed files.

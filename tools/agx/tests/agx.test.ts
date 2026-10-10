@@ -247,9 +247,13 @@ const NO_EGRESS = roster("no-egress", (t) =>
   ),
 );
 
+const fixtureBriefText = (text: string): string =>
+  /RESOURCE-(?:CLASS|ENVELOPE)\(/u.test(text)
+    ? text
+    : `${text.trimEnd()}\nRESOURCE-CLASS(NONCOMPUTE): fixture CLI work\n`;
 const brief = (name: string, text: string): string => {
   const p = join(scratch, `${name}.md`);
-  writeFileSync(p, text);
+  writeFileSync(p, fixtureBriefText(text));
   return p;
 };
 
@@ -2343,8 +2347,8 @@ describe("agx ledger note and throughput CLI", () => {
       TEST_SKIP_LEGACY: "1",
     });
     expect(refused.code).toBe(2);
-    expect(refused.err).toContain("remand outcome:");
-    expect(refused.err).toContain("schema = 2");
+    expect(refused.err).toContain("remand verify:");
+    expect(refused.err).toContain("read_only_diagnostic");
     expect(logLines(refused.state).map((line) => line.kind)).toEqual([
       "refusal",
     ]);
@@ -3290,6 +3294,157 @@ const logLines = (state: string): z.output<typeof AnyLine>[] =>
 const lastJevBody = (): string => bodies.at(-1) ?? "";
 
 describe("agx dispatch: a brief with a ticket", () => {
+  test.each([
+    ["RESOURCE-CLASS(NONCOMPUTE): CLI work", "token"],
+    [
+      "RESOURCE-ENVELOPE(/tmp/envelope.json): agent-resource-run only",
+      "compute",
+    ],
+  ])(
+    "%s persists kind and opaque labels in prompt, marker and ledger",
+    async (resource, kind) => {
+      const state = join(scratch, `metadata-${kind}`);
+      const labels = ["Exact Case", "", "a/b", "Exact Case"];
+      const b = brief(
+        `metadata-${kind}`,
+        ticketText(
+          `writes = []\nverify = ["true"]\nlabels = ${JSON.stringify(labels)}`,
+          `${resource}\nInspect.`,
+        ),
+      );
+      const r = await router(
+        runArgs(b, freshCwd()),
+        {
+          AGX_STATE_DIR: state,
+          FAKE_SLEEP_MS: "250",
+        },
+        async () => {
+          const home = join(state, "active");
+          let marker: string | undefined;
+          for (let i = 0; i < 200; i++) {
+            marker = existsSync(home)
+              ? readdirSync(home).find(
+                  (name) =>
+                    name.endsWith(".json") && !name.endsWith(".progress.json"),
+                )
+              : undefined;
+            if (marker !== undefined) break;
+            await Bun.sleep(10);
+          }
+          expect(marker).toBeDefined();
+          const active = decodedJson(
+            z.looseObject({ kind: z.string(), labels: z.array(z.string()) }),
+            readFileSync(join(home, marker ?? "missing"), "utf8"),
+          );
+          expect(active).toMatchObject({ kind, labels });
+        },
+      );
+      expect(r.code).toBe(0);
+      const receipt = decodedJson(
+        z.looseObject({
+          resource: z.looseObject({
+            kind: z.string(),
+            labels: z.array(z.string()),
+          }),
+        }),
+        r.out.trim(),
+      );
+      expect(receipt.resource).toEqual({ kind, labels });
+      expect(logLines(state)[0]?.resource).toEqual({ kind, labels });
+      const prompts = readFileSync(join(scratch, "prompt.log"), "utf8");
+      expect(prompts.slice(prompts.lastIndexOf("<<<"))).toContain(
+        `labels: ${JSON.stringify(labels)}`,
+      );
+    },
+  );
+
+  test("dispatch and offline lint print the same collected hard-floor violations before Jev", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "batched-floor",
+      '+++\nschema = 2\ntimeout_s = 2\npremises = ["file:absent"]\n+++\nDo the work.',
+    );
+    // Deliberately remove the fixture's automatic RESOURCE declaration.
+    writeFileSync(
+      b,
+      readFileSync(b, "utf8").replace(/\nRESOURCE-CLASS[^\n]*\n/u, "\n"),
+    );
+    const before = bodies.length;
+    const lint = await router(["ticket", "lint", b, "--cd", cwd]);
+    const dispatch = await router(runArgs(b, cwd), { TEST_SKIP_LEGACY: "1" });
+    expect(lint.code).toBe(1);
+    expect(dispatch.code).toBe(2);
+    expect(dispatch.err).toBe(lint.out);
+    expect(bodies.length).toBe(before);
+    for (const rule of ["schema", "resource", "verify", "premise"])
+      expect(lint.out).toContain(`remand ${rule}:`);
+  });
+
+  test("ticket new/ls use the repository root and repeated labels without Jev", async () => {
+    const root = freshCwd();
+    const nested = join(root, "nested");
+    const bin = join(root, "bin");
+    mkdirSync(nested);
+    mkdirSync(bin);
+    const jj = join(bin, "jj");
+    writeFileSync(
+      jj,
+      `#!/usr/bin/env bun\nprocess.stdout.write(${JSON.stringify(root)} + "\\n");\n`,
+    );
+    chmodSync(jj, 0o755);
+    const env = {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      AGX_STATE_DIR: join(root, "state"),
+    };
+    const before = bodies.length;
+    const made = await router(
+      [
+        "ticket",
+        "new",
+        "retry",
+        "--label",
+        "Exact",
+        "--label",
+        "x/y",
+        "--cd",
+        nested,
+      ],
+      env,
+    );
+    expect(made.code).toBe(0);
+    const path = made.out.trim();
+    expect(path).toMatch(/\/\.agents\/tickets\/\d{6}-retry\.md$/u);
+    mkdirSync(env.AGX_STATE_DIR, { recursive: true });
+    writeFileSync(
+      join(env.AGX_STATE_DIR, "runs.jsonl"),
+      `${JSON.stringify({ kind: "run", run_id: "last-run", brief: { path }, cwd: root, worker: { outcome: "returned" }, pick: { source: "test", choice: "luna-low", reason: "fixture" } })}\n`,
+    );
+    const listed = await router(["ticket", "ls", "--cd", nested], env);
+    expect(listed.code).toBe(0);
+    expect(
+      decodedJson(
+        z.array(
+          z.looseObject({
+            labels: z.array(z.string()),
+            kind: z.string(),
+            last_run_id: z.string(),
+            outcome: z.string(),
+          }),
+        ),
+        listed.out.trim(),
+      )[0],
+    ).toMatchObject({
+      labels: ["Exact", "x/y"],
+      kind: "token",
+      last_run_id: "last-run",
+      outcome: "returned",
+    });
+    expect(
+      (await router(["ticket", "new", "retry", "--cd", nested], env)).code,
+    ).toBe(2);
+    expect(bodies.length).toBe(before);
+  });
+
   test("the worker gets the prose without the front matter, plus the verify line", async () => {
     const cwd = freshCwd();
     const b = brief(
@@ -3301,6 +3456,11 @@ describe("agx dispatch: a brief with a ticket", () => {
     const seen = readFileSync(join(scratch, "prompt.log"), "utf8");
     const mine = seen.slice(seen.lastIndexOf("<<<"));
     expect(mine).toContain("PROSE-MARK do it");
+    expect(mine).toContain("Promise:");
+    expect(mine).toContain("first_return: useful interim RETURN (360 seconds)");
+    expect(mine).toContain("kind: token");
+    expect(mine).toContain("labels: []");
+    expect(mine.indexOf("Promise:")).toBeLessThan(mine.indexOf("PROSE-MARK"));
     expect(mine).not.toContain("+++");
     expect(mine).not.toContain("schema = 1");
     expect(mine).toContain(
@@ -3373,8 +3533,8 @@ describe("agx dispatch: a brief with a ticket", () => {
       CLAUDE_CODE_SESSION_ID: "",
     });
     expect(r.code).toBe(2);
-    expect(r.err).toContain("remand outcome:");
-    expect(r.err).toContain('outcome = "<decision/result this changes>"');
+    expect(r.err).toContain("remand verify:");
+    expect(r.err).toContain('verify = ["<foreground check>"]');
     const after = existsSync(join(scratch, "argv.log"))
       ? readFileSync(join(scratch, "argv.log"), "utf8")
       : "";
@@ -3417,31 +3577,18 @@ describe("agx dispatch: a brief with a ticket", () => {
       expect(refusal?.ticket_grade).toMatchObject({
         verdict: "clarify",
         source: "floor",
-        violations: [{ rule: "premise", quote_from_brief: premise }],
       });
     },
   );
 
-  test("schema 1 floor remand is refused with fixes unless the recorded escape is supplied", async () => {
-    const b = brief("t-schema1-remand", ticketText("writes = []\nverify = []"));
-    const r = await router(runArgs(b, freshCwd()), {
-      CLAUDE_CODE_SESSION_ID: "",
-      TEST_SKIP_LEGACY: "1",
-    });
-    expect(r.code).toBe(2);
-    expect(r.err).toContain("remand outcome:");
-    expect(r.err).toContain('Fix: outcome = "<decision/result this changes>"');
-    expect(r.err).toContain("schema = 2");
-    expect(logLines(r.state).map((line) => line.kind)).toEqual(["refusal"]);
-
-    const escape = await router(
-      [...runArgs(b, freshCwd()), "--legacy-brief", "one more release"],
-      {
-        CLAUDE_CODE_SESSION_ID: "",
-      },
+  test("an existing schema 1 ticket without optional promise fields runs", async () => {
+    const b = brief(
+      "t-schema1-compatible",
+      ticketText('writes = []\nverify = ["true"]'),
     );
-    expect(escape.code).toBe(0);
-    expect(escape.out).toContain('"legacy_brief_reason":"one more release"');
+    const r = await router(runArgs(b, freshCwd()), { TEST_SKIP_LEGACY: "1" });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('"labels":[]');
   });
 
   test("schema 2 grader clarify is recorded and warned without refusing", async () => {
@@ -3477,7 +3624,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(r.out).toContain('"verdict":"pass"');
   });
 
-  test("valid split refuses schema 2 and prints ready-to-paste pieces", async () => {
+  test("valid split warns, runs, and prints ready-to-paste pieces", async () => {
     const b = brief(
       "t-grader-split",
       '+++\nschema = 2\noutcome = "choose A and B"\nconsumer = "coordinator"\nfirst_return = "decision.md"\nwrites = []\nverify = ["true"]\ncapabilities = ["bounded-judgment"]\n+++\nDeliver A and B.\n',
@@ -3486,7 +3633,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       TEST_ENABLE_GRADER: "1",
       FAKE_GRADE: JSON.stringify(splitGrade),
     });
-    expect(r.code).toBe(2);
+    expect(r.code).toBe(0);
     expect(r.err).toContain("remand multiple-deliverables:");
     expect(r.err).toContain("split piece 1: A decision");
     expect(r.err).toContain('first_return = "a.md within six minutes"');
@@ -3507,14 +3654,17 @@ describe("agx dispatch: a brief with a ticket", () => {
           }),
         }),
       }),
-      readFileSync(join(r.state, "runs.jsonl"), "utf8").trim(),
+      r.out.trim(),
     );
     expect(refusal.ticket_grade).toMatchObject({
       verdict: "split",
       source: "floor+grader",
       grader: { status: "ok", row: { id: "luna-low", route: "codex" } },
     });
-    expect(logLines(r.state).map((line) => line.kind)).toEqual(["refusal"]);
+    expect(logLines(r.state).map((line) => line.kind)).toEqual([
+      "run",
+      "grade",
+    ]);
   });
 
   test("split pieces that only differ by target file are rejected and recorded", async () => {
@@ -3562,9 +3712,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     });
     expect(r.code).toBe(0);
     expect(r.err).toContain("split piece 1: A decision");
-    expect(r.err).toContain(
-      "urgent override (Vast outage: mise is broken): grader split is recorded as a warning",
-    );
+    expect(r.err).toContain("warning: grader split; proceeding with the run");
     const receipt = decodedJson(
       z.looseObject({
         ticket: z.looseObject({ urgent_reason: z.string() }),
@@ -3589,7 +3737,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       TEST_ENABLE_GRADER: "1",
     });
     expect(r.code).toBe(2);
-    expect(r.err).toContain("remand outcome:");
+    expect(r.err).toContain("remand verify:");
     expect(r.err).not.toContain("urgent override");
     expect(logLines(r.state).map((line) => line.kind)).toEqual(["refusal"]);
   });
@@ -5152,9 +5300,8 @@ describe("agx: the stored brief", () => {
     ).brief.sha256;
 
   test("the full original text, ticket included, is at briefs/<sha256>.md after the run", async () => {
-    const text = ticketText(
-      'writes = []\nverify = ["true"]',
-      "STORE-MARK keep me\n",
+    const text = fixtureBriefText(
+      ticketText('writes = []\nverify = ["true"]', "STORE-MARK keep me\n"),
     );
     const r = await router(
       runArgs(brief("s-store", text), freshCwd(), "read-only"),
@@ -5169,7 +5316,7 @@ describe("agx: the stored brief", () => {
   });
 
   test("a legacy brief (no ticket) is stored too", async () => {
-    const text = "legacy STORE-LEGACY text\n";
+    const text = fixtureBriefText("legacy STORE-LEGACY text\n");
     const r = await router(
       runArgs(brief("s-legacy", text), freshCwd(), "read-only"),
     );
@@ -5185,7 +5332,11 @@ describe("agx: the stored brief", () => {
       AGX_STATE_DIR: state,
       CLAUDE_CODE_SESSION_ID: "store-once-first",
     });
-    const file = join(state, "briefs", `${sha("STORE-ONCE twice\n")}.md`);
+    const file = join(
+      state,
+      "briefs",
+      `${sha(fixtureBriefText("STORE-ONCE twice\n"))}.md`,
+    );
     const first = statSync(file).mtimeMs;
     await Bun.sleep(30);
     const second = await router(runArgs(b, freshCwd(), "read-only"), {
@@ -5199,7 +5350,9 @@ describe("agx: the stored brief", () => {
   });
 
   test("result --brief prints the stored brief, and still does once the original file is gone", async () => {
-    const text = ticketText("writes = []\nverify = []", "STORE-PRINT body\n");
+    const text = fixtureBriefText(
+      ticketText("writes = []\nverify = []", "STORE-PRINT body\n"),
+    );
     const path = brief("s-print", text);
     const run = await router(runArgs(path, freshCwd(), "read-only"));
     const id = decodedJson(RunIdSchema, run.out.trim()).run_id;
@@ -5216,7 +5369,9 @@ describe("agx: the stored brief", () => {
     const run = await router(runArgs(path, freshCwd(), "read-only"));
     const id = decodedJson(RunIdSchema, run.out.trim()).run_id;
     rmSync(path);
-    rmSync(join(run.state, "briefs", `${sha("STORE-GONE\n")}.md`));
+    rmSync(
+      join(run.state, "briefs", `${sha(fixtureBriefText("STORE-GONE\n"))}.md`),
+    );
     const r = await router(["ledger", "result", id, "--brief"], {
       AGX_STATE_DIR: run.state,
     });

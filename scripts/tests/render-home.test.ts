@@ -122,6 +122,17 @@ describe("render-home: base only", () => {
     });
     // A real file, never a symlink — the whole point of the change.
     expect(lstatSync(dest(home)).isSymbolicLink()).toBe(false);
+    const policy = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
+    for (const text of [
+      "promise block",
+      "kind/labels",
+      ".agents/tickets",
+      "agx ticket new",
+      "agx ticket ls",
+      "agx ticket lint",
+      "Grader split/clarify verdicts warn",
+    ])
+      expect(policy).toContain(text);
     cleanup(dotfiles, home);
   });
 

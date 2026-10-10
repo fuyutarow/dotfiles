@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
+import { KindSchema } from "./ticket.ts";
 
 export const STATE_SCHEMA = 1;
 
@@ -64,6 +65,8 @@ export const ActiveSchema = z.strictObject({
   run_id: z.string(),
   pid: z.number().int(),
   display_id: z.string().optional(),
+  kind: KindSchema.optional(),
+  labels: z.array(z.string()).optional(),
   label: z.string(),
   choice: z.string(),
   pick_source: z.string(),

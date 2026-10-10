@@ -1,15 +1,8 @@
 import type { TicketGrade } from "./report.ts";
-import type { ParsedBrief, Ticket } from "./ticket.ts";
+import { ticketFields, type ParsedBrief } from "./ticket.ts";
 
 function frontMatterKeys(brief: string): Set<string> {
-  const lines = brief.split("\n");
-  if (lines[0]?.trimEnd() !== "+++") return new Set();
-  const end = lines.findIndex((line, i) => i > 0 && line.trimEnd() === "+++");
-  return new Set(
-    lines
-      .slice(1, end < 0 ? undefined : end)
-      .flatMap((line) => /^([A-Za-z_][\w]*)\s*=/u.exec(line)?.[1] ?? []),
-  );
+  return new Set(Object.keys(ticketFields(brief)));
 }
 
 function quoteFor(brief: string, key: string): string {
@@ -44,8 +37,7 @@ export function floorTicketGrade(
 ): TicketGrade {
   const violations: TicketGrade["violations"] = [];
   const keys = frontMatterKeys(brief);
-  const ticket: Ticket | undefined =
-    parsed.kind === "ticket" ? parsed.ticket : undefined;
+  const ticket = parsed.kind === "ticket" ? parsed.ticket : ticketFields(brief);
   const missing = (key: string, example: string): void => {
     violations.push(
       violation(
@@ -73,7 +65,9 @@ export function floorTicketGrade(
 
   if (
     (selectedEffort === "xhigh" || selectedEffort === "max") &&
-    !hasXhighMaxJustification(ticket?.capabilities ?? [])
+    !hasXhighMaxJustification(
+      parsed.kind === "ticket" ? parsed.ticket.capabilities : [],
+    )
   ) {
     violations.push(
       violation(

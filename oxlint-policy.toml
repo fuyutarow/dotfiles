@@ -7,7 +7,7 @@
 # are stated here. In the four quality categories every rule is an error unless it is listed under
 # [[off]] with the failure-or-cost reason it was judged on; restriction rules are opt-in, one by one,
 # under [[on]]. There is no warn level (a warning nobody must fix trains people to read past it),
-# no `overrides` and no disable comment (lint:ts-ratchet, lint:ts-no-disable).
+# only generated I/O overrides and no disable comment (lint:ts-ratchet, lint:ts-no-disable).
 #
 # Every key is required where its table appears; the renderer's schema is strict, so a typo or an
 # unknown rule name fails the render (oxlint itself also rejects an unknown rule).
@@ -15,7 +15,7 @@
 schema = 1
 
 # oxlint's default plugin set, named so it cannot change under us on an upgrade.
-plugins = ["eslint", "typescript", "unicorn", "oxc"]
+plugins = ["eslint", "typescript", "unicorn", "oxc", "node"]
 
 # Loads ESLint's core rules into oxlint, for `no-restricted-syntax` (the [[custom]] kind "syntax").
 js_plugins = [{ name = "eslint-js", specifier = "oxlint-plugin-eslint" }, { name = "dotfiles", specifier = "./tools/oxlint-plugin-dotfiles/src/index.mjs" }]
@@ -24,182 +24,183 @@ js_plugins = [{ name = "eslint-js", specifier = "oxlint-plugin-eslint" }, { name
 # Test fixtures are outside Bun API migration scope; other lint rules still apply to them.
 exclude = ["**/tests/**", "**/*.test.ts"]
 apis = [
-  { modules = ["node:fs", "fs"], api = "readFileSync", replacement = "await Bun.file(p).text() / .arrayBuffer()" },
-  { modules = ["node:fs", "fs"], api = "existsSync", replacement = "await Bun.file(p).exists()" },
-  { modules = ["node:fs", "fs"], api = "statSync", replacement = "await fs.promises.stat(p)" },
-  { modules = ["node:fs", "fs"], api = "lstatSync", replacement = "await fs.promises.lstat(p)" },
-  { modules = ["node:fs", "fs"], api = "readdirSync", replacement = "await fs.promises.readdir(p)" },
   { modules = ["node:child_process", "child_process"], api = "exec", replacement = "Bun.spawn" },
   { modules = ["node:child_process", "child_process"], api = "execFile", replacement = "Bun.spawn" },
   { modules = ["node:child_process", "child_process"], api = "spawn", replacement = "Bun.spawn" },
-  { modules = ["node:child_process", "child_process"], api = "execSync", replacement = "Bun.spawn / Bun.spawnSync" },
-  { modules = ["node:child_process", "child_process"], api = "execFileSync", replacement = "Bun.spawn / Bun.spawnSync" },
-  { modules = ["node:child_process", "child_process"], api = "spawnSync", replacement = "Bun.spawn / Bun.spawnSync" },
   { modules = ["node:crypto", "crypto"], api = "createHash", replacement = "Bun.CryptoHasher" },
 ]
 
-# Production exemptions are per-file only. Every entry must still call a policy API; stale entries fail lint.
+# One exemption source for both rules. Each path/rule pair must still produce a diagnostic.
 # Membership is compared with the parent revision by lint:oxlint-policy (initial rollout excepted).
-# Paths resolve against the plugin's checkout, so consumer repos never inherit these exemptions.
-[bun_api.allowlist]
-"tools/agx/src/ledger.ts" = "protocol: synchronous exclusive ledger lock, append and atomic rotation callbacks; promise conversion must preserve lock lifetime and synchronous callers"
-"tools/shared/src/jsonl.ts" = "protocol: readJsonlTailSync and JsonlLineReader serve synchronous ledger handlers; asynchronous readJsonlTail now uses fs.promises for stat, tail-boundary reads and bounded chunks"
-"agents/claude/hooks/bash-durations.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/capture-last-response.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/copy-via-herdr-pane.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/detect-ccc-gpu-hold.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/detect-leaked-toolcall.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/enforce-background-waits.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/enforce-no-new-bash.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/enforce-official-execution.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/enforce-reply-language.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/goal-kernel.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/herdr-tab-name.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/lib.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/log-sys-snapshot.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/quote-command.ts" = "protocol: synchronous hook path"
-"agents/claude/hooks/resolve-agent-name.ts" = "protocol: synchronous hook path"
-"agents/codex/hooks/enforce-dispatch-contract.ts" = "protocol: synchronous hook path"
-"agents/codex/hooks/goal-kernel.ts" = "protocol: synchronous hook path"
-"agents/codex/remote-control.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/codex/sandbox-network.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/goal-kernel/kernel.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/goal-kernel/postmortem.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/hooks/dir-lock.ts" = "protocol: synchronous hook path"
-"agents/hooks/enforce-model-floor.ts" = "protocol: synchronous hook path"
-"agents/hooks/enforce-repo-bash-deny.ts" = "protocol: synchronous hook path"
-"agents/hooks/enforce-search-route.ts" = "protocol: synchronous hook path"
-"agents/hooks/enforce-storage-headroom.ts" = "protocol: synchronous hook path"
-"agents/hooks/lib.ts" = "protocol: synchronous hook path"
-"agents/hooks/read-path.ts" = "protocol: synchronous hook path"
-"agents/hooks/remind-reply-language.ts" = "protocol: synchronous hook path"
-"agents/hooks/slugs.ts" = "protocol: synchronous hook path"
-"agents/models/check-releases.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/models/roster.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/research-control/learning-bus.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/commanding-research-fleets/scripts/check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/continuing-long-running-tasks/scripts/continuation-record.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/designing-command-line-interfaces/scripts/cli-contract-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/designing-version-schemes/scripts/versioning-contract-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/directing-research/scripts/research-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/directing-research/scripts/research-run/model.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/directing-research/scripts/research-run/parse.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/driving-git/scripts/git-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/forging-novel-theses/scripts/gate-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/forging-skills/scripts/skill-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/governing-configuration-systems/scripts/configuration-contract-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/governing-research-documentation/scripts/research-docs-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/operating-the-harness/scripts/scope-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/surfacing-blind-spots/scripts/blind-spot-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/systematizing-knowledge/scripts/check-donor-set.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/systematizing-knowledge/scripts/check-ledger.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/wiring-mise-tasks/scripts/jj-commit.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/wiring-mise-tasks/scripts/mise-contract.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/wiring-repositories/scripts/wiring-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"agents/skills/writing-bun-scripts/scripts/script-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"cocoindex/deploy-daemon.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"macos/defaults.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"obsidian/apply.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"obsidian/trust.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/agx-host.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/auth-push.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/ccc-swap.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/config-map.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/doctor-remote.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/doctor.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/edge-policy.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/hook-post-commit.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/hook-registry.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/install-mcp.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/land.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/link-dots.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/link-skills.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/lint-bun.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/lint-hook-slug.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/lint-ts-ratchet.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/lint-zsh.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/linux-init.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/live-refs.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/one-writer-check.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/render-home.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/render-oxlintrc.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/repos-audit.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/secrets-push.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/skills-doctor.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/tmux-plugins.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/vendor-deps.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/vendor-skill.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/wsl-capacity-recover.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/wsl-winget.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"scripts/wsl-wslconfig.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agent-resource-run/src/agent-resource-run.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx-usehooks/src/runtime.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/agx.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/lifecycle.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/migrate-state.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/premises.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/routes.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/selection.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/state.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/ticket-home.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/workers/codex-host.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/workers/codex-resource-probe.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/workers/codex.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/agx/src/workers/run-claude.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/coredev/src/hosts.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/coredev/src/login-shell.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/coredev/src/tool-steps.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/coredev/src/transfer-steps.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/delete.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/engine.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/jj/discover.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/jj/scan.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/lib/busy.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/lib/graveyards.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/lib/procs.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/lib/protected.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/lib/purge-progress.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/lib/remove-tree.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/lib/version-stores.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/liveness/facts.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/receipt.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/storage.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/audit.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/builds.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/clean.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/judgment.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/purge.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/rust.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/scratch.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/system.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/toolchains.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/tree.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/disk-reclaim/src/targets/workspaces.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/repo-retrieve/src/ccc-db-dir.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/repo-retrieve/src/ccc-index.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/repo-retrieve/src/ccc-scope.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/repo-retrieve/src/definitions.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/repo-retrieve/src/repo-retrieve.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/serena-foreground/src/serena-foreground.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/shared/src/dir-lock.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/shared/src/dispatch-pricing.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/shared/src/gpu-samples.ts" = "protocol: synchronous history and sampler APIs stay for the off-render sampler; render-time executable discovery uses findGpuExecutableAsync"
-"tools/shared/src/sockets.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/shared/src/storage-headroom.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/shared/src/typesafe-key.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/smart-open/src/receive.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/smart-open/src/smart-open.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/statusline/src/bounded.ts" = "protocol: synchronous readJson, writeCache and execWithin remain for synchronous helper callers; async collectors use readJsonAsync, writeCacheAsync and execAsyncBounded"
-"tools/statusline/src/dispatch-runs.ts" = "protocol: the exported routeRuns API remains synchronous for sync callers; buildDataframe uses routeRunsAsync, whose directory, marker and progress reads are asynchronous"
-"tools/statusline/src/host-load.ts" = "protocol: sync readHostLoad and off-render sampler retain sync lock/cache/proc APIs; buildDataframe uses readHostLoadAsync and async lock/cache reads, and s uses the synchronous API"
-"tools/statusline/src/identity.ts" = "protocol: readClaudeJson and rcState remain synchronous compatibility APIs; buildDataframe uses readClaudeJsonAsync and rcStateAsync with asynchronous file reads"
-"tools/statusline/src/storage.ts" = "protocol: diskReadings remains a synchronous compatibility API; render uses diskReadingsAsync, including asynchronous WSL detection, config and statfs reads"
-"tools/storage-headroom/src/headroom.ts" = "pending: synchronous startup/helper contract; migrate with callers"
+# Consumer repos receive test-pattern overrides only, never these production exemptions.
+[io_allowlist]
+"agents/claude/hooks/assign-lib.ts" = { rules = ["no-sync"], reason = "adoption baseline: agents/claude/hooks/assign-lib.ts preserves its current synchronous caller contract (Unexpected sync method: 'realpathSync'.); migrate with callers before retiring this exemption" }
+"agents/claude/hooks/bash-durations.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/capture-last-response.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/copy-via-herdr-pane.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/detect-ccc-gpu-hold.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/detect-leaked-toolcall.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/enforce-background-waits.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/enforce-no-new-bash.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/enforce-official-execution.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/enforce-reply-language.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/goal-kernel.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/herdr-tab-name.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/lib.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/log-sys-snapshot.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/quote-command.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/claude/hooks/repo-retrieve.ts" = { rules = ["no-sync"], reason = "adoption baseline: agents/claude/hooks/repo-retrieve.ts preserves its current synchronous caller contract (Unexpected sync method: 'realpathSync'. Unexpected sync method: 'statSync'.); migrate with callers before retiring this exemption" }
+"agents/claude/hooks/resolve-agent-name.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/codex/codex-config.ts" = { rules = ["no-sync"], reason = "adoption baseline: agents/codex/codex-config.ts preserves its current synchronous caller contract (Unexpected sync method: 'mkdirSync'. Unexpected sync method: 'writeFileSync'.); migrate with callers before retiring this exemption" }
+"agents/codex/hooks/enforce-dispatch-contract.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/codex/hooks/goal-kernel.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/codex/remote-control.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/codex/sandbox-network.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/goal-kernel/kernel.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/goal-kernel/postmortem.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/hooks/dir-lock.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/hooks/enforce-model-floor.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/hooks/enforce-repo-bash-deny.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/hooks/enforce-search-route.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/hooks/enforce-storage-headroom.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "protocol: synchronous hook path" }
+"agents/hooks/lib.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/hooks/read-path.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/hooks/remind-reply-language.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/hooks/slugs.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
+"agents/models/check-releases.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/models/roster.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/research-control/learning-bus.ts" = { rules = ["prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/commanding-research-fleets/scripts/check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/continuing-long-running-tasks/scripts/compact-hook.ts" = { rules = ["no-sync"], reason = "adoption baseline: agents/skills/continuing-long-running-tasks/scripts/compact-hook.ts preserves its current synchronous caller contract (Unexpected sync method: 'readSync'.); migrate with callers before retiring this exemption" }
+"agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/continuing-long-running-tasks/scripts/continuation-record.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/designing-command-line-interfaces/scripts/cli-contract-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/designing-version-schemes/scripts/versioning-contract-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/directing-research/scripts/research-check.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/directing-research/scripts/research-run/model.ts" = { rules = ["prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/directing-research/scripts/research-run/parse.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/driving-git/scripts/git-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/forging-novel-theses/scripts/gate-check.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/forging-skills/scripts/skill-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/governing-configuration-systems/scripts/configuration-contract-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/governing-research-documentation/scripts/research-docs-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/operating-the-harness/scripts/scope-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/surfacing-blind-spots/scripts/blind-spot-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/systematizing-knowledge/scripts/check-donor-set.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/systematizing-knowledge/scripts/check-ledger.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/wiring-mise-tasks/scripts/jj-commit.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/wiring-mise-tasks/scripts/mise-contract.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/wiring-repositories/scripts/wiring-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"agents/skills/writing-bun-scripts/scripts/script-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"archives/skills/turnstile-spin/scripts/lib.ts" = { rules = ["no-sync"], reason = "adoption baseline: archives/skills/turnstile-spin/scripts/lib.ts preserves its current synchronous caller contract (Unexpected sync method: 'existsSync'.); migrate with callers before retiring this exemption" }
+"archives/skills/turnstile-spin/scripts/persist-skill.ts" = { rules = ["no-sync"], reason = "adoption baseline: archives/skills/turnstile-spin/scripts/persist-skill.ts preserves its current synchronous caller contract (Unexpected sync method: 'existsSync'.); migrate with callers before retiring this exemption" }
+"cocoindex/deploy-daemon.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"macos/defaults.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"obsidian/apply.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"obsidian/trust.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/agx-host.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/auth-push.ts" = { rules = ["prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/bun-api-allowlist.ts" = { rules = ["no-sync"], reason = "adoption baseline: scripts/bun-api-allowlist.ts preserves its current synchronous caller contract (Unexpected sync method: 'spawnSync'.); migrate with callers before retiring this exemption" }
+"scripts/ccc-swap.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/config-map.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/core-tools.ts" = { rules = ["no-sync"], reason = "adoption baseline: scripts/core-tools.ts preserves its current synchronous caller contract (Unexpected sync method: 'realpathSync'.); migrate with callers before retiring this exemption" }
+"scripts/doctor.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/edge-policy.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/hook-registry.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/install-mcp.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/land.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/link-dots.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/link-skills.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/lint-bun.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/lint-hook-slug.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/lint-skills-floor.ts" = { rules = ["no-sync"], reason = "adoption baseline: scripts/lint-skills-floor.ts preserves its current synchronous caller contract (Unexpected sync method: 'spawnSync'.); migrate with callers before retiring this exemption" }
+"scripts/lint-skills-index.ts" = { rules = ["no-sync"], reason = "adoption baseline: scripts/lint-skills-index.ts preserves its current synchronous caller contract (Unexpected sync method: 'spawnSync'.); migrate with callers before retiring this exemption" }
+"scripts/lint-ts-no-disable.ts" = { rules = ["no-sync"], reason = "adoption baseline: scripts/lint-ts-no-disable.ts preserves its current synchronous caller contract (Unexpected sync method: 'spawnSync'.); migrate with callers before retiring this exemption" }
+"scripts/linux-brew.ts" = { rules = ["no-sync"], reason = "adoption baseline: scripts/linux-brew.ts preserves its current synchronous caller contract (Unexpected sync method: 'mkdirSync'. Unexpected sync method: 'symlinkSync'. Unexpected sync method: 'realpathSync'. Unexpected sync method: 'readlinkSync'. Unexpected sync method: 'unlinkSync'. Unexpected sync method: 'rmdirSync'.); migrate with callers before retiring this exemption" }
+"scripts/live-refs.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/one-writer-check.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/render-home.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/render-oxlintrc.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/secrets-push.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/skills-doctor.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/test-resource-control.ts" = { rules = ["no-sync"], reason = "adoption baseline: scripts/test-resource-control.ts preserves its current synchronous caller contract (Unexpected sync method: 'spawnSync'.); migrate with callers before retiring this exemption" }
+"scripts/tracked-files.ts" = { rules = ["no-sync"], reason = "adoption baseline: scripts/tracked-files.ts preserves its current synchronous caller contract (Unexpected sync method: 'spawnSync'.); migrate with callers before retiring this exemption" }
+"scripts/vendor-deps.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/vendor-skill.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/wsl-capacity-recover.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"scripts/wsl-winget.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agent-resource-run/src/agent-resource-run.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx-usehooks/src/runtime.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/agx.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/ledger.ts" = { rules = ["no-sync"], reason = "protocol: synchronous exclusive ledger lock, append and atomic rotation callbacks; promise conversion must preserve lock lifetime and synchronous callers" }
+"tools/agx/src/lifecycle.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/migrate-state.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/premises.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/routes.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/selection.ts" = { rules = ["prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/state.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/ticket-home.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/workers/codex-host.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/workers/codex-progress.ts" = { rules = ["no-sync"], reason = "adoption baseline: tools/agx/src/workers/codex-progress.ts preserves its current synchronous caller contract (Unexpected sync method: 'writeFileSync'. Unexpected sync method: 'renameSync'.); migrate with callers before retiring this exemption" }
+"tools/agx/src/workers/codex-resource-probe.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/workers/codex.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/agx/src/workers/run-claude.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/coredev/src/hosts.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/coredev/src/login-shell.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/coredev/src/tool-steps.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/coredev/src/transfer-steps.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/delete.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/engine.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/jj/discover.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/jj/jj.ts" = { rules = ["no-sync"], reason = "adoption baseline: tools/disk-reclaim/src/jj/jj.ts preserves its current synchronous caller contract (Unexpected sync method: 'spawnSync'.); migrate with callers before retiring this exemption" }
+"tools/disk-reclaim/src/jj/scan.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/lib/busy.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/lib/graveyards.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/lib/procs.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/lib/protected.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/lib/purge-progress.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/lib/remove-tree.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/lib/version-stores.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/lib/worker-guard.ts" = { rules = ["no-sync"], reason = "adoption baseline: tools/disk-reclaim/src/lib/worker-guard.ts preserves its current synchronous caller contract (Unexpected sync method: 'realpathSync'.); migrate with callers before retiring this exemption" }
+"tools/disk-reclaim/src/liveness/facts.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/receipt.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/storage.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/audit.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/builds.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/clean.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/judgment.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/purge.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/rust.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/scratch.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/system.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/toolchains.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/tree.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/disk-reclaim/src/targets/workspaces.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/repo-retrieve/src/ccc-db-dir.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/repo-retrieve/src/ccc-index.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/repo-retrieve/src/ccc-scope.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/repo-retrieve/src/definitions.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/repo-retrieve/src/repo-retrieve.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/serena-foreground/src/serena-foreground.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/shared/src/dir-lock.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/shared/src/dispatch-pricing.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/shared/src/gpu-samples.ts" = { rules = ["no-sync"], reason = "protocol: synchronous history and sampler APIs stay for the off-render sampler; render-time executable discovery uses findGpuExecutableAsync" }
+"tools/shared/src/jsonl.ts" = { rules = ["no-sync"], reason = "protocol: readJsonlTailSync and JsonlLineReader serve synchronous ledger handlers; asynchronous readJsonlTail now uses fs.promises for stat, tail-boundary reads and bounded chunks" }
+"tools/shared/src/sockets.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/shared/src/storage-headroom.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/shared/src/typesafe-key.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/smart-open/src/smart-open.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
+"tools/statusline/src/bounded.ts" = { rules = ["no-sync"], reason = "protocol: synchronous readJson, writeCache and execWithin remain for synchronous helper callers; async collectors use readJsonAsync, writeCacheAsync and execAsyncBounded" }
+"tools/statusline/src/dispatch-runs.ts" = { rules = ["no-sync"], reason = "protocol: the exported routeRuns API remains synchronous for sync callers; buildDataframe uses routeRunsAsync, whose directory, marker and progress reads are asynchronous" }
+"tools/statusline/src/dispatch-warning.ts" = { rules = ["no-sync"], reason = "adoption baseline: tools/statusline/src/dispatch-warning.ts preserves its current synchronous caller contract (Unexpected sync method: 'readJsonlTailSync'.); migrate with callers before retiring this exemption" }
+"tools/statusline/src/host-load.ts" = { rules = ["no-sync","prefer-bun-api"], reason = "protocol: sync readHostLoad and off-render sampler retain sync lock/cache/proc APIs; buildDataframe uses readHostLoadAsync and async lock/cache reads, and s uses the synchronous API" }
+"tools/statusline/src/identity.ts" = { rules = ["no-sync"], reason = "protocol: readClaudeJson and rcState remain synchronous compatibility APIs; buildDataframe uses readClaudeJsonAsync and rcStateAsync with asynchronous file reads" }
+"tools/statusline/src/storage.ts" = { rules = ["no-sync"], reason = "protocol: diskReadings remains a synchronous compatibility API; render uses diskReadingsAsync, including asynchronous WSL detection, config and statfs reads" }
+"tools/storage-headroom/src/headroom.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 
 [categories]
 correctness = "error"
@@ -494,3 +495,8 @@ since = "2026-10-04"
 message = "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
 bad = ["import { z } from \"zod/v4\";\nexport const s = z.string();\n"]
 good = ["import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n"]
+
+[[option]]
+rule = "node/no-sync"
+value = { allowAtRootLevel = true }
+reason = "Prefer async I/O in functions; module-load calls are startup work. Built-in rule owns sync prohibition; generated overrides hold adoption debt."

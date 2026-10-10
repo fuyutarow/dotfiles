@@ -69,6 +69,16 @@ const PolicySchema = z
     ),
     on: z.array(Reasoned),
     custom: z.array(Custom).min(1),
+    io_allowlist: z.record(
+      z.string().regex(/^(?!\/)(?!.*(?:\*|\.\.))[a-zA-Z0-9_./-]+$/u),
+      z.strictObject({
+        rules: z
+          .array(z.enum(["no-sync", "prefer-bun-api"]))
+          .min(1)
+          .refine((rules) => new Set(rules).size === rules.length),
+        reason: z.string().min(1),
+      }),
+    ),
     bun_api: z.strictObject({
       exclude: z.array(z.string().min(1)),
       apis: z
@@ -80,7 +90,6 @@ const PolicySchema = z
           }),
         )
         .min(1),
-      allowlist: z.record(z.string(), z.string().min(1)),
     }),
   })
   .refine(
@@ -130,6 +139,7 @@ export async function loadRepoPolicy(
       ),
       ignore: [...base.ignore, ...local.data.ignore],
       custom: base.custom.filter((c) => c.scope === "house"),
+      io_allowlist: {},
     },
   };
 }
@@ -155,7 +165,7 @@ const ofKind = (p: Policy, kind: CustomRule["kind"]): CustomRule[] =>
 /** The .oxlintrc.json text for a policy (stable key order, trailing newline). */
 export function renderOxlintrc(p: Policy): string {
   const rules: Record<string, unknown> = {
-    "dotfiles/prefer-bun-api": ["error", p.bun_api],
+    "dotfiles/prefer-bun-api": ["error", { apis: p.bun_api.apis }],
   };
   for (const r of p.off) rules[r.rule] = "off";
   for (const r of p.option) rules[r.rule] = ["error", r.value];
@@ -186,13 +196,41 @@ export function renderOxlintrc(p: Policy): string {
   ];
   const config = {
     $schema: "./node_modules/oxlint/configuration_schema.json",
+    settings: {
+      dotfiles: {
+        generatedOverrides:
+          "scripts/render-oxlintrc.ts from oxlint-policy.toml; do not edit",
+      },
+    },
     plugins: p.plugins,
     jsPlugins: p.js_plugins,
     categories: p.categories,
     ignorePatterns: p.ignore.map((i) => i.pattern),
     rules,
+    // Generated only: lint:ts-ratchet compares this with the policy render byte for byte.
+    overrides: generatedOverrides(p),
   };
   return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+export function generatedOverrides(p: Policy) {
+  return [
+    {
+      files: p.bun_api.exclude,
+      rules: { "node/no-sync": "off", "dotfiles/prefer-bun-api": "off" },
+    },
+    ...Object.entries(p.io_allowlist)
+      .toSorted(([a], [b]) => a.localeCompare(b))
+      .map(([path, entry]) => ({
+        files: [path],
+        rules: Object.fromEntries(
+          entry.rules.map((rule) => [
+            rule === "no-sync" ? "node/no-sync" : "dotfiles/prefer-bun-api",
+            "off",
+          ]),
+        ),
+      })),
+  ];
 }
 
 function fatal(message: string): never {
@@ -243,7 +281,7 @@ if (import.meta.main) {
   if (!loaded.ok) fatal(`cannot read oxlint-policy.toml: ${loaded.error}`);
   const failures =
     argv.flags.check && argv.flags.repo === undefined
-      ? await checkBunAllowlist(ROOT, loaded.value.bun_api.allowlist)
+      ? await checkBunAllowlist(ROOT, loaded.value.io_allowlist)
       : [];
   if (failures.length > 0) {
     console.error(failures.join("\n"));

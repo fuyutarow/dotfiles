@@ -1,6 +1,4 @@
 // oxlint exposes the ESLint-compatible context through its RuleTester contract.
-import { matchesGlob, relative } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { RuleTester } from "oxlint/plugins-dev";
 import { z } from "../../shared/src/zod.ts";
 
@@ -10,12 +8,8 @@ type Source = Context["sourceCode"];
 type Node = Parameters<Source["getScope"]>[0];
 type Identifier = Extract<Node, { type: "Identifier" }>;
 type Binding = { module: string; api: string | null };
-// Exemptions belong to this checkout, even when its policy is rendered into another repo.
-const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 const Options = z.strictObject({
-  root: z.string().optional(),
-  exclude: z.array(z.string().min(1)).default([]),
   apis: z
     .array(
       z.strictObject({
@@ -25,7 +19,6 @@ const Options = z.strictObject({
       }),
     )
     .min(1),
-  allowlist: z.record(z.string(), z.string().min(1)),
 });
 
 function variable(source: Source, identifier: Identifier) {
@@ -111,8 +104,6 @@ export const preferBunApi = {
     schema: [{ type: "object", additionalProperties: true }],
     messages: {
       replace: "{{api}} → {{replacement}} (Bun-first I/O policy).",
-      stale:
-        "Stale Bun API allowlist entry: {{path}} no longer calls a policy API; remove it.",
       invalid: "Invalid Bun API policy options: {{error}}",
     },
   },
@@ -129,15 +120,6 @@ export const preferBunApi = {
         },
       };
     const options = checked.data;
-    const path = relative(options.root ?? ROOT, context.filename).replaceAll(
-      "\\",
-      "/",
-    );
-    // Only this rule excludes tests; all other lint policies still govern them.
-    if (options.exclude.some((pattern) => matchesGlob(path, pattern)))
-      return {};
-    const exempt = Object.hasOwn(options.allowlist, path);
-    let hits = 0;
     return {
       CallExpression(node: Extract<Node, { type: "CallExpression" }>) {
         const imported = importedCall(context.sourceCode, node.callee);
@@ -148,17 +130,11 @@ export const preferBunApi = {
             entry.api === imported.api,
         );
         if (policy === undefined) return;
-        hits += 1;
-        if (!exempt)
-          context.report({
-            node,
-            messageId: "replace",
-            data: { api: policy.api, replacement: policy.replacement },
-          });
-      },
-      "Program:exit"(node: Extract<Node, { type: "Program" }>) {
-        if (exempt && hits === 0)
-          context.report({ node, messageId: "stale", data: { path } });
+        context.report({
+          node,
+          messageId: "replace",
+          data: { api: policy.api, replacement: policy.replacement },
+        });
       },
     };
   },

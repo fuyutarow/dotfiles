@@ -56,14 +56,17 @@ async function lint(
           specifier: join(root, "tools/oxlint-plugin-dotfiles/src/index.mjs"),
         },
       ],
+      overrides: [
+        { files: exclude, rules: { "dotfiles/prefer-bun-api": "off" } },
+        ...(exempt && !useCheckoutRoot
+          ? [{ files: [file], rules: { "dotfiles/prefer-bun-api": "off" } }]
+          : []),
+      ],
       rules: {
         "dotfiles/prefer-bun-api": [
           "error",
           {
-            root: useCheckoutRoot ? undefined : scratch,
-            exclude,
             apis,
-            allowlist: exempt ? { [file]: "tests: fixture" } : {},
           },
         ],
       },
@@ -121,14 +124,20 @@ test("Bun calls, async fs, unrelated objects and shadowed bindings stay clear", 
 });
 test("an allowlisted file with a policy call is exempt", async () => {
   expect(
-    (await lint("import { readFileSync } from 'fs'; readFileSync('p');", true))
-      .messages,
+    (
+      await lint(
+        "import { createHash } from 'node:crypto'; createHash('sha256');",
+        true,
+      )
+    ).messages,
   ).toEqual([]);
 });
-test("a stale exemption fails", async () => {
-  const result = await lint("await Bun.file('p').text();", true);
-  expect(result.exit).toBe(1);
-  expect(result.messages[0]).toContain("Stale Bun API allowlist entry");
+test("sync calls are owned by the built-in rule, never the Bun replacement plugin", async () => {
+  const result = await lint(
+    "import * as fs from 'node:fs'; function f() { return fs.readFileSync('p'); }",
+  );
+  expect(result.exit).toBe(0);
+  expect(result.messages).toEqual([]);
 });
 
 test.each([
@@ -138,7 +147,7 @@ test.each([
   "tools/demo/src/inline.test.ts",
 ])("test pattern excludes %s without a per-file exemption", async (path) => {
   const result = await lint(
-    "import { readFileSync } from 'node:fs'; readFileSync('p');",
+    "import { createHash } from 'node:crypto'; createHash('sha256');",
     false,
     false,
     path,
@@ -153,21 +162,21 @@ test.each([
   "src/io.test-helper.ts",
 ])("production neighbour %s remains governed", async (path) => {
   const result = await lint(
-    "import { readFileSync } from 'node:fs'; readFileSync('p');",
+    "import { createHash } from 'node:crypto'; createHash('sha256');",
     false,
     false,
     path,
   );
   expect(result.exit).toBe(1);
-  expect(result.messages[0]).toContain("readFileSync →");
+  expect(result.messages[0]).toContain("createHash →");
 });
 
 test("a same-named file outside the plugin checkout cannot inherit an exemption", async () => {
   const result = await lint(
-    "import { readFileSync } from 'fs'; readFileSync('p');",
+    "import { createHash } from 'node:crypto'; createHash('sha256');",
     true,
     true,
   );
   expect(result.exit).toBe(1);
-  expect(result.messages[0]).toContain("readFileSync →");
+  expect(result.messages[0]).toContain("createHash →");
 });

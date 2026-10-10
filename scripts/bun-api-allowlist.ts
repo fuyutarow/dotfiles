@@ -1,11 +1,16 @@
 // Exemption membership is monotone against the immutable parent policy. Initial rollout has no
-// bun_api section; after landing, a new path is refused even if another entry was removed.
+// io_allowlist section: the approved no-sync adoption baseline. Thereafter new path/rule pairs fail.
 import { join } from "node:path";
 import { attempt } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
 
 const Baseline = z.object({
-  bun_api: z.object({ allowlist: z.record(z.string(), z.string()) }).optional(),
+  io_allowlist: z
+    .record(
+      z.string(),
+      z.object({ rules: z.array(z.string()), reason: z.string() }),
+    )
+    .optional(),
 });
 
 export function addedExemptions(
@@ -15,9 +20,20 @@ export function addedExemptions(
   return Object.keys(current).filter((path) => !Object.hasOwn(baseline, path));
 }
 
+export function addedRuleExemptions(
+  current: Record<string, { rules: string[]; reason: string }>,
+  baseline: Record<string, { rules: string[]; reason: string }>,
+): string[] {
+  return Object.entries(current).flatMap(([path, entry]) =>
+    entry.rules
+      .filter((rule) => baseline[path]?.rules.includes(rule) !== true)
+      .map((rule) => `${path} (${rule})`),
+  );
+}
+
 export async function checkBunAllowlist(
   root: string,
-  allowlist: Record<string, string>,
+  allowlist: Record<string, { rules: string[]; reason: string }>,
 ): Promise<string[]> {
   const parent = Bun.spawnSync(
     [
@@ -41,9 +57,9 @@ export async function checkBunAllowlist(
   if (baseline?.success !== true)
     return ["Bun API ratchet: invalid parent policy"];
   const added =
-    baseline.data.bun_api === undefined
+    baseline.data.io_allowlist === undefined
       ? []
-      : addedExemptions(allowlist, baseline.data.bun_api.allowlist);
+      : addedRuleExemptions(allowlist, baseline.data.io_allowlist);
   const missing = await Promise.all(
     Object.keys(allowlist).map(async (path) =>
       (await Bun.file(join(root, path)).exists()) ? undefined : path,

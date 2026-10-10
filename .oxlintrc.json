@@ -1,10 +1,16 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "settings": {
+    "dotfiles": {
+      "generatedOverrides": "scripts/render-oxlintrc.ts from oxlint-policy.toml; do not edit"
+    }
+  },
   "plugins": [
     "eslint",
     "typescript",
     "unicorn",
-    "oxc"
+    "oxc",
+    "node"
   ],
   "jsPlugins": [
     {
@@ -36,51 +42,7 @@
     "dotfiles/prefer-bun-api": [
       "error",
       {
-        "exclude": [
-          "**/tests/**",
-          "**/*.test.ts"
-        ],
         "apis": [
-          {
-            "modules": [
-              "node:fs",
-              "fs"
-            ],
-            "api": "readFileSync",
-            "replacement": "await Bun.file(p).text() / .arrayBuffer()"
-          },
-          {
-            "modules": [
-              "node:fs",
-              "fs"
-            ],
-            "api": "existsSync",
-            "replacement": "await Bun.file(p).exists()"
-          },
-          {
-            "modules": [
-              "node:fs",
-              "fs"
-            ],
-            "api": "statSync",
-            "replacement": "await fs.promises.stat(p)"
-          },
-          {
-            "modules": [
-              "node:fs",
-              "fs"
-            ],
-            "api": "lstatSync",
-            "replacement": "await fs.promises.lstat(p)"
-          },
-          {
-            "modules": [
-              "node:fs",
-              "fs"
-            ],
-            "api": "readdirSync",
-            "replacement": "await fs.promises.readdir(p)"
-          },
           {
             "modules": [
               "node:child_process",
@@ -107,197 +69,13 @@
           },
           {
             "modules": [
-              "node:child_process",
-              "child_process"
-            ],
-            "api": "execSync",
-            "replacement": "Bun.spawn / Bun.spawnSync"
-          },
-          {
-            "modules": [
-              "node:child_process",
-              "child_process"
-            ],
-            "api": "execFileSync",
-            "replacement": "Bun.spawn / Bun.spawnSync"
-          },
-          {
-            "modules": [
-              "node:child_process",
-              "child_process"
-            ],
-            "api": "spawnSync",
-            "replacement": "Bun.spawn / Bun.spawnSync"
-          },
-          {
-            "modules": [
               "node:crypto",
               "crypto"
             ],
             "api": "createHash",
             "replacement": "Bun.CryptoHasher"
           }
-        ],
-        "allowlist": {
-          "tools/agx/src/ledger.ts": "protocol: synchronous exclusive ledger lock, append and atomic rotation callbacks; promise conversion must preserve lock lifetime and synchronous callers",
-          "tools/shared/src/jsonl.ts": "protocol: readJsonlTailSync and JsonlLineReader serve synchronous ledger handlers; asynchronous readJsonlTail now uses fs.promises for stat, tail-boundary reads and bounded chunks",
-          "agents/claude/hooks/bash-durations.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/capture-last-response.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/copy-via-herdr-pane.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/detect-ccc-gpu-hold.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/detect-leaked-toolcall.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/enforce-background-waits.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/enforce-no-new-bash.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/enforce-official-execution.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/enforce-reply-language.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/goal-kernel.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/herdr-tab-name.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/lib.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/log-sys-snapshot.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/quote-command.ts": "protocol: synchronous hook path",
-          "agents/claude/hooks/resolve-agent-name.ts": "protocol: synchronous hook path",
-          "agents/codex/hooks/enforce-dispatch-contract.ts": "protocol: synchronous hook path",
-          "agents/codex/hooks/goal-kernel.ts": "protocol: synchronous hook path",
-          "agents/codex/remote-control.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/codex/sandbox-network.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/goal-kernel/kernel.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/goal-kernel/postmortem.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/hooks/dir-lock.ts": "protocol: synchronous hook path",
-          "agents/hooks/enforce-model-floor.ts": "protocol: synchronous hook path",
-          "agents/hooks/enforce-repo-bash-deny.ts": "protocol: synchronous hook path",
-          "agents/hooks/enforce-search-route.ts": "protocol: synchronous hook path",
-          "agents/hooks/enforce-storage-headroom.ts": "protocol: synchronous hook path",
-          "agents/hooks/lib.ts": "protocol: synchronous hook path",
-          "agents/hooks/read-path.ts": "protocol: synchronous hook path",
-          "agents/hooks/remind-reply-language.ts": "protocol: synchronous hook path",
-          "agents/hooks/slugs.ts": "protocol: synchronous hook path",
-          "agents/models/check-releases.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/models/roster.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/research-control/learning-bus.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/commanding-research-fleets/scripts/check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/continuing-long-running-tasks/scripts/continuation-record.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/designing-command-line-interfaces/scripts/cli-contract-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/designing-version-schemes/scripts/versioning-contract-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/directing-research/scripts/research-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/directing-research/scripts/research-run/model.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/directing-research/scripts/research-run/parse.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/driving-git/scripts/git-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/forging-novel-theses/scripts/gate-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/forging-skills/scripts/skill-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/governing-configuration-systems/scripts/configuration-contract-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/governing-research-documentation/scripts/research-docs-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/operating-the-harness/scripts/scope-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/surfacing-blind-spots/scripts/blind-spot-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/systematizing-knowledge/scripts/check-donor-set.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/systematizing-knowledge/scripts/check-ledger.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/wiring-repositories/scripts/wiring-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "agents/skills/writing-bun-scripts/scripts/script-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "cocoindex/deploy-daemon.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "macos/defaults.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "obsidian/apply.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "obsidian/trust.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/agx-host.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/auth-push.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/ccc-swap.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/config-map.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/doctor-remote.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/doctor.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/edge-policy.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/hook-post-commit.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/hook-registry.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/install-mcp.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/land.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/link-dots.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/link-skills.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/lint-bun.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/lint-hook-slug.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/lint-ts-ratchet.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/lint-zsh.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/linux-init.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/live-refs.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/one-writer-check.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/render-home.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/render-oxlintrc.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/repos-audit.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/secrets-push.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/skills-doctor.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/tmux-plugins.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/vendor-deps.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/vendor-skill.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/wsl-capacity-recover.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/wsl-winget.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "scripts/wsl-wslconfig.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agent-resource-run/src/agent-resource-run.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx-usehooks/src/runtime.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/agx.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/lifecycle.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/migrate-state.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/premises.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/routes.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/selection.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/state.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/ticket-home.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/workers/codex-host.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/workers/codex-resource-probe.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/workers/codex.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/agx/src/workers/run-claude.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/coredev/src/hosts.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/coredev/src/login-shell.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/coredev/src/tool-steps.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/coredev/src/transfer-steps.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/delete.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/engine.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/jj/discover.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/jj/scan.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/lib/busy.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/lib/graveyards.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/lib/procs.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/lib/protected.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/lib/purge-progress.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/lib/remove-tree.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/lib/version-stores.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/liveness/facts.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/receipt.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/storage.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/audit.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/builds.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/clean.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/judgment.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/purge.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/rust.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/scratch.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/system.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/toolchains.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/tree.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/disk-reclaim/src/targets/workspaces.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/repo-retrieve/src/ccc-db-dir.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/repo-retrieve/src/ccc-index.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/repo-retrieve/src/ccc-scope.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/repo-retrieve/src/definitions.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/repo-retrieve/src/repo-retrieve.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/serena-foreground/src/serena-foreground.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/shared/src/dir-lock.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/shared/src/dispatch-pricing.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/shared/src/gpu-samples.ts": "protocol: synchronous history and sampler APIs stay for the off-render sampler; render-time executable discovery uses findGpuExecutableAsync",
-          "tools/shared/src/sockets.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/shared/src/storage-headroom.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/shared/src/typesafe-key.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/smart-open/src/receive.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/smart-open/src/smart-open.ts": "pending: synchronous startup/helper contract; migrate with callers",
-          "tools/statusline/src/bounded.ts": "protocol: synchronous readJson, writeCache and execWithin remain for synchronous helper callers; async collectors use readJsonAsync, writeCacheAsync and execAsyncBounded",
-          "tools/statusline/src/dispatch-runs.ts": "protocol: the exported routeRuns API remains synchronous for sync callers; buildDataframe uses routeRunsAsync, whose directory, marker and progress reads are asynchronous",
-          "tools/statusline/src/host-load.ts": "protocol: sync readHostLoad and off-render sampler retain sync lock/cache/proc APIs; buildDataframe uses readHostLoadAsync and async lock/cache reads, and s uses the synchronous API",
-          "tools/statusline/src/identity.ts": "protocol: readClaudeJson and rcState remain synchronous compatibility APIs; buildDataframe uses readClaudeJsonAsync and rcStateAsync with asynchronous file reads",
-          "tools/statusline/src/storage.ts": "protocol: diskReadings remains a synchronous compatibility API; render uses diskReadingsAsync, including asynchronous WSL detection, config and statfs reads",
-          "tools/storage-headroom/src/headroom.ts": "pending: synchronous startup/helper contract; migrate with callers"
-        }
+        ]
       }
     ],
     "typescript/prefer-readonly-parameter-types": "off",
@@ -334,6 +112,12 @@
         "allowNullableString": false,
         "allowNullableNumber": false,
         "allowAny": false
+      }
+    ],
+    "node/no-sync": [
+      "error",
+      {
+        "allowAtRootLevel": true
       }
     ],
     "typescript/no-explicit-any": "error",
@@ -418,5 +202,1365 @@
         ]
       }
     ]
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/tests/**",
+        "**/*.test.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/assign-lib.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/bash-durations.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/capture-last-response.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/copy-via-herdr-pane.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/detect-ccc-gpu-hold.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/detect-leaked-toolcall.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/enforce-background-waits.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/enforce-no-new-bash.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/enforce-official-execution.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/enforce-reply-language.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/goal-kernel.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/herdr-tab-name.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/lib.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/log-sys-snapshot.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/quote-command.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/repo-retrieve.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/claude/hooks/resolve-agent-name.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/codex/codex-config.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/codex/hooks/enforce-dispatch-contract.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/codex/hooks/goal-kernel.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/codex/remote-control.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/codex/sandbox-network.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/goal-kernel/kernel.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/goal-kernel/postmortem.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/hooks/dir-lock.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/hooks/enforce-model-floor.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/hooks/enforce-repo-bash-deny.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/hooks/enforce-search-route.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/hooks/enforce-storage-headroom.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/hooks/lib.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/hooks/read-path.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/hooks/remind-reply-language.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/hooks/slugs.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/models/check-releases.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/models/roster.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/research-control/learning-bus.ts"
+      ],
+      "rules": {
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/commanding-research-fleets/scripts/check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/continuing-long-running-tasks/scripts/compact-hook.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/continuing-long-running-tasks/scripts/continuation-record.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/designing-command-line-interfaces/scripts/cli-contract-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/designing-version-schemes/scripts/versioning-contract-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/directing-research/scripts/research-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/directing-research/scripts/research-run/model.ts"
+      ],
+      "rules": {
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/directing-research/scripts/research-run/parse.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/driving-git/scripts/git-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/forging-novel-theses/scripts/gate-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/forging-skills/scripts/skill-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/governing-configuration-systems/scripts/configuration-contract-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/governing-research-documentation/scripts/research-docs-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/operating-the-harness/scripts/scope-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/surfacing-blind-spots/scripts/blind-spot-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/systematizing-knowledge/scripts/check-donor-set.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/systematizing-knowledge/scripts/check-ledger.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/wiring-repositories/scripts/wiring-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "agents/skills/writing-bun-scripts/scripts/script-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "archives/skills/turnstile-spin/scripts/lib.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "archives/skills/turnstile-spin/scripts/persist-skill.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "cocoindex/deploy-daemon.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "macos/defaults.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "obsidian/apply.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "obsidian/trust.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/agx-host.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/auth-push.ts"
+      ],
+      "rules": {
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/bun-api-allowlist.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/ccc-swap.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/config-map.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/core-tools.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/doctor.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/edge-policy.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/hook-registry.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/install-mcp.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/land.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/link-dots.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/link-skills.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/lint-bun.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/lint-hook-slug.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/lint-skills-floor.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/lint-skills-index.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/lint-ts-no-disable.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/linux-brew.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/live-refs.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/one-writer-check.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/render-home.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/render-oxlintrc.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/secrets-push.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/skills-doctor.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/test-resource-control.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/tracked-files.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/vendor-deps.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/vendor-skill.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/wsl-capacity-recover.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "scripts/wsl-winget.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agent-resource-run/src/agent-resource-run.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx-usehooks/src/runtime.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/agx.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/ledger.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/lifecycle.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/migrate-state.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/premises.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/routes.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/selection.ts"
+      ],
+      "rules": {
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/state.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/ticket-home.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/workers/codex-host.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/workers/codex-progress.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/workers/codex-resource-probe.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/workers/codex.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/agx/src/workers/run-claude.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/coredev/src/hosts.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/coredev/src/login-shell.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/coredev/src/tool-steps.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/coredev/src/transfer-steps.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/delete.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/engine.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/jj/discover.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/jj/jj.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/jj/scan.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/lib/busy.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/lib/graveyards.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/lib/procs.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/lib/protected.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/lib/purge-progress.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/lib/remove-tree.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/lib/version-stores.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/lib/worker-guard.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/liveness/facts.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/receipt.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/storage.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/audit.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/builds.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/clean.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/judgment.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/purge.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/rust.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/scratch.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/system.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/toolchains.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/tree.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/disk-reclaim/src/targets/workspaces.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/repo-retrieve/src/ccc-db-dir.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/repo-retrieve/src/ccc-index.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/repo-retrieve/src/ccc-scope.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/repo-retrieve/src/definitions.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/repo-retrieve/src/repo-retrieve.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/serena-foreground/src/serena-foreground.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/shared/src/dir-lock.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/shared/src/dispatch-pricing.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/shared/src/gpu-samples.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/shared/src/jsonl.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/shared/src/sockets.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/shared/src/storage-headroom.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/shared/src/typesafe-key.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/smart-open/src/smart-open.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/statusline/src/bounded.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/statusline/src/dispatch-runs.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/statusline/src/dispatch-warning.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/statusline/src/host-load.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off",
+        "dotfiles/prefer-bun-api": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/statusline/src/identity.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/statusline/src/storage.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    },
+    {
+      "files": [
+        "tools/storage-headroom/src/headroom.ts"
+      ],
+      "rules": {
+        "node/no-sync": "off"
+      }
+    }
+  ]
 }

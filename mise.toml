@@ -294,25 +294,23 @@ run = "bun scripts/lint-bun.ts"
 # The rules landed with a measured backlog of 1534 errors in 105 files, all converted the same
 # day (2026-10-03) — including the HOOKS, which are live gates and zero-dependency, so they read
 # their payload through agents/hooks/narrow.ts instead of zod. There is no ledger and no standing
-# exception: lint:ts-ratchet (below) fails if `.oxlintrc.json` carries any `overrides`. A file
-# that breaks a rule is converted, never listed. The one structural exclusion is the symlink
+# exception for trust-boundary rules. I/O adoption debt uses generated overrides only;
+# lint:ts-ratchet rejects handwritten overrides and stale path/rule entries. The structural exclusion is the symlink
 # agents/claude/hooks/repo-retrieve.ts in `ignorePatterns` (oxlint resolves its imports at the
 # link path and reports false errors; the real file is linted at its own path — same reason as
 # tsconfig.json's exclude).
 [tasks."lint:ts"]
 dir = "{{config_root}}"
-description = "oxlint --type-aware the repo's TS against .oxlintrc.json, generated from oxlint-policy.toml: every rule an error (no warn level), no override, no disable comment"
+description = "oxlint --type-aware the repo's TS against .oxlintrc.json: every rule an error, generated I/O overrides only, no disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
-depends = ["lint:ts-no-disable", "lint:oxlint-policy"]
+depends = ["lint:ts-no-disable", "lint:oxlint-policy", "lint:ts-ratchet"]
 run = "bunx --bun oxlint --type-aware"
 
-# The ratchet, at its floor. It began as the shrink-only guard on a ledger of files exempt from the
-# trust-boundary rules (it failed when a listed file was already clean). The ledger is gone, and a
-# ratchet at zero makes any entry an increase, so it now fails when `.oxlintrc.json` carries ANY
-# `overrides`: the lint-side twin of lint:ts-no-disable, which forbids the comment form.
+# I/O exemptions are generated from the single policy allowlist. The ratchet rejects
+# handwritten overrides, growth beyond adoption baseline, and stale path/rule memberships.
 [tasks."lint:ts-ratchet"]
 dir = "{{config_root}}"
-description = "Fail when .oxlintrc.json carries any `overrides`: the debt ledger was paid to zero on 2026-10-03 and there is no standing lint exception (a file that breaks a rule is converted, not listed)"
+description = "Verify generated-only overrides, shrink-only I/O allowlist, and live path/rule exemptions"
 run = "bun scripts/lint-ts-ratchet.ts"
 
 # oxlint has no rule that forbids its own suppression comments, so this does: any oxlint-disable

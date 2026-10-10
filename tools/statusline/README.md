@@ -9,6 +9,7 @@ Run with Bun 1.4 or newer:
 
 ```sh
 printf '%s' '{}' | bun tools/statusline/src/statusline.ts
+statusline --codex --cwd "$HOME/dotfiles"
 bun test tools/statusline/tests
 ```
 
@@ -19,10 +20,14 @@ checks, explicit absence messages, 2 s enrichment limits, 3 s agent lookup limit
 render deadline, 5 s GPU cache and 30 s agent-name cache are preserved. The GPU sampler remains
 a bounded detached child of the local host-load module, using the original host-wide lock.
 
-Codex CLI currently accepts built-in statusline item identifiers through `tui.status_line`; it has
-no command-backed input/output contract for this renderer. `SessionStatus` is the provider boundary
-for a future supported adapter, not a claim that Codex can load this command today. Until Codex
-offers such a boundary, its own footer remains configured through Codex's native items.
+Codex CLI has no command-driven statusline setting, so tmux renders the Codex adapter outside the
+TUI. `--cwd` selects the newest rollout whose `session_meta.cwd` matches the pane. `--pid` reads the
+process cwd (`/proc` or bounded `lsof`) and uses the same rollout selection. The adapter reads
+bounded metadata and event tails, normalizes them to `SessionStatus`, and leaves missing context or
+rate data as explicit n/a slots. tmux checks `pane_current_command`, supplies the active pane cwd,
+and refreshes through its existing five-second `status-interval`. Herdr's command entries are
+tab-bar-wide; its pane metadata is display-only, so neither provides tmux's active-pane command
+format.
 
 Dispatch worker rows begin with the roster row and elapsed time, followed by the active display ID
 when present (for example, `luna-high 6m05s agt_lfix Repo: dotfiles…`). Older active markers
@@ -60,6 +65,7 @@ outside this scaffolding step.
 | ----------------------- | ----: | ------------------------------------------------------------------------- |
 | src/session-status.ts   |    38 | Provider-neutral session facts consumed by the dataframe builder          |
 | src/adapters/claude-statusline.ts |  89 | Claude stdin schema and normalization boundary                         |
+| src/adapters/codex-rollout.ts | — | Bounded Codex rollout selection and normalization                         |
 | src/ansi.ts             |    32 | ANSI vocabulary, absence markers, percentage colors                       |
 | src/bounded.ts          |   150 | Shared 4 s render deadline, bounded subprocesses, atomic cache writes     |
 | src/build-dataframe.ts  |   126 | Orchestrate enrichment in the original order                              |

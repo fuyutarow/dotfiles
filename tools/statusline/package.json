@@ -1,12 +1,13 @@
 {
   "name": "@dotfiles/statusline",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "private": true,
   "type": "module",
   "bin": {
     "statusline": "src/statusline.ts"
   },
   "dependencies": {
+    "cleye": "2.6.0",
     "neverthrow": "8.2.0",
     "zod": "4.6.5"
   }

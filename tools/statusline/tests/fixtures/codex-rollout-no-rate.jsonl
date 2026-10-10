@@ -1,0 +1,2 @@
+{"type":"session_meta","payload":{"id":"fixture-codex-no-rate","cwd":"/fixture/codex","model":"gpt-6-luna"}}
+{"type":"turn_context","payload":{"model":"gpt-6-luna","effort":"medium"}}

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0 — 2026-10-11
+
+- Add a Codex rollout adapter for model, effort, context, and rate-window status.
+- Add `statusline --codex --cwd <dir>` and `--pid <pid>` for tmux's active Codex pane.
+- Show the full statusline output in tmux's status bar, refreshed on the existing five-second interval.
+
 ## 0.10.2 — 2026-10-10
 
 - Color Claude and Codex rate usage by used-to-elapsed pace: green through 1.0, yellow through 1.5, and red above 1.5 or at 90% usage; keep the first 2% of a window on usage-threshold colors unless usage is already high.

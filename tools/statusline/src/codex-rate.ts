@@ -157,6 +157,24 @@ async function newestRollout(root: string): Promise<string | undefined> {
   return undefined;
 }
 
+async function rolloutForSession(
+  root: string,
+  session: string,
+): Promise<string | undefined> {
+  const today = Temporal.Now.plainDateISO();
+  for (let offset = 0; offset <= 366; offset++) {
+    const day = today.subtract({ days: offset });
+    const dir = join(root, String(day.year), pad2(day.month), pad2(day.day));
+    const names = await readdir(dir).catch(() => []);
+    const name = names.find(
+      (item) =>
+        item.startsWith("rollout-") && item.endsWith(`-${session}.jsonl`),
+    );
+    if (name !== undefined) return join(dir, name);
+  }
+  return undefined;
+}
+
 function asWindow(
   value: z.output<typeof WINDOW> | undefined,
 ): Window | undefined {
@@ -195,8 +213,12 @@ async function selectRateAsync(path: string, size: number, length: number) {
 
 export async function readCodexRate(
   root = join(process.env.HOME ?? "", ".codex", "sessions"),
+  session?: string,
 ): Promise<Result<CodexRate | undefined, string>> {
-  const path = await newestRollout(root);
+  const path =
+    session === undefined
+      ? await newestRollout(root)
+      : await rolloutForSession(root, session);
   if (path === undefined) return ok(undefined);
   const info = await stat(path).catch(() => null);
   if (info === null) return err("codex rate unavailable");

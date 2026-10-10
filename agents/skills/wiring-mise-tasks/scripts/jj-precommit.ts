@@ -42,7 +42,6 @@ export function jjRead(args: string[], root = process.cwd()): Buffer {
     stdout: "pipe",
     stderr: "pipe",
     timeout: 120_000,
-    maxBuffer: 32 * 1024 * 1024,
   });
   if (result.exitCode !== 0)
     fatal(`jj ${args[0]} failed: ${result.stderr.toString().trim()}`);

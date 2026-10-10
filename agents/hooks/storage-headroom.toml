@@ -24,7 +24,9 @@ path = "/mnt/c"
 # guest are reused before the vhdx grows). Deny new work at 20; stop_gib must stay below deny_gib.
 deny_gib = 20
 deny_pct = 5
-warn_gib = 40
+# 2026-10-11, owner ruling: "40 GiB の閾値を 20GiBにして". agent-resource-run refused every
+# compute launch at its warn line with C: at 39.8 GiB while the guest had 264 GiB free.
+warn_gib = 20
 warn_pct = 10
 stop_gib = 10
 # Display-only time-to-full colours; accepted by the gate but not enforced yet.

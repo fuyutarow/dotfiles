@@ -1,10 +1,17 @@
 {
-  "maxListingChars": 50782,
-  "measuredOn": "2026-10-06",
-  "skillsAtMeasurement": 57,
+  "maxListingChars": 51223,
+  "measuredOn": "2026-10-10",
+  "skillsAtMeasurement": 58,
   "why": "A local ratchet over the static sum of active skill names and descriptions. This is a conservative character-footprint proxy, not measured per-turn tokens: host selection, truncation, invocation policy and tokenization affect observed listing cost. F4 in forging-skills owns membership and the retire/merge/shorten/raise decision. The shared floor compares the proxy against maxListingChars. A ceiling raise needs an explicit reason in the same reviewable change; recovered footprint may lower the ceiling.",
   "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
   "raises": [
+    {
+      "date": "2026-10-10",
+      "from": 50782,
+      "to": 51223,
+      "spentBy": "practicing-unix-philosophy",
+      "reason": "User-requested Unix-philosophy distillation, corrected after the user rejected a boundary-only scope and requested unix in the name. The entry joins the nine major principles, prototyping and three-system learning into a design approach; existing CLI, interaction and structural-edit owners retain their detailed contracts. Its name+description adds 487 characters to the measured 50,736 baseline, consuming the prior 46-character slack and pinning the ceiling at 51,223. The semantic index repair now succeeds; the three-query JA/EN battery found the previous draft and adjacent interaction guidance, which were inspected rather than reported absent. No unrelated skill is retired. Source reading, coverage review and executed composition checks are recorded in practicing-unix-philosophy/tests/forge-verification-ledger.md."
+    },
     {
       "date": "2026-10-03",
       "from": 55721,

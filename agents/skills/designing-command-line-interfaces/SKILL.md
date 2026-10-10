@@ -87,6 +87,7 @@ locus or command/output/exit. No harness → same map, serial.
 | “Canonicalize or sign this config.” | `governing-configuration-systems`. |
 | “Launch or distribute this CLI.” | `growing-oss-adoption`. |
 | A one-shot shell pipeline. | Use the shell directly; no contract is being kept. |
+| “Apply Unix philosophy to the design of this tool.” | `practicing-unix-philosophy` develops the design approach; return here for CLI protocol decisions. |
 | “Implement this agreed CLI.” | `implementing-and-debugging` plus the language owner. |
 
 Ordered co-fires:
@@ -110,4 +111,3 @@ Ordered co-fires:
 | `tests/triggers.md` | F3 fire/no-fire desk-check | Editing the description or cuts. |
 | `tests/local-failure-corpus.md` | Failure cases motivating gates | Challenging a gate. |
 | `tests/forge-verification-ledger.md` | SOLE provenance, calibration, and verification record | Reforging or assessing acceptance. |
-

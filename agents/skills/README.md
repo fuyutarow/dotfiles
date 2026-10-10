@@ -33,6 +33,7 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 
 ### Design & interfaces
 
+- [`practicing-unix-philosophy`](practicing-unix-philosophy/) — Apply Unix philosophy as a connected design approach: small tools, portable filters and data, reuse, noncaptive interfaces, prototypes, three-system learning and useful scope.
 - [`designing-interactions`](designing-interactions/) — Design or audit any interaction surface (GUI, CLI, voice, agent-facing): modes, undo vs confirmation, hidden state, delegability.
 - [`designing-command-line-interfaces`](designing-command-line-interfaces/) — Design or audit a reusable CLI's contract: consumers, grammar, effects, stdout/stderr and machine route, outcomes, compatibility.
 - [`designing-developer-diagnostics`](designing-developer-diagnostics/) — Design developer-facing CLI/config/build diagnostics as observed failure, precise locus, safe recovery, and human-plus-machine receipt.

@@ -16,6 +16,9 @@ description: >-
 
 # Refactoring — behavior-preserving structural change, on purpose
 
+For an unsettled Unix-philosophy decision about one tool versus reusable stages, use
+`practicing-unix-philosophy` first. Return here for the behavior-preserving structural edits.
+
 > **Version**: v2609.3.0 (2026-09-23) — re-distilled from the canonical general-refactoring and
 > LLM existing-code-modification positions; claim provenance lives in the forge ledger.
 > **Scope**: change HOW code is structured without changing WHAT it observably does.

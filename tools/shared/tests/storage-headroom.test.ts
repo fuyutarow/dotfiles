@@ -42,12 +42,15 @@ describe("storage headroom", () => {
     };
     expect(guest).toMatchObject({ path: "/", deny_gib: 40, deny_pct: 10 });
     expect(host).toMatchObject({
+      label: "host C: (WSL vhdx)",
       path: "/mnt/c",
       deny_gib: 20,
       deny_pct: 5,
-      warn_gib: 40,
+      warn_gib: 20,
       warn_pct: 10,
       stop_gib: 10,
+      rate_red_minutes: 30,
+      rate_yellow_minutes: 120,
     });
     expect(
       assess(guest, { free: 100 * GiB, total: 1_000 * GiB }).deny_line,

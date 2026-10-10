@@ -15,14 +15,25 @@ export const MID = "·"; //   meter middot
 // rc:? above is the older instance of the same rule.
 export const NA_COLOR = `${ESC}[38;5;178m`; // amber, same as rc:? — "unverified", not "bad"
 export function naSegment(label: string, why: string): string {
-  return `${label} ${NA_COLOR}n/a${RST} ${DIM}(${why})${RST}`;
+  return roles.unavailable(label, why);
 }
 // Usage-percent -> rounded int + threshold color (green <70 / yellow <90 / red >=90).
-export function pctColor(i: number): string {
-  if (i >= 90) return "38;5;167";
-  if (i >= 70) return "38;5;178";
+export function pctColor(i: number, yellow = 70, red = 90): string {
+  if (i >= red) return "38;5;167";
+  if (i >= yellow) return "38;5;178";
   return "38;5;71";
 }
+// Rate and Sys vocabulary: plain names/windows, threshold-colored values, dim supporting
+// text/separators. Each styled part resets itself; never wrap an already-rendered segment.
+export const roles = {
+  label: (text: string) => text,
+  window: (text: string) => text,
+  value: (text: string, color: string) => `${ESC}[${color}m${text}${RST}`,
+  secondary: (text: string) => `${DIM}${text}${RST}`,
+  separator: (text = MID) => ` ${DIM}${text}${RST} `,
+  unavailable: (label: string, why?: string): string =>
+    `${roles.label(label)} ${roles.value("n/a", pctColor(70))}${why === undefined ? "" : ` ${roles.secondary(`(${why})`)}`}`,
+};
 // `text` is the percentage right-aligned to three columns ("  9", " 42", "100"): a value crossing
 // 10 or 100 must not shift every segment after it — the row flickered as CPU went 12% -> 9%
 // (owner 2026-10-06: 「一桁になると表示が縮む。チカチカする。等幅にしてほしい」).

@@ -12,7 +12,7 @@ import {
   pad2,
   stampMDHM,
 } from "./prompt-stamp.ts";
-import { DIM, ESC, RST, pctFmt } from "./ansi.ts";
+import { pctFmt, roles } from "./ansi.ts";
 import type { TokenUsage } from "../../shared/src/dispatch-pricing.ts";
 
 const WINDOW = z.object({
@@ -253,16 +253,16 @@ export function codexRateSegment(
   now = nowEpochSec(),
 ): string {
   if (rate === undefined) {
-    return `${ESC}[38;5;178mcodex n/a${why === undefined ? "" : ` (${why})`}${RST}`;
+    return roles.unavailable("codex", why);
   }
   const ageMs = Temporal.Now.instant().epochMilliseconds - rate.mtimeMs;
-  if (ageMs > STALE_MS) return `${ESC}[38;5;178mcodex n/a (stale source)${RST}`;
+  if (ageMs > STALE_MS) return roles.unavailable("codex", "stale source");
   const parts = rate.windows.map((window) => {
     let label = `${window.minutes}m`;
     if (window.minutes === 300) label = "5h";
     if (window.minutes === 10080) label = "7d";
     const formatted = pctFmt(window.percent);
-    let item = `codex ${label} ${ESC}[${formatted.col}m${formatted.text}%${RST}`;
+    let item = `${roles.label("codex")} ${roles.window(label)} ${roles.value(`${formatted.text}%`, formatted.col)}`;
     if (window.reset !== undefined) {
       const local = localFromEpochSec(window.reset);
       let stamp = stampMDHM(local);
@@ -276,10 +276,10 @@ export function codexRateSegment(
           ),
         ),
       );
-      item += ` ${DIM}⟳${stamp}(${remaining(window.reset, now)} ${elapsed}%)${RST}`;
+      item += ` ${roles.secondary(`⟳${stamp}(${remaining(window.reset, now)} ${elapsed}%)`)}`;
     }
     return item;
   });
-  if (parts.length === 0) return `${ESC}[38;5;178mcodex n/a${RST}`;
-  return parts.join(` ${DIM}·${RST} `);
+  if (parts.length === 0) return roles.unavailable("codex");
+  return parts.join(roles.separator());
 }

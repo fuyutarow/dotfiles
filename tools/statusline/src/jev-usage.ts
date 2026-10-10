@@ -5,6 +5,7 @@ import { stateDir } from "./dispatch-state.ts";
 import { jsonOf, z } from "./zod.ts";
 import { formatCostUsd } from "../../shared/src/dispatch-pricing.ts";
 import { loadRoster } from "../../../agents/models/roster.ts";
+import { pctColor, roles } from "./ansi.ts";
 
 const USAGE = z.looseObject({
   input_tokens: z.number().nonnegative().optional(),
@@ -117,8 +118,8 @@ export function jevUsageSegment(
   usage: JevUsage | undefined,
   why?: string,
 ): string {
-  if (usage?.costUsd === undefined)
-    return `Jev n/a${why === undefined ? "" : ` (${why})`}`;
+  if (usage?.costUsd === undefined) return roles.unavailable("Jev", why);
   const cost = formatCostUsd(usage.costUsd);
-  return `Jev 7d spend ${cost}`;
+  // Seven-day spend: green below $1, yellow below $5, red at $5 and above.
+  return `${roles.label("Jev")} ${roles.window("7d")} ${roles.secondary("spend")} ${roles.value(cost, pctColor(usage.costUsd, 1, 5))}`;
 }

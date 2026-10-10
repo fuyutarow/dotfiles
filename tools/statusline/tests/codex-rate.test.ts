@@ -97,9 +97,12 @@ test("stale and missing sessions render named absence", async () => {
   const parsed = await readCodexRate(root);
   expect(parsed.isOk()).toBe(true);
   if (parsed.isOk() && parsed.value !== undefined)
-    expect(codexRateSegment(parsed.value)).toContain(
-      "codex n/a (stale source)",
-    );
+    expect(
+      codexRateSegment(parsed.value).replaceAll(
+        new RegExp(`${ESC}\\[[0-9;]*m`, "gu"),
+        "",
+      ),
+    ).toContain("codex n/a (stale source)");
   const absent = await readCodexRate(join(root, "missing"));
   expect(absent.isOk()).toBe(true);
   if (absent.isOk()) expect(absent.value).toBeUndefined();
@@ -111,7 +114,12 @@ test("ignores corrupt and unrelated tail lines when no rate object exists", asyn
   const parsed = await readCodexRate(root);
   expect(parsed.isOk()).toBe(true);
   if (parsed.isOk()) expect(parsed.value).toBeUndefined();
-  expect(codexRateSegment(undefined)).toContain("codex n/a");
+  expect(
+    codexRateSegment(undefined).replaceAll(
+      new RegExp(`${ESC}\\[[0-9;]*m`, "gu"),
+      "",
+    ),
+  ).toContain("codex n/a");
 });
 
 test("drops the partial first line when the 256 KiB tail begins mid-line", async () => {

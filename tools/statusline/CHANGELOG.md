@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.9 — 2026-10-10
+
+- Share label, window, value, secondary and separator roles across every Rate and Sys segment, including explicit n/a values.
+- Color Jev seven-day spend green below $1, yellow from $1 to below $5, and red at $5 or above; keep `spend` dim and the source/window plain.
+- Dim disk capacity, free percentage and rate suffixes, plus memory stale details; only disk free GiB carries the space threshold color.
+
 ## 0.9.8 — 2026-10-10
 
 - Read the recent dispatch-warning window from a bounded tail of `runs.jsonl`.

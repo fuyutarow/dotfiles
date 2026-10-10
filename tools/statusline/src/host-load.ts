@@ -19,7 +19,7 @@ import { diskReadings, diskSegment, type DiskEntry } from "./storage.ts";
 import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
 import { findGpuExecutable, sampleGpu } from "../../shared/src/gpu-samples.ts";
-import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
+import { ESC, RST, naSegment, pctFmt, roles } from "./ansi.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
   execAsyncBounded,
@@ -441,15 +441,15 @@ export function cpuPct(): Result<number, string> {
 // percent-then-dim-detail shape rl5Segment/rl7Segment already use for their reset countdowns.
 export function memSegment(label: string, m: MemReading): string {
   const { text: pct, col } = pctFmt(m.pct);
-  let seg = `${label} ${ESC}[${col}m${pct}%${RST} ${DIM}(${m.frac})${RST}`;
+  let seg = `${roles.label(label)} ${roles.value(`${pct}%`, col)} ${roles.secondary(`(${m.frac})`)}`;
   if (m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
-    seg += ` ${DIM}GPU≈${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}${RST}`;
-  // A number old enough to mislead is never shown as a current one: amber `stale`, its age, and why.
+    seg += ` ${roles.secondary(`GPU≈${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}`)}`;
+  // A number old enough to mislead carries supporting detail: `stale`, its age, and why.
   // Under STALE_SHOW_S it is not marked (owner ruling 2026-10-05): with the bar refreshing every 5 s
   // and one session sampling for all, a reading tens of seconds old is the normal case, and the
   // marker there was noise that buried the cases that matter.
   if (m.stale !== undefined && m.stale.secs >= STALE_SHOW_S)
-    seg += ` ${NA_COLOR}stale ${m.stale.secs}s${RST} ${DIM}(${m.stale.why})${RST}`;
+    seg += ` ${roles.secondary(`stale ${m.stale.secs}s (${m.stale.why})`)}`;
   return seg;
 }
 // Disks: WHICH filesystems and at what free space they turn yellow/red are not decided here —
@@ -465,7 +465,7 @@ export function sysSegment(
     cpu.match(
       (v) => {
         const { text: pct, col } = pctFmt(v);
-        return `CPU ${ESC}[${col}m${pct}%${RST}`;
+        return `${roles.label("CPU")} ${roles.value(`${pct}%`, col)}`;
       },
       (why) => naSegment("CPU", why),
     ),
@@ -486,7 +486,7 @@ export function sysSegment(
       (why) => [naSegment("Disk", why)],
     ),
   ];
-  return parts.join(` ${DIM}${MID}${RST} `);
+  return parts.join(roles.separator());
 }
 
 /** Every Sys reading, each a value or the reason it could not be taken (EXPLICIT-ABSENCE). */

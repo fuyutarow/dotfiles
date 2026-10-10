@@ -16,7 +16,7 @@ import {
   diskRateStatePath,
   updateDiskRates,
 } from "./disk-rate.ts";
-import { DIM, ESC, NA_COLOR, RST, naSegment } from "./ansi.ts";
+import { naSegment, roles } from "./ansi.ts";
 
 // they are read from agents/hooks/storage-headroom.toml ([drive.*]: path, deny_gib, warn_gib),
 // the same file the storage gate enforces, so the bar and the gate can never disagree about a
@@ -230,7 +230,7 @@ export async function diskReadingsAsync(
 export function diskSegment(d: DiskEntry): string {
   if (d.kind === "miss") return naSegment(d.label, d.why);
   if (d.freeG === undefined || !Number.isFinite(d.freeG) || d.freeG < 0)
-    return `${d.label} ${NA_COLOR}n/a${RST}`;
+    return roles.unavailable(d.label);
   const free = significant(d.freeG, 3);
   const total = d.totalG;
   const fraction =
@@ -240,24 +240,9 @@ export function diskSegment(d: DiskEntry): string {
   let rate = "";
   const fill = d.rateGibPerMin;
   if (fill !== undefined && Number.isFinite(fill) && Math.abs(fill) >= 0.05) {
-    let colour = "";
-    const minutes = d.freeG / fill;
-    if (
-      fill > 0 &&
-      d.rateYellowMinutes !== undefined &&
-      minutes < d.rateYellowMinutes
-    )
-      colour = `${ESC}[38;5;178m`;
-    if (
-      fill > 0 &&
-      d.rateRedMinutes !== undefined &&
-      minutes < d.rateRedMinutes
-    )
-      colour = `${ESC}[38;5;167m`;
-    rate = ` ${colour}${fill > 0 ? "↓" : "↑"}${significant(Math.abs(fill), 2)}GiB/min`;
+    rate = ` ${fill > 0 ? "↓" : "↑"}${significant(Math.abs(fill), 2)}GiB/min`;
   }
-  const suffix = rate === "" ? "" : `${DIM}${rate}${RST}`;
-  return `${d.label} ${ESC}[${d.col}m${free}GiB${RST}${fraction} free${suffix}`;
+  return `${roles.label(d.label)} ${roles.value(`${free}GiB`, d.col)}${roles.secondary(`${fraction} free${rate}`)}`;
 }
 
 function significant(value: number, digits: number): string {

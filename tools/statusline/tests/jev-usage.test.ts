@@ -3,6 +3,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jevUsageSegment, readJevUsage } from "../src/jev-usage.ts";
+import { ESC } from "../src/ansi.ts";
+
+const plain = (text: string) =>
+  text.replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");
 
 const roots: string[] = [];
 const previous = process.env.AGX_STATE_DIR;
@@ -50,7 +54,7 @@ test("reads seven-day Jev response usage and prices spend", async () => {
   const usage = await readJevUsage(now);
   expect(usage.isOk()).toBe(true);
   if (usage.isOk())
-    expect(jevUsageSegment(usage.value)).toBe("Jev 7d spend $0.04");
+    expect(plain(jevUsageSegment(usage.value))).toBe("Jev 7d spend $0.04");
 });
 
 test.each([
@@ -63,7 +67,7 @@ test.each([
   [1.234, "Jev 7d spend $1.23"],
   [undefined, "Jev n/a"],
 ])("formats Jev cost %s as %s", (costUsd, expected) => {
-  expect(jevUsageSegment({ costUsd })).toBe(expected);
+  expect(plain(jevUsageSegment({ costUsd }))).toBe(expected);
 });
 
 test("names Jev when runs.jsonl is absent", async () => {
@@ -71,5 +75,5 @@ test("names Jev when runs.jsonl is absent", async () => {
   process.env.AGX_STATE_DIR = root;
   const usage = await readJevUsage();
   expect(usage.isOk()).toBe(true);
-  if (usage.isOk()) expect(jevUsageSegment(usage.value)).toBe("Jev n/a");
+  if (usage.isOk()) expect(plain(jevUsageSegment(usage.value))).toBe("Jev n/a");
 });

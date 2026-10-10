@@ -8,7 +8,7 @@ import {
   pad2,
   stampMDHM,
 } from "./prompt-stamp.ts";
-import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
+import { ESC, RST, naSegment, pctFmt, roles } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { codexRateSegment } from "./codex-rate.ts";
 import { jevUsageSegment } from "./jev-usage.ts";
@@ -128,7 +128,7 @@ function usageText(
   const { text } = pctFmt(pct);
   const elapsed =
     reset !== undefined ? elapsedPct(reset, windowSeconds, now) : undefined;
-  return `${ESC}[${usageColor(pct, elapsed)}m${text}%${RST}`;
+  return roles.value(`${text}%`, usageColor(pct, elapsed));
 }
 
 // own; rateRow() puts the middot BETWEEN them, so a missing 5h window cannot leave "Rate: · 7d".
@@ -137,8 +137,9 @@ function rl5Segment(
   rl5Reset: number | undefined,
   now: number,
 ): string {
-  let seg = `5h ${usageText(rl5, rl5Reset, FIVE_HOURS, now)}`;
-  if (rl5Reset !== undefined) seg += ` ${DIM}${reset5(rl5Reset, now)}${RST}`;
+  let seg = `${roles.window("5h")} ${usageText(rl5, rl5Reset, FIVE_HOURS, now)}`;
+  if (rl5Reset !== undefined)
+    seg += ` ${roles.secondary(reset5(rl5Reset, now))}`;
   return seg;
 }
 // Rate row, 7d window: same shape as rl5Segment.
@@ -147,17 +148,18 @@ function rl7Segment(
   rl7Reset: number | undefined,
   now: number,
 ): string {
-  let seg = `7d ${usageText(rl7, rl7Reset, SEVEN_DAYS, now)}`;
-  if (rl7Reset !== undefined) seg += ` ${DIM}${reset7(rl7Reset, now)}${RST}`;
+  let seg = `${roles.window("7d")} ${usageText(rl7, rl7Reset, SEVEN_DAYS, now)}`;
+  if (rl7Reset !== undefined)
+    seg += ` ${roles.secondary(reset7(rl7Reset, now))}`;
   return seg;
 }
 // Rate row, per-model weekly cap (e.g. "Fable 100% ⟳reset") — same reset7 shape as the 7d
 // segment, since this window is also day-scale.
 function rlModelSegment(m: ModelLimit, now: number): string {
   const { text: pct, col } = pctFmt(m.pct);
-  let seg = `${m.name} ${ESC}[${col}m${pct}%${RST}`;
+  let seg = `${roles.label(m.name)} ${roles.value(`${pct}%`, col)}`;
   if (m.resetEpoch !== undefined)
-    seg += ` ${DIM}${reset7(m.resetEpoch, now)}${RST}`;
+    seg += ` ${roles.secondary(reset7(m.resetEpoch, now))}`;
   return seg;
 }
 type RateFacts = Pick<
@@ -185,15 +187,19 @@ function claudeRateSegment(df: RateFacts, now: number): string {
     const claude: string[] = [
       rl5 !== undefined
         ? rl5Segment(rl5, df.rl5Reset, now)
-        : `5h ${NA_COLOR}n/a${RST}`,
+        : roles.unavailable(roles.window("5h")),
       rl7 !== undefined
         ? rl7Segment(rl7, df.rl7Reset, now)
-        : `7d ${NA_COLOR}n/a${RST}`,
+        : roles.unavailable(roles.window("7d")),
     ];
-    parts.push(`claude ${claude.join(` ${DIM}${MID}${RST} `)}`);
+    parts.push(`${roles.label("claude")} ${claude.join(roles.separator())}`);
   } else {
     parts.push(
-      `claude ${NA_COLOR}n/a${RST} ${DIM}${MID}${RST} 5h ${NA_COLOR}n/a${RST} ${DIM}${MID}${RST} 7d ${NA_COLOR}n/a${RST}`,
+      [
+        roles.unavailable("claude"),
+        roles.unavailable(roles.window("5h")),
+        roles.unavailable(roles.window("7d")),
+      ].join(roles.separator()),
     );
   }
   for (const m of df.rlModel)
@@ -204,7 +210,7 @@ function claudeRateSegment(df: RateFacts, now: number): string {
     );
   if (df.modelCapsWhy !== undefined && df.modelCapsWhy !== "")
     parts.push(naSegment("model caps", df.modelCapsWhy));
-  return parts.join(` ${DIM}${MID}${RST} `);
+  return parts.join(roles.separator());
 }
 
 // One builder for both the statusline and its snapshot. Every provider always owns one slot.
@@ -218,14 +224,13 @@ export function rateRow(df: RateFacts, now = nowEpochSec()): string {
       if (source === "claude") return claudeRateSegment(df, now);
       if (source === "codex")
         return codexRateSegment(df.codexRate, df.codexRateWhy, now);
-      const jev = jevUsageSegment(df.jevUsage, df.jevUsageWhy);
-      return `Jev ${DIM}${jev.slice("Jev ".length)}${RST}`;
+      return jevUsageSegment(df.jevUsage, df.jevUsageWhy);
     })().unwrapOr(undefined);
     return rendered === undefined || rendered.trim() === ""
       ? naSegment(source, "unavailable")
       : rendered;
   });
   // Provider boundaries use pipes; windows within each provider keep middots.
-  return `${label} ${slots.join(` ${DIM}|${RST} `)}`;
+  return `${label} ${slots.join(roles.separator("|"))}`;
 }
 // Job row, admitted-work half: "<name>[+N] <elapsed> [orphan×N]" — extracted out of render() only

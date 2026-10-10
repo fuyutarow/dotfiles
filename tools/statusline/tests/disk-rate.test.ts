@@ -44,7 +44,7 @@ describe("disk rate", () => {
       "Disk C: 11.5GiB/930GiB (1%) free ↓3.1GiB/min",
     );
     expect(diskSegment(reading)).toContain(
-      "\u001B[38;5;167m11.5GiB\u001B[0m/930GiB (1%) free",
+      "\u001B[38;5;167m11.5GiB\u001B[0m\u001B[2m/930GiB (1%) free",
     );
   });
   test("under 30s has no rate; the exact 30s boundary does", () => {
@@ -54,10 +54,10 @@ describe("disk rate", () => {
     );
     expect(rateAfter(11.5, 30).rateGibPerMin).toBeCloseTo(6.2);
   });
-  test("freeing uses ↑ and never a time-to-full colour", () => {
+  test("freeing uses ↑ in the dim disk suffix", () => {
     const reading = rateAfter(17.7);
     expect(reading.rateGibPerMin).toBeCloseTo(-3.1);
-    expect(diskSegment(reading)).toEndWith("\u001B[2m ↑3.1GiB/min\u001B[0m");
+    expect(diskSegment(reading)).toEndWith("free ↑3.1GiB/min\u001B[0m");
   });
   test("rates below the display floor stay hidden", () => {
     expect(
@@ -70,25 +70,22 @@ describe("disk rate", () => {
       plain(diskSegment({ ...disk(11.5), rateGibPerMin: 0.05 })),
     ).toContain("↓0.050GiB/min");
   });
-  test.each([
-    [29, "38;5;167"],
-    [30, "38;5;178"],
-    [119, "38;5;178"],
-    [120, undefined],
-  ])("time to full %d minutes colours only the rate", (free, colour) => {
-    const output = diskSegment({ ...disk(free), rateGibPerMin: 1 });
-    const prefix = colour === undefined ? "" : `\u001B[${colour}m`;
-    expect(output).toEndWith(`free\u001B[2m ${prefix}↓1.0GiB/min\u001B[0m`);
-    expect(output).toContain("\u001B[38;5;167m");
-  });
-  test("colours come from the configured durations", () => {
+  test.each([29, 30, 119, 120])(
+    "time to full %d minutes keeps the rate dim",
+    (free) => {
+      const output = diskSegment({ ...disk(free), rateGibPerMin: 1 });
+      expect(output).toEndWith(`free ↓1.0GiB/min\u001B[0m`);
+      expect(output).toContain("\u001B[38;5;167m");
+    },
+  );
+  test("configured durations do not override the secondary role", () => {
     const output = diskSegment({
       ...disk(11.5),
       rateGibPerMin: 1,
       rateRedMinutes: 5,
       rateYellowMinutes: 10,
     });
-    expect(output).toEndWith("free\u001B[2m ↓1.0GiB/min\u001B[0m");
+    expect(output).toEndWith("free ↓1.0GiB/min\u001B[0m");
   });
   test("significant figures use decimal GiB notation", () => {
     expect(plain(diskSegment(disk(0.012345)))).toContain(
@@ -225,7 +222,7 @@ test.each(["Disk /", "Disk WSL", "Disk C:", "Disk /Volumes/data"])(
     };
     const segment = diskSegment(reading);
     expect(segment).toBe(
-      `${label} ${ESC}[38;5;71m58.2GiB${RST}/931GiB (6%) free${ESC}[2m ↓0.089GiB/min${RST}`,
+      `${label} ${ESC}[38;5;71m58.2GiB${RST}${ESC}[2m/931GiB (6%) free ↓0.089GiB/min${RST}`,
     );
     const row = sysSegment(
       ok(0),
@@ -241,7 +238,7 @@ test.each(["38;5;178", "38;5;167"])(
   "low-space %s colour applies only to the free amount",
   (col) => {
     expect(diskSegment({ ...disk(11.5), col })).toBe(
-      `Disk C: ${ESC}[${col}m11.5GiB${RST}/930GiB (1%) free`,
+      `Disk C: ${ESC}[${col}m11.5GiB${RST}${ESC}[2m/930GiB (1%) free${RST}`,
     );
   },
 );
@@ -255,7 +252,7 @@ test("unknown capacity retains coloured free space and the unchanged rate", () =
       rateGibPerMin: 0.089,
     }),
   ).toBe(
-    `Disk C: ${ESC}[38;5;71m58.2GiB${RST} free${ESC}[2m ↓0.089GiB/min${RST}`,
+    `Disk C: ${ESC}[38;5;71m58.2GiB${RST}${ESC}[2m free ↓0.089GiB/min${RST}`,
   );
 });
 

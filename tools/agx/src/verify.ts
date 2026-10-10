@@ -84,10 +84,14 @@ export async function runVerify(
   cmds: string[],
   cwd: string,
   timeoutS: number,
+  onPhase?: (phase: string) => void,
 ): Promise<VerifyResult[]> {
   const deadline = performance.now() + timeoutS * 1000;
   const results: VerifyResult[] = [];
-  for (const cmd of cmds) {
+  for (const [index, cmd] of cmds.entries()) {
+    const label = cmd.trim().replaceAll(/\s+/gu, " ");
+    const shortLabel = label.length > 72 ? `${label.slice(0, 71)}…` : label;
+    onPhase?.(`verifying ${index + 1}/${cmds.length} ${shortLabel}`);
     const remaining = deadline - performance.now();
     results.push(
       remaining <= 0

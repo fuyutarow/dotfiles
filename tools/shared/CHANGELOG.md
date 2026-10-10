@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.4 — 2026-10-10
+
+- Extend active markers with run phase, vendor session, final cost and final worker usage for post-exit statusline rows.
+
+## 0.4.3 — 2026-10-10
+
+- Format known positive USD costs to cents and retain `<$0.01` for positive sub-cent amounts; zero and unknown values keep their prior behavior.
+
 ## 0.4.2 — 2026-10-10
 
 - Own the strict agx active-marker writer contract, its forward-compatible reader schema, and shared malformed-versus-unreadable classification.

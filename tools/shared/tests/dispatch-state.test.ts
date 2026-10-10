@@ -79,3 +79,24 @@ test("marker parsing skips missing identities and counts other unreadable marker
   expect(parseActiveMarker("{").kind).toBe("unreadable");
   expect(parseActiveMarker(JSON.stringify(ownFreshMarker)).kind).toBe("valid");
 });
+
+test("active markers retain post-worker phase, session, cost and usage", () => {
+  const serialized = serializeActiveMarker({
+    ...ownFreshMarker,
+    phase: "verifying 2/3 bun test",
+    worker_session: "resumed-vendor-session",
+    cost_usd: 0.548,
+    worker_usage: { input_tokens: 120, output_tokens: 30 },
+  });
+  expect(serialized.success).toBe(true);
+  if (!serialized.success) return;
+  const parsed = parseActiveMarker(serialized.text);
+  expect(parsed.kind).toBe("valid");
+  if (parsed.kind === "valid")
+    expect(parsed.marker).toMatchObject({
+      phase: "verifying 2/3 bun test",
+      worker_session: "resumed-vendor-session",
+      cost_usd: 0.548,
+      worker_usage: { input_tokens: 120, output_tokens: 30 },
+    });
+});

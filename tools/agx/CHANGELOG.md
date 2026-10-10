@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.2 — 2026-10-10
+
+- Persist the worker's final session, usage and cost in its active marker before verification; keep marker phase updated through verification and grading.
+
 ## 2.5.1 — 2026-10-10
 
 - Validate active worker markers with the shared strict writer contract before publishing them.

@@ -50,4 +50,21 @@ describe("runVerify: a timed-out command's whole process group dies", () => {
     expect(r).toMatchObject({ exit: 0, timed_out: false });
     expect(r?.output_tail.trim()).toBe("fine");
   });
+
+  test("reports each verification phase immediately before its command", async () => {
+    const phases: string[] = [];
+    const results = await runVerify(
+      ["echo first", "echo second"],
+      scratch,
+      5,
+      (phase) => {
+        phases.push(phase);
+      },
+    );
+    expect(phases).toEqual([
+      "verifying 1/2 echo first",
+      "verifying 2/2 echo second",
+    ]);
+    expect(results.map((result) => result.exit)).toEqual([0, 0]);
+  });
 });

@@ -18,16 +18,13 @@ export type TokenPrices = Readonly<{
 export function formatCostUsd(value: number | undefined): string {
   if (value === undefined) return "";
   if (value === 0) return "$0";
-  if (value < 0.01) return "<$0.01";
+  if (value > 0 && value < 0.01) return "<$0.01";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    notation: "compact",
-    minimumSignificantDigits: 3,
-    maximumSignificantDigits: 3,
-  })
-    .format(value)
-    .replace(/K$/u, "k");
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 export function costUsd(

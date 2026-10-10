@@ -6,6 +6,15 @@ import { jsonOf, z } from "./zod.ts";
 export const STATE_DIR = "agx";
 export const ACTIVE_MARKER_SCHEMA = 1;
 
+export const ActiveWorkerUsageSchema = z.looseObject({
+  input_tokens: z.number().nonnegative().optional(),
+  cached_input_tokens: z.number().nonnegative().optional(),
+  output_tokens: z.number().nonnegative().optional(),
+  reasoning_output_tokens: z.number().nonnegative().optional(),
+  cache_read_input_tokens: z.number().nonnegative().optional(),
+  cache_creation_input_tokens: z.number().nonnegative().optional(),
+});
+
 /** Strict agx writer contract for one live worker marker. */
 export const ActiveMarkerSchema = z.strictObject({
   schema: z.literal(ACTIVE_MARKER_SCHEMA),
@@ -20,6 +29,10 @@ export const ActiveMarkerSchema = z.strictObject({
   started_at: z.string(),
   cwd: z.string(),
   dispatcher_session: z.string().optional(),
+  phase: z.string().optional(),
+  worker_session: z.string().optional(),
+  cost_usd: z.number().nonnegative().optional(),
+  worker_usage: ActiveWorkerUsageSchema.optional(),
   ticket: z
     .looseObject({
       writes: z.array(z.string()),

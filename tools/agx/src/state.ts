@@ -3,16 +3,21 @@
 // Outside the repo by design: briefs and picks may be private. Zero-dep beyond the repo's zod bundle.
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { z } from "../../shared/src/zod.ts";
+import { fromThrowable, z } from "../../shared/src/zod.ts";
 import {
   ACTIVE_MARKER_SCHEMA,
+  ActiveWorkerUsageSchema,
   ActiveMarkerReaderSchema,
   ActiveMarkerSchema,
   dispatchStateDir,
   serializeActiveMarker,
   type ActiveMarker,
 } from "../../shared/src/dispatch-state.ts";
-export { ActiveMarkerReaderSchema, ActiveMarkerSchema };
+export {
+  ActiveMarkerReaderSchema,
+  ActiveMarkerSchema,
+  ActiveWorkerUsageSchema,
+};
 export { serializeActiveMarker };
 export type { ActiveMarker };
 
@@ -54,6 +59,17 @@ export function storeBrief(
 /** One JSON marker per running worker: written at start, removed at exit. */
 export const activeDir = (env: NodeJS.ProcessEnv = process.env): string =>
   join(stateDir(env), "active");
+
+/** Atomically persist a strictly validated active marker and its live statusline fields. */
+export function writeActiveMarker(path: string, active: Active): boolean {
+  const serialized = serializeActiveMarker(active);
+  if (!serialized.success) return false;
+  const tmp = `${path}.${process.pid}.tmp`;
+  return fromThrowable(() => {
+    writeFileSync(tmp, serialized.text);
+    renameSync(tmp, path);
+  })().isOk();
+}
 
 // A brief's dispatch declaration (CLAUDE.md: every dispatch declares its resource class) is the
 // same few words on every brief, so as a label it told the Run rows nothing (Vast 2026-10-06: three

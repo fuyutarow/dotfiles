@@ -109,15 +109,17 @@ import {
 import {
   activeDir,
   ActiveSchema,
+  ActiveWorkerUsageSchema,
   briefLabel,
   progressFile,
   ProgressSchema,
   stateDir,
   STATE_SCHEMA,
-  serializeActiveMarker,
+  writeActiveMarker,
   storedBriefPath,
   storeBrief,
   type Active,
+  type Progress,
 } from "./state.ts";
 import { postJev, type JevTrace } from "./jev-client.ts";
 import {
@@ -1931,19 +1933,29 @@ const ClaudeRelay = z.looseObject({
 
 /** What the worker did, from its progress file, read before the file is removed (O2). */
 type Done = { last: string; commands: number; files: number };
-function progressAtEnd(path: string): Done | undefined {
+function progressRecord(path: string): Progress | undefined {
   if (!existsSync(path)) return undefined;
   const p = jsonOf(ProgressSchema).safeParse(readFileSync(path, "utf8"));
-  return p.success
-    ? { last: p.data.last, commands: p.data.commands, files: p.data.files }
-    : undefined;
+  return p.success ? p.data : undefined;
+}
+
+function progressSummary(progress: Progress | undefined): Done | undefined {
+  return progress === undefined
+    ? undefined
+    : {
+        last: progress.last,
+        commands: progress.commands,
+        files: progress.files,
+      };
+}
+
+function progressAtEnd(path: string): Done | undefined {
+  return progressSummary(progressRecord(path));
 }
 
 /** The vendor session id a running worker has reported in its progress file, if any. */
 function progressSession(path: string): string | undefined {
-  if (!existsSync(path)) return undefined;
-  const p = jsonOf(ProgressSchema).safeParse(readFileSync(path, "utf8"));
-  return p.success ? p.data.session : undefined;
+  return progressRecord(path)?.session;
 }
 
 /** A worker whose stdout is not its receipt is a failure that says so (O1) — it used to be logged as
@@ -2466,7 +2478,7 @@ async function launch(l: Launch): Promise<number> {
   const taskKind = resourceKind(
     parsedBrief.kind === "invalid" ? brief : parsedBrief.prose,
   );
-  const active: Active = {
+  let active: Active = {
     schema: SCHEMA,
     run_id: runId,
     display_id: displayId,
@@ -2478,6 +2490,8 @@ async function launch(l: Launch): Promise<number> {
     pick_source: pick.source,
     started_at: now(),
     cwd: resolve(flags.cd),
+    phase: "working",
+    ...(resume === undefined ? {} : { worker_session: resume.session }),
     ...(currentDispatcherSession() === undefined
       ? {}
       : { dispatcher_session: currentDispatcherSession() }),
@@ -2489,10 +2503,19 @@ async function launch(l: Launch): Promise<number> {
   const changesBefore = await snapshotChanges(writesRoot, ticket?.writes ?? []);
   mkdirSync(ACTIVE_DIR, { recursive: true });
   const marker = join(ACTIVE_DIR, `${runId}.json`);
-  const serializedMarker = serializeActiveMarker(active);
-  if (!serializedMarker.success)
-    fatal(`cannot write invalid active marker: ${serializedMarker.error}`);
-  writeFileSync(marker, serializedMarker.text);
+  if (!writeActiveMarker(marker, active))
+    fatal("cannot write invalid active marker");
+  const persistActive = (fields: Partial<Active>): boolean => {
+    const next: Active = { ...active, ...fields };
+    if (!writeActiveMarker(marker, next)) {
+      dispatchError(
+        "agx: active marker update failed; statusline may be stale",
+      );
+      return false;
+    }
+    active = next;
+    return true;
+  };
   // The worker folds its own events into this file (agx via AGX_CODEX_PROGRESS_FILE,
   // run-claude via --progress-file); the statusline Run rows read it.
   const progress = progressFile(runId);
@@ -2851,9 +2874,8 @@ async function launch(l: Launch): Promise<number> {
   firstReturnByDeadline =
     firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
   let orphans = await reapWorkerGroup(child.pid);
-  const done = progressAtEnd(progress);
-  rmSync(progress, { force: true });
-  rmSync(activity, { force: true });
+  const finalProgress = progressRecord(progress);
+  const done = progressSummary(finalProgress);
   rmSync(workerBrief, { force: true });
   const elapsedS = Math.round((performance.now() - t0) / 100) / 10;
   const codexWorker = jsonOf(WorkerReceipt).safeParse(out.trim());
@@ -2948,6 +2970,61 @@ async function launch(l: Launch): Promise<number> {
     .looseObject({ outcome: z.string().optional() })
     .safeParse(workerData);
   outcomeName = workerOutcome.success ? workerOutcome.data.outcome : undefined;
+  const workerRecord = z.record(z.string(), z.unknown()).safeParse(workerData);
+  const receiptUsage = workerRecord.success
+    ? ActiveWorkerUsageSchema.safeParse(workerRecord.data.usage)
+    : undefined;
+  const receiptSession = workerRecord.success
+    ? z
+        .looseObject({ session: z.string().optional() })
+        .safeParse(workerRecord.data)
+    : undefined;
+  const vendorMetrics = workerRecord.success
+    ? graderUsage(row, workerRecord.data)
+    : undefined;
+  const receiptCost = workerRecord.success
+    ? z
+        .looseObject({ cost_usd: z.number().nonnegative().optional() })
+        .safeParse(workerRecord.data)
+    : undefined;
+  const finalCost =
+    (receiptCost?.success === true ? receiptCost.data.cost_usd : undefined) ??
+    vendorMetrics?.cost_usd ??
+    finalProgress?.cost_usd;
+  const finalSession =
+    finalProgress?.session ??
+    (receiptSession?.success === true
+      ? receiptSession.data.session
+      : undefined) ??
+    resume?.session;
+  const finalUsage =
+    (receiptUsage?.success === true ? receiptUsage.data : undefined) ??
+    finalProgress?.usage;
+  const neverStarted =
+    outcomeName === "timeout" &&
+    (done === undefined || (done.commands === 0 && done.files === 0));
+  const firstVerify =
+    ticket !== undefined &&
+    !neverStarted &&
+    !(stalled && parsedReturn.kind !== "valid") &&
+    ticket.verify.length > 0
+      ? ticket.verify[0]
+      : undefined;
+  const verifyTotal = ticket?.verify.length ?? 0;
+  const nextPhase =
+    firstVerify === undefined
+      ? "grading"
+      : `verifying 1/${verifyTotal} ${firstVerify}`;
+  const markerUpdated = persistActive({
+    phase: nextPhase,
+    ...(finalSession === undefined ? {} : { worker_session: finalSession }),
+    ...(finalCost === undefined ? {} : { cost_usd: finalCost }),
+    ...(finalUsage === undefined ? {} : { worker_usage: finalUsage }),
+  });
+  if (markerUpdated) {
+    rmSync(progress, { force: true });
+    rmSync(activity, { force: true });
+  }
   const writeViolations = writes?.violations ?? [];
   if (writes?.unavailable !== undefined)
     dispatchError(`agx: writes check unavailable: ${writes.unavailable}`);
@@ -2963,9 +3040,18 @@ async function launch(l: Launch): Promise<number> {
   const verified =
     ticket === undefined || (stalled && parsedReturn.kind !== "valid")
       ? undefined
-      : await verifyAfterWorker(ticket, active.cwd, outcomeName, done);
+      : await verifyAfterWorker(
+          ticket,
+          active.cwd,
+          outcomeName,
+          done,
+          (phase) => {
+            persistActive({ phase });
+          },
+        );
   // Once interrupted, the stop handler is the sole writer of the run receipt.
   if (stopCompletion !== undefined) await stopCompletion;
+  persistActive({ phase: "grading" });
   const workerOutput = z
     .looseObject({ structured_output: z.unknown().optional() })
     .safeParse(workerData);
@@ -3166,8 +3252,10 @@ async function launch(l: Launch): Promise<number> {
     ...(runStats.cost_usd === null ? {} : { cost_usd: runStats.cost_usd }),
   };
   appendLog({ kind: "run", ...receipt, stats: runStats });
-  rmSync(marker, { force: true });
   if (parsedReturn.kind !== "valid" && (stalled || nonDelivery)) {
+    rmSync(progress, { force: true });
+    rmSync(activity, { force: true });
+    rmSync(marker, { force: true });
     cleanup();
     const incident = nonDelivery
       ? {
@@ -3275,6 +3363,9 @@ async function launch(l: Launch): Promise<number> {
   } else if (parsedReturn.kind === "valid") {
     recordWaiver(runId, "returned early with findings", "router");
   }
+  rmSync(progress, { force: true });
+  rmSync(activity, { force: true });
+  rmSync(marker, { force: true });
   process.stdout.write(`${JSON.stringify({ ...receipt, ...graded })}\n`);
   return writeViolations.length > 0 ? 1 : exit;
 }
@@ -3295,6 +3386,7 @@ async function verifyAfterWorker(
   cwd: string,
   outcome: string | undefined,
   done: Done | undefined,
+  onPhase?: (phase: string) => void,
 ): Promise<Verified> {
   const neverStarted =
     outcome === "timeout" &&
@@ -3305,7 +3397,12 @@ async function verifyAfterWorker(
       summary: "skipped: the worker timed out before doing any work",
       skipped: "the worker timed out before doing any work",
     };
-  const results = await runVerify(ticket.verify, cwd, ticket.verify_timeout_s);
+  const results = await runVerify(
+    ticket.verify,
+    cwd,
+    ticket.verify_timeout_s,
+    onPhase,
+  );
   const summary = verifySummary(results);
   dispatchError(`agx: verify ${summary}`);
   return { results, summary };

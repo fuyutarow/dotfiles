@@ -23,6 +23,9 @@ export interface RouteRun {
   choice: string;
   label: string;
   pickSource: string;
+  phase: string | undefined;
+  workerSession: string | undefined;
+  markerCostUsd: number | undefined;
   secs: number;
   alive: boolean;
   dispatcherSession: string | undefined;
@@ -130,6 +133,9 @@ export function routeRuns(
       choice: a.choice,
       label: a.label,
       pickSource: a.pick_source,
+      phase: a.phase,
+      workerSession: a.worker_session,
+      markerCostUsd: a.cost_usd,
       secs: sinceSecs(a.started_at).unwrapOr(0),
       alive: pidAlive(a.pid).isOk(),
       dispatcherSession: a.dispatcher_session,
@@ -218,6 +224,9 @@ export async function routeRunsAsync(
         choice: a.choice,
         label: a.label,
         pickSource: a.pick_source,
+        phase: a.phase,
+        workerSession: a.worker_session,
+        markerCostUsd: a.cost_usd,
         secs: sinceSecs(a.started_at).unwrapOr(0),
         alive,
         dispatcherSession: a.dispatcher_session,
@@ -235,11 +244,20 @@ export async function routeRunsAsync(
 // "│ $ bun test x.ts · 12 cmd · 3 files": the worker's latest event, then what it has done so far.
 // Older than a minute it says how old (a worker deep in reasoning prints nothing for a while — that
 // is shown as age, not hidden). No progress file yet = no event yet, said as such.
-function doingText(d: RouteRun["doing"]): string {
-  if (d === undefined) return `${DIM}│ no event yet${RST}`;
+function doingText(d: RouteRun["doing"], phase: string | undefined): string {
+  if (phase === undefined) {
+    if (d === undefined) return `${DIM}│ no event yet${RST}`;
+    const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
+    return `${DIM}│${RST} ${d.last}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
+  }
+  if (phase !== "working") return `${DIM}│${RST} ${phase}`;
+  if (d === undefined || d.last === "starting")
+    return `${DIM}│${RST} working · no event yet`;
   const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
-  return `${DIM}│${RST} ${d.last}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
+  const activity = `${d.last}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
+  return `${DIM}│${RST} working · ${activity}`;
 }
+
 // The worker's vendor id (codex thread, claude session), shortened without UUIDv7's shared
 // timestamp prefix. Extend the tail only for rows that still collide. Same rules as the former
 // Claude statusline, now in tools/statusline (cbc82bdc): an id shorter than 8 characters gets a shorter
@@ -262,7 +280,10 @@ function growSessionTail(
   return grew;
 }
 function sessionDisplays(shown: RouteRun[]): string[] {
-  const ids = shown.map((run) => run.doing?.session?.replaceAll("-", "") ?? "");
+  const ids = shown.map(
+    (run) =>
+      (run.doing?.session ?? run.workerSession)?.replaceAll("-", "") ?? "",
+  );
   const tailLengths = ids.map((id) =>
     id === "" ? 0 : Math.min(4, Math.max(0, id.length - 4)),
   );
@@ -344,7 +365,11 @@ export function routeLines(
   );
   const choices = shown.map((r) => r.choice);
   const elapsed = shown.map((r) => dur(r.secs));
-  const costs = shown.map((r) => r.doing?.costUsd);
+  const costs = shown.map((r) =>
+    r.phase === "working"
+      ? (r.doing?.costUsd ?? r.markerCostUsd)
+      : (r.markerCostUsd ?? r.doing?.costUsd),
+  );
   const costLabels = costs.map((value) =>
     value === undefined ? "$–" : costLabel(value),
   );
@@ -375,7 +400,7 @@ export function routeLines(
   const reserveSession = sessionWidth > 0;
   const lines = shown.map(
     (r, i) =>
-      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing)}`,
+      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase)}`,
   );
   const summary = [
     ...(other > 0 ? [`${DIM}+${other} in other sessions${RST}`] : []),

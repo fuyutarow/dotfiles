@@ -200,19 +200,14 @@ describe("statusline Run row", () => {
 
   test.each([
     [0, "$0"],
+    [0.0004, "<$0.01"],
     [0.004, "<$0.01"],
-    [0.0123, "$0.0123"],
-    [0.0312, "$0.0312"],
-    [0.0999, "$0.0999"],
-    [0.1, "$0.100"],
-    [0.31, "$0.310"],
+    [0.0099, "<$0.01"],
+    [0.01, "$0.01"],
+    [0.0149, "$0.01"],
+    [0.0295, "$0.03"],
+    [0.548, "$0.55"],
     [1.234, "$1.23"],
-    [12.34, "$12.3"],
-    [123.4, "$123"],
-    [1234, "$1.23k"],
-    [12345, "$12.3k"],
-    [123456, "$123k"],
-    [1234567, "$1.23M"],
   ])("formats reported cost %s as %s", async (costUsd, expected) => {
     const dir = join(scratch, `cost-column-${costUsd}`);
     marker(dir, "priced", process.pid, "priced worker");
@@ -245,6 +240,97 @@ describe("statusline Run row", () => {
     expect(out).toMatch(/^luna-high 1m3\ds \$– unknown worker │/mu);
   });
 
+  test("post-worker verification uses marker phase, final cost and vendor session without progress sidecar", async () => {
+    const dir = join(scratch, "post-worker-verify");
+    const active = join(dir, "active");
+    mkdirSync(active, { recursive: true });
+    const written = serializeActiveMarker({
+      schema: 1,
+      run_id: "post-worker-verify",
+      pid: process.pid,
+      kind: "token",
+      labels: ["harness"],
+      label: "verify worker",
+      choice: "luna-max",
+      pick_source: "resume",
+      started_at: Temporal.Now.instant().subtract({ seconds: 300 }).toString(),
+      cwd: scratch,
+      dispatcher_session: SESSION,
+      phase: "verifying 3/6 bun test tools/agx",
+      worker_session: "thread-new",
+      cost_usd: 0.0563,
+      worker_usage: { input_tokens: 900_000, output_tokens: 120_000 },
+      ticket: { writes: ["tools/agx/**"] },
+    });
+    expect(written.success).toBe(true);
+    if (written.success)
+      writeFileSync(join(active, "post-worker-verify.json"), written.text);
+
+    const line = (await render(dir))
+      .split("\n")
+      .find((value) => value.startsWith("luna-max "));
+    expect(line).toContain("$0.06");
+    expect(line).toContain("thre..dnew");
+    expect(line).toContain("resume:");
+    expect(line).toContain("verifying 3/6 bun test tools/agx");
+    expect(line).not.toContain("no event yet");
+  });
+
+  test("grading phase stays visible for a Claude row with unknown cost", async () => {
+    const dir = join(scratch, "claude-grading");
+    const active = join(dir, "active");
+    mkdirSync(active, { recursive: true });
+    const written = serializeActiveMarker({
+      schema: 1,
+      run_id: "claude-grading",
+      pid: process.pid,
+      label: "claude worker",
+      choice: "sonnet-medium",
+      pick_source: "jev",
+      started_at: Temporal.Now.instant().subtract({ seconds: 60 }).toString(),
+      cwd: scratch,
+      dispatcher_session: SESSION,
+      phase: "grading",
+      ticket: { writes: [] },
+    });
+    expect(written.success).toBe(true);
+    if (written.success)
+      writeFileSync(join(active, "claude-grading.json"), written.text);
+
+    const line = (await render(dir))
+      .split("\n")
+      .find((value) => value.startsWith("sonnet-medium "));
+    expect(line).toContain("$–");
+    expect(line).toContain("grading");
+    expect(line).not.toContain("no event yet");
+  });
+
+  test("working phase says no event only before the first worker event", async () => {
+    const dir = join(scratch, "working-no-event");
+    const active = join(dir, "active");
+    mkdirSync(active, { recursive: true });
+    const written = serializeActiveMarker({
+      schema: 1,
+      run_id: "working-no-event",
+      pid: process.pid,
+      label: "new worker",
+      choice: "luna-high",
+      pick_source: "jev",
+      started_at: Temporal.Now.instant().toString(),
+      cwd: scratch,
+      dispatcher_session: SESSION,
+      phase: "working",
+    });
+    expect(written.success).toBe(true);
+    if (written.success)
+      writeFileSync(join(active, "working-no-event.json"), written.text);
+
+    const line = (await render(dir))
+      .split("\n")
+      .find((value) => value.startsWith("luna-high "));
+    expect(line).toContain("working · no event yet");
+  });
+
   test("prices the latest live rollout token total for a Codex row", async () => {
     const dir = join(scratch, "rollout-cost");
     const session = "livecost-unique-session-20261009";
@@ -274,7 +360,7 @@ describe("statusline Run row", () => {
     const line = (await render(dir))
       .split("\n")
       .find((value) => value.startsWith("luna-high "));
-    expect(line).toContain("$0.139");
+    expect(line).toContain("$0.14");
     expect(line).toContain("live codex");
   });
 

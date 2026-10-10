@@ -50,13 +50,20 @@ test("reads seven-day Jev response usage and prices spend", async () => {
   const usage = await readJevUsage(now);
   expect(usage.isOk()).toBe(true);
   if (usage.isOk())
-    expect(jevUsageSegment(usage.value)).toBe("Jev 7d spend $0.0378");
+    expect(jevUsageSegment(usage.value)).toBe("Jev 7d spend $0.04");
 });
 
-test("labels seven-day spend for small and larger amounts", () => {
-  expect(jevUsageSegment({ costUsd: 0.001 })).toBe("Jev 7d spend <$0.01");
-  expect(jevUsageSegment({ costUsd: 1.23 })).toBe("Jev 7d spend $1.23");
-  expect(jevUsageSegment({ costUsd: undefined })).toBe("Jev 7d spend —");
+test.each([
+  [0, "Jev 7d spend $0"],
+  [0.0004, "Jev 7d spend <$0.01"],
+  [0.004, "Jev 7d spend <$0.01"],
+  [0.0099, "Jev 7d spend <$0.01"],
+  [0.01, "Jev 7d spend $0.01"],
+  [0.0149, "Jev 7d spend $0.01"],
+  [1.234, "Jev 7d spend $1.23"],
+  [undefined, "Jev 7d spend —"],
+])("formats Jev cost %s as %s", (costUsd, expected) => {
+  expect(jevUsageSegment({ costUsd })).toBe(expected);
 });
 
 test("omits Jev when runs.jsonl is absent", async () => {

@@ -69,15 +69,15 @@ test("rate row prefixes Claude windows and appends Codex elapsed share and Jev t
   expect(stripAnsi(row)).toContain("claude 5h 15% ⟳");
   expect(stripAnsi(row)).toContain(" · 7d 50% ⟳");
   expect(stripAnsi(row)).toContain(" | codex 7d 12% ⟳");
-  expect(stripAnsi(row)).toContain(" | Jev 7d spend $0.0420");
+  expect(stripAnsi(row)).toContain(" | Jev 7d spend $0.04");
   const codexLabel = "codex";
   const jevLabel = "Jev";
-  const jevValue = `${ESC}[2m7d spend $0.0420${RST}`;
+  const jevValue = `${ESC}[2m7d spend $0.04${RST}`;
   expect(row).toContain(codexLabel);
   expect(stripAnsi(row)).toContain(jevLabel);
   expect(codexLabel).not.toMatch(new RegExp(`${ESC}\\[[0-9;]*m`, "u"));
   expect(jevLabel).not.toMatch(new RegExp(`${ESC}\\[[0-9;]*m`, "u"));
-  expect(jevValue).toBe(`${ESC}[2m7d spend $0.0420${RST}`);
+  expect(jevValue).toBe(`${ESC}[2m7d spend $0.04${RST}`);
   expect(row).toContain(jevValue);
   expect(stripAnsi(row)).not.toContain("cr ");
 });

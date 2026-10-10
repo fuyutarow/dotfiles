@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.5 — 2026-10-10
+
+- Keep phase, final vendor session and final cost visible from the marker while agx verifies and grades after worker exit.
+
+## 0.9.4 — 2026-10-10
+
+- Show run-row and Jev spend costs through the shared cents formatter, including `<$0.01` for positive sub-cent spend.
+
 ## 0.9.3 — 2026-10-10
 
 - Read the shared agx marker contract, render every own live worker including resumed runs, and show unreadable-marker counts while skipping malformed markers without identity.

@@ -39,6 +39,7 @@ export interface Dataframe {
   codexRate?: CodexRate | undefined;
   codexRateWhy?: string | undefined;
   jevUsage?: JevUsage | undefined;
+  jevUsageWhy?: string | undefined;
   branch?: string | undefined; // undefined with no branchWhy = cwd is not a repo (nothing to show)
   branchWhy?: string | undefined; // the lookup itself failed — shown as n/a, never dropped
   add?: number | undefined; // undefined = the payload carried no cost block (NOT zero lines)

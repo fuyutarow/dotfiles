@@ -16,7 +16,7 @@ import {
   diskRateStatePath,
   updateDiskRates,
 } from "./disk-rate.ts";
-import { DIM, ESC, RST, naSegment, pctFmt } from "./ansi.ts";
+import { DIM, ESC, NA_COLOR, RST, naSegment } from "./ansi.ts";
 
 // they are read from agents/hooks/storage-headroom.toml ([drive.*]: path, deny_gib, warn_gib),
 // the same file the storage gate enforces, so the bar and the gate can never disagree about a
@@ -35,8 +35,8 @@ export interface DiskReading {
   kind: "reading"; // discriminant: DiskEntry is told apart by this tag, not by probing for a key
   label: string; // "Disk C:", "Disk WSL", or "Disk <path>" — see diskLabel
   usedG: number;
-  totalG: number;
-  freeG: number;
+  totalG: number | undefined;
+  freeG: number | undefined;
   col: string; // green / yellow (below warn_gib) / red (below deny_gib)
   path?: string;
   rateGibPerMin?: number | undefined; // positive = filling, negative = freeing
@@ -127,7 +127,7 @@ export function diskReadings(
     const { bsize, blocks, bfree, bavail } = st.value;
     const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
     const freeG = (bavail * bsize) / 1024 ** 3;
-    const totalG = usedG + freeG; // df's Use% denominator (reserved blocks excluded)
+    const totalG = (blocks * bsize) / 1024 ** 3;
     // The storage-headroom gate (agents/hooks/enforce-storage-headroom.ts), on its own measure: free =
     // bavail, size = blocks. The gate validates that each _pct is present; this reader is not the
     // authority, so a missing share leaves the absolute size alone (100% of the drive never undercuts).
@@ -198,7 +198,7 @@ export async function diskReadingsAsync(
     const { bsize, blocks, bfree, bavail } = result.value;
     const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
     const freeG = (bavail * bsize) / 1024 ** 3;
-    const totalG = usedG + freeG;
+    const totalG = (blocks * bsize) / 1024 ** 3;
     const free = bavail * bsize;
     const size = blocks * bsize;
     const line = (gib: number | undefined, pct: number | undefined): number =>
@@ -229,8 +229,14 @@ export async function diskReadingsAsync(
 }
 export function diskSegment(d: DiskEntry): string {
   if (d.kind === "miss") return naSegment(d.label, d.why);
-  const pct = pctFmt((d.usedG / d.totalG) * 100).text;
+  if (d.freeG === undefined || !Number.isFinite(d.freeG) || d.freeG < 0)
+    return `${d.label} ${NA_COLOR}n/a${RST}`;
   const free = significant(d.freeG, 3);
+  const total = d.totalG;
+  const fraction =
+    total !== undefined && Number.isFinite(total) && total > 0
+      ? `/${significant(total, 3)}GiB (${Math.round((d.freeG / total) * 100)}%)`
+      : "";
   let rate = "";
   const fill = d.rateGibPerMin;
   if (fill !== undefined && Number.isFinite(fill) && Math.abs(fill) >= 0.05) {
@@ -250,7 +256,8 @@ export function diskSegment(d: DiskEntry): string {
       colour = `${ESC}[38;5;167m`;
     rate = ` ${colour}${fill > 0 ? "↓" : "↑"}${significant(Math.abs(fill), 2)}GiB/min`;
   }
-  return `${d.label} ${ESC}[${d.col}m${pct}%${RST} ${DIM}${free}GiB free${rate}${RST}`;
+  const suffix = rate === "" ? "" : `${DIM}${rate}${RST}`;
+  return `${d.label} ${ESC}[${d.col}m${free}GiB${RST}${fraction} free${suffix}`;
 }
 
 function significant(value: number, digits: number): string {

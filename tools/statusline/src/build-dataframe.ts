@@ -85,6 +85,7 @@ async function runBounded<T>(
   budgetMs: number,
   source: () => Promise<T>,
 ): Promise<Outcome<T>> {
+  const started = performance.now();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<Outcome<T>>((resolve) => {
     timer = setTimeout(() => {
@@ -95,7 +96,10 @@ async function runBounded<T>(
   const pending = Promise.resolve()
     .then(source)
     .then(
-      (value): Outcome<T> => ({ ok: true, value }),
+      (value): Outcome<T> =>
+        performance.now() - started >= budgetMs
+          ? { ok: false, why: `${name} timeout ${budgetMs}ms` }
+          : { ok: true, value },
       (): Outcome<T> => ({ ok: false, why: `${name} unavailable` }),
     );
   const outcome = await Promise.race([pending, timedOut]);
@@ -314,6 +318,9 @@ export async function buildDataframe(
       jevUsage.why === undefined && jevUsage.value.isOk()
         ? jevUsage.value.value
         : undefined,
+    jevUsageWhy:
+      jevUsage.why ??
+      (jevUsage.value.isErr() ? jevUsage.value.error : undefined),
     branch,
     branchWhy,
     add: data.cost?.total_lines_added,

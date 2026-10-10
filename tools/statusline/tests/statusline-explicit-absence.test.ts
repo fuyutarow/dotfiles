@@ -500,7 +500,7 @@ describe("statusline other rows", () => {
   test("an empty payload prints n/a for Ctx, Rate and diff instead of 0 or nothing", () => {
     const text = render({ bin: binWith({}), payload: {} }).text;
     expect(text).toContain("Ctx: n/a");
-    expect(text).toContain("Rate: n/a (no rate_limits in the payload)");
+    expect(text).toContain("Rate: claude n/a · 5h n/a · 7d n/a");
     expect(text).toContain("diff n/a (payload has no cost block)");
     expect(text).not.toContain("(+0,-0)");
   });
@@ -788,7 +788,7 @@ describe("statusline trust boundaries (zod)", () => {
       },
     }).text;
     expect(text).toContain("Ctx: 12.3k n/a");
-    expect(text).toContain("Rate: n/a (no rate_limits in the payload)");
+    expect(text).toContain("Rate: claude n/a · 5h n/a · 7d n/a");
   });
 
   test("a GPU cache of the wrong shape is an empty cache: the sample is retaken", () => {

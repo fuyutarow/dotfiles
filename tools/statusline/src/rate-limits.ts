@@ -160,66 +160,72 @@ function rlModelSegment(m: ModelLimit, now: number): string {
     seg += ` ${DIM}${reset7(m.resetEpoch, now)}${RST}`;
   return seg;
 }
-// Rate row: "Rate: 5h NN% ⟳… · 7d NN% ⟳… [· <Model> NN% ⟳…]". A window the payload does not carry
-// reads `5h n/a`; a payload with none at all (before the first API response, or an account with
-// no rate limits) reads `Rate: n/a (…)`. One builder for the bar and for the snapshot
-// log-sys-snapshot.ts attaches.
-export function rateRow(
-  df: Pick<
-    Dataframe,
-    | "rl5"
-    | "rl5Reset"
-    | "rl7"
-    | "rl7Reset"
-    | "rlModel"
-    | "modelCapsWhy"
-    | "codexRate"
-    | "codexRateWhy"
-    | "jevUsage"
-  >,
-  now = nowEpochSec(),
-): string {
-  const label = `${ESC}[38;5;108mRate:${RST}`;
-  if (
-    (df.rl5 === null || df.rl5 === undefined) &&
-    (df.rl7 === null || df.rl7 === undefined) &&
-    df.rlModel.length === 0 &&
-    df.codexRate === undefined &&
-    df.codexRateWhy === undefined &&
-    df.jevUsage === undefined
-  )
-    return `${label} ${NA_COLOR}n/a${RST} ${DIM}(no rate_limits in the payload)${RST}`;
-  const hasClaudeRates =
-    (df.rl5 !== null && df.rl5 !== undefined) ||
-    (df.rl7 !== null && df.rl7 !== undefined);
+type RateFacts = Pick<
+  Dataframe,
+  | "rl5"
+  | "rl5Reset"
+  | "rl7"
+  | "rl7Reset"
+  | "rlModel"
+  | "modelCapsWhy"
+  | "codexRate"
+  | "codexRateWhy"
+  | "jevUsage"
+  | "jevUsageWhy"
+>;
+
+function claudeRateSegment(df: RateFacts, now: number): string {
+  const rl5 =
+    df.rl5Reset !== undefined && df.rl5Reset <= now ? undefined : df.rl5;
+  const rl7 =
+    df.rl7Reset !== undefined && df.rl7Reset <= now ? undefined : df.rl7;
+  const hasClaudeRates = rl5 !== undefined || rl7 !== undefined;
   const parts: string[] = [];
   if (hasClaudeRates) {
     const claude: string[] = [
-      df.rl5 !== null && df.rl5 !== undefined
-        ? rl5Segment(df.rl5, df.rl5Reset, now)
+      rl5 !== undefined
+        ? rl5Segment(rl5, df.rl5Reset, now)
         : `5h ${NA_COLOR}n/a${RST}`,
-      df.rl7 !== null && df.rl7 !== undefined
-        ? rl7Segment(df.rl7, df.rl7Reset, now)
+      rl7 !== undefined
+        ? rl7Segment(rl7, df.rl7Reset, now)
         : `7d ${NA_COLOR}n/a${RST}`,
     ];
     parts.push(`claude ${claude.join(` ${DIM}${MID}${RST} `)}`);
   } else {
     parts.push(
-      `claude 5h ${NA_COLOR}n/a${RST} ${DIM}${MID}${RST} 7d ${NA_COLOR}n/a${RST}`,
+      `claude ${NA_COLOR}n/a${RST} ${DIM}${MID}${RST} 5h ${NA_COLOR}n/a${RST} ${DIM}${MID}${RST} 7d ${NA_COLOR}n/a${RST}`,
     );
   }
-  for (const m of df.rlModel) parts.push(rlModelSegment(m, now));
-  let row = `${label} ${parts.join(` ${DIM}${MID}${RST} `)}`;
-  const codex = codexRateSegment(df.codexRate, df.codexRateWhy, now);
-  if (codex !== "") row += ` ${DIM}|${RST} ${codex}`;
-  if (df.jevUsage !== undefined) {
-    const jev = jevUsageSegment(df.jevUsage);
-    const detail = jev.slice("Jev ".length);
-    row += ` ${DIM}|${RST} Jev ${DIM}${detail}${RST}`;
-  }
+  for (const m of df.rlModel)
+    parts.push(
+      m.resetEpoch !== undefined && m.resetEpoch <= now
+        ? naSegment(m.name, "stale source")
+        : rlModelSegment(m, now),
+    );
   if (df.modelCapsWhy !== undefined && df.modelCapsWhy !== "")
-    row += ` ${DIM}${MID}${RST} ${naSegment("model caps", df.modelCapsWhy)}`;
+    parts.push(naSegment("model caps", df.modelCapsWhy));
+  return parts.join(` ${DIM}${MID}${RST} `);
+}
+
+// One builder for both the statusline and its snapshot. Every provider always owns one slot.
+export const RATE_SOURCES = ["claude", "codex", "Jev"] as const;
+export function rateRow(df: RateFacts, now = nowEpochSec()): string {
+  const label = `${ESC}[38;5;108mRate:${RST}`;
+  // Positive space: exactly one slot per source, in this fixed order. A renderer failure
+  // belongs to its own slot; no early return or undefined filter can erase a provider.
+  const slots = RATE_SOURCES.map((source) => {
+    const rendered = fromThrowable(() => {
+      if (source === "claude") return claudeRateSegment(df, now);
+      if (source === "codex")
+        return codexRateSegment(df.codexRate, df.codexRateWhy, now);
+      const jev = jevUsageSegment(df.jevUsage, df.jevUsageWhy);
+      return `Jev ${DIM}${jev.slice("Jev ".length)}${RST}`;
+    })().unwrapOr(undefined);
+    return rendered === undefined || rendered.trim() === ""
+      ? naSegment(source, "unavailable")
+      : rendered;
+  });
   // Provider boundaries use pipes; windows within each provider keep middots.
-  return row;
+  return `${label} ${slots.join(` ${DIM}|${RST} `)}`;
 }
 // Job row, admitted-work half: "<name>[+N] <elapsed> [orphan×N]" — extracted out of render() only

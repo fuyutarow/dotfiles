@@ -67,7 +67,13 @@ export function updateDiskRates(
 ): { entries: DiskEntry[]; state: DiskRateState } {
   const state: DiskRateState = { schema: 1, drives: {} };
   const updated = entries.map((d): DiskEntry => {
-    if (d.kind === "miss" || d.path === undefined) return d;
+    if (
+      d.kind === "miss" ||
+      d.path === undefined ||
+      d.totalG === undefined ||
+      d.freeG === undefined
+    )
+      return d;
     const totalBytes = d.totalG * GiB;
     const prior = previous?.drives[d.path];
     let samples = (prior?.totalBytes === totalBytes ? prior.samples : [])

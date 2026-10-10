@@ -61,15 +61,15 @@ test.each([
   [0.01, "Jev 7d spend $0.01"],
   [0.0149, "Jev 7d spend $0.01"],
   [1.234, "Jev 7d spend $1.23"],
-  [undefined, "Jev 7d spend —"],
+  [undefined, "Jev n/a"],
 ])("formats Jev cost %s as %s", (costUsd, expected) => {
   expect(jevUsageSegment({ costUsd })).toBe(expected);
 });
 
-test("omits Jev when runs.jsonl is absent", async () => {
+test("names Jev when runs.jsonl is absent", async () => {
   const root = "/definitely/missing/statusline-jev";
   process.env.AGX_STATE_DIR = root;
   const usage = await readJevUsage();
   expect(usage.isOk()).toBe(true);
-  if (usage.isOk()) expect(jevUsageSegment(usage.value)).toBe("");
+  if (usage.isOk()) expect(jevUsageSegment(usage.value)).toBe("Jev n/a");
 });

@@ -88,7 +88,7 @@ test("renders both windows and hides unlimited or absent credits", async () => {
   }
 });
 
-test("adds stale age and treats a missing sessions directory as silence", async () => {
+test("stale and missing sessions render named absence", async () => {
   const { root, file } = await fixture();
   await writeFile(file, event(sample(null, window(10080, 11, 1791948537))));
   const stale = Temporal.Now.instant().subtract({ hours: 2 }).toString();
@@ -97,7 +97,9 @@ test("adds stale age and treats a missing sessions directory as silence", async 
   const parsed = await readCodexRate(root);
   expect(parsed.isOk()).toBe(true);
   if (parsed.isOk() && parsed.value !== undefined)
-    expect(codexRateSegment(parsed.value)).toContain("(as of 2h ago)");
+    expect(codexRateSegment(parsed.value)).toContain(
+      "codex n/a (stale source)",
+    );
   const absent = await readCodexRate(join(root, "missing"));
   expect(absent.isOk()).toBe(true);
   if (absent.isOk()) expect(absent.value).toBeUndefined();
@@ -109,7 +111,7 @@ test("ignores corrupt and unrelated tail lines when no rate object exists", asyn
   const parsed = await readCodexRate(root);
   expect(parsed.isOk()).toBe(true);
   if (parsed.isOk()) expect(parsed.value).toBeUndefined();
-  expect(codexRateSegment(undefined)).toBe("");
+  expect(codexRateSegment(undefined)).toContain("codex n/a");
 });
 
 test("drops the partial first line when the 256 KiB tail begins mid-line", async () => {

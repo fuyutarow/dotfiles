@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { open, readdir, stat } from "node:fs/promises";
 import { openSync, readSync, closeSync } from "node:fs";
 import { statSync } from "node:fs";
 import { join } from "node:path";
@@ -33,6 +33,7 @@ const RATE = z.object({
   ),
 });
 const TOKEN_COUNT_EVENT = z.object({
+  timestamp: maybe(z.string()),
   type: z.literal("event_msg"),
   payload: z.object({
     type: z.literal("token_count"),
@@ -61,25 +62,6 @@ const TOKEN_COUNT = z.object({
     info: z.object({ total_token_usage: TOKEN_USAGE }),
   }),
 });
-
-function selectRateFromTail(
-  path: string,
-  size: number,
-  length: number,
-): z.output<typeof RATE> | undefined {
-  const fd = openSync(path, "r");
-  const buffer = Buffer.alloc(length);
-  readSync(fd, buffer, 0, length, size - length);
-  closeSync(fd);
-  const lines = buffer.toString("utf8").split("\n");
-  if (length < size) lines.shift();
-  for (const line of lines.toReversed()) {
-    if (line.trim() === "") continue;
-    const parsed = jsonOf(TOKEN_COUNT_EVENT).safeParse(line);
-    if (parsed.success) return parsed.data.payload.rate_limits;
-  }
-  return undefined;
-}
 
 function selectUsageFromTail(
   path: string,
@@ -153,20 +135,19 @@ async function newestRollout(root: string): Promise<string | undefined> {
     const day = today.subtract({ days: dayOffset });
     const dir = join(root, String(day.year), pad2(day.month), pad2(day.day));
     const names = await readdir(dir).catch(() => []);
-    const infos = names
-      .filter((name) => /^rollout-.*\.jsonl$/u.test(name))
-      .map((name) => {
-        const path = join(dir, name);
-        const info = fromThrowable(
-          () => statSync(path),
-          () => null,
-        )();
-        return info.isOk() && info.value.isFile()
-          ? { path, mtimeMs: info.value.mtimeMs }
-          : null;
-      });
+    const infos = await Promise.all(
+      names
+        .filter((name) => /^rollout-.*\.jsonl$/u.test(name))
+        .map(async (name) => {
+          const path = join(dir, name);
+          const info = await stat(path).catch(() => null);
+          return info !== null && info.isFile()
+            ? { path, mtimeMs: info.mtimeMs }
+            : undefined;
+        }),
+    );
     const newest = infos
-      .filter((file) => file !== null)
+      .filter((info) => info !== undefined)
       .toSorted((a, b) => b.mtimeMs - a.mtimeMs)[0];
     if (newest !== undefined) return newest.path;
   }
@@ -187,52 +168,77 @@ function asWindow(
   };
 }
 
+// Async file operations let the dataframe's source deadline win even on slow storage.
+async function selectRateAsync(path: string, size: number, length: number) {
+  const fd = await open(path, "r");
+  const buffer = Buffer.alloc(length);
+  const read = await fd.read(buffer, 0, length, size - length).then(
+    (value) => ok(value),
+    (error: unknown) => err(error),
+  );
+  await fd.close();
+  if (read.isErr()) return err("codex rate unavailable");
+  const lines = buffer
+    .subarray(0, read.value.bytesRead)
+    .toString("utf8")
+    .split("\n");
+  if (length < size) lines.shift();
+  for (const line of lines.toReversed()) {
+    const parsed = jsonOf(TOKEN_COUNT_EVENT).safeParse(line);
+    if (parsed.success) return ok(parsed.data);
+  }
+  return ok(undefined);
+}
+
 export async function readCodexRate(
   root = join(process.env.HOME ?? "", ".codex", "sessions"),
 ): Promise<Result<CodexRate | undefined, string>> {
   const path = await newestRollout(root);
   if (path === undefined) return ok(undefined);
-  const infoResult = fromThrowable(
-    () => statSync(path),
-    () => "codex rate unavailable",
-  )();
-  if (infoResult.isErr()) return err(infoResult.error);
-  const info = infoResult.value;
-  let selected: z.output<typeof RATE> | undefined;
+  const info = await stat(path).catch(() => null);
+  if (info === null) return err("codex rate unavailable");
+  let selected: z.output<typeof TOKEN_COUNT_EVENT> | undefined;
   const maxLength = Math.min(info.size, MAX_TAIL_BYTES);
-  const readResult = fromThrowable(
-    () => {
-      const lengths = new Set([
-        Math.min(info.size, TAIL_BYTES),
-        Math.min(info.size, 512 * 1024),
-        maxLength,
-      ]);
-      for (const length of lengths) {
-        selected = selectRateFromTail(path, info.size, length);
-        if (selected !== undefined || length === maxLength) break;
-      }
-    },
-    () => "codex rate unavailable",
-  )();
-  if (readResult.isErr()) {
-    return err(readResult.error);
-  }
+  const readResult = await (async () => {
+    const lengths = new Set([
+      Math.min(info.size, TAIL_BYTES),
+      Math.min(info.size, 512 * 1024),
+      maxLength,
+    ]);
+    for (const length of lengths) {
+      const result = await selectRateAsync(path, info.size, length);
+      if (result.isErr()) return false;
+      selected = result.value;
+      if (selected !== undefined || length === maxLength) break;
+    }
+    return true;
+  })().catch(() => false);
+  if (!readResult) return err("codex rate unavailable");
   if (selected === undefined) return ok(undefined);
-  const windows = [
-    asWindow(selected.primary),
-    asWindow(selected.secondary),
-  ].filter((item) => item !== undefined);
-  const balance = selected.credits?.balance;
+  const rate = selected.payload.rate_limits;
+  const timestamp = selected.timestamp;
+  const eventTime =
+    timestamp === undefined
+      ? undefined
+      : fromThrowable(
+          () => Temporal.Instant.from(timestamp).epochMilliseconds,
+        )().unwrapOr(undefined);
+  const mtimeMs =
+    eventTime === undefined ? info.mtimeMs : Math.min(info.mtimeMs, eventTime);
+  const windows = [asWindow(rate.primary), asWindow(rate.secondary)].filter(
+    (item) => item !== undefined,
+  );
+  const balance = rate.credits?.balance;
   let credits: string | undefined;
   if (
-    selected.credits?.has_credits === true &&
-    selected.credits.unlimited === false &&
+    rate.credits?.has_credits === true &&
+    rate.credits.unlimited === false &&
     balance !== undefined
   )
     credits = String(Math.round(Number(balance)));
   if (windows.length === 0 && credits === undefined) return ok(undefined);
-  if (credits === undefined) return ok({ windows, mtimeMs: info.mtimeMs });
-  return ok({ windows, credits, mtimeMs: info.mtimeMs });
+  if (credits === undefined) return ok({ windows, mtimeMs });
+  return ok({ windows, credits, mtimeMs });
 }
 
 function remaining(epoch: number, now: number): string {
@@ -241,20 +247,16 @@ function remaining(epoch: number, now: number): string {
     return `${Math.floor(seconds / 86400)}d${Math.floor((seconds % 86400) / 3600)}h`;
   return `${Math.floor(seconds / 3600)}h${pad2(Math.floor((seconds % 3600) / 60))}m`;
 }
-function ageText(ageMs: number): string {
-  const minutes = Math.floor(ageMs / 60000);
-  if (minutes >= 60) return `${Math.floor(minutes / 60)}h ago`;
-  return `${minutes}m ago`;
-}
 export function codexRateSegment(
   rate: CodexRate | undefined,
   why?: string,
   now = nowEpochSec(),
 ): string {
   if (rate === undefined) {
-    if (why === undefined) return "";
-    return `${ESC}[38;5;178mcodex n/a (${why})${RST}`;
+    return `${ESC}[38;5;178mcodex n/a${why === undefined ? "" : ` (${why})`}${RST}`;
   }
+  const ageMs = Temporal.Now.instant().epochMilliseconds - rate.mtimeMs;
+  if (ageMs > STALE_MS) return `${ESC}[38;5;178mcodex n/a (stale source)${RST}`;
   const parts = rate.windows.map((window) => {
     let label = `${window.minutes}m`;
     if (window.minutes === 300) label = "5h";
@@ -278,8 +280,6 @@ export function codexRateSegment(
     }
     return item;
   });
-  if (parts.length === 0) return "";
-  const ageMs = Temporal.Now.instant().epochMilliseconds - rate.mtimeMs;
-  if (ageMs > STALE_MS) parts[parts.length - 1] += ` (as of ${ageText(ageMs)})`;
+  if (parts.length === 0) return `${ESC}[38;5;178mcodex n/a${RST}`;
   return parts.join(` ${DIM}·${RST} `);
 }

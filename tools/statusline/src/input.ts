@@ -1,4 +1,5 @@
 import { z } from "./zod.ts";
+import { recoverInvalid } from "./bounded.ts";
 
 // ZOD FIRST (writing-typescript, owner call 2026-10-03): every value that enters this file from
 // outside — the stdin payload, the cache files under ~/.cache/claude, ~/.claude.json, the storage
@@ -12,10 +13,12 @@ import { z } from "./zod.ts";
 export const maybe = <T extends z.ZodType>(schema: T) =>
   schema.nullish().transform((v) => v ?? undefined);
 
-const RateWindowSchema = z.object({
-  used_percentage: maybe(z.number()),
-  resets_at: maybe(z.number()), // Unix epoch seconds
-});
+const RateWindowSchema = recoverInvalid(
+  z.object({
+    used_percentage: maybe(z.number()),
+    resets_at: maybe(z.number()), // Unix epoch seconds
+  }),
+);
 export const StatusInputSchema = z.object({
   cwd: maybe(z.string()),
   session_id: maybe(z.string()),
@@ -44,10 +47,12 @@ export const StatusInputSchema = z.object({
   ),
   effort: maybe(z.object({ level: maybe(z.string()) })),
   rate_limits: maybe(
-    z.object({
-      five_hour: maybe(RateWindowSchema),
-      seven_day: maybe(RateWindowSchema),
-    }),
+    recoverInvalid(
+      z.object({
+        five_hour: maybe(RateWindowSchema),
+        seven_day: maybe(RateWindowSchema),
+      }),
+    ),
   ),
   worktree: maybe(z.object({ name: maybe(z.string()) })),
 });

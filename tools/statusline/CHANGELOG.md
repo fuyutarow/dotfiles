@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.7 — 2026-10-10
+
+- Show every disk as free/total GiB with its rounded free percentage; colour only the free amount using the existing space thresholds, preserving the depletion-rate suffix.
+- Show known free space without a fraction when capacity is unknown, and explicit n/a when free space is unknown.
+
+## 0.9.6 — 2026-10-10
+
+- Always render the fixed Claude, Codex and Jev Rate slots, with named n/a for missing, empty, stale, invalid, unreadable or timed-out sources.
+- Keep rate file reads asynchronous so slow storage cannot block source deadlines.
+
 ## 0.9.5 — 2026-10-10
 
 - Keep phase, final vendor session and final cost visible from the marker while agx verifies and grades after worker exit.

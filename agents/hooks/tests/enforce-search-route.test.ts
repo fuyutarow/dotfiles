@@ -138,12 +138,12 @@ describe("enforce-search-route", () => {
     }
   });
 
-  test("allows grep and rg scoped to explicit regular files", () => {
+  test("allows one project output file but denies project source-file searches", () => {
     const project = registerProject();
     writeFileSync(join(project, "one.log"), "foo\n");
     writeFileSync(join(project, "a.txt"), "foo a\n");
     writeFileSync(join(project, "b.txt"), "foo b\n");
-    for (const command of ["grep -e foo one.log", "rg foo a.txt b.txt"]) {
+    for (const command of ["grep -e foo one.log"]) {
       const result = runHook(HOOK, bashPayload(project, command), withCcc());
       expect({
         command,
@@ -153,6 +153,12 @@ describe("enforce-search-route", () => {
         decision: undefined,
       });
     }
+    const sourceSearch = runHook(
+      HOOK,
+      bashPayload(project, "rg foo a.txt b.txt"),
+      withCcc(),
+    );
+    expect(decisionOf(sourceSearch.stdout)?.permissionDecision).toBe("deny");
   });
 
   test("denies built-in Grep in an operational ccc project", () => {
@@ -384,6 +390,43 @@ describe("enforce-search-route", () => {
       }).toEqual({ command, decision: expected });
     }
   }, 20_000);
+
+  test("allows external logs and single output files but denies project source searches", () => {
+    const fixture = tempDir("search-route-log-scope-");
+    const project = join(fixture, "project");
+    const outside = join(fixture, "scratch");
+    const home = join(fixture, "home");
+    mkdirSync(join(project, ".cocoindex_code"), { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    mkdirSync(join(home, ".codex", "sessions"), { recursive: true });
+    writeFileSync(
+      join(project, ".cocoindex_code", "settings.yml"),
+      "include_patterns: []\n",
+    );
+    const landLog = join(outside, "land.log");
+    const sessionLog = join(home, ".codex", "sessions", "rollout.jsonl");
+    const projectOutput = join(project, "result.jsonl");
+    const source = join(project, "scripts", "land.ts");
+    mkdirSync(join(project, "scripts"), { recursive: true });
+    for (const path of [landLog, sessionLog, projectOutput, source])
+      writeFileSync(path, "statusline\n");
+    const env = { ...withCcc(), HOME: home };
+    const cases: ReadonlyArray<readonly [string, string, string | undefined]> =
+      [
+        [project, `grep -E '^[[]land[]]' ${landLog}`, undefined],
+        [project, `awk '/x/' ${sessionLog}`, undefined],
+        [project, `grep statusline ${projectOutput}`, undefined],
+        [project, `grep foo ${source}`, "deny"],
+        [project, "grep -rn foo .", "deny"],
+      ];
+    for (const [cwd, command, expected] of cases) {
+      const result = runHook(HOOK, bashPayload(cwd, command), env);
+      expect({
+        command,
+        decision: decisionOf(result.stdout)?.permissionDecision,
+      }).toEqual({ command, decision: expected });
+    }
+  });
 
   test("allows raw search when ccc is unavailable", () => {
     const project = registerProject();

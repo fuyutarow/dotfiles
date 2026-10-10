@@ -229,23 +229,27 @@ function commandSearches(c: ShellCommand, command: string): boolean {
   return FILE_SCAN_PRIMITIVE.test(text);
 }
 
-/** One nonrecursive grep/rg over explicit regular files is a file lookup, not a repo search. */
+const OUTPUT_FILE = /\.(?:log|jsonl|tsv|txt|out|err)$/iu;
+
+/** One nonrecursive grep/rg over explicit output files or paths outside ccc roots is not a repo search. */
 function fileScopedSearch(c: ShellCommand): boolean {
   const eff = effective(c);
   if (eff === undefined || (eff.name !== "grep" && eff.name !== "rg"))
     return false;
   if (eff.args.some(isRecursiveOption)) return false;
   const operands = searchOperands(c);
-  return (
-    operands.length > 0 &&
-    operands.every((operand) => {
-      const target = readPath(operand, c);
-      return (
-        target.resolved &&
-        statSync(target.path, { throwIfNoEntry: false })?.isFile() === true
-      );
-    })
-  );
+  if (operands.length === 0) return false;
+  const registered = operands.map((operand) => {
+    const target = readPath(operand, c);
+    if (!target.resolved) return null;
+    const outputFile =
+      operands.length === 1 &&
+      OUTPUT_FILE.test(target.path) &&
+      statSync(target.path, { throwIfNoEntry: false })?.isFile() === true;
+    if (outputFile) return true;
+    return registeredProject(target.path) === null;
+  });
+  return registered.every((outside) => outside === true);
 }
 
 function isRawSearch(command: string | undefined, cwd: string): boolean {

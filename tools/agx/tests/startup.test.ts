@@ -35,12 +35,12 @@ function run(args: string[]): { code: number; out: string; err: string } {
 test("root version, help and bare invocation do not touch state", () => {
   const version = run(["--version"]);
   expect(version.code).toBe(0);
-  expect(version.out.trim()).toBe("2.5.3");
+  expect(version.out.trim()).toBe("2.5.4");
   expect(version.err).toBe("");
 
   const help = run(["--help"]);
   expect(help.code).toBe(0);
-  expect(help.out).toContain("agx v2.5.3");
+  expect(help.out).toContain("agx v2.5.4");
   expect(help.err).toBe("");
 
   const bare = run([]);

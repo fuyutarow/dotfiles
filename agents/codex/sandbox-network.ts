@@ -6,21 +6,32 @@ import { attempt } from "../hooks/attempt.ts";
 import { z } from "../hooks/zod.ts";
 
 const RecordSchema = z.record(z.string(), z.unknown());
-const TOP_LEVEL = [
-  "model_context_window",
-  "model_auto_compact_token_limit",
-] as const;
+const ApprovalPolicySchema = z.enum(["on-request", "never"]);
+const ApprovalsReviewerSchema = z.enum(["user", "auto_review"]);
+
+function topLevelValues(declared: Declared) {
+  return {
+    model_context_window: declared.modelContextWindow,
+    model_auto_compact_token_limit: declared.modelAutoCompactTokenLimit,
+    approval_policy: declared.approvalPolicy,
+    approvals_reviewer: declared.approvalsReviewer,
+  };
+}
 
 export type Declared = {
   networkAccess: boolean;
   modelContextWindow: number;
   modelAutoCompactTokenLimit: number;
+  approvalPolicy: z.output<typeof ApprovalPolicySchema>;
+  approvalsReviewer: z.output<typeof ApprovalsReviewerSchema>;
 };
 export type Live = {
   contents: string | null;
   networkAccess: boolean | null;
   modelContextWindow: number | null;
   modelAutoCompactTokenLimit: number | null;
+  approvalPolicy: string | null;
+  approvalsReviewer: string | null;
 };
 
 function values(parsed: unknown): Declared | Error {
@@ -35,15 +46,27 @@ function values(parsed: unknown): Declared | Error {
     .number()
     .int()
     .safeParse(root.data.model_auto_compact_token_limit);
-  if (network.success && context.success && compact.success) {
+  const approval = ApprovalPolicySchema.safeParse(root.data.approval_policy);
+  const reviewer = ApprovalsReviewerSchema.safeParse(
+    root.data.approvals_reviewer,
+  );
+  if (
+    network.success &&
+    context.success &&
+    compact.success &&
+    approval.success &&
+    reviewer.success
+  ) {
     return {
       networkAccess: network.data,
       modelContextWindow: context.data,
       modelAutoCompactTokenLimit: compact.data,
+      approvalPolicy: approval.data,
+      approvalsReviewer: reviewer.data,
     };
   }
   return new Error(
-    "Codex declaration requires network_access boolean and integer model limits",
+    "Codex declaration requires network_access boolean, integer model limits, approval_policy (on-request|never), and approvals_reviewer (user|auto_review)",
   );
 }
 
@@ -69,6 +92,8 @@ export async function readLive(home: string): Promise<Live | Error> {
       networkAccess: null,
       modelContextWindow: null,
       modelAutoCompactTokenLimit: null,
+      approvalPolicy: null,
+      approvalsReviewer: null,
     };
   }
   const read = await attempt(() => readFileSync(path, "utf8"));
@@ -86,16 +111,26 @@ export async function readLive(home: string): Promise<Live | Error> {
     .number()
     .int()
     .safeParse(root.data.model_auto_compact_token_limit);
+  const approval = z.string().safeParse(root.data.approval_policy);
+  const reviewer = z.string().safeParse(root.data.approvals_reviewer);
   return {
     contents: read.value,
     networkAccess: network.success ? network.data : null,
     modelContextWindow: context.success ? context.data : null,
     modelAutoCompactTokenLimit: compact.success ? compact.data : null,
+    approvalPolicy: approval.success ? approval.data : null,
+    approvalsReviewer: reviewer.success ? reviewer.data : null,
   };
 }
 
 export function drift(declared: Declared, live: Live): string[] {
   const lines = [
+    live.approvalPolicy === declared.approvalPolicy
+      ? null
+      : `approval_policy=${String(live.approvalPolicy)}, declared ${declared.approvalPolicy}`,
+    live.approvalsReviewer === declared.approvalsReviewer
+      ? null
+      : `approvals_reviewer=${String(live.approvalsReviewer)}, declared ${declared.approvalsReviewer}`,
     live.networkAccess === declared.networkAccess
       ? null
       : `sandbox_workspace_write.network_access=${String(live.networkAccess)}, declared ${declared.networkAccess}`,
@@ -109,18 +144,18 @@ export function drift(declared: Declared, live: Live): string[] {
   return lines.flatMap((line) => (line === null ? [] : [line]));
 }
 
-function replaceInteger(
+function replaceScalar(
   line: string,
   key: string,
-  value: number,
+  value: number | string,
 ): string | null {
   const assignment = new RegExp(
-    `^(\\s*${key}\\s*=\\s*)([+-]?\\d+)(\\s*(?:#.*)?)$`,
+    `^(\\s*${key}\\s*=\\s*)(?:"(?:[^"\\\\]|\\\\.)*"|'[^']*'|[+-]?[\\d_]+)(\\s*(?:#.*)?)$`,
     "u",
   ).exec(line);
   return assignment === null
     ? null
-    : `${assignment[1]}${value}${assignment[3]}`;
+    : `${assignment[1]}${JSON.stringify(value)}${assignment[2]}`;
 }
 
 function replaceBoolean(line: string, value: boolean): string | null {
@@ -135,14 +170,8 @@ function updateTopLevelLine(
   line: string,
   declared: Declared,
 ): { line: string; key: string } | null {
-  for (const key of TOP_LEVEL) {
-    const changed = replaceInteger(
-      line,
-      key,
-      key === "model_context_window"
-        ? declared.modelContextWindow
-        : declared.modelAutoCompactTokenLimit,
-    );
+  for (const [key, value] of Object.entries(topLevelValues(declared))) {
+    const changed = replaceScalar(line, key, value);
     if (changed !== null) return { line: changed, key };
   }
   return null;
@@ -177,13 +206,9 @@ export function edit(contents: string | null, declared: Declared): string {
     found.add(changed.key);
     lines[index] = changed.line;
   }
-  const prefix = TOP_LEVEL.filter((key) => !found.has(key)).map((key) => {
-    const value =
-      key === "model_context_window"
-        ? declared.modelContextWindow
-        : declared.modelAutoCompactTokenLimit;
-    return `${key} = ${value}`;
-  });
+  const prefix = Object.entries(topLevelValues(declared))
+    .filter(([key]) => !found.has(key))
+    .map(([key, value]) => `${key} = ${JSON.stringify(value)}`);
   if (prefix.length > 0) {
     const insertion = firstTable;
     if (insertion === 0) lines.splice(insertion, 0, ...prefix, "");

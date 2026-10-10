@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.4 — 2026-10-10
+
+- Pin Codex worker approval policy to `never` for fresh and resumed runs, preserving headless behavior when interactive sessions use automatic approval review.
+
 ## 2.5.3 — 2026-10-10
 
 - Dispatch root `--version`, `--help` and bare invocations before loading the dispatcher; read recent run history from a bounded tail and stream full-history reports across dated archives.

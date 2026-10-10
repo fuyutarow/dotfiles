@@ -1,4 +1,8 @@
 # Codex CLI configuration keys maintained by dotfiles.
+# Interactive approvals use Codex's reviewer agent; sandbox boundaries stay unchanged.
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+
 # 2026-10-09 evidence: gpt-6-luna accepted 483,584 input tokens and Codex reported a window of 828,400.
 model_context_window = 1000000
 model_auto_compact_token_limit = 950000

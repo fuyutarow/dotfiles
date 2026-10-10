@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { drift, edit, readLive } from "../sandbox-network.ts";
+import { drift, edit, readLive, type Declared } from "../sandbox-network.ts";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,11 @@ const declared = {
   networkAccess: true,
   modelContextWindow: 1000000,
   modelAutoCompactTokenLimit: 950000,
-};
+  approvalPolicy: "on-request",
+  approvalsReviewer: "auto_review",
+} satisfies Declared;
+const approvals =
+  'approval_policy = "on-request"\napprovals_reviewer = "auto_review"\n';
 
 function visit(path: string): string[] {
   const entries = readdirSync(path, { withFileTypes: true });
@@ -45,20 +49,23 @@ describe("Codex settings convergence", () => {
       '# user comment\nother = "unchanged"\n\n[sandbox_workspace_write]\nnetwork_access = true\n';
     const result = edit(source, declared);
     expect(result).toBe(
-      '# user comment\nother = "unchanged"\n\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n\n[sandbox_workspace_write]\nnetwork_access = true\n',
+      '# user comment\nother = "unchanged"\n\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n\n[sandbox_workspace_write]\nnetwork_access = true\n',
     );
   });
 
   test("updates wrong values and preserves inline comments", () => {
     const source =
+      approvals +
       "model_context_window = 100000\nmodel_auto_compact_token_limit = 900000 # retain\n[sandbox_workspace_write]\nnetwork_access = false\n";
     expect(edit(source, declared)).toBe(
-      "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000 # retain\n[sandbox_workspace_write]\nnetwork_access = true\n",
+      approvals +
+        "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000 # retain\n[sandbox_workspace_write]\nnetwork_access = true\n",
     );
   });
 
   test("a converged file is a byte-identical no-op", () => {
     const source =
+      approvals +
       "# leading\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true # note\n";
     expect(edit(source, declared)).toBe(source);
     expect(
@@ -67,6 +74,8 @@ describe("Codex settings convergence", () => {
         networkAccess: true,
         modelContextWindow: 1000000,
         modelAutoCompactTokenLimit: 950000,
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
       }),
     ).toEqual([]);
   });
@@ -79,7 +88,7 @@ describe("Codex settings convergence", () => {
       "[custom]\nmodel_context_window = 123\nmodel_auto_compact_token_limit = 456\n",
     );
     expect(result).toContain(
-      "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n\n[custom]",
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n\n[custom]',
     );
   });
 
@@ -88,7 +97,8 @@ describe("Codex settings convergence", () => {
     mkdirSync(join(home, ".codex"));
     writeFileSync(
       join(home, ".codex/config.toml"),
-      "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n",
+      approvals +
+        "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n",
     );
     const live = await readLive(home);
     expect(live).not.toBeInstanceOf(Error);

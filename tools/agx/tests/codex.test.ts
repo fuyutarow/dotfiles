@@ -233,6 +233,10 @@ describe("agx", () => {
           ],
           { AGX_CODEX_BIN: bin },
         );
+        const launch = readFileSync(log, "utf8").split("\n");
+        const pinned = launch.indexOf('approval_policy="never"');
+        expect(pinned).toBeGreaterThan(0);
+        expect(launch[pinned - 1]).toBe("-c");
         expect(r.code).toBe(0);
         const effective = sandbox === "none" ? "danger-full-access" : sandbox;
         const argv = readFileSync(log, "utf8").split("\n");

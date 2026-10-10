@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,6 +20,65 @@ function run(home: string, args: string[] = []) {
 }
 
 describe("codex:config", () => {
+  test.each(["approval_policy", "approvals_reviewer"])(
+    "--check detects drift in %s alone without writing",
+    (key) => {
+      const home = mkdtempSync(join(tmpdir(), "codex-config-approval-check-"));
+      mkdirSync(join(home, ".codex"));
+      const declared = readFileSync(
+        join(repo, "agents/codex/config.declared.toml"),
+        "utf8",
+      );
+      const stale = declared.replace(
+        new RegExp(`${key} = "[^"]+"`, "u"),
+        `${key} = "stale"`,
+      );
+      const path = join(home, ".codex/config.toml");
+      writeFileSync(path, stale);
+      const result = run(home, ["--check"]);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr.toString()).toContain(`${key}=stale`);
+      expect(readFileSync(path, "utf8")).toBe(stale);
+    },
+  );
+
+  test.each([
+    "",
+    "approval_policy = \"never\"\napprovals_reviewer = 'user' # reviewer\n",
+  ])(
+    "converges approvals, preserves Codex-owned settings, and is idempotent: %s",
+    (approvals) => {
+      const home = mkdtempSync(join(tmpdir(), "codex-config-approvals-"));
+      mkdirSync(join(home, ".codex"));
+      const path = join(home, ".codex/config.toml");
+      const owned =
+        'model = "owner-model" # keep\nsandbox_mode = "read-only"\n\n[profiles.custom]\napproval_policy = "never"\napprovals_reviewer = "user"\n\n[projects."/owner/project"]\ntrust_level = "trusted"\n';
+      writeFileSync(path, approvals + owned);
+      expect(run(home).exitCode).toBe(0);
+      const converged = readFileSync(path, "utf8");
+      expect(Bun.TOML.parse(converged)).toMatchObject({
+        approval_policy: "on-request",
+        approvals_reviewer: "auto_review",
+        sandbox_mode: "read-only",
+      });
+      expect(converged).toContain(
+        'model = "owner-model" # keep\nsandbox_mode = "read-only"',
+      );
+      expect(converged).toContain(
+        owned.slice(owned.indexOf("[profiles.custom]")),
+      );
+      if (approvals.length > 0)
+        expect(converged).toContain(
+          'approvals_reviewer = "auto_review" # reviewer',
+        );
+      const second = run(home);
+      expect(second.exitCode).toBe(0);
+      expect(second.stdout.toString() + second.stderr.toString()).toBe("");
+      expect(readFileSync(path, "utf8")).toBe(converged);
+      expect(run(home, ["--check"]).exitCode).toBe(0);
+    },
+  );
+
   test("--check exits 1 for drift without writing", () => {
     const home = mkdtempSync(join(tmpdir(), "codex-config-check-"));
     mkdirSync(join(home, ".codex"));
@@ -38,7 +97,7 @@ describe("codex:config", () => {
     // The values match agents/codex/config.declared.toml.
     writeFileSync(
       join(home, ".codex/config.toml"),
-      "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n",
+      'approval_policy = "on-request"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n',
     );
     const result = run(home, ["--check"]);
     expect(result.exitCode).toBe(0);

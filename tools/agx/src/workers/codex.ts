@@ -420,6 +420,9 @@ const execFlags = [
   String(model),
   "-c",
   `model_reasoning_effort="${effort}"`,
+  // Keep headless approvals independent of the interactive AutoReview default, also on resume.
+  "-c",
+  'approval_policy="never"',
   "-o",
   lastFile,
   ...(argv.flags.outputSchema === undefined

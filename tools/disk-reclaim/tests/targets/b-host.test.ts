@@ -72,6 +72,9 @@ test("PowerShell selection preserves young temp files, junctions, and all virtua
   expect(hostProbe).toContain("ReparsePoint");
   expect(hostProbe).toContain("'.vhdx','.vhd'");
   expect(hostProbe).toContain("GetCompressedFileSizeW");
+  expect(hostProbe).toContain(
+    "if ([string]::IsNullOrWhiteSpace($p.BasePath)) { return }",
+  );
   expect(hostAction("windows-update", "ignored")).toContain(
     "/StartComponentCleanup",
   );
@@ -141,6 +144,9 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
   expect(ran.stderr.toString()).toContain("inert here");
   let log = readFileSync(env.HOST_STUB_LOG, "utf8");
   expect(log).toContain("r99-lan");
+  expect(log).toContain(".ps1'");
+  expect(log).toContain("[Console]::In.ReadToEnd()");
+  expect(log).toContain("Remove-Item -LiteralPath $scriptPath");
   expect(log).not.toContain("Clear-RecycleBin");
   expect(log).not.toContain("powercfg.exe /h off");
   const approved = invoke([

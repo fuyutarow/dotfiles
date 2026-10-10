@@ -46,16 +46,19 @@ Configuration resolves beside the executable, or at `RECLAIM_CONFIG` when set. `
 owns repository, scratch, and delete roots; delete roots default to `/tmp` and `~/.cache`.
 `~` and `{uid}` expand to absolute paths. If omitted, `ignore_unreadable_procs` defaults to
 `["sshd"]`, matching the shipped configuration. The setting exempts only
-EACCES on same-uid cwd/fd/environ probes whose readable comm or exe basename exactly matches
-the list, for scratch/workspaces. Other unreadable processes stay ASK; readable live paths
-still block reclamation. Owner-approved delete keeps its stricter unreadable-process refusal.
+EACCES on same-uid cwd/fd/environ/maps probes whose readable comm or exe basename exactly matches
+the list, for scratch/workspaces. Other unreadable process-path probes stay ASK; readable live
+paths still block reclamation. An unreadable environment scan for a non-ignored process keeps
+scratch session liveness unknown without making separately resolved process paths unknown.
+Owner-approved delete keeps its stricter unreadable-process refusal.
 
 Each plan uses one `/proc` process snapshot, shared by its liveness and workspace checks. Only
 processes whose uid equals the owner's uid affect in-use judgments; foreign-uid processes, including
 root, are skipped. Rationale: all agents and workers run as the owner's uid; foreign-uid daemons do
-not use user scratch or workspaces (owner decision 2026-10-08). Processes that vanish between
-listing and reading (`ENOENT` or `ESRCH`) count as gone; EACCES on a live, non-ignored same-uid
-process remains unknown and yields ASK. A workspace with a positive in-use signal is
+not use user scratch or workspaces (owner decision 2026-10-08). Executable, cwd, fd, and mapped-file
+paths are checked independently from environment session ids. Processes that vanish between
+listing and reading (`ENOENT` or `ESRCH`) count as gone; unreadable live, non-ignored same-uid
+path evidence remains unknown and yields ASK. A workspace with a positive in-use signal is
 KEEP, and that check runs before `jj status` can snapshot the working copy. A known conflict also
 requires KEEP even when an unrelated fact is unknown.
 

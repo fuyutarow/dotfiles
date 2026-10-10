@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { hostAction, hostProbe } from "./host-powershell.ts";
@@ -71,10 +72,23 @@ const sshRunner: HostRunner = async (host, script) => {
   const signal = AbortSignal.timeout(
     script.includes("dism.exe") ? 3_600_000 : 120_000,
   );
-  const encoded = Buffer.from(
-    script === "$probe" ? hostProbe : script,
-    "utf16le",
-  ).toString("base64");
+  const name = `disk-reclaim-${randomUUID()}.ps1`;
+  const wrapper = [
+    "$ErrorActionPreference='Stop'",
+    "$ProgressPreference='SilentlyContinue'",
+    `$scriptPath=Join-Path $env:TEMP '${name}'`,
+    "$source=[Console]::In.ReadToEnd()",
+    "[IO.File]::WriteAllText($scriptPath,$source,[Text.UTF8Encoding]::new($true))",
+    "$exitCode=0",
+    "try {",
+    "  & powershell.exe -NoProfile -NonInteractive -File $scriptPath",
+    "  if ($null -ne $LASTEXITCODE) { $exitCode=$LASTEXITCODE }",
+    "} finally {",
+    "  Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue",
+    "}",
+    "exit $exitCode",
+  ].join("\n");
+  const encoded = Buffer.from(wrapper, "utf16le").toString("base64");
   const proc = Bun.spawn(
     [
       "ssh",
@@ -85,8 +99,10 @@ const sshRunner: HostRunner = async (host, script) => {
       host,
       `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
     ],
-    { stdout: "pipe", stderr: "pipe", signal },
+    { stdin: "pipe", stdout: "pipe", stderr: "pipe", signal },
   );
+  await proc.stdin.write(script === "$probe" ? hostProbe : script);
+  await proc.stdin.end();
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),

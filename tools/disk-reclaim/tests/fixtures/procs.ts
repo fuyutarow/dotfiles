@@ -22,6 +22,10 @@ export function procFixture(
     "Name:\tfixture\nUid:\t1000\t1000\t1000\t1000\n",
   );
   writeFileSync(join(base, "environ"), "");
+  writeFileSync(
+    join(base, "maps"),
+    "7f000000-7f001000 r-xp 00000000 08:01 12345 /elsewhere/libfixture.so\n",
+  );
   symlinkSync(`/usr/bin/${comm}`, join(base, "exe"));
   symlinkSync("/elsewhere", join(base, "cwd"));
   symlinkSync("/elsewhere/data", join(base, "fd/3"));

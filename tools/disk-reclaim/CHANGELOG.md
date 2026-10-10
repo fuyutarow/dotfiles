@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- Run Windows host PowerShell probes from a temporary script file over SSH and ignore WSL registry entries without a BasePath, preserving the C: measurement.
+- Detect WSL in non-interactive SSH shells through procfs when `WSL_DISTRO_NAME` is absent.
+- Resolve same-uid executable, open-file, and mapped-file paths independently from environment-based session liveness.
+
 ## 0.4.0
 
 - Report every discovered `target/` directory in the Rust tier with its size and a RECLAIM, KEEP, or ASK verdict; recency now orders rows instead of hiding them.

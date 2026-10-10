@@ -71,6 +71,7 @@ if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
 }
 Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss' -ErrorAction SilentlyContinue | ForEach-Object {
   $p=Get-ItemProperty $_.PSPath
+  if ([string]::IsNullOrWhiteSpace($p.BasePath)) { return }
   Get-ChildItem -LiteralPath $p.BasePath -Filter '*.vhdx' -File -ErrorAction SilentlyContinue | ForEach-Object {
     [uint32]$high=0; $low=[ReclaimAllocation]::GetCompressedFileSizeW($_.FullName,[ref]$high)
     $allocated='?'

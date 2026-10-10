@@ -1,5 +1,34 @@
+import { fromAsyncThrowable } from "neverthrow";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
+
+export function isWslRuntime(facts: {
+  platform: string;
+  distroName: string | undefined;
+  procVersion: string;
+  interop: boolean;
+}): boolean {
+  return (
+    facts.platform === "linux" &&
+    (facts.distroName !== undefined ||
+      facts.procVersion.toLowerCase().includes("microsoft") ||
+      facts.interop)
+  );
+}
+
+async function runningInWsl(): Promise<boolean> {
+  if (process.platform !== "linux") return false;
+  const [versionResult, interop] = await Promise.all([
+    fromAsyncThrowable(() => Bun.file("/proc/version").text())(),
+    Bun.file("/proc/sys/fs/binfmt_misc/WSLInterop").exists(),
+  ]);
+  return isWslRuntime({
+    platform: process.platform,
+    distroName: process.env.WSL_DISTRO_NAME,
+    procVersion: versionResult.unwrapOr(""),
+    interop,
+  });
+}
 
 export type Method = {
   name: "Optimize-VHD" | "diskpart";
@@ -66,10 +95,8 @@ export function createVhdxTarget(options: {
   return {
     name: "vhdx",
     tier: "plan-only",
-    available: () => ({
-      available:
-        process.platform === "linux" &&
-        process.env.WSL_DISTRO_NAME !== undefined,
+    available: async () => ({
+      available: await runningInWsl(),
       skip_reason: "vhdx planner requires WSL",
     }),
     plan: async (_ctx: Context) => {

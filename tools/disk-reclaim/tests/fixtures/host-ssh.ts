@@ -5,8 +5,15 @@ const command = args.at(-1) ?? "";
 const encoded = /-EncodedCommand ([A-Za-z0-9+/=]+)$/u.exec(command)?.[1];
 const log = process.env.HOST_STUB_LOG;
 if (encoded === undefined || log === undefined) process.exit(99);
-const script = Buffer.from(encoded, "base64").toString("utf16le");
-appendFileSync(log, `${JSON.stringify(args)}\n${script}\n`);
+const wrapper = Buffer.from(encoded, "base64").toString("utf16le");
+const script = await Bun.stdin.text();
+if (
+  !wrapper.includes(".ps1'") ||
+  !wrapper.includes("[Console]::In.ReadToEnd()") ||
+  !wrapper.includes("Remove-Item -LiteralPath $scriptPath")
+)
+  process.exit(99);
+appendFileSync(log, `${JSON.stringify(args)}\n${wrapper}\n${script}\n`);
 const snapshot = [
   "c_free=4294967296",
   "c_total=99999999999",

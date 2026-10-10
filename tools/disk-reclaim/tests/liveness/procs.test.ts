@@ -15,6 +15,7 @@ import {
 } from "../../src/liveness/facts.ts";
 import { judge } from "../../src/liveness/predicate.ts";
 import { collectProcesses, openPathsUnder } from "../../src/lib/procs.ts";
+import { protectedReason } from "../../src/lib/protected.ts";
 import { judgeWorkspace, type WorkspaceFacts } from "../../src/jj/safety.ts";
 import { procFixture } from "../fixtures/procs.ts";
 import { tempRoot } from "../fixtures/temp.ts";
@@ -77,7 +78,9 @@ for (const via of ["cwd", "fd", "fd/3", "environ"]) {
         ...proc,
         ignoreUnreadableProcs: config.ignore_unreadable_procs,
       });
-      expect(judgeWorkspace({ ...safeWorkspace, open }).verdict).toBe(expected);
+      expect(judgeWorkspace({ ...safeWorkspace, open }).verdict).toBe(
+        via === "environ" ? "RECLAIM" : expected,
+      );
       expect(snapshot.openPaths(ref.dir).unknown).toEqual(open.unknown);
       expect(snapshot.facts(ref)).toBe(snapshot.facts(ref));
       expect(proc.scans()).toBe(2); // one shared snapshot + one independent compatibility probe
@@ -112,7 +115,7 @@ test("same-uid EACCES requires a readable allowlisted comm; EPERM remains unknow
   }
 });
 
-test("recorded EACCES facts include process comm, state, and status uid line", () => {
+test("unreadable environ stays a liveness uncertainty with process identity details", () => {
   const root = tempRoot("reclaim-proc-eacces-fact-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
@@ -123,10 +126,56 @@ test("recorded EACCES facts include process comm, state, and status uid line", (
     ...proc,
     ignoreUnreadableProcs: ["sshd"],
   });
-  const fact = snapshot.openPaths(root).unknown[0];
-  expect(fact).toContain("comm=python");
-  expect(fact).toContain("state=S");
-  expect(fact).toContain("uid_line=Uid:");
+  const fact = snapshot.environSessionIds;
+  expect(fact.ok).toBe(false);
+  if (fact.ok) return;
+  expect(fact.error).toContain("comm=python");
+  expect(snapshot.openPaths(root).unknown).toEqual([]);
+});
+
+test("same-uid exe and mapped files resolve paths when environ is unreadable", () => {
+  const root = tempRoot("reclaim-proc-maps-");
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+  const proc = procFixture(root, "python", ["environ"]);
+  const cache = join(root, "cache with spaces");
+  const mapped = join(cache, "lib", "module.so");
+  const encoded = mapped.replaceAll(" ", "\\040");
+  writeFileSync(
+    join(proc.base, "maps"),
+    `7f000000-7f001000 r-xp 00000000 08:01 12345 ${encoded} (deleted)\n`,
+  );
+  const snapshot = collectProcesses(proc);
+  expect(snapshot.environSessionIds.ok).toBe(false);
+  expect(snapshot.openPaths(cache)).toEqual({
+    open: [{ pid: 9999999, via: "maps", path: mapped }],
+    unknown: [],
+  });
+  expect(snapshot.processes[0]?.openPaths).toContain(mapped);
+  expect(
+    protectedReason(cache, {
+      home: root,
+      ownerTarget: "clean",
+      procDir: proc.procRoot,
+    }),
+  ).toBe("contains a running process open or mapped file");
+});
+
+test("unreadable same-uid maps keep path protection uncertain", () => {
+  const root = tempRoot("reclaim-proc-maps-denied-");
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+  const proc = procFixture(root, "python", ["maps"]);
+  const snapshot = collectProcesses(proc);
+  expect(
+    snapshot
+      .openPaths(root)
+      .unknown.some((detail) => detail.includes("pid 9999999 maps")),
+  ).toBe(true);
 });
 
 test("same-uid EACCES rechecks process state and starttime once", () => {

@@ -1,10 +1,38 @@
 import { expect, test } from "bun:test";
 import {
   createVhdxTarget,
+  isWslRuntime,
   pickMethod,
   probeFailure,
 } from "../../src/targets/vhdx.ts";
 import { run } from "../../src/engine.ts";
+
+test("WSL detection recognizes procfs on SSH shells without WSL_DISTRO_NAME", () => {
+  expect(
+    isWslRuntime({
+      platform: "linux",
+      distroName: undefined,
+      procVersion: "Linux version 6.18.54.1-microsoft-standard-WSL2",
+      interop: false,
+    }),
+  ).toBe(true);
+  expect(
+    isWslRuntime({
+      platform: "linux",
+      distroName: undefined,
+      procVersion: "Linux version 6.8.0-generic",
+      interop: false,
+    }),
+  ).toBe(false);
+  expect(
+    isWslRuntime({
+      platform: "linux",
+      distroName: "Ubuntu-24.04",
+      procVersion: "Linux version 6.8.0-generic",
+      interop: false,
+    }),
+  ).toBe(true);
+});
 
 test("vhdx port preserves offline procedures and act never invokes its runner", async () => {
   for (const optimize of [true, false]) {

@@ -118,7 +118,7 @@ const eaccesIdentity = (base: string, fs: ProcFs): string => {
   return `comm=${comm.ok ? comm.value.trim() : "unavailable"} state=${state} uid_line=${uidLine}`;
 };
 
-/** Only an EACCES on cwd/fd/environ of an exactly allowlisted process is exempt. */
+/** Only an EACCES on proc facts of an exactly allowlisted process is exempt. */
 export function ignoreUnreadableProcess(
   error: unknown,
   base: string,
@@ -132,7 +132,7 @@ export function ignoreUnreadableProcess(
   return exe.ok && names.includes(basename(cleaned(exe.value)));
 }
 
-/** One same-uid scan supplies BOTH environment liveness and cwd/fd evidence. */
+/** One same-uid scan supplies independent environment-liveness and path evidence. */
 export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
   const root = resolveProcRoot(options.procRoot);
   const uid = options.uid ?? process.getuid?.() ?? 0;
@@ -141,15 +141,17 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
   const paths: OpenPath[] = [];
   const processes: ProcessFact[] = [];
   const ids: string[] = [];
-  const unknown: { uid: number | undefined; detail: string }[] = [];
+  const pathUnknown: { uid: number | undefined; detail: string }[] = [];
+  const environUnknown: { uid: number | undefined; detail: string }[] = [];
   const initialStats = new Map<number, ProcResult<ProcStat>>();
   const eaccesOutcomes = new Map<number, "gone" | "ignored" | "unknown">();
   const names = procResult<string[]>(() => fs.readdir(root));
   if (!names.ok)
-    unknown.push({
-      uid: undefined,
-      detail: `process scan unavailable: ${root}: ${message(names.error)}`,
-    });
+    for (const unknown of [pathUnknown, environUnknown])
+      unknown.push({
+        uid: undefined,
+        detail: `process scan unavailable: ${root}: ${message(names.error)}`,
+      });
   for (const name of names.ok ? names.value : []) {
     if (!/^\d+$/u.test(name)) continue;
     const pid = Number(name);
@@ -193,12 +195,18 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
       eaccesOutcomes.set(pid, outcome);
       return outcome;
     };
-    const probe = <T>(via: string, read: () => T | Error): T | undefined => {
+    const probe = <T>(
+      via: string,
+      read: () => T | Error,
+      scope: "paths" | "environ" | "none" = "paths",
+    ): T | undefined => {
       const result = procResult<T>(read);
       if (result.ok) return result.value;
       const unreadable =
         errorCode(result.error) === "EACCES" ? sameUidEacces() : null;
+      const unknown = scope === "environ" ? environUnknown : pathUnknown;
       if (
+        scope !== "none" &&
         !gone(result.error) &&
         unreadable !== "gone" &&
         unreadable !== "ignored" &&
@@ -212,7 +220,11 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
         });
       return undefined;
     };
-    const environ = probe("environ", () => fs.readText(join(base, "environ")));
+    const environ = probe(
+      "environ",
+      () => fs.readText(join(base, "environ")),
+      "environ",
+    );
     ids.push(
       ...(environ?.split("\0") ?? [])
         .filter((entry) => entry.startsWith("CLAUDE_CODE_SESSION_ID="))
@@ -236,29 +248,51 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
       const path = pathProbe(`fd/${fd}`);
       return path === undefined ? [] : [path];
     });
-    const comm = probe("comm", () => fs.readText(join(base, "comm")))?.trim();
+    const comm = probe(
+      "comm",
+      () => fs.readText(join(base, "comm")),
+      "none",
+    )?.trim();
+    const maps = probe("maps", () => fs.readText(join(base, "maps"))) ?? "";
+    const mappedPaths = maps.split("\n").flatMap((line) => {
+      const [, encodedPath] =
+        /^[\da-fA-F]+-[\da-fA-F]+\s+\S+\s+\S+\s+\S+\s+\d+\s+(\/.*)$/u.exec(
+          line,
+        ) ?? [];
+      if (encodedPath === undefined) return [];
+      const path = cleaned(
+        encodedPath.replaceAll(/\\([0-7]{3})/gu, (_escape, octal: string) =>
+          String.fromCodePoint(Number.parseInt(octal, 8)),
+        ),
+      );
+      return path.startsWith("/") ? [path] : [];
+    });
+    paths.push(...mappedPaths.map((path) => ({ pid, via: "maps", path })));
     processes.push({
       pid,
       comm: comm === "" ? undefined : comm,
       exe,
       cwd,
       environ,
-      openPaths,
+      openPaths: [...openPaths, ...mappedPaths],
     });
   }
-  if (process.env.RECLAIM_PROC_TRACE === "1" && unknown.length > 0)
-    unknown.forEach((item) => {
+  if (process.env.RECLAIM_PROC_TRACE === "1" && pathUnknown.length > 0)
+    pathUnknown.forEach((item) => {
       traceUnknown(item, root, fs);
     });
   return {
     environSessionIds:
-      unknown.length === 0
+      environUnknown.length === 0
         ? { ok: true, value: ids }
-        : { ok: false, error: unknown.map(({ detail }) => detail).join("; ") },
+        : {
+            ok: false,
+            error: environUnknown.map(({ detail }) => detail).join("; "),
+          },
     processes,
     openPaths: (dir) => ({
       open: paths.filter((p) => under(p.path, resolve(dir))),
-      unknown: unknown.map(({ detail }) => detail),
+      unknown: pathUnknown.map(({ detail }) => detail),
     }),
   };
 }

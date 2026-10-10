@@ -179,5 +179,12 @@ export function protectedReason(
     )
   )
     return "contains a running process cwd";
+  if (
+    processes.open.some(
+      ({ path: processPath, via }) =>
+        (via.startsWith("fd/") || via === "maps") && within(processPath, path),
+    )
+  )
+    return "contains a running process open or mapped file";
   return null;
 }

@@ -204,6 +204,8 @@ may take a long time; migration reports elapsed install/build time.
 Downloads and source-build scratch use a private `/var/tmp` directory rather than HOME quota.
 The installer uses at most two allowed CPUs, with Make/Go worker limits, and streams verbose
 progress. Scratch is removed on success and its location is reported on failure.
+If Clang would select an incomplete system GCC installation, a scratch CMake hint selects the
+newest complete GCC development directory; the system compiler files are not edited.
 
 Migration verifies core command provenance in login and SSH command shells before retiring
 legacy downloader links. It checks `/proc` executable links, mapped files and inherited PATHs,

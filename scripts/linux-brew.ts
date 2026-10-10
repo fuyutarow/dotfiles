@@ -28,6 +28,23 @@ export function buildCpuList(allowed: string): string {
   return cpus.slice(0, 2).join(",");
 }
 
+async function completeGccHint(): Promise<string | undefined> {
+  const triplet =
+    process.arch === "arm64" ? "aarch64-linux-gnu" : "x86_64-linux-gnu";
+  const base = `/usr/lib/gcc/${triplet}`;
+  const versions = (await attemptOr(() => readdir(base), []))
+    .filter((version) => /^\d+$/u.test(version))
+    .toSorted((a, b) => Number(b) - Number(a));
+  for (const version of versions) {
+    const dir = join(base, version);
+    const complete =
+      (await Bun.file(join(dir, "libstdc++.so")).exists()) &&
+      (await Bun.file(`/usr/include/c++/${version}/string`).exists());
+    if (complete) return version === versions[0] ? undefined : dir;
+  }
+  return undefined;
+}
+
 export async function bundleCore(
   prefix: string,
   root: string,
@@ -44,8 +61,21 @@ export async function bundleCore(
   );
   const taskset = Bun.which("taskset");
   const launcher = taskset !== null && cpus !== "" ? [taskset, "-c", cpus] : [];
+  const gcc =
+    inherited.CMAKE_TOOLCHAIN_FILE === undefined
+      ? await completeGccHint()
+      : undefined;
+  const toolchain = join(scratch, "complete-gcc.cmake");
+  if (gcc !== undefined) {
+    await Bun.write(
+      toolchain,
+      `if(CMAKE_CXX_COMPILER MATCHES "clang")\n  set(CMAKE_CXX_COMPILER_ARG1 "--gcc-install-dir=${gcc}")\nendif()\n`,
+    );
+    say(`Clang/CMake build hint: complete GCC development installation ${gcc}`);
+  }
   const env = {
     ...inherited,
+    ...(gcc === undefined ? {} : { CMAKE_TOOLCHAIN_FILE: toolchain }),
     HOMEBREW_CACHE: join(scratch, "cache"),
     HOMEBREW_TEMP: join(scratch, "tmp"),
     HOMEBREW_MAKE_JOBS: "2",

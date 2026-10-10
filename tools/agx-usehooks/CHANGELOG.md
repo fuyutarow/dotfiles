@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-10-10
+
+- Return validated current utilization, 15/60-minute estimates, sample count and VRAM usage from a shared two-hour GPU history. Averages require three samples; unknown readings never become default numbers.
+- Share rate limiting and jittered 10–20 s sampling with statusline instead of treating a single burst as sustained saturation.
+
+## 0.4.0 — 2026-10-10
 
 - Select running systemd user service jobs with session-first attribution, project-cwd fallback, and a shared 1 s subprocess budget.
 - Scope unattributed markers to the hook project via marker cwd; retain optional name, kind, and labels for project classification.

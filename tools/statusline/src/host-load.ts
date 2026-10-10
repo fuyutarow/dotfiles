@@ -18,13 +18,13 @@ import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { diskReadings, diskSegment, type DiskEntry } from "./storage.ts";
 import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
+import { findGpuExecutable, sampleGpu } from "../../shared/src/gpu-samples.ts";
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
   execAsyncBounded,
   type ExecFailure,
   execBounded,
-  execWithin,
   failWhy,
   readJson,
   readJsonAsync,
@@ -42,6 +42,8 @@ const HOME = process.env.HOME ?? "";
 export const MemReadingSchema = z.object({
   frac: z.string(), // e.g. "16.2/54.9G"
   pct: z.number(), // used/total*100, unrounded — pctFmt() rounds at render time
+  gpuAvg15: z.number().nullable().optional(),
+  gpuSamples15: z.number().optional(),
   // Set only when this is the last GOOD sample served because the fresh one failed (VRAM only):
   // how old it is and why the fresh one failed. render() prints it, so an old number is never
   // shown as if it were current.
@@ -231,7 +233,7 @@ export function vramGated(): Result<MemReading, string> | undefined {
 }
 export function vramFrac(): Result<MemReading, string> {
   // A missing tool needs no sampler to be known, and a Mac without one has no VRAM row (vramGated).
-  if (Bun.which("nvidia-smi") === null) return err("no nvidia-smi");
+  if (findGpuExecutable() === undefined) return err("no nvidia-smi");
   // A file that is missing or fails GpuCacheSchema is an empty cache. Read BEFORE taking `now`: the
   // sampler is another process and may land a sample at any moment, and an entry stamped a few ms
   // after a `now` taken first reads as "from the future" (within() rejects it, as it must for a
@@ -261,32 +263,19 @@ export function vramFrac(): Result<MemReading, string> {
   }
   return err(why);
 }
-// `nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits`: the first GPU's
-// line, "<used MiB>, <total MiB>". Whole numbers only — an empty field must not read as 0.
-export const MiB = z.string().trim().regex(/^\d+$/u).transform(Number);
-export const NvidiaSmiSchema = z
-  .string()
-  .transform((out) => (out.split("\n")[0] ?? "").split(","))
-  .pipe(z.tuple([MiB, MiB]));
 // Runs in the sampler, under GPU_SAMPLE_TIMEOUT_MS — never inside a render.
 export function sampleVram(): Result<MemReading, ExecFailure> {
-  return execWithin(
-    "nvidia-smi",
-    "nvidia-smi",
-    ["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
-    GPU_SAMPLE_TIMEOUT_MS,
-  ).andThen((out) => {
-    const unparsable: ExecFailure = {
-      why: "nvidia-smi output unparsable",
-      stderr: "",
-      ran: true,
-    };
-    const parsed = NvidiaSmiSchema.safeParse(out);
-    if (!parsed.success) return err(unparsable);
-    const [used, total] = parsed.data;
-    const reading = memReading(used / 1024, total / 1024);
-    return reading !== undefined ? ok(reading) : err(unparsable);
-  });
+  const result = sampleGpu({ timeoutMs: GPU_SAMPLE_TIMEOUT_MS });
+  if (!result.ok) return err({ why: result.why, stderr: "", ran: true });
+  const device = result.value;
+  const reading = memReading(device.memUsedGiB, device.memTotalGiB);
+  return reading === undefined
+    ? err({ why: "nvidia-smi output unparsable", stderr: "", ran: true })
+    : ok({
+        ...reading,
+        gpuAvg15: device.avg15Pct,
+        gpuSamples15: device.samples15,
+      });
 }
 
 // Host RAM, Linux only (reads /proc/meminfo — instant, no subprocess). MemAvailable (not
@@ -453,6 +442,8 @@ export function cpuPct(): Result<number, string> {
 export function memSegment(label: string, m: MemReading): string {
   const { text: pct, col } = pctFmt(m.pct);
   let seg = `${label} ${ESC}[${col}m${pct}%${RST} ${DIM}(${m.frac})${RST}`;
+  if (m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
+    seg += ` ${DIM}GPU≈${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}${RST}`;
   // A number old enough to mislead is never shown as a current one: amber `stale`, its age, and why.
   // Under STALE_SHOW_S it is not marked (owner ruling 2026-10-05): with the bar refreshing every 5 s
   // and one session sampling for all, a reading tens of seconds old is the normal case, and the
@@ -630,7 +621,7 @@ async function ramFracAsync(): Promise<Result<MemReading, string>> {
   return reading === undefined ? err("meminfo unparsable") : ok(reading);
 }
 async function vramFracAsync(): Promise<Result<MemReading, string>> {
-  if (Bun.which("nvidia-smi") === null) return err("no nvidia-smi");
+  if (findGpuExecutable() === undefined) return err("no nvidia-smi");
   const cached: GpuCache =
     (await readJsonAsync(GPU_CACHE, GpuCacheSchema)) ?? {};
   const now = Temporal.Now.instant().epochMilliseconds;

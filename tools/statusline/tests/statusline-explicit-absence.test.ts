@@ -134,8 +134,20 @@ const GpuMissSchema = z.object({
 const SysCacheSchema = z.object({ line: z.string() });
 
 describe("statusline Sys row: VRAM", () => {
+  test("a warm estimate renders compactly beside VRAM with its sample count", () => {
+    const home = tempHome();
+    seedGpuCache(home, {
+      at: nowMs(),
+      reading: { frac: " 3.5/12.0G", pct: 29.2, gpuAvg15: 3, gpuSamples15: 42 },
+    });
+    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
+    expect(sysRow(render({ home, bin }).text)).toContain(
+      "VRAM 29% ( 3.5/12.0G) GPU≈3%/15m n=42",
+    );
+  });
+
   test("a working nvidia-smi shows the number", () => {
-    const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
+    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
     expect(sysRow(renderSettled({ bin }).text)).toContain(
       "VRAM 29% ( 3.5/12.0G)",
     );
@@ -162,7 +174,7 @@ describe("statusline Sys row: VRAM", () => {
     "O4: a sample slower than the old 2 s bound is an answer, not a failure",
     () => {
       const bin = binWith({
-        "nvidia-smi": "/bin/sleep 3\necho '3584, 12288'",
+        "nvidia-smi": "/bin/sleep 3\necho '0, 0, 3584, 12288'",
       });
       const row = sysRow(renderSettled({ bin }).text);
       expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
@@ -182,7 +194,9 @@ describe("statusline Sys row: VRAM", () => {
         reading: { frac: " 3.5/12.0G", pct: 29.2 },
         good: { at: at - 20_000, reading: { frac: " 3.5/12.0G", pct: 29.2 } },
       });
-      const bin = binWith({ "nvidia-smi": "/bin/sleep 2\necho '3584, 12288'" });
+      const bin = binWith({
+        "nvidia-smi": "/bin/sleep 2\necho '0, 0, 3584, 12288'",
+      });
       const during = sysRow(render({ home, bin }).text);
       expect(during).toContain("VRAM 29% ( 3.5/12.0G)"); // 20 s old: plain, no marker under 60 s
       waitForSampler(home);
@@ -248,7 +262,7 @@ describe("statusline Sys row: VRAM", () => {
       expect(failed.why).toBe("nvidia-smi timeout 500ms");
       expect(failed.reading ?? null).toBeNull();
       seedGpuCache(home, { ...failed, at: failed.at - 60_000 });
-      const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
+      const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
       expect(sysRow(renderSettled({ home, bin }).text)).toContain(
         "VRAM 29% ( 3.5/12.0G)",
       );
@@ -331,7 +345,7 @@ describe("statusline Sys row: VRAM", () => {
     const row = sysRow(
       renderSettled({
         home,
-        bin: binWith({ "nvidia-smi": "echo '3584, 12288'" }),
+        bin: binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" }),
       }).text,
     );
     expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
@@ -349,7 +363,7 @@ describe("statusline Sys row: VRAM", () => {
   test("the pre-fix cache shape ({reading:null}) is not trusted as 'no GPU'", () => {
     const home = tempHome();
     seedGpuCache(home, { at: nowMs(), reading: null });
-    const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
+    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
     expect(sysRow(renderSettled({ home, bin }).text)).toContain("VRAM 29%");
   });
 });
@@ -642,7 +656,7 @@ describe("statusline resource bounds", () => {
     "O2: concurrent renders never leave a reader a torn cache file or a stray temp file",
     async () => {
       const home = tempHome();
-      const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
+      const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
       const cacheDir = join(home, ".cache", "claude");
       const files = ["statusline-gpu.json", "statusline-cpu.json"];
       const procs = Array.from({ length: 8 }, () =>
@@ -682,7 +696,10 @@ describe("statusline resource bounds", () => {
       const home = tempHome();
       const log = join(tempDir("slog-"), "gpu.log");
       const bin = binWith({
-        "nvidia-smi": countingGpu(log, "/bin/sleep 1\necho '3584, 12288'"),
+        "nvidia-smi": countingGpu(
+          log,
+          "/bin/sleep 1\necho '0, 0, 3584, 12288'",
+        ),
       });
       const outputs = await Promise.all(
         Array.from({ length: 6 }, async () => {
@@ -719,7 +736,7 @@ describe("statusline resource bounds", () => {
     mkdirSync(lock, { recursive: true });
     const oldSecs = (nowMs() - 60_000) / 1000; // utimes takes epoch seconds; no Date (banned)
     utimesSync(lock, oldSecs, oldSecs);
-    const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
+    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
     expect(sysRow(renderSettled({ home, bin }).text)).toContain(
       "VRAM 29% ( 3.5/12.0G)",
     );
@@ -777,7 +794,7 @@ describe("statusline trust boundaries (zod)", () => {
   test("a GPU cache of the wrong shape is an empty cache: the sample is retaken", () => {
     const home = tempHome();
     seedGpuCache(home, { at: "yesterday", reading: { frac: 1, pct: "x" } });
-    const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
+    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
     expect(sysRow(renderSettled({ home, bin }).text)).toContain(
       "VRAM 29% ( 3.5/12.0G)",
     );

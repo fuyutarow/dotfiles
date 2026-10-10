@@ -52,8 +52,8 @@ const df = await buildDataframe(payload.data);
 process.stdout.write(render(df));
 
 // Hand the plain Sys row to hooks/log-sys-snapshot.ts, which attaches it to the transcript.
-// This file stays the ONLY sampler (nvidia-smi, the /proc CPU delta) — the hook just reads the
-// latest line, so a tool call never pays for a sample. Host-wide values, so one file serves
+// Host load shares GPU history with agx-usehooks; the snapshot hook just reads the latest
+// rendered line, so transcript logging never pays for a sample. Host-wide values serve
 // every session. Best-effort: a failed write only means the next hook firing finds it stale.
 const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");

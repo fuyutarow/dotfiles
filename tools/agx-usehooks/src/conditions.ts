@@ -1,9 +1,8 @@
-import { access } from "node:fs/promises";
-import { constants } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { attempt, attemptOr } from "../../shared/src/attempt.ts";
 import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
+import { sampleGpu, type GpuReading } from "../../shared/src/gpu-samples.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import type { HookContext } from "./runtime.ts";
 import { projectCwd } from "./attribution.ts";
@@ -49,31 +48,6 @@ const Record = z.object({
     .optional(),
 });
 const LIMIT_MS = 1_000;
-let nvidiaSmiPath: string | undefined;
-
-async function executable(path: string): Promise<boolean> {
-  return (
-    await attempt(async () => {
-      await access(path, constants.X_OK);
-      return true;
-    })
-  ).ok;
-}
-
-async function findNvidiaSmi(
-  path = process.env.PATH ?? "",
-  fallbacks = ["/usr/lib/wsl/lib/nvidia-smi", "/usr/bin/nvidia-smi"],
-): Promise<string | undefined> {
-  const candidates = path
-    .split(process.platform === "win32" ? ";" : ":")
-    .filter(Boolean)
-    .map((dir) => join(dir, "nvidia-smi"));
-  candidates.push(...fallbacks);
-  for (const candidate of candidates) {
-    if (await executable(candidate)) return candidate;
-  }
-  return undefined;
-}
 
 async function bounded<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -215,31 +189,13 @@ async function command(
   return result.ok ? result.value : undefined;
 }
 
-/** First NVIDIA GPU, or unknown when unavailable, malformed, or slow. */
-export async function gpu(
+/** First NVIDIA GPU, with shared jittered history; null averages need more samples. */
+export function gpu(
   ctx: HookContext,
-  search: { path?: string; fallbacks?: string[] } = {},
-): Promise<{ utilPct: number; freeGiB: number } | "unknown"> {
-  nvidiaSmiPath ??= await findNvidiaSmi(search.path, search.fallbacks);
-  if (nvidiaSmiPath === undefined) return "unknown";
-  const out = await command(
-    [
-      nvidiaSmiPath,
-      "--query-gpu=utilization.gpu,memory.free",
-      "--format=csv,noheader,nounits",
-    ],
-    ctx.cwd,
-  );
-  if (out === undefined) return "unknown";
-  const match = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/u.exec(
-    out.split("\n")[0] ?? "",
-  );
-  if (match === null) return "unknown";
-  const utilPct = Number(match[1]);
-  const freeGiB = Number(match[2]) / 1024;
-  return utilPct <= 100 && Number.isFinite(freeGiB)
-    ? { utilPct, freeGiB }
-    : "unknown";
+  search: { path?: string; fallbacks?: string[]; statePath?: string } = {},
+): Promise<GpuReading | "unknown"> {
+  const result = sampleGpu({ ...search, cwd: ctx.cwd, timeoutMs: LIMIT_MS });
+  return Promise.resolve(result.ok ? result.value : "unknown");
 }
 
 /** Hours since the oldest modified file reported by jj diff; clean/unavailable is zero. */

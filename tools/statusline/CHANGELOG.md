@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.2 — 2026-10-10
+
+- Use the shared jittered GPU sampler and show its 15-minute utilization estimate and sample count beside VRAM when enough history exists. Preserve sampling outside the render path.
+
 ## 0.9.1 — 2026-10-10
 
 - Render other-session, unattributed, and stale run counts together on one dim-separated summary line.

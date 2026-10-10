@@ -237,32 +237,38 @@ test("unattributed markers require project cwd; exact sessions override cwd", as
 test("GPU resolves WSL fallback and returns unknown when none is executable", async () => {
   const { dir, ctx } = world();
   process.env.PATH = join(dir, "empty-path");
-  expect(await gpu(ctx, { fallbacks: [] })).toBe("unknown");
+  const statePath = join(dir, "gpu-samples.jsonl");
+  expect(await gpu(ctx, { fallbacks: [], statePath })).toBe("unknown");
   const wslLib = join(dir, "usr", "lib", "wsl", "lib");
   mkdirSync(wslLib, { recursive: true });
   const wslSmi = join(wslLib, "nvidia-smi");
   writeFileSync(
     wslSmi,
-    `#!${process.execPath}\nprocess.stdout.write("19, 8192\\n");\n`,
+    `#!${process.execPath}\nprocess.stdout.write("19, 0, 4096, 12288\\n");\n`,
   );
   chmodSync(wslSmi, 0o755);
-  expect(await gpu(ctx, { fallbacks: [wslSmi] })).toEqual({
-    utilPct: 19,
-    freeGiB: 8,
+  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toEqual({
+    nowPct: 19,
+    avg15Pct: null,
+    avg60Pct: null,
+    samples15: 1,
+    memUsedGiB: 4,
+    memTotalGiB: 12,
   });
   writeFileSync(
     wslSmi,
-    `#!${process.execPath}\nprocess.stdout.write("N/A, 8192\\n");\n`,
+    `#!${process.execPath}\nprocess.stdout.write("[N/A], 0, 4096, 12288\\n");\n`,
   );
-  expect(await gpu(ctx)).toBe("unknown");
+  rmSync(statePath);
+  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toBe("unknown");
   writeFileSync(
     wslSmi,
-    `#!${process.execPath}\nprocess.stdout.write("101, 8192\\n");\n`,
+    `#!${process.execPath}\nprocess.stdout.write("101, 0, 4096, 12288\\n");\n`,
   );
-  expect(await gpu(ctx)).toBe("unknown");
+  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toBe("unknown");
   writeFileSync(wslSmi, `#!${process.execPath}\nawait Bun.sleep(10_000);\n`);
   const started = performance.now();
-  expect(await gpu(ctx)).toBe("unknown");
+  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toBe("unknown");
   expect(performance.now() - started).toBeLessThan(1_500);
 });
 

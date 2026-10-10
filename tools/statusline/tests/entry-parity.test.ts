@@ -367,7 +367,7 @@ function expectGolden(
       "vm_stat",
       "echo 'Mach Virtual Memory Statistics: (page size of 4096 bytes)'\necho 'Pages wired down: 1048576.'\necho 'Pages occupied by compressor: 0.'\necho 'Anonymous pages: 1048576.'\necho 'Pages purgeable: 0.'",
     );
-    fake("nvidia-smi", "echo '3584, 12288'");
+    fake("nvidia-smi", "echo '0, 0, 3584, 12288'");
     writeFileSync(
       join(home, ".claude.json"),
       JSON.stringify({

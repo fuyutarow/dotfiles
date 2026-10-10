@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 — 2026-10-10
+
+- Add bounded, locked, atomically persisted GPU samples with zod parsing, WSL executable discovery, jittered 10–20 s sampling, and 15/60-minute estimates. Discard corrupt history and retain at most two hours.
+
 ## 0.4.0 — 2026-10-09
 
 - Share roster row price lookup and Codex token cost calculation across tools.

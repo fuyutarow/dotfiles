@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2 — 2026-10-10
+
+- Own the strict agx active-marker writer contract, its forward-compatible reader schema, and shared malformed-versus-unreadable classification.
+
 ## 0.4.1 — 2026-10-10
 
 - Add bounded, locked, atomically persisted GPU samples with zod parsing, WSL executable discovery, jittered 10–20 s sampling, and 15/60-minute estimates. Discard corrupt history and retain at most two hours.

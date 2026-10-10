@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 — 2026-10-10
+
+- Select runs through the shared forward-compatible agx marker reader and expose unreadable-marker counts through `scanRuns`.
+
 ## 0.5.0 — 2026-10-10
 
 - Return validated current utilization, 15/60-minute estimates, sample count and VRAM usage from a shared two-hour GPU history. Averages require three samples; unknown readings never become default numbers.

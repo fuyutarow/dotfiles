@@ -1,7 +1,11 @@
 import { readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { attempt, attemptOr } from "../../shared/src/attempt.ts";
-import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
+import {
+  dispatchStateDir,
+  parseActiveMarker,
+  type ActiveMarkerReader,
+} from "../../shared/src/dispatch-state.ts";
 import { sampleGpu, type GpuReading } from "../../shared/src/gpu-samples.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import type { HookContext } from "./runtime.ts";
@@ -17,24 +21,7 @@ export type Run = {
 };
 export type RunStateOptions = { stateDirs?: string[] };
 export type RunFilter = RunStateOptions & { session?: string };
-const Marker = z.object({
-  run_id: z.string(),
-  pid: z.number().int().positive(),
-  choice: z.string(),
-  dispatcher_session: z.string().optional(),
-  cwd: z.string().optional(),
-  display_id: z.string().optional(),
-  kind: z.string().optional(),
-  labels: z.array(z.string()).optional(),
-  ticket: z
-    .object({
-      lane: z.string().optional(),
-      name: z.string().optional(),
-      kind: z.string().optional(),
-      labels: z.array(z.string()).optional(),
-    })
-    .optional(),
-});
+export type RunScan = { runs: Run[]; unreadable: number };
 const Record = z.object({
   kind: z.string(),
   run_id: z.string(),
@@ -65,32 +52,40 @@ async function liveMarker(
   path: string,
   session: string | null | undefined,
   ctx: HookContext,
-): Promise<Run[]> {
-  const parsed = jsonOf(Marker).safeParse(await Bun.file(path).text());
-  if (!parsed.success) return [];
-  if (session === null && parsed.data.dispatcher_session !== undefined)
-    return [];
-  if (session === null && !projectCwd(parsed.data.cwd, ctx.repoRoot)) return [];
+): Promise<{ run?: Run; unreadable: boolean }> {
+  const text = await Bun.file(path)
+    .text()
+    .catch(() => null);
+  if (text === null) return { unreadable: true };
+  const parsed = parseActiveMarker(text);
+  if (parsed.kind === "malformed") return { unreadable: false };
+  if (parsed.kind === "unreadable") return { unreadable: true };
+  const marker = parsed.marker;
+  if (session === null && marker.dispatcher_session !== undefined)
+    return { unreadable: false };
+  if (session === null && !projectCwd(marker.cwd, ctx.repoRoot))
+    return { unreadable: false };
   if (
     session !== undefined &&
     session !== null &&
-    parsed.data.dispatcher_session !== session
+    marker.dispatcher_session !== session
   )
-    return [];
-  const alive = await attempt(() => process.kill(parsed.data.pid, 0));
-  if (!alive.ok) return [];
-  return [
-    {
-      id: parsed.data.run_id,
-      lane: parsed.data.ticket?.lane ?? "other",
-      row: parsed.data.choice,
-      ...runMetadata(parsed.data),
+    return { unreadable: false };
+  const alive = await attempt(() => process.kill(marker.pid, 0));
+  if (!alive.ok) return { unreadable: false };
+  return {
+    run: {
+      id: marker.run_id,
+      lane: marker.ticket?.lane ?? "other",
+      row: marker.choice,
+      ...runMetadata(marker),
     },
-  ];
+    unreadable: false,
+  };
 }
 
 function runMetadata(
-  marker: z.output<typeof Marker>,
+  marker: ActiveMarkerReader,
 ): Pick<Run, "name" | "kind" | "labels"> {
   const name = marker.ticket?.name ?? marker.display_id;
   const kind = marker.ticket?.kind ?? marker.kind;
@@ -106,7 +101,7 @@ async function runsInDir(
   root: string,
   session: string | null | undefined,
   ctx: HookContext,
-): Promise<Run[]> {
+): Promise<RunScan> {
   const dir = join(root, "active");
   const names = await readdir(dir);
   const rows = await Promise.all(
@@ -115,29 +110,49 @@ async function runsInDir(
       .filter(
         (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
       )
-      .map((name) =>
-        attemptOr(() => liveMarker(join(dir, name), session, ctx), []),
-      ),
+      .map((name) => liveMarker(join(dir, name), session, ctx)),
   );
-  return rows.flat();
+  return {
+    runs: rows.flatMap(({ run }) => (run === undefined ? [] : [run])),
+    unreadable: rows.filter(({ unreadable }) => unreadable).length,
+  };
 }
 
 function selectRuns(
   session: string | null | undefined,
   options: RunStateOptions,
   ctx: HookContext,
-): Promise<Run[]> {
-  return bounded(async () => {
-    const roots = [...new Set(options.stateDirs ?? [dispatchStateDir()])];
-    const rows = await Promise.all(
-      roots.map((root) => attemptOr(() => runsInDir(root, session, ctx), [])),
-    );
-    const runs = new Map<string, Run>();
-    for (const run of rows.flat()) {
-      if (!runs.has(run.id)) runs.set(run.id, run);
-    }
-    return [...runs.values()];
-  }, []);
+): Promise<RunScan> {
+  return bounded(
+    async () => {
+      const roots = [...new Set(options.stateDirs ?? [dispatchStateDir()])];
+      const rows = await Promise.all(
+        roots.map((root) =>
+          attemptOr(() => runsInDir(root, session, ctx), {
+            runs: [],
+            unreadable: 0,
+          }),
+        ),
+      );
+      const runs = new Map<string, Run>();
+      for (const run of rows.flatMap(({ runs: values }) => values)) {
+        if (!runs.has(run.id)) runs.set(run.id, run);
+      }
+      return {
+        runs: [...runs.values()],
+        unreadable: rows.reduce((sum, row) => sum + row.unreadable, 0),
+      };
+    },
+    { runs: [], unreadable: 0 },
+  );
+}
+
+/** Live workers and unreadable marker count, with missing-identity markers skipped silently. */
+export function scanRuns(
+  ctx: HookContext,
+  filter: RunFilter = {},
+): Promise<RunScan> {
+  return selectRuns(filter.session, filter, ctx);
 }
 
 /** Live PIDs, optionally restricted to the dispatcher's exact Claude session ID. */
@@ -145,7 +160,7 @@ export function runningRuns(
   ctx: HookContext,
   filter: RunFilter = {},
 ): Promise<Run[]> {
-  return selectRuns(filter.session, filter, ctx);
+  return scanRuns(ctx, filter).then(({ runs }) => runs);
 }
 
 /** Live runs without dispatcher_session whose marker cwd belongs to this project. */
@@ -153,7 +168,7 @@ export function unattributedRuns(
   ctx: HookContext,
   options: RunStateOptions = {},
 ): Promise<Run[]> {
-  return selectRuns(null, options, ctx);
+  return selectRuns(null, options, ctx).then(({ runs }) => runs);
 }
 
 export async function laneCount(

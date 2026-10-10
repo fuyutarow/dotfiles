@@ -13,6 +13,7 @@ emit no stdout, and report one stderr line.
 Conditions return values:
 
 - `await runningRuns(ctx)`: live `{ id, lane, row }[]`; missing ticket lanes are `"other"`.
+- `await scanRuns(ctx)`: the same live runs plus a count of unreadable markers; markers missing `run_id` or `pid` are skipped silently.
 - `await runningRuns(ctx, { session, stateDirs })`: live runs whose `dispatcher_session` equals `session`, from optional explicit state directories.
 - `await unattributedRuns(ctx)`: live runs without `dispatcher_session` whose marker cwd is inside `ctx.repoRoot`, separately from session counts.
 - `await runningJobs(ctx, { session })`: running systemd user services, optionally filtered by exact unit session. Each job includes `id`, `attribution`, optional `session`, `cwd`, `kind`, and `labels`.

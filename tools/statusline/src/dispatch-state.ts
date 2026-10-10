@@ -1,14 +1,14 @@
-// Read-only wire contract ported from tools/agx/src/state.ts:
-// state directory: lines 9-20; marker path: 47-49; ActiveSchema: 68-79;
-// progress path/schema: 81-100. No marker, progress, brief or run-log writers.
+// Read-only helpers for agx state paths and progress files. The active-marker contract lives in
+// tools/shared/src/dispatch-state.ts. This module contains no marker, progress, brief, or log writer.
 import { join } from "node:path";
 import { z } from "./zod.ts";
 import {
+  ACTIVE_MARKER_SCHEMA,
   dispatchStateDir,
   dispatchStateReadDirs,
 } from "../../shared/src/dispatch-state.ts";
 
-export const STATE_SCHEMA = 1;
+export const STATE_SCHEMA = ACTIVE_MARKER_SCHEMA;
 
 /** $AGX_STATE_DIR (test seam), else $XDG_STATE_HOME/agx, else ~/.local/state/agx. */
 export const stateDir = dispatchStateDir;
@@ -17,23 +17,6 @@ export const activeDir = (env: NodeJS.ProcessEnv = process.env): string =>
   join(stateDir(env), "active");
 export const activeDirs = (env: NodeJS.ProcessEnv = process.env): string[] =>
   dispatchStateReadDirs(env).map((dir) => join(dir, "active"));
-export const ActiveSchema = z.strictObject({
-  schema: z.literal(STATE_SCHEMA),
-  run_id: z.string(),
-  pid: z.number().int(),
-  display_id: z.string().optional(),
-  label: z.string(),
-  choice: z.string(),
-  pick_source: z.string(),
-  started_at: z.string(),
-  cwd: z.string(),
-  dispatcher_session: z.string().optional(),
-  // Ticket metadata is written on current agx markers; the statusline ignores it,
-  // but the strict wire schema must accept it or the entire live marker disappears.
-  ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
-});
-export type Active = z.output<typeof ActiveSchema>;
-
 /** What a running worker is doing, beside its marker: `<run_id>.progress.json` in activeDir.
  *  Codex and Claude workers write activity, cumulative usage when reported, and known cost here;
  *  the statusline Run rows read it, and agx removes it with the active marker. */

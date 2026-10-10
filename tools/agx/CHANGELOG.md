@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.1 — 2026-10-10
+
+- Validate active worker markers with the shared strict writer contract before publishing them.
+
 ## 2.5.0 — 2026-10-10
 
 - Add `agx ps` for session-scoped run state and report summaries, plus `agx ledger gc` to record and remove dead markers; dispatch runs gc at startup.

@@ -130,7 +130,11 @@ export function render(df: Dataframe): string {
   if (df.routes !== undefined && df.routes.isErr())
     runLines = [naSegment("agx", df.routes.error)];
   else if (df.routes !== undefined)
-    runLines = routeLines(df.routes.value, df.sid);
+    runLines = routeLines(
+      df.routes.value.runs,
+      df.sid,
+      df.routes.value.unreadable,
+    );
   if (df.dispatchWarning !== undefined)
     runLines.push(`${ESC}[38;5;178m${df.dispatchWarning}${RST}`);
 

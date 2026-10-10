@@ -9,12 +9,21 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
+import {
+  deadOwnMarker,
+  malformedMarker,
+  ownFreshMarker,
+  ownResumedMarker,
+  unreadableMarker,
+} from "../../shared/tests/fixtures/active-markers.ts";
 import {
   dirtyFor,
   englishSegments,
   gpu,
   laneCount,
   runningRuns,
+  scanRuns,
   unattributedRuns,
   unackedReturns,
 } from "../src/index.ts";
@@ -46,38 +55,38 @@ function binary(dir: string, name: string, body: string): void {
   process.env.PATH = bin;
 }
 
-function stateMarker(root: string, file: string, values: object): void {
+function stateMarker(
+  root: string,
+  file: string,
+  values: Record<string, unknown> & { ticket?: Record<string, unknown> },
+): void {
   writeFileSync(
     join(root, "active", `${file}.json`),
     JSON.stringify({
+      schema: 1,
       run_id: file,
-      choice: "terra",
       pid: process.pid,
-      dispatcher_session: "session-a",
+      label: `fixture ${file}`,
+      choice: "terra",
+      pick_source: "fixture",
+      started_at: Temporal.Now.instant().toString(),
       cwd: root,
-      ticket: { lane: "theory" },
+      dispatcher_session: "session-a",
       ...values,
+      ticket:
+        values.ticket === undefined
+          ? { writes: [], lane: "theory" }
+          : { writes: [], ...values.ticket },
     }),
   );
 }
 
 test("runningRuns and laneCount use live PIDs, ticket lanes, and choice rows", async () => {
   const { dir, ctx } = world();
-  const marker = (id: string, values: object) => {
-    writeFileSync(
-      join(dir, "active", `${id}.json`),
-      JSON.stringify({
-        run_id: id,
-        choice: "terra",
-        pid: process.pid,
-        ...values,
-      }),
-    );
-  };
-  marker("live", { ticket: { lane: "theory" } });
-  marker("other", {});
-  marker("dead", { pid: 2_147_483_647 });
-  marker("invalid", { pid: -1 });
+  stateMarker(dir, "live", { ticket: { lane: "theory" } });
+  stateMarker(dir, "other", { ticket: { lane: "other" } });
+  stateMarker(dir, "dead", { pid: 2_147_483_647 });
+  stateMarker(dir, "invalid", { pid: -1 });
   writeFileSync(join(dir, "active", "bad.json"), "{");
   expect(await runningRuns(ctx)).toEqual([
     { id: "live", lane: "theory", row: "terra" },
@@ -85,6 +94,59 @@ test("runningRuns and laneCount use live PIDs, ticket lanes, and choice rows", a
   ]);
   expect(await laneCount(ctx, "theory")).toBe(1);
   expect(await laneCount(ctx, "missing")).toBe(0);
+});
+
+test("shared agx marker fixtures reach run selectors while malformed and dead markers do not", async () => {
+  const { dir, ctx } = world();
+  for (const [name, fixture] of [
+    ["fresh", ownFreshMarker],
+    ["resumed", ownResumedMarker],
+  ] as const) {
+    const written = serializeActiveMarker({
+      ...fixture,
+      run_id: name,
+      pid: process.pid,
+      cwd: dir,
+      dispatcher_session: "session-a",
+    });
+    expect(written.success).toBe(true);
+    if (written.success)
+      writeFileSync(join(dir, "active", `${name}.json`), written.text);
+  }
+  writeFileSync(
+    join(dir, "active", "malformed.json"),
+    JSON.stringify(malformedMarker),
+  );
+  writeFileSync(
+    join(dir, "active", "unreadable.json"),
+    JSON.stringify(unreadableMarker),
+  );
+  const dead = serializeActiveMarker(deadOwnMarker);
+  expect(dead.success).toBe(true);
+  if (dead.success) writeFileSync(join(dir, "active", "dead.json"), dead.text);
+
+  const scan = await scanRuns(ctx, { session: "session-a" });
+  expect(scan.runs).toEqual([
+    {
+      id: "fresh",
+      lane: "other",
+      row: "luna-xhigh",
+      name: "agt_run_v2",
+      kind: "token",
+      labels: [],
+    },
+    {
+      id: "resumed",
+      lane: "other",
+      row: "luna-xhigh",
+      name: "agt_deploy_hosts",
+      kind: "token",
+      labels: [],
+    },
+  ]);
+  expect(scan.unreadable).toBe(1);
+  expect(await runningRuns(ctx, { session: "session-a" })).toEqual(scan.runs);
+  expect(await laneCount(ctx, "other", { session: "session-a" })).toBe(2);
 });
 
 test("session selectors separate two dispatchers and unattributed live runs", async () => {
@@ -97,17 +159,11 @@ test("session selectors separate two dispatchers and unattributed live runs", as
     ["dead-unattributed", undefined, 2_147_483_647],
     ["unattributed", undefined, process.pid],
   ] satisfies [string, string | undefined, number][]) {
-    writeFileSync(
-      join(dir, "active", `${id}.json`),
-      JSON.stringify({
-        run_id: id,
-        choice: "terra",
-        pid,
-        dispatcher_session: session,
-        cwd: dir,
-        ticket: { lane: id === "a-bench" ? "bench" : "theory" },
-      }),
-    );
+    stateMarker(dir, id, {
+      pid,
+      dispatcher_session: session,
+      ticket: { lane: id === "a-bench" ? "bench" : "theory" },
+    });
   }
   expect(
     (await runningRuns(ctx, { session: "session-a" })).map((run) => run.id),
@@ -174,15 +230,7 @@ test("concurrent explicit selectors stay isolated from each other and the enviro
     [dir, "first"],
     [other, "second"],
   ] satisfies [string, string][]) {
-    writeFileSync(
-      join(root, "active", `${id}.json`),
-      JSON.stringify({
-        run_id: id,
-        choice: "terra",
-        pid: process.pid,
-        cwd: dir,
-      }),
-    );
+    stateMarker(root, id, { cwd: dir, dispatcher_session: undefined });
   }
   const [first, second] = await Promise.all([
     runningRuns(ctx, { stateDirs: [dir] }),

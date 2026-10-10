@@ -9,6 +9,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
+import {
+  deadOwnMarker,
+  malformedMarker,
+  ownFreshMarker,
+  ownResumedMarker,
+  unreadableMarker,
+} from "../../shared/tests/fixtures/active-markers.ts";
 
 // The statusline Run rows (no "Run:" head; each line starts with its row id): agx's running workers, read from its markers
 // (tools/agx/src/state.ts). One line per live worker (row, elapsed time, label), the
@@ -129,6 +137,50 @@ async function render(
 }
 
 describe("statusline Run row", () => {
+  test("shared writer fixtures render fresh and resumed own rows, skip malformed, and count stale/unreadable", async () => {
+    const dir = join(scratch, "shared-marker-contract");
+    const active = join(dir, "active");
+    mkdirSync(active, { recursive: true });
+    const now = Temporal.Now.instant().toString();
+    for (const [name, fixture] of [
+      ["fresh", ownFreshMarker],
+      ["resumed", ownResumedMarker],
+    ] as const) {
+      const written = serializeActiveMarker({
+        ...fixture,
+        run_id: name,
+        pid: process.pid,
+        started_at: now,
+        cwd: scratch,
+        dispatcher_session: SESSION,
+      });
+      expect(written.success).toBe(true);
+      if (written.success)
+        writeFileSync(join(active, `${name}.json`), written.text);
+    }
+    writeFileSync(
+      join(active, "malformed.json"),
+      JSON.stringify(malformedMarker),
+    );
+    writeFileSync(
+      join(active, "unreadable.json"),
+      JSON.stringify(unreadableMarker),
+    );
+    const dead = serializeActiveMarker(deadOwnMarker);
+    expect(dead.success).toBe(true);
+    if (dead.success) writeFileSync(join(active, "dead.json"), dead.text);
+
+    const out = await render(dir);
+    const rows = out
+      .split("\n")
+      .filter((line) => line.startsWith("luna-xhigh"));
+    expect(rows).toHaveLength(2);
+    expect(rows.join("\n")).toContain("Repo: dotfiles");
+    expect(rows.join("\n")).toContain("resume:");
+    expect(out).toContain("stale 1");
+    expect(out).toContain("unreadable 1");
+  });
+
   test("a live worker shows its row, elapsed time and label", async () => {
     const dir = join(scratch, "live");
     marker(dir, "a", process.pid, "lint batch 7");
@@ -686,15 +738,15 @@ describe("statusline Run row", () => {
     ).toBe(1);
   });
 
-  test("more workers than the cap: the rest are counted, not dropped silently", async () => {
+  test("all own workers render as rows above the former cap", async () => {
     const dir = join(scratch, "many");
     for (let i = 0; i < 8; i++)
       marker(dir, `w${i}`, process.pid, `worker ${i}`, 60 + i);
     const out = await render(dir);
     expect(out.split("\n").filter((l) => l.includes("luna-high")).length).toBe(
-      6,
+      8,
     );
-    expect(out).toContain("+2 more");
+    expect(out).not.toContain("more");
   });
 
   test("a marker whose process is gone is counted as stale, not hidden", async () => {

@@ -7,6 +7,7 @@ export {
 } from "./runtime.ts";
 export {
   runningRuns,
+  scanRuns,
   unattributedRuns,
   laneCount,
   gpu,
@@ -15,6 +16,7 @@ export {
   type Run,
   type RunStateOptions,
   type RunFilter,
+  type RunScan,
 } from "./conditions.ts";
 export { englishSegments } from "./english.ts";
 export {

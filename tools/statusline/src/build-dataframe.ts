@@ -2,7 +2,7 @@ import { err, ok, type Result } from "neverthrow";
 import type { StatusInput } from "./input.ts";
 import type { Dataframe } from "./dataframe.ts";
 import type { HostLoad } from "./host-load.ts";
-import type { RouteRun } from "./dispatch-runs.ts";
+import type { RouteScan } from "./dispatch-runs.ts";
 import type { Admitted } from "./jobs.ts";
 import type { DiskEntry } from "./storage.ts";
 import type { ModelLimit } from "./rate-limits.ts";
@@ -49,7 +49,7 @@ type Sources = {
     failed?: string;
   }>;
   hostLoad: () => Promise<Omit<HostLoad, "disks">>;
-  routes: () => Promise<Result<RouteRun[], string> | undefined>;
+  routes: () => Promise<Result<RouteScan, string> | undefined>;
   dispatchWarning: () => Promise<string | undefined>;
   storage: () => Promise<Result<DiskEntry[], string>>;
   herdrReport: (

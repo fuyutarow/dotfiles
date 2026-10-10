@@ -46,7 +46,9 @@ test("sync and async readers deduplicate by run_id, independent of filename", as
   for (const result of [routeRuns(env), await routeRunsAsync(env)]) {
     expect(result?.isOk()).toBe(true);
     if (result === undefined || result.isErr()) continue;
-    expect(result.value.map((run) => [run.label, run.doing?.last])).toEqual([
+    expect(
+      result.value.runs.map((run) => [run.label, run.doing?.last]),
+    ).toEqual([
       ["current", "current"],
       ["legacy", "legacy"],
     ]);
@@ -58,6 +60,7 @@ test("unattributed rows stay dim even with an absent or empty payload session", 
     displayId: undefined,
     choice: "luna-high",
     label: "hidden",
+    pickSource: "fixture",
     secs: 1,
     alive: true,
     dispatcherSession: undefined,

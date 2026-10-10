@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3 — 2026-10-10
+
+- Read the shared agx marker contract, render every own live worker including resumed runs, and show unreadable-marker counts while skipping malformed markers without identity.
+
 ## 0.9.2 — 2026-10-10
 
 - Use the shared jittered GPU sampler and show its 15-minute utilization estimate and sample count beside VRAM when enough history exists. Preserve sampling outside the render path.

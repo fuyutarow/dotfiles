@@ -3,10 +3,11 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
-import { activeDirs, ActiveSchema, ProgressSchema } from "./dispatch-state.ts";
+import { activeDirs, ProgressSchema } from "./dispatch-state.ts";
 import { DIM, ESC, RST } from "./ansi.ts";
 import { dur } from "./jobs.ts";
 import { readCodexUsage } from "./codex-rate.ts";
+import { parseActiveMarker } from "../../shared/src/dispatch-state.ts";
 import {
   costUsd,
   dispatchRowPrice,
@@ -21,6 +22,7 @@ export interface RouteRun {
   displayId: string | undefined;
   choice: string;
   label: string;
+  pickSource: string;
   secs: number;
   alive: boolean;
   dispatcherSession: string | undefined;
@@ -51,6 +53,10 @@ function doingOf(dir: string, runId: string): RouteRun["doing"] {
     ...(p.cost_usd === undefined ? {} : { costUsd: p.cost_usd }),
     ...(p.session === undefined ? {} : { session: p.session }),
   };
+}
+export interface RouteScan {
+  runs: RouteRun[];
+  unreadable: number;
 }
 const pidAlive = fromThrowable((pid: number) => process.kill(pid, 0));
 const sinceSecs = fromThrowable((iso: string) =>
@@ -86,11 +92,12 @@ async function liveCodexCost(
 }
 export function routeRuns(
   env: NodeJS.ProcessEnv = process.env,
-): Result<RouteRun[], string> | undefined {
+): Result<RouteScan, string> | undefined {
   const dirs = activeDirs(env).filter((dir) => existsSync(dir));
   if (dirs.length === 0) return undefined;
   const seen = new Set<string>();
   const runs: RouteRun[] = [];
+  let unreadable = 0;
   const markers: { dir: string; name: string }[] = [];
   for (const dir of dirs) {
     const names = listDir(dir);
@@ -105,27 +112,36 @@ export function routeRuns(
   }
   for (const { dir, name } of markers) {
     const text = readText(join(dir, name));
-    if (text.isErr()) continue;
-    const parsed = jsonOf(ActiveSchema).safeParse(text.value);
-    if (!parsed.success || seen.has(parsed.data.run_id)) continue;
-    const a = parsed.data;
+    if (text.isErr()) {
+      unreadable += 1;
+      continue;
+    }
+    const parsed = parseActiveMarker(text.value);
+    if (parsed.kind === "malformed") continue;
+    if (parsed.kind === "unreadable") {
+      unreadable += 1;
+      continue;
+    }
+    const a = parsed.marker;
+    if (seen.has(a.run_id)) continue;
     seen.add(a.run_id);
     runs.push({
       displayId: a.display_id,
       choice: a.choice,
       label: a.label,
+      pickSource: a.pick_source,
       secs: sinceSecs(a.started_at).unwrapOr(0),
       alive: pidAlive(a.pid).isOk(),
       dispatcherSession: a.dispatcher_session,
       doing: doingOf(dir, a.run_id),
     });
   }
-  return ok(runs);
+  return ok({ runs, unreadable });
 }
 /** Async render-path version; marker and progress files are read without blocking the line. */
 export async function routeRunsAsync(
   env: NodeJS.ProcessEnv = process.env,
-): Promise<Result<RouteRun[], string> | undefined> {
+): Promise<Result<RouteScan, string> | undefined> {
   const listings = await Promise.all(
     activeDirs(env).map(async (dir) => ({
       dir,
@@ -140,21 +156,28 @@ export async function routeRunsAsync(
       )
       .map((name) => ({ dir, name })),
   );
-  const parsedMarkers = await Promise.all(
+  const markerReads = await Promise.all(
     markers.map(async ({ dir, name }) => {
       const text = await Bun.file(join(dir, name))
         .text()
         .catch(() => null);
-      if (text === null) return null;
-      const parsed = jsonOf(ActiveSchema).safeParse(text);
-      return parsed.success ? { dir, active: parsed.data } : null;
+      return {
+        dir,
+        parsed:
+          text === null
+            ? ({ kind: "unreadable", reason: "file read failed" } as const)
+            : parseActiveMarker(text),
+      };
     }),
   );
+  const unreadable = markerReads.filter(
+    ({ parsed }) => parsed.kind === "unreadable",
+  ).length;
   const seen = new Set<string>();
-  const unique = parsedMarkers.flatMap((marker) => {
-    if (marker === null || seen.has(marker.active.run_id)) return [];
-    seen.add(marker.active.run_id);
-    return [marker];
+  const unique = markerReads.flatMap(({ dir, parsed }) => {
+    if (parsed.kind !== "valid" || seen.has(parsed.marker.run_id)) return [];
+    seen.add(parsed.marker.run_id);
+    return [{ dir, active: parsed.marker }];
   });
   const runs = await Promise.all(
     unique.map(async ({ dir, active: a }) => {
@@ -194,6 +217,7 @@ export async function routeRunsAsync(
         displayId: a.display_id,
         choice: a.choice,
         label: a.label,
+        pickSource: a.pick_source,
         secs: sinceSecs(a.started_at).unwrapOr(0),
         alive,
         dispatcherSession: a.dispatcher_session,
@@ -201,15 +225,13 @@ export async function routeRunsAsync(
       } satisfies RouteRun;
     }),
   );
-  return ok(runs);
+  return ok({ runs, unreadable });
 }
 // This session's Run rows: one line per worker, like Claude Code's own background panel — "<row>
 // <elapsed> <label> │ <doing>". Other sessions' workers are one count. No "Run:" head (owner
 // 2026-10-06: 「Run: って labelは不要では？」): the row id
-// (luna-high, sonnet-medium) already says what the line is, and the head cost every line 5 columns. Capped at RUN_LINES so a wide fan-out cannot
-// push the other rows off screen; the cap is SAID (+N more), never silent. Stale markers get their
-// own line.
-const RUN_LINES = 6;
+// (luna-high, sonnet-medium) already says what the line is, and the head cost every line 5 columns.
+// Every own live worker gets a row. Stale and unreadable markers get summary counts.
 // "│ $ bun test x.ts · 12 cmd · 3 files": the worker's latest event, then what it has done so far.
 // Older than a minute it says how old (a worker deep in reasoning prints nothing for a while — that
 // is shown as age, not hidden). No progress file yet = no event yet, said as such.
@@ -301,6 +323,7 @@ function padDisplay(value: string, width: number, left = false): string {
 export function routeLines(
   runs: RouteRun[],
   sessionId: string | undefined,
+  unreadable = 0,
 ): string[] {
   const live = runs.filter((r) => r.alive).toSorted((a, b) => b.secs - a.secs);
   const stale = runs.length - live.length;
@@ -313,7 +336,7 @@ export function routeLines(
       ? []
       : attributed.filter((r) => r.dispatcherSession === sessionId);
   const other = attributed.length - own.length;
-  const shown = own.slice(0, RUN_LINES);
+  const shown = own;
   const sessions = sessionDisplays(shown);
   const sessionWidth = Math.max(
     0,
@@ -329,7 +352,14 @@ export function routeLines(
     0,
     ...costLabels.map((value) => Bun.stringWidth(value)),
   );
-  const labels = shown.map((r) => truncateDisplay(r.label, RUN_LABEL_WIDTH));
+  const labels = shown.map((r) =>
+    truncateDisplay(
+      r.pickSource === "resume" && !/^resume(?::|\b)/iu.test(r.label)
+        ? `resume: ${r.label}`
+        : r.label,
+      RUN_LABEL_WIDTH,
+    ),
+  );
   const choiceWidth = Math.max(
     0,
     ...choices.map((value) => Bun.stringWidth(value)),
@@ -347,12 +377,13 @@ export function routeLines(
     (r, i) =>
       `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing)}`,
   );
-  if (own.length > RUN_LINES)
-    lines.push(`${DIM}+${own.length - RUN_LINES} more${RST}`);
   const summary = [
     ...(other > 0 ? [`${DIM}+${other} in other sessions${RST}`] : []),
     ...(unattributed > 0 ? [`${DIM}unattributed ${unattributed}${RST}`] : []),
     ...(stale > 0 ? [`${ESC}[38;5;167mstale ${stale}${RST}`] : []),
+    ...(unreadable > 0
+      ? [`${ESC}[38;5;178munreadable ${unreadable}${RST}`]
+      : []),
   ];
   if (summary.length > 0) lines.push(summary.join(` ${DIM}·${RST} `));
   return lines;

@@ -1,13 +1,25 @@
-// agx's on-disk state, defined in ONE place for its two consumers: agx (writes a
-// marker per running worker, appends runs.jsonl) and the statusline Run rows (read the markers).
+// agx's on-disk paths and progress state. The shared active-marker contract lives in tools/shared;
+// agx validates writes here through its re-export and statusline/hooks use its reader schema.
 // Outside the repo by design: briefs and picks may be private. Zero-dep beyond the repo's zod bundle.
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
-import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
-import { KindSchema } from "./ticket.ts";
+import {
+  ACTIVE_MARKER_SCHEMA,
+  ActiveMarkerReaderSchema,
+  ActiveMarkerSchema,
+  dispatchStateDir,
+  serializeActiveMarker,
+  type ActiveMarker,
+} from "../../shared/src/dispatch-state.ts";
+export { ActiveMarkerReaderSchema, ActiveMarkerSchema };
+export { serializeActiveMarker };
+export type { ActiveMarker };
 
-export const STATE_SCHEMA = 1;
+export const STATE_SCHEMA = ACTIVE_MARKER_SCHEMA;
+export const ActiveSchema = ActiveMarkerReaderSchema;
+export const ActiveWriterSchema = ActiveMarkerSchema;
+export type Active = ActiveMarker;
 
 /** $AGX_STATE_DIR (test seam), else $XDG_STATE_HOME/agx, else ~/.local/state/agx. */
 export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
@@ -59,23 +71,6 @@ export function briefLabel(brief: string): string {
       ?.slice(0, LABEL_CHARS) ?? ""
   );
 }
-
-export const ActiveSchema = z.strictObject({
-  schema: z.literal(STATE_SCHEMA),
-  run_id: z.string(),
-  pid: z.number().int(),
-  display_id: z.string().optional(),
-  kind: KindSchema.optional(),
-  labels: z.array(z.string()).optional(),
-  label: z.string(),
-  choice: z.string(),
-  pick_source: z.string(),
-  started_at: z.string(),
-  cwd: z.string(),
-  dispatcher_session: z.string().optional(),
-  ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
-});
-export type Active = z.output<typeof ActiveSchema>;
 
 /** What a running worker is doing, beside its marker: `<run_id>.progress.json` in activeDir.
  *  Written by agx from Codex `--json` events and Claude stream-json events, read by the

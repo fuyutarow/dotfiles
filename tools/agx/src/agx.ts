@@ -114,6 +114,7 @@ import {
   ProgressSchema,
   stateDir,
   STATE_SCHEMA,
+  serializeActiveMarker,
   storedBriefPath,
   storeBrief,
   type Active,
@@ -2488,7 +2489,10 @@ async function launch(l: Launch): Promise<number> {
   const changesBefore = await snapshotChanges(writesRoot, ticket?.writes ?? []);
   mkdirSync(ACTIVE_DIR, { recursive: true });
   const marker = join(ACTIVE_DIR, `${runId}.json`);
-  writeFileSync(marker, JSON.stringify(active));
+  const serializedMarker = serializeActiveMarker(active);
+  if (!serializedMarker.success)
+    fatal(`cannot write invalid active marker: ${serializedMarker.error}`);
+  writeFileSync(marker, serializedMarker.text);
   // The worker folds its own events into this file (agx via AGX_CODEX_PROGRESS_FILE,
   // run-claude via --progress-file); the statusline Run rows read it.
   const progress = progressFile(runId);

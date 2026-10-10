@@ -15,7 +15,7 @@
 # uv / rust are deliberately NOT declared yet — they would shadow existing toolchains; see
 # the mise-contract FAILs, which stay red on purpose until that is decided separately.
 [tools]
-bun = "1.3.14"
+bun = "1.4"
 
 [tasks.up]
 alias = "u"

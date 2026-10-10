@@ -9,6 +9,17 @@ failure and its bounded evidence status.
 No live engine, provider, hook, broker, or scientific run is activated. Scientific progress is
 currently `SEARCH=0` and `LEARN=0`.
 
+## Idea Factory broker specification
+
+- [IDEA-FACTORY-SOK.md](IDEA-FACTORY-SOK.md) is the bounded critical evidence position behind the
+  encounter broker. Its [claim ledger](evidence/IDEA-FACTORY-CLAIMS.jsonl) separates source claims,
+  design synthesis, and open human-to-LLM transfer questions.
+- [IDEA-FACTORY-PILOT.md](IDEA-FACTORY-PILOT.md) freezes the manual/shadow evaluation protocol,
+  structural zero-tolerance gates, baseline, denominators, and pre-observation productivity margins.
+- [`brokering-research-encounters`](../skills/brokering-research-encounters/) owns only the
+  consented encounter → non-authoritative offer → terminal receipt transition. A voluntary pull
+  enters the existing Director-local `HUMAN-METHOD-INPUT` path; this specification activates no broker.
+
 ## V0 checkers
 
 - `trace.ts` validates one section trace: exact Goal → Programme Snapshot → OPEN_ISSUE → Mandate →

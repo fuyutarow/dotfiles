@@ -23,6 +23,23 @@ export function pctColor(i: number, yellow = 70, red = 90): string {
   if (i >= yellow) return "38;5;178";
   return "38;5;71";
 }
+// Rate usage is colored by its pace through the reset window. Until 2% has elapsed,
+// retain usage-threshold coloring because the ratio is too sensitive to a near-zero base.
+export function paceColor(used: number, elapsed: number | undefined): string {
+  if (used >= 90) return "38;5;167";
+  if (elapsed === undefined || elapsed < 2) return pctColor(used);
+  const pace = used / elapsed;
+  if (pace > 1.5) return "38;5;167";
+  if (pace > 1) return "38;5;178";
+  return "38;5;71";
+}
+// Disk free-space colors are shared across every volume and use free percentage, not GiB.
+export function diskFreeColor(freePercent: number | undefined): string {
+  if (freePercent === undefined) return "38;5;71";
+  if (freePercent < 10) return "38;5;167";
+  if (freePercent < 20) return "38;5;178";
+  return "38;5;71";
+}
 // Rate and Sys vocabulary: plain names/windows, threshold-colored values, dim supporting
 // text/separators. Each styled part resets itself; never wrap an already-rendered segment.
 export const roles = {

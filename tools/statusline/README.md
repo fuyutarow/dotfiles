@@ -1,6 +1,6 @@
 # statusline
 
-Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.2.1.
+Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.10.2.
 `agents/claude/settings.json` declares `statusLine.command` as `~/.bun/bin/statusline`, this package's `bin`
 (root `package.json` `bin`, installed by `bun link` / `mise run deps`). The former Claude implementation
 has been retired; parity fixtures preserve its expected behavior.
@@ -36,11 +36,15 @@ Disk free GiB uses three significant figures. A fill/free rate appears at
 Linear regression over the last five minutes smooths short bursts; samples are spaced at least
 five seconds apart, capped at 61 per drive, and must span at least 30 seconds. Missing or corrupt
 state starts a new window silently. A capacity change, backwards clock step, or five-minute gap
-also resets the window. Only free GiB carries the configured space threshold color; capacity,
-free percentage, `free` and the entire rate suffix are dim supporting text.
+also resets the window. The free GiB amount is colored from free-space percentage: red below 10%,
+yellow below 20%, green otherwise; capacity, free percentage, `free` and the entire rate suffix
+are dim supporting text.
 
-Rate and Sys share the roles in `src/ansi.ts`: plain labels and windows, threshold-colored
-values, dim secondary text and dim separators. Unknown values are amber `n/a` with dim reasons.
+Rate values use pace (`used% ÷ elapsed%`): green through 1.0, yellow through 1.5, red above 1.5
+or at 90% usage. During the first 2% of a window, usage-threshold color is used unless usage is
+already at least 90%. Rate and Sys share the roles in `src/ansi.ts`: plain labels and windows,
+colored values, dim secondary text and dim separators. Unknown values are amber `n/a` with dim
+reasons.
 Jev's seven-day spend uses the same threshold function as percentages, with dollar boundaries
 of $1 (yellow) and $5 (red); `Jev 7d` is plain and `spend` is dim. Memory fractions, GPU averages,
 sample counts and stale details are also dim.

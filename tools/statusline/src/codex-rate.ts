@@ -9,7 +9,7 @@ import {
   pad2,
   stampMDHM,
 } from "./prompt-stamp.ts";
-import { pctFmt, roles } from "./ansi.ts";
+import { paceColor, pctFmt, roles } from "./ansi.ts";
 import type { TokenUsage } from "../../shared/src/dispatch-pricing.ts";
 
 const WINDOW = z.object({
@@ -265,21 +265,23 @@ export function codexRateSegment(
     if (window.minutes === 300) label = "5h";
     if (window.minutes === 10080) label = "7d";
     const formatted = pctFmt(window.percent);
-    let item = `${roles.label("codex")} ${roles.window(label)} ${roles.value(`${formatted.text}%`, formatted.col)}`;
+    const elapsed =
+      window.reset === undefined || window.minutes <= 0
+        ? undefined
+        : Math.max(
+            0,
+            Math.min(
+              100,
+              (1 - Math.max(0, window.reset - now) / (window.minutes * 60)) *
+                100,
+            ),
+          );
+    let item = `${roles.label("codex")} ${roles.window(label)} ${roles.value(`${formatted.text}%`, paceColor(window.percent, elapsed))}`;
     if (window.reset !== undefined) {
       const local = localFromEpochSec(window.reset);
       let stamp = stampMDHM(local);
       if (window.minutes === 300) stamp = clockHM(local);
-      const elapsed = Math.round(
-        Math.max(
-          0,
-          Math.min(
-            100,
-            (1 - Math.max(0, window.reset - now) / (window.minutes * 60)) * 100,
-          ),
-        ),
-      );
-      item += ` ${roles.secondary(`⟳${stamp}(${remaining(window.reset, now)} ${elapsed}%)`)}`;
+      item += ` ${roles.secondary(`⟳${stamp}(${remaining(window.reset, now)} ${Math.round(elapsed ?? 0)}%)`)}`;
     }
     return item;
   });

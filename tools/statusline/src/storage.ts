@@ -2,7 +2,6 @@ import { readFileSync, statfsSync } from "node:fs";
 import { readFile, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
-import { storageLine } from "../../shared/src/storage-headroom.ts";
 import { z } from "./zod.ts";
 import {
   execError,
@@ -16,12 +15,12 @@ import {
   diskRateStatePath,
   updateDiskRates,
 } from "./disk-rate.ts";
-import { naSegment, roles } from "./ansi.ts";
+import { diskFreeColor, naSegment, roles } from "./ansi.ts";
 
-// they are read from agents/hooks/storage-headroom.toml ([drive.*]: path, deny_gib, warn_gib),
-// the same file the storage gate enforces, so the bar and the gate can never disagree about a
-// threshold. statfs is a syscall (no subprocess), cheap enough for every render. A drive whose
-// path does not exist here (/mnt/c on macOS) is skipped, as the gate skips it.
+// Drive paths come from agents/hooks/storage-headroom.toml. Free-space color thresholds are
+// presentation rules in ansi.ts; the storage gate keeps its own enforcement thresholds. statfs is
+// a syscall (no subprocess), cheap enough for every render. A drive whose path does not exist here
+// (/mnt/c on macOS) is skipped, as the gate skips it.
 export const STORAGE_CONFIG = join(
   import.meta.dir,
   "..",
@@ -37,7 +36,6 @@ export interface DiskReading {
   usedG: number;
   totalG: number | undefined;
   freeG: number | undefined;
-  col: string; // green / yellow (below warn_gib) / red (below deny_gib)
   path?: string;
   rateGibPerMin?: number | undefined; // positive = filling, negative = freeing
   rateRedMinutes?: number | undefined;
@@ -134,16 +132,6 @@ export function diskReadings(
     const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
     const freeG = (bavail * bsize) / 1024 ** 3;
     const totalG = (blocks * bsize) / 1024 ** 3;
-    // The storage-headroom gate (agents/hooks/enforce-storage-headroom.ts), on its own measure: free =
-    // bavail, size = blocks. The gate validates that each _pct is present; this reader is not the
-    // authority, so a missing share leaves the absolute size alone (100% of the drive never undercuts).
-    const free = bavail * bsize;
-    const size = blocks * bsize;
-    const line = (gib: number | undefined, pct: number | undefined): number =>
-      gib === undefined ? 0 : storageLine(gib, pct ?? 100, size);
-    let col = "38;5;71";
-    if (free < line(d.warn_gib, d.warn_pct)) col = "38;5;178";
-    if (free < line(d.deny_gib, d.deny_pct)) col = "38;5;167";
     out.push({
       kind: "reading",
       label: diskLabel(path),
@@ -153,7 +141,6 @@ export function diskReadings(
       usedG,
       totalG,
       freeG,
-      col,
     });
   }
   const statePath = options.statePath ?? diskRateStatePath();
@@ -209,13 +196,6 @@ export async function diskReadingsAsync(
     const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
     const freeG = (bavail * bsize) / 1024 ** 3;
     const totalG = (blocks * bsize) / 1024 ** 3;
-    const free = bavail * bsize;
-    const size = blocks * bsize;
-    const line = (gib: number | undefined, pct: number | undefined): number =>
-      gib === undefined ? 0 : storageLine(gib, pct ?? 100, size);
-    let col = "38;5;71";
-    if (free < line(d.warn_gib, d.warn_pct)) col = "38;5;178";
-    if (free < line(d.deny_gib, d.deny_pct)) col = "38;5;167";
     out.push({
       kind: "reading",
       label: diskLabel(path, isWsl),
@@ -225,7 +205,6 @@ export async function diskReadingsAsync(
       usedG,
       totalG,
       freeG,
-      col,
     });
   }
   const statePath = options.statePath ?? diskRateStatePath();
@@ -252,7 +231,11 @@ export function diskSegment(d: DiskEntry): string {
   if (fill !== undefined && Number.isFinite(fill) && Math.abs(fill) >= 0.05) {
     rate = ` ${fill > 0 ? "↓" : "↑"}${significant(Math.abs(fill), 2)}GiB/min`;
   }
-  return `${roles.label(d.label)} ${roles.value(`${free}GiB`, d.col)}${roles.secondary(`${fraction} free${rate}`)}`;
+  const freePercent =
+    total !== undefined && Number.isFinite(total) && total > 0
+      ? (d.freeG / total) * 100
+      : undefined;
+  return `${roles.label(d.label)} ${roles.value(`${free}GiB`, diskFreeColor(freePercent))}${roles.secondary(`${fraction} free${rate}`)}`;
 }
 
 function significant(value: number, digits: number): string {

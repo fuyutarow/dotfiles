@@ -3,6 +3,7 @@ import { err, ok } from "neverthrow";
 import { rateRow } from "../src/rate-limits.ts";
 import { memSegment, sysSegment } from "../src/host-load.ts";
 import { diskSegment, type DiskReading } from "../src/storage.ts";
+import { diskFreeColor, paceColor } from "../src/ansi.ts";
 
 const reset = "\u001B[0m";
 const dim = "\u001B[2m";
@@ -15,7 +16,6 @@ const disk: DiskReading = {
   usedG: 337,
   freeG: 123,
   totalG: 460,
-  col: "38;5;71",
 };
 
 test.each([
@@ -44,7 +44,7 @@ test.each([
     now,
   );
   expect(row).toContain(
-    `claude 5h ${green} 5%${reset} ${dim}·${reset} 7d ${amber}70%${reset} ${dim}⟳`,
+    `claude 5h ${green} 5%${reset} ${dim}·${reset} 7d ${green}70%${reset} ${dim}⟳`,
   );
   expect(row).toContain(`Fable ${red}90%${reset}`);
   expect(row).toContain(
@@ -53,6 +53,58 @@ test.each([
   expect(row).toEndWith(
     ` ${dim}|${reset} Jev 7d ${dim}spend${reset} ${color}${text}${reset}`,
   );
+});
+
+test("rate colors follow used-to-elapsed pace for the screenshot values", () => {
+  const now = 1_790_000_000;
+  const row = rateRow(
+    {
+      rl5: 21,
+      rl5Reset: now + 1_980,
+      rl7: 78,
+      rl7Reset: now + 260_064,
+      rlModel: [],
+      codexRate: {
+        windows: [{ minutes: 10_080, percent: 24, reset: now + 562_464 }],
+        mtimeMs: Temporal.Now.instant().epochMilliseconds,
+      },
+    },
+    now,
+  );
+  expect(row).toContain(`5h ${green}21%${reset}`);
+  expect(row).toContain(`7d ${amber}78%${reset}`);
+  expect(row).toContain(`codex 7d ${red}24%${reset}`);
+});
+
+test.each([
+  [50, 50, green],
+  [75, 50, amber],
+  [75.01, 50, red],
+  [20, 1.99, green],
+  [75, 1.99, amber],
+  [90, 0, red],
+  [70, undefined, amber],
+])("pace color for used %s and elapsed %s", (used, elapsed, color) => {
+  expect(paceColor(used, elapsed)).toBe(color.slice(2, -1));
+});
+
+test.each([
+  [9.99, red],
+  [10, amber],
+  [19.99, amber],
+  [20, green],
+  [undefined, green],
+])("disk free percent %s uses a percentage color", (freePercent, color) => {
+  expect(diskFreeColor(freePercent)).toBe(color.slice(2, -1));
+});
+
+test("screenshot disk values color free space by share", () => {
+  expect(
+    diskSegment({ ...disk, label: "Disk C:", freeG: 43.8, totalG: 930 }),
+  ).toContain(`Disk C: ${red}43.8GiB${reset}`);
+  expect(
+    diskSegment({ ...disk, label: "Disk WSL", freeG: 660.3, totalG: 930 }),
+  ).toContain(`Disk WSL ${green}660GiB${reset}`);
 });
 
 test("Rate missing values keep plain names/windows, amber n/a and dim reasons", () => {

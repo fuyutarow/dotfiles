@@ -7,7 +7,7 @@ import {
   pad2,
   stampMDHM,
 } from "./prompt-stamp.ts";
-import { ESC, RST, naSegment, pctFmt, roles } from "./ansi.ts";
+import { ESC, RST, naSegment, paceColor, pctFmt, roles } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { codexRateSegment } from "./codex-rate.ts";
 import { jevUsageSegment } from "./jev-usage.ts";
@@ -106,16 +106,17 @@ function reset7(epoch: number, now: number): string {
 const FIVE_HOURS = 5 * 60 * 60;
 const SEVEN_DAYS = 7 * 24 * 60 * 60;
 
-function elapsedPct(reset: number, windowSeconds: number, now: number): number {
+function elapsedPercent(
+  reset: number,
+  windowSeconds: number,
+  now: number,
+): number {
   const remaining = Math.max(0, reset - now);
-  return Math.round(
-    Math.max(0, Math.min(100, (1 - remaining / windowSeconds) * 100)),
-  );
+  return Math.max(0, Math.min(100, (1 - remaining / windowSeconds) * 100));
 }
 
-function usageColor(pct: number, elapsed: number | undefined): string {
-  const { pct: rounded, col } = pctFmt(pct);
-  return elapsed !== undefined && rounded > elapsed + 10 ? "38;5;178" : col;
+function elapsedPct(reset: number, windowSeconds: number, now: number): number {
+  return Math.round(elapsedPercent(reset, windowSeconds, now));
 }
 
 function usageText(
@@ -126,8 +127,8 @@ function usageText(
 ): string {
   const { text } = pctFmt(pct);
   const elapsed =
-    reset !== undefined ? elapsedPct(reset, windowSeconds, now) : undefined;
-  return roles.value(`${text}%`, usageColor(pct, elapsed));
+    reset !== undefined ? elapsedPercent(reset, windowSeconds, now) : undefined;
+  return roles.value(`${text}%`, paceColor(pct, elapsed));
 }
 
 // own; rateRow() puts the middot BETWEEN them, so a missing 5h window cannot leave "Rate: · 7d".

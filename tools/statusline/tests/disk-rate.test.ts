@@ -22,7 +22,6 @@ const disk = (freeG: number): DiskReading => ({
   usedG: 930 - freeG,
   totalG: 930,
   freeG,
-  col: "38;5;167",
   rateRedMinutes: 30,
   rateYellowMinutes: 120,
 });
@@ -70,14 +69,16 @@ describe("disk rate", () => {
       plain(diskSegment({ ...disk(11.5), rateGibPerMin: 0.05 })),
     ).toContain("↓0.050GiB/min");
   });
-  test.each([29, 30, 119, 120])(
-    "time to full %d minutes keeps the rate dim",
-    (free) => {
-      const output = diskSegment({ ...disk(free), rateGibPerMin: 1 });
-      expect(output).toEndWith(`free ↓1.0GiB/min\u001B[0m`);
-      expect(output).toContain("\u001B[38;5;167m");
-    },
-  );
+  test.each([
+    [29, "38;5;167"],
+    [30, "38;5;167"],
+    [119, "38;5;178"],
+    [120, "38;5;178"],
+  ])("free %d GiB colors by percent and keeps the rate dim", (free, color) => {
+    const output = diskSegment({ ...disk(free), rateGibPerMin: 1 });
+    expect(output).toEndWith(`free ↓1.0GiB/min\u001B[0m`);
+    expect(output).toContain(`\u001B[${color}m`);
+  });
   test("configured durations do not override the secondary role", () => {
     const output = diskSegment({
       ...disk(11.5),
@@ -217,12 +218,11 @@ test.each(["Disk /", "Disk WSL", "Disk C:", "Disk /Volumes/data"])(
       ...disk(58.2),
       label,
       totalG: 931,
-      col: "38;5;71",
       rateGibPerMin: 0.089,
     };
     const segment = diskSegment(reading);
     expect(segment).toBe(
-      `${label} ${ESC}[38;5;71m58.2GiB${RST}${ESC}[2m/931GiB (6%) free ↓0.089GiB/min${RST}`,
+      `${label} ${ESC}[38;5;167m58.2GiB${RST}${ESC}[2m/931GiB (6%) free ↓0.089GiB/min${RST}`,
     );
     const row = sysSegment(
       ok(0),
@@ -234,21 +234,19 @@ test.each(["Disk /", "Disk WSL", "Disk C:", "Disk /Volumes/data"])(
   },
 );
 
-test.each(["38;5;178", "38;5;167"])(
-  "low-space %s colour applies only to the free amount",
-  (col) => {
-    expect(diskSegment({ ...disk(11.5), col })).toBe(
-      `Disk C: ${ESC}[${col}m11.5GiB${RST}${ESC}[2m/930GiB (1%) free${RST}`,
-    );
-  },
-);
+test.each([
+  [92.07, "38;5;167"],
+  [139.5, "38;5;178"],
+  [186, "38;5;71"],
+])("disk free amount uses free percentage threshold %s", (freeG, col) => {
+  expect(diskSegment(disk(freeG))).toContain(`${ESC}[${col}m`);
+});
 
 test("unknown capacity retains coloured free space and the unchanged rate", () => {
   expect(
     diskSegment({
       ...disk(58.2),
       totalG: undefined,
-      col: "38;5;71",
       rateGibPerMin: 0.089,
     }),
   ).toBe(

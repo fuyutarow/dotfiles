@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.2 — 2026-10-10
+
+- Color Claude and Codex rate usage by used-to-elapsed pace: green through 1.0, yellow through 1.5, and red above 1.5 or at 90% usage; keep the first 2% of a window on usage-threshold colors unless usage is already high.
+- Color disk free GiB by the free percentage on every volume: red below 10%, yellow below 20%, and green otherwise.
+- Cover the owner's screenshot values and pace/disk color boundaries.
+
 ## 0.10.1 — 2026-10-10
 
 - Read the shared forward-compatible progress-sidecar contract, including `turns`, so working rows retain the latest command, counts and rollout-derived cost when writers add fields.

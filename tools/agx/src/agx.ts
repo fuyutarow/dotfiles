@@ -1182,34 +1182,10 @@ function judge(
       jev: trace,
     };
   }
-  const argmaxRow = [...mass.entries()].toSorted((a, b) => b[1] - a[1])[0]?.[0];
-  const argmaxCandidate = roster.choice.find(
-    (candidate) => candidate.id === argmaxRow,
-  );
-  const argmaxCost =
-    argmaxCandidate?.price_in === undefined ||
-    argmaxCandidate.price_out === undefined ||
-    cheapest === undefined
-      ? undefined
-      : (argmaxCandidate.price_in + argmaxCandidate.price_out) / cheapest;
-  const epsilonRows =
-    argmaxCost === undefined
-      ? []
-      : [...mass.keys()].filter((id) => {
-          const candidate = roster.choice.find((row) => row.id === id);
-          return (
-            candidate?.price_in !== undefined &&
-            candidate.price_out !== undefined &&
-            (candidate.price_in + candidate.price_out) / cheapest! <=
-              4 * argmaxCost
-          );
-        });
   const sample = sampleRow(
     Object.fromEntries(mass),
     options.temperature,
     options.seed,
-    0.1,
-    epsilonRows,
   );
   if (sample === undefined) {
     const row = roster.choice.find(
@@ -1250,8 +1226,6 @@ function judge(
     seed: options.seed,
     masked_rows: maskedRows,
     sampled_probability: sampledProbability,
-    epsilon: sample.epsilon,
-    epsilon_rows: sample.epsilonRows,
     reason: `${sample.row} (sampled p=${sampledProbability.toFixed(2)} from jev; argmax ${sample.argmaxRow})`,
     ...(answer.confidence === undefined
       ? {}
@@ -6050,7 +6024,7 @@ async function parseAgx() {
               pickTemperature: {
                 type: Number,
                 description:
-                  "sampling temperature (0 < T <= 5; near zero is argmax)",
+                  "sampling temperature (0 <= T <= 5; zero is argmax)",
               },
               pickSeed: {
                 type: String,

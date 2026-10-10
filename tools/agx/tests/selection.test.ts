@@ -95,99 +95,93 @@ describe("deterministic escalation", () => {
 });
 
 describe("seeded row selection", () => {
-  test("1000 fixed seeds track the probability distribution", () => {
+  const fixture = {
+    leader: 0.7,
+    runnerUp: 0.2,
+    third: 0.06,
+    fourth: 0.02,
+    tailA: 0.01,
+    tailB: 0.01,
+  };
+
+  test("default 0.5: 1000 seeds track all tempered probabilities", async () => {
+    const loaded = await loadRoster();
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const temperature = loaded.value.auto.pick_temperature;
+    expect(temperature).toBe(0.5);
+    const total = Object.values(fixture).reduce((sum, p) => sum + p ** 2, 0);
     const counts = new Map<string, number>();
-    const draws = 1000;
-    for (let i = 0; i < draws; i++) {
-      const sample = sampleRow(
-        { "luna-high": 0.75, "luna-low": 0.25 },
-        1,
-        `draw-${i}`,
-      );
-      if (sample === undefined) {
-        expect(sample).toBeDefined();
-        continue;
-      }
-      counts.set(sample.row, (counts.get(sample.row) ?? 0) + 1);
-      expect(sample.probability).toBeCloseTo(
-        sample.row === "luna-high" ? 0.725 : 0.275,
-      );
-    }
-    expect(
-      Math.abs((counts.get("luna-high") ?? 0) / draws - 0.725),
-    ).toBeLessThan(0.05);
-    expect(
-      Math.abs((counts.get("luna-low") ?? 0) / draws - 0.275),
-    ).toBeLessThan(0.05);
-  });
-
-  test("the same seed reproduces the same draw", () => {
-    const probabilities = { "luna-high": 0.75, "luna-low": 0.25 };
-    expect(sampleRow(probabilities, 1, "repeatable")).toEqual(
-      sampleRow(probabilities, 1, "repeatable"),
-    );
-  });
-
-  test("temperature zero is argmax", () => {
-    const probabilities = { "luna-high": 0.75, "luna-low": 0.25 };
-    expect(sampleRow(probabilities, 0, "any-seed")).toMatchObject({
-      row: "luna-high",
-      argmaxRow: "luna-high",
-      probability: 1,
-      mode: "argmax",
-    });
-  });
-
-  test("epsilon smoothing explores a one-hot answer across five rows", () => {
-    const probabilities = { a: 1, b: 0, c: 0, d: 0, e: 0 };
-    const counts = new Map<string, number>();
-    for (let i = 0; i < 2000; i++) {
-      const sample = sampleRow(probabilities, 1, `smooth-${i}`);
+    for (let i = 0; i < 1000; i++) {
+      const sample = sampleRow(fixture, temperature, `draw-${i}`);
       expect(sample).toBeDefined();
       if (sample === undefined) continue;
       counts.set(sample.row, (counts.get(sample.row) ?? 0) + 1);
-      expect(sample.epsilon).toBe(0.1);
+      const p =
+        Object.entries(fixture).find(([row]) => row === sample.row)?.[1] ?? 0;
+      expect(sample.probability).toBeCloseTo(p ** 2 / total, 12);
     }
-    for (const row of ["b", "c", "d", "e"])
-      expect(Math.abs((counts.get(row) ?? 0) / 2000 - 0.02)).toBeLessThan(0.01);
+    for (const [row, p] of Object.entries(fixture)) {
+      const expected = p ** 2 / total;
+      // Four binomial standard deviations, plus one count for discrete rare rows.
+      const error = 4 * Math.sqrt((expected * (1 - expected)) / 1000) + 0.001;
+      expect(Math.abs((counts.get(row) ?? 0) / 1000 - expected)).toBeLessThan(
+        error,
+      );
+    }
+    expect(0.2 ** 2 / total).toBeCloseTo(0.0748783, 7);
   });
 
-  test("epsilon zero preserves the unsmoothed distribution", () => {
-    expect(sampleRow({ a: 1, b: 0 }, 1, "epsilon-zero", 0)).toMatchObject({
+  test("explicit T=1 reproduces the untempered categorical draw", () => {
+    const probabilities = { a: 0.75, b: 0.25 };
+    const counts = new Map<string, number>();
+    for (let i = 0; i < 1000; i++) {
+      const seed = `untempered-${i}`;
+      const sample = sampleRow(probabilities, 1, seed);
+      expect(sample).toEqual(sampleRow(probabilities, 1, seed));
+      if (sample === undefined) continue;
+      counts.set(sample.row, (counts.get(sample.row) ?? 0) + 1);
+      expect(sample.probability).toBeCloseTo(
+        sample.row === "a" ? 0.75 : 0.25,
+        12,
+      );
+    }
+    expect(Math.abs((counts.get("b") ?? 0) / 1000 - 0.25)).toBeLessThan(0.05);
+  });
+
+  test("all positive rows remain drawable at the default, including both 1% tails", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 100000 && seen.size < 6; i++) {
+      const sample = sampleRow(fixture, 0.5, `all-rows-${i}`);
+      if (sample !== undefined) seen.add(sample.row);
+    }
+    expect([...seen].toSorted()).toEqual(Object.keys(fixture).toSorted());
+    // No probability floor: a tiny input remains positive when selected alone.
+    expect(sampleRow({ tiny: 1e-100 }, 0.5, "tiny")?.probability).toBe(1);
+  });
+
+  test("only zero temperature is argmax; positive near-zero T still samples", () => {
+    expect(sampleRow({ a: 0.75, b: 0.25 }, 0, "any-seed")).toMatchObject({
+      row: "a",
+      argmaxRow: "a",
+      probability: 1,
+      mode: "argmax",
+    });
+    const seen = new Set(
+      Array.from(
+        { length: 100 },
+        (_, i) => sampleRow({ a: 0.5, b: 0.5 }, 0.001, `cold-${i}`)?.row,
+      ),
+    );
+    expect(seen.size).toBe(2);
+    expect(sampleRow({ a: 0.5, b: 0.5 }, 0.001, "cold")?.mode).toBe("sample");
+  });
+
+  test("zero input mass has no smoothing and all-zero inputs cannot be sampled", () => {
+    expect(sampleRow({ a: 1, b: 0 }, 0.5, "zero-mass")).toMatchObject({
       row: "a",
       probability: 1,
-      epsilon: 0,
     });
-  });
-
-  test("epsilon is limited to cost-eligible rows", () => {
-    const lowArgmax = sampleRow(
-      { "luna-low": 1, "opus-max": 0, "fable-max": 0 },
-      1,
-      "low-cost",
-      0.1,
-      ["luna-low"],
-    );
-    expect(lowArgmax?.epsilonRows).toEqual(["luna-low"]);
-    expect(lowArgmax?.probability).toBe(1);
-
-    const sonnetArgmax = sampleRow(
-      { "sonnet-high": 1, "opus-max": 0, "fable-max": 0 },
-      1,
-      "sonnet-cost",
-      0.1,
-      ["sonnet-high", "opus-max"],
-    );
-    expect(sonnetArgmax?.epsilonRows).toEqual(["sonnet-high", "opus-max"]);
-  });
-
-  test("zero-probability eligible rows can be drawn after smoothing", () => {
-    const probabilities = { a: 1, b: 0 };
-    expect(
-      Array.from(
-        { length: 500 },
-        (_, i) => sampleRow(probabilities, 1, `zero-row-${i}`)?.row,
-      ),
-    ).toContain("b");
+    expect(sampleRow({ a: 0, b: 0 }, 0.5, "all-zero")).toBeUndefined();
   });
 });

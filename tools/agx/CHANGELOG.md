@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.8.1 — 2026-10-11
+
+- Lower the default pick temperature to 0.5 and remove epsilon smoothing. Sample categorically from p_i^(1/T) / sum_j p_j^(1/T) over all eligible rows, with no probability floor or top-p cutoff; positive temperatures never trigger an argmax shortcut. Preserve reasoned eligibility masks, ticket/CLI overrides, and receipt temperature plus tempered picked probability. Legacy epsilon receipt fields remain readable.
+- Computed effect for Jev probabilities 0.70/0.20/0.06/0.02/0.01/0.01:
+
+| T | Runner-up | Each 1% row |
+| --- | --- | --- |
+| 1 | 20.00% | 1.000% |
+| 0.7 | 13.83% | 0.191% |
+| 0.5 | 7.49% | 0.019% |
+
 ## 2.8.0 — 2026-10-10
 
 - Default tickets to per-project agx state when no repository ticket home exists; add `--home state`, `--project`, and selection-rule output in `ticket ls`.

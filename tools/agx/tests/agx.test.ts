@@ -1607,9 +1607,8 @@ describe("agx dispatch", () => {
       mode: "sample",
       argmax_row: "luna-high",
       sampled_row: "luna-high",
-      temperature: 1,
+      temperature: 0.5,
       sampled_probability: 1,
-      epsilon: 0.1,
     });
     expect(typeof receipt.pick.seed).toBe("string");
     expect(receipt.pick.masked_rows).toContainEqual({
@@ -1699,9 +1698,65 @@ describe("agx dispatch", () => {
     expect(first.mode).toBe("sample");
     expect(first.seed).toBe("repeatable-seed");
     expect(first.sampled_probability).toBeCloseTo(
-      first.choice === "luna-high" ? 0.725 : 0.275,
+      first.choice === "luna-high" ? 0.9 : 0.1,
       12,
     );
+  });
+
+  test("pick temperature overrides preserve raw T=1 probabilities and CLI precedence", async () => {
+    const target = brief(
+      "untempered-override",
+      ticketText(
+        "writes = []\nverify = []\npick_temperature = 1",
+        "PICK=luna-high PROBS=luna-high:0.75,luna-low:0.25",
+      ),
+    );
+    for (const extra of [
+      [],
+      ["--pick-temperature", "1"],
+      ["--pick-temperature", "0.5"],
+    ]) {
+      const result = await router([
+        ...runArgs(target, scratch, "read-only"),
+        "--pick-seed",
+        "override",
+        ...extra,
+      ]);
+      expect(result.code).toBe(0);
+      const pick = decodedJson(Receipt, result.out.trim()).pick;
+      const temperature = extra.at(-1) === "0.5" ? 0.5 : 1;
+      expect(pick.temperature).toBe(temperature);
+      const high = temperature === 1 ? 0.75 : 0.9;
+      expect(pick.sampled_probability).toBeCloseTo(
+        pick.choice === "luna-high" ? high : 1 - high,
+        12,
+      );
+    }
+  });
+
+  test("budget excludes only rows over the declared budget, even at tiny probability", async () => {
+    const target = brief(
+      "tempering-budget",
+      ticketText(
+        "writes = []\nverify = []\nbudget_usd = 0.02",
+        "PICK=luna-high PROBS=luna-high:0.999,sol-medium:0.001",
+      ),
+    );
+    const result = await router([
+      "pick",
+      "--prompt-file",
+      target,
+      "--cd",
+      scratch,
+    ]);
+    expect(result.code).toBe(0);
+    const pick = decodedJson(Receipt.shape.pick, result.out.trim());
+    expect(pick.choice).toBe("luna-high");
+    expect(pick.sampled_probability).toBe(1);
+    expect(pick.masked_rows).toContainEqual({
+      row: "sol-medium",
+      reason: "exceeds ticket budget",
+    });
   });
 
   test("auto: route masking renormalizes surviving Jev probability", async () => {
@@ -1803,7 +1858,7 @@ describe("agx dispatch", () => {
     ).toBe(false);
   });
 
-  test("pick requires free-text justification and limits epsilon by relative cost", async () => {
+  test("pick requires free-text justification without a relative-cost probability mask", async () => {
     const pick = async (name: string, capabilities: string, jev: string) => {
       const target = brief(
         name,
@@ -1823,7 +1878,7 @@ describe("agx dispatch", () => {
       return decodedJson(
         z.looseObject({
           masked_rows: z.array(z.looseObject({ row: z.string() })),
-          epsilon_rows: z.array(z.string()),
+          sampled_probability: z.number(),
         }),
         result.out.trim(),
       );
@@ -1845,18 +1900,15 @@ describe("agx dispatch", () => {
       "PICK=luna-low PROBS=luna-low:1,opus-max:0,fable-max:0",
     );
     expect(lowArgmax.masked_rows).toEqual([]);
-    expect(lowArgmax.epsilon_rows).toEqual(["luna-low"]);
-    expect(lowArgmax.epsilon_rows).not.toContain("opus-max");
-    expect(lowArgmax.epsilon_rows).not.toContain("fable-max");
+    expect(lowArgmax.sampled_probability).toBe(1);
 
     const sonnetArgmax = await pick(
       "sonnet-argmax",
       justified,
       "PICK=sonnet-high PROBS=sonnet-high:1,opus-max:0,fable-max:0",
     );
-    expect(sonnetArgmax.epsilon_rows).toContain("sonnet-high");
-    expect(sonnetArgmax.epsilon_rows).toContain("opus-max");
-    expect(sonnetArgmax.epsilon_rows).not.toContain("fable-max");
+    expect(sonnetArgmax.masked_rows).toEqual([]);
+    expect(sonnetArgmax.sampled_probability).toBe(1);
   });
 
   test("pick falls back to the roster default when Claude is the only available route and is masked", async () => {
@@ -1880,7 +1932,7 @@ describe("agx dispatch", () => {
     });
   });
 
-  test("auto: zero Jev probabilities remain eligible through smoothing", async () => {
+  test("auto: zero Jev probabilities remain unmasked with zero sampling mass", async () => {
     const target = brief(
       "distribution-zero",
       "PICK=luna-high PROBS=luna-high:1,luna-low:0\n",
@@ -1897,7 +1949,8 @@ describe("agx dispatch", () => {
     const receipt = decodedJson(Receipt, r.out.trim());
     expect(["luna-high", "luna-low"]).toContain(receipt.pick.choice);
     expect(receipt.pick.mode).toBe("sample");
-    expect(receipt.pick.epsilon).toBe(0.1);
+    expect(receipt.pick.epsilon).toBeUndefined();
+    expect(receipt.pick.choice).toBe("luna-high");
     expect(receipt.pick.sampled_probability).toBeGreaterThan(0);
     expect(receipt.pick.masked_rows).toContainEqual({
       row: "luna-max",
@@ -5081,7 +5134,7 @@ describe("agx dispatch: a brief with a ticket", () => {
         r.out.trim(),
       );
       expect(receipt.result).toBe("failed");
-      expect(receipt.pick.epsilon).toBe(0.1);
+      expect(receipt.pick.epsilon).toBeUndefined();
       expect(receipt.pick.jev).toBeDefined();
       expect(
         bodies

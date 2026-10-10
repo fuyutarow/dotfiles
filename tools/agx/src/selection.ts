@@ -52,8 +52,6 @@ export type SampledRow = Readonly<{
   row: string;
   argmaxRow: string;
   probability: number;
-  epsilon: number;
-  epsilonRows: string[];
   mode: "sample" | "argmax";
 }>;
 
@@ -62,43 +60,25 @@ export function sampleRow(
   probabilities: Readonly<Record<string, number>>,
   temperature: number,
   seed: string,
-  epsilon = 0.1,
-  epsilonRows?: readonly string[],
 ): SampledRow | undefined {
   const entries = Object.entries(probabilities).filter(
     ([, probability]) => probability >= 0 && Number.isFinite(probability),
   );
-  if (entries.length === 0 || epsilon < 0 || epsilon > 1) return undefined;
-  const rowsReceivingEpsilon = entries
-    .map(([row]) => row)
-    .filter((row) => epsilonRows === undefined || epsilonRows.includes(row));
-  const epsilonMass =
-    rowsReceivingEpsilon.length === 0
-      ? 0
-      : epsilon / rowsReceivingEpsilon.length;
-  const smoothed = entries.map(
-    ([row, probability]) =>
-      [
-        row,
-        rowsReceivingEpsilon.includes(row)
-          ? (1 - epsilon) * probability + epsilonMass
-          : probability,
-      ] as const,
-  );
+  if (entries.length === 0 || !Number.isFinite(temperature) || temperature < 0)
+    return undefined;
   const argmax = entries.toSorted((a, b) => b[1] - a[1])[0];
   if (argmax === undefined) return undefined;
-  if (temperature < 0.01)
+  if (argmax[1] === 0) return undefined;
+  if (temperature === 0)
     return {
       row: argmax[0],
       argmaxRow: argmax[0],
       probability: 1,
-      epsilon,
-      epsilonRows: rowsReceivingEpsilon,
       mode: "argmax",
     };
 
-  const maxLogProbability = Math.log(Math.max(...smoothed.map(([, p]) => p)));
-  const weighted = smoothed.map(
+  const maxLogProbability = Math.log(argmax[1]);
+  const weighted = entries.map(
     ([row, p]) =>
       [row, Math.exp((Math.log(p) - maxLogProbability) / temperature)] as const,
   );
@@ -122,8 +102,6 @@ export function sampleRow(
     row: selected,
     argmaxRow: argmax[0],
     probability: (weighted.find(([row]) => row === selected)?.[1] ?? 0) / total,
-    epsilon,
-    epsilonRows: rowsReceivingEpsilon,
     mode: "sample",
   };
 }

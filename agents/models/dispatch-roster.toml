@@ -26,7 +26,7 @@ default = "luna-high"
 max_task_chars = 6000
 timeout_ms = 20000
 no_egress = []
-pick_temperature = 1.0
+pick_temperature = 0.5
 
 [auto.jev]
 # Jev list price from archives/skills/driving-jev/references/model-and-api.md, verified 2026-09-21.

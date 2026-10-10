@@ -471,6 +471,11 @@ describe("render-home: the rest of the rendered half", () => {
     expect(md).toContain(
       "Objective: maximize this ticket's expected accepted-returns-per-hour: expected acceptance rate multiplied by 3600 and divided by expected time to first return, using the comparable-ticket tradeoff line (same capability tags and size class from writes-glob count and brief length). Weigh comparable-ticket median time to first return, timeout rate, accepted rate, and cost per accepted ahead of overall records and benchmark scores. Each row marks the best observed expected throughput; when comparable history is little, treat it as uncertainty and do not silently substitute overall averages. Choose the lowest effort that does not lower that throughput; xhigh/max only when the ticket names a capability lower effort measurably lacks. Among rows within noise of each other, pick the cheaper, and when a codex and a claude row are comparable, pick codex. Cost excludes a row only when its expected cost exceeds the ticket's declared budget.",
     );
+    expect(md).toContain("temperature T (default 0.5)");
+    expect(md).toContain("over ALL eligible rows");
+    expect(md).toContain("| 1 | 20.00% | 1.000% |");
+    expect(md).toContain("| 0.7 | 13.83% | 0.191% |");
+    expect(md).toContain("| 0.5 | 7.49% | 0.019% |");
     expect(md).toContain("hard worker bound defaults to 600 seconds");
     expect(md).toContain("outcome `returned`");
     expect(md).toContain("--sandbox none|read-only|workspace-write");

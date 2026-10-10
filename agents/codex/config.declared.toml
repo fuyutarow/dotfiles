@@ -13,4 +13,4 @@ network_access = true
 [tui]
 # git-branch and five-hour-limit are left out: codex 0.162.1 always omits them on this setup
 # (detached HEAD; weekly-only account), so they would never render.
-status_line = ["model-with-reasoning", "current-dir", "context-remaining", "weekly-limit", "approval-mode", "used-tokens", "task-progress"]
+status_line = ["model-with-reasoning", "current-dir", "context-remaining", "weekly-limit", "used-tokens", "task-progress"]

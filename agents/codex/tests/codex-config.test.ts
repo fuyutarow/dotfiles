@@ -6,7 +6,7 @@ import { join } from "node:path";
 const repo = join(import.meta.dir, "..", "..", "..");
 const script = join(repo, "agents/codex/codex-config.ts");
 const statusLine =
-  'status_line = ["model-with-reasoning", "current-dir", "context-remaining", "weekly-limit", "approval-mode", "used-tokens", "task-progress"]';
+  'status_line = ["model-with-reasoning", "current-dir", "context-remaining", "weekly-limit", "used-tokens", "task-progress"]';
 
 function run(home: string, args: string[] = []) {
   return Bun.spawnSync([process.execPath, script, ...args], {

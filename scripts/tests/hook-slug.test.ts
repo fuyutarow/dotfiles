@@ -21,6 +21,43 @@ import { jsonText } from "../../agents/hooks/zod.ts";
 
 const root = resolve(import.meta.dir, "../..");
 
+test("namespaced environment slug is emitted only once by both emitters", () => {
+  expect(hookMessage("probe", "dotfiles:fixture")).toBe(
+    "[dotfiles:fixture] probe",
+  );
+  const shell = Bun.spawnSync(
+    [
+      "sh",
+      "-c",
+      '. "$1"; hook_stderr probe',
+      "sh",
+      join(root, "agents/hooks/slug.sh"),
+    ],
+    { env: { ...process.env, HOOK_SLUG: "dotfiles:fixture" }, timeout: 5_000 },
+  );
+  expect(shell.exitCode).toBe(0);
+  expect(shell.stderr.toString()).toBe("[dotfiles:fixture] probe\n");
+});
+
+test("lint rejects missing, misplaced and wrong namespace command tokens", () => {
+  const dir = fixture();
+  const path = join(dir, "agents/claude/settings.json");
+  const original = readFileSync(path, "utf8");
+  for (const replacement of [
+    "",
+    "HOOK_SLUG=dispatch-contract ",
+    "HOOK_SLUG=other:dispatch-contract ",
+    "X=1 HOOK_SLUG=dotfiles:dispatch-contract ",
+  ]) {
+    writeFileSync(
+      path,
+      original.replace("HOOK_SLUG=dotfiles:dispatch-contract ", replacement),
+    );
+    expect(lintHookSlugs(dir).join("\n")).toContain("unlisted unowned command");
+  }
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("lint rejects bare prefixes in both shared emitters", () => {
   const dir = fixture();
   for (const path of ["agents/hooks/lib.ts", "agents/hooks/slug.sh"]) {

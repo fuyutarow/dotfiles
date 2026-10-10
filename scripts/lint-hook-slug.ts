@@ -18,6 +18,7 @@ function commandError(
 ): string | undefined {
   if (hook.type !== "command" || typeof hook.command !== "string")
     return "hook lacks an owned command and slug";
+  if (external.has(hook.command)) return undefined;
   if (!owned.has(hook.command) && !external.has(hook.command))
     return `unlisted unowned command: ${hook.command}`;
   return undefined;
@@ -111,7 +112,11 @@ export function lintHookSlugs(root: string): string[] {
       );
   }
   const external = new Set(registry.external.map((h) => h.command));
-  const owned = new Set(registry.identities.flatMap((h) => h.commands));
+  const owned = new Set(
+    registry.identities.flatMap((h) =>
+      h.commands.map((command) => `HOOK_SLUG=dotfiles:${h.slug} ${command}`),
+    ),
+  );
   const launchers = new Set(["agents/hooks/run.sh"]);
   for (const command of owned) {
     const match = /~\/\.(claude|codex)\/hooks\/([\w-]+\.sh)/u.exec(command);
@@ -128,7 +133,13 @@ export function lintHookSlugs(root: string): string[] {
   }
   const shared = loadRegistry(join(root, "agents/hooks"));
   errors.push(...shared.errors);
-  for (const hook of shared.specs) owned.add(commandFor(hook));
+  for (const hook of shared.specs) {
+    const identity = registry.identities.find(
+      (h) => h.script === `hooks/${hook.script}`,
+    );
+    if (identity === undefined) errors.push(`missing identity: ${hook.script}`);
+    else owned.add(`HOOK_SLUG=dotfiles:${identity.slug} ${commandFor(hook)}`);
+  }
   const Config = z.object({ hooks: HooksConfigSchema });
   for (const path of [
     "agents/claude/settings.json",
@@ -163,7 +174,7 @@ async function main(): Promise<void> {
       process.stdout.write(`FAIL hook-slug: ${error}\n`);
     if (result.value.length === 0)
       process.stdout.write(
-        "OK hook-slug: all owned hooks have unique bare slugs and namespaced emitters\n",
+        "OK hook-slug: all owned commands start with namespaced slugs; emitters preserve them\n",
       );
     process.exitCode = result.value.length === 0 ? 0 : 1;
   }

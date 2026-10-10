@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-continuity.sh",
+            "command": "HOOK_SLUG=dotfiles:codex-task-continuity sh ~/.codex/hooks/run-continuity.sh",
             "timeout": 5
           }
         ]
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh",
             "timeout": 3
           }
         ]
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-goal-kernel.sh --enforce",
+            "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh --enforce",
             "timeout": 5
           }
         ]
@@ -59,7 +59,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -71,7 +71,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -83,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-continuity.sh",
+            "command": "HOOK_SLUG=dotfiles:codex-task-continuity sh ~/.codex/hooks/run-continuity.sh",
             "timeout": 5
           }
         ]
@@ -95,7 +95,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-dispatch-contract.sh"
+            "command": "HOOK_SLUG=dotfiles:codex-dispatch-contract sh ~/.codex/hooks/run-dispatch-contract.sh"
           }
         ]
       },
@@ -104,7 +104,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-goal-kernel.sh --enforce",
+            "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh --enforce",
             "timeout": 5
           }
         ]
@@ -116,7 +116,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -127,7 +127,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]

@@ -89,11 +89,6 @@ script = "claude/hooks/enforce-no-new-bash.ts"
 commands = ["sh ~/.claude/hooks/run.sh --fail-closed enforce-no-new-bash.ts"]
 
 [[vendor_hook]]
-slug = "ccc-gpu-hold"
-script = "claude/hooks/detect-ccc-gpu-hold.ts"
-commands = ["sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts"]
-
-[[vendor_hook]]
 slug = "assign-command"
 script = "claude/hooks/assign-command.ts"
 commands = ["sh ~/.claude/hooks/run.sh assign-command.ts"]

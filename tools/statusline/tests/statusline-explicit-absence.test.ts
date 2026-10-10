@@ -111,12 +111,14 @@ function writeClaudeJson(home: string, body: string): void {
 }
 
 function countingGpu(log: string, body: string): string {
-  return `echo run >> '${log}'\n${body}`;
+  return `echo "$1" >> '${log}'\n${body}`;
 }
 
 function invocations(log: string): number {
   return existsSync(log)
-    ? readFileSync(log, "utf8").split("\n").filter(Boolean).length
+    ? readFileSync(log, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("--query-gpu=")).length
     : 0;
 }
 
@@ -689,9 +691,10 @@ describe("statusline resource bounds", () => {
     SLOW,
   );
 
-  // O3: at most one nvidia-smi in flight host-wide. `invocations` counts what the fake was asked.
+  // O3: one utilisation sampler host-wide. Count utilisation queries separately from the
+  // once-per-minute compute-app probe for the ccc indexing badge (same sampler, sequential).
   test(
-    "O3: six concurrent renders start exactly one nvidia-smi; each says it is sampling",
+    "O3: six concurrent renders start one GPU sampler; each says it is sampling",
     async () => {
       const home = tempHome();
       const log = join(tempDir("slog-"), "gpu.log");
@@ -717,6 +720,11 @@ describe("statusline resource bounds", () => {
       );
       waitForSampler(home);
       expect(invocations(log)).toBe(1);
+      expect(
+        readFileSync(log, "utf8")
+          .split("\n")
+          .filter((line) => line.startsWith("--query-compute-apps=")).length,
+      ).toBe(1);
       // Every session names what it is waiting for — none is silent about VRAM.
       for (const r of outputs.map((output) => sysRow(output))) {
         expect(r).toContain("VRAM n/a (sampling in progress)");

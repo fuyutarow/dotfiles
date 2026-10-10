@@ -64,7 +64,8 @@ const GATE = {
   hooks: [
     {
       type: "command",
-      command: "HOOK_SLUG=gate sh ~/.agents/hooks/run.sh --fail-closed gate.ts",
+      command:
+        "HOOK_SLUG=dotfiles:gate sh ~/.agents/hooks/run.sh --fail-closed gate.ts",
     },
   ],
 };
@@ -109,7 +110,39 @@ function cleanup(...dirs: string[]): void {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
 }
 
+function assertHookCommand(command: string): void {
+  if (command.includes("herdr-agent-state.sh"))
+    expect(command).toStartWith("sh ");
+  else expect(command).toMatch(/^HOOK_SLUG=dotfiles:[a-z][a-z0-9-]* sh /u);
+  expect(command).not.toContain("dotfiles:dotfiles:");
+}
+
 describe("render-home: base only", () => {
+  test("every real rendered owned command starts with its namespace and retired hook is absent", () => {
+    const home = makeHome();
+    const r = run({
+      HOME: home,
+      DOTFILES: ROOT,
+      DOTFILES_RENDER_FROM_WORKING_COPY: "1",
+      CLAUDE_SETTINGS_PRIVATE: join(home, "missing-overlay.json"),
+    });
+    expect(r.code).toBe(0);
+    for (const path of [
+      join(home, ".claude/settings.json"),
+      join(home, ".codex/hooks.json"),
+    ]) {
+      const text = readFileSync(path, "utf8");
+      expect(text).not.toContain("detect-ccc-gpu-hold");
+      const commands = [...text.matchAll(/"command": "([^"\n]+)"/gu)]
+        .map((m) => m[1] ?? "")
+        .filter((c) => c.includes("hooks/") || c.includes("herdr-agent-state"));
+      expect(commands.length).toBeGreaterThan(0);
+      commands.forEach((command) => {
+        assertHookCommand(command);
+      });
+    }
+    cleanup(home);
+  });
   test("reference render validates commands in live HOME and writes only scratch HOME", () => {
     const dotfiles = makeDotfiles({
       statusLine: { type: "command", command: "~/.bun/bin/statusline" },

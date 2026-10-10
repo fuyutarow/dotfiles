@@ -26,7 +26,7 @@ const vendorOnly: HooksConfig = {
       hooks: [
         {
           type: "command",
-          command: "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
+          command: "sh ~/.claude/hooks/run.sh assign-command.ts",
         },
         {
           type: "command",
@@ -80,7 +80,7 @@ describe("wire", () => {
         hooks: [
           {
             type: "command",
-            command: "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
+            command: "sh ~/.claude/hooks/run.sh assign-command.ts",
           },
         ],
       },

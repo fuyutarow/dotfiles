@@ -26,7 +26,7 @@ export function hookSlug(): string {
 export const HOOK_NAMESPACE = "dotfiles";
 
 export function hookPrefix(slug = hookSlug()): string {
-  return `[${HOOK_NAMESPACE}:${slug}] `;
+  return `[${HOOK_NAMESPACE}:${slug.replace(/^dotfiles:/u, "")}] `;
 }
 
 export function hookMessage(text: string, slug = hookSlug()): string {

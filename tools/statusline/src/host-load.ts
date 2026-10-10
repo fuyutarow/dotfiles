@@ -23,6 +23,7 @@ import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { diskReadings, diskSegment, type DiskEntry } from "./storage.ts";
 import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
+import { CccIndexSchema, cccBadge, sampleCccIndexing } from "./ccc-indexing.ts";
 import {
   findGpuExecutable,
   findGpuExecutableAsync,
@@ -53,6 +54,7 @@ export const MemReadingSchema = z.object({
   pct: z.number(), // used/total*100, unrounded — pctFmt() rounds at render time
   gpuAvg15: z.number().nullable().optional(),
   gpuSamples15: z.number().optional(),
+  cccIndexing: CccIndexSchema.optional(),
   // Set only when this is the last GOOD sample served because the fresh one failed (VRAM only):
   // how old it is and why the fresh one failed. render() prints it, so an old number is never
   // shown as if it were current.
@@ -132,7 +134,7 @@ export const SAMPLING_WHY = "sampling in progress";
 // a herd feeding the load that made nvidia-smi slow. Its owner is not recorded: a lock older than
 // GPU_LOCK_STALE_MS (the sample bound + start-up margin) is a crashed sampler's, and is broken.
 export const GPU_LOCK = `${HOME}/.cache/claude/statusline-gpu.lock`;
-export const GPU_LOCK_STALE_MS = GPU_SAMPLE_TIMEOUT_MS + 15_000;
+export const GPU_LOCK_STALE_MS = GPU_SAMPLE_TIMEOUT_MS + 19_000;
 export interface GpuLock {
   release(): void;
 }
@@ -263,7 +265,7 @@ async function ensureSamplerAsync(): Promise<Result<void, string>> {
 // caller exits AFTER this returns, so the lock is released by `using` first. Refuses to run
 // without the lock: ensureSampler starts it and hands the lock over.
 // The separate sampler child uses this sync entry; renderer calls return before sampling starts.
-export function runSampler(): number {
+export async function runSampler(): Promise<number> {
   if (!existsSync(GPU_LOCK)) {
     process.stderr.write(
       `statusline: ${SAMPLE_ENV} is set by the statusline, which holds ${GPU_LOCK}; refusing to run without it\n`,
@@ -279,13 +281,22 @@ export function runSampler(): number {
   };
   const good = readJson(GPU_CACHE, GpuCacheSchema)?.good;
   const sampled = sampleVram();
+  const cccIndexing = sampled.isOk()
+    ? await sampleCccIndexing({
+        cachePath: `${HOME}/.cache/claude/statusline-ccc-indexing.json`,
+      })
+    : undefined;
+  const reading = sampled.map((value) =>
+    Object.assign({}, value, { cccIndexing }),
+  );
   // Stamped AFTER the sample returns, so the TTL runs from when the answer exists.
   const at = Temporal.Now.instant().epochMilliseconds;
   writeCache(
     GPU_CACHE,
-    sampled.isOk()
-      ? { at, reading: sampled.value, good: { at, reading: sampled.value } }
-      : { at, why: sampled.error.why, good }, // JSON drops an undefined `good`
+    reading.match(
+      (value) => ({ at, reading: value, good: { at, reading: value } }),
+      (failure) => ({ at, why: failure.why, good }),
+    ), // JSON drops an undefined `good`
   );
   return 0;
 }
@@ -513,6 +524,12 @@ export function memSegment(label: string, m: MemReading): string {
   let seg = `${roles.label(label)} ${roles.value(`${pct}%`, col)} ${roles.secondary(`(${m.frac})`)}`;
   if (m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
     seg += ` ${roles.secondary(`GPU≈${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}`)}`;
+  const badge = cccBadge(
+    m.cccIndexing,
+    Temporal.Now.instant().epochMilliseconds,
+  );
+  if (label === "VRAM" && badge !== undefined)
+    seg += ` ${roles.secondary(badge)}`;
   // A number old enough to mislead carries supporting detail: `stale`, its age, and why.
   // Under STALE_SHOW_S it is not marked (owner ruling 2026-10-05): with the bar refreshing every 5 s
   // and one session sampling for all, a reading tens of seconds old is the normal case, and the
@@ -746,5 +763,5 @@ async function main(): Promise<void> {
 }
 
 // Sampler mode (started by ensureSampler with SAMPLE_ENV): one GPU sample, then exit.
-if (process.env[SAMPLE_ENV] === "1") process.exit(runSampler());
+if (process.env[SAMPLE_ENV] === "1") process.exit(await runSampler());
 if (import.meta.main) await main();

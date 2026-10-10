@@ -181,14 +181,16 @@ function withHooks(
     const command = hook.command;
     const identity = identities.identities.find(
       (h) =>
-        h.commands.includes(command) ||
+        h.commands.includes(
+          command.replace(/^HOOK_SLUG=dotfiles:[\w-]+ /u, ""),
+        ) ||
         specs.some(
           (spec) =>
             h.script === `hooks/${spec.script}` && commandFor(spec) === command,
         ),
     );
     if (identity !== undefined)
-      hook.command = `HOOK_SLUG=${identity.slug} ${command}`;
+      hook.command = `HOOK_SLUG=dotfiles:${identity.slug} ${command.replace(/^HOOK_SLUG=dotfiles:[\w-]+ /u, "")}`;
   }
   return { ...config, hooks: wired };
 }
@@ -219,7 +221,9 @@ function expandHome(path: string): string {
 }
 
 function missingTarget(command: string): string | undefined {
-  const first = firstToken(command);
+  let first = firstToken(command);
+  while (first !== undefined && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(first.token))
+    first = firstToken(first.rest);
   if (first === undefined) return undefined;
 
   // `bun script.ts` executes the script target, so validate that path rather than Bun itself.

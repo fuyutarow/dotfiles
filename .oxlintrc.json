@@ -248,14 +248,6 @@
     },
     {
       "files": [
-        "agents/claude/hooks/detect-ccc-gpu-hold.ts"
-      ],
-      "rules": {
-        "node/no-sync": "off"
-      }
-    },
-    {
-      "files": [
         "agents/claude/hooks/detect-leaked-toolcall.ts"
       ],
       "rules": {

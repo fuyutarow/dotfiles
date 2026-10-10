@@ -38,7 +38,6 @@ apis = [
 "agents/claude/hooks/bash-durations.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
 "agents/claude/hooks/capture-last-response.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
 "agents/claude/hooks/copy-via-herdr-pane.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
-"agents/claude/hooks/detect-ccc-gpu-hold.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
 "agents/claude/hooks/detect-leaked-toolcall.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
 "agents/claude/hooks/enforce-background-waits.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
 "agents/claude/hooks/enforce-no-new-bash.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }

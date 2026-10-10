@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.0 — 2026-10-11
+
+- Show `ccc indexing Nm` in the Sys GPU segment after 15 minutes of observed GPU indexing; reuse the sampler with bounded probes cached for one minute. Retire the per-prompt and per-Bash advisory hook.
+
 ## 0.11.0 — 2026-10-11
 
 - Add a Codex rollout adapter for model, effort, context, and rate-window status.

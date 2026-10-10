@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-dispatch-contract.ts"
+            "command": "HOOK_SLUG=dotfiles:dispatch-contract sh ~/.claude/hooks/run.sh --fail-closed enforce-dispatch-contract.ts"
           }
         ]
       },
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-supervised-execution.ts"
+            "command": "HOOK_SLUG=dotfiles:supervised-execution sh ~/.claude/hooks/run.sh --fail-closed enforce-supervised-execution.ts"
           }
         ]
       },
@@ -27,17 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-official-execution.ts"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
-            "timeout": 15
+            "command": "HOOK_SLUG=dotfiles:official-execution sh ~/.claude/hooks/run.sh --fail-closed enforce-official-execution.ts"
           }
         ]
       },
@@ -46,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-no-new-bash.ts"
+            "command": "HOOK_SLUG=dotfiles:no-new-bash sh ~/.claude/hooks/run.sh --fail-closed enforce-no-new-bash.ts"
           }
         ]
       },
@@ -55,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run-goal-kernel.sh --enforce",
+            "command": "HOOK_SLUG=dotfiles:claude-goal-kernel sh ~/.claude/hooks/run-goal-kernel.sh --enforce",
             "timeout": 5
           }
         ]
@@ -65,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-background-waits.ts"
+            "command": "HOOK_SLUG=dotfiles:background-waits sh ~/.claude/hooks/run.sh --fail-closed enforce-background-waits.ts"
           }
         ]
       }
@@ -86,12 +76,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh task-continuity.ts",
+            "command": "HOOK_SLUG=dotfiles:claude-task-continuity sh ~/.claude/hooks/run.sh task-continuity.ts",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh herdr-tab-name.ts",
+            "command": "HOOK_SLUG=dotfiles:herdr-tab-name sh ~/.claude/hooks/run.sh herdr-tab-name.ts",
             "timeout": 10
           }
         ]
@@ -101,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:claude-goal-kernel sh ~/.claude/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -112,7 +102,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:claude-goal-kernel sh ~/.claude/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -123,7 +113,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run-goal-kernel.sh --enforce",
+            "command": "HOOK_SLUG=dotfiles:claude-goal-kernel sh ~/.claude/hooks/run-goal-kernel.sh --enforce",
             "timeout": 5
           }
         ]
@@ -132,13 +122,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh assign-command.ts",
+            "command": "HOOK_SLUG=dotfiles:assign-command sh ~/.claude/hooks/run.sh assign-command.ts",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
-            "timeout": 15
           }
         ]
       }
@@ -149,7 +134,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh quote-command.ts",
+            "command": "HOOK_SLUG=dotfiles:quote-command sh ~/.claude/hooks/run.sh quote-command.ts",
             "timeout": 20
           }
         ]
@@ -161,7 +146,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:claude-goal-kernel sh ~/.claude/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -173,7 +158,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:claude-goal-kernel sh ~/.claude/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -185,7 +170,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh task-continuity.ts",
+            "command": "HOOK_SLUG=dotfiles:claude-task-continuity sh ~/.claude/hooks/run.sh task-continuity.ts",
             "timeout": 5
           }
         ]
@@ -196,7 +181,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:claude-goal-kernel sh ~/.claude/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -205,7 +190,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh detect-leaked-toolcall.ts"
+            "command": "HOOK_SLUG=dotfiles:leaked-toolcall sh ~/.claude/hooks/run.sh detect-leaked-toolcall.ts"
           }
         ]
       },
@@ -213,7 +198,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh detect-audit-theater.ts"
+            "command": "HOOK_SLUG=dotfiles:audit-theater sh ~/.claude/hooks/run.sh detect-audit-theater.ts"
           }
         ]
       },
@@ -221,7 +206,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh detect-groundless-claim.ts"
+            "command": "HOOK_SLUG=dotfiles:groundless-claim sh ~/.claude/hooks/run.sh detect-groundless-claim.ts"
           }
         ]
       },
@@ -229,7 +214,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh enforce-reply-language.ts"
+            "command": "HOOK_SLUG=dotfiles:reply-language sh ~/.claude/hooks/run.sh enforce-reply-language.ts"
           }
         ]
       },
@@ -237,7 +222,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh capture-last-response.ts"
+            "command": "HOOK_SLUG=dotfiles:capture-last-response sh ~/.claude/hooks/run.sh capture-last-response.ts"
           }
         ]
       },
@@ -245,7 +230,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
+            "command": "HOOK_SLUG=dotfiles:sys-snapshot sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
             "timeout": 5
           }
         ]
@@ -257,7 +242,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:claude-goal-kernel sh ~/.claude/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]
@@ -267,7 +252,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
+            "command": "HOOK_SLUG=dotfiles:sys-snapshot sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
             "timeout": 5
           }
         ]
@@ -277,7 +262,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh suggest-existing-definition.ts",
+            "command": "HOOK_SLUG=dotfiles:existing-definition sh ~/.claude/hooks/run.sh suggest-existing-definition.ts",
             "timeout": 15
           }
         ]
@@ -287,7 +272,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh record-bash-duration.ts"
+            "command": "HOOK_SLUG=dotfiles:bash-duration sh ~/.claude/hooks/run.sh record-bash-duration.ts"
           }
         ]
       }
@@ -298,7 +283,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "command": "HOOK_SLUG=dotfiles:claude-goal-kernel sh ~/.claude/hooks/run-goal-kernel.sh",
             "timeout": 5
           }
         ]

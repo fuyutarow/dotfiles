@@ -30,7 +30,7 @@ hook_slug() {
 }
 
 hook_prefix() {
-  printf '[dotfiles:%s] ' "$HOOK_SLUG"
+  printf '[dotfiles:%s] ' "${HOOK_SLUG#dotfiles:}"
 }
 
 hook_stderr() {

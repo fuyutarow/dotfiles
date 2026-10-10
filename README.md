@@ -201,6 +201,9 @@ user. On an existing host, run `mise run linux:migrate-brew -- --dry-run`, then
 `mise run linux:migrate-brew`. A declared no-root host installs Homebrew into its home-relative
 prefix without sudo; longer HOME paths use Homebrew's manual Git checkout layout. Source builds
 may take a long time; migration reports elapsed install/build time.
+Downloads and source-build scratch use a private `/var/tmp` directory rather than HOME quota.
+The installer uses at most two allowed CPUs, with Make/Go worker limits, and streams verbose
+progress. Scratch is removed on success and its location is reported on failure.
 
 Migration verifies core command provenance in login and SSH command shells before retiring
 legacy downloader links. It checks `/proc` executable links, mapped files and inherited PATHs,

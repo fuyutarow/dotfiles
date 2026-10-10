@@ -1,10 +1,11 @@
 // Consumer: owner/agent. Dry-run is read-only; failure stops before retiring any legacy links.
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { $ } from "bun";
 import { coreCommands, brewPrefix, corePathProblems } from "./core-tools.ts";
 import { buildLinuxInitEnv } from "./linux-init-env.ts";
 import {
   installLinuxbrew,
+  bundleCore,
   legacyLinks,
   legacyPathUsers,
   removeLegacyLinks,
@@ -36,9 +37,7 @@ export async function migrateLinuxbrew(
     HOMEBREW_MAKE_JOBS: "2",
   };
   $.env(env);
-  await $`${prefix}/bin/brew bundle --file=${join(root, "Brewfile.core")}`.cwd(
-    root,
-  );
+  if ((await bundleCore(prefix, root, env, say)) !== 0) process.exit(1);
   say(
     `Homebrew install/build elapsed: ${((performance.now() - started) / 1000).toFixed(1)} seconds`,
   );

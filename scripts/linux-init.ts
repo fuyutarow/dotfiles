@@ -15,7 +15,7 @@ import { buildLinuxInitEnv } from "./linux-init-env.ts";
 import { declareRentedCodexHost, hostDeclarationProbes } from "./agx-host.ts";
 import { sudoIsOurs } from "./sudo-group.ts";
 import { brewPrefix } from "./core-tools.ts";
-import { installLinuxbrew } from "./linux-brew.ts";
+import { installLinuxbrew, bundleCore } from "./linux-brew.ts";
 import { migrateLinuxbrew } from "./linux-migrate-brew.ts";
 
 const HOME = homedir();
@@ -91,7 +91,7 @@ if (codexHostDeclaration === "invalid") process.exit(1);
 const started = performance.now();
 await installLinuxbrew(PREFIX, say);
 say(`brew bundle Brewfile.core at ${PREFIX}`);
-await $`${PREFIX}/bin/brew bundle --file=${join(DOTFILES, "Brewfile.core")}`;
+if ((await bundleCore(PREFIX, DOTFILES, CHILD_ENV, say)) !== 0) process.exit(1);
 say(
   `Homebrew install/build elapsed: ${((performance.now() - started) / 1000).toFixed(1)} seconds`,
 );

@@ -15,9 +15,16 @@ import {
   legacyLinks,
   legacyPathUsers,
   removeLegacyLinks,
+  buildCpuList,
 } from "../linux-brew.ts";
 
 const roots: string[] = [];
+test("installer affinity honors sparse or restricted CPU sets", () => {
+  expect(buildCpuList("8-15,32-63")).toBe("8,9");
+  expect(buildCpuList("3,11,19")).toBe("3,11");
+  expect(buildCpuList("7")).toBe("7");
+  expect(buildCpuList("")).toBe("");
+});
 afterEach(() => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });

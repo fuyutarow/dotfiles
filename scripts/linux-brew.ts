@@ -8,11 +8,85 @@ import {
   symlinkSync,
   unlinkSync,
 } from "node:fs";
-import { access, lstat, readdir } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { $ } from "bun";
 import { LINUXBREW } from "./core-tools.ts";
 import { attemptOr } from "../agents/hooks/attempt.ts";
+
+/** Cap the installer itself, so Go also sees two CPUs instead of the shared host's full count. */
+export function buildCpuList(allowed: string): string {
+  if (allowed.trim() === "") return "";
+  const cpus: string[] = [];
+  for (const span of allowed.split(",")) {
+    const [first, last] = span.split("-").map(Number);
+    if (first === undefined || !Number.isInteger(first) || first < 0) continue;
+    cpus.push(String(first));
+    if (last !== undefined && last > first) cpus.push(String(first + 1));
+    if (cpus.length >= 2) break;
+  }
+  return cpus.slice(0, 2).join(",");
+}
+
+export async function bundleCore(
+  prefix: string,
+  root: string,
+  inherited: NodeJS.ProcessEnv,
+  say: (line: string) => void,
+): Promise<number> {
+  // Private scratch on the system filesystem keeps downloads/builds out of shared HOME quotas.
+  const scratch = await mkdtemp("/var/tmp/dotfiles-linuxbrew-");
+  await mkdir(join(scratch, "cache"));
+  await mkdir(join(scratch, "tmp"));
+  const status = await Bun.file("/proc/self/status").text();
+  const cpus = buildCpuList(
+    /^Cpus_allowed_list:\s*([\d,-]+)/mu.exec(status)?.[1] ?? "",
+  );
+  const taskset = Bun.which("taskset");
+  const launcher = taskset !== null && cpus !== "" ? [taskset, "-c", cpus] : [];
+  const env = {
+    ...inherited,
+    HOMEBREW_CACHE: join(scratch, "cache"),
+    HOMEBREW_TEMP: join(scratch, "tmp"),
+    HOMEBREW_MAKE_JOBS: "2",
+    GOMAXPROCS: "2",
+    GOFLAGS: "-p=2",
+    HOMEBREW_DISPLAY_INSTALL_TIMES: "1",
+    HOMEBREW_NO_ASK: "1",
+  };
+  say(
+    `Homebrew scratch: ${scratch}; installer CPU affinity: ${cpus === "" ? "unavailable" : cpus}; Make/Go workers: 2`,
+  );
+  const started = performance.now();
+  // Native finite bound, generous for owner-authorized source builds. Keep scratch on failure.
+  const proc = Bun.spawn(
+    [
+      ...launcher,
+      join(prefix, "bin/brew"),
+      "bundle",
+      "--verbose",
+      `--file=${join(root, "Brewfile.core")}`,
+    ],
+    {
+      cwd: root,
+      env,
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit",
+      timeout: 43_200_000,
+    },
+  );
+  const code = await proc.exited;
+  say(
+    `Homebrew bundle/build elapsed: ${((performance.now() - started) / 1000).toFixed(1)} seconds; exit ${code}`,
+  );
+  if (code === 0) await rm(scratch, { recursive: true, force: true });
+  else
+    say(
+      `failed; scratch retained at ${scratch}; legacy links remain untouched`,
+    );
+  return code;
+}
 
 export async function installLinuxbrew(
   prefix: string,

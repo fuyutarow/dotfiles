@@ -141,6 +141,7 @@ import { floorTicketGrade, hasXhighMaxJustification } from "./ticket-grade.ts";
 import { checkPremises } from "./premises.ts";
 import { buildDetachedLaunch, type DetachPlatform } from "./detach.ts";
 import { planWorkspace } from "./workspaces.ts";
+import { createSparseWorkspace } from "./prepare-workspace.ts";
 import { progressIntervalMs, progressThrottle } from "./progress.ts";
 import { lintTicket, renderTicketLint } from "./ticket-lint.ts";
 import {
@@ -1579,20 +1580,6 @@ interface RunFlags {
   workspaceName?: string;
 }
 
-type WorkspaceCommandResult = { ok: true } | { ok: false; error: string };
-function workspaceCommand(args: string[], cwd: string): WorkspaceCommandResult {
-  const spawned = fromThrowable(
-    () => Bun.spawnSync(args, { cwd, stdout: "pipe", stderr: "pipe" }),
-    errorMessage,
-  )();
-  if (spawned.isErr()) return { ok: false, error: spawned.error };
-  if (spawned.value.exitCode === 0) return { ok: true };
-  return {
-    ok: false,
-    error: `${args.join(" ")} failed (exit ${spawned.value.exitCode}): ${spawned.value.stderr.toString().trim()}`,
-  };
-}
-
 async function prepareWorkspace(
   nameHint: string | undefined,
 ): Promise<{ name: string; path: string }> {
@@ -1600,20 +1587,9 @@ async function prepareWorkspace(
   const plan = await planWorkspace(root, nameHint);
   if (!plan.ok) fatal(plan.error);
   const { name, path } = plan;
-  const added = workspaceCommand(
-    ["jj", "workspace", "add", "--name", name, path],
-    root,
-  );
-  if (!added.ok) fatal(added.error);
-  const trusted = workspaceCommand(["mise", "trust"], path);
-  const installed = trusted.ok
-    ? workspaceCommand(["bun", "install", "--frozen-lockfile"], path)
-    : trusted;
-  if (!installed.ok) {
-    workspaceCommand(["jj", "workspace", "forget", name], root);
-    rmSync(path, { recursive: true, force: true });
-    fatal(installed.error);
-  }
+  const prepared = await createSparseWorkspace(root, name, path);
+  if (!prepared.ok) fatal(errorMessage(prepared.error));
+  dispatchError(`agx: workspace receipt: ${JSON.stringify(prepared.value)}`);
   dispatchError(
     `agx: land command: mise run land -- ${name} -m "land ${name}"`,
   );

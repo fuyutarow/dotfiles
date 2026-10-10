@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.8.3 — 2026-10-11
+
+- Create empty sparse workspaces before selecting tracked top-level paths. Share `.agx.toml` `workspace_exclude` and the measured size fallback with the storage hook; print exclusions, measured bytes and checkout size. Name workspaces for their repository and run mise/Bun setup only when declared.
+
 ## 2.8.2 — 2026-10-11
 
 - Amend live prompt-file runs through their recorded brief without resolving a ticket home, then resume the same vendor session. Validate the amendment before interrupting the worker.

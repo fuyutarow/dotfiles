@@ -32,6 +32,10 @@ import { hookJson, hookStderr } from "./lib.ts";
 
 import { createHash } from "node:crypto";
 import {
+  isHeavyWorkspacePath,
+  workspacePolicy,
+} from "../../tools/shared/src/workspace-policy.ts";
+import {
   loadStorageHeadroom,
   storageLine as effective,
   type Drive,
@@ -584,6 +588,7 @@ export type CheckoutCacheEntry = {
   at: number;
 };
 export type CheckoutPolicyDeps = {
+  workspacePolicy?: typeof workspacePolicy;
   now: () => number;
   cachedSize: (
     root: string,
@@ -660,6 +665,7 @@ export function writeCheckoutCache(
 }
 
 const defaultCheckoutPolicyDeps: CheckoutPolicyDeps = {
+  workspacePolicy,
   now: () => Temporal.Now.instant().epochMilliseconds,
   cachedSize: cachedCheckoutSizeBytes,
   saveCache: writeCheckoutCache,
@@ -746,6 +752,13 @@ export async function fullCheckoutReason(
       continue;
     const root = checkoutRoot(add);
     if (root === null) return unknownReason;
+    const policy =
+      deps.workspacePolicy === undefined
+        ? undefined
+        : await deps.workspacePolicy(root, thresholdMb);
+    if (policy !== undefined && !policy.ok) return unknownReason;
+    if (policy?.ok && policy.value.excluded.length > 0)
+      return `storage-headroom: refusing a full-checkout jj workspace; heavy paths: ${policy.value.excluded.join(", ")}. ${SPARSE_WORKSPACE_ADVICE}`;
     const cached = await deps.cachedSize(root, deps.now);
     if (
       cached?.trackedFileCount !== undefined &&
@@ -795,7 +808,7 @@ export async function fullCheckoutReason(
     }
     const measuredBytes = sizeProbe.bytes;
     const mb = measuredBytes / 1_000_000;
-    if (mb > thresholdMb) {
+    if (isHeavyWorkspacePath(measuredBytes, thresholdMb)) {
       return (
         `storage-headroom: refusing a full-checkout jj workspace; this repo is ${mb.toFixed(1)} MB ` +
         `(> ${thresholdMb} MB threshold). Use ` +

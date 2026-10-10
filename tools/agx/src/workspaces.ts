@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { stat } from "node:fs/promises";
 import { fromAsyncThrowable } from "neverthrow";
 import { errorMessage } from "../../shared/src/attempt.ts";
@@ -40,7 +40,8 @@ export async function planWorkspace(
       ok: false,
       error: "--workspace name must use letters, numbers, _ or -",
     };
-  const path = join(repoRoot, "..", `dotfiles-arm-${name}`);
+  const workspaceName = `${basename(repoRoot)}-arm-${name}`;
+  const path = join(repoRoot, "..", workspaceName);
   const existing = await workspacePathExists(path);
   if (!existing.ok)
     return {
@@ -49,5 +50,5 @@ export async function planWorkspace(
     };
   if (existing.exists)
     return { ok: false, error: `workspace path already exists: ${path}` };
-  return { ok: true, name, path };
+  return { ok: true, name: workspaceName, path };
 }

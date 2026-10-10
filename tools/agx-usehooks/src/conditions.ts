@@ -2,6 +2,11 @@ import { readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { attempt, attemptOr } from "../../shared/src/attempt.ts";
 import {
+  DEFAULT_JSONL_TAIL_BYTES,
+  jsonlLines,
+  readJsonlTail,
+} from "../../shared/src/jsonl.ts";
+import {
   dispatchStateDir,
   parseActiveMarker,
   type ActiveMarkerReader,
@@ -262,11 +267,14 @@ function recordAliases(
 /** Finished returned runs without an acknowledgement (including rejected acknowledgements). */
 export function unackedReturns(_ctx: HookContext): Promise<Run[]> {
   return bounded(async () => {
-    const text = await Bun.file(join(dispatchStateDir(), "runs.jsonl")).text();
+    const { text } = await readJsonlTail(
+      join(dispatchStateDir(), "runs.jsonl"),
+      DEFAULT_JSONL_TAIL_BYTES,
+    );
     const runs = new Map<string, Run>();
     const acked = new Set<string>();
     const aliases = new Map<string, string>();
-    for (const line of text.split("\n")) {
+    for (const line of jsonlLines(text)) {
       const parsed = jsonOf(Record).safeParse(line);
       if (!parsed.success) continue;
       const record = parsed.data;

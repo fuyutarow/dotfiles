@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.8 — 2026-10-10
+
+- Read the recent dispatch-warning window from a bounded tail of `runs.jsonl`.
+
 ## 0.9.7 — 2026-10-10
 
 - Show every disk as free/total GiB with its rounded free percentage; colour only the free amount using the existing space thresholds, preserving the depletion-rate suffix.

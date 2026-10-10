@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../package.json" with { type: "json" };
 
-const CLI = join(import.meta.dir, "../src/agx.ts");
+const CLI = join(import.meta.dir, "../src/main.ts");
 const ROOT = join(import.meta.dir, "../../..");
 const testEnv: NodeJS.ProcessEnv = {
   ...Object.fromEntries(
@@ -41,7 +41,7 @@ const commandNames = (output: string): string[] => {
 test("the suite has one bin and a major version for the CLI break", () => {
   expect(pkg.name).toBe("agx");
   expect(pkg.version).toMatch(/^2\./u);
-  expect(pkg.bin).toEqual({ agx: "src/agx.ts" });
+  expect(pkg.bin).toEqual({ agx: "src/main.ts" });
 });
 
 test("bare and unknown commands list the root command nouns", () => {

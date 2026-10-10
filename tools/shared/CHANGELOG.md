@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.5 — 2026-10-10
+
+- Add bounded-tail and line-streaming helpers for JSONL readers.
+
 ## 0.4.4 — 2026-10-10
 
 - Extend active markers with run phase, vendor session, final cost and final worker usage for post-exit statusline rows.

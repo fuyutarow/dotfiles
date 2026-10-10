@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 — 2026-10-10
+
+- Read unacknowledged-return history from a bounded tail of `runs.jsonl`.
+
 ## 0.6.0 — 2026-10-10
 
 - Accept an optional project-supplied kebab-case slug as the second argument to onPrompt/onStop; explicit slugs win.

@@ -15,7 +15,7 @@
     "disk-reclaim": "tools/disk-reclaim/src/reclaim.ts",
     "storage-headroom": "tools/storage-headroom/src/storage-headroom.ts",
     "statusline": "tools/statusline/src/statusline.ts",
-    "agx": "tools/agx/src/agx.ts"
+    "agx": "tools/agx/src/main.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

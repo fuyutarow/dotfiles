@@ -1,5 +1,6 @@
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { fromThrowable } from "neverthrow";
+import { jsonlLines, type JsonlInput } from "../../shared/src/jsonl.ts";
 
 const RunSchema = z.looseObject({
   kind: z.literal("run"),
@@ -16,7 +17,7 @@ const RunSchema = z.looseObject({
 });
 
 export type DispatchStatsInput = Readonly<{
-  log: string;
+  log: JsonlInput;
   now: number;
   sinceMs?: number;
 }>;
@@ -25,6 +26,12 @@ type Bucket = {
   picks: number;
   by_route: Record<"codex" | "claude", number>;
   by_row: Record<string, number>;
+};
+type ParsedRun = z.output<typeof RunSchema> & {
+  at: number;
+  route: "codex" | "claude";
+  row: string;
+  host: string;
 };
 
 const SOURCES = ["jev", "default", "resume"] as const;
@@ -39,29 +46,31 @@ export function dispatchStats({
   now,
   sinceMs = now - WINDOWS["24h"],
 }: DispatchStatsInput) {
-  const runs = log
-    .split("\n")
-    .filter((line) => line !== "")
-    .flatMap((line) => {
-      const parsed = jsonOf(RunSchema).safeParse(line);
-      if (!parsed.success) return [];
-      const started = parsed.data.started_at;
-      const parsedAt =
-        started === undefined
-          ? undefined
-          : fromThrowable(
-              () => Temporal.Instant.from(started).epochMilliseconds,
-              (error) => error,
-            )();
-      const at = parsedAt?.isOk() === true ? parsedAt.value : Number.NaN;
-      const route = parsed.data.route ?? parsed.data.stats?.route;
-      const row = parsed.data.stats?.row ?? parsed.data.pick.choice;
-      if (!Number.isFinite(at) || route === undefined || row === undefined)
-        return [];
-      return [
-        { ...parsed.data, at, route, row, host: parsed.data.host ?? "unknown" },
-      ];
+  const runs: ParsedRun[] = [];
+  for (const line of jsonlLines(log)) {
+    const parsed = jsonOf(RunSchema).safeParse(line);
+    if (!parsed.success) continue;
+    const started = parsed.data.started_at;
+    const parsedAt =
+      started === undefined
+        ? undefined
+        : fromThrowable(
+            () => Temporal.Instant.from(started).epochMilliseconds,
+            (error) => error,
+          )();
+    const at = parsedAt?.isOk() === true ? parsedAt.value : Number.NaN;
+    const route = parsed.data.route ?? parsed.data.stats?.route;
+    const row = parsed.data.stats?.row ?? parsed.data.pick.choice;
+    if (!Number.isFinite(at) || route === undefined || row === undefined)
+      continue;
+    runs.push({
+      ...parsed.data,
+      at,
+      route,
+      row,
+      host: parsed.data.host ?? "unknown",
     });
+  }
   const hosts = [...new Set(runs.map((run) => run.host))].toSorted();
   return Object.fromEntries(
     hosts.map((host) => [

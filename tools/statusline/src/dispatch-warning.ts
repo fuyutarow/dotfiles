@@ -1,12 +1,15 @@
 // Codex-share warning, ported from agents/claude/dispatch-warning.ts (ef73a9c4) plus the reading
 // half of the old buildDataframe. Read-only: runs.jsonl and route-capability.json are written by
 // agx (tools/agx/src/routes.ts: routeCachePath = <state>/route-capability.json).
-import { readFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { readJson, readJsonAsync } from "./bounded.ts";
 import { stateDir } from "./dispatch-state.ts";
+import {
+  DEFAULT_JSONL_TAIL_BYTES,
+  readJsonlTailSync,
+} from "../../shared/src/jsonl.ts";
 import { nowEpochSec } from "./prompt-stamp.ts";
 import { jsonOf, z } from "./zod.ts";
 
@@ -68,8 +71,10 @@ export function readDispatchWarning(): string | undefined {
   const state = stateDir();
   const cache = readJson(join(state, "route-capability.json"), CacheSchema);
   if (cache?.host !== hostname()) return undefined;
-  const log = fromThrowable(() =>
-    readFileSync(join(state, "runs.jsonl"), "utf8"),
+  const log = fromThrowable(
+    () =>
+      readJsonlTailSync(join(state, "runs.jsonl"), DEFAULT_JSONL_TAIL_BYTES)
+        .text,
   )();
   return log.isOk()
     ? dispatchWarning(
@@ -85,13 +90,15 @@ export async function readDispatchWarningAsync(): Promise<string | undefined> {
   const cachePath = join(state, "route-capability.json");
   const cache = await readJsonAsync(cachePath, CacheSchema);
   if (cache?.host !== hostname()) return undefined;
-  const log = await Bun.file(join(state, "runs.jsonl"))
-    .text()
-    .catch(() => null);
-  return log === null
+  const log = fromThrowable(
+    () =>
+      readJsonlTailSync(join(state, "runs.jsonl"), DEFAULT_JSONL_TAIL_BYTES)
+        .text,
+  )();
+  return log.isErr()
     ? undefined
     : dispatchWarning(
-        log,
+        log.value,
         JSON.stringify(cache),
         hostname(),
         nowEpochSec() * 1000,

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.3 — 2026-10-10
+
+- Dispatch root `--version`, `--help` and bare invocations before loading the dispatcher; read recent run history from a bounded tail and stream full-history reports across dated archives.
+- Rotate oversized `runs.jsonl` logs from GC into dated archives, preserving every JSONL record and keeping the live log bounded.
+
 ## 2.5.2 — 2026-10-10
 
 - Persist the worker's final session, usage and cost in its active marker before verification; keep marker phase updated through verification and grading.

@@ -1,5 +1,6 @@
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { fromThrowable } from "neverthrow";
+import { jsonlLines, type JsonlInput } from "../../shared/src/jsonl.ts";
 
 const Line = z.looseObject({
   kind: z.string(),
@@ -171,7 +172,7 @@ export type ThroughputOptions = Readonly<{
 }>;
 
 /** The compact, shareable subset used by pick requests and record exports. */
-export function perRowRecord(log: string, options: ThroughputOptions) {
+export function perRowRecord(log: JsonlInput, options: ThroughputOptions) {
   const report = throughputStats(log, options);
   return Object.fromEntries(
     Object.entries(report.per_row).map(([row, stats]) => [
@@ -188,7 +189,7 @@ export function perRowRecord(log: string, options: ThroughputOptions) {
   );
 }
 
-export function perTagRecord(log: string, options: ThroughputOptions) {
+export function perTagRecord(log: JsonlInput, options: ThroughputOptions) {
   const report = throughputStats(log, options);
   return Object.fromEntries(
     Object.entries(report.per_tag).map(([tag, rows]) => [
@@ -211,53 +212,54 @@ export function perTagRecord(log: string, options: ThroughputOptions) {
 }
 
 export function perKindRecord(
-  log: string,
+  log: JsonlInput,
   row: string,
   capabilities: string[],
   repo: string,
   options: ThroughputOptions,
 ) {
-  const entries = log.split("\n").flatMap((line) => {
-    const parsed = jsonOf(Line).safeParse(line);
-    if (
-      !parsed.success ||
-      parsed.data.kind !== "run" ||
-      parsed.data.run_id === undefined ||
-      parsed.data.started_at === undefined
-    )
-      return [];
-    const started = epoch(parsed.data.started_at);
-    if (
-      started === undefined ||
-      started < options.sinceMs ||
-      started > options.now
-    )
-      return [];
-    const tags = parsed.data.ticket?.capabilities ?? [];
-    let match = false;
-    if (capabilities.length > 0)
-      match = tags.some((tag) => capabilities.includes(tag));
-    else
-      match =
-        (parsed.data.cwd?.split(/[\\/]/u).findLast(Boolean) ?? "") === repo;
-    if (!match || (parsed.data.stats?.row ?? parsed.data.pick?.choice) !== row)
-      return [];
-    return [JSON.stringify(parsed.data)];
-  });
-  return throughputStats(entries.join("\n"), options).per_row[row];
+  function* matchingEntries(): Generator<string> {
+    for (const line of jsonlLines(log)) {
+      const parsed = jsonOf(Line).safeParse(line);
+      if (
+        !parsed.success ||
+        parsed.data.kind !== "run" ||
+        parsed.data.run_id === undefined ||
+        parsed.data.started_at === undefined
+      )
+        continue;
+      const started = epoch(parsed.data.started_at);
+      if (
+        started === undefined ||
+        started < options.sinceMs ||
+        started > options.now
+      )
+        continue;
+      const tags = parsed.data.ticket?.capabilities ?? [];
+      const match =
+        capabilities.length > 0
+          ? tags.some((tag) => capabilities.includes(tag))
+          : (parsed.data.cwd?.split(/[\\/]/u).findLast(Boolean) ?? "") === repo;
+      if (
+        !match ||
+        (parsed.data.stats?.row ?? parsed.data.pick?.choice) !== row
+      )
+        continue;
+      yield JSON.stringify(parsed.data);
+    }
+  }
+  return throughputStats(matchingEntries(), options).per_row[row];
 }
 
 function calculateThroughputStats(
-  log: string,
+  log: JsonlInput,
   { now, sinceMs, grading }: ThroughputOptions,
 ) {
-  const entries = log
-    .split("\n")
-    .filter((line) => line !== "")
-    .flatMap((line) => {
-      const parsed = jsonOf(Line).safeParse(line);
-      return parsed.success ? [parsed.data] : [];
-    });
+  const entries: Entry[] = [];
+  for (const line of jsonlLines(log)) {
+    const parsed = jsonOf(Line).safeParse(line);
+    if (parsed.success) entries.push(parsed.data);
+  }
   const acks = new Map<string, Entry>();
   const grades = new Map<string, string>();
   for (const entry of entries) {
@@ -632,8 +634,9 @@ let statsCache:
     }
   | undefined;
 
-export function throughputStats(log: string, options: ThroughputOptions) {
+export function throughputStats(log: JsonlInput, options: ThroughputOptions) {
   if (
+    typeof log === "string" &&
     statsCache?.log === log &&
     statsCache.now === options.now &&
     statsCache.sinceMs === options.sinceMs &&
@@ -641,22 +644,23 @@ export function throughputStats(log: string, options: ThroughputOptions) {
   )
     return statsCache.value;
   const value = calculateThroughputStats(log, options);
-  statsCache = { log, ...options, value };
+  if (typeof log === "string") statsCache = { log, ...options, value };
   return value;
 }
 
 export function lineageMasks(
-  log: string,
+  log: JsonlInput,
   {
     name,
     resumeFrom,
     now,
   }: { name?: string; resumeFrom?: string; now: number },
 ): Record<string, { failures: number; reason: string }> {
-  const entries = log.split("\n").flatMap((line) => {
+  const entries = [];
+  for (const line of jsonlLines(log)) {
     const parsed = jsonOf(Line).safeParse(line);
-    return parsed.success ? [parsed.data] : [];
-  });
+    if (parsed.success) entries.push(parsed.data);
+  }
   const runs = entries.filter(
     (entry) => entry.kind === "run" && entry.run_id !== undefined,
   );
@@ -781,7 +785,7 @@ const Candidate = z.strictObject({
 });
 
 export function replayStats(
-  log: string,
+  log: JsonlInput,
   candidateValue: unknown,
   options: ThroughputOptions,
 ) {
@@ -791,27 +795,27 @@ export function replayStats(
       error:
         "candidate must be { rules: [{ when: feature predicate, row: alternative row }] }",
     };
-  const runs = log
-    .split("\n")
-    .filter((line) => line !== "")
-    .flatMap((line) => {
-      const parsed = jsonOf(Line).safeParse(line);
-      if (
-        !parsed.success ||
-        parsed.data.kind !== "run" ||
-        parsed.data.run_id === undefined
-      )
-        return [];
-      const started = epoch(parsed.data.started_at);
-      if (
-        started === undefined ||
-        started < options.sinceMs ||
-        started > options.now
-      )
-        return [];
-      return [{ ...parsed.data, started }];
-    });
-  const report = throughputStats(log, options);
+  const entries: Entry[] = [];
+  for (const line of jsonlLines(log)) {
+    const parsed = jsonOf(Line).safeParse(line);
+    if (parsed.success) entries.push(parsed.data);
+  }
+  const runs: (Entry & { run_id: string; started: number })[] = [];
+  for (const entry of entries) {
+    if (entry.kind !== "run" || entry.run_id === undefined) continue;
+    const started = epoch(entry.started_at);
+    if (
+      started === undefined ||
+      started < options.sinceMs ||
+      started > options.now
+    )
+      continue;
+    runs.push({ ...entry, run_id: entry.run_id, started });
+  }
+  function* serializedEntries(): Generator<string> {
+    for (const entry of entries) yield JSON.stringify(entry);
+  }
+  const report = throughputStats(serializedEntries(), options);
   const rowRates = new Map(
     Object.entries(report.per_row).map(([row, stats]) => [
       row,
@@ -820,13 +824,12 @@ export function replayStats(
   );
   const acks = new Map<string, boolean>();
   const grades = new Map<string, string>();
-  for (const line of log.split("\n")) {
-    const parsed = jsonOf(Line).safeParse(line);
-    if (!parsed.success || parsed.data.run_id === undefined) continue;
-    if (parsed.data.kind === "ack" && parsed.data.consumed !== undefined)
-      acks.set(parsed.data.run_id, parsed.data.consumed);
-    if (parsed.data.kind === "grade" && parsed.data.grade !== undefined)
-      grades.set(parsed.data.run_id, parsed.data.grade);
+  for (const entry of entries) {
+    if (entry.run_id === undefined) continue;
+    if (entry.kind === "ack" && entry.consumed !== undefined)
+      acks.set(entry.run_id, entry.consumed);
+    if (entry.kind === "grade" && entry.grade !== undefined)
+      grades.set(entry.run_id, entry.grade);
   }
   const workerHours =
     sum(runs.map((run) => run.stats?.elapsed_s ?? run.worker?.elapsed_s ?? 0)) /

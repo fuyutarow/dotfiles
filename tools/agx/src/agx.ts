@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // agx — the ONE entry point that starts a worker for a task, records why that worker was
 // chosen, and shows it as running (statusline `Run:` segment, `agx ledger ls`).
 // Consumers: the coordinating agent (primary), a human, the statusline. PATH command via
@@ -66,6 +65,11 @@ import { fromThrowable } from "neverthrow";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { jsonOf, jsonText, z } from "../../shared/src/zod.ts";
 import {
+  DEFAULT_JSONL_TAIL_BYTES,
+  jsonlLines,
+  readJsonlTailSync,
+} from "../../shared/src/jsonl.ts";
+import {
   criterionFor,
   costMultiple,
   loadRoster,
@@ -95,6 +99,7 @@ import {
   type Routes,
 } from "./routes.ts";
 import { dispatchStats } from "./dispatch-stats.ts";
+import { appendLedgerLine, ledgerLines, rotateRunsLog } from "./ledger.ts";
 import {
   parseSince,
   replayStats,
@@ -169,7 +174,7 @@ const LOG_FILE = join(STATE_DIR, "runs.jsonl");
 const IMPORTED_RECORD_FILE = join(STATE_DIR, "imported-record.json");
 const ROUTING_RECORD_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const ROUTING_RECORD_MIN_RUNS = 3;
-const ROUTING_LOG_TAIL_BYTES = 4 * 1024 * 1024;
+const ROUTING_LOG_TAIL_BYTES = DEFAULT_JSONL_TAIL_BYTES;
 const RecordExportSchema = z.strictObject({
   schema: z.literal(1),
   host: z.string().min(1),
@@ -718,17 +723,11 @@ async function routingCriteria(
   failure?: string;
 }> {
   const current = epochMilliseconds();
-  const loaded = await attempt(async () => {
+  const loaded = await attempt(() => {
     const gradeCounts = gradeTally();
-    let complete = "";
-    if (existsSync(LOG_FILE)) {
-      const size = statSync(LOG_FILE).size;
-      const start = Math.max(0, size - ROUTING_LOG_TAIL_BYTES);
-      const tail = await Bun.file(LOG_FILE).slice(start, size).text();
-      const newline = tail.indexOf("\n");
-      if (start > 0) complete = newline < 0 ? "" : tail.slice(newline + 1);
-      else complete = tail;
-    }
+    const complete = existsSync(LOG_FILE)
+      ? readJsonlTailSync(LOG_FILE, ROUTING_LOG_TAIL_BYTES).text
+      : "";
     return {
       throughput: throughputStats(complete, {
         now: current,
@@ -1467,11 +1466,11 @@ async function pickFor(
 // --- state: active markers and the log -------------------------------------------------------------
 
 function appendLog(record: Record<string, unknown>): void {
-  mkdirSync(STATE_DIR, { recursive: true });
-  appendFileSync(
-    LOG_FILE,
+  const appended = appendLedgerLine(
+    STATE_DIR,
     `${JSON.stringify({ schema: SCHEMA, ...record })}\n`,
   );
+  if (!appended.ok) fatal(`cannot append to ${LOG_FILE}: ${appended.error}`);
 }
 
 function alive(pid: number): boolean {
@@ -3898,9 +3897,24 @@ const quantile = (xs: number[], q: number): number | undefined => {
     : s[Math.min(s.length - 1, Math.floor(q * s.length))];
 };
 
-function perChoice(lines: Logged[]): Record<string, unknown> {
+function perChoice(
+  lines: Logged[],
+  grades: Map<string, z.output<typeof GradeLine>>,
+): Record<string, unknown> {
   const runs = lines.filter((l) => l.kind === "run");
-  const tally = gradeTally();
+  const tally = new Map<string, Record<Grade, number>>();
+  for (const logged of runs) {
+    const storedGrade =
+      logged.run_id === undefined ? undefined : grades.get(logged.run_id);
+    if (storedGrade === undefined) continue;
+    const counts = tally.get(logged.pick.choice) ?? {
+      pass: 0,
+      partial: 0,
+      fail: 0,
+    };
+    counts[storedGrade.grade] += 1;
+    tally.set(logged.pick.choice, counts);
+  }
   const ids = [...new Set(runs.map((l) => l.pick.choice))];
   return Object.fromEntries(
     ids.map((id) => {
@@ -3929,15 +3943,26 @@ function perChoice(lines: Logged[]): Record<string, unknown> {
   );
 }
 
+function parseLogLines(lines: Iterable<string>): Logged[] {
+  const records: Logged[] = [];
+  for (const line of lines) {
+    const parsed = jsonOf(LogLine).safeParse(line);
+    if (parsed.success) records.push(parsed.data);
+  }
+  return records;
+}
+
+/** Recent dispatch readers stay bounded to the live ledger tail. */
 function readLog(): Logged[] {
   if (!existsSync(LOG_FILE)) return [];
-  return readFileSync(LOG_FILE, "utf8")
-    .split("\n")
-    .filter((l) => l !== "")
-    .flatMap((l) => {
-      const p = jsonOf(LogLine).safeParse(l);
-      return p.success ? [p.data] : [];
-    });
+  return parseLogLines(
+    jsonlLines(readJsonlTailSync(LOG_FILE, ROUTING_LOG_TAIL_BYTES).text),
+  );
+}
+
+/** Full-history commands stream archives followed by the live ledger. */
+function readAllLog(): Logged[] {
+  return parseLogLines(ledgerLines(STATE_DIR));
 }
 
 type RunState = "running" | "returned" | "done" | "failed" | "abandoned";
@@ -3986,6 +4011,11 @@ function collectDeadMarkers(dryRun = false): {
 
 function gcCommand(dryRun: boolean): number {
   const result = collectDeadMarkers(dryRun);
+  if (!dryRun) {
+    const rotation = rotateRunsLog(STATE_DIR);
+    if (rotation.error !== undefined)
+      fatal(`cannot rotate ${LOG_FILE}: ${rotation.error}`);
+  }
   if (dryRun)
     process.stdout.write(
       `agx ledger gc: ${result.found === 0 ? "no stale markers" : `would mark ${result.found} abandoned and remove ${result.found} marker(s)`}\n`,
@@ -4130,14 +4160,27 @@ const GradeLine = z.looseObject({
 });
 
 /** The latest grade per run_id (a regrade replaces the earlier one). */
-function readGrades(): Map<string, z.output<typeof GradeLine>> {
+function gradesFrom(
+  lines: Iterable<string>,
+): Map<string, z.output<typeof GradeLine>> {
   const grades = new Map<string, z.output<typeof GradeLine>>();
-  if (!existsSync(LOG_FILE)) return grades;
-  for (const l of readFileSync(LOG_FILE, "utf8").split("\n")) {
+  for (const l of lines) {
     const p = jsonOf(GradeLine).safeParse(l);
     if (p.success) grades.set(p.data.run_id, p.data);
   }
   return grades;
+}
+
+function readGrades(): Map<string, z.output<typeof GradeLine>> {
+  if (!existsSync(LOG_FILE))
+    return new Map<string, z.output<typeof GradeLine>>();
+  return gradesFrom(
+    jsonlLines(readJsonlTailSync(LOG_FILE, ROUTING_LOG_TAIL_BYTES).text),
+  );
+}
+
+function readAllGrades(): Map<string, z.output<typeof GradeLine>> {
+  return gradesFrom(ledgerLines(STATE_DIR));
 }
 
 const WaiverLine = z.looseObject({
@@ -4147,14 +4190,25 @@ const WaiverLine = z.looseObject({
 });
 
 /** Run ids recorded as not gradable, each with its reason (a waiver is never counted as a grade). */
-function readWaivers(): Set<string> {
+function waiversFrom(lines: Iterable<string>): Set<string> {
   const waived = new Set<string>();
-  if (!existsSync(LOG_FILE)) return waived;
-  for (const l of readFileSync(LOG_FILE, "utf8").split("\n")) {
+  for (const l of lines) {
     const p = jsonOf(WaiverLine).safeParse(l);
     if (p.success) waived.add(p.data.run_id);
   }
   return waived;
+}
+
+function readWaivers(): Set<string> {
+  return existsSync(LOG_FILE)
+    ? waiversFrom(
+        jsonlLines(readJsonlTailSync(LOG_FILE, ROUTING_LOG_TAIL_BYTES).text),
+      )
+    : new Set();
+}
+
+function readAllWaivers(): Set<string> {
+  return waiversFrom(ledgerLines(STATE_DIR));
 }
 
 // O3 (Tiger ledger, owner 2026-10-06 「tiger styleが徹底されているべき。fail firstでなければ」): a
@@ -4313,7 +4367,9 @@ function loggedBrief(logged: Logged): string | undefined {
 
 async function grade(runId: string, evidencePath: string): Promise<number> {
   const roster = await loadRosterOrDie();
-  const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
+  const logged = readAllLog().find(
+    (l) => l.kind === "run" && l.run_id === runId,
+  );
   if (logged === undefined)
     fatal(`no run ${runId} in ${LOG_FILE} (agx ledger stats lists the log)`);
   if (!existsSync(evidencePath))
@@ -4377,7 +4433,9 @@ function recordWaiver(runId: string, reason: string, by?: "router") {
 }
 
 function waive(runId: string, reason: string): number {
-  const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
+  const logged = readAllLog().find(
+    (l) => l.kind === "run" && l.run_id === runId,
+  );
   if (logged === undefined)
     fatal(`no run ${runId} in ${LOG_FILE} (agx ledger stats lists the log)`);
   const record = recordWaiver(runId, reason);
@@ -4392,7 +4450,7 @@ function ack(
   note: string | undefined,
 ): number {
   const resolved = resolveRunId(runId);
-  const logged = readLog().find(
+  const logged = readAllLog().find(
     (line) => line.kind === "run" && line.run_id === resolved,
   );
   if (logged === undefined)
@@ -4417,12 +4475,14 @@ function stats(flags: {
   grading: boolean;
   check: boolean;
   replay: string | undefined;
+  all: boolean;
 }): number {
-  const allLines = readLog();
-  const logText = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf8") : "";
+  const allLines = readAllLog();
+  const allGrades = readAllGrades();
+  const allWaivers = readAllWaivers();
   const nowMs = epochMilliseconds();
-  const sinceMs = parseSince(flags.since, nowMs);
-  if (!Number.isFinite(sinceMs))
+  const sinceMs = flags.all ? 0 : parseSince(flags.since, nowMs);
+  if (!flags.all && !Number.isFinite(sinceMs))
     fatal(
       `invalid --since value '${flags.since ?? ""}': use an ISO instant or duration such as 24h`,
     );
@@ -4440,7 +4500,7 @@ function stats(flags: {
     return at !== undefined && at >= sinceMs && at <= nowMs;
   });
   const routePicks = dispatchStats({
-    log: logText,
+    log: ledgerLines(STATE_DIR),
     now: nowMs,
     sinceMs,
   });
@@ -4469,21 +4529,17 @@ function stats(flags: {
       p50: quantile(latency, 0.5),
       p95: quantile(latency, 0.95),
     },
-    per_choice: perChoice(lines),
+    per_choice: perChoice(lines, allGrades),
     // O3: finished runs still owed a grade or a waiver, over every cwd
-    ungraded: (() => {
-      const graded = readGrades();
-      const waived = readWaivers();
-      return lines.filter(
-        (l) =>
-          l.kind === "run" &&
-          l.run_id !== undefined &&
-          !graded.has(l.run_id) &&
-          !waived.has(l.run_id),
-      ).length;
-    })(),
+    ungraded: lines.filter(
+      (l) =>
+        l.kind === "run" &&
+        l.run_id !== undefined &&
+        !allGrades.has(l.run_id) &&
+        !allWaivers.has(l.run_id),
+    ).length,
   };
-  const throughput = throughputStats(logText, {
+  const throughput = throughputStats(ledgerLines(STATE_DIR), {
     now: nowMs,
     sinceMs,
     grading: flags.grading,
@@ -4497,7 +4553,7 @@ function stats(flags: {
           );
           if (!candidate.success)
             fatal(`invalid candidate JSON: ${flags.replay}`);
-          return replayStats(logText, candidate.data, {
+          return replayStats(ledgerLines(STATE_DIR), candidate.data, {
             now: nowMs,
             sinceMs,
             grading: false,
@@ -4505,7 +4561,7 @@ function stats(flags: {
         })();
   const report = {
     ...legacy,
-    window: flags.since ?? "24h",
+    window: flags.all ? "all" : (flags.since ?? "24h"),
     throughput,
     legacy,
     ...(replay === undefined ? {} : { replay }),
@@ -4524,14 +4580,21 @@ function exportRecord(since: string, out: string | undefined): number {
     fatal(
       `invalid --since value '${since}': use an ISO instant or duration such as 7d`,
     );
-  const logText = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf8") : "";
   const candidate = RecordExportSchema.safeParse({
     schema: 1,
     host: hostname(),
     exported_at: now(),
     window: since,
-    per_row: perRowRecord(logText, { now: nowMs, sinceMs, grading: false }),
-    per_tag: perTagRecord(logText, { now: nowMs, sinceMs, grading: false }),
+    per_row: perRowRecord(ledgerLines(STATE_DIR), {
+      now: nowMs,
+      sinceMs,
+      grading: false,
+    }),
+    per_tag: perTagRecord(ledgerLines(STATE_DIR), {
+      now: nowMs,
+      sinceMs,
+      grading: false,
+    }),
   });
   if (!candidate.success)
     fatal(
@@ -4637,14 +4700,12 @@ const ExportStatsSchema = z.looseObject({
 });
 
 const readExportRuns = (): ExportRun[] => {
-  if (!existsSync(LOG_FILE)) return [];
-  return readFileSync(LOG_FILE, "utf8")
-    .split("\n")
-    .filter((line) => line !== "")
-    .flatMap((line) => {
-      const parsed = jsonOf(ExportRunLine).safeParse(line);
-      return parsed.success ? [parsed.data] : [];
-    });
+  const records: ExportRun[] = [];
+  for (const line of ledgerLines(STATE_DIR)) {
+    const parsed = jsonOf(ExportRunLine).safeParse(line);
+    if (parsed.success) records.push(parsed.data);
+  }
+  return records;
 };
 
 const latestGrades = (): Map<
@@ -4652,14 +4713,13 @@ const latestGrades = (): Map<
   { grade: Grade; confidence: number | null }
 > => {
   const result = new Map<string, { grade: Grade; confidence: number | null }>();
-  if (!existsSync(LOG_FILE)) return result;
   const schema = z.looseObject({
     kind: z.literal("grade"),
     run_id: z.string(),
     grade: GradeEnum,
     confidence: z.number().optional(),
   });
-  for (const line of readFileSync(LOG_FILE, "utf8").split("\n")) {
+  for (const line of ledgerLines(STATE_DIR)) {
     const parsed = jsonOf(schema).safeParse(line);
     if (parsed.success)
       result.set(parsed.data.run_id, {
@@ -4672,8 +4732,7 @@ const latestGrades = (): Map<
 
 const latestWaivers = (): Map<string, string> => {
   const result = new Map<string, string>();
-  if (!existsSync(LOG_FILE)) return result;
-  for (const line of readFileSync(LOG_FILE, "utf8").split("\n")) {
+  for (const line of ledgerLines(STATE_DIR)) {
     const parsed = jsonOf(WaiverLine).safeParse(line);
     if (parsed.success) result.set(parsed.data.run_id, parsed.data.reason);
   }
@@ -4948,7 +5007,9 @@ async function resumeCommand(
 ): Promise<number> {
   const roster = await loadRosterOrDie();
   const runId = resolveRunId(id);
-  const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
+  const logged = readAllLog().find(
+    (l) => l.kind === "run" && l.run_id === runId,
+  );
   if (logged === undefined)
     fatal(`no run ${id} in ${LOG_FILE} (agx ledger stats lists the log)`);
   const worker = logged.worker;
@@ -5495,6 +5556,10 @@ async function parseAgx() {
                 description:
                   "window start as ISO instant or duration (default 24h)",
               },
+              all: {
+                type: Boolean,
+                description: "include every archived and live run record",
+              },
               grading: {
                 type: Boolean,
                 description: "include grading overhead and estimated saves",
@@ -5679,7 +5744,7 @@ async function detachDispatch(
     platform,
     unit,
     cwd: resolve(flags.cd),
-    command: [process.execPath, join(import.meta.dir, "agx.ts"), ...childArgs],
+    command: [process.execPath, join(import.meta.dir, "main.ts"), ...childArgs],
     env: { ...process.env, HOME: process.env.HOME ?? homedir() },
     logDir,
   });
@@ -5709,6 +5774,9 @@ async function detachDispatch(
 async function main(): Promise<number | undefined> {
   if (argv.command === "dispatch") {
     const gc = collectDeadMarkers();
+    const rotation = rotateRunsLog(STATE_DIR);
+    if (rotation.error !== undefined)
+      fatal(`cannot rotate ${LOG_FILE}: ${rotation.error}`);
     if (gc.removed > 0)
       dispatchError(
         `agx: marked ${gc.removed} abandoned run(s) and removed ${gc.removed} stale marker(s)`,
@@ -5818,7 +5886,7 @@ async function main(): Promise<number | undefined> {
         `${JSON.stringify(
           listTickets(
             root,
-            readLog().filter((line) => line.kind === "run"),
+            readAllLog().filter((line) => line.kind === "run"),
           ),
         )}\n`,
       );
@@ -5855,11 +5923,13 @@ async function main(): Promise<number | undefined> {
   if (argv.command === "ls") return ls();
   if (argv.command === "doctor") return doctor();
   if (argv.command === "stats") {
-    const { since, grading, check, replay } = argv.flags;
+    const { since, all, grading, check, replay } = argv.flags;
     if (since === "" || replay === "") fatal("a value is required");
+    if (all === true && since !== undefined) fatal("choose --all or --since");
     if (check === true && grading !== true) fatal("--check requires --grading");
     return stats({
       since,
+      all: all ?? false,
       grading: grading ?? false,
       check: check ?? false,
       replay,
@@ -5923,7 +5993,7 @@ async function main(): Promise<number | undefined> {
  *  a coordinator names a worker the way its vendor does (owner 2026-10-06). An unknown id is passed
  *  through, so grade / waive say "no run"; a prefix several runs share is refused, naming them. */
 function resolveRunId(id: string): string {
-  const runs = readLog().filter((l) => l.kind === "run");
+  const runs = readAllLog().filter((l) => l.kind === "run");
   if (id === "" || runs.some((l) => l.run_id === id)) return id;
   const normalizedId = /^agt[_-]/u.test(id)
     ? `agt_${normalizeDisplayName(id.slice(4))}`
@@ -5972,7 +6042,7 @@ function resultCommand(
   showBrief: boolean,
 ): number {
   const resolved = resolveRunId(id);
-  const logged = readLog().find(
+  const logged = readAllLog().find(
     (l) => l.kind === "run" && l.run_id === resolved,
   );
   if (logged === undefined)

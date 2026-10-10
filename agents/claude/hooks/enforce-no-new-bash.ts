@@ -1,3 +1,4 @@
+import { hookJson, hookStderr } from "./lib.ts";
 // PreToolUse gate (matcher: Write|Edit|MultiEdit) — NO-NEW-BASH, made deterministic.
 //
 // The rule lives in writing-bun-scripts (THE LAW, gate BG0): local automation is Bun
@@ -84,7 +85,7 @@ function applyEdits(text: string, edits: readonly unknown[]): string | null {
 function main(): void {
   const payload = readStdinJson();
   if (payload === undefined) {
-    process.stderr.write("enforce-no-new-bash: invalid JSON payload\n");
+    hookStderr("enforce-no-new-bash: invalid JSON payload\n");
     process.exitCode = 1;
     return;
   }
@@ -138,7 +139,7 @@ function main(): void {
     ? ""
     : " It also carries no `# shim: <bootstrap|hook-entry|exec-wrapper|vendored>` line.";
   process.stdout.write(
-    JSON.stringify({
+    hookJson({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         additionalContext:

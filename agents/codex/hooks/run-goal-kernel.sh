@@ -8,7 +8,11 @@ if [ "${1:-}" = "--enforce" ]; then
   shift
 fi
 
-hook=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)/goal-kernel.ts
+hook=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)/goal-kernel.ts
+# shellcheck source=agents/hooks/slug.sh
+. "$(dirname -- "$hook")/../../hooks/slug.sh"
+HOOK_SLUG=$(hook_slug "$(dirname -- "$hook")" "goal-kernel.ts")
+export HOOK_SLUG
 
 goal_kernel_is_unconfigured() {
   scan_root=$(pwd -P 2> /dev/null) || return 1
@@ -41,9 +45,9 @@ fi
 
 if [ "$mode" = "enforce" ]; then
   goal_kernel_is_unconfigured && exit 0
-  printf 'goal-kernel: Bun runtime required; configured or indeterminate pre-effect event blocked\n' >&2
+  hook_stderr 'Bun runtime required; configured or indeterminate pre-effect event blocked'
   exit 2
 fi
-printf 'goal-kernel: Bun runtime required; hook event was not observed\n' >&2
+hook_stderr 'Bun runtime required; hook event was not observed'
 printf '{}\n'
 exit 0

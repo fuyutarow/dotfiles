@@ -1,3 +1,4 @@
+import { hookJson, hookStderr } from "./lib.ts";
 // Stop hook: enforce the user's Japanese reply preference against the final assistant message.
 // Safety: FAIL OPEN on every hook error (including unreadable/malformed transcripts), with one
 // stderr line explaining the failure. A broken language check must never trap a session.
@@ -28,9 +29,7 @@ const BLOCK_REASON =
   "直前の返答が英語です。日本語で書き直してください（コードや識別子は原文のままで構いません）。";
 
 function stderrLine(reason: string): void {
-  process.stderr.write(
-    `enforce-reply-language: ${reason.replaceAll(/\s+/gu, " ")}\n`,
-  );
+  hookStderr(`enforce-reply-language: ${reason.replaceAll(/\s+/gu, " ")}\n`);
 }
 
 type DecisionAudit = {
@@ -152,7 +151,7 @@ async function main(audit: DecisionAudit): Promise<number> {
     return recordDecision(audit, "allow", "no_language_violation");
 
   process.stdout.write(
-    `${JSON.stringify({ decision: "block", reason: BLOCK_REASON })}\n`,
+    `${hookJson({ decision: "block", reason: BLOCK_REASON })}\n`,
   );
   return recordDecision(audit, "block", "english_prose");
 }

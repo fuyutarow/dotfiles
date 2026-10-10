@@ -1,3 +1,4 @@
+import { hookJson, hookStderr } from "./lib.ts";
 // PreToolUse gate — refuse tool calls that may write when storage headroom is gone.
 //
 // Why a hook and not prose: 2026-09-21 23:50 JST the Windows host drive that holds the WSL2
@@ -1138,7 +1139,7 @@ async function collectBudgetStatus(
 async function main(): Promise<void> {
   const payload = readStdinJson();
   if (payload === undefined) {
-    process.stderr.write("storage-headroom: invalid JSON payload\n");
+    hookStderr("storage-headroom: invalid JSON payload\n");
     process.exitCode = 1;
     return;
   }
@@ -1283,7 +1284,7 @@ async function main(): Promise<void> {
   }
   if (warnings.length > 0) {
     process.stdout.write(
-      `${JSON.stringify({
+      `${hookJson({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           additionalContext: warnings.join("\n"),

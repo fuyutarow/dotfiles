@@ -1,3 +1,4 @@
+import { hookStderr } from "./lib.ts";
 // Stop hook — audit-theater guard.
 //
 // BLOCKS (exit 2) when the assistant's own prose-audit / style-review report uses
@@ -58,7 +59,7 @@ async function main(): Promise<number> {
   }
   if (!hit) return 0;
 
-  console.error(
+  hookStderr(
     [
       "Your audit report used self-justifying or unbounded gate language.",
       "Rewrite with: target / violation / cited evidence / replacement / unchecked risk.",

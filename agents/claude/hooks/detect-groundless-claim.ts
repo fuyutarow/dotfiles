@@ -1,3 +1,4 @@
+import { hookJson } from "./lib.ts";
 // Stop hook — groundless-claim guard.
 //
 // WARNS (never blocks) when the assistant's final text this turn makes a
@@ -91,7 +92,7 @@ async function main(): Promise<number> {
     "Cite the 分母: what was checked against what (照合/正本), a file:line, git show/log/diff, a URL, or name the 検証手段/監査 — or soften the claim.",
   ].join("\n");
 
-  process.stdout.write(JSON.stringify({ systemMessage }));
+  process.stdout.write(hookJson({ systemMessage }));
   return 0;
 }
 

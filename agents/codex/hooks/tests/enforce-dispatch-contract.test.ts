@@ -123,7 +123,7 @@ describe("Codex spawn_agent model+effort guard", () => {
     const result = run(payload);
     expect(result.code).toBe(2);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("dispatch-contract:");
+    expect(result.stderr).toContain("[codex-dispatch-contract]");
   });
 
   test("the generation floor is data: a custom floor file moves what the dispatch gate allows", () => {

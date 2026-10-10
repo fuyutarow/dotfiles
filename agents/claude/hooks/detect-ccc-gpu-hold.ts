@@ -1,3 +1,4 @@
+import { hookJson } from "./lib.ts";
 // Advisory hook (PreToolUse matcher "Bash", and UserPromptSubmit) — alert when the ccc
 // (cocoindex-code) daemon has been INDEXING on the GPU for a long time. NEVER blocks: it adds
 // context for the model and a systemMessage for the user, and exits 0 on every error (register
@@ -221,7 +222,7 @@ async function main(): Promise<void> {
       "stopping it kills every ccc search.",
   ].join("\n");
   process.stdout.write(
-    `${JSON.stringify({
+    `${hookJson({
       systemMessage: `ccc has been indexing ${projects} on the GPU for ${minutes} min — check that project's index scope`,
       hookSpecificOutput: { hookEventName: event, additionalContext: context },
     })}\n`,

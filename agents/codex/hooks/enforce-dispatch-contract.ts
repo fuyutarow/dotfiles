@@ -1,3 +1,4 @@
+import { hookJson, hookStderr } from "./lib.ts";
 // Codex PreToolUse gate for spawn_agent (hook tool name "Agent"): every subagent names its model
 // AND reasoning_effort explicitly, as one of the owner's allowed pairs (ALLOWED below), and declares
 // exactly one resource class. Nothing is injected. Fail closed: malformed input exits 2.
@@ -102,13 +103,13 @@ function pairProblem(
 }
 
 function denyMalformed(reason: string): never {
-  process.stderr.write(`dispatch-contract: ${reason}\n`);
+  hookStderr(`dispatch-contract: ${reason}\n`);
   process.exit(2);
 }
 
 function output(decision: "allow" | "deny", reason: string): void {
   process.stdout.write(
-    `${JSON.stringify({
+    `${hookJson({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: decision,

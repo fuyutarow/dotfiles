@@ -71,6 +71,7 @@ import { dirname } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText } from "../agents/hooks/zod.ts";
+import { loadSlugs } from "../agents/hooks/slugs.ts";
 import { loadRoster, rosterPolicy } from "../agents/models/roster.ts";
 import { RENDERED } from "./config-registry.ts";
 import {
@@ -79,6 +80,7 @@ import {
   HooksConfigSchema,
   type Vendor,
   wire,
+  commandFor,
 } from "./hook-registry.ts";
 
 function print(line: string): void {
@@ -121,7 +123,27 @@ function withHooks(
       `FATAL: ${from}: \`hooks\` is not a hook config — ${hooks.error.message}`,
     );
   }
-  return { ...config, hooks: wire(hooks.data, specs, vendor) };
+  const identities = loadSlugs(`${dotfiles}/agents/hooks/hooks.toml`);
+  if (identities instanceof Error)
+    fatal(`FATAL: hook slug registry: ${identities.message}`);
+  const wired = wire(hooks.data, specs, vendor);
+  for (const hook of Object.values(wired).flatMap((groups) =>
+    groups.flatMap((group) => group.hooks),
+  )) {
+    if (typeof hook.command !== "string") continue;
+    const command = hook.command;
+    const identity = identities.identities.find(
+      (h) =>
+        h.commands.includes(command) ||
+        specs.some(
+          (spec) =>
+            h.script === `hooks/${spec.script}` && commandFor(spec) === command,
+        ),
+    );
+    if (identity !== undefined)
+      hook.command = `HOOK_SLUG=${identity.slug} ${command}`;
+  }
+  return { ...config, hooks: wired };
 }
 
 const json = (v: unknown): string => `${JSON.stringify(v, null, 2)}\n`;

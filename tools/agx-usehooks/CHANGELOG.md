@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 — 2026-10-10
+
+- Accept an optional project-supplied kebab-case slug as the second argument to onPrompt/onStop; explicit slugs win.
+- Preserve existing one-argument calls with a default derived from the project directory basename plus `-prompt` or `-stop`, converted to kebab case.
+- Prefix injected context, Stop reasons and failure diagnostics with `[<slug>]`.
+
 ## 0.5.1 — 2026-10-10
 
 - Select runs through the shared forward-compatible agx marker reader and expose unreadable-marker counts through `scanRuns`.

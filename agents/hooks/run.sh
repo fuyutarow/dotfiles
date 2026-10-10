@@ -13,7 +13,7 @@
 #   --fail-closed print a PreToolUse deny JSON — policy gates: never fail open
 set -u
 
-dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 
 mode=open
 if [ "${1:-}" = "--fail-closed" ]; then
@@ -21,6 +21,12 @@ if [ "${1:-}" = "--fail-closed" ]; then
   shift
 fi
 hook="$dir/${1:?usage: run.sh [--fail-closed] <hook>.ts}"
+slug_lib="$dir/slug.sh"
+[ -f "$slug_lib" ] || slug_lib="$dir/../../hooks/slug.sh"
+# shellcheck source=agents/hooks/slug.sh
+. "$slug_lib"
+HOOK_SLUG=$(hook_slug "$dir" "${1}")
+export HOOK_SLUG
 
 for c in bun "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun \
   /home/linuxbrew/.linuxbrew/bin/bun /usr/local/bin/bun; do
@@ -30,7 +36,6 @@ for c in bun "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun \
 done
 
 if [ "$mode" = "closed" ]; then
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"hook runner: no bun >= 1.4 found to run %s — install or upgrade bun (brew install bun), then mise run doctor"}}\n' \
-    "$(basename "$hook")"
+  hook_deny "hook runner: no bun >= 1.4 found to run $(basename "$hook") — install or upgrade bun (brew install bun), then mise run doctor"
 fi
 exit 0

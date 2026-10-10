@@ -1,3 +1,4 @@
+import { hookJson } from "./lib.ts";
 // UserPromptExpansion hook (matcher: quote) — runs /quote to completion HERE and returns
 // decision:"block", so the turn ends without an inference call.
 //
@@ -45,7 +46,7 @@ const TURN_SEPARATOR = "\n\n---\n\n";
 // would let a request past this check just to fail confusingly later.
 
 function block(reason: string): never {
-  console.log(JSON.stringify({ decision: "block", reason }));
+  console.log(hookJson({ decision: "block", reason }));
   process.exit(0);
 }
 

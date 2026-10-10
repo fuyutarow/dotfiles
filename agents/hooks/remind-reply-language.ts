@@ -1,3 +1,4 @@
+import { hookStderr, hookSlug } from "./lib.ts";
 // UserPromptSubmit reminder for Claude Code: carry the configured Japanese reply preference
 // into each prompt as additional context. Errors fail open so a broken settings file cannot stop
 // prompt submission.
@@ -17,10 +18,8 @@ await onPrompt(() => {
     readFileSync(join(home, ".claude", "settings.json"), "utf8"),
   );
   if (settings === undefined) {
-    process.stderr.write(
-      "remind-reply-language: malformed ~/.claude/settings.json\n",
-    );
+    hookStderr("remind-reply-language: malformed ~/.claude/settings.json\n");
     return false;
   }
   return strAt(settings, "language") === "japanese" ? CONTEXT : false;
-});
+}, hookSlug());

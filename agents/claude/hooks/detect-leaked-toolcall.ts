@@ -1,3 +1,4 @@
+import { hookMessage } from "./lib.ts";
 // Stop hook — "leaked tool-call" early-warning.
 //
 // Detects the Opus-4.x serialization regression where a tool call is emitted as PLAIN
@@ -47,7 +48,7 @@ async function main(): Promise<void> {
   await attempt(() => {
     writeFileSync("/dev/tty", "\u0007");
   }); // terminal bell (best-effort; no tty)
-  const msg = "tool-call が漏れました — Esc Esc で /rewind を";
+  const msg = hookMessage("tool-call が漏れました — Esc Esc で /rewind を");
   await attempt(() => {
     if (process.platform === "darwin") {
       spawnSync(

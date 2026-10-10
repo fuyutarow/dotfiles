@@ -14,7 +14,16 @@ import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 
 // The protocol primitives are vendor-neutral and live with the portable hooks; re-exported so
 // Claude-only hooks keep importing everything from ./lib.ts.
-export { decidePre, findExe, readStdinJson } from "../../hooks/lib.ts";
+export {
+  decidePre,
+  findExe,
+  readStdinJson,
+  readBoundedStdinJson,
+  hookJson,
+  hookMessage,
+  hookStderr,
+  hookSlug,
+} from "../../hooks/lib.ts";
 
 export type TranscriptEntry = {
   type?: string | undefined;

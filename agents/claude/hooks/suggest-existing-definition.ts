@@ -1,3 +1,4 @@
+import { hookJson } from "./lib.ts";
 // PostToolUse (Write|Edit|MultiEdit) — the moment a NEW function or type is written, check whether
 // the repository already has one that does the same thing, and say so to the model.
 //
@@ -138,7 +139,7 @@ async function main(): Promise<void> {
   }
   if (findings.length === 0) return;
   console.log(
-    JSON.stringify({
+    hookJson({
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
         additionalContext:

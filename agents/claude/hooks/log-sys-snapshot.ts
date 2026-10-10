@@ -1,3 +1,4 @@
+import { hookJson } from "./lib.ts";
 // Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
 // (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
@@ -83,7 +84,7 @@ async function main(): Promise<void> {
 
   mkdirSync(STATE_DIR, { recursive: true });
   writeFileSync(statePath, `${now}\n`);
-  process.stdout.write(`${JSON.stringify({ systemMessage: shown })}\n`);
+  process.stdout.write(`${hookJson({ systemMessage: shown })}\n`);
 }
 
 await attempt(main); // FAIL OPEN — a missing cache or state file just means no line this time

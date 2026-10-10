@@ -1,4 +1,11 @@
-/** Claude Code protocol adapter; semantic contract lives in continuing-long-running-tasks. */
-import { runCompactHook } from "../../skills/continuing-long-running-tasks/scripts/compact-hook";
+/** claude adapter; continuation semantics remain in the continuity skill. Fail open. */
+import { handleCompactHook } from "../../skills/continuing-long-running-tasks/scripts/compact-hook";
+import { attempt } from "../../hooks/attempt.ts";
+import { hookJson, readBoundedStdinJson } from "./lib.ts";
+import { parseJson } from "../../hooks/narrow.ts";
 
-runCompactHook("claude");
+await attempt(() => {
+  const output = handleCompactHook("claude", readBoundedStdinJson());
+  if (output !== undefined)
+    process.stdout.write(`${hookJson(parseJson(output))}\n`);
+});

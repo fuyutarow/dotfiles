@@ -135,6 +135,7 @@ depends = [
   "lint:oxlint-policy",
   "vendor:deps:check",
   "lint:one-writer",
+  "lint:hook-slug",
   "lint:config-map",
   "lint:live-refs",
   "typecheck",
@@ -144,6 +145,11 @@ depends = [
   "lint:harness-scope",
   "lint:gates",
 ]
+
+[tasks."lint:hook-slug"]
+dir = "{{config_root}}"
+description = "Require unique hook slugs, prefixed messages and explicit external ownership"
+run = "bun scripts/lint-hook-slug.ts"
 
 [tasks."lint:md"]
 dir = "{{config_root}}"

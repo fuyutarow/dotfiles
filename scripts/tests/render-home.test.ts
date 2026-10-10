@@ -54,7 +54,7 @@ function writeOtherInputs(dir: string): void {
   writeFileSync(join(dir, "agents", "hooks", "gate.ts"), "// fixture\n");
   writeFileSync(
     join(dir, "agents", "hooks", "hooks.toml"),
-    '[[hook]]\nscript = "gate.ts"\nevent = "PreToolUse"\nmatcher = "Bash"\nfail_closed = true\nvendors = ["claude", "codex"]\n',
+    '[[hook]]\nslug = "gate"\nscript = "gate.ts"\nevent = "PreToolUse"\nmatcher = "Bash"\nfail_closed = true\nvendors = ["claude", "codex"]\n',
   );
 }
 
@@ -63,7 +63,7 @@ const GATE = {
   hooks: [
     {
       type: "command",
-      command: "sh ~/.agents/hooks/run.sh --fail-closed gate.ts",
+      command: "HOOK_SLUG=gate sh ~/.agents/hooks/run.sh --fail-closed gate.ts",
     },
   ],
 };

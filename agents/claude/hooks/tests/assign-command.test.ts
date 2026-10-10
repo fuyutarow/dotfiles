@@ -122,7 +122,9 @@ describe("assign-command: fleet_policy.toml resolution (2026-09-07 migration)", 
     const r = runHook(HOOK, payload("/assign dtr", projectDir));
     expect(r.code).toBe(0);
     const out = await decisionOf(r.stdout);
-    expect(out.additionalContext).toBe("PROJECT-LOCAL CHARTER");
+    expect(out.additionalContext).toBe(
+      "[assign-command] PROJECT-LOCAL CHARTER",
+    );
   });
 
   test("a role absent from the project's own fleet_policy.toml gets no context, even though the skill default configures it", async () => {

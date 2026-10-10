@@ -1,3 +1,4 @@
+import { hookJson } from "./lib.ts";
 // UserPromptSubmit hook (no matcher — this event supports none) implementing `/assign <role>`:
 // typed at the start of a prompt, it renames THIS session to "<project>-<role>_<suffix>" (the
 // same effect as `/rename`, via hookSpecificOutput.sessionTitle) and, if configured, delivers
@@ -44,7 +45,7 @@ import { attempt } from "../../hooks/attempt.ts";
 import { strAt } from "../../hooks/narrow.ts";
 
 function block(reason: string): never {
-  console.log(JSON.stringify({ decision: "block", reason }));
+  console.log(hookJson({ decision: "block", reason }));
   process.exit(0);
 }
 
@@ -55,7 +56,7 @@ function allow(sessionTitle: string, additionalContext: string | null): never {
   };
   if (additionalContext !== null && additionalContext !== "")
     hookSpecificOutput.additionalContext = additionalContext;
-  console.log(JSON.stringify({ hookSpecificOutput }));
+  console.log(hookJson({ hookSpecificOutput }));
   process.exit(0);
 }
 

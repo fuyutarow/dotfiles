@@ -12,6 +12,7 @@ function hook(
   input = "{}",
   event = "onPrompt",
   openStdin = false,
+  omitSlug = false,
 ) {
   const dir = mkdtempSync(join(tmpdir(), "agx-usehooks-runtime-"));
   const root = join(dir, "repo");
@@ -20,7 +21,7 @@ function hook(
   const path = join(dir, "hook.ts");
   writeFileSync(
     path,
-    `import { ${event} } from ${JSON.stringify(entry)}; await ${event}(async (ctx) => { ${body} });`,
+    `import { ${event} } from ${JSON.stringify(entry)}; await ${event}(async (ctx) => { ${body} }${omitSlug ? "" : ', "fixture-hook"'});`,
   );
   return { dir, root, path, input, openStdin };
 }
@@ -50,7 +51,7 @@ test("prompt joins only strings in one matching output block", async () => {
   expect(decodedJson(z.unknown(), result.stdout)).toEqual({
     hookSpecificOutput: {
       hookEventName: "UserPromptSubmit",
-      additionalContext: "one\ntwo",
+      additionalContext: "[fixture-hook] one\ntwo",
     },
   });
 });
@@ -63,7 +64,7 @@ test("stop blocks once and never blocks an active Stop", async () => {
   );
   expect(decodedJson(z.unknown(), first.stdout)).toEqual({
     decision: "block",
-    reason: "one\ntwo",
+    reason: "[fixture-hook] one\ntwo",
   });
   const active = await invoke(
     'return "one";',
@@ -75,7 +76,7 @@ test("stop blocks once and never blocks an active Stop", async () => {
 
 test("scalar strings and empty results share the same output contract", async () => {
   expect((await invoke('return "scalar";')).stdout).toContain(
-    '"additionalContext":"scalar"',
+    '"additionalContext":"[fixture-hook] scalar"',
   );
   for (const value of [
     "false",
@@ -172,7 +173,13 @@ test("context discovers ancestor repo root and preserves payload", async () => {
     out,
   );
   expect(
-    decodedJson(z.unknown(), result.hookSpecificOutput.additionalContext),
+    decodedJson(
+      z.unknown(),
+      result.hookSpecificOutput.additionalContext.replace(
+        "[fixture-hook] ",
+        "",
+      ),
+    ),
   ).toEqual({
     cwd,
     repoRoot: fixture.root,
@@ -181,3 +188,55 @@ test("context discovers ancestor repo root and preserves payload", async () => {
   expect(exit).toBe(0);
   rmSync(fixture.dir, { recursive: true, force: true });
 });
+
+test.each(["onPrompt", "onStop"])(
+  "%s derives a project/event slug for existing one-argument calls",
+  (event) => {
+    const fixture = hook('return "notice";', "{}", event, false, true);
+    const project = join(fixture.dir, "Firedancer Project");
+    const nested = join(project, "nested");
+    mkdirSync(join(project, ".git"), { recursive: true });
+    mkdirSync(nested);
+    const result = Bun.spawnSync([process.execPath, fixture.path], {
+      cwd: fixture.root,
+      stdin: Buffer.from(JSON.stringify({ cwd: nested })),
+      timeout: 5_000,
+    });
+    const suffix = event === "onStop" ? "stop" : "prompt";
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.toString()).toBe("");
+    expect(result.stdout.toString()).toContain(
+      `[firedancer-project-${suffix}] notice`,
+    );
+    expect(decodedJson(z.unknown(), result.stdout.toString())).toEqual(
+      event === "onStop"
+        ? { decision: "block", reason: "[firedancer-project-stop] notice" }
+        : {
+            hookSpecificOutput: {
+              hookEventName: "UserPromptSubmit",
+              additionalContext: "[firedancer-project-prompt] notice",
+            },
+          },
+    );
+    const malformed = Bun.spawnSync([process.execPath, fixture.path], {
+      cwd: nested,
+      stdin: Buffer.from("{"),
+      timeout: 5_000,
+    });
+    expect(malformed.exitCode).toBe(0);
+    expect(malformed.stdout.toString()).toBe("");
+    expect(malformed.stderr.toString()).toStartWith(
+      `[firedancer-project-${suffix}] `,
+    );
+    const noCwd = Bun.spawnSync([process.execPath, fixture.path], {
+      cwd: nested,
+      stdin: Buffer.from("{}"),
+      timeout: 5_000,
+    });
+    expect(noCwd.exitCode).toBe(0);
+    expect(noCwd.stdout.toString()).toContain(
+      `[firedancer-project-${suffix}] notice`,
+    );
+    rmSync(fixture.dir, { recursive: true, force: true });
+  },
+);

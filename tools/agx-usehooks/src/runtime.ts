@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
@@ -33,28 +33,50 @@ function repoRoot(cwd: string): string {
   return dir;
 }
 
-function failure(reason: string): void {
-  process.stderr.write(`agx-usehooks: ${reason.replaceAll(/\s+/gu, " ")}\n`);
+function message(slug: string, text: string): string {
+  return `[${slug}] ${text}`;
+}
+
+function failure(slug: string, reason: string): void {
+  process.stderr.write(`${message(slug, reason.replaceAll(/\s+/gu, " "))}\n`);
+}
+
+function defaultSlug(event: "UserPromptSubmit" | "Stop", cwd: string): string {
+  const name = basename(repoRoot(cwd))
+    .replaceAll(/([a-z0-9])([A-Z])/gu, "$1-$2")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/gu, "-")
+    .replaceAll(/^-+|-+$/gu, "");
+  let project = name === "" ? "project" : name;
+  if (/^[0-9]/u.test(project)) project = `project-${project}`;
+  return `${project}-${event === "Stop" ? "stop" : "prompt"}`;
 }
 
 async function run(
   event: "UserPromptSubmit" | "Stop",
   fn: Callback,
+  slug?: string,
 ): Promise<void> {
+  if (slug !== undefined && !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(slug)) {
+    failure("agx-usehooks", "hook slug must be kebab-case; fail open");
+    process.exit(0);
+  }
+  let effectiveSlug = slug ?? defaultSlug(event, process.cwd());
   const started = performance.now();
   const timer = setTimeout(() => {
-    failure("3 s budget exceeded; fail open");
+    failure(effectiveSlug, "3 s budget exceeded; fail open");
     process.exit(0);
   }, BUDGET_MS);
   const result = await attempt(async () => {
     const parsed = jsonOf(Payload).safeParse(await Bun.stdin.text());
     if (!parsed.success) return new Error("invalid hook payload; fail open");
+    const cwd = resolve(parsed.data.cwd ?? process.cwd());
+    effectiveSlug = slug ?? defaultSlug(event, cwd);
     if (
       parsed.data.hook_event_name !== undefined &&
       parsed.data.hook_event_name !== event
     )
       return new Error("wrong hook event; fail open");
-    const cwd = resolve(parsed.data.cwd ?? process.cwd());
     const value = await fn({
       cwd,
       repoRoot: repoRoot(cwd),
@@ -72,24 +94,28 @@ async function run(
     )
       return null;
     return event === "Stop"
-      ? { decision: "block", reason: text }
+      ? { decision: "block", reason: message(effectiveSlug, text) }
       : {
-          hookSpecificOutput: { hookEventName: event, additionalContext: text },
+          hookSpecificOutput: {
+            hookEventName: event,
+            additionalContext: message(effectiveSlug, text),
+          },
         };
   });
   clearTimeout(timer);
-  if (!result.ok) failure(errorMessage(result.error));
-  else if (result.value instanceof Error) failure(result.value.message);
+  if (!result.ok) failure(effectiveSlug, errorMessage(result.error));
+  else if (result.value instanceof Error)
+    failure(effectiveSlug, result.value.message);
   else if (result.value !== null)
     process.stdout.write(`${JSON.stringify(result.value)}\n`);
   process.exit(0);
 }
 
 /** Read stdin, call project code, and emit one additionalContext block; exits 0. */
-export function onPrompt(fn: Callback): Promise<void> {
-  return run("UserPromptSubmit", fn);
+export function onPrompt(fn: Callback, slug?: string): Promise<void> {
+  return run("UserPromptSubmit", fn, slug);
 }
 /** Read stdin and block once with project reasons; exits 0, including on failure. */
-export function onStop(fn: Callback): Promise<void> {
-  return run("Stop", fn);
+export function onStop(fn: Callback, slug?: string): Promise<void> {
+  return run("Stop", fn, slug);
 }

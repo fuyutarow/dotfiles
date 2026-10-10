@@ -11,16 +11,86 @@
 //     permissionDecision "deny"/"allow", permissionDecisionReason, and additionalContext.
 //     "ask" is Claude-only — Codex marks it a FAILED hook run — so a portable hook never asks.
 
-import { constants, readFileSync, statSync } from "node:fs";
+import { constants, readFileSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { parseJson, strAt } from "./narrow.ts";
+import { obj, parseJson, strAt } from "./narrow.ts";
 import { parseShell } from "./shell-syntax.ts";
+import { slugForScript } from "./slugs.ts";
+
+/** Registry identity, also passed by the renderer for launcher diagnostics. */
+export function hookSlug(): string {
+  return process.env.HOOK_SLUG ?? slugForScript(Bun.main);
+}
+
+export function hookMessage(text: string, slug = hookSlug()): string {
+  // Replace historic ad-hoc labels, preserving everything after them.
+  const old = text.replace(
+    /^(?:enforce-|detect-|remind-|log-|suggest-|record-)?(?:storage-headroom|model-floor|search-route|repo-bash-deny|reply-language|dispatch-contract|supervised-execution|official-execution|background-waits|no-new-bash|ccc-gpu-hold|goal-kernel|task-continuity|agx-usehooks):\s*/u,
+    "",
+  );
+  if (old.startsWith(`[${slug}] `)) return old;
+  return `[${slug}] ${old}`;
+}
+
+const MESSAGE_KEYS = new Set([
+  "permissionDecisionReason",
+  "reason",
+  "additionalContext",
+  "systemMessage",
+  "stopReason",
+]);
+
+/** Encode protocol JSON without altering decisions, event names or vendor-specific fields. */
+export function hookJson(value: unknown, slug = hookSlug()): string {
+  const root = obj(value);
+  if (root === undefined) return JSON.stringify(value);
+  const prefixFields = (
+    record: Record<string, unknown>,
+  ): Record<string, unknown> =>
+    Object.fromEntries(
+      Object.entries(record).map(([key, entry]) => [
+        key,
+        MESSAGE_KEYS.has(key) && typeof entry === "string"
+          ? hookMessage(entry, slug)
+          : entry,
+      ]),
+    );
+  const specific = obj(root.hookSpecificOutput);
+  return JSON.stringify({
+    ...prefixFields(root),
+    ...(specific === undefined
+      ? {}
+      : { hookSpecificOutput: prefixFields(specific) }),
+  });
+}
+
+/** Each stderr line is independently attributable, including multiline Stop diagnostics. */
+export function hookStderr(text: string, slug = hookSlug()): void {
+  for (const line of text.trimEnd().split("\n")) {
+    process.stderr.write(`${hookMessage(line, slug)}\n`);
+  }
+}
 
 // The event JSON as `unknown`: read fields through ./narrow.ts (obj/str/strAt/...), which return a
 // value only if it really has that type. It used to be `any`, which type-checked any field access.
 export function readStdinJson(): unknown {
   return parseJson(readFileSync(0, "utf8"));
+}
+
+/** Continuity hooks retain their existing 1 MiB input bound. */
+export function readBoundedStdinJson(maxBytes = 1_048_576): unknown {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  while (true) {
+    const chunk = Buffer.allocUnsafe(Math.min(65_536, maxBytes - total + 1));
+    const count = readSync(0, chunk, 0, chunk.length, null);
+    if (count === 0) break;
+    total += count;
+    if (total > maxBytes) return undefined;
+    chunks.push(chunk.subarray(0, count));
+  }
+  return parseJson(Buffer.concat(chunks, total).toString("utf8"));
 }
 
 // PreToolUse decision — print JSON and exit 0. `extra` merges into hookSpecificOutput
@@ -31,7 +101,7 @@ export function decidePre(
   extra: Record<string, unknown> = {},
 ): never {
   console.log(
-    JSON.stringify({
+    hookJson({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: decision,

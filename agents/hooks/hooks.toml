@@ -12,10 +12,15 @@
 # agents/hooks/lib.ts). A hook that reads a vendor's transcript, a vendor-only tool name, or
 # answers "ask" stays in that vendor's own dir (agents/claude/hooks, agents/codex/hooks).
 #
-# Fields: script (file in agents/hooks), event, matcher (optional), fail_closed (a policy gate
+# Slug: required, unique kebab-case identity used as [<slug>] on every visible message.
+# vendor_hook declares vendor-only identities; external lists third-party commands, owner and reason.
+# vendor_hook.script is relative to agents/; commands lists its exact hand-written registrations.
+# external.command is an exact allowlist match; an unlisted unowned command fails lint:hook-slug.
+# Fields: slug, script (file in agents/hooks), event, matcher (optional), fail_closed (a policy gate
 # must never fail open when bun is missing), timeout (seconds, optional), vendors.
 
 [[hook]]
+slug = "storage-headroom"
 script = "enforce-storage-headroom.ts"
 event = "PreToolUse"
 fail_closed = true
@@ -25,6 +30,7 @@ vendors = ["claude", "codex"]
 # model family are in model-floor.toml (sol >= 6.1, grok >= 4.7, ...), so a newer generation passes
 # without an edit. Both vendors, because a Codex session orders work from grok and claude too.
 [[hook]]
+slug = "model-floor"
 script = "enforce-model-floor.ts"
 event = "PreToolUse"
 matcher = "Bash"
@@ -32,6 +38,7 @@ fail_closed = true
 vendors = ["claude", "codex"]
 
 [[hook]]
+slug = "search-route"
 script = "enforce-search-route.ts"
 event = "PreToolUse"
 matcher = "Grep|Bash"
@@ -40,6 +47,7 @@ vendors = ["claude", "codex"]
 
 # Codex only: Claude Code enforces .claude/settings.json permissions.deny itself.
 [[hook]]
+slug = "repo-bash-deny"
 script = "enforce-repo-bash-deny.ts"
 event = "PreToolUse"
 matcher = "Bash"
@@ -48,8 +56,129 @@ vendors = ["codex"]
 
 # Claude only: remind each submitted prompt of the configured reply language.
 [[hook]]
+slug = "reply-language-reminder"
 script = "remind-reply-language.ts"
 event = "UserPromptSubmit"
 fail_closed = false
 vendors = ["claude"]
 
+
+[[vendor_hook]]
+slug = "dispatch-contract"
+script = "claude/hooks/enforce-dispatch-contract.ts"
+commands = ["sh ~/.claude/hooks/run.sh --fail-closed enforce-dispatch-contract.ts"]
+
+[[vendor_hook]]
+slug = "supervised-execution"
+script = "claude/hooks/enforce-supervised-execution.ts"
+commands = ["sh ~/.claude/hooks/run.sh --fail-closed enforce-supervised-execution.ts"]
+
+[[vendor_hook]]
+slug = "official-execution"
+script = "claude/hooks/enforce-official-execution.ts"
+commands = ["sh ~/.claude/hooks/run.sh --fail-closed enforce-official-execution.ts"]
+
+[[vendor_hook]]
+slug = "background-waits"
+script = "claude/hooks/enforce-background-waits.ts"
+commands = ["sh ~/.claude/hooks/run.sh --fail-closed enforce-background-waits.ts"]
+
+[[vendor_hook]]
+slug = "no-new-bash"
+script = "claude/hooks/enforce-no-new-bash.ts"
+commands = ["sh ~/.claude/hooks/run.sh --fail-closed enforce-no-new-bash.ts"]
+
+[[vendor_hook]]
+slug = "ccc-gpu-hold"
+script = "claude/hooks/detect-ccc-gpu-hold.ts"
+commands = ["sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts"]
+
+[[vendor_hook]]
+slug = "assign-command"
+script = "claude/hooks/assign-command.ts"
+commands = ["sh ~/.claude/hooks/run.sh assign-command.ts"]
+
+[[vendor_hook]]
+slug = "quote-command"
+script = "claude/hooks/quote-command.ts"
+commands = ["sh ~/.claude/hooks/run.sh quote-command.ts"]
+
+[[vendor_hook]]
+slug = "audit-theater"
+script = "claude/hooks/detect-audit-theater.ts"
+commands = ["sh ~/.claude/hooks/run.sh detect-audit-theater.ts"]
+
+[[vendor_hook]]
+slug = "groundless-claim"
+script = "claude/hooks/detect-groundless-claim.ts"
+commands = ["sh ~/.claude/hooks/run.sh detect-groundless-claim.ts"]
+
+[[vendor_hook]]
+slug = "leaked-toolcall"
+script = "claude/hooks/detect-leaked-toolcall.ts"
+commands = ["sh ~/.claude/hooks/run.sh detect-leaked-toolcall.ts"]
+
+[[vendor_hook]]
+slug = "reply-language"
+script = "claude/hooks/enforce-reply-language.ts"
+commands = ["sh ~/.claude/hooks/run.sh enforce-reply-language.ts"]
+
+[[vendor_hook]]
+slug = "sys-snapshot"
+script = "claude/hooks/log-sys-snapshot.ts"
+commands = ["sh ~/.claude/hooks/run.sh log-sys-snapshot.ts"]
+
+[[vendor_hook]]
+slug = "existing-definition"
+script = "claude/hooks/suggest-existing-definition.ts"
+commands = ["sh ~/.claude/hooks/run.sh suggest-existing-definition.ts"]
+
+[[vendor_hook]]
+slug = "capture-last-response"
+script = "claude/hooks/capture-last-response.ts"
+commands = ["sh ~/.claude/hooks/run.sh capture-last-response.ts"]
+
+[[vendor_hook]]
+slug = "bash-duration"
+script = "claude/hooks/record-bash-duration.ts"
+commands = ["sh ~/.claude/hooks/run.sh record-bash-duration.ts"]
+
+[[vendor_hook]]
+slug = "herdr-tab-name"
+script = "claude/hooks/herdr-tab-name.ts"
+commands = ["sh ~/.claude/hooks/run.sh herdr-tab-name.ts"]
+
+[[vendor_hook]]
+slug = "claude-goal-kernel"
+script = "claude/hooks/goal-kernel.ts"
+commands = ["sh ~/.claude/hooks/run-goal-kernel.sh --enforce","sh ~/.claude/hooks/run-goal-kernel.sh"]
+
+[[vendor_hook]]
+slug = "claude-task-continuity"
+script = "claude/hooks/task-continuity.ts"
+commands = ["sh ~/.claude/hooks/run.sh task-continuity.ts"]
+
+[[vendor_hook]]
+slug = "codex-dispatch-contract"
+script = "codex/hooks/enforce-dispatch-contract.ts"
+commands = ["sh ~/.codex/hooks/run-dispatch-contract.sh"]
+
+[[vendor_hook]]
+slug = "codex-goal-kernel"
+script = "codex/hooks/goal-kernel.ts"
+commands = ["sh ~/.codex/hooks/run-goal-kernel.sh","sh ~/.codex/hooks/run-goal-kernel.sh --enforce"]
+
+[[vendor_hook]]
+slug = "codex-task-continuity"
+script = "codex/hooks/task-continuity.ts"
+commands = ["sh ~/.codex/hooks/run-continuity.sh"]
+
+[[external]]
+command = "sh ~/.codex/herdr-agent-state.sh session"
+owner = "herdr"
+reason = "Herdr installs and owns this session-state integration outside the repository."
+
+[[external]]
+command = "sh ~/.claude/hooks/herdr-agent-state.sh session"
+owner = "herdr"
+reason = "Vendored Herdr integration; upstream owns and overwrites its implementation."

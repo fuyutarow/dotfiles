@@ -332,7 +332,7 @@ describe("shell-level & as a hook", () => {
   test("denies the incident command in a backgrounded call, naming the rule and the fixes", () => {
     const out = decide({ command: INCIDENT, run_in_background: true });
     expect(out).toContain('"permissionDecision":"deny"');
-    expect(out).toContain("background-waits:");
+    expect(out).toContain("[background-waits]");
     expect(out).toContain("drop the `&`");
     expect(out).toContain("a & b & wait");
     expect(out).toContain("systemd-run --user --unit=<name>");

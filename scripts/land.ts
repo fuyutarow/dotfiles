@@ -28,6 +28,12 @@ import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
 import { enqueue, landLock, queueStatus, runQueue } from "./land-queue.ts";
 import { renderRefusal } from "./render-source.ts";
 import { doctorReport, doctorStep } from "./land-doctor.ts";
+import {
+  foreignWip,
+  landExit,
+  landSummary,
+  type LandReport,
+} from "./land-verdict.ts";
 
 function recordWorkspaceAcceptance(workspace: string): number {
   const state = dispatchStateDir();
@@ -421,6 +427,43 @@ function hostDiagnostic(stderr: string): string {
   return stderr.trim().replaceAll(/\s+/gu, " ").slice(-1000);
 }
 
+async function localDeployVerdict(
+  root: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
+  const deployed = await runHost(
+    root,
+    [process.env.LAND_MISE ?? "mise", "run", "hook:post-merge"],
+    600_000,
+    env,
+  );
+  if (!deployed.ok) return `FAIL ${deployed.reason}`;
+  if (deployed.value.timedOut) return "FAIL local render timed out";
+  if (deployed.value.code !== 0) {
+    const blocked = foreignWip(
+      `${deployed.value.stdout}\n${deployed.value.stderr}`,
+    );
+    if (blocked !== undefined)
+      return `blocked: foreign WIP (${blocked.join(", ")})`;
+    return `FAIL local render exited ${deployed.value.code}: ${hostDiagnostic(deployed.value.stderr)}`;
+  }
+  const proof = await runHost(
+    root,
+    [process.env.LAND_MISE ?? "mise", "run", "doctor"],
+    90_000,
+    env,
+  );
+  let code = proof.ok ? proof.value.code : 2;
+  if (proof.ok && proof.value.timedOut) code = 124;
+  const doctor = doctorReport(
+    proof.ok
+      ? `${proof.value.stdout}\n__LAND_DOCTOR_EXIT_${code}__`
+      : undefined,
+  );
+  for (const line of doctor.lines) emit(`[land] doctor: local ${line}`);
+  return `${doctor.status}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`;
+}
+
 const jj = (cwd: string, argv: string[]) =>
   run(cwd, ["jj", "--no-pager", "--color", "never", ...argv]);
 const read = (cwd: string, argv: string[]) =>
@@ -578,6 +621,7 @@ function mainCheckout(root: string): string {
 async function main(
   argv = Bun.argv.slice(2),
   queueLockHeld = false,
+  onReport?: (report: LandReport) => void,
 ): Promise<number> {
   const parsed = cli(
     {
@@ -670,8 +714,9 @@ async function main(
         });
         return result instanceof Error ? result : 0;
       }
-      return runQueue(mainRoot, (item) =>
-        main(
+      return runQueue(mainRoot, async (item) => {
+        let report: LandReport | undefined;
+        const exit = await main(
           [
             item.ws,
             "-m",
@@ -680,8 +725,12 @@ async function main(
             ...(item.keep_workspace ? ["--keep-workspace"] : []),
           ],
           true,
-        ),
-      );
+          (value) => {
+            report = value;
+          },
+        );
+        return { exit, ...(report === undefined ? {} : { report }) };
+      });
     });
     const result = queued.ok
       ? queued.value
@@ -698,6 +747,7 @@ async function main(
   let landedRoot: string | undefined;
   let restoredPaths: string[] = [];
   const hostResults = new Map<string, string>();
+  const report: LandReport = { commit: "pending", push: "pending", hosts: {} };
   const captured = await attempt(() =>
     safeTry(async function* () {
       const binProblems = await packageBinProblems(process.cwd());
@@ -856,6 +906,11 @@ async function main(
         ]);
         const after = await at(mainRoot, "@-");
         if (after.isOk() && after.value !== before) commit = after.value;
+        if (commit !== undefined) {
+          report.commit = "ok";
+          emit(`[land] commit: ok ${commit}`);
+          stage = "push";
+        }
         const failedCommitUnchanged =
           committed.isErr() && after.isOk() && after.value === before;
         if (failedCommitUnchanged)
@@ -870,7 +925,10 @@ async function main(
         if (after.isErr()) return after;
         commit = after.value;
       }
-      emit(`[land] commit: ok ${commit ?? "would gated commit --push"}`);
+      report.commit = "ok";
+      report.push = "ok";
+      if (parsed.flags.dryRun) emit("[land] commit: ok preview gated commit");
+      emit(`[land] push: ok ${parsed.flags.dryRun ? "preview" : commit}`);
       if (!parsed.flags.dryRun) {
         stage = "deps";
         yield* run(mainRoot, [process.env.LAND_MISE ?? "mise", "run", "deps"]);
@@ -881,33 +939,13 @@ async function main(
           DOTFILES_RENDER_FROM_WORKING_COPY: "0",
           DOCTOR_ONLY: "",
         };
-        yield* run(
-          mainRoot,
-          [process.env.LAND_MISE ?? "mise", "run", "hook:post-merge"],
-          deployEnv,
-        );
-        const proof = await runHost(
-          mainRoot,
-          [process.env.LAND_MISE ?? "mise", "run", "doctor"],
-          90_000,
-          deployEnv,
-        );
-        const proofExit = proof.ok ? proof.value.code : 2;
-        const doctorExit = proof.ok && proof.value.timedOut ? 124 : proofExit;
-        const localDoctor = doctorReport(
-          proof.ok
-            ? `${proof.value.stdout}\n__LAND_DOCTOR_EXIT_${doctorExit}__`
-            : undefined,
-        );
-        for (const line of localDoctor.lines)
-          emit(`[land] doctor: local ${line}`);
-        hostResults.set(
-          "local",
-          `${localDoctor.status}; doctor PASS ${localDoctor.pass} / FAIL ${localDoctor.fail}`,
-        );
-        emit(
-          `[land] deploy: ${localDoctor.status} local; doctor PASS ${localDoctor.pass} / FAIL ${localDoctor.fail}`,
-        );
+        stage = "deploy";
+        const localState = await localDeployVerdict(mainRoot, deployEnv);
+        hostResults.set("local", localState);
+        const [localVerdict, ...localDetails] = localState.split(";");
+        const suffix =
+          localDetails.length === 0 ? "" : `;${localDetails.join(";")}`;
+        emit(`[land] deploy: ${localVerdict} local${suffix}`);
         const accepted = recordWorkspaceAcceptance(workerRoot);
         emit(
           `[land] acceptance: recorded ${accepted} run(s) from this workspace`,
@@ -954,9 +992,6 @@ async function main(
           `${smokeBegin}_DOCTOR`,
           `${smokeEnd}_DOCTOR`,
         );
-        const doctor = doctorReport(capturedDoctor.smoke);
-        for (const line of doctor.lines)
-          emit(`[land] doctor: ${host.alias} ${line}`);
         const capturedSmoke = extractSmoke(
           capturedDoctor.output,
           smokeBegin,
@@ -976,12 +1011,24 @@ async function main(
           emit(`[land] deploy: unreachable ${host.alias}: ${reason}`);
           continue;
         }
+        const blockedPaths = foreignWip(
+          `${deployed.value.stdout}\n${deployed.value.stderr}`,
+        );
+        if (deployed.value.code !== 0 && blockedPaths !== undefined) {
+          const state = `blocked: foreign WIP (${blockedPaths.join(", ")})`;
+          hostResults.set(host.alias, state);
+          emit(`[land] deploy: ${state} ${host.alias}`);
+          continue;
+        }
         if (deployed.value.code !== 0) {
           const reason = `remote command exited ${deployed.value.code}${diagnostic === "" ? "" : `: ${diagnostic}`}`;
           hostResults.set(host.alias, `FAIL ${reason}`);
           emit(`[land] deploy: FAIL ${host.alias}: ${reason}`);
           continue;
         }
+        const doctor = doctorReport(capturedDoctor.smoke);
+        for (const line of doctor.lines)
+          emit(`[land] doctor: ${host.alias} ${line}`);
         hostResults.set(
           host.alias,
           `${doctor.status}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`,
@@ -1010,6 +1057,11 @@ async function main(
     : reject(errorMessage(captured.error));
   if (result.isErr())
     emit(`[land] ${stage}: FAIL ${errorMessage(result.error)}`);
+  if (result.isErr()) {
+    report.failure = errorMessage(result.error);
+    if (stage === "commit") report.commit = "failed";
+    if (stage === "push") report.push = "failed";
+  }
   if (
     result.isErr() &&
     queueLockHeld &&
@@ -1029,10 +1081,10 @@ async function main(
         : `[land] queue: residue restore FAIL ${errorMessage(cleaned.error)}`,
     );
   }
-  emit(
-    `[land] summary: ${result.isOk() ? "ok" : "FAIL"} commit=${commit ?? "none"} hosts=${JSON.stringify(Object.fromEntries(hostResults))}`,
-  );
-  return result.isOk() ? 0 : 1;
+  report.hosts = Object.fromEntries(hostResults);
+  onReport?.(report);
+  emit(`[land] ${landSummary(report, commit)}`);
+  return landExit(report);
 }
 
 if (import.meta.main)

@@ -63,6 +63,7 @@ import {
 import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
 import { RENDERED } from "./config-registry.ts";
 import { brewPrefix, coreCommands, corePathProblems } from "./core-tools.ts";
+import { danglingRepoBins } from "./deps-prune.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText } from "../agents/hooks/zod.ts";
 import {
@@ -425,15 +426,17 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
   // A renamed or removed bin leaves bun's old link behind: it points through bun's global
   // node_modules/dotfiles link, so link-dots.ts's "$DOTFILES/*" prune never sees it.
   // No bin dir at all: the per-bin loop above already reported every declared command.
-  const stale: string[] = existsSync(binDir)
-    ? readdirSync(binDir)
-        .map((n) => join(binDir, n))
-        .filter((p) => lstatSync(p).isSymbolicLink() && !existsSync(p))
-        .filter((p) => readlinkSync(p).includes("node_modules/dotfiles/"))
-    : [];
+  const stale = await danglingRepoBins(ctx.dotfiles, binDir);
+  if (stale instanceof Error)
+    return fail(
+      "bins",
+      `cannot inspect bin links: ${stale.message}`,
+      "check bin directory permissions",
+    );
   problems.push(
     ...stale.map(
-      (p) => `${p} is a dangling link left by a renamed/removed bin — rip ${p}`,
+      (p) =>
+        `${p} is a dangling link left by a renamed/removed bin — mise run deps`,
     ),
   );
   return problems.length === 0
@@ -444,7 +447,7 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
     : fail(
         "bins",
         `${problems.length} PATH command problem(s)`,
-        "mise run deps (then rip any dangling link listed)",
+        "mise run deps",
         problems,
       );
 }

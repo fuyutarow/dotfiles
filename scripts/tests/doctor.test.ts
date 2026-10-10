@@ -239,6 +239,9 @@ network_access = true
     );
 
     // The shape bun leaves after a bin rename: a link through its global node_modules/dotfiles.
+    const packages = join(home, ".bun/install/global/node_modules");
+    mkdirSync(packages, { recursive: true });
+    symlinkSync(dotfiles, join(packages, "dotfiles"));
     symlinkSync(
       "../install/global/node_modules/dotfiles/tools/old.ts",
       join(binDir, "old"),

@@ -154,6 +154,7 @@ for (const args of [['commit', '-m', argv[argv.indexOf('-m') + 1], '--', ...path
  const r = Bun.spawnSync(['jj', ...args], { stdout: 'pipe', stderr: 'pipe', timeout: 30000 });
  if (r.exitCode !== 0) { process.stderr.write(r.stderr); process.exit(r.exitCode); }
 }
+if (process.env.LAND_FAIL_PUSH === '1') { process.stderr.write('push refused: fixture failure\\n'); process.exit(7); }
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['pushed']) + '\\n');\n`,
   );
   writeFileSync(
@@ -162,6 +163,7 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['pushed']) + '\\n');\n`,
 const args = process.argv.slice(2);
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['ssh', ...args]) + '\\n');
 const host = args[2] ?? 'unknown';
+if (process.env.LAND_BLOCKED_SSH === host) { process.stderr.write('FATAL: uncommitted render inputs\\nDOTFILES_RENDER_REFUSAL_V1={"reason":"foreign-wip","paths":["agents/hooks/storage-headroom.toml"]}\\n'); process.exit(2); }
 const command = args.at(-1) ?? '';
 const begin = command.match(/__LAND_SMOKE_BEGIN_[0-9]+__/u)?.[0];
 const end = command.match(/__LAND_SMOKE_END_[0-9]+__/u)?.[0];
@@ -563,6 +565,17 @@ describe("land workspace", () => {
     );
   });
 
+  test("a failed push retains the successful commit verdict and does not deploy", () => {
+    const f = fixture();
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land([], { LAND_FAIL_PUSH: "1" });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toContain("[land] commit: ok");
+    expect(result.stdout.toString()).toContain("[land] push: FAIL");
+    expect(result.stdout.toString()).not.toContain("landed and pushed");
+    expect(f.log().filter((event) => event[0] === "ssh")).toEqual([]);
+  });
+
   test("dry-run includes unsnapshotted changes and changes neither files nor metadata", () => {
     const f = fixture();
     writeFileSync(
@@ -621,6 +634,27 @@ describe("land workspace", () => {
       'hosts={"sol":"FAIL remote command exited 7","r99-u26":"ok; doctor PASS 1 / FAIL 0","r99-u24":"skipped (damaged)","local":"ok; doctor PASS 1 / FAIL 0"}',
     );
     expect(f.log().filter((event) => event[0] === "ssh")).toHaveLength(2);
+  });
+
+  test("foreign render WIP blocks only its host and queue status retains the verdicts", () => {
+    const f = fixture();
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    expect(
+      f.command(["--enqueue", f.worker, "-m", "Blocked host"]).exitCode,
+    ).toBe(0);
+    const result = f.command(["--run-queue"], { LAND_BLOCKED_SSH: "r99-u26" });
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    expect(result.stdout.toString()).toContain(
+      "blocked: foreign WIP (agents/hooks/storage-headroom.toml) r99-u26",
+    );
+    expect(result.stdout.toString()).toContain("landed and pushed");
+    const status = f.command(["--queue-status"]).stdout.toString();
+    expect(status).toContain('"push": "ok"');
+    expect(status).toContain('"commit": "ok"');
+    expect(status).toContain(
+      '"r99-u26": "blocked: foreign WIP (agents/hooks/storage-headroom.toml)"',
+    );
+    expect(existsSync(f.worker)).toBe(false);
   });
 
   test(

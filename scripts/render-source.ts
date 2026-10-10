@@ -87,7 +87,7 @@ export async function renderRefusal(
   const paths = dirty.split("\0").filter(Boolean);
   if (paths.length === 0) return undefined;
   return new Error(
-    `uncommitted render inputs: ${JSON.stringify(paths)}; refusing to render $HOME. Commit them first, or use mise run link:dots -- --from-working-copy for an explicit local render`,
+    `uncommitted render inputs: ${JSON.stringify(paths)}; refusing to render $HOME. Commit them first, or use mise run link:dots -- --from-working-copy for an explicit local render\nDOTFILES_RENDER_REFUSAL_V1=${JSON.stringify({ reason: "foreign-wip", paths })}`,
   );
 }
 

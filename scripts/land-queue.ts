@@ -7,6 +7,7 @@ import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { acquire, holderOf, tryAcquire } from "../tools/shared/src/dir-lock.ts";
 import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
+import { LandReportSchema, landExit, type LandReport } from "./land-verdict.ts";
 
 const Enqueue = z.strictObject({
   schema: z.literal(1),
@@ -34,6 +35,7 @@ const Done = z.strictObject({
   status: z.enum(["OK", "FAIL"]),
   exit: z.number().int(),
   detail: z.string(),
+  report: LandReportSchema.optional(),
 });
 const Event = z.discriminatedUnion("kind", [Enqueue, Start, Done]);
 export type QueueRequest = z.output<typeof Enqueue>;
@@ -244,7 +246,9 @@ async function mainClean(mainRoot: string): Promise<boolean | Error> {
 
 export async function runQueue(
   mainRoot: string,
-  land: (request: QueueRequest) => Promise<number>,
+  land: (
+    request: QueueRequest,
+  ) => Promise<{ exit: number; report?: LandReport }>,
 ): Promise<number | Error> {
   const state = landStateDir(mainRoot);
   const runner = tryAcquire(
@@ -304,7 +308,9 @@ export async function runQueue(
       if (started instanceof Error) return started;
       emit(`landing ${item.ws} id=${item.id}`);
       const landed = await attempt(() => land(item));
-      const code = landed.ok ? landed.value : 2;
+      const report = landed.ok ? landed.value.report : undefined;
+      let code = landed.ok ? landed.value.exit : 2;
+      if (report !== undefined) code = landExit(report);
       const recorded = await journal(state, () =>
         append(state, {
           schema: 1,
@@ -313,6 +319,7 @@ export async function runQueue(
           at: now(),
           status: code === 0 ? "OK" : "FAIL",
           exit: code,
+          ...(report === undefined ? {} : { report }),
           detail: landed.ok
             ? `land exited ${code}`
             : errorMessage(landed.error),

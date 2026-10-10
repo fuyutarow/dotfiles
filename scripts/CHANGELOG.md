@@ -1,5 +1,22 @@
 # Script changes
 
+## 2026-10-11 — land stage verdicts and automatic bin repair
+
+Land reports commit, push and each host separately. Its summary explicitly says
+`landed and pushed` after those stages succeed, even when deployment fails.
+The version-1 `DOTFILES_RENDER_REFUSAL_V1` JSON marker identifies uncommitted
+render inputs as `blocked: foreign WIP (<paths>)`; blocked hosts do not fail a
+successful landing. Transport, timeout and other deploy failures still exit 1.
+Queue schema 1 remains backward compatible: new results also retain the same
+commit/push/host report used to compute land's exit. OK/FAIL counts count queued
+attempts, including blocked-only deployments among OK attempts.
+
+`mise run deps` now removes and prints dangling bin links whose symlink chain
+resolves into this checkout, including Bun's global package link. Live links,
+foreign links and regular files stay untouched. Doctor uses the same ownership
+check and points to deps as the complete repair. These scripts have no package
+version; the protocol marker is version 1 and this dated entry is the release record.
+
 ## 2026-10-10 — serialized land and deployment proof
 
 `mise run land` now serializes direct landings and queued items with the same

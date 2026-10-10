@@ -637,6 +637,9 @@ describe("render-home: committed jj inputs", () => {
     const refused = run(f.env);
     expect(refused.code).toBe(1);
     expect(refused.out).toContain("uncommitted render inputs");
+    expect(refused.out).toContain(
+      'DOTFILES_RENDER_REFUSAL_V1={"reason":"foreign-wip","paths":["agents/codex/hooks.json"]}',
+    );
     expect(readFileSync(join(f.home, ".codex/hooks.json"), "utf8")).toBe(
       previous,
     );

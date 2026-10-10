@@ -6,8 +6,16 @@ import { attempt, attemptOr } from "../../shared/src/attempt.ts";
 import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import type { HookContext } from "./runtime.ts";
+import { projectCwd } from "./attribution.ts";
 
-export type Run = { id: string; lane: string; row: string };
+export type Run = {
+  id: string;
+  lane: string;
+  row: string;
+  name?: string;
+  kind?: string;
+  labels?: string[];
+};
 export type RunStateOptions = { stateDirs?: string[] };
 export type RunFilter = RunStateOptions & { session?: string };
 const Marker = z.object({
@@ -15,7 +23,18 @@ const Marker = z.object({
   pid: z.number().int().positive(),
   choice: z.string(),
   dispatcher_session: z.string().optional(),
-  ticket: z.object({ lane: z.string().optional() }).optional(),
+  cwd: z.string().optional(),
+  display_id: z.string().optional(),
+  kind: z.string().optional(),
+  labels: z.array(z.string()).optional(),
+  ticket: z
+    .object({
+      lane: z.string().optional(),
+      name: z.string().optional(),
+      kind: z.string().optional(),
+      labels: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 const Record = z.object({
   kind: z.string(),
@@ -71,11 +90,13 @@ async function bounded<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 async function liveMarker(
   path: string,
   session: string | null | undefined,
+  ctx: HookContext,
 ): Promise<Run[]> {
   const parsed = jsonOf(Marker).safeParse(await Bun.file(path).text());
   if (!parsed.success) return [];
   if (session === null && parsed.data.dispatcher_session !== undefined)
     return [];
+  if (session === null && !projectCwd(parsed.data.cwd, ctx.repoRoot)) return [];
   if (
     session !== undefined &&
     session !== null &&
@@ -89,13 +110,28 @@ async function liveMarker(
       id: parsed.data.run_id,
       lane: parsed.data.ticket?.lane ?? "other",
       row: parsed.data.choice,
+      ...runMetadata(parsed.data),
     },
   ];
+}
+
+function runMetadata(
+  marker: z.output<typeof Marker>,
+): Pick<Run, "name" | "kind" | "labels"> {
+  const name = marker.ticket?.name ?? marker.display_id;
+  const kind = marker.ticket?.kind ?? marker.kind;
+  const labels = marker.ticket?.labels ?? marker.labels;
+  return {
+    ...(name === undefined ? {} : { name }),
+    ...(kind === undefined ? {} : { kind }),
+    ...(labels === undefined ? {} : { labels }),
+  };
 }
 
 async function runsInDir(
   root: string,
   session: string | null | undefined,
+  ctx: HookContext,
 ): Promise<Run[]> {
   const dir = join(root, "active");
   const names = await readdir(dir);
@@ -105,7 +141,9 @@ async function runsInDir(
       .filter(
         (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
       )
-      .map((name) => attemptOr(() => liveMarker(join(dir, name), session), [])),
+      .map((name) =>
+        attemptOr(() => liveMarker(join(dir, name), session, ctx), []),
+      ),
   );
   return rows.flat();
 }
@@ -113,11 +151,12 @@ async function runsInDir(
 function selectRuns(
   session: string | null | undefined,
   options: RunStateOptions,
+  ctx: HookContext,
 ): Promise<Run[]> {
   return bounded(async () => {
     const roots = [...new Set(options.stateDirs ?? [dispatchStateDir()])];
     const rows = await Promise.all(
-      roots.map((root) => attemptOr(() => runsInDir(root, session), [])),
+      roots.map((root) => attemptOr(() => runsInDir(root, session, ctx), [])),
     );
     const runs = new Map<string, Run>();
     for (const run of rows.flat()) {
@@ -129,18 +168,18 @@ function selectRuns(
 
 /** Live PIDs, optionally restricted to the dispatcher's exact Claude session ID. */
 export function runningRuns(
-  _ctx: HookContext,
+  ctx: HookContext,
   filter: RunFilter = {},
 ): Promise<Run[]> {
-  return selectRuns(filter.session, filter);
+  return selectRuns(filter.session, filter, ctx);
 }
 
-/** Live runs without dispatcher_session; never attributed to a filtered session. */
+/** Live runs without dispatcher_session whose marker cwd belongs to this project. */
 export function unattributedRuns(
-  _ctx: HookContext,
+  ctx: HookContext,
   options: RunStateOptions = {},
 ): Promise<Run[]> {
-  return selectRuns(null, options);
+  return selectRuns(null, options, ctx);
 }
 
 export async function laneCount(

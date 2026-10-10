@@ -14,7 +14,9 @@ Conditions return values:
 
 - `await runningRuns(ctx)`: live `{ id, lane, row }[]`; missing ticket lanes are `"other"`.
 - `await runningRuns(ctx, { session, stateDirs })`: live runs whose `dispatcher_session` equals `session`, from optional explicit state directories.
-- `await unattributedRuns(ctx)`: live runs without `dispatcher_session`, separately from session counts.
+- `await unattributedRuns(ctx)`: live runs without `dispatcher_session` whose marker cwd is inside `ctx.repoRoot`, separately from session counts.
+- `await runningJobs(ctx, { session })`: running systemd user services, optionally filtered by exact unit session. Each job includes `id`, `attribution`, optional `session`, `cwd`, `kind`, and `labels`.
+- `await unattributedJobs(ctx)`: running services classified as `projectUnattributed`.
 - `await laneCount(ctx, lane, { session })`: number of live runs in that lane, optionally filtered by session.
 - `await gpu(ctx)`: `{ utilPct, freeGiB } | "unknown"` (first GPU, 1 s timeout).
 - `await englishSegments(text)`: English prose segments using the reply-language hook rule.
@@ -32,9 +34,22 @@ the first directory winning. The 1 s budget covers the entire selection.
 `agx` writes `dispatcher_session` from the trimmed `CLAUDE_CODE_SESSION_ID` environment
 variable. For Claude dispatches this is the same UUID as the hook payload's `session_id`,
 not a worker name or PID; pass `ctx.payload.session_id` as the filter. Dispatches without
-that environment variable remain unattributed. Omitting the filter returns all live runs;
+that environment variable are project-unattributed only when the marker cwd is inside the
+hook's project root. Missing or foreign cwd is excluded from `unattributedRuns`.
+Run selectors retain optional ticket name, kind, and labels (falling back to marker metadata).
+Omitting the filter returns all live runs;
 an explicit session excludes unattributed runs. Project hooks should handle a missing
 payload session explicitly rather than accidentally requesting host-wide counts.
+
+Job attribution uses the unit's nonempty `Environment` `CLAUDE_CODE_SESSION_ID` first,
+even when its cwd is elsewhere. Otherwise a unit `WorkingDirectory` or main process cwd
+inside `ctx.repoRoot` yields `projectUnattributed`; all others are `foreign`.
+`runningJobs(ctx)` includes all three groups; project hooks must exclude foreign jobs and
+other sessions. Failed, exited, unavailable, or slow services produce no live jobs.
+The list and batched property read share a 1 s subprocess budget. Job kind and labels come
+from optional `AGX_JOB_KIND` and comma/space-separated `AGX_JOB_LABELS` unit environment
+values (`AGX_KIND` and `AGX_LABELS` are also accepted). `procRoot` defaults to `/proc` and
+may be supplied for alternate proc mounts or fixtures.
 
 Register the package once with `cd <dotfiles>/tools/agx-usehooks && bun link`.
 In the project, run `bun link agx-usehooks`, then import from `"agx-usehooks"`.

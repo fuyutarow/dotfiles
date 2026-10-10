@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Select running systemd user service jobs with session-first attribution, project-cwd fallback, and a shared 1 s subprocess budget.
+- Scope unattributed markers to the hook project via marker cwd; retain optional name, kind, and labels for project classification.
+
 ## 0.3.0
 
 - Add optional per-call `stateDirs` to `runningRuns`, `unattributedRuns`, and `laneCount`, without changing the shared default state home.

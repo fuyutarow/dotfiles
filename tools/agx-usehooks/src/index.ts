@@ -17,4 +17,10 @@ export {
   type RunFilter,
 } from "./conditions.ts";
 export { englishSegments } from "./english.ts";
+export {
+  runningJobs,
+  unattributedJobs,
+  type Job,
+  type JobFilter,
+} from "./jobs.ts";
 export { STATE_DIR } from "../../shared/src/dispatch-state.ts";

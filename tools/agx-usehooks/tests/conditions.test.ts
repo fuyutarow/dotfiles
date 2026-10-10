@@ -54,6 +54,7 @@ function stateMarker(root: string, file: string, values: object): void {
       choice: "terra",
       pid: process.pid,
       dispatcher_session: "session-a",
+      cwd: root,
       ticket: { lane: "theory" },
       ...values,
     }),
@@ -103,6 +104,7 @@ test("session selectors separate two dispatchers and unattributed live runs", as
         choice: "terra",
         pid,
         dispatcher_session: session,
+        cwd: dir,
         ticket: { lane: id === "a-bench" ? "bench" : "theory" },
       }),
     );
@@ -174,7 +176,12 @@ test("concurrent explicit selectors stay isolated from each other and the enviro
   ] satisfies [string, string][]) {
     writeFileSync(
       join(root, "active", `${id}.json`),
-      JSON.stringify({ run_id: id, choice: "terra", pid: process.pid }),
+      JSON.stringify({
+        run_id: id,
+        choice: "terra",
+        pid: process.pid,
+        cwd: dir,
+      }),
     );
   }
   const [first, second] = await Promise.all([
@@ -184,6 +191,47 @@ test("concurrent explicit selectors stay isolated from each other and the enviro
   expect(first.map((run) => run.id)).toEqual(["first"]);
   expect(second.map((run) => run.id)).toEqual(["second"]);
   expect(process.env.AGX_STATE_DIR).toBe(dir);
+});
+
+test("unattributed markers require project cwd; exact sessions override cwd", async () => {
+  const { dir, ctx } = world();
+  stateMarker(dir, "own-outside", {
+    cwd: "/foreign",
+    ticket: { name: "th-own", kind: "theory", labels: ["proof"] },
+  });
+  stateMarker(dir, "project", {
+    dispatcher_session: undefined,
+    cwd: join(dir, "nested"),
+  });
+  stateMarker(dir, "other-session", {
+    dispatcher_session: "session-b",
+    cwd: dir,
+  });
+  stateMarker(dir, "sibling", {
+    dispatcher_session: undefined,
+    cwd: `${dir}-sibling`,
+  });
+  stateMarker(dir, "escape", {
+    dispatcher_session: undefined,
+    cwd: join(dir, "..", "foreign"),
+  });
+  stateMarker(dir, "missing-cwd", {
+    dispatcher_session: undefined,
+    cwd: undefined,
+  });
+  expect((await unattributedRuns(ctx)).map((run) => run.id)).toEqual([
+    "project",
+  ]);
+  expect(await runningRuns(ctx, { session: "session-a" })).toEqual([
+    {
+      id: "own-outside",
+      lane: "other",
+      row: "terra",
+      name: "th-own",
+      kind: "theory",
+      labels: ["proof"],
+    },
+  ]);
 });
 
 test("GPU resolves WSL fallback and returns unknown when none is executable", async () => {

@@ -64,6 +64,7 @@ const Line = z.looseObject({
     .looseObject({
       row: z.string().optional(),
       effort: z.string().optional(),
+      vendor_status: z.string().optional(),
       outcome: z.string().optional(),
       elapsed_s: z.number().optional(),
       cost_usd: z.number().nullable().optional(),
@@ -77,9 +78,16 @@ const Line = z.looseObject({
         .optional(),
     })
     .optional(),
-  worker: z.looseObject({ elapsed_s: z.number().optional() }).optional(),
+  worker: z
+    .looseObject({
+      elapsed_s: z.number().optional(),
+      outcome: z.string().optional(),
+    })
+    .optional(),
   grade: z.string().optional(),
   consumed: z.boolean().optional(),
+  accept: z.boolean().optional(),
+  result: z.enum(["delivered", "returned", "failed", "abandoned"]).optional(),
   at: z.string().optional(),
   resumed_from: z.string().optional(),
 });
@@ -261,10 +269,17 @@ function calculateThroughputStats(
     if (parsed.success) entries.push(parsed.data);
   }
   const acks = new Map<string, Entry>();
+  const acceptances = new Map<string, boolean>();
   const grades = new Map<string, string>();
   for (const entry of entries) {
     if (entry.kind === "ack" && entry.run_id !== undefined)
       acks.set(entry.run_id, entry);
+    if (
+      entry.kind === "acceptance" &&
+      entry.run_id !== undefined &&
+      entry.accept !== undefined
+    )
+      acceptances.set(entry.run_id, entry.accept);
     if (
       entry.kind === "grade" &&
       entry.run_id !== undefined &&
@@ -296,7 +311,11 @@ function calculateThroughputStats(
         run_id: entry.run_id,
         started_ms: started,
         row: entry.stats?.row ?? entry.pick?.choice ?? "unknown",
-        outcome: entry.stats?.outcome ?? "unknown",
+        outcome:
+          entry.stats?.vendor_status ??
+          entry.stats?.outcome ??
+          entry.worker?.outcome ??
+          "unknown",
         elapsed_s: elapsed,
         tokens: tokenTotal(entry),
         first_return_s: firstReturnS,
@@ -311,20 +330,13 @@ function calculateThroughputStats(
   const summarize = (group: Run[]) => {
     const accepted = group.filter(
       (run) =>
-        run.outcome !== "non_delivery" &&
-        (grades.get(run.run_id) === "pass" ||
-          (run.outcome === "returned" &&
-            acks.get(run.run_id)?.consumed === true)),
+        run.result === "delivered" && acceptances.get(run.run_id) === true,
     );
     const acceptedIds = new Set(accepted.map((run) => run.run_id));
     const time = sum(group.map((run) => run.elapsed_s));
     const costs = group.flatMap((run) => run.stats?.cost_usd ?? []);
     const tokens = group
-      .filter(
-        (run) =>
-          !acceptedIds.has(run.run_id) &&
-          acks.get(run.run_id)?.consumed !== true,
-      )
+      .filter((run) => !acceptedIds.has(run.run_id))
       .map((run) => run.tokens);
     return {
       runs: group.length,
@@ -618,7 +630,7 @@ function calculateThroughputStats(
     grading: grading ? gradingReport : undefined,
     replay_assumption:
       "row rates are independent of task; candidate picks use the recorded window rate for each alternative row",
-    note: "accepted counts returned runs only when acked (agx ledger note <run_id> --consumed)",
+    note: "accepted counts delivered runs only when explicitly accepted; legacy ack events are ignored",
   };
 }
 
@@ -701,15 +713,8 @@ export function lineageMasks(
   while (expandLineage() > 0) {
     // Expand ancestors and descendants until the lineage reaches a fixed point.
   }
-  const acks = new Map<string, boolean>();
   const grades = new Map<string, string>();
   for (const entry of entries) {
-    if (
-      entry.kind === "ack" &&
-      entry.run_id !== undefined &&
-      entry.consumed !== undefined
-    )
-      acks.set(entry.run_id, entry.consumed);
     if (
       entry.kind === "grade" &&
       entry.run_id !== undefined &&
@@ -722,11 +727,18 @@ export function lineageMasks(
     const id = run.run_id!;
     if (!selected.has(id)) continue;
     const row = run.stats?.row ?? run.pick?.choice ?? "unknown";
+    const legacyStatus =
+      run.stats?.vendor_status ?? run.stats?.outcome ?? run.worker?.outcome;
     const bad =
-      (run.stats?.outcome ?? "") === "non_delivery" ||
-      grades.get(id) === "fail" ||
-      grades.get(id) === "partial" ||
-      ((run.stats?.outcome ?? "") === "returned" && acks.get(id) !== true);
+      run.result === "failed" ||
+      run.result === "abandoned" ||
+      (run.result === undefined &&
+        (grades.get(id) === "fail" ||
+          grades.get(id) === "partial" ||
+          legacyStatus === "timeout" ||
+          legacyStatus === "non_delivery" ||
+          legacyStatus === "codex-failed" ||
+          legacyStatus === "claude-failed"));
     if (bad) failures.set(row, (failures.get(row) ?? 0) + 1);
   }
   return Object.fromEntries(
@@ -736,7 +748,7 @@ export function lineageMasks(
         row,
         {
           failures: count,
-          reason: `${count} lineage runs ended fail/partial, non_delivery, or returned without ack-consumed`,
+          reason: `${count} lineage runs ended failed or abandoned (legacy records map fail/partial grades to failed)`,
         },
       ]),
   );
@@ -822,23 +834,18 @@ export function replayStats(
       stats.accepted_rate,
     ]),
   );
-  const acks = new Map<string, boolean>();
-  const grades = new Map<string, string>();
+  const acceptance = new Map<string, boolean>();
   for (const entry of entries) {
     if (entry.run_id === undefined) continue;
-    if (entry.kind === "ack" && entry.consumed !== undefined)
-      acks.set(entry.run_id, entry.consumed);
-    if (entry.kind === "grade" && entry.grade !== undefined)
-      grades.set(entry.run_id, entry.grade);
+    if (entry.kind === "acceptance" && entry.accept !== undefined)
+      acceptance.set(entry.run_id, entry.accept);
   }
   const workerHours =
     sum(runs.map((run) => run.stats?.elapsed_s ?? run.worker?.elapsed_s ?? 0)) /
     3600;
   const actualAccepted = runs.filter(
     (run) =>
-      grades.get(run.run_id ?? "") === "pass" ||
-      (run.stats?.outcome === "returned" &&
-        acks.get(run.run_id ?? "") === true),
+      run.result === "delivered" && acceptance.get(run.run_id ?? "") === true,
   ).length;
   const candidateExpected = runs.reduce((total, run) => {
     const feature = {

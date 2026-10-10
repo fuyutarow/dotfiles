@@ -148,12 +148,15 @@ describe("render-home: base only", () => {
     const policy = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
     for (const text of [
       "promise block",
-      "kind/labels",
+      "RESOURCE derives `kind = token|compute`",
       ".agents/tickets",
       "agx ticket new",
       "agx ticket ls",
       "agx ticket lint",
-      "Grader split/clarify verdicts warn",
+      "accepted-delivery record",
+      "accepted-throughput argmax",
+      "The bounded pre-run grader remains an admission warning/remand tool.",
+      "Historical grade/confidence fields remain readable.",
       "agx ps [--all] [--json]",
       "agx ledger gc [--dry-run]",
       "agx dispatch --detach",
@@ -461,6 +464,11 @@ describe("render-home: the rest of the rendered half", () => {
     expect(md).toContain("outcome `returned`");
     expect(md).toContain("--sandbox none|read-only|workspace-write");
     expect(md).toContain("workers that need network or ssh");
+    expect(md).toContain("agx show <run_id|name|latest>");
+    expect(md).toContain("Scope violations are warning facts");
+    expect(md).toContain(
+      "routine housekeeping choices are theirs to make and report",
+    );
     expect(md.endsWith("<!-- roster:end -->\n")).toBe(true);
     expect(
       readFileSync(join(dotfiles, "agents", "claude", "CLAUDE.md"), "utf8"),

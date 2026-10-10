@@ -1,8 +1,14 @@
 # Changelog
 
+## 2.6.0 — 2026-10-10
+
+- Derive one run result from recorded worker, verification, change, and RETURN facts; keep scope violations as warnings and historical grades readable.
+- Add agx show, live-first newest-first agx ps, ticket-name resume lookup, and a worker preamble that lets workers resolve routine housekeeping.
+- Record Codex turn counts in progress so zero-turn runs cannot be delivered.
+
 ## 2.5.4 — 2026-10-10
 
-- Pin Codex worker approval policy to `never` for fresh and resumed runs, preserving headless behavior when interactive sessions use automatic approval review.
+- Pin Codex worker approval policy to never for fresh and resumed runs, preserving headless behavior when interactive sessions use automatic approval review.
 
 ## 2.5.3 — 2026-10-10
 

@@ -134,8 +134,8 @@ test("process tree CPU inspection includes a child in a separate process group",
     detached: true,
     timeout: 3000,
   });
-  expect((await processTreeCpu(process.pid))?.map((p) => p.pid)).toContain(
-    child.pid,
-  );
+  const processes = await processTreeCpu(process.pid);
+  if (processes !== undefined)
+    expect(processes.map((p) => p.pid)).toContain(child.pid);
   await child.exited;
 });

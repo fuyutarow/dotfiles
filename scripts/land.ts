@@ -2,28 +2,314 @@
 // paths LAND_MISE and LAND_SSH (argv is never interpreted by a local shell).
 import {
   cpSync,
+  appendFileSync,
   existsSync,
   lstatSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { cli } from "cleye";
-import { err, ok, ResultAsync, safeTry } from "neverthrow";
+import { err, fromThrowable, ok, ResultAsync, safeTry } from "neverthrow";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   filesets,
   validPath,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
 import { LAND_HOSTS } from "./config-registry.ts";
+import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
+
+function recordWorkspaceAcceptance(workspace: string): number {
+  const state = dispatchStateDir();
+  const log = join(state, "runs.jsonl");
+  if (!existsSync(log)) return 0;
+  const target = realpathSync(workspace);
+  const lines = readFileSync(log, "utf8").split("\n").filter(Boolean);
+  const ids = new Set<string>();
+  for (const line of lines) {
+    const parsed = jsonOf(
+      z.looseObject({
+        kind: z.literal("run"),
+        run_id: z.string(),
+        cwd: z.string(),
+      }),
+    ).safeParse(line);
+    if (!parsed.success || !existsSync(parsed.data.cwd)) continue;
+    if (realpathSync(parsed.data.cwd) !== target) continue;
+    ids.add(parsed.data.run_id);
+  }
+  for (const run_id of ids)
+    appendFileSync(
+      log,
+      `${JSON.stringify({ kind: "acceptance", run_id, accept: true, at: Temporal.Now.instant().toString(), workspace: target })}\n`,
+    );
+  return ids.size;
+}
 
 const emit = (text: string): void => {
   process.stdout.write(`${text}\n`);
 };
+const shellQuote = (value: string): string =>
+  `'${value.replaceAll("'", "'\\''")}'`;
+
+export async function packageBinProblems(root: string): Promise<string[]> {
+  const problems: string[] = [];
+  for await (const manifest of new Bun.Glob("**/package.json").scan({
+    cwd: root,
+    onlyFiles: true,
+  })) {
+    if (
+      ["node_modules/", ".jj/", ".git/", "archives/"].some((prefix) =>
+        manifest.startsWith(prefix),
+      )
+    )
+      continue;
+    const source = fromThrowable(
+      () => readFileSync(join(root, manifest), "utf8"),
+      errorMessage,
+    )();
+    if (source.isErr()) continue;
+    const parsed = jsonOf(
+      z.looseObject({
+        bin: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+      }),
+    ).safeParse(source.value);
+    if (!parsed.success || parsed.data.bin === undefined) continue;
+    const targets =
+      typeof parsed.data.bin === "string"
+        ? [parsed.data.bin]
+        : Object.values(parsed.data.bin);
+    for (const target of targets)
+      problems.push(...packageBinTargetProblems(root, manifest, target));
+  }
+  return problems;
+}
+
+function packageBinTargetProblems(
+  root: string,
+  manifest: string,
+  target: string,
+): string[] {
+  const path = resolve(dirname(join(root, manifest)), target);
+  const relative = `${manifest.slice(0, -"package.json".length)}${target}`;
+  const info = fromThrowable(() => statSync(path), errorMessage)();
+  if (info.isErr()) return [`${relative}: target does not exist`];
+  const source = fromThrowable(
+    () => readFileSync(path, "utf8"),
+    errorMessage,
+  )();
+  if (source.isErr()) return [`${relative}: target cannot be read`];
+  const problems: string[] = [];
+  if ((info.value.mode & 0o111) === 0)
+    problems.push(`${relative}: target is not executable`);
+  if (!source.value.startsWith("#!"))
+    problems.push(`${relative}: target has no shebang`);
+  return problems;
+}
+
+type Version = { major: number; minor: number; patch: number };
+const parseVersion = (value: string): Version | undefined => {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(value);
+  if (match === null) return undefined;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+  };
+};
+const versionText = ({ major, minor, patch }: Version): string =>
+  `${major}.${minor}.${patch}`;
+function nextVersion(
+  alpha: string,
+  base: string,
+  workspace: string,
+): string | undefined {
+  const a = parseVersion(alpha);
+  const b = parseVersion(base);
+  const w = parseVersion(workspace);
+  if (a === undefined || b === undefined || w === undefined) return undefined;
+  let bump: "major" | "minor" | "patch" | undefined;
+  if (w.major > b.major) bump = "major";
+  else if (w.minor > b.minor) bump = "minor";
+  else if (w.patch > b.patch) bump = "patch";
+  if (bump === undefined) return undefined;
+  if (bump === "major")
+    return versionText({ major: a.major + 1, minor: 0, patch: 0 });
+  if (bump === "minor")
+    return versionText({ major: a.major, minor: a.minor + 1, patch: 0 });
+  return versionText({ major: a.major, minor: a.minor, patch: a.patch + 1 });
+}
+
+function changelogParts(
+  text: string,
+): { preamble: string; top: string; rest: string } | undefined {
+  const start = text.indexOf("## ");
+  if (start < 0) return undefined;
+  const next = text.indexOf("\n## ", start + 3);
+  return {
+    preamble: text.slice(0, start).trimEnd(),
+    top: text.slice(start, next < 0 ? text.length : next).trimEnd(),
+    rest: next < 0 ? "" : text.slice(next + 1).trim(),
+  };
+}
+
+function samePackageExceptVersion(left: string, right: string): boolean {
+  const packageRecord = z.record(z.string(), z.unknown());
+  const a = jsonOf(packageRecord).safeParse(left);
+  const b = jsonOf(packageRecord).safeParse(right);
+  if (!a.success || !b.success) return false;
+  delete a.data.version;
+  delete b.data.version;
+  return JSON.stringify(a.data) === JSON.stringify(b.data);
+}
+
+function unresolvedConflictPaths(root: string, pathList: string[]): string[] {
+  const conflicts: string[] = [];
+  for (const path of pathList) {
+    const file = join(root, path);
+    if (!existsSync(file)) continue;
+    const source = fromThrowable(
+      () => readFileSync(file, "utf8"),
+      errorMessage,
+    )();
+    if (source.isErr()) continue;
+    if (/^(?:<<<<<<<|%%%%%%%)/mu.test(source.value)) conflicts.push(path);
+  }
+  return conflicts;
+}
+
+function resolveVersionOnlyConflict(
+  workerRoot: string,
+  mainRoot: string,
+  alpha: string,
+  workspaceChange: string,
+  workspaceBase: string,
+  conflictPaths: string[],
+): ResultAsync<{ packagePath: string; version: string }, Error> {
+  return safeTry(async function* () {
+    const packagePath = conflictPaths.find((path) =>
+      /^tools\/[^/]+\/package\.json$/u.test(path),
+    );
+    if (packagePath === undefined)
+      return reject(
+        `rebase introduced conflicts: ${JSON.stringify(conflictPaths)}`,
+      );
+    const changelogPath = packagePath.replace(
+      /package\.json$/u,
+      "CHANGELOG.md",
+    );
+    if (conflictPaths.length !== 2 || !conflictPaths.includes(changelogPath))
+      return reject(
+        `rebase introduced conflicts: ${JSON.stringify(conflictPaths)}`,
+      );
+    const basePackageText = yield* jj(workerRoot, [
+      "file",
+      "show",
+      "-r",
+      workspaceBase,
+      packagePath,
+    ]);
+    const workspacePackageText = yield* jj(workerRoot, [
+      "file",
+      "show",
+      "-r",
+      workspaceChange,
+      packagePath,
+    ]);
+    const alphaPackageText = yield* jj(mainRoot, [
+      "file",
+      "show",
+      "-r",
+      alpha,
+      packagePath,
+    ]);
+    const packageVersion = z.looseObject({ version: z.string() });
+    const basePackage = jsonOf(packageVersion).safeParse(basePackageText);
+    const workspacePackage =
+      jsonOf(packageVersion).safeParse(workspacePackageText);
+    const alphaPackage = jsonOf(packageVersion).safeParse(alphaPackageText);
+    if (
+      !basePackage.success ||
+      !workspacePackage.success ||
+      !alphaPackage.success
+    )
+      return reject(`cannot parse package versions: ${packagePath}`);
+    if (!samePackageExceptVersion(basePackageText, workspacePackageText))
+      return reject(
+        `version conflict also changes package fields: ${packagePath}`,
+      );
+    const version = nextVersion(
+      alphaPackage.data.version,
+      basePackage.data.version,
+      workspacePackage.data.version,
+    );
+    if (version === undefined)
+      return reject(
+        `cannot infer the workspace version bump level: ${packagePath}`,
+      );
+    const baseChangelog = yield* jj(workerRoot, [
+      "file",
+      "show",
+      "-r",
+      workspaceBase,
+      changelogPath,
+    ]);
+    const workspaceChangelog = yield* jj(workerRoot, [
+      "file",
+      "show",
+      "-r",
+      workspaceChange,
+      changelogPath,
+    ]);
+    const alphaChangelog = yield* jj(mainRoot, [
+      "file",
+      "show",
+      "-r",
+      alpha,
+      changelogPath,
+    ]);
+    const workspaceParts = changelogParts(workspaceChangelog);
+    const alphaParts = changelogParts(alphaChangelog);
+    const baseParts = changelogParts(baseChangelog);
+    if (
+      workspaceParts === undefined ||
+      alphaParts === undefined ||
+      baseParts === undefined
+    )
+      return reject(`cannot parse top CHANGELOG sections: ${changelogPath}`);
+    const baseSections =
+      `${baseParts.top}${baseParts.rest === "" ? "" : `\n\n${baseParts.rest}`}`.trim();
+    if (
+      workspaceParts.preamble !== alphaParts.preamble ||
+      workspaceParts.rest.trim() !== baseSections
+    )
+      return reject(
+        `CHANGELOG conflict is not a single additive top entry: ${changelogPath}`,
+      );
+    if (!/^## \d+\.\d+\.\d+/u.test(workspaceParts.top))
+      return reject(
+        `workspace CHANGELOG entry has no semantic version: ${changelogPath}`,
+      );
+    const workspaceTop = workspaceParts.top.replace(
+      /^## \d+\.\d+\.\d+/u,
+      `## ${version}`,
+    );
+    alphaPackage.data.version = version;
+    writeFileSync(
+      join(workerRoot, packagePath),
+      `${JSON.stringify(alphaPackage.data, null, 2)}\n`,
+    );
+    const mergedChangelog = `${alphaParts.preamble}\n\n${workspaceTop}\n\n${alphaParts.top}${alphaParts.rest === "" ? "" : `\n\n${alphaParts.rest}`}\n`;
+    writeFileSync(join(workerRoot, changelogPath), mergedChangelog);
+    return ok({ packagePath, version });
+  });
+}
 const reject = (reason: string) => err(new Error(reason));
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -131,6 +417,38 @@ const at = (cwd: string, rev: string, template = "commit_id") =>
   read(cwd, ["log", "--no-graph", "-r", rev, "-T", template]).map((text) =>
     text.trim(),
   );
+
+function findWorkspaceListMatch(
+  output: string,
+  requestedPath: string,
+  requestedBasename: string,
+): { name: string; path: string } | undefined {
+  for (const line of output.split("\n")) {
+    const [name, path] = line.split("\t");
+    if (name === undefined || path === undefined) continue;
+    if (
+      resolve(path) === resolve(requestedPath) ||
+      basename(path) === requestedBasename
+    )
+      return { name, path };
+  }
+  return undefined;
+}
+
+async function listWorkspaceMatch(
+  root: string,
+  requestedPath: string,
+  requestedBasename: string,
+): Promise<{ name: string; path: string } | undefined> {
+  const listed = await read(root, [
+    "workspace",
+    "list",
+    "--template",
+    'name ++ "\\t" ++ workspace_root ++ "\\n"',
+  ]);
+  if (listed.isErr()) return undefined;
+  return findWorkspaceListMatch(listed.value, requestedPath, requestedBasename);
+}
 
 function paths(
   cwd: string,
@@ -257,6 +575,9 @@ async function main(): Promise<number> {
   const hostResults = new Map<string, string>();
   const captured = await attempt(() =>
     safeTry(async function* () {
+      const binProblems = await packageBinProblems(process.cwd());
+      if (binProblems.length > 0)
+        return reject(`package bin check failed: ${binProblems.join("; ")}`);
       if (parsed._.length !== 1 || (parsed.flags.message?.trim() ?? "") === "")
         return reject("one workspace and -m <message> are required");
       for (const host of LAND_HOSTS)
@@ -272,12 +593,41 @@ async function main(): Promise<number> {
           )
         : realpathSync(repoEntry);
       let mainRoot = dirname(dirname(repo));
-      let workerRoot = (yield* read(root, [
+      const requestedWorkspace = parsed._[0] ?? "";
+      const workspaceBasename = basename(requestedWorkspace);
+      const directWorkspace = await read(root, [
         "workspace",
         "root",
         "--name",
-        parsed._[0] ?? "",
-      ])).trim();
+        workspaceBasename,
+      ]);
+      let workspaceName = workspaceBasename;
+      let workspacePath = directWorkspace.isOk()
+        ? directWorkspace.value.trim()
+        : undefined;
+      if (workspacePath === undefined) {
+        const listedMatch = await listWorkspaceMatch(
+          root,
+          requestedWorkspace,
+          workspaceBasename,
+        );
+        if (listedMatch !== undefined) {
+          workspaceName = listedMatch.name;
+          workspacePath = listedMatch.path;
+        }
+      }
+      if (workspacePath === undefined) {
+        workspaceName = workspaceBasename.startsWith("dotfiles-arm-")
+          ? workspaceBasename.slice("dotfiles-arm-".length)
+          : workspaceBasename;
+        workspacePath = (yield* read(root, [
+          "workspace",
+          "root",
+          "--name",
+          workspaceName,
+        ])).trim();
+      }
+      let workerRoot = workspacePath;
       if (workerRoot === mainRoot || !existsSync(workerRoot))
         return reject(
           "worker workspace must exist and differ from the main checkout",
@@ -293,6 +643,8 @@ async function main(): Promise<number> {
       yield* jj(workerRoot, ["status"]);
       yield* jj(mainRoot, ["status"]);
       const alpha = yield* at(mainRoot, "alpha");
+      const workspaceChange = yield* at(workerRoot, "@");
+      const workspaceBase = yield* at(workerRoot, "@-");
       if ((yield* at(workerRoot, "@", "conflict")) !== "false")
         return reject("workspace change has conflicts");
       const initial = yield* paths(workerRoot, "@-", "@");
@@ -312,8 +664,25 @@ async function main(): Promise<number> {
       );
       stage = "rebase";
       yield* jj(workerRoot, ["rebase", "-r", "@", "-o", alpha]);
-      if ((yield* at(workerRoot, "@", "conflict")) !== "false")
-        return reject("rebase introduced conflicts");
+      if ((yield* at(workerRoot, "@", "conflict")) !== "false") {
+        const conflictPaths = unresolvedConflictPaths(workerRoot, initial);
+        const repaired = yield* resolveVersionOnlyConflict(
+          workerRoot,
+          mainRoot,
+          alpha,
+          workspaceChange,
+          workspaceBase,
+          conflictPaths,
+        );
+        yield* jj(workerRoot, ["status"]);
+        if ((yield* at(workerRoot, "@", "conflict")) !== "false")
+          return reject(
+            "version-only conflict repair left unresolved conflicts",
+          );
+        emit(
+          `[land] rebase: resolved version-only conflict ${repaired.packagePath} -> ${repaired.version}`,
+        );
+      }
       emit(
         `[land] rebase: ok ${parsed.flags.dryRun ? "preview " : ""}onto alpha`,
       );
@@ -361,11 +730,30 @@ async function main(): Promise<number> {
         ]);
         const after = await at(mainRoot, "@-");
         if (after.isOk() && after.value !== before) commit = after.value;
+        const failedCommitUnchanged =
+          committed.isErr() && after.isOk() && after.value === before;
+        if (failedCommitUnchanged)
+          yield* jj(mainRoot, [
+            "restore",
+            "--from",
+            alpha,
+            "--",
+            ...filesets(changed),
+          ]);
         if (committed.isErr()) return committed;
         if (after.isErr()) return after;
         commit = after.value;
       }
       emit(`[land] commit: ok ${commit ?? "would gated commit --push"}`);
+      if (!parsed.flags.dryRun) {
+        stage = "deps";
+        yield* run(mainRoot, [process.env.LAND_MISE ?? "mise", "run", "deps"]);
+        emit("[land] deps: ok local main checkout");
+        const accepted = recordWorkspaceAcceptance(workerRoot);
+        emit(
+          `[land] acceptance: recorded ${accepted} run(s) from this workspace`,
+        );
+      }
       stage = "deploy";
       const smokeBegin = `__LAND_SMOKE_BEGIN_${process.pid}__`;
       const smokeEnd = `__LAND_SMOKE_END_${process.pid}__`;
@@ -385,7 +773,10 @@ async function main(): Promise<number> {
           parsed.flags.smoke === undefined
             ? ""
             : ` && { printf '\\n${smokeBegin}\\n'; ( ${parsed.flags.smoke}\n ) 2>&1; _land_smoke_status=$?; printf '\\n${smokeEnd}\\n'; exit "$_land_smoke_status"; }`;
-        const command = `cd ~/dotfiles && mise run pull && mise run deps${smokeStep}`;
+        const remoteWork = `cd ~/dotfiles && mise run pull && mise run deps${smokeStep}`;
+        const locked = `flock -w 600 ~/.cache/dotfiles-land.lock sh -c ${shellQuote(remoteWork)}`;
+        const command = `mkdir -p ~/.cache; setsid sh -c ${shellQuote(locked)} & _land_pid=$!; trap 'kill -TERM -$_land_pid 2>/dev/null || true; wait $_land_pid 2>/dev/null || true' HUP TERM INT; wait $_land_pid; _land_status=$?; trap - HUP TERM INT; exit $_land_status`;
+        emit(`[land] deploy: waiting for host lock ${host.alias}`);
         const deployed = await runHost(mainRoot, [
           process.env.LAND_SSH ?? "ssh",
           "-o",
@@ -432,6 +823,11 @@ async function main(): Promise<number> {
           status.startsWith("FAIL ") || status.startsWith("unreachable "),
       );
       if (failedHosts) return reject("one or more host deployments failed");
+      if (!parsed.flags.dryRun) {
+        yield* jj(root, ["workspace", "forget", workspaceName]);
+        rmSync(workerRoot, { recursive: true, force: true });
+        emit(`[land] workspace: removed ${workspaceName}`);
+      }
       return ok(undefined);
     }),
   ).finally(() => {

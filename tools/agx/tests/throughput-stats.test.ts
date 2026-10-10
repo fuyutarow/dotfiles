@@ -31,6 +31,27 @@ const run = (values: Record<string, unknown>): string =>
   });
 
 describe("throughputStats", () => {
+  test("counts only explicitly accepted delivered runs", () => {
+    const log = [
+      run({ result: "delivered" }),
+      JSON.stringify({ kind: "acceptance", run_id: "r", accept: true }),
+    ].join("\n");
+    const report = throughputStats(log, { now, sinceMs: 0, grading: false });
+    expect(report.per_row["row-a"]).toMatchObject({
+      accepted: 1,
+      accepted_rate: 1,
+    });
+    const unaccepted = throughputStats(run({ result: "delivered" }), {
+      now,
+      sinceMs: 0,
+      grading: false,
+    });
+    expect(unaccepted.per_row["row-a"]).toMatchObject({
+      accepted: 0,
+      accepted_rate: 0,
+    });
+  });
+
   test("reuses the cached result for the same bounded log snapshot", () => {
     const options = { now: 1_000, sinceMs: 0, grading: false };
     const first = throughputStats("", options);
@@ -119,7 +140,7 @@ describe("throughputStats", () => {
     expect(result.per_row["luna-high"]?.runs).toBe(2);
     expect(result.per_tag["gpu-kernels"]?.["luna-high"]?.runs).toBe(1);
     expect(result.per_tag["gpu-kernels"]?.["luna-high"]?.timeout_rate).toBe(1);
-    expect(result.per_tag["typescript"]?.["luna-high"]?.accepted_rate).toBe(1);
+    expect(result.per_tag["typescript"]?.["luna-high"]?.accepted_rate).toBe(0);
   });
   test("non_delivery is rejected even with a passing grade and counts as a row failure", () => {
     const nowMs = Temporal.Now.instant().epochMilliseconds;
@@ -173,6 +194,7 @@ describe("throughputStats", () => {
       {
         kind: "run",
         run_id: "comparable-pass",
+        result: "delivered",
         started_at: startedAt,
         ticket: {
           schema: 2,
@@ -188,6 +210,7 @@ describe("throughputStats", () => {
         },
       },
       { kind: "grade", run_id: "comparable-pass", grade: "pass" },
+      { kind: "acceptance", run_id: "comparable-pass", accept: true },
       {
         kind: "run",
         run_id: "different-size",
@@ -235,9 +258,9 @@ describe("throughputStats", () => {
     expect(result.per_row["row-a"]?.median_time_to_first_return_s).toBe(12);
   });
 
-  test("accepts graded and consumed returns and counts only unconsumed, unaccepted tokens as wasted", () => {
+  test("accepts only marked deliveries and counts unaccepted tokens as wasted", () => {
     const log = [
-      run({}),
+      run({ result: "delivered" }),
       run({
         run_id: "returned",
         stats: {
@@ -262,6 +285,7 @@ describe("throughputStats", () => {
         },
       }),
       JSON.stringify({ kind: "grade", run_id: "r", grade: "pass" }),
+      JSON.stringify({ kind: "acceptance", run_id: "r", accept: true }),
       JSON.stringify({ kind: "ack", run_id: "returned", consumed: true }),
     ].join("\n");
     const result = throughputStats(log, {
@@ -271,7 +295,7 @@ describe("throughputStats", () => {
     });
     expect(result.per_row["row-a"]).toMatchObject({
       runs: 2,
-      accepted: 2,
+      accepted: 1,
       median_time_to_first_return_s: 34,
     });
     expect(result.per_row["row-b"]?.wasted_tokens).toBe(11);
@@ -478,6 +502,7 @@ describe("throughputStats", () => {
     const log = [
       run({
         run_id: "a1",
+        result: "delivered",
         stats: {
           row: "row-a",
           effort: "medium",
@@ -488,6 +513,7 @@ describe("throughputStats", () => {
         },
       }),
       JSON.stringify({ kind: "grade", run_id: "a1", grade: "pass" }),
+      JSON.stringify({ kind: "acceptance", run_id: "a1", accept: true }),
       run({
         run_id: "b1",
         pick: { source: "jev", choice: "row-b", confidence: 0.4 },

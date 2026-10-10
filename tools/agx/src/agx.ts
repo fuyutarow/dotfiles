@@ -64,6 +64,7 @@ import pkg from "../package.json" with { type: "json" };
 import { fromThrowable } from "neverthrow";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { jsonOf, jsonText, z } from "../../shared/src/zod.ts";
+import { deriveRunResult } from "../../shared/src/run-result.ts";
 import {
   DEFAULT_JSONL_TAIL_BYTES,
   jsonlLines,
@@ -139,6 +140,7 @@ import {
 import { floorTicketGrade, hasXhighMaxJustification } from "./ticket-grade.ts";
 import { checkPremises } from "./premises.ts";
 import { buildDetachedLaunch, type DetachPlatform } from "./detach.ts";
+import { planWorkspace } from "./workspaces.ts";
 import { progressIntervalMs, progressThrottle } from "./progress.ts";
 import { lintTicket, renderTicketLint } from "./ticket-lint.ts";
 import { ticketRoot, newTicket, listTickets } from "./ticket-home.ts";
@@ -1589,6 +1591,48 @@ interface RunFlags {
   pickSeed?: string | undefined;
   runId?: string;
   verbose?: boolean;
+  workspaceName?: string;
+}
+
+type WorkspaceCommandResult = { ok: true } | { ok: false; error: string };
+function workspaceCommand(args: string[], cwd: string): WorkspaceCommandResult {
+  const spawned = fromThrowable(
+    () => Bun.spawnSync(args, { cwd, stdout: "pipe", stderr: "pipe" }),
+    errorMessage,
+  )();
+  if (spawned.isErr()) return { ok: false, error: spawned.error };
+  if (spawned.value.exitCode === 0) return { ok: true };
+  return {
+    ok: false,
+    error: `${args.join(" ")} failed (exit ${spawned.value.exitCode}): ${spawned.value.stderr.toString().trim()}`,
+  };
+}
+
+async function prepareWorkspace(
+  nameHint: string | undefined,
+): Promise<{ name: string; path: string }> {
+  const root = workspaceRoot(process.cwd());
+  const plan = await planWorkspace(root, nameHint);
+  if (!plan.ok) fatal(plan.error);
+  const { name, path } = plan;
+  const added = workspaceCommand(
+    ["jj", "workspace", "add", "--name", name, path],
+    root,
+  );
+  if (!added.ok) fatal(added.error);
+  const trusted = workspaceCommand(["mise", "trust"], path);
+  const installed = trusted.ok
+    ? workspaceCommand(["bun", "install", "--frozen-lockfile"], path)
+    : trusted;
+  if (!installed.ok) {
+    workspaceCommand(["jj", "workspace", "forget", name], root);
+    rmSync(path, { recursive: true, force: true });
+    fatal(installed.error);
+  }
+  dispatchError(
+    `agx: land command: mise run land -- ${name} -m "land ${name}"`,
+  );
+  return { name, path };
 }
 
 function refuseUnrunnable(roster: Roster, id: string): Choice {
@@ -2135,6 +2179,9 @@ function statsFor(
   cwd: string,
   asOf: string,
   graderCostUsd: number | null = null,
+  vendorStatus = typeof worker.outcome === "string"
+    ? worker.outcome
+    : "codex-failed",
 ): Record<string, unknown> {
   const tokens = tokenCounts(row.route, worker.usage);
   const price = {
@@ -2185,8 +2232,7 @@ function statsFor(
     route: row.route,
     model: row.model,
     effort: row.effort,
-    outcome:
-      typeof worker.outcome === "string" ? worker.outcome : "codex-failed",
+    vendor_status: vendorStatus,
     exit,
     elapsed_s:
       typeof worker.elapsed_s === "number" ? worker.elapsed_s : elapsedS,
@@ -2200,7 +2246,6 @@ function statsFor(
     price,
     brief_chars: briefChars,
     cwd,
-    jev_confidence: pick.confidence ?? null,
     picked_by: pick.source,
   };
 }
@@ -2924,6 +2969,9 @@ async function launch(l: Launch): Promise<number> {
         }
       : { request }),
   };
+  const rawVendorStatus =
+    z.looseObject({ outcome: z.string().optional() }).safeParse(rawWorker).data
+      ?.outcome ?? "unparsed";
   let workerData = rawWorker;
   if (parsedReturn.kind === "valid" && workerData !== undefined)
     workerData = { ...workerData, outcome: "returned" };
@@ -2934,8 +2982,6 @@ async function launch(l: Launch): Promise<number> {
       cause: "all stall inputs flat for " + stallWindowS + "s",
     };
   let exit = workerExit;
-  if (parsedReturn.kind === "valid") exit = 0;
-  else if (stalled) exit = 1;
   const progressField = done === undefined ? {} : { progress: done };
   let outcomeName: string | undefined;
   const delta = await checkedWrites(
@@ -2946,25 +2992,6 @@ async function launch(l: Launch): Promise<number> {
   );
   if (stopCompletion !== undefined) await stopCompletion;
   const writes = ticket === undefined ? undefined : delta;
-  const nonDelivery =
-    parsedReturn.kind !== "valid" &&
-    !stalled &&
-    workerExit === 0 &&
-    z.looseObject({ outcome: z.string() }).safeParse(rawWorker).data
-      ?.outcome === "ok" &&
-    ticket !== undefined &&
-    ticket.read_only_diagnostic !== true &&
-    (ticket.writes?.length ?? 0) > 0 &&
-    writes?.unavailable === undefined &&
-    writes?.paths.length === 0;
-  if (nonDelivery) {
-    workerData = {
-      ...workerData,
-      outcome: "non_delivery",
-      cause: "ticket declared writes but no files changed",
-    };
-    exit = 1;
-  }
   const workerOutcome = z
     .looseObject({ outcome: z.string().optional() })
     .safeParse(workerData);
@@ -3092,10 +3119,6 @@ async function launch(l: Launch): Promise<number> {
     dispatchError(
       `agx: worker claimed changes (${claimedPaths.join(", ")}) but the ticket writes diff is empty`,
     );
-  const verifyProvesOtherwise =
-    verified !== undefined &&
-    verified.results.length > 0 &&
-    verified.results.every((result) => result.exit === 0 && !result.timed_out);
   const stoppedWith = z
     .looseObject({ outcome: z.string(), session: z.string() })
     .safeParse(workerData);
@@ -3170,6 +3193,38 @@ async function launch(l: Launch): Promise<number> {
   if (parsedReturn.kind === "valid") returnFields.return = parsedReturn.record;
   else if (parsedReturn.kind === "invalid")
     returnFields.return_error = parsedReturn.error;
+  const workerTurns = z
+    .looseObject({ num_turns: z.number().int().nonnegative().optional() })
+    .safeParse(workerData);
+  const runFacts = {
+    vendor_exit: workerExit,
+    vendor_status: rawVendorStatus,
+    turns: finalProgress?.turns ?? workerTurns.data?.num_turns ?? 0,
+    tokens: finalUsage ?? null,
+    output_chars: lastMessage.length,
+    changed_files: delta.paths,
+    verify: verified?.results ?? [],
+    verify_required: (ticket?.verify.length ?? 0) > 0,
+    verify_required_count: ticket?.verify.length ?? 0,
+    valid_return: parsedReturn.kind === "valid",
+    return_findings:
+      parsedReturn.kind === "valid" ? parsedReturn.record.findings.length : 0,
+    timed_out: outcomeName === "timeout" || exit === 3,
+    stalled,
+    scope_warning: writeViolations,
+  };
+  const result = deriveRunResult({
+    vendor_exit: runFacts.vendor_exit,
+    verify: runFacts.verify,
+    verify_required: runFacts.verify_required,
+    verify_required_count: runFacts.verify_required_count,
+    changed_files: runFacts.changed_files,
+    valid_return: runFacts.valid_return,
+    return_findings: runFacts.return_findings,
+    turns: runFacts.turns,
+    output_chars: runFacts.output_chars,
+    timed_out: runFacts.timed_out,
+  });
   const receiptBase = {
     schema: SCHEMA,
     resource: { kind: active.kind, labels: active.labels },
@@ -3207,7 +3262,7 @@ async function launch(l: Launch): Promise<number> {
       ? {}
       : { dispatcher_session: active.dispatcher_session }),
     ended_at: now(),
-    exit,
+    exit: workerExit,
     ...(resumeHint === undefined ? {} : { resume_with: resumeHint }),
     ...reportFields(workerData),
     ...returnFields,
@@ -3215,6 +3270,8 @@ async function launch(l: Launch): Promise<number> {
     ...(verified === undefined
       ? {}
       : { verify: verified.results, verify_summary: verified.summary }),
+    facts: runFacts,
+    result,
     ...writesFields,
     ...claimFields,
     ...(partialReport === undefined ? {} : { report_partial: partialReport }),
@@ -3226,7 +3283,7 @@ async function launch(l: Launch): Promise<number> {
         : "process group only; this router does not assign a per-run Linux cgroup or recover reparented descendants that called setsid",
     // agx's own receipt carries progress; a claude worker's comes from its progress file
     worker:
-      worker.success || stalled || nonDelivery
+      worker.success || stalled
         ? {
             ...progressField,
             sandbox: flags.sandbox,
@@ -3245,36 +3302,28 @@ async function launch(l: Launch): Promise<number> {
     active.cwd,
     roster.as_of,
     ticketGrade.grader?.usage?.cost_usd ?? null,
+    rawVendorStatus,
   );
   const receipt = {
     ...receiptBase,
     ...(runStats.cost_usd === null ? {} : { cost_usd: runStats.cost_usd }),
   };
   appendLog({ kind: "run", ...receipt, stats: runStats });
-  if (parsedReturn.kind !== "valid" && (stalled || nonDelivery)) {
+  if (parsedReturn.kind !== "valid" && stalled) {
     rmSync(progress, { force: true });
     rmSync(activity, { force: true });
     rmSync(marker, { force: true });
     cleanup();
-    const incident = nonDelivery
-      ? {
-          kind: "non_delivery",
-          at: now(),
-          run_id: runId,
-          display_id: displayId,
-          row: row.id,
-          returned: false,
-        }
-      : {
-          kind: "stalled",
-          at: now(),
-          run_id: runId,
-          display_id: displayId,
-          row: row.id,
-          stall_s: stallS,
-          ...stallEvidence,
-          commands: done?.commands ?? 0,
-        };
+    const incident = {
+      kind: "stalled",
+      at: now(),
+      run_id: runId,
+      display_id: displayId,
+      row: row.id,
+      stall_s: stallS,
+      ...stallEvidence,
+      commands: done?.commands ?? 0,
+    };
     appendFileSync(
       join(STATE_DIR, "incidents.jsonl"),
       `${JSON.stringify(incident)}\n`,
@@ -3344,29 +3393,11 @@ async function launch(l: Launch): Promise<number> {
           : undefined,
     });
   }
-  let graded: Record<string, unknown> = {};
-  if (verified !== undefined) {
-    if (writeViolations.length > 0)
-      graded = recordWritesViolationGrade(runId, verified, writeViolations);
-    else if (claimsWithoutDiff && !verifyProvesOtherwise)
-      graded = recordClaimsWithoutDiffGrade(runId, verified, claimedPaths);
-    else
-      graded = await autoGrade(
-        roster,
-        runId,
-        brief,
-        receipt.worker,
-        active.cwd,
-        verified,
-      );
-  } else if (parsedReturn.kind === "valid") {
-    recordWaiver(runId, "returned early with findings", "router");
-  }
   rmSync(progress, { force: true });
   rmSync(activity, { force: true });
   rmSync(marker, { force: true });
-  process.stdout.write(`${JSON.stringify({ ...receipt, ...graded })}\n`);
-  return writeViolations.length > 0 ? 1 : exit;
+  process.stdout.write(`${JSON.stringify(receipt)}\n`);
+  return exit;
 }
 
 // --- the ticket after the worker exits: verify, then grade ---------------------------------------------
@@ -3824,6 +3855,21 @@ const LogLine = z.looseObject({
   timeout_source: z.enum(["cli", "ticket", "default"]).optional(),
   timeout_reason: z.string().optional(),
   ticket_grade: z.unknown().optional(),
+  result: z.enum(["delivered", "returned", "failed", "abandoned"]).optional(),
+  accept: z.boolean().optional(),
+  workspace: z.string().optional(),
+  facts: z
+    .looseObject({
+      changed_files: z.array(z.string()).optional(),
+      scope_warning: z.array(z.string()).optional(),
+      turns: z.number().optional(),
+      tokens: z.unknown().optional(),
+    })
+    .optional(),
+  verify: z
+    .array(z.looseObject({ cmd: z.string(), exit: z.number() }))
+    .optional(),
+  resume_with: z.string().optional(),
   checkpoint: z.unknown().optional(),
   writes_check: z.union([z.array(z.string()), z.string()]).optional(),
   writes_violations: z.array(z.string()).optional(),
@@ -4009,7 +4055,116 @@ function collectDeadMarkers(dryRun = false): {
   return { found: dead.length, removed: dead.length };
 }
 
-function gcCommand(dryRun: boolean): number {
+function workspaceGc(yes: boolean, days: number): number {
+  const root = workspaceRoot(process.cwd());
+  const listed = Bun.spawnSync(
+    [
+      "jj",
+      "--no-pager",
+      "--color",
+      "never",
+      "workspace",
+      "list",
+      "--template",
+      'name ++ "\\t" ++ workspace_root ++ "\\n"',
+    ],
+    { cwd: root, stdout: "pipe", stderr: "pipe" },
+  );
+  if (listed.exitCode !== 0)
+    fatal(`cannot list jj workspaces: ${listed.stderr.toString().trim()}`);
+  const accepted = new Set(
+    readAllLog()
+      .filter((line) => line.kind === "acceptance" && line.accept === true)
+      .map((line) => line.workspace),
+  );
+  const cutoff = epochMilliseconds() - days * 86_400_000;
+  const stale = listed.stdout
+    .toString()
+    .split("\n")
+    .flatMap((line) => {
+      const [name, path] = line.split("\t");
+      if (
+        name === undefined ||
+        path === undefined ||
+        !basename(path).startsWith("dotfiles-arm-") ||
+        resolve(path) === resolve(root)
+      )
+        return [];
+      const landed = accepted.has(resolve(path));
+      const old = existsSync(path) && statSync(path).mtimeMs < cutoff;
+      return landed || old ? [{ name, path, landed, old }] : [];
+    });
+  for (const item of stale) {
+    process.stdout.write(
+      `${yes ? "remove" : "stale"}\t${item.name}\t${item.path}\t${item.landed ? "landed" : `${days}d+`}\n`,
+    );
+    if (yes) forgetWorkspace(root, item);
+  }
+  if (stale.length === 0)
+    process.stdout.write(
+      "agx ledger gc --workspaces: no stale arm workspaces\n",
+    );
+  return 0;
+}
+
+function expireUnacceptedDeliveries(days: number): number {
+  const lines = readAllLog();
+  const accepted = new Set(
+    lines
+      .filter((line) => line.kind === "acceptance")
+      .map((line) => line.run_id),
+  );
+  const cutoff = epochMilliseconds() - days * 86_400_000;
+  const expired = lines.filter(
+    (line) =>
+      line.kind === "run" &&
+      line.result === "delivered" &&
+      line.run_id !== undefined &&
+      !accepted.has(line.run_id) &&
+      (instantMilliseconds(line.ended_at) ?? Infinity) < cutoff,
+  );
+  for (const line of expired)
+    appendLog({
+      kind: "acceptance",
+      run_id: line.run_id,
+      accept: false,
+      at: now(),
+      note: `unaccepted for ${days} days`,
+    });
+  return expired.length;
+}
+
+function forgetWorkspace(
+  root: string,
+  item: { name: string; path: string },
+): void {
+  const forgotten = Bun.spawnSync(
+    ["jj", "--no-pager", "--color", "never", "workspace", "forget", item.name],
+    { cwd: root, stdout: "pipe", stderr: "pipe" },
+  );
+  if (forgotten.exitCode !== 0)
+    fatal(
+      `cannot forget workspace ${item.name}: ${forgotten.stderr.toString().trim()}`,
+    );
+  rmSync(item.path, { recursive: true, force: true });
+}
+
+function gcCommand(
+  dryRun: boolean,
+  workspaces: boolean,
+  yes: boolean,
+  days: number,
+): number {
+  if (workspaces) {
+    const result = workspaceGc(yes, days);
+    if (yes) {
+      const expired = expireUnacceptedDeliveries(days);
+      process.stdout.write(
+        `agx ledger gc: marked ${expired} unaccepted delivery/deliveries (${days}d)\n`,
+      );
+    }
+    return result;
+  }
   const result = collectDeadMarkers(dryRun);
   if (!dryRun) {
     const rotation = rotateRunsLog(STATE_DIR);
@@ -4024,6 +4179,12 @@ function gcCommand(dryRun: boolean): number {
     process.stdout.write(
       `agx ledger gc: ${result.removed === 0 ? "no stale markers" : `marked ${result.removed} abandoned and removed ${result.removed} marker(s)`}\n`,
     );
+  if (!dryRun) {
+    const expired = expireUnacceptedDeliveries(days);
+    process.stdout.write(
+      `agx ledger gc: marked ${expired} unaccepted delivery/deliveries (${days}d)\n`,
+    );
+  }
   return 0;
 }
 
@@ -4079,56 +4240,64 @@ function psCommand(showAll: boolean, asJson: boolean): number {
     )
       latest.set(entry.run_id, entry);
 
-  const session = currentDispatcherSession();
   const ids = new Set([...latest.keys(), ...markers.keys()]);
-  const rows = [...ids].flatMap((id): PsRow[] => {
-    const marker = markers.get(id);
-    const logged = latest.get(id);
-    const dispatcherSession =
-      marker?.active.dispatcher_session ?? logged?.dispatcher_session;
-    if (!showAll && (session === undefined || dispatcherSession !== session))
-      return [];
-    let state: RunState;
-    if (logged !== undefined) state = stateOfRecord(logged);
-    else if (marker?.alive === true) state = "running";
-    else state = "abandoned";
-    const endedAt =
-      logged?.ended_at ??
-      (logged?.kind === "abandoned" ? (logged.when ?? logged.at) : undefined);
-    const typedReport = WorkerReport.safeParse(logged?.report);
-    const summary =
-      state === "running" || !typedReport.success
-        ? null
-        : oneLineSummary(typedReport.data.summary);
-    return [
-      {
-        id,
-        name:
-          marker?.active.display_id ??
-          logged?.display_id ??
-          marker?.active.label ??
-          logged?.label ??
+  const rows = [...ids]
+    .flatMap((id): PsRow[] => {
+      const marker = markers.get(id);
+      const logged = latest.get(id);
+      let state: RunState;
+      if (logged !== undefined) state = stateOfRecord(logged);
+      else if (marker?.alive === true) state = "running";
+      else state = "abandoned";
+      const endedAt =
+        logged?.ended_at ??
+        (logged?.kind === "abandoned" ? (logged.when ?? logged.at) : undefined);
+      const typedReport = WorkerReport.safeParse(logged?.report);
+      const summary =
+        state === "running" || !typedReport.success
+          ? null
+          : oneLineSummary(typedReport.data.summary);
+      return [
+        {
           id,
-        row: logged?.pick.choice ?? marker?.active.choice ?? "unknown",
-        kind: marker?.active.kind ?? logged?.resource?.kind ?? "unknown",
-        labels: marker?.active.labels ?? logged?.resource?.labels ?? [],
-        state,
-        age: ageLabel(marker?.active.started_at ?? logged?.started_at, endedAt),
-        summary,
-      },
-    ];
-  });
+          name:
+            marker?.active.display_id ??
+            logged?.display_id ??
+            marker?.active.label ??
+            logged?.label ??
+            id,
+          row: logged?.pick.choice ?? marker?.active.choice ?? "unknown",
+          kind: marker?.active.kind ?? logged?.resource?.kind ?? "unknown",
+          labels: marker?.active.labels ?? logged?.resource?.labels ?? [],
+          state,
+          age: ageLabel(
+            marker?.active.started_at ?? logged?.started_at,
+            endedAt,
+          ),
+          summary,
+        },
+      ];
+    })
+    .toSorted((a, b) => {
+      const liveOrder =
+        Number(b.state === "running") - Number(a.state === "running");
+      if (liveOrder !== 0) return liveOrder;
+      return b.id.localeCompare(a.id);
+    });
+  const visibleRows = showAll ? rows : rows.slice(0, 20);
 
   if (asJson) {
-    process.stdout.write(`${JSON.stringify({ schema: SCHEMA, runs: rows })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ schema: SCHEMA, runs: visibleRows })}\n`,
+    );
     return 0;
   }
-  if (rows.length === 0) {
+  if (visibleRows.length === 0) {
     process.stdout.write("agx ps: no runs\n");
     return 0;
   }
   process.stdout.write("id\tname\trow\tkind\tlabels\tstate\tage\tsummary\n");
-  for (const row of rows)
+  for (const row of visibleRows)
     process.stdout.write(
       `${row.id}\t${row.name}\t${row.row}\t${row.kind}\t${row.labels.join(",")}\t${row.state}\t${row.age}\t${row.summary ?? ""}\n`,
     );
@@ -4463,6 +4632,29 @@ function ack(
     dispatcher_session: currentDispatcherSession() ?? null,
     at: now(),
     consumed,
+    ...(note === undefined ? {} : { note }),
+  };
+  appendLog(record);
+  process.stdout.write(`${JSON.stringify({ schema: SCHEMA, ...record })}\n`);
+  return 0;
+}
+
+function acceptRun(
+  runId: string,
+  accept: boolean,
+  note: string | undefined,
+): number {
+  const resolved = resolveRunId(runId);
+  const logged = readAllLog().find(
+    (line) => line.kind === "run" && line.run_id === resolved,
+  );
+  if (logged === undefined)
+    fatal(`no finished run ${runId} in ${LOG_FILE}; no acceptance recorded`);
+  const record = {
+    kind: "acceptance",
+    run_id: resolved,
+    accept,
+    at: now(),
     ...(note === undefined ? {} : { note }),
   };
   appendLog(record);
@@ -5172,6 +5364,13 @@ const suiteOptions = {
       help: { description: "List session runs and their current state" },
     }),
     command({
+      name: "show",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: { description: "Show one completed run" },
+    }),
+    command({
       name: "ledger",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -5206,7 +5405,7 @@ async function parseAgx() {
         flags: {
           all: {
             type: Boolean,
-            description: "include runs from every session",
+            description: "show every run without the default 20 row limit",
           },
           json: { type: Boolean, description: "print rows as JSON" },
         },
@@ -5220,7 +5419,31 @@ async function parseAgx() {
       _: typeof parsed._;
     };
   }
+  if (rootArgv.command === "show") {
+    const parsed = cli(
+      {
+        name: "agx show",
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+        parameters: ["<run_id>"],
+        flags: {
+          json: { type: Boolean, description: "print the full record as JSON" },
+        },
+      },
+      undefined,
+      rawArgs.slice(1),
+    );
+    return { command: "show" as const, flags: parsed.flags, _: parsed._ };
+  }
   if (rootArgv.command === "dispatch") {
+    const dispatchArgs = [...rawArgs];
+    const workspaceFlag = dispatchArgs.indexOf("--workspace");
+    if (
+      workspaceFlag >= 0 &&
+      (dispatchArgs[workspaceFlag + 1] === undefined ||
+        dispatchArgs[workspaceFlag + 1]?.startsWith("--") === true)
+    )
+      dispatchArgs.splice(workspaceFlag + 1, 0, "");
     const parsed = cli(
       {
         name: "agx",
@@ -5246,6 +5469,10 @@ async function parseAgx() {
               cd: {
                 type: String,
                 description: "the worker's working directory",
+              },
+              workspace: {
+                type: String,
+                description: "create a fresh jj workspace, optionally named",
               },
               sandbox: {
                 type: String,
@@ -5323,7 +5550,7 @@ async function parseAgx() {
         ],
       },
       undefined,
-      rawArgs,
+      dispatchArgs,
     );
     await parsed;
     if (parsed.command === "dispatch")
@@ -5540,6 +5767,20 @@ async function parseAgx() {
                 description:
                   "report dead markers without recording or removing them",
               },
+              workspaces: {
+                type: Boolean,
+                description: "list stale arm workspaces",
+              },
+              yes: {
+                type: Boolean,
+                description: "forget and remove listed stale workspaces",
+              },
+              days: {
+                type: Number,
+                default: 7,
+                description:
+                  "age threshold for stale workspaces and unaccepted deliveries",
+              },
             },
             help: {
               description: "mark dead run markers abandoned and remove them",
@@ -5599,6 +5840,14 @@ async function parseAgx() {
             ignoreArgv: rejectPrototypeFlag,
             parameters: ["<run_id>"],
             flags: {
+              accept: {
+                type: Boolean,
+                description: "accept this delivery",
+              },
+              reject: {
+                type: Boolean,
+                description: "mark this delivery unaccepted",
+              },
               consumed: {
                 type: Boolean,
                 description: "the artifact was consumed (default)",
@@ -5771,6 +6020,11 @@ async function detachDispatch(
   return 0;
 }
 
+// Historical grading writers remain readable for old ledger workflows; new run completion uses result facts.
+void autoGrade;
+void recordWritesViolationGrade;
+void recordClaimsWithoutDiffGrade;
+
 async function main(): Promise<number | undefined> {
   if (argv.command === "dispatch") {
     const gc = collectDeadMarkers();
@@ -5791,7 +6045,8 @@ async function main(): Promise<number | undefined> {
     argv.command === "replay" ||
     argv.command === "grade" ||
     argv.command === "note" ||
-    argv.command === "result"
+    argv.command === "result" ||
+    argv.command === "show"
   )
     positionals = 1;
   if (argv._.length > positionals) {
@@ -5833,10 +6088,12 @@ async function main(): Promise<number | undefined> {
       );
     if (
       f.promptFile === undefined ||
-      f.cd === undefined ||
+      (f.cd === undefined && f.workspace === undefined) ||
       f.sandbox === undefined
     )
-      fatal("dispatch needs --prompt-file, --cd and --sandbox");
+      fatal(
+        "dispatch needs --prompt-file, --cd and --sandbox (or --workspace instead of --cd)",
+      );
     if (
       f.sandbox !== "none" &&
       f.sandbox !== "read-only" &&
@@ -5845,9 +6102,13 @@ async function main(): Promise<number | undefined> {
       fatal(
         `--sandbox must be none, read-only or workspace-write, not '${f.sandbox}'`,
       );
+    const prepared =
+      f.workspace === undefined
+        ? undefined
+        : await prepareWorkspace(f.workspace);
     const flags: RunFlags = {
       promptFile: f.promptFile,
-      cd: f.cd,
+      cd: prepared?.path ?? f.cd ?? process.cwd(),
       sandbox: f.sandbox,
       choice: f.choice,
       row: f.row,
@@ -5862,6 +6123,7 @@ async function main(): Promise<number | undefined> {
       pickSeed: f.pickSeed,
       runId: f.runId ?? newRunId(),
       verbose: f.verbose ?? false,
+      ...(prepared === undefined ? {} : { workspaceName: prepared.name }),
     };
     return f.detach === true ? detachDispatch(flags, rawArgs) : run(flags);
   }
@@ -5919,7 +6181,22 @@ async function main(): Promise<number | undefined> {
   }
   if (argv.command === "ps")
     return psCommand(argv.flags.all ?? false, argv.flags.json ?? false);
-  if (argv.command === "gc") return gcCommand(argv.flags.dryRun ?? false);
+  if (argv.command === "show") {
+    if (argv._.length !== 1) fatal("show needs <run_id|name|latest>");
+    return resultCommand(argv._.runId, argv.flags.json ?? false, false);
+  }
+  if (argv.command === "gc") {
+    if ((argv.flags.days ?? 7) < 1 || !Number.isInteger(argv.flags.days ?? 7))
+      fatal("--days must be a positive whole number");
+    if (argv.flags.yes === true && argv.flags.workspaces !== true)
+      fatal("--yes requires --workspaces");
+    return gcCommand(
+      argv.flags.dryRun ?? false,
+      argv.flags.workspaces ?? false,
+      argv.flags.yes ?? false,
+      argv.flags.days ?? 7,
+    );
+  }
   if (argv.command === "ls") return ls();
   if (argv.command === "doctor") return doctor();
   if (argv.command === "stats") {
@@ -5948,6 +6225,19 @@ async function main(): Promise<number | undefined> {
       fatal("--note requires a non-empty explanation");
     if (argv.flags.consumed === true && argv.flags.rejected === true)
       fatal("choose either --consumed or --rejected");
+    if (
+      (argv.flags.accept === true || argv.flags.reject === true) &&
+      (argv.flags.consumed === true || argv.flags.rejected === true)
+    )
+      fatal("choose acceptance flags or legacy consumed flags");
+    if (argv.flags.accept === true && argv.flags.reject === true)
+      fatal("choose either --accept or --reject");
+    if (argv.flags.accept === true || argv.flags.reject === true)
+      return acceptRun(
+        argv._.runId,
+        argv.flags.reject !== true,
+        argv.flags.note,
+      );
     return ack(argv._.runId, argv.flags.rejected !== true, argv.flags.note);
   }
   if (argv.command === "export") return exportRuns(argv.flags.since);
@@ -5994,6 +6284,7 @@ async function main(): Promise<number | undefined> {
  *  through, so grade / waive say "no run"; a prefix several runs share is refused, naming them. */
 function resolveRunId(id: string): string {
   const runs = readAllLog().filter((l) => l.kind === "run");
+  if (id === "latest") return runs.at(-1)?.run_id ?? id;
   if (id === "" || runs.some((l) => l.run_id === id)) return id;
   const normalizedId = /^agt[_-]/u.test(id)
     ? `agt_${normalizeDisplayName(id.slice(4))}`
@@ -6004,7 +6295,11 @@ function resolveRunId(id: string): string {
     const normalizedStoredId = /^agt[_-]/u.test(storedId)
       ? `agt_${normalizeDisplayName(storedId.slice(4))}`
       : storedId;
-    return storedId === id || normalizedStoredId === normalizedId;
+    return (
+      storedId === id ||
+      normalizedStoredId === normalizedId ||
+      l.ticket?.name === id
+    );
   });
   if (displayMatches.length > 0) {
     const latest = displayMatches.at(-1);
@@ -6059,13 +6354,18 @@ function resultCommand(
     return 0;
   }
   const worker = logged.worker;
+  const acceptance = readAllLog().findLast(
+    (line) => line.kind === "acceptance" && line.run_id === resolved,
+  )?.accept;
   const outcome = worker?.outcome ?? "unknown";
   const cause = worker?.cause;
   const report = worker?.last_message ?? "";
   const typed = WorkerReport.safeParse(logged.report);
   const reportNote = reportNoteFor(logged, typed);
   if (asJson) {
-    process.stdout.write(`${JSON.stringify(logged)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ ...logged, accept: acceptance ?? null })}\n`,
+    );
     if (reportNote !== undefined) dispatchError(`agx: ${reportNote}`);
     if (report.trim() === "" && !typed.success)
       dispatchError(
@@ -6075,7 +6375,13 @@ function resultCommand(
   }
   const fields = [
     `row=${logged.pick.choice}`,
-    `outcome=${outcome}`,
+    `result=${logged.result ?? outcome}`,
+    `accept=${acceptance ?? "pending"}`,
+    `kind=${logged.resource?.kind ?? "unknown"}`,
+    `labels=${(logged.resource?.labels ?? []).join(",")}`,
+    `turns=${logged.facts?.turns ?? "?"}`,
+    `tokens=${JSON.stringify(logged.facts?.tokens ?? null)}`,
+    `timing=${logged.started_at ?? "?"}..${logged.ended_at ?? "?"}`,
     `exit=${logged.exit ?? "?"}`,
     `elapsed=${worker?.elapsed_s === undefined ? "?" : `${worker.elapsed_s}s`}`,
     ...(outcome === "ok" || outcome === "returned"
@@ -6089,6 +6395,24 @@ function resultCommand(
     process.stdout.write(`RETURN: ${JSON.stringify(logged.return)}\n`);
   if (logged.return_error !== undefined)
     process.stdout.write(`RETURN error: ${logged.return_error}\n`);
+  if (logged.verify !== undefined)
+    for (const check of logged.verify)
+      process.stdout.write(`VERIFY exit=${check.exit} ${check.cmd}\n`);
+  if (logged.facts?.changed_files !== undefined) {
+    const changedFiles = logged.facts.changed_files;
+    const changedSummary =
+      changedFiles.length === 0 ? "(none)" : changedFiles.join(", ");
+    process.stdout.write(`CHANGED: ${changedSummary}\n`);
+  }
+  if (logged.resume_with !== undefined)
+    process.stdout.write(`RESUME: ${logged.resume_with}\n`);
+  if (
+    logged.facts?.scope_warning !== undefined &&
+    logged.facts.scope_warning.length > 0
+  )
+    process.stdout.write(
+      `SCOPE WARNING: ${logged.facts.scope_warning.join(", ")}\n`,
+    );
   if (logged.report_partial !== undefined)
     process.stdout.write(
       `Partial (harness-written): ${JSON.stringify(logged.report_partial)}\n`,

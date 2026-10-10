@@ -65,6 +65,7 @@ test("bare and unknown commands list the root command nouns", () => {
       "pick",
       "dispatch",
       "ps",
+      "show",
       "ledger",
     ]);
   }
@@ -82,6 +83,7 @@ test("minimal environment and piped stdout list all nouns from an unrelated cwd"
       "pick",
       "dispatch",
       "ps",
+      "show",
       "ledger",
     ]);
   }
@@ -108,6 +110,7 @@ test("forced color, no color and narrow columns keep suite headings and nouns st
         "pick",
         "dispatch",
         "ps",
+        "show",
         "ledger",
       ]);
     }

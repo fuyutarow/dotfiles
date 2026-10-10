@@ -124,6 +124,7 @@ test("ps filters to this Claude session and --all includes other sessions", () =
   const ownRuns = decodedJson(PsResult, own.out).runs;
   expect(ownRuns.map((run) => run.id).toSorted()).toEqual([
     "done-own",
+    "returned-other",
     "running-own",
   ]);
   expect(ownRuns.find((run) => run.id === "done-own")).toMatchObject({
@@ -135,6 +136,7 @@ test("ps filters to this Claude session and --all includes other sessions", () =
   expect(ownRuns.find((run) => run.id === "running-own")?.state).toBe(
     "running",
   );
+  expect(ownRuns[0]?.state).toBe("running");
 
   const all = cli(["ps", "--all", "--json"], state, {
     CLAUDE_CODE_SESSION_ID: "session-own",
@@ -167,7 +169,7 @@ test("ledger gc records dead markers, leaves live markers, and supports dry-run"
 
   const collected = cli(["ledger", "gc"], state);
   expect(collected.code).toBe(0);
-  expect(collected.out.trim().split("\n")).toHaveLength(1);
+  expect(collected.out.trim().split("\n")).toHaveLength(2);
   expect(collected.out).toContain("marked 1 abandoned");
   expect(existsSync(dead)).toBe(false);
   expect(existsSync(live)).toBe(true);

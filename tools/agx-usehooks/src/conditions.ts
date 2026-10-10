@@ -33,8 +33,15 @@ const Record = z.object({
   display_id: z.string().optional(),
   choice: z.string().optional(),
   pick: z.object({ choice: z.string() }).optional(),
+  result: z.enum(["delivered", "returned", "failed", "abandoned"]).optional(),
+  accept: z.boolean().optional(),
   ticket: z.object({ lane: z.string().optional() }).optional(),
-  stats: z.object({ outcome: z.string().optional() }).optional(),
+  stats: z
+    .object({
+      vendor_status: z.string().optional(),
+      outcome: z.string().optional(),
+    })
+    .optional(),
   worker: z
     .object({ outcome: z.string().optional(), session: z.string().optional() })
     .optional(),
@@ -264,7 +271,7 @@ function recordAliases(
     aliases.set(record.worker.session, record.run_id);
 }
 
-/** Finished returned runs without an acknowledgement (including rejected acknowledgements). */
+/** Finished returned runs without an explicit acceptance mark. */
 export function unackedReturns(_ctx: HookContext): Promise<Run[]> {
   return bounded(async () => {
     const { text } = await readJsonlTail(
@@ -272,18 +279,21 @@ export function unackedReturns(_ctx: HookContext): Promise<Run[]> {
       DEFAULT_JSONL_TAIL_BYTES,
     );
     const runs = new Map<string, Run>();
-    const acked = new Set<string>();
+    const accepted = new Set<string>();
     const aliases = new Map<string, string>();
     for (const line of jsonlLines(text)) {
       const parsed = jsonOf(Record).safeParse(line);
       if (!parsed.success) continue;
       const record = parsed.data;
       if (record.kind === "run") recordAliases(record, aliases);
-      if (record.kind === "ack")
-        acked.add(aliases.get(record.run_id) ?? record.run_id);
+      if (record.kind === "acceptance" && record.accept === true)
+        accepted.add(aliases.get(record.run_id) ?? record.run_id);
       if (
         record.kind !== "run" ||
-        (record.stats?.outcome ?? record.worker?.outcome) !== "returned"
+        (record.result ??
+          record.stats?.vendor_status ??
+          record.stats?.outcome ??
+          record.worker?.outcome) !== "returned"
       )
         continue;
       runs.set(record.run_id, {
@@ -292,6 +302,6 @@ export function unackedReturns(_ctx: HookContext): Promise<Run[]> {
         row: record.pick?.choice ?? record.choice ?? "other",
       });
     }
-    return [...runs.values()].filter((run) => !acked.has(run.id));
+    return [...runs.values()].filter((run) => !accepted.has(run.id));
   }, []);
 }

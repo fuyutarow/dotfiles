@@ -102,6 +102,7 @@ export const ProgressSchema = z.strictObject({
   at: z.string(),
   last: z.string(),
   commands: z.number().int().nonnegative(),
+  turns: z.number().int().nonnegative().optional(),
   files: z.number().int().nonnegative(),
   usage: z
     .looseObject({

@@ -38,6 +38,7 @@ const Event = z.looseObject({
 export type Tally = {
   last: string;
   commands: number;
+  turns: number;
   files: ReadonlySet<string>;
   usage?: {
     input_tokens: number;
@@ -53,6 +54,7 @@ export type Tally = {
 export const emptyTally = (): Tally => ({
   last: "starting",
   commands: 0,
+  turns: 0,
   files: new Set(),
 });
 
@@ -209,8 +211,10 @@ export function foldEvent(t: Tally, line: string): Tally {
   const { type, item, thread_id: threadId } = parsed.data;
   if (type === "thread.started" && threadId !== undefined)
     return { ...t, session: threadId };
-  if (type === "turn.completed" && parsed.data.usage !== undefined) {
+  if (type === "turn.completed") {
     const usage = parsed.data.usage;
+    const withTurn = { ...t, turns: t.turns + 1 };
+    if (usage === undefined) return withTurn;
     const previous = t.usage ?? {
       input_tokens: 0,
       cached_input_tokens: 0,
@@ -218,7 +222,7 @@ export function foldEvent(t: Tally, line: string): Tally {
       reasoning_output_tokens: 0,
     };
     return {
-      ...t,
+      ...withTurn,
       usage: {
         input_tokens: previous.input_tokens + (usage.input_tokens ?? 0),
         cached_input_tokens:
@@ -260,6 +264,7 @@ export const toProgress = (t: Tally, at: string): Progress => ({
   at,
   last: t.last,
   commands: t.commands,
+  turns: t.turns,
   files: t.files.size,
   ...(t.usage === undefined ? {} : { usage: t.usage }),
   ...(t.totalCostUsd === undefined ? {} : { cost_usd: t.totalCostUsd }),

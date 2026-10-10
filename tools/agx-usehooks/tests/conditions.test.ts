@@ -355,7 +355,7 @@ test("dirtyFor uses the oldest jj changed file and clean/unavailable returns zer
   expect(await dirtyFor(ctx)).toBe(0);
 });
 
-test("unackedReturns ignores other outcomes, accepts ack of either disposition and malformed rows", async () => {
+test("unackedReturns ignores other outcomes and requires explicit acceptance rather than legacy ack", async () => {
   const { dir, ctx } = world();
   const records = [
     {
@@ -363,23 +363,30 @@ test("unackedReturns ignores other outcomes, accepts ack of either disposition a
       run_id: "pending",
       pick: { choice: "terra" },
       ticket: { lane: "theory" },
-      stats: { outcome: "returned" },
+      result: "returned",
     },
     {
       kind: "run",
-      run_id: "acked",
+      run_id: "accepted",
+      display_id: "agt_example",
+      pick: { choice: "terra" },
+      result: "returned",
+    },
+    { kind: "acceptance", run_id: "accepted", accept: true },
+    {
+      kind: "run",
+      run_id: "rejected",
+      pick: { choice: "terra" },
+      result: "returned",
+    },
+    { kind: "acceptance", run_id: "rejected", accept: false },
+    {
+      kind: "run",
+      run_id: "legacy-ack",
       choice: "terra",
       worker: { outcome: "returned" },
     },
-    { kind: "ack", run_id: "acked", consumed: false },
-    {
-      kind: "run",
-      run_id: "display-acked",
-      display_id: "agt_example",
-      pick: { choice: "terra" },
-      stats: { outcome: "returned" },
-    },
-    { kind: "ack", run_id: "agt_example", consumed: true },
+    { kind: "ack", run_id: "legacy-ack", consumed: true },
     {
       kind: "run",
       run_id: "normal",
@@ -393,6 +400,8 @@ test("unackedReturns ignores other outcomes, accepts ack of either disposition a
   );
   expect(await unackedReturns(ctx)).toEqual([
     { id: "pending", lane: "theory", row: "terra" },
+    { id: "rejected", lane: "other", row: "terra" },
+    { id: "legacy-ack", lane: "other", row: "terra" },
   ]);
   rmSync(join(dir, "runs.jsonl"));
   expect(await unackedReturns(ctx)).toEqual([]);

@@ -111,6 +111,10 @@ const RETURN_OPEN = /```agx-return\s*\n/u;
 
 /** Appended to every worker prompt, after the ticket's verify line. */
 export const REPORT_INSTRUCTION = `## Final report (required)
+Housekeeping decisions are yours. Choose the obvious version number, CHANGELOG placement,
+adjacent files needed for the change, fixture names, and meaning of a count; note the choice
+in your report and continue. RETURN only for a decision that changes the outcome or contradicts
+the brief.
 Your final message must start with ONE JSON object and nothing else before it, of this shape:
 ${SHAPE}
 - summary: what you did and the outcome, in a few sentences.

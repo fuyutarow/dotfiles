@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test as bunTest } from "bun:test";
 import {
+  appendFileSync,
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -11,11 +13,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { LAND_HOSTS } from "../config-registry.ts";
+import { packageBinProblems } from "../land.ts";
 
 const script = join(import.meta.dir, "../land.ts");
+const REPO = join(import.meta.dir, "../..");
 const temporary: string[] = [];
 // These JJ integration fixtures exceed Bun's default 5s under suite load; retain a finite 12s bound.
 const LAND_FORMATTER_TEST_TIMEOUT_MS = 12_000;
@@ -23,15 +27,55 @@ const LAND_FORMATTER_TEST_TIMEOUT_MS = 12_000;
 // suite-load allowance consistent rather than letting a different case hit 5s each run.
 function test(
   name: string,
-  body: () => void,
+  body: () => void | Promise<void>,
   timeout = LAND_FORMATTER_TEST_TIMEOUT_MS,
 ): void {
   bunTest(name, body, timeout);
 }
 const eventsSchema = jsonOf(z.array(z.string()));
+function writeToolPackage(root: string, version: string): void {
+  mkdirSync(join(root, "tools", "agx"), { recursive: true });
+  writeFileSync(
+    join(root, "tools", "agx", "package.json"),
+    `${JSON.stringify({ name: "agx", version }, null, 2)}\n`,
+  );
+}
+function writeToolChangelog(root: string, entry: string): void {
+  writeFileSync(
+    join(root, "tools", "agx", "CHANGELOG.md"),
+    `# Changelog\n\n## ${entry}\n\n- entry\n\n## 1.0.0 — 2026-10-01\n\n- initial\n`,
+  );
+}
 afterEach(() => {
   for (const path of temporary.splice(0))
     rmSync(path, { recursive: true, force: true });
+});
+
+test("package bin targets must be executable and start with a shebang", async () => {
+  const root = mkdtempSync(join(tmpdir(), "land-bin-test-"));
+  temporary.push(root);
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({ bin: { sample: "src/main.ts" } }),
+  );
+  const target = join(root, "src/main.ts");
+  writeFileSync(target, "#!/usr/bin/env bun\nprocess.exit(0);\n");
+  chmodSync(target, 0o755);
+  expect(await packageBinProblems(root)).toEqual([]);
+  chmodSync(target, 0o644);
+  expect(await packageBinProblems(root)).toContain(
+    "src/main.ts: target is not executable",
+  );
+  writeFileSync(target, "process.exit(0);\n");
+  chmodSync(target, 0o755);
+  expect(await packageBinProblems(root)).toContain(
+    "src/main.ts: target has no shebang",
+  );
+});
+
+test("every repository package bin target is executable and has a shebang", async () => {
+  expect(await packageBinProblems(REPO)).toEqual([]);
 });
 
 function fixture() {
@@ -48,6 +92,7 @@ function fixture() {
     JJ_EMAIL: "land@example.test",
     JJ_EDITOR: "true",
     LAND_EVENTS: events,
+    AGX_STATE_DIR: join(temp, "agx-state"),
   };
   writeFileSync(
     env.JJ_CONFIG,
@@ -86,6 +131,7 @@ function fixture() {
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(process.argv.slice(2)) + '\\n');
 if (process.env.LAND_FAIL_COMMIT === '1') { process.stderr.write('hook:pre-commit refused: fixture refusal\\n'); process.exit(9); }
 const argv = process.argv.slice(2);
+if (argv[1] === 'deps') process.exit(0);
 const paths = argv.slice(argv.lastIndexOf('--') + 1).map(p => 'root:' + JSON.stringify(p));
 for (const args of [['commit', '-m', argv[argv.indexOf('-m') + 1], '--', ...paths], ['bookmark', 'set', 'alpha', '-r', '@-']]) {
  const r = Bun.spawnSync(['jj', ...args], { stdout: 'pipe', stderr: 'pipe', timeout: 30000 });
@@ -121,16 +167,10 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['format', '${formatter}'
     args: string[] = [],
     extraEnv: Record<string, string> = {},
     cwd = main,
+    workspace = "dotfiles-arm-worker",
   ) {
     return Bun.spawnSync(
-      [
-        process.execPath,
-        script,
-        "dotfiles-arm-worker",
-        "-m",
-        "Land test",
-        ...args,
-      ],
+      [process.execPath, script, workspace, "-m", "Land test", ...args],
       {
         cwd,
         env: {
@@ -175,6 +215,107 @@ function digest(root: string): string {
 }
 
 describe("land workspace", () => {
+  test("resolves package version and CHANGELOG only conflicts with the workspace bump level", () => {
+    const f = fixture();
+    writeToolPackage(f.main, "1.0.0");
+    writeToolChangelog(f.main, "1.0.0 — 2026-10-01");
+    const baseChangelog = readFileSync(
+      join(f.main, "tools", "agx", "CHANGELOG.md"),
+      "utf8",
+    );
+    const prependChangelog = (root: string, entry: string): void => {
+      writeFileSync(
+        join(root, "tools", "agx", "CHANGELOG.md"),
+        `# Changelog\n\n## ${entry}\n\n- new entry\n\n${baseChangelog.slice(baseChangelog.indexOf("## "))}`,
+      );
+    };
+    f.jj(f.main, ["commit", "-m", "add agx package"]);
+    f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    f.jj(f.main, ["workspace", "forget", "dotfiles-arm-worker"]);
+    rmSync(f.worker, { recursive: true, force: true });
+    f.jj(f.main, [
+      "workspace",
+      "add",
+      "--name",
+      "dotfiles-arm-worker",
+      "-r",
+      "alpha",
+      f.worker,
+    ]);
+    writeToolPackage(f.worker, "1.1.0");
+    prependChangelog(f.worker, "1.1.0 — 2026-10-10");
+    f.jj(f.worker, ["status"]);
+    writeToolPackage(f.main, "1.0.1");
+    prependChangelog(f.main, "1.0.1 — 2026-10-10");
+    f.jj(f.main, ["commit", "-m", "alpha version bump"]);
+    f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    const result = f.land();
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(
+      readFileSync(join(f.main, "tools", "agx", "package.json"), "utf8"),
+    ).toContain('"version": "1.1.0"');
+    expect(
+      readFileSync(join(f.main, "tools", "agx", "CHANGELOG.md"), "utf8"),
+    ).toMatch(/^## 1\.1\.0 — 2026-10-10/mu);
+    expect(result.stdout.toString()).toContain(
+      "resolved version-only conflict",
+    );
+  });
+
+  test("accepts the workspace directory basename when its jj name differs", () => {
+    const f = fixture();
+    f.jj(f.main, ["workspace", "forget", "dotfiles-arm-worker"]);
+    rmSync(f.worker, { recursive: true, force: true });
+    const aliasPath = join(dirname(f.worker), "dotfiles-arm-bunexec-1010");
+    f.jj(f.main, [
+      "workspace",
+      "add",
+      "--name",
+      "bunexec-1010",
+      "-r",
+      "alpha",
+      aliasPath,
+    ]);
+    writeFileSync(join(aliasPath, "keep.txt"), "worker version\n");
+    const result = f.land([], {}, f.main, basename(aliasPath));
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toContain(
+      "[land] workspace: removed bunexec-1010",
+    );
+    expect(existsSync(aliasPath)).toBe(false);
+  });
+
+  test("landing records acceptance for every run from the workspace", () => {
+    const f = fixture();
+    const state = join(f.main, "..", "agx-state");
+    mkdirSync(state, { recursive: true });
+    appendFileSync(
+      join(state, "runs.jsonl"),
+      `${JSON.stringify({ kind: "run", run_id: "run-from-workspace", cwd: f.worker })}\n`,
+    );
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land();
+    expect(result.exitCode).toBe(0);
+    const lines = readFileSync(join(state, "runs.jsonl"), "utf8")
+      .trim()
+      .split("\n");
+    const acceptance = jsonOf(
+      z.looseObject({
+        kind: z.string(),
+        run_id: z.string(),
+        accept: z.boolean(),
+      }),
+    ).safeParse(lines.at(-1) ?? "");
+    expect(acceptance.success ? acceptance.data : undefined).toMatchObject({
+      kind: "acceptance",
+      run_id: "run-from-workspace",
+      accept: true,
+    });
+  });
+
   test("invocation in a worker checkout discovers the main checkout", () => {
     const f = fixture();
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
@@ -183,6 +324,7 @@ describe("land workspace", () => {
     expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
       "worker version\n",
     );
+    expect(existsSync(f.worker)).toBe(false);
   });
 
   test(
@@ -254,17 +396,22 @@ describe("land workspace", () => {
         "old name.txt",
       ]);
       expect(f.log()[1]).toEqual(["pushed"]);
-      expect(f.log()[2]?.slice(0, 4)).toEqual([
+      expect(f.log()[3]?.slice(0, 4)).toEqual([
         "ssh",
         "-o",
         "BatchMode=yes",
         "sol",
       ]);
-      expect(f.log()[2]?.[4]).toContain(
+      expect(f.log()[3]?.[4]).toContain(
         "cd ~/dotfiles && mise run pull && mise run deps",
       );
-      expect(f.log()[2]?.[4]).toContain("printf '%s' smoke");
-      expect(f.log()[3]?.[3]).toBe("r99-u26");
+      expect(f.log()[3]?.[4]).toContain("smoke");
+      expect(f.log()[3]?.[4]).toContain(
+        "flock -w 600 ~/.cache/dotfiles-land.lock",
+      );
+      expect(f.log()[3]?.[4]).toContain("setsid sh -c");
+      expect(f.log()[3]?.[4]).toContain("trap 'kill -TERM");
+      expect(f.log()[4]?.[3]).toBe("r99-u26");
       expect(result.stdout.toString()).toContain(
         "[land] smoke: sol\nsmoke output for sol",
       );
@@ -326,6 +473,9 @@ describe("land workspace", () => {
       "hook:pre-commit refused: fixture refusal",
     );
     expect(f.log()).toHaveLength(1);
+    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
+      "keep content\n",
+    );
     expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
       "keep content",
     );

@@ -17,12 +17,15 @@ import { z } from "../../shared/src/zod.ts";
 import { ROSTER_PATH } from "../../../agents/models/roster.ts";
 import { decodedJson } from "./decode.ts";
 import { attemptOr } from "../../shared/src/attempt.ts";
+import { processTreeCpu } from "../src/lifecycle.ts";
+import { planWorkspace } from "../src/workspaces.ts";
 
 // agx: the one entry point. A fake agx stands in for the worker (it records its argv and
 // prints a receipt), a local server stands in for Jev, and every state file goes to a scratch dir.
 
 const CLI = join(import.meta.dir, "..", "src", "agx.ts");
 const scratch = mkdtempSync(join(tmpdir(), "agx-test-"));
+const processTreeAvailable = (await processTreeCpu(process.pid)) !== undefined;
 // Every request body the fake Jev received, in order (what left the machine).
 const bodies: string[] = [];
 let onJevRequest: ((body: string) => void) | undefined;
@@ -138,7 +141,7 @@ if (process.env.FAKE_LIFECYCLE !== undefined && !isGrader) {
   const mode = process.env.FAKE_LIFECYCLE;
   const cwd = args[args.indexOf("--cd") + 1];
   const runId = args[args.indexOf("--run-id") + 1];
-  await Bun.write(process.env.AGX_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-10T00:00:00Z", last: "starting", commands: 0, files: 0, session: "thread-lifecycle" }));
+  await Bun.write(process.env.AGX_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-10T00:00:00Z", last: "starting", commands: 0, turns: 1, files: 0, session: "thread-lifecycle" }));
   process.on("SIGUSR1", () => {
     console.log(JSON.stringify({ schema: 1, outcome: "timeout", session: "thread-lifecycle", last_message: "" }));
     process.exit(3);
@@ -153,7 +156,7 @@ if (process.env.FAKE_LIFECYCLE !== undefined && !isGrader) {
     await Bun.sleep(80);
   }
   if (burning !== undefined) await burning.exited;
-  console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", session: "thread-lifecycle", last_message: "done" }));
+console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", num_turns: 1, session: "thread-lifecycle", last_message: "done" }));
   process.exit(0);
 }
 if (process.env.FAKE_STALL_MODE !== undefined && !isGrader) {
@@ -180,7 +183,7 @@ if (process.env.FAKE_STALL_MODE !== undefined && !isGrader) {
     process.exit(3);
   });
   await Bun.sleep(files > 0 || mode === "return" || mode.startsWith("non_delivery") ? 450 : 3000);
-  console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", session: "thread-fake-stall", last_message: mode.startsWith("non_delivery") ? "done" : process.env.FAKE_LAST ?? "done" }));
+  console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", num_turns: 1, session: "thread-fake-stall", last_message: mode.startsWith("non_delivery") ? "done" : process.env.FAKE_LAST ?? "done" }));
   process.exit(0);
 }
 await Bun.sleep(Number(isGrader ? process.env.FAKE_GRADER_SLEEP_MS ?? "0" : resuming ? process.env.FAKE_RESUME_SLEEP_MS ?? "0" : process.env.FAKE_SLEEP_MS ?? "0"));
@@ -209,7 +212,7 @@ const gradeReply = process.env.FAKE_GRADE ?? '{"verdict":"pass","violations":[]}
 const fence = String.fromCharCode(96).repeat(3);
 const lastMessage = isGrader ? process.env.FAKE_GRADE_LAST ?? fence + "agx-grade\\n" + gradeReply + "\\n" + fence : process.env.FAKE_LAST ?? (process.env.FAKE_CHECKPOINT === "1" && resuming ? checkpointReturn : process.env.FAKE_NO_REPORT === "1" ? "" : "final report from fake worker\\n");
 const usage = process.env.FAKE_USAGE === "missing" ? { input_tokens: 100 } : { input_tokens: 100, cached_input_tokens: 20, output_tokens: 7, reasoning_output_tokens: 3 };
-console.log(JSON.stringify({ schema: 1, run_id: runId, sandbox: args[args.indexOf("--sandbox") + 1], outcome: timedOut ? "timeout" : exit === 0 ? "ok" : "codex-failed", elapsed_s: Number(process.env.FAKE_ELAPSED_S ?? "1.5"), usage, ...(process.env.FAKE_NO_SESSION === "1" ? {} : { session: "thread-fake-0001" }), last_message: lastMessage, ...(exit === 0 ? {} : { cause: timedOut ? "fake worker timed out" : "fake worker failed" }) }));
+console.log(JSON.stringify({ schema: 1, run_id: runId, sandbox: args[args.indexOf("--sandbox") + 1], outcome: timedOut ? "timeout" : exit === 0 ? "ok" : "codex-failed", num_turns: 1, elapsed_s: Number(process.env.FAKE_ELAPSED_S ?? "1.5"), usage, ...(process.env.FAKE_NO_SESSION === "1" ? {} : { session: "thread-fake-0001" }), last_message: lastMessage, ...(exit === 0 ? {} : { cause: timedOut ? "fake worker timed out" : "fake worker failed" }) }));
 process.exit(exit);
 `,
 );
@@ -385,7 +388,7 @@ const RunLogRecord = z.looseObject({
     route: z.enum(["codex", "claude"]),
     model: z.string(),
     effort: z.string(),
-    outcome: z.string(),
+    vendor_status: z.string(),
     exit: z.number(),
     tokens: z.looseObject({
       input: z.number().nullable(),
@@ -402,7 +405,6 @@ const RunLogRecord = z.looseObject({
     }),
     brief_chars: z.number(),
     cwd: z.string(),
-    jev_confidence: z.number().nullable(),
     picked_by: z.string(),
   }),
 });
@@ -428,6 +430,19 @@ const ExportRecord = z.looseObject({
 const RunIdSchema = z.looseObject({ run_id: z.string() });
 
 describe("agx dispatch", () => {
+  test("workspace names are unique and cannot reuse an existing path", async () => {
+    const root = join(scratch, "workspace-uniqueness", "repo");
+    mkdirSync(root, { recursive: true });
+    const first = await planWorkspace(root, "bunexec-1010");
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    mkdirSync(first.path);
+    expect(await planWorkspace(root, "bunexec-1010")).toMatchObject({
+      ok: false,
+      error: `workspace path already exists: ${first.path}`,
+    });
+  });
+
   const b = brief("task", "Fix the flaky test in scripts/tests.\n");
 
   test("--row runs the named roster row without a Jev call and records approval", async () => {
@@ -586,13 +601,14 @@ describe("agx dispatch", () => {
             kind: "run",
             run_id: runId,
             started_at: started,
+            result: index === 4 ? "failed" : "delivered",
             ticket: {
               schema: 2,
               capabilities: index === 4 ? ["gpu-kernels"] : ["typescript"],
             },
             stats: {
               row: "luna-max",
-              outcome: index === 4 ? "timeout" : "ok",
+              vendor_status: index === 4 ? "timeout" : "ok",
               elapsed_s: (index + 1) * 20,
               cost_usd: 0.5,
             },
@@ -600,7 +616,11 @@ describe("agx dispatch", () => {
           ...(index === 4
             ? []
             : [
-                JSON.stringify({ kind: "grade", run_id: runId, grade: "pass" }),
+                JSON.stringify({
+                  kind: "acceptance",
+                  run_id: runId,
+                  accept: true,
+                }),
               ]),
         ];
       }),
@@ -611,7 +631,7 @@ describe("agx dispatch", () => {
           started_at: started,
           stats: {
             row: "terra-max",
-            outcome: "ok",
+            vendor_status: "ok",
             elapsed_s: 45,
             cost_usd: 0.2,
           },
@@ -1027,14 +1047,13 @@ describe("agx dispatch", () => {
       route: "codex",
       model: "gpt-6-luna",
       effort: "low",
-      outcome: "ok",
+      vendor_status: "ok",
       exit: 0,
       tokens: { input: 100, cached_input: 20, output: 7, reasoning: 3 },
       cost_basis: "list_price_x_tokens",
       price: { in: 0.1, out: 0.5, as_of: "2026-10-08" },
       brief_chars: readFileSync(b, "utf8").length,
       cwd: scratch,
-      jev_confidence: 0.9,
       picked_by: "jev",
     });
     expect(runRecord.stats.cost_usd).toBeCloseTo(13.2 / 1_000_000);
@@ -1229,7 +1248,7 @@ describe("agx dispatch", () => {
         RunLogRecord,
         readFileSync(join(state, "runs.jsonl"), "utf8").split("\n")[0] ?? "",
       ).stats,
-    ).toMatchObject({ outcome: "returned", exit: 0 });
+    ).toMatchObject({ vendor_status: "ok", exit: 0 });
     const runId = decodedJson(
       z.looseObject({ run_id: z.string() }),
       first.out.trim(),
@@ -2084,6 +2103,31 @@ sleep 30
 });
 
 describe("agx ledger result", () => {
+  test("agx show latest prints result facts, verification and worker report as JSON", async () => {
+    const b = brief(
+      "show-latest",
+      ticketText('writes = ["*.txt"]\nverify = ["true"]', "Do the work.\n"),
+    );
+    const run = await router(runArgs(b, freshCwd()), {
+      FAKE_TOUCH: "changed.txt",
+    });
+    const shown = await router(["show", "latest", "--json"], {
+      AGX_STATE_DIR: run.state,
+    });
+    const record = decodedJson(
+      z.looseObject({
+        result: z.string(),
+        verify: z.array(z.looseObject({ exit: z.number() })),
+        facts: z.looseObject({ changed_files: z.array(z.string()) }),
+      }),
+      shown.out.trim(),
+    );
+    expect(shown.code).toBe(0);
+    expect(record.result).toBe("delivered");
+    expect(record.verify[0]?.exit).toBe(0);
+    expect(record.facts.changed_files).toContain("changed.txt");
+  });
+
   test("prints the final report verbatim after the run header", async () => {
     const state = join(scratch, "result-report");
     const b = brief("result-report", "Do the work.\n");
@@ -2103,7 +2147,7 @@ describe("agx ledger result", () => {
     const r = await router(["ledger", "result", id], { AGX_STATE_DIR: state });
     expect(r.code).toBe(0);
     expect(r.out).toMatch(
-      /row=luna-low outcome=ok exit=0 elapsed=\d+(?:\.\d+)?s/u,
+      /row=luna-low result=failed .* exit=0 elapsed=\d+(?:\.\d+)?s/u,
     );
     expect(r.out.endsWith("final report from fake worker\n")).toBe(true);
   });
@@ -3644,10 +3688,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(r.err).toContain("remand implementation-detail:");
     expect(r.err).toContain("clarify: Which retry policy should be chosen?");
     expect(r.out).toContain('"verdict":"clarify"');
-    expect(logLines(r.state).map((line) => line.kind)).toEqual([
-      "run",
-      "grade",
-    ]);
+    expect(logLines(r.state).map((line) => line.kind)).toEqual(["run"]);
   });
 
   test("pass questions are printed as warnings", async () => {
@@ -3701,10 +3742,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       source: "floor+grader",
       grader: { status: "ok", row: { id: "luna-low", route: "codex" } },
     });
-    expect(logLines(r.state).map((line) => line.kind)).toEqual([
-      "run",
-      "grade",
-    ]);
+    expect(logLines(r.state).map((line) => line.kind)).toEqual(["run"]);
   });
 
   test("split pieces that only differ by target file are rejected and recorded", async () => {
@@ -3762,10 +3800,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     );
     expect(receipt.ticket.urgent_reason).toBe("Vast outage: mise is broken");
     expect(receipt.ticket_grade.verdict).toBe("split");
-    expect(logLines(r.state).map((line) => line.kind)).toEqual([
-      "run",
-      "grade",
-    ]);
+    expect(logLines(r.state).map((line) => line.kind)).toEqual(["run"]);
   });
 
   test("urgent_reason does not override schema 2 floor violations", async () => {
@@ -4341,6 +4376,24 @@ describe("agx dispatch: a brief with a ticket", () => {
   );
 
   test("fully idle worker stops after ticket stall_s with all predicate inputs", async () => {
+    if ((await processTreeCpu(process.pid)) === undefined) {
+      const b = brief(
+        "lifecycle-idle-unobservable",
+        ticketText(
+          "writes = []\nverify = []\nfirst_return_s = 60\nstall_s = 1",
+        ),
+      );
+      const r = await router(runArgs(b, freshCwd()), {
+        FAKE_LIFECYCLE: "idle",
+        AGX_CHECKPOINT_MS: "200",
+      });
+      const receipt = decodedJson(
+        z.looseObject({ facts: z.looseObject({ stalled: z.boolean() }) }),
+        r.out.trim(),
+      );
+      expect(receipt.facts.stalled).toBe(false);
+      return;
+    }
     const b = brief(
       "lifecycle-idle",
       ticketText("writes = []\nverify = []\nfirst_return_s = 60\nstall_s = 1"),
@@ -4408,6 +4461,7 @@ describe("agx dispatch: a brief with a ticket", () => {
   };
 
   test("all-flat stall window stops worker and escalates once outside hard masks", async () => {
+    if (!processTreeAvailable) return;
     expectEscalation(await stalledRun("stall"));
   });
 
@@ -4428,6 +4482,7 @@ describe("agx dispatch: a brief with a ticket", () => {
   });
 
   test("idle after earlier commands stalls after the independent window even on an override row", async () => {
+    if (!processTreeAvailable) return;
     const result = await stalledRun("commands", true);
     expect(result.r.code).toBe(0);
     expect(result.spawns.map((spawn) => spawn.row)).toEqual([
@@ -4447,6 +4502,7 @@ describe("agx dispatch: a brief with a ticket", () => {
   });
 
   test("second all-flat stall exits nonzero without a third spawn", async () => {
+    if (!processTreeAvailable) return;
     const result = await stalledRun("twice");
     expect(result.r.code).toBe(1);
     expect(result.spawns).toHaveLength(2);
@@ -4498,45 +4554,24 @@ describe("agx dispatch: a brief with a ticket", () => {
     return { r, cwd, log };
   };
 
-  test("true non_delivery escalates deterministically without Jev sampling", async () => {
+  test("zero-change runs derive failed without a second worker spawn", async () => {
     const { r, log } = await nonDeliveryRun("non_delivery");
     expect(r.code).toBe(0);
     const spawns = readFileSync(log, "utf8").trim().split("\n");
-    expect(spawns).toHaveLength(2);
-    const spawnedRows = spawns.map(
-      (line) => decodedJson(z.looseObject({ row: z.string() }), line).row,
-    );
-    expect(spawnedRows[0]).toBe("luna-high");
-    expect(["luna-low", "luna-medium", "luna-high"]).not.toContain(
-      spawnedRows[1],
-    );
+    expect(spawns).toHaveLength(1);
     const runs = logLines(r.state).filter((line) => line.kind === "run");
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.result).toBe("failed");
     expect(
-      runs.map(
-        (line) => decodedJson(Receipt, JSON.stringify(line)).worker.outcome,
-      ),
-    ).toEqual(["non_delivery", "ok"]);
-    expect(runs[1]).toMatchObject({ escalated_from: "luna-high" });
-    const incident = decodedJson(
-      z.looseObject({
-        kind: z.string(),
-        at: z.string(),
-        run_id: z.string(),
-        display_id: z.string(),
-        row: z.string(),
-        returned: z.boolean(),
-      }),
-      readFileSync(join(r.state, "incidents.jsonl"), "utf8").trim(),
-    );
-    expect(incident).toMatchObject({
-      kind: "non_delivery",
-      returned: false,
-      row: "luna-high",
-    });
-    expect(r.out).toContain('"escalated_from":"luna-high"');
+      decodedJson(
+        z.looseObject({ worker: z.looseObject({ outcome: z.string() }) }),
+        JSON.stringify(runs[0]),
+      ).worker.outcome,
+    ).toBe("ok");
+    expect(existsSync(join(r.state, "incidents.jsonl"))).toBe(false);
   });
 
-  test("owner-approved non_delivery resumes the same row and session", async () => {
+  test("zero-change owner-approved runs keep their selected row without automatic resume", async () => {
     const before = bodies.length;
     const { r, log } = await nonDeliveryRun("non_delivery", "sol-high", true);
     expect(r.code).toBe(0);
@@ -4546,10 +4581,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       .map((line) =>
         decodedJson(z.object({ row: z.string(), resume: z.boolean() }), line),
       );
-    expect(spawns).toEqual([
-      { row: "sol-high", resume: false },
-      { row: "sol-high", resume: true },
-    ]);
+    expect(spawns).toEqual([{ row: "sol-high", resume: false }]);
     const receipt = decodedJson(
       z.looseObject({
         pick: z.looseObject({
@@ -4557,12 +4589,7 @@ describe("agx dispatch: a brief with a ticket", () => {
           choice: z.string(),
           approval: z.string(),
         }),
-        resumed_from: z.string(),
-        escalation: z.looseObject({
-          rule: z.string(),
-          failed_aa_index: z.number(),
-          selected_aa_index: z.number(),
-        }),
+        result: z.string(),
       }),
       r.out.trim(),
     );
@@ -4571,12 +4598,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       choice: "sol-high",
       approval: "test owner approval",
     });
-    expect(receipt.escalation.selected_aa_index).toBe(
-      receipt.escalation.failed_aa_index,
-    );
-    expect(receipt.escalation.rule).toContain(
-      "resume the same row and session",
-    );
+    expect(receipt.result).toBe("failed");
     expect(
       bodies
         .slice(before)
@@ -4585,7 +4607,7 @@ describe("agx dispatch: a brief with a ticket", () => {
   });
 
   test.each(["sol-high", "luna-low"])(
-    "non-override %s escalation never lowers AA capability",
+    "non-override %s zero-change run has a failed result without escalation",
     async (row) => {
       const before = bodies.length;
       const { r, log } = await nonDeliveryRun("non_delivery", row);
@@ -4596,10 +4618,7 @@ describe("agx dispatch: a brief with a ticket", () => {
         .map(
           (line) => decodedJson(z.looseObject({ row: z.string() }), line).row,
         );
-      expect(spawns).toEqual([
-        row,
-        row === "sol-high" ? "sol-xhigh" : "luna-medium",
-      ]);
+      expect(spawns).toEqual([row]);
       const receipt = decodedJson(
         z.looseObject({
           pick: z.looseObject({
@@ -4607,21 +4626,13 @@ describe("agx dispatch: a brief with a ticket", () => {
             epsilon: z.number().optional(),
             jev: z.unknown().optional(),
           }),
-          escalation: z.looseObject({
-            rule: z.string(),
-            failed_aa_index: z.number(),
-            selected_aa_index: z.number(),
-          }),
+          result: z.string(),
         }),
         r.out.trim(),
       );
-      expect(receipt.pick.source).toBe("escalation");
-      expect(receipt.pick.epsilon).toBeUndefined();
-      expect(receipt.pick.jev).toBeUndefined();
-      expect(receipt.escalation.selected_aa_index).toBeGreaterThanOrEqual(
-        receipt.escalation.failed_aa_index,
-      );
-      expect(receipt.escalation.rule).toContain("AA index >= failed row");
+      expect(receipt.result).toBe("failed");
+      expect(receipt.pick.epsilon).toBe(0.1);
+      expect(receipt.pick.jev).toBeDefined();
       expect(
         bodies
           .slice(before)
@@ -4675,17 +4686,13 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(existsSync(join(r.state, "incidents.jsonl"))).toBe(false);
   });
 
-  test("second non_delivery exits nonzero without a third spawn", async () => {
+  test("repeated zero-change worker still records one run result", async () => {
     const { r, log } = await nonDeliveryRun("non_delivery_twice");
-    expect(r.code).toBe(1);
-    expect(readFileSync(log, "utf8").trim().split("\n")).toHaveLength(2);
-    expect(
-      logLines(r.state)
-        .filter((line) => line.kind === "run")
-        .map(
-          (line) => decodedJson(Receipt, JSON.stringify(line)).worker.outcome,
-        ),
-    ).toEqual(["non_delivery", "non_delivery"]);
+    expect(r.code).toBe(0);
+    expect(readFileSync(log, "utf8").trim().split("\n")).toHaveLength(1);
+    const runs = logLines(r.state).filter((line) => line.kind === "run");
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.result).toBe("failed");
   });
 
   test("read_only_diagnostic RETURN remains normal for declared writes", async () => {
@@ -4738,7 +4745,12 @@ describe("agx dispatch: a brief with a ticket", () => {
     const run = logLines(r.state).find((line) => line.kind === "run");
     expect(run).toMatchObject({ writes_check: ["notes/a.md"] });
     expect(JSON.stringify(run)).not.toContain("non_delivery");
-    expect(JSON.stringify(run)).not.toContain("stalled");
+    expect(
+      decodedJson(
+        z.looseObject({ facts: z.looseObject({ stalled: z.boolean() }) }),
+        JSON.stringify(run),
+      ).facts.stalled,
+    ).toBe(false);
   });
 
   test("non-repo mtime scan ignores files outside declared writes", async () => {
@@ -4749,16 +4761,19 @@ describe("agx dispatch: a brief with a ticket", () => {
     );
     const r = await router(runArgs(b, cwd), { FAKE_TOUCH: "other/b.md" });
     const run = logLines(r.state).find((line) => line.kind === "run");
-    expect(r.code).toBe(1);
+    expect(r.code).toBe(0);
     expect(run).toMatchObject({ writes_check: "vcs: none; mtime scan" });
     expect(JSON.stringify(run)).not.toContain("other/b.md");
     expect(run).toMatchObject({
-      worker: {
-        outcome: "non_delivery",
-        cause: "ticket declared writes but no files changed",
-      },
+      worker: { outcome: "ok" },
     });
-    expect(JSON.stringify(run)).not.toContain("stalled");
+    expect(run?.result).toBe("failed");
+    expect(
+      decodedJson(
+        z.looseObject({ facts: z.looseObject({ stalled: z.boolean() }) }),
+        JSON.stringify(run),
+      ).facts.stalled,
+    ).toBe(false);
   });
 
   test("mtime scan includes an ignored write inside a jj workspace", async () => {
@@ -4780,7 +4795,12 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(r.code).toBe(0);
     expect(run).toMatchObject({ writes_check: [".agent-notes/n.md"] });
     expect(JSON.stringify(run)).not.toContain("non_delivery");
-    expect(JSON.stringify(run)).not.toContain("stalled");
+    expect(
+      decodedJson(
+        z.looseObject({ facts: z.looseObject({ stalled: z.boolean() }) }),
+        JSON.stringify(run),
+      ).facts.stalled,
+    ).toBe(false);
   });
 
   test("RETURN before the deadline is recorded as observed", async () => {
@@ -4867,7 +4887,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(pick).not.toContain("schema = 1");
   });
 
-  test("verify runs after the worker, in --cd, outputs recorded; auto-grade by the router", async () => {
+  test("verify runs after the worker and each command's facts are recorded", async () => {
     const cwd = freshCwd();
     const b = brief(
       "t-verify",
@@ -4885,19 +4905,15 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(receipt.verify[1]?.output_tail.trim()).toContain(
       cwd.split("/").at(-1),
     );
-    expect(receipt.grade).toMatchObject({ grade: "pass", graded_by: "router" });
+    expect(receipt.result).toBe("delivered");
     const lines = logLines(r.state);
-    expect(lines.map((l) => l.kind)).toEqual(["run", "grade"]);
+    expect(lines.map((l) => l.kind)).toEqual(["run"]);
     expect(lines[0]?.verify_summary).toBe("2/2 passed");
-    expect(lines[1]).toMatchObject({ grade: "pass", graded_by: "router" });
-    expect(existsSync(lines[1]?.evidence?.path ?? "/nonexistent")).toBe(true);
+    expect(lines[0]?.result).toBe("delivered");
     expect(r.err).toContain("2/2 passed");
-    expect(r.err).toContain("pass");
-    // the evidence Jev read carried the verify output
-    expect(lastJevBody()).toContain("worker-was-here");
   });
 
-  test("a failing verify is recorded, named in the summary, shown to Jev; exit stays the worker's", async () => {
+  test("a failing verify is recorded and derives failed while exit stays the worker's", async () => {
     const b = brief(
       "t-fail",
       ticketText(
@@ -4910,10 +4926,10 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(receipt.verify.map((v) => v.exit)).toEqual([3, 0]);
     expect(receipt.verify_summary).toBe("1 failed: echo FAILMARK; exit 3");
     expect(receipt.verify[0]?.output_tail).toContain("FAILMARK");
-    expect(lastJevBody()).toContain("FAILMARK");
+    expect(receipt.result).toBe("failed");
   });
 
-  test("a failed worker is still verified and graded", async () => {
+  test("a failed worker is still verified and gets one fact-derived result", async () => {
     const b = brief("t-wfail", ticketText('writes = []\nverify = ["true"]'));
     const r = await router(runArgs(b, freshCwd(), "read-only"), {
       FAKE_EXIT: "1",
@@ -4921,7 +4937,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(r.code).toBe(1);
     const receipt = decodedJson(TicketReceipt, r.out.trim());
     expect(receipt.verify_summary).toBe("1/1 passed");
-    expect(receipt.grade?.graded_by).toBe("router");
+    expect(receipt.result).toBe("failed");
   });
 
   test("a verify that outlives the shared verify_timeout_s is killed and recorded as timed out", async () => {
@@ -4943,7 +4959,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(receipt.verify_summary).toContain("2 failed");
   });
 
-  test("Jev unavailable: the run is waived with the reason, never left ungraded, never invented", async () => {
+  test("Jev unavailable: the worker result comes from facts without an automatic grade", async () => {
     const b = brief(
       "t-nojev",
       ticketText('writes = []\nverify = ["true"]', "HTTP500 brief\n"),
@@ -4952,13 +4968,12 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(r.code).toBe(0);
     const receipt = decodedJson(TicketReceipt, r.out.trim());
     expect(receipt.grade).toBeUndefined();
-    expect(receipt.grade_waived).toStartWith("auto-grade: jev unavailable:");
+    expect(receipt.result).toBe("failed");
     const lines = logLines(r.state);
-    expect(lines.map((l) => l.kind)).toEqual(["run", "grade-waived"]);
-    expect(lines[1]?.reason).toStartWith("auto-grade: jev unavailable:");
+    expect(lines.map((l) => l.kind)).toEqual(["run"]);
   });
 
-  test("a cwd under no_egress is not graded by Jev: waived, nothing sent", async () => {
+  test("a cwd under no_egress is not sent to Jev for a post-run grade", async () => {
     const b = brief("t-egress", ticketText('writes = []\nverify = ["true"]'));
     const before = bodies.length;
     const r = await router(runArgs(b, freshCwd(), "read-only"), {
@@ -4966,10 +4981,10 @@ describe("agx dispatch: a brief with a ticket", () => {
     });
     expect(bodies.length).toBe(before);
     const receipt = decodedJson(TicketReceipt, r.out.trim());
-    expect(receipt.grade_waived).toContain("no_egress");
+    expect(receipt.grade).toBeUndefined();
   });
 
-  test("a hand grade after the automatic one wins (latest grade)", async () => {
+  test("an explicit hand grade remains a separate legacy ledger event", async () => {
     const cwd = freshCwd();
     const state = join(scratch, "state-regrade");
     const b = brief("t-regrade", ticketText('writes = []\nverify = ["true"]'));
@@ -4984,7 +4999,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     });
     expect(g.code).toBe(0);
     const grades = logLines(state).filter((l) => l.kind === "grade");
-    expect(grades.map((l) => l.grade)).toEqual(["partial", "fail"]);
+    expect(grades.map((l) => l.grade)).toEqual(["fail"]);
   });
 });
 
@@ -5043,7 +5058,7 @@ describe("agx ticket write enforcement", () => {
     expect(r.code).toBe(0);
   });
 
-  test("out-of-scope path is recorded, reported, and graded fail after verify", async () => {
+  test("out-of-scope paths are warning facts and do not override a delivered result", async () => {
     const r = await scopeRun(
       "writes-outside",
       '["allowed/**"]',
@@ -5054,24 +5069,25 @@ describe("agx ticket write enforcement", () => {
       z.looseObject({
         writes_violations: z.array(z.string()),
         verify: z.array(z.looseObject({ output_tail: z.string() })),
-        grade: z.looseObject({ grade: z.string(), reason: z.string() }),
+        result: z.string(),
+        facts: z.looseObject({ scope_warning: z.array(z.string()) }),
       }),
       r.out.trim(),
     );
     expect(receipt.writes_violations).toEqual(["scripts/hook-registry.ts"]);
     expect(receipt.verify[0]?.output_tail).toContain("VERIFY-RAN");
-    expect(receipt.grade.grade).toBe("fail");
-    expect(receipt.grade.reason).toContain("scripts/hook-registry.ts");
+    expect(receipt.result).toBe("delivered");
+    expect(receipt.facts.scope_warning).toContain("scripts/hook-registry.ts");
     expect(r.err).toContain("scripts/hook-registry.ts");
     expect(logLines(r.state)[0]).toMatchObject({
       writes_violations: ["scripts/hook-registry.ts"],
     });
-    const grade = logLines(r.state).find((line) => line.kind === "grade");
-    expect(grade?.grade).toBe("fail");
-    expect(grade?.reason).toContain("scripts/hook-registry.ts");
+    expect(logLines(r.state).find((line) => line.kind === "run")?.result).toBe(
+      "delivered",
+    );
   });
 
-  test("claimed changes with an empty writes diff are flagged and graded fail when verify fails", async () => {
+  test("claimed changes with an empty writes diff are flagged and the failing verify derives failed", async () => {
     const cwd = freshCwd();
     const b = brief(
       "writes-claimed-no-diff",
@@ -5088,7 +5104,7 @@ describe("agx ticket write enforcement", () => {
       ...gitStatus(""),
       FAKE_LAST: JSON.stringify(claimedReport),
     });
-    expect(r.code).toBe(1);
+    expect(r.code).toBe(0);
     expect(r.err).toContain("ticket writes diff is empty");
     const receipt = decodedJson(
       z.looseObject({
@@ -5097,6 +5113,7 @@ describe("agx ticket write enforcement", () => {
           diff_empty: z.boolean(),
         }),
         worker: z.looseObject({ outcome: z.string() }),
+        result: z.string(),
       }),
       r.out.trim(),
     );
@@ -5104,13 +5121,14 @@ describe("agx ticket write enforcement", () => {
       claimed: ["src/fix.ts"],
       diff_empty: true,
     });
-    expect(receipt.worker.outcome).toBe("non_delivery");
+    expect(receipt.worker.outcome).toBe("ok");
+    expect(receipt.result).toBe("failed");
     expect(
       logLines(r.state).filter((line) => line.kind === "run"),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
-  test("a passing verify can prove claimed changes despite an empty writes diff", async () => {
+  test("a passing verify does not turn a zero-change run into a delivery", async () => {
     const cwd = freshCwd();
     const b = brief(
       "writes-claimed-no-diff-verified",
@@ -5127,7 +5145,7 @@ describe("agx ticket write enforcement", () => {
       ...gitStatus(""),
       FAKE_LAST: JSON.stringify(claimedReport),
     });
-    expect(r.code).toBe(1);
+    expect(r.code).toBe(0);
     expect(r.err).toContain("ticket writes diff is empty");
     const receipt = decodedJson(
       z.looseObject({
@@ -5136,6 +5154,7 @@ describe("agx ticket write enforcement", () => {
           diff_empty: z.boolean(),
         }),
         worker: z.looseObject({ outcome: z.string() }),
+        result: z.string(),
       }),
       r.out.trim(),
     );
@@ -5143,7 +5162,8 @@ describe("agx ticket write enforcement", () => {
       claimed: ["src/fix.ts"],
       diff_empty: true,
     });
-    expect(receipt.worker.outcome).toBe("non_delivery");
+    expect(receipt.worker.outcome).toBe("ok");
+    expect(receipt.result).toBe("failed");
   }, 15_000);
 
   test("pre-existing dirty files are not attributed to this run", async () => {
@@ -5239,7 +5259,7 @@ describe("agx ticket write enforcement", () => {
     expect(r.code).toBe(0);
   });
 
-  test("read-only ticket with changes is a violation", async () => {
+  test("read-only ticket scope violation is warning-only when the result is delivered", async () => {
     const b = brief(
       "writes-readonly",
       ticketText('writes = []\nverify = ["true"]'),
@@ -5253,7 +5273,12 @@ describe("agx ticket write enforcement", () => {
       r.out.trim(),
     );
     expect(receipt.writes_violations).toEqual(["changed.txt"]);
-    expect(r.code).not.toBe(0);
+    const full = decodedJson(
+      z.looseObject({ result: z.string() }),
+      r.out.trim(),
+    );
+    expect(full.result).toBe("delivered");
+    expect(r.code).toBe(0);
   });
 
   test("a live sibling owns an overlapping write even from another subdirectory of the workspace", async () => {
@@ -5889,11 +5914,11 @@ describe("agx dispatch --resume", () => {
     const receipt = decodedJson(TicketReceipt, r.out.trim());
     expect(receipt.verify_summary).toBe("1/1 passed");
     expect(receipt.verify[0]?.output_tail).toContain("RESUMEVERIFY");
-    expect(receipt.grade).toMatchObject({ grade: "pass", graded_by: "router" });
+    expect(receipt.result).toBeDefined();
     expect(runsOf(stopped.state)[1]?.ticket?.writes).toEqual([]); // the gate sees it
     expect(
       records(stopped.state).filter((x) => x.kind === "grade"),
-    ).toHaveLength(2);
+    ).toHaveLength(0);
     expect(promptTail()).toContain("`echo RESUMEVERIFY");
   });
 });

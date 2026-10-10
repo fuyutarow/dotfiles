@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import pkg from "../package.json" with { type: "json" };
 
 const CLI = join(import.meta.dir, "..", "src", "main.ts");
 const scratch = mkdtempSync(join(tmpdir(), "agx-startup-"));
@@ -35,12 +36,12 @@ function run(args: string[]): { code: number; out: string; err: string } {
 test("root version, help and bare invocation do not touch state", () => {
   const version = run(["--version"]);
   expect(version.code).toBe(0);
-  expect(version.out.trim()).toBe("2.5.4");
+  expect(version.out.trim()).toBe(pkg.version);
   expect(version.err).toBe("");
 
   const help = run(["--help"]);
   expect(help.code).toBe(0);
-  expect(help.out).toContain("agx v2.5.4");
+  expect(help.out).toContain(`agx v${pkg.version}`);
   expect(help.err).toBe("");
 
   const bare = run([]);

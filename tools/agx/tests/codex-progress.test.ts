@@ -102,7 +102,6 @@ describe("foldEvent", () => {
     ]);
     const after = [
       "not json",
-      ev({ type: "turn.completed" }),
       ev({ type: "item.started", item: { type: "reasoning" } }),
       ev({
         type: "item.completed",
@@ -131,6 +130,7 @@ test("turn completion adds cumulative usage to progress", () => {
     output_tokens: 20,
     reasoning_output_tokens: 5,
   });
+  expect(toProgress(t, "2026-10-06T00:00:00Z").turns).toBe(1);
 });
 
 test("progress writer persists usage and row-priced cost immediately", () => {
@@ -183,6 +183,7 @@ test("toProgress is the state.ts record: counts, not the path set", () => {
     at: "2026-10-06T00:00:00Z",
     last: "✎ a",
     commands: 1,
+    turns: 0,
     files: 1,
   });
 });

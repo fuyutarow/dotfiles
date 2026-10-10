@@ -55,6 +55,13 @@ const suiteOptions = {
       help: { description: "List session runs and their current state" },
     }),
     command({
+      name: "show",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: { description: "Show one completed run" },
+    }),
+    command({
       name: "ledger",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,

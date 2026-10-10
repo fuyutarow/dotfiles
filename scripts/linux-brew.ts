@@ -62,20 +62,21 @@ export async function bundleCore(
   const taskset = Bun.which("taskset");
   const launcher = taskset !== null && cpus !== "" ? [taskset, "-c", cpus] : [];
   const gcc =
-    inherited.CMAKE_TOOLCHAIN_FILE === undefined
+    inherited.CCC_OVERRIDE_OPTIONS === undefined
       ? await completeGccHint()
       : undefined;
-  const toolchain = join(scratch, "complete-gcc.cmake");
   if (gcc !== undefined) {
-    await Bun.write(
-      toolchain,
-      `if(CMAKE_CXX_COMPILER MATCHES "clang")\n  set(CMAKE_CXX_COMPILER_ARG1 "--gcc-install-dir=${gcc}")\nendif()\n`,
+    say(
+      `Scoped Clang driver hint: complete GCC development installation ${gcc}`,
     );
-    say(`Clang/CMake build hint: complete GCC development installation ${gcc}`);
   }
   const env = {
     ...inherited,
-    ...(gcc === undefined ? {} : { CMAKE_TOOLCHAIN_FILE: toolchain }),
+    // Clang's driver option injection reaches nested WebKit builds which reset CMake hints.
+    // It is scoped to this installer child; no global compiler files or environment are edited.
+    ...(gcc === undefined
+      ? {}
+      : { CCC_OVERRIDE_OPTIONS: `+--gcc-install-dir=${gcc}` }),
     HOMEBREW_CACHE: join(scratch, "cache"),
     HOMEBREW_TEMP: join(scratch, "tmp"),
     HOMEBREW_MAKE_JOBS: "2",

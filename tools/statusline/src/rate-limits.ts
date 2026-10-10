@@ -1,6 +1,5 @@
 import { err, fromThrowable, ok, type Result } from "neverthrow";
-import { z } from "./zod.ts";
-import { maybe } from "./input.ts";
+import { maybe, z } from "./zod.ts";
 import {
   clockHM,
   localFromEpochSec,

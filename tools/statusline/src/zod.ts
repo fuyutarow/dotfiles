@@ -4,6 +4,10 @@ import { fromThrowable } from "neverthrow";
 import { z } from "../../shared/src/zod.ts";
 
 export { z };
+
+// Optional nullable wire fields become one explicit absent state after validation.
+export const maybe = <T extends z.ZodType>(schema: T) =>
+  schema.nullish().transform((value) => value ?? undefined);
 // Throw → Result, synchronously (neverthrow's, from the same bundle): for the zero-dep files that
 // cannot import neverthrow from node_modules. The async floor is ./attempt.ts.
 export { fromThrowable };

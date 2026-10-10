@@ -3,7 +3,7 @@
 import { DIM, ESC, RST } from "./ansi.ts";
 import { writeCache } from "./bounded.ts";
 import { jsonText } from "./zod.ts";
-import { StatusInputSchema } from "./input.ts";
+import { ClaudeStatuslineInputSchema } from "./adapters/claude-statusline.ts";
 import { promptParts } from "./prompt-stamp.ts";
 import { coloredHead, render } from "./format.ts";
 import { buildDataframe } from "./build-dataframe.ts";
@@ -27,7 +27,7 @@ if (typeof Temporal === "undefined") {
   process.exit(0);
 }
 const raw = await Bun.stdin.text();
-// unknown -> StatusInput at the trust boundary: parsed with StatusInputSchema, never cast. A
+// unknown -> ClaudeStatuslineInput at the trust boundary: parsed and normalized by its adapter. A
 // payload that is not JSON, or has a field of the wrong type, renders line 1 plus the first
 // reason — the whole bar saying "the input is wrong" beats a bar built from half-trusted values.
 const json = jsonText.safeParse(raw);
@@ -36,7 +36,7 @@ if (!json.success) {
   process.stdout.write(`${DIM}Model: ? | invalid statusline JSON${RST}`);
   process.exit(0);
 }
-const payload = StatusInputSchema.safeParse(json.data);
+const payload = ClaudeStatuslineInputSchema.safeParse(json.data);
 if (!payload.success) {
   const issue = payload.error.issues[0];
   const path = (issue?.path ?? []).map(String).join(".");
@@ -72,7 +72,7 @@ writeCache(SYS_CACHE, {
 // shared file let an idle session's older Rate overwrite a fresh one (observed 2026-10-01: 7d 60%
 // then 51% with the same reset). One file per session; the hook reads its own and inserts the
 // rows as given.
-const sid = (payload.data.session_id ?? "").replaceAll(/[^A-Za-z0-9_-]/gu, "_");
+const sid = (payload.data.sessionId ?? "").replaceAll(/[^A-Za-z0-9_-]/gu, "_");
 if (sid !== "") {
   const rows = [ctxSegment(df), rateRow(df)]; // neither is ever empty: a value or an explicit n/a
   writeCache(`${HOME}/.cache/claude/statusline-session/${sid}.json`, {

@@ -9,7 +9,7 @@ import {
 } from "../src/build-dataframe.ts";
 import { readCodexRate } from "../src/codex-rate.ts";
 import { readJevUsage } from "../src/jev-usage.ts";
-import { StatusInputSchema } from "../src/input.ts";
+import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { RATE_SOURCES, rateRow } from "../src/rate-limits.ts";
 import { ESC } from "../src/ansi.ts";
 
@@ -74,7 +74,7 @@ const quietSources = {
 } satisfies NonNullable<BuildDataframeOptions["sources"]>;
 
 async function row(payload: unknown = {}, options: BuildDataframeOptions = {}) {
-  const parsed = StatusInputSchema.safeParse(payload);
+  const parsed = ClaudeStatuslineInputSchema.safeParse(payload);
   expect(parsed.success).toBe(true);
   if (!parsed.success) return "";
   return plain(

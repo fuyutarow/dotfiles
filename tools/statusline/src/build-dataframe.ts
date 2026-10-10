@@ -1,5 +1,5 @@
 import { err, ok, type Result } from "neverthrow";
-import type { StatusInput } from "./input.ts";
+import type { SessionStatus } from "./session-status.ts";
 import type { Dataframe } from "./dataframe.ts";
 import type { HostLoad } from "./host-load.ts";
 import type { RouteScan } from "./dispatch-runs.ts";
@@ -146,28 +146,24 @@ const DEFAULT_SOURCES: Sources = {
 
 // --- buildDataframe: stdin -> every displayable value, already computed. No ANSI, no rows. ---
 export async function buildDataframe(
-  data: StatusInput,
+  data: SessionStatus,
   options: BuildDataframeOptions = {},
 ): Promise<Dataframe> {
   // || (not ??): an empty cwd string must ALSO fall through to PWD, matching the old sh's
   // `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
-  const workspaceDir = data.workspace?.current_dir;
-  const cwdCandidate = firstNonEmpty(
-    data.cwd,
-    firstNonEmpty(workspaceDir, process.env.PWD ?? ""),
-  );
+  const cwdCandidate = firstNonEmpty(data.cwd, process.env.PWD ?? "");
   const cwd = cwdCandidate;
   const sid =
-    data.session_id !== undefined && data.session_id !== ""
-      ? data.session_id
+    data.sessionId !== undefined && data.sessionId !== ""
+      ? data.sessionId
       : undefined; // "" is not an id either
   const sessionNameHint =
-    data.session_name !== undefined && data.session_name !== ""
-      ? data.session_name
+    data.sessionName !== undefined && data.sessionName !== ""
+      ? data.sessionName
       : undefined;
   const sources = { ...DEFAULT_SOURCES, ...options.sources };
 
-  const model = modelName(data.model?.display_name, data.model?.id);
+  const model = modelName(data.model?.name, data.model?.id);
 
   // "Dynamic workflow" (ultracode's auto multi-agent orchestration) is armed ONLY while BOTH
   // hold: the setting says so, and the live effort actually running is xhigh — ultracode forces
@@ -176,16 +172,14 @@ export async function buildDataframe(
   // see ultracodeConfigured()'s note) can silently push effort off xhigh and turn orchestration
   // OFF even though `ultracode: true` still sits in settings. Reading the live value here (not
   // the setting alone) is what makes this catch that silent case instead of lying about it.
-  const effort = data.effort?.level; // string | undefined
+  const effort = data.effort; // string | undefined
   // Plain-text form for herdr only ("xhigh" vs "xhigh+WF") — render() does its OWN combining
   // (with its own +WF color) from the raw `effort`/`wfOn` pair below; a dataframe field must
   // hold one raw fact, not a pre-styled/pre-joined display string, or a future render() change
   // duplicates work already done here (caught live 2026-09-12: the first cut of this split
   // stored the combined string AND re-appended "+WF" in render(), rendering "xhigh+WF+WF").
   // No `?? 0`: a payload that carries no token count is "unknown", not "zero tokens".
-  const ctxTok =
-    data.context_window?.total_input_tokens ??
-    data.context_window?.current_usage?.input_tokens;
+  const ctxTok = data.context?.inputTokens;
   const ctx = contextLabel(ctxTok);
 
   const budget = (key: keyof Sources): number =>
@@ -299,11 +293,11 @@ export async function buildDataframe(
     wfOn,
     rc: rc.value,
     ctx,
-    ctxPct: data.context_window?.used_percentage,
-    rl5: data.rate_limits?.five_hour?.used_percentage,
-    rl5Reset: data.rate_limits?.five_hour?.resets_at,
-    rl7: data.rate_limits?.seven_day?.used_percentage,
-    rl7Reset: data.rate_limits?.seven_day?.resets_at,
+    ctxPct: data.context?.usedPercent,
+    rl5: data.rateLimits?.fiveHour?.usedPercent,
+    rl5Reset: data.rateLimits?.fiveHour?.resetsAt,
+    rl7: data.rateLimits?.sevenDay?.usedPercent,
+    rl7Reset: data.rateLimits?.sevenDay?.resetsAt,
     rlModel: identity.value.rlModel,
     accountWhy: identityWhy ?? identity.value.accountWhy,
     modelCapsWhy: identityWhy ?? identity.value.modelCapsWhy,
@@ -323,8 +317,8 @@ export async function buildDataframe(
       (jevUsage.value.isErr() ? jevUsage.value.error : undefined),
     branch,
     branchWhy,
-    add: data.cost?.total_lines_added,
-    del: data.cost?.total_lines_removed,
+    add: data.changes?.linesAdded,
+    del: data.changes?.linesRemoved,
     wt: data.worktree?.name,
     jobs,
     orphans,

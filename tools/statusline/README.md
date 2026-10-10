@@ -12,11 +12,17 @@ printf '%s' '{}' | bun tools/statusline/src/statusline.ts
 bun test tools/statusline/tests
 ```
 
-The input remains Claude Code statusline JSON on stdin; stdout retains the existing ANSI rows
-and graceful invalid-input messages. Existing environment variables, cache locations, schema
+The Claude adapter parses Claude Code statusline JSON on stdin and normalizes it to the provider-neutral
+`SessionStatus` contract; stdout retains the existing ANSI rows and graceful invalid-input messages.
+Existing environment variables, cache locations, schema
 checks, explicit absence messages, 2 s enrichment limits, 3 s agent lookup limit, 4 s shared
 render deadline, 5 s GPU cache and 30 s agent-name cache are preserved. The GPU sampler remains
 a bounded detached child of the local host-load module, using the original host-wide lock.
+
+Codex CLI currently accepts built-in statusline item identifiers through `tui.status_line`; it has
+no command-backed input/output contract for this renderer. `SessionStatus` is the provider boundary
+for a future supported adapter, not a claim that Codex can load this command today. Until Codex
+offers such a boundary, its own footer remains configured through Codex's native items.
 
 Dispatch worker rows begin with the roster row and elapsed time, followed by the active display ID
 when present (for example, `luna-high 6m05s agt_lfix Repo: dotfiles…`). Older active markers
@@ -48,6 +54,8 @@ outside this scaffolding step.
 
 | Module                  | Lines | Responsibility                                                            |
 | ----------------------- | ----: | ------------------------------------------------------------------------- |
+| src/session-status.ts   |    38 | Provider-neutral session facts consumed by the dataframe builder          |
+| src/adapters/claude-statusline.ts |  89 | Claude stdin schema and normalization boundary                         |
 | src/ansi.ts             |    32 | ANSI vocabulary, absence markers, percentage colors                       |
 | src/bounded.ts          |   150 | Shared 4 s render deadline, bounded subprocesses, atomic cache writes     |
 | src/build-dataframe.ts  |   126 | Orchestrate enrichment in the original order                              |
@@ -59,7 +67,6 @@ outside this scaffolding step.
 | src/format.ts           |   146 | Row assembly and prompt-head colors                                       |
 | src/host-load.ts        |   537 | CPU/RAM/VRAM sampling, GPU lock/cache, Sys formatting                     |
 | src/identity.ts         |   409 | Account, agent-name cache, Remote Control probe, herdr updates            |
-| src/input.ts            |    54 | Nullable stdin payload schema                                             |
 | src/jobs.ts             |   109 | Admitted jobs, scratchpad orphans, elapsed formatting                     |
 | src/model-context.ts    |    60 | Model normalization and context labels                                    |
 | src/prompt-stamp.ts     |    95 | Temporal clock, offset, tilde path and prompt fields                      |
@@ -67,13 +74,13 @@ outside this scaffolding step.
 | src/repo-state.ts       |    36 | Bounded branch lookup and explicit git failures                           |
 | src/statusline.ts       |    82 | Executable stdin entry, graceful errors and snapshot cache writes         |
 | src/storage.ts          |   130 | Storage TOML reads, disk measurements, shared threshold calculation       |
-| src/zod.ts              |    40 | Local JSON codecs using the shared Zod primitive                          |
+| src/zod.ts              |    44 | Local JSON codecs and nullable-field schema helper                       |
 
 ## Exact source import list
 
 - `src/ansi.ts`:
 - `src/bounded.ts`: `node:child_process`, `node:fs`, `node:path`, `neverthrow`, `./zod.ts`
-- `src/build-dataframe.ts`: `neverthrow`, `./input.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./jobs.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`
+- `src/build-dataframe.ts`: `neverthrow`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./jobs.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`
 - `src/cgroup-memory.ts`:
 - `src/dataframe.ts`: `neverthrow`, `./host-load.ts`, `./storage.ts`, `./identity.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`
 - `src/dispatch-runs.ts`: `node:fs`, `node:path`, `neverthrow`, `./zod.ts`, `./dispatch-state.ts`, `./ansi.ts`, `./jobs.ts`
@@ -81,14 +88,15 @@ outside this scaffolding step.
 - `src/dispatch-state.ts`: `node:os`, `node:path`, `./zod.ts`
 - `src/format.ts`: `./ansi.ts`, `./prompt-stamp.ts`, `./dataframe.ts`, `./model-context.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`, `./host-load.ts`
 - `src/host-load.ts`: `node:child_process`, `node:fs`, `node:path`, `node:os`, `neverthrow`, `./storage.ts`, `./cgroup-memory.ts`, `./zod.ts`, `./ansi.ts`, `./bounded.ts`
-- `src/identity.ts`: `node:fs`, `node:net`, `neverthrow`, `./zod.ts`, `./input.ts`, `./bounded.ts`
-- `src/input.ts`: `./zod.ts`
+- `src/identity.ts`: `node:fs`, `node:net`, `neverthrow`, `./zod.ts`, `./bounded.ts`
+- `src/session-status.ts`: (types only)
+- `src/adapters/claude-statusline.ts`: `../bounded.ts`, `../zod.ts`, `../session-status.ts`
 - `src/jobs.ts`: `./bounded.ts`, `./ansi.ts`, `./prompt-stamp.ts`
 - `src/model-context.ts`: `./ansi.ts`, `./dataframe.ts`
 - `src/prompt-stamp.ts`: `node:os`
-- `src/rate-limits.ts`: `neverthrow`, `./zod.ts`, `./input.ts`, `./prompt-stamp.ts`, `./ansi.ts`, `./dataframe.ts`
+- `src/rate-limits.ts`: `neverthrow`, `./zod.ts`, `./prompt-stamp.ts`, `./ansi.ts`, `./dataframe.ts`
 - `src/repo-state.ts`: `./bounded.ts`, `./model-context.ts`
-- `src/statusline.ts`: `./ansi.ts`, `./bounded.ts`, `./zod.ts`, `./input.ts`, `./prompt-stamp.ts`, `./format.ts`, `./build-dataframe.ts`, `./host-load.ts`, `./model-context.ts`, `./rate-limits.ts`
+- `src/statusline.ts`: `./ansi.ts`, `./bounded.ts`, `./zod.ts`, `./adapters/claude-statusline.ts`, `./prompt-stamp.ts`, `./format.ts`, `./build-dataframe.ts`, `./host-load.ts`, `./model-context.ts`, `./rate-limits.ts`
 - `src/storage.ts`: `node:fs`, `node:path`, `neverthrow`, `../../shared/src/storage-headroom.ts`, `./zod.ts`, `./bounded.ts`, `./ansi.ts`
 - `src/zod.ts`: `neverthrow`, `../../shared/src/zod.ts`
 

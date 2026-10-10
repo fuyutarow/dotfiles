@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { err, ok } from "neverthrow";
-import { StatusInputSchema } from "../src/input.ts";
+import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
 import { render } from "../src/format.ts";
 
@@ -8,7 +8,7 @@ const ESC = String.fromCodePoint(27);
 
 describe("buildDataframe source budgets", () => {
   test("a hung git source yields a named placeholder within the render budget", async () => {
-    const parsed = StatusInputSchema.safeParse({ cwd: "/fixture" });
+    const parsed = ClaudeStatuslineInputSchema.safeParse({ cwd: "/fixture" });
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
     const started = performance.now();

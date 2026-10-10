@@ -130,6 +130,8 @@ import {
 } from "./report.ts";
 import { floorTicketGrade, hasXhighMaxJustification } from "./ticket-grade.ts";
 import { checkPremises } from "./premises.ts";
+import { buildDetachedLaunch, type DetachPlatform } from "./detach.ts";
+import { progressIntervalMs, progressThrottle } from "./progress.ts";
 import { lintTicket, renderTicketLint } from "./ticket-lint.ts";
 import { ticketRoot, newTicket, listTickets } from "./ticket-home.ts";
 import {
@@ -218,6 +220,12 @@ function dispatchError(message: string): void {
 const displayIdForName = (name: string): string => `agt_${name}`;
 
 const now = (): string => Temporal.Now.instant().toString();
+function newRunId(): string {
+  const suffix = randomInt(36 ** 6)
+    .toString(36)
+    .padStart(6, "0");
+  return `${now().replaceAll(":", "-")}-${process.pid}-${suffix}`;
+}
 const currentDispatcherSession = (): string | undefined => {
   const id = process.env.CLAUDE_CODE_SESSION_ID?.trim();
   return id === undefined || id === "" ? undefined : id;
@@ -1271,6 +1279,7 @@ async function pickFor(
   lineageName?: string,
   writesCount = 0,
   timeoutS?: number,
+  includeThroughput = false,
 ): Promise<Pick> {
   const routes = hostRoutes();
   const available = availableRoster(roster, routes);
@@ -1384,7 +1393,7 @@ async function pickFor(
         requestRoster.choice.some((row) => row.id === id),
       ),
     ),
-    routing.throughputLines,
+    includeThroughput ? routing.throughputLines : undefined,
     temperatureOverride ?? roster.auto.pick_temperature,
     seedOverride ??
       createHash("sha256")
@@ -1463,9 +1472,9 @@ function appendLog(record: Record<string, unknown>): void {
 }
 
 function alive(pid: number): boolean {
-  return fromThrowable(() => {
-    process.kill(pid, 0);
-  })().isOk();
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  const result = fromThrowable(() => process.kill(pid, 0), errorMessage)();
+  return result.isOk() || result.error.includes("EPERM");
 }
 
 function readActive(): { active: Active; alive: boolean; file: string }[] {
@@ -1577,6 +1586,7 @@ interface RunFlags {
   pickTemperature?: number | undefined;
   pickSeed?: string | undefined;
   runId?: string;
+  verbose?: boolean;
 }
 
 function refuseUnrunnable(roster: Roster, id: string): Choice {
@@ -2251,6 +2261,7 @@ async function run(flags: RunFlags): Promise<number> {
           ticket?.name ?? flags.name,
           ticket?.writes?.length ?? 0,
           ticket?.timeout_s,
+          flags.verbose === true,
         )
       : {
           source: "override",
@@ -2417,6 +2428,7 @@ async function launch(l: Launch): Promise<number> {
       .stdout.toString()
       .trim();
     const limit = codexWorkerLimit(limitOutput, roster.auto.max_codex_workers);
+    const shouldReportWait = progressThrottle(progressIntervalMs());
     const admitted = await admitCodexWorker({
       liveCodexWorkers: () =>
         readActive().filter(
@@ -2431,14 +2443,15 @@ async function launch(l: Launch): Promise<number> {
       now: epochMilliseconds,
       sleep: (ms) => Bun.sleep(ms),
       reportWait: (live, max, waited) => {
-        dispatchError(
-          `agx: waiting for codex worker slot (${live}/${max} active; ${Math.round(waited / 1000)}s elapsed)`,
-        );
+        if (shouldReportWait())
+          dispatchError(
+            `agx: waiting for codex worker slot (${live}/${max} active; ${Math.round(waited / 1000)}s elapsed)`,
+          );
       },
     });
     if (!admitted.ok) fatal(admitted.reason);
   }
-  const runId = flags.runId ?? `${now().replaceAll(":", "-")}-${process.pid}`;
+  const runId = flags.runId ?? newRunId();
   // the full text, ticket included, kept by its hash: the run record's brief.sha256 is the key
   storeBrief(sha256(brief), brief);
   dispatchError(
@@ -3401,7 +3414,11 @@ function recordClaimsWithoutDiffGrade(
 
 // --- pick / ls / stats -----------------------------------------------------------------------------
 
-async function pickOnly(promptFile: string, cd: string): Promise<number> {
+async function pickOnly(
+  promptFile: string,
+  cd: string,
+  verbose: boolean,
+): Promise<number> {
   const roster = await loadRosterOrDie();
   if (!existsSync(promptFile)) fatal(`no such brief: ${promptFile}`);
   const brief = readFileSync(promptFile, "utf8");
@@ -3450,6 +3467,7 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
     ticket?.name,
     ticket?.writes?.length ?? 0,
     ticket?.timeout_s,
+    verbose,
   );
   appendLog({
     kind: "pick",
@@ -3675,12 +3693,23 @@ function doctor(): number {
 const LogLine = z.looseObject({
   kind: z.string(),
   run_id: z.string().optional(),
+  display_id: z.string().optional(),
   label: z.string().optional(),
   cwd: z.string().optional(),
   dispatcher_session: z.string().optional(),
+  resource: z
+    .looseObject({
+      kind: z.enum(["token", "compute"]).optional(),
+      labels: z.array(z.string()).optional(),
+    })
+    .optional(),
   started_at: z.string().optional(),
   ended_at: z.string().optional(),
   at: z.string().optional(),
+  when: z.string().optional(),
+  last_known_state: z
+    .enum(["running", "returned", "done", "failed", "abandoned"])
+    .optional(),
   brief: z
     .looseObject({ path: z.string(), sha256: z.string().optional() })
     .optional(),
@@ -3808,6 +3837,171 @@ function readLog(): Logged[] {
       const p = jsonOf(LogLine).safeParse(l);
       return p.success ? [p.data] : [];
     });
+}
+
+type RunState = "running" | "returned" | "done" | "failed" | "abandoned";
+
+function stateOfRecord(record: Logged): RunState {
+  if (record.kind === "abandoned") return "abandoned";
+  if (record.kind !== "run") return "running";
+  if (record.worker?.outcome === "returned" || record.return !== undefined)
+    return "returned";
+  return record.worker?.outcome === "ok" ? "done" : "failed";
+}
+
+function collectDeadMarkers(dryRun = false): {
+  found: number;
+  removed: number;
+} {
+  const dead = readActive().filter((entry) => !entry.alive);
+  if (dryRun) return { found: dead.length, removed: 0 };
+  if (dead.length === 0) return { found: 0, removed: 0 };
+  const log = readLog();
+  for (const { active, file } of dead) {
+    const previous = log.findLast((entry) => entry.run_id === active.run_id);
+    const at = now();
+    appendLog({
+      kind: "abandoned",
+      run_id: active.run_id,
+      when: at,
+      at,
+      last_known_state:
+        previous === undefined ? "running" : stateOfRecord(previous),
+      display_id: active.display_id,
+      label: active.label,
+      cwd: active.cwd,
+      ...(active.dispatcher_session === undefined
+        ? {}
+        : { dispatcher_session: active.dispatcher_session }),
+      resource: { kind: active.kind, labels: active.labels ?? [] },
+      started_at: active.started_at,
+      ended_at: at,
+      pick: { source: active.pick_source, choice: active.choice },
+    });
+    rmSync(file, { force: true });
+  }
+  return { found: dead.length, removed: dead.length };
+}
+
+function gcCommand(dryRun: boolean): number {
+  const result = collectDeadMarkers(dryRun);
+  if (dryRun)
+    process.stdout.write(
+      `agx ledger gc: ${result.found === 0 ? "no stale markers" : `would mark ${result.found} abandoned and remove ${result.found} marker(s)`}\n`,
+    );
+  else
+    process.stdout.write(
+      `agx ledger gc: ${result.removed === 0 ? "no stale markers" : `marked ${result.removed} abandoned and removed ${result.removed} marker(s)`}\n`,
+    );
+  return 0;
+}
+
+interface PsRow {
+  id: string;
+  name: string;
+  row: string;
+  kind: string;
+  labels: string[];
+  state: RunState;
+  age: string;
+  summary: string | null;
+}
+
+function ageLabel(startedAt: string | undefined, endedAt?: string): string {
+  const started = instantMilliseconds(startedAt);
+  const ended =
+    endedAt === undefined ? epochMilliseconds() : instantMilliseconds(endedAt);
+  if (started === undefined || ended === undefined) return "?";
+  const seconds = Math.max(0, Math.floor((ended - started) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600)
+    return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, "0")}s`;
+  return `${Math.floor(seconds / 3600)}h${String(Math.floor((seconds % 3600) / 60)).padStart(2, "0")}m`;
+}
+
+function instantMilliseconds(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = fromThrowable(
+    () => Temporal.Instant.from(value).epochMilliseconds,
+    (error) => error,
+  )();
+  return parsed.isOk() ? parsed.value : undefined;
+}
+
+function oneLineSummary(value: string): string {
+  return value
+    .replaceAll(/[\r\n\t]+/gu, " ")
+    .replaceAll(/\s{2,}/gu, " ")
+    .trim()
+    .slice(0, 200);
+}
+
+function psCommand(showAll: boolean, asJson: boolean): number {
+  const markers = new Map(
+    readActive().map((entry) => [entry.active.run_id, entry]),
+  );
+  const latest = new Map<string, Logged>();
+  for (const entry of readLog())
+    if (
+      entry.run_id !== undefined &&
+      (entry.kind === "run" || entry.kind === "abandoned")
+    )
+      latest.set(entry.run_id, entry);
+
+  const session = currentDispatcherSession();
+  const ids = new Set([...latest.keys(), ...markers.keys()]);
+  const rows = [...ids].flatMap((id): PsRow[] => {
+    const marker = markers.get(id);
+    const logged = latest.get(id);
+    const dispatcherSession =
+      marker?.active.dispatcher_session ?? logged?.dispatcher_session;
+    if (!showAll && (session === undefined || dispatcherSession !== session))
+      return [];
+    let state: RunState;
+    if (logged !== undefined) state = stateOfRecord(logged);
+    else if (marker?.alive === true) state = "running";
+    else state = "abandoned";
+    const endedAt =
+      logged?.ended_at ??
+      (logged?.kind === "abandoned" ? (logged.when ?? logged.at) : undefined);
+    const typedReport = WorkerReport.safeParse(logged?.report);
+    const summary =
+      state === "running" || !typedReport.success
+        ? null
+        : oneLineSummary(typedReport.data.summary);
+    return [
+      {
+        id,
+        name:
+          marker?.active.display_id ??
+          logged?.display_id ??
+          marker?.active.label ??
+          logged?.label ??
+          id,
+        row: logged?.pick.choice ?? marker?.active.choice ?? "unknown",
+        kind: marker?.active.kind ?? logged?.resource?.kind ?? "unknown",
+        labels: marker?.active.labels ?? logged?.resource?.labels ?? [],
+        state,
+        age: ageLabel(marker?.active.started_at ?? logged?.started_at, endedAt),
+        summary,
+      },
+    ];
+  });
+
+  if (asJson) {
+    process.stdout.write(`${JSON.stringify({ schema: SCHEMA, runs: rows })}\n`);
+    return 0;
+  }
+  if (rows.length === 0) {
+    process.stdout.write("agx ps: no runs\n");
+    return 0;
+  }
+  process.stdout.write("id\tname\trow\tkind\tlabels\tstate\tage\tsummary\n");
+  for (const row of rows)
+    process.stdout.write(
+      `${row.id}\t${row.name}\t${row.row}\t${row.kind}\t${row.labels.join(",")}\t${row.state}\t${row.age}\t${row.summary ?? ""}\n`,
+    );
+  return 0;
 }
 
 // --- grade: Jev judges a finished run from evidence the coordinator collected ----------------------
@@ -4809,6 +5003,13 @@ const suiteOptions = {
       help: { description: "Run or resume a worker" },
     }),
     command({
+      name: "ps",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: { description: "List session runs and their current state" },
+    }),
+    command({
       name: "ledger",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -4833,6 +5034,30 @@ await rootArgv;
 await helpArgv;
 
 async function parseAgx() {
+  if (rootArgv.command === "ps") {
+    const parsed = cli(
+      {
+        name: "agx ps",
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+        parameters: [],
+        flags: {
+          all: {
+            type: Boolean,
+            description: "include runs from every session",
+          },
+          json: { type: Boolean, description: "print rows as JSON" },
+        },
+      },
+      undefined,
+      rawArgs.slice(1),
+    );
+    return { command: "ps", flags: parsed.flags, _: parsed._ } satisfies {
+      command: "ps";
+      flags: typeof parsed.flags;
+      _: typeof parsed._;
+    };
+  }
   if (rootArgv.command === "dispatch") {
     const parsed = cli(
       {
@@ -4901,6 +5126,18 @@ async function parseAgx() {
                 description:
                   "skip the pre-spawn ticket grader (recorded in the receipt)",
               },
+              detach: {
+                type: Boolean,
+                description: "launch as a named OS-managed background job",
+              },
+              verbose: {
+                type: Boolean,
+                description: "include recent throughput in Jev's request",
+              },
+              runId: {
+                type: String,
+                description: "run id used by the detached child process",
+              },
               legacyBrief: {
                 type: String,
                 description:
@@ -4946,6 +5183,10 @@ async function parseAgx() {
             type: String,
             default: ".",
             description: "the directory the brief would run in (no_egress)",
+          },
+          verbose: {
+            type: Boolean,
+            description: "include recent throughput in Jev's request",
           },
         },
         commands: [
@@ -5127,6 +5368,22 @@ async function parseAgx() {
             help: { description: "running dispatches" },
           }),
           command({
+            name: "gc",
+            strictFlags: true,
+            ignoreArgv: rejectPrototypeFlag,
+            parameters: [],
+            flags: {
+              dryRun: {
+                type: Boolean,
+                description:
+                  "report dead markers without recording or removing them",
+              },
+            },
+            help: {
+              description: "mark dead run markers abandoned and remove them",
+            },
+          }),
+          command({
             name: "stats",
             strictFlags: true,
             ignoreArgv: rejectPrototypeFlag,
@@ -5240,6 +5497,8 @@ async function parseAgx() {
     await parsed;
     if (parsed.command === "ls")
       return { command: parsed.command, flags: parsed.flags, _: parsed._ };
+    if (parsed.command === "gc")
+      return { command: parsed.command, flags: parsed.flags, _: parsed._ };
     if (parsed.command === "stats")
       return { command: parsed.command, flags: parsed.flags, _: parsed._ };
     if (parsed.command === "record")
@@ -5256,7 +5515,104 @@ async function parseAgx() {
 }
 const argv = await parseAgx();
 
+function withoutOption(
+  args: string[],
+  option: string,
+  takesValue: boolean,
+): string[] {
+  const kept: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index] ?? "";
+    if (value === option) {
+      index += Number(takesValue);
+      continue;
+    }
+    if (value.startsWith(`${option}=`)) continue;
+    kept.push(value);
+  }
+  return kept;
+}
+
+function withOption(args: string[], option: string, value: string): string[] {
+  return [...withoutOption(args, option, true), option, value];
+}
+
+function resolveDetachPlatform(
+  forcedPlatform: string | undefined,
+): DetachPlatform | undefined {
+  if (forcedPlatform === "linux" || forcedPlatform === "darwin")
+    return forcedPlatform;
+  if (forcedPlatform !== undefined) return undefined;
+  if (process.platform === "linux") return "linux";
+  if (process.platform === "darwin") return "darwin";
+  return undefined;
+}
+
+async function detachDispatch(
+  flags: RunFlags,
+  originalArgs: string[],
+): Promise<number> {
+  const forcedPlatform = process.env.AGX_DETACH_PLATFORM;
+  const platform = resolveDetachPlatform(forcedPlatform);
+  if (platform === undefined && forcedPlatform === undefined)
+    fatal(`--detach is supported on Linux and macOS, not ${process.platform}`);
+  if (platform === undefined)
+    fatal(
+      `AGX_DETACH_PLATFORM must be linux or darwin, not '${forcedPlatform}'`,
+    );
+
+  const brief = readFileSync(flags.promptFile, "utf8");
+  const parsed = parseTicket(brief);
+  if (parsed.kind === "invalid") fatal(parsed.reason);
+  const ticketName = parsed.kind === "ticket" ? parsed.ticket.name : undefined;
+  const displayId = chooseDisplayId(flags.name ?? ticketName);
+  const name = displayId.slice("agt_".length);
+  const runId = flags.runId ?? newRunId();
+  const unit = `agx-${name}-${sha256(runId).slice(0, 8)}`;
+  let childArgs = withoutOption(originalArgs, "--detach", false);
+  childArgs = withOption(childArgs, "--run-id", runId);
+  childArgs = withOption(childArgs, "--name", name);
+  const logDir = resolve(STATE_DIR, "detached");
+  if (platform === "darwin") mkdirSync(logDir, { recursive: true });
+  const detachedLaunch = buildDetachedLaunch({
+    platform,
+    unit,
+    cwd: resolve(flags.cd),
+    command: [process.execPath, join(import.meta.dir, "agx.ts"), ...childArgs],
+    env: { ...process.env, HOME: process.env.HOME ?? homedir() },
+    logDir,
+  });
+  // The OS manager's acknowledgment is bounded; the accepted worker outlives this call.
+  const started = await attempt(() =>
+    Bun.spawnSync([detachedLaunch.executable, ...detachedLaunch.args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 15_000,
+      killSignal: "SIGKILL",
+    }),
+  );
+  if (!started.ok)
+    fatal(
+      `cannot start ${detachedLaunch.executable}: ${errorMessage(started.error)}`,
+    );
+  if (started.value.exitCode !== 0)
+    fatal(
+      `${detachedLaunch.executable} failed (exit ${started.value.exitCode}): ${started.value.stderr.toString().trim()}`,
+    );
+  process.stdout.write(
+    `unit: ${detachedLaunch.unit}\nlogs: ${detachedLaunch.logCommand}\nrun_id: ${runId}\n`,
+  );
+  return 0;
+}
+
 async function main(): Promise<number | undefined> {
+  if (argv.command === "dispatch") {
+    const gc = collectDeadMarkers();
+    if (gc.removed > 0)
+      dispatchError(
+        `agx: marked ${gc.removed} abandoned run(s) and removed ${gc.removed} stale marker(s)`,
+      );
+  }
   // Cleye leaves excess positionals in argv._ (writing-bun-scripts BG1); result and grade take one.
   let positionals = 0;
   if (argv.command === "record") positionals = 2;
@@ -5320,7 +5676,7 @@ async function main(): Promise<number | undefined> {
       fatal(
         `--sandbox must be none, read-only or workspace-write, not '${f.sandbox}'`,
       );
-    return run({
+    const flags: RunFlags = {
       promptFile: f.promptFile,
       cd: f.cd,
       sandbox: f.sandbox,
@@ -5335,8 +5691,10 @@ async function main(): Promise<number | undefined> {
       legacyBrief: f.legacyBrief,
       pickTemperature: f.pickTemperature,
       pickSeed: f.pickSeed,
-      runId: `${now().replaceAll(":", "-")}-${process.pid}`,
-    });
+      runId: f.runId ?? newRunId(),
+      verbose: f.verbose ?? false,
+    };
+    return f.detach === true ? detachDispatch(flags, rawArgs) : run(flags);
   }
   if (argv.command === "ticket-lint") {
     const lintGrade = lintTicket(
@@ -5374,7 +5732,11 @@ async function main(): Promise<number | undefined> {
     if (argv.flags.promptFile === "" || argv.flags.cd === "")
       fatal("a value is required");
     if (argv.flags.promptFile === undefined) fatal("pick needs --prompt-file");
-    return pickOnly(argv.flags.promptFile, argv.flags.cd);
+    return pickOnly(
+      argv.flags.promptFile,
+      argv.flags.cd,
+      argv.flags.verbose ?? false,
+    );
   }
   if (argv.command === "replay") {
     if (argv._.length !== 1) fatal("replay needs <dir>");
@@ -5386,6 +5748,9 @@ async function main(): Promise<number | undefined> {
       fatal("ask needs --request <file|->");
     return ask(argv.flags.request);
   }
+  if (argv.command === "ps")
+    return psCommand(argv.flags.all ?? false, argv.flags.json ?? false);
+  if (argv.command === "gc") return gcCommand(argv.flags.dryRun ?? false);
   if (argv.command === "ls") return ls();
   if (argv.command === "doctor") return doctor();
   if (argv.command === "stats") {

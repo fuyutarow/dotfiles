@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.0 — 2026-10-10
+
+- Add `agx ps` for session-scoped run state and report summaries, plus `agx ledger gc` to record and remove dead markers; dispatch runs gc at startup.
+- Add OS-managed detached dispatch (`systemd-run` on Linux, a logged launchd job on macOS), throttle wait messages to five minutes by default, and make recent throughput opt-in with `--verbose`.
+
 ## 2.4.0 — 2026-10-10
 
 - Make first_return_s a soft checkpoint: request an interim RETURN for the existing Codex session and record RETURN/progress observations without stopping either worker route.

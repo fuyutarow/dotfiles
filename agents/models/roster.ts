@@ -165,11 +165,17 @@ export function rosterTable(r: Roster): string {
   return [head, ...rows].join("\n");
 }
 
+const ROSTER_RUN_CONTROL = [
+  "  Run control: `agx ps [--all] [--json]` lists this session's runs with state and each finished worker's one-line report summary; `agx ledger gc [--dry-run]` records dead markers as abandoned and removes them (dispatch runs gc automatically).",
+  "  Durable/noise controls: `agx dispatch --detach` starts a named systemd user unit or macOS launchd job; `agx dispatch --verbose` includes recent throughput in Jev's request, omitted by default (use `agx ledger stats` for the table).",
+];
+
 /** The dispatch policy that opens the deployed ~/.claude/CLAUDE.md: the rule, the table, and how
  * to choose and run. scripts/render-home.ts puts it between the roster markers at deploy time, so
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
   return [
+    ...ROSTER_RUN_CONTROL,
     `- **Every dispatch goes through \`agx dispatch\`: Jev alone picks one row of this roster from the brief and this table (each row's use, measured capability, price and graded record). Recent records include the overall seven-day window, records restricted to each capability tag on the ticket, and comparable-ticket tradeoffs grouped by exact capability tags and size class (writes-glob count and brief length); records below five runs say \`little record\`. A row with two lineage failures/partials or returns without ack-consumed is masked from Jev's candidates, with each row and reason in the receipt; if all rows are masked, the overall-record argmax remains available and is recorded. Jev alone picks among the remaining candidates. ${ROUTING_OBJECTIVE} \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. When Jev is unreachable or answers outside the roster the default \`${r.default}\` runs, and the receipt says why.**`,
     `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; as of ${r.as_of}.`,
     `  Ticket premises: declare relied-on files or exact-text symbols as \`premises = ["file:<path>", "symbol:<name>", "symbol:<name>@<path-glob>"]\`; missing premises refuse before Jev, and checks time out after five seconds.`,

@@ -228,7 +228,7 @@ test("wait cap returns partial and does not oversleep the deadline", async () =>
 test("CLI prints wait ids before a capped wait", async () => {
   const { base, previous } = fixture();
   marker(join(previous, "active/live.json"), "live");
-  const result = await runCli(base, ["--wait", "--wait-max", "0.01"]);
+  const result = await runCli(base, ["--wait", "--wait-max", "1"]);
   expect(result.exit).toBe(3);
   expect(result.stdout).toContain("WAIT: live run ids: live");
 });

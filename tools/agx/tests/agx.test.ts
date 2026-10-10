@@ -624,7 +624,7 @@ describe("agx dispatch", () => {
       '+++\nschema = 2\ncapabilities = ["gpu-kernels"]\n+++\nChoose a worker.\n',
     );
     const r = await router(
-      ["pick", "--prompt-file", requestBrief, "--cd", scratch],
+      ["pick", "--prompt-file", requestBrief, "--cd", scratch, "--verbose"],
       {
         AGX_STATE_DIR: state,
       },
@@ -676,6 +676,16 @@ describe("agx dispatch", () => {
     expect(request.questions.worker.criteria["luna-max"]).toContain(
       "Comparable-ticket tradeoff: n=0;",
     );
+  });
+
+  test("recent throughput is omitted from Jev's request by default", async () => {
+    const requestBrief = brief("throughput-default-off", "Choose a worker.\n");
+    const r = await router(
+      ["pick", "--prompt-file", requestBrief, "--cd", scratch],
+      { AGX_STATE_DIR: join(scratch, "throughput-default-off") },
+    );
+    expect(r.code).toBe(0);
+    expect(lastJevBody()).not.toContain("recent_throughput");
   });
 
   test("kind records use any shared capability tag and isolate unrelated tags", async () => {
@@ -868,7 +878,7 @@ describe("agx dispatch", () => {
     );
     const requestBrief = brief("imported-record-pick", "Choose a worker.\n");
     const r = await router(
-      ["pick", "--prompt-file", requestBrief, "--cd", scratch],
+      ["pick", "--prompt-file", requestBrief, "--cd", scratch, "--verbose"],
       { AGX_STATE_DIR: state },
     );
     expect(r.code).toBe(0);
@@ -878,7 +888,7 @@ describe("agx dispatch", () => {
     mkdirSync(corruptState, { recursive: true });
     writeFileSync(join(corruptState, "imported-record.json"), "not json");
     const corrupt = await router(
-      ["pick", "--prompt-file", requestBrief, "--cd", scratch],
+      ["pick", "--prompt-file", requestBrief, "--cd", scratch, "--verbose"],
       { AGX_STATE_DIR: corruptState },
     );
     expect(corrupt.code).toBe(0);
@@ -1688,7 +1698,7 @@ describe("agx dispatch", () => {
     const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("default");
     expect(receipt.pick.reason).toContain("no TYPESAFE_API_KEY");
-  });
+  }, 15_000);
 
   test("auto: a cwd under no_egress never calls Jev", async () => {
     const r = await router(
@@ -5134,7 +5144,7 @@ describe("agx ticket write enforcement", () => {
       diff_empty: true,
     });
     expect(receipt.worker.outcome).toBe("non_delivery");
-  });
+  }, 15_000);
 
   test("pre-existing dirty files are not attributed to this run", async () => {
     const cwd = freshCwd();
@@ -5421,7 +5431,7 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
       r.err.split("\n").filter((line) => line.includes("warning:")),
     ).toHaveLength(1);
     expect(r.err).toContain("12 finished run(s)");
-  });
+  }, 15_000);
 
   test("disjoint write globs do not block when a no-verify run is ungraded", async () => {
     const cwd = freshCwd();

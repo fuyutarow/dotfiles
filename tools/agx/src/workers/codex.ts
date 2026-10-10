@@ -67,18 +67,14 @@ import { resourceBriefFallback } from "./codex-resource-probe.ts";
 import { costUsd } from "../dispatch-cost.ts";
 import { activityWriter } from "../lifecycle.ts";
 import { parseReturn } from "../report.ts";
+import { progressIntervalMs, progressThrottle } from "../progress.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["none", "read-only", "workspace-write"];
 const MAX_TIMEOUT_S = 14400;
 const DEFAULT_TIMEOUT_S = 900;
 const IDENTICAL_TOOL_ERROR_LIMIT = 5; // Stop a worker that is retrying the same broken call indefinitely.
-// AGX_CODEX_HEARTBEAT_S is a test seam (a test cannot wait 30 s for the first liveness line).
-const parsedHeartbeat = Number(process.env.AGX_CODEX_HEARTBEAT_S ?? "");
-const HEARTBEAT_S =
-  parsedHeartbeat !== 0 && !Number.isNaN(parsedHeartbeat)
-    ? parsedHeartbeat
-    : 30;
+const PROGRESS_INTERVAL_MS = progressIntervalMs();
 const FLOOR_CONFIG =
   process.env.MODEL_FLOOR_CONFIG ??
   join(
@@ -490,9 +486,11 @@ if (!spawned.ok) {
   refuse(`cannot start ${CODEX_BIN}: ${errorMessage(spawned.error)}`);
 }
 const proc = spawned.value;
+const shouldReportProgress = progressThrottle(PROGRESS_INTERVAL_MS);
 const heartbeat = setInterval(() => {
-  say(`waiting for ${model} (${elapsed()} s of ${timeoutS} s)…`);
-}, HEARTBEAT_S * 1000);
+  if (shouldReportProgress())
+    say(`waiting for ${model} (${elapsed()} s of ${timeoutS} s)…`);
+}, PROGRESS_INTERVAL_MS);
 // Read both pipes from the start (a child blocked on a full pipe never exits), but stop waiting for
 // them PIPE_GRACE_MS after the child itself exits: a killed codex can leave a grandchild holding
 // the pipe open, and the bound must hold even then.

@@ -309,6 +309,7 @@ if (b < 0 || e < b)
   fatal(`FATAL: markers ${BEGIN} … ${END} not found in ${mdPath}`);
 outputs.push({
   dest: `${home}/.claude/CLAUDE.md`,
+  // rosterPolicy also supplies the generated agx run-control guidance; its source stays in roster.ts.
   text: `${md.value.slice(0, b)}${BEGIN}\n<!-- RENDERED from agents/models/dispatch-roster.toml by scripts/render-home.ts — edit the roster, then \`mise run link:dots\`. -->\n${rosterPolicy(roster.value)}\n${END}${md.value.slice(e + END.length)}`,
   from: `${mdPath} + ${rosterPath}`,
 });

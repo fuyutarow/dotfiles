@@ -131,6 +131,10 @@ describe("render-home: base only", () => {
       "agx ticket ls",
       "agx ticket lint",
       "Grader split/clarify verdicts warn",
+      "agx ps [--all] [--json]",
+      "agx ledger gc [--dry-run]",
+      "agx dispatch --detach",
+      "agx dispatch --verbose",
     ])
       expect(policy).toContain(text);
     cleanup(dotfiles, home);
@@ -422,7 +426,7 @@ describe("render-home: the rest of the rendered half", () => {
     run({ HOME: home, DOTFILES: dotfiles });
     const md = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
     expect(md).toMatch(
-      /^# policy\n\n<!-- roster:begin -->\n<!-- RENDERED [^\n]*-->\n- \*\*Every dispatch goes through/u,
+      /^# policy\n\n<!-- roster:begin -->\n<!-- RENDERED [^\n]*-->\n  Run control:[^\n]*\n  Durable\/noise controls:[^\n]*\n- \*\*Every dispatch goes through/u,
     );
     expect(md).toContain(
       "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",

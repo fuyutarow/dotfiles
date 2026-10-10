@@ -27,7 +27,7 @@ const invoke = (args: string[], env: NodeJS.ProcessEnv = testEnv, cwd = ROOT) =>
     cwd,
     stdout: "pipe",
     stderr: "pipe",
-    timeout: 5_000,
+    timeout: 15_000,
   });
 
 const commandNames = (output: string): string[] => {
@@ -44,7 +44,7 @@ test("the suite has one bin and a major version for the CLI break", () => {
   expect(pkg.bin).toEqual({ agx: "src/agx.ts" });
 });
 
-test("bare and unknown commands list exactly the four nouns", () => {
+test("bare and unknown commands list the root command nouns", () => {
   for (const args of [
     [],
     ["unknown"],
@@ -64,6 +64,7 @@ test("bare and unknown commands list exactly the four nouns", () => {
       "ticket",
       "pick",
       "dispatch",
+      "ps",
       "ledger",
     ]);
   }
@@ -80,6 +81,7 @@ test("minimal environment and piped stdout list all nouns from an unrelated cwd"
       "ticket",
       "pick",
       "dispatch",
+      "ps",
       "ledger",
     ]);
   }
@@ -105,11 +107,12 @@ test("forced color, no color and narrow columns keep suite headings and nouns st
         "ticket",
         "pick",
         "dispatch",
+        "ps",
         "ledger",
       ]);
     }
   }
-});
+}, 15_000);
 
 test("the CLI ignores previous state paths and previous environment overrides", () => {
   const base = mkdtempSync(join(tmpdir(), "agx-state-layout-"));

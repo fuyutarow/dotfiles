@@ -647,7 +647,7 @@ describe("agx", () => {
       AGX_CODEX_BIN: bin,
       FAKE_CODEX_MODE: "slow",
       FAKE_CODEX_SLEEP: "20",
-      AGX_CODEX_HEARTBEAT_S: "1",
+      AGX_PROGRESS_EVERY_S: "1",
     });
     expect(performance.now() - t0).toBeLessThan(10_000);
     expect(r.code).toBe(3);

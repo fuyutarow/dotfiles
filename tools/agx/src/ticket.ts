@@ -4,7 +4,7 @@
 //
 //   +++
 //   schema = 1
-//   writes = ["tools/agx/**"]   # globs relative to --cd; [] = read-only
+//   writes = ["tools/agx/**"]   # globs relative to repo root; [] = read-only
 //   verify = ["bun test tools/agx/tests"]
 //   verify_timeout_s = 1200                  # optional; bound for all verify commands together
 //   timeout_s = 3600                         # optional; worker wall clock (60..14400)
@@ -40,7 +40,7 @@ const writeGlob = z
   .string()
   .min(1)
   .refine((g) => !g.startsWith("/") && !g.split("/").includes(".."), {
-    message: "a write glob is relative to --cd and stays inside it",
+    message: "a write glob is relative to the repo root and stays inside it",
   });
 
 const premise = z.string().refine(
@@ -92,6 +92,7 @@ const CommonTicket = {
     .max(360)
     .default(DEFAULT_FIRST_RETURN_S),
   budget_usd: z.number().positive().optional(),
+  stall_s: z.number().int().positive().optional(),
   pick_temperature: z.number().min(0).max(5).optional(),
   capabilities: z.array(z.string().min(1)).default([]),
   premises: z.array(premise).optional(),

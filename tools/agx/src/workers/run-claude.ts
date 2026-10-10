@@ -4,6 +4,7 @@ import { cli } from "cleye";
 import { err, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../../../shared/src/zod.ts";
 import { parseReturn } from "../report.ts";
+import { activityWriter } from "../lifecycle.ts";
 import {
   AGX_WORKER_ENV,
   AGX_WORKER_VALUE,
@@ -202,11 +203,12 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     mkdirSync(dirname(messageFile), { recursive: true });
     writeFileSync(messageFile, returnedText);
   };
+  const recordActivity = activityWriter();
   const [stdout, stderr, exitCode] = await Promise.all([
     progress === undefined
-      ? readStream(child.stdout)
-      : readLines(child.stdout, feed),
-    readStream(child.stderr),
+      ? readLines(child.stdout, () => {}, recordActivity)
+      : readLines(child.stdout, feed, recordActivity),
+    readLines(child.stderr, () => {}, recordActivity),
     child.exited,
   ]);
   cleanup();
@@ -251,22 +253,18 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
   };
 }
 
-function readStream(
-  stream: ReadableStream<Uint8Array> | null,
-): Promise<string> {
-  return stream === null ? Promise.resolve("") : new Response(stream).text();
-}
-
 /** The whole stream as text, handing each complete line to `onLine` as it arrives. */
 async function readLines(
   stream: ReadableStream<Uint8Array> | null,
   onLine: (line: string) => void,
+  recordActivity: (bytes: number) => void,
 ): Promise<string> {
   if (stream === null) return "";
   const decoder = new TextDecoder();
   let text = "";
   let pending = "";
   for await (const chunk of stream) {
+    recordActivity(chunk.byteLength);
     const piece = decoder.decode(chunk, { stream: true });
     text += piece;
     const lines = (pending + piece).split("\n");

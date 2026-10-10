@@ -67,8 +67,9 @@ turn a RETURN into non-delivery. Receipts (`outcome_summary`) and stderr say
 entry or the RETURN's `proposed_next` when no question is supplied. RETURNs never auto-escalate.
 The strict RETURN schema remains unchanged; both incident messages from 2026-10-09 fit it.
 
-True `non_delivery` (declared writes with an empty checked delta and no valid RETURN) and
-first-return stalls may escalate once. An owner-approved `--row` preserves its row and approval
+True `non_delivery` (a naturally completed worker with declared writes, an empty checked delta,
+and no valid RETURN) and proven all-flat stalls may escalate once. Workers stopped while still
+progressing, including at `timeout_s`, never auto-escalate. An owner-approved `--row` preserves its row and approval
 and resumes its own vendor session. Without a session, the dispatcher stops for the coordinator.
 Other escalations use `pick.source = "escalation"`: among available rows that fit the ticket's
 budget and Claude run bounds, other than the failed
@@ -80,6 +81,36 @@ The dispatcher asserts that the selected AA index cannot be lower and records `e
 `failed_aa_index`, and `selected_aa_index` alongside `escalated_from`. Missing capability evidence
 or no capable available row stops escalation for the coordinator. A second failure exits nonzero
 without a third worker.
+
+`first_return_s` is a soft checkpoint, never a stop condition. At that time, the router asks
+Codex to queue an interim RETURN request for its existing session and records whether the request
+was sent (or why it could not be sent), whether a valid RETURN appeared, and whether progress
+appeared by the deadline. This request says to continue authorized work and keep running jobs.
+Claude has no live prompt injection; its receipt records that limitation and the same observations.
+Neither route is interrupted or resumed because of this checkpoint.
+
+The independent stall window is ticket `stall_s` (positive integer seconds, default 600). A run
+stops early only when ALL observed inputs have been flat throughout the window: cumulative CPU
+time of the worker's process tree (including descendants and retained CPU of exited children),
+mtime and size of files matching declared writes, and vendor stdout/stderr activity or session
+progress/last-message files. Wrapper heartbeat messages do not count as worker output. Unavailable
+CPU or filesystem observations prevent a stall verdict. The stall message and receipt print the
+CPU seconds/PIDs, each declared file's mtime and size, output metadata, and observed flat duration.
+Otherwise the worker runs to completion or `timeout_s`.
+
+Observation never waits on shutdown: timers are unref'ed and cleared as soon as the worker
+exits, in-flight CPU/filesystem samples and soft requests are canceled, and receipt construction
+uses the request's current result without waiting. CPU samples have a 250 ms budget; declared-write
+scans yield to the event loop, start at each glob's fixed prefix, prune `.git`, `.jj`, and
+`node_modules` before traversal, and have a 20,000-entry limit and a 500 ms budget (250 ms for
+live samples). Incomplete scans are unavailable, never evidence of no progress or non-delivery.
+
+Write globs resolve against the repository/workspace root, even when `--cd` names a subdirectory
+(outside a repository, `--cd` is the root). At run start the router snapshots matching files'
+mtime and size, including ignored files. Only changes since that snapshot count. Files declared
+by another live run in the same workspace, or a run whose lifetime overlapped this one, are
+reported as `changed by others (not attributed)` and `writes_unattributed`; they are excluded
+from this run's changed paths and scope violations, including when both tickets claim the path.
 
 ## Worker display IDs
 

@@ -51,7 +51,6 @@ import {
   readFileSync,
   renameSync,
   readdirSync,
-  lstatSync,
   realpathSync,
   rmSync,
   statSync,
@@ -75,6 +74,19 @@ import {
   type Roster,
 } from "../../../agents/models/roster.ts";
 import { admitCodexWorker, codexWorkerLimit } from "./admission.ts";
+import {
+  DEFAULT_STALL_S,
+  declaredFiles,
+  fileFingerprint,
+  fileStamp,
+  sameStamp,
+  workspaceRoot,
+  processTreeCpu,
+  StallObserver,
+  requestInterimReturn,
+  type FileSnapshot,
+  type StallInputs,
+} from "./lifecycle.ts";
 import { escalationRow, sampleRow } from "./selection.ts";
 import {
   currentHost,
@@ -225,7 +237,7 @@ interface WritesCheck {
 
 interface ChangeSnapshot {
   paths: string[];
-  hashes: Map<string, string | undefined>;
+  stamps: FileSnapshot;
   unavailable?: string;
 }
 
@@ -282,31 +294,29 @@ async function changedPaths(cwd: string): Promise<WritesCheck> {
   };
 }
 
-async function contentHash(
+async function snapshotChanges(
   cwd: string,
-  path: string,
-): Promise<string | undefined> {
-  const read = await attempt(() => readFileSync(join(cwd, path)));
-  return read.ok ? sha256(read.value.toString("base64")) : undefined;
-}
-
-async function snapshotChanges(cwd: string): Promise<ChangeSnapshot> {
+  writes: string[],
+): Promise<ChangeSnapshot> {
   const listed = await changedPaths(cwd);
   const paths = [
     ...new Set(listed.paths.map((p) => p.replaceAll("\\", "/"))),
   ].filter((p) => !p.split("/").includes("node_modules"));
+  const declared = await declaredFiles(cwd, writes);
+  const stamps = declared ?? new Map();
+  for (const path of paths) {
+    const stamp = fileStamp(join(cwd, path));
+    if (stamp !== undefined) stamps.set(path, stamp);
+  }
   return {
     paths,
-    hashes: new Map(
-      await Promise.all(
-        paths.map(
-          async (path) => [path, await contentHash(cwd, path)] as const,
-        ),
-      ),
-    ),
-    ...(listed.unavailable === undefined
-      ? {}
-      : { unavailable: listed.unavailable }),
+    stamps,
+    ...(declared === undefined
+      ? {
+          unavailable:
+            "declared-write snapshot exceeded its budget or was unreadable",
+        }
+      : {}),
   };
 }
 
@@ -314,67 +324,37 @@ function pathMatchesGlobs(path: string, globs: string[]): boolean {
   return globs.some((glob) => new Bun.Glob(glob).match(path));
 }
 
-function scanWrittenPaths(
-  cwd: string,
-  writes: string[],
-  startedAt: string,
-): string[] {
-  if (writes.length === 0) return [];
-  const startedMs = Temporal.Instant.from(startedAt).epochMilliseconds;
-  const paths: string[] = [];
-  let entries = 0;
-  const visit = (directory: string, prefix: string): void => {
-    if (entries >= 5000) return;
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (entries >= 5000) break;
-      entries += 1;
-      if (
-        entry.isDirectory() &&
-        [".git", ".jj", "node_modules"].includes(entry.name)
-      )
-        continue;
-      const relative = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
-      const absolute = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        visit(absolute, relative);
-        continue;
-      }
-      if (!entry.isFile() || lstatSync(absolute).mtimeMs < startedMs) continue;
-      const matches = writes.some((glob) => new Bun.Glob(glob).match(relative));
-      if (matches) paths.push(relative);
-    }
-  };
-  visit(cwd, "");
-  return paths;
-}
-
 async function checkedWrites(
   cwd: string,
   writes: string[],
   before: ChangeSnapshot,
   siblingWrites: string[][],
-  startedAt: string,
 ): Promise<WritesCheck> {
   const listed = await changedPaths(cwd);
+  const declared = await declaredFiles(cwd, writes);
+  if (declared === undefined || before.unavailable !== undefined)
+    return {
+      paths: [],
+      unavailable:
+        before.unavailable ??
+        "declared-write snapshot exceeded its budget or was unreadable",
+    };
   const paths = [
     ...new Set([
       ...before.paths,
+      ...before.stamps.keys(),
       ...listed.paths.map((p) => p.replaceAll("\\", "/")),
-      ...scanWrittenPaths(cwd, writes, startedAt),
+      ...declared.keys(),
     ]),
   ].filter((p) => !p.split("/").includes("node_modules"));
-  const hashes = await Promise.all(
-    paths.map(async (path) => [path, await contentHash(cwd, path)] as const),
+  const changed = paths.filter(
+    (path) => !sameStamp(fileStamp(join(cwd, path)), before.stamps.get(path)),
   );
-  const delta = hashes
-    .filter(([path, hash]) => hash !== before.hashes.get(path))
-    .map(([path]) => path);
-  const violations = delta.filter(
-    (path) =>
-      !pathMatchesGlobs(path, writes) &&
-      !siblingWrites.some((globs) => pathMatchesGlobs(path, globs)),
+  const unattributed = changed.filter((path) =>
+    siblingWrites.some((globs) => pathMatchesGlobs(path, globs)),
   );
-  const unattributed = delta.filter((path) => !violations.includes(path));
+  const delta = changed.filter((path) => !unattributed.includes(path));
+  const violations = delta.filter((path) => !pathMatchesGlobs(path, writes));
   return {
     paths: delta,
     ...(violations.length === 0 ? {} : { violations }),
@@ -389,24 +369,9 @@ async function changedSince(
   cwd: string,
   before: ChangeSnapshot,
   writes: string[],
-  startedAt: string,
+  siblingWrites: string[][],
 ): Promise<string[]> {
-  const after = await changedPaths(cwd);
-  const paths = [
-    ...new Set([
-      ...before.paths,
-      ...after.paths,
-      ...scanWrittenPaths(cwd, writes, startedAt),
-    ]),
-  ]
-    .map((p) => p.replaceAll("\\", "/"))
-    .filter((p) => !p.split("/").includes("node_modules"));
-  const hashes = await Promise.all(
-    paths.map(async (path) => [path, await contentHash(cwd, path)] as const),
-  );
-  return hashes
-    .filter(([path, hash]) => hash !== before.hashes.get(path))
-    .map(([path]) => path);
+  return (await checkedWrites(cwd, writes, before, siblingWrites)).paths;
 }
 
 type ProcessInfo = { pid: number; ppid: number; pgid: number; cmd: string };
@@ -1498,12 +1463,9 @@ function appendLog(record: Record<string, unknown>): void {
 }
 
 function alive(pid: number): boolean {
-  const r = Bun.spawnSync(["kill", "-0", String(pid)], {
-    stdout: "ignore",
-    stderr: "ignore",
-    timeout: 5_000,
-  });
-  return r.exitCode === 0;
+  return fromThrowable(() => {
+    process.kill(pid, 0);
+  })().isOk();
 }
 
 function readActive(): { active: Active; alive: boolean; file: string }[] {
@@ -1567,7 +1529,10 @@ function overlappingWriterScopes(
   const intervals = readLog()
     .filter(
       (entry) =>
-        entry.kind === "run" && entry.run_id !== runId && entry.cwd === cwd,
+        entry.kind === "run" &&
+        entry.run_id !== runId &&
+        entry.cwd !== undefined &&
+        workspaceRoot(entry.cwd) === cwd,
     )
     .flatMap((entry) => {
       const writes = entry.ticket?.writes;
@@ -1582,7 +1547,10 @@ function overlappingWriterScopes(
         : [];
     });
   const live = readActive()
-    .filter(({ active }) => active.run_id !== runId && active.cwd === cwd)
+    .filter(
+      ({ active, alive: isAlive }) =>
+        isAlive && active.run_id !== runId && workspaceRoot(active.cwd) === cwd,
+    )
     .flatMap(({ active }) =>
       active.ticket?.writes === undefined ? [] : [active.ticket.writes],
     );
@@ -2503,13 +2471,15 @@ async function launch(l: Launch): Promise<number> {
       ? {}
       : { ticket: { writes: ticket.writes ?? [] } }),
   };
-  const changesBefore = await snapshotChanges(active.cwd);
+  const writesRoot = workspaceRoot(active.cwd);
+  const changesBefore = await snapshotChanges(writesRoot, ticket?.writes ?? []);
   mkdirSync(ACTIVE_DIR, { recursive: true });
   const marker = join(ACTIVE_DIR, `${runId}.json`);
   writeFileSync(marker, JSON.stringify(active));
   // The worker folds its own events into this file (agx via AGX_CODEX_PROGRESS_FILE,
   // run-claude via --progress-file); the statusline Run rows read it.
   const progress = progressFile(runId);
+  const activity = join(ACTIVE_DIR, `${runId}.activity`);
 
   // The worker's prompt is always a copy under the state dir: what it was told, plus the typed
   // report instruction after the ticket's verify line (a legacy brief is its own text).
@@ -2548,6 +2518,7 @@ async function launch(l: Launch): Promise<number> {
       env: {
         ...process.env,
         AGX_CODEX_PROGRESS_FILE: progress,
+        AGX_WORKER_ACTIVITY_FILE: activity,
         AGX_LAST_MESSAGE_FILE: join(
           STATE_DIR,
           "worker-receipts",
@@ -2565,16 +2536,25 @@ async function launch(l: Launch): Promise<number> {
   const child = spawned.value;
   let checkpointTimer: ReturnType<typeof setTimeout> | undefined;
   let firstReturnPoll: ReturnType<typeof setInterval> | undefined;
+  let stallPoll: ReturnType<typeof setInterval> | undefined;
+  const observationStop = new AbortController();
+  let observationEnded = false;
   const clearObservation = (): void => {
+    observationEnded = true;
+    observationStop.abort();
     if (checkpointTimer !== undefined) clearTimeout(checkpointTimer);
     if (firstReturnPoll !== undefined) clearInterval(firstReturnPoll);
+    if (stallPoll !== undefined) clearInterval(stallPoll);
   };
+  // Exit wins over every pending observation and pipe drain. Never await a sample on exit.
+  void child.exited.then(clearObservation);
   const cleanup = (): void => {
     clearObservation();
     process.removeListener("SIGINT", onInterrupt);
     process.removeListener("SIGTERM", onTerminate);
   };
   let stopping = false;
+  let stopCompletion: Promise<void> | undefined;
   const stop = async (signal: NodeJS.Signals, code: number): Promise<void> => {
     if (stopping) return;
     stopping = true;
@@ -2586,10 +2566,10 @@ async function launch(l: Launch): Promise<number> {
     const orphans = await reapWorkerGroup(child.pid);
     const done = progressAtEnd(progress);
     const filesChanged = await changedSince(
-      active.cwd,
+      writesRoot,
       changesBefore,
       ticket?.writes ?? [],
-      active.started_at,
+      overlappingWriterScopes(runId, writesRoot, active.started_at, now()),
     );
     const session = progressSession(progress);
     // recorded as stopped; a waiver, because a stopped run has no work to grade and must not block the cwd
@@ -2646,13 +2626,14 @@ async function launch(l: Launch): Promise<number> {
     rmSync(workerBrief, { force: true });
     rmSync(marker, { force: true });
     rmSync(progress, { force: true });
+    rmSync(activity, { force: true });
     process.exit(code);
   };
   const onInterrupt = (): void => {
-    void stop("SIGINT", 130);
+    stopCompletion ??= stop("SIGINT", 130);
   };
   const onTerminate = (): void => {
-    void stop("SIGTERM", 143);
+    stopCompletion ??= stop("SIGTERM", 143);
   };
   process.on("SIGINT", onInterrupt);
   process.on("SIGTERM", onTerminate);
@@ -2661,63 +2642,162 @@ async function launch(l: Launch): Promise<number> {
   let firstReturnAtS: number | undefined;
   let firstReturnByDeadline = false;
   let firstReturnWindowS = ticket?.first_return_s ?? 360;
-  let validReturnObserved = false;
+  let returnByDeadline = false;
+  let progressByDeadline = false;
+  let checkpointFired = false;
+  let interimRequest: { sent: boolean; reason?: string } | undefined;
   let stalled = false;
-  if (row.route === "codex" || resume === undefined) {
-    const firstReturnS = ticket?.first_return_s ?? 360;
-    const testDelay = Number(process.env.AGX_CHECKPOINT_MS ?? "");
-    const checkpointDelayMs =
-      Number.isFinite(testDelay) && testDelay > 0
-        ? testDelay
-        : firstReturnS * 1000;
-    const timerDelayMs = Math.max(
-      0,
-      checkpointDelayMs - (performance.now() - workerStartedAt),
+  let stallEvidence: { flat_s: number; inputs?: StallInputs } | undefined;
+  const stallS = ticket?.stall_s ?? DEFAULT_STALL_S;
+  const testStallMs = Number(process.env.AGX_STALL_MS ?? "");
+  const stallWindowS = testStallMs > 0 ? testStallMs / 1000 : stallS;
+  const stallObserver = new StallObserver(performance.now());
+  let initialCpu: number | undefined;
+  let cpuProgress = false;
+  let writesProgress = false;
+  let observedFiles: FileSnapshot | undefined;
+  let sampling = false;
+  const sampleStall = async (): Promise<void> => {
+    if (sampling || observationEnded) return;
+    sampling = true;
+    using _sampling = {
+      [Symbol.dispose]: () => {
+        sampling = false;
+      },
+    };
+    const [files, processes] = await Promise.all([
+      declaredFiles(writesRoot, ticket?.writes ?? [], {
+        signal: observationStop.signal,
+        budgetMs: 250,
+      }),
+      processTreeCpu(child.pid, observationStop.signal),
+    ]);
+    if (observationEnded) return;
+    observedFiles = files;
+    writesProgress ||=
+      observedFiles !== undefined &&
+      fileFingerprint(observedFiles) !== initialWrites;
+    const observed = stallObserver.observe(
+      performance.now(),
+      processes,
+      observedFiles,
+      JSON.stringify({
+        vendor_stream: fileStamp(activity),
+        session_progress: fileStamp(progress),
+        last_message: fileStamp(
+          join(STATE_DIR, "worker-receipts", runId + ".last.txt"),
+        ),
+      }),
     );
-    firstReturnWindowS = checkpointDelayMs / 1000;
-    const observeFirstReturn = (): void => {
-      const lastMessageFile = join(
-        STATE_DIR,
-        "worker-receipts",
-        `${runId}.last.txt`,
-      );
-      const currentMessage = existsSync(lastMessageFile)
-        ? readFileSync(lastMessageFile, "utf8")
-        : "";
-      const currentProgress = progressAtEnd(progress);
-      validReturnObserved ||= parseReturn(currentMessage).kind === "valid";
-      const progressObserved =
-        currentProgress !== undefined &&
+    initialCpu ??= observed.inputs?.cpu_s;
+    cpuProgress ||=
+      observed.inputs !== undefined &&
+      initialCpu !== undefined &&
+      observed.inputs.cpu_s > initialCpu;
+    if (
+      stalled ||
+      observed.flat_s < stallWindowS ||
+      observed.inputs === undefined
+    )
+      return;
+    stalled = true;
+    stallEvidence = observed;
+    dispatchError(
+      "agx: stalled after " +
+        observed.flat_s.toFixed(1) +
+        "s (stall_s=" +
+        stallS +
+        "); ALL flat: " +
+        JSON.stringify(observed.inputs),
+    );
+    clearObservation();
+    // SIGUSR1 is reserved for a proven all-flat stall; never for first_return_s.
+    void attempt(() => process.kill(child.pid, "SIGUSR1"));
+  };
+  stallPoll = setInterval(
+    () => {
+      void sampleStall();
+    },
+    Math.max(50, Math.min(1000, (stallWindowS * 1000) / 4)),
+  );
+  stallPoll.unref();
+  const initialWrites = fileFingerprint(
+    new Map(
+      [...changesBefore.stamps].filter(([path]) =>
+        pathMatchesGlobs(path, ticket?.writes ?? []),
+      ),
+    ),
+  );
+  const observeFirstReturn = (atCheckpoint = false): void => {
+    const lastMessageFile = join(
+      STATE_DIR,
+      "worker-receipts",
+      runId + ".last.txt",
+    );
+    const message = fromThrowable(() =>
+      readFileSync(lastMessageFile, "utf8"),
+    )();
+    const currentMessage = message.isOk() ? message.value : "";
+    const currentProgress = progressAtEnd(progress);
+    const returned = parseReturn(currentMessage).kind === "valid";
+    const progressed =
+      cpuProgress ||
+      writesProgress ||
+      (currentProgress !== undefined &&
         (currentProgress.commands > 0 ||
           currentProgress.files > 0 ||
-          currentProgress.last !== "starting");
-      if (
-        firstReturnAtS === undefined &&
-        (parseReturn(currentMessage).kind === "valid" || progressObserved)
-      )
-        firstReturnAtS =
-          Math.round(((performance.now() - workerStartedAt) / 1000) * 10) / 10;
-    };
-    firstReturnPoll = setInterval(observeFirstReturn, 50);
-    checkpointTimer = setTimeout(() => {
-      observeFirstReturn();
+          currentProgress.last !== "starting")) ||
+      fileStamp(activity) !== undefined;
+    const elapsed = atCheckpoint
+      ? firstReturnWindowS
+      : (performance.now() - workerStartedAt) / 1000;
+    if (elapsed <= firstReturnWindowS) {
+      returnByDeadline ||= returned;
+      progressByDeadline ||= progressed;
+    }
+    if (firstReturnAtS === undefined && (returned || progressed))
+      firstReturnAtS = elapsed;
+  };
+  const testDelay = Number(process.env.AGX_CHECKPOINT_MS ?? "");
+  const checkpointDelayMs =
+    testDelay > 0 ? testDelay : firstReturnWindowS * 1000;
+  firstReturnWindowS = checkpointDelayMs / 1000;
+  firstReturnPoll = setInterval(() => {
+    observeFirstReturn();
+  }, 100);
+  firstReturnPoll.unref();
+  checkpointTimer = setTimeout(
+    () => {
+      checkpointFired = true;
+      void sampleStall().then(() => {
+        if (observationEnded) return;
+        observeFirstReturn(true);
+        firstReturnByDeadline =
+          firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
+      });
+      observeFirstReturn(true);
       firstReturnByDeadline =
         firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
-      if (
-        resume === undefined &&
-        !validReturnObserved &&
-        (progressAtEnd(progress)?.files ?? 0) === 0
-      ) {
-        stalled = true;
-        clearObservation();
-        // Both worker wrappers handle SIGUSR1 through their existing timeout abort path.
-        void attempt(() => process.kill(child.pid, "SIGUSR1"));
+      if (row.route === "codex") {
+        interimRequest = {
+          sent: false,
+          reason: "soft request pending at worker exit",
+        };
+        void requestInterimReturn(
+          progressSession(progress),
+          observationStop.signal,
+        ).then((result) => {
+          interimRequest = result;
+        });
       }
-    }, timerDelayMs);
-  }
+    },
+    Math.max(0, checkpointDelayMs - (performance.now() - workerStartedAt)),
+  );
+  checkpointTimer.unref();
   const completed = await attempt(() =>
     Promise.all([new Response(child.stdout).text(), child.exited]),
   );
+  if (stopCompletion !== undefined) await stopCompletion;
   clearObservation();
   if (!completed.ok) {
     cleanup();
@@ -2727,10 +2807,11 @@ async function launch(l: Launch): Promise<number> {
     rmSync(workerBrief, { force: true });
     rmSync(marker, { force: true });
     rmSync(progress, { force: true });
+    rmSync(activity, { force: true });
     fatal(`worker read failed: ${errorMessage(completed.error)}`);
   }
   const [out, workerExit] = completed.value;
-  if (row.route === "codex" && firstReturnAtS === undefined) {
+  if (firstReturnAtS === undefined) {
     const lastMessageFile = join(
       STATE_DIR,
       "worker-receipts",
@@ -2750,12 +2831,12 @@ async function launch(l: Launch): Promise<number> {
       firstReturnAtS =
         Math.round(((performance.now() - workerStartedAt) / 1000) * 10) / 10;
   }
-  if (row.route === "codex")
-    firstReturnByDeadline =
-      firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
+  firstReturnByDeadline =
+    firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
   let orphans = await reapWorkerGroup(child.pid);
   const done = progressAtEnd(progress);
   rmSync(progress, { force: true });
+  rmSync(activity, { force: true });
   rmSync(workerBrief, { force: true });
   const elapsedS = Math.round((performance.now() - t0) / 100) / 10;
   const codexWorker = jsonOf(WorkerReceipt).safeParse(out.trim());
@@ -2775,26 +2856,36 @@ async function launch(l: Launch): Promise<number> {
       .data?.last_message ?? "";
   const parsedReturn = parseReturn(lastMessage);
   if (
-    row.route === "codex" &&
     firstReturnAtS === undefined &&
     parsedReturn.kind === "valid" &&
     elapsedS <= firstReturnWindowS
   )
     firstReturnAtS = elapsedS;
-  if (row.route === "codex")
-    firstReturnByDeadline =
-      firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
-  const checkpoint =
-    row.route === "claude"
+  firstReturnByDeadline =
+    firstReturnAtS !== undefined && firstReturnAtS <= firstReturnWindowS;
+  const request = interimRequest ?? {
+    sent: false,
+    reason: "worker finished before checkpoint",
+  };
+  const checkpoint = {
+    mode: "soft",
+    fired: checkpointFired,
+    first_return_by_deadline: firstReturnByDeadline,
+    first_return_at_s: firstReturnAtS ?? null,
+    return_by_deadline:
+      returnByDeadline ||
+      (!checkpointFired &&
+        parsedReturn.kind === "valid" &&
+        elapsedS <= firstReturnWindowS),
+    progress_by_deadline:
+      progressByDeadline || (!checkpointFired && firstReturnByDeadline),
+    ...(row.route === "claude"
       ? {
           supported: false,
           reason: "claude worker takes its prompt at start; no live injection",
         }
-      : {
-          mode: "observe",
-          first_return_by_deadline: firstReturnByDeadline,
-          first_return_at_s: firstReturnAtS ?? null,
-        };
+      : { request }),
+  };
   let workerData = rawWorker;
   if (parsedReturn.kind === "valid" && workerData !== undefined)
     workerData = { ...workerData, outcome: "returned" };
@@ -2802,7 +2893,7 @@ async function launch(l: Launch): Promise<number> {
     workerData = {
       ...rawWorker,
       outcome: "stalled",
-      cause: "stalled at first_return_s",
+      cause: "all stall inputs flat for " + stallWindowS + "s",
     };
   let exit = workerExit;
   if (parsedReturn.kind === "valid") exit = 0;
@@ -2810,15 +2901,19 @@ async function launch(l: Launch): Promise<number> {
   const progressField = done === undefined ? {} : { progress: done };
   let outcomeName: string | undefined;
   const delta = await checkedWrites(
-    active.cwd,
+    writesRoot,
     ticket?.writes ?? [],
     changesBefore,
-    overlappingWriterScopes(runId, active.cwd, active.started_at, now()),
-    active.started_at,
+    overlappingWriterScopes(runId, writesRoot, active.started_at, now()),
   );
+  if (stopCompletion !== undefined) await stopCompletion;
   const writes = ticket === undefined ? undefined : delta;
   const nonDelivery =
     parsedReturn.kind !== "valid" &&
+    !stalled &&
+    workerExit === 0 &&
+    z.looseObject({ outcome: z.string() }).safeParse(rawWorker).data
+      ?.outcome === "ok" &&
     ticket !== undefined &&
     ticket.read_only_diagnostic !== true &&
     (ticket.writes?.length ?? 0) > 0 &&
@@ -2843,10 +2938,17 @@ async function launch(l: Launch): Promise<number> {
     dispatchError(
       `agx: writes outside ticket scope: ${writeViolations.join(", ")}`,
     );
+  if ((writes?.unattributed?.length ?? 0) > 0)
+    dispatchError(
+      "agx: changed by others (not attributed): " +
+        writes?.unattributed?.join(", "),
+    );
   const verified =
     ticket === undefined || (stalled && parsedReturn.kind !== "valid")
       ? undefined
       : await verifyAfterWorker(ticket, active.cwd, outcomeName, done);
+  // Once interrupted, the stop handler is the sole writer of the run receipt.
+  if (stopCompletion !== undefined) await stopCompletion;
   const workerOutput = z
     .looseObject({ structured_output: z.unknown().optional() })
     .safeParse(workerData);
@@ -2991,6 +3093,9 @@ async function launch(l: Launch): Promise<number> {
       ? {}
       : { legacy_brief_reason: legacyBriefReason }),
     checkpoint,
+    ...(stallEvidence === undefined
+      ? {}
+      : { stall: { stall_s: stallS, ...stallEvidence } }),
     timeout_s: timeout.seconds,
     timeout_source: timeout.source,
     ...(timeout.reason === undefined ? {} : { timeout_reason: timeout.reason }),
@@ -3057,19 +3162,20 @@ async function launch(l: Launch): Promise<number> {
           returned: false,
         }
       : {
-          kind: "stalled_at_first_return",
+          kind: "stalled",
           at: now(),
           run_id: runId,
           display_id: displayId,
           row: row.id,
-          first_return_s: ticket?.first_return_s ?? 360,
+          stall_s: stallS,
+          ...stallEvidence,
           commands: done?.commands ?? 0,
         };
     appendFileSync(
       join(STATE_DIR, "incidents.jsonl"),
       `${JSON.stringify(incident)}\n`,
     );
-    if (stalled) recordWaiver(runId, "stalled at first_return_s", "router");
+    if (stalled) recordWaiver(runId, "all stall inputs flat", "router");
     if (l.escalatedFrom !== undefined) {
       process.stdout.write(`${JSON.stringify(receipt)}\n`);
       return 1;

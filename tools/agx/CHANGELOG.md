@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.0 — 2026-10-10
+
+- Make first_return_s a soft checkpoint: request an interim RETURN for the existing Codex session and record RETURN/progress observations without stopping either worker route.
+- Stop as stalled only after stall_s (default 600 seconds) with flat process-tree CPU, declared-file mtime/size, and vendor stream activity. Print and retain the predicate inputs; never escalate a progressing worker stopped at its hard bound.
+- Snapshot declared files at run start, resolve writes against the workspace root, and exclude concurrent runs' declared files from attribution and scope violations. Report them as changed by others (not attributed).
+- Keep observation off the exit path: use cancellable asynchronous CPU/filesystem sampling, unref timers, bound scans to declared write prefixes, and cancel pending soft requests when the worker exits.
+- Keep the stop handler as the sole receipt writer after interruption, including SIGTERM during verification; prevent a competing completion or non-delivery record.
+
 ## 2.3.0 — 2026-10-10
 
 - Prepend the worker promise block, derive token/compute kind from RESOURCE, and preserve opaque labels in active markers and ledger resource metadata.

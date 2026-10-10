@@ -115,6 +115,12 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
+const QUEUE = join(scratch, "fake-codex-queue");
+writeFileSync(
+  QUEUE,
+  `#!/bin/sh\nprintf '%s\\n' "$@" >> "$AGX_STATE_DIR/queue.log"\n`,
+);
+chmodSync(QUEUE, 0o755);
 const FAKE = join(scratch, "fake-agx.ts");
 writeFileSync(
   FAKE,
@@ -128,6 +134,28 @@ const isGrader = promptText.includes("Grade this brief as a meaningful remand ju
 const resuming = args.includes("--resume");
 if (process.env.FAKE_CHECKPOINT === "1" && process.env.AGX_CODEX_PROGRESS_FILE !== undefined)
   appendFileSync(process.env.AGX_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: 1, files: Number(process.env.FAKE_CHECKPOINT_FILES ?? "0"), session: "thread-fake-checkpoint" }));
+if (process.env.FAKE_LIFECYCLE !== undefined && !isGrader) {
+  const mode = process.env.FAKE_LIFECYCLE;
+  const cwd = args[args.indexOf("--cd") + 1];
+  const runId = args[args.indexOf("--run-id") + 1];
+  await Bun.write(process.env.AGX_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-10T00:00:00Z", last: "starting", commands: 0, files: 0, session: "thread-lifecycle" }));
+  process.on("SIGUSR1", () => {
+    console.log(JSON.stringify({ schema: 1, outcome: "timeout", session: "thread-lifecycle", last_message: "" }));
+    process.exit(3);
+  });
+  let burning;
+  if (mode === "cpu") burning = Bun.spawn([process.execPath, "-e", "const until = performance.now() + 2500; while (performance.now() < until) Math.sqrt(Math.random());"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  const until = performance.now() + 2500;
+  let counter = 0;
+  while (performance.now() < until) {
+    if (mode === "writes") await Bun.write(cwd + "/delivered.txt", String(counter++));
+    if (mode === "output") await Bun.write(process.env.AGX_WORKER_ACTIVITY_FILE, String(counter++));
+    await Bun.sleep(80);
+  }
+  if (burning !== undefined) await burning.exited;
+  console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", session: "thread-lifecycle", last_message: "done" }));
+  process.exit(0);
+}
 if (process.env.FAKE_STALL_MODE !== undefined && !isGrader) {
   const log = process.env.FAKE_STALL_LOG;
   const prior = existsSync(log) ? (await Bun.file(log).text()).trim().split("\\n").length : 0;
@@ -311,6 +339,7 @@ async function router(
       ),
       AGX_STATE_DIR: state,
       AGX_CODEX_WORKER: FAKE,
+      AGX_CODEX_BIN: QUEUE,
       DISPATCH_ROSTER_PATH: LIVE_JEV,
       TYPESAFE_API_KEY: "fixture-key",
       ...env,
@@ -1788,7 +1817,8 @@ describe("agx dispatch", () => {
           .split("\n")
           .filter((line) => line === "agx: sandbox none (unsandboxed)"),
       ).toHaveLength(sandbox === "none" ? 1 : 0);
-      expect(receipt.checkpoint).toEqual({
+      expect(receipt.checkpoint).toMatchObject({
+        mode: "soft",
         supported: false,
         reason: "claude worker takes its prompt at start; no live injection",
       });
@@ -4113,7 +4143,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     const receipt = decodedJson(
       z.looseObject({
         checkpoint: z.looseObject({
-          mode: z.literal("observe"),
+          mode: z.literal("soft"),
           first_return_by_deadline: z.boolean(),
           first_return_at_s: z.number().nullable(),
         }),
@@ -4122,7 +4152,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       r.out.trim(),
     );
     expect(receipt.checkpoint).toMatchObject({
-      mode: "observe",
+      mode: "soft",
       first_return_by_deadline: true,
     });
     expect(typeof receipt.checkpoint.first_return_at_s).toBe("number");
@@ -4139,6 +4169,65 @@ describe("agx dispatch: a brief with a ticket", () => {
     );
   }, 45_000);
 
+  test("slow CPU sampling is canceled instead of delaying worker exit", async () => {
+    const bin = join(scratch, `slow-ps-${stateSeq++}`);
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "ps"),
+      '#!/bin/sh\ncase "$*" in *time=*) exec sleep 30;; esac\nexec /bin/ps "$@"\n',
+    );
+    chmodSync(join(bin, "ps"), 0o755);
+    const r = await router(
+      runArgs(brief("slow-ps-exit", "finish\n"), freshCwd()),
+      {
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        AGX_CHECKPOINT_MS: "80",
+        FAKE_SLEEP_MS: "350",
+      },
+    );
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        worker: z.looseObject({ elapsed_s: z.number() }),
+        checkpoint: z.looseObject({ fired: z.boolean() }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.checkpoint.fired).toBe(true);
+    expect(receipt.worker.elapsed_s).toBeLessThan(2);
+  });
+
+  test("a pending soft request is canceled instead of delaying router shutdown", async () => {
+    const bin = join(scratch, `slow-queue-${stateSeq++}`);
+    writeFileSync(bin, "#!/bin/sh\nexec sleep 30\n");
+    chmodSync(bin, 0o755);
+    const r = await router(
+      runArgs(brief("slow-queue-exit", "finish\n"), freshCwd()),
+      {
+        AGX_CODEX_BIN: bin,
+        AGX_CHECKPOINT_MS: "80",
+        FAKE_CHECKPOINT: "1",
+        FAKE_SLEEP_MS: "350",
+      },
+    );
+    expect(r.code).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        worker: z.looseObject({ elapsed_s: z.number() }),
+        checkpoint: z.looseObject({
+          fired: z.boolean(),
+          request: z.looseObject({ sent: z.boolean() }),
+        }),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.checkpoint).toMatchObject({
+      fired: true,
+      request: { sent: false },
+    });
+    expect(receipt.worker.elapsed_s).toBeLessThan(2);
+  });
+
   const stalledRun = async (mode: string, override = false) => {
     const cwd = freshCwd();
     const log = join(cwd, "spawns.jsonl");
@@ -4154,6 +4243,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     const started = performance.now();
     const r = await router(args, {
       AGX_CHECKPOINT_MS: "250",
+      AGX_STALL_MS: "1000",
       FAKE_STALL_MODE: mode,
       FAKE_STALL_LOG: log,
       FAKE_LAST:
@@ -4177,7 +4267,7 @@ describe("agx dispatch: a brief with a ticket", () => {
                 kind: z.string(),
                 commands: z.number(),
                 row: z.string(),
-                first_return_s: z.number(),
+                stall_s: z.number(),
                 run_id: z.string(),
                 display_id: z.string(),
                 at: z.string(),
@@ -4196,6 +4286,85 @@ describe("agx dispatch: a brief with a ticket", () => {
     };
   };
 
+  test.each(["writes", "cpu", "output"])(
+    "%s activity passes first_return_s and survives stall_s to completion",
+    async (mode) => {
+      const cwd = freshCwd();
+      const b = brief(
+        `lifecycle-${mode}`,
+        ticketText(
+          `writes = ${mode === "writes" ? '["delivered.txt"]' : "[]"}\nverify = []\nfirst_return_s = 60\nstall_s = 1`,
+        ),
+      );
+      const start = performance.now();
+      const r = await router(runArgs(b, cwd), {
+        FAKE_LIFECYCLE: mode,
+        AGX_CHECKPOINT_MS: "200",
+      });
+      expect(r.code).toBe(0);
+      expect(performance.now() - start).toBeGreaterThan(2500);
+      expect(
+        logLines(r.state).filter((line) => line.kind === "run"),
+      ).toHaveLength(1);
+      const receipt = decodedJson(
+        z.looseObject({
+          checkpoint: z.looseObject({
+            fired: z.boolean(),
+            request: z.looseObject({ sent: z.boolean() }),
+          }),
+          worker: z.looseObject({ outcome: z.string() }),
+          stall: z.unknown().optional(),
+        }),
+        r.out.trim(),
+      );
+      expect(receipt.worker.outcome).toBe("ok");
+      expect(receipt.stall).toBeUndefined();
+      expect(receipt.checkpoint).toMatchObject({
+        fired: true,
+        request: { sent: true },
+      });
+      expect(readFileSync(join(r.state, "queue.log"), "utf8")).toContain(
+        "Never stop running jobs",
+      );
+    },
+    15_000,
+  );
+
+  test("fully idle worker stops after ticket stall_s with all predicate inputs", async () => {
+    const b = brief(
+      "lifecycle-idle",
+      ticketText("writes = []\nverify = []\nfirst_return_s = 60\nstall_s = 1"),
+    );
+    const r = await router(runArgs(b, freshCwd()), {
+      FAKE_LIFECYCLE: "idle",
+      AGX_CHECKPOINT_MS: "200",
+    });
+    const firstRun = logLines(r.state).find((line) => line.kind === "run");
+    expect(firstRun).toMatchObject({
+      worker: { outcome: "stalled" },
+      stall: { stall_s: 1 },
+    });
+    const receipt = decodedJson(
+      z.looseObject({
+        stall: z.looseObject({
+          flat_s: z.number(),
+          inputs: z.looseObject({
+            cpu_s: z.number(),
+            pids: z.array(z.number()),
+            writes: z.array(z.unknown()),
+            output: z.string(),
+          }),
+        }),
+      }),
+      JSON.stringify(firstRun),
+    );
+    expect(receipt.stall.flat_s).toBeGreaterThanOrEqual(1);
+    expect(r.err).toContain("ALL flat:");
+    expect(r.err).toContain('"cpu_s":');
+    expect(r.err).toContain('"writes":');
+    expect(r.err).toContain('"output":');
+  }, 15_000);
+
   const expectEscalation = (result: Awaited<ReturnType<typeof stalledRun>>) => {
     expect(result.r.code).toBe(0);
     expect(result.spawns).toHaveLength(2);
@@ -4206,9 +4375,9 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(result.stopped).toEqual(["luna-high"]);
     expect(result.incidents).toHaveLength(1);
     expect(result.incidents[0]).toMatchObject({
-      kind: "stalled_at_first_return",
+      kind: "stalled",
       row: "luna-high",
-      first_return_s: 60,
+      stall_s: 600,
     });
     const receipt = decodedJson(
       z.looseObject({
@@ -4228,7 +4397,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     ).toEqual(["stalled", "returned"]);
   };
 
-  test("stall at first return stops worker and escalates once outside hard masks", async () => {
+  test("all-flat stall window stops worker and escalates once outside hard masks", async () => {
     expectEscalation(await stalledRun("stall"));
   });
 
@@ -4248,7 +4417,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(result.stopped).toEqual([]);
   });
 
-  test("commands without files at first return stall even an override row", async () => {
+  test("idle after earlier commands stalls after the independent window even on an override row", async () => {
     const result = await stalledRun("commands", true);
     expect(result.r.code).toBe(0);
     expect(result.spawns.map((spawn) => spawn.row)).toEqual([
@@ -4267,7 +4436,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(result.incidents[0]?.commands).toBe(3);
   });
 
-  test("second first-return stall exits nonzero without a third spawn", async () => {
+  test("second all-flat stall exits nonzero without a third spawn", async () => {
     const result = await stalledRun("twice");
     expect(result.r.code).toBe(1);
     expect(result.spawns).toHaveLength(2);
@@ -4618,14 +4787,14 @@ describe("agx dispatch: a brief with a ticket", () => {
     const receipt = decodedJson(
       z.looseObject({
         checkpoint: z.looseObject({
-          mode: z.literal("observe"),
+          mode: z.literal("soft"),
           first_return_by_deadline: z.boolean(),
           first_return_at_s: z.number().nullable(),
         }),
       }),
       r.out.trim(),
     );
-    expect(receipt.checkpoint.mode).toBe("observe");
+    expect(receipt.checkpoint.mode).toBe("soft");
     expect(receipt.checkpoint.first_return_by_deadline).toBe(true);
     expect(receipt.checkpoint.first_return_at_s).not.toBeNull();
   });
@@ -4651,7 +4820,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       z.looseObject({
         resumed_from: z.string(),
         checkpoint: z.looseObject({
-          mode: z.literal("observe"),
+          mode: z.literal("soft"),
           first_return_by_deadline: z.boolean(),
           first_return_at_s: z.number().nullable(),
         }),
@@ -4660,7 +4829,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       resumed.out.trim(),
     );
     expect(receipt.resumed_from).toBe(original);
-    expect(receipt.checkpoint.mode).toBe("observe");
+    expect(receipt.checkpoint.mode).toBe("soft");
     expect(receipt.checkpoint.first_return_by_deadline).toBe(true);
     expect(receipt.checkpoint.first_return_at_s).not.toBeNull();
     expect(receipt.worker.elapsed_s).toBeGreaterThanOrEqual(
@@ -4989,6 +5158,31 @@ describe("agx ticket write enforcement", () => {
     expect(r.code).toBe(0);
   });
 
+  test("repo-root writes from a subdirectory exclude unchanged pre-existing matching files", async () => {
+    const root = freshCwd();
+    mkdirSync(join(root, ".jj"));
+    mkdirSync(join(root, "child"));
+    mkdirSync(join(root, "notes"));
+    writeFileSync(join(root, "notes", "existing.txt"), "already here");
+    const r = await scopeRun(
+      "root-relative-write",
+      '["notes/**"]',
+      { FAKE_TOUCH: "../notes/new.txt" },
+      "?? notes/new.txt\n",
+      join(root, "child"),
+    );
+    const receipt = decodedJson(
+      z.looseObject({
+        writes_check: z.array(z.string()),
+        writes_violations: z.array(z.string()).optional(),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.writes_check).toEqual(["notes/new.txt"]);
+    expect(receipt.writes_violations).toBeUndefined();
+    expect(r.code).toBe(0);
+  });
+
   test("a concurrently live sibling ticket path is recorded as unattributed without failing", async () => {
     const cwd = freshCwd();
     const state = join(scratch, "writes-sibling");
@@ -5019,6 +5213,8 @@ describe("agx ticket write enforcement", () => {
         ...gitStatus("?? tools/reclaim/file.ts\n"),
         AGX_STATE_DIR: state,
         FAKE_TOUCH: "tools/reclaim/file.ts",
+        FAKE_LAST:
+          '```agx-return\n{"findings":[],"evidence":[],"impact_on_brief":"sibling observed","proposed_next":"none","artifacts":[]}\n```',
       },
     );
     const receipt = decodedJson(
@@ -5048,6 +5244,57 @@ describe("agx ticket write enforcement", () => {
     );
     expect(receipt.writes_violations).toEqual(["changed.txt"]);
     expect(r.code).not.toBe(0);
+  });
+
+  test("a live sibling owns an overlapping write even from another subdirectory of the workspace", async () => {
+    const cwd = freshCwd();
+    mkdirSync(join(cwd, ".jj"));
+    mkdirSync(join(cwd, "child"));
+    const state = join(scratch, `live-overlap-${stateSeq++}`);
+    mkdirSync(join(state, "active"), { recursive: true });
+    writeFileSync(
+      join(state, "active", "sibling.json"),
+      JSON.stringify({
+        schema: 1,
+        run_id: "sibling",
+        pid: process.pid,
+        label: "other",
+        choice: "luna-high",
+        pick_source: "jev",
+        started_at: Temporal.Now.instant().toString(),
+        cwd: join(cwd, "child"),
+        ticket: { writes: ["shared.txt"] },
+      }),
+    );
+    const r = await router(
+      runArgs(
+        brief(
+          "live-overlap",
+          ticketText('writes = ["shared.txt"]\nverify = []'),
+        ),
+        cwd,
+      ),
+      {
+        ...gitStatus("?? shared.txt\n"),
+        AGX_STATE_DIR: state,
+        FAKE_TOUCH: "shared.txt",
+        FAKE_LAST:
+          '```agx-return\n{"findings":[],"evidence":[],"impact_on_brief":"other writer","proposed_next":"none","artifacts":[]}\n```',
+      },
+    );
+    const receipt = decodedJson(
+      z.looseObject({
+        writes_check: z.array(z.string()),
+        writes_unattributed: z.array(z.string()),
+        writes_violations: z.array(z.string()).optional(),
+      }),
+      r.out.trim(),
+    );
+    expect(receipt.writes_check).toEqual([]);
+    expect(receipt.writes_unattributed).toEqual(["shared.txt"]);
+    expect(receipt.writes_violations).toBeUndefined();
+    expect(r.err).toContain("changed by others (not attributed): shared.txt");
+    expect(r.code).toBe(0);
   });
 
   test("unavailable change listing is recorded with its cause", async () => {
@@ -5685,6 +5932,7 @@ describe("agx: a stopped router stops its verify too", () => {
         ),
       );
     const run = lines.find((l) => l.kind === "run");
+    expect(lines.filter((l) => l.kind === "run")).toHaveLength(1);
     expect(run?.worker?.outcome).toBe("stopped");
     expect(run?.worker?.cause).toContain("SIGTERM");
     expect(lines.some((l) => l.kind === "grade-waived")).toBe(true);

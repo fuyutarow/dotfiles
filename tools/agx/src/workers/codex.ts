@@ -44,7 +44,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { jsonText, z } from "../../../shared/src/zod.ts";
+import { jsonOf, jsonText, z } from "../../../shared/src/zod.ts";
 import { attempt, errorMessage } from "../../../shared/src/attempt.ts";
 import { loadRoster } from "../../../../agents/models/roster.ts";
 import {
@@ -65,6 +65,8 @@ import {
 } from "./codex-host.ts";
 import { resourceBriefFallback } from "./codex-resource-probe.ts";
 import { costUsd } from "../dispatch-cost.ts";
+import { activityWriter } from "../lifecycle.ts";
+import { parseReturn } from "../report.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["none", "read-only", "workspace-write"];
@@ -517,6 +519,16 @@ const progress =
     ? undefined
     : progressWriter(progressPath, undefined, tokenPrices);
 let streamed = "";
+const recordActivity = activityWriter();
+const AgentMessage = z.looseObject({
+  item: z.looseObject({ type: z.literal("agent_message"), text: z.string() }),
+});
+const observeReturn = (line: string): void => {
+  const message = jsonOf(AgentMessage).safeParse(line);
+  if (!message.success || parseReturn(message.data.item.text).kind !== "valid")
+    return;
+  writeFileSync(lastFile, message.data.item.text);
+};
 let spinCause: string | undefined;
 const detectToolSpin = toolErrorStreak(IDENTICAL_TOOL_ERROR_LIMIT);
 function readEvents(): Promise<string> {
@@ -524,12 +536,14 @@ function readEvents(): Promise<string> {
   let pending = "";
   const sink = new WritableStream<Uint8Array>({
     write(chunk) {
+      recordActivity(chunk.byteLength);
       const text = decoder.decode(chunk, { stream: true });
       streamed += text;
       const lines = `${pending}${text}`.split("\n");
       pending = lines.pop() ?? "";
       for (const line of lines) {
         progress?.feed(line);
+        observeReturn(line);
         const detectedCause = detectToolSpin(line);
         if (spinCause === undefined && detectedCause !== null) {
           spinCause = detectedCause;
@@ -540,13 +554,18 @@ function readEvents(): Promise<string> {
   });
   return proc.stdout.pipeTo(sink).then(() => streamed);
 }
+async function readErrors(): Promise<string> {
+  let text = "";
+  const decoder = new TextDecoder();
+  for await (const chunk of proc.stderr) {
+    recordActivity(chunk.byteLength);
+    text += decoder.decode(chunk, { stream: true });
+  }
+  return text + decoder.decode();
+}
 // Both readers start now; each is cut PIPE_GRACE_MS after the child exits (graced waits for that).
 const completed = await attempt(() =>
-  Promise.all([
-    proc.exited,
-    graced(readEvents()),
-    graced(new Response(proc.stderr).text()),
-  ]),
+  Promise.all([proc.exited, graced(readEvents()), graced(readErrors())]),
 );
 clearInterval(heartbeat);
 clearDeadline();

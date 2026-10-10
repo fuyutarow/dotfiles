@@ -44,6 +44,60 @@ pty_run() {
   print -r -- "$out"
 }
 
+# --- Mac core PATH precedence: real login and interactive ptys, isolated HOME ---------------
+# Relocate the Apple Silicon prefix into the fixture; never write /opt/homebrew or the real HOME.
+core_tmp=$(mktemp -d) || exit 1
+core_home="$core_tmp/home"
+core_prefix="$core_tmp/opt/homebrew"
+mkdir -p "$core_home/.local/bin" "$core_home/.bun/bin" "$core_home/.cargo" \
+  "$core_home/.config/dotfiles" "$core_prefix/bin" "$core_prefix/sbin" \
+  "$core_prefix/opt/rustup/bin" "$core_home/.local/share/mise/shims"
+print -r -- "$core_prefix" >| "$core_home/.config/dotfiles/brew-prefix"
+print -r -- 'export PATH="$HOME/.local/bin:$PATH"' >| "$core_home/.cargo/env"
+for core_cmd in bun uv uvx; do
+  for core_bin in "$core_prefix/bin" "$core_home/.local/bin" "$core_home/.bun/bin"; do
+    print -r -- '#!/bin/sh' 'exit 0' >| "$core_bin/$core_cmd"
+    chmod +x "$core_bin/$core_cmd"
+  done
+done
+print -r -- '#!/bin/sh' 'exit 0' >| "$core_home/.local/bin/standalone-agent"
+chmod +x "$core_home/.local/bin/standalone-agent"
+for core_cmd in sheldon direnv mise; do
+  print -r -- '#!/bin/sh' 'exit 0' >| "$core_prefix/bin/$core_cmd"
+  chmod +x "$core_prefix/bin/$core_cmd"
+done
+cat >| "$core_prefix/bin/brew" <<'EOF'
+#!/bin/sh
+printf 'export PATH="%s/bin:%s/sbin:$PATH"\n' "$HOMEBREW_PREFIX" "$HOMEBREW_PREFIX"
+EOF
+chmod +x "$core_prefix/bin/brew"
+ln -s "$ROOT/zsh/zshenv" "$core_home/.zshenv"
+ln -s "$ROOT/zsh/zshrc" "$core_home/.zshrc"
+sed "s|/opt/homebrew|$core_prefix|g; s|/usr/local|$core_tmp/usr/local|g" \
+  "$ROOT/zsh/zprofile.mac" >| "$core_home/.zprofile"
+for core_mode in -lc -lic -ic -c; do
+  core_probe='command -v bun uv uvx standalone-agent; print -r -- "SHIMS=${path[(Ie)$HOME/.local/share/mise/shims]}"'
+  # zpty's command is shell text: quote the compound -c argument explicitly. Keep the parent
+  # alive until the probe is queued, as with pty_run below, so a short-lived child is drained.
+  zpty CORE_PATH zsh -f
+  zpty -w CORE_PATH "env -i HOME=${(q)core_home} ZDOTDIR=${(q)core_home} PATH=${(q)core_home}/.local/bin:/usr/bin:/bin TERM=xterm-256color zsh $core_mode ${(q)core_probe}; exit"
+  core_out=''
+  while zpty -r CORE_PATH core_chunk; do core_out+=$core_chunk; done
+  zpty -d CORE_PATH 2>/dev/null
+  for core_cmd in bun uv uvx; do
+    want "Mac-shaped $core_mode resolves $core_cmd under /opt/homebrew" "$core_prefix/bin/$core_cmd" "$core_out"
+    wantnot "Mac-shaped $core_mode never resolves legacy $core_cmd" "$core_home/.local/bin/$core_cmd" "$core_out"
+  done
+  want "Mac-shaped $core_mode keeps standalone user commands reachable" \
+    "$core_home/.local/bin/standalone-agent" "$core_out"
+  if [[ $core_mode == *i* ]]; then
+    want "Mac-shaped $core_mode excludes mise shims" 'SHIMS=0' "$core_out"
+  else
+    wantnot "Mac-shaped $core_mode retains non-interactive mise shims" 'SHIMS=0' "$core_out"
+  fi
+done
+rip --graveyard "$core_tmp-graveyard" "$core_tmp" >/dev/null
+
 # --- 1. the safe repair actually reaches the terminal -------------------------------------
 out=$(pty_run '_term_restore; print -r -- MARK1')
 want "safe repair emits the mouse-mode disable set"      "$MODES_OFF" "$out"

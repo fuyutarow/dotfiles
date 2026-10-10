@@ -254,6 +254,37 @@ test("prune: removes only dangling links INTO the repo, and retired links even i
   ]);
 });
 
+test.each(["mac", "wsl", "linux"] as const)(
+  "retired bun wrapper: check reports, deploy prunes on %s, foreign links and binaries survive",
+  (os) => {
+    const ctx = { ...fixture("safe"), os };
+    const bin = join(ctx.home, ".local/bin");
+    const dst = join(bin, "bun");
+    const wrapper = join(ctx.dotfiles, "scripts/bun-exec.sh");
+    mkdirSync(bin, { recursive: true });
+    mkdirSync(join(ctx.dotfiles, "scripts"));
+    writeFileSync(wrapper, "#!/bin/sh\nexit 0\n");
+    symlinkSync(wrapper, dst);
+    const check: Ctx = { ...ctx, mode: "check", drift: [] };
+    prune(check);
+    expect(check.drift).toHaveLength(1);
+    expect(check.drift[0]).toContain("retired: no longer declared");
+    expect(readlinkSync(dst)).toBe(wrapper);
+    prune(ctx);
+    expect(isLink(dst)).toBe(false);
+    expect(existsSync(wrapper)).toBe(true);
+    writeFileSync(dst, "standalone binary\n");
+    prune(ctx);
+    expect(readFileSync(dst, "utf8")).toBe("standalone binary\n");
+    const foreign = { ...fixture("safe"), os };
+    mkdirSync(join(foreign.home, ".local/bin"), { recursive: true });
+    const foreignDst = join(foreign.home, ".local/bin/bun");
+    symlinkSync(wrapper, foreignDst);
+    prune(foreign);
+    expect(readlinkSync(foreignDst)).toBe(wrapper);
+  },
+);
+
 test("assertRoots: relative or foreign roots are refused before any mutation", () => {
   const foreign = tmp("not-a-repo-");
   expect(assertRoots("/h", "dotfiles")?.message).toContain(

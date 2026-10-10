@@ -196,6 +196,8 @@ export const ETC_LINKS: readonly (readonly [string, string, string])[] = [
 // wrote provenance THROUGH it into the repo; since 2026-10-06 (INV-8) scripts/vendor-skill.ts runs
 // the CLI in a throwaway HOME and writes the ledger itself, so no deployed path writes the repo.
 export const RETIRED = [
+  // Previously linked to scripts/bun-exec.sh; core Bun is now Homebrew on every OS.
+  ".local/bin/bun",
   ".agents/.skill-lock.json",
   // Linked until 2026-10-06; the tools WRITE these (measured), so they became TOOL_OWNED.
   ".gitconfig",

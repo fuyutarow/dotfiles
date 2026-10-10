@@ -44,6 +44,21 @@ pty_run() {
   print -r -- "$out"
 }
 
+# --- cp convenience aliases still use the overwrite guard ---------------------------------
+copy_tmp=$(mktemp -d) || exit 1
+print -r -- 'source' >| "$copy_tmp/source"
+chmod 744 "$copy_tmp/source"
+print -r -- 'keep' >| "$copy_tmp/existing"
+out=$(pty_run "cd ${(q)copy_tmp}" \
+              "source ${(q)ROOT}/zsh/aliases.zsh >/dev/null 2>&1" \
+              'cpa source existing; print -r -- "BLOCK=$?"' \
+              'cpa source free-copy; print -r -- "COPY=$?"')
+want "cpa refuses to overwrite an existing file" 'BLOCK=1' "$out"
+want "cpa copies to a free destination" 'COPY=0' "$out"
+[[ $(<"$copy_tmp/existing") == keep ]] && ok "cpa leaves the existing file unchanged" || bad "cpa changed the existing file"
+[[ -x "$copy_tmp/free-copy" ]] && ok "cpa preserves executable permissions" || bad "cpa did not preserve executable permissions"
+command rm -rf "$copy_tmp"
+
 # --- Mac core PATH precedence: real login and interactive ptys, isolated HOME ---------------
 # Relocate the Apple Silicon prefix into the fixture; never write /opt/homebrew or the real HOME.
 core_tmp=$(mktemp -d) || exit 1

@@ -464,6 +464,8 @@ show_aliases_help() {
   p            View file (bat)
   f            Find files (fd)
   gr           Search in files (rg)
+  cpa          Copy with archive attributes (refuses overwrite)
+  cpr          Copy recursively (refuses overwrite)
 
 🛠️  Modern Tools:
   zi           Interactive directory selection
@@ -849,6 +851,8 @@ __TOOL__() {
   done
 }
 alias cpf='command cp'   # 強制上書き (両OS共通)
+alias cpa='cp -a'        # guarded archive copy
+alias cpr='cp -r'        # guarded recursive copy
 alias mvf='command mv'   # 強制上書き (両OS共通)
 
 # rip for safer file removal

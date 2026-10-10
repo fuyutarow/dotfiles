@@ -263,6 +263,94 @@ describe("enforce-reply-language", () => {
     expect(result.stderr).toBe("");
   });
 
+  test("Japanese prose quoting an English hook message -> allows", () => {
+    const transcript = writeTranscript([
+      user("返答を確認してください"),
+      assistant(
+        `この引用は記録として残します。今回の返答は日本語です。\n\n> [dotfiles:reply-language] ${"The previous reply was counted as English because diagnostic text was included in the language check. ".repeat(3)}`,
+      ),
+    ]);
+    const result = runHook(HOOK, stopPayload(transcript), {
+      HOME: settingsHome("japanese"),
+    });
+
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  test("Japanese prose with code-like table cells -> allows", () => {
+    const transcript = writeTranscript([
+      user("変更点を説明してください"),
+      assistant(
+        `この設定を更新しました。動作を確認しました。\n\n| 項目 | 値 |\n| --- | --- |\n| フック | --stop-hook-active-reply-language-validation |\n| タスク | test:reply-language-hook-transcript-selection |\n| 識別子 | lastAssistantMessageIncludesToolInputContent |\n| パス | agents/claude/hooks/enforce-reply-language.test.ts |`,
+      ),
+    ]);
+    const result = runHook(HOOK, stopPayload(transcript), {
+      HOME: settingsHome("japanese"),
+    });
+
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  test("Japanese final text ignores English tool inputs in the transcript", () => {
+    const englishInput =
+      "Write English tool input with lots of implementation details and explanatory sentences. ".repeat(
+        8,
+      );
+    const transcript = writeTranscript([
+      user("設定を直してください"),
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "text", text: "調査結果を踏まえて設定を直します。" },
+            {
+              type: "tool_use",
+              id: "write-1",
+              name: "Write",
+              input: { content: englishInput },
+            },
+            {
+              type: "tool_use",
+              id: "bash-1",
+              name: "Bash",
+              input: { command: englishInput },
+            },
+            {
+              type: "tool_use",
+              id: "send-1",
+              name: "SendMessage",
+              input: { message: englishInput },
+            },
+          ],
+        },
+      },
+      {
+        type: "user",
+        message: {
+          content: [
+            { type: "tool_result", tool_use_id: "write-1", content: "完了" },
+            { type: "tool_result", tool_use_id: "bash-1", content: "ok" },
+            { type: "tool_result", tool_use_id: "send-1", content: "sent" },
+          ],
+        },
+      },
+      assistant("修正を適用し、確認しました。"),
+    ]);
+    const result = runHook(
+      HOOK,
+      {
+        ...stopPayload(transcript),
+        last_assistant_message: englishInput,
+      },
+      { HOME: settingsHome("japanese") },
+    );
+
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
   test("one short English sentence under 120 letters -> allows", () => {
     const transcript = writeTranscript([
       user("説明してください"),

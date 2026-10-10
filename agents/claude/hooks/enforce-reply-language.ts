@@ -76,28 +76,90 @@ async function recordDecision(
   return 0;
 }
 
-function finalAssistantText(transcript: string): string | Error {
-  let lastText = "";
+type TranscriptSelection = { text: string; toolInputs: string[] };
+
+function stringValues(value: unknown): string[] {
+  const direct = str(value);
+  if (direct !== undefined) return [direct];
+  if (Array.isArray(value)) return value.flatMap((item) => stringValues(item));
+  if (value === null || typeof value !== "object") return [];
+  return Object.values(value).flatMap((item) => stringValues(item));
+}
+
+function hasToolResult(entry: unknown): boolean {
+  return (arr(at(entry, "message", "content")) ?? []).some(
+    (block) => strAt(block, "type") === "tool_result",
+  );
+}
+
+function assistantBlocks(
+  entry: unknown,
+  includeText: boolean,
+): TranscriptSelection {
+  const textBlocks: string[] = [];
+  const toolInputs: string[] = [];
+  for (const block of arr(at(entry, "message", "content")) ?? []) {
+    const kind = strAt(block, "type");
+    if (kind === "tool_use")
+      toolInputs.push(...stringValues(at(block, "input")));
+    const text = kind === "text" ? strAt(block, "text") : undefined;
+    if (includeText && text !== undefined) textBlocks.push(text);
+  }
+  return { text: textBlocks.join("\n"), toolInputs };
+}
+
+function finalAssistantText(transcript: string): TranscriptSelection | Error {
+  const entries: unknown[] = [];
   for (const line of readFileSync(transcript, "utf8").split("\n")) {
     if (line.trim() === "") continue;
     const entry = parseJson(line);
     if (entry === undefined) return new Error("malformed transcript line");
-    if (strAt(entry, "type") !== "assistant") continue;
-
-    const content = at(entry, "message", "content");
-    const direct = str(content);
-    lastText =
-      direct ??
-      (arr(content) ?? [])
-        .flatMap((block) => {
-          const text = strAt(block, "text");
-          return strAt(block, "type") === "text" && text !== undefined
-            ? [text]
-            : [];
-        })
-        .join("\n");
+    entries.push(entry);
   }
-  return lastText;
+
+  const latestUserTurn = entries.findLastIndex(
+    (entry) => strAt(entry, "type") === "user" && !hasToolResult(entry),
+  );
+  const latestToolResult = entries.findLastIndex(
+    (entry, index) => index > latestUserTurn && hasToolResult(entry),
+  );
+  const after = Math.max(latestUserTurn, latestToolResult);
+  const textBlocks: string[] = [];
+  const toolInputs: string[] = [];
+  for (const [index, entry] of entries.entries()) {
+    if (index <= latestUserTurn || strAt(entry, "type") !== "assistant")
+      continue;
+    const selected = assistantBlocks(entry, index > after);
+    textBlocks.push(selected.text);
+    toolInputs.push(...selected.toolInputs);
+  }
+  return {
+    text: textBlocks.filter((text) => text !== "").join("\n"),
+    toolInputs,
+  };
+}
+
+function withoutToolInputs(text: string, toolInputs: string[]): string {
+  return toolInputs.reduce(
+    (remaining, input) =>
+      input === "" ? remaining : remaining.replaceAll(input, ""),
+    text,
+  );
+}
+
+function stripCodeLikeTableCells(text: string): string {
+  const codeLikeCell =
+    /`[^`]*`|(?:^|\s)--?[\w-]+|\b(?:[\w.-]+\/)+[\w.-]+\b|\b[\w-]+\.[A-Za-z0-9]{1,8}\b|\b[A-Za-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*\b|\b\w+_\w+\b|\b(?:[A-Za-z0-9_-]+:)+[A-Za-z0-9_-]+\b/u;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (!/^\s*\|.*\|\s*$/u.test(line)) return line;
+      return line
+        .split("|")
+        .map((cell) => (codeLikeCell.test(cell) ? "" : cell))
+        .join("|");
+    })
+    .join("\n");
 }
 
 async function main(audit: DecisionAudit): Promise<number> {
@@ -125,9 +187,9 @@ async function main(audit: DecisionAudit): Promise<number> {
   if (audit.language !== "japanese")
     return recordDecision(audit, "allow", "language_not_japanese");
 
-  // Stop's in-memory response is authoritative, including an empty string. The transcript
-  // is written asynchronously and can still end with a tool call when this hook runs.
-  // Fall back only for older clients that do not provide last_assistant_message.
+  // Keep the Stop response when it contains visible prose, but remove tool_use input strings
+  // echoed into it. The transcript supplies typed text blocks when the response is only tool data
+  // or older clients do not provide last_assistant_message.
   const response = strAt(payload, "last_assistant_message");
   const transcript = audit.transcript_path;
   if (response === undefined && (transcript === undefined || transcript === ""))
@@ -135,17 +197,49 @@ async function main(audit: DecisionAudit): Promise<number> {
 
   audit.text_source =
     response === undefined ? "transcript" : "last_assistant_message";
-  const text = response ?? finalAssistantText(transcript ?? "");
-  if (text instanceof Error) {
-    stderrLine(`check failed open: ${text.message}`);
-    return recordDecision(audit, "allow", "transcript_error", text.message);
+  let selection: TranscriptSelection | undefined;
+  if (transcript !== undefined && transcript !== "" && response !== "") {
+    const result = await attempt(() => finalAssistantText(transcript));
+    if (!result.ok && response === undefined) {
+      const error = errorMessage(result.error);
+      stderrLine(`check failed open: ${error}`);
+      return recordDecision(audit, "allow", "check_error", error);
+    }
+    if (result.ok && result.value instanceof Error && response === undefined) {
+      stderrLine(`check failed open: ${result.value.message}`);
+      return recordDecision(
+        audit,
+        "allow",
+        "transcript_error",
+        result.value.message,
+      );
+    }
+    if (result.ok && !(result.value instanceof Error)) {
+      selection = result.value;
+    }
+  }
+  const responseText =
+    response === undefined
+      ? undefined
+      : withoutToolInputs(response, selection?.toolInputs ?? []);
+  const hasResponseText = responseText !== undefined && responseText !== "";
+  let text = "";
+  if (response === "") {
+    text = response;
+  } else if (hasResponseText) {
+    text = responseText;
+  } else if (selection !== undefined) {
+    text = selection.text;
+    audit.text_source = "transcript";
+  } else {
+    text = responseText ?? "";
   }
   audit.message_chars = text.length;
-  const prose = stripNonProse(text);
+  const prose = stripNonProse(stripCodeLikeTableCells(text));
   const { letters, share } = japaneseShare(prose);
   audit.letters = letters;
   audit.japanese_share = share;
-  const segmentBlocks = hasEnglishProseSegment(text);
+  const segmentBlocks = hasEnglishProseSegment(stripCodeLikeTableCells(text));
   const wholeReplyBlocks = letters >= MIN_LETTERS && share < MIN_JAPANESE_SHARE;
   if (!wholeReplyBlocks && !segmentBlocks)
     return recordDecision(audit, "allow", "no_language_violation");

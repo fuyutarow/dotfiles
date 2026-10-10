@@ -17,6 +17,8 @@ import { findings } from "../config-map.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const DISABLE_COMMENT = ["// eslint", "disable\n"].join("-");
+// Full-suite parallel run measured these JJ snapshot fixtures at 5.0–5.5s; keep a local 12s bound.
+const SLOW_JJ_FIXTURE_TIMEOUT_MS = 12_000;
 const dirs: string[] = [];
 afterAll(() => {
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
@@ -130,79 +132,96 @@ describe("J1 dotfiles consumers", () => {
     expect(readFileSync(f.marker, "utf8")).toBe("");
   });
 
-  test("Bun floor checks selected snapshot scripts and catches a Node entrypoint", () => {
-    const f = fixture();
-    f.write("scripts/good.ts", "export const value = 2;\n");
-    f.write("scripts/unselected.ts", "#!/usr/bin/env node\nprocess.exit(0);\n");
-    const good = f.snapshot(["scripts/good.ts"]);
-    const pass = good.run("scripts/lint-bun.ts");
-    expect(pass.exitCode, pass.stdout.toString() + pass.stderr.toString()).toBe(
-      0,
-    );
-    f.write("scripts/good.ts", "#!/usr/bin/env node\nprocess.exit(0);\n");
-    const bad = f.snapshot(["scripts/good.ts"]);
-    f.write("scripts/good.ts", "export const value = 3;\n");
-    expect(bad.run("scripts/lint-bun.ts").exitCode).toBe(1);
-    expect(readFileSync(f.marker, "utf8")).toBe("");
-  });
+  test(
+    "Bun floor checks selected snapshot scripts and catches a Node entrypoint",
+    () => {
+      const f = fixture();
+      f.write("scripts/good.ts", "export const value = 2;\n");
+      f.write(
+        "scripts/unselected.ts",
+        "#!/usr/bin/env node\nprocess.exit(0);\n",
+      );
+      const good = f.snapshot(["scripts/good.ts"]);
+      const pass = good.run("scripts/lint-bun.ts");
+      expect(
+        pass.exitCode,
+        pass.stdout.toString() + pass.stderr.toString(),
+      ).toBe(0);
+      f.write("scripts/good.ts", "#!/usr/bin/env node\nprocess.exit(0);\n");
+      const bad = f.snapshot(["scripts/good.ts"]);
+      f.write("scripts/good.ts", "export const value = 3;\n");
+      expect(bad.run("scripts/lint-bun.ts").exitCode).toBe(1);
+      expect(readFileSync(f.marker, "utf8")).toBe("");
+    },
+    SLOW_JJ_FIXTURE_TIMEOUT_MS,
+  );
 
-  test("skill collection gates overlay selected changes and exclude an unfinished skill", () => {
-    const f = fixture();
-    f.write(
-      "agents/skills/doing-things/SKILL.md",
-      readFileSync(
-        join(f.root, "agents/skills/doing-things/SKILL.md"),
-        "utf8",
-      ) + "\nReport a checked result.\n",
-    );
-    f.write("agents/skills/unfinished/SKILL.md", "invalid unfinished WIP\n");
-    const good = f.snapshot(["agents/skills/doing-things/SKILL.md"]);
-    for (const script of [
-      "scripts/lint-skills-index.ts",
-      "scripts/lint-skills-floor.ts",
-    ]) {
-      const r = good.run(script);
-      expect(r.exitCode, r.stdout.toString() + r.stderr.toString()).toBe(0);
-    }
-    const bad = f.snapshot(["agents/skills/unfinished/SKILL.md"]);
-    expect(bad.run("scripts/lint-skills-index.ts").exitCode).toBe(1);
-    expect(bad.run("scripts/lint-skills-floor.ts").exitCode).toBe(1);
-    expect(readFileSync(f.marker, "utf8")).toBe("");
-  });
+  test(
+    "skill collection gates overlay selected changes and exclude an unfinished skill",
+    () => {
+      const f = fixture();
+      f.write(
+        "agents/skills/doing-things/SKILL.md",
+        readFileSync(
+          join(f.root, "agents/skills/doing-things/SKILL.md"),
+          "utf8",
+        ) + "\nReport a checked result.\n",
+      );
+      f.write("agents/skills/unfinished/SKILL.md", "invalid unfinished WIP\n");
+      const good = f.snapshot(["agents/skills/doing-things/SKILL.md"]);
+      for (const script of [
+        "scripts/lint-skills-index.ts",
+        "scripts/lint-skills-floor.ts",
+      ]) {
+        const r = good.run(script);
+        expect(r.exitCode, r.stdout.toString() + r.stderr.toString()).toBe(0);
+      }
+      const bad = f.snapshot(["agents/skills/unfinished/SKILL.md"]);
+      expect(bad.run("scripts/lint-skills-index.ts").exitCode).toBe(1);
+      expect(bad.run("scripts/lint-skills-floor.ts").exitCode).toBe(1);
+      expect(readFileSync(f.marker, "utf8")).toBe("");
+    },
+    SLOW_JJ_FIXTURE_TIMEOUT_MS,
+  );
 
-  test("jj formatter verifies immutable temporary copies and refuses formatting changes", () => {
-    const f = fixture();
-    const formatter = join(f.dir, "upper.ts");
-    writeFileSync(
-      formatter,
-      'import { readFileSync, writeFileSync } from "node:fs"; for (const path of process.argv.slice(2)) writeFileSync(path, readFileSync(path, "utf8").toUpperCase());\n',
-    );
-    const args = ["--tool", `txt=${process.execPath} ${formatter}`];
-    f.write("selected.txt", "ALREADY FORMATTED\n");
-    const good = f.snapshot(["selected.txt"]);
-    f.write("selected.txt", "later worktree bytes\n");
-    const pass = good.run(
-      "agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts",
-      args,
-    );
-    expect(pass.exitCode, pass.stdout.toString() + pass.stderr.toString()).toBe(
-      0,
-    );
-    expect(readFileSync(join(f.root, "selected.txt"), "utf8")).toBe(
-      "later worktree bytes\n",
-    );
-    const bad = f.snapshot(["selected.txt"]);
-    const r = bad.run(
-      "agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts",
-      args,
-    );
-    expect(r.exitCode).toBe(1);
-    expect(r.stdout.toString()).toContain("needs formatting");
-    expect(readFileSync(join(f.root, "selected.txt"), "utf8")).toBe(
-      "later worktree bytes\n",
-    );
-    expect(readFileSync(f.marker, "utf8")).toBe("");
-  });
+  test(
+    "jj formatter verifies immutable temporary copies and refuses formatting changes",
+    () => {
+      const f = fixture();
+      const formatter = join(f.dir, "upper.ts");
+      writeFileSync(
+        formatter,
+        'import { readFileSync, writeFileSync } from "node:fs"; for (const path of process.argv.slice(2)) writeFileSync(path, readFileSync(path, "utf8").toUpperCase());\n',
+      );
+      const args = ["--tool", `txt=${process.execPath} ${formatter}`];
+      f.write("selected.txt", "ALREADY FORMATTED\n");
+      const good = f.snapshot(["selected.txt"]);
+      f.write("selected.txt", "later worktree bytes\n");
+      const pass = good.run(
+        "agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts",
+        args,
+      );
+      expect(
+        pass.exitCode,
+        pass.stdout.toString() + pass.stderr.toString(),
+      ).toBe(0);
+      expect(readFileSync(join(f.root, "selected.txt"), "utf8")).toBe(
+        "later worktree bytes\n",
+      );
+      const bad = f.snapshot(["selected.txt"]);
+      const r = bad.run(
+        "agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts",
+        args,
+      );
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout.toString()).toContain("needs formatting");
+      expect(readFileSync(join(f.root, "selected.txt"), "utf8")).toBe(
+        "later worktree bytes\n",
+      );
+      expect(readFileSync(f.marker, "utf8")).toBe("");
+    },
+    SLOW_JJ_FIXTURE_TIMEOUT_MS,
+  );
 
   test("config inventory checks the candidate, including selected deletions", () => {
     const f = fixture();

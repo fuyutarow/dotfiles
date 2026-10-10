@@ -107,6 +107,7 @@ const CORPUS = [
   { path: "scripts/auth-push.ts" },
   { path: "scripts/link-skills.ts" },
   { path: "scripts/skills-doctor.ts" },
+  { path: "scripts/land.ts" },
   { path: "scripts/vendor-skill.ts" },
   { path: "scripts/wsl-audit.ts" },
   { path: "scripts/wsl-capacity-recover.ts" },

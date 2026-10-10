@@ -24,11 +24,22 @@
 export type When = "all" | "mac" | "wsl" | "linux" | "not-mac";
 
 // Landing targets are SSH aliases; connection details remain in ~/.ssh/config.local.
-export const LAND_HOSTS: readonly string[] = ["sol", "r99-u26"];
+// Keep the damaged r99-u24 visible in the inventory, but do not deploy there until repaired.
+export const LAND_HOSTS: readonly {
+  alias: string;
+  deploy: boolean;
+  reason?: string;
+}[] = [
+  { alias: "sol", deploy: true },
+  { alias: "r99-u26", deploy: true },
+  { alias: "r99-u24", deploy: false, reason: "damaged" },
+];
 
 // [when, repo-relative source, home-relative destination]
 export const LINKS: readonly (readonly [When, string, string])[] = [
   // --- zsh ---
+  // `#!/usr/bin/env bun` package bins use the dotfiles-declared Bun from any SSH-command cwd.
+  ["all", "scripts/bun-exec.sh", ".local/bin/bun"],
   ["all", "zsh/zshenv", ".zshenv"],
   ["all", "zsh/zshrc", ".zshrc"],
   ["mac", "zsh/zprofile.mac", ".zprofile"],

@@ -13,9 +13,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { LAND_HOSTS } from "../config-registry.ts";
 
 const script = join(import.meta.dir, "../land.ts");
 const temporary: string[] = [];
+// Measured 5.0s under parallel test load and 2.14s isolated; scope the 12s bound to this JJ fixture.
+const LAND_FORMATTER_TEST_TIMEOUT_MS = 12_000;
 const eventsSchema = jsonOf(z.array(z.string()));
 afterEach(() => {
   for (const path of temporary.splice(0))
@@ -84,8 +87,15 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['pushed']) + '\\n');\n`,
   writeFileSync(
     ssh,
     `#!${process.execPath}\nimport { appendFileSync } from 'node:fs';
-appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['ssh', ...process.argv.slice(2)]) + '\\n');
-process.exit(process.env.LAND_FAIL_SSH === '1' ? 7 : 0);\n`,
+const args = process.argv.slice(2);
+appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['ssh', ...args]) + '\\n');
+const host = args[2] ?? 'unknown';
+const command = args.at(-1) ?? '';
+const begin = command.match(/__LAND_SMOKE_BEGIN_[0-9]+__/u)?.[0];
+const end = command.match(/__LAND_SMOKE_END_[0-9]+__/u)?.[0];
+if (begin !== undefined && end !== undefined) process.stdout.write('\\n' + begin + '\\n  smoke output for ' + host + '  \\n' + end + '\\n');
+if (process.env.LAND_UNREACHABLE_SSH === host) { process.stderr.write('ssh: connect to host ' + host + ' failed\\n'); process.exit(255); }
+process.exit(process.env.LAND_FAIL_SSH === host ? 7 : 0);\n`,
   );
   chmodSync(mise, 0o755);
   chmodSync(ssh, 0o755);
@@ -110,8 +120,6 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['format', '${formatter}'
         "dotfiles-arm-worker",
         "-m",
         "Land test",
-        "--hosts",
-        "sol,r99-u26",
         ...args,
       ],
       {
@@ -168,34 +176,38 @@ describe("land workspace", () => {
     );
   });
 
-  test("formatters get only existing changed paths and run before commit", () => {
-    const f = fixture();
-    writeFileSync(join(f.worker, "added.ts"), "const added=1;\n");
-    writeFileSync(join(f.worker, "added.md"), "# Added\n");
-    writeFileSync(join(f.worker, "added.sh"), "echo added\n");
-    rmSync(join(f.worker, "remove.md"));
-    const result = f.land();
-    expect(result.exitCode).toBe(0);
-    expect(f.log().slice(0, 3)).toEqual([
-      ["format", "bunx", "--bun", "oxfmt", "./added.ts"],
-      ["format", "rumdl", "fmt", "./added.md"],
-      [
-        "format",
-        "shfmt",
-        "-w",
-        "-ln",
-        "bash",
-        "-i",
-        "2",
-        "-ci",
-        "-sr",
-        "-bn",
-        "-s",
-        "./added.sh",
-      ],
-    ]);
-    expect(f.log()[3]?.slice(0, 2)).toEqual(["run", "commit"]);
-  });
+  test(
+    "formatters get only existing changed paths and run before commit",
+    () => {
+      const f = fixture();
+      writeFileSync(join(f.worker, "added.ts"), "const added=1;\n");
+      writeFileSync(join(f.worker, "added.md"), "# Added\n");
+      writeFileSync(join(f.worker, "added.sh"), "echo added\n");
+      rmSync(join(f.worker, "remove.md"));
+      const result = f.land();
+      expect(result.exitCode).toBe(0);
+      expect(f.log().slice(0, 3)).toEqual([
+        ["format", "bunx", "--bun", "oxfmt", "./added.ts"],
+        ["format", "rumdl", "fmt", "./added.md"],
+        [
+          "format",
+          "shfmt",
+          "-w",
+          "-ln",
+          "bash",
+          "-i",
+          "2",
+          "-ci",
+          "-sr",
+          "-bn",
+          "-s",
+          "./added.sh",
+        ],
+      ]);
+      expect(f.log()[3]?.slice(0, 2)).toEqual(["run", "commit"]);
+    },
+    LAND_FORMATTER_TEST_TIMEOUT_MS,
+  );
 
   test("rename reports and commits both paths as exact argv; deploy follows push", () => {
     const f = fixture();
@@ -228,14 +240,37 @@ describe("land workspace", () => {
       "old name.txt",
     ]);
     expect(f.log()[1]).toEqual(["pushed"]);
-    expect(f.log()[2]).toEqual([
+    expect(f.log()[2]?.slice(0, 4)).toEqual([
       "ssh",
       "-o",
       "BatchMode=yes",
       "sol",
-      "cd ~/dotfiles && mise run pull && mise run deps && ( printf '%s' smoke\n)",
     ]);
+    expect(f.log()[2]?.[4]).toContain(
+      "cd ~/dotfiles && mise run pull && mise run deps",
+    );
+    expect(f.log()[2]?.[4]).toContain("printf '%s' smoke");
     expect(f.log()[3]?.[3]).toBe("r99-u26");
+    expect(result.stdout.toString()).toContain(
+      "[land] smoke: sol\nsmoke output for sol",
+    );
+    expect(result.stdout.toString()).toContain(
+      "[land] smoke: r99-u26\nsmoke output for r99-u26",
+    );
+    expect(result.stdout.toString()).toContain(
+      "[land] deploy: skipped r99-u24 (damaged)",
+    );
+    expect(
+      f
+        .log()
+        .filter((event) => event[0] === "ssh")
+        .map((event) => event[3]),
+    ).toEqual(
+      LAND_HOSTS.filter((host) => host.deploy).map((host) => host.alias),
+    );
+    expect(LAND_HOSTS.find((host) => host.alias === "r99-u24")?.deploy).toBe(
+      false,
+    );
     expect(result.stdout.toString()).toMatch(/summary: ok commit=[0-9a-f]+/u);
   });
 
@@ -317,15 +352,38 @@ describe("land workspace", () => {
     );
   });
 
-  test("host failure reports its host and skips subsequent hosts", () => {
+  test("one failing host is reported while later hosts still deploy", () => {
     const f = fixture();
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    const result = f.land([], { LAND_FAIL_SSH: "1" });
+    const result = f.land(["--smoke", "printf smoke"], {
+      LAND_FAIL_SSH: "sol",
+    });
     expect(result.exitCode).toBe(1);
-    expect(result.stdout.toString()).toContain("[land] deploy: FAIL sol:");
     expect(result.stdout.toString()).toContain(
-      'hosts={"sol":"FAIL","r99-u26":"pending"}',
+      "[land] deploy: FAIL sol: remote command exited 7",
     );
-    expect(f.log()).toHaveLength(3);
+    expect(result.stdout.toString()).toContain("[land] deploy: ok r99-u26");
+    expect(result.stdout.toString()).toContain(
+      "[land] smoke: sol\nsmoke output for sol",
+    );
+    expect(result.stdout.toString()).toContain(
+      "[land] smoke: r99-u26\nsmoke output for r99-u26",
+    );
+    expect(result.stdout.toString()).toContain(
+      'hosts={"sol":"FAIL remote command exited 7","r99-u26":"ok","r99-u24":"skipped (damaged)"}',
+    );
+    expect(f.log().filter((event) => event[0] === "ssh")).toHaveLength(2);
+  });
+
+  test("an unreachable host is reported and later hosts still deploy", () => {
+    const f = fixture();
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land([], { LAND_UNREACHABLE_SSH: "sol" });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toContain(
+      "[land] deploy: unreachable sol: ssh: connect to host sol failed",
+    );
+    expect(result.stdout.toString()).toContain("[land] deploy: ok r99-u26");
+    expect(f.log().filter((event) => event[0] === "ssh")).toHaveLength(2);
   });
 });

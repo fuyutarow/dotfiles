@@ -62,6 +62,67 @@ function run(cwd: string, argv: string[]): ResultAsync<string, Error> {
   });
 }
 
+type HostExecution = {
+  code: number;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+};
+
+type HostExecutionResult =
+  | { ok: true; value: HostExecution }
+  | { ok: false; reason: string };
+
+async function runHost(
+  cwd: string,
+  argv: string[],
+): Promise<HostExecutionResult> {
+  const result = await attempt(async () => {
+    const signal = AbortSignal.timeout(600_000);
+    const child = Bun.spawn(argv, {
+      cwd,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    return { code, stdout, stderr, timedOut: signal.aborted };
+  });
+  return result.ok ? result : { ok: false, reason: errorMessage(result.error) };
+}
+
+function extractSmoke(
+  stdout: string,
+  begin: string,
+  end: string,
+): { output: string; smoke: string | undefined } {
+  const beginToken = `\n${begin}\n`;
+  const endToken = `\n${end}\n`;
+  const start = stdout.lastIndexOf(beginToken);
+  if (start < 0) return { output: stdout, smoke: undefined };
+  const finish = stdout.indexOf(endToken, start + beginToken.length);
+  if (finish < 0) return { output: stdout, smoke: undefined };
+  return {
+    output: stdout.slice(0, start) + stdout.slice(finish + endToken.length),
+    smoke: stdout.slice(start + beginToken.length, finish).trim(),
+  };
+}
+
+function printSmoke(host: string, smoke: string | undefined): void {
+  if (smoke === undefined) return;
+  emit(`[land] smoke: ${host}${smoke === "" ? " (empty)" : ""}`);
+  if (smoke !== "") emit(smoke);
+}
+
+function hostDiagnostic(stderr: string): string {
+  return stderr.trim().replaceAll(/\s+/gu, " ").slice(-1000);
+}
+
 const jj = (cwd: string, argv: string[]) =>
   run(cwd, ["jj", "--no-pager", "--color", "never", ...argv]);
 const read = (cwd: string, argv: string[]) =>
@@ -172,10 +233,22 @@ async function main(): Promise<number> {
     ignoreArgv: rejectPrototypeFlag,
     parameters: ["<workspace-name>"],
     flags: {
-      message: { type: String, alias: "m" },
-      hosts: { type: String },
-      smoke: { type: String },
-      dryRun: { type: Boolean, default: false },
+      message: {
+        type: String,
+        alias: "m",
+        description: "Commit message for the landed workspace.",
+      },
+      smoke: {
+        type: String,
+        description:
+          "Run this command on each deployed host after pull and deps, and print its output.",
+      },
+      dryRun: {
+        type: Boolean,
+        default: false,
+        description:
+          "Preview the landing and host results without committing or deploying.",
+      },
     },
   });
   let stage = "preflight";
@@ -186,16 +259,11 @@ async function main(): Promise<number> {
     safeTry(async function* () {
       if (parsed._.length !== 1 || (parsed.flags.message?.trim() ?? "") === "")
         return reject("one workspace and -m <message> are required");
-      const hosts =
-        parsed.flags.hosts === undefined
-          ? [...LAND_HOSTS]
-          : parsed.flags.hosts.split(",");
-      if (
-        hosts.length === 0 ||
-        hosts.some((host) => !/^[a-zA-Z0-9][a-zA-Z0-9_.@-]*$/u.test(host))
-      )
-        return reject("hosts must be non-empty SSH aliases");
-      for (const host of hosts) hostResults.set(host, "pending");
+      for (const host of LAND_HOSTS)
+        hostResults.set(
+          host.alias,
+          host.deploy ? "pending" : `skipped (${host.reason ?? "disabled"})`,
+        );
       const root = (yield* read(process.cwd(), ["workspace", "root"])).trim();
       const repoEntry = join(root, ".jj", "repo");
       const repo = lstatSync(repoEntry).isFile()
@@ -299,25 +367,71 @@ async function main(): Promise<number> {
       }
       emit(`[land] commit: ok ${commit ?? "would gated commit --push"}`);
       stage = "deploy";
-      for (const host of hosts) {
-        if (parsed.flags.dryRun) {
-          hostResults.set(host, "would pull, deps and smoke");
-          emit(`[land] deploy: ok ${host} preview`);
+      const smokeBegin = `__LAND_SMOKE_BEGIN_${process.pid}__`;
+      const smokeEnd = `__LAND_SMOKE_END_${process.pid}__`;
+      for (const host of LAND_HOSTS) {
+        if (!host.deploy) {
+          const reason = host.reason ?? "disabled";
+          hostResults.set(host.alias, `skipped (${reason})`);
+          emit(`[land] deploy: skipped ${host.alias} (${reason})`);
           continue;
         }
-        const command = `cd ~/dotfiles && mise run pull && mise run deps${parsed.flags.smoke === undefined ? "" : ` && ( ${parsed.flags.smoke}\n)`}`;
-        const deployed = await run(mainRoot, [
+        if (parsed.flags.dryRun) {
+          hostResults.set(host.alias, "would pull, deps and smoke");
+          emit(`[land] deploy: ok ${host.alias} preview`);
+          continue;
+        }
+        const smokeStep =
+          parsed.flags.smoke === undefined
+            ? ""
+            : ` && { printf '\\n${smokeBegin}\\n'; ( ${parsed.flags.smoke}\n ) 2>&1; _land_smoke_status=$?; printf '\\n${smokeEnd}\\n'; exit "$_land_smoke_status"; }`;
+        const command = `cd ~/dotfiles && mise run pull && mise run deps${smokeStep}`;
+        const deployed = await runHost(mainRoot, [
           process.env.LAND_SSH ?? "ssh",
           "-o",
           "BatchMode=yes",
-          host,
+          host.alias,
           command,
         ]);
-        hostResults.set(host, deployed.isOk() ? "ok" : "FAIL");
-        if (deployed.isErr())
-          return reject(`${host}: ${errorMessage(deployed.error)}`);
-        emit(`[land] deploy: ok ${host}`);
+        if (!deployed.ok) {
+          const state = `FAIL ${deployed.reason}`;
+          hostResults.set(host.alias, state);
+          emit(`[land] deploy: FAIL ${host.alias}: ${deployed.reason}`);
+          continue;
+        }
+        const capturedSmoke = extractSmoke(
+          deployed.value.stdout,
+          smokeBegin,
+          smokeEnd,
+        );
+        printSmoke(host.alias, capturedSmoke.smoke);
+        const diagnostic = hostDiagnostic(deployed.value.stderr);
+        if (deployed.value.timedOut) {
+          const reason = `SSH command timed out${diagnostic === "" ? "" : `: ${diagnostic}`}`;
+          hostResults.set(host.alias, `FAIL ${reason}`);
+          emit(`[land] deploy: FAIL ${host.alias}: ${reason}`);
+          continue;
+        }
+        if (deployed.value.code === 255) {
+          const reason = diagnostic.length > 0 ? diagnostic : "ssh exited 255";
+          hostResults.set(host.alias, `unreachable ${reason}`);
+          emit(`[land] deploy: unreachable ${host.alias}: ${reason}`);
+          continue;
+        }
+        if (deployed.value.code !== 0) {
+          const reason = `remote command exited ${deployed.value.code}${diagnostic === "" ? "" : `: ${diagnostic}`}`;
+          hostResults.set(host.alias, `FAIL ${reason}`);
+          emit(`[land] deploy: FAIL ${host.alias}: ${reason}`);
+          continue;
+        }
+        hostResults.set(host.alias, "ok");
+        emit(`[land] deploy: ok ${host.alias}`);
       }
+      const failedHosts = [...hostResults.values()].some(
+        (status) =>
+          status.startsWith("FAIL ") || status.startsWith("unreachable "),
+      );
+      if (failedHosts) return reject("one or more host deployments failed");
       return ok(undefined);
     }),
   ).finally(() => {

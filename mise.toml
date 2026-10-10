@@ -860,7 +860,7 @@ run = 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh'
 
 [tasks."cc:install-mcp"]
 description = "Apply .mcp.json (single declarative source) to Claude Code (user scope) AND Codex. Idempotent. mac & WSL."
-run = 'bun ~/dotfiles/scripts/install-mcp.ts'
+run = 'bun ~/dotfiles/scripts/install-mcp.ts && bun ~/dotfiles/agents/codex/codex-config.ts'
 
 [tasks."link:skills"]
 description = "Link agents/ commands and skills into AI tools' config directories"
@@ -881,5 +881,5 @@ description = "Converge the Codex app-server daemon's remote control (how the Ch
 run = "bun agents/codex/codex-remote-control.ts"
 
 [tasks."codex:config"]
-description = "Converge declared Codex model limits and workspace-write network settings into ~/.codex/config.toml."
+description = "Converge declared Codex model limits, workspace-write network settings, and .mcp.json MCP entries into ~/.codex/config.toml."
 run = "bun agents/codex/codex-config.ts"

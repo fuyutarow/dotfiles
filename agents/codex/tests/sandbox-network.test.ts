@@ -12,6 +12,7 @@ const declared = {
   modelAutoCompactTokenLimit: 950000,
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",
+  mcpServers: {},
 } satisfies Declared;
 const approvals =
   'approval_policy = "on-request"\napprovals_reviewer = "auto_review"\n';
@@ -76,6 +77,8 @@ describe("Codex settings convergence", () => {
         modelAutoCompactTokenLimit: 950000,
         approvalPolicy: "on-request",
         approvalsReviewer: "auto_review",
+        mcpServers: {},
+        managedMcpNames: [],
       }),
     ).toEqual([]);
   });
@@ -106,5 +109,48 @@ describe("Codex settings convergence", () => {
     expect(readFileSync(join(home, ".codex/config.toml"), "utf8")).toContain(
       "model_context_window",
     );
+  });
+
+  test("replaces a drifted managed HTTP server, keeps user servers, and is idempotent", () => {
+    const mcpDeclared = {
+      ...declared,
+      mcpServers: {
+        context7: {
+          type: "http" as const,
+          url: "https://mcp.context7.com/mcp",
+        },
+        local: {
+          type: "stdio" as const,
+          command: "bunx",
+          args: ["-y", "local-mcp"],
+          env: { TOKEN_ENV: "TOKEN_ENV" },
+        },
+      },
+    };
+    const source = `model_context_window = 1000000
+model_auto_compact_token_limit = 950000
+[sandbox_workspace_write]
+network_access = true
+
+# codex-dotfiles-mcp-managed: context7, retired
+[mcp_servers.context7]
+command = "bunx"
+args = ["-y", "@upstash/context7-mcp"]
+
+[mcp_servers.retired]
+url = "https://old.example/mcp"
+
+[mcp_servers.user]
+command = "user-server"
+`;
+    const first = edit(source, mcpDeclared);
+    expect(first).toContain(
+      '[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"',
+    );
+    expect(first).toContain('[mcp_servers.local]\ncommand = "bunx"');
+    expect(first).not.toContain("@upstash/context7-mcp");
+    expect(first).not.toContain("[mcp_servers.retired]");
+    expect(first).toContain('[mcp_servers.user]\ncommand = "user-server"');
+    expect(edit(first, mcpDeclared)).toBe(first);
   });
 });

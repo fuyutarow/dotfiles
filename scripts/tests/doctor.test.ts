@@ -179,6 +179,8 @@ network_access = true
     expect(r.out).toContain(
       "model_auto_compact_token_limit=940000, declared 950000",
     );
+    expect(r.out).toContain("mcp_servers.context7 differs from .mcp.json");
+    expect(r.out).toContain("fix: mise run codex:config");
   });
 
   test("codex-config: skips when ~/.codex does not exist", () => {

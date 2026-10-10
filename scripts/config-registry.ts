@@ -284,10 +284,11 @@ const OTHER: readonly Surface[] = [
     kind: "applied",
     when: "all",
     sources: [".mcp.json"],
-    deployed: "Claude Code (user scope) and Codex MCP registrations",
+    deployed: "Claude Code (user scope) and Codex managed MCP tables",
     consumer: "Claude Code, Codex",
-    writer: "human, in the repo; mise run cc:install-mcp applies",
-    verify: `${DOCTOR} (mcp)`,
+    writer:
+      "human, in the repo; mise run cc:install-mcp applies Claude then codex:config converges Codex",
+    verify: `${DOCTOR} (mcp, codex-config)`,
   },
   {
     kind: "applied",
@@ -303,10 +304,10 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: ["agents/codex/config.declared.toml"],
     deployed:
-      "the Codex-owned ~/.codex/config.toml model limits and workspace-write network setting",
+      "the Codex-owned ~/.codex/config.toml model limits, workspace-write network setting, and managed MCP tables",
     consumer: "Codex workers using workspace-write sandbox",
     writer:
-      "human, in the repo; mise run codex:config converges model_context_window, model_auto_compact_token_limit, and sandbox_workspace_write.network_access",
+      "human, in the repo; mise run codex:config converges model_context_window, model_auto_compact_token_limit, sandbox_workspace_write.network_access, and .mcp.json MCP entries",
     verify: `${DOCTOR} (codex-config)`,
   },
   {

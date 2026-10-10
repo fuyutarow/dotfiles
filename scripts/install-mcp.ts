@@ -4,16 +4,16 @@
 // output is verdict-style lines meant for eyeballing (registered/applied/DRIFT/pruned/tip), not
 // a machine envelope, matching the shell original.
 //
-// .mcp.json (declarative source of truth) is applied into BOTH Claude Code (user scope) and
-// Codex, idempotently: each declared server is removed then re-added. Two DISTINCT failure
+// .mcp.json (declarative source of truth) is applied into Claude Code (user scope), idempotently:
+// each declared server is removed then re-added. Codex is deliberately converged by
+// agents/codex/codex-config.ts, which edits its TOML directly and can preserve user MCP entries.
+// Two DISTINCT failure
 // postures, both preserved exactly from the original `set -eu` body:
 //   - every `mcp remove` is best-effort — its failure (including "binary not found") is
 //     swallowed, matching the shell's `2>/dev/null || true`.
 //   - every `mcp add` is NOT guarded — its failure aborts the whole run immediately (no further
 //     servers get processed, no "applied" line, no drift report), matching `set -e` on an
-//     unguarded statement. codex's own remove/add block only runs at all when a codex binary
-//     resolves (`command -v codex`); when it doesn't, codex is skipped entirely for every server,
-//     silently, not treated as a failure.
+//     unguarded statement.
 // After registration, a DRIFT REPORT (added 2026-07-25, ported as-is) compares `.mcp.json`'s
 // declared names against `claude mcp list`'s live registrations; anything live-but-undeclared is
 // reported, and only pruned when MCP_PRUNE=1 — the loop that enumerates `.mcp.json` itself only
@@ -327,94 +327,32 @@ function runOrPrintAdd(
   return undefined;
 }
 
-/** codex's remove-then-add pair for one server; only called when a codex binary resolves. */
+/**
+ * Compatibility no-op: Codex MCP entries are owned by codex-config.ts, not the CLI's imperative
+ * remove/add API. Keeping the boundary lets existing fixture invocations retain their argv shape.
+ */
 function registerWithCodex(
-  codexBin: string,
-  plan: Plan,
-  dryRun: boolean,
+  _codexBin: string,
+  _plan: Plan,
+  _dryRun: boolean,
 ): AbortError | undefined {
-  if (dryRun) {
-    print(
-      `[dry-run] would run: ${codexBin} mcp remove ${plan.name} (errors ignored)`,
-    );
-  } else {
-    runIgnoringFailure(codexBin, ["mcp", "remove", plan.name]);
-  }
-
-  const addArgs =
-    plan.url !== ""
-      ? ["mcp", "add", plan.name, "--url", plan.url]
-      : ["mcp", "add", plan.name, "--", ...plan.execTokens];
-  if (dryRun || plan.url === "") {
-    return runOrPrintAdd(codexBin, addArgs, dryRun);
-  }
-  return addCodexHttpServer(codexBin, plan.name, addArgs);
-}
-
-// `codex mcp add --url` writes the server at once, then starts an OAuth login for a server that
-// offers one and waits for a browser to finish it — about five minutes on a headless box before
-// "deadline has elapsed" (measured 2026-10-06 on a rented box: 4:56). That wait is the login, not
-// the registration. So: bound the add, then ask codex itself whether the server is registered.
-// Registered without a login is a stated state, not a failure and not a silent success.
-const CODEX_ADD_BOUND_MS = 30_000;
-function addCodexHttpServer(
-  codexBin: string,
-  name: string,
-  addArgs: string[],
-): AbortError | undefined {
-  const add = fromThrowable(Bun.spawnSync)([codexBin, ...addArgs], {
-    stdin: "ignore",
-    stdout: "inherit",
-    stderr: "inherit",
-    timeout: CODEX_ADD_BOUND_MS,
-  });
-  if (add.isOk() && add.value.exitCode === 0) return undefined;
-  // bounded: a list reads the config file; 15 s is generous.
-  const list = fromThrowable(Bun.spawnSync)([codexBin, "mcp", "list"], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "ignore",
-    timeout: 15_000,
-  });
-  const listed =
-    list.isOk() &&
-    (list.value.stdout?.toString() ?? "")
-      .split("\n")
-      .some((line) => line.trim().split(/\s+/u)[0] === name);
-  if (!listed) {
-    return new AbortError(
-      `${codexBin} ${addArgs.join(" ")} did not register '${name}'`,
-      add.isOk() ? (add.value.exitCode ?? 1) : 127,
-    );
-  }
-  print(
-    `codex: '${name}' registered; its OAuth login did not finish within ${CODEX_ADD_BOUND_MS / 1000}s ` +
-      `(no browser here) — run \`codex mcp login ${name}\` where one is, if the server needs it`,
-  );
   return undefined;
 }
 
-/** One undeclared-but-live server's removal for MCP_PRUNE=1 — claude first, then codex when a
- * codex binary resolves; both remain best-effort even under prune. */
+/** One undeclared-but-live server's removal for MCP_PRUNE=1. Codex owns its managed-name pruning. */
 function pruneServer(
   name: string,
   claudeBin: string,
-  codexBin: string,
+  _codexBin: string,
   dryRun: boolean,
 ): void {
   if (dryRun) {
     print(
       `[dry-run] would run: ${claudeBin} mcp remove -s user ${name} (errors ignored)`,
     );
-    if (which(codexBin)) {
-      print(
-        `[dry-run] would run: ${codexBin} mcp remove ${name} (errors ignored)`,
-      );
-    }
     return;
   }
   runIgnoringFailure(claudeBin, ["mcp", "remove", "-s", "user", name]);
-  if (which(codexBin)) runIgnoringFailure(codexBin, ["mcp", "remove", name]);
 }
 
 /** The DRIFT REPORT's undeclared-name computation and printing (see main()'s comment above its
@@ -569,7 +507,9 @@ function main(): AbortError | UsageError | undefined {
     print(`registered: ${name} (${plan.display})`);
   }
 
-  print(`applied ${mcpJsonPath} -> Claude(user) + Codex`);
+  print(
+    `applied ${mcpJsonPath} -> Claude(user); codex:config owns Codex MCP entries`,
+  );
 
   // DRIFT REPORT (added 2026-07-25). The loop above only visits names PRESENT in .mcp.json, so
   // deleting an entry here never uninstalls it. Read-only (`claude mcp list`), so it runs

@@ -7,7 +7,7 @@ const repo = join(import.meta.dir, "..", "..", "..");
 const script = join(repo, "agents/codex/codex-config.ts");
 
 function run(home: string, args: string[] = []) {
-  return Bun.spawnSync(["bun", script, ...args], {
+  return Bun.spawnSync([process.execPath, script, ...args], {
     env: {
       ...process.env,
       HOME: home,
@@ -97,7 +97,7 @@ describe("codex:config", () => {
     // The values match agents/codex/config.declared.toml.
     writeFileSync(
       join(home, ".codex/config.toml"),
-      'approval_policy = "on-request"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n',
+      'approval_policy = "on-request"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7, deepwiki, exa\n\n[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n\n[mcp_servers.deepwiki]\nurl = "https://mcp.deepwiki.com/mcp"\n\n[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"\n',
     );
     const result = run(home, ["--check"]);
     expect(result.exitCode).toBe(0);
@@ -112,7 +112,7 @@ describe("codex:config", () => {
       join(dotfiles, "agents/codex/config.declared.toml"),
       "invalid = true\n",
     );
-    const result = Bun.spawnSync(["bun", script, "--check"], {
+    const result = Bun.spawnSync([process.execPath, script, "--check"], {
       env: {
         ...process.env,
         HOME: home,
@@ -124,5 +124,25 @@ describe("codex:config", () => {
     });
     expect(result.exitCode).toBe(2);
     expect(result.stderr.toString()).toContain("Codex declaration requires");
+  });
+
+  test("replaces stale context7 with HTTP, preserves a user server, and is idempotent", () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-config-mcp-"));
+    mkdirSync(join(home, ".codex"));
+    const config = join(home, ".codex/config.toml");
+    writeFileSync(
+      config,
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7\n[mcp_servers.context7]\ncommand = "bunx"\nargs = ["-y", "@upstash/context7-mcp"]\n\n[mcp_servers.user-added]\ncommand = "keep-me"\n',
+    );
+    expect(run(home).exitCode).toBe(0);
+    const first = readFileSync(config, "utf8");
+    expect(first).toContain(
+      '[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"',
+    );
+    expect(first).not.toContain("@upstash/context7-mcp");
+    expect(first).toContain('[mcp_servers.user-added]\ncommand = "keep-me"');
+    expect(run(home).exitCode).toBe(0);
+    const second = readFileSync(config, "utf8");
+    expect(second).toBe(first);
   });
 });

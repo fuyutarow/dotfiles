@@ -226,7 +226,7 @@ describe("install-mcp: happy path registration", () => {
       "CALL claude mcp add -s user --transport http exa https://mcp.exa.ai/mcp",
     );
     expect(out).toContain(
-      `applied ${dotfiles}/.mcp.json -> Claude(user) + Codex`,
+      `applied ${dotfiles}/.mcp.json -> Claude(user); codex:config owns Codex MCP entries`,
     );
     expect(out).toContain(
       "tip: run 'ccc index <repo>' once to warm cocoindex-code's embedding model.",
@@ -247,18 +247,17 @@ describe("install-mcp: happy path registration", () => {
     cleanup(dotfiles);
   });
 
-  test("codex mirrors the same registrations when codex-bin resolves", () => {
+  test("Codex registration is left to codex:config even when codex-bin resolves", () => {
     const dotfiles = makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
     const { out, code } = run(baseArgs(dotfiles), { FAKE_CLAUDE_LIST: "" });
     expect(code).toBe(0);
-    expect(out).toContain("CALL codex mcp remove fetch");
-    expect(out).toContain("CALL codex mcp add fetch -- uvx mcp-server-fetch");
+    expect(out).not.toContain("CALL codex");
     cleanup(dotfiles);
   });
 
-  test("codex is skipped entirely (no remove, no add) when codex-bin does not resolve", () => {
+  test("Codex-bin availability does not affect Claude's declarative installation", () => {
     const dotfiles = makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
@@ -485,7 +484,7 @@ describe("install-mcp: drift report", () => {
     });
     expect(code).toBe(0);
     expect(out).toContain("CALL claude mcp remove -s user ghost-server");
-    expect(out).toContain("CALL codex mcp remove ghost-server");
+    expect(out).not.toContain("CALL codex mcp remove ghost-server");
     expect(out).toContain("  pruned: ghost-server");
     expect(out).not.toContain("declare them in .mcp.json");
     cleanup(dotfiles);
@@ -551,7 +550,7 @@ describe("install-mcp: root argumentization / defaults", () => {
     const out = proc.stdout.toString() + proc.stderr.toString();
     expect(proc.exitCode).toBe(0);
     expect(out).toContain(
-      `applied ${dotfiles}/.mcp.json -> Claude(user) + Codex`,
+      `applied ${dotfiles}/.mcp.json -> Claude(user); codex:config owns Codex MCP entries`,
     );
     cleanup(dotfiles);
   });
@@ -586,7 +585,7 @@ describe("install-mcp: root argumentization / defaults", () => {
     const out = proc.stdout.toString() + proc.stderr.toString();
     expect(proc.exitCode).toBe(0);
     expect(out).toContain(
-      `applied ${dotfiles}/.mcp.json -> Claude(user) + Codex`,
+      `applied ${dotfiles}/.mcp.json -> Claude(user); codex:config owns Codex MCP entries`,
     );
     expect(out).toContain("registered: fetch");
     cleanup(home);
@@ -598,7 +597,7 @@ describe("install-mcp: root argumentization / defaults", () => {
     expect(code).toBe(0);
     expect(out).not.toContain("registered:");
     expect(out).toContain(
-      `applied ${dotfiles}/.mcp.json -> Claude(user) + Codex`,
+      `applied ${dotfiles}/.mcp.json -> Claude(user); codex:config owns Codex MCP entries`,
     );
     expect(out).toContain("tip: run 'ccc index <repo>'");
     cleanup(dotfiles);

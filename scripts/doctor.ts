@@ -16,7 +16,8 @@
 //   mise-scope  scripts/test-mise-scope.ts       INV-6: no implicit global toolchain
 //   bun-floor   mise installs + tracked pins     no bun < 1.4 (Temporal) installed or pinned
 //   mcp         .mcp.json                        every declared server registered in Claude Code
-//                                                (and Codex, when installed)
+//   codex-config agents/codex/config.declared.toml + .mcp.json
+//                                                Codex settings and managed MCP entries match declarations
 //   codex-remote agents/codex/app-server.toml     Codex daemon remote control (mobile app) as declared
 //   wslconfig   wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
 //   ccc-daemon  cocoindex unit      (Linux)      enabled in default.target and active
@@ -900,11 +901,11 @@ export async function checkCodexSandboxNetwork(ctx: Ctx): Promise<Finding> {
   if (lines.length === 0)
     return pass(
       "codex-config",
-      "Codex settings match agents/codex/config.declared.toml",
+      "Codex settings and managed MCP entries match their declarations",
     );
   return fail(
     "codex-config",
-    "Codex settings differ from agents/codex/config.declared.toml",
+    "Codex settings or managed MCP entries differ from their declarations",
     "mise run codex:config",
     lines,
   );

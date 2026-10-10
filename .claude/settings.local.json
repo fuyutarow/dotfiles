@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git mv:*)",
+      "Bash(git rm:*)",
+      "Read(//home/fuyu/Workspace/qoed/papers/P2606_004-qoed_sok/**)",
+      "Read(//home/fuyu/Workspace/qoed/**)",
+      "Bash(awk -F/ '{print $1\"/\"$2}')",
+      "Bash(python3 -)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "context7",
+    "cocoindex-code",
+    "fetch",
+    "exa",
+    "deepwiki"
+  ]
+}

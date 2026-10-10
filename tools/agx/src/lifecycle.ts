@@ -254,7 +254,7 @@ export function activityWriter(
 }
 
 export const INTERIM_RETURN_REQUEST =
-  "Soft first_return_s checkpoint: send an interim RETURN with current findings if you can, then continue the authorized work. Never stop running jobs or wrap up because of this request. timeout_s remains the hard bound.";
+  'Soft first_return_s checkpoint: send an interim RETURN with "interim": true and current findings if you can, then continue the authorized work. Never stop running jobs or wrap up because of this request. timeout_s remains the hard bound.';
 
 /** Queue guidance for the existing session only; never resume, interrupt or start a worker. */
 export async function requestInterimReturn(

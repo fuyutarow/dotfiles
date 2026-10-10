@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
 import {
   parseReport,
+  interimReturnWriter,
   parseReturn,
   renderReport,
   reportJsonSchema,
@@ -18,7 +22,81 @@ const GOOD: WorkerReport = {
   open: [],
 };
 
+const interimMessage = (text: string): string =>
+  `\`\`\`agx-return\n${JSON.stringify({ interim: true, findings: [{ text }], evidence: [], impact_on_brief: "none", proposed_next: "continue", artifacts: [] })}\n\`\`\``;
+
 describe("report", () => {
+  test("stream interim journal retains checkpoints once and parsing chooses the last RETURN", async () => {
+    const scratch = mkdtempSync(join(tmpdir(), "agx-interim-journal-"));
+    using _scratch = {
+      [Symbol.dispose]: () => {
+        rmSync(scratch, { recursive: true, force: true });
+      },
+    };
+    const path = join(scratch, "worker", "interim.jsonl");
+    const record = {
+      findings: [],
+      evidence: [],
+      impact_on_brief: "none",
+      proposed_next: "continue",
+      artifacts: [],
+    };
+    const first = `\`\`\`agx-return\n${JSON.stringify({ ...record, interim: true })}\n\`\`\``;
+    const final = `\`\`\`agx-return\n${JSON.stringify(record)}\n\`\`\``;
+    const recordInterim = interimReturnWriter(path);
+    await recordInterim(first);
+    await recordInterim(first);
+    await recordInterim(final);
+    expect(readFileSync(path, "utf8").trim().split("\n")).toHaveLength(1);
+    expect(parseReturn(`${first}\n${final}`)).toEqual({
+      kind: "valid",
+      record,
+    });
+    expect(parseReturn(`${final}\n${first}`)).toEqual({
+      kind: "valid",
+      record: { ...record, interim: true },
+    });
+  });
+  test("queued async checkpoints flush in order before worker exit", async () => {
+    const scratch = mkdtempSync(join(tmpdir(), "agx-interim-flush-"));
+    using _scratch = {
+      [Symbol.dispose]: () => {
+        rmSync(scratch, { recursive: true, force: true });
+      },
+    };
+    const path = join(scratch, "worker", "interim.jsonl");
+    const first = interimMessage("first");
+    const second = interimMessage("second");
+    const record = interimReturnWriter(path);
+    const writes = [record(first), record(first), record(second)];
+    await record.flush();
+    await Promise.all(writes);
+    expect(readFileSync(path, "utf8").trim().split("\n")).toEqual([
+      JSON.stringify({ last_message: first }),
+      JSON.stringify({ last_message: second }),
+    ]);
+  });
+  test("RETURN accepts an optional boolean interim marker and rejects other values", () => {
+    const record = {
+      findings: [],
+      evidence: [],
+      impact_on_brief: "none",
+      proposed_next: "continue",
+      artifacts: [],
+    };
+    const fenced = (interim: unknown): string =>
+      `\`\`\`agx-return\n${JSON.stringify({ ...record, interim })}\n\`\`\``;
+    expect(parseReturn(fenced(true))).toEqual({
+      kind: "valid",
+      record: { ...record, interim: true },
+    });
+    expect(parseReturn(fenced(false))).toEqual({
+      kind: "valid",
+      record: { ...record, interim: false },
+    });
+    expect(parseReturn(fenced("true")).kind).toBe("invalid");
+    expect(withReportInstruction("work")).toContain('set "interim": true');
+  });
   test("a JSON message, a fenced one and a structured value all validate", () => {
     const text = JSON.stringify(GOOD);
     expect(parseReport(undefined, text)).toEqual({ ok: true, report: GOOD });

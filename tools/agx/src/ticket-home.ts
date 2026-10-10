@@ -1,14 +1,19 @@
 // Repository-local ticket creation and inventory. No model or network calls.
 import {
   existsSync,
+  copyFileSync,
+  constants,
   mkdirSync,
   readdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, isAbsolute, join, resolve } from "node:path";
-import { parseTicket, resourceKind } from "./ticket.ts";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
+import { attempt } from "../../shared/src/attempt.ts";
+import { parseTicket, resourceKind, ticketFields } from "./ticket.ts";
+import { z } from "../../shared/src/zod.ts";
 
 export function ticketRoot(cwd: string): string | undefined {
   for (const cmd of [
@@ -53,18 +58,116 @@ export function ticketHome(
   root: string,
   cwd: string,
   explicit?: string,
-): string {
-  const configured = explicit ?? process.env.AGX_TICKET_HOME;
-  if (configured !== undefined && configured.trim() !== "")
-    return resolvedTicketHome(configured.trim());
+  project?: string,
+): string | Error {
+  const selected = selectTicketHome(root, cwd, explicit, project);
+  return selected instanceof Error ? selected : selected.path;
+}
+
+export function selectTicketHome(
+  root: string,
+  cwd: string,
+  explicit?: string,
+  project = basename(resolve(root)),
+): { path: string; rule: string } | Error {
+  if (
+    project.trim() === "" ||
+    /[/\\\0]/u.test(project) ||
+    project === "." ||
+    project === ".."
+  )
+    return new Error("invalid project: use one directory name");
+  const stateHome = join(dispatchStateDir(), "tickets", project);
+  if (explicit?.trim() === "state")
+    return { path: stateHome, rule: "--home state" };
+  for (const [value, rule] of [
+    [explicit, "--home"],
+    [process.env.AGX_TICKET_HOME, "AGX_TICKET_HOME"],
+  ])
+    if (value !== undefined && value.trim() !== "")
+      return { path: resolvedTicketHome(value.trim()), rule: rule ?? "--home" };
   let at = resolve(cwd);
-  while (at.startsWith(resolve(root))) {
+  const resolvedRoot = resolve(root);
+  while (at === resolvedRoot || at.startsWith(`${resolvedRoot}/`)) {
     const value = configTicketHome(join(at, ".agx.toml"));
-    if (value !== undefined) return resolvedTicketHome(value, at);
-    if (at === root) break;
+    if (value !== undefined)
+      return {
+        path: resolvedTicketHome(value, at),
+        rule: ".agx.toml ticket_home",
+      };
+    if (at === resolvedRoot) break;
     at = dirname(at);
   }
-  return join(root, ".agents", "tickets");
+  const local = join(resolvedRoot, ".agents", "tickets");
+  return existsSync(local)
+    ? { path: local, rule: "repo .agents/tickets" }
+    : { path: stateHome, rule: "state fallback" };
+}
+
+const ticketFileIdentity = (name: string): string =>
+  name.replace(/^\d{6}-/u, "");
+
+function ticketImportId(home: string, name: string): string {
+  const fields = z
+    .object({ name: z.string().optional(), id: z.string().optional() })
+    .safeParse(ticketFields(readFileSync(join(home, name), "utf8"))).data;
+  return fields?.name ?? fields?.id ?? ticketFileIdentity(name);
+}
+
+/** Copy bytes verbatim; exclusive copies refuse collisions, including a concurrent importer. */
+export async function importTickets(
+  source: string,
+  home: string,
+  date = Temporal.Now.plainDateISO().toString(),
+  onImported?: (source: string, destination: string) => void,
+): Promise<{ imported: number; skipped_collision: number } | Error> {
+  const result = await attempt(async () => {
+    const files = readdirSync(source, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+      .toSorted((a, b) => a.name.localeCompare(b.name));
+    mkdirSync(home, { recursive: true });
+    let imported = 0;
+    let skipped_collision = 0;
+    const names = new Set(
+      readdirSync(home)
+        .filter((name) => name.endsWith(".md"))
+        .map((name) => ticketFileIdentity(name)),
+    );
+    const ids = new Set(
+      readdirSync(home)
+        .filter((name) => name.endsWith(".md"))
+        .map((name) => ticketImportId(home, name)),
+    );
+    for (const entry of files) {
+      const stamp = date.replaceAll("-", "").slice(2);
+      const name = /^\d{6}-.+\.md$/u.test(entry.name)
+        ? entry.name
+        : `${stamp}-${entry.name}`;
+      const target = join(home, name);
+      const id = ticketImportId(source, entry.name);
+      if (names.has(ticketFileIdentity(name)) || ids.has(id)) {
+        skipped_collision++;
+        continue;
+      }
+      const copied = await attempt(() => {
+        copyFileSync(join(source, entry.name), target, constants.COPYFILE_EXCL);
+      });
+      if (copied.ok) {
+        imported++;
+        names.add(ticketFileIdentity(name));
+        ids.add(id);
+        onImported?.(resolve(source, entry.name), resolve(target));
+      } else if (existsSync(target)) skipped_collision++;
+      else
+        return new Error(
+          `cannot import ${entry.name}: ${String(copied.error)}`,
+        );
+    }
+    return { imported, skipped_collision };
+  });
+  return result.ok
+    ? result.value
+    : new Error(`cannot import tickets: ${String(result.error)}`);
 }
 
 export function ticketPath(home: string, name: string): string | Error {

@@ -1,11 +1,20 @@
-import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { expect, setDefaultTimeout, test } from "bun:test";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { decodedJson } from "../../shared/src/decode.ts";
 import { z } from "../../shared/src/zod.ts";
 
 const entry = resolve(import.meta.dir, "../src/index.ts");
+// Multiple bounded hook invocations must finish before the enclosing test deadline.
+// Per-child five-second bounds and explicit hook timing assertions remain unchanged.
+setDefaultTimeout(20_000);
 
 test.each([
   ['{ namespace: "qoed", slug: "review" }', "[qoed:review] notice"],
@@ -171,12 +180,27 @@ test("bad input, wrong event and callback errors fail open with one line", async
 });
 
 test("callback timeout terminates before late output", async () => {
-  const started = performance.now();
-  const result = await invoke('await Bun.sleep(10_000); return "late";');
+  const dir = mkdtempSync(join(tmpdir(), "agx-usehooks-callback-clock-"));
+  using _clock = {
+    [Symbol.dispose]: () => {
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+  const started = join(dir, "started.json");
+  const result = await invoke(
+    `await Bun.write(${JSON.stringify(started)}, String(Temporal.Now.instant().epochMilliseconds)); await Bun.sleep(10_000); return "late";`,
+  );
   expect(result.exit).toBe(0);
   expect(result.stdout).toBe("");
   expect(result.stderr).toContain("budget exceeded");
-  expect(performance.now() - started).toBeLessThan(4_000);
+  // Measure the callback's termination, independently of cold module/CLI startup.
+  const startedAt = decodedJson(
+    z.number().int().nonnegative(),
+    readFileSync(started, "utf8"),
+  );
+  expect(Temporal.Now.instant().epochMilliseconds - startedAt).toBeLessThan(
+    4_000,
+  );
 }, 5_000);
 
 test("stdin is included in the total timeout", async () => {

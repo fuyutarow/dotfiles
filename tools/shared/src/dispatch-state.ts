@@ -58,6 +58,7 @@ export const ActiveMarkerSchema = z.strictObject({
   worker_session: z.string().optional(),
   cost_usd: z.number().nonnegative().optional(),
   worker_usage: ActiveWorkerUsageSchema.optional(),
+  interim_reports: z.array(z.unknown()).optional(),
   ticket: z
     .looseObject({
       writes: z.array(z.string()),

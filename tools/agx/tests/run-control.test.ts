@@ -70,6 +70,39 @@ const PsRun = z.looseObject({
 });
 const PsResult = z.looseObject({ runs: z.array(PsRun) });
 
+test("show exposes interim progress for a live run and its statusline phase", () => {
+  const state = join(scratch, "live-interim-state");
+  const active = join(state, "active");
+  mkdirSync(active, { recursive: true });
+  const phase = "working after interim RETURN 1";
+  writeFileSync(
+    join(active, "live-interim.json"),
+    JSON.stringify({
+      ...marker(
+        "live-interim",
+        process.pid,
+        "session",
+        Temporal.Now.instant().toString(),
+      ),
+      phase,
+      interim_reports: [
+        { return: { interim: true, findings: [{ text: "CLI shapes ready" }] } },
+      ],
+    }),
+  );
+  const shown = cli(["show", "live-interim", "--json"], state);
+  expect(shown.code, shown.err).toBe(0);
+  const progress = decodedJson(
+    z.looseObject({ phase: z.string(), interim_reports: z.array(z.unknown()) }),
+    shown.out,
+  );
+  expect(progress.phase).toBe(phase);
+  expect(progress.interim_reports).toHaveLength(1);
+  expect(cli(["show", "live-interim"], state).out).toContain(
+    "CLI shapes ready",
+  );
+});
+
 test("ps filters to this Claude session and --all includes other sessions", () => {
   const state = join(scratch, "ps-state");
   const active = join(state, "active");

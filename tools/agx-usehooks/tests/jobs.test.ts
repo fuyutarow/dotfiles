@@ -1,15 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
 import {
-  chmodSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runningJobs, unattributedJobs } from "../src/index.ts";
+import { commandFixture } from "./command-fixture.ts";
 
 const originalPath = process.env.PATH;
 const dirs: string[] = [];
@@ -20,22 +20,32 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
 });
 
-function world(rows: object[]) {
+function systemctlFixture(path: string, rows: Record<string, unknown>[]): void {
+  const records = rows.map((row) => Object.entries(row));
+  const units = records
+    .map(
+      (row) =>
+        `${String(row.find(([key]) => key === "Id")?.[1])} loaded active running fixture`,
+    )
+    .join("\n");
+  const properties = records
+    .map((row) =>
+      row.map(([key, value]) => `${key}=${String(value)}`).join("\n"),
+    )
+    .join("\n\n");
+  commandFixture(path, {
+    stdout: properties,
+    match: { arg: "list-units", stdout: units },
+  });
+}
+
+function world(rows: Record<string, unknown>[]) {
   const root = mkdtempSync(join(tmpdir(), "agx-usehooks-jobs-"));
   dirs.push(root);
   const bin = join(root, "bin");
   mkdirSync(bin);
   const systemctl = join(bin, "systemctl");
-  writeFileSync(
-    systemctl,
-    `#!${process.execPath}\nconst rows = ${JSON.stringify(rows)};
-if (process.argv.includes("list-units")) {
-  process.stdout.write(rows.map(row => row.Id + " loaded active running fixture").join("\\n"));
-} else {
-  process.stdout.write(rows.map(row => Object.entries(row).map(([key,value]) => key + "=" + value).join("\\n")).join("\\n\\n"));
-}\n`,
-  );
-  chmodSync(systemctl, 0o755);
+  systemctlFixture(systemctl, rows);
   process.env.PATH = bin;
   return {
     root,
@@ -83,11 +93,7 @@ test("jobs prefer unit session, then project cwd, and keep foreign jobs separate
       row,
     ),
   );
-  writeFileSync(
-    join(root, "bin", "systemctl"),
-    `#!${process.execPath}\nconst rows = ${JSON.stringify(rows)};
-process.stdout.write(process.argv.includes("list-units") ? rows.map(row => row.Id + " loaded active running fixture").join("\\n") : rows.map(row => Object.entries(row).map(([key,value]) => key + "=" + value).join("\\n")).join("\\n\\n"));\n`,
-  );
+  systemctlFixture(join(root, "bin", "systemctl"), rows);
   const jobs = await runningJobs(ctx);
   expect(jobs.map((job) => [job.id, job.attribution])).toEqual([
     ["own.service", "session"],
@@ -137,31 +143,38 @@ test("missing, failed, malformed and slow systemctl fail open within the budget"
   process.env.PATH = root;
   expect(await runningJobs(ctx)).toEqual([]);
   process.env.PATH = join(root, "bin");
-  writeFileSync(systemctl, `#!${process.execPath}\nprocess.exit(1);\n`);
+  commandFixture(systemctl, { exit: 1 });
   expect(await runningJobs(ctx)).toEqual([]);
-  writeFileSync(
-    systemctl,
-    `#!${process.execPath}\nprocess.stdout.write("garbage");\n`,
-  );
+  commandFixture(systemctl, { stdout: "garbage" });
   expect(await runningJobs(ctx)).toEqual([]);
-  writeFileSync(systemctl, `#!${process.execPath}\nawait Bun.sleep(10_000);\n`);
+  commandFixture(systemctl, { sleepMs: 10_000 });
   const started = performance.now();
   expect(await runningJobs(ctx)).toEqual([]);
   expect(performance.now() - started).toBeLessThan(1_500);
 });
 
 test("list and show share one deadline, including failure of the property read", async () => {
-  const { systemctl, ctx } = world([]);
-  writeFileSync(
-    systemctl,
-    `#!${process.execPath}\nif (process.argv.includes("list-units")) process.stdout.write("fixture.service loaded active running fixture\\n"); else process.exit(1);\n`,
-  );
+  const { root, systemctl, ctx } = world([]);
+  commandFixture(systemctl, {
+    exit: 1,
+    match: {
+      arg: "list-units",
+      stdout: "fixture.service loaded active running fixture\n",
+    },
+  });
   expect(await runningJobs(ctx)).toEqual([]);
-  writeFileSync(
-    systemctl,
-    `#!${process.execPath}\nawait Bun.sleep(650);\nprocess.stdout.write(process.argv.includes("list-units") ? "fixture.service loaded active running fixture\\n" : "Id=fixture.service\\nActiveState=active\\nSubState=running\\n");\n`,
-  );
+  const calls = join(root, "deadline-calls");
+  commandFixture(systemctl, {
+    appendPath: calls,
+    sleepMs: 650,
+    stdout: "Id=fixture.service\nActiveState=active\nSubState=running\n",
+    match: {
+      arg: "list-units",
+      stdout: "fixture.service loaded active running fixture\n",
+    },
+  });
   const started = performance.now();
   expect(await runningJobs(ctx)).toEqual([]);
   expect(performance.now() - started).toBeLessThan(1_500);
+  expect(readFileSync(calls, "utf8")).toBe("xx");
 });

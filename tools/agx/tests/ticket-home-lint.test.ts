@@ -11,10 +11,12 @@ import { join, resolve } from "node:path";
 import { lintTicket } from "../src/ticket-lint.ts";
 import {
   amendTicket,
+  importTickets,
   listTickets,
   newTicket,
   newTicketAtHome,
   ticketHome,
+  selectTicketHome,
   ticketRoot,
 } from "../src/ticket-home.ts";
 import { parseTicket, promiseBlock, resourceKind } from "../src/ticket.ts";
@@ -124,6 +126,92 @@ describe("local lint", () => {
 });
 
 describe("repository ticket home", () => {
+  test("state fallback, explicit state, project isolation and existing local homes", () => {
+    const previous = {
+      state: process.env.AGX_STATE_DIR,
+      home: process.env.AGX_TICKET_HOME,
+    };
+    using _environment = {
+      [Symbol.dispose]: () => {
+        if (previous.state === undefined) delete process.env.AGX_STATE_DIR;
+        else process.env.AGX_STATE_DIR = previous.state;
+        if (previous.home === undefined) delete process.env.AGX_TICKET_HOME;
+        else process.env.AGX_TICKET_HOME = previous.home;
+      },
+    };
+    const root = join(scratch, "state-project");
+    const nested = join(root, "nested");
+    const state = join(scratch, "state-storage");
+    mkdirSync(nested, { recursive: true });
+    process.env.AGX_STATE_DIR = state;
+    delete process.env.AGX_TICKET_HOME;
+    expect(selectTicketHome(root, nested)).toEqual({
+      path: join(state, "tickets/state-project"),
+      rule: "state fallback",
+    });
+    mkdirSync(join(root, ".agents/tickets"), { recursive: true });
+    expect(selectTicketHome(root, nested)).toEqual({
+      path: join(root, ".agents/tickets"),
+      rule: "repo .agents/tickets",
+    });
+    writeFileSync(join(root, ".agx.toml"), 'ticket_home = "configured"');
+    expect(selectTicketHome(root, nested)).toEqual({
+      path: join(root, "configured"),
+      rule: ".agx.toml ticket_home",
+    });
+    process.env.AGX_TICKET_HOME = join(scratch, "environment-home");
+    expect(selectTicketHome(root, nested)).toEqual({
+      path: process.env.AGX_TICKET_HOME,
+      rule: "AGX_TICKET_HOME",
+    });
+    expect(selectTicketHome(root, nested, "state", "other-project")).toEqual({
+      path: join(state, "tickets/other-project"),
+      rule: "--home state",
+    });
+    expect(selectTicketHome(root, nested, "state", "../escape")).toBeInstanceOf(
+      Error,
+    );
+    expect(selectTicketHome(root, nested, "state", ".")).toBeInstanceOf(Error);
+  });
+
+  test("import copies bytes, retains ids/history, skips name collisions and stays idempotent across days", async () => {
+    const source = join(scratch, "import-source");
+    const home = join(scratch, "import-home");
+    mkdirSync(source);
+    mkdirSync(home);
+    const history =
+      '+++\nschema = 1\nname = "identity"\n+++\r\nOriginal\r\n\r\n## NEXT\r\nnext\r\n## DECISION\r\ndecided\r\n## CLARIFICATION\r\nanswer\r\n';
+    writeFileSync(join(source, "identity.md"), history);
+    writeFileSync(join(source, "250101-existing.md"), "collision source");
+    writeFileSync(join(home, "261009-existing.md"), "keep existing");
+    writeFileSync(join(source, "250101-dated.md"), "dated contents");
+    writeFileSync(join(source, "ignore.txt"), "not a ticket");
+    expect(await importTickets(source, home, "2026-10-10")).toEqual({
+      imported: 2,
+      skipped_collision: 1,
+    });
+    expect(readFileSync(join(home, "261010-identity.md"))).toEqual(
+      readFileSync(join(source, "identity.md")),
+    );
+    expect(readFileSync(join(home, "250101-dated.md"), "utf8")).toBe(
+      "dated contents",
+    );
+    expect(readFileSync(join(home, "261009-existing.md"), "utf8")).toBe(
+      "keep existing",
+    );
+    expect(await importTickets(source, home, "2026-10-11")).toEqual({
+      imported: 0,
+      skipped_collision: 3,
+    });
+    writeFileSync(join(source, "different-filename.md"), history);
+    expect(await importTickets(source, home, "2026-10-12")).toEqual({
+      imported: 0,
+      skipped_collision: 4,
+    });
+    expect(await importTickets(join(source, "absent"), home)).toBeInstanceOf(
+      Error,
+    );
+  });
   test("home precedence and two amendments preserve one file and ticket id", () => {
     const root = join(scratch, "override-repo");
     const nested = join(root, "nested", "deeper");

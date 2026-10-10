@@ -1,6 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
 import {
-  chmodSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -10,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { commandFixture } from "./command-fixture.ts";
 import {
   GpuOutputSchema,
   gpuEstimate,
@@ -29,15 +29,20 @@ function fixture() {
   dirs.push(dir);
   const executable = join(dir, "nvidia-smi");
   const calls = join(dir, "calls");
-  writeFileSync(
-    executable,
-    `#!${process.execPath}\nimport { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(calls)}, "x");\nif (process.argv[2] !== "--query-gpu=utilization.gpu,utilization.memory,memory.used,memory.total" || process.argv[3] !== "--format=csv,noheader,nounits") process.exit(1);\nprocess.stdout.write("0, 19, 255, 12288\\n");\n`,
-  );
-  chmodSync(executable, 0o755);
+  commandFixture(executable, {
+    appendPath: calls,
+    argv: [
+      "--query-gpu=utilization.gpu,utilization.memory,memory.used,memory.total",
+      "--format=csv,noheader,nounits",
+    ],
+    stdout: "0, 19, 255, 12288\n",
+  });
   return {
     dir,
     calls,
     options: {
+      // These cases test history/locking; the hook timeout is tested in conditions.test.ts.
+      timeoutMs: 5_000,
       path: dir,
       fallbacks: [],
       statePath: join(dir, "samples.jsonl"),
@@ -166,7 +171,7 @@ test("concurrent processes share one sample without torn writes or leftover lock
       const child = Bun.spawn([process.execPath, "-e", script], {
         stdout: "pipe",
         stderr: "pipe",
-        timeout: 5_000,
+        timeout: 10_000,
       });
       const [out, stderr, exit] = await Promise.all([
         new Response(child.stdout).text(),
@@ -185,7 +190,7 @@ test("concurrent processes share one sample without torn writes or leftover lock
   ).toHaveLength(1);
   expect(existsSync(`${options.statePath}.lock`)).toBe(false);
   expect(readdirSync(dir).some((s) => s.endsWith(".tmp"))).toBe(false);
-});
+}, 15_000);
 
 test("writing prunes the two-hour history and never exceeds 721 samples", () => {
   const { options } = fixture();

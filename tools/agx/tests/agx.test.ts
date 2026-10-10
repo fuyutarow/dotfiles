@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import {
   appendFileSync,
   chmodSync,
@@ -24,6 +24,9 @@ import { planWorkspace } from "../src/workspaces.ts";
 // prints a receipt), a local server stands in for Jev, and every state file goes to a scratch dir.
 
 const CLI = join(import.meta.dir, "..", "src", "agx.ts");
+// Multi-dispatch cases include several separately bounded subprocesses and their cleanup.
+// Keep the suite deadline above those bounds; explicit worker/timeout tests retain their limits.
+setDefaultTimeout(20_000);
 const scratch = mkdtempSync(join(tmpdir(), "agx-test-"));
 const processTreeAvailable = (await processTreeCpu(process.pid)) !== undefined;
 // Every request body the fake Jev received, in order (what left the machine).
@@ -127,7 +130,7 @@ chmodSync(QUEUE, 0o755);
 const FAKE = join(scratch, "fake-agx.ts");
 writeFileSync(
   FAKE,
-  `import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+  `import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 appendFileSync(${JSON.stringify(join(scratch, "argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 const args = Bun.argv.slice(2);
@@ -135,6 +138,13 @@ const promptAt = args.indexOf("--prompt-file");
 const promptText = promptAt === -1 ? "" : await Bun.file(args[promptAt + 1] ?? "").text();
 const isGrader = promptText.includes("Grade this brief as a meaningful remand judgment");
 const resuming = args.includes("--resume");
+if (resuming && process.env.FAKE_RESUME_LAST !== undefined) process.env.FAKE_LAST = process.env.FAKE_RESUME_LAST;
+const continuationLog = process.env.FAKE_CONTINUATION_LOG;
+if (!isGrader && continuationLog !== undefined) {
+  const count = existsSync(continuationLog) ? readFileSync(continuationLog, "utf8").trim().split("\\n").length : 0;
+  appendFileSync(continuationLog, JSON.stringify(args) + "\\n");
+  process.env.FAKE_LAST = count < Number(process.env.FAKE_INTERIM_COUNT ?? "1") ? process.env.FAKE_INTERIM_LAST : process.env.FAKE_RESUME_LAST;
+}
 if (process.env.FAKE_CHECKPOINT === "1" && process.env.AGX_CODEX_PROGRESS_FILE !== undefined)
   appendFileSync(process.env.AGX_CODEX_PROGRESS_FILE, JSON.stringify({ schema: 1, at: "2026-10-08T00:00:00Z", last: "working", commands: 1, files: Number(process.env.FAKE_CHECKPOINT_FILES ?? "0"), session: "thread-fake-checkpoint" }));
 if (process.env.FAKE_LIFECYCLE !== undefined && !isGrader) {
@@ -236,6 +246,7 @@ writeFileSync(
 import { writeFileSync } from "node:fs";
 appendFileSync(${JSON.stringify(join(scratch, "claude-argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
 const mode = process.env.FAKE_CLAUDE_MODE ?? "ok";
+if (Bun.argv.includes("--resume") && process.env.FAKE_RESUME_LAST !== undefined) process.env.FAKE_LAST = process.env.FAKE_RESUME_LAST;
 if (mode === "fail") {
   console.log(JSON.stringify({ exit_code: 1, timed_out: false, error: "model rejected: sonnet", stderr: "boom" }));
   process.exit(1);
@@ -268,7 +279,7 @@ if (mode === "structured") {
   console.log(JSON.stringify({ exit_code: 0, timed_out: false, subtype: "success", is_error: false, num_turns: 4, result: "", structured_output: typed, session_id: "sess-claude-0001", total_cost_usd: 0.01 }));
   process.exit(0);
 }
-console.log(JSON.stringify({ exit_code: 0, timed_out: false, result: process.env.FAKE_LAST ?? "done", session_id: "sess-claude-0001", total_cost_usd: 0.01, usage: { input_tokens: 80, cache_read_input_tokens: 10, cache_creation_input_tokens: 5, output_tokens: 7 } }));
+console.log(JSON.stringify({ exit_code: 0, timed_out: false, num_turns: 1, result: process.env.FAKE_LAST ?? "done", session_id: "sess-claude-0001", total_cost_usd: 0.01, usage: { input_tokens: 80, cache_read_input_tokens: 10, cache_creation_input_tokens: 5, output_tokens: 7 } }));
 `,
 );
 const NO_EGRESS = roster("no-egress", (t) =>
@@ -430,6 +441,203 @@ const ExportRecord = z.looseObject({
 const RunIdSchema = z.looseObject({ run_id: z.string() });
 
 describe("agx dispatch", () => {
+  test("several interim RETURNs stay in one run and keep the same vendor session", async () => {
+    const cwd = freshCwd();
+    const calls = join(cwd, "continuation-calls.jsonl");
+    const interim =
+      "```agx-return\n" +
+      JSON.stringify({
+        interim: true,
+        findings: [{ text: "progress" }],
+        evidence: [],
+        impact_on_brief: "none",
+        proposed_next: "continue",
+        artifacts: [],
+      }) +
+      "\n```";
+    const result = await router(
+      runArgs(
+        brief("several-interims", "RESOURCE-CLASS(NONCOMPUTE): fixture\nWork."),
+        cwd,
+      ),
+      {
+        FAKE_CONTINUATION_LOG: calls,
+        FAKE_INTERIM_COUNT: "2",
+        FAKE_INTERIM_LAST: interim,
+        FAKE_RESUME_LAST:
+          "```agx-return\n" +
+          JSON.stringify({
+            findings: [{ text: "finished" }],
+            evidence: [],
+            impact_on_brief: "none",
+            proposed_next: "done",
+            artifacts: [],
+          }) +
+          "\n```",
+      },
+    );
+    expect(result.code, result.err).toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        run_id: z.string(),
+        interim_reports: z.array(z.unknown()),
+        facts: z.looseObject({ turns: z.number() }),
+      }),
+      result.out.trim(),
+    );
+    expect(receipt.interim_reports).toHaveLength(2);
+    expect(receipt.facts.turns).toBe(3);
+    const argv = readFileSync(calls, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => decodedJson(z.array(z.string()), line));
+    expect(argv).toHaveLength(3);
+    expect(argv[0]).not.toContain("--resume");
+    expect(argv[1]).toContain("thread-fake-0001");
+    expect(argv[2]).toContain("thread-fake-0001");
+    for (const args of argv)
+      expect(args[args.indexOf("--run-id") + 1]).toBe(receipt.run_id);
+  });
+
+  test.each(["codex", "claude"])(
+    "explicit interim RETURN continues the same %s session and final RETURN ends it",
+    async (route) => {
+      const cwd = freshCwd();
+      const state = join(cwd, "interim-state");
+      const record = {
+        findings: [{ text: "CLI ready" }],
+        evidence: ["fixture"],
+        impact_on_brief: "none",
+        proposed_next: "continue",
+        artifacts: [],
+      };
+      const report = {
+        summary: "interim progress",
+        changes: [],
+        checks: [],
+        for_coordinator: [],
+        open: [],
+      };
+      const returned = (interim: boolean): string =>
+        `${JSON.stringify(report)}\n\`\`\`agx-return\n${JSON.stringify({ ...record, interim })}\n\`\`\``;
+      const target = brief(
+        `interim-${route}`,
+        ticketText(
+          'writes = []\nverify = ["true"]\ntimeout_s = 60',
+          "RESOURCE-CLASS(NONCOMPUTE): CLI fixture\nContinue work.",
+        ),
+      );
+      const result = await router(
+        [
+          ...runArgs(target, cwd),
+          "--row",
+          route === "codex" ? "luna-low" : "sonnet-low",
+          "--approval",
+          "owner approved fixture row",
+        ],
+        {
+          AGX_STATE_DIR: state,
+          AGX_RUN_CLAUDE: FAKE_CLAUDE,
+          FAKE_LAST: returned(true),
+          FAKE_RESUME_LAST: returned(false),
+          FAKE_SLEEP_MS: "1100",
+        },
+      );
+      expect(result.code, result.err).toBe(0);
+      expect(result.err).toContain("interim RETURN 1 recorded");
+      const receipt = decodedJson(
+        z.looseObject({
+          run_id: z.string(),
+          result: z.string(),
+          interim_reports: z.array(
+            z.looseObject({
+              session: z.string(),
+              return: z.looseObject({ interim: z.boolean() }),
+            }),
+          ),
+          return: z.looseObject({ interim: z.boolean() }),
+          facts: z.looseObject({
+            turns: z.number(),
+            tokens: z.looseObject({ input_tokens: z.number() }),
+          }),
+        }),
+        result.out.trim(),
+      );
+      expect(receipt.interim_reports).toHaveLength(1);
+      expect(receipt.return.interim).toBe(false);
+      expect(receipt.result).toBe("delivered");
+      expect(receipt.facts.tokens.input_tokens).toBe(
+        route === "codex" ? 200 : 160,
+      );
+      if (route === "codex") expect(receipt.facts.turns).toBe(2);
+      const calls = readFileSync(
+        join(scratch, route === "codex" ? "argv.log" : "claude-argv.log"),
+        "utf8",
+      )
+        .trim()
+        .split("\n")
+        .map((line) => decodedJson(z.array(z.string()), line));
+      const last = calls.at(-1) ?? [];
+      expect(last).toContain("--resume");
+      expect(last).toContain(
+        receipt.interim_reports[0]?.session ?? "missing session",
+      );
+      if (route === "codex")
+        expect(Number(last[last.indexOf("--timeout-s") + 1])).toBeLessThan(60);
+      const shown = await router(["show", receipt.run_id], {
+        AGX_STATE_DIR: state,
+      });
+      expect(shown.code, shown.err).toBe(0);
+      expect(shown.out).toContain("INTERIM RETURN:");
+      expect(shown.out).toContain('"interim":true');
+      const log = readFileSync(join(state, "runs.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => decodedJson(z.looseObject({ kind: z.string() }), line));
+      expect(log.filter((line) => line.kind === "run")).toHaveLength(1);
+      expect(log.filter((line) => line.kind === "interim")).toHaveLength(1);
+    },
+    20_000,
+  );
+
+  test("interim RETURN without a vendor session is retained and fails without becoming a final RETURN", async () => {
+    const message =
+      "```agx-return\n" +
+      JSON.stringify({
+        interim: true,
+        findings: [{ text: "progress" }],
+        evidence: [],
+        impact_on_brief: "none",
+        proposed_next: "continue",
+        artifacts: [],
+      }) +
+      "\n```";
+    const result = await router(
+      runArgs(
+        brief(
+          "interim-no-session",
+          "RESOURCE-CLASS(NONCOMPUTE): fixture\nWork.",
+        ),
+        freshCwd(),
+      ),
+      { FAKE_LAST: message, FAKE_NO_SESSION: "1" },
+    );
+    expect(result.code).not.toBe(0);
+    const receipt = decodedJson(
+      z.looseObject({
+        result: z.string(),
+        interim_reports: z.array(z.unknown()),
+        facts: z.looseObject({ valid_return: z.boolean() }),
+        worker: z.looseObject({ cause: z.string() }),
+      }),
+      result.out.trim(),
+    );
+    expect(receipt.interim_reports).toHaveLength(1);
+    expect(receipt.facts.valid_return).toBe(false);
+    expect(receipt.result).toBe("failed");
+    expect(receipt.worker.cause).toContain("no resumable vendor session");
+  });
+
   test("workspace names are unique and cannot reuse an existing path", async () => {
     const root = join(scratch, "workspace-uniqueness", "repo");
     mkdirSync(root, { recursive: true });
@@ -3497,7 +3705,15 @@ describe("agx dispatch: a brief with a ticket", () => {
     );
     expect(made.code).toBe(0);
     const path = made.out.trim();
-    expect(path).toMatch(/\/\.agents\/tickets\/\d{6}-retry\.md$/u);
+    expect(path).toBe(
+      join(
+        env.AGX_STATE_DIR,
+        "tickets",
+        basename(root),
+        `${Temporal.Now.plainDateISO().toString().replaceAll("-", "").slice(2)}-retry.md`,
+      ),
+    );
+    expect(existsSync(join(root, ".agents"))).toBe(false);
     mkdirSync(env.AGX_STATE_DIR, { recursive: true });
     writeFileSync(
       join(env.AGX_STATE_DIR, "runs.jsonl"),
@@ -3505,6 +3721,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     );
     const listed = await router(["ticket", "ls", "--cd", nested], env);
     expect(listed.code).toBe(0);
+    expect(listed.err).toContain("state fallback");
     expect(
       decodedJson(
         z.array(
@@ -3527,6 +3744,50 @@ describe("agx dispatch: a brief with a ticket", () => {
       (await router(["ticket", "new", "retry", "--cd", nested], env)).code,
     ).toBe(2);
     expect(bodies.length).toBe(before);
+    const source = join(root, "migration-source");
+    mkdirSync(source);
+    const original =
+      readFileSync(path, "utf8") +
+      "\n## NEXT\nDo this next.\n## DECISION\nKeep the id.\n## CLARIFICATION\nAnswered.\n";
+    writeFileSync(join(source, "retry.md"), original);
+    const args = [
+      "ticket",
+      "import",
+      source,
+      "--cd",
+      nested,
+      "--home",
+      "state",
+      "--project",
+      "migrated",
+    ];
+    const imported = await router(args, env);
+    expect(imported.code, imported.err).toBe(0);
+    expect(imported.out).toContain("imported: 1; skipped-collision: 0");
+    const destination = join(
+      env.AGX_STATE_DIR,
+      "tickets/migrated",
+      basename(path),
+    );
+    expect(readFileSync(destination, "utf8")).toBe(original);
+    expect(readFileSync(join(source, "retry.md"), "utf8")).toBe(original);
+    expect((await router(args, env)).out).toContain(
+      "imported: 0; skipped-collision: 1",
+    );
+    const projected = await router(
+      [
+        "ticket",
+        "ls",
+        "--cd",
+        nested,
+        "--home",
+        "state",
+        "--project",
+        "migrated",
+      ],
+      env,
+    );
+    expect(projected.err).toContain("--home state");
   });
 
   test("ticket amend keeps one file and dispatch --ticket resumes its session with the amendment", async () => {
@@ -3612,6 +3873,108 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(prompts.slice(prompts.lastIndexOf("<<<"))).toContain(
       "Continue with the amended acceptance check.",
     );
+    const redispatched = await router(
+      [
+        "dispatch",
+        "--amend",
+        "session",
+        "--home",
+        home,
+        "--cd",
+        nested,
+        "--file",
+        amendment,
+      ],
+      env,
+    );
+    expect(redispatched.code, redispatched.err).toBe(0);
+    expect(redispatched.err).toContain(
+      "amend: worker not running — amended ticket and redispatched",
+    );
+    expect(readFileSync(ticket, "utf8").match(/^## AMEND /gmu)).toHaveLength(2);
+    const calls = readFileSync(join(scratch, "argv.log"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => decodedJson(z.array(z.string()), line));
+    expect(calls.at(-1)).toContain("thread-fake-0001");
+    writeFileSync(
+      join(home, "261010-fresh.md"),
+      readFileSync(ticket, "utf8").replace(
+        'name = "session"',
+        'name = "fresh"',
+      ),
+    );
+    const fresh = await router(
+      [
+        "dispatch",
+        "--amend",
+        "fresh",
+        "--home",
+        home,
+        "--cd",
+        nested,
+        "--file",
+        amendment,
+        "--sandbox",
+        "read-only",
+      ],
+      env,
+    );
+    expect(fresh.code, fresh.err).toBe(0);
+    expect(fresh.err).toContain("amended ticket and redispatched");
+    const freshCall = readFileSync(join(scratch, "argv.log"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => decodedJson(z.array(z.string()), line))
+      .at(-1);
+    expect(freshCall).not.toContain("--resume");
+    const migration = await router(
+      [
+        "ticket",
+        "import",
+        home,
+        "--cd",
+        nested,
+        "--home",
+        "state",
+        "--project",
+        "migrated",
+      ],
+      env,
+    );
+    expect(migration.code, migration.err).toBe(0);
+    rmSync(home, { recursive: true });
+    for (let index = 0; index < 2; index++) {
+      const continued = await router(
+        [
+          "dispatch",
+          "--amend",
+          "session",
+          "--home",
+          "state",
+          "--project",
+          "migrated",
+          "--cd",
+          nested,
+          "--file",
+          amendment,
+        ],
+        env,
+      );
+      expect(continued.code, continued.err).toBe(0);
+      const record = decodedJson(
+        z.looseObject({
+          brief: z.looseObject({ path: z.string() }),
+          worker: z.looseObject({ session: z.string() }),
+          resumed_from: z.string(),
+        }),
+        continued.out.trim(),
+      );
+      expect(record.worker.session).toBe("thread-fake-0001");
+      expect(record.brief.path).toBe(
+        join(env.AGX_STATE_DIR, "tickets/migrated", "261010-session.md"),
+      );
+    }
   }, 20_000);
 
   test("the worker gets the prose without the front matter, plus the verify line", async () => {
@@ -4429,7 +4792,9 @@ describe("agx dispatch: a brief with a ticket", () => {
       const start = performance.now();
       const r = await router(runArgs(b, cwd), {
         FAKE_LIFECYCLE: mode,
-        AGX_CHECKPOINT_MS: "200",
+        // Allow the fixture's vendor session to initialize before the soft checkpoint.
+        // Activity lasts 2.5s, so the checkpoint still occurs while work is running.
+        AGX_CHECKPOINT_MS: "2000",
       });
       expect(r.code).toBe(0);
       expect(performance.now() - start).toBeGreaterThan(2500);

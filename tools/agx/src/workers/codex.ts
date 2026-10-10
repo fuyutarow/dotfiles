@@ -66,7 +66,7 @@ import {
 import { resourceBriefFallback } from "./codex-resource-probe.ts";
 import { costUsd } from "../dispatch-cost.ts";
 import { activityWriter } from "../lifecycle.ts";
-import { parseReturn } from "../report.ts";
+import { interimReturnWriter, parseReturn } from "../report.ts";
 import { progressIntervalMs, progressThrottle } from "../progress.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
@@ -524,11 +524,13 @@ const recordActivity = activityWriter();
 const AgentMessage = z.looseObject({
   item: z.looseObject({ type: z.literal("agent_message"), text: z.string() }),
 });
-const observeReturn = (line: string): void => {
+const recordInterim = interimReturnWriter(process.env.AGX_INTERIM_REPORTS_FILE);
+const observeReturn = async (line: string): Promise<void> => {
   const message = jsonOf(AgentMessage).safeParse(line);
   if (!message.success || parseReturn(message.data.item.text).kind !== "valid")
     return;
   writeFileSync(lastFile, message.data.item.text);
+  await recordInterim(message.data.item.text);
 };
 let spinCause: string | undefined;
 const detectToolSpin = toolErrorStreak(IDENTICAL_TOOL_ERROR_LIMIT);
@@ -536,7 +538,7 @@ function readEvents(): Promise<string> {
   const decoder = new TextDecoder();
   let pending = "";
   const sink = new WritableStream<Uint8Array>({
-    write(chunk) {
+    async write(chunk) {
       recordActivity(chunk.byteLength);
       const text = decoder.decode(chunk, { stream: true });
       streamed += text;
@@ -544,7 +546,7 @@ function readEvents(): Promise<string> {
       pending = lines.pop() ?? "";
       for (const line of lines) {
         progress?.feed(line);
-        observeReturn(line);
+        await observeReturn(line);
         const detectedCause = detectToolSpin(line);
         if (spinCause === undefined && detectedCause !== null) {
           spinCause = detectedCause;
@@ -576,6 +578,8 @@ if (!completed.ok) {
   refuse(`cannot read ${CODEX_BIN}: ${errorMessage(completed.error)}`);
 }
 const [code, eventsRead, errText] = completed.value;
+// The pipe grace may finish before an already-observed checkpoint's append does.
+await recordInterim.flush();
 const events = eventsRead === "" ? streamed : eventsRead;
 progress?.flush();
 if (progress !== undefined && progress.failedWrites() > 0)

@@ -139,4 +139,4 @@ test("ps and stale-marker gc stay bounded on a 74 MiB ledger", () => {
   expect(gc.code).toBe(0);
   expect(gcElapsed).toBeLessThan(15_000);
   expect(ledgerFiles(state)).toHaveLength(2);
-});
+}, 35_000); // Two 15s command bounds plus fixture setup; retain each command's latency assertion.

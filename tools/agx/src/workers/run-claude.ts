@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { cli } from "cleye";
 import { err, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../../../shared/src/zod.ts";
-import { parseReturn } from "../report.ts";
+import { interimReturnWriter, parseReturn } from "../report.ts";
 import { activityWriter } from "../lifecycle.ts";
 import {
   AGX_WORKER_ENV,
@@ -189,7 +189,10 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     }),
   });
   let returnedText = "";
-  const feed = (line: string): void => {
+  const recordInterim = interimReturnWriter(
+    process.env.AGX_INTERIM_REPORTS_FILE,
+  );
+  const feed = async (line: string): Promise<void> => {
     progress?.feed(line);
     const messageFile = process.env.AGX_LAST_MESSAGE_FILE;
     if (messageFile === undefined) return;
@@ -202,6 +205,7 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     if (parseReturn(returnedText).kind !== "valid") return;
     mkdirSync(dirname(messageFile), { recursive: true });
     writeFileSync(messageFile, returnedText);
+    await recordInterim(returnedText);
   };
   const recordActivity = activityWriter();
   const [stdout, stderr, exitCode] = await Promise.all([
@@ -211,6 +215,7 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     readLines(child.stderr, () => {}, recordActivity),
     child.exited,
   ]);
+  await recordInterim.flush();
   cleanup();
   const timedOut = signal.aborted;
   progress?.flush();
@@ -256,7 +261,7 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
 /** The whole stream as text, handing each complete line to `onLine` as it arrives. */
 async function readLines(
   stream: ReadableStream<Uint8Array> | null,
-  onLine: (line: string) => void,
+  onLine: (line: string) => void | Promise<void>,
   recordActivity: (bytes: number) => void,
 ): Promise<string> {
   if (stream === null) return "";
@@ -269,11 +274,9 @@ async function readLines(
     text += piece;
     const lines = (pending + piece).split("\n");
     pending = lines.pop() ?? "";
-    lines.forEach((l) => {
-      onLine(l);
-    });
+    for (const line of lines) await onLine(line);
   }
-  if (pending !== "") onLine(pending);
+  if (pending !== "") await onLine(pending);
   return text;
 }
 

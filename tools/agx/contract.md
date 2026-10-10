@@ -57,6 +57,20 @@ the old source. No migration runs against the real HOME are needed for verificat
 
 Jev returns a choice and per-row probabilities. The router first masks rows whose routes are unavailable, whose expected cost exceeds ticket `budget_usd`, or whose xhigh/max effort lacks a justifying ticket capability. For the remaining n eligible rows, it smooths each probability as `(1 - epsilon) * p_jev + epsilon / n` (epsilon defaults to 0.1; zero disables smoothing), then samples proportionally to `p'^(1/T)`. Temperature defaults to roster `auto.pick_temperature` (currently 1.0), may be set by ticket `pick_temperature` or CLI `--pick-temperature` (0 ≤ T ≤ 5), and zero gives argmax of Jev's original probabilities. The seed defaults to a value derived from `run_id`; CLI `--pick-seed` overrides it. The run record and receipt keep `pick.choice` and add `mode`, `argmax_row`, `sampled_row`, `temperature`, `epsilon`, `seed`, `masked_rows`, `sampled_probability` (after smoothing and temperature), and a fallback reason where applicable. Missing probabilities fall back to Jev's choice, or the roster default when Jev's choice is invalid. Resume preserves the original pick without resampling. `--choice` remains refused.
 
+## Ticket coordination
+
+Ticket home precedence is `--home <path|state>` → `AGX_TICKET_HOME` → nearest
+upward `.agx.toml ticket_home` → repo `.agents/tickets` if it exists →
+`$AGX_STATE_DIR/tickets/<project>`. State uses the repo root basename of `--cd`,
+or explicit `--project`; `ticket ls` prints the rule that selected its home.
+`ticket import <dir> [--project P]` copies Markdown files byte for byte, retaining
+ids and appended history. Undated names acquire the import day's YYMMDD prefix;
+collisions on ticket filenames (ignoring date prefixes) are skipped without overwriting.
+Counts are files imported and files skipped for name collisions. Reruns are idempotent.
+`dispatch --amend <name> --file F` without a live worker appends the amendment and
+dispatches that ticket, resuming its last vendor session when resumable. It prints
+`amend: worker not running — amended ticket and redispatched`.
+
 ## RETURN outcomes and escalation
 
 A final message containing a valid `agx-return` block has worker outcome `returned`
@@ -65,7 +79,13 @@ still runs and its results and summary are recorded beside the outcome; a failed
 turn a RETURN into non-delivery. Receipts (`outcome_summary`) and stderr say
 `returned — needs the coordinator: <first question>`, using the first report `for_coordinator`
 entry or the RETURN's `proposed_next` when no question is supplied. RETURNs never auto-escalate.
-The strict RETURN schema remains unchanged; both incident messages from 2026-10-09 fit it.
+The strict RETURN schema also accepts optional `interim: true`. Such a report is
+stored in the active marker, progress log and final receipt, visible through `agx show`
+and the statusline phase. The same vendor session resumes with
+`continue; send the final report when done`, using only the remaining hard timeout.
+It never resets the first-return checkpoint or triggers ticket verification between reports.
+An unmarked RETURN (or `interim: false`) still ends the run. A missing vendor session
+or exhausted hard timeout preserves the interim history and records failure.
 
 True `non_delivery` (a naturally completed worker with declared writes, an empty checked delta,
 and no valid RETURN) and proven all-flat stalls may escalate once. Workers stopped while still
@@ -87,7 +107,8 @@ Codex to queue an interim RETURN request for its existing session and records wh
 was sent (or why it could not be sent), whether a valid RETURN appeared, and whether progress
 appeared by the deadline. This request says to continue authorized work and keep running jobs.
 Claude has no live prompt injection; its receipt records that limitation and the same observations.
-Neither route is interrupted or resumed because of this checkpoint.
+Neither route is interrupted because of this checkpoint. If a worker naturally exits
+with an explicitly interim RETURN, agx continues the same session.
 
 The independent stall window is ticket `stall_s` (positive integer seconds, default 600). A run
 stops early only when ALL observed inputs have been flat throughout the window: cumulative CPU

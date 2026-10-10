@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.8.0 — 2026-10-10
+
+- Default tickets to per-project agx state when no repository ticket home exists; add `--home state`, `--project`, and selection-rule output in `ticket ls`.
+- Copy existing tickets with `ticket import`, preserving all bytes and ids, normalizing undated filenames and counting imported files and skipped name collisions without overwriting. Record import lineage so removing the source home does not lose a resumable vendor session.
+- Fall through from `dispatch --amend` on an exited worker to ticket amendment and redispatch, resuming the previous vendor session when possible.
+- Record explicit `interim: true` RETURNs as progress and continue the same vendor session within the original hard timeout; retain interim reports in live state, `show`, and final receipts. Unmarked RETURNs still finish the run.
+
 ## 2.7.0 — 2026-10-10
 
 - Keep one ticket id and file through append-only `ticket amend`; ticket homes may be declared by CLI, environment, or `.agx.toml`.

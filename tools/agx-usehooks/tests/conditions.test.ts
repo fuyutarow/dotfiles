@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { commandFixture } from "./command-fixture.ts";
 import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
 import {
   deadOwnMarker,
@@ -290,11 +291,7 @@ test("GPU resolves WSL fallback and returns unknown when none is executable", as
   const wslLib = join(dir, "usr", "lib", "wsl", "lib");
   mkdirSync(wslLib, { recursive: true });
   const wslSmi = join(wslLib, "nvidia-smi");
-  writeFileSync(
-    wslSmi,
-    `#!${process.execPath}\nprocess.stdout.write("19, 0, 4096, 12288\\n");\n`,
-  );
-  chmodSync(wslSmi, 0o755);
+  commandFixture(wslSmi, { stdout: "19, 0, 4096, 12288\n" });
   expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toEqual({
     nowPct: 19,
     avg15Pct: null,
@@ -303,18 +300,12 @@ test("GPU resolves WSL fallback and returns unknown when none is executable", as
     memUsedGiB: 4,
     memTotalGiB: 12,
   });
-  writeFileSync(
-    wslSmi,
-    `#!${process.execPath}\nprocess.stdout.write("[N/A], 0, 4096, 12288\\n");\n`,
-  );
+  commandFixture(wslSmi, { stdout: "[N/A], 0, 4096, 12288\n" });
   rmSync(statePath);
   expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toBe("unknown");
-  writeFileSync(
-    wslSmi,
-    `#!${process.execPath}\nprocess.stdout.write("101, 0, 4096, 12288\\n");\n`,
-  );
+  commandFixture(wslSmi, { stdout: "101, 0, 4096, 12288\n" });
   expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toBe("unknown");
-  writeFileSync(wslSmi, `#!${process.execPath}\nawait Bun.sleep(10_000);\n`);
+  commandFixture(wslSmi, { sleepMs: 10_000 });
   const started = performance.now();
   expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toBe("unknown");
   expect(performance.now() - started).toBeLessThan(1_500);

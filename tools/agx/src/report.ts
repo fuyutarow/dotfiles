@@ -5,6 +5,8 @@
 // none, and prose reports vary in shape so a coordinator could not check them mechanically. Nothing
 // here calls a model or fails a run: an invalid or missing report is recorded, never fatal.
 import { jsonText, z } from "../../shared/src/zod.ts";
+import { appendFile, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 
 export const WorkerReport = z.object({
   summary: z.string(),
@@ -20,6 +22,7 @@ export type WorkerReport = z.output<typeof WorkerReport>;
 
 /** The single structured record workers return when the dispatcher needs to choose what happens next. */
 export const ReturnSchema = z.strictObject({
+  interim: z.boolean().optional(),
   findings: z.array(
     z.strictObject({ text: z.string(), fleet: z.boolean().optional() }),
   ),
@@ -100,13 +103,13 @@ const SHAPE = `{ "summary": string,
   "for_coordinator": [string],
   "open": [string] }`;
 
-const RETURN_SHAPE = `{ "findings": [{ "text": string, "fleet"?: boolean }],
+const RETURN_SHAPE = `{ "interim"?: boolean, "findings": [{ "text": string, "fleet"?: boolean }],
   "evidence": [string],
   "impact_on_brief": string,
   "proposed_next": string,
   "artifacts": [string] }`;
 
-const RETURN_FENCE = /```agx-return\s*\n([\s\S]*?)\n```/u;
+const RETURN_FENCE = /```agx-return\s*\n([\s\S]*?)\n```/gu;
 const RETURN_OPEN = /```agx-return\s*\n/u;
 
 /** Appended to every worker prompt, after the ticket's verify line. */
@@ -130,7 +133,11 @@ Stop and RETURN immediately when:
 - you are told the time box is ending.
 Returning early with findings is success. Include the final report JSON above, then append a fenced block tagged \`agx-return\` containing JSON of this shape:
 ${RETURN_SHAPE}
-Do not wait to finish the planned work before returning.`;
+Do not wait to finish the planned work before returning.
+For a first_return_s progress checkpoint, set "interim": true in the agx-return block.
+An interim RETURN records progress and continues the same vendor session with:
+"continue; send the final report when done". Keep running jobs. Omit interim (or set false)
+for a final RETURN that needs the coordinator and ends the run.`;
 
 /** The prompt with the report instruction appended. */
 export const withReportInstruction = (text: string): string =>
@@ -147,8 +154,8 @@ export type ParsedReturn =
 
 /** Parse the optional fenced RETURN record from a worker's final message. */
 export function parseReturn(lastMessage: string): ParsedReturn {
-  const block = RETURN_FENCE.exec(lastMessage);
-  if (block === null) {
+  const block = [...lastMessage.matchAll(RETURN_FENCE)].at(-1);
+  if (block === undefined) {
     return RETURN_OPEN.test(lastMessage)
       ? { kind: "invalid", error: "unterminated agx-return block" }
       : { kind: "missing" };
@@ -172,6 +179,25 @@ export function parseReturn(lastMessage: string): ParsedReturn {
         .join("; ")}`,
     };
   return { kind: "valid", record: parsed.data };
+}
+
+/** Retain stream checkpoints even when a later message replaces the vendor's last-message file. */
+export function interimReturnWriter(path: string | undefined) {
+  let previous: string | undefined;
+  let pending = Promise.resolve();
+  const record = (message: string): Promise<void> => {
+    if (path === undefined || message === previous) return pending;
+    const parsed = parseReturn(message);
+    if (parsed.kind !== "valid" || parsed.record.interim !== true)
+      return pending;
+    previous = message;
+    pending = pending.then(async () => {
+      await mkdir(dirname(path), { recursive: true });
+      await appendFile(path, `${JSON.stringify({ last_message: message })}\n`);
+    });
+    return pending;
+  };
+  return Object.assign(record, { flush: (): Promise<void> => pending });
 }
 
 const FENCE = /^```(?:json)?\s*\n([\s\S]*?)\n```$/u;

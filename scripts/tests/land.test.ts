@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test as bunTest } from "bun:test";
 import {
   chmodSync,
   existsSync,
@@ -17,8 +17,17 @@ import { LAND_HOSTS } from "../config-registry.ts";
 
 const script = join(import.meta.dir, "../land.ts");
 const temporary: string[] = [];
-// Measured 5.0s under parallel test load and 2.14s isolated; scope the 12s bound to this JJ fixture.
+// These JJ integration fixtures exceed Bun's default 5s under suite load; retain a finite 12s bound.
 const LAND_FORMATTER_TEST_TIMEOUT_MS = 12_000;
+// All cases construct real JJ repositories and spawn the landing command; keep their
+// suite-load allowance consistent rather than letting a different case hit 5s each run.
+function test(
+  name: string,
+  body: () => void,
+  timeout = LAND_FORMATTER_TEST_TIMEOUT_MS,
+): void {
+  bunTest(name, body, timeout);
+}
 const eventsSchema = jsonOf(z.array(z.string()));
 afterEach(() => {
   for (const path of temporary.splice(0))
@@ -209,70 +218,77 @@ describe("land workspace", () => {
     LAND_FORMATTER_TEST_TIMEOUT_MS,
   );
 
-  test("rename reports and commits both paths as exact argv; deploy follows push", () => {
-    const f = fixture();
-    renameSync(join(f.worker, "old name.txt"), join(f.worker, "new name.txt"));
-    writeFileSync(join(f.main, "keep.txt"), "unrelated dirty main\n");
-    const result = f.land(["--smoke", "printf '%s' smoke"]);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString()).toContain(
-      '[land] paths: ok ["new name.txt","old name.txt"]',
-    );
-    expect(existsSync(join(f.main, "old name.txt"))).toBe(false);
-    expect(readFileSync(join(f.main, "new name.txt"), "utf8")).toBe(
-      "rename content\n",
-    );
-    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "unrelated dirty main\n",
-    );
-    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
-      "keep content",
-    );
-    expect(f.log()[0]).toEqual([
-      "run",
-      "commit",
-      "--",
-      "-m",
-      "Land test",
-      "--push",
-      "--",
-      "new name.txt",
-      "old name.txt",
-    ]);
-    expect(f.log()[1]).toEqual(["pushed"]);
-    expect(f.log()[2]?.slice(0, 4)).toEqual([
-      "ssh",
-      "-o",
-      "BatchMode=yes",
-      "sol",
-    ]);
-    expect(f.log()[2]?.[4]).toContain(
-      "cd ~/dotfiles && mise run pull && mise run deps",
-    );
-    expect(f.log()[2]?.[4]).toContain("printf '%s' smoke");
-    expect(f.log()[3]?.[3]).toBe("r99-u26");
-    expect(result.stdout.toString()).toContain(
-      "[land] smoke: sol\nsmoke output for sol",
-    );
-    expect(result.stdout.toString()).toContain(
-      "[land] smoke: r99-u26\nsmoke output for r99-u26",
-    );
-    expect(result.stdout.toString()).toContain(
-      "[land] deploy: skipped r99-u24 (damaged)",
-    );
-    expect(
-      f
-        .log()
-        .filter((event) => event[0] === "ssh")
-        .map((event) => event[3]),
-    ).toEqual(
-      LAND_HOSTS.filter((host) => host.deploy).map((host) => host.alias),
-    );
-    expect(LAND_HOSTS.find((host) => host.alias === "r99-u24")?.deploy).toBe(
-      false,
-    );
-    expect(result.stdout.toString()).toMatch(/summary: ok commit=[0-9a-f]+/u);
-  });
+  test(
+    "rename reports and commits both paths as exact argv; deploy follows push",
+    () => {
+      const f = fixture();
+      renameSync(
+        join(f.worker, "old name.txt"),
+        join(f.worker, "new name.txt"),
+      );
+      writeFileSync(join(f.main, "keep.txt"), "unrelated dirty main\n");
+      const result = f.land(["--smoke", "printf '%s' smoke"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toString()).toContain(
+        '[land] paths: ok ["new name.txt","old name.txt"]',
+      );
+      expect(existsSync(join(f.main, "old name.txt"))).toBe(false);
+      expect(readFileSync(join(f.main, "new name.txt"), "utf8")).toBe(
+        "rename content\n",
+      );
+      expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
+        "unrelated dirty main\n",
+      );
+      expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
+        "keep content",
+      );
+      expect(f.log()[0]).toEqual([
+        "run",
+        "commit",
+        "--",
+        "-m",
+        "Land test",
+        "--push",
+        "--",
+        "new name.txt",
+        "old name.txt",
+      ]);
+      expect(f.log()[1]).toEqual(["pushed"]);
+      expect(f.log()[2]?.slice(0, 4)).toEqual([
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "sol",
+      ]);
+      expect(f.log()[2]?.[4]).toContain(
+        "cd ~/dotfiles && mise run pull && mise run deps",
+      );
+      expect(f.log()[2]?.[4]).toContain("printf '%s' smoke");
+      expect(f.log()[3]?.[3]).toBe("r99-u26");
+      expect(result.stdout.toString()).toContain(
+        "[land] smoke: sol\nsmoke output for sol",
+      );
+      expect(result.stdout.toString()).toContain(
+        "[land] smoke: r99-u26\nsmoke output for r99-u26",
+      );
+      expect(result.stdout.toString()).toContain(
+        "[land] deploy: skipped r99-u24 (damaged)",
+      );
+      expect(
+        f
+          .log()
+          .filter((event) => event[0] === "ssh")
+          .map((event) => event[3]),
+      ).toEqual(
+        LAND_HOSTS.filter((host) => host.deploy).map((host) => host.alias),
+      );
+      expect(LAND_HOSTS.find((host) => host.alias === "r99-u24")?.deploy).toBe(
+        false,
+      );
+      expect(result.stdout.toString()).toMatch(/summary: ok commit=[0-9a-f]+/u);
+    },
+    LAND_FORMATTER_TEST_TIMEOUT_MS,
+  );
 
   test("a deletion is landed and committed", () => {
     const f = fixture();
@@ -375,15 +391,19 @@ describe("land workspace", () => {
     expect(f.log().filter((event) => event[0] === "ssh")).toHaveLength(2);
   });
 
-  test("an unreachable host is reported and later hosts still deploy", () => {
-    const f = fixture();
-    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    const result = f.land([], { LAND_UNREACHABLE_SSH: "sol" });
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout.toString()).toContain(
-      "[land] deploy: unreachable sol: ssh: connect to host sol failed",
-    );
-    expect(result.stdout.toString()).toContain("[land] deploy: ok r99-u26");
-    expect(f.log().filter((event) => event[0] === "ssh")).toHaveLength(2);
-  });
+  test(
+    "an unreachable host is reported and later hosts still deploy",
+    () => {
+      const f = fixture();
+      writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+      const result = f.land([], { LAND_UNREACHABLE_SSH: "sol" });
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout.toString()).toContain(
+        "[land] deploy: unreachable sol: ssh: connect to host sol failed",
+      );
+      expect(result.stdout.toString()).toContain("[land] deploy: ok r99-u26");
+      expect(f.log().filter((event) => event[0] === "ssh")).toHaveLength(2);
+    },
+    LAND_FORMATTER_TEST_TIMEOUT_MS,
+  );
 });

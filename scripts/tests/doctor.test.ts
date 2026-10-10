@@ -15,6 +15,7 @@ import {
 import { release, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { sshSupportsAttachMatch } from "../link-dots.ts";
+import { STEPS } from "../post-merge.ts";
 
 // The smart-open fixtures scope the forward with Match sessiontype (OpenSSH >= 9.9; Ubuntu 24.04
 // ships 9.6, which rejects the line). The repo case also needs a machine that attaches to r99-u24
@@ -78,10 +79,12 @@ describe("doctor", () => {
       mise.match(
         /\[tasks\."hook:post-merge"\]([\s\S]*?)(?=\n\[tasks\.|$)/u,
       )?.[1] ?? "";
-    expect(hook).toContain("mise run codex:config");
-    expect(hook.indexOf("scripts/link-dots.ts")).toBeLessThan(
-      hook.indexOf("mise run codex:config"),
-    );
+    expect(hook).toContain('exec "$(mise which bun)" scripts/post-merge.ts');
+    const dots = STEPS.findIndex((step) => step.name === "link:dots");
+    const codex = STEPS.findIndex((step) => step.name === "codex:config");
+    expect(dots).toBeGreaterThanOrEqual(0);
+    expect(codex).toBeGreaterThan(dots);
+    expect(STEPS[codex]?.args).toEqual(["agents/codex/codex-config.ts"]);
   });
 
   test("links: an empty HOME is all drift, reported without writing anything", () => {

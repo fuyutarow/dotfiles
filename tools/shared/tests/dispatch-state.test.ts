@@ -4,16 +4,59 @@ import { join } from "node:path";
 import {
   ActiveMarkerReaderSchema,
   ActiveMarkerSchema,
+  ProgressSchema,
+  ProgressReaderSchema,
   dispatchStateDir,
   dispatchStateReadDirs,
   parseActiveMarker,
   serializeActiveMarker,
+  type Progress,
 } from "../src/dispatch-state.ts";
 import {
   malformedMarker,
   ownFreshMarker,
   unreadableMarker,
 } from "./fixtures/active-markers.ts";
+
+const progress = {
+  schema: 1,
+  at: "2026-10-10T12:53:23.049083Z",
+  last: "$ bun test tools/statusline tools/shared",
+  commands: 84,
+  turns: 0,
+  files: 3,
+  session: "real-shaped-rollout-session",
+} satisfies Progress;
+
+test("progress writers are strict and readers ignore future fields", () => {
+  expect(ProgressSchema.safeParse(progress).success).toBe(true);
+  const future = { ...progress, future_progress_field: { events: 84 } };
+  expect(ProgressSchema.safeParse(future).success).toBe(false);
+  const read = ProgressReaderSchema.safeParse(future);
+  expect(read.success).toBe(true);
+  if (read.success) expect(read.data).toEqual(progress);
+  const { turns: _turns, ...legacy } = progress;
+  expect(ProgressSchema.safeParse(legacy).success).toBe(true);
+  expect(ProgressReaderSchema.safeParse(legacy).success).toBe(true);
+});
+
+test.each([
+  { turns: -1 },
+  { turns: 1.5 },
+  { commands: "84" },
+  { commands: -1 },
+  { files: -1 },
+  { schema: 2 },
+  { cost_usd: -1 },
+  { usage: { input_tokens: -1 } },
+])("progress readers still reject invalid known fields: %j", (invalid) => {
+  expect(
+    ProgressReaderSchema.safeParse({ ...progress, ...invalid }).success,
+  ).toBe(false);
+  expect(ProgressSchema.safeParse({ ...progress, ...invalid }).success).toBe(
+    false,
+  );
+});
 
 test("default dispatch state reads include both migration locations", () => {
   const base = join(homedir(), ".local/state");

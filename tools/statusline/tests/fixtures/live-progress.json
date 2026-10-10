@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "at": "2026-10-10T12:53:23.049083Z",
+  "last": "$ bun test tools/statusline tools/shared",
+  "commands": 84,
+  "turns": 0,
+  "files": 3,
+  "session": "real-shaped-rollout-session"
+}

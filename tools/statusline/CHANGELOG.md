@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1 — 2026-10-10
+
+- Read the shared forward-compatible progress-sidecar contract, including `turns`, so working rows retain the latest command, counts and rollout-derived cost when writers add fields.
+- Guard row rendering with real-shaped progress and Codex rollout fixtures, including an unknown future progress field.
+
 ## 0.10.0 — 2026-10-10
 
 - Move render-path file reads, GPU lock probing and snapshot cache writes onto asynchronous APIs so Promise.all collectors overlap filesystem I/O without changing rendered rows.

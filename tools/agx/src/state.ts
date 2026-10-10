@@ -3,7 +3,7 @@
 // Outside the repo by design: briefs and picks may be private. Zero-dep beyond the repo's zod bundle.
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fromThrowable, z } from "../../shared/src/zod.ts";
+import { fromThrowable } from "../../shared/src/zod.ts";
 import {
   ACTIVE_MARKER_SCHEMA,
   ActiveWorkerUsageSchema,
@@ -97,22 +97,7 @@ export const progressFile = (
   env: NodeJS.ProcessEnv = process.env,
 ): string => join(activeDir(env), `${runId}.progress.json`);
 
-export const ProgressSchema = z.strictObject({
-  schema: z.literal(STATE_SCHEMA),
-  at: z.string(),
-  last: z.string(),
-  commands: z.number().int().nonnegative(),
-  turns: z.number().int().nonnegative().optional(),
-  files: z.number().int().nonnegative(),
-  usage: z
-    .looseObject({
-      input_tokens: z.number().nonnegative().optional(),
-      cached_input_tokens: z.number().nonnegative().optional(),
-      output_tokens: z.number().nonnegative().optional(),
-      reasoning_output_tokens: z.number().nonnegative().optional(),
-    })
-    .optional(),
-  cost_usd: z.number().nonnegative().optional(),
-  session: z.string().optional(), // the vendor's id for the worker (codex thread, claude session)
-});
-export type Progress = z.output<typeof ProgressSchema>;
+export {
+  ProgressSchema,
+  type Progress,
+} from "../../shared/src/dispatch-state.ts";

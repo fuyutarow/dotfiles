@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  copyFileSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -10,6 +11,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
+import { ProgressReaderSchema } from "../../shared/src/dispatch-state.ts";
+import { decodedJson } from "./decode.ts";
 import {
   deadOwnMarker,
   malformedMarker,
@@ -58,6 +61,7 @@ function marker(
   choice = "luna-high",
   pickSource = "jev",
   displayId?: string,
+  phase?: string,
 ): void {
   mkdirSync(join(dir, "active"), { recursive: true });
   writeFileSync(
@@ -66,6 +70,7 @@ function marker(
       schema: 1,
       run_id: name,
       ...(displayId === undefined ? {} : { display_id: displayId }),
+      ...(phase === undefined ? {} : { phase }),
       pid,
       label,
       choice,
@@ -137,6 +142,67 @@ async function render(
 }
 
 describe("statusline Run row", () => {
+  test.each([false, true])(
+    "renders real sidecar turns and rollout cost (future field: %s)",
+    async (future) => {
+      const dir = join(scratch, `real-shaped-progress-${future}`);
+      const session = "real-shaped-rollout-session";
+      marker(
+        dir,
+        "real",
+        process.pid,
+        "live progress",
+        10,
+        SESSION,
+        "sol-high",
+        "fixture",
+        undefined,
+        "working",
+      );
+      const active = join(dir, "active");
+      const progressPath = join(active, "real.progress.json");
+      copyFileSync(
+        join(import.meta.dir, "fixtures", "live-progress.json"),
+        progressPath,
+      );
+      const sidecar = decodedJson(
+        ProgressReaderSchema,
+        await Bun.file(progressPath).text(),
+      );
+      writeFileSync(
+        progressPath,
+        JSON.stringify({
+          ...sidecar,
+          at: Temporal.Now.instant().toString(),
+          ...(future ? { future_progress_field: { events: 84 } } : {}),
+        }),
+      );
+      const day = Temporal.Now.plainDateISO("UTC");
+      const rolloutDir = join(
+        scratch,
+        ".codex",
+        "sessions",
+        String(day.year),
+        String(day.month).padStart(2, "0"),
+        String(day.day).padStart(2, "0"),
+      );
+      mkdirSync(rolloutDir, { recursive: true });
+      copyFileSync(
+        join(import.meta.dir, "fixtures", "live-rollout.jsonl"),
+        join(rolloutDir, `rollout-fixture-${session}.jsonl`),
+      );
+      const line = (await render(dir))
+        .split("\n")
+        .find((value) => value.startsWith("sol-high "));
+      expect(line).toContain(
+        "working · $ bun test tools/statusline tools/shared",
+      );
+      expect(line).toContain("84 cmd · 3 files");
+      expect(line).toContain("$2.74");
+      expect(line).not.toContain("no event yet");
+    },
+  );
+
   test("shared writer fixtures render fresh and resumed own rows, skip malformed, and count stale/unreadable", async () => {
     const dir = join(scratch, "shared-marker-contract");
     const active = join(dir, "active");

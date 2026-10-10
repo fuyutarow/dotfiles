@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.6 — 2026-10-10
+
+- Own the progress-sidecar contract, including optional `turns`: strict writer validation and a reader that validates known fields while discarding unknown additions.
+
 ## 0.4.5 — 2026-10-10
 
 - Add bounded-tail and line-streaming helpers for JSONL readers.

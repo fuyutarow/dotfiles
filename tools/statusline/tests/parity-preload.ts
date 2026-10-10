@@ -8,6 +8,9 @@ const fixed = Temporal.Instant.from("2026-10-08T12:34:00Z");
 Temporal.Now.instant = () => fixed;
 Temporal.Now.timeZoneId = () => "UTC";
 Temporal.Now.zonedDateTimeISO = () => fixed.toZonedDateTimeISO("UTC");
+// Byte parity is independent of host scheduling latency. Deadline behavior has its own
+// build-dataframe-budget tests; an immediate fixture must not become late under host load.
+performance.now = () => 0;
 Object.defineProperty(process, "platform", { value: "linux" });
 
 const realRead = fs.readFileSync;

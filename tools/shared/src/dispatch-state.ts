@@ -6,6 +6,31 @@ import { jsonOf, z } from "./zod.ts";
 export const STATE_DIR = "agx";
 export const ACTIVE_MARKER_SCHEMA = 1;
 
+/** Strict writer contract for a worker's cumulative progress sidecar. */
+export const ProgressSchema = z.strictObject({
+  schema: z.literal(ACTIVE_MARKER_SCHEMA),
+  at: z.string(),
+  last: z.string(),
+  commands: z.number().int().nonnegative(),
+  turns: z.number().int().nonnegative().optional(),
+  files: z.number().int().nonnegative(),
+  usage: z
+    .looseObject({
+      input_tokens: z.number().nonnegative().optional(),
+      cached_input_tokens: z.number().nonnegative().optional(),
+      output_tokens: z.number().nonnegative().optional(),
+      reasoning_output_tokens: z.number().nonnegative().optional(),
+    })
+    .optional(),
+  cost_usd: z.number().nonnegative().optional(),
+  session: z.string().optional(),
+});
+
+/** Readers validate known fields and discard fields added by newer writers. */
+export const ProgressReaderSchema = ProgressSchema.strip();
+export type Progress = z.output<typeof ProgressSchema>;
+export type ProgressReader = z.output<typeof ProgressReaderSchema>;
+
 export const ActiveWorkerUsageSchema = z.looseObject({
   input_tokens: z.number().nonnegative().optional(),
   cached_input_tokens: z.number().nonnegative().optional(),

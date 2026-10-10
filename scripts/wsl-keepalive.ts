@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { PRIMARY_DISTRO_RECORD } from "./wsl-distro";
 
-export type ManagedDistro = { alias: string; distro: string };
+export type ManagedDistro = { alias: string; distro: string; wake: boolean };
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -37,10 +37,24 @@ export function parseManagedDistros(contents: string): ManagedDistro[] | Error {
     if (distro === undefined) {
       return new Error(`cannot derive WSL distro for managed alias ${alias}`);
     }
+    const wakeDirectives = [
+      ...block.matchAll(/^\s*# WSL-Wake:\s*(\S+)\s*$/gimu),
+    ];
+    if (wakeDirectives.length > 1) {
+      return new Error(
+        `duplicate WSL-Wake directive for managed alias ${alias}`,
+      );
+    }
+    const wakeValue = wakeDirectives[0]?.[1]?.toLowerCase() ?? "on";
+    if (wakeValue !== "on" && wakeValue !== "off") {
+      return new Error(
+        `invalid WSL-Wake value for managed alias ${alias}: ${wakeValue}`,
+      );
+    }
     if (records.some((record) => record.alias === alias)) {
       return new Error(`duplicate managed WSL alias: ${alias}`);
     }
-    records.push({ alias, distro });
+    records.push({ alias, distro, wake: wakeValue !== "off" });
     index = end;
   }
   return records.length > 0
@@ -48,32 +62,67 @@ export function parseManagedDistros(contents: string): ManagedDistro[] | Error {
     : new Error("no # BEGIN dotfiles-wsl:<alias> blocks found");
 }
 
-export function keepalivePowerShell(distros: ManagedDistro[]): string {
-  const install = distros.map(({ alias, distro }) => {
-    const taskName = `dotfiles-wsl-keepalive-${alias}`;
-    const escapedDistro = distro.replaceAll("'", "''");
-    const hiddenAction = encodePowerShell(
-      `Start-Process -FilePath "$env:SystemRoot\\System32\\wsl.exe" -ArgumentList '-d "${escapedDistro}" --exec sleep infinity' -WindowStyle Hidden -Wait`,
-    );
-    return `$Action = New-ScheduledTaskAction -Execute "$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Argument '-NoProfile -WindowStyle Hidden -EncodedCommand ${hiddenAction}'
+export function keepalivePowerShell(
+  distros: ManagedDistro[],
+  checkOnly = false,
+): string {
+  const enabled = distros.filter(({ wake }) => wake);
+  const skipped = distros
+    .filter(({ wake }) => !wake)
+    .map(({ alias }) => `Write-Output '${alias}: skipped (wake off)'`);
+  const install = checkOnly
+    ? []
+    : enabled.map(({ alias, distro }) => {
+        const taskName = `dotfiles-wsl-keepalive-${alias}`;
+        const escapedDistro = distro.replaceAll("'", "''");
+        return `$Action = New-ScheduledTaskAction -Execute "$env:SystemRoot\\System32\\wsl.exe" -Argument '-d ${escapedDistro} --exec sleep infinity'
 $Triggers = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -AtLogOn))
 $Settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -Hidden
-Register-ScheduledTask -TaskName '${taskName}' -Action $Action -Trigger $Triggers -Settings $Settings -Force | Out-Null`;
-  });
-  const checks = distros.map(({ alias, distro }) => {
+Register-ScheduledTask -TaskName '${taskName}' -Action $Action -Trigger $Triggers -Settings $Settings -Principal $Principal -Force | Out-Null
+$RegisteredTask = Get-ScheduledTask -TaskName '${taskName}'
+if ($RegisteredTask.State -ne 'Running') { Start-ScheduledTask -TaskName '${taskName}' }`;
+      });
+  const checks = enabled.map(({ alias, distro }) => {
     const taskName = `dotfiles-wsl-keepalive-${alias}`;
     const escapedDistro = distro.replaceAll("'", "''");
-    return `if ($TaskNames -notcontains '${taskName}') { throw 'Scheduled task missing: ${taskName}' }
-$DistroState = $WslState -split '\\r?\\n' | Where-Object { $_ -match '${escapedDistro}' } | Select-Object -First 1
-if (-not $DistroState) { throw 'WSL distro missing: ${escapedDistro}' }
-Write-Output ('${alias}: keepalive installed; {0}' -f $DistroState.Trim())`;
+    const result = checkOnly ? "verified" : "installed";
+    return `$Task = Get-ScheduledTask -TaskName '${taskName}' -ErrorAction SilentlyContinue
+if ($null -eq $Task) { throw 'Scheduled task missing: ${taskName}' }
+if ($Task.Principal.UserId -ne $ExpectedPrincipal) { throw 'Scheduled task principal mismatch: ${taskName}' }
+if ($Task.Principal.LogonType.ToString() -ne 'S4U') { throw 'Scheduled task logon type mismatch: ${taskName}' }
+if ($Task.Principal.RunLevel.ToString() -ne 'Limited') { throw 'Scheduled task run level mismatch: ${taskName}' }
+$ExpectedAction = "$env:SystemRoot\\System32\\wsl.exe"
+if ($Task.Actions[0].Execute -ine $ExpectedAction) { throw 'Scheduled task action mismatch: ${taskName}' }
+if ($Task.Actions[0].Arguments.Trim() -ne '-d ${escapedDistro} --exec sleep infinity') { throw 'Scheduled task arguments mismatch: ${taskName}' }
+$TriggerKinds = @($Task.Triggers | ForEach-Object { $_.CimClass.CimClassName })
+if ($TriggerKinds -notcontains 'MSFT_TaskBootTrigger') { throw 'Startup trigger missing: ${taskName}' }
+if ($TriggerKinds -notcontains 'MSFT_TaskLogonTrigger') { throw 'Logon trigger missing: ${taskName}' }
+for ($i = 0; $i -lt 30; $i++) {
+  $Task = Get-ScheduledTask -TaskName '${taskName}'
+  if ($Task.State -eq 'Running') { break }
+  Start-Sleep -Seconds 1
+}
+if ($Task.State -ne 'Running') { throw 'Keepalive task is not Running: ${taskName}' }
+$DistroLine = $WslState -split '\\r?\\n' | Where-Object { $_ -match ('^\\s*\\*?\\s*' + [regex]::Escape('${escapedDistro}') + '\\s+Running\\s+\\d+\\s*$') } | Select-Object -First 1
+if (-not $DistroLine) { throw 'WSL distro is not Running: ${escapedDistro}' }
+Write-Output ('${alias}: keepalive ${result} (S4U, task Running); {0}' -f $DistroLine.Trim())`;
   });
+  const setup =
+    enabled.length === 0
+      ? ""
+      : `$ExpectedPrincipal = $env:USERNAME
+$Principal = New-ScheduledTaskPrincipal -UserId $ExpectedPrincipal -LogonType S4U -RunLevel Limited`;
+  const stateRead =
+    enabled.length === 0
+      ? ""
+      : `$WslState = [regex]::Replace((wsl.exe -l -v | Out-String), '\\x00', '')
+if ($LASTEXITCODE -ne 0) { throw 'wsl.exe -l -v failed' }`;
   return `$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+${setup}
 ${install.join("\n\n")}
-$TaskNames = @(Get-ScheduledTask -TaskName 'dotfiles-wsl-keepalive-*' | ForEach-Object { $_.TaskName })
-$WslState = (wsl.exe -l -v | Out-String) -replace "\`0", ''
-if ($LASTEXITCODE -ne 0) { throw 'wsl.exe -l -v failed' }
+${stateRead}
+${skipped.join("\n")}
 ${checks.join("\n")}
 `;
 }
@@ -100,7 +149,7 @@ async function main(): Promise<number | Error> {
       parameters: [],
       help: {
         description:
-          "Install one startup and logon keepalive scheduled task for each managed WSL distro on the Windows host.",
+          "Install or check startup and logon keepalive tasks for managed WSL distros on the Windows host.",
       },
       flags: {
         host: {
@@ -113,6 +162,17 @@ async function main(): Promise<number | Error> {
           default: false,
           description: "print the decoded PowerShell script without running it",
         },
+        check: {
+          type: Boolean,
+          default: false,
+          description:
+            "verify task principal, triggers, and distro state without installing",
+        },
+        alias: {
+          type: String,
+          default: "",
+          description: "limit installation or check to one managed SSH alias",
+        },
       },
     },
     undefined,
@@ -122,7 +182,18 @@ async function main(): Promise<number | Error> {
     return new Error(`Unexpected argument '${String(parsed._[0])}'`);
   const distros = await managedDistrosFromConfig();
   if (distros instanceof Error) return distros;
-  const script = keepalivePowerShell(distros);
+  const hasAlias = parsed.flags.alias !== "";
+  const selected = hasAlias
+    ? distros.filter(({ alias }) => alias === parsed.flags.alias)
+    : distros;
+  if (selected.length === 0) {
+    return new Error(
+      hasAlias
+        ? `unknown managed WSL alias: ${parsed.flags.alias}`
+        : "no managed WSL distros selected",
+    );
+  }
+  const script = keepalivePowerShell(selected, parsed.flags.check);
   if (parsed.flags.dryRun) {
     process.stdout.write(`${script}\n`);
     return 0;

@@ -136,6 +136,10 @@ export async function wakeManagedDistros(
 ): Promise<string[]> {
   const results: string[] = [];
   for (const distro of distros) {
+    if (!distro.wake) {
+      results.push(`${distro.alias}: skipped (wake off)`);
+      continue;
+    }
     const result = await Promise.try(() => wake(distro)).then(
       (value) =>
         value instanceof Error

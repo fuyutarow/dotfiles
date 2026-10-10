@@ -1,10 +1,11 @@
 # Lifecycle — why the box goes unreachable, and how to bring it back
 
 This owns RECOVERY: the box is down or unreachable, diagnose which layer and restore it. Standing
-keepalive configuration is per managed distro and restores distros after user logon; install or
-refresh it with `mise run wsl:keepalive`. Its startup trigger runs only after logon because the task
-principal uses `LogonType Interactive`, so a host left at the logon screen after reboot still needs
-`mise run wsl:wake`. Tailscale placement and unattended Tailscale remain
+keepalive configuration is per managed distro; install or refresh it with `mise run
+wsl:keepalive`. Tasks use S4U and both startup and logon triggers, so they can start without an
+interactive Windows session. Each task invokes `wsl.exe -d <distro> --exec sleep infinity`
+directly, so Task Scheduler records the native WSL process result in `LastTaskResult`. The
+installer check verifies the principal, triggers, task state, and distro state. Tailscale placement and unattended Tailscale remain
 **prevention config** owned by `securing-remote-access`, in its `wsl2-mac.md` Setup 4. The cut:
 configure it to stay up → there; it went down anyway → here.
 
@@ -104,6 +105,23 @@ route is absent, that alias was never set up; `wsl:wake` still works via the tai
 `mise run wsl:wake` (`scripts/wsl-wake.ts`) does all of it. It tries the LAN route then the tailnet
 route. It wakes a Stopped distro with the detached anchor. Then it verifies the guest and starts
 sshd through the host if the guest is silent. `--status` reports only; `--host` pins one route.
+
+Each `# BEGIN dotfiles-wsl:<alias>` block in `~/.ssh/config.local` may include
+`# WSL-Wake: off` beside `# WSL-Distro:`. The default is on; only `on` and `off` are accepted.
+Both `wsl:wake` and `wsl:keepalive` print `<alias>: skipped (wake off)` and do not start that
+distro. Set the directive for a damaged distro such as R99's Ubuntu 24.04 block:
+
+```sshconfig
+# BEGIN dotfiles-wsl:r99-u24
+Host r99-u24 r99-u24-code
+# WSL-Distro: Ubuntu-24.04
+# WSL-Wake: off
+...
+# END dotfiles-wsl:r99-u24
+```
+
+Use `mise run wsl:keepalive -- --alias r99-u26` to update a single task. Add `--check` to verify
+the task's principal, logon type, triggers, and Running distro state without changing Task Scheduler.
 
 Its wake and sshd-start both invoke `wsl.exe -d <distro> -u root --exec …` into the guest. That is
 the same primitive the keepalive schtask uses (`securing-remote-access`, Setup 4). A distro rename

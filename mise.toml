@@ -784,11 +784,13 @@ run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 # starts sshd through the host and re-checks.
 [tasks."wsl:wake"]
 description = "Start every managed WSL distro and leave each guest ssh-reachable — for when Windows rebooted to the logon screen or a distro idle-terminated. Tries the LAN alias then the tailnet alias, continues past failures, and prints one result line per distro. --status to only report; --host to pin one route."
-run = 'bun ~/dotfiles/scripts/wsl-wake.ts'
+dir = "{{config_root}}"
+run = "bun scripts/wsl-wake.ts"
 
 [tasks."wsl:keepalive"]
-description = "Install or replace the Windows startup and logon keepalive task for each managed WSL distro. --dry-run prints the PowerShell script."
-run = 'bun ~/dotfiles/scripts/wsl-keepalive.ts'
+description = "Install or check S4U startup and logon keepalive tasks for managed WSL distros. --alias selects one; --check verifies principal, triggers, and Running state; --dry-run prints PowerShell."
+dir = "{{config_root}}"
+run = "bun scripts/wsl-keepalive.ts"
 
 [tasks."wsl:distro"]
 description = "Create a named WSL distro and SSH alias; requires r99-u24 running because its Tailscale daemon owns the shared utility-VM address. --dry-run prints the plan."

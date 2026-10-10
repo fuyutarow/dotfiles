@@ -195,7 +195,9 @@ describe("live repo references", () => {
       result.some((line) => line.includes("package.json bin missing")),
     ).toBe(true);
     expect(
-      result.some((line) => line.includes("agents/hooks/hooks.toml hook[0]")),
+      result.some((line) =>
+        /agents\/hooks\/hooks.toml:\d+ hook\[0\]/u.test(line),
+      ),
     ).toBe(true);
     expect(
       result.some((line) =>
@@ -205,5 +207,36 @@ describe("live repo references", () => {
     expect(
       result.some((line) => line.includes("deployed ~/.codex/hooks.json")),
     ).toBe(true);
+  });
+
+  test("CLI failures retain source lines on piped stderr and unreadable inputs name the file", async () => {
+    const { home, repo } = fixture();
+    const path = join(repo, "agents/claude/settings.json");
+    writeFileSync(
+      path,
+      '{\n  "hooks": {"PreToolUse": [{"hooks": [{"command": "sh ~/.claude/hooks/run.sh gone.ts"}]}]}\n}\n',
+    );
+    const run = () =>
+      Bun.spawn([process.execPath, join(import.meta.dir, "../live-refs.ts")], {
+        env: {
+          ...process.env,
+          HOME: home,
+          DOTFILES: repo,
+          PRECOMMIT_VCS: undefined,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    const missing = run();
+    const diagnostic = await new Response(missing.stderr).text();
+    expect(await missing.exited).toBe(1);
+    expect(diagnostic).toContain("settings.json:2");
+    expect(diagnostic).toContain("gone.ts");
+    writeFileSync(path, "{invalid");
+    const invalid = run();
+    expect(await new Response(invalid.stderr).text()).toContain(
+      `${path}: cannot read JSON`,
+    );
+    expect(await invalid.exited).toBe(2);
   });
 });

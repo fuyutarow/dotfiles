@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.8.2 — 2026-10-11
+
+- Amend live prompt-file runs through their recorded brief without resolving a ticket home, then resume the same vendor session. Validate the amendment before interrupting the worker.
+
 ## 2.8.1 — 2026-10-11
 
 - Lower the default pick temperature to 0.5 and remove epsilon smoothing. Sample categorically from p_i^(1/T) / sum_j p_j^(1/T) over all eligible rows, with no probability floor or top-p cutoff; positive temperatures never trigger an argmax shortcut. Preserve reasoned eligibility masks, ticket/CLI overrides, and receipt temperature plus tempered picked probability. Legacy epsilon receipt fields remain readable.

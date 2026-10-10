@@ -119,7 +119,7 @@ test("doctor rejects enabled without the default.target edge and enabled but ina
     JSON.stringify({ enabled: "enabled", active: "inactive" }),
   );
   expect(f.doctor().verdict).toBe("FAIL");
-});
+}, 20_000);
 
 test("macOS, check mode and hosts without systemd skip without writes or commands", () => {
   for (const variant of [

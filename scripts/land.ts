@@ -11,6 +11,7 @@ import {
   rmSync,
   statSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
@@ -346,7 +347,7 @@ function run(
     );
     if (signal.aborted || code !== 0) {
       // Preserve hook refusal lines and the real process exit status, without a shell pipe.
-      process.stderr.write(`${stdout.slice(-131072)}${stderr.slice(-131072)}`);
+      writeSync(2, `${stdout}${stderr}`);
       return reject(
         `${argv[0]} exited ${code}${signal.aborted ? " (timeout)" : ""}`,
       );

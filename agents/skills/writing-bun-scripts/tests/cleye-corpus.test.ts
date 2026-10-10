@@ -119,6 +119,7 @@ const CORPUS = [
   { path: "scripts/wsl-winget.ts" },
   { path: "tools/smart-open/src/receive.ts" },
   { path: "tools/smart-open/src/smart-open.ts" },
+  { path: "tools/statusline/src/statusline.ts" },
   {
     path: "tools/storage-headroom/src/storage-headroom.ts",
     unknownFlag: { exit: 2, message: "Unknown flag" },

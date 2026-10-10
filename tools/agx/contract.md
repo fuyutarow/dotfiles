@@ -144,8 +144,11 @@ front-matter `name`. Home precedence is `--home`, `AGX_TICKET_HOME`, nearest upw
 `ticket_home`, then `.agents/tickets`; `ticket ls` prints the resolved home. `agx ticket amend
 <name> --file F|-` appends a dated AMEND section without rewriting earlier instructions. `agx
 dispatch --ticket <name>` resolves that home and continues the prior vendor session when one exists;
-`agx dispatch --amend <run|name> --file F` SIGINTs a live router, waits up to 30 seconds, appends,
-and resumes the same vendor session. `agx dispatch --resume <run|name> --repick` starts a fresh
+`agx dispatch --amend <run|name> --file F` validates the amendment, SIGINTs a live router,
+waits up to 30 seconds, appends to its recorded brief, and resumes the same vendor session.
+Live prompt-file runs use their recorded source path without resolving a ticket home; when
+the source is gone, an amended brief is retained under the run's state directory.
+`agx dispatch --resume <run|name> --repick` starts a fresh
 row selection with the prior report and open items as a compact handoff.
 
 The worker receives a compact promise before the body: outcome, consumer, absolute write

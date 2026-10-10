@@ -7,26 +7,40 @@ import {
   readlinkSync,
   realpathSync,
   readdirSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  writeSync,
+  symlinkSync,
+  rmSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { LINKS, type When } from "./config-registry.ts";
+import {
+  jjContext,
+  jjCandidate,
+  jjExport,
+  selected,
+  type JjPrecommit,
+} from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
+import { RENDER_INPUTS } from "./render-source.ts";
 
 type Os = "mac" | "wsl" | "linux";
 type Roots = { repo: string; home: string; os: Os };
 
 const REPAIR =
-  "restore the file, or run `mise run deps && mise run link:dots` first, so the new declaration is deployed before the old file is retired";
+  "restore the file or remove the reference in the same commit; after landing declarations, run `mise run deps && mise run link:dots` to refresh deployed files";
 
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    process.stderr.write("unknown flag(s): --__proto__\n");
+    writeSync(2, "unknown flag(s): --__proto__\n");
     process.exit(2);
   }
 }
@@ -112,7 +126,7 @@ function checkRepoPath(
   const resolved = resolveMissingPath(absolute);
   if (!pointsIntoRepo(resolved, roots.repo)) return;
   if (!existsSync(absolute)) {
-    out.push(`FAIL ${surface}: dangling path ${resolved}; ${REPAIR}`);
+    out.push(`FAIL ${surface} → missing target ${resolved}; ${REPAIR}`);
   }
 }
 
@@ -174,27 +188,47 @@ function commandsIn(
   surface: string,
   roots: Roots,
   out: string[],
+  source?: { text: string; offset: number },
 ): void {
   if (Array.isArray(value)) {
     value.forEach((entry, index) => {
-      commandsIn(entry, `${surface}[${index}]`, roots, out);
+      commandsIn(entry, `${surface}[${index}]`, roots, out, source);
     });
     return;
   }
   if (typeof value !== "object" || value === null) return;
   for (const [key, child] of Object.entries(value)) {
     if (key === "command" && typeof child === "string") {
-      checkCommand(surface, child, roots, out);
+      checkCommand(commandReference(surface, child, source), child, roots, out);
     } else {
-      commandsIn(child, `${surface}.${key}`, roots, out);
+      commandsIn(child, `${surface}.${key}`, roots, out, source);
     }
   }
+}
+
+function commandReference(
+  surface: string,
+  command: string,
+  source?: { text: string; offset: number },
+): string {
+  const encoded = JSON.stringify(command);
+  const offset = source?.text.indexOf(encoded, source.offset) ?? -1;
+  const line =
+    offset < 0 ? 1 : (source?.text.slice(0, offset).split("\n").length ?? 1);
+  if (source !== undefined && offset >= 0)
+    source.offset = offset + encoded.length;
+  return `${surface.replace(/(\.json).*$/u, "$1")}:${line} (${surface})`;
+}
+
+function referenceLine(source: string | undefined, value: string): number {
+  const offset = source?.indexOf(JSON.stringify(value)) ?? -1;
+  return offset < 0 ? 1 : (source?.slice(0, offset).split("\n").length ?? 1);
 }
 
 function readJson(path: string): unknown {
   const parsed = jsonOf(z.unknown()).safeParse(readFileSync(path, "utf8"));
   if (parsed.success) return parsed.data;
-  process.stderr.write(`FATAL: ${parsed.error.message}\n`);
+  writeSync(2, `FATAL: ${path}: cannot read JSON: ${parsed.error.message}\n`);
   return process.exit(2);
 }
 
@@ -244,8 +278,9 @@ function checkHookRegistry(roots: Roots, out: string[]): void {
   const raw = readFileSync(join(roots.repo, "agents/hooks/hooks.toml"), "utf8");
   const decoded = fromThrowable(() => Bun.TOML.parse(raw))();
   if (decoded.isErr()) {
-    process.stderr.write(
-      `FATAL: ${decoded.error instanceof Error ? decoded.error.message : String(decoded.error)}\n`,
+    writeSync(
+      2,
+      `FATAL: agents/hooks/hooks.toml: cannot parse registry: ${decoded.error instanceof Error ? decoded.error.message : String(decoded.error)}\n`,
     );
     process.exit(2);
   }
@@ -262,7 +297,10 @@ function checkHookRegistry(roots: Roots, out: string[]): void {
     })
     .safeParse(decoded.value);
   if (!parsed.success) {
-    process.stderr.write(`FATAL: ${parsed.error.message}\n`);
+    writeSync(
+      2,
+      `FATAL: agents/hooks/hooks.toml: cannot validate registry: ${parsed.error.message}\n`,
+    );
     process.exit(2);
   }
   for (const [index, hook] of (parsed.data.hook ?? []).entries()) {
@@ -270,7 +308,7 @@ function checkHookRegistry(roots: Roots, out: string[]): void {
     const script = join(roots.repo, "agents/hooks", hook.script);
     if (Array.isArray(hook.vendors) && hook.vendors.length > 0) {
       checkRepoPath(
-        `declared agents/hooks/hooks.toml hook[${index}]`,
+        `declared agents/hooks/hooks.toml:${referenceLine(raw, hook.script)} hook[${index}]`,
         script,
         roots,
         out,
@@ -290,7 +328,11 @@ export function findings(roots: Roots): string[] {
     ],
     ["deployed ~/.codex/hooks.json", join(roots.home, ".codex/hooks.json")],
   ] as const) {
-    if (existsSync(path)) commandsIn(readJson(path), surface, roots, out);
+    if (existsSync(path))
+      commandsIn(readJson(path), surface, roots, out, {
+        text: readFileSync(path, "utf8"),
+        offset: 0,
+      });
   }
   for (const [surface, path] of [
     [
@@ -302,7 +344,11 @@ export function findings(roots: Roots): string[] {
       join(roots.repo, "agents/codex/hooks.json"),
     ],
   ] as const) {
-    if (existsSync(path)) commandsIn(readJson(path), surface, roots, out);
+    if (existsSync(path))
+      commandsIn(readJson(path), surface, roots, out, {
+        text: readFileSync(path, "utf8"),
+        offset: 0,
+      });
   }
   checkHookRegistry(roots, out);
 
@@ -313,7 +359,7 @@ export function findings(roots: Roots): string[] {
   for (const [name, target] of Object.entries(pkg.bin ?? {})) {
     if (typeof target === "string") {
       checkRepoPath(
-        `package.json bin ${name}`,
+        `package.json bin ${name}:${referenceLine(readFileSync(join(roots.repo, "package.json"), "utf8"), target)}`,
         join(roots.repo, target),
         roots,
         out,
@@ -321,6 +367,92 @@ export function findings(roots: Roots): string[] {
     }
   }
   return out;
+}
+
+// A commit is BASE plus selected REV paths. Render that view in a disposable HOME;
+// deployment is deliberately later, and must never be a prerequisite for retirement.
+export function candidateFindings(
+  context: JjPrecommit,
+  home: string,
+  os: Os,
+): string[] {
+  const scratch = mkdtempSync(join(tmpdir(), "live-refs-candidate-"));
+  const repo = join(scratch, "repo");
+  const targetHome = join(scratch, "home");
+  using _cleanup = {
+    [Symbol.dispose]: () => {
+      rmSync(scratch, { recursive: true, force: true });
+    },
+  };
+  const entries = jjCandidate(context);
+  // Liveness needs existence, not file contents. Export only render inputs and manifests.
+  for (const path of entries.keys()) {
+    const dest = join(repo, path);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, "");
+  }
+  jjExport(
+    context,
+    repo,
+    new Map(
+      [...entries].filter(
+        ([path]) =>
+          selected(RENDER_INPUTS, path) || path.endsWith("package.json"),
+      ),
+    ),
+  );
+  const link = (source: string, destination: string): void => {
+    const dest = join(targetHome, destination);
+    if (lstatSync(dest, { throwIfNoEntry: false }) !== undefined) return;
+    mkdirSync(dirname(dest), { recursive: true });
+    symlinkSync(join(repo, source), dest);
+  };
+  for (const [when, source, destination] of LINKS)
+    if (applies(when, os)) link(source, destination);
+  link("agents/skills", ".agents/skills");
+  link("agents/commands", ".claude/commands");
+  link("agents/codex/AGENTS.md", ".codex/AGENTS.md");
+  link("agents/commands", ".codex/prompts");
+  for (const path of entries.keys()) {
+    if (!path.endsWith("package.json")) continue;
+    const pkg = z
+      .object({ bin: z.record(z.string(), z.string()).optional() })
+      .safeParse(readJson(join(repo, path)));
+    if (!pkg.success) continue;
+    for (const [name, target] of Object.entries(pkg.data.bin ?? {}))
+      link(join(dirname(path), target), `.bun/bin/${name}`);
+  }
+  // bounded: native 60s timeout on the immutable candidate renderer.
+  const rendered = Bun.spawnSync(
+    [process.execPath, join(repo, "scripts/render-home.ts")],
+    {
+      env: {
+        ...process.env,
+        HOME: targetHome,
+        DOTFILES: repo,
+        COMMAND_TARGET_HOME: targetHome,
+        CLAUDE_SETTINGS_PRIVATE:
+          process.env.CLAUDE_SETTINGS_PRIVATE ??
+          join(home, ".claude/settings.private.json"),
+        DOTFILES_RENDER_REV: undefined,
+        DOTFILES_RENDER_FROM_WORKING_COPY: "1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 60_000,
+    },
+  );
+  const diagnostic = [
+    rendered.stderr.toString().trim(),
+    rendered.stdout.toString().trim(),
+  ]
+    .filter((text) => text !== "")
+    .join("\n");
+  if (rendered.exitCode !== 0)
+    return [
+      `FATAL: live-refs candidate render could not run (exit ${rendered.exitCode}, signal ${rendered.signalCode ?? "none"}): ${diagnostic === "" ? "no child diagnostics" : diagnostic}`,
+    ];
+  return findings({ repo, home: targetHome, os });
 }
 
 function systemOs(): Os | undefined {
@@ -343,22 +475,26 @@ function main(): void {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    process.stderr.write(`unexpected positional argument: ${parsed._[0]}\n`);
+    writeSync(2, `unexpected positional argument: ${parsed._[0]}\n`);
     process.exitCode = 2;
     return;
   }
   const home = process.env.HOME ?? homedir();
-  const repo = process.env.DOTFILES ?? join(home, "dotfiles");
+  const repo = process.env.DOTFILES ?? resolve(import.meta.dir, "..");
   const os = systemOs();
   if (os === undefined) {
-    process.stderr.write(`FATAL: unsupported platform: ${process.platform}\n`);
+    writeSync(2, `FATAL: unsupported platform: ${process.platform}\n`);
     process.exitCode = 2;
     return;
   }
-  const result = findings({ home, repo, os });
+  const context = jjContext();
+  const result =
+    context === undefined
+      ? findings({ home, repo, os })
+      : candidateFindings(context, home, os);
   if (result.length > 0) {
     result.forEach((line) => {
-      process.stdout.write(`${line}\n`);
+      writeSync(2, `${line}\n`);
     });
     process.exitCode = 1;
     return;
@@ -370,8 +506,9 @@ if (import.meta.main) {
   fromThrowable(main)().match(
     () => {},
     (error) => {
-      process.stderr.write(
-        `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
+      writeSync(
+        2,
+        `FATAL: live-refs check could not run: ${error instanceof Error ? error.message : String(error)}\n`,
       );
       process.exitCode = 2;
     },

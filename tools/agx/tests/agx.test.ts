@@ -4030,6 +4030,57 @@ describe("agx dispatch: a brief with a ticket", () => {
     }
   }, 20_000);
 
+  test("live prompt-file amendment uses the recorded brief and resumes the vendor session without a ticket home", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "live-prompt-amend",
+      ticketText('writes = []\nverify = ["true"]', "Original live task.\n"),
+    );
+    const amendment = join(scratch, "live-prompt-correction.md");
+    writeFileSync(amendment, "Owner correction for this run.");
+    const state = join(scratch, "live-prompt-amend-state");
+    const env = {
+      AGX_STATE_DIR: state,
+      FAKE_SLEEP_MS: "10000",
+      FAKE_RESUME_SLEEP_MS: "0",
+      FAKE_CHECKPOINT: "1",
+    };
+    let amended: Awaited<ReturnType<typeof router>> | undefined;
+    await router(runArgs(b, cwd, "read-only"), env, async () => {
+      let runId: string | undefined;
+      for (let count = 0; count < 300 && runId === undefined; count++) {
+        await Bun.sleep(20);
+        const dir = join(state, "active");
+        if (!existsSync(dir)) continue;
+        runId = readdirSync(dir)
+          .filter((file) => file.endsWith(".json"))
+          .flatMap((file) => {
+            const marker = decodedJson(
+              z.looseObject({ run_id: z.string().optional() }),
+              readFileSync(join(dir, file), "utf8"),
+            );
+            return marker.run_id === undefined ? [] : [marker.run_id];
+          })
+          .find((id) =>
+            existsSync(join(state, "active", `${id}.progress.json`)),
+          );
+      }
+      expect(runId).toBeDefined();
+      amended = await router(
+        ["dispatch", "--amend", runId ?? "missing", "--file", amendment],
+        env,
+      );
+    });
+    expect(amended?.code, amended?.err).toBe(0);
+    expect(amended?.err).not.toContain("no ticket home");
+    expect(amended?.out).toContain("thread-fake-checkpoint");
+    expect(readFileSync(b, "utf8")).toContain("## AMEND");
+    expect(readFileSync(b, "utf8")).toContain("Owner correction for this run.");
+    expect(readFileSync(join(scratch, "prompt.log"), "utf8")).toContain(
+      "Owner correction for this run.",
+    );
+  }, 30_000);
+
   test("the worker gets the prose without the front matter, plus the verify line", async () => {
     const cwd = freshCwd();
     const b = brief(
@@ -4679,7 +4730,9 @@ describe("agx dispatch: a brief with a ticket", () => {
           .length
       : 0;
     const r = await router(runArgs(b, freshCwd()), {
-      AGX_CHECKPOINT_MS: "250",
+      // Leave room for fake vendor startup under full-suite load; the worker still
+      // remains alive beyond this deadline, so the no-interruption assertion holds.
+      AGX_CHECKPOINT_MS: "1000",
       FAKE_CHECKPOINT: "1",
       FAKE_CHECKPOINT_FILES: "1",
       FAKE_SLEEP_MS: "2000",

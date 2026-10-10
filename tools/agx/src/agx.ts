@@ -58,7 +58,7 @@ import {
 import { createHash, randomInt } from "node:crypto";
 import assert from "node:assert/strict";
 import { homedir, hostname } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { cli, command } from "cleye";
 import pkg from "../package.json" with { type: "json" };
 import { fromThrowable } from "neverthrow";
@@ -5653,11 +5653,8 @@ async function ticketAmendCommand(
 async function amendRunningCommand(
   target: string,
   file: string | undefined,
-  cd: string | undefined,
-  home: string | undefined,
   timeoutS: number | undefined,
   timeoutReason: string | undefined,
-  project: string | undefined,
 ): Promise<number> {
   if (file === undefined || file === "-")
     fatal("dispatch --amend needs --file <path>");
@@ -5670,12 +5667,8 @@ async function amendRunningCommand(
     fatal(
       `no running run or ticket named ${target}; --amend only interrupts a live worker`,
     );
-  const name = active.active.ticket?.name;
-  if (name === undefined)
-    fatal(
-      `run ${active.active.run_id} has no ticket id; --amend requires a ticket dispatch`,
-    );
-  const path = resolveTicketFile(name, cd ?? active.active.cwd, home, project);
+  const amendment = readFileSync(file, "utf8");
+  if (amendment.trim() === "") fatal("amendment file is empty");
   const started = performance.now();
   const sent = fromThrowable(
     () => process.kill(active.active.pid, "SIGINT"),
@@ -5690,11 +5683,29 @@ async function amendRunningCommand(
     fatal(
       `worker ${active.active.run_id} did not stop within 30s; it remains running`,
     );
-  const amended = amendTicket(path, readFileSync(file, "utf8"));
+  // Live runs already own a brief record. A prompt-file run has no ticket home,
+  // even when its parsed ticket acquired a default name from the workspace.
+  const logged = readAllLog().find(
+    (line) => line.kind === "run" && line.run_id === active.active.run_id,
+  );
+  if (logged === undefined)
+    fatal(
+      `run ${active.active.run_id} stopped without a run record; cannot amend`,
+    );
+  const brief = loggedBrief(logged);
+  if (brief === undefined)
+    fatal(`run ${active.active.run_id}: its brief is no longer stored`);
+  const path =
+    logged.brief?.path !== undefined && existsSync(logged.brief.path)
+      ? logged.brief.path
+      : join(STATE_DIR, "briefs", `${active.active.run_id}.amended.md`);
+  mkdirSync(dirname(path), { recursive: true });
+  if (!existsSync(path)) writeFileSync(path, brief);
+  const amended = amendTicket(path, amendment);
   if (amended instanceof Error) fatal(amended.message);
   const gap = Math.round((performance.now() - started) / 100) / 10;
   process.stderr.write(
-    `agx: appended amendment to ${name}; graceful-stop gap ${gap}s; resuming vendor session\n`,
+    `agx: appended amendment to run ${active.active.run_id}; graceful-stop gap ${gap}s; resuming vendor session\n`,
   );
   return resumeCommand(
     active.active.run_id,
@@ -6639,11 +6650,8 @@ async function main(): Promise<number | undefined> {
       return amendRunningCommand(
         argv.flags.amend,
         argv.flags.file,
-        argv.flags.cd,
-        argv.flags.home,
         argv.flags.timeoutS,
         argv.flags.timeoutReason,
-        argv.flags.project,
       );
     if (argv.flags.file === undefined || argv.flags.file === "-")
       fatal("dispatch --amend needs --file <path>");

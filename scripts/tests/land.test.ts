@@ -143,12 +143,12 @@ function fixture() {
   const ssh = join(temp, "ssh-stub");
   writeFileSync(
     mise,
-    `#!${process.execPath}\nimport { appendFileSync } from 'node:fs';
+    `#!${process.execPath}\nimport { appendFileSync, writeSync } from 'node:fs';
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(process.argv.slice(2)) + '\\n');
 const argv = process.argv.slice(2);
 if (argv[1] === 'deps' || argv[1] === 'hook:post-merge') process.exit(0);
 if (argv[1] === 'doctor') { process.stdout.write('PASS fixture healthy\\nRESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0\\n'); process.exit(0); }
-if (process.env.LAND_FAIL_COMMIT === '1' || argv[argv.indexOf('-m') + 1] === 'Fail queued') { process.stderr.write('hook:pre-commit refused: fixture refusal\\n'); process.exit(9); }
+if (process.env.LAND_FAIL_COMMIT === '1' || argv[argv.indexOf('-m') + 1] === 'Fail queued') { if (process.env.LAND_NOISY_COMMIT === '1') writeSync(1, 'FAIL settings.json:4 → missing target retired.ts\\n' + 'fixture output\\n'.repeat(12000)); process.stderr.write('hook:pre-commit refused: fixture refusal\\n'); process.exit(9); }
 const paths = argv.slice(argv.lastIndexOf('--') + 1).map(p => 'root:' + JSON.stringify(p));
 for (const args of [['commit', '-m', argv[argv.indexOf('-m') + 1], '--', ...paths], ['bookmark', 'set', 'alpha', '-r', '@-']]) {
  const r = Bun.spawnSync(['jj', ...args], { stdout: 'pipe', stderr: 'pipe', timeout: 30000 });
@@ -542,11 +542,17 @@ describe("land workspace", () => {
   test("commit refusal preserves hook output and stops before deploy", () => {
     const f = fixture();
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    const result = f.land([], { LAND_FAIL_COMMIT: "1" });
+    const result = f.land([], {
+      LAND_FAIL_COMMIT: "1",
+      LAND_NOISY_COMMIT: "1",
+    });
     expect(result.exitCode).toBe(1);
     expect(result.stdout.toString()).toContain("[land] commit: FAIL");
     expect(result.stderr.toString()).toContain(
       "hook:pre-commit refused: fixture refusal",
+    );
+    expect(result.stderr.toString()).toContain(
+      "FAIL settings.json:4 → missing target retired.ts",
     );
     expect(f.log()).toHaveLength(1);
     expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0 — 2026-10-10
+
+- Move render-path file reads, GPU lock probing and snapshot cache writes onto asynchronous APIs so Promise.all collectors overlap filesystem I/O without changing rendered rows.
+
 ## 0.9.9 — 2026-10-10
 
 - Share label, window, value, secondary and separator roles across every Rate and Sys segment, including explicit n/a values.

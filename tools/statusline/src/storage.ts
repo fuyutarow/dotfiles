@@ -1,5 +1,5 @@
 import { readFileSync, statfsSync } from "node:fs";
-import { statfs } from "node:fs/promises";
+import { readFile, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { storageLine } from "../../shared/src/storage-headroom.ts";
@@ -45,13 +45,18 @@ export interface DiskReading {
 }
 // "Disk C:" (a Windows drive under WSL, /mnt/<letter>), "Disk WSL" (the WSL guest root), or
 // "Disk <path>" elsewhere — a bare "C:" or "/" beside CPU/RAM/VRAM did not say what it was.
-export const IS_WSL = fromThrowable(() =>
-  /microsoft/iu.test(readFileSync("/proc/version", "utf8")),
-)().unwrapOr(false);
-export function diskLabel(path: string): string {
+export const IS_WSL =
+  process.env.WSL_DISTRO_NAME !== undefined ||
+  process.env.WSL_INTEROP !== undefined;
+async function isWslAsync(): Promise<boolean> {
+  if (IS_WSL) return true;
+  const version = await readFile("/proc/version", "utf8").catch(() => "");
+  return /microsoft/iu.test(version);
+}
+export function diskLabel(path: string, isWsl = IS_WSL): string {
   const m = path.match(/^\/mnt\/([a-z])$/u); // String.match: this file imports child_process (BG floor F4)
   if (m?.[1] !== undefined && m[1] !== "") return `Disk ${m[1].toUpperCase()}:`;
-  if (path === "/" && IS_WSL) return "Disk WSL";
+  if (path === "/" && isWsl) return "Disk WSL";
   return `Disk ${path}`;
 }
 // A drive that statfs could not read, shown as `<label> n/a (<why>)`.
@@ -84,6 +89,7 @@ export interface DiskReadOptions {
   statePath?: string;
   now?: number;
 }
+// Sync compatibility reader retained for standalone callers; the renderer uses diskReadingsAsync.
 export function diskReadings(
   options: DiskReadOptions = {},
 ): Result<DiskEntry[], string> {
@@ -163,6 +169,7 @@ export function diskReadings(
 export async function diskReadingsAsync(
   options: DiskReadOptions = {},
 ): Promise<Result<DiskEntry[], string>> {
+  const isWsl = await isWslAsync();
   const text = await Bun.file(options.configPath ?? STORAGE_CONFIG)
     .text()
     .catch(() => null);
@@ -181,18 +188,21 @@ export async function diskReadingsAsync(
       continue;
     }
     const path = d.path;
-    const result = (await Promise.allSettled([statfs(path)]))[0];
-    if (result?.status === "rejected") {
-      const why = execError(result.reason).code ?? "statfs failed";
-      const missing: DiskEntry[] =
-        why === "ENOENT" && !IS_WSL
-          ? []
-          : [{ kind: "miss", label: diskLabel(path), why }];
-      out.push(...missing);
-      continue;
+    const result = await statfs(path).then(
+      (value) => ({ ok: true as const, value }),
+      (reason: unknown) => ({
+        ok: false as const,
+        why: execError(reason).code ?? "statfs failed",
+      }),
+    );
+    if (!result.ok && !(result.why === "ENOENT" && !isWsl)) {
+      out.push({
+        kind: "miss",
+        label: diskLabel(path, isWsl),
+        why: result.why,
+      });
     }
-    if (result?.status !== "fulfilled") {
-      out.push({ kind: "miss", label: diskLabel(path), why: "statfs failed" });
+    if (!result.ok) {
       continue;
     }
     const { bsize, blocks, bfree, bavail } = result.value;
@@ -208,7 +218,7 @@ export async function diskReadingsAsync(
     if (free < line(d.deny_gib, d.deny_pct)) col = "38;5;167";
     out.push({
       kind: "reading",
-      label: diskLabel(path),
+      label: diskLabel(path, isWsl),
       path,
       rateRedMinutes: d.rate_red_minutes,
       rateYellowMinutes: d.rate_yellow_minutes,

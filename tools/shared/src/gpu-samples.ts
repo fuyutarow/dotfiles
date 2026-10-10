@@ -10,6 +10,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { access } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { tryAcquire } from "./dir-lock.ts";
@@ -72,6 +73,7 @@ export function gpuSampleInterval(random = Math.random): number {
   return 10_000 + Math.floor(Math.max(0, Math.min(1, random())) * 10_000);
 }
 /** A corrupt, oversized, unordered, or future-dated history contributes no samples. */
+// Sync history API serves the off-render sampler; renderer executable checks use the async API.
 export function readGpuSamples(path: string, now: number): GpuSample[] {
   const text = fromThrowable(() => {
     if (statSync(path).size > MAX_BYTES) return null;
@@ -117,6 +119,7 @@ export function gpuEstimate(
   });
   return parsed.success ? parsed.data : "unknown";
 }
+// Sync executable probe remains for synchronous sampler callers; renderer uses findGpuExecutableAsync.
 export function findGpuExecutable(
   path = process.env.PATH ?? "",
   fallbacks = ["/usr/lib/wsl/lib/nvidia-smi", "/usr/bin/nvidia-smi"],
@@ -130,6 +133,28 @@ export function findGpuExecutable(
       accessSync(p, constants.X_OK);
     })().isOk(),
   );
+}
+export async function findGpuExecutableAsync(
+  path = process.env.PATH ?? "",
+  fallbacks = ["/usr/lib/wsl/lib/nvidia-smi", "/usr/bin/nvidia-smi"],
+): Promise<string | undefined> {
+  const candidates = [
+    ...path
+      .split(process.platform === "win32" ? ";" : ":")
+      .filter((p) => p !== "")
+      .map((p) => join(p, "nvidia-smi")),
+    ...fallbacks,
+  ];
+  const probes = candidates.map((candidate) =>
+    access(candidate, constants.X_OK)
+      .then(() => candidate)
+      .catch(() => null),
+  );
+  for (const probe of probes) {
+    const candidate = await probe;
+    if (candidate !== null) return candidate;
+  }
+  return undefined;
 }
 type Options = {
   cwd?: string;

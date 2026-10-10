@@ -43,7 +43,7 @@ apis = [
 # Paths resolve against the plugin's checkout, so consumer repos never inherit these exemptions.
 [bun_api.allowlist]
 "tools/agx/src/ledger.ts" = "protocol: synchronous exclusive ledger lock, append and atomic rotation callbacks; promise conversion must preserve lock lifetime and synchronous callers"
-"tools/shared/src/jsonl.ts" = "protocol: readJsonlTailSync and JsonlLineReader serve synchronous ledger handlers with bounded file-descriptor reads; async tail also shares synchronous boundary scanning"
+"tools/shared/src/jsonl.ts" = "protocol: readJsonlTailSync and JsonlLineReader serve synchronous ledger handlers; asynchronous readJsonlTail now uses fs.promises for stat, tail-boundary reads and bounded chunks"
 "agents/claude/hooks/bash-durations.ts" = "protocol: synchronous hook path"
 "agents/claude/hooks/capture-last-response.ts" = "protocol: synchronous hook path"
 "agents/claude/hooks/copy-via-herdr-pane.ts" = "protocol: synchronous hook path"
@@ -188,18 +188,17 @@ apis = [
 "tools/serena-foreground/src/serena-foreground.ts" = "pending: synchronous startup/helper contract; migrate with callers"
 "tools/shared/src/dir-lock.ts" = "pending: synchronous startup/helper contract; migrate with callers"
 "tools/shared/src/dispatch-pricing.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/shared/src/gpu-samples.ts" = "pending: synchronous startup/helper contract; migrate with callers"
+"tools/shared/src/gpu-samples.ts" = "protocol: synchronous history and sampler APIs stay for the off-render sampler; render-time executable discovery uses findGpuExecutableAsync"
 "tools/shared/src/sockets.ts" = "pending: synchronous startup/helper contract; migrate with callers"
 "tools/shared/src/storage-headroom.ts" = "pending: synchronous startup/helper contract; migrate with callers"
 "tools/shared/src/typesafe-key.ts" = "pending: synchronous startup/helper contract; migrate with callers"
 "tools/smart-open/src/receive.ts" = "pending: synchronous startup/helper contract; migrate with callers"
 "tools/smart-open/src/smart-open.ts" = "pending: synchronous startup/helper contract; migrate with callers"
-"tools/statusline/src/bounded.ts" = "protocol: readJson and execWithin retain synchronous cache/subprocess contracts for sync callers; async render counterparts already exist; sl_async_io removes this entry after migrating those callers"
-"tools/statusline/src/codex-rate.ts" = "pending: usageFromRollout stats a file before bounded synchronous token-usage tail reads; migrate the stat and descriptor reads together under sl_async_io"
-"tools/statusline/src/dispatch-runs.ts" = "protocol: routeRuns returns a synchronous marker/progress scan using directory existence, listing and file reads; routeRunsAsync serves rendering; sl_async_io removes the sync API and exemption together"
-"tools/statusline/src/host-load.ts" = "protocol: synchronous GPU lock acquisition, cache/proc reads and sampler spawn serve readHostLoad and standalone sampling; preserve lock handoff and child error cleanup during the sl_async_io migration"
-"tools/statusline/src/identity.ts" = "protocol: readClaudeJson and binaryModified retain synchronous account reads and executable stats; async render counterparts already exist; sl_async_io migrates remaining sync callers before removing this entry"
-"tools/statusline/src/storage.ts" = "protocol: module initialization reads /proc/version for IS_WSL and diskReadings synchronously reads the storage policy; diskReadingsAsync already serves rendering; sl_async_io owns startup and sync-caller migration"
+"tools/statusline/src/bounded.ts" = "protocol: synchronous readJson, writeCache and execWithin remain for synchronous helper callers; async collectors use readJsonAsync, writeCacheAsync and execAsyncBounded"
+"tools/statusline/src/dispatch-runs.ts" = "protocol: the exported routeRuns API remains synchronous for sync callers; buildDataframe uses routeRunsAsync, whose directory, marker and progress reads are asynchronous"
+"tools/statusline/src/host-load.ts" = "protocol: sync readHostLoad and off-render sampler retain sync lock/cache/proc APIs; buildDataframe uses readHostLoadAsync and async lock/cache reads, and s uses the synchronous API"
+"tools/statusline/src/identity.ts" = "protocol: readClaudeJson and rcState remain synchronous compatibility APIs; buildDataframe uses readClaudeJsonAsync and rcStateAsync with asynchronous file reads"
+"tools/statusline/src/storage.ts" = "protocol: diskReadings remains a synchronous compatibility API; render uses diskReadingsAsync, including asynchronous WSL detection, config and statfs reads"
 "tools/storage-headroom/src/headroom.ts" = "pending: synchronous startup/helper contract; migrate with callers"
 
 [categories]

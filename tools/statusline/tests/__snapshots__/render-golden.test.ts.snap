@@ -1,0 +1,9 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`statusline render golden fixed collector results keep the rendered rows unchanged 1`] = `
+"<prompt-head>
+fixture@example.test | Session: fixture-session
+fixture-agent | Opus | high | rc:off | Ctx: 1.0k 25%
+Rate: claude n/a · 5h n/a · 7d n/a | codex n/a | Jev n/a (fixture unavailable)
+Sys: CPU 12% · RAM 25% (2.0/8.0G)"
+`;

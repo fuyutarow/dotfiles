@@ -23,6 +23,7 @@ const HOME = process.env.HOME ?? "";
 // err = the file could not be read or parsed (claude rewrites it constantly, so a read can land
 // mid-write), or a part has an unexpected shape: that part is then UNKNOWN, which render() says,
 // instead of reading as "no account" / "no cap". A part that is validly absent is the real absence.
+// Sync compatibility reader; buildDataframe uses readClaudeJsonAsync.
 export function readClaudeJson(): Result<unknown, string> {
   const unreadable = "~/.claude.json unreadable";
   const text = fromThrowable(
@@ -187,6 +188,7 @@ function rcProbeValid(): boolean | undefined {
   return valid;
 }
 
+// Sync compatibility probe retained for non-render callers; the renderer uses rcStateAsync.
 export function rcState(): RcState {
   if ((process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ?? "") !== "") return "on";
   return rcProbeValid() === true ? "off" : "unknown";

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   jsonlLines,
   JsonlLineReader,
+  readJsonlTail,
   readJsonlTailSync,
 } from "../src/jsonl.ts";
 import { jsonOf, z } from "../src/zod.ts";
@@ -14,7 +15,7 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-test("bounded tail returns the same complete recent records as a full parse", () => {
+test("bounded tail returns the same complete recent records as a full parse", async () => {
   const path = join(scratch, "runs.jsonl");
   const Row = z.looseObject({ index: z.number(), text: z.string() });
   const rows = Array.from({ length: 100 }, (_, index) =>
@@ -29,10 +30,12 @@ test("bounded tail returns the same complete recent records as a full parse", ()
     });
   const full = parseRows(readFileSync(path, "utf8"));
   const tail = readJsonlTailSync(path, 1_500);
+  const asyncTail = await readJsonlTail(path, 1_500);
   const recent = parseRows(tail.text);
   const streamed = [...new JsonlLineReader(path)];
 
   expect(tail.startOffset).toBeGreaterThan(0);
+  expect(asyncTail).toEqual(tail);
   expect(recent).toEqual(full.slice(-recent.length));
   expect(streamed).toEqual(rows);
 });

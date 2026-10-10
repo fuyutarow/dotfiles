@@ -16,6 +16,7 @@ import { jsonOf, z } from "./zod.ts";
 
 export const recoverInvalid = <T extends z.ZodType>(schema: T) =>
   schema.optional().catch(undefined);
+// Sync cache API retained for legacy callers; statusline collectors use readJsonAsync.
 // Read a JSON file and validate it. undefined = no usable file (missing, not JSON, or the wrong
 // shape) — the caller treats that as "expired" or reports its own n/a; it is never an assertion.
 export function readJson<S extends z.ZodType>(
@@ -115,6 +116,7 @@ export function execBounded(
     env,
   );
 }
+// Sync subprocess API retained for standalone helpers; render collectors use execAsyncBounded.
 // One child under ONE bound, with no render budget in the way: the render path goes through
 // execBounded above; the background GPU sampler (not a render) calls this directly.
 export function execWithin(
@@ -221,6 +223,7 @@ export function execAsyncBounded(
 // first, and these files are read by every other session on the host every 5 s — a reader landing
 // in the gap got invalid JSON, which reads as "no cache" (a false n/a, or an nvidia-smi spawn
 // nobody needed). Best-effort like every cache write: a failure leaves the old file and no temp.
+// Sync atomic writer retained for sync callers; the statusline entry uses writeCacheAsync.
 export function writeCache(path: string, value: unknown): void {
   const tmp = `${path}.${process.pid}.tmp`;
   fromThrowable(() => {

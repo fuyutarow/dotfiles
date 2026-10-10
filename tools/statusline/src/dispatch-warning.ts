@@ -8,6 +8,7 @@ import { readJson, readJsonAsync } from "./bounded.ts";
 import { stateDir } from "./dispatch-state.ts";
 import {
   DEFAULT_JSONL_TAIL_BYTES,
+  readJsonlTail,
   readJsonlTailSync,
 } from "../../shared/src/jsonl.ts";
 import { nowEpochSec } from "./prompt-stamp.ts";
@@ -85,20 +86,20 @@ export function readDispatchWarning(): string | undefined {
       )
     : undefined;
 }
+// The sync reader stays for compatibility; buildDataframe uses this async counterpart.
 export async function readDispatchWarningAsync(): Promise<string | undefined> {
   const state = stateDir();
   const cachePath = join(state, "route-capability.json");
   const cache = await readJsonAsync(cachePath, CacheSchema);
   if (cache?.host !== hostname()) return undefined;
-  const log = fromThrowable(
-    () =>
-      readJsonlTailSync(join(state, "runs.jsonl"), DEFAULT_JSONL_TAIL_BYTES)
-        .text,
-  )();
-  return log.isErr()
+  const log = await readJsonlTail(
+    join(state, "runs.jsonl"),
+    DEFAULT_JSONL_TAIL_BYTES,
+  ).catch(() => null);
+  return log === null
     ? undefined
     : dispatchWarning(
-        log.value,
+        log.text,
         JSON.stringify(cache),
         hostname(),
         nowEpochSec() * 1000,

@@ -3,6 +3,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
+import { execError } from "./bounded.ts";
 import { activeDirs, ProgressSchema } from "./dispatch-state.ts";
 import { DIM, ESC, RST } from "./ansi.ts";
 import { dur } from "./jobs.ts";
@@ -93,6 +94,7 @@ async function liveCodexCost(
   );
   return tokens === undefined ? progressCost : costUsd(price, tokens);
 }
+// Sync compatibility scan retained for sync callers; buildDataframe uses routeRunsAsync.
 export function routeRuns(
   env: NodeJS.ProcessEnv = process.env,
 ): Result<RouteScan, string> | undefined {
@@ -149,11 +151,22 @@ export async function routeRunsAsync(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Result<RouteScan, string> | undefined> {
   const listings = await Promise.all(
-    activeDirs(env).map(async (dir) => ({
-      dir,
-      names: await readdir(dir).catch(() => null),
-    })),
+    activeDirs(env).map((dir) =>
+      readdir(dir).then(
+        (names) => ({ dir, names, error: null }),
+        (error: unknown) => {
+          const missing = execError(error).code === "ENOENT";
+          return {
+            dir,
+            names: null,
+            error: missing ? null : `cannot list ${dir}`,
+          };
+        },
+      ),
+    ),
   );
+  const failed = listings.find(({ error }) => error !== null);
+  if (failed !== undefined && failed.error !== null) return err(failed.error);
   if (listings.every(({ names }) => names === null)) return undefined;
   const markers = listings.flatMap(({ dir, names }) =>
     (names ?? [])

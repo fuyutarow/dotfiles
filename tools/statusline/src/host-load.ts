@@ -11,14 +11,23 @@ import {
   rmdirSync,
   statSync,
 } from "node:fs";
-import { readFile } from "node:fs/promises";
+import {
+  mkdir as mkdirAsync,
+  readFile,
+  rmdir as rmdirAsync,
+  stat as statAsync,
+} from "node:fs/promises";
 import { dirname } from "node:path";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { diskReadings, diskSegment, type DiskEntry } from "./storage.ts";
 import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
-import { findGpuExecutable, sampleGpu } from "../../shared/src/gpu-samples.ts";
+import {
+  findGpuExecutable,
+  findGpuExecutableAsync,
+  sampleGpu,
+} from "../../shared/src/gpu-samples.ts";
 import { ESC, RST, naSegment, pctFmt, roles } from "./ansi.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
@@ -127,6 +136,7 @@ export const GPU_LOCK_STALE_MS = GPU_SAMPLE_TIMEOUT_MS + 15_000;
 export interface GpuLock {
   release(): void;
 }
+// Sync lock API remains for sync readHostLoad callers; the Claude renderer uses its async twin.
 export function acquireGpuLock(): Result<GpuLock, string> {
   const take = (): boolean =>
     fromThrowable(() => {
@@ -189,11 +199,70 @@ export function ensureSampler(): Result<void, string> {
   if (started.isErr()) lock.value.release();
   return started;
 }
+interface AsyncGpuLock {
+  release(): Promise<void>;
+}
+async function acquireGpuLockAsync(): Promise<Result<AsyncGpuLock, string>> {
+  const take = async (): Promise<boolean> =>
+    mkdirAsync(dirname(GPU_LOCK), { recursive: true })
+      .then(() => mkdirAsync(GPU_LOCK))
+      .then(() => true)
+      .catch(() => false);
+  const lock: AsyncGpuLock = {
+    release: async () => {
+      await rmdirAsync(GPU_LOCK).catch(() => null);
+    },
+  };
+  if (await take()) return ok(lock);
+  const held = await statAsync(GPU_LOCK)
+    .then((value) => value.mtimeMs)
+    .catch(() => null);
+  const now = Temporal.Now.instant().epochMilliseconds;
+  if (held !== null && now - held >= GPU_LOCK_STALE_MS) {
+    await lock.release();
+    if (await take()) return ok(lock);
+  }
+  return err("another sampler holds the lock");
+}
+/** Async render-path lock and cache check; the sampler still owns the lock after spawn. */
+async function ensureSamplerAsync(): Promise<Result<void, string>> {
+  const lock = await acquireGpuLockAsync();
+  if (lock.isErr()) return ok(undefined);
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const cached = await readJsonAsync(GPU_CACHE, GpuCacheSchema);
+  const says =
+    (cached?.reading !== null && cached?.reading !== undefined) ||
+    cached?.why !== undefined;
+  if (
+    cached?.at !== undefined &&
+    within(cached.at, now, GPU_SAMPLE_TTL_MS) &&
+    says
+  ) {
+    await lock.value.release();
+    return ok(undefined);
+  }
+  const started = fromThrowable(
+    () => {
+      const child = spawn(process.execPath, [import.meta.path], {
+        stdio: "ignore",
+        env: { ...process.env, [SAMPLE_ENV]: "1" },
+      });
+      child.once("error", () => {
+        void lock.value.release();
+      });
+      child.unref();
+    },
+    (e): string => `sampler not started (${failWhy(e, "bun")})`,
+  )();
+  if (started.isErr()) await lock.value.release();
+  return started;
+}
 // Sampler side (`STATUSLINE_SAMPLE_GPU=1 bun tools/statusline/src/host-load.ts`): take ONE sample under the long bound
 // and record it. `good` is the previous last-good sample, carried over a failure so a transient
 // miss can still be shown (marked stale) instead of turning into n/a. Returns the exit code; the
 // caller exits AFTER this returns, so the lock is released by `using` first. Refuses to run
 // without the lock: ensureSampler starts it and hands the lock over.
+// The separate sampler child uses this sync entry; renderer calls return before sampling starts.
 export function runSampler(): number {
   if (!existsSync(GPU_LOCK)) {
     process.stderr.write(
@@ -496,6 +565,7 @@ export interface HostLoad {
   vram: Result<MemReading, string> | undefined; // undefined: this host has no discrete VRAM
   disks: Result<DiskEntry[], string>;
 }
+// Sync host-load API remains for the standalone `s` command; statusline uses readHostLoadAsync.
 export function readHostLoad(): HostLoad {
   return {
     cpuPct: cpuPct(),
@@ -621,7 +691,8 @@ async function ramFracAsync(): Promise<Result<MemReading, string>> {
   return reading === undefined ? err("meminfo unparsable") : ok(reading);
 }
 async function vramFracAsync(): Promise<Result<MemReading, string>> {
-  if (findGpuExecutable() === undefined) return err("no nvidia-smi");
+  if ((await findGpuExecutableAsync()) === undefined)
+    return err("no nvidia-smi");
   const cached: GpuCache =
     (await readJsonAsync(GPU_CACHE, GpuCacheSchema)) ?? {};
   const now = Temporal.Now.instant().epochMilliseconds;
@@ -632,7 +703,7 @@ async function vramFracAsync(): Promise<Result<MemReading, string>> {
       cached.why !== undefined);
   if (fresh && cached.reading !== null && cached.reading !== undefined)
     return ok(cached.reading);
-  const started = fresh ? ok(undefined) : ensureSampler();
+  const started = fresh ? ok(undefined) : await ensureSamplerAsync();
   const why = started.isErr() ? started.error : (cached.why ?? SAMPLING_WHY);
   const good = cached.good;
   if (good !== undefined && within(good.at, now, GPU_STALE_MAX_MS)) {

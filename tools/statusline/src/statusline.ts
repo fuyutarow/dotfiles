@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Stdin JSON -> the existing statusline bytes; no harness configuration cutover.
 import { DIM, ESC, RST } from "./ansi.ts";
-import { writeCache } from "./bounded.ts";
+import { writeCacheAsync } from "./bounded.ts";
 import { jsonText } from "./zod.ts";
 import { ClaudeStatuslineInputSchema } from "./adapters/claude-statusline.ts";
 import { promptParts } from "./prompt-stamp.ts";
@@ -60,7 +60,7 @@ const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
 const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
 const sysPlain = sysColored.replaceAll(ANSI, "");
 // Never empty: every Sys reading is a value or an explicit n/a (see the EXPLICIT-ABSENCE law).
-writeCache(SYS_CACHE, {
+await writeCacheAsync(SYS_CACHE, {
   at: Temporal.Now.instant().epochMilliseconds,
   line: `Sys: ${sysPlain}`,
   // Same colors as the bar's Sys row (pctFmt thresholds), for a renderer that keeps ANSI.
@@ -75,8 +75,11 @@ writeCache(SYS_CACHE, {
 const sid = (payload.data.sessionId ?? "").replaceAll(/[^A-Za-z0-9_-]/gu, "_");
 if (sid !== "") {
   const rows = [ctxSegment(df), rateRow(df)]; // neither is ever empty: a value or an explicit n/a
-  writeCache(`${HOME}/.cache/claude/statusline-session/${sid}.json`, {
-    at: Temporal.Now.instant().epochMilliseconds,
-    rows: rows.map((ansi) => ({ line: ansi.replaceAll(ANSI, ""), ansi })),
-  });
+  await writeCacheAsync(
+    `${HOME}/.cache/claude/statusline-session/${sid}.json`,
+    {
+      at: Temporal.Now.instant().epochMilliseconds,
+      rows: rows.map((ansi) => ({ line: ansi.replaceAll(ANSI, ""), ansi })),
+    },
+  );
 }

@@ -1,6 +1,4 @@
 import { open, readdir, stat } from "node:fs/promises";
-import { openSync, readSync, closeSync } from "node:fs";
-import { statSync } from "node:fs";
 import { join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, maybe, z } from "./zod.ts";
@@ -62,16 +60,25 @@ const TOKEN_COUNT = z.object({
   }),
 });
 
-function selectUsageFromTail(
+async function selectUsageFromTail(
   path: string,
   size: number,
   length: number,
-): TokenUsage | undefined {
-  const fd = openSync(path, "r");
+): Promise<TokenUsage | undefined> {
+  await using fd = await open(path, "r");
   const buffer = Buffer.alloc(length);
-  readSync(fd, buffer, 0, length, size - length);
-  closeSync(fd);
-  const lines = buffer.toString("utf8").split("\n");
+  let bytesRead = 0;
+  while (bytesRead < length) {
+    const read = await fd.read(
+      buffer,
+      bytesRead,
+      length - bytesRead,
+      size - length + bytesRead,
+    );
+    if (read.bytesRead === 0) break;
+    bytesRead += read.bytesRead;
+  }
+  const lines = buffer.subarray(0, bytesRead).toString("utf8").split("\n");
   if (length < size) lines.shift();
   for (const line of lines.toReversed()) {
     if (line.trim() === "") continue;
@@ -81,13 +88,10 @@ function selectUsageFromTail(
   return undefined;
 }
 
-function usageFromRollout(path: string): TokenUsage | undefined {
-  const infoResult = fromThrowable(
-    () => statSync(path),
-    () => null,
-  )();
-  if (infoResult.isErr() || !infoResult.value.isFile()) return undefined;
-  const size = infoResult.value.size;
+async function usageFromRollout(path: string): Promise<TokenUsage | null> {
+  const info = await stat(path).catch(() => null);
+  if (info === null || !info.isFile()) return null;
+  const size = info.size;
   const maxLength = Math.min(size, MAX_TAIL_BYTES);
   const lengths = new Set([
     Math.min(size, TAIL_BYTES),
@@ -95,13 +99,13 @@ function usageFromRollout(path: string): TokenUsage | undefined {
     maxLength,
   ]);
   for (const length of lengths) {
-    const attempt = fromThrowable(() =>
-      selectUsageFromTail(path, size, length),
-    )();
-    if (attempt.isOk() && attempt.value !== undefined) return attempt.value;
+    const usage = await selectUsageFromTail(path, size, length).catch(
+      () => null,
+    );
+    if (usage !== null && usage !== undefined) return usage;
     if (length === maxLength) break;
   }
-  return undefined;
+  return null;
 }
 
 /** Last cumulative token total for a Codex session, read from a bounded rollout tail. */
@@ -122,8 +126,8 @@ export async function readCodexUsage(
     );
     if (name === undefined) continue;
     const path = join(dir, name);
-    const usage = usageFromRollout(path);
-    if (usage !== undefined) return usage;
+    const usage = await usageFromRollout(path);
+    if (usage !== undefined && usage !== null) return usage;
   }
   return undefined;
 }

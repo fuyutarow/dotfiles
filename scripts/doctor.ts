@@ -270,8 +270,7 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
       env: {
         HOME: scratch,
         COMMAND_TARGET_HOME: ctx.home,
-        MISE_DATA_DIR:
-          process.env.MISE_DATA_DIR ?? join(ctx.home, ".local/share/mise"),
+        DOTFILES_BUN_PATH: process.execPath,
         DOTFILES: ctx.dotfiles,
         CLAUDE_SETTINGS_PRIVATE: join(
           ctx.home,

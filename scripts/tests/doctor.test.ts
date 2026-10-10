@@ -9,6 +9,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -31,6 +32,8 @@ const ATTACHES_TO_R99 = !Bun.spawnSync(["ssh", "-G", "r99-u24"], {
 
 const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "doctor.ts");
+const BUN_EXEC = join(REPO, "scripts", "bun-exec.sh");
+const RENDER_HOME = join(REPO, "scripts", "render-home.ts");
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -73,6 +76,32 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("rendered reference uses resolved Bun with a temporary HOME", () => {
+    const scratch = tmp("doctor-render-home-");
+    const privateOverlay = join(scratch, "missing-settings.private.json");
+    const proc = Bun.spawnSync([BUN_EXEC, RENDER_HOME], {
+      env: {
+        ...process.env,
+        HOME: scratch,
+        COMMAND_TARGET_HOME: process.env.HOME ?? userInfo().homedir,
+        DOTFILES: REPO,
+        DOTFILES_BUN_PATH: process.execPath,
+        MISE_DATA_DIR: join(scratch, "empty-mise-data"),
+        MISE_CACHE_DIR: join(scratch, "empty-mise-cache"),
+        MISE_CONFIG_DIR: join(scratch, "empty-mise-config"),
+        CLAUDE_SETTINGS_PRIVATE: privateOverlay,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 30_000,
+    });
+    const output = proc.stdout.toString() + proc.stderr.toString();
+    expect(proc.exitCode).toBe(0);
+    expect(output).not.toContain("bun-exec: cannot resolve bun");
+    expect(output).toContain("rendered");
+    rmSync(scratch, { recursive: true, force: true });
+  });
+
   test("brew: missing executable gives a named repair rather than a crash", () => {
     const home = tmp("doctor-home-");
     const r = doctor("brew", {

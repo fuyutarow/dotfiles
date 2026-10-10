@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 const repo = join(import.meta.dir, "..", "..", "..");
 const script = join(repo, "agents/codex/codex-config.ts");
+const statusLine =
+  'status_line = ["model-with-reasoning", "current-dir", "context-remaining", "weekly-limit", "approval-mode", "used-tokens", "task-progress"]';
 
 function run(home: string, args: string[] = []) {
   return Bun.spawnSync([process.execPath, script, ...args], {
@@ -97,11 +99,42 @@ describe("codex:config", () => {
     // The values match agents/codex/config.declared.toml.
     writeFileSync(
       join(home, ".codex/config.toml"),
-      'approval_policy = "on-request"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7, deepwiki, exa\n\n[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n\n[mcp_servers.deepwiki]\nurl = "https://mcp.deepwiki.com/mcp"\n\n[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"\n',
+      `approval_policy = "on-request"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7, deepwiki, exa\n\n[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n\n[mcp_servers.deepwiki]\nurl = "https://mcp.deepwiki.com/mcp"\n\n[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"\n\n[tui]\n${statusLine}\n`,
     );
     const result = run(home, ["--check"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout.toString() + result.stderr.toString()).toBe("");
+  });
+
+  test("--check reports tui.status_line drift when [tui] is absent", () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-config-tui-check-"));
+    mkdirSync(join(home, ".codex"));
+    const path = join(home, ".codex/config.toml");
+    writeFileSync(
+      path,
+      'approval_policy = "on-request"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n',
+    );
+    const result = run(home, ["--check"]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain("tui.status_line=null");
+    expect(readFileSync(path, "utf8")).not.toContain("[tui]");
+  });
+
+  test("converges [tui] status_line, keeps other tui keys, and then checks clean", () => {
+    const home = mkdtempSync(join(tmpdir(), "codex-config-tui-write-"));
+    mkdirSync(join(home, ".codex"));
+    const path = join(home, ".codex/config.toml");
+    writeFileSync(
+      path,
+      'approval_policy = "on-request"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n[tui]\nanimations = true\nstatus_line = ["git-branch", "five-hour-limit"]\n',
+    );
+    const written = run(home);
+    expect(written.exitCode).toBe(0);
+    expect(written.stdout.toString()).toContain("codex:config: updated");
+    expect(readFileSync(path, "utf8")).toContain(
+      `[tui]\nanimations = true\n${statusLine}\n`,
+    );
+    expect(run(home, ["--check"]).exitCode).toBe(0);
   });
 
   test("--check exits 2 for a bad declaration", () => {

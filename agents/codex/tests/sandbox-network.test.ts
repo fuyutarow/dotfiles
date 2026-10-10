@@ -6,12 +6,23 @@ import { join } from "node:path";
 import { readdirSync, readFileSync as readRepoFile } from "node:fs";
 import { resolve } from "node:path";
 
+const statusLine = [
+  "model-with-reasoning",
+  "current-dir",
+  "context-remaining",
+  "weekly-limit",
+  "approval-mode",
+  "used-tokens",
+  "task-progress",
+];
+const statusLineLine = `status_line = [${statusLine.map((item) => `"${item}"`).join(", ")}]`;
 const declared = {
   networkAccess: true,
   modelContextWindow: 1000000,
   modelAutoCompactTokenLimit: 950000,
   approvalPolicy: "on-request",
   approvalsReviewer: "auto_review",
+  tuiStatusLine: statusLine,
   mcpServers: {},
 } satisfies Declared;
 const approvals =
@@ -50,7 +61,7 @@ describe("Codex settings convergence", () => {
       '# user comment\nother = "unchanged"\n\n[sandbox_workspace_write]\nnetwork_access = true\n';
     const result = edit(source, declared);
     expect(result).toBe(
-      '# user comment\nother = "unchanged"\n\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n\n[sandbox_workspace_write]\nnetwork_access = true\n',
+      `# user comment\nother = "unchanged"\n\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n\n[sandbox_workspace_write]\nnetwork_access = true\n\n[tui]\n${statusLineLine}\n`,
     );
   });
 
@@ -60,14 +71,14 @@ describe("Codex settings convergence", () => {
       "model_context_window = 100000\nmodel_auto_compact_token_limit = 900000 # retain\n[sandbox_workspace_write]\nnetwork_access = false\n";
     expect(edit(source, declared)).toBe(
       approvals +
-        "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000 # retain\n[sandbox_workspace_write]\nnetwork_access = true\n",
+        `model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000 # retain\n[sandbox_workspace_write]\nnetwork_access = true\n\n[tui]\n${statusLineLine}\n`,
     );
   });
 
   test("a converged file is a byte-identical no-op", () => {
     const source =
       approvals +
-      "# leading\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true # note\n";
+      `# leading\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true # note\n[tui]\n${statusLineLine}\n`;
     expect(edit(source, declared)).toBe(source);
     expect(
       drift(declared, {
@@ -77,6 +88,7 @@ describe("Codex settings convergence", () => {
         modelAutoCompactTokenLimit: 950000,
         approvalPolicy: "on-request",
         approvalsReviewer: "auto_review",
+        tuiStatusLine: statusLine,
         mcpServers: {},
         managedMcpNames: [],
       }),
@@ -101,7 +113,7 @@ describe("Codex settings convergence", () => {
     writeFileSync(
       join(home, ".codex/config.toml"),
       approvals +
-        "model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n",
+        `model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n[tui]\n${statusLineLine}\n`,
     );
     const live = await readLive(home);
     expect(live).not.toBeInstanceOf(Error);
@@ -109,6 +121,58 @@ describe("Codex settings convergence", () => {
     expect(readFileSync(join(home, ".codex/config.toml"), "utf8")).toContain(
       "model_context_window",
     );
+  });
+
+  test("appends a [tui] table after the sandbox table when the file has none", () => {
+    const head =
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
+    expect(edit(head, declared)).toBe(`${head}\n[tui]\n${statusLineLine}\n`);
+  });
+
+  test("replaces only status_line inside an existing [tui] table", () => {
+    const head =
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
+    const source = `${head}[tui]\nanimations = true # keep\nstatus_line = ["git-branch", "five-hour-limit"]\nnotifications = false\n\n[mcp_servers.x]\nenabled = true\n`;
+    expect(edit(source, declared)).toBe(
+      `${head}[tui]\nanimations = true # keep\n${statusLineLine}\nnotifications = false\n\n[mcp_servers.x]\nenabled = true\n`,
+    );
+  });
+
+  test("replaces a multi-line status_line array as one value", () => {
+    const head =
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
+    const source = `${head}[tui]\nstatus_line = [\n  "git-branch",\n  "current-dir",\n]\nanimations = true\n`;
+    expect(edit(source, declared)).toBe(
+      `${head}[tui]\n${statusLineLine}\nanimations = true\n`,
+    );
+  });
+
+  test("adds status_line to an existing empty [tui] table", () => {
+    const head =
+      'model_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\napproval_policy = "on-request"\napprovals_reviewer = "auto_review"\n[sandbox_workspace_write]\nnetwork_access = true\n';
+    expect(edit(`${head}[tui]\n`, declared)).toBe(
+      `${head}[tui]\n${statusLineLine}\n`,
+    );
+  });
+
+  test("reports status_line drift when the live value differs or is absent", () => {
+    const live = {
+      contents: null,
+      networkAccess: true,
+      modelContextWindow: 1000000,
+      modelAutoCompactTokenLimit: 950000,
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      tuiStatusLine: null,
+      mcpServers: {},
+      managedMcpNames: [],
+    };
+    expect(drift(declared, live)).toEqual([
+      `tui.status_line=null, declared ${JSON.stringify(statusLine)}`,
+    ]);
+    expect(
+      drift(declared, { ...live, tuiStatusLine: ["git-branch"] }),
+    ).toHaveLength(1);
   });
 
   test("replaces a drifted managed HTTP server, keeps user servers, and is idempotent", () => {

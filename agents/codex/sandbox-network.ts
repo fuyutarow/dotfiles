@@ -45,6 +45,7 @@ export type Declared = {
   modelAutoCompactTokenLimit: number;
   approvalPolicy: z.output<typeof ApprovalPolicySchema>;
   approvalsReviewer: z.output<typeof ApprovalsReviewerSchema>;
+  tuiStatusLine: string[];
   mcpServers: Record<string, McpServer>;
 };
 export type Live = {
@@ -54,6 +55,7 @@ export type Live = {
   modelAutoCompactTokenLimit: number | null;
   approvalPolicy: string | null;
   approvalsReviewer: string | null;
+  tuiStatusLine: string[] | null;
   mcpServers: Record<string, McpServer>;
   managedMcpNames: string[];
 };
@@ -74,12 +76,17 @@ function values(parsed: unknown): Omit<Declared, "mcpServers"> | Error {
   const reviewer = ApprovalsReviewerSchema.safeParse(
     root.data.approvals_reviewer,
   );
+  const tui = RecordSchema.safeParse(root.data.tui);
+  const statusLine = z
+    .array(z.string())
+    .safeParse(tui.success ? tui.data.status_line : undefined);
   if (
     network.success &&
     context.success &&
     compact.success &&
     approval.success &&
-    reviewer.success
+    reviewer.success &&
+    statusLine.success
   ) {
     return {
       networkAccess: network.data,
@@ -87,10 +94,11 @@ function values(parsed: unknown): Omit<Declared, "mcpServers"> | Error {
       modelAutoCompactTokenLimit: compact.data,
       approvalPolicy: approval.data,
       approvalsReviewer: reviewer.data,
+      tuiStatusLine: statusLine.data,
     };
   }
   return new Error(
-    "Codex declaration requires network_access boolean, integer model limits, approval_policy (on-request|never), and approvals_reviewer (user|auto_review)",
+    "Codex declaration requires network_access boolean, integer model limits, approval_policy (on-request|never), approvals_reviewer (user|auto_review), and tui.status_line string array",
   );
 }
 
@@ -181,6 +189,7 @@ export async function readLive(home: string): Promise<Live | Error> {
       modelAutoCompactTokenLimit: null,
       approvalPolicy: null,
       approvalsReviewer: null,
+      tuiStatusLine: null,
       mcpServers: {},
       managedMcpNames: [],
     };
@@ -211,6 +220,10 @@ export async function readLive(home: string): Promise<Live | Error> {
       },
     ),
   );
+  const tui = RecordSchema.safeParse(root.data.tui);
+  const statusLine = z
+    .array(z.string())
+    .safeParse(tui.success ? tui.data.status_line : undefined);
   return {
     contents: read.value,
     networkAccess: network.success ? network.data : null,
@@ -218,6 +231,7 @@ export async function readLive(home: string): Promise<Live | Error> {
     modelAutoCompactTokenLimit: compact.success ? compact.data : null,
     approvalPolicy: approval.success ? approval.data : null,
     approvalsReviewer: reviewer.success ? reviewer.data : null,
+    tuiStatusLine: statusLine.success ? statusLine.data : null,
     mcpServers,
     managedMcpNames: managedMcpNames(read.value),
   };
@@ -240,6 +254,10 @@ export function drift(declared: Declared, live: Live): string[] {
     live.modelAutoCompactTokenLimit === declared.modelAutoCompactTokenLimit
       ? null
       : `model_auto_compact_token_limit=${String(live.modelAutoCompactTokenLimit)}, declared ${declared.modelAutoCompactTokenLimit}`,
+    JSON.stringify(live.tuiStatusLine) ===
+    JSON.stringify(declared.tuiStatusLine)
+      ? null
+      : `tui.status_line=${JSON.stringify(live.tuiStatusLine)}, declared ${JSON.stringify(declared.tuiStatusLine)}`,
   ];
   const managed = new Set(live.managedMcpNames);
   const mcpLines = Object.entries(declared.mcpServers).flatMap(
@@ -372,6 +390,42 @@ function updateMcpServers(lines: string[], declared: Declared): string[] {
   return output;
 }
 
+function appendTable(lines: string[], block: string[]): void {
+  if (lines.length > 0 && lines.at(-1) === "") lines.pop();
+  if (lines.length > 0 && lines.at(-1) !== "") lines.push("");
+  lines.push(...block);
+}
+
+/** Replace only the status_line value inside [tui]; other tui keys and comments stay untouched. */
+function updateTuiStatusLine(lines: string[], statusLine: string[]): void {
+  const value = `status_line = [${statusLine.map((item) => JSON.stringify(item)).join(", ")}]`;
+  const start = lines.findIndex((line) =>
+    /^\s*\[tui\]\s*(?:#.*)?$/u.test(line),
+  );
+  if (start < 0) {
+    appendTable(lines, ["[tui]", value]);
+    return;
+  }
+  const next = lines.findIndex(
+    (line, index) => index > start && /^\s*\[[^\]]+\]/u.test(line),
+  );
+  const limit = next < 0 ? lines.length : next;
+  const key = lines.findIndex(
+    (line, index) =>
+      index > start && index < limit && /^\s*status_line\s*=/u.test(line),
+  );
+  if (key >= 0) {
+    // A multi-line array runs until the line closing its bracket; replace all of it.
+    let end = key;
+    while (end < limit - 1 && !/\]\s*(?:#.*)?$/u.test(lines[end]!)) end += 1;
+    lines.splice(key, end - key + 1, value);
+    return;
+  }
+  let last = limit - 1;
+  while (last > start && lines[last]!.trim() === "") last -= 1;
+  lines.splice(last + 1, 0, value);
+}
+
 /** Edit top-level keys textually; a same-named key inside any table is never considered. */
 export function edit(contents: string | null, declared: Declared): string {
   const source = contents ?? "";
@@ -405,7 +459,6 @@ export function edit(contents: string | null, declared: Declared): string {
   const existingTable = lines.findIndex((line) =>
     /^\s*\[sandbox_workspace_write\]\s*(?:#.*)?$/u.test(line),
   );
-  let addedTable = false;
   if (existingTable >= 0) {
     const end = lines.findIndex(
       (line, index) => index > existingTable && /^\s*\[[^\]]+\]/u.test(line),
@@ -420,17 +473,14 @@ export function edit(contents: string | null, declared: Declared): string {
     if (!present)
       lines.splice(limit, 0, `network_access = ${declared.networkAccess}`);
   } else {
-    if (lines.length > 0 && lines.at(-1) === "") lines.pop();
-    if (lines.length > 0 && lines.at(-1) !== "") lines.push("");
-    lines.push(
+    appendTable(lines, [
       "[sandbox_workspace_write]",
       `network_access = ${declared.networkAccess}`,
-    );
-    addedTable = true;
+    ]);
   }
+  updateTuiStatusLine(lines, declared.tuiStatusLine);
   const result = updateMcpServers(lines, declared).join("\n");
-  return (addedTable || Object.keys(declared.mcpServers).length > 0) &&
-    (source.endsWith("\n") || source.length === 0)
-    ? `${result}\n`
-    : result;
+  // Keep the file's trailing newline; an appended table must not drop it.
+  const trailing = source.length === 0 || source.endsWith("\n");
+  return trailing && !result.endsWith("\n") ? `${result}\n` : result;
 }

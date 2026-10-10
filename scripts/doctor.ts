@@ -19,7 +19,7 @@
 //                                                (and Codex, when installed)
 //   codex-remote agents/codex/app-server.toml     Codex daemon remote control (mobile app) as declared
 //   wslconfig   wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
-//   ccc-daemon  cocoindex unit      (WSL only)   ccc-daemon.service is active under systemd --user
+//   ccc-daemon  cocoindex unit      (Linux)      enabled in default.target and active
 //   capacity-guard WSL timer       (WSL only)   autonomous host recovery timer is enabled and active
 //   ccc-db-map  zsh/zshenv + unit                the ccc daemon relocates index DBs exactly as
 //                                                this shell does (`ccc doctor` DB path mappings)
@@ -608,20 +608,50 @@ export async function checkWslconfig(ctx: Ctx): Promise<Finding> {
       );
 }
 
-export async function checkCccDaemon(_ctx: Ctx): Promise<Finding> {
+export async function checkCccDaemon(ctx: Ctx): Promise<Finding> {
+  if (ctx.isMac) return skip("ccc-daemon", "macOS uses lazy ccc startup");
+  if (Bun.which("systemctl") === null || Bun.which("systemctl") === undefined)
+    return skip("ccc-daemon", "no systemctl on this host");
   const r = await run(
     ["systemctl", "--user", "is-active", "ccc-daemon.service"],
     { ms: 10_000 },
   );
   const state = r.out.trim();
   if (r.missing) return skip("ccc-daemon", "no systemctl on this host");
+  const enabled = await run(
+    ["systemctl", "--user", "is-enabled", "ccc-daemon.service"],
+    { ms: 10_000 },
+  );
+  const unit = join(ctx.home, ".config/systemd/user/ccc-daemon.service");
+  const wants = join(
+    ctx.home,
+    ".config/systemd/user/default.target.wants/ccc-daemon.service",
+  );
+  const installed =
+    lstatSync(unit, { throwIfNoEntry: false })?.isFile() === true;
+  const edge =
+    existsSync(wants) &&
+    existsSync(unit) &&
+    realpathSync(wants) === realpathSync(unit);
   const stateLabel = state === "" ? "unknown" : state;
-  return state === "active"
-    ? pass("ccc-daemon", "ccc-daemon.service is active (capped by its unit)")
+  const enablementLabel =
+    enabled.out.trim() === "" ? "unknown enablement" : enabled.out.trim();
+  return r.code === 0 &&
+    !r.timedOut &&
+    state === "active" &&
+    enabled.code === 0 &&
+    !enabled.timedOut &&
+    enabled.out.trim() === "enabled" &&
+    installed &&
+    edge
+    ? pass(
+        "ccc-daemon",
+        "ccc-daemon.service is enabled into default.target and active (capped by its unit)",
+      )
     : fail(
         "ccc-daemon",
-        `ccc-daemon.service is ${stateLabel} — a client will spawn it uncapped`,
-        "mise run wsl:ccc-daemon",
+        `ccc-daemon.service is ${enablementLabel} / ${stateLabel}; real unit: ${installed}; default.target edge: ${edge} — supervised searches need an enabled, active daemon`,
+        "mise run link:dots",
       );
 }
 
@@ -1096,7 +1126,7 @@ export const CHECKS: Check[] = [
   {
     name: "ccc-daemon",
     run: checkCccDaemon,
-    applies: (c) => (c.isWsl ? null : "WSL only"),
+    applies: (c) => (c.isMac ? "Linux only" : null),
   },
   {
     name: "capacity-guard",

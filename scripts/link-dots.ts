@@ -41,6 +41,7 @@ import { homedir, release } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { deployCccDaemon } from "../cocoindex/deploy-daemon.ts";
 import {
   ETC_LINKS,
   LINKS,
@@ -479,6 +480,8 @@ function main(): Error | void {
     return;
   }
   renderHome(ctx);
+  const daemonError = deployCccDaemon(ctx);
+  if (daemonError !== undefined) return daemonError;
   if (ctx.os === "mac") loadSmartOpenReceiver(ctx);
   say("done.");
 }

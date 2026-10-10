@@ -11,7 +11,7 @@ export const STEPS: Step[] = [
     boundMs: 15_000,
   },
   { name: "deps:link", args: ["link"], boundMs: 5_000 },
-  { name: "link:dots", args: ["scripts/link-dots.ts"], boundMs: 15_000 },
+  { name: "link:dots", args: ["scripts/link-dots.ts"], boundMs: 24_000 },
   {
     name: "codex:config",
     args: ["agents/codex/codex-config.ts"],

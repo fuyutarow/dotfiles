@@ -115,13 +115,6 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
     "cocoindex/global_settings.yml",
     ".cocoindex_code/global_settings.yml",
   ],
-  // The daemon needs a systemd owner or it is spawned uncapped by whichever client calls first.
-  // Linking the unit also arms the client-side guard in zsh/zshenv. Activate: mise run wsl:ccc-daemon
-  [
-    "wsl",
-    "cocoindex/ccc-daemon.service.wsl",
-    ".config/systemd/user/ccc-daemon.service",
-  ],
   [
     "wsl",
     "cocoindex/repo-retrieve-rerank.socket.wsl",
@@ -266,6 +259,16 @@ const DOCTOR = "mise run doctor";
 
 /** Surfaces with no row in the link tables above. */
 const OTHER: readonly Surface[] = [
+  {
+    kind: "applied",
+    when: "not-mac",
+    sources: ["cocoindex/ccc-daemon.service.wsl"],
+    deployed:
+      "~/.config/systemd/user/ccc-daemon.service (real file), default.target.wants",
+    consumer: "systemd user manager",
+    writer: "mise run link:dots copies the declaration and enables the unit",
+    verify: `${DOCTOR} (ccc-daemon)`,
+  },
   {
     kind: "fan-out",
     when: "all",

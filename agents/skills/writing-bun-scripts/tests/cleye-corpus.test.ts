@@ -16,6 +16,7 @@ type CorpusEntry = Readonly<{
 const CORPUS = [
   { path: "agents/goal-kernel/cli.ts" },
   { path: "tools/agx/src/agx.ts" },
+  { path: "tools/agx/src/main.ts" },
   { path: "tools/agx/src/migrate-state.ts" },
   { path: "tools/agx/src/workers/codex.ts" },
   { path: "scripts/render-oxlintrc.ts" },

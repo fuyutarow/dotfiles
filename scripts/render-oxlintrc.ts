@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
+import { checkBunAllowlist } from "./bun-api-allowlist.ts";
 
 const ROOT = join(import.meta.dir, "..");
 export const POLICY_PATH = join(ROOT, "oxlint-policy.toml");
@@ -68,6 +69,19 @@ const PolicySchema = z
     ),
     on: z.array(Reasoned),
     custom: z.array(Custom).min(1),
+    bun_api: z.strictObject({
+      exclude: z.array(z.string().min(1)),
+      apis: z
+        .array(
+          z.strictObject({
+            modules: z.array(z.string()).min(1),
+            api: z.string().min(1),
+            replacement: z.string().min(1),
+          }),
+        )
+        .min(1),
+      allowlist: z.record(z.string(), z.string().min(1)),
+    }),
   })
   .refine(
     (p) => {
@@ -109,6 +123,11 @@ export async function loadRepoPolicy(
     ok: true,
     value: {
       ...base,
+      js_plugins: base.js_plugins.map((plugin) =>
+        plugin.name === "dotfiles"
+          ? { ...plugin, specifier: join(ROOT, plugin.specifier) }
+          : plugin,
+      ),
       ignore: [...base.ignore, ...local.data.ignore],
       custom: base.custom.filter((c) => c.scope === "house"),
     },
@@ -135,7 +154,9 @@ const ofKind = (p: Policy, kind: CustomRule["kind"]): CustomRule[] =>
 
 /** The .oxlintrc.json text for a policy (stable key order, trailing newline). */
 export function renderOxlintrc(p: Policy): string {
-  const rules: Record<string, unknown> = {};
+  const rules: Record<string, unknown> = {
+    "dotfiles/prefer-bun-api": ["error", p.bun_api],
+  };
   for (const r of p.off) rules[r.rule] = "off";
   for (const r of p.option) rules[r.rule] = ["error", r.value];
   for (const r of p.on) rules[r.rule] = "error";
@@ -220,6 +241,14 @@ if (import.meta.main) {
 
   const loaded = await loadPolicy();
   if (!loaded.ok) fatal(`cannot read oxlint-policy.toml: ${loaded.error}`);
+  const failures =
+    argv.flags.check && argv.flags.repo === undefined
+      ? await checkBunAllowlist(ROOT, loaded.value.bun_api.allowlist)
+      : [];
+  if (failures.length > 0) {
+    console.error(failures.join("\n"));
+    process.exit(1);
+  }
   const repo = argv.flags.repo;
   if (repo === "") fatal("--repo needs a directory");
   const policy =

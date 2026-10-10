@@ -303,7 +303,7 @@ run = "bun scripts/lint-bun.ts"
 dir = "{{config_root}}"
 description = "oxlint --type-aware the repo's TS against .oxlintrc.json, generated from oxlint-policy.toml: every rule an error (no warn level), no override, no disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
-depends = ["lint:ts-no-disable"]
+depends = ["lint:ts-no-disable", "lint:oxlint-policy"]
 run = "bunx --bun oxlint --type-aware"
 
 # The ratchet, at its floor. It began as the shrink-only guard on a ledger of files exempt from the

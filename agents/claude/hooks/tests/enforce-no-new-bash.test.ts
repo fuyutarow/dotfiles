@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { decisionOf as decisionResult, runHook, tempDir } from "./helpers.ts";
 
 async function decisionOf(stdout: string) {
@@ -27,11 +27,56 @@ const edit = (file_path: string, old_string: string, new_string: string) => ({
 
 function fixture(name: string, content: string): string {
   const p = join(tempDir("nonewbash-"), name);
+  mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, content);
   return p;
 }
 
 describe("enforce-no-new-bash", () => {
+  test("allows two added aliases in shebang-bearing zsh configuration", () => {
+    const p = fixture("zsh/aliases.zsh", lines(1136, "#!/bin/zsh"));
+    const r = runHook(
+      HOOK,
+      edit(p, "echo 3\n", "echo 3\nalias cpa='cp -a'\nalias cpv='cp -v'\n"),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe("");
+  });
+
+  test("exempts shell configuration paths even with automation extensions or shebangs", () => {
+    const dir = tempDir("nonewbash-");
+    for (const name of [
+      "zsh/tests/x.test.zsh",
+      "zsh/legacy.sh",
+      "config/interactive.zsh",
+      "config/x.test.zsh",
+      "zshrc",
+      ".zshrc",
+      "zshrc.local",
+      ".zshrc.local",
+      "zprofile.mac",
+      ".zprofile.wsl",
+      "zshenv",
+      ".zshenv.local",
+    ]) {
+      const r = runHook(HOOK, write(join(dir, name), lines(40)));
+      expect(r.code).toBe(0);
+      expect(r.stdout).toBe("");
+    }
+  });
+
+  test("still refuses a new 40-line automation script outside config paths", async () => {
+    const dir = tempDir("nonewbash-");
+    for (const name of ["foo.sh", "zsh-tools/foo.sh", "zshrc-helper.sh"]) {
+      const r = runHook(HOOK, write(join(dir, name), lines(40)));
+      expect(r.code).toBe(0);
+      const d = await decisionOf(r.stdout);
+      expect(d.permissionDecision).toBe("deny");
+      expect(d.permissionDecisionReason).toContain("[dotfiles:no-new-bash]");
+      expect(d.permissionDecisionReason).toContain("40 lines");
+    }
+  });
+
   test("nudges a small new .sh through additionalContext, without a decision", async () => {
     const r = runHook(
       HOOK,

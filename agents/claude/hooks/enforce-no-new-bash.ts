@@ -13,8 +13,9 @@ import { hookJson, hookStderr } from "./lib.ts";
 //      but only when it creates the file or grows it. A legacy script already over the limit
 //      may still be fixed in place without growing (a ratchet: it can shrink, never grow).
 //
-// "Shell script" = a `.sh`/`.bash` path, or content whose shebang names sh/bash/dash/ksh/zsh.
-// zsh config (zshrc, *.zsh without a shebang) is shell CONFIG, not a script — untouched.
+// "Shell script" = a `.sh`/`.bash` path, or content whose shebang names sh/bash/dash/ksh/zsh,
+// outside shell configuration paths. Anything under zsh/, any *.zsh (including tests), and
+// zshrc/zprofile/zshenv basename variants are CONFIG regardless of shebang — untouched.
 //
 // Exempt, silently:
 //   - vendored shell that an external tool overwrites — detected from its own header
@@ -30,7 +31,7 @@ import { hookJson, hookStderr } from "./lib.ts";
 // exits non-zero, which Claude Code treats as a non-blocking error — the edit proceeds.
 
 import { existsSync, readFileSync } from "node:fs";
-import { basename, extname } from "node:path";
+import { basename, extname, normalize } from "node:path";
 import { arr, at, str, strAt } from "../../hooks/narrow.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
@@ -53,7 +54,14 @@ function shebangShell(content: string): boolean {
 }
 
 function isShell(path: string, content: string): boolean {
-  const ext = extname(path);
+  const normalized = normalize(path);
+  const ext = extname(normalized);
+  if (
+    normalized.split("/").includes("zsh") ||
+    ext === ".zsh" ||
+    /^\.?(?:zshrc|zprofile|zshenv)(?:\..+)?$/u.test(basename(normalized))
+  )
+    return false;
   return ext === ".sh" || ext === ".bash" || shebangShell(content);
 }
 

@@ -74,6 +74,21 @@ function cachedSpace(
   );
 }
 
+function cachedReclaimPlan(home: string): void {
+  const dir = join(home, ".cache", "claude-hooks", "storage-headroom");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "reclaim-plan.json"),
+    JSON.stringify({
+      generated_at: Temporal.Now.instant().epochMilliseconds,
+      candidates: [
+        { name: "finished-cache", bytes: 2 * GiB },
+        { name: "stale-target", bytes: GiB },
+      ],
+    }),
+  );
+}
+
 function cachedConfig(edit: (c: Doc) => void, free: number, total: number) {
   const home = mkdtempSync(join(tmpdir(), "storage-cache-home-"));
   cachedSpace(home, "/mnt/c", free, total);
@@ -302,10 +317,10 @@ describe("enforce-storage-headroom", () => {
       const d = decisionOf(r.stdout);
       expect(d?.permissionDecision).toBe("deny");
       expect(d?.permissionDecisionReason).toContain(
-        "free space: disk-reclaim plan",
+        "free space: disk-reclaim run --tier blind --yes",
       );
       expect(d?.permissionDecisionReason).toMatch(
-        /free \d+\.\d GiB|unmeasured/u,
+        /free (?:\d+ bytes \(\d+\.\d GiB\)|unmeasured)/u,
       );
     }
   });
@@ -580,9 +595,11 @@ describe("enforce-storage-headroom", () => {
       const d = decisionOf(runHook(HOOK, payload, env).stdout);
       expect(d?.permissionDecision).toBe("deny");
       expect(d?.permissionDecisionReason?.split("\n")[0]).toBe(
-        "[dotfiles:storage-headroom] free space: disk-reclaim plan, then disk-reclaim run --tier blind --yes",
+        "[dotfiles:storage-headroom] free space: disk-reclaim run --tier blind --yes",
       );
-      expect(d?.permissionDecisionReason).toContain("deny line 10.0 GiB");
+      expect(d?.permissionDecisionReason).toContain(
+        `deny line ${10 * GiB} bytes (10.0 GiB)`,
+      );
       expect(d?.permissionDecisionReason).toContain("Allowlist:");
     }
     for (const command of [
@@ -592,6 +609,29 @@ describe("enforce-storage-headroom", () => {
     ]) {
       expect(decisionOf(runHook(HOOK, bash(command), env).stdout)).toBeNull();
     }
+  });
+
+  test("denial names the short disk, byte line, and cached reclaim sizes", () => {
+    const { env, home } = cachedConfig(
+      (c) => {
+        drives(10, 10, 20)(c);
+      },
+      5 * GiB,
+      100 * GiB,
+    );
+    cachedReclaimPlan(home);
+    const d = decisionOf(runHook(HOOK, bash("cp x y"), env).stdout);
+    expect(d?.permissionDecisionReason).toContain("host C: (WSL vhdx) free");
+    expect(d?.permissionDecisionReason).toContain(`${5 * GiB} bytes (5.0 GiB)`);
+    expect(d?.permissionDecisionReason).toContain(
+      `${10 * GiB} bytes (10.0 GiB)`,
+    );
+    expect(d?.permissionDecisionReason).toContain(
+      "finished-cache 2147483648 bytes (2.0 GiB)",
+    );
+    expect(d?.permissionDecisionReason).toContain(
+      "disk-reclaim run --tier blind --yes",
+    );
   });
 
   test("allows only small Write/Edit operations under the session scratchpad below deny", () => {

@@ -15,6 +15,8 @@ import { registry, type Context, type Target } from "./targets/index.ts";
 import { typedYes } from "./targets/purge.ts";
 import { workerMutationRefusal } from "./lib/worker-guard.ts";
 import { resolveProcRoot } from "./lib/procs.ts";
+import { wslStorageSnapshot, wslReturnReport } from "./host-return.ts";
+import { cachePlanReport } from "./report.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -379,6 +381,8 @@ export async function main(
     process.stderr.write(
       `[reclaim] plan: scanning ${picked.length} targets…\n`,
     );
+  const wslBefore =
+    selectedCommand === "run" ? await wslStorageSnapshot() : null;
   const result =
     selectedCommand === "run"
       ? await run(picked, options)
@@ -388,7 +392,12 @@ export async function main(
   if (result.plan !== null) {
     const validated = Plan.safeParse(result.plan);
     if (!validated.success) return fail(validated.error.message);
+    if (selectedCommand === "plan") await cachePlanReport(validated.data);
     print(validated.data, planTable(validated.data), f.json);
+  }
+  if (selectedCommand === "run") {
+    const report = wslReturnReport(wslBefore, await wslStorageSnapshot());
+    if (report !== null) process.stderr.write(`${report}\n`);
   }
   return result.exit;
 }

@@ -36,6 +36,7 @@ import {
   storageLine as effective,
   type Drive,
 } from "../../tools/shared/src/storage-headroom.ts";
+import { readReclaimPlanCache } from "../../tools/shared/src/reclaim-plan-cache.ts";
 import {
   existsSync,
   mkdirSync,
@@ -1230,7 +1231,7 @@ async function main(): Promise<void> {
     );
   }
   if ((low.length > 0 || hostUnreadable) && hit === null) {
-    denyLowSpace(drives, config.drive);
+    await denyLowSpace(drives, config.drive);
   }
   if (hit !== null && (warningLine.length > 0 || hostUnreadable)) {
     const hostDrive = config.drive.host;
@@ -1243,7 +1244,7 @@ async function main(): Promise<void> {
     const recovery = hostLow ? await requestRecovery() : "";
     // BATCHED(drives): every drive is measured before this point and all of them are in the one
     // reason below, so a caller short on both learns it from a single denial.
-    denyLowSpace(
+    await denyLowSpace(
       drives,
       config.drive,
       `${hit.label} denied at its warn line.${hostUnreadable ? ` Host C could not be measured.${recovery}` : ""}`,
@@ -1297,7 +1298,7 @@ async function main(): Promise<void> {
 const ALLOWLIST =
   "Allowlist: cleanup: disk-reclaim, storage-headroom, mise run reclaim*, m reclaim*, jj workspace forget, jj abandon; read-only: df, du, dust, ls, cat, head, tail, rr, jj st, jj log, jj workspace list.";
 
-function denyLowSpace(
+async function denyLowSpace(
   drives: Array<{
     label: string;
     free: number | null;
@@ -1306,21 +1307,33 @@ function denyLowSpace(
   }>,
   configured: Record<string, Drive>,
   note = "",
-): never {
-  const first =
-    "free space: disk-reclaim plan, then disk-reclaim run --tier blind --yes";
+): Promise<never> {
+  const first = "free space: disk-reclaim run --tier blind --yes";
+  const candidates = await readReclaimPlanCache(process.env.HOME ?? homedir());
+  const reclaimAdvice =
+    candidates.length > 0
+      ? `Cached safe reclaim candidates: ${candidates
+          .map(
+            (c) => `${c.name} ${Math.round(c.bytes)} bytes (${gib(c.bytes)})`,
+          )
+          .join(", ")}.`
+      : "Cached safe reclaim candidates unavailable or stale; refresh with disk-reclaim plan.";
+  const driveLines = drives.map((drive) => {
+    let free = "unmeasured";
+    if (drive.free !== null)
+      free = `${Math.round(drive.free)} bytes (${gib(drive.free)})`;
+    return `${drive.label} free ${free} (deny line ${Math.round(drive.denyAt)} bytes (${gib(drive.denyAt)}))`;
+  });
   const measuredDrives =
     drives.length > 0
-      ? drives
-          .map((d) => `${d.label} ${gib(d.free)} (deny line ${gib(d.denyAt)})`)
-          .join(", ")
+      ? driveLines.join(", ")
       : Object.values(configured)
           .map((d) => `${d.label} unmeasured (deny line ${d.deny_gib} GiB)`)
           .join(", ");
   // BATCHED(drives): the denial details include every measured drive in one message.
   decidePre(
     "deny",
-    `${first}\n${measuredDrives}\n${ALLOWLIST}${note === "" ? "" : `\n${note}`}`,
+    `${first}\n${measuredDrives}\n${reclaimAdvice}\n${ALLOWLIST}${note === "" ? "" : `\n${note}`}`,
   );
 }
 

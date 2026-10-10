@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+
+- Cache a capped list of safe blind-tier plan candidates for actionable storage-headroom denials.
+- Report WSL guest free-space change separately from Windows C: free-space return, including the lazy sparse-VHDX and offline-compaction note.
+
 ## 0.4.2
 
 - Restrict the Windows winget-cache cleanup root to `%TEMP%\WinGet`, excluding installed portable packages and links under `%LOCALAPPDATA%\Microsoft\WinGet`.

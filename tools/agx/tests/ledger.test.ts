@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -10,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { ledgerFiles, ledgerLines, rotateRunsLog } from "../src/ledger.ts";
+import { decodedJson } from "./decode.ts";
 
 const CLI = join(import.meta.dir, "..", "src", "main.ts");
 const scratch = mkdtempSync(join(tmpdir(), "agx-ledger-"));
@@ -89,6 +91,49 @@ test("stats --all and export read dated archives", () => {
   const exported = run(["ledger", "export"], state);
   expect(exported.code).toBe(0);
   expect(exported.out.trim().split("\n")).toHaveLength(3);
+});
+
+test("gc expires only valid old deliveries without an existing decision", () => {
+  const state = join(scratch, "expiry-candidates");
+  mkdirSync(state, { recursive: true });
+  const pick = { source: "fixture", choice: "sol-low" };
+  const old = Temporal.Now.instant().subtract({ hours: 240 }).toString();
+  const recent = Temporal.Now.instant().toString();
+  const delivery = (id: string, endedAt = old) => ({
+    kind: "run",
+    run_id: id,
+    pick,
+    result: "delivered",
+    ended_at: endedAt,
+  });
+  const records = [
+    delivery("expire"),
+    delivery("accepted"),
+    delivery("rejected"),
+    delivery("recent", recent),
+    { kind: "acceptance", run_id: "accepted", pick, accept: true },
+    { kind: "acceptance", run_id: "rejected", pick, accept: false },
+    { ...delivery("malformed"), worker: { elapsed_s: "invalid" } },
+    { ...delivery("not-delivered"), result: "failed" },
+  ];
+  writeFileSync(
+    join(state, "runs.jsonl"),
+    records.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+  );
+  const result = run(["ledger", "gc"], state);
+  expect(result.code, result.err).toBe(0);
+  expect(result.out).toContain("marked 1 unaccepted delivery/deliveries");
+  const appended = readFileSync(join(state, "runs.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .slice(records.length)
+    .map((line) =>
+      decodedJson(
+        z.looseObject({ run_id: z.string(), accept: z.boolean() }),
+        line,
+      ),
+    );
+  expect(appended).toMatchObject([{ run_id: "expire", accept: false }]);
 });
 
 test("ps and stale-marker gc stay bounded on a 74 MiB ledger", () => {

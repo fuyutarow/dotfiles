@@ -20,6 +20,15 @@ with a compact handoff. A fresh `--prompt-file` dispatch also accepts `--repick 
 `ticket amend --file -` reads stdin; dispatch instructions require filesystem paths.
 Use `agx dispatch --help`, `agx show --help`, or the noun's `--help` to discover flags.
 
+`agx wait <ticket|run> [--all-live]` attaches a session-owned foreground command to existing
+work, including detached and amend-resumed workers. It prints each final dispatch receipt and
+waits through verification. `--all-live` snapshots the other currently live runs at invocation;
+each run is counted once. Exit is 0 for delivered/returned, 3 for timeout, and 1 for other failures.
+`agx follow <ticket|run> [--json]` emits one line per picked, started, interim RETURN, verify result
+and terminal event, then ends. JSON events carry `schema`, `run_id`, `state` and `detail`.
+Existing events are replayed before following new ones. Resume and amendment stay attached by
+default; `--detach` hands them to the OS manager and prints `agx wait <ticket>`.
+
 | Invocation | Input | Work resolution |
 | --- | --- | --- |
 | `dispatch --prompt-file brief.md --cd DIR --sandbox read-only` | Brief file | Create a state ticket |
@@ -29,6 +38,25 @@ Use `agx dispatch --help`, `agx show --help`, or the noun's `--help` to discover
 ## C2 EFFECTS
 
 - Effects / recovery: dispatch selects a row and starts a bounded worker; it writes a ticket, marker, content-addressed brief and receipt under state. A named ticket retains its existing home. Identical prompt-file instructions may reuse a released ticket name; different instructions require amendment or a new name. No force flag overwrites history. `--amend` validates input, interrupts the live router with SIGINT, waits up to 30 seconds, appends one AMEND section and resumes its vendor session (or repicks when requested). A failed stop leaves the worker running. Stored briefs and historical ledger rows remain readable.
+
+Before spawning, a per-run event journal records the sandbox, ticket, row, directory and known
+session. An unreadable worker receipt retains that metadata, so the ticket remains resumable,
+amendable and repickable. A historical continuation can inherit sandbox from its recorded ancestor.
+An initial run with no vendor session can repick; vendor resume requires an actual session ID.
+
+Capabilities accept plain routing tags or `{ need, lower_effort_lacks }` objects with non-empty
+strings. Only an object justifies xhigh/max. Without one, positive selection mass goes to the
+highest admissible lower effort in the same model family; receipt masks and fallback reasons
+record the change. The admission check also applies to overrides and continuation/escalation.
+Ticket lint warns once when tools/ or scripts/ writes may create a file without `reuses = [...]`.
+Wildcard scopes conservatively count as potential creation. The warning directs authors to run
+`rr exists '<capability>'` first; warnings do not reject dispatch.
+
+Workspace dispatch validates the ticket schema, timeout reason, local lint and write scope before
+allocation. Read-only writes and protected `.git`, `.agents`, `.codex` paths are refused in the
+corresponding Codex sandbox. Automatic names combine second-resolution time with a UUID;
+creation exclusively claims a sibling directory until setup completes or fails. A collision fails
+before invoking the workspace creator. Detached children reuse the prepared workspace.
 
 | Effect boundary | Partial state | Recovery |
 | --- | --- | --- |
@@ -78,7 +106,7 @@ retain their meanings.
 
 ## Command layout
 
-The suite has six top-level commands: dispatch, pick, ticket, ledger, show and ps.
+The suite has eight top-level commands: dispatch, pick, ticket, ledger, show, ps, wait and follow.
 There are no former command aliases.
 
 | Operation                           | Command                                                     |

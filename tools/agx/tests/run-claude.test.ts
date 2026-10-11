@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,6 +10,8 @@ import { decodedJson } from "./decode.ts";
 import { AGX_WORKER_ENV } from "../../shared/src/worker-env.ts";
 
 const ErrorEnvelope = z.object({ exit_code: z.number(), error: z.string() });
+// Positive fake-binary probes need startup room; the explicit 20ms timeout case stays unchanged.
+setDefaultTimeout(20_000);
 
 function parseErrorEnvelope(stdout: string): z.output<typeof ErrorEnvelope> {
   return decodedJson(ErrorEnvelope, stdout);
@@ -23,7 +25,11 @@ function runCli(
   script: string,
   args: string[],
 ): { exitCode: number; stderr: string; stdout: string } {
-  const result = Bun.spawnSync(["bun", script, ...args]);
+  const result = Bun.spawnSync([process.execPath, script, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 15_000,
+  });
   return {
     exitCode: result.exitCode,
     stderr: result.stderr.toString(),
@@ -54,7 +60,7 @@ describe("tools/agx dispatchner", () => {
         model: "sonnet",
         permissionMode: "plan",
         maxTurns: 1,
-        timeoutMs: 1_000,
+        timeoutMs: 5_000,
         safeMode: true,
         bare: false,
         claudeBin: fixture,
@@ -89,7 +95,7 @@ describe("tools/agx dispatchner", () => {
     const records = await probeModels(["sonnet", "reject"], {
       claudeBin: fixture,
       maxBudgetUsd: 0.2,
-      timeoutMs: 1_000,
+      timeoutMs: 5_000,
     });
 
     expect(records[0]?.kind).toBe("AVAILABLE");

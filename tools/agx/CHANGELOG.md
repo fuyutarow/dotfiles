@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.10.0 — 2026-10-11
+
+- Record sandbox, ticket, row and directory before worker dispatch. Preserve the known vendor session and sandbox when a continuation exits without a receipt; resume, amendment and repick keep the same ticket. Historical failed continuations can recover sandbox from their recorded ancestor.
+- Require structured `capabilities = [{ need, lower_effort_lacks }]` justification for xhigh/max. Plain tags still route; inadmissible picks fall back to the highest admissible lower effort of the same model family, with the mask and fallback recorded.
+- Warn about potential new files under tools/ or scripts/ without `reuses = [...]`, directing authors to `rr exists '<capability>'` first. Validate tickets and sandbox write scopes before workspace creation; automatic workspace names include a UUID and creation takes an atomic claim.
+- Add `agx wait <ticket|run> [--all-live]` and `agx follow <ticket|run> [--json]`. Keep foreground resume and amendment attached through completion. Detached acknowledgements print the wait command; detached continuations retain their assigned run ID and workspace.
+
 ## 2.9.1 — 2026-10-11
 
 - Add ticket `return_policy` with a `hard-blockers-only` default and an `any-contradiction` option. The shared worker promise block now tells Codex and Claude how to handle routine discrepancies and when to RETURN.

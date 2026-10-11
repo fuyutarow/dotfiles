@@ -24,6 +24,7 @@ export type { ActiveMarker };
 export const STATE_SCHEMA = ACTIVE_MARKER_SCHEMA;
 // agx owns the selection extension; shared consumers accept new marker fields.
 export const ActiveWriterSchema = ActiveMarkerSchema.extend({
+  sandbox: z.string().optional(),
   picked_probability: z.number().min(0).max(1).optional(),
   interim_cost_usd: z.number().nonnegative().optional(),
 });

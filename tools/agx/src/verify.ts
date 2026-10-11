@@ -85,6 +85,7 @@ export async function runVerify(
   cwd: string,
   timeoutS: number,
   onPhase?: (phase: string) => void,
+  onResult?: (result: VerifyResult) => void,
 ): Promise<VerifyResult[]> {
   const deadline = performance.now() + timeoutS * 1000;
   const results: VerifyResult[] = [];
@@ -104,6 +105,8 @@ export async function runVerify(
           }
         : await runOne(cmd, cwd, remaining),
     );
+    const result = results.at(-1);
+    if (result !== undefined) onResult?.(result);
   }
   return results;
 }

@@ -27,6 +27,20 @@ const suiteOptions = {
   help: suiteHelp,
   commands: [
     command({
+      name: "wait",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: { description: "Wait for terminal receipts" },
+    }),
+    command({
+      name: "follow",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: { description: "Stream run state changes" },
+    }),
+    command({
       name: "ticket",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,

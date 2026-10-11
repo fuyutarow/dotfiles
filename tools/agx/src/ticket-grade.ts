@@ -1,5 +1,5 @@
 import type { TicketGrade } from "./report.ts";
-import { ticketFields, type ParsedBrief } from "./ticket.ts";
+import { ticketFields, type ParsedBrief, type Capability } from "./ticket.ts";
 
 function frontMatterKeys(brief: string): Set<string> {
   return new Set(Object.keys(ticketFields(brief)));
@@ -22,10 +22,13 @@ function violation(brief: string, rule: string, why: string, fix: string) {
 }
 
 export function hasXhighMaxJustification(
-  capabilities: readonly string[],
+  capabilities: readonly Capability[],
 ): boolean {
   return capabilities.some(
-    (capability) => capability.trim().split(/\s+/u).length >= 4,
+    (capability) =>
+      typeof capability !== "string" &&
+      capability.need.trim() !== "" &&
+      capability.lower_effort_lacks.trim() !== "",
   );
 }
 
@@ -74,7 +77,7 @@ export function floorTicketGrade(
         brief,
         "effort",
         "xhigh/max slows the first return; the ticket names no measurable capability lower effort lacks.",
-        'capabilities = ["<what lower effort measurably lacks>"] or re-brief smaller',
+        'capabilities = [{ need = "<capability>", lower_effort_lacks = "<measurable limitation>" }] or re-brief smaller',
       ),
     );
   }

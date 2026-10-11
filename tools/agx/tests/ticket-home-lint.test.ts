@@ -118,10 +118,41 @@ describe("ticket promises and resource metadata", () => {
 });
 
 describe("local lint", () => {
-  test("schema, timeout, resource, verify and missing premises are collected together", () => {
+  test("new tool files warn about reuse while declared reuse and existing exact files do not", async () => {
+    const brief = complete("RESOURCE-CLASS(NONCOMPUTE): CLI").replace(
+      'writes = ["src/**"]',
+      'writes = ["tools/new-tool.ts"]',
+    );
+    expect((await lintTicket(brief, scratch)).warnings?.join(" ")).toContain(
+      "rr exists '<capability>'",
+    );
+    expect(
+      (
+        await lintTicket(
+          brief.replace(
+            'verify = ["true"]',
+            'verify = ["true"]\nreuses = ["ticket-home", "run-control"]',
+          ),
+          scratch,
+        )
+      ).warnings,
+    ).toEqual([]);
+    mkdirSync(join(scratch, "tools"), { recursive: true });
+    writeFileSync(join(scratch, "tools/new-tool.ts"), "existing");
+    expect((await lintTicket(brief, scratch)).warnings).toEqual([]);
+    expect(
+      (
+        await lintTicket(
+          brief.replace("tools/new-tool.ts", "scripts/new-file.ts"),
+          scratch,
+        )
+      ).warnings,
+    ).toHaveLength(1);
+  });
+  test("schema, timeout, resource, verify and missing premises are collected together", async () => {
     const brief =
       '+++\nschema = 2\ntimeout_s = 3\npremises = ["file:missing.ts"]\n+++\nDo the work.\n';
-    const result = lintTicket(brief, scratch);
+    const result = await lintTicket(brief, scratch);
     expect(result.violations.map((item) => item.rule)).toEqual([
       "verify",
       "schema",
@@ -136,21 +167,25 @@ describe("local lint", () => {
       expect(violation.fix.length).toBeGreaterThan(0);
   });
 
-  test("older tickets work, resource declarations and diagnostic alternatives pass", () => {
+  test("older tickets work, resource declarations and diagnostic alternatives pass", async () => {
     expect(
-      lintTicket(complete("RESOURCE-CLASS(NONCOMPUTE): CLI"), scratch)
+      (await lintTicket(complete("RESOURCE-CLASS(NONCOMPUTE): CLI"), scratch))
         .violations,
     ).toEqual([]);
     expect(
-      lintTicket(
-        complete("RESOURCE-ENVELOPE(/tmp/r.json): agent-resource-run only"),
-        scratch,
+      (
+        await lintTicket(
+          complete("RESOURCE-ENVELOPE(/tmp/r.json): agent-resource-run only"),
+          scratch,
+        )
       ).violations,
     ).toEqual([]);
     expect(
-      lintTicket(
-        "+++\nschema = 1\nwrites = []\nread_only_diagnostic = true\n+++\nRESOURCE-CLASS(NONCOMPUTE): inspection",
-        scratch,
+      (
+        await lintTicket(
+          "+++\nschema = 1\nwrites = []\nread_only_diagnostic = true\n+++\nRESOURCE-CLASS(NONCOMPUTE): inspection",
+          scratch,
+        )
       ).violations,
     ).toEqual([]);
   });
@@ -311,7 +346,7 @@ describe("repository ticket home", () => {
     expect(text).toContain("second amendment");
   });
 
-  test("new creates one skeleton with repeated labels; ls joins the latest ledger run", () => {
+  test("new creates one skeleton with repeated labels; ls joins the latest ledger run", async () => {
     const root = join(scratch, "repo");
     mkdirSync(root);
     const labels = ["Exact Case", "Exact Case", "x/y"];
@@ -320,7 +355,9 @@ describe("repository ticket home", () => {
     if (path instanceof Error) return;
     const parsed = parseTicket(readFileSync(path, "utf8"));
     expect(parsed.kind === "ticket" && parsed.ticket.labels).toEqual(labels);
-    expect(lintTicket(readFileSync(path, "utf8"), root).violations).toEqual([]);
+    expect(
+      (await lintTicket(readFileSync(path, "utf8"), root)).violations,
+    ).toEqual([]);
     expect(newTicket(root, "retry", [], "2026-10-10")).toBeInstanceOf(Error);
     expect(newTicket(root, "../escape", [])).toBeInstanceOf(Error);
     expect(

@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { fromAsyncThrowable } from "neverthrow";
 import { errorMessage } from "../../shared/src/attempt.ts";
 import { z } from "../../shared/src/zod.ts";
+import { randomUUID } from "node:crypto";
 
 export type WorkspacePlan =
   | { ok: true; name: string; path: string }
@@ -34,7 +35,7 @@ export async function planWorkspace(
   const name =
     hintedName !== undefined && hintedName.length > 0
       ? hintedName
-      : `agx-${timestamp.replaceAll(/[^0-9]/gu, "").slice(0, 14)}`;
+      : `agx-${timestamp.replaceAll(/[^0-9]/gu, "").slice(0, 14)}-${randomUUID()}`;
   if (!/^[A-Za-z0-9_-]+$/u.test(name))
     return {
       ok: false,

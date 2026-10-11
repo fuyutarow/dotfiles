@@ -74,6 +74,14 @@ const premise = z.string().refine(
   },
 );
 
+export const CapabilitySchema = z.union([
+  z.string().trim().min(1),
+  z.strictObject({
+    need: z.string().trim().min(1),
+    lower_effort_lacks: z.string().trim().min(1),
+  }),
+]);
+
 const CommonTicket = {
   labels: z.array(z.string()).default([]),
   name: z
@@ -99,7 +107,8 @@ const CommonTicket = {
   budget_usd: z.number().positive().optional(),
   stall_s: z.number().int().positive().optional(),
   pick_temperature: z.number().min(0).max(5).optional(),
-  capabilities: z.array(z.string().min(1)).default([]),
+  capabilities: z.array(CapabilitySchema).default([]),
+  reuses: z.array(z.string().trim().min(1)).optional(),
   premises: z.array(premise).optional(),
   outcome: z.string().trim().min(1).optional(),
   consumer: z.string().trim().min(1).optional(),
@@ -129,6 +138,11 @@ export const TicketSchema = z
     message: "required for schema 1 tickets",
   });
 export type Ticket = z.output<typeof TicketSchema>;
+export type Capability = Ticket["capabilities"][number];
+export const capabilityTags = (capabilities: readonly Capability[]): string[] =>
+  capabilities.map((capability) =>
+    typeof capability === "string" ? capability : capability.need,
+  );
 
 export type ParsedBrief =
   | { kind: "legacy"; prose: string }

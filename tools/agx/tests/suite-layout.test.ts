@@ -1,10 +1,12 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../package.json" with { type: "json" };
 
 const CLI = join(import.meta.dir, "../src/main.ts");
+// Root-help cases launch multiple cold, individually bounded CLI processes.
+setDefaultTimeout(20_000);
 const ROOT = join(import.meta.dir, "../../..");
 const testEnv: NodeJS.ProcessEnv = {
   ...Object.fromEntries(
@@ -61,6 +63,8 @@ test("bare and unknown commands list the root command nouns", () => {
     expect(result.exitCode).toBe(2);
     const output = result.stdout.toString();
     expect(commandNames(output)).toEqual([
+      "wait",
+      "follow",
       "ticket",
       "pick",
       "dispatch",
@@ -79,6 +83,8 @@ test("minimal environment and piped stdout list all nouns from an unrelated cwd"
     const result = invoke(args, minimal, cwd);
     expect(result.exitCode).toBe(args.includes("--help") ? 0 : 2);
     expect(commandNames(result.stdout.toString())).toEqual([
+      "wait",
+      "follow",
       "ticket",
       "pick",
       "dispatch",
@@ -106,6 +112,8 @@ test("forced color, no color and narrow columns keep suite headings and nouns st
       const result = invoke(args, env);
       expect(result.exitCode).toBe(args.includes("--help") ? 0 : 2);
       expect(commandNames(result.stdout.toString())).toEqual([
+        "wait",
+        "follow",
         "ticket",
         "pick",
         "dispatch",
@@ -115,7 +123,7 @@ test("forced color, no color and narrow columns keep suite headings and nouns st
       ]);
     }
   }
-}, 15_000);
+}, 60_000);
 
 test("the CLI ignores previous state paths and previous environment overrides", () => {
   const base = mkdtempSync(join(tmpdir(), "agx-state-layout-"));

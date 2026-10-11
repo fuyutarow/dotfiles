@@ -57,7 +57,7 @@ describe("floor ticket grade", () => {
     expect(grade.violations.at(-1)?.fix).toContain("capabilities =");
   });
 
-  test("xhigh/max needs a free-text capability justification", () => {
+  test("xhigh/max needs a structured capability justification", () => {
     const base = [
       'outcome = "choose retry behavior"',
       'consumer = "runtime owner"',
@@ -69,6 +69,7 @@ describe("floor ticket grade", () => {
       "merge-conflicts",
       "typescript",
       "three word tag",
+      "debugging a hang across a 4000-line file where four luna attempts failed",
     ]) {
       const brief = schema2(`${base}\ncapabilities = ["${capability}"]`);
       expect(
@@ -78,7 +79,7 @@ describe("floor ticket grade", () => {
       ).toContain("effort");
     }
     const brief = schema2(
-      `${base}\ncapabilities = ["debugging a hang across a 4000-line file where four luna attempts failed"]`,
+      `${base}\ncapabilities = [{ need = "debugging a hang", lower_effort_lacks = "four lower effort attempts failed to find the deadlock" }]`,
     );
     expect(floorTicketGrade(brief, parseTicket(brief), "xhigh").verdict).toBe(
       "pass",

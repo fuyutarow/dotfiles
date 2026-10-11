@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { attempt } from "../../shared/src/attempt.ts";
 import {
@@ -16,6 +16,27 @@ export async function createSparseWorkspace(
 ) {
   const policy = await workspacePolicy(root);
   if (!policy.ok) return policy;
+  const claim = `${path}.agx-claim`;
+  const claimed = await attempt(() => mkdir(claim));
+  if (!claimed.ok)
+    return { ok: false as const, error: `workspace already claimed: ${path}` };
+  const created = await attempt(() =>
+    createClaimedWorkspace(root, name, path, command, policy.value),
+  );
+  await rm(claim, { recursive: true, force: true });
+  return created.ok ? created.value : created;
+}
+
+async function createClaimedWorkspace(
+  root: string,
+  name: string,
+  path: string,
+  command: typeof workspaceCommand,
+  policy: Extract<
+    Awaited<ReturnType<typeof workspacePolicy>>,
+    { ok: true }
+  >["value"],
+) {
   const added = await command(
     [
       "jj",
@@ -37,7 +58,7 @@ export async function createSparseWorkspace(
         "sparse",
         "set",
         "--clear",
-        ...policy.value.sparse_set.flatMap((p) => ["--add", p]),
+        ...policy.sparse_set.flatMap((p) => ["--add", p]),
       ],
       path,
     );
@@ -55,7 +76,7 @@ export async function createSparseWorkspace(
     return size.ok
       ? ({
           ok: true,
-          value: { ...policy.value, checkout_bytes: size.value },
+          value: { ...policy, checkout_bytes: size.value },
         } as const)
       : size;
   });

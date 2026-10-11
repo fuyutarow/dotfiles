@@ -138,6 +138,7 @@ const promptAt = args.indexOf("--prompt-file");
 const promptText = promptAt === -1 ? "" : await Bun.file(args[promptAt + 1] ?? "").text();
 const isGrader = promptText.includes("Grade this brief as a meaningful remand judgment");
 const resuming = args.includes("--resume");
+if (process.env.FAKE_NO_RECEIPT === "1" && !isGrader) process.exit(17);
 if (resuming && process.env.FAKE_RESUME_LAST !== undefined) process.env.FAKE_LAST = process.env.FAKE_RESUME_LAST;
 const continuationLog = process.env.FAKE_CONTINUATION_LOG;
 if (!isGrader && continuationLog !== undefined) {
@@ -157,14 +158,19 @@ if (process.env.FAKE_LIFECYCLE !== undefined && !isGrader) {
     process.exit(3);
   });
   let burning;
-  if (mode === "cpu") burning = Bun.spawn([process.execPath, "-e", "const until = performance.now() + 2500; while (performance.now() < until) Math.sqrt(Math.random());"], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  const cpuStop = process.env.AGX_CODEX_PROGRESS_FILE + ".cpu-stop";
+  if (mode === "cpu") burning = Bun.spawn([process.execPath, "-e", "import { existsSync } from 'node:fs'; const until = performance.now() + 12000; while (performance.now() < until && !existsSync(process.argv[1])) Math.sqrt(Math.random());", cpuStop], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
   const until = performance.now() + 2500;
+  const deadline = performance.now() + 12000;
+  const queue = process.env.AGX_STATE_DIR + "/queue.log";
+  const requested = () => existsSync(queue) && readFileSync(queue, "utf8").includes("Never stop running jobs");
   let counter = 0;
-  while (performance.now() < until) {
+  while (performance.now() < deadline && (performance.now() < until || !requested())) {
     if (mode === "writes") await Bun.write(cwd + "/delivered.txt", String(counter++));
     if (mode === "output") await Bun.write(process.env.AGX_WORKER_ACTIVITY_FILE, String(counter++));
     await Bun.sleep(80);
   }
+  await Bun.write(cpuStop, "finished");
   if (burning !== undefined) await burning.exited;
 console.log(JSON.stringify({ schema: 1, run_id: runId, outcome: "ok", num_turns: 1, session: "thread-lifecycle", last_message: "done" }));
   process.exit(0);
@@ -354,6 +360,7 @@ async function router(
       AGX_STATE_DIR: state,
       AGX_CODEX_WORKER: FAKE,
       AGX_CODEX_BIN: QUEUE,
+      CODEX_BIN: QUEUE,
       DISPATCH_ROSTER_PATH: LIVE_JEV,
       TYPESAFE_API_KEY: "fixture-key",
       ...env,
@@ -687,9 +694,11 @@ describe("agx dispatch", () => {
     );
     expect(logged.pick).toEqual({
       source: "override",
-      choice: "luna-max",
+      choice: "luna-high",
       approval: "owner approved this row",
       reason: "owner-approved row override",
+      pick_fallback_reason:
+        "luna-max inadmissible without structured justification; same family fallback luna-high",
     });
   });
 
@@ -1613,7 +1622,8 @@ describe("agx dispatch", () => {
     expect(typeof receipt.pick.seed).toBe("string");
     expect(receipt.pick.masked_rows).toContainEqual({
       row: "luna-max",
-      reason: "xhigh/max lacks a free-text justification",
+      reason:
+        "xhigh/max lacks structured need/lower_effort_lacks justification",
     });
   });
 
@@ -1633,7 +1643,7 @@ describe("agx dispatch", () => {
     expect(receipt.pick.choice).toBe("luna-high");
     expect(receipt.pick.mode).toBe("fallback");
     expect(receipt.pick.pick_fallback_reason).toBe(
-      "no probabilities; Jev choice 'luna-max' is unavailable, using default",
+      "no probabilities; luna-max inadmissible without structured justification; same family fallback luna-high",
     );
     expect(receipt.pick.confidence).toBe(0.2);
   });
@@ -1863,7 +1873,7 @@ describe("agx dispatch", () => {
       const target = brief(
         name,
         ticketText(
-          `writes = []\nverify = []\ncapabilities = ["${capabilities}"]`,
+          `writes = []\nverify = []\ncapabilities = [${capabilities === "typescript" ? JSON.stringify(capabilities) : `{ need = "debugging", lower_effort_lacks = "${capabilities}" }`}]`,
           jev,
         ),
       );
@@ -1954,7 +1964,8 @@ describe("agx dispatch", () => {
     expect(receipt.pick.sampled_probability).toBeGreaterThan(0);
     expect(receipt.pick.masked_rows).toContainEqual({
       row: "luna-max",
-      reason: "xhigh/max lacks a free-text justification",
+      reason:
+        "xhigh/max lacks structured need/lower_effort_lacks justification",
     });
   });
 
@@ -3649,6 +3660,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     "%s persists kind and opaque labels in prompt, marker and ledger",
     async (resource, kind) => {
       const state = join(scratch, `metadata-${kind}`);
+      const release = join(scratch, `metadata-${kind}.release`);
       const labels = ["Exact Case", "", "a/b", "Exact Case"];
       const b = brief(
         `metadata-${kind}`,
@@ -3661,12 +3673,18 @@ describe("agx dispatch: a brief with a ticket", () => {
         runArgs(b, freshCwd()),
         {
           AGX_STATE_DIR: state,
-          FAKE_SLEEP_MS: "250",
+          FAKE_BLOCK_UNTIL_FILE: release,
         },
         async () => {
+          using _release = {
+            [Symbol.dispose]: () => {
+              writeFileSync(release, "checked");
+            },
+          };
           const home = join(state, "active");
           let marker: string | undefined;
-          for (let i = 0; i < 200; i++) {
+          const deadline = performance.now() + 15_000;
+          while (performance.now() < deadline) {
             marker = existsSync(home)
               ? readdirSync(home).find(
                   (name) =>
@@ -4042,7 +4060,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     const env = {
       AGX_STATE_DIR: state,
       FAKE_SLEEP_MS: "10000",
-      FAKE_RESUME_SLEEP_MS: "0",
+      FAKE_RESUME_SLEEP_MS: "500",
       FAKE_CHECKPOINT: "1",
     };
     let amended: Awaited<ReturnType<typeof router>> | undefined;
@@ -4086,10 +4104,12 @@ describe("agx dispatch: a brief with a ticket", () => {
         expect(readFileSync(ticketFile, "utf8")).toContain(
           'name = "u24_copyfix"',
         );
+        const resumedAt = performance.now();
         amended = await router(
           ["dispatch", "--amend", "u24_copyfix", "--file", amendment],
           env,
         );
+        expect(performance.now() - resumedAt).toBeGreaterThanOrEqual(500);
       },
     );
     expect(stopped.code).toBe(130);
@@ -5498,9 +5518,11 @@ describe("agx dispatch: a brief with a ticket", () => {
     });
     expect(first.code).toBe(1);
     const original = decodedJson(RunIdSchema, first.out.trim()).run_id;
+    // Make reuse of the original clock fail even with a generous fixture startup allowance.
+    await Bun.sleep(5500);
     const resumed = await router(["dispatch", "--resume", original], {
       AGX_STATE_DIR: state,
-      AGX_CHECKPOINT_MS: "250",
+      AGX_CHECKPOINT_MS: "5000",
       FAKE_CHECKPOINT: "1",
       FAKE_RESUME_SLEEP_MS: "1000",
       FAKE_ELAPSED_S: "0.01",
@@ -6397,6 +6419,300 @@ const readPids = (file: string): number[] =>
 // --- resume: continue a stopped worker in its own vendor session -----------------------------------
 
 describe("agx dispatch --resume", () => {
+  test("structured justification admits sol-max; long plain tags fall back to sol-high and retain routing tags", async () => {
+    for (const [capability, expected] of [
+      ['"debugging a large file after multiple attempts"', "sol-high"],
+      [
+        '{ need = "typescript", lower_effort_lacks = "failed four attempts to locate the deadlock" }',
+        "sol-max",
+      ],
+    ] satisfies [string, string][]) {
+      const input = brief(
+        `effort-${expected}`,
+        ticketText(
+          `writes = []\nverify = []\ncapabilities = [${capability}]`,
+          "PICK=sol-max",
+        ),
+      );
+      const picked = await router([
+        "pick",
+        "--prompt-file",
+        input,
+        "--cd",
+        scratch,
+      ]);
+      expect(picked.code, picked.err).toBe(0);
+      const pick = decodedJson(
+        z.looseObject({
+          choice: z.string(),
+          pick_fallback_reason: z.string().optional(),
+        }),
+        picked.out.trim(),
+      );
+      expect(pick.choice).toBe(expected);
+      if (expected === "sol-high")
+        expect(pick.pick_fallback_reason).toContain("same family");
+      else
+        expect(lastJevBody()).toContain(
+          '"required_capabilities":["typescript"]',
+        );
+    }
+  });
+  test("a resumed worker that dies without a receipt preserves sandbox, session and ticket for amend/resume/repick", async () => {
+    const state = join(scratch, "crashed-continuation");
+    const cwd = freshCwd();
+    const input = brief("crash-cont", "complete the task\n");
+    const original = await router(
+      [...runArgs(input, cwd), "--name", "crash_cont"],
+      { AGX_STATE_DIR: state, FAKE_TIMEOUT: "1" },
+    );
+    expect(original.code).toBe(3);
+    const failed = await router(["dispatch", "--resume", "crash_cont"], {
+      AGX_STATE_DIR: state,
+      FAKE_NO_RECEIPT: "1",
+    });
+    expect(failed.code).not.toBe(0);
+    const record = decodedJson(
+      z.looseObject({
+        sandbox: z.string(),
+        worker: z.looseObject({ session: z.string(), sandbox: z.string() }),
+        ticket: z.looseObject({ path: z.string() }),
+      }),
+      failed.out.trim(),
+    );
+    expect(record.sandbox).toBe("workspace-write");
+    expect(record.worker.session).toBe("thread-fake-0001");
+    expect(record.worker.sandbox).toBe("workspace-write");
+    const again = await router(["dispatch", "--resume", "crash_cont"], {
+      AGX_STATE_DIR: state,
+    });
+    expect(again.code, again.err).toBe(0);
+    const amendment = join(scratch, "crash-cont-amend.md");
+    writeFileSync(amendment, "Check the amended acceptance condition.");
+    const amended = await router(
+      ["dispatch", "--amend", "crash_cont", "--file", amendment],
+      { AGX_STATE_DIR: state, FAKE_NO_RECEIPT: "1" },
+    );
+    expect(amended.code).not.toBe(0);
+    const repicked = await router(
+      ["dispatch", "--resume", "crash_cont", "--repick"],
+      { AGX_STATE_DIR: state },
+    );
+    expect(repicked.code, repicked.err).toBe(0);
+    expect(repicked.err).not.toContain("sandbox was not recorded");
+    expect(readFileSync(record.ticket.path, "utf8")).toContain(
+      "Check the amended acceptance condition.",
+    );
+  });
+
+  test("a fresh crashed worker without any receipt can repick", async () => {
+    const state = join(scratch, "fresh-crashed-repick");
+    const crashed = await router(
+      [
+        ...runArgs(brief("fresh-crash", "do work"), freshCwd()),
+        "--name",
+        "fresh_crash",
+      ],
+      { AGX_STATE_DIR: state, FAKE_NO_RECEIPT: "1" },
+    );
+    expect(crashed.code).not.toBe(0);
+    const repicked = await router(
+      ["dispatch", "--resume", "fresh_crash", "--repick"],
+      { AGX_STATE_DIR: state },
+    );
+    expect(repicked.code, repicked.err).toBe(0);
+  });
+
+  test("wait and follow attach to a fake worker until terminal, replaying state changes", async () => {
+    const state = join(scratch, "watch-live-worker");
+    let waited: Awaited<ReturnType<typeof router>> | undefined;
+    let followed: Awaited<ReturnType<typeof router>> | undefined;
+    const dispatched = await router(
+      [
+        ...runArgs(brief("watch-fixture", "do work"), freshCwd()),
+        "--name",
+        "watch_fixture",
+      ],
+      { AGX_STATE_DIR: state, FAKE_SLEEP_MS: "700" },
+      async () => {
+        const until = performance.now() + 5000;
+        while (!existsSync(join(state, "active")) && performance.now() < until)
+          await Bun.sleep(10);
+        await Bun.sleep(100);
+        [waited, followed] = await Promise.all([
+          router(["wait", "watch_fixture"], { AGX_STATE_DIR: state }),
+          router(["follow", "watch_fixture", "--json"], {
+            AGX_STATE_DIR: state,
+          }),
+        ]);
+      },
+    );
+    expect(dispatched.code).toBe(0);
+    expect(waited?.code, waited?.err).toBe(1);
+    expect(waited?.out).toContain('"kind":"run"');
+    const states = (followed?.out ?? "")
+      .trim()
+      .split("\n")
+      .map(
+        (line) => decodedJson(z.looseObject({ state: z.string() }), line).state,
+      );
+    expect(states).toEqual(["picked", "started", "terminal"]);
+    expect(followed?.code).toBe(1);
+  });
+
+  test("detached fake-worker runs can be waited and followed, including detached resume", async () => {
+    const bin = join(scratch, "fake-manager-bin");
+    mkdirSync(bin, { recursive: true });
+    const manager = join(bin, "systemd-run");
+    writeFileSync(
+      manager,
+      `#!${process.execPath}\nconst args = Bun.argv.slice(2);\nconst command = args.slice(args.indexOf("--") + 1);\nconst cwd = args.find(a => a.startsWith("--working-directory="))?.slice("--working-directory=".length);\nconst child = Bun.spawn(command, { cwd, env: process.env, stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true, timeout: 10000 });\nchild.unref();\n`,
+    );
+    chmodSync(manager, 0o755);
+    const state = join(scratch, "detached-watch-state");
+    const report =
+      '{"summary":"done","changes":[],"checks":[],"for_coordinator":[],"open":[]}\n```agx-return\n{"findings":[{"text":"done"}],"evidence":["fixture"],"impact_on_brief":"none","proposed_next":"done","artifacts":[]}\n```';
+    const env = {
+      AGX_STATE_DIR: state,
+      AGX_DETACH_PLATFORM: "linux",
+      AGX_TEST_CLAUDE_ROUTE: "unavailable",
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      FAKE_SLEEP_MS: "700",
+      FAKE_RESUME_SLEEP_MS: "700",
+      FAKE_LAST: report,
+    };
+    const launched = await router(
+      [
+        ...runArgs(
+          brief("detached-watch", ticketText('writes = []\nverify = ["true"]')),
+          freshCwd(),
+        ),
+        "--name",
+        "detached_watch",
+        "--detach",
+      ],
+      env,
+    );
+    expect(launched.code, launched.err).toBe(0);
+    expect(launched.out).toContain("agx wait detached_watch");
+    const [waited, followed] = await Promise.all([
+      router(["wait", "detached_watch"], env),
+      router(["follow", "detached_watch", "--json"], env),
+    ]);
+    expect(waited.code, waited.err).toBe(0);
+    expect(followed.code, followed.err).toBe(0);
+    expect(followed.out).toContain('"state":"verify result"');
+    expect(followed.out).toContain('"state":"terminal"');
+    const resumed = await router(
+      ["dispatch", "--resume", "detached_watch", "--detach"],
+      env,
+    );
+    expect(resumed.code, resumed.err).toBe(0);
+    const again = await router(["wait", "detached_watch"], env);
+    expect(again.code, again.err).toBe(0);
+    expect(again.out).toContain('"resumed_from"');
+    const amendment = join(scratch, "detached-amend.md");
+    writeFileSync(
+      amendment,
+      "Owner correction watched through the detached continuation.",
+    );
+    let amendmentWait: Awaited<ReturnType<typeof router>> | undefined;
+    const interrupted = await router(
+      ["dispatch", "--resume", "detached_watch"],
+      { ...env, FAKE_RESUME_SLEEP_MS: "10000", FAKE_CHECKPOINT: "1" },
+      async () => {
+        const until = performance.now() + 5000;
+        while (performance.now() < until) {
+          const dir = join(state, "active");
+          if (
+            existsSync(dir) &&
+            readdirSync(dir).some((file) => file.endsWith(".progress.json"))
+          )
+            break;
+          await Bun.sleep(10);
+        }
+        const amended = await router(
+          [
+            "dispatch",
+            "--amend",
+            "detached_watch",
+            "--file",
+            amendment,
+            "--detach",
+          ],
+          env,
+        );
+        expect(amended.code, amended.err).toBe(0);
+        amendmentWait = await router(["wait", "detached_watch"], env);
+      },
+    );
+    expect(interrupted.code).toBe(130);
+    expect(amendmentWait?.code, amendmentWait?.err).toBe(0);
+    expect(amendmentWait?.out).toContain('"resumed_from"');
+    const legacy = await router(
+      [
+        ...runArgs(
+          brief("legacy-detached", "Legacy worker instructions."),
+          freshCwd(),
+        ),
+        "--name",
+        "legacy_watch",
+        "--detach",
+      ],
+      env,
+    );
+    expect(legacy.code, legacy.err).toBe(0);
+    expect((await router(["wait", "legacy_watch"], env)).code).toBe(0);
+    const retired = roster("detached-retired-row", (text) =>
+      withJev(text).replace(
+        /\[\[choice\]\]\nid = "luna-low"[\s\S]*?(?=\n\[\[choice\]\])/u,
+        "",
+      ),
+    );
+    const refused = await router(
+      ["dispatch", "--resume", "legacy_watch", "--detach"],
+      { ...env, DISPATCH_ROSTER_PATH: retired },
+    );
+    expect(refused.code, refused.err).toBe(0);
+    const refusedWait = await router(["wait", "legacy_watch"], env);
+    expect(refusedWait.code, refusedWait.err).toBe(1);
+    expect(refusedWait.out).toContain(
+      "dispatch exited before writing its terminal receipt",
+    );
+    const continued = await router(
+      ["dispatch", "--resume", "legacy_watch"],
+      env,
+    );
+    expect(continued.code, continued.err).toBe(0);
+    const legacyResume = await router(
+      ["dispatch", "--resume", "legacy_watch", "--detach"],
+      env,
+    );
+    expect(legacyResume.code, legacyResume.err).toBe(0);
+    expect((await router(["wait", "legacy_watch"], env)).code).toBe(0);
+  }, 60_000);
+
+  test("workspace dispatch refuses invalid schema, timeout and protected writes before allocation", async () => {
+    for (const fields of [
+      "writes = []\nverify = []\nunknown = true",
+      "writes = []\nverify = []\ntimeout_s = 1200",
+      'writes = [".agents/skills/**"]\nverify = []',
+    ]) {
+      const rejected = await router([
+        "dispatch",
+        "--prompt-file",
+        brief(`preflight-${stateSeq}`, ticketText(fields)),
+        "--workspace",
+        "fixture-refused",
+        "--sandbox",
+        "workspace-write",
+      ]);
+      expect(rejected.code).toBe(2);
+      expect(rejected.err).not.toContain("workspace receipt");
+      expect(rejected.err).not.toContain("workspace path already exists");
+      expect(rejected.err).toMatch(/schema|timeout_reason|protected/u);
+    }
+  });
   const argvLines = (file: string): string[][] =>
     readFileSync(join(scratch, file), "utf8")
       .trim()

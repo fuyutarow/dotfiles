@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
@@ -14,6 +14,8 @@ import { z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
 
 const CLI = join(import.meta.dir, "..", "src", "agx.ts");
+// Each integration case can launch several bounded CLI children; allow loaded CI hosts.
+setDefaultTimeout(20_000);
 const scratch = mkdtempSync(join(tmpdir(), "agx-run-control-"));
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
@@ -28,6 +30,7 @@ function cli(
     env: { ...process.env, AGX_STATE_DIR: state, ...env },
     stdout: "pipe",
     stderr: "pipe",
+    timeout: 15_000,
   });
   return {
     code: result.exitCode ?? -1,
@@ -69,6 +72,136 @@ const PsRun = z.looseObject({
   summary: z.string().nullable(),
 });
 const PsResult = z.looseObject({ runs: z.array(PsRun) });
+
+test("wait --all-live snapshots fake workers, prints each receipt once and returns timeout failure", async () => {
+  const state = join(scratch, "wait-all-live");
+  const active = join(state, "active");
+  const release = join(state, "release-second");
+  mkdirSync(active, { recursive: true });
+  const worker = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      `
+    import { appendFileSync, existsSync, rmSync } from "node:fs";
+    const state = ${JSON.stringify(state)};
+    for (const [id, result, exit] of [["first", "delivered", 0], ["second", "failed", 3]]) {
+      while (id === "second" && !existsSync(state + "/release-second")) await Bun.sleep(10);
+      await Bun.sleep(250);
+      appendFileSync(state + "/runs.jsonl", JSON.stringify({ kind: "run", run_id: id, pick: { source: "fixture", choice: "luna-low" }, result, exit, worker: { outcome: exit === 3 ? "timeout" : "ok" } }) + "\\n");
+      rmSync(state + "/active/" + id + ".json");
+    }
+  `,
+    ],
+    { stdout: "ignore", stderr: "ignore", timeout: 15_000 },
+  );
+  for (const id of ["first", "second"])
+    writeFileSync(
+      join(active, `${id}.json`),
+      JSON.stringify(
+        marker(id, worker.pid, "session", Temporal.Now.instant().toString()),
+      ),
+    );
+  const waiter = Bun.spawn(
+    [process.execPath, CLI, "wait", "first", "--all-live"],
+    {
+      env: { ...process.env, AGX_STATE_DIR: state },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 15_000,
+    },
+  );
+  const output = async (): Promise<string> => {
+    let text = "";
+    const decoder = new TextDecoder();
+    for await (const chunk of waiter.stdout) {
+      text += decoder.decode(chunk);
+      if (text.includes('"run_id":"first"'))
+        writeFileSync(release, "first received");
+    }
+    return text;
+  };
+  const [out, err, code, workerExit] = await Promise.all([
+    output(),
+    new Response(waiter.stderr).text(),
+    waiter.exited,
+    worker.exited,
+  ]);
+  expect(code, err).toBe(3);
+  const receipts = out
+    .trim()
+    .split("\n")
+    .map(
+      (line) => decodedJson(z.looseObject({ run_id: z.string() }), line).run_id,
+    );
+  expect(receipts).toEqual(["first", "second"]);
+  expect(workerExit).toBe(0);
+});
+
+test("follow replays picked, started, interim RETURN and verification in timestamp order and ends", () => {
+  const state = join(scratch, "follow-replay");
+  mkdirSync(join(state, "events"), { recursive: true });
+  const pick = { source: "fixture", choice: "luna-low" };
+  const runId = "ordered";
+  const events = [
+    {
+      kind: "started",
+      run_id: runId,
+      pick,
+      started_at: "2026-10-11T00:00:00Z",
+      sandbox: "read-only",
+    },
+    {
+      kind: "verify",
+      run_id: runId,
+      pick,
+      at: "2026-10-11T00:00:02Z",
+      verify: [{ cmd: "true", exit: 0 }],
+    },
+  ];
+  writeFileSync(
+    join(state, "events/ordered.jsonl"),
+    events.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+  );
+  const log = [
+    {
+      kind: "interim",
+      run_id: runId,
+      pick,
+      at: "2026-10-11T00:00:01Z",
+      interim_report: { return: { interim: true } },
+    },
+    {
+      kind: "run",
+      run_id: runId,
+      pick,
+      ended_at: "2026-10-11T00:00:03Z",
+      result: "returned",
+      worker: { outcome: "returned" },
+    },
+  ];
+  writeFileSync(
+    join(state, "runs.jsonl"),
+    log.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+  );
+  const followed = cli(["follow", runId, "--json"], state);
+  expect(followed.code, followed.err).toBe(0);
+  const states = followed.out
+    .trim()
+    .split("\n")
+    .map(
+      (line) => decodedJson(z.looseObject({ state: z.string() }), line).state,
+    );
+  expect(states).toEqual([
+    "picked",
+    "started",
+    "interim RETURN",
+    "verify result",
+    "terminal",
+  ]);
+  expect(cli(["follow", runId, "extra"], state).code).toBe(2);
+  expect(cli(["wait", runId, "extra"], state).code).toBe(2);
+});
 
 test("show exposes interim progress for a live run and its statusline phase", () => {
   const state = join(scratch, "live-interim-state");
@@ -316,7 +449,7 @@ test("dispatch --detach builds Linux systemd-run argv through a stub and reaps s
   const prompt = join(scratch, "detached-brief.md");
   writeFileSync(
     prompt,
-    "RESOURCE-CLASS(NONCOMPUTE): detached test\nBuild argv only.\n",
+    "+++\nschema = 1\nwrites = []\nverify = []\n+++\nRESOURCE-CLASS(NONCOMPUTE): detached test\nBuild argv only.\n",
   );
 
   const result = cli(

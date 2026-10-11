@@ -1,6 +1,7 @@
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { fromThrowable } from "neverthrow";
 import { jsonlLines, type JsonlInput } from "../../shared/src/jsonl.ts";
+import { capabilityTags, CapabilitySchema } from "./ticket.ts";
 
 const Line = z.looseObject({
   kind: z.string(),
@@ -14,7 +15,10 @@ const Line = z.looseObject({
     .looseObject({
       schema: z.number(),
       name: z.string().optional(),
-      capabilities: z.array(z.string()).optional(),
+      capabilities: z
+        .array(CapabilitySchema)
+        .transform(capabilityTags)
+        .optional(),
       writes: z.array(z.string()).optional(),
       urgent_reason: z.string().optional(),
     })

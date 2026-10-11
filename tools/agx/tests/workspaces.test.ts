@@ -47,10 +47,9 @@ test("declared heavy directory is never checked out, no undeclared setup, repo p
       undefined,
       "2026-10-11T01:02:03Z",
     );
-    expect(automatic).toMatchObject({
-      ok: true,
-      name: "firedancer-arm-agx-20261011010203",
-    });
+    expect(automatic.ok).toBe(true);
+    if (automatic.ok)
+      expect(automatic.name).toMatch(/^firedancer-arm-agx-20261011010203-/u);
     const calls: string[][] = [];
     const created = await createSparseWorkspace(
       root,
@@ -139,6 +138,41 @@ test("invalid declaration fails before creating a workspace", async () => {
       join(root, "..", "bad"),
     );
     expect(result.ok).toBe(false);
+  });
+});
+
+test("same-second automatic plans differ and an atomic claim admits one creator", async () => {
+  await fixture(async (root) => {
+    await Bun.write(
+      join(root, ".agx.toml"),
+      'workspace_exclude = ["research_record"]',
+    );
+    const [a, b] = await Promise.all([
+      planWorkspace(root, undefined, "2026-10-11T01:02:03Z"),
+      planWorkspace(root, undefined, "2026-10-11T01:02:03Z"),
+    ]);
+    expect(a.ok && b.ok && a.path !== b.path).toBe(true);
+    const path = join(root, "..", "claimed");
+    let adds = 0;
+    const command = async (args: string[]) => {
+      if (args.includes("add")) {
+        adds++;
+        await Bun.sleep(100);
+      }
+      return { ok: false as const, error: "fixture declined creation" };
+    };
+    const results = await Promise.all([
+      createSparseWorkspace(root, "claimed", path, command),
+      createSparseWorkspace(root, "claimed", path, command),
+    ]);
+    expect(adds).toBe(1);
+    expect(results.every((result) => !result.ok)).toBe(true);
+    expect(
+      results.some(
+        (result) =>
+          !result.ok && String(result.error).includes("already claimed"),
+      ),
+    ).toBe(true);
   });
 });
 

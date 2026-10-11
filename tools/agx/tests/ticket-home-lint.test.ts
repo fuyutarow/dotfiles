@@ -32,6 +32,36 @@ const complete = (resource: string, fields = ""): string =>
 
 describe("ticket promises and resource metadata", () => {
   test.each([
+    [
+      "hard-blockers-only",
+      "record the finding in your final report, and continue",
+      "RETURN early only for a hard blocker",
+    ],
+    ["any-contradiction", "RETURN early for any contradiction", undefined],
+  ] as const)(
+    "promise block follows return_policy %s",
+    (policy, first, second) => {
+      const parsed = parseTicket(
+        complete(
+          "RESOURCE-CLASS(NONCOMPUTE): CLI",
+          `return_policy = "${policy}"`,
+        ),
+      );
+      expect(parsed.kind).toBe("ticket");
+      if (parsed.kind !== "ticket") return;
+      const promise = promiseBlock(
+        parsed.ticket,
+        scratch,
+        "read-only",
+        "token",
+      );
+      expect(promise).toContain(`return_policy: ${policy}`);
+      expect(promise).toContain(first);
+      if (second !== undefined) expect(promise).toContain(second);
+    },
+  );
+
+  test.each([
     ["RESOURCE-CLASS(NONCOMPUTE): CLI and tests", "token"],
     [
       "RESOURCE-ENVELOPE(/tmp/resources.json): agent-resource-run only",

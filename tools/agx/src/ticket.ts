@@ -9,6 +9,7 @@
 //   verify_timeout_s = 1200                  # optional; bound for all verify commands together
 //   timeout_s = 3600                         # optional; worker wall clock (60..14400)
 //   timeout_reason = "why this exceeds 1800 seconds" # required when timeout_s > 1800
+//   return_policy = "hard-blockers-only"         # or "any-contradiction"
 //   capabilities = ["long-tool-loop"]        # optional; handed to Jev as required capabilities
 //   budget_usd = 5.00                       # optional positive USD budget used to exclude over-budget rows
 //   pick_temperature = 1.0                  # optional sampling temperature (0 <= T <= 5)
@@ -33,6 +34,7 @@ export const TICKET_SCHEMA = 2;
 export const DEFAULT_VERIFY_TIMEOUT_S = 1200;
 export const DEFAULT_TIMEOUT_S = 600;
 export const DEFAULT_FIRST_RETURN_S = 360;
+export const DEFAULT_RETURN_POLICY = "hard-blockers-only";
 export const EXTENDED_TIMEOUT_THRESHOLD_S = 600;
 export const MAX_TIMEOUT_S = 14400;
 
@@ -91,6 +93,9 @@ const CommonTicket = {
     .min(60)
     .max(360)
     .default(DEFAULT_FIRST_RETURN_S),
+  return_policy: z
+    .enum(["hard-blockers-only", "any-contradiction"])
+    .default(DEFAULT_RETURN_POLICY),
   budget_usd: z.number().positive().optional(),
   stall_s: z.number().int().positive().optional(),
   pick_temperature: z.number().min(0).max(5).optional(),
@@ -166,6 +171,10 @@ export function promiseBlock(
     `consumer: ${compact(ticket.consumer ?? "coordinator")}`,
     `writes: ${JSON.stringify((ticket.writes ?? []).map((glob) => resolve(cwd, glob)))}`,
     `first_return: ${compact(ticket.first_return ?? "useful interim RETURN")} (${ticket.first_return_s} seconds)`,
+    `return_policy: ${ticket.return_policy}`,
+    ticket.return_policy === "any-contradiction"
+      ? "Housekeeping: RETURN early for any contradiction with the brief, including a small discrepancy."
+      : "Housekeeping: for small discrepancies with an obvious resolution (counts off by a few, short vs full commit ids, brief count differs from measurement, or missing formatting), use the conservative assumption, record the finding in your final report, and continue. RETURN early only for a hard blocker: a rule the data cannot satisfy, a premise failure that changes the outcome, or a safety rule.",
     `verify: ${JSON.stringify(ticket.verify)}${ticket.read_only_diagnostic === true ? " (read_only_diagnostic)" : ""}`,
     `kind: ${kind ?? "undeclared"}`,
     `labels: ${JSON.stringify(ticket.labels)}`,

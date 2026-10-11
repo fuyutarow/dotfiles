@@ -516,8 +516,9 @@ describe("render-home: the rest of the rendered half", () => {
     expect(md).toContain("agx show <run_id|name|latest>");
     expect(md).toContain("Scope violations are warning facts");
     expect(md).toContain(
-      "routine housekeeping choices are theirs to make and report",
+      "Ticket `return_policy` defaults to `hard-blockers-only`",
     );
+    expect(md).toContain("`any-contradiction` available for stricter tickets");
     expect(md.endsWith("<!-- roster:end -->\n")).toBe(true);
     expect(
       readFileSync(join(dotfiles, "agents", "claude", "CLAUDE.md"), "utf8"),

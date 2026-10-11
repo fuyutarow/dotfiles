@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.9.1 — 2026-10-11
+
+- Add ticket `return_policy` with a `hard-blockers-only` default and an `any-contradiction` option. The shared worker promise block now tells Codex and Claude how to handle routine discrepancies and when to RETURN.
+
 ## 2.9.0 — 2026-10-11
 
 - Make the ticket the work handle across dispatch, resume, amendment, repick, show, ledger notes and ps. Prompt-file dispatches create a durable anonymous ticket in the per-project state home, named by `--name`, the brief's `name`, or a generated name. Keep the source brief untouched, ticket history append-only, and existing run/vendor identifiers readable and accepted.

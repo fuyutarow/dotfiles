@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_TIMEOUT_S,
   DEFAULT_FIRST_RETURN_S,
+  DEFAULT_RETURN_POLICY,
   globsOverlap,
   parseTicket,
   verifyLine,
@@ -17,6 +18,7 @@ describe("parseTicket", () => {
   test("worker and first-return defaults are 600 and 360 seconds", () => {
     expect(DEFAULT_TIMEOUT_S).toBe(600);
     expect(DEFAULT_FIRST_RETURN_S).toBe(360);
+    expect(DEFAULT_RETURN_POLICY).toBe("hard-blockers-only");
   });
 
   test("no front matter: legacy, the brief unchanged", () => {
@@ -37,6 +39,7 @@ describe("parseTicket", () => {
         verify: ["bun test", "tsc"],
         verify_timeout_s: 1200,
         first_return_s: 360,
+        return_policy: "hard-blockers-only",
         capabilities: [],
       },
     });
@@ -88,6 +91,10 @@ describe("parseTicket", () => {
     ["timeout above maximum", valid("writes = []\ntimeout_s = 14401")],
     ["extended timeout without reason", valid("writes = []\ntimeout_s = 601")],
     ["non-integer timeout", valid("writes = []\ntimeout_s = 60.5")],
+    [
+      "invalid return policy",
+      valid('writes = []\nreturn_policy = "sometimes"'),
+    ],
   ])("invalid (%s) is refused with a reason", (_name, text) => {
     const r = parseTicket(text);
     expect(r.kind).toBe("invalid");
@@ -114,6 +121,19 @@ describe("parseTicket", () => {
   test("schema 2 accepts incomplete work fields for the remand grade", () => {
     expect(parseTicket("+++\nschema = 2\nwrites = []\n+++\nprose").kind).toBe(
       "ticket",
+    );
+  });
+
+  test.each([
+    [undefined, "hard-blockers-only"],
+    ["hard-blockers-only", "hard-blockers-only"],
+    ["any-contradiction", "any-contradiction"],
+  ] as const)("return_policy %s parses as %s", (policy, expected) => {
+    const field = policy === undefined ? "" : `return_policy = "${policy}"\n`;
+    const parsed = parseTicket(valid(`writes = []\n${field}`));
+    expect(parsed.kind).toBe("ticket");
+    expect(parsed.kind === "ticket" && parsed.ticket.return_policy).toBe(
+      expected,
     );
   });
 });

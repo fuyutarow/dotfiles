@@ -114,6 +114,7 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
 
   // --- codex (user-level hooks; AGENTS.md / prompts / skills fan out via link:skills) ---
   ["all", "agents/codex/hooks", ".codex/hooks"],
+  ["all", "agents/codex/terminal", ".codex/terminal"],
 
   // --- vendor-neutral hooks (the hook analogue of ~/.agents/skills) ---
   // hooks.toml there is wired into BOTH the rendered ~/.claude/settings.json and ~/.codex/hooks.json

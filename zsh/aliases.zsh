@@ -153,6 +153,52 @@ alias b='bun'
 alias bb='bun run build'
 alias bn='bun run'
 
+# Inside Herdr, keep Codex fullscreen while giving mouse drags back to Herdr's pane selector.
+# The Bun bridge strips only child mouse-mode enables; every other invocation remains direct.
+codex() {
+  local bridge="$HOME/.codex/terminal/codex-mouse-bridge.ts"
+  if [[ ${HERDR_ENV:-} != 1 || ! -t 0 || ! -t 1 ]]; then
+    command codex "$@"
+    return $?
+  fi
+
+  local prefix_file="$HOME/.config/dotfiles/brew-prefix"
+  if [[ ! -r $prefix_file ]]; then
+    print -u2 -- "codex: Herdr mouse bridge requires the rendered Homebrew prefix at $prefix_file"
+    return 127
+  fi
+  if [[ ! -r $bridge ]]; then
+    print -u2 -- "codex: Herdr mouse bridge is missing at $bridge"
+    return 127
+  fi
+
+  local prefix=$(<"$prefix_file")
+  local bun_bin="$prefix/bin/bun"
+  if [[ ! -x $bun_bin ]]; then
+    print -u2 -- "codex: declared Homebrew Bun is not executable at $bun_bin"
+    return 127
+  fi
+  local bun_version=$("$bun_bin" --version 2>/dev/null)
+  if [[ $bun_version != <->.<->.<->* ]]; then
+    print -u2 -- "codex: could not read a supported Bun version from $bun_bin"
+    return 127
+  fi
+  local bun_major=${bun_version%%.*}
+  local version_rest=${bun_version#*.}
+  local bun_minor=${version_rest%%.*}
+  if (( bun_major < 1 || (bun_major == 1 && bun_minor < 4) )); then
+    print -u2 -- "codex: Herdr mouse bridge requires Bun 1.4 or newer; found $bun_version"
+    return 127
+  fi
+
+  local codex_bin=$(whence -p codex)
+  if [[ -z $codex_bin ]]; then
+    print -u2 -- 'codex: executable not found on PATH'
+    return 127
+  fi
+  "$bun_bin" "$bridge" "$codex_bin" "$@"
+}
+
 
 alias rgf='rg -F'
 

@@ -206,6 +206,56 @@ zsh -f -c "IS_MAC=true IS_WSL=false; source $ROOT/zsh/aliases.zsh >/dev/null 2>&
 [[ -s $tmp ]] && bad "_term_restore wrote to a non-tty stdout" || ok "_term_restore is silent off-tty"
 command rm -f $tmp 2>/dev/null
 
+# --- 8a. Codex bridge is restricted to Herdr TTYs and preserves argv -------------------------
+bridge_tmp=$(mktemp -d) || exit 1
+mkdir -p "$bridge_tmp/home/.codex/terminal" "$bridge_tmp/home/.config/dotfiles" \
+  "$bridge_tmp/prefix/bin" "$bridge_tmp/bin"
+print -r -- 'placeholder' >| "$bridge_tmp/home/.codex/terminal/codex-mouse-bridge.ts"
+print -r -- "$bridge_tmp/prefix" >| "$bridge_tmp/home/.config/dotfiles/brew-prefix"
+cat >| "$bridge_tmp/prefix/bin/bun" <<'EOF'
+#!/bin/sh
+if [ "$1" = "--version" ]; then
+  printf '%s\n' "${BUN_FIXTURE_VERSION:-1.4.2}"
+  exit 0
+fi
+printf 'CALL\n' >> "$CAPTURE"
+printf '<%s>\n' "$@" >> "$CAPTURE"
+EOF
+cat >| "$bridge_tmp/bin/codex" <<'EOF'
+#!/bin/sh
+printf '<%s>\n' "$@" > "$CAPTURE"
+EOF
+chmod +x "$bridge_tmp/prefix/bin/bun" "$bridge_tmp/bin/codex"
+capture="$bridge_tmp/argv"
+bridge_path="$bridge_tmp/home/.codex/terminal/codex-mouse-bridge.ts"
+codex_path="$bridge_tmp/bin/codex"
+out=$(pty_run "export HOME=${(q)bridge_tmp}/home PATH=${(q)bridge_tmp}/bin:\$PATH CAPTURE=${(q)capture} HERDR_ENV=1" \
+              "source ${(q)ROOT}/zsh/aliases.zsh >/dev/null 2>&1" \
+              'codex; codex resume thread-id; codex --config model=x --profile work resume thread-id; codex --version; print -r -- CODEX_DONE')
+want "Herdr Codex no-argument call uses the registered bridge and executable" \
+  $'CALL\n<'${bridge_path}$'>\n<'${codex_path}$'>\nCALL' "$(<"$capture")"
+want "Herdr Codex preserves resume UUID arguments" \
+  $'<'${bridge_path}$'>\n<'${codex_path}$'>\n<resume>\n<thread-id>' "$(<"$capture")"
+want "Herdr Codex preserves leading config flags" \
+  $'<--config>\n<model=x>\n<--profile>\n<work>\n<resume>\n<thread-id>' "$(<"$capture")"
+want "Herdr Codex forwards --version to Codex" '<--version>' "$(<"$capture")"
+want "Herdr Codex wrapper returns" 'CODEX_DONE' "$out"
+: >| "$capture"
+out=$(pty_run "export HOME=${(q)bridge_tmp}/home PATH=${(q)bridge_tmp}/bin:\$PATH CAPTURE=${(q)capture} HERDR_ENV=1 BUN_FIXTURE_VERSION=1.3.9" \
+              "source ${(q)ROOT}/zsh/aliases.zsh >/dev/null 2>&1" \
+              'codex --version; print -r -- "CODEX_EXIT=$?"')
+want "unsupported Bun version fails explicitly" 'requires Bun 1.4 or newer' "$out"
+want "unsupported Bun version prevents Codex launch" 'CODEX_EXIT=127' "$out"
+[[ ! -s "$capture" ]] && ok "unsupported Bun version does not invoke the bridge" || bad "unsupported Bun version invoked the bridge"
+out=$(env HOME="$bridge_tmp/home" PATH="$bridge_tmp/bin:$PATH" CAPTURE="$capture" HERDR_ENV=1 \
+      zsh -f -c "source ${(q)ROOT}/zsh/aliases.zsh >/dev/null 2>&1; codex --version")
+want "non-TTY Herdr Codex calls the original executable directly" '<--version>' "$(<"$capture")"
+out=$(pty_run "export HOME=${(q)bridge_tmp}/home PATH=${(q)bridge_tmp}/bin:\$PATH CAPTURE=${(q)capture} HERDR_ENV=''" \
+              "source ${(q)ROOT}/zsh/aliases.zsh >/dev/null 2>&1" \
+              'codex --version; print -r -- CODEX_DONE')
+want "non-Herdr Codex calls the original executable" '<--version>' "$(<"$capture")"
+command rm -rf "$bridge_tmp"
+
 # --- 9. a real interactive startup survives redraws without duplicating the prompt header ----
 # Use the repository zshrc and aliases in an isolated HOME/ZDOTDIR. A precmd hook records how
 # many prompt generations occurred outside the pty; the distinctive `|~` in the header lets us

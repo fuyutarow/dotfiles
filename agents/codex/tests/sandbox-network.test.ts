@@ -7,13 +7,10 @@ import { readdirSync, readFileSync as readRepoFile } from "node:fs";
 import { resolve } from "node:path";
 
 const statusLine = [
+  "thread-id",
   "model-with-reasoning",
   "current-dir",
-  "context-remaining",
-  "weekly-limit",
-  "thread-id",
-  "used-tokens",
-  "task-progress",
+  "run-state",
 ];
 const statusLineLine = `status_line = [${statusLine.map((item) => `"${item}"`).join(", ")}]`;
 const declared = {

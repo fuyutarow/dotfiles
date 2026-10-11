@@ -11,21 +11,12 @@ model_auto_compact_token_limit = 950000
 network_access = true
 
 [tui]
-# Codex 0.162.1 renders the footer on one line and clips at the right edge, so identity and model
-# come first. Dropped thread-name/title, context-used, project-name, total-input/output-tokens,
-# codex-version, reasoning, and thread-credits as duplicates or low value. Owner approved 2026-10-11.
+# After seeing the 12-item footer on 2026-10-11, the owner chose to keep only these four items.
+# Codex 0.162.1 renders the footer on one line and clips at the right edge.
 # Items without runtime data may be omitted by Codex.
 status_line = [
   "thread-id",
   "model-with-reasoning",
-  "git-branch",
   "current-dir",
   "run-state",
-  "context-remaining",
-  "five-hour-limit",
-  "weekly-limit",
-  "estimated-thread-cost",
-  "task-progress",
-  "used-tokens",
-  "fast-mode",
 ]

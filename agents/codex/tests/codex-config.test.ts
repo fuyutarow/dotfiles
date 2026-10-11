@@ -8,16 +8,8 @@ const script = join(repo, "agents/codex/codex-config.ts");
 const expectedItems = [
   "thread-id",
   "model-with-reasoning",
-  "git-branch",
   "current-dir",
   "run-state",
-  "context-remaining",
-  "five-hour-limit",
-  "weekly-limit",
-  "estimated-thread-cost",
-  "task-progress",
-  "used-tokens",
-  "fast-mode",
 ];
 const statusLine = `status_line = [${expectedItems.map((item) => JSON.stringify(item)).join(", ")}]`;
 

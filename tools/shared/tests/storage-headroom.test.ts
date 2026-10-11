@@ -44,11 +44,11 @@ describe("storage headroom", () => {
     expect(host).toMatchObject({
       label: "host C: (WSL vhdx)",
       path: "/mnt/c",
-      deny_gib: 20,
+      deny_gib: 6,
       deny_pct: 5,
-      warn_gib: 20,
+      warn_gib: 6,
       warn_pct: 10,
-      stop_gib: 10,
+      stop_gib: 4,
       rate_red_minutes: 30,
       rate_yellow_minutes: 120,
     });
@@ -57,7 +57,7 @@ describe("storage headroom", () => {
     ).toBe(40 * GiB);
     expect(
       assess(host, { free: 100 * GiB, total: 1_000 * GiB }).deny_line,
-    ).toBe(20 * GiB);
+    ).toBe(6 * GiB);
   });
 
   test("assessment boundaries are strict and stop remains an independent line", () => {

@@ -1,10 +1,17 @@
 {
-  "maxListingChars": 51223,
-  "measuredOn": "2026-10-10",
-  "skillsAtMeasurement": 58,
+  "maxListingChars": 51683,
+  "measuredOn": "2026-10-11",
+  "skillsAtMeasurement": 59,
   "why": "A local ratchet over the static sum of active skill names and descriptions. This is a conservative character-footprint proxy, not measured per-turn tokens: host selection, truncation, invocation policy and tokenization affect observed listing cost. F4 in forging-skills owns membership and the retire/merge/shorten/raise decision. The shared floor compares the proxy against maxListingChars. A ceiling raise needs an explicit reason in the same reviewable change; recovered footprint may lower the ceiling.",
-  "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
+  "evidenceAtMeasurement": "The structural floor measured 59 active skills and 51,683 name+description chars after this admission; the ceiling equals that measured total.",
   "raises": [
+    {
+      "date": "2026-10-11",
+      "from": 51223,
+      "to": 51683,
+      "spentBy": "driving-polysearch-v1",
+      "reason": "The owner-approved r99-u26 WIP admits a 460-character name+description entry for the polysearch-v1 record CLI. The floor measured 51,223 chars at 58 skills before admission and 51,683 at 59 after; the cap matches the new total exactly, with no added slack."
+    },
     {
       "date": "2026-10-10",
       "from": 50782,

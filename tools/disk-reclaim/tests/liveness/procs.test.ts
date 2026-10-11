@@ -14,7 +14,11 @@ import {
   scratchRef,
 } from "../../src/liveness/facts.ts";
 import { judge } from "../../src/liveness/predicate.ts";
-import { collectProcesses, openPathsUnder } from "../../src/lib/procs.ts";
+import {
+  collectProcesses,
+  openPathsUnder,
+  procFs,
+} from "../../src/lib/procs.ts";
 import { protectedReason } from "../../src/lib/protected.ts";
 import { judgeWorkspace, type WorkspaceFacts } from "../../src/jj/safety.ts";
 import { procFixture } from "../fixtures/procs.ts";
@@ -22,6 +26,8 @@ import { tempRoot } from "../fixtures/temp.ts";
 import type { Candidate } from "../../src/model.ts";
 
 const uuid = "123e4567-e89b-42d3-a456-426614174000";
+const deniedProcError = (path: string): Error =>
+  Object.assign(new Error(`EACCES: ${path}`), { code: "EACCES" });
 const safeWorkspace: Omit<WorkspaceFacts, "open"> = {
   fresh: { ok: true, detail: "fresh" },
   unpushed: [],
@@ -90,16 +96,22 @@ for (const via of ["cwd", "fd", "fd/3", "environ"]) {
 
 test("same-uid EACCES requires a readable allowlisted comm; EPERM remains unknown", () => {
   for (const options of [
-    { comm: "sshd", denied: ["cwd", "comm"], code: "EACCES", unknown: true },
+    { comm: "python", denied: ["cwd", "comm"], code: "EACCES", unknown: true },
     {
-      comm: "sshd",
+      comm: "python",
       denied: ["cwd", "comm", "exe"],
       code: "EACCES",
       unknown: true,
     },
-    { comm: "sshd", denied: ["cwd"], code: "EPERM", unknown: true },
-    { comm: "sshd-helper", denied: ["cwd"], code: "EACCES", unknown: true },
-    { comm: "sshd", denied: ["cwd"], code: "EACCES", unknown: true, allow: [] },
+    { comm: "python", denied: ["cwd"], code: "EPERM", unknown: true },
+    { comm: "python-helper", denied: ["cwd"], code: "EACCES", unknown: true },
+    {
+      comm: "python",
+      denied: ["cwd"],
+      code: "EACCES",
+      unknown: true,
+      allow: [],
+    },
   ]) {
     const root = tempRoot("reclaim-proc-identity-");
     using cleanup = new DisposableStack();
@@ -113,6 +125,80 @@ test("same-uid EACCES requires a readable allowlisted comm; EPERM remains unknow
     });
     expect(snapshot.openPaths(root).unknown.length > 0).toBe(options.unknown);
   }
+});
+
+test("r99 privilege-boundary processes are expected while unrelated unreadable comm stays unknown", () => {
+  const root = tempRoot("reclaim-proc-r99-boundaries-");
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+  const procRoot = join(root, "proc");
+  const rows = [
+    [161160, "sshd-session"],
+    [2777902, "sshd-session"],
+    [2778142, "sshd-session"],
+    [417, "(sd-pam)"],
+    [415, "systemd"],
+    [111, "sshd"],
+    [606, "sshd-session-helper"],
+  ] as const;
+  for (const [pid, comm] of rows) {
+    const base = join(procRoot, String(pid));
+    mkdirSync(join(base, "fd"), { recursive: true });
+    writeFileSync(join(base, "comm"), `${comm}\n`);
+    writeFileSync(
+      join(base, "stat"),
+      `${pid} (${comm}) S ${Array.from({ length: 18 }, () => "0").join(" ")} 123\n`,
+    );
+    writeFileSync(join(base, "status"), "Uid:\t1000\t1000\t1000\t1000\n");
+    writeFileSync(join(base, "environ"), "");
+    writeFileSync(join(base, "maps"), "");
+    symlinkSync(`/usr/bin/${comm}`, join(base, "exe"));
+    symlinkSync("/elsewhere", join(base, "cwd"));
+  }
+  const denied = (path: string): boolean =>
+    rows.some(([pid]) => {
+      const base = join(procRoot, String(pid));
+      const relative = path.slice(base.length + 1);
+      return (
+        path.startsWith(`${base}/`) &&
+        (["environ", "cwd", "fd"].includes(relative) ||
+          (pid === 161160 && relative === "comm"))
+      );
+    });
+  const fs = {
+    ...procFs,
+    readText: (path: string) =>
+      denied(path) ? deniedProcError(path) : procFs.readText(path),
+    readlink: (path: string) =>
+      denied(path) ? deniedProcError(path) : procFs.readlink(path),
+    readdir: (path: string) =>
+      denied(path) ? deniedProcError(path) : procFs.readdir(path),
+  };
+  const summaries: string[] = [];
+  const snapshot = collectProcesses({
+    procRoot,
+    uid: process.getuid?.() ?? 0,
+    fs,
+    diagnostics: (summary) => {
+      summaries.push(summary);
+    },
+  });
+  const paths = snapshot.openPaths(root);
+  expect(paths.unknown).toHaveLength(2);
+  expect(
+    paths.unknown.every((detail) =>
+      detail.includes("comm=sshd-session-helper"),
+    ),
+  ).toBe(true);
+  expect(snapshot.environSessionIds.ok).toBe(false);
+  expect(summaries).toContain(
+    "live-process scan: 0 fds (18 probes) in 6 processes unreadable (EACCES; expected permission boundary (non-dumpable process)) — expected, not a probe problem; excluded from in-use evidence, no effect on targets",
+  );
+  expect(summaries).toContain(
+    "live-process scan: 0 fds (3 probes) in 1 processes unreadable (EACCES) — treated as unknown; idle-dependent candidates remain ASK unless positive use proves KEEP",
+  );
 });
 
 test("unreadable environ stays a liveness uncertainty with process identity details", () => {
@@ -191,7 +277,7 @@ test("same-uid EACCES rechecks process state and starttime once", () => {
     cleanup.defer(() => {
       rmSync(root, { recursive: true, force: true });
     });
-    const comm = scenario === "live" ? "python" : "sshd";
+    const comm = "python";
     const proc = procFixture(root, comm, ["environ", "fd"]);
     const statPath = join(proc.base, "stat");
     const readText = proc.fs.readText;
@@ -214,7 +300,7 @@ test("same-uid EACCES rechecks process state and starttime once", () => {
     const snapshot = collectProcesses({
       ...proc,
       fs,
-      ignoreUnreadableProcs: ["sshd"],
+      ignoreUnreadableProcs: scenario === "ignored" ? ["python"] : [],
     });
     const expectedUnknown = scenario === "live";
     expect(snapshot.openPaths(root).unknown.length > 0).toBe(expectedUnknown);

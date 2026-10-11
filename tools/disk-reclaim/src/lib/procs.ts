@@ -70,7 +70,15 @@ const procResult = <T>(operation: () => T | Error): ProcResult<T> => {
     : { ok: true, value: result.value };
 };
 const cleaned = (path: string): string => path.replace(/ \(deleted\)$/u, "");
-const expectedUnreadableNames = ["systemd", "sudo", "su", "polkitd"];
+const expectedUnreadableNames = [
+  "systemd", // systemd --user runs as the session owner and may be non-dumpable.
+  "sudo", // sudo crosses a privilege boundary before dropping elevated credentials.
+  "su", // su crosses a privilege boundary before changing user identity.
+  "polkitd", // The system polkit daemon runs with a different privilege context.
+  "sshd", // OpenSSH sshd uses privilege separation for authenticated sessions.
+  "sshd-session", // OpenSSH 9.8+ uses this per-connection session process.
+  "(sd-pam)", // systemd's PAM session monitor can be non-dumpable under procfs.
+];
 const under = (path: string, dir: string): boolean =>
   path === dir || path.startsWith(`${dir}/`);
 type ProcStat = { state: string; starttime: string };
@@ -189,17 +197,19 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
         const value = processStat(text);
         return value ?? new Error(`pid ${pid}: missing proc stat fields`);
       });
-      const matchesComm = (processNames: readonly string[]): boolean => {
+      const matchesIdentity = (processNames: readonly string[]): boolean => {
         const comm = procResult<string>(() => fs.readText(join(base, "comm")));
-        return comm.ok && processNames.includes(comm.value.trim());
+        if (comm.ok && processNames.includes(comm.value.trim())) return true;
+        const exe = procResult<string>(() => fs.readlink(join(base, "exe")));
+        return exe.ok && processNames.includes(basename(cleaned(exe.value)));
       };
       if (!current.ok && gone(current.error)) outcome = "gone";
       else if (current.ok && current.value.state === "Z") outcome = "gone";
       else if (current.ok && current.value.starttime !== before.value.starttime)
         outcome = "gone";
-      else if (current.ok && matchesComm(expectedUnreadableNames))
+      else if (current.ok && matchesIdentity(expectedUnreadableNames))
         outcome = "expected";
-      else if (current.ok && matchesComm(allow)) outcome = "ignored";
+      else if (current.ok && matchesIdentity(allow)) outcome = "ignored";
       eaccesOutcomes.set(pid, outcome);
       return outcome;
     };

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-10-11
+
+- Classify exact `sshd`, `sshd-session`, and `(sd-pam)` proc identities as expected unreadable
+  privilege-boundary processes, using comm or executable basename while preserving unknown
+  status for every other unreadable same-uid process.
+
 ## 0.5.0 — 2026-10-11
 
 - Render concurrent progress with shared Clack taskLog groups on stderr; collapse finished rows, retain scan counters across heartbeats, show rates and known deletion ETAs, and finalize the region on errors and signals.

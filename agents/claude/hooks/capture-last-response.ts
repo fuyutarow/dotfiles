@@ -14,13 +14,17 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { attempt, attemptOr } from "../../hooks/attempt.ts";
-import { parseJson, strAt } from "../../hooks/narrow.ts";
+import { at, parseJson, strAt } from "../../hooks/narrow.ts";
 import { MAX_QUOTE_TURNS } from "./quote.config.ts";
 
 const HOME = process.env.HOME ?? "";
 const KEEP = MAX_QUOTE_TURNS; // deepest `/quote N` worth supporting; bounds the file for a long session
 
-async function recordResponse(sid: unknown, text: unknown): Promise<void> {
+async function recordResponse(
+  sid: unknown,
+  text: unknown,
+  replaceLast: boolean,
+): Promise<void> {
   if (!(typeof sid === "string" && sid !== "" && typeof text === "string"))
     return;
   const dir = `${HOME}/.cache/claude/last-response`;
@@ -35,9 +39,14 @@ async function recordResponse(sid: unknown, text: unknown): Promise<void> {
         .filter((l) => l.trim() !== ""),
     noHistory,
   );
-  lines.push(
-    JSON.stringify({ at: Temporal.Now.instant().epochMilliseconds, text }),
-  );
+  const response = JSON.stringify({
+    at: Temporal.Now.instant().epochMilliseconds,
+    text,
+  });
+  // Stop-hook retries carry stop_hook_active=true; replace the blocked draft so this logical
+  // assistant turn has one history entry, the final response the user saw.
+  if (replaceLast && lines.length > 0) lines[lines.length - 1] = response;
+  else lines.push(response);
 
   mkdirSync(dir, { recursive: true });
   writeFileSync(file, `${lines.slice(-KEEP).join("\n")}\n`);
@@ -49,6 +58,7 @@ await attempt(async () => {
   await recordResponse(
     strAt(payload, "session_id"),
     strAt(payload, "last_assistant_message"),
+    at(payload, "stop_hook_active") === true,
   );
 });
 process.exit(0);

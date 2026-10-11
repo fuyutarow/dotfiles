@@ -25,12 +25,18 @@ import { hookJson } from "./lib.ts";
 // the worst outcome) and say what went wrong in `reason`.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { isIP } from "node:net";
 import { tmpdir, userInfo } from "node:os";
 import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
-import { attempt } from "../../hooks/attempt.ts";
+import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { promptParts, stampMDHMZ } from "./prompt-stamp.ts";
 import {
@@ -55,10 +61,60 @@ function copyViaHerdr(text: string): string {
   writeFileSync(file, text);
   return execFileSync("bun", [`${HOOKS}/copy-via-herdr-pane.ts`], {
     env: { ...process.env, COPY_PAYLOAD_FILE: file },
-    stdio: ["ignore", "pipe", "ignore"],
+    stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
     timeout: 15000,
   }).trim();
+}
+
+function failureReason(error: unknown): string {
+  const stderr = str(at(error, "stderr"));
+  if (stderr !== undefined && stderr.trim() !== "") return stderr.trim();
+  return errorMessage(error);
+}
+
+type CopyResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string };
+
+async function copyViaSshOsc52(text: string): Promise<CopyResult> {
+  const tty = process.env.SSH_TTY?.trim();
+  if (tty === undefined || tty === "") {
+    return {
+      ok: false,
+      reason:
+        "SSH_TTY is not set, so there is no client terminal to receive OSC 52",
+    };
+  }
+  if (!tty.startsWith("/dev/")) {
+    return { ok: false, reason: `SSH_TTY is not a /dev terminal path: ${tty}` };
+  }
+  const device = await attempt(() => statSync(tty).isCharacterDevice());
+  if (!device.ok) return { ok: false, reason: failureReason(device.error) };
+  if (!device.value) {
+    return {
+      ok: false,
+      reason: `SSH_TTY does not name a terminal device: ${tty}`,
+    };
+  }
+  const write = await attempt(() => {
+    writeFileSync(
+      tty,
+      `\u001B]52;c;${Buffer.from(text, "utf8").toString("base64")}\u0007`,
+      { flag: "a" },
+    );
+  });
+  return write.ok
+    ? { ok: true }
+    : { ok: false, reason: failureReason(write.error) };
+}
+
+function copyViaPbcopy(text: string): void {
+  execFileSync("pbcopy", [], {
+    input: text,
+    stdio: ["pipe", "ignore", "pipe"],
+    timeout: 5000,
+  });
 }
 
 function shellQuote(value: string): string {
@@ -232,21 +288,46 @@ if (count > CLIPBOARD_TURN_LIMIT) {
   }
 }
 
-// Claude Code cannot reach the clipboard from a process it spawns — see
-// hooks/copy-via-herdr-pane.ts's header for why, and what it does instead. The payload travels
-// as a FILE PATH, handed over in the child's environment: it is arbitrary assistant prose, and
-// shell-quoting it into a command line would be a needless injection surface. Both helper
-// hooks take their one input from the environment rather than argv — hooks are zero-dep, and
-// BG1 rules out hand-parsing process.argv in a file that cannot import Cleye.
+// The Herdr path needs a live pane with a real pty; see copy-via-herdr-pane.ts. If it is
+// unavailable, native pbcopy works on a local macOS host, while a remote SSH session can emit
+// OSC 52 to its inherited SSH_TTY device. The payload passed to Herdr travels as a FILE PATH,
+// handed over in the child's environment: it is arbitrary assistant prose, and shell-quoting it
+// into a command line would be a needless injection surface. The helper takes its input from the
+// environment rather than argv — hooks are zero-dep, and BG1 rules out hand-parsing process.argv
+// in a file that cannot import Cleye.
 const paneCopy = await attempt(() => copyViaHerdr(payloadText));
-if (!paneCopy.ok) {
+if (paneCopy.ok) {
   block(
-    `Could not reach an idle shell pane, so nothing was copied. Select this to copy it by hand:\n\n${payloadText}`,
+    // The header itself, not a paraphrase of it: what the human sees here is exactly the first line
+    // of what they will paste (owner, 2026-10-06).
+    `Copied to clipboard — ${header}${short} [${paneCopy.value}]`,
+  );
+}
+
+const failures = [`Herdr pane: ${failureReason(paneCopy.error)}`];
+const remote =
+  (process.env.SSH_CONNECTION?.trim() ?? "") !== "" ||
+  (process.env.SSH_TTY?.trim() ?? "") !== "";
+if (remote) {
+  const osc52 = await copyViaSshOsc52(payloadText);
+  if (osc52.ok) {
+    block(`Copied to clipboard via SSH OSC 52 — ${header}${short}`);
+  }
+  failures.push(`SSH OSC 52: ${osc52.reason}`);
+} else if (process.platform === "darwin") {
+  const pbcopy = await attempt(() => {
+    copyViaPbcopy(payloadText);
+  });
+  if (pbcopy.ok) {
+    block(`Copied to clipboard via pbcopy — ${header}${short}`);
+  }
+  failures.push(`macOS pbcopy: ${failureReason(pbcopy.error)}`);
+} else {
+  failures.push(
+    `Direct clipboard fallback: unavailable on ${process.platform} outside SSH`,
   );
 }
 
 block(
-  // The header itself, not a paraphrase of it: what the human sees here is exactly the first line
-  // of what they will paste (owner, 2026-10-06).
-  `Copied to clipboard — ${header}${short} [${paneCopy.value}]`,
+  `Could not copy this quote. Tried:\n- ${failures.join("\n- ")}\n\nSelect this to copy it by hand:\n\n${payloadText}`,
 );

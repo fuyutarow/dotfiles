@@ -36,7 +36,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { attempt } from "../../hooks/attempt.ts";
+import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { parseJson, strAt } from "../../hooks/narrow.ts";
 
 // herdr exports its own binary as HERDR_BIN_PATH when it starts a pane — a VERSIONED Homebrew
@@ -59,7 +59,7 @@ const POLL_DELAY_MS = 200;
 
 function herdr(args: string[]): unknown {
   const out = execFileSync(HERDR_BIN, args, {
-    stdio: ["ignore", "pipe", "ignore"],
+    stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
     timeout: 5000,
   });
@@ -99,14 +99,24 @@ if (
   !existsSync(payloadFile)
 ) {
   console.error(
-    "usage: COPY_PAYLOAD_FILE=<payload-file> bun copy-via-herdr-pane.ts",
+    "COPY_PAYLOAD_FILE is missing or does not name a readable payload file",
   );
   process.exit(2);
 }
-if (process.env.HERDR_ENV !== "1" || !existsSync(CLIP_SCRIPT)) process.exit(3);
+if (process.env.HERDR_ENV !== "1") {
+  console.error("HERDR_ENV is not 1; this hook is not running in a Herdr pane");
+  process.exit(3);
+}
+if (!existsSync(CLIP_SCRIPT)) {
+  console.error(`clipboard helper is missing: ${CLIP_SCRIPT}`);
+  process.exit(3);
+}
 
 const selfPane = process.env.HERDR_PANE_ID;
-if (selfPane === undefined || selfPane === "") process.exit(3);
+if (selfPane === undefined || selfPane === "") {
+  console.error("HERDR_PANE_ID is missing; there is no current pane to split");
+  process.exit(3);
+}
 
 const split = await attempt(() =>
   herdr([
@@ -121,9 +131,17 @@ const split = await attempt(() =>
   ]),
 );
 // split itself failed (e.g. too small to split) -> caller falls back
-if (!split.ok) process.exit(4);
+if (!split.ok) {
+  console.error(
+    `could not create a disposable pane: ${errorMessage(split.error)}`,
+  );
+  process.exit(4);
+}
 const paneId = strAt(split.value, "result", "pane", "pane_id");
-if (paneId === undefined || paneId === "") process.exit(4);
+if (paneId === undefined || paneId === "") {
+  console.error("herdr created no pane id for the disposable pane");
+  process.exit(4);
+}
 
 let ready = false;
 for (let pollAttempt = 0; pollAttempt < POLL_ATTEMPTS; pollAttempt++) {
@@ -135,6 +153,9 @@ for (let pollAttempt = 0; pollAttempt < POLL_ATTEMPTS; pollAttempt++) {
 }
 if (!ready) {
   await closeQuietly(paneId);
+  console.error(
+    "the new Herdr pane did not reach a bare shell prompt before timeout",
+  );
   process.exit(5);
 }
 
@@ -142,11 +163,14 @@ const run = await attempt(() =>
   execFileSync(
     HERDR_BIN,
     ["pane", "run", paneId, `'${CLIP_SCRIPT}' < '${payloadFile}'`],
-    { stdio: ["ignore", "ignore", "ignore"], timeout: 5000 },
+    { stdio: ["ignore", "ignore", "pipe"], timeout: 5000 },
   ),
 );
 if (!run.ok) {
   await closeQuietly(paneId);
+  console.error(
+    `could not run the clipboard helper in the new pane: ${errorMessage(run.error)}`,
+  );
   process.exit(6);
 }
 

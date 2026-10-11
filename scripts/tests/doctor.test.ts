@@ -102,6 +102,20 @@ describe("doctor", () => {
     expect(finding.lines?.join(" ")).toContain("Personal-Drive");
   });
 
+  test("google-drive: WSL reports when the Google Drive filesystem is not mounted", async () => {
+    const finding = await checkGoogleDrive({
+      home: tmp("doctor-drive-wsl-home-"),
+      dotfiles: REPO,
+      isMac: false,
+      isWsl: true,
+      isCoreBox: false,
+      mountInfo: "42 23 0:39 / /mnt rw,relatime - ext4 /dev/sda rw\n",
+    });
+    expect(finding.verdict).toBe("FAIL");
+    expect(finding.detail).toContain("G: is not mounted at /mnt/g");
+    expect(finding.fix).toBe("mise run wsl:drive-mount && sudo mount /mnt/g");
+  });
+
   test("rendered reference uses resolved Bun with a temporary HOME", () => {
     const scratch = tmp("doctor-render-home-");
     const privateOverlay = join(scratch, "missing-settings.private.json");

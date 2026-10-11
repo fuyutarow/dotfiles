@@ -37,11 +37,13 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, release } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { hostname, homedir, release } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { deployCccDaemon } from "../cocoindex/deploy-daemon.ts";
 import { renderRefusal } from "./render-source.ts";
 import {
@@ -143,9 +145,151 @@ function linkTarget(ctx: Ctx, src: string, dst: string): void {
 }
 
 /** Resolve Drive without persisting the user's Google account folder name. */
+type DriveCache = {
+  version: 1;
+  host: string;
+  root: string;
+  personal: string | null;
+};
+const driveCacheSchema = jsonOf(
+  z.object({
+    version: z.literal(1),
+    host: z.string(),
+    root: z.string(),
+    personal: z.string().nullable(),
+  }),
+);
+
+const DRIVE_MAX_DEPTH = 6;
+const DRIVE_MAX_DISCOVERY_MS = 15_000;
+
+function driveCachePath(home: string): string {
+  const host = hostname().replaceAll(/[^a-zA-Z0-9._-]/gu, "_");
+  return join(home, ".local/state/dotfiles", `google-drive-${host}.json`);
+}
+
+function readDriveCache(path: string): DriveCache | undefined {
+  const text = fromThrowable(() => readFileSync(path, "utf8"))();
+  if (text.isErr()) return undefined;
+  const parsed = driveCacheSchema.safeParse(text.value);
+  return parsed.success && parsed.data.host === hostname()
+    ? parsed.data
+    : undefined;
+}
+
+function writeDriveCache(
+  path: string,
+  root: string,
+  personal: string | undefined,
+): void {
+  fromThrowable(() => {
+    mkdirSync(dirname(path), { recursive: true });
+    const value: DriveCache = {
+      version: 1,
+      host: hostname(),
+      root,
+      personal: personal ?? null,
+    };
+    const temp = `${path}.${randomUUID()}.tmp`;
+    writeFileSync(temp, `${JSON.stringify(value)}\n`, { mode: 0o600 });
+    renameSync(temp, path);
+  })();
+}
+
+function cachedWslDriveTargets(
+  home: string,
+  root: string,
+  cachePath: string,
+  maxDiscoveryMs: number,
+): { root?: string; personal?: string } {
+  const cached = readDriveCache(cachePath);
+  if (cached !== undefined) {
+    const rootResolves = isDir(cached.root);
+    const personalResolves = cached.personal === null || isDir(cached.personal);
+    if (rootResolves && personalResolves) {
+      return {
+        root: cached.root,
+        ...(cached.personal === null ? {} : { personal: cached.personal }),
+      };
+    }
+  }
+
+  if (!isDir(root)) return {};
+
+  // Existing links are the previous successful discovery receipt. Promote it into the cache so
+  // hosts already deployed before this cache existed do not repeat the expensive Drive walk.
+  const linkedPersonal = readLink(join(home, "Personal-Drive"));
+  const relativeTarget =
+    linkedPersonal === null
+      ? undefined
+      : relative(resolve(root), resolve(linkedPersonal));
+  if (
+    linkedPersonal !== null &&
+    isAbsolute(linkedPersonal) &&
+    isDir(linkedPersonal) &&
+    relativeTarget !== undefined &&
+    (relativeTarget === "" ||
+      (!isAbsolute(relativeTarget) &&
+        relativeTarget !== ".." &&
+        !relativeTarget.startsWith(`..${sep}`)))
+  ) {
+    writeDriveCache(cachePath, root, linkedPersonal);
+    return { root, personal: linkedPersonal };
+  }
+
+  const myDrive = join(root, "My Drive");
+  if (!isDir(myDrive)) {
+    writeDriveCache(cachePath, root, undefined);
+    return { root };
+  }
+
+  say(
+    `discover Google Drive Personal-Drive: waiting on drvfs directory metadata under My Drive (depth ≤ ${DRIVE_MAX_DEPTH}, time ≤ ${maxDiscoveryMs / 1000}s)`,
+  );
+  const start = performance.now();
+  const pending: { dir: string; depth: number }[] = [
+    { dir: myDrive, depth: 0 },
+  ];
+  let next = 0;
+  let personal: string | undefined;
+  while (next < pending.length && performance.now() - start < maxDiscoveryMs) {
+    const current = pending[next];
+    next += 1;
+    if (current === undefined || current.depth > DRIVE_MAX_DEPTH) continue;
+    const listed = fromThrowable(() =>
+      readdirSync(current.dir, { withFileTypes: true }),
+    )();
+    if (listed.isErr()) continue;
+    const directories = listed.value.filter((entry) => entry.isDirectory());
+    const target = directories.find((entry) => entry.name === "Personal-Drive");
+    if (target !== undefined) {
+      personal = join(current.dir, target.name);
+      break;
+    }
+    if (current.depth < DRIVE_MAX_DEPTH)
+      pending.push(
+        ...directories.map((entry) => ({
+          dir: join(current.dir, entry.name),
+          depth: current.depth + 1,
+        })),
+      );
+  }
+  if (personal === undefined && performance.now() - start >= maxDiscoveryMs)
+    say(
+      `Google Drive discovery stopped at its ${maxDiscoveryMs / 1000}s time limit`,
+    );
+  writeDriveCache(cachePath, root, personal);
+  return { root, ...(personal === undefined ? {} : { personal }) };
+}
+
 export function googleDriveTargets(
   home: string,
   os: Os,
+  options: {
+    wslRoot?: string;
+    cachePath?: string;
+    maxDiscoveryMs?: number;
+  } = {},
 ): { root?: string; personal?: string } {
   let root: string | undefined;
   if (os === "mac") {
@@ -158,8 +302,13 @@ export function googleDriveTargets(
       : [];
     if (matches.length === 1) root = matches[0];
   } else if (os === "wsl") {
-    const mount = "/mnt/g";
-    if (isDir(mount)) root = mount;
+    root = options.wslRoot ?? "/mnt/g";
+    return cachedWslDriveTargets(
+      home,
+      root,
+      options.cachePath ?? driveCachePath(home),
+      options.maxDiscoveryMs ?? DRIVE_MAX_DISCOVERY_MS,
+    );
   }
   if (root === undefined) return {};
 

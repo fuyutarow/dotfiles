@@ -446,6 +446,15 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "wsl",
+    sources: ["wsl/gdrive.fstab"],
+    deployed: "/etc/fstab (drvfs G: mounted at /mnt/g)",
+    consumer: "WSL2 mount initialization",
+    writer: "human, in the repo; mise run wsl:drive-mount installs the entry",
+    verify: `${DOCTOR} (google-drive)`,
+  },
+  {
+    kind: "applied",
+    when: "wsl",
     sources: ["wsl/winget.win.json"],
     deployed: "the Windows host's winget packages",
     consumer: "winget",

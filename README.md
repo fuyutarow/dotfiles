@@ -194,10 +194,16 @@ exec zsh
 ```
 
 When Google Drive for Windows is available as `G:`, `wsl/wsl.conf` enables WSL automount at
-`/mnt`; `mise run link:dots` declares `~/Google Drive` for the drive root and discovers the
-unique `Personal-Drive` directory under `My Drive` for `~/Personal-Drive`. The Drive account's
-folder name is discovered locally and is never stored in this repository. After changing
-`wsl/wsl.conf`, restart the distro for automount settings to take effect.
+`/mnt`. Google Drive's virtual `G:` is not found by WSL automount. Run `mise run wsl:drive-mount`
+once to install the declared drvfs entry from `wsl/gdrive.fstab` into `/etc/fstab`; WSL will mount
+it at `/mnt/g` on later distro starts. `mise run doctor` reports when
+that mount is absent. `mise run link:dots` declares `~/Google Drive` for the drive root and
+discovers the `Personal-Drive` directory under `My Drive` for `~/Personal-Drive`. The discovered
+target is cached in an untracked host-specific file under `~/.local/state/dotfiles/`; an existing
+valid link seeds the cache on already-deployed hosts. A fresh discovery walks at most six levels
+and 15 seconds, printing its bounds before it starts. The Drive account's folder name is never
+stored in this repository. After changing `wsl/wsl.conf`, restart the distro for automount settings
+to take effect.
 
 ### Throwaway Linux box (rented GPU, fresh VM, container)
 

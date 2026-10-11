@@ -782,6 +782,10 @@ run = 'bun ~/dotfiles/scripts/wsl-init.ts'
 description = "Deploy wsl/wslconfig.win to %USERPROFILE%\\.wslconfig (COPY — Windows cannot follow a WSL symlink). Idempotent, backs up drift, guards memory= against host RAM. Needs `wsl --shutdown` to take effect."
 run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 
+[tasks."wsl:drive-mount"]
+description = "Install the declared Google Drive G: drvfs entry in /etc/fstab so WSL mounts the virtual drive on future starts; preserves unrelated entries."
+run = "bun wsl/drive-mount.ts"
+
 # Start WSL on a Windows host parked at its LOGON SCREEN — the thing that actually fixes the
 # "Windows Update rebooted overnight and the box was unreachable for 5 hours" failure.
 #

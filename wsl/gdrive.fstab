@@ -1,0 +1,2 @@
+# Google Drive for Windows exposes G: as a virtual drive that WSL automount does not discover.
+G: /mnt/g drvfs defaults,nofail 0 0

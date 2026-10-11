@@ -11,6 +11,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  renameSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -96,6 +97,34 @@ test("Google Drive targets are discovered without storing the account folder nam
   linkGoogleDrive(ctx);
   expect(readlinkSync(join(home, "Google Drive"))).toBe(root);
   expect(readlinkSync(join(home, "Personal-Drive"))).toBe(personal);
+});
+
+test("WSL Google Drive discovery is cached per host and reruns only when its target disappears", () => {
+  const home = tmp("drive-wsl-home-");
+  const root = join(home, "drive");
+  const first = join(root, "My Drive", "account", "Personal-Drive");
+  const second = join(root, "My Drive", "other", "Personal-Drive");
+  const cachePath = join(home, ".local/state/dotfiles/google-drive-test.json");
+  mkdirSync(first, { recursive: true });
+  const options = { wslRoot: root, cachePath, maxDiscoveryMs: 1_000 };
+
+  expect(googleDriveTargets(home, "wsl", options)).toEqual({
+    root,
+    personal: first,
+  });
+  expect(readFileSync(cachePath, "utf8")).toContain(first);
+
+  mkdirSync(second, { recursive: true });
+  expect(googleDriveTargets(home, "wsl", options)).toEqual({
+    root,
+    personal: first,
+  });
+
+  renameSync(first, join(root, "My Drive", "account", "saved-personal-drive"));
+  expect(googleDriveTargets(home, "wsl", options)).toEqual({
+    root,
+    personal: second,
+  });
 });
 
 test("Google Drive discovery refuses ambiguous roots and private collections", () => {

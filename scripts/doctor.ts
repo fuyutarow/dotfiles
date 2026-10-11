@@ -96,6 +96,7 @@ export type Ctx = {
   dotfiles: string;
   isMac: boolean;
   isWsl: boolean;
+  mountInfo?: string;
   /** Plain Linux carries core only; desktop extras remain in Brewfile. */
   isCoreBox: boolean;
 };
@@ -226,6 +227,23 @@ export function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
   return Promise.resolve().then(() => {
     if (!ctx.isMac && !ctx.isWsl)
       return skip("google-drive", "Google Drive links apply to macOS and WSL");
+    if (ctx.isWsl) {
+      const mountInfo =
+        ctx.mountInfo ??
+        (existsSync("/proc/self/mountinfo")
+          ? readFileSync("/proc/self/mountinfo", "utf8")
+          : "");
+      const mounted = mountInfo
+        .split("\n")
+        .some((line) => line.split(" ")[4] === "/mnt/g");
+      if (!mounted)
+        return fail(
+          "google-drive",
+          "Windows Google Drive G: is not mounted at /mnt/g",
+          "mise run wsl:drive-mount && sudo mount /mnt/g",
+          ["/mnt/g is not a mounted filesystem"],
+        );
+    }
     const targets = googleDriveTargets(ctx.home, ctx.isMac ? "mac" : "wsl");
     const problems: string[] = [];
     for (const [name, target] of [

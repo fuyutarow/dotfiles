@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { commandFixture } from "./command-fixture.ts";
 import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
 import {
+  agx290Marker,
   deadOwnMarker,
   malformedMarker,
   ownFreshMarker,
@@ -150,6 +151,29 @@ test("shared agx marker fixtures reach run selectors while malformed and dead ma
   expect(await laneCount(ctx, "other", { session: "session-a" })).toBe(2);
 });
 
+test("agx 2.9 marker additions remain readable without parsing ps columns", async () => {
+  const { dir, ctx } = world();
+  writeFileSync(
+    join(dir, "active", "agx-2.9.json"),
+    JSON.stringify({
+      ...agx290Marker,
+      pid: process.pid,
+      cwd: dir,
+      dispatcher_session: "session-a",
+    }),
+  );
+  expect(await runningRuns(ctx)).toEqual([
+    {
+      id: agx290Marker.run_id,
+      lane: "implementation",
+      row: "luna-medium",
+      name: "c6_u17",
+      kind: "compute",
+      labels: ["implementation"],
+    },
+  ]);
+});
+
 test("session selectors separate two dispatchers and unattributed live runs", async () => {
   const { dir, ctx } = world();
   for (const [id, session, pid] of [
@@ -283,11 +307,13 @@ test("unattributed markers require project cwd; exact sessions override cwd", as
   ]);
 });
 
-test("GPU resolves WSL fallback and returns unknown when none is executable", async () => {
+test("GPU resolves the WSL fallback and explains missing, invalid, or timed-out sampling", async () => {
   const { dir, ctx } = world();
   process.env.PATH = join(dir, "empty-path");
   const statePath = join(dir, "gpu-samples.jsonl");
-  expect(await gpu(ctx, { fallbacks: [], statePath })).toBe("unknown");
+  expect(await gpu(ctx, { fallbacks: [], statePath })).toEqual({
+    unavailable: "no nvidia-smi",
+  });
   const wslLib = join(dir, "usr", "lib", "wsl", "lib");
   mkdirSync(wslLib, { recursive: true });
   const wslSmi = join(wslLib, "nvidia-smi");
@@ -302,12 +328,18 @@ test("GPU resolves WSL fallback and returns unknown when none is executable", as
   });
   commandFixture(wslSmi, { stdout: "[N/A], 0, 4096, 12288\n" });
   rmSync(statePath);
-  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toBe("unknown");
+  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toEqual({
+    unavailable: "nvidia-smi output unparsable",
+  });
   commandFixture(wslSmi, { stdout: "101, 0, 4096, 12288\n" });
-  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toBe("unknown");
+  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toEqual({
+    unavailable: "nvidia-smi output unparsable",
+  });
   commandFixture(wslSmi, { sleepMs: 10_000 });
   const started = performance.now();
-  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toBe("unknown");
+  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toEqual({
+    unavailable: "nvidia-smi timeout 1000ms",
+  });
   expect(performance.now() - started).toBeLessThan(1_500);
 });
 

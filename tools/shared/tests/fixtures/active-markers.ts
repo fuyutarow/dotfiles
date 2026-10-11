@@ -40,6 +40,40 @@ export const ownResumedMarker = {
   ticket: { writes: ["scripts/**", "zsh/**", "mise.toml", "tools/coredev/**"] },
 };
 
+/** Sanitized active marker shape emitted by agx 2.9.0, including its expanded ticket. */
+export const agx290Marker = {
+  schema: 1,
+  run_id: "2026-10-11T03-18-28.857884966Z-905743-nro4qy",
+  display_id: "agt_c6_u17",
+  kind: "compute",
+  labels: ["implementation"],
+  pid: 905743,
+  label: "resume: FIRST ACTION: append started to agent-notes/c6_u17.md",
+  choice: "luna-medium",
+  pick_source: "resume",
+  started_at: "2026-10-11T03:18:28.859245666Z",
+  cwd: "/home/fuyu/Workspace/firedancer-arm-c6u17",
+  dispatcher_session: fixtureSession,
+  phase: "working after interim RETURN 1",
+  worker_session: "01a128f6-13c7-79c0-b24f-fbb979040b9f",
+  cost_usd: 0.04422078,
+  worker_usage: {
+    input_tokens: 2376211,
+    cached_input_tokens: 2248448,
+    output_tokens: 11696,
+    reasoning_output_tokens: 6224,
+  },
+  ticket: {
+    writes: ["agent-notes/c6_u17.md", "packages/ModelRegistry.jl/**"],
+    name: "c6_u17",
+    path: "/home/fuyu/.local/state/agx/tickets/firedancer-arm-c6u17/261011-c6_u17.md",
+    lane: "implementation",
+    kind: "compute",
+    labels: ["implementation"],
+  },
+  picked_probability: 0.040382317801672646,
+};
+
 export const malformedMarker = {
   schema: 1,
   display_id: "agt_malformed",

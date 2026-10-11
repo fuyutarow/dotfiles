@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0 — 2026-10-11
+
+- Keep live-run selection on structured agx active markers, including the expanded agx 2.9.0 ticket shape; the `ps` column change (`id` → `ticket`, `run_id` moved last) cannot shift hook parsing.
+- Return the GPU sampling failure reason instead of collapsing it to an opaque unknown value. WSL discovery checks PATH and `/usr/lib/wsl/lib/nvidia-smi` with the existing bounded query.
+
 ## 0.7.0 — 2026-10-10
 
 - Prefix context, Stop reasons and diagnostics with `[<namespace>:<slug>]`.

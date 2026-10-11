@@ -27,6 +27,7 @@ export type Run = {
 export type RunStateOptions = { stateDirs?: string[] };
 export type RunFilter = RunStateOptions & { session?: string };
 export type RunScan = { runs: Run[]; unreadable: number };
+export type GpuUnavailable = { unavailable: string };
 const Record = z.object({
   kind: z.string(),
   run_id: z.string(),
@@ -220,9 +221,11 @@ async function command(
 export function gpu(
   ctx: HookContext,
   search: { path?: string; fallbacks?: string[]; statePath?: string } = {},
-): Promise<GpuReading | "unknown"> {
+): Promise<GpuReading | GpuUnavailable> {
   const result = sampleGpu({ ...search, cwd: ctx.cwd, timeoutMs: LIMIT_MS });
-  return Promise.resolve(result.ok ? result.value : "unknown");
+  return Promise.resolve(
+    result.ok ? result.value : { unavailable: result.why },
+  );
 }
 
 /** Hours since the oldest modified file reported by jj diff; clean/unavailable is zero. */

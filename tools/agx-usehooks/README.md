@@ -17,7 +17,7 @@ Conditions return values:
 - `await runningJobs(ctx, { session })`: running systemd user services, optionally filtered by exact unit session. Each job includes `id`, `attribution`, optional `session`, `cwd`, `kind`, and `labels`.
 - `await unattributedJobs(ctx)`: running services classified as `projectUnattributed`.
 - `await laneCount(ctx, lane, { session })`: number of live runs in that lane, optionally filtered by session.
-- `await gpu(ctx)`: `{ nowPct, avg15Pct, avg60Pct, samples15, memUsedGiB, memTotalGiB } | "unknown"` (first GPU, 1 s timeout). Both averages are estimates and are `null` until their window has three samples. Reads share a locked, atomic two-hour history with statusline, sampling at jittered 10–20 s intervals when consumers run.
+- `await gpu(ctx)`: `{ nowPct, avg15Pct, avg60Pct, samples15, memUsedGiB, memTotalGiB } | { unavailable: reason }` (first GPU, 1 s timeout). WSL discovery checks PATH and `/usr/lib/wsl/lib/nvidia-smi`. Both averages are estimates and are `null` until their window has three samples. Reads share a locked, atomic two-hour history with statusline, sampling at jittered 10–20 s intervals when consumers run.
 - `await englishSegments(text)`: English prose segments using the reply-language hook rule.
 - `await dirtyFor(ctx)`: oldest changed-file modification age in hours, or 0.
 - `await unackedReturns(ctx)`: returned runs with no acknowledgement, as `{ id, lane, row }[]`.
@@ -67,7 +67,7 @@ await onPrompt(async (ctx) => {
   ]);
   return [
     theory < 3 && "There are fewer than three theory runs.",
-    device !== "unknown" &&
+    !("unavailable" in device) &&
       (device.avg15Pct ?? (device.samples15 <= 1 ? device.nowPct : null)) !== null &&
       (device.avg15Pct ?? device.nowPct) < 20 &&
       "GPU utilisation is under 20%.",

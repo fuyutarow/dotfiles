@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.0 — 2026-10-11
+
+- Make `statusline --codex` default to the current directory, select only interactive `codex-tui` rollouts, and support exact `--thread <id>` selection with a non-zero unknown-id result.
+- Omit Claude-only identity, rate-window, diff and cost fields from Codex output, and document the CLI defaults in help.
+
 ## 0.12.0 — 2026-10-11
 
 - Show `ccc indexing Nm` in the Sys GPU segment after 15 minutes of observed GPU indexing; reuse the sampler with bounded probes cached for one minute. Retire the per-prompt and per-Bash advisory hook.

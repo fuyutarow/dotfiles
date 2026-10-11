@@ -10,6 +10,7 @@ const SESSION_META = z.object({
     session_id: maybe(z.string()),
     cwd: maybe(z.string()),
     model: maybe(z.string()),
+    originator: maybe(z.string()),
   }),
 });
 const TOKEN_COUNT = z.object({
@@ -81,9 +82,35 @@ async function matchingRolloutOnDay(dir: string, cwd: string) {
   const candidates = await rolloutsInDay(dir);
   for (const candidate of candidates) {
     const meta = await metadata(candidate.path);
-    if (meta?.payload.cwd === cwd) return { path: candidate.path, meta };
+    if (meta?.payload.cwd === cwd && meta.payload.originator === "codex-tui")
+      return { path: candidate.path, meta };
   }
   return null;
+}
+
+async function matchingRolloutByThreadOnDay(dir: string, threadId: string) {
+  const names = await readdir(dir).catch(() => []);
+  const candidates = await Promise.all(
+    names
+      .filter(
+        (name) =>
+          name.startsWith("rollout-") && name.endsWith(`-${threadId}.jsonl`),
+      )
+      .map(async (name) => {
+        const path = join(dir, name);
+        const info = await stat(path).catch(() => null);
+        if (info?.isFile() !== true) return null;
+        const meta = await metadata(path);
+        return meta?.payload.originator === "codex-tui"
+          ? { path, meta, mtimeMs: info.mtimeMs }
+          : null;
+      }),
+  );
+  return (
+    candidates
+      .filter((candidate) => candidate !== null)
+      .toSorted((a, b) => b.mtimeMs - a.mtimeMs)[0] ?? null
+  );
 }
 
 async function matchingRollout(root: string, cwd: string) {
@@ -102,6 +129,22 @@ async function matchingRollout(root: string, cwd: string) {
   return null;
 }
 
+async function matchingRolloutByThread(root: string, threadId: string) {
+  const today = Temporal.Now.plainDateISO();
+  for (let offset = 0; offset <= 366; offset++) {
+    const day = today.subtract({ days: offset });
+    const dir = join(
+      root,
+      String(day.year),
+      String(day.month).padStart(2, "0"),
+      String(day.day).padStart(2, "0"),
+    );
+    const match = await matchingRolloutByThreadOnDay(dir, threadId);
+    if (match !== null) return match;
+  }
+  return null;
+}
+
 async function readTail(path: string): Promise<string> {
   await using file = await open(path, "r");
   const info = await file.stat();
@@ -112,12 +155,10 @@ async function readTail(path: string): Promise<string> {
   return length < info.size ? text.slice(text.indexOf("\n") + 1) : text;
 }
 
-/** Select the newest rollout for the pane cwd and normalize its current turn/context facts. */
-export async function readCodexSessionStatus(
-  cwd: string,
-  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+async function readSelectedSessionStatus(
+  selected: Awaited<ReturnType<typeof matchingRolloutOnDay>>,
+  cwd: string | undefined,
 ): Promise<SessionStatus | undefined> {
-  const selected = await matchingRollout(root, cwd);
   if (selected === null) return undefined;
   const tail = await readTail(selected.path).catch(() => "");
   let model = selected.meta.payload.model;
@@ -151,4 +192,21 @@ export async function readCodexSessionStatus(
     effort,
     context,
   };
+}
+
+/** Select the newest interactive TUI rollout for the cwd and normalize its current turn/context facts. */
+export async function readCodexSessionStatus(
+  cwd: string,
+  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+): Promise<SessionStatus | undefined> {
+  return readSelectedSessionStatus(await matchingRollout(root, cwd), cwd);
+}
+
+/** Select an interactive TUI rollout by its thread ID from the rollout filename. */
+export async function readCodexThreadStatus(
+  threadId: string,
+  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+): Promise<SessionStatus | undefined> {
+  const selected = await matchingRolloutByThread(root, threadId);
+  return readSelectedSessionStatus(selected, selected?.meta.payload.cwd);
 }

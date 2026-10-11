@@ -64,6 +64,7 @@ type Sources = {
 export interface BuildDataframeOptions {
   sources?: Partial<Sources>;
   budgets?: Partial<Record<keyof Sources, number>>;
+  codex?: boolean;
 }
 const BUDGETS_MS: Record<keyof Sources, number> = {
   identity: 1500,
@@ -197,7 +198,20 @@ export async function buildDataframe(
     codexRateResult,
     jevUsageResult,
   ] = await Promise.allSettled([
-    runBounded("account", budget("identity"), sources.identity),
+    runBounded(
+      "account",
+      budget("identity"),
+      options.codex === true
+        ? () =>
+            Promise.resolve({
+              email: undefined,
+              accountWhy: undefined,
+              rlModel: [],
+              modelCapsWhy: undefined,
+              wfOn: false,
+            })
+        : sources.identity,
+    ),
     runBounded("name", budget("agentName"), () =>
       sid === undefined
         ? Promise.resolve(ok<string | undefined, string>(undefined))

@@ -215,11 +215,15 @@ function claudeRateSegment(df: RateFacts, now: number): string {
 
 // One builder for both the statusline and its snapshot. Every provider always owns one slot.
 export const RATE_SOURCES = ["claude", "codex", "Jev"] as const;
-export function rateRow(df: RateFacts, now = nowEpochSec()): string {
+export function rateRow(
+  df: RateFacts,
+  now = nowEpochSec(),
+  sources: readonly (typeof RATE_SOURCES)[number][] = RATE_SOURCES,
+): string {
   const label = `${ESC}[38;5;108mRate:${RST}`;
   // Positive space: exactly one slot per source, in this fixed order. A renderer failure
   // belongs to its own slot; no early return or undefined filter can erase a provider.
-  const slots = RATE_SOURCES.map((source) => {
+  const slots = sources.map((source) => {
     const rendered = fromThrowable(() => {
       if (source === "claude") return claudeRateSegment(df, now);
       if (source === "codex")

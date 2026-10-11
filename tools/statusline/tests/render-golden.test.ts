@@ -53,5 +53,12 @@ describe("statusline render golden", () => {
     const lines = render(dataframe).replaceAll(ANSI, "").split("\n");
     lines[0] = "<prompt-head>";
     expect(lines.join("\n")).toMatchSnapshot();
+
+    const codexLines = render(dataframe, { codex: true }).replaceAll(ANSI, "");
+    expect(codexLines).not.toContain("fixture@example.test");
+    expect(codexLines).not.toContain("claude");
+    expect(codexLines).not.toContain("Jev");
+    expect(codexLines).not.toContain("diff");
+    expect(codexLines).not.toContain("payload has no cost block");
   });
 });

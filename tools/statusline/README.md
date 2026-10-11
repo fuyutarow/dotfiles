@@ -1,6 +1,6 @@
 # statusline
 
-Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.10.2.
+Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.13.0.
 `agents/claude/settings.json` declares `statusLine.command` as `~/.bun/bin/statusline`, this package's `bin`
 (root `package.json` `bin`, installed by `bun link` / `mise run deps`). The former Claude implementation
 has been retired; parity fixtures preserve its expected behavior.
@@ -10,6 +10,8 @@ Run with Bun 1.4 or newer:
 ```sh
 printf '%s' '{}' | bun tools/statusline/src/statusline.ts
 statusline --codex --cwd "$HOME/dotfiles"
+statusline --codex --thread 01a1291d-5a63-76d3-a760-021ebaabf5f2
+statusline --codex
 bun test tools/statusline/tests
 ```
 
@@ -21,9 +23,14 @@ render deadline, 5 s GPU cache and 30 s agent-name cache are preserved. The GPU 
 a bounded detached child of the local host-load module, using the original host-wide lock.
 
 Codex CLI has no command-driven statusline setting, so tmux renders the Codex adapter outside the
-TUI. `--cwd` selects the newest rollout whose `session_meta.cwd` matches the pane. `--pid` reads the
-process cwd (`/proc` or bounded `lsof`) and uses the same rollout selection. The adapter reads
-bounded metadata and event tails, normalizes them to `SessionStatus`, and leaves missing context or
+TUI. `--codex` with no other flags uses the current directory; `--cwd` selects by the supplied
+directory, `--pid` reads the process cwd (`/proc` or bounded `lsof`), and `--thread` selects the
+rollout whose filename ends in the supplied thread ID. Cwd and PID selection use the newest rollout
+whose `session_meta.cwd` matches and whose `originator` is `codex-tui`, skipping
+`codex_exec` workers. A cwd or PID selection with no match prints one dim line and exits. Codex
+output omits Claude-only identity, rate-window, diff and cost fields. An unknown thread ID prints
+one error line naming that ID and exits non-zero. The adapter reads bounded
+metadata and event tails, normalizes them to `SessionStatus`, and leaves missing Codex context or
 rate data as explicit n/a slots. tmux checks `pane_current_command`, supplies the active pane cwd,
 and refreshes through its existing five-second `status-interval`. Herdr's command entries are
 tab-bar-wide; its pane metadata is display-only, so neither provides tmux's active-pane command

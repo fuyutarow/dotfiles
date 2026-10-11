@@ -4,9 +4,12 @@ import { DIM, ESC, RST } from "./ansi.ts";
 import { realpath } from "node:fs/promises";
 import { execAsyncBounded, writeCacheAsync } from "./bounded.ts";
 import { cli } from "cleye";
-import { jsonText } from "./zod.ts";
+import { jsonText, z } from "./zod.ts";
 import { ClaudeStatuslineInputSchema } from "./adapters/claude-statusline.ts";
-import { readCodexSessionStatus } from "./adapters/codex-rollout.ts";
+import {
+  readCodexSessionStatus,
+  readCodexThreadStatus,
+} from "./adapters/codex-rollout.ts";
 import type { SessionStatus } from "./session-status.ts";
 import { promptParts } from "./prompt-stamp.ts";
 import { coloredHead, render } from "./format.ts";
@@ -35,20 +38,68 @@ async function cwdForPid(pid: string): Promise<string | null> {
         ?.slice(1) ?? null)
     : null;
 }
-async function codexSession(cwd?: string, pid?: string) {
+async function codexSession(cwd?: string, pid?: string, threadId?: string) {
   if (pid !== undefined && cwd !== undefined)
     return { session: null, error: "use only one of --pid or --cwd" };
+  if (threadId !== undefined && (pid !== undefined || cwd !== undefined))
+    return {
+      session: null,
+      error: "use only one of --thread, --pid or --cwd",
+    };
   if (pid !== undefined && !/^[1-9]\d*$/u.test(pid))
     return { session: null, error: "--pid must be a positive process ID" };
-  const selectedCwd = cwd ?? (pid === undefined ? null : await cwdForPid(pid));
+  if (threadId !== undefined) {
+    const session = await readCodexThreadStatus(threadId);
+    return session === undefined
+      ? {
+          session: null,
+          error: `no interactive Codex session found for thread ${threadId}`,
+        }
+      : { session, cwd: session.cwd, error: null };
+  }
+  const envPwd = process.env.PWD;
+  const currentCwd =
+    envPwd === undefined || envPwd === "" ? process.cwd() : envPwd;
+  const selectedCwd =
+    cwd ?? (pid === undefined ? currentCwd : await cwdForPid(pid));
   if (selectedCwd === null || selectedCwd === "")
     return { session: null, error: "--codex requires --pid or --cwd" };
   return {
-    session: (await readCodexSessionStatus(selectedCwd)) ?? {
-      cwd: selectedCwd,
-    },
+    session: await readCodexSessionStatus(selectedCwd),
+    cwd: selectedCwd,
     error: null,
   };
+}
+const CodexSelectorFlagsSchema = z.object({
+  cwd: z.string().optional(),
+  pid: z.string().optional(),
+  thread: z.string().optional(),
+});
+async function codexSessionFromFlags(flags: unknown): Promise<SessionStatus> {
+  const parsedFlags = CodexSelectorFlagsSchema.safeParse(flags);
+  if (!parsedFlags.success) {
+    const field = parsedFlags.error.issues[0]?.path.map(String).join(".");
+    process.stderr.write(
+      `FATAL: invalid Codex selector${field === undefined ? "" : ` ${field}`}\n`,
+    );
+    process.exit(2);
+  }
+  const selected = await codexSession(
+    parsedFlags.data.cwd,
+    parsedFlags.data.pid,
+    parsedFlags.data.thread,
+  );
+  if (selected.error !== null) {
+    process.stderr.write(`FATAL: ${selected.error}\n`);
+    process.exit(2);
+  }
+  if (selected.session === undefined) {
+    process.stdout.write(
+      `${DIM}Codex: no interactive session for ${selected.cwd}${RST}`,
+    );
+    process.exit(0);
+  }
+  return selected.session;
 }
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -65,13 +116,22 @@ const args = cli(
     flags: {
       codex: {
         type: Boolean,
-        description: "Read the newest Codex rollout for a pane",
+        description:
+          "Read the owner's interactive Codex session (defaults to the current directory)",
       },
       pid: {
         type: String,
         description: "Codex process ID (used to read its cwd)",
       },
-      cwd: { type: String, description: "Pane working directory" },
+      cwd: {
+        type: String,
+        description:
+          "Working directory to match (defaults to the current directory)",
+      },
+      thread: {
+        type: String,
+        description: "Interactive Codex thread ID shown in the TUI footer",
+      },
     },
   },
   undefined,
@@ -93,14 +153,13 @@ if (typeof Temporal === "undefined") {
 }
 let session: SessionStatus | undefined;
 if (args.flags.codex === true) {
-  const selected = await codexSession(args.flags.cwd, args.flags.pid);
-  if (selected.error !== null) {
-    process.stderr.write(`FATAL: ${selected.error}\n`);
-    process.exit(2);
-  }
-  session = selected.session;
-} else if (args.flags.pid !== undefined || args.flags.cwd !== undefined) {
-  process.stderr.write("FATAL: --pid and --cwd require --codex\n");
+  session = await codexSessionFromFlags(args.flags);
+} else if (
+  args.flags.pid !== undefined ||
+  args.flags.cwd !== undefined ||
+  args.flags.thread !== undefined
+) {
+  process.stderr.write("FATAL: --pid, --cwd and --thread require --codex\n");
   process.exit(2);
 }
 if (args.flags.codex !== true) {
@@ -133,12 +192,13 @@ const selectedSession = session;
 const df =
   args.flags.codex === true && selectedSession?.sessionId !== undefined
     ? await buildDataframe(selectedSession, {
+        codex: true,
         sources: {
           codexRate: () => readCodexRate(undefined, selectedSession.sessionId),
         },
       })
     : await buildDataframe(session ?? {});
-process.stdout.write(render(df));
+process.stdout.write(render(df, { codex: args.flags.codex === true }));
 
 // Hand the plain Sys row to hooks/log-sys-snapshot.ts, which attaches it to the transcript.
 // Host load shares GPU history with agx-usehooks; the snapshot hook just reads the latest

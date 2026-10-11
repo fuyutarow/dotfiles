@@ -53,15 +53,19 @@ export function coloredHead(p: PromptParts): string {
     `${ESC}[36m${p.when}${ESC}[38;5;240m${p.zone}${RST}|${ESC}[32m${p.cwd}${RST}`
   );
 }
-export function render(df: Dataframe): string {
+export function render(
+  df: Dataframe,
+  options: { codex?: boolean } = {},
+): string {
+  const codex = options.codex === true;
   const joinText = (t: string, seg: string) => (t !== "" ? t + SEP : "") + seg;
 
   const line1 = coloredHead(promptParts(df.cwd));
 
   let identityLine = "";
-  if (df.email !== null && df.email !== undefined)
+  if (!codex && df.email !== null && df.email !== undefined)
     identityLine = joinText(identityLine, `${ESC}[38;5;103m${df.email}${RST}`);
-  else if (df.accountWhy !== undefined && df.accountWhy !== "")
+  else if (!codex && df.accountWhy !== undefined && df.accountWhy !== "")
     identityLine = joinText(identityLine, naSegment("account", df.accountWhy));
   if (df.sid !== null && df.sid !== undefined)
     identityLine = joinText(
@@ -70,9 +74,13 @@ export function render(df: Dataframe): string {
     );
 
   let agentLine = "";
-  if (df.sessionName !== null && df.sessionName !== undefined)
+  if (!codex && df.sessionName !== null && df.sessionName !== undefined)
     agentLine = joinText(agentLine, `${ESC}[38;5;214m${df.sessionName}${RST}`);
-  else if (df.sessionNameWhy !== undefined && df.sessionNameWhy !== "")
+  else if (
+    !codex &&
+    df.sessionNameWhy !== undefined &&
+    df.sessionNameWhy !== ""
+  )
     agentLine = joinText(agentLine, naSegment("name", df.sessionNameWhy));
   agentLine = joinText(agentLine, `${ESC}[38;5;30m${df.model}${RST}`);
   if (df.effort !== undefined && df.effort !== "") {
@@ -85,25 +93,28 @@ export function render(df: Dataframe): string {
   // Always rendered, one distinct form per state (see rcState()): an absent segment would make
   // "disconnected" and "probe broken" look identical, which is the ambiguity this exists to
   // remove. 🔗 stays unstyled — an emoji does not reliably repaint under an fg override.
-  if (df.rc === "on") agentLine += `${SEP}🔗`;
-  else if (df.rc === "off") agentLine += `${SEP}${DIM}rc:off${RST}`;
-  else agentLine += `${SEP}${ESC}[38;5;178mrc:?${RST}`;
+  if (!codex) {
+    if (df.rc === "on") agentLine += `${SEP}🔗`;
+    else if (df.rc === "off") agentLine += `${SEP}${DIM}rc:off${RST}`;
+    else agentLine += `${SEP}${ESC}[38;5;178mrc:?${RST}`;
+  }
 
   agentLine = joinText(agentLine, ctxSegment(df));
 
-  const rateLine = rateRow(df);
+  const rateLine = codex ? rateRow(df, undefined, ["codex"]) : rateRow(df);
 
   let repoLine = "";
   if (df.branch !== undefined && df.branch !== "")
     repoLine = joinText(repoLine, `${ESC}[38;5;96m${BR} ${df.branch}${RST}`);
   else if (df.branchWhy !== undefined && df.branchWhy !== "")
     repoLine = joinText(repoLine, `${BR} ${naSegment("branch", df.branchWhy)}`);
-  repoLine = joinText(
-    repoLine,
-    df.add === undefined || df.del === undefined
-      ? naSegment("diff", "payload has no cost block")
-      : `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`,
-  );
+  if (!codex)
+    repoLine = joinText(
+      repoLine,
+      df.add === undefined || df.del === undefined
+        ? naSegment("diff", "payload has no cost block")
+        : `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`,
+    );
   if (df.wt !== undefined && df.wt !== "")
     repoLine = joinText(repoLine, `${ESC}[38;5;140mwt: ${df.wt}${RST}`);
 

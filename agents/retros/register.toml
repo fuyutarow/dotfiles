@@ -1,0 +1,440 @@
+[[lesson]]
+id = "R2610-0A-A1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "作業の宛先は一つの handle に統一し、起動経路による例外を作らない。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-A2"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "抽選の探索幅と費用上限を明示し、予算の規律を未記入で無効にしない。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "fixed"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-A3"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "repo 内の書き込みと repo 外への作用を別々に申告できるようにする。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-A4"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "採否を要しない終了状態を区別し、毎回の雑音を減らす。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-A5"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "作業の表示は phase だけでなく、進行中の内容を確認できるものにする。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-B1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "commit・push・ホストごとの deploy は別々に判定する。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "fixed"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-B2"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "失敗は理由を伴って返し、同じ原因で再試行を重ねさせない。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "fixed"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-B3"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "他セッションの作業待ちは失敗と区別する。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "fixed"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-B4"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "診断で見つかる漂流には、管理する側の片付け経路を用意する。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "fixed"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-C1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "hook の目的と実行時間の上限を宣言し、入口の待ち時間を管理する。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-C2"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "hook の出所は実行時のメッセージから識別できるようにする。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "fixed"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-C3"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "検索の規律は対象範囲を限定し、自分のログやツールの出力を巻き込まない。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-D1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "高価な調査を発注する前に、最小の観測で前提を確かめる。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-D2"
+first_seen = "2026-10-10"
+sources = ["retro", "memory", "session"]
+principle = "返答言語の規律は Stop hook に捕まる前に適用する。"
+enforcement = { type = "hook", locus = "agents/claude/hooks/enforce-reply-language.ts" }
+status = "open"
+recurrences = ["2026-10-11"]
+
+[[lesson]]
+id = "R2610-0A-D3"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "票ごとの上書きで選択規律を迂回せず、選択方針を一か所で扱う。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "fixed"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-D4"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "失敗の原因を確かめ、同じ送り方を繰り返さない。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-D5"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "選択方針を変える前に、判断基準と費用への影響を固定する。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0A-X1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "sandbox 内で jj を使う際の競合は独立した課題として記録し、解決条件を明示する。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-A1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "規律は作る側に組み込み、hook は最後の網。定義は共有。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-A2"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "空き容量の gate は止めるだけでなく、安全に空きを作る経路へつなぐ。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-B1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "安全に消せる根拠と測定量を示し、権限不足を一律に使用中扱いしない。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-B2"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "削除対象の安全性は名前でなく実体と範囲で確かめる。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-B3"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "測る・調べる・判断する・消す・見せるの責務と、タスクの対象を整理する。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-B4"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "ゲストで消した量と Windows の C: に返った量を別々に測る。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-C1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "再開と追記の宛先は run の経路や sandbox の有無によらず保持する。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-C2"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "高い努力の選択理由を schema で要求し、技能の列挙で代用させない。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-D1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "票を書く前の rr exists を lint か grader で必須に。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-E2"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "権限の境界を保ちつつ、安全を証明できる削除を通す経路を機能させる。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0B-F1"
+first_seen = "2026-10-10"
+sources = ["retro"]
+principle = "変化する元ディスクには早期に一貫した snapshot を使い、調査自体の起動作用も把握する。"
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "feedback-survey-before-claiming-impossible"
+first_seen = "2026-10-11"
+sources = ["memory"]
+principle = "Survey primary sources before claiming a path is impossible or too costly."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "feedback-cli-devx-never-silent"
+first_seen = "2026-10-11"
+sources = ["memory", "session"]
+principle = "Explain waits; avoid silent fallback, false success, and routine noise."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = ["2026-10-11"]
+
+[[lesson]]
+id = "feedback-isolate-harness-edits"
+first_seen = "2026-10-11"
+sources = ["memory"]
+principle = "Isolate edits to hook-imported sources in a jj workspace."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "feedback-formatter-is-oxfmt"
+first_seen = "2026-10-11"
+sources = ["memory"]
+principle = "Use oxfmt as the TypeScript formatter."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "feedback-naming-recall"
+first_seen = "2026-10-11"
+sources = ["memory"]
+principle = "Names should state the object and action."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "feedback-codex-never-gated-on-sandbox"
+first_seen = "2026-10-11"
+sources = ["memory"]
+principle = "Do not gate Codex work on sandbox behavior."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "feedback-coordinator-only"
+first_seen = "2026-10-11"
+sources = ["memory"]
+principle = "Route every edit through a worker and include lint:ts in verification."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "feedback-owner-coordination-prefs"
+first_seen = "2026-10-11"
+sources = ["memory", "session"]
+principle = "Verify the real path before saying fixed; vet reclaim paths, replace before retiring, optimize throughput, and order by live owner pain."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = ["2026-10-11"]
+
+[[lesson]]
+id = "feedback-no-compat-aliases"
+first_seen = "2026-10-11"
+sources = ["memory"]
+principle = "Do not add compatibility aliases."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "feedback-move-auth-from-mac"
+first_seen = "2026-10-11"
+sources = ["memory"]
+principle = "Move authentication off the Mac."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "feedback-dotfiles-core-utils-only"
+first_seen = "2026-10-11"
+sources = ["memory"]
+principle = "Keep dotfiles focused on core utilities."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "feedback-brief-reuse-check"
+first_seen = "2026-10-11"
+sources = ["memory", "session"]
+principle = "Check house decisions and tools before writing a brief."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = ["2026-10-11"]
+
+[[lesson]]
+id = "FD-2026-10-11-detach"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Validate synchronously before detach; return non-zero on start failure and distinguish accepted from started."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "FD-2026-10-11-started-state"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Do not report a detached run as started when its tracked directory or service unit is absent."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "FD-2026-10-11-ticket-home"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Ticket identity must not depend on a non-unique --cd basename."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "FD-2026-10-11-amend-wait"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "An amend with no live worker must not block a detached session."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "FD-2026-10-11-premise-path"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "State that premise paths are relative to --cd and report parse failures clearly."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "FD-2026-10-11-hook-latency"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Exclude hook latency from trivial command background-wait measurements."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "FD-2026-10-11-search-route"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Do not reject a ticket because a heredoc mentions a search command."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "FD-2026-10-11-ticket-generation"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Provide a sanctioned ticket-generation path for interacting repository rules."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []

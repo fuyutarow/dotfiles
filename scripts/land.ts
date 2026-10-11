@@ -468,6 +468,26 @@ const jj = (cwd: string, argv: string[]) =>
   run(cwd, ["jj", "--no-pager", "--color", "never", ...argv]);
 const read = (cwd: string, argv: string[]) =>
   jj(cwd, ["--ignore-working-copy", "--at-operation=@", ...argv]);
+function usehooksConsumerGate(
+  root: string,
+  changed: string[],
+  alpha: string,
+): ResultAsync<string, Error> {
+  return safeTry(async function* () {
+    if (!changed.some((path) => path.startsWith("tools/agx-usehooks/")))
+      return ok("");
+    const consumers = await run(root, [
+      process.env.LAND_MISE ?? "mise",
+      "run",
+      "usehooks:consumers",
+    ]);
+    if (consumers.isErr()) {
+      yield* jj(root, ["restore", "--from", alpha, "--", ...filesets(changed)]);
+      return consumers;
+    }
+    return consumers;
+  });
+}
 const at = (cwd: string, rev: string, template = "commit_id") =>
   read(cwd, ["log", "--no-graph", "-r", rev, "-T", template]).map((text) =>
     text.trim(),
@@ -892,6 +912,8 @@ async function main(
       );
       stage = "commit";
       if (!parsed.flags.dryRun) {
+        const consumers = yield* usehooksConsumerGate(mainRoot, changed, alpha);
+        if (consumers !== "") emit(consumers.trimEnd());
         const before = yield* at(mainRoot, "@-");
         const committed = await run(mainRoot, [
           process.env.LAND_MISE ?? "mise",

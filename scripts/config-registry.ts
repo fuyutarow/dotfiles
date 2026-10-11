@@ -566,6 +566,15 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
+    sources: ["tools/agx-usehooks/consumers.toml"],
+    deployed: "the checkout",
+    consumer: "agx-usehooks consumer typechecks and land's pre-commit gate",
+    writer: "human, in the repo",
+    verify: "mise run usehooks:consumers",
+  },
+  {
+    kind: "in-place",
+    when: "all",
     sources: ["agents/skills-lock.json"],
     deployed: "the checkout",
     consumer: "skills-doctor (provenance ledger)",

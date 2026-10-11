@@ -147,6 +147,7 @@ function fixture() {
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(process.argv.slice(2)) + '\\n');
 const argv = process.argv.slice(2);
 if (argv[1] === 'deps' || argv[1] === 'hook:post-merge') process.exit(0);
+if (argv[1] === 'usehooks:consumers') { process.stdout.write('PASS fixture consumer\\n'); process.exit(process.env.LAND_FAIL_CONSUMERS === '1' ? 1 : 0); }
 if (argv[1] === 'doctor') { process.stdout.write('PASS fixture healthy\\nRESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0\\n'); process.exit(0); }
 if (process.env.LAND_FAIL_COMMIT === '1' || argv[argv.indexOf('-m') + 1] === 'Fail queued') { if (process.env.LAND_NOISY_COMMIT === '1') writeSync(1, 'FAIL settings.json:4 → missing target retired.ts\\n' + 'fixture output\\n'.repeat(12000)); process.stderr.write('hook:pre-commit refused: fixture refusal\\n'); process.exit(9); }
 const paths = argv.slice(argv.lastIndexOf('--') + 1).map(p => 'root:' + JSON.stringify(p));
@@ -258,6 +259,40 @@ function digest(root: string): string {
 }
 
 describe("land workspace", () => {
+  test("usehooks changes check consumers before commit and refuse hook errors", () => {
+    const f = fixture();
+    mkdirSync(join(f.worker, "tools/agx-usehooks/src"), { recursive: true });
+    writeFileSync(
+      join(f.worker, "tools/agx-usehooks/src/index.ts"),
+      "export const fixture = true;\n",
+    );
+    const refused = f.land([], { LAND_FAIL_CONSUMERS: "1" });
+    expect(refused.exitCode).toBe(1);
+    const refusedLog = f.log();
+    expect(refusedLog.some((args) => args[1] === "usehooks:consumers")).toBe(
+      true,
+    );
+    expect(refusedLog.some((args) => args[1] === "commit")).toBe(false);
+    expect(existsSync(join(f.main, "tools/agx-usehooks/src/index.ts"))).toBe(
+      false,
+    );
+  });
+  test("passing consumer gate precedes land commit", () => {
+    const f = fixture();
+    mkdirSync(join(f.worker, "tools/agx-usehooks/src"), { recursive: true });
+    writeFileSync(
+      join(f.worker, "tools/agx-usehooks/src/index.ts"),
+      "export const fixture = true;\n",
+    );
+    const landed = f.land();
+    expect(landed.exitCode).toBe(0);
+    const log = f.log();
+    const consumer = log.findIndex((args) => args[1] === "usehooks:consumers");
+    expect(consumer).toBeGreaterThanOrEqual(0);
+    expect(log.findIndex((args) => args[1] === "commit")).toBeGreaterThan(
+      consumer,
+    );
+  });
   test("resolves package version and CHANGELOG only conflicts with the workspace bump level", () => {
     const f = fixture();
     writeToolPackage(f.main, "1.0.0");

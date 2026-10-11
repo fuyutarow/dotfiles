@@ -411,7 +411,12 @@ run = 'bun ~/dotfiles/scripts/test-mise-scope.ts'
 [tasks.check]
 alias = "c"
 description = "全gate集約 (CI): fmt:check + lint + test"
-depends = ["fmt:check", "lint", "test"]
+depends = ["fmt:check", "lint", "test", "usehooks:consumers"]
+
+[tasks."usehooks:consumers"]
+dir = "{{config_root}}"
+description = "Read-only declared consumer typechecks against this workspace's agx-usehooks; absent consumers are SKIP"
+run = "bun tools/agx-usehooks/src/check-consumers.ts"
 
 # Device policy tasks are intentionally outside the CI aggregate: a connected, authorized
 # Pixel is required. `android:line:check` is a live-device audit, not a source-code gate.

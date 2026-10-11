@@ -253,7 +253,9 @@ function newRunId(): string {
   return `${now().replaceAll(":", "-")}-${process.pid}-${suffix}`;
 }
 const currentDispatcherSession = (): string | undefined => {
-  const id = process.env.CLAUDE_CODE_SESSION_ID?.trim();
+  const id = (
+    process.env.AGX_DISPATCHER_SESSION ?? process.env.CLAUDE_CODE_SESSION_ID
+  )?.trim();
   return id === undefined || id === "" ? undefined : id;
 };
 const epochMilliseconds = (): number =>
@@ -6901,7 +6903,11 @@ async function detachDispatch(
     unit,
     cwd: resolve(flags.cd),
     command: [process.execPath, join(import.meta.dir, "main.ts"), ...childArgs],
-    env: { ...process.env, HOME: process.env.HOME ?? homedir() },
+    env: {
+      ...process.env,
+      HOME: process.env.HOME ?? homedir(),
+      AGX_DISPATCHER_SESSION: currentDispatcherSession() ?? "",
+    },
     logDir,
   });
   // The OS manager's acknowledgment is bounded; the accepted worker outlives this call.
@@ -6924,6 +6930,7 @@ async function detachDispatch(
   journalRunEvent({
     kind: "detached",
     run_id: runId,
+    dispatcher_session: currentDispatcherSession(),
     ticket: { name, path: ticketFile, writes: [] },
     cwd: flags.cd,
     sandbox: flags.sandbox,

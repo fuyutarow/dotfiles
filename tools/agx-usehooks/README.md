@@ -10,6 +10,28 @@ emit no stdout, and report one stderr line.
 
 Conditions return values:
 
+The public GPU contract is `GpuReading | GpuUnavailable`, derived from exported
+`GpuReadingSchema` and `GpuUnavailableSchema`; `GpuSchema` parses their union.
+`RunSchema`, `RunsSchema`, and `LaneCountSchema` define `Run`, `Runs`, and
+`LaneCount`. `gpu()`, `runningRuns()`, `unattributedRuns()`, and `laneCount()`
+return the schemas' parsed output. An invalid internal value emits a contract diagnostic and returns a separately
+parsed unavailable or empty fallback. Missing external state returns the documented
+unavailable or empty value.
+**Semver rule:** a changed exported shape requires a major version, even during
+0.x. Adding exports without changing existing shapes is a minor version.
+
+`consumers.toml` declares consumer roots, hook scopes, commands, and their
+`link:agx-usehooks` link paths. `mise run usehooks:consumers` runs firedancer's
+`bunx tsc --noEmit -p <root>` (on r99-u26, `/home/fuyu/Workspace/firedancer`).
+The exact project command runs first, followed by a read-only hook check using a
+temporary config extending the project's config with `agx-usehooks` mapped to this
+workspace. It changes no consumer files or symlinks. Hook diagnostics fail either check; diagnostics
+elsewhere are reported, and compiler/config failures also fail. An absent checkout
+prints `SKIP: consumer not present on this host`, never PASS; run the check on
+r99-u26 where firedancer exists. Land invokes it before commit when this library
+changes. The 0.8.0 migration and consumer impact are recorded in CHANGELOG.md;
+the consumer owner migrates firedancer, with no `utilPct` compatibility alias.
+
 - `await runningRuns(ctx)`: live `{ id, lane, row }[]`; missing ticket lanes are `"other"`.
 - `await scanRuns(ctx)`: the same live runs plus a count of unreadable markers; markers missing `run_id` or `pid` are skipped silently.
 - `await runningRuns(ctx, { session, stateDirs })`: live runs whose `dispatcher_session` equals `session`, from optional explicit state directories.
@@ -35,6 +57,9 @@ variable. For Claude dispatches this is the same UUID as the hook payload's `ses
 not a worker name or PID; pass `ctx.payload.session_id` as the filter. Dispatches without
 that environment variable are project-unattributed only when the marker cwd is inside the
 hook's project root. Missing or foreign cwd is excluded from `unattributedRuns`.
+Detached dispatch captures this ID at dispatch into the unit's
+`AGX_DISPATCHER_SESSION`; the detached child uses that captured value for the
+active marker, independently of its vendor worker session.
 Run selectors retain optional ticket name, kind, and labels (falling back to marker metadata).
 Omitting the filter returns all live runs;
 an explicit session excludes unattributed runs. Project hooks should handle a missing

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.10.1 — 2026-10-11
+
+- Capture the caller's dispatcher session explicitly in detached unit environment and acknowledgement history. A fake OS manager regression verifies session-filtered `runningRuns` counts the detached run independently of the manager's session.
+
 ## 2.10.0 — 2026-10-11
 
 - Record sandbox, ticket, row and directory before worker dispatch. Preserve the known vendor session and sandbox when a continuation exits without a receipt; resume, amendment and repick keep the same ticket. Historical failed continuations can recover sandbox from their recorded ancestor.

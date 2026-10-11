@@ -11,23 +11,25 @@ import {
   parseActiveMarker,
   type ActiveMarkerReader,
 } from "../../shared/src/dispatch-state.ts";
-import { sampleGpu, type GpuReading } from "../../shared/src/gpu-samples.ts";
+import { sampleGpu } from "../../shared/src/gpu-samples.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import type { HookContext } from "./runtime.ts";
 import { projectCwd } from "./attribution.ts";
 
-export type Run = {
-  id: string;
-  lane: string;
-  row: string;
-  name?: string;
-  kind?: string;
-  labels?: string[];
-};
+import {
+  GpuSchema,
+  RunsSchema,
+  LaneCountSchema,
+  validated,
+  type Run,
+  type Runs,
+  type LaneCount,
+  type Gpu,
+} from "./schemas.ts";
+export type { Run, GpuUnavailable } from "./schemas.ts";
 export type RunStateOptions = { stateDirs?: string[] };
 export type RunFilter = RunStateOptions & { session?: string };
 export type RunScan = { runs: Run[]; unreadable: number };
-export type GpuUnavailable = { unavailable: string };
 const Record = z.object({
   kind: z.string(),
   run_id: z.string(),
@@ -172,25 +174,32 @@ export function scanRuns(
 export function runningRuns(
   ctx: HookContext,
   filter: RunFilter = {},
-): Promise<Run[]> {
-  return scanRuns(ctx, filter).then(({ runs }) => runs);
+): Promise<Runs> {
+  return scanRuns(ctx, filter).then(({ runs }) =>
+    validated(RunsSchema, runs, []),
+  );
 }
 
 /** Live runs without dispatcher_session whose marker cwd belongs to this project. */
 export function unattributedRuns(
   ctx: HookContext,
   options: RunStateOptions = {},
-): Promise<Run[]> {
-  return selectRuns(null, options, ctx).then(({ runs }) => runs);
+): Promise<Runs> {
+  return selectRuns(null, options, ctx).then(({ runs }) =>
+    validated(RunsSchema, runs, []),
+  );
 }
 
 export async function laneCount(
   ctx: HookContext,
   lane: string,
   filter: RunFilter = {},
-): Promise<number> {
-  return (await runningRuns(ctx, filter)).filter((run) => run.lane === lane)
-    .length;
+): Promise<LaneCount> {
+  return validated(
+    LaneCountSchema,
+    (await runningRuns(ctx, filter)).filter((run) => run.lane === lane).length,
+    0,
+  );
 }
 
 async function command(
@@ -221,10 +230,12 @@ async function command(
 export function gpu(
   ctx: HookContext,
   search: { path?: string; fallbacks?: string[]; statePath?: string } = {},
-): Promise<GpuReading | GpuUnavailable> {
+): Promise<Gpu> {
   const result = sampleGpu({ ...search, cwd: ctx.cwd, timeoutMs: LIMIT_MS });
-  return Promise.resolve(
+  return validated(
+    GpuSchema,
     result.ok ? result.value : { unavailable: result.why },
+    { unavailable: "agx-usehooks contract invalid" },
   );
 }
 

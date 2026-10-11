@@ -21,6 +21,19 @@ export {
 } from "./conditions.ts";
 export { englishSegments } from "./english.ts";
 export {
+  GpuReadingSchema,
+  GpuUnavailableSchema,
+  GpuSchema,
+  RunSchema,
+  RunsSchema,
+  LaneCountSchema,
+  type GpuReading,
+  type GpuUnavailable,
+  type Gpu,
+  type Runs,
+  type LaneCount,
+} from "./schemas.ts";
+export {
   runningJobs,
   unattributedJobs,
   type Job,

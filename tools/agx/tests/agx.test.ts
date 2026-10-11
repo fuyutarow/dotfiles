@@ -19,6 +19,8 @@ import { decodedJson } from "./decode.ts";
 import { attemptOr } from "../../shared/src/attempt.ts";
 import { processTreeCpu } from "../src/lifecycle.ts";
 import { planWorkspace } from "../src/workspaces.ts";
+// Cross-package acceptance test for the public hook consumer contract.
+import { runningRuns } from "../../agx-usehooks/src/index.ts";
 
 // agx: the one entry point. A fake agx stands in for the worker (it records its argv and
 // prints a receipt), a local server stands in for Jev, and every state file goes to a scratch dir.
@@ -6566,10 +6568,11 @@ describe("agx dispatch --resume", () => {
     const manager = join(bin, "systemd-run");
     writeFileSync(
       manager,
-      `#!${process.execPath}\nconst args = Bun.argv.slice(2);\nconst command = args.slice(args.indexOf("--") + 1);\nconst cwd = args.find(a => a.startsWith("--working-directory="))?.slice("--working-directory=".length);\nconst child = Bun.spawn(command, { cwd, env: process.env, stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true, timeout: 10000 });\nchild.unref();\n`,
+      `#!${process.execPath}\nconst args = Bun.argv.slice(2);\nconst command = args.slice(args.indexOf("--") + 1);\nconst cwd = args.find(a => a.startsWith("--working-directory="))?.slice("--working-directory=".length);\nconst env = { ...process.env, CLAUDE_CODE_SESSION_ID: "manager-unrelated", AGX_DISPATCHER_SESSION: "manager-unrelated", ...Object.fromEntries(args.filter(a => a.startsWith("--setenv=")).map(a => { const value = a.slice(9); const at = value.indexOf("="); return [value.slice(0, at), value.slice(at + 1)]; })) };\nconst child = Bun.spawn(command, { cwd, env, stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true, timeout: 10000 });\nchild.unref();\nprocess.exit(0);\n`,
     );
     chmodSync(manager, 0o755);
     const state = join(scratch, "detached-watch-state");
+    const dispatchCwd = freshCwd();
     const report =
       '{"summary":"done","changes":[],"checks":[],"for_coordinator":[],"open":[]}\n```agx-return\n{"findings":[{"text":"done"}],"evidence":["fixture"],"impact_on_brief":"none","proposed_next":"done","artifacts":[]}\n```';
     const env = {
@@ -6577,7 +6580,8 @@ describe("agx dispatch --resume", () => {
       AGX_DETACH_PLATFORM: "linux",
       AGX_TEST_CLAUDE_ROUTE: "unavailable",
       PATH: `${bin}:${process.env.PATH ?? ""}`,
-      FAKE_SLEEP_MS: "700",
+      CLAUDE_CODE_SESSION_ID: "  detached-dispatch-session  ",
+      FAKE_SLEEP_MS: "1500",
       FAKE_RESUME_SLEEP_MS: "700",
       FAKE_LAST: report,
     };
@@ -6585,7 +6589,7 @@ describe("agx dispatch --resume", () => {
       [
         ...runArgs(
           brief("detached-watch", ticketText('writes = []\nverify = ["true"]')),
-          freshCwd(),
+          dispatchCwd,
         ),
         "--name",
         "detached_watch",
@@ -6595,6 +6599,30 @@ describe("agx dispatch --resume", () => {
     );
     expect(launched.code, launched.err).toBe(0);
     expect(launched.out).toContain("agx wait detached_watch");
+    const ctx = {
+      cwd: dispatchCwd,
+      repoRoot: dispatchCwd,
+      payload: { session_id: "detached-dispatch-session" },
+    };
+    let ownRuns: Awaited<ReturnType<typeof runningRuns>> = [];
+    const deadline = performance.now() + 5000;
+    while (ownRuns.length === 0 && performance.now() < deadline) {
+      ownRuns = await runningRuns(ctx, {
+        session: ctx.payload.session_id,
+        stateDirs: [state],
+      });
+      if (ownRuns.length === 0) await Bun.sleep(25);
+    }
+    expect(ownRuns).toHaveLength(1);
+    expect(
+      await runningRuns(ctx, {
+        session: "manager-unrelated",
+        stateDirs: [state],
+      }),
+    ).toEqual([]);
+    expect(
+      await runningRuns(ctx, { session: "other-session", stateDirs: [state] }),
+    ).toEqual([]);
     const [waited, followed] = await Promise.all([
       router(["wait", "detached_watch"], env),
       router(["follow", "detached_watch", "--json"], env),

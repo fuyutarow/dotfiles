@@ -102,6 +102,35 @@ async function matchingRollout(root: string, cwd: string) {
   return null;
 }
 
+async function matchingRolloutBySessionIdOnDay(dir: string, sessionId: string) {
+  const candidates = await rolloutsInDay(dir);
+  for (const candidate of candidates) {
+    const meta = await metadata(candidate.path);
+    if (
+      meta?.payload.session_id === sessionId ||
+      meta?.payload.id === sessionId
+    )
+      return { path: candidate.path, meta };
+  }
+  return null;
+}
+
+async function matchingRolloutBySessionId(root: string, sessionId: string) {
+  const today = Temporal.Now.plainDateISO();
+  for (let offset = 0; offset <= 366; offset++) {
+    const day = today.subtract({ days: offset });
+    const dir = join(
+      root,
+      String(day.year),
+      String(day.month).padStart(2, "0"),
+      String(day.day).padStart(2, "0"),
+    );
+    const match = await matchingRolloutBySessionIdOnDay(dir, sessionId);
+    if (match !== null) return match;
+  }
+  return null;
+}
+
 async function readTail(path: string): Promise<string> {
   await using file = await open(path, "r");
   const info = await file.stat();
@@ -112,12 +141,10 @@ async function readTail(path: string): Promise<string> {
   return length < info.size ? text.slice(text.indexOf("\n") + 1) : text;
 }
 
-/** Select the newest rollout for the pane cwd and normalize its current turn/context facts. */
-export async function readCodexSessionStatus(
-  cwd: string,
-  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+async function readSelectedSessionStatus(
+  selected: { path: string; meta: z.output<typeof SESSION_META> } | null,
+  cwd: string | undefined,
 ): Promise<SessionStatus | undefined> {
-  const selected = await matchingRollout(root, cwd);
   if (selected === null) return undefined;
   const tail = await readTail(selected.path).catch(() => "");
   let model = selected.meta.payload.model;
@@ -151,4 +178,21 @@ export async function readCodexSessionStatus(
     effort,
     context,
   };
+}
+
+/** Select the newest rollout for the pane cwd and normalize its current turn/context facts. */
+export async function readCodexSessionStatus(
+  cwd: string,
+  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+): Promise<SessionStatus | undefined> {
+  return readSelectedSessionStatus(await matchingRollout(root, cwd), cwd);
+}
+
+/** Select a rollout by the exact Codex lifecycle-hook session id. */
+export async function readCodexSessionStatusForSessionId(
+  sessionId: string,
+  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+): Promise<SessionStatus | undefined> {
+  const selected = await matchingRolloutBySessionId(root, sessionId);
+  return readSelectedSessionStatus(selected, selected?.meta.payload.cwd);
 }

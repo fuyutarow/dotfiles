@@ -22,7 +22,10 @@ a bounded detached child of the local host-load module, using the original host-
 
 Codex CLI has no command-driven statusline setting, so tmux renders the Codex adapter outside the
 TUI. `--cwd` selects the newest rollout whose `session_meta.cwd` matches the pane. `--pid` reads the
-process cwd (`/proc` or bounded `lsof`) and uses the same rollout selection. The adapter reads
+process cwd (`/proc` or bounded `lsof`) and uses the same rollout selection. Codex lifecycle hooks
+resolve their Herdr pane from the unique Codex pane in the same tab and cwd, report rollout model
+and effort (falling back only to values the hook payload supplies), then clear both at `SessionEnd`;
+tmux continues to render the Codex adapter. The adapter reads
 bounded metadata and event tails, normalizes them to `SessionStatus`, and leaves missing context or
 rate data as explicit n/a slots. tmux checks `pane_current_command`, supplies the active pane cwd,
 and refreshes through its existing five-second `status-interval`. Herdr's command entries are

@@ -6,7 +6,10 @@ import { execAsyncBounded, writeCacheAsync } from "./bounded.ts";
 import { cli } from "cleye";
 import { jsonText } from "./zod.ts";
 import { ClaudeStatuslineInputSchema } from "./adapters/claude-statusline.ts";
-import { readCodexSessionStatus } from "./adapters/codex-rollout.ts";
+import {
+  readCodexSessionStatus,
+  readCodexSessionStatusForSessionId,
+} from "./adapters/codex-rollout.ts";
 import type { SessionStatus } from "./session-status.ts";
 import { promptParts } from "./prompt-stamp.ts";
 import { coloredHead, render } from "./format.ts";
@@ -15,6 +18,7 @@ import { readCodexRate } from "./codex-rate.ts";
 import { sysSegment } from "./host-load.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
+import { reportToHerdr } from "./identity.ts";
 
 const HOME = process.env.HOME ?? "";
 async function cwdForPid(pid: string): Promise<string | null> {
@@ -35,11 +39,25 @@ async function cwdForPid(pid: string): Promise<string | null> {
         ?.slice(1) ?? null)
     : null;
 }
-async function codexSession(cwd?: string, pid?: string) {
+async function codexSession(
+  cwd?: string,
+  pid?: string,
+  sessionId?: string,
+) {
   if (pid !== undefined && cwd !== undefined)
     return { session: null, error: "use only one of --pid or --cwd" };
+  if (sessionId !== undefined && (pid !== undefined || cwd !== undefined))
+    return {
+      session: null,
+      error: "use only one of --session-id, --pid or --cwd",
+    };
   if (pid !== undefined && !/^[1-9]\d*$/u.test(pid))
     return { session: null, error: "--pid must be a positive process ID" };
+  if (sessionId !== undefined)
+    return {
+      session: await readCodexSessionStatusForSessionId(sessionId),
+      error: null,
+    };
   const selectedCwd = cwd ?? (pid === undefined ? null : await cwdForPid(pid));
   if (selectedCwd === null || selectedCwd === "")
     return { session: null, error: "--codex requires --pid or --cwd" };
@@ -72,6 +90,26 @@ const args = cli(
         description: "Codex process ID (used to read its cwd)",
       },
       cwd: { type: String, description: "Pane working directory" },
+      "session-id": {
+        type: String,
+        description: "Exact Codex lifecycle-hook session ID",
+      },
+      "herdr-metadata": {
+        type: Boolean,
+        description: "Report Codex model and effort to Herdr without rendering",
+      },
+      "herdr-metadata-clear": {
+        type: Boolean,
+        description: "Clear Codex model and effort from Herdr without rendering",
+      },
+      "metadata-model": {
+        type: String,
+        description: "Codex hook model used only when its rollout has no model",
+      },
+      "metadata-effort": {
+        type: String,
+        description: "Codex hook effort used only when its rollout has no effort",
+      },
     },
   },
   undefined,
@@ -93,15 +131,55 @@ if (typeof Temporal === "undefined") {
 }
 let session: SessionStatus | undefined;
 if (args.flags.codex === true) {
-  const selected = await codexSession(args.flags.cwd, args.flags.pid);
+  if (
+    args.flags["herdr-metadata"] === true &&
+    args.flags["herdr-metadata-clear"] === true
+  ) {
+    process.stderr.write(
+      "FATAL: use only one of --herdr-metadata or --herdr-metadata-clear\n",
+    );
+    process.exit(2);
+  }
+  if (args.flags["herdr-metadata-clear"] === true) {
+    await reportToHerdr("", undefined, "", "off");
+    process.exit(0);
+  }
+  const selected = await codexSession(
+    args.flags.cwd,
+    args.flags.pid,
+    args.flags["session-id"],
+  );
   if (selected.error !== null) {
     process.stderr.write(`FATAL: ${selected.error}\n`);
     process.exit(2);
   }
   session = selected.session;
-} else if (args.flags.pid !== undefined || args.flags.cwd !== undefined) {
-  process.stderr.write("FATAL: --pid and --cwd require --codex\n");
+} else if (
+  args.flags.pid !== undefined ||
+  args.flags.cwd !== undefined ||
+  args.flags["session-id"] !== undefined ||
+  args.flags["herdr-metadata"] === true ||
+  args.flags["herdr-metadata-clear"] === true ||
+  args.flags["metadata-model"] !== undefined ||
+  args.flags["metadata-effort"] !== undefined
+) {
+  process.stderr.write(
+    "FATAL: --pid, --cwd, --session-id and Herdr metadata flags require --codex\n",
+  );
   process.exit(2);
+}
+if (args.flags["herdr-metadata"] === true) {
+  const metadataModel =
+    session?.model?.name ?? args.flags["metadata-model"] ?? "";
+  const metadataEffort = session?.effort ?? args.flags["metadata-effort"];
+  if (metadataModel !== "" || metadataEffort !== undefined)
+    await reportToHerdr(
+      metadataModel,
+      undefined,
+      metadataEffort,
+      "off",
+    );
+  process.exit(0);
 }
 if (args.flags.codex !== true) {
   const raw = await Bun.stdin.text();

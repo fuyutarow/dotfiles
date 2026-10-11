@@ -7,6 +7,12 @@
             "type": "command",
             "command": "sh ~/.codex/herdr-agent-state.sh session",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bun ~/.codex/hooks/herdr-metadata.ts",
+            "timeout": 3,
+            "async": true
           }
         ]
       },
@@ -36,6 +42,15 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bun ~/.codex/hooks/herdr-metadata.ts",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh",
             "timeout": 3
           }
@@ -43,6 +58,16 @@
       }
     ],
     "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.codex/hooks/herdr-metadata.ts",
+            "timeout": 3,
+            "async": true
+          }
+        ]
+      },
       {
         "hooks": [
           {
@@ -123,6 +148,16 @@
       }
     ],
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun ~/.codex/hooks/herdr-metadata.ts",
+            "timeout": 3,
+            "async": true
+          }
+        ]
+      },
       {
         "hooks": [
           {

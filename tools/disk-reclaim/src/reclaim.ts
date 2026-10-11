@@ -59,7 +59,7 @@ const flags = {
   host: { type: String, description: "Windows host SSH alias (default r99)" },
   approve: {
     type: [String] satisfies [StringConstructor],
-    description: "Explicit host approval: recycle-bin or hibernate-off",
+    description: "Explicit owner-item approval (repeatable)",
   },
   json: {
     type: Boolean,
@@ -130,7 +130,7 @@ const parsedFlags = z.object({
     .string()
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u)
     .optional(),
-  approve: z.array(z.enum(["recycle-bin", "hibernate-off"])).default([]),
+  approve: z.array(z.string().min(1)).default([]),
   json: z.boolean().default(false),
   tier: z.string().optional(),
   all: z.boolean().default(false),
@@ -394,7 +394,7 @@ export async function main(
     {
       ...common,
       name: "disk-reclaim",
-      version: "0.5.1",
+      version: "1.1.0",
       parameters: ["[targets...]"],
       commands,
       flags: planFlags,

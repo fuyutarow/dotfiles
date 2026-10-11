@@ -14,6 +14,7 @@ if (
 )
   process.exit(99);
 appendFileSync(log, `${JSON.stringify(args)}\n${wrapper}\n${script}\n`);
+if (process.env.HOST_STUB_EMPTY === "1") process.exit(0);
 const snapshot = [
   "c_free=4294967296",
   "c_total=99999999999",
@@ -24,9 +25,20 @@ const snapshot = [
   "lever=windows-temp|300|C:\\Windows\\Temp",
   "lever=delivery-optimization|400|C:\\DO",
   "lever=wer-dumps|500|C:\\WER",
-  "lever=windows-update|?|C:\\Windows\\WinSxS",
+  "lever=windows-update-download|600|C:\\Windows\\SoftwareDistribution\\Download",
+  "lever=windows-update-components|700|C:\\Windows\\WinSxS",
+  "lever=browser-crash-dumps|800|C:\\Users\\Test\\Crashpad",
+  "lever=npm-cache|900|C:\\Users\\Test\\npm-cache",
+  "lever=pip-cache|1000|C:\\Users\\Test\\pip-cache",
+  "lever=uv-cache|1100|C:\\Users\\Test\\uv-cache",
+  "lever=nuget-cache|1200|C:\\Users\\Test\\NuGet",
+  "lever=cargo-cache|1300|C:\\Users\\Test\\Cargo",
+  "lever=nvidia-download-cache|1400|C:\\NVIDIA",
+  "lever=winget-download-cache|1500|C:\\Users\\Test\\WinGetCache",
   "lever=recycle-bin|600|C:\\$Recycle.Bin",
   "lever=hibernate-off|700|C:\\hiberfil.sys",
+  "lever=claude-vm-bundles|1600|C:\\Users\\Test\\AppData\\Roaming\\Claude\\vm_bundles",
+  "lever=pagefile-size|1700|C:\\pagefile.sys",
   "vhdx=800|Ubuntu|Running|C:\\WSL\\ext4.vhdx",
 ].join("\n");
 const freeAfter = script.includes("dism.exe") ? 4294967296 : 4297064448;

@@ -190,3 +190,62 @@ test("plan candidates become one flat record with allocation and holder facts", 
   });
   rmSync(root, { recursive: true, force: true });
 });
+
+test("host lever candidates emit Windows-path JSONL records without local fingerprints", async () => {
+  const path = "C:\\Users\\fixture\\AppData\\Local\\npm-cache";
+  const parsedPlan = Plan.safeParse({
+    schema: "reclaim.plan/1",
+    host: "fixture-host",
+    generated_at: "2026-10-11T00:00:00Z",
+    mode: "plan",
+    headroom: { drives: [] },
+    targets: [
+      {
+        name: "host",
+        tier: "owner",
+        available: true,
+        skip_reason: null,
+        exit: null,
+        candidates: [
+          {
+            id: "npm-cache",
+            path: null,
+            verdict: "RECLAIM",
+            reason: "regenerable npm cache",
+            checks: [{ name: "host-tier", ok: true, detail: "npm-cache" }],
+            bytes: 22,
+            bytes_kind: "estimate",
+            host_lever: {
+              path,
+              tier: "npm-cache",
+              live_safe: true,
+              approval: null,
+            },
+            action: { kind: "command", argv: ["npm-cache", path] },
+            result: null,
+          },
+        ],
+        totals: { reclaim: 1, ask: 0, keep: 0 },
+      },
+    ],
+    totals: { reclaim_bytes: 22, ask_bytes: 0, freed_bytes: null },
+    receipt: null,
+  });
+  expect(parsedPlan.success).toBe(true);
+  if (!parsedPlan.success) return;
+  const rows = await recordsFromPlan(parsedPlan.data);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    target: "npm-cache",
+    host: "fixture-host",
+    path,
+    bytes_allocated: 22,
+    verdict: "safe",
+    fingerprint: null,
+  });
+  const receipts = await applyRecords(`${JSON.stringify(rows[0])}\n`, {
+    apply: () => Promise.resolve({ ok: true, reason: "must not run" }),
+  });
+  expect(receipts[0]?.outcome).toBe("skipped");
+  expect(receipts[0]?.reason).toContain("remote host records");
+});

@@ -19,11 +19,14 @@ disk-reclaim delete <abs-path>... [--yes] [--json]
 ```
 
 `plan` emits newline-delimited records with `target`, `host`, `path`, `bytes_allocated`, `regen`,
-`holders`, `verdict`, `reason`, and `{dev, ino, size, mtime}` fingerprint fields. Pipe it directly
-to `apply`; no plan data is read from disk. `apply` takes a per-host lock and checks each record
-again immediately before the target action. Replaced or changed paths are skipped. Owner-only
-rows remain ASK until their item is supplied with `--approve <owner-item>`; XDG Trash uses
-`--approve xdg-trash`. `--yes` is the single-process equivalent of `plan | apply`.
+`holders`, `verdict`, `reason`, and fingerprint fields. Windows host records use the lever id as
+`target`, report allocation from Windows `SizeOnDisk`, and set `fingerprint` to null because the
+remote path cannot be fingerprinted locally. `apply` skips records without a local fingerprint.
+Pipe locally fingerprinted records directly to `apply`; no plan data is read from disk. `apply`
+takes a per-host lock and checks each record again immediately before the target action. Replaced
+or changed paths are skipped. Owner-only rows remain ASK until their item is supplied with
+`--approve <owner-item>`; XDG Trash uses `--approve xdg-trash`. `--yes` is the single-process
+equivalent of `plan | apply`.
 
 Plan is read-only. Legacy `run` requires named targets or `--tier blind`, plus `--yes`. `delete`
 prints its checks and byte estimate without `--yes`; with `--yes` it repeats every check under

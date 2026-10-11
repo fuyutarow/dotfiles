@@ -6,12 +6,12 @@ function Free-C {
   if ($null -eq $c.FreeSpace) { throw 'C: free measurement unavailable' }
   [int64]$c.FreeSpace
 }
-function Files($root) {
+function Files($root, $includeVirtualDisks=$false) {
   if (!(Test-Path -LiteralPath $root)) { return }
   Get-ChildItem -LiteralPath $root -Force -ErrorAction SilentlyContinue | ForEach-Object {
     if ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) { return }
-    if ($_.PSIsContainer) { Files $_.FullName }
-    elseif ($_.Extension -notin @('.vhdx','.vhd')) { $_ }
+    if ($_.PSIsContainer) { Files $_.FullName $includeVirtualDisks }
+    elseif ($includeVirtualDisks -or $_.Extension -notin @('.vhdx','.vhd')) { $_ }
   }
 }
 $roots=@{
@@ -20,11 +20,29 @@ $roots=@{
   'winget-cache'=@("$env:TEMP\WinGet")
   'user-temp'=@($env:TEMP)
   'windows-temp'=@("$env:WINDIR\Temp")
+  'windows-update-download'=@("$env:WINDIR\SoftwareDistribution\Download")
+  'windows-update-components'=@("$env:WINDIR\WinSxS")
   'delivery-optimization'=@("$env:WINDIR\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache", "$env:ProgramData\Microsoft\Windows\DeliveryOptimization\Cache")
   'wer-dumps'=@("$env:ProgramData\Microsoft\Windows\WER", "$env:LOCALAPPDATA\Microsoft\Windows\WER", "$env:LOCALAPPDATA\CrashDumps", "$env:WINDIR\Minidump", "$env:WINDIR\MEMORY.DMP")
-  'windows-update'=@("$env:WINDIR\WinSxS")
+  'browser-crash-dumps'=@(
+    "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Crashpad\reports", "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Crashpad\temp",
+    "$env:LOCALAPPDATA\Microsoft\Edge Beta\User Data\Crashpad\reports", "$env:LOCALAPPDATA\Microsoft\Edge Beta\User Data\Crashpad\temp",
+    "$env:LOCALAPPDATA\Microsoft\Edge Dev\User Data\Crashpad\reports", "$env:LOCALAPPDATA\Microsoft\Edge Dev\User Data\Crashpad\temp",
+    "$env:LOCALAPPDATA\Microsoft\Edge SxS\User Data\Crashpad\reports", "$env:LOCALAPPDATA\Microsoft\Edge SxS\User Data\Crashpad\temp",
+    "$env:LOCALAPPDATA\Google\Chrome\User Data\Crashpad\reports", "$env:LOCALAPPDATA\Google\Chrome\User Data\Crashpad\temp",
+    "$env:LOCALAPPDATA\Google\Chrome SxS\User Data\Crashpad\reports", "$env:LOCALAPPDATA\Google\Chrome SxS\User Data\Crashpad\temp",
+    "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Crashpad\reports", "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Crashpad\temp"
+  )
+  'npm-cache'=@("$env:LOCALAPPDATA\npm-cache", "$env:APPDATA\npm-cache")
+  'pip-cache'=@("$env:LOCALAPPDATA\pip\Cache", "$env:USERPROFILE\.cache\pip")
+  'uv-cache'=@("$env:LOCALAPPDATA\uv\cache", "$env:USERPROFILE\.cache\uv")
+  'nuget-cache'=@("$env:LOCALAPPDATA\NuGet\v3-cache", "$env:USERPROFILE\.nuget\packages")
+  'cargo-cache'=@("$env:USERPROFILE\.cargo\registry", "$env:USERPROFILE\.cargo\git")
+  'nvidia-download-cache'=@('C:\NVIDIA', "$env:LOCALAPPDATA\NVIDIA\Downloader", "$env:LOCALAPPDATA\NVIDIA Corporation\NVIDIA app\UpdateFramework")
+  'winget-download-cache'=@("$env:LOCALAPPDATA\Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalCache")
   'recycle-bin'=@('C:\$Recycle.Bin')
   'hibernate-off'=@('C:\hiberfil.sys')
+  'claude-vm-bundles'=@("$env:APPDATA\Claude\vm_bundles")
 }
 function Selected($id) {
   foreach($root in $roots[$id]) {
@@ -33,8 +51,10 @@ function Selected($id) {
   }
 }
 function Eligible($id) {
+  $wingetTemp=Join-Path $env:TEMP 'WinGet'
   Selected $id | Where-Object {
-    ($id -notin @('user-temp','windows-temp')) -or ($_.LastWriteTime -lt (Get-Date).AddDays(-1))
+    (($id -notin @('user-temp','windows-temp')) -or ($_.LastWriteTime -lt (Get-Date).AddDays(-1))) -and
+    (($id -ne 'user-temp') -or !$_.FullName.StartsWith($wingetTemp, [StringComparison]::OrdinalIgnoreCase))
   }
 }
 `;
@@ -63,16 +83,24 @@ function SizeOnDisk($path) {
 Get-ChildItem -LiteralPath $env:TEMP -Directory -ErrorAction SilentlyContinue |
   Where-Object { !($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } |
   ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'swap.vhdx') -ErrorAction SilentlyContinue } |
-  ForEach-Object { "swap=$([int64]($_.LastWriteTime.ToUniversalTime()-(Get-Date '1970-01-01Z')).TotalMilliseconds)|$($_.Length)|$($_.FullName)" }
+  ForEach-Object { "swap=$([int64]($_.LastWriteTime.ToUniversalTime()-(Get-Date '1970-01-01Z')).TotalMilliseconds)|$(SizeOnDisk $_.FullName)|$($_.FullName)" }
 foreach($id in $roots.Keys) {
   $bytes='?'
-  if ($id -ne 'windows-update') {
+  if ($id -eq 'claude-vm-bundles') {
+    [uint64]$total=0
+    foreach($root in $roots[$id]) { foreach($item in (Files $root $true)) { $total += SizeOnDisk $item.FullName } }
+    $bytes=$total
+  } else {
     [uint64]$total=0
     foreach($item in (Eligible $id)) { $total += SizeOnDisk $item.FullName }
     $bytes=$total
   }
   "lever=$id|$bytes|$($roots[$id] -join '; ')"
 }
+$pageFiles=Get-CimInstance Win32_PageFileUsage -ErrorAction Stop
+[uint64]$pageFileBytes=0
+foreach($pageFile in $pageFiles) { $pageFileBytes += [uint64]$pageFile.AllocatedBaseSize * 1MB }
+"lever=pagefile-size|$pageFileBytes|$($pageFiles.Name -join '; ')"
 $states=@{}
 if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
   $env:WSL_UTF8=1
@@ -98,7 +126,7 @@ const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
 export function hostAction(id: string, path: string): string {
   const actions: Record<string, string> = {
     "delivery-optimization": "Delete-DeliveryOptimizationCache -Force",
-    "windows-update":
+    "windows-update-components":
       'dism.exe /Online /Cleanup-Image /StartComponentCleanup; if ($LASTEXITCODE -ne 0) { throw "DISM exit $LASTEXITCODE" }',
     "recycle-bin": "Clear-RecycleBin -DriveLetter C -Force",
     "hibernate-off":

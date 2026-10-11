@@ -13,13 +13,18 @@ export const Fingerprint = z.object({
 export const ReclaimRecord = z.object({
   target: z.string().min(1),
   host: z.string().min(1),
-  path: z.string().refine(isAbsolute, "expected an absolute path"),
+  path: z
+    .string()
+    .refine(
+      (path) => isAbsolute(path) || /^[A-Za-z]:[\\/]/u.test(path),
+      "expected an absolute local or Windows path",
+    ),
   bytes_allocated: z.number().nonnegative().nullable(),
   regen: z.boolean(),
   holders: z.array(z.string()),
   verdict: z.enum(["safe", "ask", "deny", "keep"]),
   reason: z.string(),
-  fingerprint: Fingerprint,
+  fingerprint: Fingerprint.nullable(),
   owner_item: z.string().optional(),
 });
 export type ReclaimRecord = z.output<typeof ReclaimRecord>;
@@ -54,21 +59,38 @@ export async function recordsFromPlan(plan: Plan): Promise<ReclaimRecord[]> {
     plan.targets.map(async (target) =>
       Promise.all(
         target.candidates.map(async (candidate) => {
-          const path = candidate.path;
+          const path = candidate.host_lever?.path ?? candidate.path;
           if (path === null) return null;
-          const measured = await fromAsyncThrowable(() => fingerprint(path))();
-          if (measured.isErr()) return null;
+          const remoteHostPath = candidate.host_lever !== undefined;
+          const localFingerprint = remoteHostPath
+            ? null
+            : await fromAsyncThrowable(() => fingerprint(path))().then(
+                (result) =>
+                  result.match(
+                    (value) => value,
+                    () => null,
+                  ),
+              );
+          if (!remoteHostPath && localFingerprint === null) return null;
           const trashItem =
             target.name === "purge" && candidate.id.startsWith("XDG trash:")
               ? "xdg-trash"
               : undefined;
           const hostItem = candidate.host_lever?.approval ?? trashItem;
+          let recordTarget = target.name;
+          if (remoteHostPath)
+            recordTarget =
+              candidate.host_lever?.tier === "orphan-swap"
+                ? "orphan-swap"
+                : candidate.id;
           const value = {
-            target: target.name,
+            target: recordTarget,
             host: plan.host,
             path: candidate.host_lever?.path ?? path,
             bytes_allocated: candidate.bytes,
-            regen: regenTargets.has(target.name),
+            regen:
+              regenTargets.has(target.name) ||
+              (remoteHostPath && candidate.verdict === "RECLAIM"),
             holders: holdersOf(candidate),
             verdict:
               hostItem === undefined ? verdictOf(candidate.verdict) : "ask",
@@ -76,7 +98,7 @@ export async function recordsFromPlan(plan: Plan): Promise<ReclaimRecord[]> {
               hostItem === undefined
                 ? candidate.reason
                 : `${candidate.reason}; requires --approve ${hostItem}`,
-            fingerprint: measured.value,
+            fingerprint: localFingerprint,
             ...(hostItem === undefined ? {} : { owner_item: hostItem }),
           };
           const parsed = ReclaimRecord.safeParse(value);
@@ -108,7 +130,7 @@ const currentFingerprint = async (path: string) =>
     () => null,
   );
 const sameFingerprint = (
-  left: ReclaimRecord["fingerprint"],
+  left: NonNullable<ReclaimRecord["fingerprint"]>,
   right: ReclaimRecord["fingerprint"] | null,
 ) =>
   right !== null &&
@@ -136,6 +158,16 @@ export async function applyRecords(
       continue;
     }
     const record = parsed.data;
+    if (record.fingerprint === null) {
+      receipts.push({
+        line: index + 1,
+        path: record.path,
+        outcome: "skipped",
+        reason:
+          "record has no local fingerprint; remote host records cannot be applied here",
+      });
+      continue;
+    }
     const approvedOwnerItem =
       record.verdict === "ask" &&
       record.owner_item !== undefined &&

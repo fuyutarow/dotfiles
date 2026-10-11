@@ -244,6 +244,9 @@ export async function plan(
       const ctx = {
         ...options.context,
         targetName: target.name,
+        reportPlanError: (message: string) => {
+          errors[index] = `${target.name}: ${message}`;
+        },
         reportProgress:
           reportProgress === undefined
             ? undefined
@@ -308,6 +311,7 @@ export async function plan(
         errors[index] = `${target.name}: ${errorMessage(planned.error)}`;
         continue;
       }
+      if (errors[index] !== null) continue;
       const parsed = Candidate.array().safeParse(
         planned !== null && planned.isOk() ? planned.value : [],
       );

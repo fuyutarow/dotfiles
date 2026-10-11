@@ -20,11 +20,26 @@ export type HostSnapshot = {
   levers: Lever[];
   vhdx: Vhdx[];
 };
-export type CommandResult = { code: number; out: string; timedOut: boolean };
+export type CommandResult = {
+  code: number;
+  out: string;
+  err?: string;
+  timedOut: boolean;
+};
 export type HostRunner = (
   host: string,
   script: string,
 ) => Promise<CommandResult>;
+const capturedStream = (value: string | undefined) => {
+  const output = value?.trim() ?? "";
+  return output.length === 0 ? "<empty>" : output.slice(-2000);
+};
+const probeFailure = (result: CommandResult, reason: string): string =>
+  [
+    `host PowerShell probe failed: ${reason}; exit=${result.code}${result.timedOut ? "; timed out" : ""}`,
+    `stdout: ${capturedStream(result.out)}`,
+    `stderr: ${capturedStream(result.err)}`,
+  ].join("\n");
 export function classifySwaps(swaps: Swap[]) {
   const [live, ...orphans] = swaps.toSorted((a, b) => b.mtimeMs - a.mtimeMs);
   return {
@@ -69,9 +84,10 @@ export function parseProbe(out: string): HostSnapshot {
   return s;
 }
 const sshRunner: HostRunner = async (host, script) => {
-  const signal = AbortSignal.timeout(
-    script.includes("dism.exe") ? 3_600_000 : 120_000,
-  );
+  let timeout = 120_000;
+  if (script.includes("dism.exe")) timeout = 3_600_000;
+  else if (script === "$probe") timeout = 600_000;
+  const signal = AbortSignal.timeout(timeout);
   const name = `disk-reclaim-${randomUUID()}.ps1`;
   const wrapper = [
     "$ErrorActionPreference='Stop'",
@@ -110,7 +126,8 @@ const sshRunner: HostRunner = async (host, script) => {
   ]);
   return {
     code,
-    out: `${out}${err}`.replaceAll("\r", ""),
+    out: out.replaceAll("\r", ""),
+    err: err.replaceAll("\r", ""),
     timedOut: signal.aborted,
   };
 };
@@ -138,6 +155,16 @@ const definitions: Record<
     approval: null,
     note: "files older than 1 day only; virtual disks excluded",
   },
+  "windows-update-download": {
+    live: true,
+    approval: null,
+    note: "Windows Update download cache; files older than 1 day only",
+  },
+  "windows-update-components": {
+    live: true,
+    approval: null,
+    note: "DISM StartComponentCleanup is slow; plan-only without --yes; requires elevation",
+  },
   "delivery-optimization": {
     live: true,
     approval: null,
@@ -148,10 +175,48 @@ const definitions: Record<
     approval: null,
     note: "WER and crash dumps; may require elevation",
   },
+  "browser-crash-dumps": {
+    live: true,
+    approval: null,
+    note: "browser Crashpad reports and temporary dumps",
+  },
+  "npm-cache": { live: true, approval: null, note: "regenerable npm cache" },
+  "pip-cache": { live: true, approval: null, note: "regenerable pip cache" },
+  "uv-cache": { live: true, approval: null, note: "regenerable uv cache" },
+  "nuget-cache": {
+    live: true,
+    approval: null,
+    note: "regenerable NuGet cache",
+  },
+  "cargo-cache": {
+    live: true,
+    approval: null,
+    note: "regenerable Cargo cache",
+  },
+  "nvidia-download-cache": {
+    live: true,
+    approval: null,
+    note: "NVIDIA download caches; installed repair support excluded",
+  },
+  "winget-download-cache": {
+    live: true,
+    approval: null,
+    note: "regenerable WinGet download cache",
+  },
+  "pagefile-size": {
+    live: false,
+    approval: "pagefile-size",
+    note: "owner-only pagefile allocation from Win32_PageFileUsage accounting",
+  },
+  "claude-vm-bundles": {
+    live: false,
+    approval: "claude-vm-bundles",
+    note: "owner-only Claude VM bundles containing virtual disks",
+  },
   "windows-update": {
     live: true,
     approval: null,
-    note: "DISM StartComponentCleanup is slow; plan-only without --yes; requires elevation",
+    note: "legacy Windows Update component cleanup alias",
   },
   "recycle-bin": {
     live: true,
@@ -211,22 +276,30 @@ export function createHostTarget(options: {
         options.snapshot === undefined
           ? await options.runner(hostname(ctx), "$probe")
           : null;
+      if (result?.timedOut === true) {
+        ctx.reportPlanError?.(probeFailure(result, "SSH step timed out"));
+        return [];
+      }
+      if (result !== null && result.code !== 0) {
+        ctx.reportPlanError?.(
+          probeFailure(result, "SSH/PowerShell step returned a failure status"),
+        );
+        return [];
+      }
       const s =
         result === null ? await options.snapshot!() : parseProbe(result.out);
       if (
-        result?.timedOut === true ||
-        (result !== null && result.code !== 0) ||
-        (s.cFree === null && result !== null)
-      )
-        return [
-          {
-            ...candidate(
-              { id: "host-probe", path: hostname(ctx), bytes: null },
-              ctx,
-            ),
-            reason: "host probe failed or C: free measurement missing",
-          },
-        ];
+        result !== null &&
+        (s.cFree === null ||
+          (s.levers.length === 0 &&
+            s.swaps.length === 0 &&
+            s.vhdx.length === 0))
+      ) {
+        ctx.reportPlanError?.(
+          probeFailure(result, "PowerShell returned no usable probe records"),
+        );
+        return [];
+      }
       const { orphans } = classifySwaps(s.swaps);
       const levers = s.levers.slice();
       if (

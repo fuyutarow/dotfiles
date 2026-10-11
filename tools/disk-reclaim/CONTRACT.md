@@ -31,9 +31,13 @@ is skipped. A failed record does not authorize another path.
 
 Plan JSONL stdout has one JSON object per candidate with `target`, `host`, `path`,
 `bytes_allocated`, `regen`, `holders`, `verdict`, `reason`, and `fingerprint` (`dev`, `ino`,
-`size`, `mtime`). Apply writes per-input outcomes to stdout. Progress uses the shared Clack adapter
-on a TTY and is silent off-TTY; JSONL data is not decorated. Errors and named wait diagnostics go
-to stderr. Probe, SSH, lock, fstrim, and host sampling waits have explicit bounds.
+`size`, `mtime`). Windows host rows use the lever id as `target`, carry allocated `SizeOnDisk`
+bytes (the pagefile uses Windows `Win32_PageFileUsage` allocation accounting), and set
+`fingerprint` to null because the Windows path cannot be fingerprinted locally.
+Apply skips records without a local fingerprint. Progress uses the shared Clack adapter on a TTY
+and is silent off-TTY; JSONL data is not decorated. Errors and named wait diagnostics go to stderr.
+A failed or empty SSH/PowerShell host probe exits 2 with the failing step and captured stdout and
+stderr. Probe, SSH, lock, fstrim, and host sampling waits have explicit bounds.
 
 ## C4 Outcomes
 

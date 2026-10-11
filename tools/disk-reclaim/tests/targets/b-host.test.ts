@@ -3,6 +3,7 @@ import { chmodSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { jsonOf } from "../../../shared/src/zod.ts";
 import { Plan } from "../../src/model.ts";
+import { ReclaimRecord } from "../../src/records.ts";
 import { cliEnv } from "../fixtures/cli-env.ts";
 import { tempRoot } from "../fixtures/temp.ts";
 import {
@@ -32,14 +33,14 @@ const context: Context = {
 };
 test("host parses separate cleanup tiers and allocated VHDX reports", async () => {
   const s = parseProbe(
-    "c_free=123\r\nc_total=999\r\nlever=user-temp|42|C:\\Temp\r\nlever=windows-update|?|C:\\Windows\\WinSxS\r\nvhdx=456|Ubuntu|Running|C:\\WSL\\ext4.vhdx\r\n",
+    "c_free=123\r\nc_total=999\r\nlever=user-temp|42|C:\\Temp\r\nlever=windows-update-components|?|C:\\Windows\\WinSxS\r\nvhdx=456|Ubuntu|Running|C:\\WSL\\ext4.vhdx\r\n",
   );
   expect(s).toMatchObject({
     cFree: 123,
     cTotal: 999,
     levers: [
       { id: "user-temp", bytes: 42 },
-      { id: "windows-update", bytes: null },
+      { id: "windows-update-components", bytes: null },
     ],
     vhdx: [{ bytes: 456, distro: "Ubuntu", state: "Running" }],
   });
@@ -79,7 +80,7 @@ test("PowerShell selection preserves young temp files, junctions, and all virtua
   expect(hostProbe).toContain(
     "if ([string]::IsNullOrWhiteSpace($p.BasePath)) { return }",
   );
-  expect(hostAction("windows-update", "ignored")).toContain(
+  expect(hostAction("windows-update-components", "ignored")).toContain(
     "/StartComponentCleanup",
   );
   expect(hostAction("hibernate-off", "ignored")).toContain(
@@ -118,14 +119,14 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
     `#!/usr/bin/env bun\n${await Bun.file(resolve(import.meta.dir, "../fixtures/host-ssh.ts")).text()}`,
   );
   chmodSync(stub, 0o755);
-  const invoke = (args: string[]) =>
+  const invoke = (args: string[], overrides: Record<string, string> = {}) =>
     Bun.spawnSync(
       [
         process.execPath,
         resolve(import.meta.dir, "../fixtures/cli-fixture.ts"),
         ...args,
       ],
-      { env, cwd: root, timeout: 20_000 },
+      { env: { ...env, ...overrides }, cwd: root, timeout: 20_000 },
     );
   const preview = invoke(["plan", "host", "--host", "r99-lan", "--json"]);
   expect(preview.exitCode, preview.stderr.toString()).toBe(0);
@@ -133,7 +134,24 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
   expect(parsed.success).toBe(true);
   if (!parsed.success) return;
   const rows = parsed.data.targets[0]?.candidates ?? [];
-  expect(rows).toHaveLength(10);
+  expect(rows).toHaveLength(21);
+  const records = invoke(["plan", "host", "--host", "r99-lan"]);
+  expect(records.exitCode, records.stderr.toString()).toBe(0);
+  const jsonl = records.stdout
+    .toString()
+    .trim()
+    .split("\n")
+    .map((line) => jsonOf(ReclaimRecord).safeParse(line));
+  expect(jsonl.every((row) => row.success)).toBe(true);
+  const leverNames = jsonl.flatMap((row) =>
+    row.success ? [row.data.target] : [],
+  );
+  expect(leverNames).toContain("windows-update-download");
+  expect(leverNames).toContain("windows-update-components");
+  expect(leverNames).toContain("browser-crash-dumps");
+  expect(leverNames).toContain("npm-cache");
+  expect(leverNames).toContain("pagefile-size");
+  expect(leverNames).toContain("claude-vm-bundles");
   expect(
     rows
       .filter(
@@ -142,7 +160,7 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
           c.host_lever?.approval !== undefined,
       )
       .map((c) => c.verdict),
-  ).toEqual(["ASK", "ASK"]);
+  ).toEqual(["ASK", "ASK", "ASK", "ASK"]);
   expect(readFileSync(env.HOST_STUB_LOG, "utf8")).not.toContain("c_before");
   const refused = invoke(["run", "host", "--approve", "recycle-bin", "--json"]);
   expect(refused.exitCode).toBe(2);
@@ -153,7 +171,7 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
   if (!executed.success) return;
   const acted =
     executed.data.targets[0]?.candidates.filter((c) => c.result !== null) ?? [];
-  expect(acted).toHaveLength(7);
+  expect(acted).toHaveLength(16);
   expect(
     acted.every(
       (c) =>
@@ -186,6 +204,15 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
   expect(log).toContain("powercfg.exe /h off");
   expect(log).toContain('"r99"');
   expect(log).not.toContain("Remove-Item -LiteralPath 'C:\\WSL\\ext4.vhdx'");
+  const emptyProbe = invoke(["plan", "host", "--host", "r99-lan", "--json"], {
+    HOST_STUB_EMPTY: "1",
+  });
+  expect(emptyProbe.exitCode).toBe(2);
+  expect(emptyProbe.stdout.toString()).toBe("");
+  expect(emptyProbe.stderr.toString()).toContain(
+    "host PowerShell probe failed: PowerShell returned no usable probe records",
+  );
+  expect(emptyProbe.stderr.toString()).toContain("stdout: <empty>");
 }, 30_000);
 
 test("host plan matches dry-run swap selection and runner is injected", async () => {

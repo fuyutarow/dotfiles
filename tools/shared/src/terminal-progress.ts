@@ -60,7 +60,7 @@ export class TerminalProgress {
   }
 
   start(): void {
-    if (this.#timer !== undefined || this.#closed) return;
+    if (!this.#options.tty || this.#timer !== undefined || this.#closed) return;
     this.#timer = setInterval(
       () => {
         this.refresh();
@@ -71,7 +71,7 @@ export class TerminalProgress {
   }
 
   update(value: ProgressRow): void {
-    if (this.#closed) return;
+    if (!this.#options.tty || this.#closed) return;
     const now = this.#now();
     const previous = this.#rows.get(value.id);
     const continuing =
@@ -106,7 +106,7 @@ export class TerminalProgress {
   }
 
   message(text: string): void {
-    if (this.#closed) return;
+    if (!this.#options.tty || this.#closed) return;
     const message = clean(text);
     if (this.#log !== undefined) {
       this.#messages.push(message);
@@ -115,7 +115,7 @@ export class TerminalProgress {
   }
 
   refresh(force = false): void {
-    if (this.#closed) return;
+    if (!this.#options.tty || this.#closed) return;
     const now = this.#now();
     if (this.#options.tty && !force && now - this.#lastFrame < 100) return;
     this.#lastFrame = now;

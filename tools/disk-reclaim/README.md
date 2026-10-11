@@ -1,11 +1,15 @@
 # disk-reclaim
 
-Preview configured reclamation and run only candidates whose checks prove they are safe. The
-CLI registers all twelve reclaim targets. `delete` is a separate owner-approved
-path for candidates a human has reviewed.
+Plan configured reclamation as one JSONL record per candidate. `apply` reads those records from
+stdin, revalidates each fingerprint and target safety, then acts only on selected safe records.
+The CLI registers thirteen reclaim targets. The no-argument invocation renders the same plan
+for a person; `--yes` composes planning and application.
 
 ```text
-disk-reclaim [plan] [TARGET...] [--tier T] [--json] [--all] [--fetch]
+disk-reclaim
+disk-reclaim plan [--on <host>] [--target <target>...]
+disk-reclaim apply [--approve <owner-item>...]
+disk-reclaim --yes [--on <host>] [--target <target>...]
 disk-reclaim run TARGET... --yes [--json] [--stop-on-error] [--fetch]
 disk-reclaim run --tier blind --yes
 disk-reclaim targets [--json]
@@ -14,7 +18,14 @@ disk-reclaim wrap NAME [--interactive] -- CMD...
 disk-reclaim delete <abs-path>... [--yes] [--json]
 ```
 
-Plan is read-only. `run` requires named targets or `--tier blind`, plus `--yes`. `delete`
+`plan` emits newline-delimited records with `target`, `host`, `path`, `bytes_allocated`, `regen`,
+`holders`, `verdict`, `reason`, and `{dev, ino, size, mtime}` fingerprint fields. Pipe it directly
+to `apply`; no plan data is read from disk. `apply` takes a per-host lock and checks each record
+again immediately before the target action. Replaced or changed paths are skipped. Owner-only
+rows remain ASK until their item is supplied with `--approve <owner-item>`; XDG Trash uses
+`--approve xdg-trash`. `--yes` is the single-process equivalent of `plan | apply`.
+
+Plan is read-only. Legacy `run` requires named targets or `--tier blind`, plus `--yes`. `delete`
 prints its checks and byte estimate without `--yes`; with `--yes` it repeats every check under
 the shared state lock, then removes only paths beneath configured roots. It refuses `/`, `$HOME`,
 repo store roots, listed jj workspaces, symlink paths, and paths used by same-uid processes.
@@ -25,10 +36,13 @@ continuing with siblings. The no-`--yes` plan reports that nested store checks a
 traversal. A listed jj workspace must first be forgotten with `jj workspace forget`, or handled
 through the `workspaces` target.
 
-The blind tier selects clean, builds, rust, toolchains, workspaces, scratch, and system (sudo).
-Workspaces runs before scratch; both share one liveness snapshot per plan and recheck facts
-under the lock. Judgment and host require owner selection, purge must be named, and vhdx/audit
-are plan-only. `targets --json` lists their tiers and availability without scanning candidates.
+The blind tier selects clean, builds, rust, toolchains, workspaces, scratch, `rip-expire`, and
+system (sudo). Rip expiry removes only entries in `RIP_GRAVEYARD` older than the configured
+24-hour retention. It leaves XDG Trash for owner approval. The graveyard location comes from
+the `RIP_GRAVEYARD` environment setting exported by the shell setup. Workspaces runs before
+scratch; both share one liveness snapshot per plan and recheck facts under the lock. Judgment
+and host require owner selection, purge must be named, and vhdx/audit are plan-only.
+`targets --json` lists their tiers and availability without scanning candidates.
 Within blind-tier targets, a failed candidate does not prevent later candidates from being
 attempted; the run still exits 1 if any candidate fails. `--stop-on-error` stops the target at its
 first failure. Clean selects only Julia's `compiled` and `scratchspaces` directories; it keeps
@@ -73,10 +87,9 @@ Verify: `bun test tools/disk-reclaim`.
 
 Terminal progress uses reusable Clack taskLog groups in `tools/shared`. Concurrent scans
 each have a row; host actions name the host and lever; deletion combines path counters into
-its owning target row. Finished rows collapse to one-line results. The final stdout summary
-counts candidate rows and reports found/freed bytes; estimates can overlap. Progress is on
-stderr. CI, pipes, `TERM=dumb`, and `--json` use plain output; `--no-progress` suppresses
-progress. Cursor visibility and terminal input modes are untouched.
+its owning target row. Finished rows collapse to one-line results. Human progress is on stderr
+through the shared Clack adapter on a TTY; off-TTY progress is silent, leaving JSONL stdout
+unchanged. Cursor visibility and terminal input modes are untouched.
 
 Unreadable live-process probes produce one stderr summary per cause and identify targets
 held back as ASK. Expected EACCES from exactly named systemd, sudo, su, and polkitd

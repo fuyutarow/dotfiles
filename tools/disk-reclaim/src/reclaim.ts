@@ -5,17 +5,39 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { fromAsyncThrowable } from "neverthrow";
 import { z } from "../../shared/src/zod.ts";
-import { loadConfig, plan, run, type EngineOptions } from "./engine.ts";
+import {
+  actPlannedPath,
+  loadConfig,
+  plan,
+  run,
+  type EngineOptions,
+} from "./engine.ts";
 import { Plan, Tier } from "./model.ts";
-import { errorMessage, readReceipts, stateDir, wrap } from "./receipt.ts";
+import {
+  errorMessage,
+  readReceipts,
+  stateDir,
+  waitForLock,
+  wrap,
+} from "./receipt.ts";
 import { deleteApproved } from "./delete.ts";
 import { ProgressReporter } from "./lib/progress.ts";
 import { readHeadroom } from "./storage.ts";
 import { registry, type Context, type Target } from "./targets/index.ts";
 import { typedYes } from "./targets/purge.ts";
 import { workerMutationRefusal } from "./lib/worker-guard.ts";
-import { wslStorageSnapshot, wslReturnReport } from "./host-return.ts";
+import {
+  sampleWslReturn,
+  trimWslGuest,
+  wslStorageSnapshot,
+  wslReturnReport,
+} from "./host-return.ts";
 import { cachePlanReport } from "./report.ts";
+import {
+  applyRecords,
+  recordsFromPlan,
+  type ReclaimRecord,
+} from "./records.ts";
 import {
   resolveProcRoot,
   processDecisionText,
@@ -29,6 +51,11 @@ const rejectPrototypeFlag = (type: string, flag: string): void => {
   }
 };
 const flags = {
+  on: { type: String, description: "Target host, such as windows" },
+  target: {
+    type: [String] satisfies [StringConstructor],
+    description: "Select a target (repeatable)",
+  },
   host: { type: String, description: "Windows host SSH alias (default r99)" },
   approve: {
     type: [String] satisfies [StringConstructor],
@@ -84,15 +111,21 @@ const usageExit = (code: number) => {
 };
 const common = { strictFlags: true, ignoreArgv: rejectPrototypeFlag };
 const planFlags = {
+  on: flags.on,
+  target: flags.target,
   host: flags.host,
+  approve: flags.approve,
   json: flags.json,
   tier: flags.tier,
   all: flags.all,
   fetch: flags.fetch,
   noProgress: flags.noProgress,
   verbose: flags.verbose,
+  yes: flags.yes,
 };
 const parsedFlags = z.object({
+  on: z.string().optional(),
+  target: z.array(z.string()).default([]),
   host: z
     .string()
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u)
@@ -137,6 +170,12 @@ const commands = [
   }),
   command({
     ...common,
+    name: "apply",
+    parameters: [],
+    flags: { approve: flags.approve },
+  }),
+  command({
+    ...common,
     name: "targets",
     parameters: [],
     flags: { json: flags.json },
@@ -169,9 +208,17 @@ const print = (value: unknown, human: string, json: boolean): void => {
   process.stdout.write(`${json ? JSON.stringify(value) : human}\n`);
 };
 const fail = (message: string): number => {
-  process.stderr.write(`disk-reclaim: ${message}\n`);
+  process.stderr.write(`disk-reclaim: ${safeStderr(message)}\n`);
   return 2;
 };
+const safeStderr = (message: string) =>
+  message
+    .split("")
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 32 || (code >= 127 && code <= 159) ? " " : character;
+    })
+    .join("");
 
 function watchProgress(reporter: ProgressReporter): () => void {
   const restore = () => {
@@ -268,9 +315,71 @@ function writeProcessDiagnostics(
   effect: string,
 ): void {
   for (const summary of summarizeProcessFailures([...details]))
-    process.stderr.write(`${summary}; ${effect}\n`);
+    process.stderr.write(`${safeStderr(`${summary}; ${effect}`)}\n`);
   if (verbose)
-    for (const detail of details) process.stderr.write(`${detail}\n`);
+    for (const detail of details)
+      process.stderr.write(`${safeStderr(detail)}\n`);
+}
+
+async function applyInput(
+  input: string,
+  approve: string[],
+  targets: Target[],
+  context: Context,
+  captureLiveness?: EngineOptions["captureLiveness"],
+): Promise<number> {
+  const lock = await waitForLock("apply", stateDir(), context.log);
+  if (lock.release === null)
+    return fail(lock.error ?? "could not acquire apply lock");
+  using _lock = { [Symbol.dispose]: lock.release };
+  const wslBefore = await wslStorageSnapshot();
+  const applyOne = async (record: ReclaimRecord) => {
+    const target = targets.find((item) => item.name === record.target);
+    if (target === undefined) return { ok: false, reason: "unknown target" };
+    const actionResult = await actPlannedPath(
+      target,
+      record.path,
+      { ...context, approve },
+      captureLiveness,
+    );
+    return { ok: actionResult.ok, reason: actionResult.error ?? "applied" };
+  };
+  const results = await applyRecords(input, { approve, apply: applyOne });
+  process.stdout.write(
+    `${results.map((item) => JSON.stringify(item)).join("\n")}\n`,
+  );
+  if (wslBefore !== null) {
+    process.stderr.write(
+      "disk-reclaim: WSL target waits for fstrim (120-second bound)\n",
+    );
+    const trim = await trimWslGuest();
+    if (!trim.ok) return fail(`WSL target fstrim failed: ${trim.detail}`);
+    process.stderr.write(
+      "disk-reclaim: WSL target samples Windows C: return (10-second bound)\n",
+    );
+    const wslAfter = await sampleWslReturn(wslBefore);
+    const report = wslReturnReport(wslBefore, wslAfter);
+    if (report !== null) process.stderr.write(`${report}\n`);
+  }
+  return results.some((item) => item.outcome === "failed") ? 1 : 0;
+}
+
+function outputPlan(
+  value: Plan,
+  records: ReclaimRecord[],
+  mode: "json" | "jsonl" | "human",
+): void {
+  if (mode === "json") {
+    print(value, planTable(value), true);
+    return;
+  }
+  if (mode === "jsonl") {
+    process.stdout.write(
+      `${records.map((record) => JSON.stringify(record)).join("\n")}${records.length === 0 ? "" : "\n"}`,
+    );
+    return;
+  }
+  print(value, planTable(value), false);
 }
 
 export async function main(
@@ -291,7 +400,7 @@ export async function main(
       flags: planFlags,
       help: {
         description:
-          "Preview safe disk reclamation; run and delete require --yes.",
+          "Plan safe disk reclamation as JSONL. Apply reads approved records from stdin.",
       },
     },
     undefined,
@@ -309,12 +418,19 @@ export async function main(
       return fail("wrap forwards command output and does not support --json");
     return wrap(name, parsed._["--"], f.interactive);
   }
-  if (selectedCommand === "run" || (selectedCommand === "delete" && f.yes)) {
+  if (
+    selectedCommand === "run" ||
+    selectedCommand === "apply" ||
+    (selectedCommand === "delete" && f.yes)
+  ) {
     const refusal = workerMutationRefusal();
     if (refusal !== null) return fail(refusal);
   }
   const p = parsed;
-  if (["targets", "receipts"].includes(selectedCommand ?? "") && p._.length > 0)
+  if (
+    ["targets", "receipts", "apply"].includes(selectedCommand ?? "") &&
+    p._.length > 0
+  )
     return fail("unexpected positional arguments");
   if (f.interactive && selectedCommand !== "run")
     return fail("--interactive is supported only by run and wrap");
@@ -452,8 +568,10 @@ export async function main(
     }
     progressReporter.report(target, phase, entries, bytes, done, totalBytes);
   };
+  const selectedHost =
+    f.on === "windows" ? (f.host ?? "r99") : (f.on ?? f.host);
   const context: Context = {
-    ...(f.host === undefined ? {} : { host: f.host }),
+    ...(selectedHost === undefined ? {} : { host: selectedHost }),
     approve: f.approve,
     mode: "plan",
     explicit: false,
@@ -467,15 +585,33 @@ export async function main(
     reportActivity: f.noProgress
       ? undefined
       : (unit, task) => {
-          progressReporter.activity(unit, task);
+          if (progressTty) progressReporter.activity(unit, task);
+          else
+            process.stderr.write(
+              `disk-reclaim: ${safeStderr(`${unit}: ${task}`)}\n`,
+            );
         },
     reportProcessFailures: (_summary, details) => {
       for (const detail of details) processDetails.add(detail);
     },
     log: (m) => {
-      progressReporter.message(`reclaim: ${m}`);
+      const message = `reclaim: ${safeStderr(m)}`;
+      if (progressTty) progressReporter.message(message);
+      else process.stderr.write(`disk-reclaim: ${message}\n`);
     },
   };
+  if (selectedCommand === "apply") {
+    const input = await new Response(stdin).text();
+    if (input.trim() === "")
+      return fail("apply requires JSONL records on stdin");
+    return applyInput(
+      input,
+      f.approve,
+      targets,
+      context,
+      dependencies.captureLiveness,
+    );
+  }
   if (selectedCommand === "targets") {
     const rows = await Promise.all(
       targets.map(async (t) => {
@@ -501,7 +637,10 @@ export async function main(
     );
     return 0;
   }
-  const names = p._.slice();
+  const names = [...p._.map(String), ...f.target].map((name) =>
+    name === "windows" ? "host" : name,
+  );
+  if (f.on === "windows" && names.length === 0) names.push("host");
   const tier = f.tier === undefined ? null : Tier.safeParse(f.tier);
   if (tier !== null && !tier.success) return fail(`unknown tier ${f.tier}`);
   const unknown = names.filter((name) => !targets.some((t) => t.name === name));
@@ -605,13 +744,25 @@ export async function main(
     process.removeListener("SIGTERM", terminate);
     process.removeListener("exit", restore);
   });
-  if (result.error !== null) process.stderr.write(`reclaim: ${result.error}\n`);
+  if (result.error !== null)
+    process.stderr.write(`reclaim: ${safeStderr(result.error)}\n`);
   if (result.plan !== null) {
     const validated = Plan.safeParse(result.plan);
     if (!validated.success) return fail(validated.error.message);
     if (selectedCommand === "plan") await cachePlanReport(validated.data);
     reportProcessDiagnostics(validated.data, processDetails, f.verbose);
-    print(validated.data, planTable(validated.data), f.json);
+    const records = await recordsFromPlan(validated.data);
+    if (selectedCommand === "plan" && !f.yes)
+      outputPlan(validated.data, records, f.json ? "json" : "jsonl");
+    else if (f.yes && selectedCommand !== "run")
+      return applyInput(
+        `${records.map((record) => JSON.stringify(record)).join("\n")}\n`,
+        f.approve,
+        targets,
+        context,
+        dependencies.captureLiveness,
+      );
+    else outputPlan(validated.data, records, f.json ? "json" : "human");
   }
   if (selectedCommand === "run") {
     const report = wslReturnReport(wslBefore, await wslStorageSnapshot());

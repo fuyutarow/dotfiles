@@ -1,0 +1,185 @@
+import { lstat } from "node:fs/promises";
+import { isAbsolute } from "node:path";
+import { fromAsyncThrowable } from "neverthrow";
+import { jsonOf, z } from "../../shared/src/zod.ts";
+import type { Plan } from "./model.ts";
+
+export const Fingerprint = z.object({
+  dev: z.number().nonnegative(),
+  ino: z.number().nonnegative(),
+  size: z.number().nonnegative(),
+  mtime: z.number().nonnegative(),
+});
+export const ReclaimRecord = z.object({
+  target: z.string().min(1),
+  host: z.string().min(1),
+  path: z.string().refine(isAbsolute, "expected an absolute path"),
+  bytes_allocated: z.number().nonnegative().nullable(),
+  regen: z.boolean(),
+  holders: z.array(z.string()),
+  verdict: z.enum(["safe", "ask", "deny", "keep"]),
+  reason: z.string(),
+  fingerprint: Fingerprint,
+  owner_item: z.string().optional(),
+});
+export type ReclaimRecord = z.output<typeof ReclaimRecord>;
+
+const regenTargets = new Set(["clean", "builds", "rust", "scratch"]);
+const holdersOf = (candidate: Plan["targets"][number]["candidates"][number]) =>
+  candidate.checks.flatMap((check) =>
+    check.name === "not in use" && check.ok !== true ? [check.detail] : [],
+  );
+const verdictOf = (
+  verdict: Plan["targets"][number]["candidates"][number]["verdict"],
+): ReclaimRecord["verdict"] => {
+  if (verdict === "RECLAIM") return "safe";
+  if (verdict === "ASK") return "ask";
+  return "keep";
+};
+
+export async function fingerprint(
+  path: string,
+): Promise<ReclaimRecord["fingerprint"]> {
+  const stat = await lstat(path);
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    size: stat.size,
+    mtime: stat.mtimeMs,
+  };
+}
+
+export async function recordsFromPlan(plan: Plan): Promise<ReclaimRecord[]> {
+  const groups = await Promise.all(
+    plan.targets.map(async (target) =>
+      Promise.all(
+        target.candidates.map(async (candidate) => {
+          const path = candidate.path;
+          if (path === null) return null;
+          const measured = await fromAsyncThrowable(() => fingerprint(path))();
+          if (measured.isErr()) return null;
+          const trashItem =
+            target.name === "purge" && candidate.id.startsWith("XDG trash:")
+              ? "xdg-trash"
+              : undefined;
+          const hostItem = candidate.host_lever?.approval ?? trashItem;
+          const value = {
+            target: target.name,
+            host: plan.host,
+            path: candidate.host_lever?.path ?? path,
+            bytes_allocated: candidate.bytes,
+            regen: regenTargets.has(target.name),
+            holders: holdersOf(candidate),
+            verdict:
+              hostItem === undefined ? verdictOf(candidate.verdict) : "ask",
+            reason:
+              hostItem === undefined
+                ? candidate.reason
+                : `${candidate.reason}; requires --approve ${hostItem}`,
+            fingerprint: measured.value,
+            ...(hostItem === undefined ? {} : { owner_item: hostItem }),
+          };
+          const parsed = ReclaimRecord.safeParse(value);
+          return parsed.success ? parsed.data : null;
+        }),
+      ),
+    ),
+  );
+  return groups.flat().filter((record) => record !== null);
+}
+
+export type ApplyReceipt = {
+  line: number;
+  path: string | null;
+  outcome: "deleted" | "skipped" | "failed";
+  reason: string;
+};
+export type ApplyOptions = {
+  approve?: string[];
+  currentFingerprint?: (
+    path: string,
+  ) => Promise<ReclaimRecord["fingerprint"] | null>;
+  apply: (record: ReclaimRecord) => Promise<{ ok: boolean; reason: string }>;
+};
+
+const currentFingerprint = async (path: string) =>
+  (await fromAsyncThrowable(() => fingerprint(path))()).match(
+    (value) => value,
+    () => null,
+  );
+const sameFingerprint = (
+  left: ReclaimRecord["fingerprint"],
+  right: ReclaimRecord["fingerprint"] | null,
+) =>
+  right !== null &&
+  left.dev === right.dev &&
+  left.ino === right.ino &&
+  left.size === right.size &&
+  left.mtime === right.mtime;
+
+export async function applyRecords(
+  input: string,
+  options: ApplyOptions,
+): Promise<ApplyReceipt[]> {
+  const receipts: ApplyReceipt[] = [];
+  const lines = input.split("\n");
+  for (const [index, line] of lines.entries()) {
+    if (line.trim() === "") continue;
+    const parsed = jsonOf(ReclaimRecord).safeParse(line);
+    if (!parsed.success) {
+      receipts.push({
+        line: index + 1,
+        path: null,
+        outcome: "failed",
+        reason: parsed.error.message,
+      });
+      continue;
+    }
+    const record = parsed.data;
+    const approvedOwnerItem =
+      record.verdict === "ask" &&
+      record.owner_item !== undefined &&
+      options.approve?.includes(record.owner_item) === true;
+    if (record.verdict !== "safe" && !approvedOwnerItem) {
+      receipts.push({
+        line: index + 1,
+        path: record.path,
+        outcome: "skipped",
+        reason: `verdict is ${record.verdict}`,
+      });
+      continue;
+    }
+    if (
+      record.owner_item !== undefined &&
+      options.approve?.includes(record.owner_item) !== true
+    ) {
+      receipts.push({
+        line: index + 1,
+        path: record.path,
+        outcome: "skipped",
+        reason: `requires --approve ${record.owner_item}`,
+      });
+      continue;
+    }
+    const actual = await (options.currentFingerprint ?? currentFingerprint)(
+      record.path,
+    );
+    if (!sameFingerprint(record.fingerprint, actual)) {
+      receipts.push({
+        line: index + 1,
+        path: record.path,
+        outcome: "skipped",
+        reason: "fingerprint changed since plan",
+      });
+      continue;
+    }
+    const result = await options.apply(record);
+    receipts.push({
+      line: index + 1,
+      path: record.path,
+      outcome: result.ok ? "deleted" : "failed",
+      reason: result.reason,
+    });
+  }
+  return receipts;
+}

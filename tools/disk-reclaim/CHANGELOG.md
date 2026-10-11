@@ -1,10 +1,16 @@
 # Changelog
 
+## 1.0.0 — 2026-10-11
+
+- Add the JSONL candidate record pipeline with per-record fingerprint and liveness revalidation.
+- Collapse mise entrypoints to reclaim and reclaim:yes.
+- Measure Windows host allocation and keep off-TTY progress silent.
+
 ## 0.6.0
 
 - Add blind-tier expiry for rip graveyard entries older than the configured 24-hour retention; XDG Trash remains owner-only.
 - Restore owner write permission on read-only directories before purging, so mode-500 graveyard trees can be removed.
-- Read the shared `RIP_GRAVEYARD` location instead of assuming rip's RAM-backed `/tmp` default.
+- Read the shared RIP_GRAVEYARD location instead of assuming rip's RAM-backed /tmp default.
 
 ## 0.5.1 — 2026-10-11
 

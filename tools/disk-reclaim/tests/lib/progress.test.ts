@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { ProgressReporter } from "../../src/lib/progress.ts";
 
-test("non-TTY progress is line-based and throttled per target using the injected clock", () => {
+test("non-TTY progress is silent", () => {
   let time = 100;
   const output: string[] = [];
   const reporter = new ProgressReporter({
@@ -17,12 +17,7 @@ test("non-TTY progress is line-based and throttled per target using the injected
   time = 2100;
   reporter.report("clean", "scan", 3, 30);
   reporter.report("clean", "scan", 3, 30, true);
-  expect(output).toHaveLength(3);
-  expect(
-    output.every((line) => line.endsWith("\n") && !line.includes("\r")),
-  ).toBe(true);
-  expect(output.join("")).toContain("scan found complete");
-  expect(output[0]).toContain("10 B");
+  expect(output).toEqual([]);
 });
 
 test("TTY progress redraws active target rows in place", () => {

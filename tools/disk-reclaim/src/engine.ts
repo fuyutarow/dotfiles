@@ -13,6 +13,7 @@ import {
   ActionResult,
   Candidate,
   Config,
+  type ActionResult as ActionResultType,
   type Headroom,
   type Plan,
   type ReceiptAction,
@@ -449,6 +450,77 @@ async function recheckAndAct(
   found.result = result;
   Object.assign(action, result);
   return result.ok ? 0 : 1;
+}
+
+/** Re-plan one stdin-authorized path under the caller's host lock, then act once. */
+export async function actPlannedPath(
+  target: Target,
+  path: string,
+  context: Context,
+  captureLiveness?: (config: Config) => LivenessSnapshot,
+): Promise<ActionResultType> {
+  const freshContext: Context = {
+    ...context,
+    mode: "run",
+    explicit: true,
+    targetName: target.name,
+    liveness: (captureLiveness ?? ((config) => snapshotFor(config, context)))(
+      context.config,
+    ),
+  };
+  const availability = await fromAsyncThrowable(async () =>
+    target.available(freshContext),
+  )();
+  if (availability.isErr())
+    return {
+      ok: false,
+      bytes_freed: null,
+      error: errorMessage(availability.error),
+    };
+  if (!availability.value.available)
+    return {
+      ok: false,
+      bytes_freed: null,
+      error: availability.value.skip_reason ?? "target unavailable",
+    };
+  const planned = await fromAsyncThrowable(async () =>
+    target.plan(freshContext),
+  )();
+  if (planned.isErr())
+    return { ok: false, bytes_freed: null, error: errorMessage(planned.error) };
+  const candidates = Candidate.array().safeParse(planned.value);
+  if (!candidates.success)
+    return { ok: false, bytes_freed: null, error: candidates.error.message };
+  const candidate = candidates.data.find(
+    (item) => item.path === path && item.verdict === "RECLAIM",
+  );
+  if (candidate === undefined)
+    return {
+      ok: false,
+      bytes_freed: null,
+      error: "candidate is no longer safe after revalidation",
+    };
+  const protection = protectedReason(candidate.path ?? path, {
+    ownerTarget: target.name,
+    procDir: freshContext.procDir,
+    repoRoots: [
+      ...freshContext.config.repo_roots,
+      ...freshContext.config.repos,
+    ],
+    protectedPaths: freshContext.config.protected ?? [],
+    ignoreUnreadableProcs: freshContext.config.ignore_unreadable_procs ?? [],
+  });
+  if (protection !== null)
+    return { ok: false, bytes_freed: null, error: protection };
+  const acted = await fromAsyncThrowable(async () =>
+    target.act(candidate, freshContext),
+  )();
+  if (acted.isErr())
+    return { ok: false, bytes_freed: null, error: errorMessage(acted.error) };
+  const result = ActionResult.safeParse(acted.value);
+  return result.success
+    ? result.data
+    : { ok: false, bytes_freed: null, error: result.error.message };
 }
 
 async function executeCandidates(

@@ -35,12 +35,14 @@ test("40 EACCES fds yield one expected summary on TTY and pipes; verbose keeps d
         verbose = details;
       },
     });
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("40 fds (40 probes) in 1 processes");
-    expect(lines[0]).toContain("expected, not a probe problem");
+    expect(lines).toHaveLength(tty ? 1 : 0);
+    if (tty) {
+      expect(lines[0]).toContain("40 fds (40 probes) in 1 processes");
+      expect(lines[0]).toContain("expected, not a probe problem");
+      expect(lines[0]).toContain("no effect on targets");
+    }
     expect(verbose).toHaveLength(40);
     expect(snapshot.openPaths(root).unknown).toHaveLength(0);
-    expect(lines[0]).toContain("no effect on targets");
     expect(summarizeProcessFailures(verbose)).toHaveLength(1);
     progress.finish();
   }

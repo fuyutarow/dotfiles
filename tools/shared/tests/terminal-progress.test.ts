@@ -91,7 +91,7 @@ test("completed preflight and later work share one region until finish", () => {
   expect(final.split("done scan:")).toHaveLength(2);
 });
 
-test("plain output has no escapes; Clack frames fit a narrow pane", () => {
+test("off-TTY progress is silent; Clack frames fit a narrow pane", () => {
   for (const tty of [false, true]) {
     const frames: string[] = [];
     const progress = new TerminalProgress({
@@ -112,6 +112,6 @@ test("plain output has no escapes; Clack frames fit a narrow pane", () => {
         stripVTControlCharacters(frames.at(-1) ?? "").trimEnd().length,
       ).toBeLessThanOrEqual(19);
     progress.finish();
-    if (!tty) expect(frames.join("")).not.toContain("\u001B");
+    if (!tty) expect(frames).toEqual([]);
   }
 });

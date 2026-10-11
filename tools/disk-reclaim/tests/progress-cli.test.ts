@@ -46,17 +46,19 @@ function invoke(
   };
 }
 
-test("TTY and plain CLI emit one aggregated process summary; verbose shows forty facts", () => {
+test("TTY process summary remains singular; pipes stay free of progress frames", () => {
   for (const tty of [false, true]) {
     const result = invoke(tty, []);
     expect(result.exit).toBe(0);
     const transcript = stripVTControlCharacters(result.out + result.err);
     expect(transcript.split("live-process scan:")).toHaveLength(2);
     expect(transcript).toContain("40 fds (40 probes)");
-    expect(transcript).toContain("SUMMARY");
     expect(transcript).toContain("ASK targets: probe, peer");
     expect(transcript).not.toContain("fd/10:");
-    if (!tty) expect(result.out + result.err).not.toContain("\u001B");
+    if (!tty) {
+      expect(result.out + result.err).not.toContain("\u001B");
+      expect(result.err).not.toContain("scan found");
+    }
   }
   const verbose = invoke(false, ["--verbose"]);
   expect(verbose.exit).toBe(0);

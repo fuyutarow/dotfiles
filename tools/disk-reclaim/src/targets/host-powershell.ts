@@ -44,17 +44,6 @@ function Eligible($id) {
 export const hostProbe =
   hostFunctions +
   String.raw`
-"c_free=$(Free-C)"
-"c_total=$((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").Size)"
-Get-ChildItem -LiteralPath $env:TEMP -Directory -ErrorAction SilentlyContinue |
-  Where-Object { !($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } |
-  ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'swap.vhdx') -ErrorAction SilentlyContinue } |
-  ForEach-Object { "swap=$([int64]($_.LastWriteTime.ToUniversalTime()-(Get-Date '1970-01-01Z')).TotalMilliseconds)|$($_.Length)|$($_.FullName)" }
-foreach($id in $roots.Keys) {
-  $bytes='?'
-  if ($id -ne 'windows-update') { $bytes=[int64]((Eligible $id | Measure-Object Length -Sum).Sum+0) }
-  "lever=$id|$bytes|$($roots[$id] -join '; ')"
-}
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -63,6 +52,27 @@ public class ReclaimAllocation {
   public static extern uint GetCompressedFileSizeW(string path, out uint high);
 }
 '@
+function SizeOnDisk($path) {
+  [uint32]$high=0
+  $low=[ReclaimAllocation]::GetCompressedFileSizeW($path,[ref]$high)
+  if ($low -eq [uint32]::MaxValue -and [Runtime.InteropServices.Marshal]::GetLastWin32Error() -ne 0) { throw "allocation size unavailable: $path" }
+  ([uint64]$high*4294967296)+$low
+}
+"c_free=$(Free-C)"
+"c_total=$((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").Size)"
+Get-ChildItem -LiteralPath $env:TEMP -Directory -ErrorAction SilentlyContinue |
+  Where-Object { !($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } |
+  ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'swap.vhdx') -ErrorAction SilentlyContinue } |
+  ForEach-Object { "swap=$([int64]($_.LastWriteTime.ToUniversalTime()-(Get-Date '1970-01-01Z')).TotalMilliseconds)|$($_.Length)|$($_.FullName)" }
+foreach($id in $roots.Keys) {
+  $bytes='?'
+  if ($id -ne 'windows-update') {
+    [uint64]$total=0
+    foreach($item in (Eligible $id)) { $total += SizeOnDisk $item.FullName }
+    $bytes=$total
+  }
+  "lever=$id|$bytes|$($roots[$id] -join '; ')"
+}
 $states=@{}
 if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
   $env:WSL_UTF8=1

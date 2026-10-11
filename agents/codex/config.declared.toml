@@ -11,8 +11,8 @@ model_auto_compact_token_limit = 950000
 network_access = true
 
 [tui]
-# Use terminal-owned transcript rendering so Codex does not capture plain mouse drags in Herdr.
-fullscreen_transcript = false
+# User-requested fullscreen transcript with the composer fixed at the bottom.
+fullscreen_transcript = true
 # After seeing the 12-item footer on 2026-10-11, the owner chose to keep only these four items.
 # Codex 0.162.1 renders the footer on one line and clips at the right edge.
 # Items without runtime data may be omitted by Codex.

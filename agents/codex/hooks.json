@@ -21,6 +21,15 @@
         ]
       },
       {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_SLUG=dotfiles:codex-herdr-metadata sh ~/.codex/hooks/run-herdr-metadata.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
@@ -129,6 +138,15 @@
             "type": "command",
             "command": "HOOK_SLUG=dotfiles:codex-goal-kernel sh ~/.codex/hooks/run-goal-kernel.sh",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_SLUG=dotfiles:codex-herdr-metadata sh ~/.codex/hooks/run-herdr-metadata.sh",
+            "timeout": 10
           }
         ]
       }

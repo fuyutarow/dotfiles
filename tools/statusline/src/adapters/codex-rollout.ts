@@ -101,7 +101,8 @@ async function matchingRolloutByThreadOnDay(dir: string, threadId: string) {
         const info = await stat(path).catch(() => null);
         if (info?.isFile() !== true) return null;
         const meta = await metadata(path);
-        return meta?.payload.originator === "codex-tui"
+        return meta?.payload.originator === "codex-tui" &&
+          (meta.payload.session_id === threadId || meta.payload.id === threadId)
           ? { path, meta, mtimeMs: info.mtimeMs }
           : null;
       }),

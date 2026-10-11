@@ -159,6 +159,11 @@ script = "codex/hooks/enforce-dispatch-contract.ts"
 commands = ["sh ~/.codex/hooks/run-dispatch-contract.sh"]
 
 [[vendor_hook]]
+slug = "codex-herdr-metadata"
+script = "codex/hooks/report-herdr-metadata.ts"
+commands = ["sh ~/.codex/hooks/run-herdr-metadata.sh"]
+
+[[vendor_hook]]
 slug = "codex-goal-kernel"
 script = "codex/hooks/goal-kernel.ts"
 commands = ["sh ~/.codex/hooks/run-goal-kernel.sh","sh ~/.codex/hooks/run-goal-kernel.sh --enforce"]

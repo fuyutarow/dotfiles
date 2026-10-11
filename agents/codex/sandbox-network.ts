@@ -70,6 +70,7 @@ export type Declared = {
   approvalPolicy: z.output<typeof ApprovalPolicySchema>;
   approvalsReviewer: z.output<typeof ApprovalsReviewerSchema>;
   tuiStatusLine: string[];
+  tuiFullscreenTranscript: boolean;
   mcpServers: Record<string, McpServer>;
 };
 export type Live = {
@@ -80,6 +81,7 @@ export type Live = {
   approvalPolicy: string | null;
   approvalsReviewer: string | null;
   tuiStatusLine: string[] | null;
+  tuiFullscreenTranscript: boolean | null;
   mcpServers: Record<string, McpServer>;
   managedMcpNames: string[];
 };
@@ -104,9 +106,12 @@ function values(parsed: unknown): Omit<Declared, "mcpServers"> | Error {
   const statusLine = z
     .array(StatusLineItemSchema)
     .safeParse(tui.success ? tui.data.status_line : undefined);
-  if (!statusLine.success)
+  const fullscreenTranscript = z
+    .boolean()
+    .safeParse(tui.success ? tui.data.fullscreen_transcript : undefined);
+  if (!statusLine.success || !fullscreenTranscript.success)
     return new Error(
-      `Codex declaration requires tui.status_line to be an array of native Codex 0.162.1 items: ${StatusLineItemSchema.options.join(", ")}`,
+      `Codex declaration requires tui.status_line to be an array of native Codex 0.162.1 items and tui.fullscreen_transcript to be boolean: ${StatusLineItemSchema.options.join(", ")}`,
     );
   if (
     network.success &&
@@ -123,6 +128,7 @@ function values(parsed: unknown): Omit<Declared, "mcpServers"> | Error {
       approvalPolicy: approval.data,
       approvalsReviewer: reviewer.data,
       tuiStatusLine: statusLine.data,
+      tuiFullscreenTranscript: fullscreenTranscript.data,
     };
   }
   return new Error(
@@ -218,6 +224,7 @@ export async function readLive(home: string): Promise<Live | Error> {
       approvalPolicy: null,
       approvalsReviewer: null,
       tuiStatusLine: null,
+      tuiFullscreenTranscript: null,
       mcpServers: {},
       managedMcpNames: [],
     };
@@ -252,6 +259,9 @@ export async function readLive(home: string): Promise<Live | Error> {
   const statusLine = z
     .array(z.string())
     .safeParse(tui.success ? tui.data.status_line : undefined);
+  const fullscreenTranscript = z
+    .boolean()
+    .safeParse(tui.success ? tui.data.fullscreen_transcript : undefined);
   return {
     contents: read.value,
     networkAccess: network.success ? network.data : null,
@@ -260,6 +270,9 @@ export async function readLive(home: string): Promise<Live | Error> {
     approvalPolicy: approval.success ? approval.data : null,
     approvalsReviewer: reviewer.success ? reviewer.data : null,
     tuiStatusLine: statusLine.success ? statusLine.data : null,
+    tuiFullscreenTranscript: fullscreenTranscript.success
+      ? fullscreenTranscript.data
+      : null,
     mcpServers,
     managedMcpNames: managedMcpNames(read.value),
   };
@@ -286,6 +299,9 @@ export function drift(declared: Declared, live: Live): string[] {
     JSON.stringify(declared.tuiStatusLine)
       ? null
       : `tui.status_line=${JSON.stringify(live.tuiStatusLine)}, declared ${JSON.stringify(declared.tuiStatusLine)}`,
+    live.tuiFullscreenTranscript === declared.tuiFullscreenTranscript
+      ? null
+      : `tui.fullscreen_transcript=${String(live.tuiFullscreenTranscript)}, declared ${declared.tuiFullscreenTranscript}`,
   ];
   const managed = new Set(live.managedMcpNames);
   const mcpLines = Object.entries(declared.mcpServers).flatMap(
@@ -424,29 +440,54 @@ function appendTable(lines: string[], block: string[]): void {
   lines.push(...block);
 }
 
-/** Replace only the status_line value inside [tui]; other tui keys and comments stay untouched. */
-function updateTuiStatusLine(lines: string[], statusLine: string[]): void {
+/** Replace only managed keys inside [tui]; other tui keys and comments stay untouched. */
+function updateTuiSettings(lines: string[], declared: Declared): void {
+  const statusLine = declared.tuiStatusLine;
   const value = `status_line = [${statusLine.map((item) => JSON.stringify(item)).join(", ")}]`;
+  const fullscreen = `fullscreen_transcript = ${declared.tuiFullscreenTranscript}`;
   const start = lines.findIndex((line) =>
     /^\s*\[tui\]\s*(?:#.*)?$/u.test(line),
   );
   if (start < 0) {
-    appendTable(lines, ["[tui]", value]);
+    appendTable(lines, ["[tui]", fullscreen, value]);
     return;
   }
   const next = lines.findIndex(
     (line, index) => index > start && /^\s*\[[^\]]+\]/u.test(line),
   );
   const limit = next < 0 ? lines.length : next;
-  const key = lines.findIndex(
+  // An empty table commonly ends in a blank separator; insert before that separator.
+  let insertionLimit = limit;
+  while (insertionLimit > start + 1 && lines[insertionLimit - 1]!.trim() === "")
+    insertionLimit -= 1;
+  let key = lines.findIndex(
     (line, index) =>
       index > start && index < limit && /^\s*status_line\s*=/u.test(line),
   );
+  let fullscreenKey = lines.findIndex(
+    (line, index) =>
+      index > start &&
+      index < limit &&
+      /^\s*fullscreen_transcript\s*=/u.test(line),
+  );
+  if (fullscreenKey >= 0) lines[fullscreenKey] = fullscreen;
+  else {
+    const insertion = key >= 0 ? key : insertionLimit;
+    lines.splice(insertion, 0, fullscreen);
+    if (key >= 0) key += 1;
+    fullscreenKey = insertion;
+  }
   if (key >= 0) {
     // A multi-line array runs until the line closing its bracket; replace all of it.
     let end = key;
-    while (end < limit - 1 && !/\]\s*(?:#.*)?$/u.test(lines[end]!)) end += 1;
+    while (end < lines.length - 1 && !/\]\s*(?:#.*)?$/u.test(lines[end]!))
+      end += 1;
     lines.splice(key, end - key + 1, value);
+    return;
+  }
+  // No status_line existed. Put it after fullscreen_transcript (or preserve trailing layout).
+  if (fullscreenKey >= 0) {
+    lines.splice(fullscreenKey + 1, 0, value);
     return;
   }
   let last = limit - 1;
@@ -506,7 +547,7 @@ export function edit(contents: string | null, declared: Declared): string {
       `network_access = ${declared.networkAccess}`,
     ]);
   }
-  updateTuiStatusLine(lines, declared.tuiStatusLine);
+  updateTuiSettings(lines, declared);
   const result = updateMcpServers(lines, declared).join("\n");
   // Keep the file's trailing newline; an appended table must not drop it.
   const trailing = source.length === 0 || source.endsWith("\n");

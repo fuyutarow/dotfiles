@@ -32,6 +32,7 @@ describe("codex:config", () => {
       readFileSync(join(repo, "agents/codex/config.declared.toml"), "utf8"),
     );
     expect(parsed).toMatchObject({ tui: { status_line: expectedItems } });
+    expect(parsed).toMatchObject({ tui: { fullscreen_transcript: false } });
   });
 
   test.each([{ args: [] }, { args: ["--check"] }])(
@@ -139,7 +140,7 @@ describe("codex:config", () => {
     // The values match agents/codex/config.declared.toml.
     writeFileSync(
       join(home, ".codex/config.toml"),
-      `approval_policy = "on-request"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7, deepwiki, exa\n\n[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n\n[mcp_servers.deepwiki]\nurl = "https://mcp.deepwiki.com/mcp"\n\n[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"\n\n[tui]\n${statusLine}\n`,
+      `approval_policy = "on-request"\napprovals_reviewer = "auto_review"\nmodel_context_window = 1000000\nmodel_auto_compact_token_limit = 950000\n[sandbox_workspace_write]\nnetwork_access = true\n\n# codex-dotfiles-mcp-managed: context7, deepwiki, exa\n\n[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n\n[mcp_servers.deepwiki]\nurl = "https://mcp.deepwiki.com/mcp"\n\n[mcp_servers.exa]\nurl = "https://mcp.exa.ai/mcp"\n\n[tui]\nfullscreen_transcript = false\n${statusLine}\n`,
     );
     const result = run(home, ["--check"]);
     expect(result.exitCode).toBe(0);
@@ -172,7 +173,7 @@ describe("codex:config", () => {
     expect(written.exitCode).toBe(0);
     expect(written.stdout.toString()).toContain("codex:config: updated");
     expect(readFileSync(path, "utf8")).toContain(
-      `[tui]\nanimations = true\n${statusLine}\n`,
+      `[tui]\nanimations = true\nfullscreen_transcript = false\n${statusLine}\n`,
     );
     expect(run(home, ["--check"]).exitCode).toBe(0);
   });

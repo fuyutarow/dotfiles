@@ -1,24 +1,102 @@
-# agx contract
+# CLI CONTRACT
+
+## C0 CONSUMERS
+
+- Consumer regimes: human-interactive, agent, shell-pipeline, ci
+
+| Regime | Supported work | Noninteractive path | Machine-readable result |
+| --- | --- | --- | --- |
+| human-interactive / agent | Dispatch, continue and inspect a ticket | Explicit files, ticket names and sandbox | Dispatch receipt; show/ps `--json` |
+| shell-pipeline / ci | Inspect records and verify contracts | No interactive prompts; explicit flags | Schema-tagged JSON and exit status |
+
+## C1 INVOCATION
+
+- Parser profile: Cleye with strict flags and explicit operands; kebab-case flags, no option-prefix abbreviations. Help/version exit 0; framework parse errors exit 1; local usage refusals exit 2.
+- Ambiguous / invalid cases: choose one of `--ticket`, `--resume`, `--amend`. `--ticket` and `--prompt-file` combine only for repick instructions. `--file` requires `--amend` or `--repick`. Empty or missing instruction files refuse before interrupting a worker. Ticket names resolve to live work first, then its latest finished run; run IDs and unique vendor-session prefixes remain accepted. A shared vendor session selects its latest run. Ticket names in different projects require project context or a run ID.
+
+The command table below is the invocation inventory. `dispatch --resume my_ticket --repick
+--file next.md --prompt-file context.md` retains the ticket and combines both instruction files
+with a compact handoff. A fresh `--prompt-file` dispatch also accepts `--repick --file next.md`.
+`ticket amend --file -` reads stdin; dispatch instructions require filesystem paths.
+Use `agx dispatch --help`, `agx show --help`, or the noun's `--help` to discover flags.
+
+| Invocation | Input | Work resolution |
+| --- | --- | --- |
+| `dispatch --prompt-file brief.md --cd DIR --sandbox read-only` | Brief file | Create a state ticket |
+| `dispatch --resume ticket --repick --file next.md` | Ticket and instruction file | Latest run of that ticket |
+| `show ticket`; `ledger note ticket` | Ticket name | Live inspection; latest finished acknowledgement |
+
+## C2 EFFECTS
+
+- Effects / recovery: dispatch selects a row and starts a bounded worker; it writes a ticket, marker, content-addressed brief and receipt under state. A named ticket retains its existing home. Identical prompt-file instructions may reuse a released ticket name; different instructions require amendment or a new name. No force flag overwrites history. `--amend` validates input, interrupts the live router with SIGINT, waits up to 30 seconds, appends one AMEND section and resumes its vendor session (or repicks when requested). A failed stop leaves the worker running. Stored briefs and historical ledger rows remain readable.
+
+| Effect boundary | Partial state | Recovery |
+| --- | --- | --- |
+| Dispatch / repick | Durable ticket, archived instructions, run receipt | Resume or amend the ticket |
+| Amendment | Old instructions remain in the same file | Append a corrective amendment |
+| Live interruption | Partial run and vendor session recorded | Continue by ticket after graceful stop |
+
+## C3 CHANNELS
+
+- Machine mode: dispatch receipt, `show --json`, `ps --json`, ledger JSON.
+- Machine framing: one JSON object per stdout line, with `schema`; human show/ps use readable fields and tables.
+- Machine compatibility: additive fields; old records may omit ticket identity and live selection fields. Unknown fields are tolerated by readers. Removed command names acquire no compatibility aliases.
+- Waits / liveness: worker and verification waits retain their declared bounds; stderr progress defaults to 300 seconds. Amendment waits at most 30 seconds; detached manager acknowledgement at most 15 seconds. Live show exposes row, picked probability, cumulative worker cost in USD, phase, last activity and its timestamp, and elapsed time. Unreported probability/cost are unknown, not zero. JSON adds `name`, `row`, `picked_probability`, `last_activity`, `last_activity_at`, and `elapsed_s` to the marker.
+
+| Mode / TTY | stdout | stderr | Framing |
+| --- | --- | --- | --- |
+| Dispatch, piped or TTY | One receipt | Routing, worker progress and diagnostics | Schema-tagged JSON |
+| Human show / ps | Live fields / ticket rows | Lookup diagnostics | Plain readable text |
+| `show --json` / `ps --json` | Snapshot / run list | Lookup diagnostics | One JSON object |
+
+## C4 OUTCOMES
+
+- Fallbacks / handoffs: row-selection fallbacks remain recorded; resume preserves the selected row and vendor session, while repick explicitly starts a fresh selection and session. A detached acknowledgement confirms manager handoff, not completed work. A live resume directs callers to amendment rather than starting a concurrent continuation.
+
+| Outcome class | Exit / status | Output | Retry / next action |
+| --- | --- | --- | --- |
+| Completed / returned | 0 / receipt result | Verification and final report on stdout | Inspect or acknowledge the ticket |
+| Timeout / interruption | 3 (Codex), 124 (Claude), 130 / 143 (signals) | Partial receipt, recorded vendor session | Resume or amend the ticket |
+| Invalid local request | 2 | Diagnostic on stderr | Correct input; no worker starts |
+| No grading decision | Run exit unchanged | `grade-waived` with `decision: "no-decision"` for returned/stopped runs | Explicit grading/acceptance remains possible |
+
+Dispatch emits no warning about historical ungraded runs. A no-decision counts one finished
+run without a grading judgment; it is neither a pass nor acceptance. Existing grades and waivers
+retain their meanings.
+
+## C5 EVOLUTION
+
+- Positive receipt: `bun test tools/agx/tests/agx.test.ts -t 'prompt-file dispatch creates a ticket|repick accepts instruction files'` exits 0 and proves amendment by ticket, both instruction files and resolved ledger acknowledgements. `bun test tools/agx/tests/run-control.test.ts` proves live human/JSON fields and ticket names in ps.
+- Negative receipt: the ticket-home fixture attempts to replace an amended ticket with a fresh brief and receives an error while preserving history; invalid target combinations and instruction files refuse before worker interruption.
+
+| Surface | Promise | Change / deprecation | Verification receipt |
+| --- | --- | --- | --- |
+| Ticket identity | One handle and file per unit of work | Every dispatch has a ticket; prompt-file copies are state-owned | Ticket creation, live amendment and repick fixtures |
+| Run / vendor identifiers | Existing records and explicit IDs remain usable | Latest continuation in one vendor session is selectable | Resume and historical ledger fixtures |
+| Live marker / receipt | Schema-tagged additive fields | Picked probability and canonical ticket path are recorded | Live show, state writer and ps fixtures |
+| Grading | Explicit grades remain readable | Warning removed; returned/stopped runs record no-decision | Historical warning and no-decision fixtures |
 
 ## Command layout
 
-The suite has exactly four nouns; there are no former command aliases.
+The suite has six top-level commands: dispatch, pick, ticket, ledger, show and ps.
+There are no former command aliases.
 
 | Operation                           | Command                                                     |
 | ----------------------------------- | ----------------------------------------------------------- |
 | Run a worker                        | `agx dispatch --prompt-file <brief> --cd <dir> --sandbox …` |
-| Resume a worker                     | `agx dispatch --resume <run_id>`                            |
+| Resume a worker                     | `agx dispatch --resume <ticket>`                            |
 | Choose a row                        | `agx pick --prompt-file <brief> [--cd <dir>]`               |
 | Ask typed selection questions       | `agx pick ask --request <file                               | ->`                    |
 | Inspect route availability          | `agx pick doctor`                                           |
 | Replay ticket grading               | `agx ticket replay <dir> [--expect <file.tsv>]`             |
-| Grade or waive a finished run       | `agx ticket grade <run_id> --evidence <file>                | --waive <why>`         |
+| Grade or waive a finished run       | `agx ticket grade <ticket> --evidence <file>                | --waive <why>`         |
 | List workers                        | `agx ledger ls`                                             |
 | Show statistics                     | `agx ledger stats`                                          |
 | Export/import the routing record    | `agx ledger record export                                   | import`                |
-| Note artifact consumption/rejection | `agx ledger note <run_id> --consumed                        | --rejected [--note …]` |
+| Note artifact consumption/rejection | `agx ledger note <ticket> --consumed                        | --rejected [--note …]` |
 | Export runs                         | `agx ledger export`                                         |
-| Show a run result or stored brief   | `agx ledger result <run_id> [--json                         | --brief]`              |
+| Show a run result or stored brief   | `agx show <ticket> [--json]`; `agx ledger result <ticket> [--json | --brief]` |
+| List work                           | `agx ps [--all] [--json]` |
 
 Flags and output retain their existing meanings. Runtime state is only in
 `$XDG_STATE_HOME/agx` (default `~/.local/state/agx`), with `AGX_STATE_DIR` as the test seam.
@@ -70,6 +148,16 @@ Counts are files imported and files skipped for name collisions. Reruns are idem
 `dispatch --amend <name> --file F` without a live worker appends the amendment and
 dispatches that ticket, resuming its last vendor session when resumable. It prints
 `amend: worker not running — amended ticket and redispatched`.
+
+Every `dispatch --prompt-file` creates an anonymous ticket under
+`$AGX_STATE_DIR/tickets/<project>` regardless of the repository's named-ticket home.
+The name is CLI `--name`, then front-matter `name`, then four generated base36 characters;
+the same name is printed by ps and accepted by work-targeting commands. The state copy has
+that name in its front matter when present; a legacy plain brief uses its dated filename.
+The original source remains unchanged. Markers and run records keep `ticket.name` and
+`ticket.path`; `brief.sha256` still identifies the exact archived dispatch instructions.
+Ticket lookup includes these state tickets and recorded canonical paths, so amendment does
+not depend on the original working directory or prompt file surviving.
 
 ## RETURN outcomes and escalation
 
@@ -135,7 +223,12 @@ from this run's changed paths and scope violations, including when both tickets 
 
 ## Worker display IDs
 
-`agx dispatch --name <name>` or ticket front matter `name = "<name>"` assigns the worker ID `agt_<name>`, name in [A-Za-z0-9_] (hyphens become underscores); the CLI value takes precedence. Names keep their typed case and must contain 1..16 ASCII letters, digits, `_` or `-`. A hyphenated name is normalized to underscores with one stderr note; other characters are refused with exit 2. Without either name, the dispatcher assigns `agt_` followed by four lowercase base36 characters. A live ID on this host cannot be reused; finished runs release it. Resume keeps the original display ID. `resume`, `result`, `grade` and `ack` accept the display ID, choosing the most recent run when finished history contains more than one match; hyphenated spelling resolves to the underscore ID.
+Worker IDs `agt_<name>` remain diagnostic metadata in records and worker logs. Ticket names
+keep their typed case and hyphens; only the worker display normalizes hyphens to underscores.
+Names contain 1..16 ASCII letters, digits, `_` or `-`. Without a supplied name, the dispatcher
+generates four lowercase base36 characters for the ticket and corresponding display ID.
+A live display ID on this host cannot be reused; finished runs release it. Resume retains it.
+Historical recorded display-ID lookup remains readable; no new command aliases are introduced.
 
 ## Ticket home and worker promises
 
@@ -145,11 +238,13 @@ front-matter `name`. Home precedence is `--home`, `AGX_TICKET_HOME`, nearest upw
 <name> --file F|-` appends a dated AMEND section without rewriting earlier instructions. `agx
 dispatch --ticket <name>` resolves that home and continues the prior vendor session when one exists;
 `agx dispatch --amend <run|name> --file F` validates the amendment, SIGINTs a live router,
-waits up to 30 seconds, appends to its recorded brief, and resumes the same vendor session.
-Live prompt-file runs use their recorded source path without resolving a ticket home; when
-the source is gone, an amended brief is retained under the run's state directory.
+waits up to 30 seconds, appends to its canonical ticket, and resumes the same vendor session.
+Live prompt-file runs use their state ticket; the source may be gone. Historical runs lacking
+a ticket path can still use their recorded brief or a retained copy.
 `agx dispatch --resume <run|name> --repick` starts a fresh
-row selection with the prior report and open items as a compact handoff.
+row selection with the prior report and open items as a compact handoff. `--file` and
+`--prompt-file` add instructions; `--ticket <name> --repick` and `--amend <name> --file F
+--repick` retain the same ticket too.
 
 The worker receives a compact promise before the body: outcome, consumer, absolute write
 paths/globs, first-return artifact and seconds, verify, kind, labels, and sandbox mode.
@@ -216,10 +311,11 @@ the run and its resumes as one lineage. Rows with at least two lineage runs grad
 each masked row and reason. If every candidate is masked, the overall-record argmax remains
 available and the receipt says which row was kept; Jev still makes the choice.
 
-`agx ledger note <run_id> [--consumed|--rejected] [--note "<why>"]` appends an acknowledgement
+`agx ledger note <ticket> [--consumed|--rejected] [--note "<why>"]` appends an acknowledgement
 with the current dispatcher session and timestamp. It accepts finished runs with any outcome; an
 unknown run is refused without writing a record. Omitted outcome means consumed. A later
-acknowledgement supersedes an earlier one for stats.
+acknowledgement supersedes an earlier one for stats. Its `run_id` is the resolved run ID,
+so naming a ticket or vendor session links the acknowledgement to the same run as show.
 
 `agx ledger stats [--since <ISO|duration>]` defaults to 24 hours. Its throughput section reports
 run counts, accepted artifacts, accepted artifacts per worker hour, median time to first return,

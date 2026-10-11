@@ -3,7 +3,7 @@
 // Outside the repo by design: briefs and picks may be private. Zero-dep beyond the repo's zod bundle.
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fromThrowable } from "../../shared/src/zod.ts";
+import { fromThrowable, z } from "../../shared/src/zod.ts";
 import {
   ACTIVE_MARKER_SCHEMA,
   ActiveWorkerUsageSchema,
@@ -22,9 +22,13 @@ export { serializeActiveMarker };
 export type { ActiveMarker };
 
 export const STATE_SCHEMA = ACTIVE_MARKER_SCHEMA;
-export const ActiveSchema = ActiveMarkerReaderSchema;
-export const ActiveWriterSchema = ActiveMarkerSchema;
-export type Active = ActiveMarker;
+// agx owns the selection extension; shared consumers accept new marker fields.
+export const ActiveWriterSchema = ActiveMarkerSchema.extend({
+  picked_probability: z.number().min(0).max(1).optional(),
+  interim_cost_usd: z.number().nonnegative().optional(),
+});
+export const ActiveSchema = ActiveWriterSchema.loose();
+export type Active = z.output<typeof ActiveWriterSchema>;
 
 /** $AGX_STATE_DIR (test seam), else $XDG_STATE_HOME/agx, else ~/.local/state/agx. */
 export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
@@ -62,11 +66,11 @@ export const activeDir = (env: NodeJS.ProcessEnv = process.env): string =>
 
 /** Atomically persist a strictly validated active marker and its live statusline fields. */
 export function writeActiveMarker(path: string, active: Active): boolean {
-  const serialized = serializeActiveMarker(active);
-  if (!serialized.success) return false;
+  const parsed = ActiveWriterSchema.safeParse(active);
+  if (!parsed.success) return false;
   const tmp = `${path}.${process.pid}.tmp`;
   return fromThrowable(() => {
-    writeFileSync(tmp, serialized.text);
+    writeFileSync(tmp, JSON.stringify(parsed.data));
     renameSync(tmp, path);
   })().isOk();
 }

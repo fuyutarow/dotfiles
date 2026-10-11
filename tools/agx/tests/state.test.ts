@@ -56,6 +56,7 @@ test("active marker updates atomically retain phase, final usage, cost and worke
       ...active,
       phase: "verifying 1/1 bun test",
       cost_usd: 0.0149,
+      picked_probability: 0.73,
       worker_usage: { input_tokens: 100, output_tokens: 20 },
     }),
   ).toBe(true);
@@ -66,6 +67,7 @@ test("active marker updates atomically retain phase, final usage, cost and worke
       phase: "verifying 1/1 bun test",
       worker_session: "resumed-vendor-session",
       cost_usd: 0.0149,
+      picked_probability: 0.73,
       worker_usage: { input_tokens: 100, output_tokens: 20 },
     });
 });

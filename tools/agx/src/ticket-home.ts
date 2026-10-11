@@ -13,7 +13,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
 import { attempt } from "../../shared/src/attempt.ts";
 import { parseTicket, resourceKind, ticketFields } from "./ticket.ts";
-import { z } from "../../shared/src/zod.ts";
+import { fromThrowable, z } from "../../shared/src/zod.ts";
 
 export function ticketRoot(cwd: string): string | undefined {
   for (const cmd of [
@@ -170,13 +170,8 @@ export async function importTickets(
     : new Error(`cannot import tickets: ${String(result.error)}`);
 }
 
-export function ticketPath(home: string, name: string): string | Error {
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(name))
-    return new Error(
-      "ticket name must contain only letters, numbers, underscores or hyphens",
-    );
-  if (!existsSync(home)) return new Error(`no ticket home: ${home}`);
-  const matches = readdirSync(home)
+function matchingTickets(home: string, name: string): string[] {
+  return readdirSync(home)
     .filter((file) => file.endsWith(".md"))
     .map((file) => join(home, file))
     .filter((path) => {
@@ -186,11 +181,66 @@ export function ticketPath(home: string, name: string): string | Error {
         path.endsWith(`-${name}.md`)
       );
     });
+}
+
+export function ticketPath(home: string, name: string): string | Error {
+  if (!/^[A-Za-z0-9_-]+$/u.test(name))
+    return new Error(
+      "ticket name must contain only letters, numbers, underscores or hyphens",
+    );
+  if (!existsSync(home)) return new Error(`no ticket home: ${home}`);
+  const matches = matchingTickets(home, name);
   if (matches.length === 1)
     return matches[0] ?? new Error(`no ticket named ${name} in ${home}`);
   if (matches.length === 0)
     return new Error(`no ticket named ${name} in ${home}`);
   return new Error(`ticket name ${name} is ambiguous in ${home}`);
+}
+
+/** A prompt-file dispatch gets a durable ticket; the caller's source file stays untouched.
+ * Reusing identical instructions is safe, but a new brief cannot erase ticket history. */
+export function dispatchTicketAtHome(
+  home: string,
+  name: string,
+  brief: string,
+  date = Temporal.Now.plainDateISO().toString(),
+): string | Error {
+  if (!/^[A-Za-z0-9_-]{1,16}$/u.test(name))
+    return new Error(
+      "ticket name must be 1..16 letters, numbers, underscores or hyphens",
+    );
+  const parsed = parseTicket(brief);
+  if (parsed.kind === "invalid") return new Error(parsed.reason);
+  let text = brief;
+  if (parsed.kind === "ticket") {
+    const declaration = `name = ${JSON.stringify(name)}`;
+    text =
+      parsed.ticket.name === undefined
+        ? brief.replace(/^(\+\+\+\r?\n)/u, `$1${declaration}\n`)
+        : brief.replace(
+            /^\s*(?:name|"name"|'name')\s*=[^\r\n]*/mu,
+            declaration,
+          );
+  }
+  mkdirSync(home, { recursive: true });
+  const matches = matchingTickets(home, name);
+  if (matches.length > 1)
+    return new Error(`ticket name ${name} is ambiguous in ${home}`);
+  const existing = matches[0];
+  if (existing !== undefined)
+    return readFileSync(existing, "utf8") === text
+      ? existing
+      : new Error(
+          `ticket ${name} already exists with different instructions; use --amend or choose a new --name`,
+        );
+  const stamp = date.replaceAll("-", "").slice(2);
+  const path = join(home, `${stamp}-${name}.md`);
+  const written = fromThrowable(() => {
+    writeFileSync(path, text, { flag: "wx" });
+  })();
+  return written.isOk()
+    ? path
+    : new Error(`cannot create ticket ${name}: ${String(written.error)}`);
 }
 
 export function newTicketAtHome(
@@ -262,6 +312,7 @@ export interface TicketRun {
   brief?: { path: string; sha256?: string | undefined } | undefined;
   cwd?: string | undefined;
   worker?: { outcome?: string | undefined } | undefined;
+  ticket?: { name?: string | undefined; path?: string | undefined } | undefined;
 }
 
 export function listTicketsAtHome(home: string, runs: TicketRun[]): object[] {
@@ -275,13 +326,16 @@ export function listTicketsAtHome(home: string, runs: TicketRun[]): object[] {
       const parsed = parseTicket(text);
       const hash = createHash("sha256").update(text).digest("hex");
       const last = runs.findLast(
-        (run) => run.brief?.path === path || run.brief?.sha256 === hash,
+        (run) =>
+          run.ticket?.path === path ||
+          run.brief?.path === path ||
+          run.brief?.sha256 === hash,
       );
       return {
         name:
           parsed.kind === "ticket" && parsed.ticket.name !== undefined
             ? parsed.ticket.name
-            : name.slice(0, -3),
+            : ticketFileIdentity(name).slice(0, -3),
         path,
         kind:
           resourceKind(parsed.kind === "invalid" ? text : parsed.prose) ?? null,

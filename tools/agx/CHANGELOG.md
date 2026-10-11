@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.9.0 — 2026-10-11
+
+- Make the ticket the work handle across dispatch, resume, amendment, repick, show, ledger notes and ps. Prompt-file dispatches create a durable anonymous ticket in the per-project state home, named by `--name`, the brief's `name`, or a generated name. Keep the source brief untouched, ticket history append-only, and existing run/vendor identifiers readable and accepted.
+- Allow `--repick` with `--file` and `--prompt-file` continuation instructions, retaining the ticket while selecting a fresh row and vendor session with a compact handoff.
+- Show live row, picked probability, cumulative cost, phase, last activity and elapsed time by ticket; keep the ticket name visible in ps and resume hints. Resolve ledger acknowledgements to the actual run ID, including repeated runs in the same vendor session.
+- Remove the repeated ungraded-run dispatch warning. Returned and stopped runs automatically receive a `grade-waived` record with `decision: "no-decision"`; this records an absence of grading without inventing a pass or acceptance.
+
 ## 2.8.3 — 2026-10-11
 
 - Create empty sparse workspaces before selecting tracked top-level paths. Share `.agx.toml` `workspace_exclude` and the measured size fallback with the storage hook; print exclusions, measured bytes and checkout size. Name workspaces for their repository and run mise/Bun setup only when declared.

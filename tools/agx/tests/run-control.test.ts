@@ -103,6 +103,72 @@ test("show exposes interim progress for a live run and its statusline phase", ()
   );
 });
 
+test("show and ps expose the ticket and live selection, cost, activity and elapsed fields", () => {
+  const state = join(scratch, "live-ticket-fields");
+  const active = join(state, "active");
+  mkdirSync(active, { recursive: true });
+  const started = Temporal.Now.instant().subtract({ seconds: 65 }).toString();
+  const at = Temporal.Now.instant().toString();
+  writeFileSync(
+    join(active, "ticket-fields.json"),
+    JSON.stringify({
+      ...marker("ticket-fields", process.pid, "session", started),
+      ticket: { name: "u24_copyfix", writes: [] },
+      picked_probability: 0.73,
+      cost_usd: 0.125,
+      phase: "working",
+    }),
+  );
+  writeFileSync(
+    join(active, "ticket-fields.progress.json"),
+    JSON.stringify({
+      schema: 1,
+      at,
+      last: "checking ticket lookup",
+      commands: 2,
+      files: 1,
+      cost_usd: 0.25,
+      session: "vendor-live-fields",
+    }),
+  );
+  const shown = cli(["show", "u24_copyfix"], state);
+  expect(shown.code, shown.err).toBe(0);
+  for (const field of [
+    "ticket=u24_copyfix",
+    "row=luna-low",
+    "probability=0.73",
+    "cost=$0.250000",
+    "phase=working",
+    "checking ticket lookup",
+    at,
+    "elapsed=1m",
+  ])
+    expect(shown.out).toContain(field);
+  const json = cli(["show", "vendor-live-fields", "--json"], state);
+  expect(json.code, json.err).toBe(0);
+  expect(
+    decodedJson(
+      z.looseObject({
+        name: z.string(),
+        row: z.string(),
+        picked_probability: z.number(),
+        cost_usd: z.number(),
+        last_activity: z.string(),
+        elapsed_s: z.number(),
+      }),
+      json.out,
+    ),
+  ).toMatchObject({
+    name: "u24_copyfix",
+    row: "luna-low",
+    picked_probability: 0.73,
+    cost_usd: 0.25,
+    last_activity: "checking ticket lookup",
+  });
+  const listed = cli(["ps", "--json"], state);
+  expect(decodedJson(PsResult, listed.out).runs[0]?.name).toBe("u24_copyfix");
+});
+
 test("ps filters to this Claude session and --all includes other sessions", () => {
   const state = join(scratch, "ps-state");
   const active = join(state, "active");

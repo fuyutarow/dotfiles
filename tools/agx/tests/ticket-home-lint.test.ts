@@ -11,6 +11,7 @@ import { join, resolve } from "node:path";
 import { lintTicket } from "../src/ticket-lint.ts";
 import {
   amendTicket,
+  dispatchTicketAtHome,
   importTickets,
   listTickets,
   newTicket,
@@ -126,6 +127,38 @@ describe("local lint", () => {
 });
 
 describe("repository ticket home", () => {
+  test("dispatch tickets preserve source instructions, override names and refuse history replacement", () => {
+    const home = join(scratch, "anonymous-home");
+    const brief = complete(
+      "RESOURCE-CLASS(NONCOMPUTE): fixture",
+      'name = "source_name"',
+    );
+    const path = dispatchTicketAtHome(home, "chosen_name", brief, "2026-10-11");
+    expect(path).toBe(join(home, "261011-chosen_name.md"));
+    if (path instanceof Error) return;
+    expect(readFileSync(path, "utf8")).toContain('name = "chosen_name"');
+    expect(readFileSync(path, "utf8")).not.toContain('name = "source_name"');
+    expect(dispatchTicketAtHome(home, "chosen_name", brief, "2026-10-12")).toBe(
+      path,
+    );
+    expect(amendTicket(path, "Keep the new acceptance check.")).toBeUndefined();
+    expect(dispatchTicketAtHome(home, "chosen_name", brief)).toBeInstanceOf(
+      Error,
+    );
+    expect(readFileSync(path, "utf8")).toContain(
+      "Keep the new acceptance check.",
+    );
+    const legacy = dispatchTicketAtHome(
+      home,
+      "plain",
+      "Legacy instructions.",
+      "2026-10-11",
+    );
+    expect(legacy).toBe(join(home, "261011-plain.md"));
+    expect(
+      dispatchTicketAtHome(home, "../escape", "Invalid path."),
+    ).toBeInstanceOf(Error);
+  });
   test("state fallback, explicit state, project isolation and existing local homes", () => {
     const previous = {
       state: process.env.AGX_STATE_DIR,

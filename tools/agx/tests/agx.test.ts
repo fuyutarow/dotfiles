@@ -2988,7 +2988,7 @@ describe("agx ticket grade", () => {
   });
 });
 
-// An ungraded run without verify is advisory: dispatch warns once and continues.
+// Historical ungraded runs never warn or gate a new dispatch.
 describe("ungraded runs without verify", () => {
   const evidence = (text: string): string => {
     const p = join(mkdtempSync(join(scratch, "ev-")), "evidence.txt");
@@ -3030,7 +3030,7 @@ describe("ungraded runs without verify", () => {
       { AGX_STATE_DIR: state, CLAUDE_CODE_SESSION_ID: session },
     );
 
-  test("an ungraded run warns once and the next dispatch reaches Jev and a worker", async () => {
+  test("an ungraded run stays silent and the next dispatch reaches Jev and a worker", async () => {
     const state = join(scratch, "o3-refuse");
     const cwd = mkdtempSync(join(scratch, "o3-cwd-"));
     await first(state, cwd);
@@ -3045,7 +3045,7 @@ describe("ungraded runs without verify", () => {
       .filter(
         (line) => line.includes("warning:") && line.includes("remain ungraded"),
       );
-    expect(warnings).toHaveLength(1);
+    expect(warnings).toHaveLength(0);
     expect(bodies.length).toBeGreaterThan(asked);
     expect(
       readFileSync(join(scratch, "argv.log"), "utf8").split("\n").length,
@@ -4030,7 +4030,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     }
   }, 20_000);
 
-  test("live prompt-file amendment uses the recorded brief and resumes the vendor session without a ticket home", async () => {
+  test("prompt-file dispatch creates a ticket and amendment by its name resumes the live vendor session", async () => {
     const cwd = freshCwd();
     const b = brief(
       "live-prompt-amend",
@@ -4046,40 +4046,144 @@ describe("agx dispatch: a brief with a ticket", () => {
       FAKE_CHECKPOINT: "1",
     };
     let amended: Awaited<ReturnType<typeof router>> | undefined;
-    await router(runArgs(b, cwd, "read-only"), env, async () => {
-      let runId: string | undefined;
-      for (let count = 0; count < 300 && runId === undefined; count++) {
-        await Bun.sleep(20);
-        const dir = join(state, "active");
-        if (!existsSync(dir)) continue;
-        runId = readdirSync(dir)
-          .filter((file) => file.endsWith(".json"))
-          .flatMap((file) => {
-            const marker = decodedJson(
-              z.looseObject({ run_id: z.string().optional() }),
-              readFileSync(join(dir, file), "utf8"),
+    let ticketFile: string | undefined;
+    const original = readFileSync(b, "utf8");
+    const stopped = await router(
+      [...runArgs(b, cwd, "read-only"), "--name", "u24_copyfix"],
+      env,
+      async () => {
+        let runId: string | undefined;
+        for (let count = 0; count < 300 && runId === undefined; count++) {
+          await Bun.sleep(20);
+          const dir = join(state, "active");
+          if (!existsSync(dir)) continue;
+          runId = readdirSync(dir)
+            .filter((file) => file.endsWith(".json"))
+            .flatMap((file) => {
+              const marker = decodedJson(
+                z.looseObject({ run_id: z.string().optional() }),
+                readFileSync(join(dir, file), "utf8"),
+              );
+              return marker.run_id === undefined ? [] : [marker.run_id];
+            })
+            .find((id) =>
+              existsSync(join(state, "active", `${id}.progress.json`)),
             );
-            return marker.run_id === undefined ? [] : [marker.run_id];
-          })
-          .find((id) =>
-            existsSync(join(state, "active", `${id}.progress.json`)),
-          );
-      }
-      expect(runId).toBeDefined();
-      amended = await router(
-        ["dispatch", "--amend", runId ?? "missing", "--file", amendment],
-        env,
-      );
-    });
+        }
+        expect(runId).toBeDefined();
+        const live = await router(["show", "u24_copyfix", "--json"], env);
+        expect(live.code, live.err).toBe(0);
+        const marker = decodedJson(
+          z.looseObject({
+            ticket: z.looseObject({ name: z.string(), path: z.string() }),
+            picked_probability: z.number(),
+          }),
+          live.out,
+        );
+        expect(marker.ticket.name).toBe("u24_copyfix");
+        ticketFile = marker.ticket.path;
+        expect(ticketFile).toStartWith(join(state, "tickets", basename(cwd)));
+        expect(readFileSync(ticketFile, "utf8")).toContain(
+          'name = "u24_copyfix"',
+        );
+        amended = await router(
+          ["dispatch", "--amend", "u24_copyfix", "--file", amendment],
+          env,
+        );
+      },
+    );
+    expect(stopped.code).toBe(130);
     expect(amended?.code, amended?.err).toBe(0);
     expect(amended?.err).not.toContain("no ticket home");
     expect(amended?.out).toContain("thread-fake-checkpoint");
-    expect(readFileSync(b, "utf8")).toContain("## AMEND");
-    expect(readFileSync(b, "utf8")).toContain("Owner correction for this run.");
+    expect(readFileSync(b, "utf8")).toBe(original);
+    expect(readFileSync(ticketFile ?? "", "utf8")).toContain("## AMEND");
+    expect(readFileSync(ticketFile ?? "", "utf8")).toContain(
+      "Owner correction for this run.",
+    );
     expect(readFileSync(join(scratch, "prompt.log"), "utf8")).toContain(
       "Owner correction for this run.",
     );
   }, 30_000);
+
+  test("repick accepts instruction files and prompt-file while retaining the ticket and resolving ledger note", async () => {
+    const cwd = freshCwd();
+    const state = join(cwd, "repick-ticket-state");
+    const b = brief(
+      "repick-ticket",
+      ticketText(
+        'name = "repick_work"\nwrites = []\nverify = ["true"]',
+        "Initial ticket work.\n",
+      ),
+    );
+    const first = await router(runArgs(b, cwd, "read-only"), {
+      AGX_STATE_DIR: state,
+    });
+    expect(first.code, first.err).toBe(0);
+    const firstRecord = decodedJson(
+      z.looseObject({
+        ticket: z.looseObject({ name: z.string(), path: z.string() }),
+      }),
+      first.out,
+    );
+    const file = join(cwd, "repick-instructions.md");
+    const prompt = join(cwd, "repick-prompt.md");
+    writeFileSync(
+      file,
+      "EXTRA-REPICK-INSTRUCTION: verify the ticket association.",
+    );
+    writeFileSync(
+      prompt,
+      "PROMPT-REPICK-INSTRUCTION: retain prior acceptance criteria.",
+    );
+    for (const targetFlag of ["--resume", "--ticket"]) {
+      const result = await router(
+        [
+          "dispatch",
+          targetFlag,
+          "repick_work",
+          "--repick",
+          "--file",
+          file,
+          "--prompt-file",
+          prompt,
+        ],
+        { AGX_STATE_DIR: state },
+      );
+      expect(result.code, result.err).toBe(0);
+      const record = decodedJson(
+        z.looseObject({
+          run_id: z.string(),
+          ticket: z.looseObject({ name: z.string(), path: z.string() }),
+          pick: z.looseObject({ source: z.string() }),
+        }),
+        result.out,
+      );
+      expect(record.ticket).toEqual(firstRecord.ticket);
+      expect(record.pick.source).not.toBe("resume");
+      const calls = readFileSync(join(scratch, "argv.log"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => decodedJson(z.array(z.string()), line));
+      expect(calls.at(-1)).not.toContain("--resume");
+      const prompts = readFileSync(join(scratch, "prompt.log"), "utf8");
+      const latest = prompts.slice(prompts.lastIndexOf("<<<"));
+      for (const text of [
+        "COMPACT HANDOFF",
+        "EXTRA-REPICK-INSTRUCTION",
+        "PROMPT-REPICK-INSTRUCTION",
+      ])
+        expect(latest).toContain(text);
+      const noted = await router(
+        ["ledger", "note", "repick_work", "--consumed"],
+        { AGX_STATE_DIR: state },
+      );
+      expect(noted.code, noted.err).toBe(0);
+      expect(
+        decodedJson(z.looseObject({ run_id: z.string() }), noted.out).run_id,
+      ).toBe(record.run_id);
+    }
+  });
 
   test("the worker gets the prose without the front matter, plus the verify line", async () => {
     const cwd = freshCwd();
@@ -5935,7 +6039,7 @@ describe("agx worker teardown", () => {
   });
 });
 
-describe("agx dispatch: ungraded no-verify warnings", () => {
+describe("agx dispatch: historical ungraded runs never warn", () => {
   let seq = 0;
   /** An ungraded finished run in `cwd`; `writes` undefined = a legacy run (no ticket). */
   function seed(
@@ -5985,7 +6089,7 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
       sandbox,
     );
 
-  test("ungraded no-verify ticket warns and continues by same cwd fallback", async () => {
+  test("ungraded no-verify ticket silently continues by same cwd fallback", async () => {
     const cwd = freshCwd();
     const state = gate("overlap");
     seed(state, cwd, ["tools/agx/**"]);
@@ -5993,14 +6097,14 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
       AGX_STATE_DIR: state,
     });
     expect(r.code).toBe(0);
-    expect(r.err).toContain("warning:");
-    expect(r.err).toContain("remain ungraded");
+    expect(r.err).not.toContain("warning:");
+    expect(r.err).not.toContain("remain ungraded");
     expect(
       r.err.split("\n").filter((line) => line.includes("warning:")),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   });
 
-  test("one warning summarizes multiple ungraded runs", async () => {
+  test("multiple historical ungraded runs do not emit a warning", async () => {
     const cwd = freshCwd();
     const state = gate("all-blockers");
     for (let index = 0; index < 12; index += 1) seed(state, cwd, ["a/**"]);
@@ -6010,8 +6114,8 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
     expect(r.code).toBe(0);
     expect(
       r.err.split("\n").filter((line) => line.includes("warning:")),
-    ).toHaveLength(1);
-    expect(r.err).toContain("12 finished run(s)");
+    ).toHaveLength(0);
+    expect(r.err).not.toContain("12 finished run(s)");
   }, 15_000);
 
   test("disjoint write globs do not block when a no-verify run is ungraded", async () => {
@@ -6023,20 +6127,20 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
       FAKE_TOUCH: "agents/models/roster.ts",
     });
     expect(r.code).toBe(0);
-    expect(r.err).toContain("warning:");
+    expect(r.err).not.toContain("warning:");
   });
 
-  test("dispatcher-session warning spans cwd boundaries", async () => {
+  test("historical ungraded runs in the dispatcher session do not warn across cwd boundaries", async () => {
     const state = gate("othercwd");
     seed(state, freshCwd(), ["a/**"]);
     const r = await router(ticketRun(freshCwd(), "[]"), {
       AGX_STATE_DIR: state,
     });
     expect(r.code).toBe(0);
-    expect(r.err).toContain("warning:");
+    expect(r.err).not.toContain("warning:");
   });
 
-  test("read-only and writing no-verify tickets warn and continue", async () => {
+  test("read-only and writing no-verify tickets silently continue", async () => {
     const cwd = freshCwd();
     const state = gate("readonly");
     seed(state, cwd, ["a/**"]);
@@ -6044,19 +6148,19 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
       AGX_STATE_DIR: state,
     });
     expect(ro.code).toBe(0);
-    expect(ro.err).toContain("warning:");
+    expect(ro.err).not.toContain("warning:");
     const state2 = gate("readonly2");
     seed(state2, cwd, []);
     const rw = await router(ticketRun(cwd, "[]"), {
       AGX_STATE_DIR: state2,
     });
     expect(rw.code).toBe(0);
-    expect(rw.err).toContain("warning:");
+    expect(rw.err).not.toContain("warning:");
     const legacy = await router(runArgs(brief(`g-${seq++}`, "legacy\n"), cwd), {
       AGX_STATE_DIR: state2,
     });
     expect(legacy.code).toBe(0);
-    expect(legacy.err).toContain("warning:");
+    expect(legacy.err).not.toContain("warning:");
   });
 
   test("an ungraded ticket with verify never gates a later dispatch", async () => {
@@ -6081,7 +6185,7 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
     expect(r.err).not.toContain(id);
   });
 
-  test("cwd is the warning key when no dispatcher session is available", async () => {
+  test("no dispatcher session also emits no ungraded warning", async () => {
     const cwd = freshCwd();
     const state = gate("cwd-fallback");
     seed(state, cwd, undefined, undefined, null);
@@ -6090,10 +6194,10 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
       CLAUDE_CODE_SESSION_ID: "",
     });
     expect(r.code).toBe(0);
-    expect(r.err).toContain("warning:");
+    expect(r.err).not.toContain("warning:");
   });
 
-  test("legacy mode also warns and continues for later legacy and writing-ticket runs", async () => {
+  test("legacy mode silently continues for later legacy and writing-ticket runs", async () => {
     const cwd = freshCwd();
     const state = gate("legacy");
     seed(state, cwd, undefined);
@@ -6101,15 +6205,15 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
       AGX_STATE_DIR: state,
     });
     expect(legacy.code).toBe(0);
-    expect(legacy.err).toContain("warning:");
+    expect(legacy.err).not.toContain("warning:");
     const ticket = await router(ticketRun(cwd, "[]"), {
       AGX_STATE_DIR: state,
     });
     expect(ticket.code).toBe(0);
-    expect(ticket.err).toContain("warning:");
+    expect(ticket.err).not.toContain("warning:");
   });
 
-  test("an ungraded writing ticket run warns before a legacy run", async () => {
+  test("an ungraded writing ticket run does not warn before a legacy run", async () => {
     const cwd = freshCwd();
     const state = gate("ticket-blocks-legacy");
     seed(state, cwd, ["z/**"]);
@@ -6117,7 +6221,66 @@ describe("agx dispatch: ungraded no-verify warnings", () => {
       AGX_STATE_DIR: state,
     });
     expect(legacy.code).toBe(0);
-    expect(legacy.err).toContain("warning:");
+    expect(legacy.err).not.toContain("warning:");
+  });
+
+  test("returned and timed-out runs automatically record one no-decision without a grade", async () => {
+    const returned = {
+      findings: [{ text: "A coordinator decision remains." }],
+      evidence: [],
+      impact_on_brief: "Requires a decision",
+      proposed_next: "Review the result",
+      artifacts: [],
+    };
+    for (const [name, env] of [
+      [
+        "returned",
+        { FAKE_LAST: `\`\`\`agx-return\n${JSON.stringify(returned)}\n\`\`\`` },
+      ],
+      ["timeout", { FAKE_TIMEOUT: "1" }],
+    ] satisfies [string, Record<string, string>][]) {
+      const state = gate(`no-decision-${name}`);
+      const r = await router(
+        runArgs(
+          brief(`no-decision-${name}`, "Inspect the current work."),
+          freshCwd(),
+          "read-only",
+        ),
+        { ...env, AGX_STATE_DIR: state },
+      );
+      const record = decodedJson(
+        z.looseObject({
+          run_id: z.string(),
+          ticket: z.looseObject({ name: z.string() }),
+        }),
+        r.out,
+      );
+      const lines = readFileSync(join(state, "runs.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) =>
+          decodedJson(
+            z.looseObject({
+              kind: z.string(),
+              run_id: z.string().optional(),
+              decision: z.string().optional(),
+            }),
+            line,
+          ),
+        );
+      expect(
+        lines.filter(
+          (line) =>
+            line.run_id === record.run_id && line.decision === "no-decision",
+        ),
+      ).toHaveLength(1);
+      expect(lines.some((line) => line.kind === "grade")).toBe(false);
+      const next = await router(ticketRun(freshCwd(), "[]", "read-only"), {
+        AGX_STATE_DIR: state,
+      });
+      expect(next.code, next.err).toBe(0);
+      expect(next.err).not.toContain("ungraded");
+    }
   });
 });
 
@@ -6246,7 +6409,9 @@ describe("agx dispatch --resume", () => {
     resumed_from: z.string().optional(),
     resume_with: z.string().optional(),
     pick: z.looseObject({ source: z.string(), choice: z.string() }).optional(),
-    ticket: z.looseObject({ writes: z.array(z.string()) }).optional(),
+    ticket: z
+      .looseObject({ name: z.string().optional(), writes: z.array(z.string()) })
+      .optional(),
     worker: z
       .looseObject({
         outcome: z.string().optional(),
@@ -6275,13 +6440,16 @@ describe("agx dispatch --resume", () => {
   test("a timed-out run with a session: the receipt and stderr name the resume command; without a session they do not", async () => {
     const r = await stoppedRun("rs-hint", { FAKE_TIMEOUT: "1" });
     expect(r.code).toBe(3);
-    const id = firstId(r.state);
-    expect(r.err).toContain(`agx dispatch --resume ${id}`);
+    const name = runsOf(r.state)[0]?.ticket?.name;
+    expect(name).toBeDefined();
+    expect(r.err).toContain(`agx dispatch --resume ${name}`);
     expect(
       decodedJson(z.looseObject({ resume_with: z.string() }), r.out.trim())
         .resume_with,
-    ).toBe(`agx dispatch --resume ${id}`);
-    expect(runsOf(r.state)[0]?.resume_with).toBe(`agx dispatch --resume ${id}`);
+    ).toBe(`agx dispatch --resume ${name}`);
+    expect(runsOf(r.state)[0]?.resume_with).toBe(
+      `agx dispatch --resume ${name}`,
+    );
     const failed = await stoppedRun("rs-hint-failed", { FAKE_EXIT: "1" });
     expect(failed.err).toContain("agx dispatch --resume ");
     const none = await stoppedRun("rs-hint-none", {
@@ -6393,7 +6561,9 @@ describe("agx dispatch --resume", () => {
     );
     expect(stopped.code).toBe(124);
     const id = firstId(stopped.state);
-    expect(stopped.err).toContain(`agx dispatch --resume ${id}`);
+    expect(stopped.err).toContain(
+      `agx dispatch --resume ${runsOf(stopped.state)[0]?.ticket?.name}`,
+    );
     const firstArgv = lastArgv("claude-argv.log");
     expect(firstArgv).toContain("--persist-session"); // router-dispatched sessions stay on disk
     expect(firstArgv).not.toContain("--resume");

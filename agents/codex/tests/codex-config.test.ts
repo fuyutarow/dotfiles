@@ -6,27 +6,18 @@ import { join } from "node:path";
 const repo = join(import.meta.dir, "..", "..", "..");
 const script = join(repo, "agents/codex/codex-config.ts");
 const expectedItems = [
-  "project-name",
+  "thread-id",
+  "model-with-reasoning",
+  "git-branch",
   "current-dir",
   "run-state",
-  "thread-name",
-  "thread-title",
-  "git-branch",
   "context-remaining",
-  "context-used",
   "five-hour-limit",
   "weekly-limit",
-  "codex-version",
-  "used-tokens",
-  "total-input-tokens",
-  "total-output-tokens",
-  "thread-credits",
   "estimated-thread-cost",
-  "thread-id",
-  "fast-mode",
-  "model-with-reasoning",
-  "reasoning",
   "task-progress",
+  "used-tokens",
+  "fast-mode",
 ];
 const statusLine = `status_line = [${expectedItems.map((item) => JSON.stringify(item)).join(", ")}]`;
 
@@ -44,7 +35,7 @@ function run(home: string, args: string[] = []) {
 }
 
 describe("codex:config", () => {
-  test("declares every native 0.162.1 item in the owner's order", () => {
+  test("declares the owner-approved native 0.162.1 items in display order", () => {
     const parsed = Bun.TOML.parse(
       readFileSync(join(repo, "agents/codex/config.declared.toml"), "utf8"),
     );

@@ -11,7 +11,7 @@ const statusLine = [
   "current-dir",
   "context-remaining",
   "weekly-limit",
-  "approval-mode",
+  "thread-id",
   "used-tokens",
   "task-progress",
 ];

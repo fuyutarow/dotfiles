@@ -5,8 +5,30 @@ import { join } from "node:path";
 
 const repo = join(import.meta.dir, "..", "..", "..");
 const script = join(repo, "agents/codex/codex-config.ts");
-const statusLine =
-  'status_line = ["model-with-reasoning", "current-dir", "context-remaining", "weekly-limit", "used-tokens", "task-progress"]';
+const expectedItems = [
+  "project-name",
+  "current-dir",
+  "run-state",
+  "thread-name",
+  "thread-title",
+  "git-branch",
+  "context-remaining",
+  "context-used",
+  "five-hour-limit",
+  "weekly-limit",
+  "codex-version",
+  "used-tokens",
+  "total-input-tokens",
+  "total-output-tokens",
+  "thread-credits",
+  "estimated-thread-cost",
+  "thread-id",
+  "fast-mode",
+  "model-with-reasoning",
+  "reasoning",
+  "task-progress",
+];
+const statusLine = `status_line = [${expectedItems.map((item) => JSON.stringify(item)).join(", ")}]`;
 
 function run(home: string, args: string[] = []) {
   return Bun.spawnSync([process.execPath, script, ...args], {
@@ -22,6 +44,41 @@ function run(home: string, args: string[] = []) {
 }
 
 describe("codex:config", () => {
+  test("declares every native 0.162.1 item in the owner's order", () => {
+    const parsed = Bun.TOML.parse(
+      readFileSync(join(repo, "agents/codex/config.declared.toml"), "utf8"),
+    );
+    expect(parsed).toMatchObject({ tui: { status_line: expectedItems } });
+  });
+
+  test.each([{ args: [] }, { args: ["--check"] }])(
+    "unknown status-line item fails before writing: %j",
+    ({ args }) => {
+      const home = mkdtempSync(join(tmpdir(), "codex-config-unknown-item-"));
+      const dotfiles = mkdtempSync(join(tmpdir(), "codex-config-invalid-tui-"));
+      mkdirSync(join(home, ".codex"));
+      mkdirSync(join(dotfiles, "agents/codex"), { recursive: true });
+      const config = join(home, ".codex/config.toml");
+      const original = 'model = "keep-me"\n';
+      writeFileSync(config, original);
+      writeFileSync(
+        join(dotfiles, "agents/codex/config.declared.toml"),
+        readFileSync(
+          join(repo, "agents/codex/config.declared.toml"),
+          "utf8",
+        ).replace('"thread-id"', '"unknown-status-item"'),
+      );
+      const result = Bun.spawnSync([process.execPath, script, ...args], {
+        env: { ...process.env, HOME: home, DOTFILES: dotfiles },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr.toString()).toContain("native Codex 0.162.1 items");
+      expect(readFileSync(config, "utf8")).toBe(original);
+    },
+  );
+
   test.each(["approval_policy", "approvals_reviewer"])(
     "--check detects drift in %s alone without writing",
     (key) => {

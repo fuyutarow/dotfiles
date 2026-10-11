@@ -8,6 +8,30 @@ import { jsonOf, z } from "../hooks/zod.ts";
 const RecordSchema = z.record(z.string(), z.unknown());
 const ApprovalPolicySchema = z.enum(["on-request", "never"]);
 const ApprovalsReviewerSchema = z.enum(["user", "auto_review"]);
+// Accepted native item names observed in codex-cli 0.162.1.
+const StatusLineItemSchema = z.enum([
+  "project-name",
+  "current-dir",
+  "run-state",
+  "thread-name",
+  "thread-title",
+  "git-branch",
+  "context-remaining",
+  "context-used",
+  "five-hour-limit",
+  "weekly-limit",
+  "codex-version",
+  "used-tokens",
+  "total-input-tokens",
+  "total-output-tokens",
+  "thread-credits",
+  "estimated-thread-cost",
+  "thread-id",
+  "fast-mode",
+  "model-with-reasoning",
+  "reasoning",
+  "task-progress",
+]);
 
 function topLevelValues(declared: Declared) {
   return {
@@ -78,8 +102,12 @@ function values(parsed: unknown): Omit<Declared, "mcpServers"> | Error {
   );
   const tui = RecordSchema.safeParse(root.data.tui);
   const statusLine = z
-    .array(z.string())
+    .array(StatusLineItemSchema)
     .safeParse(tui.success ? tui.data.status_line : undefined);
+  if (!statusLine.success)
+    return new Error(
+      `Codex declaration requires tui.status_line to be an array of native Codex 0.162.1 items: ${StatusLineItemSchema.options.join(", ")}`,
+    );
   if (
     network.success &&
     context.success &&

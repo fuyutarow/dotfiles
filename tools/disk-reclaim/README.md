@@ -70,3 +70,18 @@ accept legacy schema-less receipts; delete appends a schema 2 receipt with plann
 Storage thresholds are exposed by the separate read-only `storage-headroom` CLI.
 
 Verify: `bun test tools/disk-reclaim`.
+
+Terminal progress uses reusable Clack taskLog groups in `tools/shared`. Concurrent scans
+each have a row; host actions name the host and lever; deletion combines path counters into
+its owning target row. Finished rows collapse to one-line results. The final stdout summary
+counts candidate rows and reports found/freed bytes; estimates can overlap. Progress is on
+stderr. CI, pipes, `TERM=dumb`, and `--json` use plain output; `--no-progress` suppresses
+progress. Cursor visibility and terminal input modes are untouched.
+
+Unreadable live-process probes produce one stderr summary per cause and identify targets
+held back as ASK. Expected EACCES from exactly named systemd, sudo, su, and polkitd
+processes is excluded from in-use uncertainty after identity revalidation;
+readable positive use still blocks reclamation. Other unreadable processes remain
+unknown. Workspace rows show allocated bytes for every verdict, or unknown bytes
+if sizing fails. Use `--verbose` on plan/run for per-probe details;
+the JSON plan retains its original facts.

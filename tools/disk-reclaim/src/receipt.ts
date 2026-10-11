@@ -30,7 +30,13 @@ export const freeBytes = (path = homedir()): number => {
   const s = statfsSync(path);
   return s.bavail * s.bsize;
 };
-export async function waitForLock(name: string, dir = stateDir()) {
+export async function waitForLock(
+  name: string,
+  dir = stateDir(),
+  log: (text: string) => void = (text) => {
+    process.stderr.write(`${text}\n`);
+  },
+) {
   const waitS = Number(process.env.RECLAIM_LOCK_WAIT_S ?? "900");
   if (!Number.isFinite(waitS) || waitS < 0)
     return {
@@ -48,8 +54,8 @@ export async function waitForLock(name: string, dir = stateDir()) {
     waitMs: waitS * 1000,
     pollMs: Math.max(1, Math.min(2000, waitS * 1000)),
     onWait: (h) => {
-      process.stderr.write(
-        `disk-reclaim: ${name} waits for ${h === undefined ? "a lock being taken" : `${h.what} (pid ${h.pid} on ${h.host}, since ${h.since})`}\n`,
+      log(
+        `disk-reclaim: ${name} waits for ${h === undefined ? "a lock being taken" : `${h.what} (pid ${h.pid} on ${h.host}, since ${h.since})`}`,
       );
     },
   });
@@ -96,9 +102,15 @@ export function readReceipts(last = 10, dir = stateDir()) {
   }
   return { receipts: last === 0 ? [] : receipts.slice(-last), errors };
 }
-export function finalLine(receipt: ReceiptV1, path: string): void {
-  process.stderr.write(
-    `disk-reclaim: ${receipt.name} exit ${receipt.exit} · free ${gib(receipt.free_before)} → ${gib(receipt.free_after)} · receipt ${path}\n`,
+export function finalLine(
+  receipt: ReceiptV1,
+  path: string,
+  log: (text: string) => void = (text) => {
+    process.stderr.write(`${text}\n`);
+  },
+): void {
+  log(
+    `disk-reclaim: ${receipt.name} exit ${receipt.exit} · free ${gib(receipt.free_before)} → ${gib(receipt.free_after)} · receipt ${path}`,
   );
 }
 export async function wrap(

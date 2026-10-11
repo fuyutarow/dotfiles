@@ -100,12 +100,20 @@ const totals = (candidates: Candidate[]): TargetPlan["totals"] => ({
   keep: candidates.filter((c) => c.verdict === "KEEP").length,
 });
 const snapshotFor = (config: Config, context: Context): LivenessSnapshot =>
-  createLivenessSnapshot(
-    config,
-    context.procDir === undefined
-      ? {}
-      : { procs: { procRoot: context.procDir } },
-  );
+  createLivenessSnapshot(config, {
+    procs: {
+      ...(context.procDir === undefined ? {} : { procRoot: context.procDir }),
+      diagnostics: (summary, details) => {
+        if (context.reportProcessFailures !== undefined) {
+          context.reportProcessFailures(summary, details);
+          return;
+        }
+        context.log(summary);
+        if (context.verbose === true)
+          for (const detail of details) context.log(detail);
+      },
+    },
+  });
 function aggregate(
   targets: TargetPlan[],
   mode: "plan" | "run",
@@ -228,8 +236,54 @@ export async function plan(
       if (target === undefined) continue;
       const reportProgress = options.context.reportProgress;
       reportProgress?.(target.name, target.name, 0, 0);
+      const scannedPaths = new Map<
+        string,
+        { entries: number; bytes: number }
+      >();
       const ctx = {
         ...options.context,
+        targetName: target.name,
+        reportProgress:
+          reportProgress === undefined
+            ? undefined
+            : (
+                unit: string,
+                root: string,
+                entries: number,
+                bytes: number,
+                done = false,
+                phase: "scan" | "delete" = "scan",
+                totalBytes?: number,
+              ) => {
+                if (phase !== "scan" || root === target.name) {
+                  reportProgress(
+                    unit,
+                    root,
+                    entries,
+                    bytes,
+                    done,
+                    phase,
+                    totalBytes,
+                  );
+                  return;
+                }
+                scannedPaths.set(root, { entries, bytes });
+                const sum = [...scannedPaths.values()].reduce(
+                  (all, path) => ({
+                    entries: all.entries + path.entries,
+                    bytes: all.bytes + path.bytes,
+                  }),
+                  { entries: 0, bytes: 0 },
+                );
+                reportProgress(
+                  unit,
+                  target.name,
+                  sum.entries,
+                  sum.bytes,
+                  false,
+                  phase,
+                );
+              },
         mode: "plan",
         headroom,
         underPressure: options.underPressure === true,
@@ -473,8 +527,7 @@ async function executeTarget(
     },
   };
   row.exit = 0;
-  if (options.context.progress !== false)
-    process.stderr.write(`disk-reclaim: ${target.name} started\n`);
+  ctx.reportProgress?.(target.name, target.name, 0, 0, false, "delete");
   const availability = await fromAsyncThrowable(async () =>
     target.available(ctx),
   )();
@@ -527,11 +580,19 @@ async function executeTarget(
   row.totals = totals(row.candidates);
   const completed = receipt();
   const path = writeReceipt(completed, dir);
-  finalLine(completed, path);
+  finalLine(completed, path, ctx.log);
   if (completed.free_after < completed.free_before)
-    process.stderr.write(
-      `disk-reclaim: WARNING ${target.name} reduced free space by ${completed.free_before - completed.free_after} bytes\n`,
+    ctx.log(
+      `WARNING ${target.name} reduced free space by ${completed.free_before - completed.free_after} bytes`,
     );
+  ctx.reportProgress?.(
+    target.name,
+    target.name,
+    actions.length,
+    actions.reduce((sum, action) => sum + (action.bytes_freed ?? 0), 0),
+    true,
+    "delete",
+  );
   return path;
 }
 
@@ -635,10 +696,13 @@ export async function run(
   const preview = await plan(targets, runOptions);
   if (preview.plan === null) return preview;
   const dir = options.state ?? stateDir();
+  options.context.reportActivity?.("lock", "waiting for reclaim lock");
   const lock = await waitForLock(
     targets.length === 0 ? "run" : targets.map((t) => t.name).join(","),
     dir,
+    options.context.log,
   );
+  options.context.reportProgress?.("lock", "lock", 0, 0, true);
   if (lock.release === null)
     return { exit: lock.exit, plan: preview.plan, error: lock.error };
   using _lock = { [Symbol.dispose]: lock.release };

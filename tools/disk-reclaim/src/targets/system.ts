@@ -12,7 +12,11 @@ export type SystemOptions = {
   run?: CommandRunner;
 };
 const defaultRun: CommandRunner = (argv) => {
-  const result = Bun.spawnSync(argv, { stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(argv, {
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 120_000,
+  });
   return {
     code: result.exitCode ?? 1,
     out: result.stdout.toString(),
@@ -43,7 +47,7 @@ export function createSystemTarget(options: SystemOptions = {}) {
     name: "system",
     tier: "sudo",
     available: (_ctx?: Context) => {
-      const sudo = hasSudo();
+      const sudo = wsl && hasSudo();
       let skipReason: string | null = null;
       if (!wsl) skipReason = "not running inside WSL";
       else if (!sudo) skipReason = "passwordless sudo unavailable";
@@ -70,7 +74,11 @@ export function createSystemTarget(options: SystemOptions = {}) {
         action: { kind: "command", argv },
         result: null,
       })),
-    act: (candidate: Candidate, _ctx: Context) => {
+    act: (candidate: Candidate, ctx: Context) => {
+      ctx.reportActivity?.(
+        "system",
+        `waiting for ${candidate.action.argv.join(" ")}`,
+      );
       const result = run(candidate.action.argv);
       let error: string | null = null;
       if (result.code !== 0)

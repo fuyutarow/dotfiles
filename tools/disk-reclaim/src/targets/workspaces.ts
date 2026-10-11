@@ -27,7 +27,7 @@ import {
 } from "../lib/remove-tree.ts";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { treeBytes } from "./tree.ts";
+import { measuredTreeBytes } from "./tree.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
 import { protectedReason } from "../lib/protected.ts";
 
@@ -311,7 +311,7 @@ function evaluate(
     verdict: judged.verdict,
     reason: judged.reason,
     checks: judged.checks,
-    bytes: judged.verdict === "RECLAIM" ? treeBytes(root) : null,
+    bytes: fromThrowable(() => measuredTreeBytes(root, ctx))().unwrapOr(null),
     bytes_kind: judged.verdict === "RECLAIM" ? "freed_now" : "estimate",
     action: { kind: "jj-forget+delete", argv: FORGET(store, name) },
     result: null,
@@ -367,6 +367,11 @@ export function createWorkspacesTarget(
         candidates.push(ask(dir, dir, reason, "orphan", "listed by its store"));
       }
       return candidates.map((candidate) => {
+        const path = candidate.path;
+        if (candidate.bytes === null && path !== null)
+          candidate.bytes = fromThrowable(() =>
+            measuredTreeBytes(path, ctx),
+          )().unwrapOr(null);
         if (candidate.path === null || candidate.verdict !== "RECLAIM")
           return candidate;
         const protection = protectedReason(candidate.path, {

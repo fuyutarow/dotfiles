@@ -206,6 +206,7 @@ export function createHostTarget(options: {
       skip_reason: null,
     }),
     plan: async (ctx) => {
+      ctx.reportActivity?.("host", `waiting for SSH ${hostname(ctx)} probe`);
       const result =
         options.snapshot === undefined
           ? await options.runner(hostname(ctx), "$probe")
@@ -279,12 +280,22 @@ export function createHostTarget(options: {
           bytes_freed: null,
           error: `requires run authorization${def.approval === null ? "" : ` and --approve ${def.approval}`}`,
         };
+      const unit = `host/${hostname(ctx)}/${tier}`;
+      ctx.reportActivity?.(unit, `waiting for ${tier} on ${hostname(ctx)}`);
       const r = await options.runner(
         hostname(ctx),
         hostAction(tier, c.host_lever.path),
       );
       const before = numeric(/^c_before=(\d+)$/mu.exec(r.out)?.[1]);
       const after = numeric(/^c_after=(\d+)$/mu.exec(r.out)?.[1]);
+      ctx.reportProgress?.(
+        unit,
+        unit,
+        1,
+        before === null || after === null ? 0 : Math.max(0, after - before),
+        true,
+        "delete",
+      );
       if (before === null || after === null)
         return {
           ok: false,

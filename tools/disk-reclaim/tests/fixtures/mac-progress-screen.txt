@@ -1,0 +1,14 @@
+Captured 2026-10-11 JST after rebase: bun tools/disk-reclaim/src/reclaim.ts plan system toolchains (real Mac PTY, exit 0)
+
+◆  Progress finished
+done preflight: storage/procs · 0 B · 0 B/s · 0.0s · 0 entries
+done toolchains: scan found · 1.4GiB · 141.9MiB/s · 9.9s · 67683 entries
+done system: scan found · 0 B · 0 B/s · 9.9s · 0 entries
+disk-reclaim: could not update hook plan cache: Error: EPERM: operation not permitted, open '/Users/fuyu/.cache/claude-hooks/storage-headroom/reclaim-plan.json.24427.tmp'
+disk-reclaim: SKIP system: not running inside WSL
+TARGET	TIER	VERDICT	PATH	BYTES	LIVE-SAFE	APPROVAL	C: DELTA	REASON
+toolchains	blind	KEEP	/Users/fuyu/.rustup/toolchains/stable-aarch64-apple-darwin	1472077824	-	-	-	default rustup toolchain
+
+SUMMARY	CANDIDATES	FOUND BYTES	FREED BYTES	EXIT
+toolchains	1	1472077824	0	preview
+system	0	0	0	preview

@@ -23,8 +23,9 @@ export const createCleanTarget = (
   isBusy: ProcessProbe = processBusy,
   bunGc: (homePath: string) => boolean = (homePath) => {
     const result = Bun.spawnSync(["bun", "pm", "cache", "rm"], {
-      stdout: "inherit",
-      stderr: "inherit",
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 120_000,
       env: { ...process.env, HOME: homePath },
     });
     return result.exitCode === 0;
@@ -52,10 +53,10 @@ export const createCleanTarget = (
               p.startsWith(`${root}/.cargo/git/`)) &&
             ["cargo", "rustc", "rust-analyzer"].some((name) => isBusy(name))
           )
-            return keepTreeCandidate(p, "busy: cargo");
+            return keepTreeCandidate(p, "busy: cargo", _ctx);
           if (comm !== undefined && isBusy(comm))
-            return keepTreeCandidate(p, `busy: ${comm}`);
-          return treeCandidate(p, "regenerable package cache");
+            return keepTreeCandidate(p, `busy: ${comm}`, _ctx);
+          return treeCandidate(p, "regenerable package cache", _ctx);
         });
     },
     act: (candidate, ctx) => {

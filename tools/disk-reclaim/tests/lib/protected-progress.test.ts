@@ -37,7 +37,7 @@ test("process cwd protects its containing candidate, not candidate descendants",
   expect(protectedReason(child, { home: root, procDir })).toBeNull();
 });
 
-test("removeTree emits throttled progress to its stderr writer on a fake TTY", async () => {
+test("removeTree standalone progress stays plain even on a fake TTY", async () => {
   const root = tempRoot("reclaim-progress-");
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
@@ -64,6 +64,8 @@ test("removeTree emits throttled progress to its stderr writer on a fake TTY", a
     },
   });
   expect(result.ok).toBe(true);
-  expect(stderr.join("")).toContain("\r[reclaim]");
+  expect(stderr.join("")).toContain("[reclaim]");
+  expect(stderr.join("")).not.toContain("\r");
+  expect(stderr.join("")).not.toContain("\u001B");
   expect(stderr.join("")).toContain("2/2 entries · 100%");
 });

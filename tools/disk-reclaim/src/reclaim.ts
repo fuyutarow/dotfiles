@@ -14,9 +14,13 @@ import { readHeadroom } from "./storage.ts";
 import { registry, type Context, type Target } from "./targets/index.ts";
 import { typedYes } from "./targets/purge.ts";
 import { workerMutationRefusal } from "./lib/worker-guard.ts";
-import { resolveProcRoot } from "./lib/procs.ts";
 import { wslStorageSnapshot, wslReturnReport } from "./host-return.ts";
 import { cachePlanReport } from "./report.ts";
+import {
+  resolveProcRoot,
+  processDecisionText,
+  summarizeProcessFailures,
+} from "./lib/procs.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -53,6 +57,11 @@ const flags = {
     default: false,
     description: "Disable stderr progress",
   },
+  verbose: {
+    type: Boolean,
+    default: false,
+    description: "Include per-process probe details",
+  },
   fetch: {
     type: Boolean,
     default: false,
@@ -81,6 +90,7 @@ const planFlags = {
   all: flags.all,
   fetch: flags.fetch,
   noProgress: flags.noProgress,
+  verbose: flags.verbose,
 };
 const parsedFlags = z.object({
   host: z
@@ -94,6 +104,7 @@ const parsedFlags = z.object({
   yes: z.boolean().default(false),
   underPressure: z.boolean().default(false),
   noProgress: z.boolean().default(false),
+  verbose: z.boolean().default(false),
   fetch: z.boolean().default(false),
   stopOnError: z.boolean().default(false),
   interactive: z.boolean().default(false),
@@ -118,6 +129,7 @@ const commands = [
       yes: flags.yes,
       underPressure: flags.underPressure,
       noProgress: flags.noProgress,
+      verbose: flags.verbose,
       interactive: flags.interactive,
       stopOnError: flags.stopOnError,
       fetch: flags.fetch,
@@ -133,7 +145,12 @@ const commands = [
     ...common,
     name: "delete",
     parameters: ["<paths...>"],
-    flags: { json: flags.json, yes: flags.yes },
+    flags: {
+      json: flags.json,
+      yes: flags.yes,
+      verbose: flags.verbose,
+      noProgress: flags.noProgress,
+    },
   }),
   command({
     ...common,
@@ -156,6 +173,36 @@ const fail = (message: string): number => {
   return 2;
 };
 
+function watchProgress(reporter: ProgressReporter): () => void {
+  const restore = () => {
+    reporter.finish();
+  };
+  const interrupt = () => {
+    restore();
+    process.exit(130);
+  };
+  const terminate = () => {
+    restore();
+    process.exit(143);
+  };
+  process.once("SIGINT", interrupt);
+  process.once("SIGTERM", terminate);
+  process.once("exit", restore);
+  return () => {
+    restore();
+    process.removeListener("SIGINT", interrupt);
+    process.removeListener("SIGTERM", terminate);
+    process.removeListener("exit", restore);
+  };
+}
+
+const progressIsTty = (json: boolean) =>
+  !json &&
+  (process.env.CI ?? "") === "" &&
+  process.env.TERM !== "dumb" &&
+  process.stdout.isTTY &&
+  process.stderr.isTTY;
+
 function planTable(value: Plan): string {
   const lines = [
     "TARGET\tTIER\tVERDICT\tPATH\tBYTES\tLIVE-SAFE\tAPPROVAL\tC: DELTA\tREASON",
@@ -168,11 +215,62 @@ function planTable(value: Plan): string {
     lines.push(
       ...target.candidates.map(
         (c) =>
-          `${target.name}\t${c.host_lever?.tier ?? target.tier}\t${c.verdict}\t${c.host_lever?.path ?? c.path ?? "-"}\t${c.bytes ?? "-"}\t${c.host_lever?.live_safe ?? "-"}\t${c.host_lever?.approval ?? "-"}\t${c.result?.c_free_delta ?? "-"}\t${c.reason}`,
+          `${target.name}\t${c.host_lever?.tier ?? target.tier}\t${c.verdict}\t${c.host_lever?.path ?? c.path ?? "-"}\t${c.bytes ?? "-"}\t${c.host_lever?.live_safe ?? "-"}\t${c.host_lever?.approval ?? "-"}\t${c.result?.c_free_delta ?? "-"}\t${processDecisionText(c.reason)}`,
       ),
     );
   }
+  lines.push("", "SUMMARY\tCANDIDATES\tFOUND BYTES\tFREED BYTES\tEXIT");
+  for (const target of value.targets)
+    lines.push(
+      `${target.name}\t${target.candidates.length}\t${target.candidates.reduce((sum, c) => sum + (c.bytes ?? 0), 0)}\t${target.candidates.reduce((sum, c) => sum + (c.result?.bytes_freed ?? 0), 0)}\t${target.exit ?? "preview"}`,
+    );
   return lines.join("\n");
+}
+
+function reportProcessDiagnostics(
+  value: Plan,
+  details: Set<string>,
+  verbose: boolean,
+): void {
+  const texts = value.targets.flatMap((target) =>
+    target.candidates.flatMap((candidate) => [
+      candidate.reason,
+      ...candidate.checks.map((check) => check.detail),
+    ]),
+  );
+  const fragments = texts
+    .join("; ")
+    .split("; ")
+    .filter(
+      (detail) => detail.includes("pid ") && /\b(EACCES|EPERM)\b/u.test(detail),
+    );
+  for (const detail of fragments)
+    details.add(detail.slice(detail.indexOf("pid ")));
+  const held = value.targets
+    .filter((target) =>
+      target.candidates.some(
+        (candidate) =>
+          candidate.verdict === "ASK" &&
+          /process|open-path|environ/iu.test(candidate.reason),
+      ),
+    )
+    .map((target) => target.name);
+  const effect =
+    held.length === 0
+      ? "no targets held back by unreadable process evidence"
+      : `ASK targets: ${held.join(", ")}; see candidate reasons`;
+  writeProcessDiagnostics(details, verbose, effect);
+}
+
+function writeProcessDiagnostics(
+  details: Set<string>,
+  verbose: boolean,
+  effect: string,
+): void {
+  for (const summary of summarizeProcessFailures([...details]))
+    process.stderr.write(`${summary}; ${effect}\n`);
+  if (verbose)
+    for (const detail of details) process.stderr.write(`${detail}\n`);
 }
 
 export async function main(
@@ -187,7 +285,7 @@ export async function main(
     {
       ...common,
       name: "disk-reclaim",
-      version: "0.2.0",
+      version: "0.5.0",
       parameters: ["[targets...]"],
       commands,
       flags: planFlags,
@@ -225,17 +323,54 @@ export async function main(
     if (paths.length === 0) return fail("delete requires at least one path");
     const loaded = loadConfig();
     if (loaded.config === null) return fail(loaded.error ?? "invalid config");
+    const reporter = new ProgressReporter({ tty: progressIsTty(f.json) });
+    const cleanup = watchProgress(reporter);
+    const details = new Set<string>();
+    if (!f.noProgress) {
+      reporter.start();
+      reporter.activity("delete", "checking paths/processes");
+    }
     const result = await deleteApproved(paths, {
       config: loaded.config,
       yes: f.yes,
       state: stateDir(),
       procRoot: resolveProcRoot(),
-    });
+      progress: {
+        progress: !f.noProgress,
+        progressTty: progressIsTty(f.json),
+        targetName: "delete",
+        reportProgress: f.noProgress
+          ? undefined
+          : (_target, _root, entries, bytes, done, phase = "scan", total) => {
+              reporter.report("delete", phase, entries, bytes, done, total);
+            },
+      },
+      diagnostics: (_summary, failures) => {
+        for (const detail of failures) details.add(detail);
+      },
+      log: (message) => {
+        reporter.message(message);
+      },
+    }).finally(cleanup);
+    writeProcessDiagnostics(
+      details,
+      f.verbose,
+      "delete retains its unreadable-process refusal",
+    );
     for (const refusal of result.refused)
       process.stderr.write(
         `disk-reclaim: REFUSED ${refusal.path}: ${refusal.reason} (owner ${refusal.owner_name}, uid ${refusal.owner_uid}); repair: ${refusal.repair}\n`,
       );
-    print(result, result.lines.join("\n"), f.json);
+    print(
+      result,
+      [
+        ...result.lines.map(processDecisionText),
+        "",
+        "SUMMARY\tPATHS\tFOUND BYTES\tEXIT",
+        `delete\t${result.rows.length}\t${result.rows.reduce((sum, row) => sum + (row.bytes ?? 0), 0)}\t${result.exit}`,
+      ].join("\n"),
+      f.json,
+    );
     return result.exit;
   }
   if (selectedCommand === "receipts") {
@@ -258,17 +393,64 @@ export async function main(
   }
   const loaded = loadConfig();
   if (loaded.config === null) return fail(loaded.error ?? "invalid config");
-  const progressTty = process.stderr.isTTY ?? false;
+  const progressTty =
+    !f.json &&
+    (process.env.CI ?? "") === "" &&
+    process.env.TERM !== "dumb" &&
+    process.stdout.isTTY &&
+    process.stderr.isTTY;
   const progressReporter = new ProgressReporter({ tty: progressTty });
+  const processDetails = new Set<string>();
+  const deleted = new Map<
+    string,
+    Map<string, { entries: number; bytes: number }>
+  >();
+  let preflight = true;
   const reportProgress = (
     target: string,
-    _root: string,
+    root: string,
     entries: number,
     bytes: number,
     done = false,
     phase: "scan" | "delete" = "scan",
+    totalBytes?: number,
   ): void => {
-    progressReporter.report(target, phase, entries, bytes, done);
+    if (preflight) {
+      progressReporter.update({
+        id: "preflight",
+        task: "storage/procs",
+        entries: 0,
+        bytes: 0,
+        done: true,
+      });
+      preflight = false;
+    }
+    if (phase === "delete" && target !== root) {
+      const paths =
+        deleted.get(target) ??
+        new Map<string, { entries: number; bytes: number }>();
+      paths.set(root, { entries, bytes });
+      deleted.set(target, paths);
+      const totals = [...paths.values()].reduce(
+        (sum, path) => ({
+          entries: sum.entries + path.entries,
+          bytes: sum.bytes + path.bytes,
+        }),
+        { entries: 0, bytes: 0 },
+      );
+      progressReporter.report(
+        target,
+        phase,
+        totals.entries,
+        totals.bytes,
+        false,
+        totalBytes === undefined
+          ? undefined
+          : totals.bytes - bytes + totalBytes,
+      );
+      return;
+    }
+    progressReporter.report(target, phase, entries, bytes, done, totalBytes);
   };
   const context: Context = {
     ...(f.host === undefined ? {} : { host: f.host }),
@@ -281,8 +463,17 @@ export async function main(
     reportProgress: f.noProgress ? undefined : reportProgress,
     config: loaded.config,
     procDir: resolveProcRoot(),
+    verbose: f.verbose,
+    reportActivity: f.noProgress
+      ? undefined
+      : (unit, task) => {
+          progressReporter.activity(unit, task);
+        },
+    reportProcessFailures: (_summary, details) => {
+      for (const detail of details) processDetails.add(detail);
+    },
     log: (m) => {
-      process.stderr.write(`reclaim: ${m}\n`);
+      progressReporter.message(`reclaim: ${m}`);
     },
   };
   if (selectedCommand === "targets") {
@@ -332,7 +523,6 @@ export async function main(
         t.tier === tier.data ||
         (tier.data === "blind" && t.tier === "sudo")),
   );
-  const measured = readHeadroom();
   if (names.some((name) => !picked.some((t) => t.name === name)))
     return fail("named targets do not match --tier");
   let authorized = f.yes;
@@ -375,24 +565,52 @@ export async function main(
     yes: authorized,
     underPressure: f.underPressure,
     stopOnError: f.stopOnError,
-    headroom: measured,
   };
-  if (!f.noProgress)
-    process.stderr.write(
-      `[reclaim] plan: scanning ${picked.length} targets…\n`,
+  const restore = () => {
+    progressReporter.finish();
+  };
+  const interrupt = () => {
+    restore();
+    process.exit(130);
+  };
+  const terminate = () => {
+    restore();
+    process.exit(143);
+  };
+  process.once("SIGINT", interrupt);
+  process.once("SIGTERM", terminate);
+  process.once("exit", restore);
+  if (!f.noProgress) {
+    progressReporter.message(
+      `[reclaim] plan: scanning ${picked.length} targets…`,
     );
+    progressReporter.start();
+    progressReporter.update({
+      id: "preflight",
+      task: "storage/procs",
+      entries: 0,
+      bytes: 0,
+    });
+  }
   const wslBefore =
     selectedCommand === "run" ? await wslStorageSnapshot() : null;
-  const result =
+  const measuredOptions = { ...options, headroom: readHeadroom() };
+  const result = await (
     selectedCommand === "run"
-      ? await run(picked, options)
-      : await plan(picked, options);
-  if (progressTty) process.stderr.write("\n");
+      ? run(picked, measuredOptions)
+      : plan(picked, measuredOptions)
+  ).finally(() => {
+    restore();
+    process.removeListener("SIGINT", interrupt);
+    process.removeListener("SIGTERM", terminate);
+    process.removeListener("exit", restore);
+  });
   if (result.error !== null) process.stderr.write(`reclaim: ${result.error}\n`);
   if (result.plan !== null) {
     const validated = Plan.safeParse(result.plan);
     if (!validated.success) return fail(validated.error.message);
     if (selectedCommand === "plan") await cachePlanReport(validated.data);
+    reportProcessDiagnostics(validated.data, processDetails, f.verbose);
     print(validated.data, planTable(validated.data), f.json);
   }
   if (selectedCommand === "run") {

@@ -55,10 +55,11 @@ function targetRows(
   path: string,
   unknown: string[],
   processes: ReturnType<typeof collectProcesses>["processes"],
+  ctx: Context,
 ): Candidate[] {
   const project = dirname(path);
   const manifest = fromThrowable(() => statSync(join(project, "Cargo.toml")))();
-  const base = treeCandidate(path, "Rust target is idle and regenerable");
+  const base = treeCandidate(path, "Rust target is idle and regenerable", ctx);
   if (manifest.isErr() || !manifest.value.isFile())
     return [
       ask(
@@ -118,6 +119,7 @@ function targetRows(
     const child = treeCandidate(
       incremental,
       "incremental cache inside an unresolved Rust target",
+      ctx,
     );
     rows.push(ask(child, reason));
   }
@@ -146,6 +148,15 @@ export const createRustTarget = (root?: () => string) =>
       const snapshot = collectProcesses({
         procRoot: resolveProcRoot(ctx.procDir),
         ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
+        diagnostics: (summary, details) => {
+          if (ctx.reportProcessFailures !== undefined) {
+            ctx.reportProcessFailures(summary, details);
+            return;
+          }
+          ctx.log(summary);
+          if (ctx.verbose === true)
+            for (const detail of details) ctx.log(detail);
+        },
       });
       const now = Temporal.Now.instant().epochMilliseconds / 1000;
       return targets
@@ -154,6 +165,7 @@ export const createRustTarget = (root?: () => string) =>
             path,
             snapshot.openPaths(path).unknown,
             snapshot.processes,
+            ctx,
           ),
         )
         .toSorted((a, b) => {

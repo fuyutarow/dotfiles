@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 — 2026-10-11
+
+- Add a reusable stderr progress adapter over pinned `@clack/prompts` 1.8.1 taskLog groups, with concurrent status rows, injected clocks/output, plain fallback, counters, rates, optional ETA, and idempotent cleanup.
+
 ## 0.4.6 — 2026-10-10
 
 - Own the progress-sidecar contract, including optional `turns`: strict writer validation and a reader that validates known fields while discarding unknown additions.

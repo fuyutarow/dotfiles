@@ -42,10 +42,16 @@ export type Context = {
         bytes: number,
         done?: boolean,
         phase?: "scan" | "delete",
+        totalBytes?: number,
       ) => void)
     | undefined;
   targetName?: string | undefined;
   procDir?: string | undefined;
+  verbose?: boolean | undefined;
+  reportActivity?: ((unit: string, task: string) => void) | undefined;
+  reportProcessFailures?:
+    | ((summary: string, details: string[]) => void)
+    | undefined;
   /** One facts snapshot per plan, refreshed under the lock before actions. */
   liveness?: LivenessSnapshot;
   log: (message: string) => void;

@@ -4,16 +4,43 @@ import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import type { Candidate } from "../model.ts";
 import type { Context } from "./index.ts";
 
-export function treeBytes(path: string): number {
-  const stat = lstatSync(path);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) return stat.blocks * 512;
-  return readdirSync(path).reduce(
-    (sum, name) => sum + treeBytes(join(path, name)),
-    stat.blocks * 512,
+export function treeBytes(
+  path: string,
+  report?: (entries: number, bytes: number) => void,
+): number {
+  let entries = 0;
+  let bytes = 0;
+  const visit = (entry: string): void => {
+    const stat = lstatSync(entry);
+    entries++;
+    bytes += stat.blocks * 512;
+    // Synchronous walks cannot run timer callbacks. Deliver bounded updates
+    // directly so the shared Clack region stays live while traversing.
+    if (entries % 128 === 0) report?.(entries, bytes);
+    if (stat.isDirectory() && !stat.isSymbolicLink())
+      for (const name of readdirSync(entry)) visit(join(entry, name));
+  };
+  visit(path);
+  report?.(entries, bytes);
+  return bytes;
+}
+
+export function measuredTreeBytes(path: string, ctx?: Context): number {
+  return treeBytes(
+    path,
+    ctx?.reportProgress === undefined
+      ? undefined
+      : (entries, bytes) => {
+          ctx.reportProgress?.(ctx.targetName ?? path, path, entries, bytes);
+        },
   );
 }
 
-export function treeCandidate(path: string, reason: string): Candidate {
+export function treeCandidate(
+  path: string,
+  reason: string,
+  ctx?: Context,
+): Candidate {
   return {
     id: path,
     path,
@@ -22,16 +49,20 @@ export function treeCandidate(path: string, reason: string): Candidate {
     checks: [
       { name: "target exists and is a directory", ok: true, detail: path },
     ],
-    bytes: treeBytes(path),
+    bytes: measuredTreeBytes(path, ctx),
     bytes_kind: "freed_now",
     action: { kind: "delete", argv: [path] },
     result: null,
   };
 }
 
-export function keepTreeCandidate(path: string, reason: string): Candidate {
+export function keepTreeCandidate(
+  path: string,
+  reason: string,
+  ctx?: Context,
+): Candidate {
   return {
-    ...treeCandidate(path, reason),
+    ...treeCandidate(path, reason, ctx),
     verdict: "KEEP",
     action: { kind: "delete", argv: [] },
   };

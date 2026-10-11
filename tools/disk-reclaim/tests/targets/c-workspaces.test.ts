@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test as bunTest } from "bun:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
   mkdirSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -12,8 +13,20 @@ import type { Candidate, ReceiptAction } from "../../src/model.ts";
 import { openPathsUnder } from "../../src/jj/proc.ts";
 import { createWorkspacesTarget } from "../../src/targets/workspaces.ts";
 import { World } from "../jj/fixture.ts";
+import { collectProcesses } from "../../src/lib/procs.ts";
+import { procFixture } from "../fixtures/procs.ts";
+import { treeBytes } from "../../src/targets/tree.ts";
 
 type Recovery = NonNullable<ReceiptAction["recovery"]>;
+// Each case runs several real jj children, each bounded at ten seconds by World.
+// Keep the case bounded without applying a five-second budget to the whole chain.
+const test = (
+  name: string,
+  run: () => void | Promise<void>,
+  timeout = 30_000,
+) => {
+  bunTest(name, run, timeout);
+};
 // Each test owns its process fixture. The busy-cwd case adds one real child process.
 const probe = (dir: string) => {
   const w = worlds.find((world) => dir.startsWith(`${world.root}/`));
@@ -48,6 +61,44 @@ const failed = (c: Candidate) =>
   c.checks.filter((k) => k.ok !== true).map((k) => k.name);
 
 describe("workspaces target", () => {
+  test("r99-shaped workspaces ignore expected systemd EACCES and show bytes for every verdict", async () => {
+    const w = world();
+    const paths = [w.add("dotfiles-arm-ref_u5"), w.add("dotfiles-arm-sw_v1")];
+    const proc = procFixture(w.root, "systemd", ["exe", "fd/3"]);
+    const ctx = { ...w.context("plan"), procDir: proc.procRoot };
+    let snapshot = collectProcesses(proc);
+    const checked = createWorkspacesTarget({
+      openPaths: (path) => snapshot.openPaths(path),
+    });
+    expect(snapshot.openPaths(w.root).unknown).toEqual([]);
+    const rows = await checked.plan(ctx);
+    for (const path of paths) {
+      const row = only(rows, path);
+      expect(row.verdict).toBe("RECLAIM");
+      expect(row.checks.find((check) => check.name === "not in use")?.ok).toBe(
+        true,
+      );
+      expect(row.bytes).toBe(treeBytes(path));
+      expect(row.bytes).toBeGreaterThan(0);
+    }
+    // An unexpected unreadable process remains ASK, with allocated bytes shown.
+    writeFileSync(join(proc.base, "comm"), "python\n");
+    snapshot = collectProcesses(proc);
+    const unknown = await checked.plan(ctx);
+    for (const path of paths) {
+      expect(only(unknown, path).verdict).toBe("ASK");
+      expect(only(unknown, path).bytes).toBe(treeBytes(path));
+    }
+    // Readable positive use still wins over the expected permission exception.
+    writeFileSync(join(proc.base, "comm"), "systemd\n");
+    unlinkSync(join(proc.base, "cwd"));
+    symlinkSync(paths[0]!, join(proc.base, "cwd"));
+    snapshot = collectProcesses(proc);
+    const busy = only(await checked.plan(ctx), paths[0]!);
+    expect(busy.verdict).toBe("KEEP");
+    expect(busy.bytes).toBe(treeBytes(paths[0]!));
+  }, 30_000);
+
   test("a pushed, clean workspace is RECLAIM; run records recovery, forgets, then deletes", async () => {
     const w = world();
     const ws = w.add("ws1");
@@ -91,7 +142,7 @@ describe("workspaces target", () => {
     const ws = w.add("ws1");
     const paths = (await plan(w)).map((c) => c.path);
     expect(paths).toEqual([ws]);
-  });
+  }, 30_000);
 
   test("an unpushed commit is ASK and nothing is touched", async () => {
     const w = world();

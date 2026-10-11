@@ -69,6 +69,7 @@ type ContextProgress = (
   bytes: number,
   done?: boolean,
   phase?: "scan" | "delete",
+  totalBytes?: number,
 ) => void;
 
 function nameForUid(uid: number): string {
@@ -108,9 +109,10 @@ export function removeTreeProgress(
       onProgress: (entries: number, bytes: number, done: boolean) => void;
     } {
   if (context?.progress === false) return false;
+  const totalBytes = bytes ?? estimatedBytes(path);
   return {
     entries: countEntries(path) + 1,
-    bytes: bytes ?? estimatedBytes(path),
+    bytes: totalBytes,
     tty: context?.progressTty === true,
     onProgress: (entries, currentBytes, done) =>
       context?.reportProgress?.(
@@ -120,6 +122,7 @@ export function removeTreeProgress(
         currentBytes,
         done,
         "delete",
+        totalBytes,
       ),
   };
 }
@@ -267,9 +270,9 @@ export async function removeTree(
     }
     const writer =
       progress.write ?? ((value: string) => process.stderr.write(value));
-    writer(
-      `${progress.tty ? "\r" : ""}${line}${final || !progress.tty ? "\n" : ""}`,
-    );
+    // The CLI supplies the shared Clack adapter through onProgress. Standalone
+    // library callers get plain lines, never a second terminal renderer.
+    writer(`${line}\n`);
   };
   const rootResult = fromThrowable(() => lstatSync(path))();
   const rootStat = rootResult.match(

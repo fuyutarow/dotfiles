@@ -38,6 +38,7 @@ export const procFs: ProcFs = {
   },
 };
 export type ProcOptions = {
+  diagnostics?: (summary: string, details: string[]) => void;
   procRoot?: string;
   uid?: number;
   ignoreUnreadableProcs?: readonly string[];
@@ -69,6 +70,7 @@ const procResult = <T>(operation: () => T | Error): ProcResult<T> => {
     : { ok: true, value: result.value };
 };
 const cleaned = (path: string): string => path.replace(/ \(deleted\)$/u, "");
+const expectedUnreadableNames = ["systemd", "sudo", "su", "polkitd"];
 const under = (path: string, dir: string): boolean =>
   path === dir || path.startsWith(`${dir}/`);
 type ProcStat = { state: string; starttime: string };
@@ -143,8 +145,12 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
   const ids: string[] = [];
   const pathUnknown: { uid: number | undefined; detail: string }[] = [];
   const environUnknown: { uid: number | undefined; detail: string }[] = [];
+  const expectedFailures: string[] = [];
   const initialStats = new Map<number, ProcResult<ProcStat>>();
-  const eaccesOutcomes = new Map<number, "gone" | "ignored" | "unknown">();
+  const eaccesOutcomes = new Map<
+    number,
+    "gone" | "ignored" | "expected" | "unknown"
+  >();
   const names = procResult<string[]>(() => fs.readdir(root));
   if (!names.ok)
     for (const unknown of [pathUnknown, environUnknown])
@@ -168,11 +174,11 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
     });
     initialStats.set(pid, initialStat);
     if (initialStat.ok && initialStat.value.state === "Z") continue;
-    const sameUidEacces = (): "gone" | "ignored" | "unknown" => {
+    const sameUidEacces = (): "gone" | "ignored" | "expected" | "unknown" => {
       const cached = eaccesOutcomes.get(pid);
       if (cached !== undefined) return cached;
       const before = initialStats.get(pid);
-      let outcome: "gone" | "ignored" | "unknown" = "unknown";
+      let outcome: "gone" | "ignored" | "expected" | "unknown" = "unknown";
       if (before?.ok !== true) {
         eaccesOutcomes.set(pid, outcome);
         return outcome;
@@ -183,15 +189,17 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
         const value = processStat(text);
         return value ?? new Error(`pid ${pid}: missing proc stat fields`);
       });
-      const allowlistedComm = (): boolean => {
+      const matchesComm = (processNames: readonly string[]): boolean => {
         const comm = procResult<string>(() => fs.readText(join(base, "comm")));
-        return comm.ok && allow.includes(comm.value.trim());
+        return comm.ok && processNames.includes(comm.value.trim());
       };
       if (!current.ok && gone(current.error)) outcome = "gone";
       else if (current.ok && current.value.state === "Z") outcome = "gone";
       else if (current.ok && current.value.starttime !== before.value.starttime)
         outcome = "gone";
-      else if (current.ok && allowlistedComm()) outcome = "ignored";
+      else if (current.ok && matchesComm(expectedUnreadableNames))
+        outcome = "expected";
+      else if (current.ok && matchesComm(allow)) outcome = "ignored";
       eaccesOutcomes.set(pid, outcome);
       return outcome;
     };
@@ -205,11 +213,16 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
       const unreadable =
         errorCode(result.error) === "EACCES" ? sameUidEacces() : null;
       const unknown = scope === "environ" ? environUnknown : pathUnknown;
+      if (scope !== "none" && unreadable === "expected")
+        expectedFailures.push(
+          `pid ${pid} ${via}: ${message(result.error)} [expected-unreadable ${eaccesIdentity(base, fs)}]`,
+        );
       if (
         scope !== "none" &&
         !gone(result.error) &&
         unreadable !== "gone" &&
         unreadable !== "ignored" &&
+        unreadable !== "expected" &&
         (unreadable === null
           ? !ignoreUnreadableProcess(result.error, base, allow, fs)
           : true)
@@ -281,6 +294,15 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
     pathUnknown.forEach((item) => {
       traceUnknown(item, root, fs);
     });
+  const details = [
+    ...new Set(
+      [...pathUnknown, ...environUnknown]
+        .map(({ detail }) => detail)
+        .concat(expectedFailures),
+    ),
+  ];
+  for (const summary of summarizeProcessFailures(details))
+    options.diagnostics?.(summary, details);
   return {
     environSessionIds:
       environUnknown.length === 0
@@ -295,6 +317,42 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
       unknown: pathUnknown.map(({ detail }) => detail),
     }),
   };
+}
+
+/** Presentation groups causes; the underlying unknown facts keep their safety meaning. */
+export function summarizeProcessFailures(details: readonly string[]): string[] {
+  const groups = new Map<
+    string,
+    { fds: number; probes: number; pids: Set<string>; expected: boolean }
+  >();
+  for (const detail of details) {
+    const code =
+      /\b(EACCES|EPERM|ENOENT|ESRCH)\b/u.exec(detail)?.[1] ?? "unavailable";
+    const expected =
+      code === "EACCES" && detail.includes("[expected-unreadable ");
+    const key = `${code}${expected ? "; expected permission boundary (non-dumpable process)" : ""}`;
+    const group = groups.get(key) ?? {
+      fds: 0,
+      probes: 0,
+      pids: new Set<string>(),
+      expected,
+    };
+    group.probes++;
+    if (/ fd\/\d+:/u.test(detail)) group.fds++;
+    const pid = /pid (\d+)/u.exec(detail)?.[1];
+    if (pid !== undefined) group.pids.add(pid);
+    groups.set(key, group);
+  }
+  return [...groups].map(
+    ([cause, group]) =>
+      `live-process scan: ${group.fds} fds (${group.probes} probes) in ${group.pids.size} processes unreadable (${cause}) — ${group.expected ? "expected, not a probe problem; excluded from in-use evidence, no effect on targets" : "treated as unknown; idle-dependent candidates remain ASK unless positive use proves KEEP"}`,
+  );
+}
+
+export function processDecisionText(text: string): string {
+  const start = text.indexOf("pid ");
+  if (start < 0 || !/\b(EACCES|EPERM)\b/u.test(text)) return text;
+  return `${text.slice(0, start)}same-uid process paths unreadable; treated as unknown (see live-process scan summary)`;
 }
 
 export function openPathsUnder(

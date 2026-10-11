@@ -21,11 +21,11 @@ test("non-TTY progress is line-based and throttled per target using the injected
   expect(
     output.every((line) => line.endsWith("\n") && !line.includes("\r")),
   ).toBe(true);
-  expect(output.join("")).toContain("scan complete");
-  expect(output[0]).toContain("10 bytes");
+  expect(output.join("")).toContain("scan found complete");
+  expect(output[0]).toContain("10 B");
 });
 
-test("TTY progress redraws active target rows and includes a total row", () => {
+test("TTY progress redraws active target rows in place", () => {
   let time = 100;
   const output: string[] = [];
   const reporter = new ProgressReporter({
@@ -40,7 +40,8 @@ test("TTY progress redraws active target rows and includes a total row", () => {
   reporter.report("clean", "scan", 2, 20);
   time = 201;
   reporter.report("clean", "scan", 3, 30);
-  expect(output.join("")).toContain("\u001B[2K");
-  expect(output.join("")).toContain("[reclaim] total:");
-  expect(output.join("")).toContain("\u001B[3A");
+  expect(output.join("")).toContain("\u001B[");
+  expect(output.join("")).toContain("30 B");
+  expect(output.join("")).toContain("\u001B[1A");
+  reporter.finish();
 });

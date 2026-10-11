@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — 2026-10-11
+
+- Render concurrent progress with shared Clack taskLog groups on stderr; collapse finished rows, retain scan counters across heartbeats, show rates and known deletion ETAs, and finalize the region on errors and signals.
+- Keep CI, pipes, dumb terminals, and JSON output free of terminal escape codes; add a final human summary table without changing the JSON plan schema.
+- Aggregate unreadable live-process probes by cause, classify expected permission boundaries, identify affected ASK targets, and expose per-probe details with `--verbose`.
+- Avoid probing sudo outside WSL and prevent Bun cache command output from interrupting the progress region.
+- Keep preflight and later tasks in one region and deliver counters during synchronous directory-size walks.
+- Exclude expected same-uid non-dumpable process EACCES from in-use uncertainty after identity revalidation; preserve readable positive use and show allocated workspace bytes for ASK and KEEP rows too.
+
 ## 0.4.3
 
 - Cache a capped list of safe blind-tier plan candidates for actionable storage-headroom denials.

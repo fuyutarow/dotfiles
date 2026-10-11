@@ -78,15 +78,23 @@ export const createToolchainsTarget = (
       for (const name of rustupNames) {
         const path = join(rustupDir, name);
         if (name === defaultName) {
-          candidates.push(keepTreeCandidate(path, "default rustup toolchain"));
+          candidates.push(
+            keepTreeCandidate(path, "default rustup toolchain", _ctx),
+          );
           continue;
         }
         if (pins.some((p) => name.startsWith(p) || p.startsWith(name))) {
-          candidates.push(keepTreeCandidate(path, "pinned rustup toolchain"));
+          candidates.push(
+            keepTreeCandidate(path, "pinned rustup toolchain", _ctx),
+          );
           continue;
         }
         candidates.push(
-          treeCandidate(path, "non-default rustup toolchain is not pinned"),
+          treeCandidate(
+            path,
+            "non-default rustup toolchain is not pinned",
+            _ctx,
+          ),
         );
       }
       const servers = join(home, ".vscode-server/cli/servers");
@@ -131,7 +139,9 @@ export const createToolchainsTarget = (
           busy.value.exitCode === 0
         )
           continue;
-        candidates.push(treeCandidate(path, "old idle VS Code server version"));
+        candidates.push(
+          treeCandidate(path, "old idle VS Code server version", _ctx),
+        );
       }
       for (const store of STORES) {
         const found = readStore(home, store);
@@ -142,7 +152,11 @@ export const createToolchainsTarget = (
           keepDays,
         }))
           candidates.push(
-            treeCandidate(release.path, `superseded ${store.name} release`),
+            treeCandidate(
+              release.path,
+              `superseded ${store.name} release`,
+              _ctx,
+            ),
           );
       }
       return candidates;

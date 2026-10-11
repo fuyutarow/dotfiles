@@ -21,6 +21,7 @@ import { fromThrowable } from "../../shared/src/zod.ts";
 import {
   directoryProtection,
   removeTree,
+  removeTreeProgress,
   type RemovalRefusal,
 } from "./lib/remove-tree.ts";
 import {
@@ -28,6 +29,7 @@ import {
   type ProcessSnapshot,
   type ProcFs,
 } from "./lib/procs.ts";
+import type { Context } from "./targets/index.ts";
 
 type Check = { name: string; ok: boolean; detail: string };
 type PlanRow = {
@@ -37,6 +39,12 @@ type PlanRow = {
   allowed: boolean;
 };
 type Options = {
+  progress?: Pick<
+    Context,
+    "progress" | "progressTty" | "targetName" | "reportProgress"
+  >;
+  diagnostics?: (summary: string, details: string[]) => void;
+  log?: (message: string) => void;
   config: Config;
   yes: boolean;
   state?: string;
@@ -191,15 +199,21 @@ function evaluate(
 }
 export async function deleteApproved(paths: string[], options: Options) {
   const procOptions = {
+    ...(options.diagnostics === undefined
+      ? {}
+      : { diagnostics: options.diagnostics }),
     ...(options.procRoot === undefined ? {} : { procRoot: options.procRoot }),
     ...(options.procFs === undefined ? {} : { fs: options.procFs }),
     uid: process.getuid?.() ?? 0,
     ignoreUnreadableProcs: options.config.ignore_unreadable_procs ?? [],
   };
   const planProcesses = collectProcesses(procOptions);
-  const rows = paths.map((path) =>
-    evaluate(path, options.config, planProcesses),
-  );
+  const rows = paths.map((path) => {
+    options.progress?.reportProgress?.("delete", path, 0, 0);
+    const row = evaluate(path, options.config, planProcesses);
+    options.progress?.reportProgress?.("delete", path, 1, row.bytes ?? 0, true);
+    return row;
+  });
   const lines = rows.map(
     (row) =>
       `${row.allowed ? "ALLOW" : "REFUSE"}\t${row.path}\t${row.bytes ?? "?"}\t${row.checks.map((c) => `${c.ok ? "ok" : "fail"}:${c.name}=${c.detail}`).join("; ")}`,
@@ -208,7 +222,8 @@ export async function deleteApproved(paths: string[], options: Options) {
   if (rows.some((row) => !row.allowed))
     return { exit: 2, rows, lines, refused: [] };
   const dir = options.state ?? stateDir();
-  const lock = await waitForLock("delete", dir);
+  options.log?.("delete waits for the reclaim lock");
+  const lock = await waitForLock("delete", dir, options.log);
   if (lock.release === null)
     return {
       exit: lock.exit,
@@ -244,6 +259,7 @@ export async function deleteApproved(paths: string[], options: Options) {
     };
     actions.push(action);
     const result = await removeTree(row.path, {
+      progress: removeTreeProgress(row.path, row.bytes, options.progress),
       uid: process.getuid?.() ?? 0,
       protection: {
         ownerTarget: "delete",

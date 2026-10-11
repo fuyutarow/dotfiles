@@ -63,6 +63,7 @@ export const createBuildsTarget = (
                 ...treeCandidate(
                   path,
                   `regenerable build output (kondo --all parity)`,
+                  ctx,
                 ),
                 verdict:
                   reason === "process paths are unknown"
@@ -76,6 +77,7 @@ export const createBuildsTarget = (
             treeCandidate(
               path,
               "regenerable build output (kondo --all parity)",
+              ctx,
             ),
           ];
         }),

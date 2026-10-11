@@ -16,7 +16,7 @@ import {
 } from "../lib/remove-tree.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { treeBytes } from "./tree.ts";
+import { measuredTreeBytes } from "./tree.ts";
 
 type Inspection<T> = { ok: true; value: T } | { ok: false; error: string };
 const uuidPattern =
@@ -122,8 +122,8 @@ const candidate = (
   result: null,
 });
 
-const candidateBytes = (path: string): number | null => {
-  const result = inspect(() => treeBytes(path));
+const candidateBytes = (path: string, ctx: Context): number | null => {
+  const result = inspect(() => measuredTreeBytes(path, ctx));
   return result.ok ? result.value : null;
 };
 
@@ -172,7 +172,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
               "ASK",
               `cannot inspect scratch workspace markers: ${delegated.error}`,
               null,
-              candidateBytes(ref.dir),
+              candidateBytes(ref.dir, ctx),
             );
           if (delegated.value)
             return candidate(
@@ -180,7 +180,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
               "KEEP",
               "delegated: jj workspace",
               false,
-              candidateBytes(ref.dir),
+              candidateBytes(ref.dir, ctx),
             );
           const capturedFacts = inspect(() =>
             options.getFacts === undefined
@@ -193,7 +193,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
               "ASK",
               `liveness facts unavailable: ${capturedFacts.error}`,
               null,
-              candidateBytes(ref.dir),
+              candidateBytes(ref.dir, ctx),
             );
           const result = judge(ref, capturedFacts.value);
           const verdict = verdicts[result.verdict];
@@ -203,7 +203,7 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
             verdict,
             result.evidence.join("; "),
             check,
-            candidateBytes(ref.dir),
+            candidateBytes(ref.dir, ctx),
           );
         }),
       );

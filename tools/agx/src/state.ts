@@ -27,6 +27,8 @@ export const ActiveWriterSchema = ActiveMarkerSchema.extend({
   sandbox: z.string().optional(),
   picked_probability: z.number().min(0).max(1).optional(),
   interim_cost_usd: z.number().nonnegative().optional(),
+  /** the ticket's proposition id, so ps can show allocation per proposition */
+  proposition: z.string().min(1).optional(),
 });
 export const ActiveSchema = ActiveWriterSchema.loose();
 export type Active = z.output<typeof ActiveWriterSchema>;

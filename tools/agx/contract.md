@@ -44,6 +44,17 @@ session. An unreadable worker receipt retains that metadata, so the ticket remai
 amendable and repickable. A historical continuation can inherit sandbox from its recorded ancestor.
 An initial run with no vendor session can repick; vendor resume requires an actual session ID.
 
+Every brief is a schema 2 ticket; there is no plain-brief or schema 1 path. One zod schema
+(`src/ticket.ts`) is the whole admission contract for its fields, so dispatch, pick, ticket
+lint/new/amend and resume refuse the same way. It requires `outcome`, `consumer`,
+`first_return`, `writes`, `verify` (or `read_only_diagnostic = true`) and a strict
+`[proposition]` table: `id`, one-line `claim` and `refuted_by`, `decides` (decisive | mechanism |
+prerequisite | infrastructure), `graph_node` when decisive or mechanism, non-empty `serves` when
+prerequisite or infrastructure. agx checks shape only; whether the id or graph node exists is the
+coordinator's. The recap is sent verbatim to Jev as `state.proposition`, printed by `agx pick`,
+opens the worker's promise block, and its id is kept on the marker and run record and shown by
+`agx ps` and `agx show`. Split pieces inherit the parent's proposition.
+
 Capabilities accept plain routing tags or `{ need, lower_effort_lacks }` objects with non-empty
 strings. Only an object justifies xhigh/max. Without one, positive selection mass goes to the
 highest admissible lower effort in the same model family; receipt masks and fallback reasons
@@ -181,7 +192,7 @@ Every `dispatch --prompt-file` creates an anonymous ticket under
 `$AGX_STATE_DIR/tickets/<project>` regardless of the repository's named-ticket home.
 The name is CLI `--name`, then front-matter `name`, then four generated base36 characters;
 the same name is printed by ps and accepted by work-targeting commands. The state copy has
-that name in its front matter when present; a legacy plain brief uses its dated filename.
+that name in its front matter.
 The original source remains unchanged. Markers and run records keep `ticket.name` and
 `ticket.path`; `brief.sha256` still identifies the exact archived dispatch instructions.
 Ticket lookup includes these state tickets and recorded canonical paths, so amendment does

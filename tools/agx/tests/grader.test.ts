@@ -4,6 +4,7 @@ import {
   parseAgentGrade,
   renderGradeRemand,
 } from "../src/grader.ts";
+import { completeTicket } from "./fixture-ticket.ts";
 
 const fakeGrade = (grade: unknown): string =>
   `\`\`\`agx-grade\n${JSON.stringify(grade)}\n\`\`\``;
@@ -25,14 +26,16 @@ const piece = (title: string, writes: string[], depends_on: string[] = []) => ({
   depends_on,
 });
 
-const readOnlyBrief = [
-  "+++",
-  "schema = 2",
-  "writes = []",
-  "read_only_diagnostic = true",
-  "+++",
-  "Prove the access property and identify the required slot constraints.",
-].join("\n");
+const readOnlyBrief = completeTicket(
+  [
+    "+++",
+    "schema = 2",
+    "writes = []",
+    "read_only_diagnostic = true",
+    "+++",
+    "Prove the access property and identify the required slot constraints.",
+  ].join("\n"),
+);
 
 describe("grader prompt rules", () => {
   test("orders overlapping writes and passes one deliverable with questions", () => {

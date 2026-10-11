@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.0 — 2026-10-11
+
+- BREAKING: one ticket schema. Plain briefs, `schema = 1` and `--legacy-brief` are gone; a brief without `+++` front matter is refused with a pointer to `agx ticket new`. `--choice` (kept only to be refused) is removed; `--row` with `--approval` stays the one override.
+- BREAKING: `outcome`, `consumer`, `first_return`, `writes` and `verify` (or `read_only_diagnostic = true`) are required by the zod schema instead of by a floor rule that dispatch filtered down to `verify` alone. The model-free floor now checks only xhigh/max justification.
+- BREAKING: a strict `[proposition]` table is required: `id`, one-line `claim` and `refuted_by`, `decides` (decisive | mechanism | prerequisite | infrastructure), `graph_node` for decisive/mechanism, non-empty `serves` for prerequisite/infrastructure. The recap opens the worker's promise block, goes verbatim to Jev as `state.proposition`, is printed by `agx pick`, and its id is recorded on the marker and run and shown by `agx ps` and `agx show`. Split pieces inherit it.
+
 ## 2.10.1 — 2026-10-11
 
 - Capture the caller's dispatcher session explicitly in detached unit environment and acknowledgement history. A fake OS manager regression verifies session-filtered `runningRuns` counts the detached run independently of the manager's session.

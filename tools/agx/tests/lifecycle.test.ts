@@ -11,6 +11,7 @@ import {
   workspaceRoot,
 } from "../src/lifecycle.ts";
 import { parseTicket } from "../src/ticket.ts";
+import { completeTicket } from "./fixture-ticket.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -24,16 +25,16 @@ const scratch = (): string => {
 };
 
 test("stall_s is optional, accepts positive seconds, and rejects zero/negative/fractional values", () => {
-  expect(parseTicket("+++\nschema = 1\nwrites = []\n+++\nwork").kind).toBe(
+  expect(parseTicket(completeTicket("+++\nschema = 2\n+++\nwork")).kind).toBe(
     "ticket",
   );
   expect(
-    parseTicket("+++\nschema = 1\nwrites = []\nstall_s = 1\n+++\nwork"),
+    parseTicket(completeTicket("+++\nschema = 2\nstall_s = 1\n+++\nwork")),
   ).toMatchObject({ kind: "ticket", ticket: { stall_s: 1 } });
   for (const seconds of [0, -1, 0.5])
     expect(
       parseTicket(
-        `+++\nschema = 1\nwrites = []\nstall_s = ${seconds}\n+++\nwork`,
+        completeTicket(`+++\nschema = 2\nstall_s = ${seconds}\n+++\nwork`),
       ).kind,
     ).toBe("invalid");
 });

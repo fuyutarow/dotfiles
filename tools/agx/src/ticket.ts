@@ -1,18 +1,29 @@
-// The typed work ticket at the top of an agx brief: TOML front matter between `+++` lines.
-// A brief that does not start with `+++` is LEGACY — it comes back untouched, so no running
-// coordinator breaks. Consumers: agx (run, pick). Pure: no I/O, no state.
+// The typed work ticket at the top of every agx brief: TOML front matter between `+++` lines.
+// There is one schema; a brief without it is invalid. Consumers: agx (run, pick, ticket). Pure: no
+// I/O, no state.
 //
 //   +++
-//   schema = 1
+//   schema = 2
+//   outcome = "the result this changes"
+//   consumer = "who consumes it"
+//   first_return = "useful interim artifact"
 //   writes = ["tools/agx/**"]   # globs relative to repo root; [] = read-only
-//   verify = ["bun test tools/agx/tests"]
+//   verify = ["bun test tools/agx/tests"]    # or read_only_diagnostic = true
 //   verify_timeout_s = 1200                  # optional; bound for all verify commands together
 //   timeout_s = 3600                         # optional; worker wall clock (60..14400)
-//   timeout_reason = "why this exceeds 1800 seconds" # required when timeout_s > 1800
+//   timeout_reason = "why this exceeds 600 seconds" # required when timeout_s > 600
 //   return_policy = "hard-blockers-only"         # or "any-contradiction"
 //   capabilities = ["long-tool-loop"]        # optional; handed to Jev as required capabilities
 //   budget_usd = 5.00                       # optional positive USD budget used to exclude over-budget rows
 //   pick_temperature = 1.0                  # optional sampling temperature (0 <= T <= 5)
+//
+//   [proposition]                            # the decisive question this ticket serves
+//   id = "D1"
+//   claim = "one falsifiable sentence"
+//   decides = "decisive"                     # decisive | mechanism | prerequisite | infrastructure
+//   refuted_by = "the observable outcome that refutes the claim"
+//   graph_node = "<statement id>"            # required for decisive | mechanism
+//   serves = ["D1"]                          # required for prerequisite | infrastructure
 //   +++
 //   <the prose the worker receives>
 import { resolve } from "node:path";
@@ -82,46 +93,85 @@ export const CapabilitySchema = z.union([
   }),
 ]);
 
-const CommonTicket = {
-  labels: z.array(z.string()).default([]),
-  name: z
-    .string()
-    .min(1)
-    .max(16)
-    .regex(/^[A-Za-z0-9_-]+$/u)
-    .optional(),
-  writes: z.array(writeGlob).optional(),
-  verify: z.array(z.string().trim().min(1)).default([]),
-  verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),
-  timeout_s: z.number().int().min(60).max(MAX_TIMEOUT_S).optional(),
-  timeout_reason: z.string().trim().min(1).optional(),
-  first_return_s: z
-    .number()
-    .int()
-    .min(60)
-    .max(360)
-    .default(DEFAULT_FIRST_RETURN_S),
-  return_policy: z
-    .enum(["hard-blockers-only", "any-contradiction"])
-    .default(DEFAULT_RETURN_POLICY),
-  budget_usd: z.number().positive().optional(),
-  stall_s: z.number().int().positive().optional(),
-  pick_temperature: z.number().min(0).max(5).optional(),
-  capabilities: z.array(CapabilitySchema).default([]),
-  reuses: z.array(z.string().trim().min(1)).optional(),
-  premises: z.array(premise).optional(),
-  outcome: z.string().trim().min(1).optional(),
-  consumer: z.string().trim().min(1).optional(),
-  first_return: z.string().trim().min(1).optional(),
-  split_from: z.string().trim().min(1).optional(),
-  urgent_reason: z.string().trim().min(1).optional(),
-  read_only_diagnostic: z.boolean().optional(),
-};
+const oneLine = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => !/[\r\n]/u.test(value), { message: "must be one line" });
+
+/** Why the ticket exists: carried to Jev and to the worker so a side task cannot displace it. */
+export const PropositionSchema = z
+  .strictObject({
+    id: oneLine,
+    claim: oneLine,
+    decides: z.enum([
+      "decisive",
+      "mechanism",
+      "prerequisite",
+      "infrastructure",
+    ]),
+    refuted_by: oneLine,
+    graph_node: oneLine.optional(),
+    serves: z.array(oneLine).optional(),
+  })
+  .refine(
+    (p) =>
+      (p.decides !== "decisive" && p.decides !== "mechanism") ||
+      p.graph_node !== undefined,
+    {
+      path: ["graph_node"],
+      message: "required when decides is decisive or mechanism",
+    },
+  )
+  .refine(
+    (p) =>
+      (p.decides !== "prerequisite" && p.decides !== "infrastructure") ||
+      (p.serves ?? []).length > 0,
+    {
+      path: ["serves"],
+      message:
+        "required (non-empty) when decides is prerequisite or infrastructure",
+    },
+  );
+export type Proposition = z.output<typeof PropositionSchema>;
 
 export const TicketSchema = z
   .strictObject({
-    schema: z.union([z.literal(1), z.literal(2)]),
-    ...CommonTicket,
+    schema: z.literal(2),
+    labels: z.array(z.string()).default([]),
+    name: z
+      .string()
+      .min(1)
+      .max(16)
+      .regex(/^[A-Za-z0-9_-]+$/u)
+      .optional(),
+    writes: z.array(writeGlob),
+    verify: z.array(z.string().trim().min(1)).optional(),
+    verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),
+    timeout_s: z.number().int().min(60).max(MAX_TIMEOUT_S).optional(),
+    timeout_reason: z.string().trim().min(1).optional(),
+    first_return_s: z
+      .number()
+      .int()
+      .min(60)
+      .max(360)
+      .default(DEFAULT_FIRST_RETURN_S),
+    return_policy: z
+      .enum(["hard-blockers-only", "any-contradiction"])
+      .default(DEFAULT_RETURN_POLICY),
+    budget_usd: z.number().positive().optional(),
+    stall_s: z.number().int().positive().optional(),
+    pick_temperature: z.number().min(0).max(5).optional(),
+    capabilities: z.array(CapabilitySchema).default([]),
+    reuses: z.array(z.string().trim().min(1)).optional(),
+    premises: z.array(premise).optional(),
+    outcome: z.string().trim().min(1),
+    consumer: z.string().trim().min(1),
+    first_return: z.string().trim().min(1),
+    split_from: z.string().trim().min(1).optional(),
+    urgent_reason: z.string().trim().min(1).optional(),
+    read_only_diagnostic: z.boolean().optional(),
+    proposition: PropositionSchema,
   })
   .refine(
     (ticket) =>
@@ -133,10 +183,15 @@ export const TicketSchema = z
       message: `required when timeout_s exceeds ${EXTENDED_TIMEOUT_THRESHOLD_S} seconds`,
     },
   )
-  .refine((ticket) => ticket.schema === 2 || ticket.writes !== undefined, {
-    path: ["writes"],
-    message: "required for schema 1 tickets",
-  });
+  .refine(
+    (ticket) =>
+      ticket.verify !== undefined || ticket.read_only_diagnostic === true,
+    {
+      path: ["verify"],
+      message: "required unless read_only_diagnostic = true",
+    },
+  )
+  .transform((ticket) => ({ ...ticket, verify: ticket.verify ?? [] }));
 export type Ticket = z.output<typeof TicketSchema>;
 export type Capability = Ticket["capabilities"][number];
 export const capabilityTags = (capabilities: readonly Capability[]): string[] =>
@@ -145,7 +200,6 @@ export const capabilityTags = (capabilities: readonly Capability[]): string[] =>
   );
 
 export type ParsedBrief =
-  | { kind: "legacy"; prose: string }
   | { kind: "ticket"; ticket: Ticket; prose: string }
   | { kind: "invalid"; reason: string };
 
@@ -172,6 +226,31 @@ export function ticketFields(text: string): Record<string, unknown> {
 
 const compact = (value: string): string => value.replaceAll(/[\r\n]+/gu, " ");
 
+/** The `[proposition]` table as TOML lines, for generated tickets (split pieces inherit it). */
+export function propositionToml(p: Proposition): string[] {
+  return [
+    "[proposition]",
+    `id = ${JSON.stringify(p.id)}`,
+    `claim = ${JSON.stringify(p.claim)}`,
+    `decides = ${JSON.stringify(p.decides)}`,
+    `refuted_by = ${JSON.stringify(p.refuted_by)}`,
+    ...(p.graph_node === undefined
+      ? []
+      : [`graph_node = ${JSON.stringify(p.graph_node)}`]),
+    ...(p.serves === undefined ? [] : [`serves = ${JSON.stringify(p.serves)}`]),
+  ];
+}
+
+/** The recap Jev and the worker both read first; one line per field. */
+export function propositionRecap(p: Proposition): string {
+  return [
+    `Proposition ${p.id} (${p.decides}): ${p.claim}`,
+    `refuted_by: ${p.refuted_by}`,
+    ...(p.graph_node === undefined ? [] : [`graph_node: ${p.graph_node}`]),
+    ...(p.serves === undefined ? [] : [`serves: ${p.serves.join(", ")}`]),
+  ].join("\n");
+}
+
 /** Compact worker-facing promise; paths retain glob syntax and are rooted in the checkout. */
 export function promiseBlock(
   ticket: Ticket,
@@ -180,11 +259,14 @@ export function promiseBlock(
   kind: Kind | undefined,
 ): string {
   return [
+    propositionRecap(ticket.proposition),
+    "Everything below serves this proposition; do not let a side task displace it.",
+    "",
     "Promise:",
-    `outcome: ${compact(ticket.outcome ?? "see body")}`,
-    `consumer: ${compact(ticket.consumer ?? "coordinator")}`,
-    `writes: ${JSON.stringify((ticket.writes ?? []).map((glob) => resolve(cwd, glob)))}`,
-    `first_return: ${compact(ticket.first_return ?? "useful interim RETURN")} (${ticket.first_return_s} seconds)`,
+    `outcome: ${compact(ticket.outcome)}`,
+    `consumer: ${compact(ticket.consumer)}`,
+    `writes: ${JSON.stringify(ticket.writes.map((glob) => resolve(cwd, glob)))}`,
+    `first_return: ${compact(ticket.first_return)} (${ticket.first_return_s} seconds)`,
     `return_policy: ${ticket.return_policy}`,
     ticket.return_policy === "any-contradiction"
       ? "Housekeeping: RETURN early for any contradiction with the brief, including a small discrepancy."
@@ -196,11 +278,15 @@ export function promiseBlock(
   ].join("\n");
 }
 
-/** Split a brief into its ticket and the prose after it. Front matter is recognized only when the
- *  very first line is `+++`; once it is, a malformed ticket is `invalid`, never silently legacy. */
+/** Split a brief into its ticket and the prose after it. The very first line must be `+++`. */
 export function parseTicket(text: string): ParsedBrief {
   const lines = text.split("\n");
-  if (!isFence(lines[0])) return { kind: "legacy", prose: text };
+  if (!isFence(lines[0]))
+    return {
+      kind: "invalid",
+      reason:
+        "a brief starts with +++ ticket front matter (agx ticket new prints a skeleton)",
+    };
   const end = lines.findIndex((l, i) => i > 0 && isFence(l));
   if (end === -1)
     return {

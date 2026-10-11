@@ -5,14 +5,17 @@ import {
   DEFAULT_RETURN_POLICY,
   globsOverlap,
   parseTicket,
+  promiseBlock,
   verifyLine,
 } from "../src/ticket.ts";
+import { completeTicket, FIXTURE_PROPOSITION } from "./fixture-ticket.ts";
 
-// The work ticket: TOML front matter between `+++` lines at the top of a brief. A brief without one
-// is legacy mode and must come back untouched.
+// The work ticket: TOML front matter between `+++` lines at the top of every brief.
 
 const valid = (body: string): string =>
-  `+++\nschema = 1\n${body}\n+++\nthe prose\n`;
+  completeTicket(`+++\nschema = 2\n${body}\n+++\nthe prose\n`);
+const withProposition = (table: string): string =>
+  `+++\nschema = 2\noutcome = "o"\nconsumer = "c"\nfirst_return = "r"\nwrites = []\nverify = []\n${table}\n+++\nthe prose\n`;
 
 describe("parseTicket", () => {
   test("worker and first-return defaults are 600 and 360 seconds", () => {
@@ -21,9 +24,10 @@ describe("parseTicket", () => {
     expect(DEFAULT_RETURN_POLICY).toBe("hard-blockers-only");
   });
 
-  test("no front matter: legacy, the brief unchanged", () => {
-    const text = "RESOURCE-CLASS(NONCOMPUTE): x\n# task\n";
-    expect(parseTicket(text)).toEqual({ kind: "legacy", prose: text });
+  test("no front matter is invalid and names the skeleton command", () => {
+    const r = parseTicket("RESOURCE-CLASS(NONCOMPUTE): x\n# task\n");
+    expect(r.kind).toBe("invalid");
+    expect(r.kind === "invalid" && r.reason).toContain("agx ticket new");
   });
 
   test("a valid ticket: fields, defaults, and the prose without the front matter", () => {
@@ -34,7 +38,7 @@ describe("parseTicket", () => {
       kind: "ticket",
       prose: "the prose\n",
       ticket: {
-        schema: 1,
+        schema: 2,
         writes: ["a/**"],
         verify: ["bun test", "tsc"],
         verify_timeout_s: 1200,
@@ -62,25 +66,37 @@ describe("parseTicket", () => {
     });
   });
 
-  test("premises are accepted for both ticket schemas", () => {
-    for (const schema of [1, 2]) {
-      const parsed = parseTicket(
-        `+++\nschema = ${schema}\nwrites = []\npremises = ["file:src/main.ts", "symbol:run", "symbol:main@src/**"]\n+++\nprose`,
-      );
-      expect(parsed.kind).toBe("ticket");
-      expect(parsed.kind === "ticket" && parsed.ticket.premises).toEqual([
-        "file:src/main.ts",
-        "symbol:run",
-        "symbol:main@src/**",
-      ]);
-    }
+  test("premises are accepted", () => {
+    const parsed = parseTicket(
+      valid(
+        'writes = []\npremises = ["file:src/main.ts", "symbol:run", "symbol:main@src/**"]',
+      ),
+    );
+    expect(parsed.kind).toBe("ticket");
+    expect(parsed.kind === "ticket" && parsed.ticket.premises).toEqual([
+      "file:src/main.ts",
+      "symbol:run",
+      "symbol:main@src/**",
+    ]);
   });
 
   test.each([
     ["not TOML", "+++\nwrites = [\n+++\nprose"],
-    ["unterminated", "+++\nschema = 1\nwrites = []\nprose"],
-    ["wrong schema", valid("writes = []\nschema = 2")],
-    ["missing writes", valid('verify = ["x"]')],
+    ["unterminated", "+++\nschema = 2\nwrites = []\nprose"],
+    ["schema 1", valid("writes = []").replace("schema = 2", "schema = 1")],
+    [
+      "missing writes",
+      `+++\nschema = 2\noutcome = "o"\nconsumer = "c"\nfirst_return = "r"\nverify = []\n${FIXTURE_PROPOSITION}\n+++\nprose`,
+    ],
+    [
+      "missing verify without read_only_diagnostic",
+      `+++\nschema = 2\noutcome = "o"\nconsumer = "c"\nfirst_return = "r"\nwrites = []\n${FIXTURE_PROPOSITION}\n+++\nprose`,
+    ],
+    ["missing outcome", valid("writes = []").replace(/^outcome = .*\n/mu, "")],
+    [
+      "missing proposition",
+      valid("writes = []").replace(FIXTURE_PROPOSITION, ""),
+    ],
     ["unknown key", valid("writes = []\nbogus = 1")],
     ["absolute write glob", valid('writes = ["/etc/**"]')],
     ["parent-escaping write glob", valid('writes = ["../x/**"]')],
@@ -118,10 +134,11 @@ describe("parseTicket", () => {
     expect(r.kind).toBe("invalid");
   });
 
-  test("schema 2 accepts incomplete work fields for the remand grade", () => {
-    expect(parseTicket("+++\nschema = 2\nwrites = []\n+++\nprose").kind).toBe(
-      "ticket",
+  test("read_only_diagnostic stands in for verify", () => {
+    const r = parseTicket(
+      `+++\nschema = 2\noutcome = "o"\nconsumer = "c"\nfirst_return = "r"\nwrites = []\nread_only_diagnostic = true\n${FIXTURE_PROPOSITION}\n+++\nprose`,
     );
+    expect(r.kind === "ticket" && r.ticket.verify).toEqual([]);
   });
 
   test.each([
@@ -163,4 +180,69 @@ test("verifyLine lists the commands and tells the worker to run them in the fore
   expect(line).toContain("in the foreground");
   expect(line).toContain("do not background anything you need to see");
   expect(verifyLine([])).toBe("");
+});
+
+describe("proposition", () => {
+  test.each([
+    [
+      "decisive with graph_node",
+      '[proposition]\nid = "D1"\nclaim = "c"\ndecides = "decisive"\nrefuted_by = "r"\ngraph_node = "n1"',
+      true,
+    ],
+    [
+      "infrastructure with serves",
+      '[proposition]\nid = "I1"\nclaim = "c"\ndecides = "infrastructure"\nrefuted_by = "r"\nserves = ["D1"]',
+      true,
+    ],
+    [
+      "decisive without graph_node",
+      '[proposition]\nid = "D1"\nclaim = "c"\ndecides = "decisive"\nrefuted_by = "r"',
+      false,
+    ],
+    [
+      "prerequisite with empty serves",
+      '[proposition]\nid = "P1"\nclaim = "c"\ndecides = "prerequisite"\nrefuted_by = "r"\nserves = []',
+      false,
+    ],
+    [
+      "multi-line claim",
+      '[proposition]\nid = "I1"\nclaim = """one\ntwo"""\ndecides = "infrastructure"\nrefuted_by = "r"\nserves = ["D1"]',
+      false,
+    ],
+    [
+      "unknown decides",
+      '[proposition]\nid = "I1"\nclaim = "c"\ndecides = "nice-to-have"\nrefuted_by = "r"\nserves = ["D1"]',
+      false,
+    ],
+    [
+      "missing refuted_by",
+      '[proposition]\nid = "I1"\nclaim = "c"\ndecides = "infrastructure"\nserves = ["D1"]',
+      false,
+    ],
+    [
+      "unknown key",
+      '[proposition]\nid = "I1"\nclaim = "c"\ndecides = "infrastructure"\nrefuted_by = "r"\nserves = ["D1"]\nnote = "x"',
+      false,
+    ],
+  ])("%s", (_name, table, ok) => {
+    const r = parseTicket(withProposition(table));
+    expect(r.kind).toBe(ok ? "ticket" : "invalid");
+    if (!ok) expect(r.kind === "invalid" && r.reason).toContain("proposition");
+  });
+
+  test("the promise block opens with the recap", () => {
+    const r = parseTicket(
+      withProposition(
+        '[proposition]\nid = "D1"\nclaim = "latest edition reaches the lineage best"\ndecides = "decisive"\nrefuted_by = "an arena below its best"\ngraph_node = "n1"',
+      ),
+    );
+    expect(r.kind).toBe("ticket");
+    if (r.kind !== "ticket") return;
+    const block = promiseBlock(r.ticket, "/repo", "read-only", "token");
+    expect(block.split("\n").slice(0, 3)).toEqual([
+      "Proposition D1 (decisive): latest edition reaches the lineage best",
+      "refuted_by: an arena below its best",
+      "graph_node: n1",
+    ]);
+  });
 });

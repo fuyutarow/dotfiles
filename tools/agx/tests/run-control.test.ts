@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
+import { completeTicket } from "./fixture-ticket.ts";
 
 const CLI = join(import.meta.dir, "..", "src", "agx.ts");
 // Each integration case can launch several bounded CLI children; allow loaded CI hosts.
@@ -449,7 +450,9 @@ test("dispatch --detach builds Linux systemd-run argv through a stub and reaps s
   const prompt = join(scratch, "detached-brief.md");
   writeFileSync(
     prompt,
-    "+++\nschema = 1\nwrites = []\nverify = []\n+++\nRESOURCE-CLASS(NONCOMPUTE): detached test\nBuild argv only.\n",
+    completeTicket(
+      "+++\nschema = 2\n+++\nRESOURCE-CLASS(NONCOMPUTE): detached test\nBuild argv only.\n",
+    ),
   );
 
   const result = cli(

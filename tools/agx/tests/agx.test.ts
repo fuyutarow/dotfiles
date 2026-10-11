@@ -21,6 +21,7 @@ import { processTreeCpu } from "../src/lifecycle.ts";
 import { planWorkspace } from "../src/workspaces.ts";
 // Cross-package acceptance test for the public hook consumer contract.
 import { runningRuns } from "../../agx-usehooks/src/index.ts";
+import { completeTicket, FIXTURE_PROPOSITION } from "./fixture-ticket.ts";
 
 // agx: the one entry point. A fake agx stands in for the worker (it records its argv and
 // prints a receipt), a local server stands in for Jev, and every state file goes to a scratch dir.
@@ -126,7 +127,7 @@ afterAll(() => {
 const QUEUE = join(scratch, "fake-codex-queue");
 writeFileSync(
   QUEUE,
-  `#!/bin/sh\nprintf '%s\\n' "$@" >> "$AGX_STATE_DIR/queue.log"\n`,
+  `#!/bin/sh\nif [ "$1" = "--version" ]; then\n  printf '%s\\n' 'codex 0.162.0-fixture'\n  exit 0\nfi\nprintf '%s\\n' "$@" >> "$AGX_STATE_DIR/queue.log"\n`,
 );
 chmodSync(QUEUE, 0o755);
 const FAKE = join(scratch, "fake-agx.ts");
@@ -298,9 +299,17 @@ const NO_EGRESS = roster("no-egress", (t) =>
 );
 
 const fixtureBriefText = (text: string): string =>
-  /RESOURCE-(?:CLASS|ENVELOPE)\(/u.test(text)
-    ? text
-    : `${text.trimEnd()}\nRESOURCE-CLASS(NONCOMPUTE): fixture CLI work\n`;
+  completeTicket(
+    /RESOURCE-(?:CLASS|ENVELOPE)\(/u.test(text)
+      ? text
+      : `${text.trimEnd()}\nRESOURCE-CLASS(NONCOMPUTE): fixture CLI work\n`,
+  );
+/** A fixture written exactly as given: for tests about refusing an incomplete ticket. */
+const rawBrief = (name: string, text: string): string => {
+  const p = join(scratch, `${name}.md`);
+  writeFileSync(p, text);
+  return p;
+};
 const brief = (name: string, text: string): string => {
   const p = join(scratch, `${name}.md`);
   writeFileSync(p, fixtureBriefText(text));
@@ -318,29 +327,7 @@ async function router(
   // A fresh state dir per call unless the test names one: under O3 a second run in the same cwd and
   // state is refused while the first is ungraded — the rule under test below, not these tests' topic.
   const state = env.AGX_STATE_DIR ?? join(scratch, `state-${stateSeq++}`);
-  const promptFileIndex = args.indexOf("--prompt-file");
-  const promptText =
-    promptFileIndex < 0
-      ? ""
-      : readFileSync(args[promptFileIndex + 1] ?? "", "utf8");
-  const schemaOne = /^\+\+\+[\s\S]*?^schema\s*=\s*1\s*$/mu.test(promptText);
-  const schemaOneNeedsEscape =
-    schemaOne &&
-    (!["outcome", "consumer", "first_return", "writes"].every((key) =>
-      new RegExp(`^${key}\\s*=`, "mu").test(promptText),
-    ) ||
-      (!/^verify\s*=/mu.test(promptText) &&
-        !/^read_only_diagnostic\s*=\s*true/mu.test(promptText)) ||
-      !/^capabilities\s*=/mu.test(promptText));
-  const needsLegacyEscape =
-    args[0] === "dispatch" &&
-    !args.includes("--resume") &&
-    (!promptText.startsWith("+++") || schemaOneNeedsEscape) &&
-    env.TEST_SKIP_LEGACY !== "1" &&
-    !args.includes("--legacy-brief");
   const routedArgs = [...args];
-  if (args[0] === "dispatch" && !args.includes("--resume") && needsLegacyEscape)
-    routedArgs.push("--legacy-brief", "existing plain-brief fixture");
   if (
     args[0] === "dispatch" &&
     !args.includes("--resume") &&
@@ -736,22 +723,6 @@ describe("agx dispatch", () => {
     ]);
     expect(r.code).toBe(2);
     expect(r.err).toContain("'unknown-row' is not a roster row");
-  });
-
-  test("--choice refusal points to the approved --row override", async () => {
-    const r = await router([
-      "dispatch",
-      "--prompt-file",
-      b,
-      "--cd",
-      scratch,
-      "--sandbox",
-      "read-only",
-      "--choice",
-      "luna-max",
-    ]);
-    expect(r.code).toBe(2);
-    expect(r.err).toContain('--row <id> --approval "<owner approval>"');
   });
 
   test("filters unavailable codex rows and records the claude fallback default", async () => {
@@ -2011,25 +1982,6 @@ describe("agx dispatch", () => {
     expect(receipt.pick.reason).toContain("no_egress");
   });
 
-  test("--choice is refused before anything starts: Jev alone picks the row", async () => {
-    for (const id of ["luna-high", "luna-max"]) {
-      const r = await router([
-        "dispatch",
-        "--prompt-file",
-        b,
-        "--cd",
-        scratch,
-        "--sandbox",
-        "read-only",
-        "--choice",
-        id,
-      ]);
-      expect([id, r.code]).toEqual([id, 2]);
-      expect(r.err).toContain("Jev alone picks the row");
-      expect(r.err).toContain("use_for");
-    }
-  });
-
   test("Jev is asked to prefer codex when equally sufficient, with each row's route and measured numbers", async () => {
     await router([
       "dispatch",
@@ -2696,29 +2648,20 @@ describe("agx ledger note and throughput CLI", () => {
     expect(okay.out).toContain('"per_row":{}');
   });
 
-  test("plain floor violations refuse; --legacy-brief records its reason", async () => {
-    const b = brief(
-      "plain-floor-refusal",
-      "A plain brief with no measurable first return.\n",
+  test("a plain brief is refused before Jev and names the skeleton command", async () => {
+    const b = rawBrief(
+      "plain-refusal",
+      "A plain brief with no ticket.\nRESOURCE-CLASS(NONCOMPUTE): fixture\n",
     );
-    const refused = await router(runArgs(b, freshCwd()), {
-      TEST_SKIP_LEGACY: "1",
-    });
+    const before = bodies.length;
+    const refused = await router(runArgs(b, freshCwd()));
     expect(refused.code).toBe(2);
-    expect(refused.err).toContain("remand verify:");
-    expect(refused.err).toContain("read_only_diagnostic");
+    expect(refused.err).toContain("remand schema:");
+    expect(refused.err).toContain("agx ticket new");
+    expect(bodies.length).toBe(before);
     expect(logLines(refused.state).map((line) => line.kind)).toEqual([
       "refusal",
     ]);
-    const escaped = await router([
-      ...runArgs(b, freshCwd()),
-      "--legacy-brief",
-      "exception for this release",
-    ]);
-    expect(escaped.code).toBe(0);
-    expect(escaped.out).toContain(
-      '"legacy_brief_reason":"exception for this release"',
-    );
   });
 });
 
@@ -3543,7 +3486,7 @@ describe("agx pick ask", () => {
 // --- the typed work ticket: verify run by the router, automatic grade, a gate per write scope --------
 
 const ticketText = (fields: string, prose = "Do the thing.\n"): string =>
-  `+++\nschema = 1\n${fields}\n+++\n${prose}`;
+  completeTicket(`+++\nschema = 2\n${fields}\n+++\n${prose}`);
 const splitGrade = {
   verdict: "split",
   violations: [
@@ -3725,23 +3668,18 @@ describe("agx dispatch: a brief with a ticket", () => {
 
   test("dispatch and offline lint print the same collected hard-floor violations before Jev", async () => {
     const cwd = freshCwd();
-    const b = brief(
+    const b = rawBrief(
       "batched-floor",
       '+++\nschema = 2\ntimeout_s = 2\npremises = ["file:absent"]\n+++\nDo the work.',
     );
-    // Deliberately remove the fixture's automatic RESOURCE declaration.
-    writeFileSync(
-      b,
-      readFileSync(b, "utf8").replace(/\nRESOURCE-CLASS[^\n]*\n/u, "\n"),
-    );
     const before = bodies.length;
     const lint = await router(["ticket", "lint", b, "--cd", cwd]);
-    const dispatch = await router(runArgs(b, cwd), { TEST_SKIP_LEGACY: "1" });
+    const dispatch = await router(runArgs(b, cwd));
     expect(lint.code).toBe(1);
     expect(dispatch.code).toBe(2);
     expect(dispatch.err).toBe(lint.out);
     expect(bodies.length).toBe(before);
-    for (const rule of ["schema", "resource", "verify", "premise"])
+    for (const rule of ["schema", "resource", "premise"])
       expect(lint.out).toContain(`remand ${rule}:`);
   });
 
@@ -4219,7 +4157,14 @@ describe("agx dispatch: a brief with a ticket", () => {
     const mine = seen.slice(seen.lastIndexOf("<<<"));
     expect(mine).toContain("PROSE-MARK do it");
     expect(mine).toContain("Promise:");
-    expect(mine).toContain("first_return: useful interim RETURN (360 seconds)");
+    expect(mine).toContain("first_return: fixture return (360 seconds)");
+    expect(mine.startsWith("<<<")).toBe(true);
+    expect(mine).toContain(
+      "Proposition T1 (infrastructure): the fixture behaves as the test states",
+    );
+    expect(mine.indexOf("Proposition T1")).toBeLessThan(
+      mine.indexOf("Promise:"),
+    );
     expect(mine).toContain("kind: token");
     expect(mine).toContain("labels: []");
     expect(mine.indexOf("Promise:")).toBeLessThan(mine.indexOf("PROSE-MARK"));
@@ -4283,20 +4228,54 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(bodies.length).toBe(requestCount);
   });
 
+  test("the proposition recap reaches Jev, agx pick, the ledger, ps and show", async () => {
+    const cwd = freshCwd();
+    const b = brief(
+      "t-proposition",
+      ticketText('writes = []\nverify = ["true"]'),
+    );
+    const recap =
+      "Proposition T1 (infrastructure): the fixture behaves as the test states";
+    const before = bodies.length;
+    const pick = await router(["pick", "--prompt-file", b, "--cd", cwd]);
+    expect(pick.code).toBe(0);
+    expect(pick.err).toContain(`agx: ${recap}`);
+    expect(pick.out).toContain('"proposition":{"id":"T1"');
+    const sent = bodies.slice(before).find((body) => body.includes(recap));
+    const request = decodedJson(
+      z.looseObject({ state: z.looseObject({ proposition: z.string() }) }),
+      sent ?? "{}",
+    );
+    expect(request.state.proposition.split("\n")).toEqual([
+      recap,
+      "refuted_by: the test assertion fails",
+      "serves: T0",
+    ]);
+
+    const run = await router(runArgs(b, cwd));
+    expect(run.code).toBe(0);
+    const runId = decodedJson(RunIdSchema, run.out.trim()).run_id;
+    const ps = await router(["ps", "--json"], { AGX_STATE_DIR: run.state });
+    expect(ps.out).toContain('"proposition":"T1"');
+    const show = await router(["show", runId], { AGX_STATE_DIR: run.state });
+    expect(show.out).toContain("proposition=T1");
+  });
+
   test("schema 2 remand is recorded and refuses before a worker starts", async () => {
     const before = existsSync(join(scratch, "argv.log"))
       ? readFileSync(join(scratch, "argv.log"), "utf8")
       : "";
-    const b = brief(
+    const b = rawBrief(
       "t-schema2-remand",
-      "+++\nschema = 2\nwrites = []\n+++\nDecide.\n",
+      `+++\nschema = 2\noutcome = "o"\nconsumer = "c"\nfirst_return = "r"\nwrites = []\n${FIXTURE_PROPOSITION}\n+++\nRESOURCE-CLASS(NONCOMPUTE): fixture\nDecide.\n`,
     );
     const r = await router(runArgs(b, freshCwd()), {
       CLAUDE_CODE_SESSION_ID: "",
     });
     expect(r.code).toBe(2);
-    expect(r.err).toContain("remand verify:");
-    expect(r.err).toContain('verify = ["<foreground check>"]');
+    expect(r.err).toContain(
+      "remand schema: Invalid ticket: verify: required unless read_only_diagnostic = true",
+    );
     const after = existsSync(join(scratch, "argv.log"))
       ? readFileSync(join(scratch, "argv.log"), "utf8")
       : "";
@@ -4342,16 +4321,6 @@ describe("agx dispatch: a brief with a ticket", () => {
       });
     },
   );
-
-  test("an existing schema 1 ticket without optional promise fields runs", async () => {
-    const b = brief(
-      "t-schema1-compatible",
-      ticketText('writes = []\nverify = ["true"]'),
-    );
-    const r = await router(runArgs(b, freshCwd()), { TEST_SKIP_LEGACY: "1" });
-    expect(r.code).toBe(0);
-    expect(r.out).toContain('"labels":[]');
-  });
 
   test("schema 2 grader clarify is recorded and warned without refusing", async () => {
     const b = brief(
@@ -4482,15 +4451,15 @@ describe("agx dispatch: a brief with a ticket", () => {
   });
 
   test("urgent_reason does not override schema 2 floor violations", async () => {
-    const b = brief(
+    const b = rawBrief(
       "t-urgent-floor-remand",
-      '+++\nschema = 2\nwrites = []\nurgent_reason = "Vast outage"\n+++\nRestore the environment.\n',
+      `+++\nschema = 2\noutcome = "o"\nconsumer = "c"\nfirst_return = "r"\nwrites = []\nurgent_reason = "Vast outage"\n${FIXTURE_PROPOSITION}\n+++\nRESOURCE-CLASS(NONCOMPUTE): fixture\nRestore the environment.\n`,
     );
     const r = await router(runArgs(b, freshCwd(), "read-only"), {
       TEST_ENABLE_GRADER: "1",
     });
     expect(r.code).toBe(2);
-    expect(r.err).toContain("remand verify:");
+    expect(r.err).toContain("remand schema:");
     expect(r.err).not.toContain("urgent override");
     expect(logLines(r.state).map((line) => line.kind)).toEqual(["refusal"]);
   });
@@ -4653,8 +4622,14 @@ describe("agx dispatch: a brief with a ticket", () => {
 
   test("grade-replay reports agreement and false-refusal rate without running brief workers", async () => {
     const dir = mkdtempSync(join(scratch, "grade-replay-"));
-    writeFileSync(join(dir, "a.md"), "A and B are separate decisions.\n");
-    writeFileSync(join(dir, "b.md"), "Another two-part decision.\n");
+    writeFileSync(
+      join(dir, "a.md"),
+      completeTicket("A and B are separate decisions.\n"),
+    );
+    writeFileSync(
+      join(dir, "b.md"),
+      completeTicket("Another two-part decision.\n"),
+    );
     const expected = join(dir, "expected.tsv");
     writeFileSync(expected, "a.md\tclarify\nb.md\tpass\n");
     const before = existsSync(join(scratch, "argv.log"))
@@ -4666,7 +4641,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     });
     expect(r.code).toBe(0);
     expect(r.out).toContain(
-      "a.md\tmerged=split\tfloor_violations=5\tgrader_status=ok\tgrader_verdict=split\tn_pieces=2\tpieces_valid=true\tgrader_reason=-",
+      "a.md\tmerged=split\tfloor_violations=0\tgrader_status=ok\tgrader_verdict=split\tn_pieces=2\tpieces_valid=true\tgrader_reason=-",
     );
     expect(r.out).toContain("merged_agreement=0/2 (0%)");
     expect(r.out).toContain("merged_false_refusal_rate=1/1 (100%)");
@@ -4686,7 +4661,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       join(dir, "skipped.md"),
       "+++\nschema = 2\nwrites = []\n+++\nDecide.\n",
     );
-    writeFileSync(join(dir, "failed.md"), "Legacy brief.\n");
+    writeFileSync(join(dir, "failed.md"), completeTicket("A brief.\n"));
     const expected = join(dir, "expected.tsv");
     writeFileSync(expected, "failed.md\tpass\nskipped.md\tclarify\n");
     const r = await router(["ticket", "replay", dir, "--expect", expected], {
@@ -4694,20 +4669,18 @@ describe("agx dispatch: a brief with a ticket", () => {
     });
     expect(r.code).toBe(0);
     expect(r.out).toContain(
-      "failed.md\tmerged=clarify\tfloor_violations=5\tgrader_status=failed\tgrader_verdict=n/a\tn_pieces=0\tpieces_valid=false\tgrader_reason=missing agx-grade block",
+      "failed.md\tmerged=pass\tfloor_violations=0\tgrader_status=failed\tgrader_verdict=n/a\tn_pieces=0\tpieces_valid=false\tgrader_reason=missing agx-grade block",
     );
     expect(r.out).toContain("skipped.md\tmerged=clarify");
     expect(r.out).toContain("grader_status=skipped");
-    expect(r.out).toContain(
-      "grader_reason=schema 2 floor has 4 violation(s); grader not run",
-    );
+    expect(r.out).toContain("grader_reason=ticket parse failed: ");
     expect(r.out).toContain("grader_excluded=2");
     expect(r.out).toContain("grader_agreement=n/a");
   });
 
   test("grade-replay accepts a valid CRLF grade fence with trailing whitespace", async () => {
     const dir = mkdtempSync(join(scratch, "grade-replay-crlf-"));
-    writeFileSync(join(dir, "legacy.md"), "Legacy brief.\n");
+    writeFileSync(join(dir, "crlf.md"), completeTicket("A brief.\n"));
     const grade = JSON.stringify({ verdict: "pass", violations: [] });
     const fence = String.fromCodePoint(96).repeat(3);
     const r = await router(["ticket", "replay", dir], {
@@ -4836,15 +4809,6 @@ describe("agx dispatch: a brief with a ticket", () => {
       });
     },
   );
-
-  test("no front matter: legacy mode — no verify, no automatic grade, today's receipt", async () => {
-    const r = await router(
-      runArgs(brief("t-legacy", "plain brief\n"), freshCwd()),
-    );
-    expect(r.code).toBe(0);
-    expect(r.out).not.toContain('"verify_summary"');
-    expect(logLines(r.state).map((l) => l.kind)).toEqual(["run"]);
-  });
 
   test("first-return deadline observes file progress without signaling or resuming Codex", async () => {
     const b = brief(

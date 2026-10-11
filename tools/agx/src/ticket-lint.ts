@@ -1,7 +1,7 @@
 // Shared local admission floor: no model calls or network. Consumers: dispatch and ticket lint.
 import type { TicketGrade } from "./report.ts";
 import { checkPremises } from "./premises.ts";
-import { floorTicketGrade, renderTicketRemand } from "./ticket-grade.ts";
+import { renderTicketRemand } from "./ticket-grade.ts";
 import { parseTicket, resourceKind, ticketFields } from "./ticket.ts";
 import { z } from "../../shared/src/zod.ts";
 import { resolve } from "node:path";
@@ -9,13 +9,9 @@ import { resolve } from "node:path";
 export async function lintTicket(
   brief: string,
   cwd: string,
-  legacy = false,
 ): Promise<TicketGrade> {
   const parsed = parseTicket(brief);
-  const floor = floorTicketGrade(brief, parsed);
-  const violations = floor.violations.filter(
-    (item) => item.rule === "verify" && !legacy,
-  );
+  const violations: TicketGrade["violations"] = [];
   const add = (rule: string, quote: string, why: string, fix: string): void => {
     violations.push({
       rule,
@@ -29,7 +25,7 @@ export async function lintTicket(
       "schema",
       parsed.reason,
       `Invalid ticket: ${parsed.reason}`,
-      "Correct the TOML/schema fields and close the +++ front matter.",
+      "Correct the front matter fields named above; agx ticket new prints a complete skeleton.",
     );
   const prose = parsed.kind === "invalid" ? brief : parsed.prose;
   if (resourceKind(prose) === undefined)
@@ -44,7 +40,7 @@ export async function lintTicket(
   const createsFiles =
     parsed.kind === "ticket"
       ? await Promise.all(
-          (parsed.ticket.writes ?? []).map(
+          parsed.ticket.writes.map(
             async (glob) =>
               /^(tools|scripts)\//u.test(glob) &&
               (/[*?[\]{}]/u.test(glob) ||
@@ -93,7 +89,7 @@ export function sandboxWriteViolations(
 ): string[] {
   const parsed = parseTicket(brief);
   if (parsed.kind !== "ticket" || sandbox === "none") return [];
-  const writes = parsed.ticket.writes ?? [];
+  const writes = parsed.ticket.writes;
   if (sandbox === "read-only" && writes.length > 0)
     return ["read-only sandbox cannot satisfy ticket writes"];
   return writes

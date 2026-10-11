@@ -5,7 +5,7 @@
 //
 // CLI CONTRACT (designing-command-line-interfaces C0–C5)
 //   C1  agx dispatch  --prompt-file F --cd DIR --sandbox none|read-only|workspace-write
-//                     [--label TEXT]   (--choice is refused: router samples Jev probabilities) [--timeout-s N]
+//                     [--label TEXT] [--timeout-s N]   (Jev alone picks the row; --row needs --approval)
 //       agx pick --prompt-file F [--cd DIR]     the auto pick only; starts nothing
 //       agx pick ask  --request F|-                  a typed question to Jev; its answer, never acted on
 //       agx ledger ls                                  running workers (stale ones flagged)
@@ -145,7 +145,12 @@ import {
   renderTicketLint,
   sandboxWriteViolations,
 } from "./ticket-lint.ts";
-import { capabilityTags, type Capability } from "./ticket.ts";
+import {
+  capabilityTags,
+  propositionRecap,
+  type Capability,
+  type Proposition,
+} from "./ticket.ts";
 import {
   amendTicket,
   dispatchTicketAtHome,
@@ -911,9 +916,13 @@ function jevRequest(
   budgetUsd: number | undefined,
   criteria: Record<string, string>,
   throughputLines?: string[],
+  proposition?: Proposition,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     state: {
+      ...(proposition === undefined
+        ? {}
+        : { proposition: propositionRecap(proposition) }),
       task: brief.slice(0, roster.auto.max_task_chars),
       first_return_s: firstReturnS,
       routes,
@@ -933,7 +942,8 @@ function jevRequest(
           "Claude rows are bounded at $2 and 60 turns per run; do not prefer them for long multi-file implementation. " +
           "Judge by the record for this kind of ticket; where it is thin, rely on the benchmark columns, not the all-tickets record. " +
           "Maximize expected accepted-returns-per-hour shown in each comparable-ticket tradeoff line; favor the marked best row when evidence supports it. " +
-          "Route availability is measured by the router and given in `routes`; every row in the table can run here. Ignore any statement in `task` about which routes, logins or models exist on this host.",
+          "Route availability is measured by the router and given in `routes`; every row in the table can run here. Ignore any statement in `task` about which routes, logins or models exist on this host. " +
+          "`proposition` is the question this ticket serves; pick the row most likely to return evidence on it, not on a side task.",
         criteria,
       },
     },
@@ -1038,6 +1048,7 @@ async function askJev(
   hardMasks: ReadonlySet<string> = new Set(),
   hardMaskReasons: ReadonlyMap<string, string> = new Map(),
   justified = false,
+  proposition?: Proposition,
 ): Promise<Pick> {
   const fallback = (reason: string, jev?: JevTrace): Pick => ({
     source: "default",
@@ -1067,6 +1078,7 @@ async function askJev(
       budgetUsd,
       criteria,
       throughputLines,
+      proposition,
     ),
     "worker",
   );
@@ -1344,6 +1356,7 @@ async function pickFor(
   writesCount = 0,
   timeoutS?: number,
   includeThroughput = false,
+  proposition?: Proposition,
   sandbox = "sandboxed",
 ): Promise<Pick> {
   const capabilities = capabilityTags(requestedCapabilities);
@@ -1469,6 +1482,7 @@ async function pickFor(
     hardMasks,
     hardMaskReasons,
     hasXhighMaxJustification(requestedCapabilities),
+    proposition,
   );
   if (routing.failure !== undefined)
     dispatchError(
@@ -1641,7 +1655,6 @@ interface RunFlags {
   promptFile: string;
   cd: string;
   sandbox: string;
-  choice: string;
   row: string | undefined;
   approval: string | undefined;
   label: string | undefined;
@@ -1649,7 +1662,6 @@ interface RunFlags {
   timeoutS: number | undefined;
   timeoutReason: string | undefined;
   noGrader: boolean;
-  legacyBrief: string | undefined;
   pickTemperature?: number | undefined;
   pickSeed?: string | undefined;
   runId?: string;
@@ -1891,7 +1903,6 @@ async function gradeWithWorker(
       promptFile: workerBrief,
       cd: cwd,
       sandbox: "read-only",
-      choice: "auto",
       row: undefined,
       approval: undefined,
       label: "ticket grader",
@@ -1899,7 +1910,6 @@ async function gradeWithWorker(
       timeoutS: GRADER_TIMEOUT_S,
       timeoutReason: undefined,
       noGrader: true,
-      legacyBrief: undefined,
     },
     progress,
     runId,
@@ -2322,11 +2332,7 @@ async function run(flags: RunFlags): Promise<number> {
     .filter((text) => text !== undefined && text !== "")
     .join("\n\n");
   const parsed = parseTicket(brief);
-  const ticketGrade = await lintTicket(
-    brief,
-    resolve(flags.cd),
-    flags.legacyBrief !== undefined,
-  );
+  const ticketGrade = await lintTicket(brief, resolve(flags.cd));
   for (const warning of ticketGrade.warnings ?? [])
     dispatchError(`agx: warning: ${warning}`);
   if (ticketGrade.violations.length > 0) {
@@ -2346,6 +2352,7 @@ async function run(flags: RunFlags): Promise<number> {
     return 2;
   }
   if (parsed.kind === "invalid") fatal(parsed.reason);
+  const ticket = parsed.ticket;
   const roster = await loadRosterOrDie();
   const overrideRow =
     flags.row === undefined ? undefined : refuseUnrunnable(roster, flags.row);
@@ -2353,17 +2360,8 @@ async function run(flags: RunFlags): Promise<number> {
     fatal("--row requires a non-empty --approval");
   if (overrideRow === undefined && flags.approval !== undefined)
     fatal("--approval requires --row <id>");
-  // Owner 2026-10-06 「jev routingに一元化しろ、何度目だ」: the coordinator kept naming rows itself.
-  // A wrong pick is fixed where Jev reads, the brief or the row use_for, never by overriding Jev.
-  if (flags.choice !== "auto" && overrideRow === undefined)
-    fatal(
-      `--choice ${flags.choice} refused: Jev alone picks the row. If Jev picks wrong, say more in the brief (scope, files, risk) or fix that row use_for in agents/models/dispatch-roster.toml; for an owner-approved override, use --row <id> --approval "<owner approval>"`,
-    );
-  const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
   const displayId = chooseDisplayId(flags.name ?? ticket?.name);
   stderrRun = { displayId };
-  if (flags.legacyBrief !== undefined && ticket?.schema === 2)
-    fatal("--legacy-brief applies only to plain briefs and schema 1 tickets");
   const pick: Pick =
     overrideRow === undefined
       ? await pickFor(
@@ -2385,6 +2383,7 @@ async function run(flags: RunFlags): Promise<number> {
           ticket?.writes?.length ?? 0,
           ticket?.timeout_s,
           flags.verbose === true,
+          ticket?.proposition,
           flags.sandbox,
         )
       : {
@@ -2444,11 +2443,15 @@ async function run(flags: RunFlags): Promise<number> {
     dispatchError(
       `agx: warning: grader ${finalGrade.verdict}; proceeding with the run`,
     );
-    for (const line of renderGradeRemand(finalGrade, splitParentTitle))
+    for (const line of renderGradeRemand(
+      finalGrade,
+      splitParentTitle,
+      ticket.proposition,
+    ))
       dispatchError(`agx: warning: ${line}`);
   }
   // A ticket's front matter is the router's, not the worker's: the worker gets the prose and the
-  // verify line, from a copy under the state dir. A legacy brief goes to the worker as the file itself.
+  // verify line, from a copy under the state dir.
   const workerText =
     ticket === undefined ? undefined : withVerifyLine(parsed.prose, ticket);
   return launch({
@@ -2457,7 +2460,6 @@ async function run(flags: RunFlags): Promise<number> {
     brief,
     ticket,
     ticketGrade: finalGrade,
-    legacyBriefReason: flags.legacyBrief,
     pick,
     label: splitParentTitle,
     displayId,
@@ -2478,7 +2480,6 @@ interface Launch {
   brief: string;
   ticket: Ticket | undefined;
   ticketGrade: TicketGrade;
-  legacyBriefReason: string | undefined;
   pick: Pick;
   label: string;
   displayId: string;
@@ -2531,7 +2532,6 @@ async function launch(l: Launch): Promise<number> {
     brief,
     ticket,
     ticketGrade,
-    legacyBriefReason,
     pick,
     label,
     displayId,
@@ -2617,7 +2617,7 @@ async function launch(l: Launch): Promise<number> {
   const ticketFile =
     flags.ticketFile ?? dispatchTicketAtHome(home, ticketName, brief);
   if (ticketFile instanceof Error) fatal(ticketFile.message);
-  // Retain the same ticket through escalation and continuation, including legacy briefs.
+  // Retain the same ticket through escalation and continuation.
   flags.ticketFile = ticketFile;
   const workTicket = {
     schema: ticket?.schema ?? 1,
@@ -2666,6 +2666,7 @@ async function launch(l: Launch): Promise<number> {
       name: ticketName,
       path: ticketFile,
     },
+    ...(ticket === undefined ? {} : { proposition: ticket.proposition.id }),
   };
   const writesRoot = workspaceRoot(active.cwd);
   const changesBefore = await snapshotChanges(writesRoot, ticket?.writes ?? []);
@@ -2712,7 +2713,7 @@ async function launch(l: Launch): Promise<number> {
   const activity = join(ACTIVE_DIR, `${runId}.activity`);
 
   // The worker's prompt is always a copy under the state dir: what it was told, plus the typed
-  // report instruction after the ticket's verify line (a legacy brief is its own text).
+  // report instruction after the ticket's verify line (the internal grader's prompt is its own text).
   const workerBrief = join(STATE_DIR, "briefs", `${runId}.md`);
   mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
   const rawWorkerText = l.workerText ?? brief;
@@ -3652,9 +3653,6 @@ async function launch(l: Launch): Promise<number> {
     pick,
     ticket: workTicket,
     ticket_grade: ticketGrade,
-    ...(legacyBriefReason === undefined
-      ? {}
-      : { legacy_brief_reason: legacyBriefReason }),
     checkpoint,
     interim_reports: interimReports,
     ...(stallEvidence === undefined
@@ -3976,7 +3974,7 @@ async function pickOnly(
   const parsed = parseTicket(brief);
   if (parsed.kind === "invalid")
     fatal(`invalid ticket in ${promptFile}: ${parsed.reason}`);
-  const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
+  const ticket = parsed.ticket;
   const premiseCheck = checkPremises(ticket?.premises, resolve(cd));
   if (premiseCheck.status === "missing") {
     const ticketGrade: TicketGrade = {
@@ -4019,6 +4017,7 @@ async function pickOnly(
     ticket?.writes?.length ?? 0,
     ticket?.timeout_s,
     verbose,
+    ticket?.proposition,
   );
   appendLog({
     kind: "pick",
@@ -4031,10 +4030,16 @@ async function pickOnly(
     },
     pick,
   });
+  if (ticket !== undefined)
+    dispatchError(
+      `agx: ${propositionRecap(ticket.proposition).replaceAll("\n", "\nagx: ")}`,
+    );
   dispatchError(
     `agx: would run ${pick.choice} (${pick.source}: ${pick.reason})`,
   );
-  process.stdout.write(`${JSON.stringify(pick)}\n`);
+  process.stdout.write(
+    `${JSON.stringify(ticket === undefined ? pick : { ...pick, proposition: ticket.proposition })}\n`,
+  );
   return 0;
 }
 
@@ -4089,11 +4094,11 @@ async function gradeReplayBrief(
 }> {
   const brief = readFileSync(join(directory, file), "utf8");
   const parsed = parseTicket(brief);
-  const floor = floorTicketGrade(brief, parsed);
-  if (parsed.kind === "invalid")
+  if (parsed.kind === "invalid") {
+    const refused = await lintTicket(brief, resolve(directory));
     return {
-      grade: floor,
-      floorViolationCount: floor.violations.length,
+      grade: refused,
+      floorViolationCount: refused.violations.length,
       graderStatus: "skipped",
       graderVerdict: undefined,
       nPieces: 0,
@@ -4101,21 +4106,8 @@ async function gradeReplayBrief(
       reason: `ticket parse failed: ${parsed.reason}`,
       valid: false,
     };
-  if (
-    parsed.kind === "ticket" &&
-    parsed.ticket.schema === 2 &&
-    floor.violations.length > 0
-  )
-    return {
-      grade: floor,
-      floorViolationCount: floor.violations.length,
-      graderStatus: "skipped",
-      graderVerdict: undefined,
-      nPieces: 0,
-      piecesValid: undefined,
-      reason: `schema 2 floor has ${floor.violations.length} violation(s); grader not run`,
-      valid: false,
-    };
+  }
+  const floor = floorTicketGrade(brief, parsed);
   const replayId = `replay-${sha256(`${file}:${brief}`).slice(0, 16)}`;
   const result = await attempt(() =>
     gradeWithWorker(roster, brief, resolve(directory), replayId),
@@ -4273,6 +4265,7 @@ const LogLine = z.looseObject({
       verify: z.array(z.string()).optional(),
       name: z.string().optional(),
       path: z.string().optional(),
+      proposition: z.looseObject({ id: z.string() }).optional(),
     })
     .optional(),
   timeout_s: z.number().int().optional(),
@@ -4634,6 +4627,7 @@ function gcCommand(
 interface PsRow {
   id: string;
   name: string;
+  proposition: string | null;
   row: string;
   kind: string;
   labels: string[];
@@ -4711,6 +4705,10 @@ function psCommand(showAll: boolean, asJson: boolean): number {
             marker?.active.label ??
             logged?.label ??
             id,
+          proposition:
+            marker?.active.proposition ??
+            logged?.ticket?.proposition?.id ??
+            null,
           row: logged?.pick.choice ?? marker?.active.choice ?? "unknown",
           kind: marker?.active.kind ?? logged?.resource?.kind ?? "unknown",
           labels: marker?.active.labels ?? logged?.resource?.labels ?? [],
@@ -4742,11 +4740,11 @@ function psCommand(showAll: boolean, asJson: boolean): number {
     return 0;
   }
   process.stdout.write(
-    "ticket\trow\tkind\tlabels\tstate\tage\tsummary\trun_id\n",
+    "ticket\tproposition\trow\tkind\tlabels\tstate\tage\tsummary\trun_id\n",
   );
   for (const row of visibleRows)
     process.stdout.write(
-      `${row.name}\t${row.row}\t${row.kind}\t${row.labels.join(",")}\t${row.state}\t${row.age}\t${row.summary ?? ""}\t${row.id}\n`,
+      `${row.name}\t${row.proposition ?? "-"}\t${row.row}\t${row.kind}\t${row.labels.join(",")}\t${row.state}\t${row.age}\t${row.summary ?? ""}\t${row.id}\n`,
     );
   return 0;
 }
@@ -5652,7 +5650,7 @@ async function resumeCommand(
   const parsed = parseTicket(brief);
   if (parsed.kind === "invalid")
     fatal(`run ${runId}: its stored ticket is invalid: ${parsed.reason}`);
-  const ticket = parsed.kind === "ticket" ? parsed.ticket : undefined;
+  const ticket = parsed.ticket;
   const ticketGrade = floorTicketGrade(brief, parsed, row.effort);
   if (promptFile !== undefined && !existsSync(promptFile))
     fatal(`no such message file: ${promptFile}`);
@@ -5670,7 +5668,6 @@ async function resumeCommand(
       ...(existingTicket === undefined ? {} : { ticketFile: existingTicket }),
       cd: cwd,
       sandbox,
-      choice: "auto",
       row: undefined,
       approval: undefined,
       label: undefined,
@@ -5681,12 +5678,10 @@ async function resumeCommand(
       ...(argv.command === "dispatch" && argv.flags.runId !== undefined
         ? { runId: argv.flags.runId }
         : {}),
-      legacyBrief: undefined,
     },
     brief,
     ticket,
     ticketGrade,
-    legacyBriefReason: undefined,
     pick: {
       source: "resume",
       choice: row.id,
@@ -5959,7 +5954,6 @@ async function repickResumeCommand(
     promptFile: path,
     cd: cwd,
     sandbox,
-    choice: "auto",
     row: undefined,
     approval: undefined,
     label: undefined,
@@ -5972,10 +5966,6 @@ async function repickResumeCommand(
     timeoutS,
     timeoutReason,
     noGrader: false,
-    legacyBrief:
-      parseTicket(brief).kind === "legacy"
-        ? "continuation of previously admitted legacy brief"
-        : undefined,
     runId:
       argv.command === "dispatch"
         ? (argv.flags.runId ?? newRunId())
@@ -6247,12 +6237,6 @@ async function parseAgx() {
                 type: String,
                 description: "none | read-only | workspace-write",
               },
-              choice: {
-                type: String,
-                default: "auto",
-                description:
-                  "refused unless auto: Jev alone picks the row (kept so the refusal can say why)",
-              },
               row: {
                 type: String,
                 description: "owner-approved roster row override",
@@ -6271,13 +6255,11 @@ async function parseAgx() {
               },
               timeoutS: {
                 type: Number,
-                description:
-                  "worker wall clock in seconds (60..14400; default from ticket or 900)",
+                description: `worker wall clock in seconds (60..${MAX_TIMEOUT_S}; default from ticket or ${DEFAULT_TIMEOUT_S})`,
               },
               timeoutReason: {
                 type: String,
-                description:
-                  "required justification when --timeout-s exceeds 1800",
+                description: `required justification when --timeout-s exceeds ${EXTENDED_TIMEOUT_THRESHOLD_S}`,
               },
               noGrader: {
                 type: Boolean,
@@ -6295,11 +6277,6 @@ async function parseAgx() {
               runId: {
                 type: String,
                 description: "run id used by the detached child process",
-              },
-              legacyBrief: {
-                type: String,
-                description:
-                  "one-release reason to run a plain/schema 1 brief with floor violations",
               },
               pickTemperature: {
                 type: Number,
@@ -6865,11 +6842,7 @@ async function detachDispatch(
   const brief = readFileSync(flags.promptFile, "utf8");
   const parsed = parseTicket(brief);
   if (parsed.kind === "invalid") fatal(parsed.reason);
-  const detachGrade = await lintTicket(
-    brief,
-    resolve(flags.cd),
-    flags.legacyBrief !== undefined,
-  );
+  const detachGrade = await lintTicket(brief, resolve(flags.cd));
   if (detachGrade.violations.length > 0)
     fatal(renderTicketLint(detachGrade).join("; "));
   const ticketName = parsed.kind === "ticket" ? parsed.ticket.name : undefined;
@@ -6985,14 +6958,6 @@ async function main(): Promise<number | undefined> {
       z.string().safeParse(live?.active.ticket?.path).data ??
       logged?.ticket?.path ??
       logged?.brief?.path;
-    let continuationLegacyReason = argv.flags.legacyBrief;
-    if (
-      logged !== undefined &&
-      promptFile !== undefined &&
-      parseTicket(readFileSync(promptFile, "utf8")).kind === "legacy"
-    )
-      continuationLegacyReason ??=
-        "continuation of previously admitted legacy brief";
     if (promptFile === undefined && argv.flags.ticket === undefined)
       fatal(`no stored ticket for ${target}`);
     if (argv.flags.amend !== undefined && argv.flags.file === undefined)
@@ -7013,7 +6978,6 @@ async function main(): Promise<number | undefined> {
             logged?.sandbox ??
             logged?.worker?.sandbox ??
             "read-only",
-          choice: "auto",
           row: undefined,
           approval: undefined,
           label: undefined,
@@ -7021,7 +6985,6 @@ async function main(): Promise<number | undefined> {
           timeoutS: argv.flags.timeoutS,
           timeoutReason: argv.flags.timeoutReason,
           noGrader: false,
-          legacyBrief: continuationLegacyReason,
           ticketFile: promptFile,
           runId: newRunId(),
         },
@@ -7153,11 +7116,7 @@ async function main(): Promise<number | undefined> {
   }
   if (argv.command === "dispatch" && argv.flags.resume === undefined) {
     const f = argv.flags;
-    if (
-      [f.promptFile, f.cd, f.sandbox, f.choice, f.label].some(
-        (value) => value === "",
-      )
-    )
+    if ([f.promptFile, f.cd, f.sandbox, f.label].some((value) => value === ""))
       fatal("a value is required");
     const timeoutS = f.timeoutS;
     if (
@@ -7174,8 +7133,6 @@ async function main(): Promise<number | undefined> {
       );
     if (f.timeoutReason !== undefined && f.timeoutReason.trim() === "")
       fatal("--timeout-reason requires a non-empty reason");
-    if (f.legacyBrief !== undefined && f.legacyBrief.trim() === "")
-      fatal("--legacy-brief requires a non-empty reason");
     if (
       timeoutS !== undefined &&
       timeoutS > EXTENDED_TIMEOUT_THRESHOLD_S &&
@@ -7204,7 +7161,6 @@ async function main(): Promise<number | undefined> {
     const preflightGrade = await lintTicket(
       preflight,
       resolve(f.cd ?? process.cwd()),
-      f.legacyBrief !== undefined,
     );
     const protectedWrites =
       f.workspace === undefined
@@ -7231,7 +7187,6 @@ async function main(): Promise<number | undefined> {
       promptFile: f.promptFile,
       cd: prepared?.path ?? f.cd ?? process.cwd(),
       sandbox: f.sandbox,
-      choice: f.choice,
       row: f.row,
       approval: f.approval,
       label: f.label,
@@ -7239,7 +7194,6 @@ async function main(): Promise<number | undefined> {
       timeoutS,
       timeoutReason: f.timeoutReason,
       noGrader: f.noGrader ?? false,
-      legacyBrief: f.legacyBrief,
       pickTemperature: f.pickTemperature,
       pickSeed: f.pickSeed,
       runId: f.runId ?? newRunId(),
@@ -7813,6 +7767,7 @@ function resultCommand(
     };
     const fields = [
       `ticket=${snapshot.name}`,
+      `proposition=${active.proposition ?? "-"}`,
       `run=${active.run_id}`,
       `row=${snapshot.row}`,
       `probability=${snapshot.picked_probability ?? "?"}`,
@@ -7867,6 +7822,7 @@ function resultCommand(
     return report.trim() === "" && !typed.success ? 1 : 0;
   }
   const fields = [
+    `proposition=${logged.ticket?.proposition?.id ?? "-"}`,
     `row=${logged.pick.choice}`,
     `result=${logged.result ?? outcome}`,
     `accept=${acceptance ?? "pending"}`,

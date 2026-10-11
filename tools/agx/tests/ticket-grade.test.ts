@@ -2,30 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { TicketGradeSchema } from "../src/report.ts";
 import { floorTicketGrade, renderTicketRemand } from "../src/ticket-grade.ts";
 import { parseTicket } from "../src/ticket.ts";
+import { completeTicket } from "./fixture-ticket.ts";
 
 const schema2 = (fields: string): string =>
-  `+++\nschema = 2\n${fields}\n+++\nAnalyze this brief.\n`;
+  completeTicket(`+++\nschema = 2\n${fields}\n+++\nAnalyze this brief.\n`);
 
 describe("floor ticket grade", () => {
-  test("schema 2 missing keys gets actionable clarify remands", () => {
-    const brief = schema2("writes = []");
+  test("the floor adds nothing to a schema-valid ticket at normal effort", () => {
+    const brief = schema2("writes = []\nverify = []");
     const grade = floorTicketGrade(brief, parseTicket(brief));
-    expect(grade.verdict).toBe("clarify");
-    expect(grade.violations.map((v) => v.rule)).toEqual([
-      "outcome",
-      "consumer",
-      "first_return",
-      "verify",
-    ]);
-    const lines = renderTicketRemand(grade);
-    expect(lines).toHaveLength(4);
-    for (const [index, v] of grade.violations.entries()) {
-      expect(lines[index]).toContain(v.rule);
-      expect(lines[index]).toContain(v.fix);
-    }
-    const roundTrip = TicketGradeSchema.safeParse(grade);
-    expect(roundTrip.success).toBe(true);
-    if (roundTrip.success) expect(roundTrip.data).toEqual(grade);
+    expect(grade).toEqual({ verdict: "pass", source: "floor", violations: [] });
+    expect(renderTicketRemand(grade)).toEqual([]);
+    expect(TicketGradeSchema.safeParse(grade).success).toBe(true);
   });
 
   test("a complete diagnostic ticket passes", () => {

@@ -21,6 +21,7 @@ import {
   ticketRoot,
 } from "../src/ticket-home.ts";
 import { parseTicket, promiseBlock, resourceKind } from "../src/ticket.ts";
+import { completeTicket } from "./fixture-ticket.ts";
 import { ActiveSchema } from "../src/state.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "agx-ticket-home-"));
@@ -28,7 +29,9 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 const complete = (resource: string, fields = ""): string =>
-  `+++\nschema = 2\nwrites = ["src/**"]\nverify = ["true"]\n${fields}\n+++\n${resource}\nDo the work.\n`;
+  completeTicket(
+    `+++\nschema = 2\nwrites = ["src/**"]\nverify = ["true"]\n${fields}\n+++\n${resource}\nDo the work.\n`,
+  );
 
 describe("ticket promises and resource metadata", () => {
   test.each([
@@ -85,7 +88,7 @@ describe("ticket promises and resource metadata", () => {
         "none",
         resourceKind(parsed.prose),
       );
-      expect(promise.split("\n").length).toBeLessThanOrEqual(15);
+      expect(promise.split("\n").length).toBeLessThanOrEqual(21);
       expect(promise).toContain(`kind: ${kind}`);
       expect(promise).toContain('labels: ["Opaque","","a/b","Opaque"]');
       expect(promise).toContain(join(scratch, "src/**"));
@@ -154,7 +157,6 @@ describe("local lint", () => {
       '+++\nschema = 2\ntimeout_s = 3\npremises = ["file:missing.ts"]\n+++\nDo the work.\n';
     const result = await lintTicket(brief, scratch);
     expect(result.violations.map((item) => item.rule)).toEqual([
-      "verify",
       "schema",
       "resource",
       "premise",
@@ -167,7 +169,7 @@ describe("local lint", () => {
       expect(violation.fix.length).toBeGreaterThan(0);
   });
 
-  test("older tickets work, resource declarations and diagnostic alternatives pass", async () => {
+  test("resource declarations and the diagnostic alternative pass", async () => {
     expect(
       (await lintTicket(complete("RESOURCE-CLASS(NONCOMPUTE): CLI"), scratch))
         .violations,
@@ -183,7 +185,9 @@ describe("local lint", () => {
     expect(
       (
         await lintTicket(
-          "+++\nschema = 1\nwrites = []\nread_only_diagnostic = true\n+++\nRESOURCE-CLASS(NONCOMPUTE): inspection",
+          completeTicket(
+            "+++\nschema = 2\nwrites = []\nread_only_diagnostic = true\n+++\nRESOURCE-CLASS(NONCOMPUTE): inspection",
+          ),
           scratch,
         )
       ).violations,
@@ -213,13 +217,9 @@ describe("repository ticket home", () => {
     expect(readFileSync(path, "utf8")).toContain(
       "Keep the new acceptance check.",
     );
-    const legacy = dispatchTicketAtHome(
-      home,
-      "plain",
-      "Legacy instructions.",
-      "2026-10-11",
-    );
-    expect(legacy).toBe(join(home, "261011-plain.md"));
+    expect(
+      dispatchTicketAtHome(home, "plain", "Plain instructions.", "2026-10-11"),
+    ).toBeInstanceOf(Error);
     expect(
       dispatchTicketAtHome(home, "../escape", "Invalid path."),
     ).toBeInstanceOf(Error);
@@ -411,8 +411,8 @@ describe("repository ticket home", () => {
     );
     expect(result.exitCode).toBe(1);
     const output = result.stdout.toString();
-    for (const rule of ["schema", "resource", "verify", "premise"])
+    for (const rule of ["schema", "resource", "premise"])
       expect(output).toContain(`remand ${rule}:`);
-    expect(output.match(/Fix:/gu)).toHaveLength(4);
+    expect(output.match(/Fix:/gu)).toHaveLength(3);
   });
 });

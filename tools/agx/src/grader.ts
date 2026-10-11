@@ -1,6 +1,10 @@
 import { jsonText, z } from "../../shared/src/zod.ts";
-import { overlappingGlobs, parseTicket } from "./ticket.ts";
-import { floorTicketGrade } from "./ticket-grade.ts";
+import {
+  overlappingGlobs,
+  parseTicket,
+  propositionToml,
+  type Proposition,
+} from "./ticket.ts";
 import { TicketGradeSchema, type TicketGrade } from "./report.ts";
 
 const PieceSchema = z.strictObject({
@@ -142,7 +146,7 @@ function normalizeDependencies(grade: AgentGrade): { grade: AgentGrade } {
 const tomlStringArray = (values: string[]): string =>
   `[${values.map((value) => JSON.stringify(value)).join(", ")}]`;
 
-function pieceBrief(piece: AgentPiece): string {
+function pieceBrief(piece: AgentPiece, proposition: Proposition): string {
   return [
     "+++",
     "schema = 2",
@@ -151,6 +155,7 @@ function pieceBrief(piece: AgentPiece): string {
     `first_return = ${JSON.stringify(piece.first_return)}`,
     `writes = ${tomlStringArray(piece.writes)}`,
     `verify = ${tomlStringArray(piece.verify)}`,
+    ...propositionToml(proposition),
     "+++",
     piece.title,
   ].join("\n");
@@ -267,13 +272,17 @@ function validateAgentGrade(
   }
   const titles = new Set(pieces.map((piece) => piece.title));
   if (titles.size !== pieces.length) return "piece titles must be unique";
-  for (const piece of pieces) {
-    const parsed = parseTicket(pieceBrief(piece));
-    if (parsed.kind !== "ticket")
-      return `piece ${piece.title} is not a valid schema 2 ticket`;
-    if (floorTicketGrade(pieceBrief(piece), parsed).verdict !== "pass")
-      return `piece ${piece.title} does not pass the schema 2 ticket floor`;
-  }
+  const invalidPiece =
+    parent?.kind === "ticket"
+      ? pieces
+          .map((piece) => ({
+            piece,
+            parsed: parseTicket(pieceBrief(piece, parent.ticket.proposition)),
+          }))
+          .find(({ parsed }) => parsed.kind === "invalid")
+      : undefined;
+  if (invalidPiece?.parsed.kind === "invalid")
+    return `piece ${invalidPiece.piece.title} is not a valid ticket: ${invalidPiece.parsed.reason}`;
   const overlap = unorderedWriteOverlap(pieces);
   if (overlap !== undefined)
     return `pieces ${overlap[0].title} and ${overlap[1].title} have overlapping writes without a depends_on order`;
@@ -311,6 +320,7 @@ export function mergeTicketGrades(
 export function renderGradeRemand(
   grade: TicketGrade,
   splitFrom?: string,
+  proposition?: Proposition,
 ): string[] {
   const lines = grade.violations.map(
     (item) =>
@@ -335,6 +345,7 @@ export function renderGradeRemand(
         ...(piece.depends_on.length === 0
           ? []
           : [`# depends_on = ${JSON.stringify(piece.depends_on)}`]),
+        ...(proposition === undefined ? [] : propositionToml(proposition)),
         "+++",
       ].join("\n"),
     );

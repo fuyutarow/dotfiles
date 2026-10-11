@@ -49,6 +49,10 @@ export const LAND_HOSTS: readonly {
 
 // [when, repo-relative source, home-relative destination]
 export const LINKS: readonly (readonly [When, string, string])[] = [
+  // The source tokens are resolved from the live Google Drive installation by link-dots.ts; they
+  // deliberately contain no account or machine-specific directory name.
+  ["all", "@google-drive/root", "Google Drive"],
+  ["all", "@google-drive/personal", "Personal-Drive"],
   // --- zsh ---
   // Bun is a Brewfile.core utility. The exec wrapper remains for temporary-HOME renders only.
   ["all", "zsh/zshenv", ".zshenv"],
@@ -636,11 +640,13 @@ export function surfaces(): Surface[] {
   const links = LINKS.map(([when, src, dst]): Surface => ({
     kind: "link",
     when,
-    sources: [src],
+    sources: src.startsWith("@google-drive/") ? [] : [src],
     deployed: `~/${dst}`,
-    consumer: topic(src),
+    consumer: src.startsWith("@google-drive/") ? "Google Drive" : topic(src),
     writer: "human, in the repo",
-    verify: `${DOCTOR} (links)`,
+    verify: src.startsWith("@google-drive/")
+      ? `${DOCTOR} (google-drive)`
+      : `${DOCTOR} (links)`,
   }));
   const attach: Surface = {
     kind: "link",

@@ -62,6 +62,7 @@ import {
 } from "../tools/repo-retrieve/src/ccc-db-dir.ts";
 import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
 import { RENDERED } from "./config-registry.ts";
+import { googleDriveTargets } from "./link-dots.ts";
 import { brewPrefix, coreCommands, corePathProblems } from "./core-tools.ts";
 import { danglingRepoBins } from "./deps-prune.ts";
 import { obj } from "../agents/hooks/narrow.ts";
@@ -219,6 +220,42 @@ export async function checkLinks(ctx: Ctx): Promise<Finding> {
     "mise run link:dots",
     driftLines.map((l) => l.slice("drift: ".length)),
   );
+}
+
+export function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
+  return Promise.resolve().then(() => {
+    if (!ctx.isMac && !ctx.isWsl)
+      return skip("google-drive", "Google Drive links apply to macOS and WSL");
+    const targets = googleDriveTargets(ctx.home, ctx.isMac ? "mac" : "wsl");
+    const problems: string[] = [];
+    for (const [name, target] of [
+      ["Google Drive", targets.root],
+      ["Personal-Drive", targets.personal],
+    ] as const) {
+      const path = join(ctx.home, name);
+      const actual =
+        lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true
+          ? readlinkSync(path)
+          : undefined;
+      if (target === undefined)
+        problems.push(`${name}: Drive target unavailable or ambiguous`);
+      else if (actual !== target)
+        problems.push(
+          `${name}: want symlink to ${target}, have ${actual ?? "no symlink"}`,
+        );
+    }
+    return problems.length === 0
+      ? pass(
+          "google-drive",
+          "both home links resolve to the discovered Drive root and private collection",
+        )
+      : fail(
+          "google-drive",
+          `${problems.length} Google Drive link problem(s)`,
+          "mise run link:dots (ensure Drive is mounted/signed in first)",
+          problems,
+        );
+  });
 }
 
 // Every file scripts/render-home.ts writes (scripts/config-registry.ts RENDERED), as a path under
@@ -1098,6 +1135,7 @@ type Check = {
 const always = () => null;
 export const CHECKS: Check[] = [
   { name: "links", run: checkLinks, applies: always },
+  { name: "google-drive", run: checkGoogleDrive, applies: always },
   { name: "rendered", run: checkRendered, applies: always },
   { name: "skills", run: checkSkills, applies: always },
   {

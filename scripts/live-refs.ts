@@ -408,7 +408,8 @@ export function candidateFindings(
     symlinkSync(join(repo, source), dest);
   };
   for (const [when, source, destination] of LINKS)
-    if (applies(when, os)) link(source, destination);
+    if (applies(when, os) && !source.startsWith("@google-drive/"))
+      link(source, destination);
   link("agents/skills", ".agents/skills");
   link("agents/commands", ".claude/commands");
   link("agents/codex/AGENTS.md", ".codex/AGENTS.md");

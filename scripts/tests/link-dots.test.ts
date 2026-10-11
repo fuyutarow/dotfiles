@@ -23,7 +23,9 @@ import {
   ensureToolOwned,
   link,
   loadSmartOpenReceiver,
+  googleDriveTargets,
   linkSshAttach,
+  linkGoogleDrive,
   prune,
   sshSupportsAttachMatch,
 } from "../link-dots.ts";
@@ -76,6 +78,38 @@ test("applies: every When names its OSes explicitly", () => {
   expect(applies("not-mac", "mac")).toBe(false);
   expect(applies("wsl", "linux")).toBe(false);
   expect(applies("mac", "mac")).toBe(true);
+});
+
+test("Google Drive targets are discovered without storing the account folder name", () => {
+  const home = tmp("drive-home-");
+  const root = join(home, "Library/CloudStorage/GoogleDrive-user-id");
+  const personal = join(
+    root,
+    "My Drive",
+    "private account folder",
+    "Personal-Drive",
+  );
+  mkdirSync(personal, { recursive: true });
+  expect(googleDriveTargets(home, "mac")).toEqual({ root, personal });
+
+  const ctx: Ctx = { home, dotfiles: REPO, os: "mac", mode: "safe", drift: [] };
+  linkGoogleDrive(ctx);
+  expect(readlinkSync(join(home, "Google Drive"))).toBe(root);
+  expect(readlinkSync(join(home, "Personal-Drive"))).toBe(personal);
+});
+
+test("Google Drive discovery refuses ambiguous roots and private collections", () => {
+  const home = tmp("drive-home-");
+  const cloud = join(home, "Library/CloudStorage");
+  mkdirSync(join(cloud, "GoogleDrive-one"), { recursive: true });
+  mkdirSync(join(cloud, "GoogleDrive-two"), { recursive: true });
+  expect(googleDriveTargets(home, "mac")).toEqual({});
+
+  const uniqueHome = tmp("drive-home-");
+  const root = join(uniqueHome, "Library/CloudStorage/GoogleDrive-one");
+  mkdirSync(join(root, "My Drive", "a", "Personal-Drive"), { recursive: true });
+  mkdirSync(join(root, "My Drive", "b", "Personal-Drive"), { recursive: true });
+  expect(googleDriveTargets(uniqueHome, "mac")).toEqual({ root });
 });
 
 describe("link", () => {

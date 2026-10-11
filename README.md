@@ -189,6 +189,12 @@ cd ~/dotfiles && brew install mise && mise run wsl:init
 exec zsh
 ```
 
+When Google Drive for Windows is available as `G:`, `wsl/wsl.conf` enables WSL automount at
+`/mnt`; `mise run link:dots` declares `~/Google Drive` for the drive root and discovers the
+unique `Personal-Drive` directory under `My Drive` for `~/Personal-Drive`. The Drive account's
+folder name is discovered locally and is never stored in this repository. After changing
+`wsl/wsl.conf`, restart the distro for automount settings to take effect.
+
 ### Throwaway Linux box (rented GPU, fresh VM, container)
 
 dotfiles gives such a box the **core dev utilities** only — `Brewfile.core` (shell, search, VCS,

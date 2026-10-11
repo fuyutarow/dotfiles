@@ -33,6 +33,7 @@ test("commit candidate retires a hook before deployment, but refuses an unselect
   }
   for (const [, source] of LINKS) {
     if (
+      source.startsWith("@google-drive/") ||
       source.startsWith("agents/hooks") ||
       source.startsWith("agents/models") ||
       source === "zsh/timezone"

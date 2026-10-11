@@ -16,6 +16,7 @@ import {
 import { release, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { sshSupportsAttachMatch } from "../link-dots.ts";
+import { checkGoogleDrive, type Ctx } from "../doctor.ts";
 import { STEPS } from "../post-merge.ts";
 
 // The smart-open fixtures scope the forward with Match sessiontype (OpenSSH >= 9.9; Ubuntu 24.04
@@ -76,6 +77,31 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("google-drive: both declared links must match discovered Drive targets", async () => {
+    const home = tmp("doctor-drive-home-");
+    const root = join(home, "Library/CloudStorage/GoogleDrive-test");
+    const personal = join(root, "My Drive", "private", "Personal-Drive");
+    mkdirSync(personal, { recursive: true });
+    symlinkSync(root, join(home, "Google Drive"));
+    symlinkSync(personal, join(home, "Personal-Drive"));
+    const ctx: Ctx = {
+      home,
+      dotfiles: REPO,
+      isMac: true,
+      isWsl: false,
+      isCoreBox: false,
+    };
+    expect((await checkGoogleDrive(ctx)).verdict).toBe("PASS");
+
+    symlinkSync(root, join(home, "wrong"));
+    const { unlinkSync } = await import("node:fs");
+    unlinkSync(join(home, "Personal-Drive"));
+    symlinkSync(join(home, "wrong"), join(home, "Personal-Drive"));
+    const finding = await checkGoogleDrive(ctx);
+    expect(finding.verdict).toBe("FAIL");
+    expect(finding.lines?.join(" ")).toContain("Personal-Drive");
+  });
+
   test("rendered reference uses resolved Bun with a temporary HOME", () => {
     const scratch = tmp("doctor-render-home-");
     const privateOverlay = join(scratch, "missing-settings.private.json");

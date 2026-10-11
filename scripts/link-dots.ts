@@ -40,6 +40,7 @@ import {
 import { homedir, release } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { deployCccDaemon } from "../cocoindex/deploy-daemon.ts";
 import { renderRefusal } from "./render-source.ts";
@@ -123,6 +124,10 @@ export function link(ctx: Ctx, rel: string, dst: string): void {
     say(`skip (missing): ${src}`);
     return;
   }
+  linkTarget(ctx, src, dst);
+}
+
+function linkTarget(ctx: Ctx, src: string, dst: string): void {
   if (readLink(dst) === src) return;
   if (ctx.mode === "check") {
     drift(ctx, `${dst} (want -> ${src}; have ${whatIs(dst)})`);
@@ -135,6 +140,77 @@ export function link(ctx: Ctx, rel: string, dst: string): void {
   symlinkSync(src, dst);
   ctx.changedLinks?.add(dst);
   say(`linked: ${dst} -> ${src}`);
+}
+
+/** Resolve Drive without persisting the user's Google account folder name. */
+export function googleDriveTargets(
+  home: string,
+  os: Os,
+): { root?: string; personal?: string } {
+  let root: string | undefined;
+  if (os === "mac") {
+    const cloud = join(home, "Library/CloudStorage");
+    const matches = existsSync(cloud)
+      ? readdirSync(cloud)
+          .filter((name) => name.startsWith("GoogleDrive-"))
+          .map((name) => join(cloud, name))
+          .filter((path) => isDir(path))
+      : [];
+    if (matches.length === 1) root = matches[0];
+  } else if (os === "wsl") {
+    const mount = "/mnt/g";
+    if (isDir(mount)) root = mount;
+  }
+  if (root === undefined) return {};
+
+  const myDrive = join(root, "My Drive");
+  const found: string[] = [];
+  const visit = (dir: string, depth: number): void => {
+    if (depth > 6 || found.length > 1) return;
+    const listed = fromThrowable(() =>
+      readdirSync(dir, { withFileTypes: true }),
+    )();
+    if (listed.isErr()) return;
+    for (const entry of listed.value) {
+      if (!entry.isDirectory()) continue;
+      const child = join(dir, entry.name);
+      if (entry.name === "Personal-Drive") found.push(child);
+      else visit(child, depth + 1);
+    }
+  };
+  if (isDir(myDrive)) visit(myDrive, 0);
+  return {
+    root,
+    ...(found.length === 1 ? { personal: found[0] } : {}),
+  };
+}
+
+export function linkGoogleDrive(ctx: Ctx): void {
+  if (ctx.os === "linux") return;
+  const targets = googleDriveTargets(ctx.home, ctx.os);
+  for (const [, source, name] of LINKS) {
+    if (!source.startsWith("@google-drive/")) continue;
+    const isRoot = source === "@google-drive/root";
+    const token = isRoot ? "root" : "personal";
+    const target = isRoot ? targets.root : targets.personal;
+    const dst = join(ctx.home, name);
+    if (target === undefined) {
+      reportDriveUnavailable(ctx, dst, token);
+      continue;
+    }
+    linkTarget(ctx, target, dst);
+  }
+}
+
+function reportDriveUnavailable(ctx: Ctx, dst: string, token: string): void {
+  if (ctx.mode === "check") {
+    drift(
+      ctx,
+      `${dst} (Google Drive ${token} target unavailable or ambiguous)`,
+    );
+    return;
+  }
+  say(`skip (Google Drive ${token} unavailable or ambiguous): ${dst}`);
 }
 
 // A real file or directory where a link belongs. SAFE leaves it; --force MOVES it to
@@ -386,8 +462,10 @@ function detectOs(): Os | Error {
 export function linkAll(ctx: Ctx, sshV: string): void {
   ensureSshDir(ctx);
   for (const [when, src, dst] of LINKS) {
+    if (src.startsWith("@google-drive/")) continue;
     if (applies(when, ctx.os)) link(ctx, src, join(ctx.home, dst));
   }
+  linkGoogleDrive(ctx);
   linkSshAttach(ctx, sshV);
   if (ctx.os === "wsl") {
     for (const [src, dst, apply] of ETC_LINKS) linkEtc(ctx, src, dst, apply);

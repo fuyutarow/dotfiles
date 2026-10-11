@@ -856,6 +856,9 @@ alias cpr='cp -r'        # guarded recursive copy
 alias mvf='command mv'   # 強制上書き (両OS共通)
 
 # rip for safer file removal
+# Keep rip's recoverable files on the user's data filesystem, never its /tmp default.
+# This exported value is the shared location consumed by scripts and disk-reclaim.
+export RIP_GRAVEYARD="${XDG_DATA_HOME:-$HOME/.local/share}/graveyard"
 command_exists "rip" || alias rip='command rm -i'   # bypass the disabled rm() function above
 
 # Git operation safety: checkout ban

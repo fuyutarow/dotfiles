@@ -11,12 +11,17 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  truncateSync,
   writeFileSync,
 } from "node:fs";
 import { release, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { sshSupportsAttachMatch } from "../link-dots.ts";
 import { checkGoogleDrive, type Ctx } from "../doctor.ts";
+import {
+  inspectRipGraveyard,
+  RIP_GRAVEYARD_MAX_BYTES,
+} from "../../tools/disk-reclaim/src/lib/graveyards.ts";
 import { STEPS } from "../post-merge.ts";
 
 // The smart-open fixtures scope the forward with Match sessiontype (OpenSSH >= 9.9; Ubuntu 24.04
@@ -42,7 +47,13 @@ function tmp(prefix: string): string {
 
 function doctor(
   only: string,
-  env: { HOME: string; DOTFILES: string; PATH?: string },
+  env: {
+    HOME: string;
+    DOTFILES: string;
+    PATH?: string;
+    RIP_GRAVEYARD?: string;
+    XDG_DATA_HOME?: string;
+  },
 ): { code: number; out: string } {
   const proc = Bun.spawnSync([process.execPath, SCRIPT], {
     // bun >= 1.4 writes its runtime transpiler cache to $HOME/.bun/install/cache/@t@/*.pile
@@ -77,6 +88,42 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("rip-graveyard fails when unset and when it exceeds the declared size limit", () => {
+    const home = tmp("doctor-rip-graveyard-");
+    const unset = doctor("rip-graveyard", {
+      HOME: home,
+      DOTFILES: REPO,
+      RIP_GRAVEYARD: "",
+    });
+    expect(unset.code).toBe(1);
+    expect(unset.out).toContain("RIP_GRAVEYARD is unset");
+
+    const xdg = join(home, ".local/share");
+    const graveyard = join(xdg, "graveyard");
+    mkdirSync(graveyard, { recursive: true });
+    if (!inspectRipGraveyard(graveyard).ramBacked) {
+      const valid = doctor("rip-graveyard", {
+        HOME: home,
+        DOTFILES: REPO,
+        RIP_GRAVEYARD: graveyard,
+        XDG_DATA_HOME: xdg,
+      });
+      expect(valid.code).toBe(0);
+      expect(valid.out).toContain("PASS  rip-graveyard");
+    }
+    const oversized = join(graveyard, "over-limit");
+    writeFileSync(oversized, "");
+    truncateSync(oversized, RIP_GRAVEYARD_MAX_BYTES + 1);
+    const tooLarge = doctor("rip-graveyard", {
+      HOME: home,
+      DOTFILES: REPO,
+      RIP_GRAVEYARD: graveyard,
+      XDG_DATA_HOME: xdg,
+    });
+    expect(tooLarge.code).toBe(1);
+    expect(tooLarge.out).toContain(`limit is ${RIP_GRAVEYARD_MAX_BYTES}`);
+  });
+
   test("google-drive: both declared links must match discovered Drive targets", async () => {
     const home = tmp("doctor-drive-home-");
     const root = join(home, "Library/CloudStorage/GoogleDrive-test");

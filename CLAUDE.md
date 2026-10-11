@@ -143,6 +143,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - `ls` → `eza` (l, ll, la) · `cat` → `bat` (p) · `grep` → `ripgrep` (gr) · `find` → `fd` (f)
 - `cd` → `zoxide` (`,` and `,,`) · `du` → `dust` (du2) · `ps` → `procs`
 - `rm` → **DISABLED** (function errors out); use `rip` for file removal
+- `rip`'s recoverable graveyard is `$XDG_DATA_HOME/graveyard` (fallback `~/.local/share/graveyard`); `mise run reclaim` purges rip entries older than 24 hours, and doctor fails on RAM-backed storage or more than 10 GiB.
 
 ### Daily commands
 

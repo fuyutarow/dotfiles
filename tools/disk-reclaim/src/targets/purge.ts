@@ -1,4 +1,4 @@
-import { lstatSync } from "node:fs";
+import { chmodSync, lstatSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import {
   graveyardCandidates,
@@ -8,9 +8,9 @@ import {
 } from "../lib/graveyards.ts";
 import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import { countEntries } from "../lib/purge-progress.ts";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ActionResult, Candidate, Config, Headroom } from "../model.ts";
-import type { Target } from "./index.ts";
+import type { Context, Target } from "./index.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
 import { judge } from "../liveness/predicate.ts";
 import { scratchRef, type LivenessSnapshot } from "../liveness/facts.ts";
@@ -56,6 +56,7 @@ export function purgeCandidates(
     liveness?: LivenessSnapshot;
     headroom?: Headroom;
     underPressure?: boolean;
+    ripOnly?: boolean;
     now?: number;
   } = {},
 ): Candidate[] {
@@ -66,7 +67,11 @@ export function purgeCandidates(
     (options.config?.graveyard_pressure_undo_minutes ?? 10) * 60 * 1000;
   const scratchRoots = options.config?.scratch_roots ?? [];
   const candidates: Candidate[] = [];
-  for (const graveyard of existingGraveyards(graveyardCandidates(env, home))) {
+  const graveyards = existingGraveyards(graveyardCandidates(env, home)).filter(
+    (graveyard) =>
+      options.ripOnly !== true || graveyard.label === "rip graveyard",
+  );
+  for (const graveyard of graveyards) {
     const drive = driveForPath(graveyard.path, options.headroom);
     const belowDenyLine = drive?.state === "deny";
     const entries = graveyardEntries(graveyard.path);
@@ -175,17 +180,29 @@ export function purgeCandidates(
   return candidates;
 }
 
+function makeDirectoriesOwnerWritable(path: string): void {
+  const stat = lstatSync(path);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return;
+  if ((stat.mode & 0o300) !== 0o300) chmodSync(path, stat.mode | 0o300);
+  for (const name of readdirSync(path))
+    makeDirectoriesOwnerWritable(join(path, name));
+}
+
+function purgePlan(ctx: Context, ripOnly: boolean): Candidate[] {
+  return purgeCandidates(process.env, homedir(), {
+    config: ctx.config,
+    ...(ctx.headroom === undefined ? {} : { headroom: ctx.headroom }),
+    underPressure: ctx.underPressure === true,
+    ...(ctx.liveness === undefined ? {} : { liveness: ctx.liveness }),
+    ripOnly,
+  });
+}
+
 export const purge = {
   name: "purge",
   tier: "irreversible",
   available: () => ({ available: true, skip_reason: null }),
-  plan: (ctx) =>
-    purgeCandidates(process.env, homedir(), {
-      config: ctx.config,
-      ...(ctx.headroom === undefined ? {} : { headroom: ctx.headroom }),
-      underPressure: ctx.underPressure === true,
-      ...(ctx.liveness === undefined ? {} : { liveness: ctx.liveness }),
-    }),
+  plan: (ctx) => purgePlan(ctx, false),
   act: async (candidate, ctx): Promise<ActionResult> => {
     if (candidate.path === null)
       return { ok: false, bytes_freed: null, error: "missing graveyard path" };
@@ -198,6 +215,16 @@ export const purge = {
       ? [candidate.path]
       : graveyardEntries(candidate.path);
     for (const entry of entries) {
+      const writable = fromThrowable(() => {
+        makeDirectoriesOwnerWritable(entry);
+      })();
+      if (writable.isErr()) {
+        failed = true;
+        ctx.log(
+          `ERROR ${entry}: cannot restore owner write permission: ${String(writable.error)}`,
+        );
+        continue;
+      }
       const result = await removeTree(entry, {
         uid: process.getuid?.() ?? 0,
         protection: {
@@ -228,4 +255,15 @@ export const purge = {
       error: failed ? "some graveyard entries were refused or failed" : null,
     };
   },
+} satisfies Target;
+
+export const purgeRip = {
+  ...purge,
+  name: "rip-expire",
+  tier: "blind",
+  description: {
+    what: "expired rip graveyard entries",
+    why: "remove expired rip entries; leave XDG Trash owner-only",
+  },
+  plan: (ctx: Context) => purgePlan(ctx, true),
 } satisfies Target;

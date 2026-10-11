@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
-import { purge } from "../../src/targets/purge.ts";
+import { purge, purgeRip } from "../../src/targets/purge.ts";
 import { main as reclaimMain } from "../../src/reclaim.ts";
 import { purgeCandidates } from "../../src/targets/purge.ts";
 import {
@@ -57,7 +57,7 @@ async function purgeTty(
     env: {
       ...process.env,
       HOME: root,
-      GRAVEYARD: grave,
+      RIP_GRAVEYARD: grave,
       XDG_DATA_HOME: join(root, "xdg"),
       XDG_STATE_HOME: join(root, "state"),
       RECLAIM_STATE_DIR: join(root, "state/reclaim"),
@@ -75,7 +75,7 @@ async function purgeTty(
   return { code, out: raw, root };
 }
 
-test("purge removes 555/444 tree without following a symlink outside it", async () => {
+test("purge removes 500/400 tree without following a symlink outside it", async () => {
   const root = tempRoot("disk-reclaim-purge-");
   const procDir = join(root, "proc");
   mkdirSync(procDir);
@@ -90,9 +90,9 @@ test("purge removes 555/444 tree without following a symlink outside it", async 
     Temporal.Now.instant().subtract({ hours: 48 }).epochMilliseconds / 1000;
   utimesSync(tree, old, old);
   symlinkSync(outside, join(tree, "live-store"));
-  chmodSync(join(tree, "snap", "page"), 0o444);
-  chmodSync(join(tree, "snap"), 0o555);
-  chmodSync(tree, 0o555);
+  chmodSync(join(tree, "snap", "page"), 0o400);
+  chmodSync(join(tree, "snap"), 0o500);
+  chmodSync(tree, 0o500);
   const candidate = {
     id: "grave",
     path: grave,
@@ -123,7 +123,7 @@ test("purge removes 555/444 tree without following a symlink outside it", async 
     },
   };
   expect(
-    purgeCandidates({ GRAVEYARD: grave, USER: "x" }, root).find(
+    purgeCandidates({ RIP_GRAVEYARD: grave, USER: "x" }, root).find(
       (item) => item.path === tree,
     )?.action.argv[0],
   ).toBe("removeTree");
@@ -150,13 +150,75 @@ test("purge planning selects each configured graveyard root", () => {
   const env = {
     HOME: join(root, "home"),
     USER: "fixture",
-    GRAVEYARD: join(root, "grave"),
+    RIP_GRAVEYARD: join(root, "grave"),
     XDG_DATA_HOME: join(root, "data"),
   };
-  mkdirSync(env.GRAVEYARD, { recursive: true });
+  mkdirSync(env.RIP_GRAVEYARD, { recursive: true });
   mkdirSync(join(env.XDG_DATA_HOME, "Trash/files"), { recursive: true });
   mkdirSync(join(env.XDG_DATA_HOME, "Trash/info"), { recursive: true });
   expect(purgeCandidates(env, env.HOME)).toEqual([]);
+});
+
+test("blind rip expiry purges old rip entries only and leaves XDG Trash owner-only", async () => {
+  const root = tempRoot("disk-reclaim-blind-rip-expiry-");
+  const grave = join(root, "grave");
+  const xdg = join(root, "xdg");
+  const oldRip = join(grave, "old-rip-entry");
+  const oldTrash = join(xdg, "Trash/files/old-trash-entry");
+  mkdirSync(oldRip, { recursive: true });
+  mkdirSync(oldTrash, { recursive: true });
+  writeFileSync(join(oldRip, "data"), "rip fixture");
+  writeFileSync(join(oldTrash, "data"), "trash fixture");
+  const old =
+    Temporal.Now.instant().subtract({ hours: 48 }).epochMilliseconds / 1000;
+  utimesSync(oldRip, old, old);
+  utimesSync(oldTrash, old, old);
+
+  const candidates = purgeCandidates(
+    {
+      HOME: join(root, "home"),
+      RIP_GRAVEYARD: grave,
+      XDG_DATA_HOME: xdg,
+    },
+    join(root, "home"),
+    {
+      config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+      ripOnly: true,
+    },
+  );
+
+  expect(purgeRip.tier).toBe("blind");
+  const expired = candidates.find((candidate) => candidate.path === oldRip);
+  expect(expired?.verdict).toBe("RECLAIM");
+  expect(candidates.map((candidate) => candidate.path)).not.toContain(oldTrash);
+
+  const procDir = join(root, "proc");
+  mkdirSync(procDir);
+  const logs: string[] = [];
+  const ctx: Context = {
+    mode: "run",
+    procDir,
+    config: {
+      repo_roots: [],
+      repos: [],
+      scratch_roots: [],
+      delete_roots: [],
+      regenerable_ignored: [],
+      session_grace_hours: 24,
+      ignore_unreadable_procs: [],
+    },
+    log: (line) => {
+      logs.push(line);
+    },
+  };
+  const result =
+    expired === undefined
+      ? { ok: false, bytes_freed: null, error: "missing fixture candidate" }
+      : await purgeRip.act(expired, ctx);
+  expect(result.ok).toBe(true);
+  expect(existsSync(oldRip)).toBe(false);
+  expect(existsSync(oldTrash)).toBe(true);
+  expect(logs.some((line) => line.includes("entries removed"))).toBe(true);
 });
 
 const liveFacts = (uuid: string): LivenessFacts => ({
@@ -198,7 +260,7 @@ function recentPurgeFixture(ageMinutes: number) {
     now,
     env: {
       HOME: join(root, "home"),
-      GRAVEYARD: grave,
+      RIP_GRAVEYARD: grave,
       USER: "fixture",
       XDG_DATA_HOME: join(root, "xdg"),
     },
@@ -309,7 +371,7 @@ test("rip graveyard keeps a recent entry from a live Claude session", () => {
   const liveness = livenessSnapshot(liveFacts(uuid));
 
   const candidates = purgeCandidates(
-    { GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
+    { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
     root,
     {
       config: {
@@ -378,7 +440,7 @@ test("old rip graveyard entry from a dead session is reclaimable", () => {
     now: Temporal.Now.instant().epochMilliseconds,
   });
   const candidates = purgeCandidates(
-    { GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
+    { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
     root,
     {
       config: {
@@ -410,7 +472,7 @@ test("graveyard record time is used and missing records fall back to mtime", () 
     `Time\t Original\t Destination\n${Temporal.Now.instant().toString()}\t/recorded\t${recorded}\n`,
   );
   const candidates = purgeCandidates(
-    { GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
+    { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
     root,
     { config: { graveyard_min_age_hours: 24, scratch_roots: [] } },
   );
@@ -422,11 +484,12 @@ test("graveyard record time is used and missing records fall back to mtime", () 
   );
 });
 
-test("graveyard candidates include rip and XDG trash content directories", () => {
-  const paths = graveyardCandidates({ USER: "me" }, "/home/me").map(
-    (g) => g.path,
-  );
-  expect(paths).toContain("/tmp/graveyard-me");
+test("graveyard candidates include the declared rip and XDG trash content directories", () => {
+  const paths = graveyardCandidates(
+    { USER: "me", RIP_GRAVEYARD: "/home/me/.local/share/graveyard" },
+    "/home/me",
+  ).map((g) => g.path);
+  expect(paths).toContain("/home/me/.local/share/graveyard");
   expect(paths).toContain("/home/me/.local/share/Trash/files");
   expect(paths).toContain("/home/me/.local/share/Trash/info");
   expect(paths).not.toContain("/home/me/.local/share/Trash");
@@ -434,19 +497,22 @@ test("graveyard candidates include rip and XDG trash content directories", () =>
 
 test("graveyard environment overrides select rip and XDG locations and labels", () => {
   const rows = graveyardCandidates(
-    { USER: "me", GRAVEYARD: "/data/grave", XDG_DATA_HOME: "/data/share" },
+    { USER: "me", RIP_GRAVEYARD: "/data/grave", XDG_DATA_HOME: "/data/share" },
     "/home/me",
   );
   const paths = rows.map((g) => g.path);
   expect(paths).toContain("/data/grave");
-  expect(paths).not.toContain("/tmp/graveyard-me");
+  expect(paths).not.toContain("/home/me/.local/share/graveyard");
   expect(paths).toContain("/data/share/Trash/files");
   expect(paths).not.toContain("/home/me/.local/share/Trash/files");
   expect(rows.every((g) => g.label.length > 0)).toBe(true);
 });
 
 test("existing graveyards retain only present directories and allow no matches", () => {
-  const candidates = graveyardCandidates({ USER: "me" }, "/home/me");
+  const candidates = graveyardCandidates(
+    { USER: "me", RIP_GRAVEYARD: "/home/me/.local/share/graveyard" },
+    "/home/me",
+  );
   const present = new Set(["/home/me/.local/share/Trash/files"]);
   expect(
     existingGraveyards(candidates, (path) => present.has(path)).map(

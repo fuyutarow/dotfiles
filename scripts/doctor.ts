@@ -3,6 +3,8 @@
 // human or agent reading verdict lines; each FAIL carries the command that repairs it.
 //
 // It owns no rules of its own. Each check delegates to the file that already owns the fact:
+//   rip-graveyard tools/disk-reclaim/src/lib/graveyards.ts
+//                                                effective path is disk-backed and within its size cap
 //   links       scripts/link-dots.ts --check     every declared symlink realized, no dangling ones
 //   rendered    scripts/render-home.ts           ~/.claude/settings.json, ~/.codex/hooks.json and
 //                                                ~/.claude/CLAUDE.md == a fresh render
@@ -55,7 +57,7 @@ import {
   rmSync,
 } from "node:fs";
 import { homedir, release, tmpdir, userInfo } from "node:os";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import {
   MAPPING_ENV,
   parseMapping,
@@ -82,6 +84,10 @@ import {
   receiverSocket,
   remoteSocket,
 } from "../tools/shared/src/sockets.ts";
+import {
+  inspectRipGraveyard,
+  RIP_GRAVEYARD_MAX_BYTES,
+} from "../tools/disk-reclaim/src/lib/graveyards.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 export type Finding = {
@@ -274,6 +280,52 @@ export function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
           problems,
         );
   });
+}
+
+export async function checkRipGraveyard(ctx: Ctx): Promise<Finding> {
+  const declared = process.env.RIP_GRAVEYARD;
+  const configured =
+    declared !== undefined && declared.trim() !== "" ? declared : undefined;
+  const effective = configured ?? `/tmp/graveyard-${process.env.USER ?? ""}`;
+  const xdgData = process.env.XDG_DATA_HOME ?? join(ctx.home, ".local/share");
+  const problems: string[] = [];
+  if (configured === undefined)
+    problems.push(`RIP_GRAVEYARD is unset; rip would default to ${effective}`);
+  if (!isAbsolute(effective))
+    problems.push(`effective location is not absolute: ${effective}`);
+  if (
+    configured !== undefined &&
+    resolve(configured) !== resolve(xdgData, "graveyard")
+  )
+    problems.push(
+      `RIP_GRAVEYARD must be ${resolve(xdgData, "graveyard")}, got ${resolve(configured)}`,
+    );
+
+  const measured = await attempt(() => inspectRipGraveyard(effective));
+  if (!measured.ok) {
+    problems.push(
+      `cannot inspect ${effective}: ${errorMessage(measured.error)}`,
+    );
+  } else {
+    if (measured.value.ramBacked)
+      problems.push(`${effective} is on tmpfs/ramfs`);
+    if (measured.value.bytes > RIP_GRAVEYARD_MAX_BYTES)
+      problems.push(
+        `${effective} is ${measured.value.bytes} bytes; limit is ${RIP_GRAVEYARD_MAX_BYTES}`,
+      );
+  }
+
+  return problems.length === 0
+    ? pass(
+        "rip-graveyard",
+        `${effective} is disk-backed and within the ${RIP_GRAVEYARD_MAX_BYTES}-byte limit`,
+      )
+    : fail(
+        "rip-graveyard",
+        `${problems.length} graveyard problem(s)`,
+        "source the updated shell config, then run mise run reclaim",
+        problems,
+      );
 }
 
 // Every file scripts/render-home.ts writes (scripts/config-registry.ts RENDERED), as a path under
@@ -1152,6 +1204,7 @@ type Check = {
 };
 const always = () => null;
 export const CHECKS: Check[] = [
+  { name: "rip-graveyard", run: checkRipGraveyard, applies: always },
   { name: "links", run: checkLinks, applies: always },
   { name: "google-drive", run: checkGoogleDrive, applies: always },
   { name: "rendered", run: checkRendered, applies: always },

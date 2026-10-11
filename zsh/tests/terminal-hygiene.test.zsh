@@ -44,6 +44,16 @@ pty_run() {
   print -r -- "$out"
 }
 
+# --- rip graveyard is disk-backed and follows XDG data home -------------------------------
+out=$(pty_run 'print -r -- "RIP_GRAVEYARD=$RIP_GRAVEYARD"')
+want "rip graveyard uses the home data directory by default" \
+  "RIP_GRAVEYARD=$HOME/.local/share/graveyard" "$out"
+graveyard_xdg="$TMPDIR/rip-graveyard-xdg"
+out=$(XDG_DATA_HOME="$graveyard_xdg" pty_run \
+  'print -r -- "RIP_GRAVEYARD=$RIP_GRAVEYARD"')
+want "rip graveyard follows XDG_DATA_HOME" \
+  "RIP_GRAVEYARD=$graveyard_xdg/graveyard" "$out"
+
 # --- cp convenience aliases still use the overwrite guard ---------------------------------
 copy_tmp=$(mktemp -d) || exit 1
 print -r -- 'source' >| "$copy_tmp/source"

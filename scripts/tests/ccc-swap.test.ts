@@ -22,6 +22,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -45,6 +46,7 @@ import {
   pickModeDimension,
   readEmbeddingModel,
   replaceEmbeddingModel,
+  removeDir,
   resolveHome,
   resolveShadowDir,
   snapshotDir,
@@ -66,6 +68,26 @@ function resolveRealBun(): string {
   return process.execPath;
 }
 const REAL_BUN = resolveRealBun();
+
+test("removeDir passes the declared disk graveyard explicitly to rip", async () => {
+  const rip = Bun.which("rip");
+  if (rip === null) return;
+  const root = mkdtempSync(join(tmpdir(), "ccc-swap-rip-graveyard-"));
+  const target = join(root, "removed");
+  const graveyard = join(root, "data/graveyard");
+  mkdirSync(target);
+  writeFileSync(join(target, "data"), "fixture");
+  const prior = process.env.RIP_GRAVEYARD;
+  process.env.RIP_GRAVEYARD = graveyard;
+
+  await removeDir(target);
+
+  expect(existsSync(target)).toBe(false);
+  expect(readdirSync(graveyard).length).toBeGreaterThan(0);
+  if (prior === undefined) delete process.env.RIP_GRAVEYARD;
+  else process.env.RIP_GRAVEYARD = prior;
+  rmSync(root, { recursive: true, force: true });
+});
 
 // PATH is the one ambient value forwarded: ccc-swap.ts forwards its own env to any `ccc` (here
 // fake-ccc.ts) child it spawns, and fake-ccc.ts is invoked via its `#!/usr/bin/env bun` shebang

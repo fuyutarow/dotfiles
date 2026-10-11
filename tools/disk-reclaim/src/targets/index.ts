@@ -15,7 +15,7 @@ import { workspaces } from "./workspaces.ts";
 import { scratch } from "./scratch.ts";
 import { system } from "./system.ts";
 import { judgment } from "./judgment.ts";
-import { purge } from "./purge.ts";
+import { purge, purgeRip } from "./purge.ts";
 import { host } from "./host.ts";
 import { vhdx } from "./vhdx.ts";
 import { audit } from "./audit.ts";
@@ -130,6 +130,9 @@ export const registry: Target[] = [
       what: "offline Rust docs",
       why: "requires an owner decision",
     },
+  },
+  {
+    ...purgeRip,
   },
   {
     ...purge,

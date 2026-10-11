@@ -32,7 +32,7 @@ test("audit is read-only and includes cache, graveyard and receipt evidence", ()
   const env = {
     HOME: root,
     USER: "x",
-    GRAVEYARD: join(root, "grave"),
+    RIP_GRAVEYARD: join(root, "grave"),
     XDG_STATE_HOME: join(root, "state"),
   };
   const rows = auditCandidates(root, env);

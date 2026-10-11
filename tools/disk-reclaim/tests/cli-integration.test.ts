@@ -65,7 +65,7 @@ function validPlan(result: ReturnType<typeof invoke>): Plan {
   return parsed.data;
 }
 
-test("tmp HOME CLI plans all 12 targets and blind run deletes only safe scratch, pushed workspaces, and caches; v2 receipts persist", () => {
+test("tmp HOME CLI plans all 13 targets and blind run includes bounded rip expiry; v2 receipts persist", () => {
   const w = new World();
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
@@ -89,7 +89,7 @@ test("tmp HOME CLI plans all 12 targets and blind run deletes only safe scratch,
   const cache = join(env.HOME, ".cache/pip");
   const build = join(env.HOME, "project/node_modules");
   const retained = join(env.HOME, ".cache/research-output");
-  const grave = join(env.GRAVEYARD, "owner-only");
+  const grave = join(env.RIP_GRAVEYARD, "owner-only");
   for (const dir of [cache, build, retained, grave]) {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "data"), "fixture");
@@ -100,7 +100,12 @@ test("tmp HOME CLI plans all 12 targets and blind run deletes only safe scratch,
   expect(preview.targets.map((t) => [t.name, t.tier])).toEqual(
     registry.map((t) => [t.name, t.tier]),
   );
-  expect(preview.targets).toHaveLength(12);
+  expect(preview.targets).toHaveLength(13);
+  const ripExpiry = preview.targets.find((t) => t.name === "rip-expire")!;
+  expect(ripExpiry.tier).toBe("blind");
+  expect(
+    ripExpiry.candidates.every((candidate) => candidate.verdict !== "RECLAIM"),
+  ).toBe(true);
   const workspaces = preview.targets.find((t) => t.name === "workspaces")!;
   expect(workspaces.candidates.find((c) => c.path === nestedWs)?.verdict).toBe(
     "RECLAIM",
@@ -135,6 +140,7 @@ test("tmp HOME CLI plans all 12 targets and blind run deletes only safe scratch,
     "workspaces",
     "scratch",
     "system",
+    "rip-expire",
   ]);
   for (const removed of [nestedWs, nested, plain, cache, build])
     expect(
@@ -157,7 +163,7 @@ test("tmp HOME CLI plans all 12 targets and blind run deletes only safe scratch,
   const lines = readFileSync(join(env.RECLAIM_STATE_DIR, "log.jsonl"), "utf8")
     .trim()
     .split("\n");
-  expect(lines).toHaveLength(7);
+  expect(lines).toHaveLength(8);
   const receipts = lines.map((line) => {
     const parsed = jsonOf(ReceiptV2).safeParse(line);
     if (!parsed.success) {

@@ -682,16 +682,17 @@ export async function stopDaemon(
   return runCcc(cccBin, ["daemon", "stop"], { env, timeoutMs });
 }
 
-/** `rip` (house `rm` replacement, recoverable graveyard) when available, else a plain recursive rm. */
+/** Use the shell-declared disk graveyard when available; otherwise delete without rip's /tmp default. */
 export async function removeDir(
   path: string,
   opts: { spawn?: typeof Bun.spawnSync } = {},
 ): Promise<void> {
   const spawn = opts.spawn ?? Bun.spawnSync;
   let ripOk = false;
-  if (Bun.which("rip") !== null) {
+  const graveyard = process.env.RIP_GRAVEYARD;
+  if (Bun.which("rip") !== null && graveyard !== undefined) {
     // bounded: a single fast filesystem rename into rip's own graveyard, never hangs
-    ripOk = fromThrowable(spawn)(["rip", path], {
+    ripOk = fromThrowable(spawn)(["rip", "--graveyard", graveyard, path], {
       stdout: "ignore",
       stderr: "ignore",
     })

@@ -492,7 +492,7 @@ run = "bun agents/skills/wiring-mise-tasks/scripts/jj-push.ts"
 # Thin task aliases for the disk-reclaim CLI. Target policy, safety checks, and configuration live
 # in tools/disk-reclaim/README.md; use `plan` to preview and named `run` commands to act.
 [tasks.reclaim]
-description = "Run all blind-tier reclamation targets: clean, builds, Rust targets, toolchains, workspaces, scratch, and available system cleanup. Preview with reclaim:audit."
+description = "Run blind-tier reclamation: clean, builds, Rust targets, toolchains, workspaces, scratch, rip graveyard entries older than 24 hours, and available system cleanup. XDG Trash remains owner-only. Preview with reclaim:audit."
 raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" run --tier blind --yes'
 

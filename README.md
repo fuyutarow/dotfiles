@@ -241,6 +241,8 @@ herdr --remote <alias>
 
 Renting, choosing and destroying a GPU box (Vast.ai) is the `renting-cloud-gpus` skill.
 
+`rip` keeps recoverable removals under `$XDG_DATA_HOME/graveyard` (or `~/.local/share/graveyard` when XDG data home is unset). The blind `mise run reclaim` tier purges eligible rip entries after 24 hours; `mise run doctor` fails if that graveyard is RAM-backed or exceeds 10 GiB.
+
 ## Tasks
 
 All repo tasks are defined in `mise.toml` (single task runner — no justfile here):

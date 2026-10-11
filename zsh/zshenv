@@ -15,6 +15,9 @@
 #   terminal and vanished one process down. Homebrew's declared core comes first; ~/.local/bin
 #   precedes ~/.bun/bin for vendor agents. No tool download or brew shellenv happens here.
 #
+# rip's default graveyard is /tmp; keep recoverable removals on the user's data filesystem.
+export RIP_GRAVEYARD="${XDG_DATA_HOME:-$HOME/.local/share}/graveyard"
+#
 # ── CA bundle on hosts with unreadable system certs ──────────────────────────
 # sol (2026-10-05) keeps files in /etc/pki/tls/certs that a user cannot read, and every
 # rustls-native-certs client (mise) prints one warning per such file on EVERY call — under

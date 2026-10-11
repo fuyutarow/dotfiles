@@ -127,7 +127,9 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    `ssh host 'cmd'`, so user CLIs in `~/.local/bin` and bun's global bins in `~/.bun/bin`
    (this repo's own `bin` commands) work in non-login SSH shells. It reads the rendered
    `~/.config/dotfiles/brew-prefix` and quietly adds Homebrew bin/sbin and rustup proxies;
-   `brew shellenv` belongs in login profiles, never zshenv. Bash SSH shells read the same prefix.
+   exports `RIP_GRAVEYARD` under `$XDG_DATA_HOME` (or `~/.local/share`) so non-interactive
+   commands do not send recoverable removals to `/tmp`. Bash SSH shells read the same prefix and
+   export the same graveyard. `brew shellenv` belongs in login profiles, never zshenv.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
 6. **No implicit global toolchain.** A managed tool is reachable where a config _declares_ it,
    or not at all: no global default version, and no second version manager hooking a login
@@ -241,7 +243,7 @@ herdr --remote <alias>
 
 Renting, choosing and destroying a GPU box (Vast.ai) is the `renting-cloud-gpus` skill.
 
-`rip` keeps recoverable removals under `$XDG_DATA_HOME/graveyard` (or `~/.local/share/graveyard` when XDG data home is unset). The blind `mise run reclaim` tier purges eligible rip entries after 24 hours; `mise run doctor` fails if that graveyard is RAM-backed or exceeds 10 GiB.
+`rip` keeps recoverable removals under `$XDG_DATA_HOME/graveyard` (or `~/.local/share/graveyard` when XDG data home is unset), exported by both `zsh/zshenv` and `zsh/bashrc`. `mise run doctor` evaluates the zshenv declaration, fails if the configured graveyard is RAM-backed or exceeds 10 GiB, and warns separately when a legacy `/tmp/graveyard-<user>` remains. The blind `mise run reclaim` tier purges eligible rip entries after 24 hours.
 
 ## Tasks
 

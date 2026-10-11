@@ -57,7 +57,7 @@ import {
   rmSync,
 } from "node:fs";
 import { homedir, release, tmpdir, userInfo } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import {
   MAPPING_ENV,
   parseMapping,
@@ -283,24 +283,30 @@ export function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkRipGraveyard(ctx: Ctx): Promise<Finding> {
-  const declared = process.env.RIP_GRAVEYARD;
-  const configured =
-    declared !== undefined && declared.trim() !== "" ? declared : undefined;
-  const effective = configured ?? `/tmp/graveyard-${process.env.USER ?? ""}`;
-  const xdgData = process.env.XDG_DATA_HOME ?? join(ctx.home, ".local/share");
+  const declaration = readFileSync(join(ctx.dotfiles, "zsh/zshenv"), "utf8");
+  const assignments = declaration
+    .split("\n")
+    .filter(
+      (line) =>
+        line ===
+        'export RIP_GRAVEYARD="${XDG_DATA_HOME:-$HOME/.local/share}/graveyard"',
+    );
+  const hasDeclaration = assignments.length === 1;
+  const user = process.env.USER ?? userInfo().username;
+  const xdgDataEnv = process.env.XDG_DATA_HOME;
+  const xdgData =
+    xdgDataEnv === undefined || xdgDataEnv === ""
+      ? join(ctx.home, ".local/share")
+      : xdgDataEnv;
+  const configured = hasDeclaration ? join(xdgData, "graveyard") : undefined;
+  const effective = configured ?? `/tmp/graveyard-${user}`;
   const problems: string[] = [];
   if (configured === undefined)
-    problems.push(`RIP_GRAVEYARD is unset; rip would default to ${effective}`);
+    problems.push(
+      `RIP_GRAVEYARD is unset in zshenv; rip would default to ${effective}`,
+    );
   if (!isAbsolute(effective))
     problems.push(`effective location is not absolute: ${effective}`);
-  if (
-    configured !== undefined &&
-    resolve(configured) !== resolve(xdgData, "graveyard")
-  )
-    problems.push(
-      `RIP_GRAVEYARD must be ${resolve(xdgData, "graveyard")}, got ${resolve(configured)}`,
-    );
-
   const measured = await attempt(() => inspectRipGraveyard(effective));
   if (!measured.ok) {
     problems.push(
@@ -326,6 +332,29 @@ export async function checkRipGraveyard(ctx: Ctx): Promise<Finding> {
         "source the updated shell config, then run mise run reclaim",
         problems,
       );
+}
+
+export async function checkRipGraveyardTmp(): Promise<Finding> {
+  const user = process.env.USER ?? userInfo().username;
+  const legacy = `/tmp/graveyard-${user}`;
+  if (!existsSync(legacy))
+    return pass("rip-graveyard-tmp", "no leftover /tmp graveyard");
+
+  const measured = await attempt(() => inspectRipGraveyard(legacy));
+  if (!measured.ok)
+    return warn(
+      "rip-graveyard-tmp",
+      `found ${legacy}, but could not measure its size: ${errorMessage(measured.error)}`,
+    );
+
+  const quoted = `'${legacy.replaceAll("'", "'\\''")}'`;
+  return {
+    ...warn(
+      "rip-graveyard-tmp",
+      `leftover ${legacy} is ${measured.value.bytes} bytes`,
+    ),
+    fix: `chmod -R u+w ${quoted} && rm -rf ${quoted}`,
+  };
 }
 
 // Every file scripts/render-home.ts writes (scripts/config-registry.ts RENDERED), as a path under
@@ -1205,6 +1234,7 @@ type Check = {
 const always = () => null;
 export const CHECKS: Check[] = [
   { name: "rip-graveyard", run: checkRipGraveyard, applies: always },
+  { name: "rip-graveyard-tmp", run: checkRipGraveyardTmp, applies: always },
   { name: "links", run: checkLinks, applies: always },
   { name: "google-drive", run: checkGoogleDrive, applies: always },
   { name: "rendered", run: checkRendered, applies: always },

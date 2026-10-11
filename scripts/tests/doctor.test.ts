@@ -53,6 +53,7 @@ function doctor(
     PATH?: string;
     RIP_GRAVEYARD?: string;
     XDG_DATA_HOME?: string;
+    USER?: string;
   },
 ): { code: number; out: string } {
   const proc = Bun.spawnSync([process.execPath, SCRIPT], {
@@ -88,16 +89,8 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
-  test("rip-graveyard fails when unset and when it exceeds the declared size limit", () => {
+  test("rip-graveyard evaluates zshenv and fails when the declared path exceeds its limit", () => {
     const home = tmp("doctor-rip-graveyard-");
-    const unset = doctor("rip-graveyard", {
-      HOME: home,
-      DOTFILES: REPO,
-      RIP_GRAVEYARD: "",
-    });
-    expect(unset.code).toBe(1);
-    expect(unset.out).toContain("RIP_GRAVEYARD is unset");
-
     const xdg = join(home, ".local/share");
     const graveyard = join(xdg, "graveyard");
     mkdirSync(graveyard, { recursive: true });
@@ -105,7 +98,7 @@ describe("doctor", () => {
       const valid = doctor("rip-graveyard", {
         HOME: home,
         DOTFILES: REPO,
-        RIP_GRAVEYARD: graveyard,
+        RIP_GRAVEYARD: "/tmp/doctor-must-ignore-this-inherited-value",
         XDG_DATA_HOME: xdg,
       });
       expect(valid.code).toBe(0);
@@ -122,6 +115,41 @@ describe("doctor", () => {
     });
     expect(tooLarge.code).toBe(1);
     expect(tooLarge.out).toContain(`limit is ${RIP_GRAVEYARD_MAX_BYTES}`);
+
+    const undeclared = tmp("doctor-rip-graveyard-undeclared-");
+    mkdirSync(join(undeclared, "zsh"), { recursive: true });
+    writeFileSync(
+      join(undeclared, "zsh/zshenv"),
+      "# no graveyard declaration\n",
+    );
+    const unset = doctor("rip-graveyard", {
+      HOME: home,
+      DOTFILES: undeclared,
+      RIP_GRAVEYARD: graveyard,
+      XDG_DATA_HOME: xdg,
+    });
+    expect(unset.code).toBe(1);
+    expect(unset.out).toContain("RIP_GRAVEYARD is unset in zshenv");
+  });
+
+  test("rip-graveyard-tmp warns with size and permission-restoring cleanup command", () => {
+    const user = `doctor-${Temporal.Now.instant().epochMilliseconds}-${crypto.randomUUID().slice(0, 8)}`;
+    const stale = `/tmp/graveyard-${user}`;
+    mkdirSync(stale);
+    writeFileSync(join(stale, "old-entry"), "deleted");
+    const result = doctor("rip-graveyard-tmp", {
+      HOME: tmp("doctor-rip-graveyard-tmp-home-"),
+      DOTFILES: REPO,
+      USER: user,
+    });
+    rmSync(stale, { recursive: true, force: true });
+    expect(result.code).toBe(0);
+    expect(result.out).toContain(
+      `WARN  rip-graveyard-tmp  leftover ${stale} is 7 bytes`,
+    );
+    expect(result.out).toContain(
+      `chmod -R u+w '${stale}' && rm -rf '${stale}'`,
+    );
   });
 
   test("google-drive: both declared links must match discovered Drive targets", async () => {

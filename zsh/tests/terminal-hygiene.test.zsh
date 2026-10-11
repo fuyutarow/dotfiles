@@ -45,12 +45,14 @@ pty_run() {
 }
 
 # --- rip graveyard is disk-backed and follows XDG data home -------------------------------
-out=$(pty_run 'print -r -- "RIP_GRAVEYARD=$RIP_GRAVEYARD"')
+out=$(env -u RIP_GRAVEYARD ZSHENV_FILE="$ROOT/zsh/zshenv" zsh -f -c \
+  'source "$ZSHENV_FILE"; print -r -- "RIP_GRAVEYARD=$RIP_GRAVEYARD"')
 want "rip graveyard uses the home data directory by default" \
   "RIP_GRAVEYARD=$HOME/.local/share/graveyard" "$out"
 graveyard_xdg="$TMPDIR/rip-graveyard-xdg"
-out=$(XDG_DATA_HOME="$graveyard_xdg" pty_run \
-  'print -r -- "RIP_GRAVEYARD=$RIP_GRAVEYARD"')
+out=$(env -u RIP_GRAVEYARD XDG_DATA_HOME="$graveyard_xdg" \
+  ZSHENV_FILE="$ROOT/zsh/zshenv" zsh -f -c \
+  'source "$ZSHENV_FILE"; print -r -- "RIP_GRAVEYARD=$RIP_GRAVEYARD"')
 want "rip graveyard follows XDG_DATA_HOME" \
   "RIP_GRAVEYARD=$graveyard_xdg/graveyard" "$out"
 

@@ -2,12 +2,17 @@
 // Stdin JSON -> the existing statusline bytes; no harness configuration cutover.
 import { DIM, ESC, RST } from "./ansi.ts";
 import { realpath } from "node:fs/promises";
-import { execAsyncBounded, writeCacheAsync } from "./bounded.ts";
+import {
+  execAsyncBounded,
+  resetRenderBudget,
+  writeCacheAsync,
+} from "./bounded.ts";
 import { cli } from "cleye";
 import { jsonText, z } from "./zod.ts";
 import { ClaudeStatuslineInputSchema } from "./adapters/claude-statusline.ts";
 import {
   readCodexSessionStatus,
+  readCodexPinnedSessionStatus,
   readCodexThreadStatus,
 } from "./adapters/codex-rollout.ts";
 import type { SessionStatus } from "./session-status.ts";
@@ -18,8 +23,21 @@ import { readCodexRate } from "./codex-rate.ts";
 import { sysSegment } from "./host-load.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
+import { runLive, type LiveFrame } from "./live.ts";
+import type { Dataframe } from "./dataframe.ts";
 
 const HOME = process.env.HOME ?? "";
+const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
+async function writeSysSnapshot(df: Dataframe): Promise<void> {
+  const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
+  const sysPlain = sysColored.replaceAll(ANSI, "");
+  await writeCacheAsync(SYS_CACHE, {
+    at: Temporal.Now.instant().epochMilliseconds,
+    line: `Sys: ${sysPlain}`,
+    ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
+  });
+}
 async function cwdForPid(pid: string): Promise<string | null> {
   const procCwd = await realpath(`/proc/${pid}/cwd`).catch(() => null);
   if (procCwd !== null) return procCwd;
@@ -75,7 +93,10 @@ const CodexSelectorFlagsSchema = z.object({
   pid: z.string().optional(),
   thread: z.string().optional(),
 });
-async function codexSessionFromFlags(flags: unknown): Promise<SessionStatus> {
+async function codexSessionFromFlags(
+  flags: unknown,
+  keepWatchingWhenAbsent = false,
+): Promise<SessionStatus | undefined> {
   const parsedFlags = CodexSelectorFlagsSchema.safeParse(flags);
   if (!parsedFlags.success) {
     const field = parsedFlags.error.issues[0]?.path.map(String).join(".");
@@ -94,8 +115,9 @@ async function codexSessionFromFlags(flags: unknown): Promise<SessionStatus> {
     process.exit(2);
   }
   if (selected.session === undefined) {
+    if (keepWatchingWhenAbsent) return undefined;
     process.stdout.write(
-      `${DIM}Codex: no interactive session for ${selected.cwd}${RST}`,
+      `${DIM}Codex: no interactive session for ${selected.cwd}${RST}${args.flags.once === true ? "\n" : ""}`,
     );
     process.exit(0);
   }
@@ -132,11 +154,53 @@ const args = cli(
         type: String,
         description: "Interactive Codex thread ID shown in the TUI footer",
       },
+      once: { type: Boolean, description: "Render one snapshot and exit" },
+      watch: { type: Boolean, description: "Explicitly refresh in a terminal" },
+      interval: {
+        type: String,
+        description: "Live refresh interval in seconds (1–3600)",
+      },
     },
   },
   undefined,
   Bun.argv.slice(2),
 );
+const codexMode = args.flags.codex ?? false;
+const onceMode = args.flags.once ?? false;
+const watchMode = args.flags.watch ?? false;
+const intervalText = args.flags.interval;
+const intervalSeconds = intervalText === undefined ? 5 : Number(intervalText);
+const stdoutTty = process.stdout.isTTY ?? false;
+const liveMode = codexMode && (watchMode || (!onceMode && stdoutTty));
+if (watchMode && onceMode) {
+  process.stderr.write("FATAL: --watch cannot be combined with --once\n");
+  process.exit(2);
+}
+if (!codexMode && (onceMode || watchMode || intervalText !== undefined)) {
+  process.stderr.write(
+    "FATAL: --once, --watch and --interval require --codex\n",
+  );
+  process.exit(2);
+}
+if (
+  intervalText !== undefined &&
+  (!Number.isFinite(intervalSeconds) ||
+    intervalSeconds < 1 ||
+    intervalSeconds > 3600)
+) {
+  process.stderr.write(
+    "FATAL: --interval must be a finite number from 1 to 3600 seconds\n",
+  );
+  process.exit(2);
+}
+if (watchMode && !stdoutTty) {
+  process.stderr.write("FATAL: --watch requires a TTY on stdout\n");
+  process.exit(2);
+}
+if (intervalText !== undefined && !liveMode) {
+  process.stderr.write("FATAL: --interval requires live mode\n");
+  process.exit(2);
+}
 // --- entry: read stdin JSON, build the dataframe, render, write. Graceful: an invalid/missing
 // JSON payload still renders line 1 (from $PWD, no dataframe needed) plus a hint. ---
 // Runtime floor, checked before anything touches Temporal. Which bun runs this is NOT this
@@ -152,8 +216,8 @@ if (typeof Temporal === "undefined") {
   process.exit(0);
 }
 let session: SessionStatus | undefined;
-if (args.flags.codex === true) {
-  session = await codexSessionFromFlags(args.flags);
+if (codexMode) {
+  session = await codexSessionFromFlags(args.flags, liveMode);
 } else if (
   args.flags.pid !== undefined ||
   args.flags.cwd !== undefined ||
@@ -162,7 +226,7 @@ if (args.flags.codex === true) {
   process.stderr.write("FATAL: --pid, --cwd and --thread require --codex\n");
   process.exit(2);
 }
-if (args.flags.codex !== true) {
+if (!codexMode) {
   const raw = await Bun.stdin.text();
   // unknown -> ClaudeStatuslineInput at the trust boundary: parsed and normalized by its adapter.
   const json = jsonText.safeParse(raw);
@@ -189,46 +253,85 @@ if (args.flags.codex !== true) {
   session = payload.data;
 }
 const selectedSession = session;
-const df =
-  args.flags.codex === true && selectedSession?.sessionId !== undefined
-    ? await buildDataframe(selectedSession, {
+if (liveMode) {
+  let firstFrame = true;
+  let pinnedSession = selectedSession;
+  const code = await runLive({
+    intervalSeconds,
+    frame: async (): Promise<LiveFrame> => {
+      resetRenderBudget();
+      let current: SessionStatus | undefined;
+      if (firstFrame) {
+        current = pinnedSession;
+      } else if (pinnedSession === undefined) {
+        current = await codexSessionFromFlags(args.flags, true);
+      } else {
+        const pinnedId = pinnedSession.sessionId;
+        if (pinnedId === undefined || pinnedId === "") {
+          process.stderr.write(
+            "FATAL: live Codex status requires a session with a stable session ID\n",
+          );
+          return 2;
+        }
+        current = await readCodexPinnedSessionStatus(pinnedId);
+      }
+      firstFrame = false;
+      if (current === undefined)
+        return `${DIM}Codex: no interactive session for ${args.flags.cwd ?? process.env.PWD ?? process.cwd()}${RST}`;
+      if (current.sessionId === undefined || current.sessionId === "") {
+        process.stderr.write(
+          "FATAL: live Codex status requires a session with a stable session ID\n",
+        );
+        return 2;
+      }
+      pinnedSession ??= current;
+      const frame = await buildDataframe(current, {
         codex: true,
         sources: {
-          codexRate: () => readCodexRate(undefined, selectedSession.sessionId),
+          codexRate: () => readCodexRate(undefined, current.sessionId),
         },
-      })
-    : await buildDataframe(session ?? {});
-process.stdout.write(render(df, { codex: args.flags.codex === true }));
-
-// Hand the plain Sys row to hooks/log-sys-snapshot.ts, which attaches it to the transcript.
-// Host load shares GPU history with agx-usehooks; the snapshot hook just reads the latest
-// rendered line, so transcript logging never pays for a sample. Host-wide values serve
-// every session. Best-effort: a failed write only means the next hook firing finds it stale.
-const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
-const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
-const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
-const sysPlain = sysColored.replaceAll(ANSI, "");
-// Never empty: every Sys reading is a value or an explicit n/a (see the EXPLICIT-ABSENCE law).
-await writeCacheAsync(SYS_CACHE, {
-  at: Temporal.Now.instant().epochMilliseconds,
-  line: `Sys: ${sysPlain}`,
-  // Same colors as the bar's Sys row (pctFmt thresholds), for a renderer that keeps ANSI.
-  ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
-});
-
-// This session's rows for the snapshot, in display order: Ctx, then Rate. Neither is host-wide —
-// each session's payload carries its own context and the rate_limits it last received, so one
-// shared file let an idle session's older Rate overwrite a fresh one (observed 2026-10-01: 7d 60%
-// then 51% with the same reset). One file per session; the hook reads its own and inserts the
-// rows as given.
-const sid = (session?.sessionId ?? "").replaceAll(/[^A-Za-z0-9_-]/gu, "_");
-if (args.flags.codex !== true && sid !== "") {
-  const rows = [ctxSegment(df), rateRow(df)]; // neither is ever empty: a value or an explicit n/a
-  await writeCacheAsync(
-    `${HOME}/.cache/claude/statusline-session/${sid}.json`,
-    {
-      at: Temporal.Now.instant().epochMilliseconds,
-      rows: rows.map((ansi) => ({ line: ansi.replaceAll(ANSI, ""), ansi })),
+      });
+      await writeSysSnapshot(frame);
+      return render(frame, { codex: true });
     },
+  });
+  process.exit(code);
+} else {
+  const df =
+    codexMode && selectedSession?.sessionId !== undefined
+      ? await buildDataframe(selectedSession, {
+          codex: true,
+          sources: {
+            codexRate: () =>
+              readCodexRate(undefined, selectedSession.sessionId),
+          },
+        })
+      : await buildDataframe(session ?? {});
+  process.stdout.write(
+    `${render(df, { codex: codexMode })}${codexMode && onceMode ? "\n" : ""}`,
   );
+
+  // Hand the plain Sys row to hooks/log-sys-snapshot.ts, which attaches it to the transcript.
+  // Host load shares GPU history with agx-usehooks; the snapshot hook just reads the latest
+  // rendered line, so transcript logging never pays for a sample. Host-wide values serve
+  // every session. Best-effort: a failed write only means the next hook firing finds it stale.
+  // Never empty: every Sys reading is a value or an explicit n/a (see the EXPLICIT-ABSENCE law).
+  await writeSysSnapshot(df);
+
+  // This session's rows for the snapshot, in display order: Ctx, then Rate. Neither is host-wide —
+  // each session's payload carries its own context and the rate_limits it last received, so one
+  // shared file let an idle session's older Rate overwrite a fresh one (observed 2026-10-01: 7d 60%
+  // then 51% with the same reset). One file per session; the hook reads its own and inserts the
+  // rows as given.
+  const sid = (session?.sessionId ?? "").replaceAll(/[^A-Za-z0-9_-]/gu, "_");
+  if (!codexMode && sid !== "") {
+    const rows = [ctxSegment(df), rateRow(df)]; // neither is ever empty: a value or an explicit n/a
+    await writeCacheAsync(
+      `${HOME}/.cache/claude/statusline-session/${sid}.json`,
+      {
+        at: Temporal.Now.instant().epochMilliseconds,
+        rows: rows.map((ansi) => ({ line: ansi.replaceAll(ANSI, ""), ansi })),
+      },
+    );
+  }
 }

@@ -85,7 +85,10 @@ export function failWhy(
 // performance.now(): monotonic, immune to a clock step, and defined on a bun without Temporal
 // (the floor check at the bottom must still get to print its message).
 export const RENDER_BUDGET_MS = 4000;
-export const RENDER_T0 = performance.now();
+export let RENDER_T0 = performance.now();
+export function resetRenderBudget(): void {
+  RENDER_T0 = performance.now();
+}
 export interface ExecFailure {
   why: string; // the n/a reason, from failWhy
   stderr: string; // trimmed; "" when the child printed none or never started

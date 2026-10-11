@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.0 — 2026-10-11
+
+- Refresh Codex status in place every five seconds on a TTY; add `--once`, `--watch` and validated `--interval` controls with clean terminal restoration.
+- Pin a live display to its initially selected Codex session so newer rollouts in the same cwd cannot take over.
+
 ## 0.13.0 — 2026-10-11
 
 - Make `statusline --codex` default to the current directory, select only interactive `codex-tui` rollouts, and support exact `--thread <id>` selection with a non-zero unknown-id result.
@@ -98,7 +103,7 @@
 
 ## 0.6.1 — 2026-10-09
 
-- Render known costs below $0.10 as `<$0.1` and zero as `$0`.
+- Render known costs below $0.10 as `<$0.1`and zero as`$0`.
 
 ## 0.6.0 — 2026-10-09
 

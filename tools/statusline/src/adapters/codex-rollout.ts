@@ -146,6 +146,70 @@ async function matchingRolloutByThread(root: string, threadId: string) {
   return null;
 }
 
+async function matchingRolloutBySessionIdOnDay(dir: string, sessionId: string) {
+  const candidates = await rolloutsInDay(dir);
+  for (const candidate of candidates) {
+    const meta = await metadata(candidate.path);
+    if (
+      meta?.payload.originator === "codex-tui" &&
+      (meta.payload.session_id === sessionId || meta.payload.id === sessionId)
+    )
+      return { path: candidate.path, meta };
+  }
+  return null;
+}
+
+async function matchingRolloutBySessionIdInYear(
+  root: string,
+  sessionId: string,
+  endDay: Temporal.PlainDate,
+  dayCount: number,
+) {
+  for (let offset = 0; offset < dayCount; offset++) {
+    const day = endDay.subtract({ days: offset });
+    const dir = join(
+      root,
+      String(day.year),
+      String(day.month).padStart(2, "0"),
+      String(day.day).padStart(2, "0"),
+    );
+    const match = await matchingRolloutBySessionIdOnDay(dir, sessionId);
+    if (match !== null) return match;
+  }
+  return null;
+}
+
+async function matchingRolloutBySessionId(root: string, sessionId: string) {
+  const today = Temporal.Now.plainDateISO();
+  const yearStart = Temporal.PlainDate.from({
+    year: today.year,
+    month: 1,
+    day: 1,
+  });
+  const daysThisYear = today.since(yearStart).days + 1;
+  const firstYearDays = Math.min(367, daysThisYear);
+  const currentYearMatch = await matchingRolloutBySessionIdInYear(
+    root,
+    sessionId,
+    today,
+    firstYearDays,
+  );
+  if (currentYearMatch !== null) return currentYearMatch;
+  const remainingDays = 367 - firstYearDays;
+  if (remainingDays === 0) return null;
+  const previousYearEnd = Temporal.PlainDate.from({
+    year: today.year - 1,
+    month: 12,
+    day: 31,
+  });
+  return matchingRolloutBySessionIdInYear(
+    root,
+    sessionId,
+    previousYearEnd,
+    remainingDays,
+  );
+}
+
 async function readTail(path: string): Promise<string> {
   await using file = await open(path, "r");
   const info = await file.stat();
@@ -209,5 +273,14 @@ export async function readCodexThreadStatus(
   root = join(process.env.HOME ?? "", ".codex", "sessions"),
 ): Promise<SessionStatus | undefined> {
   const selected = await matchingRolloutByThread(root, threadId);
+  return readSelectedSessionStatus(selected, selected?.meta.payload.cwd);
+}
+
+/** Reread one already-selected interactive session without selecting a newer cwd match. */
+export async function readCodexPinnedSessionStatus(
+  sessionId: string,
+  root = join(process.env.HOME ?? "", ".codex", "sessions"),
+): Promise<SessionStatus | undefined> {
+  const selected = await matchingRolloutBySessionId(root, sessionId);
   return readSelectedSessionStatus(selected, selected?.meta.payload.cwd);
 }

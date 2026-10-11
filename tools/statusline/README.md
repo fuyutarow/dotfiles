@@ -1,6 +1,6 @@
 # statusline
 
-Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.13.0.
+Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.14.0.
 `agents/claude/settings.json` declares `statusLine.command` as `~/.bun/bin/statusline`, this package's `bin`
 (root `package.json` `bin`, installed by `bun link` / `mise run deps`). The former Claude implementation
 has been retired; parity fixtures preserve its expected behavior.
@@ -15,6 +15,18 @@ statusline --codex
 bun test tools/statusline/tests
 ```
 
+## Codex display contract
+
+| Invocation                                              | Behavior                                                                                                             |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `statusline --codex` on a TTY                           | Live in-place refresh every 5 seconds; `q` or Ctrl+C exits.                                                          |
+| `statusline --codex` without a TTY                      | One snapshot, preserving the existing output bytes.                                                                  |
+| `statusline --codex --once`                             | One snapshot with a trailing newline.                                                                                |
+| `statusline --codex --watch [--interval N]`             | Explicit live display; `--watch` requires TTY stdout. Interval is finite 1–3600 seconds and only valid in live mode. |
+| `--watch --once`, or Codex-only flags without `--codex` | Usage error (exit 2).                                                                                                |
+
+Live mode selects the initial rollout once, then rereads that session ID on every frame. It never switches to a newer same-directory session. The display uses the alternate screen and hides the cursor while active, then restores terminal state on exit or signal.
+
 The Claude adapter parses Claude Code statusline JSON on stdin and normalizes it to the provider-neutral
 `SessionStatus` contract; stdout retains the existing ANSI rows and graceful invalid-input messages.
 Existing environment variables, cache locations, schema
@@ -27,7 +39,8 @@ TUI. `--codex` with no other flags uses the current directory; `--cwd` selects b
 directory, `--pid` reads the process cwd (`/proc` or bounded `lsof`), and `--thread` selects the
 rollout whose filename ends in the supplied thread ID. Cwd and PID selection use the newest rollout
 whose `session_meta.cwd` matches and whose `originator` is `codex-tui`, skipping
-`codex_exec` workers. A cwd or PID selection with no match prints one dim line and exits. Codex
+`codex_exec` workers. A snapshot selection with no match prints one dim line and exits; live
+`--watch` keeps polling until it finds a session. Codex
 output omits Claude-only identity, rate-window, diff and cost fields. An unknown thread ID prints
 one error line naming that ID and exits non-zero. The adapter reads bounded
 metadata and event tails, normalizes them to `SessionStatus`, and leaves missing Codex context or
@@ -68,30 +81,31 @@ outside this scaffolding step.
 
 ## Module map
 
-| Module                  | Lines | Responsibility                                                            |
-| ----------------------- | ----: | ------------------------------------------------------------------------- |
-| src/session-status.ts   |    38 | Provider-neutral session facts consumed by the dataframe builder          |
-| src/adapters/claude-statusline.ts |  89 | Claude stdin schema and normalization boundary                         |
-| src/adapters/codex-rollout.ts | — | Bounded Codex rollout selection and normalization                         |
-| src/ansi.ts             |    32 | ANSI vocabulary, absence markers, percentage colors                       |
-| src/bounded.ts          |   150 | Shared 4 s render deadline, bounded subprocesses, atomic cache writes     |
-| src/build-dataframe.ts  |   126 | Orchestrate enrichment in the original order                              |
-| src/cgroup-memory.ts    |    64 | Read cgroup v1/v2 memory limits and working sets                          |
-| src/dataframe.ts        |    54 | Typed facts passed to rendering                                           |
-| src/dispatch-runs.ts    |   190 | Read dispatch markers/progress and render aligned worker rows             |
-| src/dispatch-warning.ts |    84 | Codex-share warning from runs.jsonl and route-capability.json (read-only) |
-| src/dispatch-state.ts   |    55 | Read-only dispatch wire schemas and file locations                        |
-| src/format.ts           |   146 | Row assembly and prompt-head colors                                       |
-| src/host-load.ts        |   537 | CPU/RAM/VRAM sampling, GPU lock/cache, Sys formatting                     |
-| src/identity.ts         |   409 | Account, agent-name cache, Remote Control probe, herdr updates            |
-| src/jobs.ts             |   109 | Admitted jobs, scratchpad orphans, elapsed formatting                     |
-| src/model-context.ts    |    60 | Model normalization and context labels                                    |
-| src/prompt-stamp.ts     |    95 | Temporal clock, offset, tilde path and prompt fields                      |
-| src/rate-limits.ts      |   158 | Scoped model caps, window percentages and reset countdowns                |
-| src/repo-state.ts       |    36 | Bounded branch lookup and explicit git failures                           |
-| src/statusline.ts       |    82 | Executable stdin entry, graceful errors and snapshot cache writes         |
-| src/storage.ts          |   130 | Storage TOML reads, disk measurements, shared threshold calculation       |
-| src/zod.ts              |    44 | Local JSON codecs and nullable-field schema helper                       |
+| Module                            | Lines | Responsibility                                                            |
+| --------------------------------- | ----: | ------------------------------------------------------------------------- |
+| src/session-status.ts             |    38 | Provider-neutral session facts consumed by the dataframe builder          |
+| src/adapters/claude-statusline.ts |    89 | Claude stdin schema and normalization boundary                            |
+| src/adapters/codex-rollout.ts     |     — | Bounded Codex rollout selection and normalization                         |
+| src/ansi.ts                       |    32 | ANSI vocabulary, absence markers, percentage colors                       |
+| src/bounded.ts                    |   150 | Shared 4 s render deadline, bounded subprocesses, atomic cache writes     |
+| src/build-dataframe.ts            |   126 | Orchestrate enrichment in the original order                              |
+| src/cgroup-memory.ts              |    64 | Read cgroup v1/v2 memory limits and working sets                          |
+| src/dataframe.ts                  |    54 | Typed facts passed to rendering                                           |
+| src/dispatch-runs.ts              |   190 | Read dispatch markers/progress and render aligned worker rows             |
+| src/dispatch-warning.ts           |    84 | Codex-share warning from runs.jsonl and route-capability.json (read-only) |
+| src/dispatch-state.ts             |    55 | Read-only dispatch wire schemas and file locations                        |
+| src/format.ts                     |   146 | Row assembly and prompt-head colors                                       |
+| src/host-load.ts                  |   537 | CPU/RAM/VRAM sampling, GPU lock/cache, Sys formatting                     |
+| src/identity.ts                   |   409 | Account, agent-name cache, Remote Control probe, herdr updates            |
+| src/jobs.ts                       |   109 | Admitted jobs, scratchpad orphans, elapsed formatting                     |
+| src/live.ts                       |     — | Serialized Codex TTY refresh loop and terminal cleanup                    |
+| src/model-context.ts              |    60 | Model normalization and context labels                                    |
+| src/prompt-stamp.ts               |    95 | Temporal clock, offset, tilde path and prompt fields                      |
+| src/rate-limits.ts                |   158 | Scoped model caps, window percentages and reset countdowns                |
+| src/repo-state.ts                 |    36 | Bounded branch lookup and explicit git failures                           |
+| src/statusline.ts                 |    82 | Executable stdin entry, graceful errors and snapshot cache writes         |
+| src/storage.ts                    |   130 | Storage TOML reads, disk measurements, shared threshold calculation       |
+| src/zod.ts                        |    44 | Local JSON codecs and nullable-field schema helper                        |
 
 ## Exact source import list
 
@@ -106,6 +120,7 @@ outside this scaffolding step.
 - `src/format.ts`: `./ansi.ts`, `./prompt-stamp.ts`, `./dataframe.ts`, `./model-context.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`, `./host-load.ts`
 - `src/host-load.ts`: `node:child_process`, `node:fs`, `node:path`, `node:os`, `neverthrow`, `./storage.ts`, `./cgroup-memory.ts`, `./zod.ts`, `./ansi.ts`, `./bounded.ts`
 - `src/identity.ts`: `node:fs`, `node:net`, `neverthrow`, `./zod.ts`, `./bounded.ts`
+- `src/live.ts`:
 - `src/session-status.ts`: (types only)
 - `src/adapters/claude-statusline.ts`: `../bounded.ts`, `../zod.ts`, `../session-status.ts`
 - `src/jobs.ts`: `./bounded.ts`, `./ansi.ts`, `./prompt-stamp.ts`
@@ -113,7 +128,7 @@ outside this scaffolding step.
 - `src/prompt-stamp.ts`: `node:os`
 - `src/rate-limits.ts`: `neverthrow`, `./zod.ts`, `./prompt-stamp.ts`, `./ansi.ts`, `./dataframe.ts`
 - `src/repo-state.ts`: `./bounded.ts`, `./model-context.ts`
-- `src/statusline.ts`: `./ansi.ts`, `./bounded.ts`, `./zod.ts`, `./adapters/claude-statusline.ts`, `./prompt-stamp.ts`, `./format.ts`, `./build-dataframe.ts`, `./host-load.ts`, `./model-context.ts`, `./rate-limits.ts`
+- `src/statusline.ts`: `./ansi.ts`, `./bounded.ts`, `./zod.ts`, `./adapters/claude-statusline.ts`, `./prompt-stamp.ts`, `./format.ts`, `./build-dataframe.ts`, `./host-load.ts`, `./model-context.ts`, `./rate-limits.ts`, `./live.ts`
 - `src/storage.ts`: `node:fs`, `node:path`, `neverthrow`, `../../shared/src/storage-headroom.ts`, `./zod.ts`, `./bounded.ts`, `./ansi.ts`
 - `src/zod.ts`: `neverthrow`, `../../shared/src/zod.ts`
 

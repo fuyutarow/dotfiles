@@ -149,6 +149,14 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_SLUG=dotfiles:reply-language sh ~/.codex/hooks/run-reply-language.sh"
+          }
+        ]
       }
     ]
   }

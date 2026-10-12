@@ -125,7 +125,10 @@ commands = ["sh ~/.claude/hooks/run.sh detect-leaked-toolcall.ts"]
 [[vendor_hook]]
 slug = "reply-language"
 script = "claude/hooks/enforce-reply-language.ts"
-commands = ["sh ~/.claude/hooks/run.sh enforce-reply-language.ts"]
+commands = [
+  "sh ~/.claude/hooks/run.sh enforce-reply-language.ts",
+  "sh ~/.codex/hooks/run-reply-language.sh",
+]
 
 [[vendor_hook]]
 slug = "sys-snapshot"

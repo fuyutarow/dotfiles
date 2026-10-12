@@ -957,7 +957,9 @@ describe("enforce-storage-headroom", () => {
           { ...bash("cargo build"), cwd: root },
           { ...budget(0.001, 1_000_000), HOME: home },
         );
-        const ctx = decisionOf(r.stdout)?.additionalContext ?? "";
+        const decision = decisionOf(r.stdout);
+        expect(decision?.permissionDecision).toBe("deny");
+        const ctx = decision?.additionalContext ?? "";
         expect(ctx).toContain("[dotfiles:storage-headroom] WARNING host C:");
         expect(ctx).toContain("cargo target");
       },

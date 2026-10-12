@@ -1287,32 +1287,9 @@ async function main(): Promise<void> {
   if ((low.length > 0 || hostUnreadable) && hit === null) {
     await denyLowSpace(drives, config.drive);
   }
-  if (hit !== null && (warningLine.length > 0 || hostUnreadable)) {
-    const hostDrive = config.drive.host;
-    const hostLow =
-      hostDrive !== undefined &&
-      drives.some(
-        (d) =>
-          d.label === hostDrive.label && d.free !== null && d.free < d.denyAt,
-      );
-    const recovery = hostLow ? await requestRecovery() : "";
-    // BATCHED(drives): every drive is measured before this point and all of them are in the one
-    // reason below, so a caller short on both learns it from a single denial.
-    await denyLowSpace(
-      drives,
-      config.drive,
-      `${hit.label} denied at its warn line.${hostUnreadable ? ` Host C could not be measured.${recovery}` : ""}`,
-    );
-  }
-
   const warnings: string[] = [];
   for (const d of drives) {
-    if (
-      hit === null &&
-      d.warnAt !== undefined &&
-      d.free !== null &&
-      d.free < d.warnAt
-    ) {
+    if (d.warnAt !== undefined && d.free !== null && d.free < d.warnAt) {
       const others = drives
         .filter((o) => o !== d)
         .map((o) => `${o.label} free ${gib(o.free)}`)
@@ -1336,6 +1313,23 @@ async function main(): Promise<void> {
   if (budgetDenials.length > 0) {
     // BATCHED(budgets): all matching artifact budgets are measured before this denial.
     decidePre("deny", budgetDenials.join("; "));
+  }
+  if (hit !== null && (warningLine.length > 0 || hostUnreadable)) {
+    const hostDrive = config.drive.host;
+    const hostLow =
+      hostDrive !== undefined &&
+      drives.some(
+        (d) =>
+          d.label === hostDrive.label && d.free !== null && d.free < d.denyAt,
+      );
+    const recovery = hostLow ? await requestRecovery() : "";
+    // BATCHED(drives, budgets): both kinds of warning share the denial that stops the launcher.
+    await denyLowSpace(
+      drives,
+      config.drive,
+      `${hit.label} denied at its warn line.${hostUnreadable ? ` Host C could not be measured.${recovery}` : ""}`,
+      warnings.join("\n"),
+    );
   }
   if (warnings.length > 0) {
     process.stdout.write(
@@ -1361,6 +1355,7 @@ async function denyLowSpace(
   }>,
   configured: Record<string, Drive>,
   note = "",
+  additionalContext = "",
 ): Promise<never> {
   const first = "free space: disk-reclaim run --tier blind --yes";
   const candidates = await readReclaimPlanCache(process.env.HOME ?? homedir());
@@ -1388,6 +1383,7 @@ async function denyLowSpace(
   decidePre(
     "deny",
     `${first}\n${measuredDrives}\n${reclaimAdvice}\n${ALLOWLIST}${note === "" ? "" : `\n${note}`}`,
+    additionalContext === "" ? {} : { additionalContext },
   );
 }
 

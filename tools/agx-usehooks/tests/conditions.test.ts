@@ -1,6 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
 import {
-  chmodSync,
   mkdtempSync,
   mkdirSync,
   rmSync,
@@ -48,12 +47,13 @@ afterEach(() => {
   for (const dir of dirs.splice(0))
     rmSync(dir, { recursive: true, force: true });
 });
-function binary(dir: string, name: string, body: string): void {
+function jjFixture(
+  dir: string,
+  options: { stdout?: string; sleepMs?: number },
+): void {
   const bin = join(dir, "bin");
   mkdirSync(bin, { recursive: true });
-  const path = join(bin, name);
-  writeFileSync(path, `#!${process.execPath}\n${body}\n`);
-  chmodSync(path, 0o755);
+  commandFixture(join(bin, "jj"), options);
   process.env.PATH = bin;
 }
 
@@ -370,9 +370,9 @@ test("dirtyFor uses the oldest jj changed file and clean/unavailable returns zer
   const now = Temporal.Now.instant().epochMilliseconds / 1_000;
   utimesSync(join(dir, "old.ts"), now - 7_200, now - 7_200);
   utimesSync(join(dir, "new.ts"), now - 3_600, now - 3_600);
-  binary(dir, "jj", 'process.stdout.write("old.ts\\nnew.ts\\n");');
+  jjFixture(dir, { stdout: "old.ts\nnew.ts\n" });
   expect(await dirtyFor(ctx)).toBeCloseTo(2, 2);
-  binary(dir, "jj", 'process.stdout.write("");');
+  jjFixture(dir, { stdout: "" });
   expect(await dirtyFor(ctx)).toBe(0);
   process.env.PATH = dir;
   expect(await dirtyFor(ctx)).toBe(0);
@@ -432,7 +432,7 @@ test("unackedReturns ignores other outcomes and requires explicit acceptance rat
 
 test("dirtyFor bounds a stalled jj command", async () => {
   const { dir, ctx } = world();
-  binary(dir, "jj", "await Bun.sleep(10_000);");
+  jjFixture(dir, { sleepMs: 10_000 });
   const started = performance.now();
   expect(await dirtyFor(ctx)).toBe(0);
   expect(performance.now() - started).toBeLessThan(1_500);

@@ -14,12 +14,20 @@ export const RunSchema = z.object({
 });
 export const RunsSchema = z.array(RunSchema);
 export const LaneCountSchema = z.number().int().nonnegative();
+export const LauncherRunsTodaySchema = z.number().int().nonnegative();
+export const MinutesSinceLastResultSchema = z.number().nonnegative().nullable();
+export const GpuUtilSchema = z.number().min(0).max(100).nullable();
 export type GpuReading = z.output<typeof GpuReadingSchema>;
 export type GpuUnavailable = z.output<typeof GpuUnavailableSchema>;
 export type Gpu = z.output<typeof GpuSchema>;
 export type Run = z.output<typeof RunSchema>;
 export type Runs = z.output<typeof RunsSchema>;
 export type LaneCount = z.output<typeof LaneCountSchema>;
+export type LauncherRunsToday = z.output<typeof LauncherRunsTodaySchema>;
+export type MinutesSinceLastResult = z.output<
+  typeof MinutesSinceLastResultSchema
+>;
+export type GpuUtil = z.output<typeof GpuUtilSchema>;
 
 /** Contract failures are diagnosed and fail open with a separately parsed fallback. */
 export function validated<S extends z.ZodType>(

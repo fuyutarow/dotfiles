@@ -10,6 +10,8 @@ emit no stdout, and report one stderr line.
 
 Conditions return values:
 
+Fact helpers return validated scalar values for project hooks: `await launcherRunsToday(ctx, { project: ctx.repoRoot })` counts distinct launcher run receipts whose `started_at` falls on the host's local calendar day; `await minutesSinceLastResult(ctx, { project: ctx.repoRoot })` returns elapsed minutes since the newest receipt with a `result` and `ended_at`, or `null` when no such receipt exists; `await gpuUtil(ctx)` returns the current `nowPct`, or `null` when GPU sampling is unavailable. The first two read bounded tails of `$AGX_STATE_DIR/runs.jsonl` (default `$XDG_STATE_HOME/agx/runs.jsonl`, otherwise `~/.local/state/agx/runs.jsonl`) and the two newest dated `runs-YYYY-MM-DD.jsonl` ledger archives, filtering receipts by `cwd` within the supplied project path. Their schemas are `LauncherRunsTodaySchema`, `MinutesSinceLastResultSchema`, and `GpuUtilSchema`. **Semver rule:** these additive exports are a minor release; changing any exported shape requires a major version, including during 0.x.
+
 The public GPU contract is `GpuReading | GpuUnavailable`, derived from exported
 `GpuReadingSchema` and `GpuUnavailableSchema`; `GpuSchema` parses their union.
 `RunSchema`, `RunsSchema`, and `LaneCountSchema` define `Run`, `Runs`, and

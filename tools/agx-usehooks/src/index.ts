@@ -20,6 +20,7 @@ export {
   type RunScan,
 } from "./conditions.ts";
 export { englishSegments } from "./english.ts";
+export { launcherRunsToday, minutesSinceLastResult, gpuUtil } from "./facts.ts";
 export {
   GpuReadingSchema,
   GpuUnavailableSchema,
@@ -32,6 +33,12 @@ export {
   type Gpu,
   type Runs,
   type LaneCount,
+  LauncherRunsTodaySchema,
+  MinutesSinceLastResultSchema,
+  GpuUtilSchema,
+  type LauncherRunsToday,
+  type MinutesSinceLastResult,
+  type GpuUtil,
 } from "./schemas.ts";
 export {
   runningJobs,

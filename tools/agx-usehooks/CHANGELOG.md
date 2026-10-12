@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.0 — 2026-10-12
+
+- Export zod-validated `launcherRunsToday(ctx, { project })`, `minutesSinceLastResult(ctx, { project })`, and `gpuUtil(ctx)` facts. Launcher counts and result age read bounded tails of agx's `runs.jsonl` ledger and its dated archives; project attribution uses each receipt's `cwd`. GPU utilization reuses `gpu(ctx)` and yields `null` when unavailable.
+- Export the three fact schemas and output types. This is additive under the 0.x minor-version rule; existing exported shapes are unchanged.
+
 ## 0.9.0 — 2026-10-11
 
 - Export runtime schemas and their derived types for GPU readings, unavailable readings, runs and lane counts. All four selectors return parsed values. Invalid internal output emits a contract diagnostic and returns a separately parsed fail-open fallback.

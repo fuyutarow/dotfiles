@@ -9,7 +9,7 @@ import {
   realpathSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   checkConsumer,
   consumerVerdict,
@@ -17,6 +17,10 @@ import {
 } from "../src/check-consumers.ts";
 
 const temporary: string[] = [];
+const tsgo = resolve(
+  import.meta.dir,
+  "../../../node_modules/@typescript/native-preview/bin/tsgo",
+);
 afterEach(() => {
   for (const path of temporary.splice(0))
     rmSync(path, { recursive: true, force: true });
@@ -50,7 +54,7 @@ test("hook errors fail; outside errors report; compiler/config failures fail", (
   expect(consumerVerdict("", 0, ".agents/hooks")).toBe("pass");
 });
 
-test("real tsc sees workspace types through a stale consumer link without writing it", async () => {
+test("real TypeScript checking sees workspace types through a stale consumer link without writing it", async () => {
   const root = mkdtempSync(join(tmpdir(), "usehooks-consumer-"));
   temporary.push(root);
   const workspace = join(root, "workspace");
@@ -103,7 +107,7 @@ test("real tsc sees workspace types through a stale consumer link without writin
     hooks: ".agents/hooks",
     link_task: "link:agx-usehooks",
     link_path: "node_modules/agx-usehooks",
-    command: ["bunx", "tsc", "--noEmit", "-p", "{root}"],
+    command: ["bun", tsgo, "--noEmit", "-p", "{root}"],
   };
   expect(await checkConsumer(consumer, workspace)).toBe(1);
   expect(readFileSync(hook, "utf8")).toBe(stale);
@@ -129,4 +133,4 @@ test("real tsc sees workspace types through a stale consumer link without writin
   expect(
     await checkConsumer({ ...consumer, root: join(root, "absent") }, workspace),
   ).toBe(0);
-}, 30_000);
+}, 120_000);

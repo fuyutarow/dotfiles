@@ -32,6 +32,64 @@ const context: Context = {
   },
   log: () => {},
 };
+test("VSS allocated storage is an ASK record and cannot execute even when approved", async () => {
+  let calls = 0;
+  const snapshot = parseProbe(
+    "c_free=123\nlever=vss-shadow-storage|14800000000|C:\\System Volume Information\n",
+  );
+  const target = createHostTarget({
+    snapshot: () => Promise.resolve(snapshot),
+    runner: () => {
+      calls++;
+      return Promise.resolve({ code: 0, out: "", timedOut: false });
+    },
+  });
+  const ctx = {
+    ...context,
+    mode: "run" as const,
+    approve: ["vss-shadow-storage"],
+  };
+  const rows = await target.plan(ctx);
+  expect(rows[0]).toMatchObject({
+    verdict: "ASK",
+    bytes: 14800000000,
+    action: { argv: [] },
+  });
+  const records = await import("../../src/records.ts").then(
+    ({ recordsFromPlan }) =>
+      recordsFromPlan({
+        schema: "reclaim.plan/1",
+        generated_at: "2026-10-12T00:00:00Z",
+        host: "r99",
+        mode: "plan",
+        totals: { reclaim_bytes: 0, ask_bytes: 14800000000, freed_bytes: null },
+        receipt: null,
+        headroom: { drives: [] },
+        targets: [
+          {
+            name: "host",
+            tier: "owner",
+            available: true,
+            skip_reason: null,
+            exit: null,
+            candidates: rows,
+            totals: { reclaim: 0, ask: 1, keep: 0 },
+          },
+        ],
+      }),
+  );
+  expect(records[0]).toMatchObject({
+    target: "vss-shadow-storage",
+    verdict: "ask",
+    fingerprint: null,
+  });
+  if (rows[0] !== undefined)
+    expect(await target.act(rows[0], ctx)).toMatchObject({ ok: false });
+  expect(calls).toBe(0);
+  expect(hostProbe).toContain("Win32_ShadowStorage");
+  expect(hostProbe).toContain("$store.AllocatedSpace");
+  expect(hostProbe).not.toContain("vssadmin delete");
+});
 test("host parses separate cleanup tiers and allocated VHDX reports", async () => {
   const s = parseProbe(
     "c_free=123\r\nc_total=999\r\nlever=user-temp|42|C:\\Temp\r\nlever=windows-update-components|?|C:\\Windows\\WinSxS\r\nvhdx=456|Ubuntu|Running|C:\\WSL\\ext4.vhdx\r\n",
@@ -135,8 +193,8 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
   expect(parsed.success).toBe(true);
   if (!parsed.success) return;
   const rows = parsed.data.targets[0]?.candidates ?? [];
-  expect(rows).toHaveLength(21);
-  const records = invoke(["plan", "host", "--host", "r99-lan"]);
+  expect(rows).toHaveLength(22);
+  const records = invoke(["plan", "--on", "windows", "--host", "r99-lan"]);
   expect(records.exitCode, records.stderr.toString()).toBe(0);
   const jsonl = records.stdout
     .toString()
@@ -154,6 +212,15 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
   expect(leverNames).toContain("pagefile-size");
   expect(leverNames).toContain("claude-vm-bundles");
   expect(
+    jsonl.some(
+      (row) =>
+        row.success &&
+        row.data.target === "vss-shadow-storage" &&
+        row.data.verdict === "ask" &&
+        row.data.bytes_allocated === 14800000000,
+    ),
+  ).toBe(true);
+  expect(
     rows
       .filter(
         (c) =>
@@ -161,7 +228,7 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
           c.host_lever?.approval !== undefined,
       )
       .map((c) => c.verdict),
-  ).toEqual(["ASK", "ASK", "ASK", "ASK"]);
+  ).toEqual(["ASK", "ASK", "ASK", "ASK", "ASK"]);
   expect(readFileSync(env.HOST_STUB_LOG, "utf8")).not.toContain("c_before");
   const refused = invoke(["run", "host", "--approve", "recycle-bin", "--json"]);
   expect(refused.exitCode).toBe(2);

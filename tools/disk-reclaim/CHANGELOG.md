@@ -1,11 +1,13 @@
 # Changelog
 
-## 1.1.4 — 2026-10-12
+## 1.1.5 — 2026-10-12
 
 - Treat rumdl, Ruff, pytest, mypy, and node_modules tool caches as regenerable workspace content.
 - Frame Windows PowerShell script transfer as one base64 line rather than waiting for SSH stdin EOF; bound the read-only probe to 90 seconds with a 10-second SSH connection timeout.
 - Report the current SSH/PowerShell step on stderr and name the last step on timeout, without emitting partial candidate records.
 - Preserve PID, comm, and executable identity for unknown unreadable same-uid processes; keep their conservative ASK verdict.
+- Report allocated Windows VSS shadow storage as owner-only ASK records; never apply it, including with approval flags.
+- Declare sccache and Homebrew caches REGENERABLE and keep them while their tools are running.
 
 ## 1.1.3 — 2026-10-12
 

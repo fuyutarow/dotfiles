@@ -189,6 +189,15 @@ export const Config = z.object({
   scratch_roots: z.array(absolute),
   delete_roots: z.array(absolute),
   regenerable_ignored: z.array(z.string()),
+  regenerable_caches: z
+    .array(
+      z.object({
+        path: z.string().regex(/^~\/\.cache\/[A-Za-z0-9_-]+$/u),
+        class: z.literal("REGENERABLE"),
+        process: z.string().min(1),
+      }),
+    )
+    .optional(),
   ignore_unreadable_procs: z.array(z.string().min(1)).default(["sshd"]),
   protected: z.array(absolute).optional(),
   session_grace_hours: z.number().nonnegative(),

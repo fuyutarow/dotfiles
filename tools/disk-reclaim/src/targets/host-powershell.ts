@@ -107,6 +107,14 @@ $pageFiles=Get-CimInstance Win32_PageFileUsage -ErrorAction Stop
 [uint64]$pageFileBytes=0
 foreach($pageFile in $pageFiles) { $pageFileBytes += [uint64]$pageFile.AllocatedBaseSize * 1MB }
 "lever=pagefile-size|$pageFileBytes|$($pageFiles.Name -join '; ')"
+$shadowVolume=Get-CimInstance Win32_Volume -Filter "DriveLetter='C:'" -ErrorAction Stop
+$shadowStores=Get-CimInstance Win32_ShadowStorage -ErrorAction Stop
+[uint64]$shadowAllocated=0
+foreach($store in $shadowStores) {
+  $diffVolume=$store.DiffVolume
+  if ($diffVolume.DeviceID -eq $shadowVolume.DeviceID) { $shadowAllocated += [uint64]$store.AllocatedSpace }
+}
+"lever=vss-shadow-storage|$shadowAllocated|C:\System Volume Information"
 $states=@{}
 if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
   Probe-Step 'wsl.exe -l -v'

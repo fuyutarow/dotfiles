@@ -25,7 +25,7 @@ as healthy zeros. "I could not see" and "I saw a problem" are different answers.
 | 3 | `FreePhysicalMemory` = free RAM | Windows caches aggressively, drives free≈0 by design (read 0.2 GB while 4.5 GB was available) | `AvailableMBytes`, sampled; a real shortage forces **hard page reads/s** |
 | 4 | one CPU or PSI sample | `LoadPercentage` is a cached point value; swung 4→87% on a steady box; PSI `avg10` is a 10s window that tracks the workload | CPU = mean of ≥3 samples; PSI judged on **avg300**, avg10 shown for "why is it slow right now" |
 | 5 | `pgscan` total = reclaiming now | `/proc/vmstat` counters are cumulative since boot; a gate on the total opens once and never closes | sample as a **rate**; total 8.3M with rate 0 is history, not pressure |
-| 6 | `fstrim` "N GiB trimmed" | reports blocks already deallocated; measured 481 GiB "trimmed", C: moved +0.9 GB | trust only the **C: free delta** |
+| 6 | `fstrim` "N GiB trimmed" | can include already deallocated blocks; an earlier 481 GiB trim moved C: only +0.9 GB, while 2026-10-12 sparse delete + trim moved 20.1 → 34.7 GiB, then 31.9 GiB after 30 min | trust only the **C: free delta**; evidence and concurrent-work caveat in `reclaim.md` |
 | 7 | memory PSI as an alarm | on WSL2 `autoMemoryReclaim=dropCache` drops cache → refaults → PSI, at tens of GB free | PSI is a diagnostic, not an alarm; a real shortage shows in MemAvailable or swap |
 
 ## The measured anchors

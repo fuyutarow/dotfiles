@@ -6,6 +6,7 @@ import { createCleanTarget } from "../../src/targets/clean.ts";
 import { run } from "../../src/engine.ts";
 import { processBusy } from "../../src/lib/busy.ts";
 import { z } from "../../../shared/src/zod.ts";
+import { loadConfig } from "../../src/engine.ts";
 
 const config = {
   repo_roots: [],
@@ -24,6 +25,42 @@ const context = {
 };
 
 describe("clean target", () => {
+  test("declared sccache and Homebrew caches are regenerable and kept while busy", async () => {
+    const home = tempRoot("reclaim-declared-caches-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(home, { recursive: true, force: true });
+    });
+    const loaded = loadConfig();
+    expect(loaded.error).toBeNull();
+    if (loaded.config === null) return;
+    const rules = loaded.config.regenerable_caches ?? [];
+    expect(rules).toEqual([
+      { path: "~/.cache/sccache", class: "REGENERABLE", process: "sccache" },
+      { path: "~/.cache/Homebrew", class: "REGENERABLE", process: "brew" },
+    ]);
+    for (const rule of rules)
+      mkdirSync(rule.path.replace(/^~/u, home), { recursive: true });
+    const ctx = {
+      ...context,
+      config: { ...config, regenerable_caches: rules },
+    };
+    const idle = await createCleanTarget(
+      () => home,
+      () => false,
+    ).plan(ctx);
+    expect(idle.map(({ path, verdict }) => [path, verdict])).toEqual(
+      rules.map((rule) => [rule.path.replace(/^~/u, home), "RECLAIM"]),
+    );
+    const busy = await createCleanTarget(
+      () => home,
+      () => true,
+    ).plan(ctx);
+    expect(busy.map(({ verdict, reason }) => [verdict, reason])).toEqual([
+      ["KEEP", "busy: sccache"],
+      ["KEEP", "busy: brew"],
+    ]);
+  });
   test("shared exact-name pgrep probe reports busy, idle, and missing pgrep like the shell", () => {
     let argv: string[] = [];
     const fake = (exitCode: number) =>

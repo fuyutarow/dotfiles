@@ -38,10 +38,19 @@ export const createCleanTarget = (
     plan: async (_ctx: Context) => {
       const root = home();
       return Promise.all(
-        paths(root)
+        [
+          ...new Set([
+            ...paths(root),
+            ...(_ctx.config.regenerable_caches ?? []).map((rule) =>
+              rule.path.replace(/^~/u, root),
+            ),
+          ]),
+        ]
           .filter((p) => existsSync(p))
           .map((p) => {
-            let comm: string | undefined;
+            let comm = _ctx.config.regenerable_caches?.find(
+              (rule) => rule.path.replace(/^~/u, root) === p,
+            )?.process;
             if (p.endsWith("/.cache/uv")) comm = "uv";
             else if (
               p.endsWith("/.julia/compiled") ||

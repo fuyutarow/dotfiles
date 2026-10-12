@@ -5,20 +5,23 @@ Split on WHERE the bytes physically are — that decides whether freeing them re
 
 ## Why guest-side freeing does not always reach C:
 
-The ext4.vhdx is sparse. Deleting files inside the guest deallocates blocks, but the vhdx file on
-Windows only shrinks when **compacted**. One in-guest discard reached C: live: 127 GB deleted → C:
-+105 GB while Running. fstrim was a no-op another time — the blocks were already deallocated. So
-guest deletes are worth doing but are NOT a reliable C: lever. The reliable host-side levers are
-below.
+On a sparse ext4.vhdx, deleting guest files and discarding unused blocks can return host allocation
+without shrinking the logical file length. On r99, 2026-10-12 delete + fstrim moved C: free
+20.1 → 34.7 GiB immediately, then 31.9 GiB 30 minutes later. Evidence:
+`~/dotfiles/.agent-state/tasks/u26-cache-reclaim/` — `c-before.txt`, `c-immediate.txt`,
+`c-30min.txt`, `fstrim.txt`, and `reclaim-report.json`. Concurrent cleanup and live jobs confound
+causal attribution: this demonstrates a live C: return, not that every byte came from fstrim.
+Measure C: before, immediately after, and later; neither guest `df` nor trim's reported bytes
+establish host reclaim. If discard returns little, consider offline compaction.
 
-## The two inert non-levers (do not reach for these expecting space)
+## Discard and sparse settings — measure rather than assume
 
-| Non-lever | Why it does nothing here |
+| Operation | Limit |
 |---|---|
-| `fstrim /` | reports blocks already deallocated as "trimmed"; measured 481 GiB "trimmed", C: +0.9 GB |
+| `fstrim /` | can return sparse allocation live after deletion; an earlier 481 GiB "trimmed" moved C: only +0.9 GB; judge by C: delta |
 | `wsl --manage <d> --set-sparse true` | no-op when the vhdx already has the sparse attribute — it does, because `wslconfig.win` sets `sparseVhd=true` |
 
-Only offline **compaction** returns the logical↔allocated gap. Confirm sparse with
+Offline **compaction** is another way to reclaim unused allocation. Confirm sparse with
 `fsutil sparse queryflag <vhdx>` before assuming set-sparse would help.
 
 ## reclaim:host — separate Windows cleanup tiers over SSH
@@ -31,6 +34,17 @@ present, 17 GB orphaned, on one box). READ-ONLY plan from macOS or WSL; `--host`
 Safe on a live box **by construction**. The running instance holds its swap.vhdx open, so Windows
 refuses to delete it (a sharing violation). Even if the newest-is-live heuristic were wrong, the OS
 lock is the backstop. It deletes rather than rips, because a graveyard on C: frees no C:.
+
+## Windows restore point / VSS shadow storage
+
+File scans can miss this allocation. Inspect elevated `vssadmin list shadowstorage` and
+`vssadmin list shadows /for=C:`; check the storage volume as well as the protected volume.
+The owner's 2026-10-12 r99 output reported 14.8 GB allocated and a shadow created
+2026-10-11 19:00:10, type `ClientAccessibleWriters`. That is an incident anchor, not a fixed
+size threshold. `disk-reclaim plan --on windows` reports allocated storage as ASK, never applies it.
+Deleting a shadow is irreversible and requires the owner. The owner can cap growth with
+`vssadmin resize shadowstorage /for=C: /on=C: /maxsize=<owner-chosen-cap>`; shrinking the cap
+can remove snapshots too ([Microsoft command reference](https://learn.microsoft.com/windows-server/administration/windows-commands/vssadmin-resize-shadowstorage)).
 
 ## reclaim:vhdx — the offline compaction (the ~100GB-class prize)
 
@@ -54,6 +68,25 @@ Method by Windows edition (each runs after the shutdown + set-sparse-false above
 | Home (no Hyper-V) | `diskpart` → `select vdisk` / `attach vdisk readonly` / `compact vdisk` / `detach vdisk` | a diskpart script; admin |
 
 `mise run reclaim:vhdx` prints the full sequence for the detected edition.
+
+## Reading a damaged or sparse VHDX read-only
+
+Native attach is not a universal recovery reader. r99's 2026-10-12
+`Mount-DiskImage -Access ReadOnly` refused the sparse source: "Virtual hard disk files must be
+uncompressed and unencrypted and must not be sparse" (`/mnt/e/wsl/u24/native-source-attach-v10.json`
+and `copy-verify-v10.json`, read via `ssh r99-u26`). The hand-repaired source then failed
+`wsl --mount --vhd --bare` with `Wsl/Service/AttachDisk/MountDisk/HCS/ERROR_FILE_CORRUPT`
+before any guest device appeared (`native-blocker-v11.json`). This failure does not prove that
+every repaired VHDX is unreadable.
+
+For this source, `qemu-nbd --read-only` over the qcow2 overlay exposed a readable device;
+`source-nbd-v12.log` records the connection, `source-device-baseline-v12.json` reports `ro=1`,
+and `source-refused-write-v12.txt` records `dd: IO error: Permission denied`. Preserve the source,
+verify the exported device is read-only, and mount ext4 with `ro,noload` to avoid journal replay.
+A healthy destination VHDX can be attached natively with `wsl --mount --vhd <destination> --bare`:
+the owner's session attached the destination as `/dev/sde`; `commands-v12.jsonl` records successful
+mount and read-only fsck of that device. That attach command alone does **not** enforce read-only
+access. Distinguish source corruption and sparse-attribute refusals from the destination's result.
 
 ## reclaim by RELOCATION — the durable fix when C: is chronically undersized
 

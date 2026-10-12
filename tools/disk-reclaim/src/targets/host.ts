@@ -314,6 +314,25 @@ const definitions: Record<
   },
 };
 function candidate(lever: Lever, ctx: Context, tier = lever.id): Candidate {
+  if (tier === "vss-shadow-storage")
+    return {
+      id: lever.id,
+      path: null,
+      verdict: "ASK",
+      reason:
+        "Windows restore point / VSS shadow storage; report only; deletion is irreversible and requires the owner; inspect vssadmin list shadowstorage and list shadows /for=C:; owner may cap with vssadmin resize shadowstorage",
+      checks: [{ name: "owner-only", ok: false, detail: "never auto-applied" }],
+      bytes: lever.bytes,
+      bytes_kind: "estimate",
+      host_lever: {
+        path: lever.path,
+        tier,
+        live_safe: false,
+        approval: "vss-shadow-storage",
+      },
+      action: { kind: "command", argv: [] },
+      result: null,
+    };
   const def = definitions[tier];
   const approved =
     def !== undefined &&

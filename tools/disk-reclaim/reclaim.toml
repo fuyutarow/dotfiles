@@ -31,3 +31,13 @@ session_grace_hours = 24
 graveyard_min_age_hours = 24
 graveyard_pressure_undo_minutes = 10
 ignore_unreadable_procs = ["sshd"]
+
+[[regenerable_caches]]
+path = "~/.cache/sccache"
+class = "REGENERABLE"
+process = "sccache"
+
+[[regenerable_caches]]
+path = "~/.cache/Homebrew"
+class = "REGENERABLE"
+process = "brew"

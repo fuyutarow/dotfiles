@@ -42,7 +42,8 @@ Two disks, and the guest cannot see the one that runs out.
 | The trap | vhdx MAX (often ~1 TB) can exceed C:, so guest at 40% can still fill C: | a full C: wedges the guest with **no guest-side error** |
 
 **Corollary that drives everything:** freeing bytes *inside* the guest does not reliably reach C:.
-The vhdx is sparse; only an offline compaction shrinks it. So diagnosis and reclaim both split on
+On a sparse vhdx, deletion plus discard can return host allocation live; offline compaction is
+another lever. So diagnosis and reclaim both split on
 **which disk** — a guest-only view is the failure mode, not the tool.
 
 ## Deny-list — the host numbers that lie (each cost a wrong call; verify, do not trust)
@@ -56,8 +57,8 @@ Every row was a confident-wrong reading on a real box. The right column is the f
 | `FreePhysicalMemory` as "free RAM" | Windows drives free≈0 by design (caches) | `AvailableMBytes`; a shortage shows as **hard page reads/s**, not the gauge |
 | one `LoadPercentage` / PSI `avg10` sample | instantaneous, swings wildly | mean of ≥3 samples; PSI judge on **avg300**, show avg10 |
 | `pgscan` total as "reclaiming now" | cumulative since boot — never decreases | sample it as a **rate**; a nonzero total with zero rate is history |
-| `fstrim` "N GiB trimmed" as reclaim | reports blocks already deallocated — a no-op here | trust only the **C: free delta**; if it doesn't move, fstrim did nothing |
-| `wsl --manage --set-sparse true` as reclaim | no-op if already sparse; and gated behind `--allow-unsafe` since WSL 2.5.6 (corruption reports) | verify per box with `fsutil sparse queryflag`; only **compaction** returns the gap, after clearing sparse first |
+| `fstrim` "N GiB trimmed" as reclaim | trimmed bytes are not host bytes freed; sparse discard can return space live | judge by **C: free delta**: 2026-10-12 delete + fstrim, 20.1 → 34.7 GiB immediately, 31.9 GiB 30 min later; evidence and attribution limits in `references/reclaim.md` |
+| `wsl --manage --set-sparse true` as reclaim | no-op if already sparse; and gated behind `--allow-unsafe` since WSL 2.5.6 (corruption reports) | verify per box with `fsutil sparse queryflag`; measure C: after discard, or compact offline after clearing sparse |
 
 The runnable form of this table is `mise run wsl:audit`. It reads both halves with these fixes
 applied: sampled, junction-safe, allocated-by-du. Read it before asserting a cause. Full detail and
@@ -65,15 +66,16 @@ the measured anchors: `references/measurement.md`.
 
 ## Reclaim — pick the lever by WHERE the bytes are, largest first
 
-There is no single "clean up WSL". The bytes live in four different places, each with its own lever.
+There is no single "clean up WSL". Each location has its own lever.
 
 | Bytes live in… | Lever (mise task) | Reclaims | Frees C: how |
 |---|---|---|---|
-| guest package/build caches | `reclaim:clean`, `reclaim:builds`, `reclaim:system` | GB–tens | only if the vhdx later compacts |
+| guest package/build caches | `reclaim:clean`, `reclaim:builds`, `reclaim:system` | GB–tens | sparse discard may return space live; measure C: after delete + fstrim; otherwise compact |
 | the vhdx's sparse gap (logical ≫ used) | `reclaim:vhdx` (planner → offline compact) | **the biggest**, ~100GB-class | directly, after `wsl --shutdown` |
 | orphaned `swap.vhdx` (dead distro instances) | `reclaim:host` | tens of GB, recurring | directly, live-safe (OS locks the live one) |
 | winget cache, temp files older than 1 day, Delivery Optimization, WER/dumps | `reclaim:host` → `reclaim:host:yes` | per-tier plan bytes | SSH from macOS/WSL; measure C: delta per lever; near-zero = inert here |
 | Windows Update component store | `reclaim:host:yes` (DISM) | unknown until measured | slow; plan-only without `--yes`; needs elevation |
+| Windows restore point / VSS shadow storage | `vssadmin list shadowstorage` and `vssadmin list shadows /for=C:` | allocated storage, not ordinary file-scan totals | ASK only; deletion is irreversible and needs the owner; cap with `vssadmin resize shadowstorage` (may remove snapshots); observed 14.8 GB on 2026-10-12, details in `references/reclaim.md` |
 | Recycle Bin / `hiberfil.sys` | `run host --yes --approve recycle-bin` / `--approve hibernate-off` | plan includes size | explicit approval only; hibernation changes a system setting |
 | WSL distro VHDX files | `plan host --host r99` | allocated bytes, distro, state | report only; use `plan vhdx` for compaction; never delete |
 | Windows-side app bloat | winget uninstall + `wsl:winget:dump` | tens of GB | directly |
@@ -142,5 +144,5 @@ disk with no Windows host. The full set — 9 fire, 7 near-miss no-fire, 2 co-fi
 | File | Covers | Read when |
 |---|---|---|
 | `references/measurement.md` | every deny-list row in full, the measured anchors, the `wsl:audit` two-leg design and its thresholds | asserting a cause; a host number looks wrong |
-| `references/reclaim.md` | the lever ladder in depth, offline compaction (Optimize-VHD vs diskpart), winget bloat, distro prune, why fstrim/set-sparse are inert | freeing C:; choosing a reclaim lever |
+| `references/reclaim.md` | the lever ladder, measured sparse discard, VSS storage, offline compaction, read-only damaged VHDX access, winget bloat and distro prune | freeing C:; choosing a reclaim lever or reading a recovery image |
 | `references/lifecycle.md` | idle-terminate, the logon-screen / onlogon trap, wsl:wake's two routes + sshd-ensure, unattended Tailscale | the box is down or keeps going unreachable |

@@ -45,6 +45,7 @@ const snapshot = [
   "lever=hibernate-off|700|C:\\hiberfil.sys",
   "lever=claude-vm-bundles|1600|C:\\Users\\Test\\AppData\\Roaming\\Claude\\vm_bundles",
   "lever=pagefile-size|1700|C:\\pagefile.sys",
+  "lever=vss-shadow-storage|14800000000|C:\\System Volume Information",
   "vhdx=800|Ubuntu|Running|C:\\WSL\\ext4.vhdx",
 ].join("\n");
 const freeAfter = script.includes("dism.exe") ? 4294967296 : 4297064448;

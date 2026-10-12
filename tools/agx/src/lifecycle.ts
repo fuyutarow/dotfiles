@@ -146,6 +146,8 @@ export async function processTreeCpu(
   rootPid: number,
   stop?: AbortSignal,
 ): Promise<CpuProcess[] | undefined> {
+  if (process.env.AGX_TEST_PROCESS_TREE_CPU === "flat")
+    return [{ pid: rootPid, ppid: 0, pgid: rootPid, cpu_s: 0 }];
   const signal = AbortSignal.any([
     AbortSignal.timeout(250),
     ...(stop === undefined ? [] : [stop]),

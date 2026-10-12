@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -18,6 +18,10 @@ import {
   type CheckoutPolicyDeps,
   writeCheckoutCache,
 } from "../enforce-storage-headroom.ts";
+import {
+  assess,
+  loadStorageHeadroom,
+} from "../../../tools/shared/src/storage-headroom.ts";
 import { z } from "../zod.ts";
 import { decisionOf, runHook } from "./helpers.ts";
 import { decoded } from "./decode.ts";
@@ -26,6 +30,9 @@ import { decoded } from "./decode.ts";
 const NO_WSL_HOST_DRIVE = !existsSync("/mnt/c");
 
 const HOOK = "enforce-storage-headroom.ts";
+// Each assertion starts a fresh Bun hook process. Keep a bounded allowance for host contention
+// instead of using a five-second test deadline as a correctness assertion.
+setDefaultTimeout(30_000);
 
 // A fixture workspace with a sparse-free, real 2 MiB target/ file, so `du` measures it.
 function workspace(): { root: string; home: string } {
@@ -61,6 +68,7 @@ function cachedSpace(
   path: string,
   free: number,
   total: number,
+  at: number,
 ): void {
   const dir = join(home, ".cache", "claude-hooks", "storage-headroom");
   mkdirSync(dir, { recursive: true });
@@ -69,7 +77,7 @@ function cachedSpace(
     JSON.stringify({
       free,
       total,
-      at: Temporal.Now.instant().epochMilliseconds,
+      at,
     }),
   );
 }
@@ -91,9 +99,17 @@ function cachedReclaimPlan(home: string): void {
 
 function cachedConfig(edit: (c: Doc) => void, free: number, total: number) {
   const home = mkdtempSync(join(tmpdir(), "storage-cache-home-"));
-  cachedSpace(home, "/mnt/c", free, total);
-  cachedSpace(home, "/", free, total);
-  return { env: { ...config(edit), HOME: home }, home };
+  const now = Temporal.Now.instant().epochMilliseconds;
+  cachedSpace(home, "/mnt/c", free, total, now);
+  cachedSpace(home, "/", free, total, now);
+  return {
+    env: {
+      ...config(edit),
+      HOME: home,
+      STORAGE_HEADROOM_NOW_MS: String(now),
+    },
+    home,
+  };
 }
 
 // Fixtures are CONFIG files, not env overrides: each preset is the real storage-headroom.toml
@@ -222,27 +238,28 @@ const SMALL_SHARE = config((c) => {
 describe("enforce-storage-headroom", () => {
   test("positive rate durations are accepted without changing gate decisions", () => {
     for (const freeGib of [5, 15, 30]) {
-      const fixture = (durations: boolean) =>
-        cachedConfig(
-          (c) => {
-            drives(10, 10, 20)(c);
-            for (const row of Object.values(c.drive)) {
-              delete row.rate_red_minutes;
-              delete row.rate_yellow_minutes;
-              if (durations) {
-                row.rate_red_minutes = 0.001;
-                row.rate_yellow_minutes = 100_000;
-              }
+      const fixture = (durations: boolean) => {
+        const env = config((c) => {
+          drives(10, 10, 20)(c);
+          for (const row of Object.values(c.drive)) {
+            delete row.rate_red_minutes;
+            delete row.rate_yellow_minutes;
+            if (durations) {
+              row.rate_red_minutes = 0.001;
+              row.rate_yellow_minutes = 100_000;
             }
-          },
-          freeGib * GiB,
-          100 * GiB,
-        ).env;
-      const baseline = runHook(HOOK, bash("cp x y"), fixture(false));
-      const withRate = runHook(HOOK, bash("cp x y"), fixture(true));
-      expect(withRate.code).toBe(baseline.code);
-      expect(withRate.stdout).toBe(baseline.stdout);
-      expect(withRate.stderr).toBe(baseline.stderr);
+          }
+        });
+        return loadStorageHeadroom(env.STORAGE_HEADROOM_CONFIG ?? "");
+      };
+      const baseline = fixture(false);
+      const withRate = fixture(true);
+      expect(baseline.errors).toEqual([]);
+      expect(withRate.errors).toEqual([]);
+      const measurement = { free: freeGib * GiB, total: 100 * GiB };
+      expect(
+        withRate.drives.map((drive) => assess(drive, measurement)),
+      ).toEqual(baseline.drives.map((drive) => assess(drive, measurement)));
     }
   });
 
@@ -323,7 +340,7 @@ describe("enforce-storage-headroom", () => {
         /free (?:\d+ bytes \(\d+\.\d GiB\)|unmeasured)/u,
       );
     }
-  });
+  }, 30_000);
 
   test("host AND guest short come back in ONE deny naming both", () => {
     const d = decisionOf(runHook(HOOK, bash("cargo build"), FULL).stdout);

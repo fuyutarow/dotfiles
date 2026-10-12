@@ -3788,7 +3788,9 @@ async function launch(l: Launch): Promise<number> {
           roster.choice.filter(
             (candidate) =>
               routes[candidate.route].available &&
-              (candidate.route !== "claude" || claudeReason === undefined),
+              (candidate.route !== "claude" || claudeReason === undefined) &&
+              (hasXhighMaxJustification(ticket?.capabilities ?? []) ||
+                !["xhigh", "max"].includes(candidate.effort)),
           ),
           row,
           ticket?.budget_usd,

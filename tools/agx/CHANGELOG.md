@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.3.1 — 2026-10-12
+
+- Enforce the existing hard mask during stalled-worker escalation, preventing an unjustified xhigh/max choice from being downgraded back to the failed row.
+
 ## 3.3.0 — 2026-10-12
 
 - Make agx follow wait for filesystem changes, with a 2-second fallback that reads only appended ledger and event bytes. Keep agx wait behavior unchanged.

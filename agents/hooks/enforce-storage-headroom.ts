@@ -78,7 +78,11 @@ const CONFIG_PATH =
 
 // --- Config: shape and validation -------------------------------------------------------------
 
-type Launcher = { command: string; subcommands?: string[]; tasks?: string[] };
+export type Launcher = {
+  command: string;
+  subcommands?: string[];
+  tasks?: string[];
+};
 type Budget = {
   name: string;
   launchers: string[];
@@ -416,7 +420,7 @@ const esc = (s: string) => s.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 // Every launcher takes PREFIX: `RUSTFLAGS=-C... cargo build` and `env X=1 julia` are the
 // common spellings, and a gate that misses them is decoration (caught by the test suite on
 // install, 2026-09-22 — the first draft applied PREFIX to only three of the five).
-function matchLauncher(
+export function matchLauncher(
   command: string,
   launchers: Launcher[],
 ): { command: string; label: string } | null {
@@ -828,7 +832,7 @@ function isOnlyWorkspaceAddHelp(command: string, cwd: string): boolean {
   );
 }
 
-function isRecoveryOrRead(command: string, cwd: string): boolean {
+export function isRecoveryOrRead(command: string, cwd: string): boolean {
   const parsed = parseShell(command, cwd);
   if (parsed === undefined || parsed.commands.length === 0) return false;
   const commands = parsed.commands.filter(
@@ -878,6 +882,13 @@ async function freeBytes(path: string): Promise<number | null> {
   return (await space(path))?.free ?? null;
 }
 
+function nowMs(): number {
+  const injected = Number(process.env.STORAGE_HEADROOM_NOW_MS);
+  return Number.isFinite(injected)
+    ? injected
+    : Temporal.Now.instant().epochMilliseconds;
+}
+
 async function space(
   path: string,
 ): Promise<{ free: number; total: number } | null> {
@@ -896,7 +907,7 @@ async function space(
     const free = num(at(value, "free"));
     const total = num(at(value, "total"));
     const atMs = num(at(value, "at"));
-    const age = Temporal.Now.instant().epochMilliseconds - (atMs ?? 0);
+    const age = nowMs() - (atMs ?? 0);
     return free !== undefined &&
       total !== undefined &&
       atMs !== undefined &&

@@ -139,6 +139,7 @@ test("PTY relay filters mouse mode, resizes, and forwards raw input bytes", asyn
   expect(output).not.toContain("\u001B[?1000;25h");
   expect(output).toContain("RESIZED:101x37");
   expect(output).toContain("GOT:e38182ff1b5b3c304d SIZE:101x37");
+  expect(output).not.toContain("\u001B[?1007");
 });
 
 test("PTY relay forwards termination and waits for its child to exit", async () => {

@@ -16,8 +16,10 @@ import { Plan, Tier } from "./model.ts";
 import {
   errorMessage,
   readReceipts,
+  freeBytes,
   stateDir,
   waitForLock,
+  writeItemOutcomes,
   wrap,
 } from "./receipt.ts";
 import { deleteApproved } from "./delete.ts";
@@ -342,7 +344,10 @@ async function applyInput(
   targets: Target[],
   context: Context,
   captureLiveness?: EngineOptions["captureLiveness"],
+  json = false,
+  targetFailures: { target: string; reason: string }[] = [],
 ): Promise<number> {
+  const freeBefore = freeBytes();
   const lock = await waitForLock("apply", stateDir(), context.log);
   if (lock.release === null)
     return fail(lock.error ?? "could not acquire apply lock");
@@ -350,33 +355,106 @@ async function applyInput(
   const wslBefore = await wslStorageSnapshot();
   const applyOne = async (record: ReclaimRecord) => {
     const target = targets.find((item) => item.name === record.target);
-    if (target === undefined) return { ok: false, reason: "unknown target" };
+    if (target === undefined)
+      return { ok: false, reason: "unknown target", bytes_freed: null };
     const actionResult = await actPlannedPath(
       target,
       record.path,
       { ...context, approve },
       captureLiveness,
     );
-    return { ok: actionResult.ok, reason: actionResult.error ?? "applied" };
+    return {
+      ok: actionResult.ok,
+      reason: actionResult.error ?? "applied",
+      bytes_freed: actionResult.bytes_freed,
+    };
   };
   const results = await applyRecords(input, { approve, apply: applyOne });
-  process.stdout.write(
-    `${results.map((item) => JSON.stringify(item)).join("\n")}\n`,
-  );
+  let cDelta: number | null = null;
+  let trimError: string | null = null;
   if (wslBefore !== null) {
-    process.stderr.write(
-      "disk-reclaim: WSL target waits for fstrim (120-second bound)\n",
-    );
     const trim = await trimWslGuest();
-    if (!trim.ok) return fail(`WSL target fstrim failed: ${trim.detail}`);
-    process.stderr.write(
-      "disk-reclaim: WSL target samples Windows C: return (10-second bound)\n",
-    );
-    const wslAfter = await sampleWslReturn(wslBefore);
-    const report = wslReturnReport(wslBefore, wslAfter);
-    if (report !== null) process.stderr.write(`${report}\n`);
+    if (!trim.ok) trimError = `WSL target fstrim failed: ${trim.detail}`;
+    else {
+      const wslAfter = await sampleWslReturn(wslBefore);
+      cDelta = wslAfter.hostCFree - wslBefore.hostCFree;
+    }
   }
-  return results.some((item) => item.outcome === "failed") ? 1 : 0;
+  writeItemOutcomes(results, stateDir());
+  if (json) {
+    process.stdout.write(
+      `${results.map((item) => JSON.stringify(item)).join("\n")}${results.length === 0 ? "" : "\n"}`,
+    );
+  } else {
+    process.stdout.write(
+      `${formatApplySummary(results, freeBytes() - freeBefore, cDelta, trimError, targetFailures)}\n`,
+    );
+  }
+  if (trimError !== null) return fail(trimError);
+  return results.some((item) => item.outcome === "failed") ||
+    targetFailures.length > 0
+    ? 1
+    : 0;
+}
+
+const oneLine = (text: string, max = 180): string => {
+  const line = safeStderr(text).replaceAll(/\s+/gu, " ").trim();
+  return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
+};
+const signedBytes = (bytes: number): string =>
+  `${bytes >= 0 ? "+" : ""}${bytes}`;
+function formatApplySummary(
+  results: Awaited<ReturnType<typeof applyRecords>>,
+  freedBytes: number,
+  cDelta: number | null,
+  trimError: string | null,
+  targetFailures: { target: string; reason: string }[],
+): string {
+  const targets = new Map<
+    string,
+    { deleted: number; skipped: number; failed: number }
+  >();
+  for (const item of results) {
+    const name = item.target ?? "unknown";
+    const counts = targets.get(name) ?? { deleted: 0, skipped: 0, failed: 0 };
+    counts[item.outcome] += 1;
+    targets.set(name, counts);
+  }
+  for (const failure of targetFailures) {
+    const counts = targets.get(failure.target) ?? {
+      deleted: 0,
+      skipped: 0,
+      failed: 0,
+    };
+    counts.failed += 1;
+    targets.set(failure.target, counts);
+  }
+  const failures = results.filter((item) => item.outcome === "failed");
+  const cDeltaText =
+    cDelta === null ? "not measured (not WSL)" : `${signedBytes(cDelta)} bytes`;
+  const failureLines = failures
+    .slice(0, 10)
+    .map(
+      (item) =>
+        `  ${oneLine(item.path ?? "<invalid record>")}: ${oneLine(item.reason)}`,
+    );
+  if (failures.length > 10)
+    failureLines.push(`  … ${failures.length - 10} more failed items`);
+  return [
+    "disk-reclaim: --yes complete",
+    `Freed bytes: ${results.reduce((sum, item) => sum + (item.bytes_freed ?? 0), 0)} (filesystem delta ${freedBytes >= 0 ? "+" : ""}${freedBytes})`,
+    `Windows C: delta after fstrim: ${cDeltaText}`,
+    "Outcomes by target:",
+    ...[...targets].map(
+      ([target, counts]) =>
+        `  ${target}: deleted ${counts.deleted}, skipped ${counts.skipped}, failed ${counts.failed}`,
+    ),
+    ...(failures.length === 0 ? [] : ["Failed items:", ...failureLines]),
+    ...targetFailures.map(
+      (failure) => `  ${oneLine(failure.target)}: ${oneLine(failure.reason)}`,
+    ),
+    ...(trimError === null ? [] : [`fstrim: ${oneLine(trimError)}`]),
+  ].join("\n");
 }
 
 function outputPlan(
@@ -409,7 +487,7 @@ export async function main(
     {
       ...common,
       name: "disk-reclaim",
-      version: "1.1.2",
+      version: "1.1.3",
       parameters: ["[targets...]"],
       commands,
       flags: planFlags,
@@ -633,6 +711,7 @@ export async function main(
       targets,
       context,
       dependencies.captureLiveness,
+      f.json,
     );
   }
   if (selectedCommand === "targets") {
@@ -800,6 +879,17 @@ export async function main(
         targets,
         context,
         dependencies.captureLiveness,
+        f.json,
+        validated.data.targets.flatMap((target) =>
+          target.exit === 1
+            ? [
+                {
+                  target: target.name,
+                  reason: target.skip_reason ?? "target failed",
+                },
+              ]
+            : [],
+        ),
       );
     else outputPlan(validated.data, records, f.json ? "json" : "human");
   }

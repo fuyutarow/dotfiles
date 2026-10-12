@@ -55,6 +55,54 @@ test("apply touches only safe records present in stdin", async () => {
   rmSync(root, { recursive: true, force: true });
 });
 
+test("apply emits one outcome for duplicate paths and refuses conflicting verdicts", async () => {
+  const root = tempRoot("reclaim-records-duplicates-");
+  const path = join(root, "candidate");
+  mkdirSync(path);
+  const safe = await record(path);
+  const keep: ReclaimRecord = { ...safe, target: "rust", verdict: "keep" };
+  let calls = 0;
+  const conflict = await applyRecords(
+    `${JSON.stringify(safe)}\n${JSON.stringify(keep)}\n`,
+    {
+      apply: () => {
+        calls += 1;
+        return Promise.resolve({ ok: true, reason: "fixture" });
+      },
+    },
+  );
+  expect(calls).toBe(0);
+  expect(conflict).toHaveLength(1);
+  expect(conflict[0]).toMatchObject({
+    path,
+    outcome: "skipped",
+    reason: "duplicate records disagree; verdict is keep",
+  });
+
+  const duplicateSafe = await applyRecords(
+    `${JSON.stringify(safe)}\n${JSON.stringify(safe)}\n`,
+    {
+      apply: () => {
+        calls += 1;
+        rmSync(path, { recursive: true, force: true });
+        return Promise.resolve({
+          ok: true,
+          reason: "fixture delete",
+          bytes_freed: 12,
+        });
+      },
+    },
+  );
+  expect(calls).toBe(1);
+  expect(duplicateSafe).toHaveLength(1);
+  expect(duplicateSafe[0]).toMatchObject({
+    path,
+    outcome: "deleted",
+    bytes_freed: 12,
+  });
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("apply rejects a path replaced after plan", async () => {
   const root = tempRoot("reclaim-records-replaced-");
   const path = join(root, "candidate");

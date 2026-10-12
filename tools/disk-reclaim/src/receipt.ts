@@ -10,7 +10,12 @@ import { join, resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
 import { acquire } from "../../shared/src/dir-lock.ts";
 import { fromThrowable, jsonOf } from "../../shared/src/zod.ts";
-import { Receipt, type ReceiptV1, type ReceiptV2 } from "./model.ts";
+import {
+  Receipt,
+  ReclaimItemOutcome,
+  type ReceiptV1,
+  type ReceiptV2,
+} from "./model.ts";
 
 export const errorMessage = (e: unknown): string =>
   e instanceof Error ? e.message : String(e);
@@ -84,6 +89,21 @@ export function writeReceipt(
   appendFileSync(path, `${JSON.stringify(receipt)}\n`, { mode: 0o600 });
   return path;
 }
+export function writeItemOutcomes(
+  outcomes: Omit<ReclaimItemOutcome, "event">[],
+  dir = stateDir(),
+): void {
+  if (outcomes.length === 0) return;
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "log.jsonl");
+  appendFileSync(
+    path,
+    outcomes
+      .map((outcome) => JSON.stringify({ event: "item-outcome", ...outcome }))
+      .join("\n") + "\n",
+    { mode: 0o600 },
+  );
+}
 export function readReceipts(last = 10, dir = stateDir()) {
   const path = join(dir, "log.jsonl");
   if (!existsSync(path)) return { receipts: [], errors: [] };
@@ -93,6 +113,8 @@ export function readReceipts(last = 10, dir = stateDir()) {
   const receipts: (ReceiptV1 | ReceiptV2)[] = [];
   const errors: string[] = [];
   for (const [index, line] of lines.entries()) {
+    const itemOutcome = jsonOf(ReclaimItemOutcome).safeParse(line);
+    if (itemOutcome.success) continue;
     const parsed = jsonOf(Receipt).safeParse(line);
     if (!parsed.success) {
       errors.push(`${path}:${index + 1}: ${parsed.error.message}`);

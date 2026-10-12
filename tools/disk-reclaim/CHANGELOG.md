@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3 — 2026-10-12
+
+- Summarize `--yes` results for humans, log one final per-path outcome as JSONL, and refuse contradictory duplicate plan records before acting.
+
 ## 1.1.2 — 2026-10-12
 
 - Handle SIGINT and SIGTERM promptly, stop active scan workers and SSH probes, and finish only the current deletion item before reporting what was removed; a second interrupt forces exit.

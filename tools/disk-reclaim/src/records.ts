@@ -112,16 +112,22 @@ export async function recordsFromPlan(plan: Plan): Promise<ReclaimRecord[]> {
 
 export type ApplyReceipt = {
   line: number;
+  target: string | null;
   path: string | null;
   outcome: "deleted" | "skipped" | "failed";
   reason: string;
+  bytes_freed: number | null;
 };
 export type ApplyOptions = {
   approve?: string[];
   currentFingerprint?: (
     path: string,
   ) => Promise<ReclaimRecord["fingerprint"] | null>;
-  apply: (record: ReclaimRecord) => Promise<{ ok: boolean; reason: string }>;
+  apply: (record: ReclaimRecord) => Promise<{
+    ok: boolean;
+    reason: string;
+    bytes_freed?: number | null;
+  }>;
 };
 
 const currentFingerprint = async (path: string) =>
@@ -143,28 +149,64 @@ export async function applyRecords(
   input: string,
   options: ApplyOptions,
 ): Promise<ApplyReceipt[]> {
-  const receipts: ApplyReceipt[] = [];
+  const invalid: ApplyReceipt[] = [];
+  const groups = new Map<string, { line: number; record: ReclaimRecord }[]>();
   const lines = input.split("\n");
   for (const [index, line] of lines.entries()) {
     if (line.trim() === "") continue;
     const parsed = jsonOf(ReclaimRecord).safeParse(line);
     if (!parsed.success) {
-      receipts.push({
+      invalid.push({
         line: index + 1,
+        target: null,
         path: null,
         outcome: "failed",
         reason: parsed.error.message,
+        bytes_freed: null,
       });
       continue;
     }
     const record = parsed.data;
+    const group = groups.get(record.path) ?? [];
+    group.push({ line: index + 1, record });
+    groups.set(record.path, group);
+  }
+  const receipts: ApplyReceipt[] = [...invalid];
+  for (const [path, group] of groups) {
+    const first = group[0];
+    if (first === undefined) continue;
+    const record = first.record;
+    const disagreement = group.find(
+      (item) =>
+        item.record.verdict !== record.verdict ||
+        item.record.target !== record.target ||
+        JSON.stringify(item.record.fingerprint) !==
+          JSON.stringify(record.fingerprint),
+    );
+    if (disagreement !== undefined) {
+      const restrictive = group.find((item) => item.record.verdict !== "safe");
+      receipts.push({
+        line: first.line,
+        target: record.target,
+        path,
+        outcome: "skipped",
+        reason:
+          restrictive === undefined
+            ? "duplicate records disagree about target or fingerprint"
+            : `duplicate records disagree; verdict is ${restrictive.record.verdict}`,
+        bytes_freed: null,
+      });
+      continue;
+    }
     if (record.fingerprint === null) {
       receipts.push({
-        line: index + 1,
-        path: record.path,
+        line: first.line,
+        target: record.target,
+        path,
         outcome: "skipped",
         reason:
           "record has no local fingerprint; remote host records cannot be applied here",
+        bytes_freed: null,
       });
       continue;
     }
@@ -174,10 +216,12 @@ export async function applyRecords(
       options.approve?.includes(record.owner_item) === true;
     if (record.verdict !== "safe" && !approvedOwnerItem) {
       receipts.push({
-        line: index + 1,
-        path: record.path,
+        line: first.line,
+        target: record.target,
+        path,
         outcome: "skipped",
         reason: `verdict is ${record.verdict}`,
+        bytes_freed: null,
       });
       continue;
     }
@@ -186,10 +230,12 @@ export async function applyRecords(
       options.approve?.includes(record.owner_item) !== true
     ) {
       receipts.push({
-        line: index + 1,
-        path: record.path,
+        line: first.line,
+        target: record.target,
+        path,
         outcome: "skipped",
         reason: `requires --approve ${record.owner_item}`,
+        bytes_freed: null,
       });
       continue;
     }
@@ -198,20 +244,24 @@ export async function applyRecords(
     );
     if (!sameFingerprint(record.fingerprint, actual)) {
       receipts.push({
-        line: index + 1,
-        path: record.path,
+        line: first.line,
+        target: record.target,
+        path,
         outcome: "skipped",
         reason: "fingerprint changed since plan",
+        bytes_freed: null,
       });
       continue;
     }
     const result = await options.apply(record);
     receipts.push({
-      line: index + 1,
-      path: record.path,
+      line: first.line,
+      target: record.target,
+      path,
       outcome: result.ok ? "deleted" : "failed",
       reason: result.reason,
+      bytes_freed: result.bytes_freed ?? null,
     });
   }
-  return receipts;
+  return receipts.toSorted((left, right) => left.line - right.line);
 }

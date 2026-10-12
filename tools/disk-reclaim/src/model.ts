@@ -173,6 +173,16 @@ export const Receipt = z.union([
   ReceiptV2,
   ReceiptV1.extend({ schema: z.undefined().optional() }),
 ]);
+export const ReclaimItemOutcome = z.object({
+  event: z.literal("item-outcome"),
+  line: z.number().int().positive(),
+  target: z.string().nullable(),
+  path: z.string().nullable(),
+  outcome: z.enum(["deleted", "skipped", "failed"]),
+  reason: z.string(),
+  bytes_freed: z.number().nonnegative().nullable(),
+});
+export type ReclaimItemOutcome = z.output<typeof ReclaimItemOutcome>;
 export const Config = z.object({
   repo_roots: z.array(absolute),
   repos: z.array(absolute),

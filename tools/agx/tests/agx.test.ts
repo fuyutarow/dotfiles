@@ -5030,7 +5030,9 @@ describe("agx dispatch: a brief with a ticket", () => {
     const log = join(cwd, "spawns.jsonl");
     const b = brief(
       `stall-${mode}`,
-      ticketText("writes = []\nverify = []\nfirst_return_s = 60") +
+      ticketText(
+        'writes = []\nverify = []\nfirst_return_s = 60\ncapabilities = [{ need = "escalation after a flat worker", lower_effort_lacks = "the failed high-effort worker did not make progress" }]',
+      ) +
         "\nPICK=luna-high PROBS=luna-low:0.2,luna-medium:0.2,luna-high:0.3,luna-xhigh:0.2,terra-high:0.1\n",
     );
     const args = runArgs(b, cwd);
@@ -6601,6 +6603,7 @@ describe("agx dispatch --resume", () => {
     const state = join(scratch, "watch-live-worker");
     let waited: Awaited<ReturnType<typeof router>> | undefined;
     let followed: Awaited<ReturnType<typeof router>> | undefined;
+    let allLiveFollow: Awaited<ReturnType<typeof router>> | undefined;
     const dispatched = await router(
       [
         ...runArgs(brief("watch-fixture", "do work"), freshCwd()),
@@ -6613,11 +6616,12 @@ describe("agx dispatch --resume", () => {
         while (!existsSync(join(state, "active")) && performance.now() < until)
           await Bun.sleep(10);
         await Bun.sleep(100);
-        [waited, followed] = await Promise.all([
+        [waited, followed, allLiveFollow] = await Promise.all([
           router(["wait", "watch_fixture"], { AGX_STATE_DIR: state }),
           router(["follow", "watch_fixture", "--json"], {
             AGX_STATE_DIR: state,
           }),
+          router(["follow", "--all-live"], { AGX_STATE_DIR: state }),
         ]);
       },
     );
@@ -6632,6 +6636,13 @@ describe("agx dispatch --resume", () => {
       );
     expect(states).toEqual(["picked", "started", "terminal"]);
     expect(followed?.code).toBe(1);
+    expect(allLiveFollow?.code).toBe(1);
+    const compactLines = (allLiveFollow?.out ?? "").trim().split("\n");
+    expect(compactLines).toHaveLength(3);
+    expect(compactLines[0]).toContain("ticket=watch_fixture state=picked");
+    expect(compactLines[0]).toContain("summary=");
+    expect(compactLines[0]).toContain("cost=");
+    expect(compactLines.every((line) => !line.startsWith("{"))).toBe(true);
   });
 
   test("detached fake-worker runs can be waited and followed, including detached resume", async () => {

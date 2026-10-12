@@ -721,6 +721,9 @@ async function probeAndCacheTrackedFileCount(
 }
 
 function checkoutRoot(add: WorkspaceAdd): string | null {
+  const dispatchRoot = process.env.AGX_DISPATCH_ROOT;
+  if (dispatchRoot !== undefined && dispatchRoot !== "")
+    return workspaceRoot(dispatchRoot);
   let path = add.cwd;
   for (let i = 0; i < add.args.length; i++) {
     const repository = add.args[i + 1];
@@ -819,6 +822,33 @@ export async function fullCheckoutReason(
         "`jj workspace add --sparse-patterns empty <dir>`, then `jj sparse set --add <paths>`."
       );
     }
+  }
+  return null;
+}
+
+/** The shared workspace-add rule, separately slugged in both vendor hook configs. */
+export function agxWorkspaceAddReason(
+  command: string,
+  cwd: string,
+): string | null {
+  const parsed = parseShell(command, cwd);
+  if (parsed === undefined)
+    return /\bjj\s+workspace\s+add\b/u.test(command)
+      ? "cannot resolve this jj workspace add; use `agx dispatch --workspace`"
+      : null;
+  for (const c of parsed.commands) {
+    const add = workspaceAdd(c);
+    if (
+      add === null ||
+      add.args.some((arg) => arg === "--help" || arg === "-h") ||
+      add.args.some(
+        (arg, i) => arg === "--sparse-patterns" && add.args[i + 1] === "empty",
+      )
+    )
+      continue;
+    const root = checkoutRoot(add);
+    if (root !== null && existsSync(join(root, ".agx.toml")))
+      return `refusing raw jj workspace add in a repo with .agx.toml; use agx dispatch --workspace`;
   }
   return null;
 }

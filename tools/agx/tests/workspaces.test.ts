@@ -8,6 +8,7 @@ import {
   workspaceCommand,
   workspacePolicy,
   isHeavyWorkspacePath,
+  sparseWorkspaceBytes,
 } from "../../shared/src/workspace-policy.ts";
 import { fullCheckoutReason } from "../../../agents/hooks/enforce-storage-headroom.ts";
 import { attempt } from "../../shared/src/attempt.ts";
@@ -84,6 +85,28 @@ test("declared heavy directory is never checked out, no undeclared setup, repo p
     expect(
       await fullCheckoutReason("jj workspace add another", root, 500),
     ).toContain("research_record");
+    const denied = await fullCheckoutReason(
+      "jj workspace add --sparse-patterns empty another",
+      root,
+      500,
+    );
+    expect(denied).toBeNull();
+  });
+});
+
+test("sparse workspace size subtracts measured excluded directories", async () => {
+  await fixture(async (root) => {
+    await Bun.write(
+      join(root, ".agx.toml"),
+      'workspace_exclude = ["research_record"]\n',
+    );
+    await workspaceCommand(["jj", "commit", "-m", "fixture"], root);
+    const policy = await workspacePolicy(root, 500);
+    expect(policy.ok).toBe(true);
+    if (!policy.ok) return;
+    const bytes = await sparseWorkspaceBytes(root, policy.value);
+    expect(bytes.ok).toBe(true);
+    if (bytes.ok) expect(bytes.value).toBeLessThan(1024 * 1024);
   });
 });
 
@@ -123,6 +146,22 @@ test("fallback excludes measured top-level directories over the bound", async ()
     expect(policy.excluded).toEqual(["research_record"]);
     expect(policy.sparse_set).toEqual(["README.md"]);
     expect(policy.measured[0]?.bytes).toBeGreaterThan(500_000);
+    const bytes = await sparseWorkspaceBytes(root, policy);
+    expect(bytes.ok).toBe(true);
+    if (bytes.ok) expect(bytes.value).toBeLessThan(500_000);
+  });
+});
+
+test("sparse size retains measured directories below the exclusion bound", async () => {
+  await fixture(async (root) => {
+    await workspaceCommand(["jj", "commit", "-m", "fixture"], root);
+    const policy = await workspacePolicy(root, 2);
+    expect(policy.ok).toBe(true);
+    if (!policy.ok) return;
+    expect(policy.value.excluded).toEqual([]);
+    const bytes = await sparseWorkspaceBytes(root, policy.value);
+    expect(bytes.ok).toBe(true);
+    if (bytes.ok) expect(bytes.value).toBeGreaterThanOrEqual(1024 * 1024);
   });
 });
 

@@ -18,6 +18,7 @@ import {
 import { hookJson, hookMessage } from "../../agents/hooks/lib.ts";
 import { loadSlugs } from "../../agents/hooks/slugs.ts";
 import { jsonText } from "../../agents/hooks/zod.ts";
+import { loadRegistry, wire } from "../hook-registry.ts";
 
 const root = resolve(import.meta.dir, "../..");
 
@@ -96,6 +97,38 @@ test("all deployed owned hooks have unique identities and external hooks have ex
       (h) => h.command === "sh ~/.codex/herdr-agent-state.sh session",
     )?.owner,
   ).toBe("herdr");
+});
+
+test("agx workspace-add hook renders for both Claude and Codex with its nested slug", () => {
+  const registry = loadSlugs();
+  expect(registry).not.toBeInstanceOf(Error);
+  if (registry instanceof Error) return;
+  expect(
+    registry.identities.find((identity) =>
+      identity.script.endsWith("enforce-agx-workspace-add.ts"),
+    )?.slug,
+  ).toBe("agx:workspace-add");
+  const hooks = loadRegistry(join(root, "agents/hooks"));
+  expect(hooks.errors).toEqual([]);
+  const spec = hooks.specs.find(
+    (entry) => entry.script === "enforce-agx-workspace-add.ts",
+  );
+  expect(spec?.vendors).toEqual(["claude", "codex"]);
+  if (spec === undefined) return;
+  for (const vendor of ["claude", "codex"] as const) {
+    expect(wire({}, [spec], vendor).PreToolUse).toEqual([
+      {
+        matcher: "Bash",
+        hooks: [
+          {
+            type: "command",
+            command:
+              "sh ~/.agents/hooks/run.sh --fail-closed enforce-agx-workspace-add.ts",
+          },
+        ],
+      },
+    ]);
+  }
 });
 
 test("missing slug, duplicate slug and unlisted command each fail the lint", () => {

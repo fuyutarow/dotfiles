@@ -23,7 +23,7 @@ import {
   loadStorageHeadroom,
 } from "../../../tools/shared/src/storage-headroom.ts";
 import { z } from "../zod.ts";
-import { decisionOf, runHook } from "./helpers.ts";
+import { decisionOf, runHook as runHookProcess } from "./helpers.ts";
 import { decoded } from "./decode.ts";
 
 // The host-drive cases measure the WSL host drive itself (/mnt/c): declared, so elsewhere SKIPs.
@@ -63,6 +63,27 @@ const bash = (command: string) => ({
 });
 
 const GiB = 1024 ** 3;
+const fixtureSpace = new Map<string, { free: number; total: number }>();
+
+function runHook(
+  name: string,
+  payload: unknown,
+  env: Record<string, string> = {},
+  cwd?: string,
+) {
+  const home = env.HOME;
+  const space = home === undefined ? undefined : fixtureSpace.get(home);
+  if (home !== undefined && space !== undefined) {
+    const now =
+      env.STORAGE_HEADROOM_NOW_MS === undefined
+        ? Temporal.Now.instant().epochMilliseconds
+        : Number(env.STORAGE_HEADROOM_NOW_MS);
+    cachedSpace(home, "/mnt/c", space.free, space.total, now);
+    cachedSpace(home, "/", space.free, space.total, now);
+  }
+  return runHookProcess(name, payload, env, cwd);
+}
+
 function cachedSpace(
   home: string,
   path: string,
@@ -97,9 +118,14 @@ function cachedReclaimPlan(home: string): void {
   );
 }
 
-function cachedConfig(edit: (c: Doc) => void, free: number, total: number) {
+function cachedConfig(
+  edit: (c: Doc) => void,
+  free: number,
+  total: number,
+): { env: Record<string, string>; home: string } {
   const home = mkdtempSync(join(tmpdir(), "storage-cache-home-"));
   const now = Temporal.Now.instant().epochMilliseconds;
+  fixtureSpace.set(home, { free, total });
   cachedSpace(home, "/mnt/c", free, total, now);
   cachedSpace(home, "/", free, total, now);
   return {
@@ -236,32 +262,46 @@ const SMALL_SHARE = config((c) => {
 });
 
 describe("enforce-storage-headroom", () => {
-  test("positive rate durations are accepted without changing gate decisions", () => {
-    for (const freeGib of [5, 15, 30]) {
-      const fixture = (durations: boolean) => {
-        const env = config((c) => {
-          drives(10, 10, 20)(c);
-          for (const row of Object.values(c.drive)) {
-            delete row.rate_red_minutes;
-            delete row.rate_yellow_minutes;
-            if (durations) {
-              row.rate_red_minutes = 0.001;
-              row.rate_yellow_minutes = 100_000;
+  test.each([5, 15, 30])(
+    "positive rate durations preserve decisions with %s GiB free",
+    (freeGib) => {
+      const fixture = (durations: boolean) =>
+        cachedConfig(
+          (c) => {
+            drives(10, 10, 20)(c);
+            for (const row of Object.values(c.drive)) {
+              delete row.rate_red_minutes;
+              delete row.rate_yellow_minutes;
+              if (durations) {
+                row.rate_red_minutes = 0.001;
+                row.rate_yellow_minutes = 100_000;
+              }
             }
-          }
-        });
-        return loadStorageHeadroom(env.STORAGE_HEADROOM_CONFIG ?? "");
-      };
-      const baseline = fixture(false);
-      const withRate = fixture(true);
+          },
+          freeGib * GiB,
+          100 * GiB,
+        );
+      const baselineFixture = fixture(false);
+      const withRateFixture = fixture(true);
+      const baseline = loadStorageHeadroom(
+        baselineFixture.env["STORAGE_HEADROOM_CONFIG"] ?? "",
+      );
+      const withRate = loadStorageHeadroom(
+        withRateFixture.env["STORAGE_HEADROOM_CONFIG"] ?? "",
+      );
       expect(baseline.errors).toEqual([]);
       expect(withRate.errors).toEqual([]);
       const measurement = { free: freeGib * GiB, total: 100 * GiB };
       expect(
         withRate.drives.map((drive) => assess(drive, measurement)),
       ).toEqual(baseline.drives.map((drive) => assess(drive, measurement)));
-    }
-  });
+      const baselineRun = runHook(HOOK, bash("cp x y"), baselineFixture.env);
+      const withRateRun = runHook(HOOK, bash("cp x y"), withRateFixture.env);
+      expect(withRateRun.code).toBe(baselineRun.code);
+      expect(withRateRun.stdout).toBe(baselineRun.stdout);
+      expect(withRateRun.stderr).toBe(baselineRun.stderr);
+    },
+  );
 
   test.each([0, -1, "thirty"])(
     "rate durations reject non-positive or non-numeric value %s",
@@ -313,22 +353,23 @@ describe("enforce-storage-headroom", () => {
     );
   });
 
-  test("denies launchers when headroom is gone, with measured numbers", () => {
-    for (const command of [
-      "systemd-run --user --unit=probe julia probe.jl",
-      "agent-resource-run --manifest m.json",
-      "cd ~/Workspace/polysearch-rs && cargo build --release",
-      "cargo test -p core",
-      "julia --project=. scripts/run.jl",
-      "polysearch run --config x.toml",
-      "time nice julia probe.jl",
-      "FOO=1 env BAR=2 cargo bench",
-      "mise run test",
-      "mise run lint",
-      "mise run check",
-      "m t",
-      "m l",
-    ]) {
+  test.each([
+    "systemd-run --user --unit=probe julia probe.jl",
+    "agent-resource-run --manifest m.json",
+    "cd ~/Workspace/polysearch-rs && cargo build --release",
+    "cargo test -p core",
+    "julia --project=. scripts/run.jl",
+    "polysearch run --config x.toml",
+    "time nice julia probe.jl",
+    "FOO=1 env BAR=2 cargo bench",
+    "mise run test",
+    "mise run lint",
+    "mise run check",
+    "m t",
+    "m l",
+  ])(
+    "denies launcher %s when headroom is gone, with measured numbers",
+    (command) => {
       const r = runHook(HOOK, bash(command), FULL);
       expect(r.code).toBe(0);
       const d = decisionOf(r.stdout);
@@ -339,8 +380,9 @@ describe("enforce-storage-headroom", () => {
       expect(d?.permissionDecisionReason).toMatch(
         /free (?:\d+ bytes \(\d+\.\d GiB\)|unmeasured)/u,
       );
-    }
-  }, 30_000);
+    },
+    30_000,
+  );
 
   test("host AND guest short come back in ONE deny naming both", () => {
     const d = decisionOf(runHook(HOOK, bash("cargo build"), FULL).stdout);

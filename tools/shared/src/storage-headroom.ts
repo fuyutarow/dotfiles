@@ -1,7 +1,9 @@
 // Shared, zero-dependency storage thresholds. The TOML remains the authority for drive policy.
 
-import { readFileSync, statfsSync } from "node:fs";
-import { fromThrowable, z } from "./zod.ts";
+import { mkdirSync, readFileSync, statfsSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { fromThrowable, jsonOf, z } from "./zod.ts";
 
 const GiB = 1024 ** 3;
 
@@ -208,10 +210,41 @@ export function assess(
 
 /** Free bytes available to an unprivileged caller and filesystem capacity; null on statfs failure. */
 export function measureStorage(path: string): StorageMeasurement | null {
+  const cacheDir = join(
+    homedir(),
+    ".cache",
+    "claude-hooks",
+    "storage-headroom",
+  );
+  const cacheFile = join(
+    cacheDir,
+    `${new Bun.CryptoHasher("sha1").update(path).digest("hex")}.statfs.json`,
+  );
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const cached = fromThrowable(() => {
+    const parsed = jsonOf(
+      z.object({
+        free: z.number().nonnegative(),
+        total: z.number().nonnegative(),
+        at: z.number(),
+      }),
+    ).safeParse(readFileSync(cacheFile, "utf8"));
+    return parsed.success &&
+      now >= parsed.data.at &&
+      now - parsed.data.at <= 2_000
+      ? { free: parsed.data.free, total: parsed.data.total }
+      : null;
+  })();
+  if (cached.isOk() && cached.value !== null) return cached.value;
   const result = fromThrowable(() => statfsSync(path))();
   if (result.isErr()) return null;
-  return {
+  const measured = {
     free: result.value.bavail * result.value.bsize,
     total: result.value.blocks * result.value.bsize,
   };
+  fromThrowable(() => {
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(cacheFile, JSON.stringify({ ...measured, at: now }));
+  })();
+  return measured;
 }

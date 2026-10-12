@@ -12,12 +12,21 @@
 # agents/hooks/lib.ts). A hook that reads a vendor's transcript, a vendor-only tool name, or
 # answers "ask" stays in that vendor's own dir (agents/claude/hooks, agents/codex/hooks).
 #
-# Slug: required, unique kebab-case identity used as [<slug>] on every visible message.
+# Slug: required, unique kebab-case identity, optionally nested with `:` (for example agx:workspace-add),
+# used as [<slug>] on every visible message.
 # vendor_hook declares vendor-only identities; external lists third-party commands, owner and reason.
 # vendor_hook.script is relative to agents/; commands lists its exact hand-written registrations.
 # external.command is an exact allowlist match; an unlisted unowned command fails lint:hook-slug.
 # Fields: slug, script (file in agents/hooks), event, matcher (optional), fail_closed (a policy gate
 # must never fail open when bun is missing), timeout (seconds, optional), vendors.
+
+[[hook]]
+slug = "agx:workspace-add"
+script = "enforce-agx-workspace-add.ts"
+event = "PreToolUse"
+matcher = "Bash"
+fail_closed = true
+vendors = ["claude", "codex"]
 
 [[hook]]
 slug = "storage-headroom"

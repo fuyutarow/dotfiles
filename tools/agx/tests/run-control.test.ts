@@ -139,6 +139,44 @@ test("wait --all-live snapshots fake workers, prints each receipt once and retur
   expect(workerExit).toBe(0);
 });
 
+test("ps hides runs superseded by a resume unless --all is set", () => {
+  const state = join(scratch, "ps-superseded");
+  mkdirSync(state, { recursive: true });
+  const base = {
+    kind: "run",
+    ticket: { name: "same-ticket", path: "/tmp/same-ticket.md", writes: [] },
+    pick: { source: "fixture", choice: "luna-low" },
+    result: "delivered",
+    worker: { outcome: "ok" },
+    report: {
+      summary: "done",
+      changes: [],
+      checks: [],
+      for_coordinator: [],
+      open: [],
+    },
+  };
+  writeFileSync(
+    join(state, "runs.jsonl"),
+    [
+      JSON.stringify({ ...base, run_id: "old-run" }),
+      JSON.stringify({ ...base, run_id: "new-run", resumed_from: "old-run" }),
+    ].join("\n") + "\n",
+  );
+  const normal = cli(["ps", "--json"], state);
+  const all = cli(["ps", "--all", "--json"], state);
+  expect(normal.code).toBe(0);
+  expect(all.code).toBe(0);
+  expect(decodedJson(PsResult, normal.out).runs.map((run) => run.id)).toEqual([
+    "new-run",
+  ]);
+  expect(
+    decodedJson(PsResult, all.out)
+      .runs.map((run) => run.id)
+      .toSorted(),
+  ).toEqual(["new-run", "old-run"]);
+});
+
 test("follow replays picked, started, interim RETURN and verification in timestamp order and ends", () => {
   const state = join(scratch, "follow-replay");
   mkdirSync(join(state, "events"), { recursive: true });
@@ -496,6 +534,7 @@ test("dispatch --detach builds Linux systemd-run argv through a stub and reaps s
   expect(args).toContain("--setenv=CLAUDE_PID=4321");
   expect(args).toContain(`--setenv=AGX_STATE_DIR=${state}`);
   expect(args).toContain("--setenv=AGX_PROBE=forwarded");
+  expect(args).toContain(`--setenv=AGX_DISPATCH_ROOT=${resolve(scratch)}`);
 
   const separator = args.indexOf("--");
   const childArgs = args.slice(separator + 1);

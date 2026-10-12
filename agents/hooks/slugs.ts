@@ -5,7 +5,11 @@ import { join } from "node:path";
 import { z } from "./zod.ts";
 
 const Identity = z.object({
-  slug: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+  slug: z
+    .string()
+    .regex(
+      /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?::[a-z][a-z0-9]*(?:-[a-z0-9]+)*)*$/u,
+    ),
   script: z.string(),
   commands: z.array(z.string()).default([]),
 });

@@ -182,7 +182,7 @@ function withHooks(
     const identity = identities.identities.find(
       (h) =>
         h.commands.includes(
-          command.replace(/^HOOK_SLUG=dotfiles:[\w-]+ /u, ""),
+          command.replace(/^HOOK_SLUG=dotfiles:[\w:-]+ /u, ""),
         ) ||
         specs.some(
           (spec) =>
@@ -190,7 +190,7 @@ function withHooks(
         ),
     );
     if (identity !== undefined)
-      hook.command = `HOOK_SLUG=dotfiles:${identity.slug} ${command.replace(/^HOOK_SLUG=dotfiles:[\w-]+ /u, "")}`;
+      hook.command = `HOOK_SLUG=dotfiles:${identity.slug} ${command.replace(/^HOOK_SLUG=dotfiles:[\w:-]+ /u, "")}`;
   }
   return { ...config, hooks: wired };
 }

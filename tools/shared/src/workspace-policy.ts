@@ -86,6 +86,7 @@ const Declaration = z.object({
 });
 export type WorkspacePolicy = {
   source: string;
+  has_workspace_exclude: boolean;
   threshold_mb: number;
   sparse_set: string[];
   excluded: string[];
@@ -162,10 +163,24 @@ export async function workspacePolicy(
     ok: true,
     value: {
       source: declared === undefined ? "measured" : ".agx.toml",
+      has_workspace_exclude: declared !== undefined,
       threshold_mb: threshold.value,
       sparse_set: top.filter((p) => !excludes.has(p)),
       excluded: top.filter((p) => excludes.has(p)),
       measured,
     },
   };
+}
+
+/** Estimate bytes in the sparse checkout by subtracting its declared exclusions. */
+export async function sparseWorkspaceBytes(
+  root: string,
+  policy: WorkspacePolicy,
+): Promise<Attempt<number>> {
+  const total = await checkoutBytes(root);
+  if (!total.ok) return total;
+  const excluded = policy.measured
+    .filter((item) => policy.excluded.includes(item.path))
+    .reduce((sum, item) => sum + item.bytes, 0);
+  return { ok: true, value: Math.max(0, total.value - excluded) };
 }

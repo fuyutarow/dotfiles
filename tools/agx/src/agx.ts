@@ -148,6 +148,16 @@ import { checkPremises } from "./premises.ts";
 import { buildDetachedLaunch, type DetachPlatform } from "./detach.ts";
 import { planWorkspace } from "./workspaces.ts";
 import { createSparseWorkspace } from "./prepare-workspace.ts";
+import {
+  checkoutBytes,
+  sparseWorkspaceBytes,
+  workspaceCommand,
+  workspacePolicy,
+} from "../../shared/src/workspace-policy.ts";
+import {
+  loadStorageHeadroom,
+  measureStorage,
+} from "../../shared/src/storage-headroom.ts";
 import { progressIntervalMs, progressThrottle } from "./progress.ts";
 import {
   lintTicket,
@@ -1680,6 +1690,7 @@ interface RunFlags {
   runId?: string;
   verbose?: boolean;
   workspaceName?: string;
+  dispatchRoot?: string;
   ticketFile?: string;
   project?: string;
   instructionFiles?: string[];
@@ -1687,9 +1698,10 @@ interface RunFlags {
 }
 
 async function prepareWorkspace(
+  root: string,
   nameHint: string | undefined,
-): Promise<{ name: string; path: string }> {
-  const root = workspaceRoot(process.cwd());
+): Promise<{ name: string; path: string; root: string }> {
+  root = workspaceRoot(root);
   const plan = await planWorkspace(root, nameHint);
   if (!plan.ok) fatal(plan.error);
   const { name, path } = plan;
@@ -1699,7 +1711,98 @@ async function prepareWorkspace(
   dispatchError(
     `agx: land command: mise run land -- ${name} -m "land ${name}"`,
   );
-  return { name, path };
+  return { name, path, root };
+}
+
+async function requireWorkspaceHeadroom(root: string): Promise<void> {
+  const policy = await workspacePolicy(root);
+  if (!policy.ok)
+    fatal(
+      `cannot measure sparse workspace policy: ${errorMessage(policy.error)}`,
+    );
+  const estimate = await sparseWorkspaceBytes(root, policy.value);
+  if (!estimate.ok)
+    fatal(
+      `cannot measure sparse workspace size: ${errorMessage(estimate.error)}`,
+    );
+  const prefix = `${basename(root)}-arm-`;
+  const live = [
+    ...new Set(
+      readActive()
+        .filter(
+          (entry) =>
+            entry.alive &&
+            basename(entry.active.cwd).startsWith(prefix) &&
+            existsSync(entry.active.cwd),
+        )
+        .map((entry) => resolve(entry.active.cwd)),
+    ),
+  ];
+  let oneWorkspace = estimate.value;
+  for (const path of live) {
+    const sparse = await workspaceCommand(["jj", "sparse", "list"], path);
+    if (!sparse.ok || sparse.value.trim() === ".") continue;
+    const measured = await checkoutBytes(path);
+    if (measured.ok) oneWorkspace = Math.max(oneWorkspace, measured.value);
+  }
+  const configPath = join(
+    import.meta.dir,
+    "../../../agents/hooks/storage-headroom.toml",
+  );
+  const storage = loadStorageHeadroom(
+    process.env.STORAGE_HEADROOM_CONFIG ?? configPath,
+  );
+  if (storage.errors.length > 0)
+    fatal(`cannot measure workspace headroom: ${storage.errors.join("; ")}`);
+  const host = storage.drives.find((drive) => drive.label.startsWith("host"));
+  const wsl =
+    process.platform === "linux" &&
+    existsSync("/proc/sys/kernel/osrelease") &&
+    readFileSync("/proc/sys/kernel/osrelease", "utf8")
+      .toLowerCase()
+      .includes("microsoft");
+  const backingPath = wsl && host !== undefined ? host.path : root;
+  const measuredDrive = measureStorage(backingPath);
+  if (measuredDrive === null)
+    fatal(
+      `cannot measure backing drive ${backingPath}; workspace headroom is unknown`,
+    );
+  const required = (live.length + 1) * oneWorkspace;
+  if (measuredDrive.free < required)
+    fatal(
+      `insufficient workspace headroom on ${backingPath}: ${Math.round(measuredDrive.free)} free bytes; ${live.length} live workspaces + 1 need ${Math.round(required)} bytes (${Math.round(oneWorkspace)} bytes per sparse workspace)`,
+    );
+}
+
+async function refuseDeclaredFullCheckout(target: string): Promise<void> {
+  const root = workspaceRoot(process.env.AGX_DISPATCH_ROOT ?? target);
+  if (!existsSync(join(root, ".jj")) && !existsSync(join(root, ".git"))) return;
+  if (!existsSync(join(root, ".agx.toml"))) return;
+  const policy = await workspacePolicy(root);
+  if (!policy.ok)
+    fatal(`cannot verify workspace policy: ${errorMessage(policy.error)}`);
+  if (!policy.value.has_workspace_exclude) return;
+  const sparse = await workspaceCommand(["jj", "sparse", "list"], target);
+  if (!sparse.ok)
+    fatal(
+      `cannot inspect sparse checkout at ${target}: ${errorMessage(sparse.error)}`,
+    );
+  if (sparse.value.trim() === ".")
+    fatal(
+      `--cd target ${target} is a full checkout although its repo declares workspace_exclude; use --workspace`,
+    );
+}
+
+async function cleanupPreparedWorkspace(flags: RunFlags): Promise<void> {
+  if (flags.workspaceName === undefined) return;
+  const root = flags.dispatchRoot ?? workspaceRoot(flags.cd);
+  await workspaceCommand(
+    ["jj", "workspace", "forget", flags.workspaceName],
+    root,
+  );
+  await attempt(() => {
+    rmSync(flags.cd, { recursive: true, force: true });
+  });
 }
 
 function refuseUnrunnable(roster: Roster, id: string): Choice {
@@ -4700,14 +4803,25 @@ function psCommand(showAll: boolean, asJson: boolean, mine: boolean): number {
     readActive().map((entry) => [entry.active.run_id, entry]),
   );
   const latest = new Map<string, Logged>();
-  for (const entry of readLog())
+  const recent = readLog();
+  for (const entry of recent)
     if (
       entry.run_id !== undefined &&
       (entry.kind === "run" || entry.kind === "abandoned")
     )
       latest.set(entry.run_id, entry);
 
-  const ids = new Set([...latest.keys(), ...markers.keys()]);
+  const superseded = new Set(
+    recent.flatMap((entry) =>
+      entry.resumed_from === undefined ? [] : [entry.resumed_from],
+    ),
+  );
+
+  const ids = new Set(
+    [...latest.keys(), ...markers.keys()].filter(
+      (id) => showAll || !superseded.has(id),
+    ),
+  );
   const rows = [...ids]
     .flatMap((id): PsRow[] => {
       const marker = markers.get(id);
@@ -6145,7 +6259,7 @@ async function parseAgx() {
         name: `agx ${rootArgv.command}`,
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
-        parameters: ["<ticket>"],
+        parameters: ["[ticket]"],
         flags: {
           allLive: {
             type: Boolean,
@@ -6929,6 +7043,7 @@ async function detachDispatch(
       ...process.env,
       HOME: process.env.HOME ?? homedir(),
       AGX_DISPATCHER_SESSION: currentDispatcherSession() ?? "",
+      AGX_DISPATCH_ROOT: flags.dispatchRoot ?? workspaceRoot(flags.cd),
     },
     logDir,
   });
@@ -6941,14 +7056,18 @@ async function detachDispatch(
       killSignal: "SIGKILL",
     }),
   );
-  if (!started.ok)
+  if (!started.ok) {
+    await cleanupPreparedWorkspace(flags);
     fatal(
       `cannot start ${detachedLaunch.executable}: ${errorMessage(started.error)}`,
     );
-  if (started.value.exitCode !== 0)
+  }
+  if (started.value.exitCode !== 0) {
+    await cleanupPreparedWorkspace(flags);
     fatal(
       `${detachedLaunch.executable} failed (exit ${started.value.exitCode}): ${started.value.stderr.toString().trim()}`,
     );
+  }
   journalRunEvent({
     kind: "detached",
     run_id: runId,
@@ -6972,7 +7091,14 @@ void recordClaimsWithoutDiffGrade;
 
 async function main(): Promise<number | undefined> {
   if (argv.command === "wait" || argv.command === "follow") {
-    if (argv._.length !== 1) fatal(`${argv.command} needs one <ticket|run>`);
+    if (
+      argv._.length > 1 ||
+      (argv._.length === 0 &&
+        !(argv.command === "follow" && argv.flags.allLive === true))
+    )
+      fatal(
+        `${argv.command} needs one <ticket|run>${argv.command === "follow" ? " unless --all-live is used" : ""}`,
+      );
     return observeRuns(
       argv._.ticket,
       argv.command === "follow",
@@ -7218,10 +7344,13 @@ async function main(): Promise<number | undefined> {
         preflightGrade.violations.length + protectedWrites.length,
       );
     }
+    const dispatchRoot = workspaceRoot(f.cd ?? process.cwd());
+    if (f.workspace !== undefined) await requireWorkspaceHeadroom(dispatchRoot);
+    else if (f.cd !== undefined) await refuseDeclaredFullCheckout(f.cd);
     const prepared =
       f.workspace === undefined
         ? undefined
-        : await prepareWorkspace(f.workspace);
+        : await prepareWorkspace(dispatchRoot, f.workspace);
     const flags: RunFlags = {
       promptFile: f.promptFile,
       cd: prepared?.path ?? f.cd ?? process.cwd(),
@@ -7246,6 +7375,7 @@ async function main(): Promise<number | undefined> {
         f.amend === undefined ? f.file : undefined,
       ].filter((path) => path !== undefined),
       ...(prepared === undefined ? {} : { workspaceName: prepared.name }),
+      dispatchRoot,
     };
     return f.detach === true ? detachDispatch(flags, rawArgs) : run(flags);
   }
@@ -7629,14 +7759,19 @@ const eventTime = (entry: Logged): string =>
     : (entry.at ?? entry.started_at ?? "");
 
 async function observeRuns(
-  id: string,
+  id: string | undefined,
   follow: boolean,
   asJson: boolean,
   allLive: boolean,
 ): Promise<number> {
   const readAppended = followAppendedRecords();
   const log = [...runEvents(), ...readAllLog()];
-  const live = activeRunFor(id);
+  if (id === undefined && !(follow && allLive))
+    fatal(
+      `${follow ? "follow" : "wait"} needs <ticket|run> unless follow uses --all-live`,
+    );
+  const targetId = id ?? "";
+  const live = targetId === "" ? undefined : activeRunFor(targetId);
   const queuedContinuation =
     live === undefined
       ? undefined
@@ -7644,13 +7779,13 @@ async function observeRuns(
           .filter(
             (entry) =>
               entry.kind === "detached" &&
-              entry.ticket?.name === id &&
+              entry.ticket?.name === targetId &&
               entry.ticket?.path === live.active.ticket?.path &&
               (entry.at ?? "") > live.active.started_at,
           )
           .toSorted((a, b) => (b.at ?? "").localeCompare(a.at ?? ""))[0];
   const resolved = resolveRunId(
-    queuedContinuation?.run_id ?? id,
+    queuedContinuation?.run_id ?? targetId,
     undefined,
     true,
   );
@@ -7670,28 +7805,61 @@ async function observeRuns(
     live?.active.run_id ??
     pending?.run_id ??
     resolved;
-  const targets = new Set([
-    target,
+  const targets = new Set<string>([
+    ...(targetId === "" ? [] : [target]),
     ...(allLive
       ? readActive()
           .filter((entry) => entry.alive)
           .map((entry) => entry.active.run_id)
       : []),
   ]);
-  if (live === undefined && pending === undefined)
-    fatal(`no run or ticket ${id}`);
+  if (targetId !== "" && live === undefined && pending === undefined)
+    fatal(`no run or ticket ${targetId}`);
   const seen = new Set<string>();
   const done = new Set<string>();
   let exit = 0;
   const emit = (runId_: string, state: string, detail: unknown): void => {
     const event = { schema: SCHEMA, run_id: runId_, state, detail };
-    const key = JSON.stringify(event);
+    const key = asJson ? JSON.stringify(event) : `${runId_}:${state}`;
     if (seen.has(key)) return;
     seen.add(key);
-    if (follow)
-      process.stdout.write(
-        asJson ? `${key}\n` : `${runId_} ${state} ${JSON.stringify(detail)}\n`,
-      );
+    if (!follow) return;
+    if (asJson) {
+      process.stdout.write(`${key}\n`);
+      return;
+    }
+    const record = z.record(z.string(), z.unknown()).safeParse(detail).data;
+    const worker = z
+      .record(z.string(), z.unknown())
+      .safeParse(record?.worker).data;
+    const report = z
+      .looseObject({ summary: z.string() })
+      .safeParse(record?.report).data;
+    const active = readActive().find((entry) => entry.active.run_id === runId_);
+    const logged = log.findLast((entry) => entry.run_id === runId_);
+    const ticket =
+      active?.active.ticket?.name ??
+      logged?.ticket?.name ??
+      logged?.display_id ??
+      runId_;
+    const candidate =
+      report?.summary ??
+      z.string().safeParse(record?.summary).data ??
+      worker?.last_message;
+    const summary =
+      typeof candidate === "string" ? oneLineSummary(candidate) : "-";
+    const progress =
+      active === undefined ? undefined : progressRecord(progressFile(runId_));
+    const cost = [
+      z.number().nonnegative().safeParse(record?.cost_usd).data,
+      z.number().nonnegative().safeParse(worker?.cost_usd).data,
+      z.number().nonnegative().safeParse(worker?.total_cost_usd).data,
+      progress?.cost_usd,
+      active?.active.cost_usd,
+    ].find((value) => value !== undefined);
+    process.stdout.write(
+      `ticket=${ticket} state=${state} summary=${summary.length > 0 ? summary : "-"} cost=${cost === undefined ? "?" : `$${cost.toFixed(4)}`}\n`,
+    );
   };
   const observeOne = (runId_: string, records: Logged[]): void => {
     if (done.has(runId_)) return;

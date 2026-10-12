@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.0 — 2026-10-12
+
+- Preserve the dispatch repository root across detached workspace launches and clean up a prepared workspace when the OS manager refuses to start it. Refuse workspace dispatch below measured backing-drive headroom: (live sparse workspaces + 1) × one measured sparse checkout.
+- Deny raw jj workspace add in .agx.toml repositories through the shared storage-headroom predicate; direct workers to agx dispatch --workspace.
+- Allow agx follow --all-live without a ticket, print compact ticket/state/summary/cost lines by default, and hide runs superseded by resume or amendment from agx ps unless --all is set. JSON output retains its existing shape and includes superseded rows only with --all.
+
 ## 3.3.1 — 2026-10-12
 
 - Enforce the existing hard mask during stalled-worker escalation, preventing an unjustified xhigh/max choice from being downgraded back to the failed row.

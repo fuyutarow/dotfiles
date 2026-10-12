@@ -137,6 +137,10 @@ No source module imports agent code or another tool package.
 
 ## Verification
 
+Run the fixture-only render benchmark with `bun tools/statusline/bench/render.ts 100`. It reports
+p50/p95 render wall time, process CPU time, and per-source wall time. The injected sources avoid
+host probes and cache writes; these figures describe renderer overhead, not live collector cost.
+
 The three original suites are ported, including the under-6-second worst-case render test,
 GPU single-sampler concurrency and atomic-cache cases, and real zsh prompt-head comparison.
 Tests use isolated HOME/PATH fixtures; the CPU-number assertion accepts existing padded percentages.

@@ -16,14 +16,13 @@ from ccc_gpu_yield import (
     YieldGuard,
     install,
     prepare_partition,
-    state_directories,
+    state_directory,
 )
 from gpu_partition import apply
 
 # The patched adapter and lock must stay in this process, including direct launcher use.
 os.environ["COCOINDEX_RUN_GPU_IN_SUBPROCESS"] = "0"
-directories = state_directories()
-guard = YieldGuard(directories[0], Policy.from_environment(), directories[1:])
+guard = YieldGuard(state_directory(), Policy.from_environment())
 partition_mode = prepare_partition(guard, apply)
 install(guard, lambda _service: partition_mode)
 

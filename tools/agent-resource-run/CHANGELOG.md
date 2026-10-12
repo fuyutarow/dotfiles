@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.1 — 2026-10-12
+
+- Report a live non-runner reservation-lock owner as an admission denial instead of waiting and
+  exiting 70; retain stale-lock cleanup for dead owners.
+- Open reservation files close-on-exec, and make the ccc daemon use the same single XDG runtime
+  state path as agent-resource-run.
+
 ## 1.4.0 — 2026-10-12
 
 - Refuse admission and `--check-only` when the latest WSL capacity recovery verdict is a fresh

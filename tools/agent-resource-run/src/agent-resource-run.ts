@@ -6,6 +6,7 @@
 
 import {
   closeSync,
+  constants,
   existsSync,
   mkdirSync,
   openSync,
@@ -49,8 +50,10 @@ const GiB = 1024 ** 3;
 // Implementation invariants, not operator policy. Every operator-tunable threshold (CPU/RAM/
 // scratch/VRAM safety headroom, GPU idle rules and concurrency cap, sampling intervals) and the
 // reason for its value lives in resource-policy.toml one directory up — see loadResourcePolicy.
-const LOCK_WAIT_MS = 2_000;
+const LOCK_WAIT_MS = 6_000;
 const LOCK_STALE_MS = 5_000;
+// Linux fcntl.h O_CLOEXEC; Node's fs.constants type omits this Linux-only flag.
+const O_CLOEXEC = 0x80000;
 const MIN_KERNEL_TASKS = 32;
 const RUNTIME_TASK_MARGIN_PER_PROCESS = 16;
 const MAX_KERNEL_TASKS = 65_535;
@@ -58,6 +61,7 @@ const KERNEL_PROBE_MEMORY_BYTES = 16 * MiB;
 
 class UsageError extends Error {}
 class StateError extends Error {}
+class ForeignLockError extends StateError {}
 
 // --- Policy: CONFIG vs MECHANISM ----------------------------------------------------------------
 // resource-policy.toml says HOW MUCH is held back; this file says HOW. The TOML is resolved next
@@ -1774,6 +1778,34 @@ function readOwnerPid(lockDirectory: string): number | null {
   return owner.success ? owner.data.pid : null;
 }
 
+function processIdentity(pid: number): { comm: string; agentRunner: boolean } {
+  const commResult = fromThrowable(() =>
+    readFileSync(`/proc/${pid}/comm`, "utf8").trim(),
+  )();
+  const cmdlineResult = fromThrowable(() =>
+    readFileSync(`/proc/${pid}/cmdline`, "utf8").replaceAll("\0", " ").trim(),
+  )();
+  const comm = commResult.isOk() ? commResult.value : "unknown";
+  const cmdline = cmdlineResult.isOk() ? cmdlineResult.value : "";
+  return {
+    comm,
+    agentRunner:
+      /(?:^|\s)(?:agent-resource-run|[^\s]*\/agent-resource-run\.ts|[^\s]*\/\.bun\/bin\/agent-resource-run)(?:$|\s)/u.test(
+        cmdline,
+      ),
+  };
+}
+
+function foreignLockError(
+  ownerPid: number | null,
+): ForeignLockError | undefined {
+  if (ownerPid === null || !pidIsAlive(ownerPid)) return undefined;
+  const identity = processIdentity(ownerPid);
+  return identity.agentRunner
+    ? undefined
+    : new ForeignLockError(`lock held by ${ownerPid} ${identity.comm}`);
+}
+
 function releaseIfStale(
   lockDirectory: string,
   ownerPid: number | null,
@@ -1811,6 +1843,8 @@ async function acquireStateLock(
     if (handled.isErr()) return err(handled.error);
 
     const ownerPid = readOwnerPid(lockDirectory);
+    const foreignHolder = foreignLockError(ownerPid);
+    if (foreignHolder !== undefined) return err(foreignHolder);
     if (releaseIfStale(lockDirectory, ownerPid)) {
       continue;
     }
@@ -1901,7 +1935,11 @@ async function acquireLease(
   if (directoryResult.isErr()) return err(asError(directoryResult.error));
   const stateDirectory = directoryResult.value;
   const lockResult = await acquireStateLock(stateDirectory);
-  if (lockResult.isErr()) return err(lockResult.error);
+  if (lockResult.isErr()) {
+    if (lockResult.error instanceof ForeignLockError)
+      return ok({ ok: false, reason: lockResult.error.message });
+    return err(lockResult.error);
+  }
   const workResult = fromThrowable(
     (): Result<Lease | AdmissionFailure, Error> => {
       const reservations = liveReservations(stateDirectory);
@@ -1974,7 +2012,11 @@ async function acquireLease(
         stateDirectory,
         `${reservationId}.reservation.json`,
       );
-      const fd = openSync(reservationPath, "wx", 0o600);
+      const fd = openSync(
+        reservationPath,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | O_CLOEXEC,
+        0o600,
+      );
       using _fd = {
         [Symbol.dispose]: () => {
           closeSync(fd);

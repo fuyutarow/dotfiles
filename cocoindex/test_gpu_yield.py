@@ -16,7 +16,6 @@ from ccc_gpu_yield import (
     install,
     prepare_partition,
     reservation_reason,
-    state_directories,
     state_directory,
 )
 
@@ -40,41 +39,36 @@ def test_runtime_path_matches_runner(monkeypatch):
     assert state_directory() == Path("/run/user/fixture/agent-resource-control")
     monkeypatch.setenv("XDG_RUNTIME_DIR", "relative")
     assert state_directory().name == f"agent-resource-control-{os.getuid()}"
-    assert state_directory() in state_directories()
 
 
-def test_runtime_and_ssh_ledgers_both_yield(tmp_path):
-    primary, peer = tmp_path / "runtime", tmp_path / "fallback"
-    primary.mkdir()
-    peer.mkdir()
-    guard = YieldGuard(primary, Policy(utilization_percent=100), (peer,))
-    reservation(peer)
+def test_single_canonical_ledger_yields_and_owns_one_lock(tmp_path):
+    guard = YieldGuard(tmp_path, Policy(utilization_percent=100))
+    reservation(tmp_path)
 
     def cpu():
-        assert not (primary / ".lock").exists()
-        assert not (peer / ".lock").exists()
+        assert not (tmp_path / ".lock").exists()
         return "cpu"
 
     assert (
-        guard.run(cpu, lambda: pytest.fail("SSH reservation was ignored"), lambda: None)
+        guard.run(cpu, lambda: pytest.fail("live reservation was ignored"), lambda: None)
         == "cpu"
     )
-    assert (primary / "ccc-gpu-status.json").read_text() == (
-        peer / "ccc-gpu-status.json"
-    ).read_text()
-    (peer / "fixture.reservation.json").unlink()
+    assert (tmp_path / "ccc-gpu-status.json").exists()
+    (tmp_path / "fixture.reservation.json").unlink()
 
     def gpu():
-        assert (primary / ".lock").exists() and (peer / ".lock").exists()
+        lock = tmp_path / ".lock"
+        assert lock.exists()
+        assert json.loads((lock / "owner.json").read_text())["pid"] == os.getpid()
         return "gpu"
 
     assert guard.run(cpu, gpu, lambda: None) == "gpu"
-    (peer / ".lock").mkdir()
+    (tmp_path / ".lock").mkdir()
     assert (
         guard.run(cpu=lambda: "busy-cpu", gpu=gpu, release_gpu=lambda: None)
         == "busy-cpu"
     )
-    assert not (primary / ".lock").exists() and (peer / ".lock").exists()
+    assert (tmp_path / ".lock").exists()
 
 
 def test_startup_partition_is_guarded_and_cpu_selection_hides_cuda(
@@ -92,6 +86,7 @@ def test_startup_partition_is_guarded_and_cpu_selection_hides_cuda(
     pending = reservation(tmp_path)
     assert prepare_partition(guard, apply) == "cpu"
     assert calls == [] and os.environ["CUDA_VISIBLE_DEVICES"] == ""
+    assert not (tmp_path / ".lock").exists()
     pending.unlink()
     assert prepare_partition(guard, apply) == "cuda"
     assert calls == ["ccc"] and not (tmp_path / ".lock").exists()
@@ -167,6 +162,24 @@ def test_yield_and_lock_lifetime(tmp_path):
     def gpu():
         assert json.loads((lock / "owner.json").read_text())["pid"] == os.getpid()
         assert reservation_reason(tmp_path) is None
+        child_probe = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import os, pathlib, sys; root=sys.argv[1]; "
+                "fds=pathlib.Path('/proc/self/fd'); "
+                "targets=[os.readlink(fd) for fd in fds.iterdir() "
+                "if fd.is_symlink() and os.path.exists(fd)]; "
+                "sys.exit(any(target == root or target.startswith(root + '/') "
+                "for target in targets))",
+                str(lock.resolve()),
+            ],
+            close_fds=False,
+            capture_output=True,
+            check=False,
+            timeout=5,
+        )
+        assert child_probe.returncode == 0, child_probe.stderr.decode()
         calls.append("gpu")
         return "gpu"
 

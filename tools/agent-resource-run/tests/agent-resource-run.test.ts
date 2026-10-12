@@ -1521,6 +1521,43 @@ describe("admission receipt", () => {
 });
 
 describe("bounded execution", () => {
+  test.skipIf(process.platform !== "linux")(
+    "denies immediately when a live non-runner owns the admission lock",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const lockDirectory = join(stateDirectory, ".lock");
+      mkdirSync(lockDirectory);
+      writeFileSync(
+        join(lockDirectory, "owner.json"),
+        `${JSON.stringify({ pid: process.pid })}\n`,
+      );
+      const reports: string[] = [];
+      const startedAt = performance.now();
+      const result = await checkJobResult(cpuManifest(), {
+        stateDirectory,
+        snapshot: hostSnapshot(),
+        kernelEnforcement: {
+          available: false,
+          reason: "fixture sampled enforcement",
+        },
+        hostOptIn: { sampled_enforcement_reason: "test" },
+        report: (line) => {
+          reports.push(line);
+        },
+      });
+      expect(result.isOk()).toBe(true);
+      if (result.isOk())
+        expect(result.value).toMatchObject({
+          ok: false,
+          exitCode: 69,
+          reason: "admission",
+        });
+      expect(reports.join("\n")).toContain(`lock held by ${process.pid} `);
+      expect(performance.now() - startedAt).toBeLessThan(500);
+      expect(existsSync(lockDirectory)).toBe(true);
+    },
+  );
+
   test.skipIf(NO_UTIL_LINUX)(
     "fails closed when kernel enforcement is unavailable",
     async () => {

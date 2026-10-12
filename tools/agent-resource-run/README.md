@@ -202,3 +202,18 @@ distinguishes concurrent tickets sharing that shape.
 
 `serena-foreground` uses the same controller for one pinned, project-scoped foreground HTTP
 service. It replaces user-global Serena stdio auto-start; it does not restore a global MCP entry.
+
+## Shared admission lock
+
+The runner and supervised ccc daemon use one state directory: `$XDG_RUNTIME_DIR/agent-resource-control`
+when `XDG_RUNTIME_DIR` is absolute, otherwise `${TMPDIR:-/tmp}/agent-resource-control-<uid>`. The
+daemon uses only that selected directory; it does not probe or lock a second `/tmp` ledger. Its
+`.lock` is a directory marker with `owner.json`, not an open file descriptor. The daemon owns this
+marker only during CUDA batch or partition setup and removes it before CPU fallback. The runner
+opens the reservation file with `O_CLOEXEC` and closes it before launching any child.
+
+When admission sees a live lock owner other than `agent-resource-run`, it immediately reports
+`lock held by <pid> <comm>`, leaves the owner's lock untouched, and returns an admission denial
+(exit 69). Locks with a dead owner are reclaimed only after they are at least five seconds old; a
+fresh ownerless or partially written lock may be waited on for up to six seconds. The ccc user
+service sets `XDG_RUNTIME_DIR=%t` so it selects the runtime path used by user shells.

@@ -30,18 +30,6 @@ def state_directory() -> Path:
     return Path(tempfile.gettempdir()) / f"agent-resource-control-{os.getuid()}"
 
 
-def state_directories() -> tuple[Path, ...]:
-    """Systemd and SSH shells can disagree on XDG_RUNTIME_DIR; cover both defaults."""
-    paths = {
-        state_directory(),
-        Path(tempfile.gettempdir()) / f"agent-resource-control-{os.getuid()}",
-    }
-    runtime = Path(f"/run/user/{os.getuid()}")
-    if runtime.is_dir():
-        paths.add(runtime / "agent-resource-control")
-    return tuple(sorted(paths))
-
-
 def pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -130,10 +118,9 @@ class Policy:
 
 class YieldGuard:
     def __init__(
-        self, directory: Path, policy: Policy, peer_directories: tuple[Path, ...] = ()
+        self, directory: Path, policy: Policy
     ) -> None:
         self.directory = directory
-        self.directories = tuple(sorted({directory, *peer_directories}))
         self.policy = policy
         self.serial = threading.Lock()
         self.next_gpu_at = 0.0
@@ -148,12 +135,11 @@ class YieldGuard:
                 "reason": reason,
             }
         )
-        for directory in self.directories:
-            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-            target = directory / "ccc-gpu-status.json"
-            temporary = target.with_suffix(f".{os.getpid()}.tmp")
-            temporary.write_text(value)
-            temporary.replace(target)
+        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        target = self.directory / "ccc-gpu-status.json"
+        temporary = target.with_suffix(f".{os.getpid()}.tmp")
+        temporary.write_text(value)
+        temporary.replace(target)
 
     def run[T](
         self,
@@ -178,21 +164,19 @@ class YieldGuard:
             acquired = []
             try:
                 if reason is None:
-                    for directory in self.directories:
-                        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-                        lock = directory / ".lock"
-                        try:
-                            lock.mkdir(mode=0o700)
-                        except FileExistsError:
-                            reason = "reservation admission busy"
-                            break
+                    directory = self.directory
+                    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    lock = directory / ".lock"
+                    try:
+                        lock.mkdir(mode=0o700)
+                    except FileExistsError:
+                        reason = "reservation admission busy"
+                    else:
                         acquired.append(lock)
                         (lock / "owner.json").write_text(
                             json.dumps({"pid": os.getpid()})
                         )
                         reason = reservation_reason(directory)
-                        if reason is not None:
-                            break
                 if reason is not None:
                     self.status(reason)
                 else:

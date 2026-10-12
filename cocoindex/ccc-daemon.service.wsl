@@ -72,6 +72,7 @@ Type=simple
 ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/cocoindex/ccc-daemon-launch.py
 Environment="CCC_GPU_UTILIZATION_PERCENT=20"
 Environment="CCC_GPU_BATCH_SIZE=4"
+Environment="XDG_RUNTIME_DIR=%t"
 # Optional HH:MM-HH:MM host-local window, end exclusive, wrapping midnight supported.
 # Equal endpoints permit all day; utilization 0 disables GPU indexing entirely.
 Environment="CCC_GPU_WINDOW=00:00-00:00"

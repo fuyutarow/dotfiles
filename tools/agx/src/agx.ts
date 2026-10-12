@@ -147,6 +147,11 @@ import {
 import { floorTicketGrade, hasXhighMaxJustification } from "./ticket-grade.ts";
 import { checkPremises } from "./premises.ts";
 import { buildDetachedLaunch, type DetachPlatform } from "./detach.ts";
+import {
+  claimWriteLease,
+  listWriteLeases,
+  releaseWriteLease,
+} from "./write-leases.ts";
 import { planWorkspace } from "./workspaces.ts";
 import { createSparseWorkspace } from "./prepare-workspace.ts";
 import {
@@ -2726,6 +2731,7 @@ async function launch(l: Launch): Promise<number> {
     if (!admitted.ok) fatal(admitted.reason);
   }
   const runId = flags.runId ?? newRunId();
+  claimRunWrites(flags, ticket, runId);
   const ticketName =
     flags.name ?? ticket?.name ?? displayId.slice("agt_".length);
   const home = ticketHome(
@@ -3835,6 +3841,7 @@ async function launch(l: Launch): Promise<number> {
     ...(runStats.cost_usd === null ? {} : { cost_usd: runStats.cost_usd }),
   };
   appendLog({ kind: "run", ...receipt, stats: runStats });
+  pruneCurrentRepoLeases(active.cwd);
   const completedOutcome = WorkerReceipt.safeParse(workerData).data?.outcome;
   if (
     parsedReturn.kind === "valid" ||
@@ -4564,6 +4571,49 @@ function readAllLog(): Logged[] {
   return parseLogLines(ledgerLines(STATE_DIR));
 }
 
+function claimRunWrites(
+  flags: RunFlags,
+  ticket: Ticket | undefined,
+  runId: string,
+): void {
+  const writes = ticket?.writes ?? [];
+  if (writes.length === 0) return;
+  const repo = workspaceRoot(flags.cd);
+  const active = readActive().filter(
+    (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
+  );
+  const result = claimWriteLease({
+    stateDir: STATE_DIR,
+    repo,
+    run_id: runId,
+    cwd: resolve(flags.cd),
+    writes,
+    ticket: flags.name ?? ticket?.name ?? runId,
+    dispatcher_session: currentDispatcherSession() ?? "unknown",
+    since: now(),
+    activeRunIds: new Set(active.map((entry) => entry.active.run_id)),
+    evidence: [...readAllLog(), ...runEvents()],
+  });
+  if (!result.ok) fatal(`agx: write lease refused: ${result.error}`, 2);
+}
+
+function releaseRunWrites(
+  flags: RunFlags,
+  ticket: Ticket | undefined,
+  runId: string,
+): void {
+  if ((ticket?.writes.length ?? 0) === 0) return;
+  const result = releaseWriteLease({
+    stateDir: STATE_DIR,
+    repo: workspaceRoot(flags.cd),
+    run_id: runId,
+  });
+  if (!result.ok)
+    dispatchError(
+      `agx: could not release refused write lease: ${result.error}`,
+    );
+}
+
 type RunState = "running" | "returned" | "done" | "failed" | "abandoned";
 
 function stateOfRecord(record: Logged): RunState {
@@ -4730,6 +4780,7 @@ function gcCommand(
     const result = workspaceGc(yes, days);
     if (yes) {
       const expired = expireUnacceptedDeliveries(days);
+      pruneCurrentRepoLeases();
       process.stdout.write(
         `agx ledger gc: marked ${expired} unaccepted delivery/deliveries (${days}d)\n`,
       );
@@ -4752,11 +4803,29 @@ function gcCommand(
     );
   if (!dryRun) {
     const expired = expireUnacceptedDeliveries(days);
+    pruneCurrentRepoLeases();
     process.stdout.write(
       `agx ledger gc: marked ${expired} unaccepted delivery/deliveries (${days}d)\n`,
     );
   }
   return 0;
+}
+
+function pruneCurrentRepoLeases(cwd = process.cwd()): void {
+  const repo = workspaceRoot(cwd);
+  const result = listWriteLeases({
+    stateDir: STATE_DIR,
+    repo,
+    activeRunIds: new Set(
+      readActive()
+        .filter(
+          (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
+        )
+        .map((entry) => entry.active.run_id),
+    ),
+    evidence: [...readAllLog(), ...runEvents()],
+  });
+  if (!result.ok) fatal(`cannot prune write leases: ${result.error}`);
 }
 
 interface PsRow {
@@ -4801,7 +4870,44 @@ function oneLineSummary(value: string): string {
     .slice(0, 200);
 }
 
-function psCommand(showAll: boolean, asJson: boolean, mine: boolean): number {
+function psCommand(
+  showAll: boolean,
+  asJson: boolean,
+  mine: boolean,
+  leasesOnly: boolean,
+): number {
+  if (leasesOnly) {
+    const repo = workspaceRoot(process.cwd());
+    const result = listWriteLeases({
+      stateDir: STATE_DIR,
+      repo,
+      activeRunIds: new Set(
+        readActive()
+          .filter(
+            (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
+          )
+          .map((entry) => entry.active.run_id),
+      ),
+      evidence: [...readAllLog(), ...runEvents()],
+    });
+    if (!result.ok) fatal(`cannot read write leases: ${result.error}`);
+    if (asJson)
+      process.stdout.write(
+        `${JSON.stringify({ schema: SCHEMA, leases: result.value })}\n`,
+      );
+    else {
+      process.stdout.write("repo\trun_id\tticket\tdispatcher\tsince\twrites\n");
+      process.stdout.write(
+        result.value
+          .map(
+            (lease) =>
+              `${lease.repo}\t${lease.run_id}\t${lease.ticket}\t${lease.dispatcher_session.slice(0, 8)}\t${lease.since}\t${lease.writes.join(",")}\n`,
+          )
+          .join(""),
+      );
+    }
+    return 0;
+  }
   const markers = new Map(
     readActive().map((entry) => [entry.active.run_id, entry]),
   );
@@ -5215,6 +5321,7 @@ function acceptRun(
     ...(note === undefined ? {} : { note }),
   };
   appendLog(record);
+  pruneCurrentRepoLeases(logged.cwd ?? process.cwd());
   process.stdout.write(`${JSON.stringify({ schema: SCHEMA, ...record })}\n`);
   return 0;
 }
@@ -6295,6 +6402,10 @@ async function parseAgx() {
             type: Boolean,
             description: "show only runs dispatched by this session",
           },
+          leases: {
+            type: Boolean,
+            description: "list current repository write leases",
+          },
         },
       },
       undefined,
@@ -7031,6 +7142,8 @@ async function detachDispatch(
   const detachGrade = await lintTicket(brief, resolve(flags.cd));
   if (detachGrade.violations.length > 0)
     fatal(renderTicketLint(detachGrade).join("; "));
+  const runId = flags.runId ?? newRunId();
+  claimRunWrites(flags, parsed.ticket, runId);
   const ticketName = parsed.kind === "ticket" ? parsed.ticket.name : undefined;
   const liveDisplayId = originalArgs.some(
     (arg) => arg === "--amend" || arg.startsWith("--amend="),
@@ -7049,7 +7162,6 @@ async function detachDispatch(
   const ticketFile =
     flags.ticketFile ?? dispatchTicketAtHome(home, name, brief);
   if (ticketFile instanceof Error) fatal(ticketFile.message);
-  const runId = flags.runId ?? newRunId();
   const unit = `agx-${name}-${sha256(runId).slice(0, 8)}`;
   let childArgs = withoutOption(originalArgs, "--detach", false);
   const workspaceAt = childArgs.indexOf("--workspace");
@@ -7089,12 +7201,14 @@ async function detachDispatch(
     }),
   );
   if (!started.ok) {
+    releaseRunWrites(flags, parsed.ticket, runId);
     await cleanupPreparedWorkspace(flags);
     fatal(
       `cannot start ${detachedLaunch.executable}: ${errorMessage(started.error)}`,
     );
   }
   if (started.value.exitCode !== 0) {
+    releaseRunWrites(flags, parsed.ticket, runId);
     await cleanupPreparedWorkspace(flags);
     fatal(
       `${detachedLaunch.executable} failed (exit ${started.value.exitCode}): ${started.value.stderr.toString().trim()}`,
@@ -7536,6 +7650,7 @@ async function main(): Promise<number | undefined> {
       argv.flags.all ?? false,
       argv.flags.json ?? false,
       argv.flags.mine ?? false,
+      argv.flags.leases ?? false,
     );
   if (argv.command === "show") {
     if (argv._.length !== 1) fatal("show needs <run_id|name|latest>");

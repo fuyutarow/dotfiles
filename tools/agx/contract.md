@@ -59,6 +59,15 @@ opens the worker's promise block, and its id is kept on the marker and run recor
 the short dispatcher session id; `ps --json` rows include the full `dispatcher_session` (or
 `null` when the run has no recorded dispatcher session).
 
+Write leases are created only while admitting a new run and are shared by repository root across
+dispatcher sessions. Admission refuses overlapping write globs with exit 2. `agx ps --leases`
+lists the current repository's pruned lease set; `agx ledger gc` applies the same pruning rules.
+Only live runs and finished runs with changed files, no acceptance/rejection or landing decision,
+and an existing workspace retain a lease. Acceptance, rejection, landing, abandonment, a terminal
+run without changed files, or a missing workspace releases it. Historical ledger rows never create
+leases. Detached dispatch completes schema, RESOURCE, premise and lease admission before invoking
+systemd or launchd; a refusal is printed by the caller, exits 2, and prints no `run_id`.
+
 Capabilities accept plain routing tags or `{ need, lower_effort_lacks }` objects with non-empty
 strings. Only an object justifies xhigh/max. Without one, positive selection mass goes to the
 highest admissible lower effort in the same model family; receipt masks and fallback reasons

@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.5.0 — 2026-10-12
+
+- Add repository-wide write leases at new-run admission. Release them after acceptance or rejection, landing, abandonment, a terminal run with no changed files, or workspace removal. `agx ps --leases` and `agx ledger gc` use the same pruning rules; historical runs never create lease files. Detached dispatch completes ticket, RESOURCE, premise and lease admission before starting its OS unit, so refusals exit 2 without printing a run_id.
+
 ## 3.4.2 — 2026-10-12
 
 - Preserve Claude dispatcher attribution when the internal override is blank, and reject ticket workspace routing instead of silently using the prior cwd.

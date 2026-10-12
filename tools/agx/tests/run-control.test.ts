@@ -1,4 +1,5 @@
 import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -13,8 +14,11 @@ import { join, resolve } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
 import { completeTicket } from "./fixture-ticket.ts";
+import { workspaceRoot } from "../src/lifecycle.ts";
 
 const CLI = join(import.meta.dir, "..", "src", "agx.ts");
+const hashText = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
 // Each integration case can launch several bounded CLI children; allow loaded CI hosts.
 setDefaultTimeout(20_000);
 const scratch = mkdtempSync(join(tmpdir(), "agx-run-control-"));
@@ -577,4 +581,106 @@ test("dispatch --detach refuses a GPU ticket when nvidia-smi is absent", () => {
   expect(result.code).not.toBe(0);
   expect(result.err).toContain("GPU not visible in this unit");
   expect(result.err).toContain(`nvidia-smi not found on PATH=${emptyPath}`);
+});
+
+test("ledger gc prunes judged write leases and ps --leases uses the same result", () => {
+  const state = join(scratch, "gc-write-lease-state");
+  const repo = workspaceRoot(process.cwd());
+  const runId = "judged-write-lease";
+  const hash = hashText;
+  const leaseDir = join(state, "write-leases", hash(repo));
+  mkdirSync(leaseDir, { recursive: true });
+  writeFileSync(
+    join(leaseDir, `${hash(runId)}.json`),
+    JSON.stringify({
+      repo,
+      run_id: runId,
+      cwd: scratch,
+      writes: ["tools/agx/**"],
+      ticket: "judged",
+      dispatcher_session: "fixture-session",
+      since: "2026-10-12T00:00:00Z",
+    }),
+  );
+  writeFileSync(
+    join(state, "runs.jsonl"),
+    `${JSON.stringify({ kind: "acceptance", run_id: runId, accept: true, at: "2026-10-12T00:01:00Z" })}\n`,
+  );
+
+  const collected = cli(["ledger", "gc"], state);
+  expect(collected.code, collected.err).toBe(0);
+  expect(existsSync(join(leaseDir, `${hash(runId)}.json`))).toBe(false);
+  const listed = cli(["ps", "--leases", "--json"], state);
+  expect(listed.code, listed.err).toBe(0);
+  expect(
+    decodedJson(z.looseObject({ leases: z.array(z.unknown()) }), listed.out)
+      .leases,
+  ).toEqual([]);
+});
+
+test("dispatch --detach reports lease refusal before creating a unit or run_id", () => {
+  const state = join(scratch, "detach-lease-state");
+  const active = join(state, "active");
+  const stubDir = join(scratch, "detach-lease-stub");
+  mkdirSync(active, { recursive: true });
+  mkdirSync(stubDir, { recursive: true });
+  const runId = "existing-live-holder";
+  const repo = resolve(scratch);
+  const timestamp = Temporal.Now.instant().toString();
+  const hash = hashText;
+  writeFileSync(
+    join(active, `${runId}.json`),
+    JSON.stringify(marker(runId, process.pid, "holder-session", timestamp)),
+  );
+  const leaseDir = join(state, "write-leases", hash(repo));
+  mkdirSync(leaseDir, { recursive: true });
+  writeFileSync(
+    join(leaseDir, `${hash(runId)}.json`),
+    JSON.stringify({
+      repo,
+      run_id: runId,
+      cwd: scratch,
+      writes: ["tools/agx/**"],
+      ticket: "existing-holder",
+      dispatcher_session: "holder-session",
+      since: timestamp,
+    }),
+  );
+  const capture = join(scratch, "detach-lease-argv.txt");
+  const stub = join(stubDir, "systemd-run");
+  writeFileSync(stub, '#!/bin/sh\nprintf "%s\\n" "$@" > "$AGX_CAPTURE"\n');
+  chmodSync(stub, 0o755);
+  const prompt = join(scratch, "detached-lease-brief.md");
+  writeFileSync(
+    prompt,
+    completeTicket(
+      '+++\nschema = 2\nwrites = ["tools/agx/**"]\n+++\nRESOURCE-CLASS(NONCOMPUTE): detached lease test\nMust refuse before launch.\n',
+    ),
+  );
+
+  const result = cli(
+    [
+      "dispatch",
+      "--prompt-file",
+      prompt,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "none",
+      "--name",
+      "detach_lease",
+      "--detach",
+    ],
+    state,
+    {
+      AGX_DETACH_PLATFORM: "linux",
+      AGX_CAPTURE: capture,
+      CLAUDE_CODE_SESSION_ID: "session-detached-lease",
+      PATH: `${stubDir}:${process.env.PATH ?? ""}`,
+    },
+  );
+  expect(result.code).toBe(2);
+  expect(result.err).toContain("existing-live-holder");
+  expect(result.out).not.toContain("run_id:");
+  expect(existsSync(capture)).toBe(false);
 });

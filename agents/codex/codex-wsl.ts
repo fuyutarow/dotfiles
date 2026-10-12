@@ -3,7 +3,7 @@
 import { join } from "node:path";
 import {
   hasExplicitWorkingDirectory,
-  resolveRuntime,
+  resolveDesktopRuntime,
   windowsArguments,
   windowsPath,
 } from "./runtime.ts";
@@ -126,13 +126,7 @@ export async function desktopArguments(
 }
 
 async function main(): Promise<void> {
-  const runtime = await resolveRuntime(join(import.meta.dir, "../.."));
-  if (runtime.provider !== "windows-desktop") {
-    process.stderr.write(
-      "codex: this launcher requires the WSL windows-desktop provider\n",
-    );
-    process.exit(2);
-  }
+  const runtime = await resolveDesktopRuntime(join(import.meta.dir, "../.."));
   const forwarded = Bun.argv.slice(2);
   const args = await desktopArguments(
     runtime.executable,

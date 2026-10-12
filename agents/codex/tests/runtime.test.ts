@@ -7,17 +7,16 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { declaredProvider, hostKind, windowsArguments } from "../runtime.ts";
 import {
-  installFacades,
+  hasManagedDefaultFacade,
+  installDesktopFacade,
   launcherContents,
-  deferredStandaloneReleases,
-  retireStandaloneReleases,
+  retireManagedDefaultFacade,
   wslDistroName,
 } from "../codex-runtime.ts";
 import {
@@ -42,10 +41,10 @@ function fixture(): string {
   return root;
 }
 
-describe("WSL Windows Codex runtime", () => {
-  test("declares the desktop provider only for WSL", async () => {
+describe("WSL dual Codex runtime", () => {
+  test("declares the standalone provider for every host", async () => {
     expect((await declaredProvider(repo, "wsl"))._unsafeUnwrap()).toBe(
-      "windows-desktop",
+      "standalone",
     );
     expect((await declaredProvider(repo, "linux"))._unsafeUnwrap()).toBe(
       "standalone",
@@ -200,46 +199,34 @@ describe("WSL Windows Codex runtime", () => {
     });
   });
 
-  test("replaces both facade names and retires their installed standalone payload", async () => {
+  test("retires only the managed plain facade while keeping standalone releases", async () => {
     const home = fixture();
     const release = join(home, ".codex/packages/standalone/releases/0.1.0");
     const bin = join(home, ".local/bin");
     mkdirSync(release, { recursive: true });
     mkdirSync(bin, { recursive: true });
     writeFileSync(join(release, "codex"), "standalone", "utf8");
-    writeFileSync(join(release, "codex.exe"), "standalone", "utf8");
-    symlinkSync(join(release, "codex"), join(bin, "codex"));
-    symlinkSync(join(release, "codex.exe"), join(bin, "codex.exe"));
     const contents = launcherContents("/opt/bun/bin/bun", "/work/dotfiles");
+    writeFileSync(join(bin, "codex"), contents, "utf8");
 
-    expect(await installFacades(home, contents)).toEqual([release]);
-    expect(await retireStandaloneReleases(home, [release])).toBe(1);
-    expect(existsSync(release)).toBe(false);
-    for (const name of ["codex", "codex.exe"])
-      expect(readFileSync(join(bin, name), "utf8")).toBe(contents);
+    expect(await hasManagedDefaultFacade(home)).toBe(true);
+    writeFileSync(join(bin, "codex.exe"), "stale desktop facade", "utf8");
+    await installDesktopFacade(home, contents);
+    expect(await retireManagedDefaultFacade(home)).toBe(true);
+    expect(existsSync(release)).toBe(true);
+    expect(existsSync(join(bin, "codex"))).toBe(false);
+    expect(readFileSync(join(bin, "codex.exe"), "utf8")).toBe(contents);
   });
 
-  test("defers a release used by a live executable or mapped retired payload while archiving inactive releases", async () => {
+  test("leaves an unmanaged plain codex executable alone", async () => {
     const home = fixture();
-    const proc = join(home, "proc");
-    const active = join(home, ".codex/packages/standalone/releases/active");
-    const inactive = join(home, ".codex/packages/standalone/releases/inactive");
-    mkdirSync(join(active, "bin"), { recursive: true });
-    mkdirSync(join(inactive, "bin"), { recursive: true });
-    mkdirSync(join(proc, "123"), { recursive: true });
-    writeFileSync(join(active, "bin", "codex"), "active", "utf8");
-    writeFileSync(join(inactive, "bin", "codex"), "inactive", "utf8");
-    symlinkSync(join(active, "bin", "codex"), join(proc, "123", "exe"));
-    writeFileSync(
-      join(proc, "123", "maps"),
-      `${join(home, ".codex/dotfiles-retired-standalone/stamp/.codex/packages/standalone/releases/active/bin/codex")}\n`,
-      "utf8",
-    );
+    const bin = join(home, ".local/bin");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "codex"), "#!/bin/sh\necho user\n", "utf8");
 
-    expect(await deferredStandaloneReleases(home, proc)).toEqual([active]);
-    expect(await retireStandaloneReleases(home, [], proc)).toBe(1);
-    expect(existsSync(active)).toBe(true);
-    expect(existsSync(inactive)).toBe(false);
+    expect(await hasManagedDefaultFacade(home)).toBe(false);
+    expect(await retireManagedDefaultFacade(home)).toBe(false);
+    expect(readFileSync(join(bin, "codex"), "utf8")).toContain("echo user");
   });
 
   test("derives the WSL distro from a wslpath fixture for noninteractive shells", async () => {

@@ -2,4 +2,4 @@
 [providers]
 mac = "standalone"
 linux = "standalone"
-wsl = "windows-desktop"
+wsl = "standalone"

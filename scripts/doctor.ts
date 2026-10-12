@@ -1066,8 +1066,8 @@ export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
 }
 
 // Runtime ownership is intentionally delegated to agents/codex/codex-runtime.ts. That command
-// validates the declared WSL provider, Windows Desktop launcher, and Windows configuration home
-// without re-implementing its deployment contract in the doctor.
+// validates the declared WSL native provider, explicit Windows launcher, and both configuration
+// homes without re-implementing its deployment contract in the doctor.
 export async function checkCodexRuntime(ctx: Ctx): Promise<Finding> {
   const provider = await declaredProvider(ctx.dotfiles, "wsl");
   if (provider.isErr())
@@ -1076,17 +1076,17 @@ export async function checkCodexRuntime(ctx: Ctx): Promise<Finding> {
       `invalid runtime declaration: ${provider.error}`,
       "repair agents/codex/runtime.toml",
     );
-  if (provider.value !== "windows-desktop")
+  if (provider.value !== "standalone")
     return fail(
       "codex-runtime",
-      `WSL declares ${provider.value}, not the required windows-desktop provider`,
-      'set providers.wsl = "windows-desktop" in agents/codex/runtime.toml',
+      `WSL declares ${provider.value}, not the required standalone provider`,
+      'set providers.wsl = "standalone" in agents/codex/runtime.toml',
     );
   const runtime = join(ctx.dotfiles, "agents/codex/codex-runtime.ts");
   if (!existsSync(runtime))
     return fail(
       "codex-runtime",
-      "WSL Windows Desktop runtime deployment script is missing",
+      "WSL dual Codex runtime deployment script is missing",
       "restore agents/codex/codex-runtime.ts",
     );
   // Reuse this verified Bun instead of resolving an ambient `bun`: under a fixture HOME that
@@ -1098,18 +1098,18 @@ export async function checkCodexRuntime(ctx: Ctx): Promise<Finding> {
   if (r.missing)
     return fail(
       "codex-runtime",
-      "bun is not on PATH; cannot validate the Windows Codex launcher",
+      "bun is not on PATH; cannot validate the dual Codex launchers",
       "mise run deps",
     );
   if (r.timedOut)
     return warn(
       "codex-runtime",
-      "Windows Codex runtime validation timed out after 30s",
+      "dual Codex runtime validation timed out after 30s",
     );
   if (r.code === 0)
     return pass(
       "codex-runtime",
-      "WSL uses the declared Windows Desktop provider, launcher, and Windows config home",
+      "WSL plain codex uses Homebrew while explicit codex.exe uses Windows Desktop with separate config homes",
     );
   const [firstLine = ""] = (r.out + r.err).trim().split("\n");
   const detail =

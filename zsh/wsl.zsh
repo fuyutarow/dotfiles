@@ -39,9 +39,9 @@ esac
 #  * Windows-ONLY tools earn a symlink into ~/.local/bin (explorer, powershell, agy, the IDE
 #    launchers). The huge parent dirs stay OFF $PATH — TAB-completion over 9p is slow.
 #  * Cross-platform development tools (uv/uvx, claude, rg …) retain their Linux install and
-#    priority. Codex is the deliberate exception: its `windows-desktop` provider owns a `codex`
-#    launcher in ~/.local/bin. Never add `codex.exe` here: the runtime facade owns path conversion,
-#    Windows CODEX_HOME, and refresh after a Desktop upgrade.
+#    priority. Codex deliberately splits: Homebrew owns plain `codex`, while the runtime owns
+#    explicit `codex.exe`. Never add `codex.exe` here: its facade owns path conversion, Windows
+#    CODEX_HOME, and refresh after a Desktop upgrade.
 #  * Why symlinks and not PATH: ~/.local/bin is already on the PATH of every long-lived env
 #    snapshot (herdr's server freezes its env at start and has no way to refresh it). A new
 #    symlink changes directory CONTENT, not PATH — so it lands in ALL live panes instantly.

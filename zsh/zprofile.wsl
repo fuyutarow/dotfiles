@@ -16,8 +16,9 @@ _dbg "Setting up PATH exports"
 # bun global package bins (claude, gemini, this repo's `bin` commands); bun itself comes from
 # Homebrew, not ~/.bun. .zshenv already puts both dirs on every shell's PATH (2026-09-13); this
 # re-prepend exists only to keep them AHEAD of the Homebrew dirs `brew shellenv` just inserted
-# above, in login shells. Order matters: ~/.local/bin last, so the runtime-owned Windows Desktop
-# Codex facade there beats stale Bun/npm shims. It is deployed by codex-runtime.ts, never here.
+# above, in login shells. Order matters: ~/.local/bin keeps the explicit Windows `codex.exe`
+# launcher reachable; codex-runtime.ts retires only its old managed plain-codex facade so
+# Homebrew supplies unqualified `codex`. It is deployed by codex-runtime.ts, never here.
 [ -d "$HOME/.bun/bin" ] && export PATH="$HOME/.bun/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 

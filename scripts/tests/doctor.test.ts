@@ -339,12 +339,12 @@ describe("doctor", () => {
       "Windows Desktop owns the native Codex app-server",
     );
   });
-  test("codex-runtime: WSL refuses a standalone Codex declaration before probing any launcher", async () => {
+  test("codex-runtime: WSL refuses a Windows-only Codex declaration before probing any launcher", async () => {
     const dotfiles = tmp("doctor-wsl-codex-runtime-");
     mkdirSync(join(dotfiles, "agents", "codex"), { recursive: true });
     writeFileSync(
       join(dotfiles, "agents", "codex", "runtime.toml"),
-      '[providers]\nmac = "standalone"\nlinux = "standalone"\nwsl = "standalone"\n',
+      '[providers]\nmac = "standalone"\nlinux = "standalone"\nwsl = "windows-desktop"\n',
     );
     const finding = await checkCodexRuntime({
       home: tmp("doctor-wsl-codex-home-"),
@@ -355,9 +355,7 @@ describe("doctor", () => {
     });
 
     expect(finding.verdict).toBe("FAIL");
-    expect(finding.detail).toContain(
-      "not the required windows-desktop provider",
-    );
+    expect(finding.detail).toContain("not the required standalone provider");
   });
   test("post-merge runs codex:config after relinking dotfiles", () => {
     const mise = readFileSync(join(REPO, "mise.toml"), "utf8");

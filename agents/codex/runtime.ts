@@ -90,14 +90,18 @@ function linuxPath(path: string): Promise<string> {
 export async function resolveRuntime(
   dotfiles: string,
   home = homedir(),
+  selected?: RuntimeProvider,
 ): Promise<CodexRuntime> {
-  const declared = await declaredProvider(dotfiles);
-  if (declared.isErr()) {
-    process.stderr.write(`codex: ${declared.error.message}\n`);
-    process.exit(2);
+  if (selected === undefined) {
+    const declared = await declaredProvider(dotfiles);
+    if (declared.isErr()) {
+      process.stderr.write(`codex: ${declared.error.message}\n`);
+      process.exit(2);
+    }
+    selected = declared.value;
   }
-  if (declared.value === "standalone")
-    return { provider: declared.value, home, executable: "codex" };
+  if (selected === "standalone")
+    return { provider: selected, home, executable: "codex" };
   if (hostKind() !== "wsl") {
     process.stderr.write(
       "codex: windows-desktop Codex provider requires WSL\n",
@@ -131,10 +135,18 @@ export async function resolveRuntime(
     process.exit(2);
   }
   return {
-    provider: declared.value,
+    provider: selected,
     executable: await linuxPath(parsed.data.executable),
     home: await linuxPath(parsed.data.home),
   };
+}
+
+/** The dedicated `codex.exe` launcher always targets Windows Desktop on WSL. */
+export function resolveDesktopRuntime(
+  dotfiles: string,
+  home = homedir(),
+): Promise<CodexRuntime> {
+  return resolveRuntime(dotfiles, home, "windows-desktop");
 }
 
 export async function configHome(

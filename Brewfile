@@ -13,6 +13,11 @@ brew "coreutils"
 # fnm removed 2026-08-06 (INV-6): a second version manager that hooks every login shell is an
 # implicit global toolchain. Node is declared per project in mise.toml, or it does not exist.
 brew "git"
+# WSL alone uses Homebrew for unqualified `codex`; macOS and ordinary Linux retain their
+# standalone installer through install:ai-clis. Probe procfs so SSH/herdr WSL sessions work too.
+if OS.linux? && File.read("/proc/sys/kernel/osrelease").match?(/microsoft/iu)
+  brew "codex"
+end
 brew "age"         # fnox age provider (WSL has no Secret Service, so its secrets are age-encrypted)
 brew "tmux"
 

@@ -1,6 +1,6 @@
-// Install the declared AI CLI providers. Claude always remains on its native self-updating
-// channel. Codex is provider-selected by agents/codex/runtime.toml: WSL deploys the Windows
-// Desktop launcher; macOS and ordinary Linux retain the standalone vendor installer.
+// Install declared AI CLI integration. Claude remains on its native self-updating channel;
+// macOS and ordinary Linux retain Codex's standalone installer, while WSL uses Brewfile for
+// plain `codex` and also deploys its explicit Desktop `codex.exe` launcher.
 //
 // Usage: bun scripts/install-ai-clis.ts [--dry-run] [--dotfiles <path>]
 // Exit: 0 all selected installers succeeded · 1 an installer failed · 2 invalid input/runtime.
@@ -11,7 +11,7 @@ import { cli } from "cleye";
 import {
   declaredProvider,
   hostKind,
-  type CodexRuntime,
+  type HostKind,
 } from "../agents/codex/runtime.ts";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 
@@ -29,21 +29,18 @@ function print(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-/** Pure selection seam: fixtures prove WSL never routes Codex through its Linux installer. */
-export function installPlan(
-  provider: CodexRuntime["provider"],
-  dotfiles: string,
-): Installer[] {
+/** Pure selection seam: only WSL replaces the standalone installer with its declared Brew formula. */
+export function installPlan(dotfiles: string, kind: HostKind): Installer[] {
   const claude: Installer = {
     label: "Claude Code (native self-updating)",
     command: "sh",
     args: ["-c", "curl -fsSL https://claude.ai/install.sh | bash"],
   };
-  if (provider === "windows-desktop") {
+  if (kind === "wsl") {
     return [
       claude,
       {
-        label: "Codex (Windows Desktop provider)",
+        label: "Codex (WSL desktop launcher)",
         command: process.execPath,
         args: [join(dotfiles, "agents/codex/codex-runtime.ts")],
       },
@@ -104,7 +101,12 @@ async function main(): Promise<number | Error> {
   const provider = await declaredProvider(dotfiles, hostKind());
   if (provider.isErr())
     return new Error(`invalid runtime declaration: ${provider.error}`);
-  const installers = installPlan(provider.value, dotfiles);
+  const kind = hostKind();
+  if (kind === "wsl" && provider.value !== "standalone")
+    return new Error(
+      `WSL requires the standalone plain Codex provider, got ${provider.value}`,
+    );
+  const installers = installPlan(dotfiles, kind);
   for (const installer of installers) {
     if (parsed.flags.dryRun) {
       print(

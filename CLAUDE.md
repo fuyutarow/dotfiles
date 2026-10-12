@@ -19,9 +19,10 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
   with tmux.
 - **Editor**: VS Code — `e` / `ee` open it (on WSL via the Remote-WSL launcher, see `zsh/zprofile.wsl`).
   Cursor was retired 2026-07-14; do not reintroduce it.
-- **Codex provider**: `agents/codex/runtime.toml` selects the standalone CLI on macOS/Linux and
-  Windows Desktop on WSL. WSL's `codex` is the runtime-owned facade to that Desktop provider;
-  never install or prefer a second Linux Codex there. Other development tools remain native to WSL.
+- **Codex provider**: macOS and ordinary Linux retain the standalone CLI for plain `codex`; WSL
+  declares its Homebrew CLI in `Brewfile`. On WSL, `codex.exe` is the separate runtime-owned
+  facade to Windows Desktop and its Windows config home; never replace the Herdr `codex` function
+  with it.
 
 ### Package Managers
 

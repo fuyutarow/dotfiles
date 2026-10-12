@@ -546,16 +546,18 @@ run = "DOCTOR_ONLY=core-tools,deps,bins,skills,mcp,codex-config,codex-runtime bu
 description = "Restore the repo's pinned Bun dependencies from bun.lock and `bun link` its bin commands into ~/.bun/bin (writing-bun-scripts BG3 graduation project; node_modules is gitignored). Required before running repo .ts scripts on a fresh clone."
 run = "bun install --frozen-lockfile && bun link && bun scripts/deps-prune.ts"
 
-# AI coding-agent CLIs, each through its vendor's own SELF-UPDATING installer — never bun/npm.
+# AI coding-agent integration: Claude through its vendor's self-updating installer; Codex through
+# its standalone installer except on WSL, where Brewfile declares the Homebrew formula. Never use
+# bun/npm for either.
 # An npm-installed claude self-updates by shelling out to `npm view`, and on a box where npm has
 # no global version (INV-6: a toolchain exists only where a config declares it) that dies as
 # "Unable to fetch latest version from npm registry" while the registry answers 200. That is how
 # topgrade's Claude Code step failed on r99 and not on the Mac (native since install) until
-# 2026-09-23. Both installers work on macOS and Linux, and they are the channels topgrade's
-# `claude_code` and "Codex CLI (standalone)" steps update. gemini-cli dropped: Gemini is reached
-# through agy (driving-antigravity). Standalone: not wired into mac:init/wsl:init.
+# 2026-09-23. WSL updates Codex with the rest of Homebrew; other hosts retain Codex's standalone
+# installer. This task also deploys WSL's explicit Windows Desktop `codex.exe` launcher.
+# gemini-cli dropped: Gemini is reached through agy (driving-antigravity).
 [tasks."install:ai-clis"]
-description = "Install the AI coding-agent CLIs through each vendor's self-updating installer: Claude Code native (claude.ai/install.sh), Codex standalone (chatgpt.com/codex/install.sh). Never bun/npm — an npm claude cannot self-update where npm has no global version."
+description = "Install Claude Code and the standalone Codex CLI on macOS/Linux; on WSL deploy the explicit Windows Desktop codex.exe launcher while Brewfile supplies plain codex. Never bun/npm."
 run = "bun scripts/install-ai-clis.ts"
 
 [tasks."mac:init"]
@@ -807,12 +809,12 @@ description = "Converge declared Codex model limits, workspace-write network set
 run = "bun agents/codex/codex-config.ts"
 
 [tasks."codex:runtime"]
-description = "Deploy the declared WSL-to-Windows Codex runtime integration."
+description = "Deploy the WSL dual-Codex integration: Homebrew plain codex plus explicit Windows codex.exe."
 dir = "{{config_root}}"
 run = "bun agents/codex/codex-runtime.ts deploy"
 
 [tasks."codex:runtime:check"]
-description = "Verify the actual selected WSL-to-Windows Codex runtime integration without writing."
+description = "Verify the actual WSL Homebrew codex and explicit Windows codex.exe mapping without writing."
 dir = "{{config_root}}"
 run = "bun agents/codex/codex-runtime.ts --check"
 

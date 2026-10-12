@@ -149,9 +149,9 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    non-standard-prefix dependencies. At a nonstandard Linux prefix, Bun uses its official
    `oven-sh/bun/bun` Homebrew tap release instead of compiling WebKit; Bundle supplies its bunx
    alias. Both providers are Homebrew-managed. Claude Code uses its native self-updating installer.
-   Codex follows `agents/codex/runtime.toml`: macOS and Linux use the standalone installer, while
-   WSL uses the Windows Desktop provider through a runtime-owned Linux facade (never a second
-   Linux Codex installation).
+   On macOS and ordinary Linux, Codex uses its standalone installer. The Brewfile declares the
+   Homebrew CLI only on WSL, where plain `codex` stays native while Windows Desktop remains the
+   explicit `codex.exe` through a runtime-owned launcher with a separate Windows config home.
    It is not a portable container image, and
    it never builds an experiment environment: Julia, CUDA, Python and their versions are each
    repo's `mise.toml` (`mise install` in that repo). A machine where an alias is missing is a
@@ -198,10 +198,11 @@ cd ~/dotfiles && brew install mise && mise run wsl:init
 exec zsh
 ```
 
-On WSL, install the Windows Codex Desktop app first, then run `mise run install:ai-clis` from the
-WSL checkout. The task keeps Claude native to WSL and deploys the declared `windows-desktop` Codex
-facade; it does not download a Linux Codex. `mise run doctor` verifies the provider, launcher, and
-Windows configuration home. Linux development tools other than Codex remain native to WSL.
+On WSL, `brew bundle --file=Brewfile` provides plain `codex`. Install the Windows Codex Desktop
+app too, then run `mise run install:ai-clis` from the WSL checkout to deploy explicit `codex.exe`.
+The task keeps Claude native to WSL, retains the two distinct config homes, and retires only its
+old managed plain-Codex facade. macOS and ordinary Linux retain the standalone Codex installer.
+`mise run doctor` verifies both WSL providers and launchers.
 
 When Google Drive for Windows is available as `G:`, `wsl/wsl.conf` enables WSL automount at
 `/mnt`. Google Drive's virtual `G:` is not found by WSL automount. Run `mise run wsl:drive-mount`

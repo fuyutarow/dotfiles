@@ -439,6 +439,8 @@ function expectGolden(
       PWD: "/fixture",
       TZ: "UTC",
       AGX_STATE_DIR: join(home, "state"),
+      AGX_DISPATCHER_SESSION: "",
+      CLAUDE_CODE_SESSION_ID: "",
       CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge",
     };
     const run = (entry: string) => {

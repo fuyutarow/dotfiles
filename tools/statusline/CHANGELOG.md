@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.0 — 2026-10-12
+
+- Select this session's agx runs using the same dispatcher-session environment precedence as `agx ps --mine`, and summarize live named runs in `Job:` so detached systemd runs are visible there too.
+
 ## 0.14.2 — 2026-10-12
 
 - Serialize same-session renders across processes and reuse the last output for concurrent calls, including Codex live frames.

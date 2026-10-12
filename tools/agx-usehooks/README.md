@@ -95,7 +95,8 @@ await onPrompt(async (ctx) => {
   return [
     theory < 3 && "There are fewer than three theory runs.",
     !("unavailable" in device) &&
-      (device.avg15Pct ?? (device.samples15 <= 1 ? device.nowPct : null)) !== null &&
+      (device.avg15Pct ?? (device.samples15 <= 1 ? device.nowPct : null)) !==
+        null &&
       (device.avg15Pct ?? device.nowPct) < 20 &&
       "GPU utilisation is under 20%.",
   ];

@@ -3,11 +3,14 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isolatedStatuslineEnv } from "./helpers.ts";
 
 const script = join(import.meta.dir, "..", "src", "statusline.ts");
 const esc = "\u001B[";
 const homes: string[] = [];
 const processes: ReturnType<typeof Bun.spawn>[] = [];
+const renderEnv = (home: string, pwd = home): NodeJS.ProcessEnv =>
+  isolatedStatuslineEnv({ ...process.env, HOME: home, PWD: pwd });
 
 afterEach(async () => {
   for (const proc of processes.splice(0)) {
@@ -103,7 +106,7 @@ test("live Codex PTY redraws changed pinned session and restores the terminal on
     [process.execPath, script, "--codex", "--interval", "1"],
     {
       cwd: home,
-      env: { ...process.env, HOME: home, PWD: "/fixture/codex" },
+      env: renderEnv(home, "/fixture/codex"),
       terminal: {
         cols: 100,
         rows: 24,
@@ -168,7 +171,7 @@ test("raw Ctrl+C cancels a frame collection with exit 130 and restores terminal 
     [process.execPath, script, "--codex", "--interval", "1"],
     {
       cwd: home,
-      env: { ...process.env, HOME: home, PWD: "/fixture/codex" },
+      env: renderEnv(home, "/fixture/codex"),
       terminal: {
         cols: 100,
         rows: 24,
@@ -208,7 +211,7 @@ test("live Codex rejects a selected rollout without a stable session ID", async 
   let output = "";
   const proc = Bun.spawn([process.execPath, script, "--codex", "--watch"], {
     cwd: home,
-    env: { ...process.env, HOME: home, PWD: "/fixture/codex" },
+    env: renderEnv(home, "/fixture/codex"),
     terminal: {
       cols: 100,
       rows: 24,
@@ -246,7 +249,7 @@ test("SIGTERM exits 143 and restores terminal modes", async () => {
     [process.execPath, script, "--codex", "--interval", "1"],
     {
       cwd: home,
-      env: { ...process.env, HOME: home, PWD: "/fixture/codex" },
+      env: renderEnv(home, "/fixture/codex"),
       terminal: {
         cols: 100,
         rows: 24,
@@ -273,7 +276,7 @@ test("live CLI rejects invalid interval and explicit watch without a TTY", () =>
     [process.execPath, script, "--codex", "--watch", "--interval", "Infinity"],
     {
       cwd: home,
-      env: { ...process.env, HOME: home, PWD: "/fixture/codex" },
+      env: renderEnv(home, "/fixture/codex"),
     },
   );
   expect(invalid.exitCode).toBe(2);
@@ -282,32 +285,32 @@ test("live CLI rejects invalid interval and explicit watch without a TTY", () =>
     [process.execPath, script, "--codex", "--watch"],
     {
       cwd: home,
-      env: { ...process.env, HOME: home, PWD: "/fixture/codex" },
+      env: renderEnv(home, "/fixture/codex"),
     },
   );
   expect(noTty.exitCode).toBe(2);
   expect(noTty.stderr.toString()).toContain("--watch requires a TTY");
   const conflict = Bun.spawnSync(
     [process.execPath, script, "--codex", "--watch", "--once"],
-    { cwd: home, env: { ...process.env, HOME: home } },
+    { cwd: home, env: renderEnv(home) },
   );
   expect(conflict.exitCode).toBe(2);
   expect(conflict.stderr.toString()).toContain("cannot be combined");
   const once = Bun.spawnSync([process.execPath, script, "--codex", "--once"], {
     cwd: home,
-    env: { ...process.env, HOME: home, PWD: "/fixture/codex" },
+    env: renderEnv(home, "/fixture/codex"),
   });
   expect(once.exitCode).toBe(0);
   expect(once.stdout.toString().endsWith("\n")).toBe(true);
   const misplacedInterval = Bun.spawnSync(
     [process.execPath, script, "--interval", "5"],
-    { cwd: home, env: { ...process.env, HOME: home } },
+    { cwd: home, env: renderEnv(home) },
   );
   expect(misplacedInterval.exitCode).toBe(2);
   expect(misplacedInterval.stderr.toString()).toContain("require --codex");
   const nonLiveInterval = Bun.spawnSync(
     [process.execPath, script, "--codex", "--interval", "5"],
-    { cwd: home, env: { ...process.env, HOME: home } },
+    { cwd: home, env: renderEnv(home) },
   );
   expect(nonLiveInterval.exitCode).toBe(2);
   expect(nonLiveInterval.stderr.toString()).toContain("requires live mode");

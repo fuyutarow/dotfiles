@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isolatedStatuslineEnv } from "./helpers.ts";
 
 const homes: string[] = [];
 afterEach(async () => {
@@ -18,11 +19,11 @@ test("statusline --codex defaults to PWD and reports a missing interactive sessi
   const script = join(import.meta.dir, "..", "src", "statusline.ts");
   const result = Bun.spawnSync([process.execPath, script, "--codex"], {
     cwd: home,
-    env: {
+    env: isolatedStatuslineEnv({
       HOME: home,
       PATH: process.env.PATH ?? "",
       PWD: "/fixture/codex",
-    },
+    }),
   });
   const output = result.stdout.toString();
   expect(result.exitCode).toBe(0);
@@ -35,11 +36,11 @@ test("statusline --codex defaults to PWD and reports a missing interactive sessi
     [process.execPath, script, "--codex", "--thread", "missing-thread-id"],
     {
       cwd: home,
-      env: {
+      env: isolatedStatuslineEnv({
         HOME: home,
         PATH: process.env.PATH ?? "",
         PWD: "/fixture/codex",
-      },
+      }),
     },
   );
   const threadError = threadResult.stderr.toString();

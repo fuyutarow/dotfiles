@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
 import { ProgressReaderSchema } from "../../shared/src/dispatch-state.ts";
 import { decodedJson } from "./decode.ts";
+import { isolatedStatuslineEnv } from "./helpers.ts";
 import {
   deadOwnMarker,
   malformedMarker,
@@ -120,17 +121,26 @@ const tokenLine = (
 async function render(
   stateDir?: string,
   xdgStateHome?: string,
+  dispatcherSession?: string,
 ): Promise<string> {
   const p = Bun.spawn([process.execPath, STATUSLINE], {
     stdin: new Blob([PAYLOAD]),
     stdout: "pipe",
     stderr: "pipe",
     env: {
-      HOME: scratch,
-      PATH: bin,
-      TZ: "UTC",
-      AGX_STATE_DIR: stateDir,
-      XDG_STATE_HOME: xdgStateHome,
+      ...isolatedStatuslineEnv({
+        HOME: scratch,
+        PATH: bin,
+        TZ: "UTC",
+        AGX_STATE_DIR: stateDir,
+        XDG_STATE_HOME: xdgStateHome,
+      }),
+      ...(dispatcherSession === undefined
+        ? {}
+        : {
+            AGX_DISPATCHER_SESSION: dispatcherSession,
+            CLAUDE_CODE_SESSION_ID: "environment-session-mismatch",
+          }),
     },
     timeout: 30_000,
   });
@@ -899,6 +909,37 @@ describe("statusline Run row", () => {
       8,
     );
     expect(out).not.toContain("more");
+  });
+
+  test("Job summary includes this session's named detached runs", async () => {
+    const dir = join(scratch, "detached-summary");
+    marker(
+      dir,
+      "run-t20arch",
+      process.pid,
+      "architecture",
+      60,
+      "dispatcher-short",
+      "sol-high",
+      "fixture",
+      "t20arch",
+    );
+    marker(
+      dir,
+      "run-integrev",
+      process.pid,
+      "integration review",
+      30,
+      "dispatcher-short",
+      "sonnet-high",
+      "fixture",
+      "integrev",
+    );
+
+    const out = await render(dir, undefined, "dispatcher-short");
+    expect(out).toContain("Job: 2 (t20arch, integrev)");
+    expect(out).toContain("architecture");
+    expect(out).toContain("integration review");
   });
 
   test("a marker whose process is gone is counted as stale, not hidden", async () => {

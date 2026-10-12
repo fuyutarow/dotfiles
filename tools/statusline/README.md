@@ -109,7 +109,7 @@ outside this scaffolding step.
 | src/rate-limits.ts                |   158 | Scoped model caps, window percentages and reset countdowns                |
 | src/render-cache.ts               |   144 | Persistent source caches and per-session cross-process render guard       |
 | src/repo-state.ts                 |    36 | Bounded branch lookup and explicit git failures                           |
-| src/statusline.ts                 |   349 | Claude/Codex entry, live refresh, render guard and snapshot writes         |
+| src/statusline.ts                 |   349 | Claude/Codex entry, live refresh, render guard and snapshot writes        |
 | src/storage.ts                    |   130 | Storage TOML reads, disk measurements, shared threshold calculation       |
 | src/zod.ts                        |    44 | Local JSON codecs and nullable-field schema helper                        |
 

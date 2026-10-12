@@ -4,7 +4,7 @@ import type { Dataframe } from "./dataframe.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
 import { admittedJobSegment } from "./jobs.ts";
-import { routeLines } from "./dispatch-runs.ts";
+import { currentDispatcherSession, routeLines } from "./dispatch-runs.ts";
 import { sysRow } from "./host-load.ts";
 
 const SEP = ` ${DIM}|${RST} `;
@@ -122,7 +122,29 @@ export function render(
   const sysLine = sysRow(df); // the Dataframe carries the HostLoad fields under the same names
 
   let jobLine: string | undefined;
-  if (df.jobScanWhy !== undefined) {
+  const dispatcherSession = currentDispatcherSession(df.sid);
+  const ownRuns =
+    df.routes?.isOk() === true && dispatcherSession !== undefined
+      ? df.routes.value.runs
+          .filter(
+            (run) => run.alive && run.dispatcherSession === dispatcherSession,
+          )
+          .toSorted((a, b) => b.secs - a.secs)
+      : [];
+  const runNames = ownRuns.map((run) => {
+    const displayId = run.displayId?.replace(/^agt_/u, "");
+    return displayId ?? run.label.replace(/^resume:\s*/u, "");
+  });
+  if (ownRuns.length > 0) {
+    const jobDetails = [`${ownRuns.length} (${runNames.join(", ")})`];
+    if (df.jobScanWhy !== undefined)
+      jobDetails.push(naSegment("scan", df.jobScanWhy));
+    else if (df.jobs.length > 0)
+      jobDetails.push(admittedJobSegment(df.jobs, 0).trim());
+    if (df.orphans > 0)
+      jobDetails.push(`${ESC}[38;5;167morphan×${df.orphans}${RST}`);
+    jobLine = `${ESC}[38;5;173mJob:${RST} ${jobDetails.join(` ${DIM}·${RST} `)}`;
+  } else if (df.jobScanWhy !== undefined) {
     // The process scan failed, so "no jobs" would be a guess; say the scan failed instead.
     jobLine = `${ESC}[38;5;173mJob:${RST} ${naSegment("scan", df.jobScanWhy)}`;
   } else if (df.jobs.length > 0 || df.orphans > 0) {
@@ -130,8 +152,6 @@ export function render(
     if (df.jobs.length > 0) {
       jobLine += admittedJobSegment(df.jobs, df.orphans);
     } else {
-      // Orphan processes alive with nothing admitted: waiting, wedged, or leaked — all three
-      // are states the harness reports as "idle", which is the failure this segment answers.
       jobLine += ` ${DIM}—${RST} ${ESC}[38;5;167morphan×${df.orphans}${RST}`;
     }
   }

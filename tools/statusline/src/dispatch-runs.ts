@@ -365,10 +365,11 @@ export function routeLines(
     (r) => r.dispatcherSession !== undefined && r.dispatcherSession !== "",
   );
   const unattributed = live.length - attributed.length;
+  const dispatcherSession = currentDispatcherSession(sessionId);
   const own =
-    sessionId === undefined || sessionId === ""
+    dispatcherSession === undefined || dispatcherSession === ""
       ? []
-      : attributed.filter((r) => r.dispatcherSession === sessionId);
+      : attributed.filter((r) => r.dispatcherSession === dispatcherSession);
   const other = attributed.length - own.length;
   const shown = own;
   const sessions = sessionDisplays(shown);
@@ -425,4 +426,18 @@ export function routeLines(
   ];
   if (summary.length > 0) lines.push(summary.join(` ${DIM}·${RST} `));
   return lines;
+}
+
+/** Match agx ps --mine: explicit agx override, Claude session environment, then payload. */
+export function currentDispatcherSession(
+  payloadSession: string | undefined,
+): string | undefined {
+  return (
+    [process.env.AGX_DISPATCHER_SESSION, process.env.CLAUDE_CODE_SESSION_ID]
+      .find((value) => value !== undefined && value.trim() !== "")
+      ?.trim() ??
+    (payloadSession === undefined || payloadSession.trim() === ""
+      ? undefined
+      : payloadSession.trim())
+  );
 }

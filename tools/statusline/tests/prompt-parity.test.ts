@@ -1,7 +1,12 @@
 import { afterAll, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanupTempDirs, tempHome, tempDir } from "./helpers.ts";
+import {
+  cleanupTempDirs,
+  isolatedStatuslineEnv,
+  tempHome,
+  tempDir,
+} from "./helpers.ts";
 
 // The statusline's first line copies the zsh PS1 head (user@host:time zone|cwd), but nothing tied
 // the two together: on 2026-10-06 the offset was desaturated in one and the owner found the other
@@ -60,6 +65,7 @@ function zshHead(home: string): Part[] {
         ZDOTDIR: zdot,
         HOST,
         PWD: REPO,
+        TERM: "xterm-256color",
         TZ: "UTC",
       },
       timeout: 30_000,
@@ -74,7 +80,7 @@ function statuslineHead(home: string): Part[] {
     {
       cwd: REPO,
       stdin: new Blob(["{}"]),
-      env: {
+      env: isolatedStatuslineEnv({
         ...process.env,
         HOME: home,
         HERDR_ENV: "0",
@@ -82,8 +88,9 @@ function statuslineHead(home: string): Part[] {
         AGX_STATE_DIR: join(home, "state"),
         PATH: tempDir("prompt-bin-"),
         PWD: REPO,
+        TERM: "xterm-256color",
         TZ: process.env.TZ ?? "UTC",
-      },
+      }),
       timeout: 30_000,
     },
   );

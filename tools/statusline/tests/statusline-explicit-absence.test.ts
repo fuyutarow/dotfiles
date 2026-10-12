@@ -17,7 +17,12 @@ import {
 import { join } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { jsonText, z } from "../src/zod.ts";
-import { cleanupTempDirs, tempDir, tempHome } from "./helpers.ts";
+import {
+  cleanupTempDirs,
+  isolatedStatuslineEnv,
+  tempDir,
+  tempHome,
+} from "./helpers.ts";
 import { decodedJson } from "./decode.ts";
 
 const STATUSLINE = join(import.meta.dir, "..", "src", "statusline.ts");
@@ -57,7 +62,12 @@ function render(opts: {
   const r = spawnSync(process.execPath, [STATUSLINE], {
     input: JSON.stringify(opts.payload ?? {}),
     encoding: "utf8",
-    env: { HOME: home, PATH: opts.bin, TZ: "UTC", ...opts.env }, // no inherited HERDR_*, no real tools
+    env: isolatedStatuslineEnv({
+      HOME: home,
+      PATH: opts.bin,
+      TZ: "UTC",
+      ...opts.env,
+    }), // no inherited HERDR_*, session identity or real tools
     cwd: tempDir("slcwd-"), // not a repo
   });
   expect(r.status).toBe(0);
@@ -213,12 +223,12 @@ describe("statusline Sys row: VRAM", () => {
     const home = tempHome();
     const r = spawnSync(process.execPath, [STATUSLINE], {
       encoding: "utf8",
-      env: {
+      env: isolatedStatuslineEnv({
         HOME: home,
         PATH: binWith({ "nvidia-smi": "echo '1, 2'" }),
         TZ: "UTC",
         STATUSLINE_SAMPLE_GPU: "1",
-      },
+      }),
     });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("refusing to run without it");
@@ -666,7 +676,7 @@ describe("statusline resource bounds", () => {
           stdin: new Blob([JSON.stringify({ session_id: "bounds-2" })]),
           stdout: "ignore",
           stderr: "ignore",
-          env: { HOME: home, PATH: bin, TZ: "UTC" },
+          env: isolatedStatuslineEnv({ HOME: home, PATH: bin, TZ: "UTC" }),
           cwd: tempDir("slcwd-"),
         }),
       );
@@ -710,7 +720,7 @@ describe("statusline resource bounds", () => {
             stdin: new Blob([JSON.stringify({})]),
             stdout: "pipe",
             stderr: "ignore",
-            env: { HOME: home, PATH: bin, TZ: "UTC" },
+            env: isolatedStatuslineEnv({ HOME: home, PATH: bin, TZ: "UTC" }),
             cwd: tempDir("slcwd-"),
           });
           const text = await new Response(p.stdout).text();

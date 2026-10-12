@@ -39,6 +39,8 @@ default; `--detach` hands them to the OS manager and prints `agx wait <ticket>`.
 
 - Effects / recovery: dispatch selects a row and starts a bounded worker; it writes a ticket, marker, content-addressed brief and receipt under state. A named ticket retains its existing home. Identical prompt-file instructions may reuse a released ticket name; different instructions require amendment or a new name. No force flag overwrites history. `--amend` validates input, interrupts the live router with SIGINT, waits up to 30 seconds, appends one AMEND section and resumes its vendor session (or repicks when requested). A failed stop leaves the worker running. Stored briefs and historical ledger rows remain readable.
 
+Dispatch claims its non-empty `writes` scope against a repository-identity lease registry shared by dispatcher sessions. The conservative glob-overlap rule refuses conflicts before selection with exit 2 and names the held glob, run, ticket, dispatcher session and start time. Read-only tickets do not claim leases. A lease remains while its run is live, or after completion while its workspace exists and changed files await acceptance; landing, acceptance or rejection, workspace removal, and terminal runs with no changed files release it. `agx ps` reports held leases for the current repository, and `agx ps --leases` lists them without filtering by dispatcher session.
+
 Before spawning, a per-run event journal records the sandbox, ticket, row, directory and known
 session. An unreadable worker receipt retains that metadata, so the ticket remains resumable,
 amendable and repickable. A historical continuation can inherit sandbox from its recorded ancestor.
@@ -57,7 +59,9 @@ opens the worker's promise block, and its id is kept on the marker and run recor
 
 `agx ps --mine` filters the run list to the current `dispatcher_session`. Table output includes
 the short dispatcher session id; `ps --json` rows include the full `dispatcher_session` (or
-`null` when the run has no recorded dispatcher session).
+`null` when the run has no recorded dispatcher session). Both human and JSON `ps` output include
+held leases for the current repository; `--leases` emits only those leases, and `--json` returns
+them in a top-level `leases` array.
 
 Capabilities accept plain routing tags or `{ need, lower_effort_lacks }` objects with non-empty
 strings. Only an object justifies xhigh/max. Without one, positive selection mass goes to the

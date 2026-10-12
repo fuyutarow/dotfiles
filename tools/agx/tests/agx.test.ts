@@ -3699,6 +3699,68 @@ const logLines = (state: string): z.output<typeof AnyLine>[] =>
 const lastJevBody = (): string => bodies.at(-1) ?? "";
 
 describe("agx dispatch: a brief with a ticket", () => {
+  test("overlapping writes in separate workspaces are refused across dispatcher sessions", async () => {
+    const state = join(scratch, "repo-lease-state");
+    const repo = join(scratch, "repo-lease-repo");
+    const firstCwd = join(repo, "workspace-a");
+    const secondCwd = join(repo, "workspace-b");
+    const release = join(scratch, "repo-lease-release");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    writeFileSync(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
+    mkdirSync(firstCwd, { recursive: true });
+    mkdirSync(secondCwd, { recursive: true });
+    const firstBrief = brief(
+      "repo-lease-first",
+      ticketText(
+        'name = "lease-first"\nwrites = ["src/**"]\nverify = ["true"]',
+        "PICK=luna-low\nWork.",
+      ),
+    );
+    const secondBrief = brief(
+      "repo-lease-second",
+      ticketText(
+        'name = "lease-second"\nwrites = ["src/**"]\nverify = ["true"]',
+        "PICK=luna-low\nWork.",
+      ),
+    );
+    const first = await router(
+      runArgs(firstBrief, firstCwd),
+      {
+        AGX_STATE_DIR: state,
+        AGX_DISPATCHER_SESSION: "alpha-session-a",
+        FAKE_BLOCK_UNTIL_FILE: release,
+      },
+      async () => {
+        using _releaseWorker = {
+          [Symbol.dispose]: () => {
+            writeFileSync(release, "release");
+          },
+        };
+        const markerDir = join(state, "active");
+        const deadline = performance.now() + 15_000;
+        while (performance.now() < deadline) {
+          if (
+            existsSync(markerDir) &&
+            readdirSync(markerDir).some(
+              (name) =>
+                name.endsWith(".json") && !name.endsWith(".progress.json"),
+            )
+          )
+            break;
+          await Bun.sleep(10);
+        }
+        const second = await router(runArgs(secondBrief, secondCwd), {
+          AGX_STATE_DIR: state,
+          AGX_DISPATCHER_SESSION: "beta-session-b",
+        });
+        expect(second.code).toBe(2);
+        expect(second.err).toContain("held by run");
+        expect(second.err).toContain("dispatcher alpha-se");
+      },
+    );
+    expect(first.code).toBe(0);
+  });
+
   test.each([
     ["RESOURCE-CLASS(NONCOMPUTE): CLI work", "token"],
     [
@@ -6039,7 +6101,7 @@ describe("agx ticket write enforcement", () => {
     expect(r.code).toBe(0);
   });
 
-  test("a live sibling owns an overlapping write even from another subdirectory of the workspace", async () => {
+  test("dispatch refuses an overlapping live sibling from another subdirectory of the repository", async () => {
     const cwd = freshCwd();
     mkdirSync(join(cwd, ".jj"));
     mkdirSync(join(cwd, "child"));
@@ -6067,27 +6129,11 @@ describe("agx ticket write enforcement", () => {
         ),
         cwd,
       ),
-      {
-        ...gitStatus("?? shared.txt\n"),
-        AGX_STATE_DIR: state,
-        FAKE_TOUCH: "shared.txt",
-        FAKE_LAST:
-          '```agx-return\n{"findings":[],"evidence":[],"impact_on_brief":"other writer","proposed_next":"none","artifacts":[]}\n```',
-      },
+      { AGX_STATE_DIR: state },
     );
-    const receipt = decodedJson(
-      z.looseObject({
-        writes_check: z.array(z.string()),
-        writes_unattributed: z.array(z.string()),
-        writes_violations: z.array(z.string()).optional(),
-      }),
-      r.out.trim(),
-    );
-    expect(receipt.writes_check).toEqual([]);
-    expect(receipt.writes_unattributed).toEqual(["shared.txt"]);
-    expect(receipt.writes_violations).toBeUndefined();
-    expect(r.err).toContain("changed by others (not attributed): shared.txt");
-    expect(r.code).toBe(0);
+    expect(r.err).toContain("agx: REFUSED: shared.txt is held by run sibling");
+    expect(r.err).toContain("ticket sibling");
+    expect(r.code).toBe(2);
   });
 
   test("unavailable change listing is recorded with its cause", async () => {

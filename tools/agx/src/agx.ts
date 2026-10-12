@@ -150,11 +150,6 @@ import { buildDetachedLaunch, type DetachPlatform } from "./detach.ts";
 import { planWorkspace } from "./workspaces.ts";
 import { createSparseWorkspace } from "./prepare-workspace.ts";
 import {
-  claimWriteLease,
-  listWriteLeases,
-  type WriteLease,
-} from "./write-leases.ts";
-import {
   checkoutBytes,
   sparseWorkspaceBytes,
   workspaceCommand,
@@ -2479,30 +2474,6 @@ async function run(flags: RunFlags): Promise<number> {
     dispatchError(`agx: warning: ${warning}`);
   if (parsed.kind === "invalid") fatal(parsed.reason);
   const ticket = parsed.ticket;
-  const runId = flags.runId ?? newRunId();
-  flags.runId = runId;
-  if ((ticket?.writes.length ?? 0) > 0) {
-    const repo = workspaceRoot(flags.cd);
-    const active = readActive().filter(
-      (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
-    );
-    const evidence = readAllLog();
-    const observed = observedRepositoryLeases(repo, active, evidence);
-    const lease = claimWriteLease({
-      stateDir: STATE_DIR,
-      repo,
-      run_id: runId,
-      cwd: resolve(flags.cd),
-      writes: ticket?.writes ?? [],
-      ticket: flags.name ?? ticket?.name ?? runId,
-      dispatcher_session: currentDispatcherSession() ?? "unknown",
-      since: now(),
-      activeRunIds: new Set(active.map((entry) => entry.active.run_id)),
-      evidence,
-      observed,
-    });
-    if (!lease.ok) fatal(lease.error);
-  }
   const roster = await loadRosterOrDie();
   const overrideRow =
     flags.row === undefined ? undefined : refuseUnrunnable(roster, flags.row);
@@ -2647,7 +2618,6 @@ interface Launch {
 
 /** Start the worker for a pick, wait for it, verify and grade; shared by `run` and `resume`. */
 async function launch(l: Launch): Promise<number> {
-  const runId = l.flags.runId ?? newRunId();
   const selected = l.roster.choice.find((row) => row.id === l.pick.choice);
   if (
     selected !== undefined &&
@@ -2755,6 +2725,7 @@ async function launch(l: Launch): Promise<number> {
     });
     if (!admitted.ok) fatal(admitted.reason);
   }
+  const runId = flags.runId ?? newRunId();
   const ticketName =
     flags.name ?? ticket?.name ?? displayId.slice("agt_".length);
   const home = ticketHome(
@@ -4593,75 +4564,6 @@ function readAllLog(): Logged[] {
   return parseLogLines(ledgerLines(STATE_DIR));
 }
 
-function terminalWriteLease(
-  repo: string,
-  entry: Logged,
-  accepted: ReadonlySet<string>,
-): WriteLease[] {
-  const writes = entry.ticket?.writes ?? [];
-  const id = entry.run_id;
-  if (
-    id === undefined ||
-    entry.cwd === undefined ||
-    workspaceRoot(entry.cwd) !== repo ||
-    writes.length === 0 ||
-    (entry.facts?.changed_files?.length ?? 0) === 0 ||
-    accepted.has(id) ||
-    !existsSync(entry.cwd)
-  )
-    return [];
-  return [
-    {
-      repo,
-      run_id: id,
-      cwd: entry.cwd,
-      writes,
-      ticket: entry.ticket?.name ?? entry.display_id ?? id,
-      dispatcher_session: entry.dispatcher_session ?? "unknown",
-      since: entry.started_at ?? entry.ended_at ?? now(),
-    },
-  ];
-}
-
-function observedRepositoryLeases(
-  repo: string,
-  active: { active: Active }[],
-  evidence: Logged[],
-): WriteLease[] {
-  const accepted = new Set(
-    evidence.flatMap((entry) =>
-      entry.kind === "acceptance" && entry.run_id !== undefined
-        ? [entry.run_id]
-        : [],
-    ),
-  );
-  const latest = new Map<string, Logged>();
-  for (const entry of evidence)
-    if (entry.kind === "run" && entry.run_id !== undefined)
-      latest.set(entry.run_id, entry);
-  const live = active.flatMap(({ active: marker }) => {
-    const writes = marker.ticket?.writes ?? [];
-    if (writes.length === 0 || workspaceRoot(marker.cwd) !== repo) return [];
-    return [
-      {
-        repo,
-        run_id: marker.run_id,
-        cwd: marker.cwd,
-        writes,
-        ticket: marker.ticket?.name ?? marker.display_id ?? marker.run_id,
-        dispatcher_session: marker.dispatcher_session ?? "unknown",
-        since: marker.started_at,
-      },
-    ];
-  });
-  return [
-    ...live,
-    ...[...latest.values()].flatMap((entry) =>
-      terminalWriteLease(repo, entry, accepted),
-    ),
-  ];
-}
-
 type RunState = "running" | "returned" | "done" | "failed" | "abandoned";
 
 function stateOfRecord(record: Logged): RunState {
@@ -4899,45 +4801,7 @@ function oneLineSummary(value: string): string {
     .slice(0, 200);
 }
 
-function psCommand(
-  showAll: boolean,
-  asJson: boolean,
-  mine: boolean,
-  leasesOnly: boolean,
-): number {
-  const repo = workspaceRoot(process.cwd());
-  const evidence = readAllLog();
-  const active = readActive().filter((entry) => entry.alive);
-  const leaseResult = listWriteLeases({
-    stateDir: STATE_DIR,
-    repo,
-    activeRunIds: new Set(active.map((entry) => entry.active.run_id)),
-    evidence,
-  });
-  if (!leaseResult.ok) fatal(`cannot read write leases: ${leaseResult.error}`);
-  const leasesById = new Map(
-    [
-      ...leaseResult.value,
-      ...observedRepositoryLeases(repo, active, evidence),
-    ].map((lease) => [lease.run_id, lease]),
-  );
-  const leases = [...leasesById.values()];
-  if (leasesOnly) {
-    if (asJson)
-      process.stdout.write(`${JSON.stringify({ schema: SCHEMA, leases })}\n`);
-    else {
-      process.stdout.write("repo\trun_id\tticket\tdispatcher\tsince\twrites\n");
-      process.stdout.write(
-        leases
-          .map(
-            (lease) =>
-              `${lease.repo}\t${lease.run_id}\t${lease.ticket}\t${lease.dispatcher_session.slice(0, 8)}\t${lease.since}\t${lease.writes.join(",")}\n`,
-          )
-          .join(""),
-      );
-    }
-    return 0;
-  }
+function psCommand(showAll: boolean, asJson: boolean, mine: boolean): number {
   const markers = new Map(
     readActive().map((entry) => [entry.active.run_id, entry]),
   );
@@ -5021,11 +4885,11 @@ function psCommand(
 
   if (asJson) {
     process.stdout.write(
-      `${JSON.stringify({ schema: SCHEMA, runs: visibleRows, leases })}\n`,
+      `${JSON.stringify({ schema: SCHEMA, runs: visibleRows })}\n`,
     );
     return 0;
   }
-  if (visibleRows.length === 0 && leases.length === 0) {
+  if (visibleRows.length === 0) {
     process.stdout.write("agx ps: no runs\n");
     return 0;
   }
@@ -5036,13 +4900,6 @@ function psCommand(
     process.stdout.write(
       `${row.name}\t${row.proposition ?? "-"}\t${row.row}\t${row.kind}\t${row.labels.join(",")}\t${row.state}\t${row.age}\t${row.summary ?? ""}\t${row.dispatcher_session?.slice(0, 8) ?? "-"}\t${row.id}\n`,
     );
-  if (leases.length > 0) {
-    process.stdout.write("Held write leases in this repository:\n");
-    for (const lease of leases)
-      process.stdout.write(
-        `${lease.writes.join(", ")} — run ${lease.run_id} (ticket ${lease.ticket}, dispatcher ${lease.dispatcher_session.slice(0, 8)}, since ${lease.since})\n`,
-      );
-  }
   return 0;
 }
 
@@ -5948,31 +5805,6 @@ async function resumeCommand(
   if (parsed.kind === "invalid")
     fatal(`run ${runId}: its stored ticket is invalid: ${parsed.reason}`);
   const ticket = parsed.ticket;
-  const resumedRunId =
-    argv.command === "dispatch" && argv.flags.runId !== undefined
-      ? argv.flags.runId
-      : newRunId();
-  if (ticket.writes.length > 0) {
-    const repo = workspaceRoot(cwd);
-    const active = readActive().filter(
-      (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
-    );
-    const evidence = readAllLog();
-    const lease = claimWriteLease({
-      stateDir: STATE_DIR,
-      repo,
-      run_id: resumedRunId,
-      cwd,
-      writes: ticket.writes,
-      ticket: logged.ticket?.name ?? ticket.name ?? runId,
-      dispatcher_session: currentDispatcherSession() ?? "unknown",
-      since: now(),
-      activeRunIds: new Set(active.map((entry) => entry.active.run_id)),
-      evidence,
-      observed: observedRepositoryLeases(repo, active, evidence),
-    });
-    if (!lease.ok) fatal(lease.error);
-  }
   const ticketGrade = floorTicketGrade(brief, parsed, row.effort);
   if (promptFile !== undefined && !existsSync(promptFile))
     fatal(`no such message file: ${promptFile}`);
@@ -5997,7 +5829,9 @@ async function resumeCommand(
       timeoutS,
       timeoutReason,
       noGrader: false,
-      runId: resumedRunId,
+      ...(argv.command === "dispatch" && argv.flags.runId !== undefined
+        ? { runId: argv.flags.runId }
+        : {}),
     },
     brief,
     ticket,
@@ -6460,10 +6294,6 @@ async function parseAgx() {
           mine: {
             type: Boolean,
             description: "show only runs dispatched by this session",
-          },
-          leases: {
-            type: Boolean,
-            description: "list write leases held in this repository",
           },
         },
       },
@@ -7706,7 +7536,6 @@ async function main(): Promise<number | undefined> {
       argv.flags.all ?? false,
       argv.flags.json ?? false,
       argv.flags.mine ?? false,
-      argv.flags.leases ?? false,
     );
   if (argv.command === "show") {
     if (argv._.length !== 1) fatal("show needs <run_id|name|latest>");

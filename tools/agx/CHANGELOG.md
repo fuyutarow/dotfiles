@@ -1,9 +1,5 @@
 # Changelog
 
-## 3.5.0 — 2026-10-12
-
-- Enforce repository-wide write leases across workspaces and dispatcher sessions. Overlapping dispatches refuse with the holder; `agx ps` reports held leases and `agx ps --leases` lists them for the current repository.
-
 ## 3.4.2 — 2026-10-12
 
 - Preserve Claude dispatcher attribution when the internal override is blank, and reject ticket workspace routing instead of silently using the prior cwd.

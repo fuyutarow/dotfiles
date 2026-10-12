@@ -287,7 +287,12 @@ test("system precondition skips successfully for tier selection and exits 4 when
     { wsl: false, sudo: true },
   ]) {
     const logs: string[] = [];
-    const target = createSystemTarget(systemOptions);
+    const target = createSystemTarget({
+      ...systemOptions,
+      rootUnitSudo: false,
+      fstrimUnitInstalled: false,
+      run: () => ({ code: 1, out: "", err: "fixture denies system commands" }),
+    });
     const implicit = await run(
       [target],
       options({

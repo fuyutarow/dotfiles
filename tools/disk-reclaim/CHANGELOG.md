@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 — 2026-10-12
+
+- Discover legacy graveyard-* directories on tmpfs/ramfs and permanently purge them in the blind tier, reporting bytes and inode entry counts.
+
 ## 1.2.0 — 2026-10-12
 
 - Add tmpfs usage reporting, safe stale temporary-directory cleanup, and verified relocation of RAM-backed rip graveyards.

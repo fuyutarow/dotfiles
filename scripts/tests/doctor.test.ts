@@ -35,9 +35,12 @@ import { STEPS } from "../post-merge.ts";
 // (its ~/.ssh/config.local names a HostName) — doctor SKIPs smart-open everywhere else.
 const sshV = Bun.spawnSync(["ssh", "-V"], { stderr: "pipe" }).stderr.toString();
 const OLD_SSH = !sshSupportsAttachMatch(sshV);
-const ATTACHES_TO_R99 = !Bun.spawnSync(["ssh", "-G", "r99-u24"], {
-  stdout: "pipe",
-})
+const ATTACHES_TO_R99 = !Bun.spawnSync(
+  ["ssh", "-G", "-F", join(import.meta.dir, "../../ssh/config"), "r99-u24"],
+  {
+    stdout: "pipe",
+  },
+)
   .stdout.toString()
   .split("\n")
   .includes("hostname r99-u24");
@@ -61,6 +64,7 @@ function doctor(
     RIP_GRAVEYARD?: string;
     XDG_DATA_HOME?: string;
     USER?: string;
+    DOCTOR_TEST_TMP_ROOT?: string;
   },
 ): { code: number; out: string } {
   const proc = Bun.spawnSync([process.execPath, SCRIPT], {
@@ -154,24 +158,30 @@ describe("doctor", () => {
     );
   });
 
-  test("rip-graveyard-tmp warns with size and permission-restoring cleanup command", () => {
+  test("rip-graveyard-tmp fails for any leftover and names reclaim", () => {
     const user = `doctor-${Temporal.Now.instant().epochMilliseconds}-${crypto.randomUUID().slice(0, 8)}`;
-    const stale = `/tmp/graveyard-${user}`;
+    const root = tmp("doctor-stale-root-");
+    const stale = join(root, `graveyard-${user}`);
     mkdirSync(stale);
     writeFileSync(join(stale, "old-entry"), "deleted");
     const result = doctor("rip-graveyard-tmp", {
       HOME: tmp("doctor-rip-graveyard-tmp-home-"),
       DOTFILES: REPO,
       USER: user,
+      DOCTOR_TEST_TMP_ROOT: root,
     });
     rmSync(stale, { recursive: true, force: true });
-    expect(result.code).toBe(0);
-    expect(result.out).toContain(
-      `WARN  rip-graveyard-tmp  leftover ${stale} is 7 bytes`,
-    );
-    expect(result.out).toContain(
-      `chmod -R u+w '${stale}' && rm -rf '${stale}'`,
-    );
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("FAIL  rip-graveyard-tmp");
+    expect(result.out).toContain("disk-reclaim run --tier blind --yes");
+    expect(result.out).toContain(stale);
+    expect(
+      doctor("rip-graveyard-tmp", {
+        HOME: tmp("doctor-stale-home-"),
+        DOTFILES: REPO,
+        DOCTOR_TEST_TMP_ROOT: root,
+      }).code,
+    ).toBe(0);
   });
 
   test("google-drive: both declared links must match discovered Drive targets", async () => {
@@ -300,7 +310,7 @@ describe("doctor", () => {
       );
     }
   });
-  test("codex-remote: non-WSL unmanaged server warns without taking it over", async () => {
+  test("codex-remote: non-WSL unmanaged server warns without taking it over", () => {
     const home = tmp("doctor-home-");
     const bin = tmp("doctor-fake-path-");
     writeFileSync(join(bin, "codex"), "#!/bin/sh\nexit 99\n");
@@ -310,24 +320,25 @@ describe("doctor", () => {
     );
     chmodSync(join(bin, "codex"), 0o755);
     chmodSync(join(bin, "ps"), 0o755);
-    const previousPath = process.env.PATH;
-    process.env.PATH = bin;
-    using _restorePath = {
-      [Symbol.dispose]: () => {
-        if (previousPath === undefined) delete process.env.PATH;
-        else process.env.PATH = previousPath;
-      },
-    };
-    const finding = await checkCodexRemote({
+    const ctx = {
       home,
       dotfiles: REPO,
       isMac: false,
       isWsl: false,
       isCoreBox: false,
-    });
-
-    expect(finding.verdict).toBe("WARN");
-    expect(finding.fix).toBe(
+    };
+    const result = Bun.spawnSync(
+      [
+        process.execPath,
+        "--eval",
+        `import { checkCodexRemote } from ${JSON.stringify(SCRIPT)}; console.log(JSON.stringify(await checkCodexRemote(JSON.parse(process.argv[1]))));`,
+        JSON.stringify(ctx),
+      ],
+      { env: { ...process.env, PATH: bin } },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toContain('"verdict":"WARN"');
+    expect(result.stdout.toString()).toContain(
       "restart it as a managed daemon when the desktop session is not in use",
     );
   });

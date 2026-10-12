@@ -63,6 +63,76 @@ const bash = (command: string) => ({
 });
 
 const GiB = 1024 ** 3;
+test.each([
+  {
+    type: 0x01021994,
+    free: 50,
+    expected: "deny",
+    message: "95.0% inodes used",
+  },
+  {
+    type: 0x858458f6,
+    free: 0,
+    expected: "deny",
+    message: "100.0% inodes used",
+  },
+  {
+    type: 0x01021994,
+    free: 150,
+    expected: undefined,
+    message: "85.0% inodes used",
+  },
+  { type: 0x01021994, free: 151, expected: undefined, message: undefined },
+  { type: 0xef53, free: 0, expected: undefined, message: undefined },
+])(
+  "RAM inode thresholds with healthy bytes: %j",
+  ({ type, free, expected, message }) => {
+    const root = mkdtempSync(join(tmpdir(), "inode-fixture-"));
+    const fixture = cachedConfig(
+      (c) => {
+        for (const row of Object.values(c.drive)) {
+          row.deny_gib = 0;
+          row.deny_pct = 0;
+          row.warn_gib = 0;
+          row.warn_pct = 0;
+        }
+        c.drive.tmp = {
+          label: "fixture tmp",
+          path: root,
+          deny_gib: 0,
+          deny_pct: 0,
+        };
+      },
+      100 * GiB,
+      200 * GiB,
+    );
+    const dir = join(
+      fixture.home,
+      ".cache",
+      "claude-hooks",
+      "storage-headroom",
+    );
+    writeFileSync(
+      join(dir, `${createHash("sha1").update(root).digest("hex")}.statfs.json`),
+      JSON.stringify({
+        free: 100 * GiB,
+        total: 200 * GiB,
+        type,
+        files: 1000,
+        ffree: free,
+        at: Number(fixture.env.STORAGE_HEADROOM_NOW_MS),
+      }),
+    );
+    fixture.env.TMPDIR = root;
+    const result = runHook(HOOK, bash("touch output"), fixture.env);
+    expect(decisionOf(result.stdout)?.permissionDecision).toBe(expected);
+    if (message === undefined) expect(result.stdout).toBe("");
+    else expect(result.stdout).toContain(message);
+    expect(runHook(HOOK, bash("disk-reclaim plan"), fixture.env).stdout).toBe(
+      "",
+    );
+  },
+);
 const fixtureSpace = new Map<string, { free: number; total: number }>();
 
 function runHook(

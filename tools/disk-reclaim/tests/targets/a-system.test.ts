@@ -27,6 +27,8 @@ describe("system target", () => {
     const target = createSystemTarget({
       wsl: true,
       sudo: true,
+      fstrimUnitInstalled: false,
+      rootUnitSudo: false,
       run: (argv) => {
         calls.push(argv);
         return { code: 0, out: "", err: "" };
@@ -56,7 +58,12 @@ describe("system target", () => {
   });
   test("blind unmet preconditions skip; explicitly named unmet target exits 4", () => {
     expect(
-      createSystemTarget({ wsl: false, sudo: false }).available(),
+      createSystemTarget({
+        wsl: false,
+        sudo: false,
+        rootUnitSudo: false,
+        fstrimUnitInstalled: false,
+      }).available(),
     ).toMatchObject({ available: false });
     expect(systemExitCode(false, false)).toBe(0);
     expect(systemExitCode(true, false)).toBe(4);
@@ -95,6 +102,7 @@ describe("system target", () => {
       wsl: true,
       sudo: true,
       fstrimUnitInstalled: false,
+      rootUnitSudo: false,
       run: () => ({ code: 0, out: "", err: "" }),
     });
     const candidate = target.plan(systemContext)[2];

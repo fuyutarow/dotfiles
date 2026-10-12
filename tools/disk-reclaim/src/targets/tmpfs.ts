@@ -1,26 +1,32 @@
 import {
   accessSync,
-  chmodSync,
-  copyFileSync,
   existsSync,
   lstatSync,
-  mkdirSync,
   readFileSync,
   readdirSync,
-  rmSync,
   statfsSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { inspectRipGraveyard } from "../lib/graveyards.ts";
+import { basename, dirname, join, resolve } from "node:path";
+import { countEntries } from "../lib/purge-progress.ts";
+import { removeTree } from "../lib/remove-tree.ts";
 import { collectProcesses } from "../lib/procs.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 
 type Mount = { path: string; type: string };
+type Filesystem = {
+  type: bigint;
+  files: bigint;
+  ffree: bigint;
+  blocks: bigint;
+  bfree: bigint;
+  bsize: bigint;
+};
 type TmpfsOptions = {
   mounts?: () => Mount[];
+  statfs?: (path: string) => Filesystem;
   uid?: () => number;
   now?: () => number;
   isOpen?: (path: string) => boolean | null;
@@ -49,7 +55,8 @@ function awaitMountInfo(): Mount[] | null {
   if (text.isErr()) return null;
   return text.value.split("\n").flatMap((line) => {
     const parts = line.split(" - ");
-    if (parts.length !== 2 || !(parts[1] ?? "").startsWith("tmpfs ")) return [];
+    if (parts.length !== 2 || !/^(tmpfs|ramfs) /u.test(parts[1] ?? ""))
+      return [];
     const fields = parts[0]?.split(" ");
     const path = fields?.[4]?.replaceAll(/\\([0-7]{3})/gu, (_m, oct: string) =>
       String.fromCodePoint(Number.parseInt(oct, 8)),
@@ -106,8 +113,11 @@ function candidate(
   };
 }
 
-function usage(path: string) {
-  const fs = statfsSync(path, { bigint: true });
+function usage(
+  path: string,
+  measure: (p: string) => Filesystem = (p) => statfsSync(p, { bigint: true }),
+) {
+  const fs = measure(path);
   const totalInodes = Number(fs.files);
   const freeInodes = Number(fs.ffree);
   const totalBytes = Number(fs.blocks * fs.bsize);
@@ -140,72 +150,6 @@ function pathExists(path: string) {
   return fromThrowable(() => existsSync(path))();
 }
 
-function copyTree(source: string, destination: string): boolean {
-  const statResult = fromThrowable(() => lstatSync(source))();
-  if (statResult.isErr()) return false;
-  const stat = statResult.value;
-  if (stat.isSymbolicLink()) return false;
-  if (stat.isDirectory()) {
-    const mkdir = fromThrowable(() => {
-      mkdirSync(destination, { mode: (stat.mode & 0o777) | 0o700 });
-    })();
-    if (mkdir.isErr()) return false;
-    const names = fromThrowable(() => readdirSync(source))();
-    const copied =
-      names.isOk() &&
-      names.value.every((name) =>
-        copyTree(join(source, name), join(destination, name)),
-      );
-    if (!copied) return false;
-    return fromThrowable(() => {
-      chmodSync(destination, stat.mode & 0o777);
-    })().isOk();
-  }
-  const parent = fromThrowable(() => {
-    mkdirSync(dirname(destination), { recursive: true });
-  })();
-  if (parent.isErr()) return false;
-  const copied = fromThrowable(() => {
-    copyFileSync(source, destination);
-  })();
-  if (copied.isErr()) return false;
-  return fromThrowable(() => {
-    chmodSync(destination, stat.mode & 0o777);
-  })().isOk();
-}
-
-function sameTree(source: string, destination: string): boolean {
-  const pair = fromThrowable(() => ({
-    left: lstatSync(source),
-    right: lstatSync(destination),
-  }))();
-  if (pair.isErr()) return false;
-  const { left, right } = pair.value;
-  if (
-    left.isDirectory() !== right.isDirectory() ||
-    left.isSymbolicLink() ||
-    right.isSymbolicLink()
-  )
-    return false;
-  if (!left.isDirectory()) {
-    const contents = fromThrowable(
-      () => [readFileSync(source), readFileSync(destination)] as const,
-    )();
-    return contents.isOk() && contents.value[0].equals(contents.value[1]);
-  }
-  const sourceNames = fromThrowable(() => readdirSync(source).toSorted())();
-  const destinationNames = fromThrowable(() =>
-    readdirSync(destination).toSorted(),
-  )();
-  if (sourceNames.isErr() || destinationNames.isErr()) return false;
-  return (
-    sourceNames.value.join("\0") === destinationNames.value.join("\0") &&
-    sourceNames.value.every((name) =>
-      sameTree(join(source, name), join(destination, name)),
-    )
-  );
-}
-
 export function createTmpfsTarget(options: TmpfsOptions = {}) {
   const mounts = options.mounts ?? mountedTmpfs;
   const uid = options.uid ?? (() => process.getuid?.() ?? 0);
@@ -218,7 +162,8 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
         "graveyard",
       ));
   const ripGraveyard =
-    options.ripGraveyard ?? (() => process.env.RIP_GRAVEYARD);
+    options.ripGraveyard ??
+    (() => process.env.RIP_GRAVEYARD ?? process.env.GRAVEYARD);
   const beforeUse = new Map<string, ReturnType<typeof usage>>();
   return {
     name: "tmpfs",
@@ -257,11 +202,30 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
         isDiskPath: options.isDiskPath ?? isDiskBacked,
       };
       const roots = new Set(mountList.map((mount) => resolve(mount.path)));
-      return mountList.flatMap((mount) =>
-        planMount(mount, roots, planOptions, beforeUse),
+      const rows = mountList.flatMap((mount) =>
+        planMount(mount, roots, planOptions, beforeUse, options.statfs),
       );
+      const declared = planOptions.ripGraveyard;
+      if (
+        declared !== undefined &&
+        !rows.some((row) => row.path === declared) &&
+        mountList.some((mount) =>
+          declared.startsWith(`${resolve(mount.path)}/`),
+        )
+      ) {
+        const fs = fromThrowable(() =>
+          (options.statfs ?? ((p: string) => statfsSync(p, { bigint: true })))(
+            declared,
+          ),
+        )();
+        if (fs.isOk() && [TMPFS_MAGIC, RAMFS_MAGIC].includes(fs.value.type)) {
+          const row = planEntry(declared, basename(declared), planOptions);
+          rows.push(...(row === null ? [] : [row]));
+        }
+      }
+      return rows;
     },
-    act: (item: Candidate, _ctx: Context) => {
+    act: async (item: Candidate, _ctx: Context) => {
       const path = item.path;
       if (item.verdict !== "RECLAIM" || path === null)
         return {
@@ -269,44 +233,6 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
           bytes_freed: null,
           error: "tmpfs candidate is not reclaimable",
         };
-      if (item.action.argv[0] === "relocate-graveyard") {
-        const destination = item.action.argv[1];
-        if (destination === undefined)
-          return {
-            ok: false,
-            bytes_freed: null,
-            error: "graveyard destination is missing",
-          };
-        const existing = fromThrowable(() => existsSync(destination))();
-        if (existing.isErr() || existing.value)
-          return {
-            ok: false,
-            bytes_freed: null,
-            error: "graveyard destination already exists or cannot be checked",
-          };
-        const diskPath = options.isDiskPath ?? isDiskBacked;
-        if (!diskPath(destination))
-          return {
-            ok: false,
-            bytes_freed: null,
-            error: "graveyard destination is RAM-backed; tmpfs source retained",
-          };
-        const parent = fromThrowable(() =>
-          mkdirSync(dirname(destination), { recursive: true }),
-        )();
-        if (parent.isErr())
-          return {
-            ok: false,
-            bytes_freed: null,
-            error: "cannot create disk graveyard parent",
-          };
-        if (!copyTree(path, destination) || !sameTree(path, destination))
-          return {
-            ok: false,
-            bytes_freed: null,
-            error: "graveyard copy verification failed; tmpfs source retained",
-          };
-      }
       const size = fromThrowable(() => allocatedBytes(path))();
       if (size.isErr())
         return {
@@ -314,14 +240,12 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
           bytes_freed: null,
           error: "cannot measure tmpfs candidate",
         };
-      const removed = fromThrowable(() => {
-        rmSync(path, { recursive: true, force: false });
-      })();
-      if (removed.isErr())
+      const removed = await removeTree(path, { uid: uid(), progress: false });
+      if (!removed.ok)
         return {
           ok: false,
           bytes_freed: null,
-          error: "direct tmpfs removal failed",
+          error: `direct tmpfs removal failed: ${JSON.stringify([...removed.refused, ...removed.errors])}`,
         };
       for (const [root, before] of beforeUse) logUsage(root, before, _ctx.log);
       return { ok: true, bytes_freed: size.value, error: null };
@@ -370,10 +294,18 @@ function planEntry(
       null,
       { kind: "command", argv: [] },
     );
-  const isGraveyard = path === options.ripGraveyard;
+  const isGraveyard =
+    path === options.ripGraveyard ||
+    name === "graveyard" ||
+    name.startsWith("graveyard-");
   const isTempDirectory =
     st.isDirectory() && !st.isSymbolicLink() && tempName.test(name);
   if (!isGraveyard && !isTempDirectory) return null;
+  if (st.isSymbolicLink())
+    return candidate(path, "KEEP", "graveyard symlink is not traversed", null, {
+      kind: "command",
+      argv: [],
+    });
   const owned = fromThrowable(() => treeOwnedBy(path, options.uid))();
   if (owned.isErr() || !owned.value)
     return candidate(
@@ -407,26 +339,14 @@ function planEntry(
       argv: [],
     });
   }
-  const graveyard = isGraveyard
-    ? fromThrowable(() => inspectRipGraveyard(path))()
-    : null;
-  if (graveyard?.isOk() === true && graveyard.value.ramBacked) {
-    const exists = pathExists(options.diskGraveyard);
-    const onDisk = options.isDiskPath(options.diskGraveyard);
-    const canMove = exists.isOk() && !exists.value && onDisk;
-    let reason: string;
-    if (canMove)
-      reason = `relocate rip graveyard to ${options.diskGraveyard}; verify copy, then remove tmpfs copy`;
-    else if (onDisk)
-      reason = `destination exists or cannot be checked: ${options.diskGraveyard}`;
-    else reason = `destination is RAM-backed: ${options.diskGraveyard}`;
-    const verdict = canMove ? "RECLAIM" : "ASK";
+  if (isGraveyard) {
+    const bytes = fromThrowable(() => allocatedBytes(path))().unwrapOr(null);
     return candidate(
       path,
-      verdict,
-      reason,
-      fromThrowable(() => allocatedBytes(path))().unwrapOr(null),
-      { kind: "command", argv: ["relocate-graveyard", options.diskGraveyard] },
+      "RECLAIM",
+      `stale RAM-backed graveyard; permanent purge; ${1 + countEntries(path)} inodes; ${bytes ?? "unmeasured"} bytes`,
+      bytes,
+      { kind: "delete", argv: [path] },
     );
   }
   if (!isTempDirectory) return null;
@@ -450,8 +370,9 @@ function planMount(
   allMountRoots: Set<string>,
   options: PlanOptions,
   beforeUse: Map<string, ReturnType<typeof usage>>,
+  measure: (p: string) => Filesystem = (p) => statfsSync(p, { bigint: true }),
 ): Candidate[] {
-  const fs = fromThrowable(() => statfsSync(mount.path, { bigint: true }))();
+  const fs = fromThrowable(() => measure(mount.path))();
   if (
     fs.isErr() ||
     (fs.value.type !== TMPFS_MAGIC && fs.value.type !== RAMFS_MAGIC)
@@ -462,7 +383,7 @@ function planMount(
     accessSync(root, 2);
   })();
   if (writable.isErr()) return [];
-  const measured = fromThrowable(() => usage(root))();
+  const measured = fromThrowable(() => usage(root, measure))();
   if (measured.isErr()) return [];
   beforeUse.set(root, measured.value);
   const usageRow = candidate(

@@ -341,26 +341,25 @@ export async function checkRipGraveyard(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkRipGraveyardTmp(): Promise<Finding> {
-  const user = process.env.USER ?? userInfo().username;
-  const legacy = `/tmp/graveyard-${user}`;
-  if (!existsSync(legacy))
-    return pass("rip-graveyard-tmp", "no leftover /tmp graveyard");
-
-  const measured = await attempt(() => inspectRipGraveyard(legacy));
-  if (!measured.ok)
-    return warn(
+  const root = process.env.DOCTOR_TEST_TMP_ROOT ?? "/tmp";
+  const entries = await attempt(() =>
+    readdirSync(root)
+      .filter((name) => name.startsWith("graveyard-"))
+      .map((name) => join(root, name)),
+  );
+  if (!entries.ok)
+    return fail(
       "rip-graveyard-tmp",
-      `found ${legacy}, but could not measure its size: ${errorMessage(measured.error)}`,
+      `cannot inspect ${root}: ${errorMessage(entries.error)}`,
+      "disk-reclaim plan",
     );
-
-  const quoted = `'${legacy.replaceAll("'", "'\\''")}'`;
-  return {
-    ...warn(
-      "rip-graveyard-tmp",
-      `leftover ${legacy} is ${measured.value.bytes} bytes`,
-    ),
-    fix: `chmod -R u+w ${quoted} && rm -rf ${quoted}`,
-  };
+  if (entries.value.length === 0)
+    return pass("rip-graveyard-tmp", "no leftover /tmp graveyard");
+  return fail(
+    "rip-graveyard-tmp",
+    `leftover RAM graveyard(s): ${entries.value.join(", ")}`,
+    "disk-reclaim run --tier blind --yes",
+  );
 }
 
 // Every file scripts/render-home.ts writes (scripts/config-registry.ts RENDERED), as a path under

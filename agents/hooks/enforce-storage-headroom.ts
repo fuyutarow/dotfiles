@@ -919,9 +919,27 @@ function nowMs(): number {
     : Temporal.Now.instant().epochMilliseconds;
 }
 
-async function space(
-  path: string,
-): Promise<{ free: number; total: number } | null> {
+type Space = {
+  free: number;
+  total: number;
+  type?: number | undefined;
+  files?: number | undefined;
+  ffree?: number | undefined;
+};
+
+function inodeUse(sp: Space | null): number | null {
+  if (
+    sp === null ||
+    ![0x01021994, 0x858458f6].includes(sp.type ?? 0) ||
+    sp.files === undefined ||
+    sp.ffree === undefined ||
+    sp.files <= 0
+  )
+    return null;
+  return (100 * (sp.files - sp.ffree)) / sp.files;
+}
+
+async function space(path: string): Promise<Space | null> {
   const cacheDir = join(
     homedir(),
     ".cache",
@@ -943,14 +961,26 @@ async function space(
       atMs !== undefined &&
       age >= 0 &&
       age <= 2_000
-      ? { free, total }
+      ? {
+          free,
+          total,
+          type: num(at(value, "type")),
+          files: num(at(value, "files")),
+          ffree: num(at(value, "ffree")),
+        }
       : null;
   }, null);
   if (cached !== null) return cached;
 
   const measuredSpace = await attemptOr(() => {
     const s = statfsSync(path);
-    return { free: s.bavail * s.bsize, total: s.blocks * s.bsize };
+    return {
+      free: s.bavail * s.bsize,
+      total: s.blocks * s.bsize,
+      type: s.type,
+      files: s.files,
+      ffree: s.ffree,
+    };
   }, null);
   if (measuredSpace === null) return null;
   await attempt(() => {
@@ -1255,6 +1285,7 @@ async function main(): Promise<void> {
       const sp = await space(d.path);
       const total = sp?.total ?? null;
       return Object.assign({}, d, {
+        inodeUsed: inodeUse(sp),
         free: sp?.free ?? null,
         denyAt: effective(d.deny_gib, d.deny_pct, total),
         warnAt:
@@ -1263,6 +1294,38 @@ async function main(): Promise<void> {
             : effective(d.warn_gib, d.warn_pct, total),
       });
     }),
+  );
+  // /tmp is guarded even when the byte-only declaration predates inode protection.
+  if (
+    !Object.values(config.drive).some((d) => d.path === "/tmp") &&
+    (process.env.STORAGE_HEADROOM_CONFIG === undefined ||
+      process.env.TMPDIR !== undefined)
+  ) {
+    const sp = await space(
+      process.env.STORAGE_HEADROOM_CONFIG === undefined
+        ? "/tmp"
+        : (process.env.TMPDIR ?? dirname(CONFIG_PATH)),
+    );
+    if (inodeUse(sp) !== null)
+      drives.push({
+        label: "tmp /tmp",
+        path: "/tmp",
+        deny_gib: 0,
+        deny_pct: 0,
+        free: sp?.free ?? null,
+        denyAt: 0,
+        warnAt: undefined,
+        inodeUsed: inodeUse(sp),
+      });
+  }
+  const inodeWarnings = drives
+    .filter((d) => d.inodeUsed !== null && d.inodeUsed >= 85)
+    .map(
+      (d) =>
+        `${d.label}: ${d.inodeUsed?.toFixed(1)}% inodes used (warn 85%, deny 95%); run disk-reclaim plan.`,
+    );
+  const inodeDeny = drives.some(
+    (d) => d.inodeUsed !== null && d.inodeUsed >= 95,
   );
   const low = drives.filter((d) => d.free !== null && d.free < d.denyAt);
   const warningLine = drives.filter(
@@ -1278,16 +1341,16 @@ async function main(): Promise<void> {
     wsl &&
     config.drive.host !== undefined &&
     (await freeBytes(config.drive.host.path)) === null;
-  if (low.length > 0 && smallScratchpadWrite) {
+  if (low.length > 0 && smallScratchpadWrite && !inodeDeny) {
     decidePre(
       "allow",
       `storage-headroom: allowing ${toolName} to write ${fileBytes} bytes under the session scratchpad (${scratchpadRoot}); limit ${MAX_SCRATCHPAD_WRITE_BYTES} bytes.`,
     );
   }
-  if ((low.length > 0 || hostUnreadable) && hit === null) {
-    await denyLowSpace(drives, config.drive);
+  if ((low.length > 0 || hostUnreadable || inodeDeny) && hit === null) {
+    await denyLowSpace(drives, config.drive, inodeWarnings.join("\n"));
   }
-  const warnings: string[] = [];
+  const warnings: string[] = [...inodeWarnings];
   for (const d of drives) {
     if (d.warnAt !== undefined && d.free !== null && d.free < d.warnAt) {
       const others = drives
@@ -1311,10 +1374,10 @@ async function main(): Promise<void> {
   budgetDenials.push(...budgetStatusResults.denials);
   warnings.push(...budgetStatusResults.warnings);
   if (budgetDenials.length > 0) {
-    // BATCHED(budgets): all matching artifact budgets are measured before this denial.
-    decidePre("deny", budgetDenials.join("; "));
+    // BATCHED(drives, budgets): include byte and inode warnings with all artifact denials.
+    decidePre("deny", [...budgetDenials, ...warnings].join("; "));
   }
-  if (hit !== null && (warningLine.length > 0 || hostUnreadable)) {
+  if (hit !== null && (warningLine.length > 0 || hostUnreadable || inodeDeny)) {
     const hostDrive = config.drive.host;
     const hostLow =
       hostDrive !== undefined &&

@@ -7,6 +7,7 @@ import {
   readCodexSettingsEvents,
 } from "./codex-settings-stream.ts";
 import { jsonText, maybe, z } from "../zod.ts";
+import { cachedSource } from "../render-cache.ts";
 
 function settingText() {
   return maybe(z.string().trim().min(1)).catch(undefined);
@@ -74,6 +75,26 @@ type SettingsCache = Settings & {
   complete: Settings;
 };
 const settingsCache = new Map<string, SettingsCache>();
+const RolloutLookupSchema = z.object({ path: z.string().nullable() });
+
+// Cache discovery only. Settings and context must reflect appends and replacements
+// immediately, including while this short-lived cross-process lookup is still fresh.
+async function cachedRolloutLookup(
+  key: string,
+  lookup: () => Promise<Awaited<ReturnType<typeof matchingRolloutOnDay>>>,
+) {
+  const cached = await cachedSource({
+    key: `codex-selection:${key}`,
+    ttlMs: 1_000,
+    schema: RolloutLookupSchema,
+    load: async () => ({ path: (await lookup())?.path ?? null }),
+  });
+  if (cached.path === null) return null;
+  const meta = await metadata(cached.path);
+  return meta?.payload.originator === "codex-tui"
+    ? { path: cached.path, meta }
+    : null;
+}
 
 async function firstLine(path: string): Promise<string | null> {
   await using file = await open(path, "r");
@@ -412,7 +433,11 @@ export async function readCodexSessionStatus(
   cwd: string,
   root = join(process.env.HOME ?? "", ".codex", "sessions"),
 ): Promise<SessionStatus | undefined> {
-  return readSelectedSessionStatus(await matchingRollout(root, cwd), cwd);
+  const selected = await cachedRolloutLookup(`cwd:${root}:${cwd}`, () =>
+    matchingRollout(root, cwd),
+  );
+  if (selected !== null && selected.meta.payload.cwd !== cwd) return undefined;
+  return readSelectedSessionStatus(selected, cwd);
 }
 
 /** Select an interactive TUI rollout by its thread ID from the rollout filename. */
@@ -420,7 +445,15 @@ export async function readCodexThreadStatus(
   threadId: string,
   root = join(process.env.HOME ?? "", ".codex", "sessions"),
 ): Promise<SessionStatus | undefined> {
-  const selected = await matchingRolloutByThread(root, threadId);
+  const selected = await cachedRolloutLookup(`thread:${root}:${threadId}`, () =>
+    matchingRolloutByThread(root, threadId),
+  );
+  if (
+    selected !== null &&
+    selected.meta.payload.session_id !== threadId &&
+    selected.meta.payload.id !== threadId
+  )
+    return undefined;
   return readSelectedSessionStatus(selected, selected?.meta.payload.cwd);
 }
 

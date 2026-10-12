@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.2 — 2026-10-12
+
+- Serialize same-session renders across processes and reuse the last output for concurrent calls, including Codex live frames.
+- Cache git, agx process/dispatch scans, disk readings and rates, and Codex rollout selection on disk with short TTLs; keep the existing host-wide GPU sample cache.
+- Reread selected Codex metadata, streamed settings and context on every call so appends and replacements remain visible within the selection TTL.
+- Return absent Codex rates immediately when the sessions directory is missing, avoiding a year of failed day lookups competing with cache I/O.
+
 ## 0.14.1 — 2026-10-12
 
 - Stream current Codex thread settings and turn metadata across the full rollout with bounded memory, preserving cold-process and later model/effort changes. Validate cached prefixes before incremental append reads and keep the context tail bounded.

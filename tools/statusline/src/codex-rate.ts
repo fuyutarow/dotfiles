@@ -215,6 +215,10 @@ export async function readCodexRate(
   root = join(process.env.HOME ?? "", ".codex", "sessions"),
   session?: string,
 ): Promise<Result<CodexRate | undefined, string>> {
+  // A missing sessions root cannot contain a rollout. Avoid 367 failed day reads
+  // competing with the new cache I/O and consuming the source's render deadline.
+  const directory = await stat(root).catch(() => null);
+  if (directory?.isDirectory() !== true) return ok(undefined);
   const path =
     session === undefined
       ? await newestRollout(root)

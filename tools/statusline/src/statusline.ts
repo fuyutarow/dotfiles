@@ -25,6 +25,7 @@ import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
 import { runLive, type LiveFrame } from "./live.ts";
 import type { Dataframe } from "./dataframe.ts";
+import { withSessionRender } from "./render-cache.ts";
 
 const HOME = process.env.HOME ?? "";
 const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
@@ -285,31 +286,42 @@ if (liveMode) {
         return 2;
       }
       pinnedSession ??= current;
-      const frame = await buildDataframe(current, {
-        codex: true,
-        sources: {
-          codexRate: () => readCodexRate(undefined, current.sessionId),
-        },
+      return withSessionRender(`codex:${current.sessionId}`, async () => {
+        const frame = await buildDataframe(current, {
+          codex: true,
+          sources: {
+            codexRate: () => readCodexRate(undefined, current.sessionId),
+          },
+        });
+        await writeSysSnapshot(frame);
+        return render(frame, { codex: true });
       });
-      await writeSysSnapshot(frame);
-      return render(frame, { codex: true });
     },
   });
   process.exit(code);
 } else {
-  const df =
-    codexMode && selectedSession?.sessionId !== undefined
-      ? await buildDataframe(selectedSession, {
-          codex: true,
-          sources: {
-            codexRate: () =>
-              readCodexRate(undefined, selectedSession.sessionId),
-          },
-        })
-      : await buildDataframe(session ?? {});
-  process.stdout.write(
-    `${render(df, { codex: codexMode })}${codexMode && onceMode ? "\n" : ""}`,
-  );
+  let df: Dataframe | undefined;
+  const makeOutput = async (): Promise<string> => {
+    df =
+      codexMode && selectedSession?.sessionId !== undefined
+        ? await buildDataframe(selectedSession, {
+            codex: true,
+            sources: {
+              codexRate: () =>
+                readCodexRate(undefined, selectedSession.sessionId),
+            },
+          })
+        : await buildDataframe(session ?? {});
+    return render(df, { codex: codexMode });
+  };
+  const provider = codexMode ? "codex" : "claude";
+  const output =
+    session?.sessionId === undefined || session.sessionId === ""
+      ? await makeOutput()
+      : await withSessionRender(`${provider}:${session.sessionId}`, makeOutput);
+  process.stdout.write(`${output}${codexMode && onceMode ? "\n" : ""}`);
+  // The active renderer owns snapshots; a contender reused output without source reads.
+  if (df === undefined) process.exit(0);
 
   // Hand the plain Sys row to hooks/log-sys-snapshot.ts, which attaches it to the transcript.
   // Host load shares GPU history with agx-usehooks; the snapshot hook just reads the latest

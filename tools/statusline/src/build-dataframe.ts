@@ -2,7 +2,7 @@ import { err, ok, type Result } from "neverthrow";
 import type { SessionStatus } from "./session-status.ts";
 import type { Dataframe } from "./dataframe.ts";
 import type { HostLoad } from "./host-load.ts";
-import type { RouteScan } from "./dispatch-runs.ts";
+import type { RouteRun, RouteScan } from "./dispatch-runs.ts";
 import type { Admitted } from "./jobs.ts";
 import type { DiskEntry } from "./storage.ts";
 import type { ModelLimit } from "./rate-limits.ts";
@@ -23,8 +23,14 @@ import { readHostLoadAsync } from "./host-load.ts";
 import { routeRunsAsync } from "./dispatch-runs.ts";
 import { readDispatchWarningAsync } from "./dispatch-warning.ts";
 import { diskReadingsAsync } from "./storage.ts";
+import type { DiskReading } from "./storage.ts";
 import { readCodexRate } from "./codex-rate.ts";
 import { readJevUsage } from "./jev-usage.ts";
+import { cachedSource } from "./render-cache.ts";
+import { z } from "./zod.ts";
+import { activeDirs } from "./dispatch-state.ts";
+import { readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
 
 type IdentityFacts = {
   email: string | undefined;
@@ -130,16 +136,202 @@ async function identityFacts(): Promise<IdentityFacts> {
     wfOn: await ultracodeConfiguredAsync(),
   };
 }
+const RepoStateCacheSchema = z.object({
+  branch: z.string().optional(),
+  branchWhy: z.string().optional(),
+});
+const JobScanCacheSchema = z.object({
+  jobs: z.array(z.object({ name: z.string(), secs: z.number() })),
+  orphans: z.number(),
+  failed: z.string().optional(),
+});
+const RouteRunCacheSchema = z.object({
+  displayId: z.string().optional(),
+  choice: z.string(),
+  label: z.string(),
+  pickSource: z.string(),
+  phase: z.string().optional(),
+  workerSession: z.string().optional(),
+  markerCostUsd: z.number().optional(),
+  secs: z.number(),
+  alive: z.boolean(),
+  dispatcherSession: z.string().optional(),
+  doing: z
+    .object({
+      last: z.string(),
+      commands: z.number(),
+      files: z.number(),
+      ageSecs: z.number(),
+      costUsd: z.number().optional(),
+      session: z.string().optional(),
+    })
+    .optional(),
+});
+const RouteScanCacheSchema = z.object({
+  runs: z.array(RouteRunCacheSchema),
+  unreadable: z.number(),
+});
+const RouteResultCacheSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("scan"), value: RouteScanCacheSchema }),
+  z.object({ kind: z.literal("none") }),
+  z.object({ kind: z.literal("error"), value: z.string() }),
+]);
+async function agxCacheKey(): Promise<string> {
+  const dirs = activeDirs();
+  const state = await Promise.all(
+    dirs.map(async (dir) => {
+      const names = await readdir(dir).catch(() => []);
+      const stamps = await Promise.all(
+        names
+          .filter((name) => name.endsWith(".json"))
+          .toSorted()
+          .map(async (name) => {
+            const mtime = await stat(join(dir, name))
+              .then((info) => info.mtimeMs)
+              .catch(() => 0);
+            return `${name}:${mtime}`;
+          }),
+      );
+      return `${dir}:${stamps.join(",")}`;
+    }),
+  );
+  return `agx-active-state:${state.join("|")}`;
+}
+const DiskEntryCacheSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("reading"),
+    label: z.string(),
+    usedG: z.number(),
+    totalG: z.number().optional(),
+    freeG: z.number().optional(),
+    path: z.string().optional(),
+    rateGibPerMin: z.number().optional(),
+    rateRedMinutes: z.number().optional(),
+    rateYellowMinutes: z.number().optional(),
+  }),
+  z.object({ kind: z.literal("miss"), label: z.string(), why: z.string() }),
+]);
+const DiskResultCacheSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("readings"),
+    entries: z.array(DiskEntryCacheSchema),
+  }),
+  z.object({ kind: z.literal("error"), value: z.string() }),
+]);
+function diskEntryFromCache(entry: z.output<typeof DiskEntryCacheSchema>) {
+  if (entry.kind === "miss") return entry;
+  const reading: DiskReading = {
+    kind: "reading" as const,
+    label: entry.label,
+    usedG: entry.usedG,
+    totalG: entry.totalG,
+    freeG: entry.freeG,
+  };
+  if (entry.path !== undefined) reading.path = entry.path;
+  if (entry.rateGibPerMin !== undefined)
+    reading.rateGibPerMin = entry.rateGibPerMin;
+  if (entry.rateRedMinutes !== undefined)
+    reading.rateRedMinutes = entry.rateRedMinutes;
+  if (entry.rateYellowMinutes !== undefined)
+    reading.rateYellowMinutes = entry.rateYellowMinutes;
+  return reading;
+}
+function routeRunFromCache(
+  run: z.output<typeof RouteRunCacheSchema>,
+): RouteRun {
+  let doing: RouteRun["doing"];
+  if (run.doing !== undefined) {
+    doing = {
+      last: run.doing.last,
+      commands: run.doing.commands,
+      files: run.doing.files,
+      ageSecs: run.doing.ageSecs,
+    };
+    if (run.doing.costUsd !== undefined) doing.costUsd = run.doing.costUsd;
+    if (run.doing.session !== undefined) doing.session = run.doing.session;
+  }
+  return {
+    displayId: run.displayId,
+    choice: run.choice,
+    label: run.label,
+    pickSource: run.pickSource,
+    phase: run.phase,
+    workerSession: run.workerSession,
+    markerCostUsd: run.markerCostUsd,
+    secs: run.secs,
+    alive: run.alive,
+    dispatcherSession: run.dispatcherSession,
+    doing,
+  };
+}
+const cachedStorage: Sources["storage"] = async () => {
+  const cached = await cachedSource({
+    key: "configured-disk-statfs-and-rates",
+    ttlMs: 5_000,
+    schema: DiskResultCacheSchema,
+    load: async () => {
+      const result = await diskReadingsAsync();
+      return result.match(
+        (entries) => ({ kind: "readings" as const, entries }),
+        (value) => ({ kind: "error" as const, value }),
+      );
+    },
+  });
+  return cached.kind === "error"
+    ? err(cached.value)
+    : ok(cached.entries.map(diskEntryFromCache));
+};
+const cachedRoutes: Sources["routes"] = async () => {
+  const cached = await cachedSource({
+    key: await agxCacheKey(),
+    ttlMs: 1_000,
+    schema: RouteResultCacheSchema,
+    load: async () => {
+      const result = await routeRunsAsync();
+      if (result === undefined) return { kind: "none" as const };
+      return result.match(
+        (value) => ({ kind: "scan" as const, value }),
+        (value) => ({ kind: "error" as const, value }),
+      );
+    },
+  });
+  if (cached.kind === "none") return void 0;
+  if (cached.kind === "error") return err(cached.value);
+  return ok({
+    unreadable: cached.value.unreadable,
+    runs: cached.value.runs.map(routeRunFromCache),
+  });
+};
 const DEFAULT_SOURCES: Sources = {
   identity: identityFacts,
   agentName: agentNameAsync,
   rcState: rcStateAsync,
-  repoState: repoStateAsync,
-  jobScan: scanOutOfHarnessAsync,
+  repoState: async (cwd) => {
+    const result = await cachedSource({
+      key: `git:${cwd}`,
+      ttlMs: 1_500,
+      schema: RepoStateCacheSchema,
+      load: () => repoStateAsync(cwd),
+    });
+    return { branch: result.branch, branchWhy: result.branchWhy };
+  },
+  jobScan: async () => {
+    const result = await cachedSource({
+      key: "ps-agx-admissions",
+      ttlMs: 1_000,
+      schema: JobScanCacheSchema,
+      load: scanOutOfHarnessAsync,
+    });
+    return {
+      jobs: result.jobs,
+      orphans: result.orphans,
+      ...(result.failed === undefined ? {} : { failed: result.failed }),
+    };
+  },
   hostLoad: readHostLoadAsync,
-  routes: routeRunsAsync,
+  routes: cachedRoutes,
   dispatchWarning: readDispatchWarningAsync,
-  storage: diskReadingsAsync,
+  storage: cachedStorage,
   herdrReport: reportToHerdr,
   codexRate: readCodexRate,
   jevUsage: () => readJevUsage(),

@@ -1,6 +1,6 @@
 # statusline
 
-Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.14.0.
+Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.14.2.
 `agents/claude/settings.json` declares `statusLine.command` as `~/.bun/bin/statusline`, this package's `bin`
 (root `package.json` `bin`, installed by `bun link` / `mise run deps`). The former Claude implementation
 has been retired; parity fixtures preserve its expected behavior.
@@ -31,7 +31,12 @@ The Claude adapter parses Claude Code statusline JSON on stdin and normalizes it
 `SessionStatus` contract; stdout retains the existing ANSI rows and graceful invalid-input messages.
 Existing environment variables, cache locations, schema
 checks, explicit absence messages, 2 s enrichment limits, 3 s agent lookup limit, 4 s shared
-render deadline, 5 s GPU cache and 30 s agent-name cache are preserved. The GPU sampler remains
+render deadline, 5 s GPU cache and 30 s agent-name cache are preserved. Same-session renders
+are serialized across processes; a concurrent call returns the previous rendered output, or
+waits for the first cold render to finish. Git state and process/dispatch scans use 1–1.5 s
+persistent TTLs, disk readings and rates use 5 s, and Codex rollout selection uses 1 s. Selected
+metadata, streamed settings and context are reread on every call; live refresh remains pinned
+to its initially selected session. The GPU sampler remains
 a bounded detached child of the local host-load module, using the original host-wide lock.
 
 Codex CLI has no command-driven statusline setting, so tmux renders the Codex adapter outside the
@@ -85,10 +90,10 @@ outside this scaffolding step.
 | --------------------------------- | ----: | ------------------------------------------------------------------------- |
 | src/session-status.ts             |    38 | Provider-neutral session facts consumed by the dataframe builder          |
 | src/adapters/claude-statusline.ts |    89 | Claude stdin schema and normalization boundary                            |
-| src/adapters/codex-rollout.ts     |     — | Bounded Codex rollout selection and normalization                         |
+| src/adapters/codex-rollout.ts     |   467 | Cached rollout selection with fresh streamed settings and context         |
 | src/ansi.ts                       |    32 | ANSI vocabulary, absence markers, percentage colors                       |
 | src/bounded.ts                    |   150 | Shared 4 s render deadline, bounded subprocesses, atomic cache writes     |
-| src/build-dataframe.ts            |   126 | Orchestrate enrichment in the original order                              |
+| src/build-dataframe.ts            |   544 | Orchestrate enrichment and short-TTL source caches                        |
 | src/cgroup-memory.ts              |    64 | Read cgroup v1/v2 memory limits and working sets                          |
 | src/dataframe.ts                  |    54 | Typed facts passed to rendering                                           |
 | src/dispatch-runs.ts              |   190 | Read dispatch markers/progress and render aligned worker rows             |
@@ -102,8 +107,9 @@ outside this scaffolding step.
 | src/model-context.ts              |    60 | Model normalization and context labels                                    |
 | src/prompt-stamp.ts               |    95 | Temporal clock, offset, tilde path and prompt fields                      |
 | src/rate-limits.ts                |   158 | Scoped model caps, window percentages and reset countdowns                |
+| src/render-cache.ts               |   144 | Persistent source caches and per-session cross-process render guard       |
 | src/repo-state.ts                 |    36 | Bounded branch lookup and explicit git failures                           |
-| src/statusline.ts                 |    82 | Executable stdin entry, graceful errors and snapshot cache writes         |
+| src/statusline.ts                 |   349 | Claude/Codex entry, live refresh, render guard and snapshot writes         |
 | src/storage.ts                    |   130 | Storage TOML reads, disk measurements, shared threshold calculation       |
 | src/zod.ts                        |    44 | Local JSON codecs and nullable-field schema helper                        |
 
@@ -111,7 +117,7 @@ outside this scaffolding step.
 
 - `src/ansi.ts`:
 - `src/bounded.ts`: `node:child_process`, `node:fs`, `node:path`, `neverthrow`, `./zod.ts`
-- `src/build-dataframe.ts`: `neverthrow`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./jobs.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`
+- `src/build-dataframe.ts`: `node:fs/promises`, `node:path`, `neverthrow`, `./session-status.ts`, `./dataframe.ts`, `./identity.ts`, `./rate-limits.ts`, `./model-context.ts`, `./repo-state.ts`, `./jobs.ts`, `./host-load.ts`, `./dispatch-runs.ts`, `./dispatch-warning.ts`, `./render-cache.ts`, `./storage.ts`, `./zod.ts`, `./dispatch-state.ts`, `./bounded.ts`, `./codex-rate.ts`, `./jev-usage.ts`
 - `src/cgroup-memory.ts`:
 - `src/dataframe.ts`: `neverthrow`, `./host-load.ts`, `./storage.ts`, `./identity.ts`, `./rate-limits.ts`, `./jobs.ts`, `./dispatch-runs.ts`
 - `src/dispatch-runs.ts`: `node:fs`, `node:path`, `neverthrow`, `./zod.ts`, `./dispatch-state.ts`, `./ansi.ts`, `./jobs.ts`
@@ -123,12 +129,14 @@ outside this scaffolding step.
 - `src/live.ts`:
 - `src/session-status.ts`: (types only)
 - `src/adapters/claude-statusline.ts`: `../bounded.ts`, `../zod.ts`, `../session-status.ts`
+- `src/adapters/codex-rollout.ts`: `node:fs/promises`, `node:path`, `../session-status.ts`, `../../../shared/src/jsonl.ts`, `./codex-settings-stream.ts`, `../zod.ts`, `../render-cache.ts`
 - `src/jobs.ts`: `./bounded.ts`, `./ansi.ts`, `./prompt-stamp.ts`
 - `src/model-context.ts`: `./ansi.ts`, `./dataframe.ts`
 - `src/prompt-stamp.ts`: `node:os`
 - `src/rate-limits.ts`: `neverthrow`, `./zod.ts`, `./prompt-stamp.ts`, `./ansi.ts`, `./dataframe.ts`
+- `src/render-cache.ts`: `node:fs/promises`, `node:os`, `node:path`, `./zod.ts`
 - `src/repo-state.ts`: `./bounded.ts`, `./model-context.ts`
-- `src/statusline.ts`: `./ansi.ts`, `./bounded.ts`, `./zod.ts`, `./adapters/claude-statusline.ts`, `./prompt-stamp.ts`, `./format.ts`, `./build-dataframe.ts`, `./host-load.ts`, `./model-context.ts`, `./rate-limits.ts`, `./live.ts`
+- `src/statusline.ts`: `node:fs/promises`, `cleye`, `./ansi.ts`, `./bounded.ts`, `./zod.ts`, `./adapters/claude-statusline.ts`, `./adapters/codex-rollout.ts`, `./session-status.ts`, `./prompt-stamp.ts`, `./format.ts`, `./build-dataframe.ts`, `./codex-rate.ts`, `./host-load.ts`, `./model-context.ts`, `./rate-limits.ts`, `./live.ts`, `./dataframe.ts`, `./render-cache.ts`
 - `src/storage.ts`: `node:fs`, `node:path`, `neverthrow`, `../../shared/src/storage-headroom.ts`, `./zod.ts`, `./bounded.ts`, `./ansi.ts`
 - `src/zod.ts`: `neverthrow`, `../../shared/src/zod.ts`
 

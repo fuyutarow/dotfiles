@@ -142,6 +142,41 @@ function isRoutedStreamFilter(commands: ShellCommand[]): boolean {
   const filter = rest[1];
   if (router === undefined || filter === undefined || rest.length > 3)
     return false;
+  let producer = false;
+  if (router.words[0] === "jj")
+    producer =
+      router.words.length === 3 &&
+      router.words[1] === "workspace" &&
+      router.words[2] === "list";
+  else if (router.words[0] === "agx")
+    producer = router.words.length === 2 && router.words[1] === "ps";
+  if (producer) {
+    if (
+      router.dynamic ||
+      router.heredocs.length > 0 ||
+      router.redirects.length > 0
+    )
+      return false;
+    if (filter.sep !== "|") return false;
+    const [prog = "", ...args] = filter.words;
+    if (prog === "awk")
+      return (
+        rest.length === 2 &&
+        !filter.dynamic &&
+        filter.redirects.length === 0 &&
+        args.length === 1
+      );
+    if (prog !== "grep" && prog !== "rg") return false;
+    let i = 0;
+    while (/^-[Fivwnc]+$/u.test(args[i] ?? "")) i++;
+    if (args[i] === "-e" || args[i] === "--") i++;
+    return (
+      rest.length === 2 &&
+      !filter.dynamic &&
+      filter.redirects.length === 0 &&
+      args.length === i + 1
+    );
+  }
   const [head, route] =
     router.words[0] === "bun"
       ? [router.words[1] ?? "", router.words[2]]

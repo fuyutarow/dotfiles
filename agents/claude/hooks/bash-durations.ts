@@ -87,6 +87,11 @@ const summaryPath = (dir: string): string => join(dir, "summary.json");
 const pendingPath = (dir: string, id: string): string =>
   join(dir, "pending", `${id.replaceAll(/[^A-Za-z0-9_-]/gu, "_")}.json`);
 
+/** PostToolUse did not supply a tool-runtime measurement; discard the start instead of timing hooks. */
+export function discardStart(dir: string, toolUseId: string): void {
+  rmSync(pendingPath(dir, toolUseId), { force: true });
+}
+
 /** PreToolUse: a foreground call of `key` starts now. */
 export function recordStart(
   dir: string,
@@ -106,12 +111,15 @@ export function recordEnd(
   dir: string,
   toolUseId: string,
   nowMs: number,
+  measuredMs?: number,
 ): number | undefined {
   const path = pendingPath(dir, toolUseId);
   const pending = readParsed(path, Pending);
   rmSync(path, { force: true });
   if (pending === undefined) return undefined;
-  const ms = Math.max(0, nowMs - pending.started);
+  // Claude's PostToolUse duration_ms measures the tool itself, excluding permission prompts
+  // and PreToolUse hooks. Keep the wall-clock interval only as a compatibility fallback.
+  const ms = Math.max(0, measuredMs ?? nowMs - pending.started);
   const summary: Summary = readParsed(summaryPath(dir), Summary) ?? {};
   summary[pending.key] = [...(summary[pending.key] ?? []), ms].slice(-KEEP);
   writeFileSync(summaryPath(dir), `${JSON.stringify(summary)}\n`);

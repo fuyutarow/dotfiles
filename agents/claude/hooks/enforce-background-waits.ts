@@ -92,6 +92,15 @@ export function isSmallFileViewer(
   const parsed = parseShell(command, cwd);
   if (parsed === undefined || parsed.commands.length === 0) return false;
   const compound = parsed.commands.length > 1;
+  const first = parsed.commands[0];
+  const second = parsed.commands[1];
+  const simpleCatCut =
+    parsed.commands.length === 2 &&
+    first !== undefined &&
+    second !== undefined &&
+    effective(first)?.name === "cat" &&
+    effective(second)?.name === "cut" &&
+    second.sep === "|";
   const repo = readRepositoryRoot(cwd);
   let viewed = false;
   const allowed = parsed.commands.every((c) => {
@@ -100,13 +109,29 @@ export function isSmallFileViewer(
       c.header ||
       c.leading.length > 0 ||
       c.assignments.length > 0 ||
-      c.redirects.length > 0 ||
       c.heredocs.length > 0 ||
       !["", ";", "&&", "||", "|", "\n"].includes(c.sep)
     )
       return false;
     const eff = effective(c);
     if (eff === undefined) return false;
+    if (eff.name === "printf") {
+      const append = c.redirects.length === 1 ? c.redirects[0] : undefined;
+      if (
+        append?.op !== ">>" ||
+        eff.args.some((arg) => /[$`]/u.test(arg)) ||
+        append.target === ""
+      )
+        return false;
+      const target = readPath(append.target, c);
+      if (!target.resolved) return false;
+      const st = statSync(target.path, { throwIfNoEntry: false });
+      viewed = true;
+      return st?.isFile() === true && st.size < SMALL_VIEWER_MAX_BYTES;
+    }
+    if (eff.name === "cut")
+      return parsed.commands[1] === c && c.sep === "|" && !c.dynamic;
+    if (c.redirects.length > 0) return false;
     if (compound && eff.name === "echo")
       return !c.dynamic || eff.args.every((arg) => readPath(arg, c).resolved);
     const operands = viewerOperands(eff.name, eff.args);
@@ -117,6 +142,7 @@ export function isSmallFileViewer(
       if (!target.resolved) return false; // Size must be measured, never inferred for unknown paths.
       if (
         (compound || c.dynamic) &&
+        !simpleCatCut &&
         (!coordinatorPath(target.path) || insidePath(target.path, repo))
       )
         return false;
@@ -124,7 +150,9 @@ export function isSmallFileViewer(
       return st?.isFile() === true && st.size < SMALL_VIEWER_MAX_BYTES;
     });
   });
-  return allowed && viewed && new JobScanner(command).run() === 0;
+  return (
+    allowed && viewed && (simpleCatCut || new JobScanner(command).run() === 0)
+  );
 }
 
 function viewerOperands(name: string, args: string[]): string[] {

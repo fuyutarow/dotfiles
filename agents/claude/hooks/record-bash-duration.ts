@@ -3,11 +3,21 @@
 // Observes only: never decides, never prints; a missing start (a background call, a call made
 // before this hook existed) records nothing. See bash-durations.ts.
 
-import { strAt } from "../../hooks/narrow.ts";
-import { recordEnd, stateDir } from "./bash-durations.ts";
+import { at, num, strAt } from "../../hooks/narrow.ts";
+import { discardStart, recordEnd, stateDir } from "./bash-durations.ts";
 import { readStdinJson } from "./lib.ts";
 
 const payload = readStdinJson();
 const toolUseId = strAt(payload, "tool_use_id");
-if (strAt(payload, "tool_name") === "Bash" && toolUseId !== undefined)
-  recordEnd(stateDir(), toolUseId, Temporal.Now.instant().epochMilliseconds);
+if (strAt(payload, "tool_name") === "Bash" && toolUseId !== undefined) {
+  const dir = stateDir();
+  const durationMs = num(at(payload, "duration_ms"));
+  if (durationMs === undefined) discardStart(dir, toolUseId);
+  else
+    recordEnd(
+      dir,
+      toolUseId,
+      Temporal.Now.instant().epochMilliseconds,
+      durationMs,
+    );
+}

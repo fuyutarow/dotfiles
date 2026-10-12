@@ -73,6 +73,27 @@ describe("recordStart / recordEnd / medianMs", () => {
     expect(recordEnd(dir, "unknown", 5000)).toBeUndefined();
     expect(medianMs(dir, "ls")).toBeUndefined();
   });
+
+  test("the hook supplied tool duration excludes time spent in the hook harness", () => {
+    const dir = scratch();
+    recordStart(dir, "short", "cat", 0);
+    expect(recordEnd(dir, "short", 8000, 120)).toBe(120);
+    expect(medianMs(dir, "cat")).toBe(120);
+  });
+
+  test("a PostToolUse event without duration telemetry does not record harness time", () => {
+    const dir = scratch();
+    const env = ordinarySessionEnv({ CLAUDE_BASH_DURATIONS_DIR: dir });
+    recordStart(dir, "no-duration", "cat", 0);
+    Bun.spawnSync(["bun", POST], {
+      stdin: new Blob([
+        JSON.stringify({ tool_name: "Bash", tool_use_id: "no-duration" }),
+      ]),
+      env,
+      timeout: 30_000,
+    });
+    expect(medianMs(dir, "cat")).toBeUndefined();
+  });
 });
 
 describe("the measured rule", () => {
@@ -110,14 +131,8 @@ describe("the measured rule", () => {
       tool_input: { command: "mise run commit -- -m x" },
     };
     expect(hook(HOOK, first)).toBe("");
-    // pretend it took 40 s: rewrite the start, then close it through the PostToolUse hook
-    recordStart(
-      dir,
-      "t1",
-      "mise run commit",
-      Temporal.Now.instant().epochMilliseconds - 40_000,
-    );
-    hook(POST, first);
+    // Claude's duration_ms is tool execution time, excluding hook/harness setup.
+    hook(POST, { ...first, duration_ms: 40_000 });
     expect(medianMs(dir, "mise run commit")).toBeGreaterThan(39_000);
     // the next commit in front is denied with the measured reason
     const second = {

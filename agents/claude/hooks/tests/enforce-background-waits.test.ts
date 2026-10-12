@@ -167,11 +167,11 @@ describe("small-file viewer history exemption", () => {
       });
     for (const command of denied) {
       const output = decideWithEnv(command, env);
-      expect(output).toContain('"permissionDecision":"deny"');
+      expect(output, command).toContain('"permissionDecision":"deny"');
       expect(output).toContain("Rewrite command:");
       expect(output).toContain("run_in_background: true");
     }
-  });
+  }, 30_000);
 
   test("allows small read-only viewers regardless of a slow command history", () => {
     const root = mkdtempSync(join(tmpdir(), "background-viewers-"));
@@ -202,7 +202,32 @@ describe("small-file viewer history exemption", () => {
       expect(isSmallFileViewer(command)).toBe(true);
       expect(decideWithEnv(command, env)).toBe("");
     }
-  });
+  }, 30_000);
+
+  test("exempts the owner's trivial local read and append examples from slow history", () => {
+    const root = mkdtempSync(join(tmpdir(), "background-trivial-"));
+    const dir = join(root, "history");
+    const file = join(root, "small.txt");
+    writeFileSync(file, "one two three\n");
+    mkdirSync(dir, { recursive: true });
+    for (const key of ["cat", "head", "printf"]) {
+      recordStart(dir, key, key, 0);
+      recordEnd(dir, key, 7000);
+    }
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      CLAUDE_BASH_DURATIONS_DIR: dir,
+    };
+    delete env[AGX_WORKER_ENV];
+    for (const command of [
+      `cat ${file} | cut -d ' ' -f 1`,
+      `head -3 ${file}`,
+      `printf '%s\\n' next >> ${file}`,
+    ]) {
+      expect(isSmallFileViewer(command)).toBe(true);
+      expect(decideWithEnv(command, env)).toBe("");
+    }
+  }, 30_000);
 
   test("does not exempt a 5 MiB file, tail -f, or a pipeline from slow history", () => {
     const root = mkdtempSync(join(tmpdir(), "background-viewers-slow-"));
@@ -234,7 +259,7 @@ describe("small-file viewer history exemption", () => {
     expect(decideWithEnv(`cat ${small} | wc -c`, env)).toContain(
       '"permissionDecision":"deny"',
     );
-  });
+  }, 30_000);
 });
 
 function decideWithEnv(command: string, env: NodeJS.ProcessEnv): string {

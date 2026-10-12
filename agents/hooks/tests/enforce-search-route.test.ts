@@ -247,6 +247,51 @@ describe("enforce-search-route", () => {
     }
   });
 
+  test("ignores search words in ticket text and heredoc bodies", () => {
+    const project = registerProject();
+    for (const command of [
+      `agx dispatch --prompt 'Please use grep to inspect the ticket'`,
+      `agx dispatch --prompt-file /tmp/ticket-with-grep.md`,
+      `cat <<'TICKET'\nThe ticket asks to use grep and rg.\nTICKET`,
+      `printf '%s' 'grep is mentioned in this ticket'`,
+    ]) {
+      expect(
+        decisionOf(
+          runHook(HOOK, bashPayload(project, command), withCcc()).stdout,
+        ),
+      ).toBeNull();
+    }
+  });
+
+  test("allows a single grep/awk display filter after the named safe producers", () => {
+    const project = registerProject();
+    for (const command of [
+      "rr text 'needle' | grep -F -e X",
+      "jj workspace list | awk '{print $1}'",
+      "agx ps | grep run-123",
+    ]) {
+      expect(
+        decisionOf(
+          runHook(HOOK, bashPayload(project, command), withCcc()).stdout,
+        ),
+      ).toBeNull();
+    }
+  });
+
+  test("the concrete rewrite from a denial is accepted by this hook", () => {
+    const project = registerProject();
+    const denied = runHook(HOOK, bashPayload(project, "rg needle"), withCcc());
+    const reason = decisionOf(denied.stdout)?.permissionDecisionReason ?? "";
+    const rewrite = /Rewrite: ([^.]*(?:'[^']*'|\S+)[^.]*)\./u.exec(reason)?.[1];
+    expect(rewrite).toBeDefined();
+    if (rewrite === undefined) return;
+    expect(
+      decisionOf(
+        runHook(HOOK, bashPayload(project, rewrite), withCcc()).stdout,
+      ),
+    ).toBeNull();
+  });
+
   test("a stream filter cannot search a file or hide a second raw search", () => {
     const project = registerProject();
     for (const command of [

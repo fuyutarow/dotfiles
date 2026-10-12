@@ -110,6 +110,11 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   // only — WSL's login shell is zsh and its distro ~/.bashrc is not ours to move aside.
   ["linux", "zsh/bash_profile", ".bash_profile"],
   ["linux", "zsh/bashrc", ".bashrc"],
+  [
+    "not-mac",
+    "zsh/environment.d/10-rip.conf",
+    ".config/environment.d/10-rip.conf",
+  ],
 
   // --- git (per-OS identity/credential include) ---
   // git reads BOTH ~/.config/git/config and ~/.gitconfig. The repo's config is linked to the

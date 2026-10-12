@@ -4,7 +4,8 @@
 # (herdr, mise, claude, the Brewfile.core tools) and bun's global bins in ~/.bun/bin. Nothing that
 # prints or hangs. An interactive bash is handed to a login zsh at the end of this file.
 # Keep rip's recoverable removals on the user's data filesystem, not its /tmp default.
-export RIP_GRAVEYARD="${XDG_DATA_HOME:-$HOME/.local/share}/graveyard"
+export GRAVEYARD="${XDG_DATA_HOME:-$HOME/.local/share}/graveyard"
+export RIP_GRAVEYARD="$GRAVEYARD"
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;
   *) PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH" ;;

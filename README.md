@@ -127,9 +127,11 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    `ssh host 'cmd'`, so user CLIs in `~/.local/bin` and bun's global bins in `~/.bun/bin`
    (this repo's own `bin` commands) work in non-login SSH shells. It reads the rendered
    `~/.config/dotfiles/brew-prefix` and quietly adds Homebrew bin/sbin and rustup proxies;
-   exports `RIP_GRAVEYARD` under `$XDG_DATA_HOME` (or `~/.local/share`) so non-interactive
-   commands do not send recoverable removals to `/tmp`. Bash SSH shells read the same prefix and
-   export the same graveyard. `brew shellenv` belongs in login profiles, never zshenv.
+   exports `GRAVEYARD` (the variable read by `rm-improved` rip) and `RIP_GRAVEYARD` (used by repo
+   tools) under `$XDG_DATA_HOME` or `~/.local/share`. The `rip` function refuses tmpfs/ramfs
+   graveyards; linked `environment.d` settings cover systemd user services and `systemd-run --user`.
+   Bash SSH shells read the same prefix and export both variables. `brew shellenv` belongs in login
+   profiles, never zshenv.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
 6. **No implicit global toolchain.** A managed tool is reachable where a config _declares_ it,
    or not at all: no global default version, and no second version manager hooking a login

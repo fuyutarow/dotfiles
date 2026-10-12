@@ -45,16 +45,34 @@ pty_run() {
 }
 
 # --- rip graveyard is disk-backed and follows XDG data home -------------------------------
-out=$(env -u RIP_GRAVEYARD ZSHENV_FILE="$ROOT/zsh/zshenv" zsh -f -c \
-  'source "$ZSHENV_FILE"; print -r -- "RIP_GRAVEYARD=$RIP_GRAVEYARD"')
+out=$(env -u GRAVEYARD -u RIP_GRAVEYARD ZSHENV_FILE="$ROOT/zsh/zshenv" zsh -f -c \
+  'source "$ZSHENV_FILE"; print -r -- "GRAVEYARD=$GRAVEYARD RIP_GRAVEYARD=$RIP_GRAVEYARD"')
 want "rip graveyard uses the home data directory by default" \
-  "RIP_GRAVEYARD=$HOME/.local/share/graveyard" "$out"
-graveyard_xdg="$TMPDIR/rip-graveyard-xdg"
-out=$(env -u RIP_GRAVEYARD XDG_DATA_HOME="$graveyard_xdg" \
+  "GRAVEYARD=$HOME/.local/share/graveyard RIP_GRAVEYARD=$HOME/.local/share/graveyard" "$out"
+graveyard_xdg="${TMPDIR:-/tmp}/rip-graveyard-xdg"
+out=$(env -u GRAVEYARD -u RIP_GRAVEYARD XDG_DATA_HOME="$graveyard_xdg" \
   ZSHENV_FILE="$ROOT/zsh/zshenv" zsh -f -c \
-  'source "$ZSHENV_FILE"; print -r -- "RIP_GRAVEYARD=$RIP_GRAVEYARD"')
+  'source "$ZSHENV_FILE"; print -r -- "GRAVEYARD=$GRAVEYARD RIP_GRAVEYARD=$RIP_GRAVEYARD"')
 want "rip graveyard follows XDG_DATA_HOME" \
-  "RIP_GRAVEYARD=$graveyard_xdg/graveyard" "$out"
+  "GRAVEYARD=$graveyard_xdg/graveyard RIP_GRAVEYARD=$graveyard_xdg/graveyard" "$out"
+
+# The shell guard is tested with a fake filesystem probe, so it is portable to hosts where /tmp
+# is disk-backed. The target must remain in place when the selected graveyard is RAM-backed.
+rip_guard_tmp=$(mktemp -d) || exit 1
+mkdir -p "$rip_guard_tmp/bin"
+print -r -- '#!/bin/sh' 'printf tmpfs' >| "$rip_guard_tmp/bin/stat"
+chmod +x "$rip_guard_tmp/bin/stat"
+print -r -- 'keep' >| "$rip_guard_tmp/target"
+typeset rip_bin=${commands[rip]:-}
+typeset rip_path=${rip_bin:h}
+out=$(pty_run "PATH=${(q)rip_guard_tmp}/bin:${(q)rip_path}:$PATH" \
+              'rehash' \
+              "rip --graveyard ${(q)rip_guard_tmp}/graveyard ${(q)rip_guard_tmp}/target; print -r -- STATUS=\$?")
+want "rip reports an unsafe graveyard" 'rip:' "$out"
+want "rip refuses an unsafe graveyard" 'refusing removal' "$out"
+want "rip reports refusal to its caller" 'STATUS=1' "$out"
+[[ -f "$rip_guard_tmp/target" ]] && ok "rip leaves the target in place" || bad "rip removed the guarded target"
+command rm -rf "$rip_guard_tmp"
 
 # --- cp convenience aliases still use the overwrite guard ---------------------------------
 copy_tmp=$(mktemp -d) || exit 1

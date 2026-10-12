@@ -85,9 +85,11 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    including `ssh host 'cmd'`. It exists so user CLIs in `~/.local/bin` (notably Codex remote
    bootstrap) and bun's global bins in `~/.bun/bin` (this repo's `bin` commands, `bun add -g`
    tools) work in non-login SSH command shells. It reads the rendered Homebrew prefix and adds
-   existing bin/sbin and opt/rustup/bin ahead of legacy links. It also exports `RIP_GRAVEYARD`
-   under `$XDG_DATA_HOME` (or `~/.local/share`) so rip never falls back to `/tmp` in a non-interactive
-   shell. `zsh/bashrc` exports the same value for bash SSH commands. Bash reads the same prefix.
+   existing bin/sbin and opt/rustup/bin ahead of legacy links. It exports `GRAVEYARD` (read by
+   `rm-improved` rip) and `RIP_GRAVEYARD` (read by repo tools) under `$XDG_DATA_HOME` or
+   `~/.local/share`; the `rip` shell function refuses tmpfs/ramfs graveyards. The linked
+   `environment.d` declaration supplies the home-data fallback to systemd user services and
+   `systemd-run --user`; `zsh/bashrc` exports both values for bash SSH commands. Bash reads the same prefix.
    Brewfile.core declares bun/uv for all cwd, including Claude hooks. Do not put Homebrew shellenv, plugins, prompts,
    completions, or anything that can print/hang there.
 6. **No implicit global toolchain (INV-6).** A managed tool is reachable where a config

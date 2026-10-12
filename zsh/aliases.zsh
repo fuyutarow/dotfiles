@@ -901,8 +901,51 @@ alias cpa='cp -a'        # guarded archive copy
 alias cpr='cp -r'        # guarded recursive copy
 alias mvf='command mv'   # 強制上書き (両OS共通)
 
-# rip for safer file removal
-command_exists "rip" || alias rip='command rm -i'   # bypass the disabled rm() function above
+# rip for safer file removal. The upstream binary reads GRAVEYARD, while repo tools also read
+# RIP_GRAVEYARD. Check the actual destination's filesystem before every shell invocation so an
+# explicit override cannot put recoverable deletes on tmpfs or ramfs.
+unalias rip 2>/dev/null
+rip() {
+  if ! whence -p rip >/dev/null 2>&1; then
+    command rm -i "$@"
+    return $?
+  fi
+
+  local graveyard="${GRAVEYARD:-${XDG_DATA_HOME:-$HOME/.local/share}/graveyard}"
+  local fs_type="" arg
+  local -a rip_args=("$@")
+  local -i i
+  for (( i = 1; i <= ${#rip_args}; i++ )); do
+    arg="${rip_args[i]}"
+    if [[ "$arg" == "--graveyard" && $(( i + 1 )) -le ${#rip_args} ]]; then
+      graveyard="${rip_args[i+1]}"
+      break
+    elif [[ "$arg" == --graveyard=* ]]; then
+      graveyard="${arg#--graveyard=}"
+      break
+    fi
+  done
+
+  if ! mkdir -p "$graveyard" 2>/dev/null; then
+    print -u2 -- "rip: cannot create graveyard; refusing removal"
+    return 1
+  fi
+  if [[ ${IS_MAC:-false} == true ]]; then
+    fs_type=$(command stat -f %T "$graveyard" 2>/dev/null) || fs_type=""
+  else
+    fs_type=$(command stat -f -c %T -- "$graveyard" 2>/dev/null) || fs_type=""
+  fi
+  if [[ -z "$fs_type" ]]; then
+    print -u2 -- "rip: cannot verify graveyard filesystem; refusing removal"
+    return 1
+  fi
+  if [[ "$fs_type" == tmpfs || "$fs_type" == ramfs ]]; then
+    print -u2 -- "rip: graveyard is on $fs_type; refusing removal"
+    return 1
+  fi
+
+  GRAVEYARD="$graveyard" RIP_GRAVEYARD="$graveyard" command rip "${rip_args[@]}"
+}
 
 # Git operation safety: checkout ban
 # `git checkout` (and the retired git/gitconfig aliases co/cb) is dangerously overloaded — the same

@@ -288,26 +288,28 @@ export function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
 
 export async function checkRipGraveyard(ctx: Ctx): Promise<Finding> {
   const declaration = readFileSync(join(ctx.dotfiles, "zsh/zshenv"), "utf8");
-  const assignments = declaration
-    .split("\n")
-    .filter(
+  const lines = declaration.split("\n");
+  const hasRipDeclaration =
+    lines.filter((line) => line === 'export RIP_GRAVEYARD="$GRAVEYARD"')
+      .length === 1;
+  const hasGraveyardDeclaration =
+    lines.filter(
       (line) =>
         line ===
-        'export RIP_GRAVEYARD="${XDG_DATA_HOME:-$HOME/.local/share}/graveyard"',
-    );
-  const hasDeclaration = assignments.length === 1;
-  const user = process.env.USER ?? userInfo().username;
+        'export GRAVEYARD="${XDG_DATA_HOME:-$HOME/.local/share}/graveyard"',
+    ).length === 1;
+  const hasDeclaration = hasRipDeclaration && hasGraveyardDeclaration;
   const xdgDataEnv = process.env.XDG_DATA_HOME;
   const xdgData =
     xdgDataEnv === undefined || xdgDataEnv === ""
       ? join(ctx.home, ".local/share")
       : xdgDataEnv;
   const configured = hasDeclaration ? join(xdgData, "graveyard") : undefined;
-  const effective = configured ?? `/tmp/graveyard-${user}`;
+  const effective = configured ?? join(ctx.home, ".local/share/graveyard");
   const problems: string[] = [];
   if (configured === undefined)
     problems.push(
-      `RIP_GRAVEYARD is unset in zshenv; rip would default to ${effective}`,
+      `GRAVEYARD and RIP_GRAVEYARD are not both declared in zshenv; expected ${effective}`,
     );
   if (!isAbsolute(effective))
     problems.push(`effective location is not absolute: ${effective}`);

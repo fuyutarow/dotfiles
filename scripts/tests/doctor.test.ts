@@ -57,6 +57,7 @@ function doctor(
     HOME: string;
     DOTFILES: string;
     PATH?: string;
+    GRAVEYARD?: string;
     RIP_GRAVEYARD?: string;
     XDG_DATA_HOME?: string;
     USER?: string;
@@ -105,7 +106,7 @@ describe("doctor", () => {
     expect(missing.fix?.includes("systemctl --user daemon-reexec")).toBe(true);
   });
 
-  test("rip-graveyard evaluates zshenv and fails when the declared path exceeds its limit", () => {
+  test("rip-graveyard evaluates both zshenv variables and rejects bad locations", () => {
     const home = tmp("doctor-rip-graveyard-");
     const xdg = join(home, ".local/share");
     const graveyard = join(xdg, "graveyard");
@@ -114,6 +115,7 @@ describe("doctor", () => {
       const valid = doctor("rip-graveyard", {
         HOME: home,
         DOTFILES: REPO,
+        GRAVEYARD: "/tmp/doctor-must-ignore-this-inherited-value",
         RIP_GRAVEYARD: "/tmp/doctor-must-ignore-this-inherited-value",
         XDG_DATA_HOME: xdg,
       });
@@ -126,6 +128,7 @@ describe("doctor", () => {
     const tooLarge = doctor("rip-graveyard", {
       HOME: home,
       DOTFILES: REPO,
+      GRAVEYARD: graveyard,
       RIP_GRAVEYARD: graveyard,
       XDG_DATA_HOME: xdg,
     });
@@ -141,11 +144,14 @@ describe("doctor", () => {
     const unset = doctor("rip-graveyard", {
       HOME: home,
       DOTFILES: undeclared,
+      GRAVEYARD: graveyard,
       RIP_GRAVEYARD: graveyard,
       XDG_DATA_HOME: xdg,
     });
     expect(unset.code).toBe(1);
-    expect(unset.out).toContain("RIP_GRAVEYARD is unset in zshenv");
+    expect(unset.out).toContain(
+      "GRAVEYARD and RIP_GRAVEYARD are not both declared in zshenv",
+    );
   });
 
   test("rip-graveyard-tmp warns with size and permission-restoring cleanup command", () => {

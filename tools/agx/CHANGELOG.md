@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.3.0 — 2026-10-12
+
+- Make agx follow wait for filesystem changes, with a 2-second fallback that reads only appended ledger and event bytes. Keep agx wait behavior unchanged.
+
 ## 3.2.0 — 2026-10-12
 
 - Route tickets labeled `julia-compile` through the host-wide `agent-resource-run` compile slot,

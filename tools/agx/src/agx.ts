@@ -43,9 +43,12 @@
 // Test seams: AGX_STATE_DIR, DISPATCH_ROSTER_PATH, AGX_CODEX_WORKER (a fake agx).
 import {
   appendFileSync,
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   renameSync,
   readdirSync,
   realpathSync,
@@ -97,7 +100,13 @@ import {
   codexAdmissionRoute,
 } from "./admission-routes.ts";
 import { dispatchStats } from "./dispatch-stats.ts";
-import { appendLedgerLine, ledgerLines, rotateRunsLog } from "./ledger.ts";
+import {
+  appendLedgerLine,
+  ledgerFiles,
+  ledgerLines,
+  rotateRunsLog,
+} from "./ledger.ts";
+import { createFollowWaiter } from "./follow-watch.ts";
 import {
   parseSince,
   replayStats,
@@ -7518,6 +7527,68 @@ function runEvents(): Logged[] {
     );
 }
 
+function followEventFiles(): string[] {
+  const directory = join(STATE_DIR, "events");
+  return existsSync(directory)
+    ? readdirSync(directory)
+        .filter((name) => name.endsWith(".jsonl"))
+        .map((name) => join(directory, name))
+    : [];
+}
+
+function readFollowRange(path: string, start: number, size: number): Buffer {
+  const fd = openSync(path, "r");
+  const bytes = Buffer.allocUnsafe(size - start);
+  let read = 0;
+  while (read < bytes.length) {
+    const count = readSync(fd, bytes, read, bytes.length - read, start + read);
+    if (count === 0) break;
+    read += count;
+  }
+  closeSync(fd);
+  return bytes.subarray(0, read);
+}
+
+function appendParsedLines(data: Buffer, records: Logged[]): Buffer {
+  let lineStart = 0;
+  for (let index = 0; index < data.length; index += 1) {
+    if (data[index] !== 0x0a) continue;
+    const line = data.subarray(lineStart, index).toString("utf8");
+    lineStart = index + 1;
+    const parsed = jsonOf(LogLine).safeParse(line);
+    if (parsed.success) records.push(parsed.data);
+  }
+  return data.subarray(lineStart);
+}
+
+/** Read only JSONL bytes added since startup, retaining an incomplete final line. */
+function followAppendedRecords(): () => Logged[] {
+  const offsets = new Map<string, number>();
+  const fragments = new Map<string, Buffer>();
+  const files = (): string[] => [
+    ...followEventFiles(),
+    ...ledgerFiles(STATE_DIR),
+  ];
+  for (const path of files()) offsets.set(path, statSync(path).size);
+  return () => {
+    const records: Logged[] = [];
+    for (const path of files()) {
+      const size = statSync(path).size;
+      const previous = offsets.get(path) ?? 0;
+      const start = size < previous ? 0 : previous;
+      offsets.set(path, size);
+      if (start === 0) fragments.delete(path);
+      if (size <= start) continue;
+      const data = Buffer.concat([
+        fragments.get(path) ?? Buffer.alloc(0),
+        readFollowRange(path, start, size),
+      ]);
+      fragments.set(path, appendParsedLines(data, records));
+    }
+    return records;
+  };
+}
+
 function continuableRun(runId: string): Logged | undefined {
   return (
     readAllLog().findLast(
@@ -7561,6 +7632,7 @@ async function observeRuns(
   asJson: boolean,
   allLive: boolean,
 ): Promise<number> {
+  const readAppended = followAppendedRecords();
   const log = [...runEvents(), ...readAllLog()];
   const live = activeRunFor(id);
   const queuedContinuation =
@@ -7668,13 +7740,21 @@ async function observeRuns(
       done.add(runId_);
     }
   };
+  const watcher = follow
+    ? createFollowWaiter([
+        STATE_DIR,
+        join(STATE_DIR, "events"),
+        join(STATE_DIR, "active"),
+      ])
+    : undefined;
+  const records = [...log];
   while (done.size < targets.size) {
-    const records = [...runEvents(), ...readAllLog()];
-    targets.forEach((runId_) => {
-      observeOne(runId_, records);
-    });
-    if (done.size < targets.size) await Bun.sleep(100);
+    records.push(...readAppended());
+    for (const runId_ of targets) observeOne(runId_, records);
+    if (done.size < targets.size)
+      await (watcher === undefined ? Bun.sleep(100) : watcher.wait());
   }
+  watcher?.close();
   return exit;
 }
 

@@ -17,7 +17,11 @@ import {
 import { release, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { sshSupportsAttachMatch } from "../link-dots.ts";
-import { checkGoogleDrive, type Ctx } from "../doctor.ts";
+import {
+  checkGoogleDrive,
+  checkWslGpuManagerPath,
+  type Ctx,
+} from "../doctor.ts";
 import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,
@@ -89,6 +93,15 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("wsl-gpu-path checks the user manager PATH and gives the reexec repair", () => {
+    const present = checkWslGpuManagerPath("/usr/lib/wsl/lib:/usr/bin");
+    expect(present.verdict).toBe("PASS");
+    const missing = checkWslGpuManagerPath("/usr/bin:/bin");
+    expect(missing.verdict).toBe("FAIL");
+    expect(missing.detail.includes("systemd user manager PATH")).toBe(true);
+    expect(missing.fix?.includes("systemctl --user daemon-reexec")).toBe(true);
+  });
+
   test("rip-graveyard evaluates zshenv and fails when the declared path exceeds its limit", () => {
     const home = tmp("doctor-rip-graveyard-");
     const xdg = join(home, ".local/share");

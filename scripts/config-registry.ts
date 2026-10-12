@@ -151,6 +151,11 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
     "wsl/wsl-capacity-recover.timer.wsl",
     ".config/systemd/user/wsl-capacity-recover.timer",
   ],
+  [
+    "wsl",
+    "wsl/environment.d/10-wsl-gpu.conf",
+    ".config/environment.d/10-wsl-gpu.conf",
+  ],
 
   // --- update steps, process monitor, jj ---
   ["all", "topgrade/topgrade.toml", ".config/topgrade.toml"],

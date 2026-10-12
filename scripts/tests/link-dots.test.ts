@@ -17,6 +17,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LINKS } from "../config-registry.ts";
 import {
   applies,
   assertRoots,
@@ -79,6 +80,33 @@ test("applies: every When names its OSes explicitly", () => {
   expect(applies("not-mac", "mac")).toBe(false);
   expect(applies("wsl", "linux")).toBe(false);
   expect(applies("mac", "mac")).toBe(true);
+});
+
+test("the WSL systemd environment drop-in is registered and linked into XDG config", () => {
+  const home = tmp("wsl-env-home-");
+  const ctx: Ctx = {
+    home,
+    dotfiles: REPO,
+    os: "linux",
+    mode: "safe",
+    drift: [],
+  };
+  const entry = LINKS.find(
+    ([when, source]) =>
+      when === "wsl" && source === "wsl/environment.d/10-wsl-gpu.conf",
+  );
+  expect(entry).toEqual([
+    "wsl",
+    "wsl/environment.d/10-wsl-gpu.conf",
+    ".config/environment.d/10-wsl-gpu.conf",
+  ]);
+  if (entry === undefined) return;
+  expect(readFileSync(join(REPO, entry[1]), "utf8")).toBe(
+    "PATH=/usr/lib/wsl/lib:${PATH}\nLD_LIBRARY_PATH=/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n",
+  );
+  const destination = join(home, entry[2]);
+  link(ctx, entry[1], destination);
+  expect(readlinkSync(destination)).toBe(join(REPO, entry[1]));
 });
 
 test("Google Drive targets are discovered without storing the account folder name", () => {

@@ -22,6 +22,7 @@
 //                                                Codex settings and managed MCP entries match declarations
 //   codex-remote agents/codex/app-server.toml     Codex daemon remote control (mobile app) as declared
 //   wslconfig   wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
+//   wsl-gpu-path environment.d      (WSL only)   systemd user manager PATH contains WSL GPU tools
 //   ccc-daemon  cocoindex unit      (Linux)      enabled in default.target and active
 //   capacity-guard WSL timer       (WSL only)   autonomous host recovery timer is enabled and active
 //   ccc-db-map  zsh/zshenv + unit                the ccc daemon relocates index DBs exactly as
@@ -840,6 +841,41 @@ export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
   );
 }
 
+export function checkWslGpuManagerPath(path: string | undefined): Finding {
+  const name = "wsl-gpu-path";
+  if (path?.split(":").includes("/usr/lib/wsl/lib") === true)
+    return pass(name, "systemd user manager PATH includes /usr/lib/wsl/lib");
+  return fail(
+    name,
+    `systemd user manager PATH ${path === undefined ? "is not set" : `does not include /usr/lib/wsl/lib: ${path}`}`,
+    "mise run link:dots, then systemctl --user daemon-reexec (or log in again)",
+  );
+}
+
+async function checkWslGpuPath(): Promise<Finding> {
+  const result = await run(["systemctl", "--user", "show-environment"], {
+    ms: 10_000,
+  });
+  if (result.missing)
+    return fail(
+      "wsl-gpu-path",
+      "systemctl is not on PATH",
+      "mise run wsl:init",
+    );
+  if (result.timedOut)
+    return warn("wsl-gpu-path", "systemctl --user show-environment timed out");
+  if (result.code !== 0) {
+    const error = result.err.trim();
+    return fail(
+      "wsl-gpu-path",
+      error.length > 0 ? error : `systemctl exited ${result.code}`,
+      "systemctl --user daemon-reexec",
+    );
+  }
+  const path = /^PATH=(.*)$/mu.exec(result.out)?.[1];
+  return checkWslGpuManagerPath(path);
+}
+
 // ccc resolves a project's DB dir in TWO processes: the daemon writes the index where its own
 // COCOINDEX_CODE_DB_PATH_MAPPING points, while `ccc reset`/`ccc status` and repo-retrieve's
 // watermark look where the client's points. zsh/zshenv declares the client value and
@@ -1271,6 +1307,11 @@ export const CHECKS: Check[] = [
   {
     name: "wslconfig",
     run: checkWslconfig,
+    applies: (c) => (c.isWsl ? null : "WSL only"),
+  },
+  {
+    name: "wsl-gpu-path",
+    run: checkWslGpuPath,
     applies: (c) => (c.isWsl ? null : "WSL only"),
   },
   {

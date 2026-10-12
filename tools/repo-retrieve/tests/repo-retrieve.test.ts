@@ -16,6 +16,7 @@ import { describe, expect, test } from "bun:test";
 import { z } from "../../shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 import { decodedJson } from "../../../agents/hooks/tests/decode.ts";
+import { waitForIndexChild } from "../src/ccc-index.ts";
 
 const ROUTER = join(import.meta.dir, "..", "src", "repo-retrieve.ts");
 const COMPATIBILITY_PATH = join(
@@ -32,6 +33,48 @@ const COMPATIBILITY_PATH = join(
 const WrittenWatermarkSchema = z.object({
   head: z.string().nullable(),
   source: z.string(),
+});
+
+describe("index progress waiting", () => {
+  test("a fake daemon advancing for 360 seconds does not hit the stall timeout", async () => {
+    let now = 0;
+    let finish: ((code: number) => void) | undefined;
+    const childExit = new Promise<number>((resolve) => {
+      finish = resolve;
+    });
+    let samples = 0;
+    const result = await waitForIndexChild(childExit, 600_000, {
+      now: () => now,
+      sleep: (milliseconds) => {
+        now += milliseconds;
+        if (now % 60_000 === 0) samples += 1;
+        if (now === 360_000) finish?.(0);
+        return Promise.resolve();
+      },
+      sample: () =>
+        Promise.resolve(`Indexing in progress: ${samples} files listed`),
+    });
+    expect(now).toBe(360_000);
+    expect(result).toBe(0);
+  });
+
+  test("an indexing state with no counter or output advance reaches the stall timeout", async () => {
+    let now = 0;
+    const result = await waitForIndexChild(
+      new Promise<number>(() => {}),
+      3_000,
+      {
+        now: () => now,
+        sleep: (milliseconds) => {
+          now += milliseconds;
+          return Promise.resolve();
+        },
+        sample: () => Promise.resolve("project [indexing]"),
+      },
+    );
+    expect(now).toBe(3_000);
+    expect(result).toBe(124);
+  });
 });
 
 // The watermark file `index` wrote, parsed — an unparseable file fails the test loudly.
@@ -173,6 +216,7 @@ if [ "${name}" = ccc ] && [ "$1" = index ]; then
   # hasIndexArtifacts() (ccc-index.ts) see a project the router just indexed as non-empty.
   touch "$PWD/.cocoindex_code/fake_target.db" 2>/dev/null || true
 fi
+if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_INDEX_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
 if [ "${name}" = ccc ] && [ "\${FAKE_CCC_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
 if [ "${name}" = rg ] && [ "\${FAKE_RG_THREE_LINES:-0}" = 1 ]; then
   printf '%s\\n' first second third
@@ -1125,6 +1169,41 @@ describe("repo-retrieve route contract", () => {
     const search = run(dir, ["concept", "--query", "x"]);
     expect(search.code).toBe(0);
     expect(search.stdout).toContain("confidence=verified(index)");
+  });
+
+  test("detached index records its watermark after the background worker finishes", () => {
+    const { dir, head } = registerGitProject();
+    const requested = run(dir, ["index", "--detach"]);
+    expect(requested.code).toBe(0);
+    expect(requested.stdout).toContain("RESULT: INDEX_REQUESTED");
+
+    let status = run(dir, ["index", "--status"]);
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      if (status.stdout.includes("state=complete")) break;
+      status = run(dir, ["index", "--status"]);
+      Bun.sleepSync(50);
+    }
+    expect(status.code).toBe(0);
+    expect(status.stdout).toContain("state=complete");
+    expect(readWrittenWatermark(dir).head).toBe(head);
+  });
+
+  test("detached index reports stale and leaves the watermark unwritten when HEAD moves", () => {
+    const { dir, head } = registerGitProject();
+    const requested = run(dir, ["index", "--detach"], {
+      FAKE_CCC_INDEX_SLEEP: "1",
+    });
+    expect(requested.code).toBe(0);
+    writeFileSync(join(dir, "later.md"), "later\n");
+    gitCmd(dir, ["add", "later.md"]);
+    gitCmd(dir, ["commit", "-q", "-m", "later"]);
+    const movedHead = gitCmd(dir, ["rev-parse", "HEAD"]).trim();
+    expect(movedHead).not.toBe(head);
+
+    const status = run(dir, ["index", "--status"]);
+    expect(status.stdout).toContain("state=stale");
+    Bun.sleepSync(2_200);
+    expect(existsSync(watermarkFilePath(dir))).toBe(false);
   });
 
   test("a plain 'ccc index' run by hand does not permanently stick the watermark stale — the wrapper both reindexes and records the watermark in one step", () => {

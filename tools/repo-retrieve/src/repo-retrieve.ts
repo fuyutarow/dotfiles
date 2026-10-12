@@ -42,7 +42,7 @@
 //
 // Exit: 0 success, 1 no rg/ccc-search matches or Cleye ordinary-unknown refusal, 2 other
 // usage/environment failure, 3 stale/missing/corrupt/unrecorded index watermark (NO_INDEX), 75 ccc
-// index still building (daemon reports [indexing]; wait and retry), 124 child timeout.
+// index still building (daemon reports [indexing]; wait and retry), 124 index progress stalled.
 // Children receive argv directly; no query or path is evaluated by a shell.
 //
 // TRUST LAW (governs every exit path below): a tool must never report a stronger conclusion than
@@ -70,6 +70,7 @@ import {
   findRegisteredProject,
   headLabel,
   resolveRegisteredProject,
+  runIndexStatus,
   runIndexWrapper,
 } from "./ccc-index.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
@@ -1216,7 +1217,11 @@ function indexCommand() {
     {
       name: "index",
       parameters: [],
-      flags: { ...timeoutFlag() },
+      flags: {
+        ...timeoutFlag(),
+        detach: Boolean,
+        status: Boolean,
+      },
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       help: {
@@ -1235,12 +1240,25 @@ function indexCommand() {
         );
         return;
       }
+      if (parsed.flags.detach === true && parsed.flags.status === true) {
+        commandResult = err(
+          new Error("--detach and --status are mutually exclusive"),
+        );
+        return;
+      }
+      if (parsed.flags.status === true) {
+        commandResult = await runIndexStatus();
+        return;
+      }
       const timeout = positiveInteger(parsed.flags.timeoutMs, "timeout-ms");
       if (timeout.isErr()) {
         commandResult = err(timeout.error);
         return;
       }
-      const indexResult = await runIndexWrapper(timeout.value ?? 600_000);
+      const indexResult = await runIndexWrapper(
+        timeout.value ?? 600_000,
+        parsed.flags.detach === true ? "detach" : "wait",
+      );
       if (indexResult.isErr()) {
         commandResult = err(indexResult.error);
         return;
@@ -1249,7 +1267,12 @@ function indexCommand() {
       // Warm the definition catalog too, so the first `definition` query after an index does not
       // pay the build. Its failure is reported, never turned into an index failure.
       const project = findRegisteredProject(process.cwd());
-      if (indexResult.value === 0 && project !== null && project !== "") {
+      if (
+        indexResult.value === 0 &&
+        parsed.flags.detach !== true &&
+        project !== null &&
+        project !== ""
+      ) {
         const notes: string[] = [];
         const warmed = await fromAsyncThrowable(
           () => refreshCatalog(project, notes),

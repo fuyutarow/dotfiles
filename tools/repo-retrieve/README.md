@@ -13,6 +13,8 @@ rr exists '<what it does>'   -> definition catalog + judge: "is it already writt
 rr shape  '<code by example>'-> ccc grep                   old name: structural
 rr symbol                    -> exit 2: known symbols belong to Serena
 rr index                     -> ccc index, record the freshness watermark, warm the definition catalog
+rr index --detach            -> request indexing in a background worker and return
+rr index --status             -> inspect the detached request and its daemon state
 ```
 
 Old names stay as aliases; a query may be given positionally or with `--query`/`-q`. The RESULT
@@ -56,7 +58,11 @@ index. They exit 3 and write a NO_INDEX diagnostic to stderr with daemon status,
 command, and the lexical routes that remain available. `--json` adds a stdout object with
 `status: "NO_INDEX"` and `verdict: "UNVERIFIED"`; it never reports an unverified answer as PASS.
 For a new project, from its root run `ccc init && repo-retrieve index`. For an already registered
-project, run `repo-retrieve index` to execute `ccc index` and record the freshness watermark.
+project, run `repo-retrieve index` to execute `ccc index` and record the freshness watermark. The
+index command waits for progress from `ccc status` or child output; `--timeout-ms` is the maximum
+time without observable progress. Use `repo-retrieve index --detach` to leave a background worker
+running, then `repo-retrieve index --status` to inspect completion. The worker records the
+watermark only after indexing succeeds and HEAD remains unchanged from the request.
 
 Lexical NO_MATCH results from `text`, `regex`, and `files` name the repo root they searched and
 state that paths outside it were not searched. For path-like patterns and scratch-looking queries,

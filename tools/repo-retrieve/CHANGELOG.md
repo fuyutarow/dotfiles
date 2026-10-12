@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5 — 2026-10-13
+
+- Wait for observable ccc indexing progress instead of timing out on a fixed clock; add detached indexing with persistent status and HEAD-staleness reporting.
+
 ## 1.0.4 — 2026-10-13
 
 - Resolve jj workspaces to their registered backing repo for semantic routes, report the index scope, and refuse to build an index from a workspace.

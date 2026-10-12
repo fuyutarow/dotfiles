@@ -23,6 +23,7 @@
 import { readdir, rename } from "node:fs/promises";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import {
   err,
@@ -33,7 +34,7 @@ import {
 } from "neverthrow";
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
-import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
+import { requireExecutable, runChildCaptured } from "./child.ts";
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
@@ -149,7 +150,91 @@ const WatermarkSchema = z.object({
 });
 
 const WATERMARK_BASENAME = "INDEXED_AT";
+const INDEX_REQUEST_BASENAME = "INDEX_REQUEST.json";
 const INDEX_ATTEMPTS = 3;
+const INDEX_POLL_MS = 1_000;
+const INDEX_STALL_MS = 600_000;
+
+export type IndexProgressSource = {
+  now: () => number;
+  sleep: (milliseconds: number) => Promise<void>;
+  sample: () => Promise<string>;
+};
+
+export async function waitForIndexChild(
+  childExit: Promise<number>,
+  stallMs: number,
+  source: IndexProgressSource,
+): Promise<number> {
+  let lastProgress = source.now();
+  let lastSample = await source.sample();
+  let settled = false;
+  let exitCode = 0;
+  void childExit.then((code) => {
+    settled = true;
+    exitCode = code;
+  });
+  for (;;) {
+    if (settled) break;
+    await source.sleep(INDEX_POLL_MS);
+    if (settled) break;
+    const sample = await source.sample();
+    if (sample !== lastSample) {
+      lastSample = sample;
+      lastProgress = source.now();
+    }
+    if (source.now() - lastProgress >= stallMs) return 124;
+  }
+  return exitCode;
+}
+
+async function indexProgressSample(
+  project: string,
+): Promise<{ signature: string; indexing: boolean }> {
+  const ccc = requireExecutable("ccc");
+  if (ccc.isErr())
+    return {
+      signature: `ccc unavailable: ${ccc.error.message}`,
+      indexing: false,
+    };
+  const [status, daemon] = await Promise.all([
+    runChildCaptured([ccc.value, "status"], 10_000, false, project),
+    runChildCaptured([ccc.value, "daemon", "status"], 10_000, false, project),
+  ]);
+  const statusLine = status.stdout
+    .split("\n")
+    .find((line) => line.includes("Indexing in progress:"));
+  const daemonLine = daemon.stdout
+    .split("\n")
+    .find((line) => line.trimStart().startsWith(`${project} [`));
+  return {
+    signature: `${statusLine ?? status.stdout.trim()}\n${daemonLine ?? daemon.stdout.trim()}`,
+    indexing:
+      daemon.exitCode !== 0 ||
+      daemonLine === undefined ||
+      daemonLine.includes("[indexing]"),
+  };
+}
+
+async function waitForProjectIdle(
+  project: string,
+  stallMs: number,
+): Promise<boolean> {
+  let progressAt = Temporal.Now.instant().epochMilliseconds;
+  let state = await indexProgressSample(project);
+  while (state.indexing) {
+    await Bun.sleep(INDEX_POLL_MS);
+    const next = await indexProgressSample(project);
+    if (next.signature !== state.signature) {
+      state = next;
+      progressAt = Temporal.Now.instant().epochMilliseconds;
+      continue;
+    }
+    if (Temporal.Now.instant().epochMilliseconds - progressAt >= stallMs)
+      return false;
+  }
+  return true;
+}
 
 // The watermark lives beside the DB it certifies — in ccc's DB dir, which is outside the repo
 // whenever COCOINDEX_CODE_DB_PATH_MAPPING relocates it (see ccc-db-dir.ts).
@@ -157,6 +242,67 @@ function watermarkPath(project: string): Result<string, Error> {
   return resolveDbDir(project).map((directory) =>
     join(directory, WATERMARK_BASENAME),
   );
+}
+
+type IndexRequest = {
+  head: string | null;
+  requestedAt: string;
+  state: "pending" | "complete" | "stale" | "failed";
+};
+
+const IndexRequestSchema = z.object({
+  head: z.union([z.null(), z.string().regex(/^[0-9a-f]{40}$/iu)]),
+  requestedAt: z.string(),
+  state: z.enum(["pending", "complete", "stale", "failed"]),
+});
+
+function indexRequestPath(project: string): Result<string, Error> {
+  return resolveDbDir(project).map((directory) =>
+    join(directory, INDEX_REQUEST_BASENAME),
+  );
+}
+
+async function readIndexRequest(project: string): Promise<IndexRequest | null> {
+  const path = indexRequestPath(project);
+  if (path.isErr()) return null;
+  const file = Bun.file(path.value);
+  if (!(await file.exists())) return null;
+  const parsed = jsonOf(IndexRequestSchema).safeParse(await file.text());
+  return parsed.success ? parsed.data : null;
+}
+
+async function writeIndexRequest(
+  project: string,
+  request: IndexRequest,
+): Promise<Result<void, Error>> {
+  const path = indexRequestPath(project);
+  if (path.isErr()) return err(path.error);
+  const tmp = `${path.value}.tmp-${process.pid}`;
+  return fromAsyncThrowable(async () => {
+    await Bun.write(tmp, `${JSON.stringify(request, null, 2)}\n`);
+    await rename(tmp, path.value);
+  }, asError)();
+}
+
+async function markIndexRequest(
+  project: string,
+  state: IndexRequest["state"],
+): Promise<Result<void, Error>> {
+  const request = await readIndexRequest(project);
+  return request === null
+    ? ok()
+    : writeIndexRequest(project, { ...request, state });
+}
+
+async function markWorkerRequest(
+  project: string,
+  state: IndexRequest["state"],
+): Promise<void> {
+  const result = await markIndexRequest(project, state);
+  if (result.isErr())
+    process.stderr.write(
+      `NOTE: could not update detached index status: ${result.error.message}\n`,
+    );
 }
 
 type WatermarkRead =
@@ -349,12 +495,7 @@ async function autoCatchUp(
   process.stderr.write(
     `NOTE: index trails HEAD; catching up (bounded ${AUTO_INDEX_MS / 1000}s)\n`,
   );
-  const runResult = await reindexCertified(
-    project,
-    ccc.value,
-    AUTO_INDEX_MS,
-    true,
-  );
+  const runResult = await reindexCertified(project, ccc.value, AUTO_INDEX_MS);
   if (runResult.isErr()) return err(runResult.error);
   const run = runResult.value;
   const seconds = (
@@ -540,7 +681,7 @@ async function reindexCertified(
   project: string,
   ccc: string,
   timeoutMs: number,
-  childToStderr: boolean,
+  expectedHead?: string | null,
 ): Promise<Result<{ code: number; head: string | null }, Error>> {
   let head: string | null = null;
   let certified = false;
@@ -552,13 +693,16 @@ async function reindexCertified(
     const headBeforeResult = await gitHead(project);
     if (headBeforeResult.isErr()) return err(headBeforeResult.error);
     const headBefore = headBeforeResult.value;
+    if (expectedHead !== undefined && headBefore !== expectedHead) {
+      process.stderr.write(
+        `FATAL: HEAD changed since detached index request (${headLabel(expectedHead)} -> ${headLabel(headBefore)}); index is stale\n`,
+      );
+      return ok({ code: 2, head: null });
+    }
 
     process.stderr.write(`ROUTE: index -> ccc index project=${project}\n`);
     const child = await fromAsyncThrowable(
-      () =>
-        childToStderr
-          ? runChildToStderr([ccc, "index"], timeoutMs, project)
-          : runChild([ccc, "index"], timeoutMs, project),
+      () => runChildToStderr([ccc, "index"], timeoutMs, project),
       asError,
     )();
     if (child.isErr()) return err(child.error);
@@ -609,6 +753,14 @@ async function reindexCertified(
     return ok({ code: 2, head: null });
   }
 
+  const idle = await waitForProjectIdle(project, timeoutMs);
+  if (!idle) {
+    process.stderr.write(
+      `FATAL: ccc daemon kept indexing ${project} without progress for ${timeoutMs}ms; watermark left unwritten\n`,
+    );
+    return ok({ code: 124, head: null });
+  }
+
   // The daemon wrote the index wherever ITS COCOINDEX_CODE_DB_PATH_MAPPING points; this process
   // resolves the DB dir from its own. If the two disagree (a daemon started before the mapping
   // was set, a shell that never read zsh/zshenv), the index exists and this process cannot see
@@ -623,6 +775,13 @@ async function reindexCertified(
         "the daemon and this process resolve different DB dirs. Compare the 'DB path mappings' " +
         `line of 'ccc doctor' with this process's COCOINDEX_CODE_DB_PATH_MAPPING ` +
         `(${process.env.COCOINDEX_CODE_DB_PATH_MAPPING ?? "unset"}). Watermark left unwritten\n`,
+    );
+    return ok({ code: 2, head: null });
+  }
+
+  if (expectedHead !== undefined && head !== expectedHead) {
+    process.stderr.write(
+      `FATAL: HEAD changed since detached index request (${headLabel(expectedHead)} -> ${headLabel(head)}); watermark left unwritten\n`,
     );
     return ok({ code: 2, head: null });
   }
@@ -650,23 +809,53 @@ async function runChildToStderr(
   timeoutMs: number,
   cwd: string,
 ): Promise<number> {
-  const signal = AbortSignal.timeout(timeoutMs);
+  const runtimeDir = process.env.XDG_RUNTIME_DIR;
+  if (runtimeDir !== undefined) {
+    const deferralPath = join(
+      runtimeDir,
+      "agent-resource-control",
+      "ccc-gpu-status.json",
+    );
+    const deferral = jsonOf(
+      z.object({ deferring: z.boolean(), reason: z.string().optional() }),
+    ).safeParse(
+      await Bun.file(deferralPath)
+        .text()
+        .catch(() => ""),
+    );
+    if (deferral.success && deferral.data.deferring) {
+      process.stderr.write(
+        `NOTE: ccc GPU work deferred: ${deferral.data.reason ?? "GPU reservation live"}; waiting for CPU indexing progress\n`,
+      );
+    }
+  }
+  // bounded: waitForIndexChild enforces the progress-based stall timeout before terminating this client.
   const child = Bun.spawn({
     cmd: command,
     cwd,
     env: process.env,
     stdout: "pipe",
     stderr: "inherit",
-    signal,
-    killSignal: "SIGTERM",
   });
+  let outputAdvance = 0;
   const relay = (async () => {
-    for await (const chunk of child.stdout) process.stderr.write(chunk);
+    for await (const chunk of child.stdout) {
+      outputAdvance += chunk.length;
+      process.stderr.write(chunk);
+    }
   })();
-  const [exitCode] = await Promise.all([child.exited, relay]);
-  if (signal.aborted) {
+  const sample = async () =>
+    `${(await indexProgressSample(cwd)).signature}\nchild-output-bytes=${outputAdvance}`;
+  const exitPromise = Promise.all([child.exited, relay]).then(([code]) => code);
+  const exitCode = await waitForIndexChild(exitPromise, timeoutMs, {
+    now: () => Temporal.Now.instant().epochMilliseconds,
+    sleep: (milliseconds) => Bun.sleep(milliseconds),
+    sample,
+  });
+  if (exitCode === 124) {
+    child.kill("SIGTERM");
     process.stderr.write(
-      `NOTE: ccc index still running after ${timeoutMs}ms; left to the daemon\n`,
+      `FATAL: ccc index made no observable progress for ${timeoutMs}ms; stopped the client and left the daemon running\n`,
     );
     return 124;
   }
@@ -681,7 +870,8 @@ async function runChildToStderr(
 // not be verified -- see the file header). The only way to make the watermark fresh again is to
 // run `repo-retrieve index`, which reindexes AND records the result in one step.
 export async function runIndexWrapper(
-  timeoutMs: number,
+  timeoutMs = INDEX_STALL_MS,
+  mode: "wait" | "detach" = "wait",
 ): Promise<Result<number, Error>> {
   const resolution = resolveRegisteredProject(process.cwd());
   if (resolution?.workspace !== null && resolution?.workspace !== undefined) {
@@ -699,6 +889,59 @@ export async function runIndexWrapper(
   }
   const ccc = requireExecutable("ccc");
   if (ccc.isErr()) return err(ccc.error);
+
+  const worker = process.env.REPO_RETRIEVE_INDEX_WORKER === "1";
+  let expectedHead: string | null | undefined;
+  if (worker) {
+    expectedHead = process.env.REPO_RETRIEVE_INDEX_REQUEST_HEAD;
+    if (expectedHead === "none") expectedHead = null;
+  }
+  if (mode === "detach") {
+    const head = await gitHead(project);
+    if (head.isErr()) return err(head.error);
+    const request: IndexRequest = {
+      head: head.value,
+      requestedAt: Temporal.Now.instant().toString({
+        fractionalSecondDigits: 3,
+      }),
+      state: "pending",
+    };
+    const saved = await writeIndexRequest(project, request);
+    if (saved.isErr()) return err(saved.error);
+    const child = fromThrowable(
+      () =>
+        // bounded: this detached worker applies the same progress-based stall timeout internally.
+        Bun.spawn(
+          [
+            process.execPath,
+            fileURLToPath(new URL("./repo-retrieve.ts", import.meta.url)),
+            "index",
+          ],
+          {
+            cwd: project,
+            env: {
+              ...process.env,
+              REPO_RETRIEVE_INDEX_WORKER: "1",
+              REPO_RETRIEVE_INDEX_REQUEST_HEAD: head.value ?? "none",
+            },
+            stdin: "ignore",
+            stdout: "ignore",
+            stderr: "ignore",
+            detached: true,
+          },
+        ),
+      asError,
+    )();
+    if (child.isErr()) {
+      await writeIndexRequest(project, { ...request, state: "failed" });
+      return err(child.error);
+    }
+    child.value.unref();
+    process.stdout.write(
+      `RESULT: INDEX_REQUESTED project=${project} head=${headLabel(head.value)} state=pending\n`,
+    );
+    return ok(0);
+  }
 
   // Read HEAD both before and after the (potentially long-running) `ccc index` child. If they
   // disagree, a structural git mutation (commit, checkout, rebase, branch switch) landed WHILE
@@ -722,11 +965,21 @@ export async function runIndexWrapper(
     project,
     ccc.value,
     timeoutMs,
-    false,
+    expectedHead,
   );
-  if (certifiedResult.isErr()) return err(certifiedResult.error);
+  if (certifiedResult.isErr()) {
+    if (worker) await markWorkerRequest(project, "failed");
+    return err(certifiedResult.error);
+  }
   const certifiedRun = certifiedResult.value;
-  if (certifiedRun.code !== 0) return ok(certifiedRun.code);
+  if (certifiedRun.code !== 0) {
+    if (worker)
+      await markWorkerRequest(
+        project,
+        expectedHead === undefined ? "failed" : "stale",
+      );
+    return ok(certifiedRun.code);
+  }
   const head = certifiedRun.head;
   const dirty = await isWorkingTreeDirty(project);
   if (dirty.isErr()) return err(dirty.error);
@@ -746,6 +999,59 @@ export async function runIndexWrapper(
   process.stdout.write(
     `RESULT: INDEXED project=${project} head=${headLabel(head)} source=index ` +
       "confidence=verified(index)\n",
+  );
+  if (worker) await markWorkerRequest(project, "complete");
+  return ok(0);
+}
+
+export async function runIndexStatus(): Promise<Result<number, Error>> {
+  const resolution = resolveRegisteredProject(process.cwd());
+  const project = resolution?.project;
+  if (project === undefined || project === null || project === "")
+    return err(
+      new Error(
+        `index status requested, but ${process.cwd()} is not ccc-registered`,
+      ),
+    );
+  const request = await readIndexRequest(project);
+  if (request === null) {
+    process.stdout.write(
+      `RESULT: INDEX_STATUS project=${project} state=none\n`,
+    );
+    return ok(0);
+  }
+  const head = await gitHead(project);
+  if (head.isErr()) return err(head.error);
+  if (head.value !== request.head) {
+    process.stdout.write(
+      `RESULT: INDEX_STATUS project=${project} state=stale requested=${headLabel(request.head)} current=${headLabel(head.value)}\n`,
+    );
+    return ok(0);
+  }
+  const watermark = await readWatermark(project);
+  if (watermark.isErr()) return err(watermark.error);
+  const complete =
+    request.state === "complete" &&
+    watermark.value.kind === "ok" &&
+    watermark.value.value.source === "index" &&
+    watermark.value.value.head === request.head;
+  const ccc = requireExecutable("ccc");
+  if (ccc.isErr()) return err(ccc.error);
+  const status = await runChildCaptured(
+    [ccc.value, "daemon", "status"],
+    10_000,
+    false,
+    project,
+  );
+  const projectState = status.stdout
+    .split("\n")
+    .find((line) => line.trimStart().startsWith(`${project} [`))
+    ?.trim()
+    .split(" ")
+    .at(-1);
+  const state = complete ? "complete" : request.state;
+  process.stdout.write(
+    `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${projectState ?? "unknown"} head=${headLabel(request.head)}\n`,
   );
   return ok(0);
 }

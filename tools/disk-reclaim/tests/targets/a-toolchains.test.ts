@@ -154,7 +154,7 @@ describe("toolchains target and version stores", () => {
     expect(liveExecutables(join(proc, "missing"))).toBeUndefined();
   });
 
-  test("toolchains plans old VS Code versions except the newest and recent versions", () => {
+  test("toolchains plans old VS Code versions except the newest and recent versions", async () => {
     const home = tempRoot("reclaim-toolchains-servers-");
     const keepDays = process.env.KEEP_DAYS;
     process.env.KEEP_DAYS = "2";
@@ -175,15 +175,15 @@ describe("toolchains target and version stores", () => {
     const recentSec = Temporal.Now.instant().epochMilliseconds / 1000 - 86400;
     utimesSync(old, oldSec, oldSec);
     utimesSync(recent, recentSec, recentSec);
-    const planned = createToolchainsTarget(() => home)
-      .plan(contextFor(home))
-      .map((candidate) => candidate.path);
+    const planned = (
+      await createToolchainsTarget(() => home).plan(contextFor(home))
+    ).map((candidate) => candidate.path);
     expect(planned).toContain(old);
     expect(planned).not.toContain(newest);
     expect(planned).not.toContain(recent);
   });
 
-  test("rustup pin files and the discovered default toolchain are explicit KEEP candidates", () => {
+  test("rustup pin files and the discovered default toolchain are explicit KEEP candidates", async () => {
     const home = tempRoot("reclaim-toolchains-pins-");
     const projects = join(home, "Workspace/project");
     const rustupDir = join(home, ".rustup/toolchains");
@@ -206,9 +206,9 @@ describe("toolchains target and version stores", () => {
       available: () => true,
       defaultToolchain: () => "stable-x86_64-unknown-linux-gnu",
     });
-    const rustup = target
-      .plan(contextFor(home))
-      .filter((candidate) => candidate.path?.startsWith(rustupDir) === true);
+    const rustup = (await target.plan(contextFor(home))).filter(
+      (candidate) => candidate.path?.startsWith(rustupDir) === true,
+    );
     expect(
       rustup
         .toSorted((left, right) =>
@@ -238,9 +238,9 @@ describe("toolchains target and version stores", () => {
     const oldSec =
       Temporal.Now.instant().epochMilliseconds / 1000 - 100 * 86400;
     utimesSync(oldRelease, oldSec, oldSec);
-    const candidate = target
-      .plan(contextFor(home))
-      .find((item) => item.path === oldRelease);
+    const candidate = (await target.plan(contextFor(home))).find(
+      (item) => item.path === oldRelease,
+    );
     expect(candidate).toBeDefined();
     expect(candidate).toBeDefined();
     if (candidate === undefined) return;

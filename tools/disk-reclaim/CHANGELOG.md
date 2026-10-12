@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2 — 2026-10-12
+
+- Handle SIGINT and SIGTERM promptly, stop active scan workers and SSH probes, and finish only the current deletion item before reporting what was removed; a second interrupt forces exit.
+
 ## 1.1.1 — 2026-10-12
 
 - Keep reclaiming healthy targets when workspace listing or the Windows host probe fails; report each failed target and exit 1 when any target fails.

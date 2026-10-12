@@ -173,7 +173,6 @@ apis = [
 "tools/disk-reclaim/src/targets/scratch.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/disk-reclaim/src/targets/system.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/disk-reclaim/src/targets/toolchains.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
-"tools/disk-reclaim/src/targets/tree.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/disk-reclaim/src/targets/workspaces.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/repo-retrieve/src/ccc-db-dir.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/repo-retrieve/src/ccc-index.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }

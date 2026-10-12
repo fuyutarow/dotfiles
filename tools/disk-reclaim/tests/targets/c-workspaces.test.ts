@@ -78,7 +78,7 @@ describe("workspaces target", () => {
       expect(row.checks.find((check) => check.name === "not in use")?.ok).toBe(
         true,
       );
-      expect(row.bytes).toBe(treeBytes(path));
+      expect(row.bytes).toBe(await treeBytes(path));
       expect(row.bytes).toBeGreaterThan(0);
     }
     // An unexpected unreadable process remains ASK, with allocated bytes shown.
@@ -87,7 +87,7 @@ describe("workspaces target", () => {
     const unknown = await checked.plan(ctx);
     for (const path of paths) {
       expect(only(unknown, path).verdict).toBe("ASK");
-      expect(only(unknown, path).bytes).toBe(treeBytes(path));
+      expect(only(unknown, path).bytes).toBe(await treeBytes(path));
     }
     // Readable positive use still wins over the expected permission exception.
     writeFileSync(join(proc.base, "comm"), "systemd\n");
@@ -96,7 +96,7 @@ describe("workspaces target", () => {
     snapshot = collectProcesses(proc);
     const busy = only(await checked.plan(ctx), paths[0]!);
     expect(busy.verdict).toBe("KEEP");
-    expect(busy.bytes).toBe(treeBytes(paths[0]!));
+    expect(busy.bytes).toBe(await treeBytes(paths[0]!));
   }, 30_000);
 
   test("a pushed, clean workspace is RECLAIM; run records recovery, forgets, then deletes", async () => {

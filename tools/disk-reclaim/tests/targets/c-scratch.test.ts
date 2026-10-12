@@ -44,7 +44,7 @@ function makeFacts(
 }
 
 describe("scratch target", () => {
-  test("only uuid-shaped scratchpad directories are enumerated and uncertainty asks", () => {
+  test("only uuid-shaped scratchpad directories are enumerated and uncertainty asks", async () => {
     const home = tempRoot("reclaim-scratch-enumeration-");
     const root = join(home, `claude-${process.getuid?.() ?? 0}`);
     using cleanup = new DisposableStack();
@@ -71,7 +71,7 @@ describe("scratch target", () => {
       config: config(root),
       log: () => {},
     };
-    const rows = target.plan(context);
+    const rows = await target.plan(context);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       path: scratch("project", uuidA),
@@ -79,7 +79,7 @@ describe("scratch target", () => {
     });
   });
 
-  test("nested jj workspace is delegated and kept", () => {
+  test("nested jj workspace is delegated and kept", async () => {
     const home = tempRoot("reclaim-scratch-jj-");
     const root = join(home, `claude-${process.getuid?.() ?? 0}`);
     using cleanup = new DisposableStack();
@@ -96,7 +96,7 @@ describe("scratch target", () => {
         return makeFacts(ref, "dead");
       },
     });
-    const rows = target.plan({
+    const rows = await target.plan({
       mode: "plan",
       config: config(root),
       log: () => {},
@@ -108,7 +108,7 @@ describe("scratch target", () => {
     expect(probed).toBe(false);
   });
 
-  test("nested git worktree marker is delegated", () => {
+  test("nested git worktree marker is delegated", async () => {
     const home = tempRoot("reclaim-scratch-git-");
     const root = join(home, `claude-${process.getuid?.() ?? 0}`);
     using cleanup = new DisposableStack();
@@ -125,8 +125,9 @@ describe("scratch target", () => {
       },
     });
     expect(
-      target.plan({ mode: "plan", config: config(root), log: () => {} })[0]
-        ?.reason,
+      (
+        await target.plan({ mode: "plan", config: config(root), log: () => {} })
+      )[0]?.reason,
     ).toBe("delegated: jj workspace");
     expect(probed).toBe(false);
   });

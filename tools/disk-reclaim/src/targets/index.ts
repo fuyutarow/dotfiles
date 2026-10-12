@@ -22,6 +22,7 @@ import { audit } from "./audit.ts";
 
 export type Context = {
   mode: "plan" | "run";
+  signal?: AbortSignal;
   /** Whether the user named this target instead of receiving it through a tier. */
   explicit?: boolean;
   config: Config;

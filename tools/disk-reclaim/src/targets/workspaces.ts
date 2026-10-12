@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { fromAsyncThrowable } from "neverthrow";
 import {
   listWorkspaces,
   storeOf,
@@ -103,13 +104,13 @@ function lastFetch(store: string): string {
     : `remote view as of last fetch ${hit.split("\t")[0]}`;
 }
 
-function storeCandidates(
+async function storeCandidates(
   store: string,
   context: Context,
   options: WorkspacesOptions,
   covered: Set<string>,
   log: (line: string) => void,
-): Candidate[] {
+): Promise<Candidate[]> {
   let fetchError: string | null = null;
   if ((options.fetch ?? context.fetch) === true) {
     const fetched = jj(["-R", store, "git", "fetch"]);
@@ -125,11 +126,15 @@ function storeCandidates(
     context.reportPlanError?.(message, true);
     return [];
   }
-  return listed.flatMap((entry) => {
+  const candidates: Candidate[] = [];
+  for (const entry of listed) {
     if (entry.root !== null) covered.add(entry.root);
-    if (entry.name === "default" || entry.root === store) return [];
-    if (fetchError === null) return [evaluate(store, entry, context, options)];
-    return [
+    if (entry.name === "default" || entry.root === store) continue;
+    if (fetchError === null) {
+      candidates.push(await evaluate(store, entry, context, options));
+      continue;
+    }
+    candidates.push(
       ask(
         entry.root ?? `${store}#${entry.name}`,
         entry.root,
@@ -137,8 +142,9 @@ function storeCandidates(
         entry.name,
         "remote fetch",
       ),
-    ];
-  });
+    );
+  }
+  return candidates;
 }
 
 function gather(
@@ -260,12 +266,12 @@ const failAction = (error: string): ActionResult => ({
   error,
 });
 
-function evaluate(
+async function evaluate(
   store: string,
   entry: Listed,
   ctx: Context,
   options: WorkspacesOptions,
-): Candidate {
+): Promise<Candidate> {
   const { name, root } = entry;
   const id = root ?? `${store}#${name}`;
   if (root === null)
@@ -316,7 +322,9 @@ function evaluate(
     verdict: judged.verdict,
     reason: judged.reason,
     checks: judged.checks,
-    bytes: fromThrowable(() => measuredTreeBytes(root, ctx))().unwrapOr(null),
+    bytes: (
+      await fromAsyncThrowable(() => measuredTreeBytes(root, ctx))()
+    ).unwrapOr(null),
     bytes_kind: judged.verdict === "RECLAIM" ? "freed_now" : "estimate",
     action: { kind: "jj-forget+delete", argv: FORGET(store, name) },
     result: null,
@@ -333,7 +341,7 @@ export function createWorkspacesTarget(
       Bun.which("jj") === null
         ? { available: false, skip_reason: "jj is not installed" }
         : { available: true, skip_reason: null },
-    plan: (ctx) => {
+    plan: async (ctx) => {
       const context = {
         ...ctx,
         liveness:
@@ -359,7 +367,7 @@ export function createWorkspacesTarget(
       const covered = new Set<string>();
       for (const store of [...stores].toSorted()) {
         candidates.push(
-          ...storeCandidates(store, context, options, covered, ctx.log),
+          ...(await storeCandidates(store, context, options, covered, ctx.log)),
         );
       }
       for (const dir of found.workspaces) {
@@ -371,27 +379,34 @@ export function createWorkspacesTarget(
             "orphan: the store this workspace points at is missing, so jj cannot evaluate its working copy";
         candidates.push(ask(dir, dir, reason, "orphan", "listed by its store"));
       }
-      return candidates.map((candidate) => {
+      const rows: Candidate[] = [];
+      for (const candidate of candidates) {
         const path = candidate.path;
         if (candidate.bytes === null && path !== null)
-          candidate.bytes = fromThrowable(() =>
-            measuredTreeBytes(path, ctx),
-          )().unwrapOr(null);
-        if (candidate.path === null || candidate.verdict !== "RECLAIM")
-          return candidate;
+          candidate.bytes = (
+            await fromAsyncThrowable(() => measuredTreeBytes(path, ctx))()
+          ).unwrapOr(null);
+        if (candidate.path === null || candidate.verdict !== "RECLAIM") {
+          rows.push(candidate);
+          continue;
+        }
         const protection = protectedReason(candidate.path, {
           procDir: ctx.procDir,
           repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
           protectedPaths: ctx.config.protected ?? [],
           ignoreUnreadableProcs: ctx.config.ignore_unreadable_procs ?? [],
         });
-        if (protection === null) return candidate;
+        if (protection === null) {
+          rows.push(candidate);
+          continue;
+        }
         candidate.verdict =
           protection === "process paths are unknown" ? "ASK" : "KEEP";
         candidate.reason = `protected: ${protection}`;
         candidate.action.argv = [];
-        return candidate;
-      });
+        rows.push(candidate);
+      }
+      return rows;
     },
     act: async (candidate, ctx): Promise<ActionResult> => {
       const fail = failAction;

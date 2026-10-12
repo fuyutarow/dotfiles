@@ -100,6 +100,8 @@ const totals = (candidates: Candidate[]): TargetPlan["totals"] => ({
   ask: candidates.filter((c) => c.verdict === "ASK").length,
   keep: candidates.filter((c) => c.verdict === "KEEP").length,
 });
+const isAborted = (signal: AbortSignal | undefined): boolean =>
+  signal?.aborted === true;
 const snapshotFor = (config: Config, context: Context): LivenessSnapshot =>
   createLivenessSnapshot(config, {
     procs: {
@@ -246,6 +248,7 @@ export async function plan(
   let cursor = 0;
   const scan = async (): Promise<void> => {
     while (cursor < targets.length) {
+      if (options.context.signal?.aborted === true) return;
       const index = cursor;
       cursor += 1;
       const target = targets[index];
@@ -391,6 +394,8 @@ export async function plan(
   };
   const workers = Math.min(targets.length, cpus().length, 4);
   await Promise.all(Array.from({ length: workers }, () => scan()));
+  if (options.context.signal?.aborted === true)
+    return { exit: 0, plan: null, error: "cancelled" };
   const completeRows = rows.flatMap((row) => (row === null ? [] : [row]));
   if (completeRows.length !== targets.length)
     return { exit: 2, plan: null, error: "target scan did not complete" };
@@ -410,6 +415,7 @@ async function recheckAndAct(
   actions: ReceiptAction[],
   options: EngineOptions,
 ): Promise<number> {
+  if (isAborted(ctx.signal)) return 0;
   const original = row.candidates[index];
   if (original === undefined || original.verdict !== "RECLAIM") return 0;
   // The target re-evaluates in run mode under the lock immediately before act.
@@ -422,6 +428,7 @@ async function recheckAndAct(
   const fresh = await fromAsyncThrowable(async () =>
     target.plan(freshContext),
   )();
+  if (isAborted(ctx.signal)) return 0;
   const parsed = fresh.isOk() ? Candidate.array().safeParse(fresh.value) : null;
   if (parsed !== null && !parsed.success) {
     ctx.log(`${target.name}: invalid recheck: ${parsed.error.message}`);
@@ -574,6 +581,7 @@ async function executeCandidates(
   options: EngineOptions,
 ): Promise<void> {
   for (const index of row.candidates.keys()) {
+    if (ctx.signal?.aborted === true) break;
     const exit = await recheckAndAct(target, row, index, ctx, actions, options);
     if (exit === 0) continue;
     row.exit = exit;
@@ -755,6 +763,7 @@ async function executeLocked(
   }
   let receipt: string | null = null;
   for (const [index, target] of targets.entries()) {
+    if (options.context.signal?.aborted === true) break;
     const row = lockedPlan.targets[index];
     receipt = await executeTargetIfPresent(target, row, options, dir, receipt);
   }
@@ -813,6 +822,7 @@ export async function run(
   };
   const preview = await plan(targets, runOptions);
   if (preview.plan === null) return preview;
+  if (options.context.signal?.aborted === true) return preview;
   const dir = options.state ?? stateDir();
   options.context.reportActivity?.("lock", "waiting for reclaim lock");
   const lock = await waitForLock(

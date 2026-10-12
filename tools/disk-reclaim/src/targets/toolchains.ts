@@ -50,7 +50,7 @@ export const createToolchainsTarget = (
     name: "toolchains",
     tier: "blind",
     available: () => ({ available: true, skip_reason: null }),
-    plan: (_ctx: Context) => {
+    plan: async (_ctx: Context) => {
       const home = homePath();
       const projects = process.env.AUDIT_PROJECTS ?? join(home, "Workspace");
       const keepDays = Number(process.env.KEEP_DAYS ?? "2");
@@ -79,18 +79,18 @@ export const createToolchainsTarget = (
         const path = join(rustupDir, name);
         if (name === defaultName) {
           candidates.push(
-            keepTreeCandidate(path, "default rustup toolchain", _ctx),
+            await keepTreeCandidate(path, "default rustup toolchain", _ctx),
           );
           continue;
         }
         if (pins.some((p) => name.startsWith(p) || p.startsWith(name))) {
           candidates.push(
-            keepTreeCandidate(path, "pinned rustup toolchain", _ctx),
+            await keepTreeCandidate(path, "pinned rustup toolchain", _ctx),
           );
           continue;
         }
         candidates.push(
-          treeCandidate(
+          await treeCandidate(
             path,
             "non-default rustup toolchain is not pinned",
             _ctx,
@@ -140,7 +140,7 @@ export const createToolchainsTarget = (
         )
           continue;
         candidates.push(
-          treeCandidate(path, "old idle VS Code server version", _ctx),
+          await treeCandidate(path, "old idle VS Code server version", _ctx),
         );
       }
       for (const store of STORES) {
@@ -152,7 +152,7 @@ export const createToolchainsTarget = (
           keepDays,
         }))
           candidates.push(
-            treeCandidate(
+            await treeCandidate(
               release.path,
               `superseded ${store.name} release`,
               _ctx,

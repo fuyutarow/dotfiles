@@ -1337,14 +1337,6 @@
     },
     {
       "files": [
-        "tools/disk-reclaim/src/targets/tree.ts"
-      ],
-      "rules": {
-        "node/no-sync": "off"
-      }
-    },
-    {
-      "files": [
         "tools/disk-reclaim/src/targets/workspaces.ts"
       ],
       "rules": {

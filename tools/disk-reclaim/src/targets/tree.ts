@@ -1,31 +1,67 @@
-import { lstatSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import type { Candidate } from "../model.ts";
 import type { Context } from "./index.ts";
 
-export function treeBytes(
+export async function treeBytes(
   path: string,
   report?: (entries: number, bytes: number) => void,
-): number {
-  let entries = 0;
-  let bytes = 0;
-  const visit = (entry: string): void => {
-    const stat = lstatSync(entry);
-    entries++;
-    bytes += stat.blocks * 512;
-    // Synchronous walks cannot run timer callbacks. Deliver bounded updates
-    // directly so the shared Clack region stays live while traversing.
-    if (entries % 128 === 0) report?.(entries, bytes);
-    if (stat.isDirectory() && !stat.isSymbolicLink())
-      for (const name of readdirSync(entry)) visit(join(entry, name));
-  };
-  visit(path);
-  report?.(entries, bytes);
-  return bytes;
+  signal?: AbortSignal,
+): Promise<number> {
+  signal?.throwIfAborted();
+  return new Promise<number>((resolve, reject) => {
+    const worker = new Worker(
+      new URL("./tree-scan-worker.ts", import.meta.url),
+    );
+    let settled = false;
+    const cleanup = () => {
+      signal?.removeEventListener("abort", abort);
+      worker.terminate();
+    };
+    const abort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("tree scan aborted"));
+    };
+    worker.addEventListener(
+      "message",
+      (event: MessageEvent<TreeScanMessage>) => {
+        if (settled) return;
+        if (event.data.kind === "progress") {
+          report?.(event.data.entries, event.data.bytes);
+          return;
+        }
+        settled = true;
+        cleanup();
+        if (event.data.kind === "error") {
+          reject(new Error(event.data.message));
+          return;
+        }
+        report?.(event.data.entries, event.data.bytes);
+        resolve(event.data.bytes);
+      },
+    );
+    worker.addEventListener("error", (event: ErrorEvent) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(event.message));
+    });
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted === true) abort();
+    else worker.postMessage({ path }, []);
+  });
 }
 
-export function measuredTreeBytes(path: string, ctx?: Context): number {
+type TreeScanMessage =
+  | { kind: "progress"; entries: number; bytes: number }
+  | { kind: "done"; entries: number; bytes: number }
+  | { kind: "error"; message: string };
+
+export function measuredTreeBytes(
+  path: string,
+  ctx?: Context,
+): Promise<number> {
   return treeBytes(
     path,
     ctx?.reportProgress === undefined
@@ -33,6 +69,7 @@ export function measuredTreeBytes(path: string, ctx?: Context): number {
       : (entries, bytes) => {
           ctx.reportProgress?.(ctx.targetName ?? path, path, entries, bytes);
         },
+    ctx?.signal,
   );
 }
 
@@ -40,8 +77,8 @@ export function treeCandidate(
   path: string,
   reason: string,
   ctx?: Context,
-): Candidate {
-  return {
+): Promise<Candidate> {
+  return measuredTreeBytes(path, ctx).then((bytes) => ({
     id: path,
     path,
     verdict: "RECLAIM",
@@ -49,20 +86,20 @@ export function treeCandidate(
     checks: [
       { name: "target exists and is a directory", ok: true, detail: path },
     ],
-    bytes: measuredTreeBytes(path, ctx),
+    bytes,
     bytes_kind: "freed_now",
     action: { kind: "delete", argv: [path] },
     result: null,
-  };
+  }));
 }
 
-export function keepTreeCandidate(
+export async function keepTreeCandidate(
   path: string,
   reason: string,
   ctx?: Context,
-): Candidate {
+): Promise<Candidate> {
   return {
-    ...treeCandidate(path, reason, ctx),
+    ...(await treeCandidate(path, reason, ctx)),
     verdict: "KEEP",
     action: { kind: "delete", argv: [] },
   };

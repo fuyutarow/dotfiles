@@ -21,7 +21,7 @@ const context = (repoRoots: string[], procDir: string) => ({
 });
 
 describe("builds target", () => {
-  test("preserves old kondo roots and age semantics while excluding Rust targets", () => {
+  test("preserves old kondo roots and age semantics while excluding Rust targets", async () => {
     const home = tempRoot("reclaim-builds-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -37,13 +37,13 @@ describe("builds target", () => {
     writeFileSync(join(target, "artifact"), "rust");
     writeFileSync(join(dist, "artifact"), "build");
     expect(
-      createBuildsTarget(() => home)
-        .plan(context([project], procDir))
-        .map((candidate) => candidate.path),
+      (
+        await createBuildsTarget(() => home).plan(context([project], procDir))
+      ).map((candidate) => candidate.path),
     ).toEqual([dist]);
   });
 
-  test("keeps project virtualenv and dependencies in the blind tier", () => {
+  test("keeps project virtualenv and dependencies in the blind tier", async () => {
     const home = tempRoot("reclaim-builds-repo-");
     const oldHome = process.env.HOME;
     using cleanup = new DisposableStack();
@@ -60,7 +60,7 @@ describe("builds target", () => {
     const modules = join(project, "node_modules");
     mkdirSync(venv, { recursive: true });
     mkdirSync(modules, { recursive: true });
-    const candidates = createBuildsTarget(() => home).plan(
+    const candidates = await createBuildsTarget(() => home).plan(
       context([project], procDir),
     );
     expect(
@@ -79,7 +79,7 @@ describe("builds target", () => {
     ]);
   });
 
-  test("keeps a global Bun node_modules tree reached through the Bun bin symlink", () => {
+  test("keeps a global Bun node_modules tree reached through the Bun bin symlink", async () => {
     const home = tempRoot("reclaim-builds-bun-");
     const oldHome = process.env.HOME;
     using cleanup = new DisposableStack();
@@ -98,8 +98,8 @@ describe("builds target", () => {
     writeFileSync(join(global, "agent-tool"), "fixture");
     const link = join(bin, "agent-tool-link");
     symlinkSync(join(global, "agent-tool"), link);
-    const candidate = createBuildsTarget(() => home).plan(
-      context([], procDir),
+    const candidate = (
+      await createBuildsTarget(() => home).plan(context([], procDir))
     )[0];
     expect(candidate).toMatchObject({
       path: global,

@@ -48,7 +48,7 @@ describe("clean target", () => {
     expect(processBusy("uv", fake(1))).toBe(false);
   });
 
-  test("plans every existing regenerable package cache and ignores absent caches", () => {
+  test("plans every existing regenerable package cache and ignores absent caches", async () => {
     const home = tempRoot("reclaim-clean-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -76,17 +76,17 @@ describe("clean target", () => {
       () => false,
     );
     expect(target.available(context)).toMatchObject({ available: true });
-    expect(target.plan(context).map((candidate) => candidate.path)).toEqual(
-      relative.map((path) => join(home, path)),
-    );
     expect(
-      target
-        .plan(context)
-        .every((candidate) => candidate.action.kind === "delete"),
+      (await target.plan(context)).map((candidate) => candidate.path),
+    ).toEqual(relative.map((path) => join(home, path)));
+    expect(
+      (await target.plan(context)).every(
+        (candidate) => candidate.action.kind === "delete",
+      ),
     ).toBe(true);
   });
 
-  test("default home resolution uses HOME", () => {
+  test("default home resolution uses HOME", async () => {
     const previous = process.env.HOME;
     const fixtureHome = tempRoot("reclaim-clean-home-");
     using cleanup = new DisposableStack();
@@ -98,9 +98,9 @@ describe("clean target", () => {
     process.env.HOME = fixtureHome;
     mkdirSync(join(fixtureHome, ".cache/uv"), { recursive: true });
     expect(
-      createCleanTarget()
-        .plan(context)
-        .map((candidate) => candidate.path),
+      (await createCleanTarget().plan(context)).map(
+        (candidate) => candidate.path,
+      ),
     ).toEqual([join(fixtureHome, ".cache/uv")]);
   });
 
@@ -116,7 +116,7 @@ describe("clean target", () => {
     mkdirSync(cache, { recursive: true });
     writeFileSync(join(cache, "fixture"), "cache");
     const target = createCleanTarget(() => home);
-    const candidate = target.plan(context)[0];
+    const candidate = (await target.plan(context))[0];
     expect(candidate?.path).toBe(cache);
     expect(candidate).toBeDefined();
     if (candidate === undefined) return;
@@ -126,7 +126,7 @@ describe("clean target", () => {
     expect(existsSync(cache)).toBe(false);
   });
 
-  test("uv and Julia caches are kept with exact busy reasons", () => {
+  test("uv and Julia caches are kept with exact busy reasons", async () => {
     const home = tempRoot("reclaim-clean-busy-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -146,7 +146,7 @@ describe("clean target", () => {
         return true;
       },
     );
-    const candidates = target.plan(context);
+    const candidates = await target.plan(context);
     expect(probes).toEqual(["uv", "julia", "julia"]);
     expect(candidates.map(({ verdict, reason }) => [verdict, reason])).toEqual([
       ["KEEP", "busy: uv"],
@@ -155,7 +155,7 @@ describe("clean target", () => {
     ]);
   });
 
-  test("Julia cleanup never selects protected directories or the .julia root", () => {
+  test("Julia cleanup never selects protected directories or the .julia root", async () => {
     const home = tempRoot("reclaim-clean-julia-scope-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -178,13 +178,12 @@ describe("clean target", () => {
       () => home,
       () => false,
     );
-    expect(target.plan(context).map((candidate) => candidate.path)).toEqual([
-      join(julia, "compiled"),
-      join(julia, "scratchspaces"),
-    ]);
+    expect(
+      (await target.plan(context)).map((candidate) => candidate.path),
+    ).toEqual([join(julia, "compiled"), join(julia, "scratchspaces")]);
   });
 
-  test("a Bun cache is kept when the process probe finds a running bun process", () => {
+  test("a Bun cache is kept when the process probe finds a running bun process", async () => {
     const home = tempRoot("reclaim-clean-bun-busy-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -202,7 +201,7 @@ describe("clean target", () => {
       },
     );
     expect(probed).toEqual([]);
-    expect(target.plan(context)[0]).toMatchObject({
+    expect((await target.plan(context))[0]).toMatchObject({
       path: cache,
       verdict: "KEEP",
       reason: "busy: bun",
@@ -210,7 +209,7 @@ describe("clean target", () => {
     expect(probed).toEqual(["bun"]);
   });
 
-  test("Cargo registry and git caches are kept while same-uid Rust tools run", () => {
+  test("Cargo registry and git caches are kept while same-uid Rust tools run", async () => {
     const home = tempRoot("reclaim-clean-cargo-busy-");
     using cleanup = new DisposableStack();
     cleanup.defer(() => {
@@ -233,9 +232,11 @@ describe("clean target", () => {
         },
       );
       expect(
-        target
-          .plan(context)
-          .map(({ path, verdict, reason }) => [path, verdict, reason]),
+        (await target.plan(context)).map(({ path, verdict, reason }) => [
+          path,
+          verdict,
+          reason,
+        ]),
       ).toEqual(
         relative.map((path) => [join(home, path), "KEEP", "busy: cargo"]),
       );
@@ -268,7 +269,7 @@ describe("clean target", () => {
         return true;
       },
     );
-    const candidate = target.plan(context)[0];
+    const candidate = (await target.plan(context))[0];
     expect(candidate?.path).toBe(cache);
     expect(candidate).toBeDefined();
     if (candidate === undefined) return;

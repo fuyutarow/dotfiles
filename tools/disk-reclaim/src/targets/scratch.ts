@@ -1,6 +1,7 @@
 import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
+import { fromAsyncThrowable } from "neverthrow";
 import { fromThrowable } from "../../../shared/src/zod.ts";
 import {
   createLivenessSnapshot,
@@ -122,9 +123,12 @@ const candidate = (
   result: null,
 });
 
-const candidateBytes = (path: string, ctx: Context): number | null => {
-  const result = inspect(() => measuredTreeBytes(path, ctx));
-  return result.ok ? result.value : null;
+const candidateBytes = async (
+  path: string,
+  ctx: Context,
+): Promise<number | null> => {
+  const result = await fromAsyncThrowable(() => measuredTreeBytes(path, ctx))();
+  return result.isOk() ? result.value : null;
 };
 
 export function createScratchTarget(options: ScratchTargetOptions = {}) {
@@ -156,56 +160,58 @@ export function createScratchTarget(options: ScratchTargetOptions = {}) {
     name: "scratch",
     tier: "blind",
     available: () => ({ available: true, skip_reason: null }),
-    plan: (ctx) => {
+    plan: async (ctx) => {
       const snapshot =
         ctx.liveness ??
         createLivenessSnapshot(ctx.config, {
           home: home(),
           ...(options.probes === undefined ? {} : { probes: options.probes }),
         });
-      return ctx.config.scratch_roots.flatMap((root) =>
-        candidatesUnder(root).map((ref) => {
-          const delegated = hasDelegatedWorkspace(ref.dir);
-          if (!delegated.ok)
+      return Promise.all(
+        ctx.config.scratch_roots.flatMap((root) =>
+          candidatesUnder(root).map(async (ref) => {
+            const delegated = hasDelegatedWorkspace(ref.dir);
+            if (!delegated.ok)
+              return candidate(
+                ref,
+                "ASK",
+                `cannot inspect scratch workspace markers: ${delegated.error}`,
+                null,
+                await candidateBytes(ref.dir, ctx),
+              );
+            if (delegated.value)
+              return candidate(
+                ref,
+                "KEEP",
+                "delegated: jj workspace",
+                false,
+                await candidateBytes(ref.dir, ctx),
+              );
+            const capturedFacts = inspect(() =>
+              options.getFacts === undefined
+                ? snapshot.facts(ref)
+                : options.getFacts(ref, ctx.config.session_grace_hours),
+            );
+            if (!capturedFacts.ok)
+              return candidate(
+                ref,
+                "ASK",
+                `liveness facts unavailable: ${capturedFacts.error}`,
+                null,
+                await candidateBytes(ref.dir, ctx),
+              );
+            const result = judge(ref, capturedFacts.value);
+            const verdict = verdicts[result.verdict];
+            const check = verdict === "ASK" ? null : verdict === "RECLAIM";
             return candidate(
               ref,
-              "ASK",
-              `cannot inspect scratch workspace markers: ${delegated.error}`,
-              null,
-              candidateBytes(ref.dir, ctx),
+              verdict,
+              result.evidence.join("; "),
+              check,
+              await candidateBytes(ref.dir, ctx),
             );
-          if (delegated.value)
-            return candidate(
-              ref,
-              "KEEP",
-              "delegated: jj workspace",
-              false,
-              candidateBytes(ref.dir, ctx),
-            );
-          const capturedFacts = inspect(() =>
-            options.getFacts === undefined
-              ? snapshot.facts(ref)
-              : options.getFacts(ref, ctx.config.session_grace_hours),
-          );
-          if (!capturedFacts.ok)
-            return candidate(
-              ref,
-              "ASK",
-              `liveness facts unavailable: ${capturedFacts.error}`,
-              null,
-              candidateBytes(ref.dir, ctx),
-            );
-          const result = judge(ref, capturedFacts.value);
-          const verdict = verdicts[result.verdict];
-          const check = verdict === "ASK" ? null : verdict === "RECLAIM";
-          return candidate(
-            ref,
-            verdict,
-            result.evidence.join("; "),
-            check,
-            candidateBytes(ref.dir, ctx),
-          );
-        }),
+          }),
+        ),
       );
     },
     act: async (item, ctx) => {

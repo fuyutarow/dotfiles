@@ -279,6 +279,16 @@ function planTable(value: Plan): string {
   return lines.join("\n");
 }
 
+function completedDeletionPaths(value: Plan): string[] {
+  return value.targets.flatMap((target) =>
+    target.candidates.flatMap((candidate) =>
+      candidate.path !== null && candidate.result?.ok === true
+        ? [candidate.path]
+        : [],
+    ),
+  );
+}
+
 function reportProcessDiagnostics(
   value: Plan,
   details: Set<string>,
@@ -399,7 +409,7 @@ export async function main(
     {
       ...common,
       name: "disk-reclaim",
-      version: "1.1.1",
+      version: "1.1.2",
       parameters: ["[targets...]"],
       commands,
       flags: planFlags,
@@ -521,6 +531,10 @@ export async function main(
     process.stdout.isTTY &&
     process.stderr.isTTY;
   const progressReporter = new ProgressReporter({ tty: progressTty });
+  const cancellation = new AbortController();
+  let cancelledWith: 130 | 143 | undefined;
+  let interruptCount = 0;
+  let activePhase = "scan";
   const processDetails = new Set<string>();
   const deleted = new Map<
     string,
@@ -536,6 +550,7 @@ export async function main(
     phase: "scan" | "delete" = "scan",
     totalBytes?: number,
   ): void => {
+    activePhase = phase === "delete" ? "deletion" : "scan";
     if (preflight) {
       progressReporter.update({
         id: "preflight",
@@ -576,6 +591,7 @@ export async function main(
   const selectedHost =
     f.on === "windows" ? (f.host ?? "r99") : (f.on ?? f.host);
   const context: Context = {
+    signal: cancellation.signal,
     ...(selectedHost === undefined ? {} : { host: selectedHost }),
     approve: f.approve,
     mode: "plan",
@@ -587,15 +603,17 @@ export async function main(
     config: loaded.config,
     procDir: resolveProcRoot(),
     verbose: f.verbose,
-    reportActivity: f.noProgress
-      ? undefined
-      : (unit, task) => {
-          if (progressTty) progressReporter.activity(unit, task);
-          else
-            process.stderr.write(
-              `disk-reclaim: ${safeStderr(`${unit}: ${task}`)}\n`,
-            );
-        },
+    reportActivity: (unit, task) => {
+      if (/SSH/u.test(task)) activePhase = "SSH probe";
+      else if (selectedCommand === "run") activePhase = "deletion";
+      else activePhase = "scan";
+      if (f.noProgress) return;
+      if (progressTty) progressReporter.activity(unit, task);
+      else
+        process.stderr.write(
+          `disk-reclaim: ${safeStderr(`${unit}: ${task}`)}\n`,
+        );
+    },
     reportProcessFailures: (_summary, details) => {
       for (const detail of details) processDetails.add(detail);
     },
@@ -713,16 +731,25 @@ export async function main(
   const restore = () => {
     progressReporter.finish();
   };
-  const interrupt = () => {
+  const cancel = (code: 130 | 143) => {
+    interruptCount++;
+    if (interruptCount > 1) {
+      restore();
+      process.exit(code);
+    }
+    cancelledWith = code;
+    process.stderr.write(`disk-reclaim: cancelled during ${activePhase}\n`);
+    cancellation.abort();
     restore();
-    process.exit(130);
+  };
+  const interrupt = () => {
+    cancel(130);
   };
   const terminate = () => {
-    restore();
-    process.exit(143);
+    cancel(143);
   };
-  process.once("SIGINT", interrupt);
-  process.once("SIGTERM", terminate);
+  process.on("SIGINT", interrupt);
+  process.on("SIGTERM", terminate);
   process.once("exit", restore);
   if (!f.noProgress) {
     progressReporter.message(
@@ -745,11 +772,9 @@ export async function main(
       : plan(picked, measuredOptions)
   ).finally(() => {
     restore();
-    process.removeListener("SIGINT", interrupt);
-    process.removeListener("SIGTERM", terminate);
     process.removeListener("exit", restore);
   });
-  if (result.error !== null)
+  if (result.error !== null && cancelledWith === undefined)
     process.stderr.write(`reclaim: ${safeStderr(result.error)}\n`);
   if (result.plan !== null) {
     const validated = Plan.safeParse(result.plan);
@@ -757,7 +782,16 @@ export async function main(
     if (selectedCommand === "plan") await cachePlanReport(validated.data);
     reportProcessDiagnostics(validated.data, processDetails, f.verbose);
     const records = await recordsFromPlan(validated.data);
-    if (selectedCommand === "plan" && !f.yes)
+    if (cancelledWith !== undefined && selectedCommand === "run") {
+      const completedPaths = completedDeletionPaths(validated.data);
+      const summary = completedPaths.map((path) => safeStderr(path)).join(", ");
+      process.stderr.write(
+        `disk-reclaim: deleted before cancellation: ${summary.length === 0 ? "none" : summary}\n`,
+      );
+    }
+    if (cancelledWith !== undefined && selectedCommand === "plan") {
+      // An incomplete plan is not a usable plan document.
+    } else if (selectedCommand === "plan" && !f.yes)
       outputPlan(validated.data, records, f.json ? "json" : "jsonl");
     else if (f.yes && selectedCommand !== "run")
       return applyInput(
@@ -773,7 +807,9 @@ export async function main(
     const report = wslReturnReport(wslBefore, await wslStorageSnapshot());
     if (report !== null) process.stderr.write(`${report}\n`);
   }
-  return result.exit;
+  process.removeListener("SIGINT", interrupt);
+  process.removeListener("SIGTERM", terminate);
+  return cancelledWith ?? result.exit;
 }
 if (import.meta.main) {
   const result = await fromAsyncThrowable(main)();

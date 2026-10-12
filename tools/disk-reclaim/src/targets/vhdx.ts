@@ -56,9 +56,12 @@ export function pickMethod(optimize: boolean): Method {
 export type VhdxRunner = (
   host: string,
   script: string,
+  signal?: AbortSignal,
 ) => Promise<{ code: number; out: string; timedOut: boolean }>;
 const VHDX_PROBE = `$ErrorActionPreference='SilentlyContinue'; $env:WSL_UTF8=1; $state=((wsl.exe -l -v|Out-String)-split "\`n"|Select-String 'Ubuntu-24.04') -replace "\\s+"," "; "state="+$state.Trim(); "optimize_vhd="+[bool](Get-Command Optimize-VHD -ErrorAction SilentlyContinue); $lx=Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss'; foreach($k in $lx){$p=Get-ItemProperty $k.PSPath;if($p.DistributionName -eq 'Ubuntu-24.04' -and $p.BasePath){$v=($p.BasePath -replace '^\\\\\\\\\\?\\\\','')+'\\ext4.vhdx';"vhdx_path="+$v;if(Test-Path $v){"vhdx_logical="+(Get-Item $v).Length}}}`;
-const sshRunner: VhdxRunner = async (host, script) => {
+const sshRunner: VhdxRunner = async (host, script, signal) => {
+  if (signal?.aborted === true)
+    return { code: 1, out: "SSH probe cancelled", timedOut: false };
   if (Bun.which("ssh") === null)
     return { code: 127, out: "ssh executable unavailable", timedOut: false };
   const command =
@@ -68,6 +71,7 @@ const sshRunner: VhdxRunner = async (host, script) => {
   const proc = Bun.spawn(["ssh", "-o", "ConnectTimeout=10", host, command], {
     stdout: "pipe",
     stderr: "pipe",
+    ...(signal === undefined ? {} : { signal }),
   });
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -106,7 +110,7 @@ export function createVhdxTarget(options: {
       const hostResult =
         options.probe !== undefined
           ? { code: 0, out: await options.probe(), timedOut: false }
-          : await options.runner(host, "$probe");
+          : await options.runner(host, "$probe", _ctx.signal);
       const failure = probeFailure(hostResult, host);
       if (failure !== null)
         return [
@@ -149,7 +153,11 @@ export function createVhdxTarget(options: {
         ];
       const guest = options.host === "local" ? "local" : "r99-u24";
       const [usedResult, allocatedResult] = await Promise.all([
-        options.runner(guest, "df -B1 --output=used / | awk 'NR==2{print $1}'"),
+        options.runner(
+          guest,
+          "df -B1 --output=used / | awk 'NR==2{print $1}'",
+          _ctx.signal,
+        ),
         ((): Promise<Awaited<ReturnType<VhdxRunner>>> => {
           const mount = toMntPath(path);
           return mount === null
@@ -158,7 +166,11 @@ export function createVhdxTarget(options: {
                 out: "unmapped vhdx path",
                 timedOut: false,
               })
-            : options.runner(guest, `du -B1 -s "${mount}" | awk '{print $1}'`);
+            : options.runner(
+                guest,
+                `du -B1 -s "${mount}" | awk '{print $1}'`,
+                _ctx.signal,
+              );
         })(),
       ]);
       const used =

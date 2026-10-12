@@ -251,6 +251,7 @@ export async function removeTree(
   let entriesDone = 0;
   let lastProgress = 0;
   const pending: { path: string; stat: Stats }[] = [];
+  let inspected = 0;
   const writeProgress = (final = false): void => {
     const progress = options.progress;
     if (options.dryRun === true || progress === undefined || progress === false)
@@ -345,7 +346,9 @@ export async function removeTree(
       (error) => `cannot add owner rwx: ${message(error)}`,
     );
   };
-  const visit = (entry: string): boolean => {
+  const visit = async (entry: string): Promise<boolean> => {
+    inspected++;
+    if (inspected % 128 === 0) await Bun.sleep(0);
     const statResult = fromThrowable(() => lstatSync(entry))();
     if (statResult.isErr()) {
       errors.push({ path: entry, error: message(statResult.error) });
@@ -417,7 +420,7 @@ export async function removeTree(
       }
       let complete = true;
       for (const child of children.value) {
-        complete = visit(join(entry, child)) && complete;
+        complete = (await visit(join(entry, child))) && complete;
       }
       if (!complete) return false;
       if (options.dryRun === true) return true;
@@ -428,7 +431,7 @@ export async function removeTree(
     pending.push({ path: entry, stat });
     return true;
   };
-  visit(path);
+  await visit(path);
   if (options.dryRun !== true && refused.length === 0 && errors.length === 0) {
     const files = pending.filter(({ stat }) => !stat.isDirectory());
     const directories = pending

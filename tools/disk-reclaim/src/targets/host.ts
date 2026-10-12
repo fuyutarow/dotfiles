@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { fromAsyncThrowable } from "neverthrow";
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { hostAction, hostProbe } from "./host-powershell.ts";
@@ -29,11 +30,14 @@ export type CommandResult = {
 export type HostRunner = (
   host: string,
   script: string,
+  signal?: AbortSignal,
 ) => Promise<CommandResult>;
 const capturedStream = (value: string | undefined) => {
   const output = value?.trim() ?? "";
   return output.length === 0 ? "<empty>" : output.slice(-2000);
 };
+const isAborted = (signal: AbortSignal | undefined): boolean =>
+  signal?.aborted === true;
 const probeFailure = (result: CommandResult, reason: string): string =>
   [
     `host PowerShell probe failed: ${reason}; exit=${result.code}${result.timedOut ? "; timed out" : ""}`,
@@ -83,11 +87,20 @@ export function parseProbe(out: string): HostSnapshot {
   }
   return s;
 }
-const sshRunner: HostRunner = async (host, script) => {
+const sshRunner: HostRunner = async (host, script, parentSignal) => {
+  if (isAborted(parentSignal))
+    return { code: 1, out: "", err: "SSH probe cancelled", timedOut: false };
   let timeout = 120_000;
   if (script.includes("dism.exe")) timeout = 3_600_000;
   else if (script === "$probe") timeout = 600_000;
-  const signal = AbortSignal.timeout(timeout);
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeout);
+  const abort = () => {
+    controller.abort();
+  };
+  parentSignal?.addEventListener("abort", abort, { once: true });
   const name = `disk-reclaim-${randomUUID()}.ps1`;
   const wrapper = [
     "$ErrorActionPreference='Stop'",
@@ -115,21 +128,36 @@ const sshRunner: HostRunner = async (host, script) => {
       host,
       `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
     ],
-    { stdin: "pipe", stdout: "pipe", stderr: "pipe", signal },
+    {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: controller.signal,
+    },
   );
-  await proc.stdin.write(script === "$probe" ? hostProbe : script);
-  await proc.stdin.end();
-  const [out, err, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return {
-    code,
-    out: out.replaceAll("\r", ""),
-    err: err.replaceAll("\r", ""),
-    timedOut: signal.aborted,
-  };
+  const result = await fromAsyncThrowable(async () => {
+    await proc.stdin.write(script === "$probe" ? hostProbe : script);
+    await proc.stdin.end();
+    const [out, err, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    return {
+      code,
+      out: out.replaceAll("\r", ""),
+      err: err.replaceAll("\r", ""),
+      timedOut: controller.signal.aborted && !isAborted(parentSignal),
+    };
+  })();
+  clearTimeout(timer);
+  parentSignal?.removeEventListener("abort", abort);
+  return result.unwrapOr({
+    code: 1,
+    out: "",
+    err: controller.signal.aborted ? "SSH probe aborted" : "SSH probe failed",
+    timedOut: controller.signal.aborted && !isAborted(parentSignal),
+  });
 };
 const definitions: Record<
   string,
@@ -274,7 +302,7 @@ export function createHostTarget(options: {
       ctx.reportActivity?.("host", `waiting for SSH ${hostname(ctx)} probe`);
       const result =
         options.snapshot === undefined
-          ? await options.runner(hostname(ctx), "$probe")
+          ? await options.runner(hostname(ctx), "$probe", ctx.signal)
           : null;
       if (result?.timedOut === true) {
         ctx.reportPlanError?.(probeFailure(result, "SSH step timed out"));
@@ -358,6 +386,7 @@ export function createHostTarget(options: {
       const r = await options.runner(
         hostname(ctx),
         hostAction(tier, c.host_lever.path),
+        ctx.signal,
       );
       const before = numeric(/^c_before=(\d+)$/mu.exec(r.out)?.[1]);
       const after = numeric(/^c_after=(\d+)$/mu.exec(r.out)?.[1]);

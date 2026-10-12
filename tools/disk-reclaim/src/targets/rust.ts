@@ -51,15 +51,19 @@ const ask = (candidate: Candidate, reason: string): Candidate => ({
   action: { kind: "delete", argv: [] },
 });
 
-function targetRows(
+async function targetRows(
   path: string,
   unknown: string[],
   processes: ReturnType<typeof collectProcesses>["processes"],
   ctx: Context,
-): Candidate[] {
+): Promise<Candidate[]> {
   const project = dirname(path);
   const manifest = fromThrowable(() => statSync(join(project, "Cargo.toml")))();
-  const base = treeCandidate(path, "Rust target is idle and regenerable", ctx);
+  const base = await treeCandidate(
+    path,
+    "Rust target is idle and regenerable",
+    ctx,
+  );
   if (manifest.isErr() || !manifest.value.isFile())
     return [
       ask(
@@ -116,7 +120,7 @@ function targetRows(
   rows.push(parent);
   const incremental = join(path, "incremental");
   if (verdict === "ASK" && existsSync(incremental)) {
-    const child = treeCandidate(
+    const child = await treeCandidate(
       incremental,
       "incremental cache inside an unresolved Rust target",
       ctx,
@@ -131,7 +135,7 @@ export const createRustTarget = (root?: () => string) =>
     name: "rust",
     tier: "blind",
     available: () => ({ available: true, skip_reason: null }),
-    plan: (ctx: Context) => {
+    plan: async (ctx: Context) => {
       const home = process.env.HOME ?? homedir();
       const roots =
         root === undefined
@@ -159,20 +163,22 @@ export const createRustTarget = (root?: () => string) =>
         },
       });
       const now = Temporal.Now.instant().epochMilliseconds / 1000;
-      return targets
-        .flatMap((path) =>
-          targetRows(
+      const rows: Candidate[] = [];
+      for (const path of targets) {
+        rows.push(
+          ...(await targetRows(
             path,
             snapshot.openPaths(path).unknown,
             snapshot.processes,
             ctx,
-          ),
-        )
-        .toSorted((a, b) => {
-          const aBuilt = lastBuilt(a.path ?? "") ?? now;
-          const bBuilt = lastBuilt(b.path ?? "") ?? now;
-          return aBuilt - bBuilt;
-        });
+          )),
+        );
+      }
+      return rows.toSorted((a, b) => {
+        const aBuilt = lastBuilt(a.path ?? "") ?? now;
+        const bBuilt = lastBuilt(b.path ?? "") ?? now;
+        return aBuilt - bBuilt;
+      });
     },
     act: deleteTree,
   }) satisfies Target;

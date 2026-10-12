@@ -35,29 +35,31 @@ export const createCleanTarget = (
     name: "clean",
     tier: "blind",
     available: (_ctx?: Context) => ({ available: true, skip_reason: null }),
-    plan: (_ctx: Context) => {
+    plan: async (_ctx: Context) => {
       const root = home();
-      return paths(root)
-        .filter((p) => existsSync(p))
-        .map((p) => {
-          let comm: string | undefined;
-          if (p.endsWith("/.cache/uv")) comm = "uv";
-          else if (
-            p.endsWith("/.julia/compiled") ||
-            p.endsWith("/.julia/scratchspaces")
-          )
-            comm = "julia";
-          else if (p.endsWith("/.bun/install/cache")) comm = "bun";
-          else if (
-            (p.startsWith(`${root}/.cargo/registry/`) ||
-              p.startsWith(`${root}/.cargo/git/`)) &&
-            ["cargo", "rustc", "rust-analyzer"].some((name) => isBusy(name))
-          )
-            return keepTreeCandidate(p, "busy: cargo", _ctx);
-          if (comm !== undefined && isBusy(comm))
-            return keepTreeCandidate(p, `busy: ${comm}`, _ctx);
-          return treeCandidate(p, "regenerable package cache", _ctx);
-        });
+      return Promise.all(
+        paths(root)
+          .filter((p) => existsSync(p))
+          .map((p) => {
+            let comm: string | undefined;
+            if (p.endsWith("/.cache/uv")) comm = "uv";
+            else if (
+              p.endsWith("/.julia/compiled") ||
+              p.endsWith("/.julia/scratchspaces")
+            )
+              comm = "julia";
+            else if (p.endsWith("/.bun/install/cache")) comm = "bun";
+            else if (
+              (p.startsWith(`${root}/.cargo/registry/`) ||
+                p.startsWith(`${root}/.cargo/git/`)) &&
+              ["cargo", "rustc", "rust-analyzer"].some((name) => isBusy(name))
+            )
+              return keepTreeCandidate(p, "busy: cargo", _ctx);
+            if (comm !== undefined && isBusy(comm))
+              return keepTreeCandidate(p, `busy: ${comm}`, _ctx);
+            return treeCandidate(p, "regenerable package cache", _ctx);
+          }),
+      );
     },
     act: (candidate, ctx) => {
       if (candidate.path?.endsWith("/.bun/install/cache") === true) {

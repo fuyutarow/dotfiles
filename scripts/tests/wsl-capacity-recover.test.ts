@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdtempSync,
@@ -8,15 +8,18 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromThrowable, jsonOf, z } from "../../tools/shared/src/zod.ts";
 import {
   hasLiveBuildProcess,
   loadRecoveryPolicy,
   memoryEmergency,
   parseHostMemory,
+  recoveryVerdictRecord,
   selectStopTargets,
   shouldReclaim,
   startTicks,
   stopCompute,
+  writeRecoveryVerdict,
   type ComputeProcess,
 } from "../wsl-capacity-recover.ts";
 
@@ -41,8 +44,50 @@ const buildProcessRecord = (uid: number, comm: string): ComputeProcess => ({
 
 const GiB = 1024 ** 3;
 const policy = { denyBytes: 60 * GiB, stopBytes: 30 * GiB };
+const recoveryVerdictRoots: string[] = [];
+const RecoveryVerdictSchema = z.looseObject({
+  schema: z.literal(1),
+  verdict: z.enum(["OK", "HOLD"]),
+  memory_emergency: z.boolean(),
+  windows_available_mb: z.number().int().nonnegative().nullable(),
+  recorded_at: z.string(),
+});
+
+afterEach(() => {
+  for (const root of recoveryVerdictRoots.splice(0)) {
+    const removed = fromThrowable(() => {
+      rmSync(root, { recursive: true, force: true });
+    })();
+    expect(removed.isOk()).toBe(true);
+  }
+});
 
 describe("WSL capacity recovery decisions", () => {
+  test("writes an atomic, timestamped latest verdict consumable by admission", () => {
+    const root = mkdtempSync(join(tmpdir(), "wsl-recovery-verdict-"));
+    recoveryVerdictRoots.push(root);
+    const path = join(root, "state", "latest-verdict.json");
+    const record = recoveryVerdictRecord(
+      "HOLD",
+      true,
+      { availableMb: 900, pageReadsPerSecond: 900 },
+      "2026-10-12T00:00:00.000Z",
+    );
+    writeRecoveryVerdict(record, path);
+    const parsed = jsonOf(RecoveryVerdictSchema).safeParse(
+      readFileSync(path, "utf8"),
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data).toEqual({
+      schema: 1,
+      verdict: "HOLD",
+      memory_emergency: true,
+      windows_available_mb: 900,
+      recorded_at: "2026-10-12T00:00:00.000Z",
+    });
+  });
+
   test("loads the host thresholds from the canonical TOML path without WSL", () => {
     const loaded = loadRecoveryPolicy();
     expect(loaded.isOk()).toBe(true);

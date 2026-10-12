@@ -38,6 +38,10 @@ import {
   juliaCompileSlotCapacity,
   type CompileSlotLease,
 } from "./lib/compile-slot.ts";
+import {
+  assessRecoveryVerdict,
+  readRecoveryVerdict,
+} from "./lib/recovery-verdict.ts";
 
 const KiB = 1024;
 const MiB = 1024 ** 2;
@@ -1077,7 +1081,9 @@ export function queryNvidiaSmi(
     lastTimedOut =
       lastExitCode === 124 ||
       lastExitCode === 137 ||
-      (lastExitCode === null && spawned.value.signalCode !== null);
+      lastExitCode === 143 ||
+      (typeof spawned.value.signalCode === "number" &&
+        spawned.value.signalCode !== 0);
     if (!lastTimedOut) break;
     const delay = backoffMs[attempt];
     if (delay === undefined) break;
@@ -2903,6 +2909,7 @@ async function executeJobResult(
     }
     const jobPids =
       scopeUnit === null ? usage.pids : processIdsInScope(scopeUnit);
+    if (jobPids.length === 0) return;
     const hasProcessRows =
       gpuUsage !== null && jobPids.some((pid) => gpuUsage.has(pid));
     let jobVramBytes: number | undefined;
@@ -3290,6 +3297,9 @@ async function main(): Promise<Result<number, Error>> {
   if (parsed.flags.checkOnly && command.length > 0) {
     return err(new UsageError("--check-only does not accept a command"));
   }
+  const recovery = assessRecoveryVerdict(await readRecoveryVerdict());
+  if (recovery.kind === "refuse") return err(new StateError(recovery.message));
+  process.stdout.write(`${recovery.message}\n`);
   let result;
   if (parsed.flags.checkOnly) {
     result = await checkJob(manifest);

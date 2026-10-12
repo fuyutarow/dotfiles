@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0 — 2026-10-12
+
+- Refuse admission and `--check-only` when the latest WSL capacity recovery verdict is a fresh
+  HOLD or reports a Windows memory emergency. Missing and stale verdicts are reported and allow
+  admission.
+
 ## 1.3.1 — 2026-10-12
 
 - Retry timed-out `nvidia-smi` probes with bounded backoff, preserve timeout as an indeterminate

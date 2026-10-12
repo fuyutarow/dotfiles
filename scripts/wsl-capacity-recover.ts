@@ -4,12 +4,13 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   statSync,
   statfsSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   err,
   fromAsyncThrowable,
@@ -38,6 +39,10 @@ const STAMP_PATH = join(
   homedir(),
   ".local/state/wsl-capacity-recover/last-attempt",
 );
+const VERDICT_PATH = join(
+  homedir(),
+  ".local/state/wsl-capacity-recover/latest-verdict.json",
+);
 const COMPUTE_NAMES = new Set([
   "julia",
   "cargo",
@@ -64,6 +69,39 @@ export type HostMemory = {
   availableMb: number;
   pageReadsPerSecond: number;
 };
+
+export type RecoveryVerdictRecord = {
+  schema: 1;
+  verdict: "OK" | "HOLD";
+  memory_emergency: boolean;
+  windows_available_mb: number | null;
+  recorded_at: string;
+};
+
+export function recoveryVerdictRecord(
+  verdict: "OK" | "HOLD",
+  isMemoryEmergency: boolean,
+  memory: HostMemory | null,
+  recordedAt: string,
+): RecoveryVerdictRecord {
+  return {
+    schema: 1,
+    verdict,
+    memory_emergency: isMemoryEmergency,
+    windows_available_mb: memory?.availableMb ?? null,
+    recorded_at: recordedAt,
+  };
+}
+
+export function writeRecoveryVerdict(
+  record: RecoveryVerdictRecord,
+  path = VERDICT_PATH,
+): void {
+  const temporary = `${path}.${process.pid}.tmp`;
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(temporary, `${JSON.stringify(record)}\n`);
+  renameSync(temporary, path);
+}
 
 export type ComputeProcess = {
   pid: number;
@@ -557,11 +595,27 @@ async function main(): Promise<void> {
   }
   const memoryLow = memoryEmergency(memoryBefore);
   if (free >= policy.denyBytes && !memoryLow) {
+    writeRecoveryVerdict(
+      recoveryVerdictRecord(
+        "OK",
+        false,
+        memoryBefore,
+        Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
+      ),
+    );
     process.stdout.write(
       `${memoryBefore === null ? "DISK_CLEAR_MEMORY_UNKNOWN" : "CLEAR"} host_free=${gib(free)}\n`,
     );
     return;
   }
+  writeRecoveryVerdict(
+    recoveryVerdictRecord(
+      "HOLD",
+      memoryLow,
+      memoryBefore,
+      Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
+    ),
+  );
   const runReclaim = shouldReclaim(
     free,
     policy,
@@ -601,10 +655,12 @@ async function main(): Promise<void> {
     free = reclaimed.value;
   }
   let memoryStillLow = memoryLow;
+  let memoryLatest = memoryBefore;
   if (memoryLow) {
     await dropPageCache();
     await Bun.sleep(2_000);
     const memoryAfter = await probeHostMemory();
+    memoryLatest = memoryAfter;
     memoryStillLow = memoryAfter === null || memoryEmergency(memoryAfter);
     process.stdout.write(
       `MEM_CHECK before=${JSON.stringify(memoryBefore)} after=${JSON.stringify(memoryAfter)} ` +
@@ -639,6 +695,14 @@ async function main(): Promise<void> {
     free = measured.value;
   }
   if (free < policy.denyBytes || memoryStillLow) {
+    writeRecoveryVerdict(
+      recoveryVerdictRecord(
+        "HOLD",
+        memoryStillLow,
+        memoryLatest,
+        Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
+      ),
+    );
     process.stdout.write(
       `HOLD host_free=${gib(free)} deny_below=${gib(policy.denyBytes)} ` +
         `stop_below=${gib(policy.stopBytes)} memory_emergency=${memoryStillLow}; ` +
@@ -647,6 +711,14 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  writeRecoveryVerdict(
+    recoveryVerdictRecord(
+      "OK",
+      false,
+      memoryLatest,
+      Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
+    ),
+  );
   process.stdout.write(`RECOVERED host_free=${gib(free)}\n`);
 }
 

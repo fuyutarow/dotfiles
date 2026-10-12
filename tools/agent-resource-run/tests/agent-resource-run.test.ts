@@ -48,6 +48,10 @@ import {
   type ResourceManifest,
   type Reservation,
 } from "../src/agent-resource-run.ts";
+import {
+  assessRecoveryVerdict,
+  type RecoveryVerdict,
+} from "../src/lib/recovery-verdict.ts";
 import { decoded, decodedJson } from "../../shared/src/decode.ts";
 
 // Platform requirements, declared — a test that needs a facility this machine lacks is SKIPPED
@@ -61,6 +65,78 @@ const NO_CGROUP_SCOPES =
 
 const GiB = 1024 ** 3;
 const MiB = 1024 ** 2;
+
+const recoveryVerdict = (
+  overrides: Partial<RecoveryVerdict> = {},
+): RecoveryVerdict => ({
+  schema: 1,
+  verdict: "OK",
+  memory_emergency: false,
+  windows_available_mb: 4096,
+  recorded_at: "2026-10-12T00:00:00.000Z",
+  ...overrides,
+});
+
+describe("recover service admission verdict", () => {
+  const now = Temporal.Instant.from(
+    "2026-10-12T00:04:00.000Z",
+  ).epochMilliseconds;
+
+  test("refuses fresh HOLD and names its verdict, age, and Windows memory", () => {
+    expect(
+      assessRecoveryVerdict(
+        JSON.stringify(
+          recoveryVerdict({ verdict: "HOLD", windows_available_mb: 1024 }),
+        ),
+        now,
+      ),
+    ).toEqual({
+      kind: "refuse",
+      message:
+        "RECOVER_VERDICT verdict=HOLD age=240s windows_available_mb=1024",
+    });
+  });
+
+  test("refuses fresh memory emergency even with an OK disk verdict", () => {
+    const result = assessRecoveryVerdict(
+      JSON.stringify(
+        recoveryVerdict({
+          memory_emergency: true,
+          windows_available_mb: 900,
+        }),
+      ),
+      now,
+    );
+    expect(result.kind).toBe("refuse");
+    expect(result.message).toContain("verdict=OK+memory_emergency");
+    expect(result.message).toContain("windows_available_mb=900");
+  });
+
+  test("allows and reports a fresh OK verdict", () => {
+    expect(
+      assessRecoveryVerdict(JSON.stringify(recoveryVerdict()), now),
+    ).toEqual({
+      kind: "allow",
+      message: "RECOVER_VERDICT verdict=OK age=240s windows_available_mb=4096",
+    });
+  });
+
+  test("allows and reports stale or missing verdicts", () => {
+    const stale = assessRecoveryVerdict(
+      JSON.stringify(
+        recoveryVerdict({ recorded_at: "2026-10-12T00:00:00.000Z" }),
+      ),
+      Temporal.Instant.from("2026-10-12T00:06:00.000Z").epochMilliseconds,
+    );
+    expect(stale.kind).toBe("allow");
+    expect(stale.message).toContain("status=stale");
+    expect(assessRecoveryVerdict(undefined, now)).toEqual({
+      kind: "allow",
+      message:
+        "RECOVER_VERDICT verdict=missing age=unknown windows_available_mb=unknown",
+    });
+  });
+});
 
 const parseJson = (text: string): unknown => decodedJson(z.json(), text);
 
@@ -386,7 +462,7 @@ describe("admission", () => {
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
       rmSync(bin, { recursive: true, force: true });
-      expect(query.report.status).toBe("timeout");
+      expect(query.report).toMatchObject({ status: "timeout" });
       expect(result.reason).toContain("probe timed out after");
       expect(result.reason).not.toContain("is not visible to nvidia-smi");
     },
@@ -413,7 +489,7 @@ describe("admission", () => {
       const callCount = readFileSync(calls, "utf8").length;
       const markerCreated = existsSync(marker);
       rmSync(bin, { recursive: true, force: true });
-      expect(result.report.status).toBe("visible");
+      expect(result.report).toMatchObject({ status: "visible" });
       expect(result.report.attempts).toBe(2);
       expect(callCount).toBe(2);
       expect(markerCreated).toBe(true);
@@ -1530,6 +1606,11 @@ describe("bounded execution", () => {
       const reports: string[] = [];
       const result = await checkJob(gpuManifest(), {
         stateDirectory,
+        kernelEnforcement: {
+          available: false,
+          reason: "test sampled enforcement",
+        },
+        hostOptIn: { sampled_enforcement_reason: "test" },
         snapshot: hostSnapshot({
           gpus: [
             {
@@ -1653,7 +1734,7 @@ describe("bounded execution", () => {
 
       const deviceDelta = await run(
         () => "",
-        ["0, 100", "0, 150", "0, 300"],
+        ["0, 100", "0, 300"],
         "device-delta-sample",
       );
       expect(deviceDelta).toMatchObject({

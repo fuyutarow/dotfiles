@@ -565,8 +565,12 @@ function claudeTranscript(cwd: string, session: string): string {
   return join(homedir(), ".claude", "projects", slug, `${session}.jsonl`);
 }
 
-function fatal(message: string): never {
-  dispatchError(`agx: ${message}`);
+function fatal(
+  message: string,
+  reasonCount = Math.max(1, message.split("; ").length),
+): never {
+  const count = `${reasonCount} ${reasonCount === 1 ? "reason" : "reasons"}`;
+  process.stderr.write(`agx: REFUSED: ${message} (${count})\n`);
   return process.exit(2);
 }
 
@@ -2333,10 +2337,7 @@ async function run(flags: RunFlags): Promise<number> {
     .join("\n\n");
   const parsed = parseTicket(brief);
   const ticketGrade = await lintTicket(brief, resolve(flags.cd));
-  for (const warning of ticketGrade.warnings ?? [])
-    dispatchError(`agx: warning: ${warning}`);
   if (ticketGrade.violations.length > 0) {
-    for (const line of renderTicketLint(ticketGrade)) dispatchError(line);
     appendLog({
       kind: "refusal",
       at: now(),
@@ -2349,8 +2350,13 @@ async function run(flags: RunFlags): Promise<number> {
       },
       ticket_grade: ticketGrade,
     });
-    return 2;
+    fatal(
+      renderTicketLint(ticketGrade).join("; "),
+      ticketGrade.violations.length,
+    );
   }
+  for (const warning of ticketGrade.warnings ?? [])
+    dispatchError(`agx: warning: ${warning}`);
   if (parsed.kind === "invalid") fatal(parsed.reason);
   const ticket = parsed.ticket;
   const roster = await loadRosterOrDie();
@@ -3995,10 +4001,6 @@ async function pickOnly(
         fix: "correct the brief's premise or remove it",
       })),
     };
-    for (const violation of ticketGrade.violations)
-      dispatchError(
-        `agx: remand premise: ${violation.quote_from_brief} is absent. Fix: ${violation.fix}`,
-      );
     appendLog({
       kind: "refusal",
       at: now(),
@@ -4010,7 +4012,15 @@ async function pickOnly(
       },
       ticket_grade: ticketGrade,
     });
-    return 2;
+    fatal(
+      ticketGrade.violations
+        .map(
+          (violation) =>
+            `remand premise: ${violation.quote_from_brief} is absent. Fix: ${violation.fix}`,
+        )
+        .join("; "),
+      ticketGrade.violations.length,
+    );
   }
   const pick = await pickFor(
     roster,
@@ -4642,6 +4652,7 @@ interface PsRow {
   state: RunState;
   age: string;
   summary: string | null;
+  dispatcher_session: string | null;
 }
 
 function ageLabel(startedAt: string | undefined, endedAt?: string): string {
@@ -4673,7 +4684,7 @@ function oneLineSummary(value: string): string {
     .slice(0, 200);
 }
 
-function psCommand(showAll: boolean, asJson: boolean): number {
+function psCommand(showAll: boolean, asJson: boolean, mine: boolean): number {
   const markers = new Map(
     readActive().map((entry) => [entry.active.run_id, entry]),
   );
@@ -4726,9 +4737,16 @@ function psCommand(showAll: boolean, asJson: boolean): number {
             endedAt,
           ),
           summary,
+          dispatcher_session:
+            marker?.active.dispatcher_session ??
+            logged?.dispatcher_session ??
+            null,
         },
       ];
     })
+    .filter(
+      (row) => !mine || row.dispatcher_session === currentDispatcherSession(),
+    )
     .toSorted((a, b) => {
       const liveOrder =
         Number(b.state === "running") - Number(a.state === "running");
@@ -4748,11 +4766,11 @@ function psCommand(showAll: boolean, asJson: boolean): number {
     return 0;
   }
   process.stdout.write(
-    "ticket\tproposition\trow\tkind\tlabels\tstate\tage\tsummary\trun_id\n",
+    "ticket\tproposition\trow\tkind\tlabels\tstate\tage\tsummary\tdispatcher\trun_id\n",
   );
   for (const row of visibleRows)
     process.stdout.write(
-      `${row.name}\t${row.proposition ?? "-"}\t${row.row}\t${row.kind}\t${row.labels.join(",")}\t${row.state}\t${row.age}\t${row.summary ?? ""}\t${row.id}\n`,
+      `${row.name}\t${row.proposition ?? "-"}\t${row.row}\t${row.kind}\t${row.labels.join(",")}\t${row.state}\t${row.age}\t${row.summary ?? ""}\t${row.dispatcher_session?.slice(0, 8) ?? "-"}\t${row.id}\n`,
     );
   return 0;
 }
@@ -6145,6 +6163,10 @@ async function parseAgx() {
             description: "show every run without the default 20 row limit",
           },
           json: { type: Boolean, description: "print rows as JSON" },
+          mine: {
+            type: Boolean,
+            description: "show only runs dispatched by this session",
+          },
         },
       },
       undefined,
@@ -7180,12 +7202,10 @@ async function main(): Promise<number | undefined> {
       f.workspace !== undefined &&
       (preflightGrade.violations.length > 0 || protectedWrites.length > 0)
     ) {
-      [...renderTicketLint(preflightGrade), ...protectedWrites].forEach(
-        (line) => {
-          dispatchError(line);
-        },
+      fatal(
+        [...renderTicketLint(preflightGrade), ...protectedWrites].join("; "),
+        preflightGrade.violations.length + protectedWrites.length,
       );
-      return 2;
     }
     const prepared =
       f.workspace === undefined
@@ -7294,6 +7314,9 @@ async function main(): Promise<number | undefined> {
     const home = selected.path;
     if (argv.command === "ticket-ls") {
       process.stderr.write(`agx: ticket home: ${home} (${selected.rule})\n`);
+      process.stderr.write(
+        `agx: default state project is the backing jj repository root basename; workspaces share it\n`,
+      );
       process.stdout.write(
         `${JSON.stringify(
           listTicketsAtHome(
@@ -7330,7 +7353,11 @@ async function main(): Promise<number | undefined> {
     return ask(argv.flags.request);
   }
   if (argv.command === "ps")
-    return psCommand(argv.flags.all ?? false, argv.flags.json ?? false);
+    return psCommand(
+      argv.flags.all ?? false,
+      argv.flags.json ?? false,
+      argv.flags.mine ?? false,
+    );
   if (argv.command === "show") {
     if (argv._.length !== 1) fatal("show needs <run_id|name|latest>");
     return resultCommand(argv._.ticket, argv.flags.json ?? false, false);

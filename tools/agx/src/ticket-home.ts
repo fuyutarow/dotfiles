@@ -14,6 +14,7 @@ import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
 import { attempt } from "../../shared/src/attempt.ts";
 import { parseTicket, resourceKind, ticketFields } from "./ticket.ts";
 import { fromThrowable, z } from "../../shared/src/zod.ts";
+import { workspaceRoot } from "./lifecycle.ts";
 
 export function ticketRoot(cwd: string): string | undefined {
   for (const cmd of [
@@ -68,7 +69,7 @@ export function selectTicketHome(
   root: string,
   cwd: string,
   explicit?: string,
-  project = basename(resolve(root)),
+  project = basename(workspaceRoot(root)),
 ): { path: string; rule: string } | Error {
   if (
     project.trim() === "" ||

@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.0 — 2026-10-12
+
+- Resolve default ticket projects from the backing jj repository so workspaces share ticket state; explicit `--project` still takes precedence.
+- Make pre-worker refusals exit 2 with a first-line `agx: REFUSED:` receipt and reason count, including dispatch, detached dispatch and pick.
+- Add `agx ps --mine` and show dispatcher session ids in table and JSON output.
+
 ## 3.0.1 — 2026-10-12
 
 - Keep hard-masked xhigh/max rows out of stall escalation so launch cannot fall back to the row that stalled; preserve the AA floor and same-family price tie-break.

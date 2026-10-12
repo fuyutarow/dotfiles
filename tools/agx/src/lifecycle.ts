@@ -3,6 +3,7 @@
 import { existsSync, lstatSync, writeFileSync } from "node:fs";
 import { lstat, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { readFileSync, realpathSync } from "node:fs";
 import { fromThrowable } from "neverthrow";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 
@@ -10,17 +11,32 @@ export const DEFAULT_STALL_S = 600;
 export type FileStamp = { mtime_ms: number; size: number };
 export type FileSnapshot = Map<string, FileStamp>;
 
+const isRepositoryRoot = (path: string): boolean => {
+  const git = fromThrowable(() => lstatSync(join(path, ".git")))();
+  return (
+    existsSync(join(path, ".jj")) ||
+    existsSync(join(path, ".git", "HEAD")) ||
+    (git.isOk() && git.value.isFile())
+  );
+};
+
 export function workspaceRoot(cwd: string): string {
   let directory = resolve(cwd);
-  while (
-    !existsSync(join(directory, ".git")) &&
-    !existsSync(join(directory, ".jj"))
-  ) {
+  while (!isRepositoryRoot(directory)) {
     const parent = dirname(directory);
     if (parent === directory) return resolve(cwd);
     directory = parent;
   }
-  return directory;
+  const jjWorkspace = join(directory, ".jj");
+  const backingStore = fromThrowable(() =>
+    realpathSync(
+      resolve(
+        jjWorkspace,
+        readFileSync(join(jjWorkspace, "repo"), "utf8").trim(),
+      ),
+    ),
+  )();
+  return backingStore.isOk() ? dirname(dirname(backingStore.value)) : directory;
 }
 
 export function fileStamp(path: string): FileStamp | undefined {

@@ -55,6 +55,10 @@ coordinator's. The recap is sent verbatim to Jev as `state.proposition`, printed
 opens the worker's promise block, and its id is kept on the marker and run record and shown by
 `agx ps` and `agx show`. Split pieces inherit the parent's proposition.
 
+`agx ps --mine` filters the run list to the current `dispatcher_session`. Table output includes
+the short dispatcher session id; `ps --json` rows include the full `dispatcher_session` (or
+`null` when the run has no recorded dispatcher session).
+
 Capabilities accept plain routing tags or `{ need, lower_effort_lacks }` objects with non-empty
 strings. Only an object justifies xhigh/max. Without one, positive selection mass goes to the
 highest admissible lower effort in the same model family; receipt masks and fallback reasons
@@ -135,7 +139,7 @@ There are no former command aliases.
 | Note artifact consumption/rejection | `agx ledger note <ticket> --consumed                              | --rejected [--note …]` |
 | Export runs                         | `agx ledger export`                                               |
 | Show a run result or stored brief   | `agx show <ticket> [--json]`; `agx ledger result <ticket> [--json | --brief]`              |
-| List work                           | `agx ps [--all] [--json]`                                         |
+| List work                           | `agx ps [--all] [--mine] [--json]`                                |
 
 Flags and output retain their existing meanings. Runtime state is only in
 `$XDG_STATE_HOME/agx` (default `~/.local/state/agx`), with `AGX_STATE_DIR` as the test seam.
@@ -178,8 +182,10 @@ Jev returns a choice and per-row probabilities. The router first masks rows whos
 
 Ticket home precedence is `--home <path|state>` → `AGX_TICKET_HOME` → nearest
 upward `.agx.toml ticket_home` → repo `.agents/tickets` if it exists →
-`$AGX_STATE_DIR/tickets/<project>`. State uses the repo root basename of `--cd`,
-or explicit `--project`; `ticket ls` prints the rule that selected its home.
+`$AGX_STATE_DIR/tickets/<project>`. State uses the basename of the repository root
+backing `--cd`; for jj workspaces this is resolved through `.jj/repo`, so every workspace
+of one repository shares a project. Explicit `--project` wins. `ticket ls` prints the rule
+that selected its home and this default project rule.
 `ticket import <dir> [--project P]` copies Markdown files byte for byte, retaining
 ids and appended history. Undated names acquire the import day's YYMMDD prefix;
 collisions on ticket filenames (ignoring date prefixes) are skipped without overwriting.

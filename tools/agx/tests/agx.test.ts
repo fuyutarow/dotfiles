@@ -680,7 +680,7 @@ describe("agx dispatch", () => {
       ],
       { AGX_STATE_DIR: join(scratch, "approved-row-state") },
     );
-    expect(r.code, r.err).toBe(0);
+    expect(r.code).toBe(0);
     expect(bodies).toHaveLength(before);
     const logged = decodedJson(
       z.looseObject({
@@ -1805,7 +1805,7 @@ describe("agx dispatch", () => {
         "--cd",
         scratch,
       ]);
-      expect(r.code).toBe(0);
+      expect(r.code, r.err).toBe(0);
       const pick = decodedJson(
         z.looseObject({ masked_rows: z.array(z.unknown()) }),
         r.out.trim(),
@@ -3173,6 +3173,98 @@ test("an unexpected positional argument is refused, never ignored", async () => 
   }
 });
 
+describe("agx operator regressions", () => {
+  test("a jj workspace dispatch uses its backing repository ticket project", async () => {
+    const repository = join(scratch, "operator-project-root");
+    const workspace = join(scratch, "operator-project-root-arm-test");
+    const store = join(repository, ".jj", "repo");
+    mkdirSync(store, { recursive: true });
+    mkdirSync(join(workspace, ".jj"), { recursive: true });
+    writeFileSync(join(workspace, ".jj", "repo"), store);
+    const state = join(scratch, "operator-project-state");
+    const b = brief("operator-project", "record this workspace ticket");
+    const r = await router(runArgs(b, workspace), {
+      AGX_STATE_DIR: state,
+      CLAUDE_CODE_SESSION_ID: "operator-project-session",
+    });
+    expect(r.code, r.err).toBe(0);
+    expect(existsSync(join(state, "tickets", "operator-project-root"))).toBe(
+      true,
+    );
+    expect(
+      existsSync(join(state, "tickets", "operator-project-root-arm-test")),
+    ).toBe(false);
+    const explicit = await router(
+      [
+        ...runArgs(
+          brief("operator-explicit-project", "explicit project"),
+          workspace,
+        ),
+        "--project",
+        "manual-project",
+      ],
+      {
+        AGX_STATE_DIR: state,
+        CLAUDE_CODE_SESSION_ID: "operator-project-session",
+      },
+    );
+    expect(explicit.code, explicit.err).toBe(0);
+    expect(existsSync(join(state, "tickets", "manual-project"))).toBe(true);
+  });
+
+  test("dispatch, detached dispatch and pick make refusal receipts unmistakable", async () => {
+    const malformed = rawBrief(
+      "operator-refused",
+      '+++\nschema = 2\nwrites = "invalid"\n+++\nRefuse me.\n',
+    );
+    const cases = [
+      runArgs(malformed, freshCwd()),
+      [...runArgs(malformed, freshCwd()), "--detach"],
+      ["pick", "--prompt-file", malformed, "--cd", freshCwd()],
+    ];
+    for (const args of cases) {
+      const r = await router(args);
+      expect(r.code, r.err).toBe(2);
+      expect(r.err.split("\n")[0]).toMatch(
+        /^agx: REFUSED: .*\(\d+ reasons?\)$/u,
+      );
+    }
+  });
+
+  test("ps --mine filters rows by dispatcher session and exposes that session in JSON", async () => {
+    const state = join(scratch, "operator-ps-state");
+    const dispatchers: [name: string, session: string][] = [
+      ["operator-own", "operator-session"],
+      ["operator-other", "other-session"],
+    ];
+    for (const [name, session] of dispatchers) {
+      const r = await router(runArgs(brief(name, `run ${name}`), freshCwd()), {
+        AGX_STATE_DIR: state,
+        CLAUDE_CODE_SESSION_ID: session,
+      });
+      expect(r.code, r.err).toBe(0);
+    }
+    const mine = await router(["ps", "--mine", "--json"], {
+      AGX_STATE_DIR: state,
+      CLAUDE_CODE_SESSION_ID: "operator-session",
+    });
+    const runs = decodedJson(
+      z.looseObject({ runs: z.array(z.unknown()) }),
+      mine.out,
+    ).runs;
+    expect(mine.code).toBe(0);
+    expect(runs).toHaveLength(1);
+    expect(mine.out).toContain('"dispatcher_session":"operator-session"');
+    expect(mine.out).not.toContain('"dispatcher_session":"other-session"');
+    const table = await router(["ps", "--mine"], {
+      AGX_STATE_DIR: state,
+      CLAUDE_CODE_SESSION_ID: "operator-session",
+    });
+    expect(table.out.split("\n")[0]).toContain("dispatcher");
+    expect(table.out).toContain("operator");
+  });
+});
+
 // I4 (owner 2026-10-06): a coordinator names a worker the way its vendor does. The receipt keeps
 // the vendor's session id, and the commands that take a run accept it (a unique prefix) as well
 // as the router's own run_id.
@@ -3689,7 +3781,11 @@ describe("agx dispatch: a brief with a ticket", () => {
     const dispatch = await router(runArgs(b, cwd));
     expect(lint.code).toBe(1);
     expect(dispatch.code).toBe(2);
-    expect(dispatch.err).toBe(lint.out);
+    expect(dispatch.err.split("\n")[0]).toMatch(
+      /^agx: REFUSED: .*\(\d+ reasons?\)$/u,
+    );
+    for (const rule of ["schema", "resource", "premise"])
+      expect(dispatch.err).toContain(`remand ${rule}`);
     expect(bodies.length).toBe(before);
     for (const rule of ["schema", "resource", "premise"])
       expect(lint.out).toContain(`remand ${rule}:`);
@@ -5005,7 +5101,7 @@ describe("agx dispatch: a brief with a ticket", () => {
         // Activity lasts 2.5s, so the checkpoint still occurs while work is running.
         AGX_CHECKPOINT_MS: "2000",
       });
-      expect(r.code).toBe(0);
+      expect(r.code, r.err).toBe(0);
       expect(performance.now() - start).toBeGreaterThan(2500);
       expect(
         logLines(r.state).filter((line) => line.kind === "run"),

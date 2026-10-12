@@ -21,10 +21,16 @@
 // the reproduction that motivated it, and checkIndexFreshness() for the read-side mechanics.
 
 import { readdir, rename } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
-import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
@@ -32,16 +38,45 @@ import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
 
-export function findRegisteredProject(start: string): string | null {
+export type RegisteredProject = {
+  project: string;
+  workspace: string | null;
+};
+
+function jjBackingRepo(current: string): string | null | undefined {
+  const marker = join(current, ".jj", "repo");
+  const info = fromThrowable(() => lstatSync(marker))();
+  if (info.isErr() || !info.value.isFile()) return undefined;
+  const target = fromThrowable(() =>
+    realpathSync(
+      resolve(join(current, ".jj"), readFileSync(marker, "utf8").trim()),
+    ),
+  )();
+  return target.isErr() ? null : dirname(dirname(target.value));
+}
+
+export function resolveRegisteredProject(
+  start: string,
+): RegisteredProject | null {
   let current = resolve(start);
   while (true) {
+    const backingRepo = jjBackingRepo(current);
+    if (backingRepo === null) return null;
+    if (backingRepo !== undefined) {
+      const project = findRegisteredProject(backingRepo);
+      return project === null ? null : { project, workspace: current };
+    }
     if (existsSync(join(current, ".cocoindex_code", "settings.yml"))) {
-      return current;
+      return { project: current, workspace: null };
     }
     const parent = dirname(current);
     if (parent === current) return null;
     current = parent;
   }
+}
+
+export function findRegisteredProject(start: string): string | null {
+  return resolveRegisteredProject(start)?.project ?? null;
 }
 
 export function headLabel(head: string | null): string {
@@ -648,7 +683,15 @@ async function runChildToStderr(
 export async function runIndexWrapper(
   timeoutMs: number,
 ): Promise<Result<number, Error>> {
-  const project = findRegisteredProject(process.cwd());
+  const resolution = resolveRegisteredProject(process.cwd());
+  if (resolution?.workspace !== null && resolution?.workspace !== undefined) {
+    return err(
+      new Error(
+        `index refused in jj workspace ${resolution.workspace}; run 'repo-retrieve index' in backing repo ${resolution.project}`,
+      ),
+    );
+  }
+  const project = resolution?.project;
   if (project === undefined || project === null || project === "") {
     return err(
       new Error(`index requested, but ${process.cwd()} is not ccc-registered`),

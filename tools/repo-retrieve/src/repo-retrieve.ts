@@ -53,7 +53,7 @@
 // calling convention -- see repo-retrieve.test.ts and driving-cocoindex) can therefore never mistake
 // an unearned pass for an earned one.
 
-import { realpathSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli, command } from "cleye";
 import { z } from "../../shared/src/zod.ts";
@@ -69,6 +69,7 @@ import {
   citationToken,
   findRegisteredProject,
   headLabel,
+  resolveRegisteredProject,
   runIndexWrapper,
 } from "./ccc-index.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
@@ -275,6 +276,29 @@ function cccResultCount(stdout: string): number {
   return stdout.match(/^--- Result \d+ \(/gmu)?.length ?? 0;
 }
 
+function backingIndexNote(project: string): void {
+  process.stderr.write(
+    `INDEX: backing repo ${project} (workspace changes are not indexed; use rr text / rr regex for them)\n`,
+  );
+}
+
+function mapBackingResultPaths(
+  output: string,
+  project: string,
+  workspace: string | null,
+): string {
+  if (workspace === null) return output;
+  const prefix = project.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return output.replaceAll(
+    new RegExp(`${prefix}([/\\\\][^\\s:|]+)`, "gu"),
+    (match, suffix: string) => {
+      const relativePath = suffix.replaceAll("\\", "/").replace(/^[/\\]+/u, "");
+      const workspacePath = resolve(workspace, relativePath);
+      return existsSync(workspacePath) ? workspacePath : match;
+    },
+  );
+}
+
 async function daemonAvailability(project: string): Promise<string> {
   const ccc = requireExecutable("ccc");
   if (ccc.isErr()) return "ccc is not available on PATH";
@@ -385,8 +409,13 @@ async function runCccSearch(
   explicitProject: boolean,
   json: boolean,
 ): Promise<Result<number, Error>> {
-  const project = findRegisteredProject(cwd);
-  if (project === null || (explicitProject && project !== cwd)) {
+  const resolution = resolveRegisteredProject(cwd);
+  const project = resolution?.project;
+  if (
+    resolution === null ||
+    project === undefined ||
+    (explicitProject && project !== cwd && resolution.workspace !== cwd)
+  ) {
     return err(
       new Error(
         `${route} requested, but ${cwd} is not ccc-registered at that project root; ` +
@@ -395,7 +424,13 @@ async function runCccSearch(
     );
   }
 
-  const freshnessResult = await checkIndexFreshness(project, route);
+  if (resolution.workspace !== null) backingIndexNote(project);
+
+  const freshnessResult = await checkIndexFreshness(
+    project,
+    route,
+    resolution.workspace === null,
+  );
   if (freshnessResult.isErr()) return err(freshnessResult.error);
   const freshness = freshnessResult.value;
   if (freshness.status === "stale") {
@@ -471,11 +506,17 @@ async function runCccSearch(
       `ROUTE: ${route} -> ccc search (${index + 1}/${queries.length}) project=${project}\n`,
     );
     const searchResult = await fromAsyncThrowable(
-      () => runChildCaptured(searchArgs, timeoutMs, true, project),
+      () => runChildCaptured(searchArgs, timeoutMs, false, project),
       asError,
     )();
     if (searchResult.isErr()) return err(searchResult.error);
     const result = searchResult.value;
+    const mappedOutput = mapBackingResultPaths(
+      result.stdout,
+      project,
+      resolution.workspace,
+    );
+    if (mappedOutput !== "") process.stdout.write(mappedOutput);
     if (result.exitCode !== 0) return ok(result.exitCode);
     if (cccResultCount(result.stdout) > 0) matchedQueries += 1;
   }
@@ -1049,15 +1090,21 @@ async function runDefinition(
   cwd: string,
   json: boolean,
 ): Promise<Result<number, Error>> {
-  const project = findRegisteredProject(cwd);
-  if (project === null || project === "") {
+  const resolution = resolveRegisteredProject(cwd);
+  const project = resolution?.project;
+  if (resolution === null || project === undefined || project === "") {
     return err(
       new Error(
         `definition requested, but ${cwd} is not inside a ccc-registered project`,
       ),
     );
   }
-  const freshness = await checkIndexFreshness(project, "exists");
+  if (resolution.workspace !== null) backingIndexNote(project);
+  const freshness = await checkIndexFreshness(
+    project,
+    "exists",
+    resolution.workspace === null,
+  );
   if (freshness.isErr()) return err(freshness.error);
   if (freshness.value.status === "stale") {
     await writeNoIndexDiagnostic(
@@ -1071,17 +1118,22 @@ async function runDefinition(
   const answer = await findDefinitions(project, query, limit);
   if (answer.isErr()) return err(answer.error);
   const a = answer.value;
+  const cards = a.cards.map((card) => ({
+    ...card,
+    file: mapBackingResultPaths(card.file, project, resolution.workspace),
+  }));
   for (const n of a.notes) process.stderr.write(`NOTE: ${n}\n`);
   if (json) {
     process.stdout.write(
-      `${JSON.stringify({ ...a, cards: a.cards.map(({ body: _b, ...c }) => c) })}\n`,
+      `${JSON.stringify({ ...a, cards: cards.map(({ body: _b, ...c }) => c) })}\n`,
     );
     return ok(a.strength === "none" ? 1 : 0);
   }
   process.stderr.write(
     `ROUTE: definition -> catalog (${a.catalogSize} definitions)${a.reranked ? ` + judge=${a.judge}` : ""} project=${project}\n`,
   );
-  if (a.cards.length > 0) process.stdout.write(`${renderCards(a)}\n`);
+  if (cards.length > 0)
+    process.stdout.write(`${renderCards({ ...a, cards })}\n`);
   if (a.strength === "unranked") {
     process.stdout.write(
       "RESULT: UNRANKED route=definition; the reranker was unavailable (see NOTE), so the cards are in " +

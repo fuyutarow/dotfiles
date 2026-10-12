@@ -61,7 +61,7 @@ hook = 7.5
 [definition.thresholds.jev]
 strong = 2.2 # p >= 0.9
 likely = 0.0 # p >= 0.5
-hook = 3.5   # p >= 0.97
+hook = 3.5 # p >= 0.97
 
 [definition.jev_endpoints.typesafe]
 url = "https://api.typesafe.ai/v1/systemone"

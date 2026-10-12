@@ -119,6 +119,15 @@ function registerFreshGitProject(): { dir: string; head: string } {
   return { dir, head };
 }
 
+function jjWorkspace(backing: string): string {
+  const workspace = tempDir("repo-retrieve-jj-workspace-");
+  const store = join(backing, ".jj", "repo", "store");
+  mkdirSync(store, { recursive: true });
+  mkdirSync(join(workspace, ".jj"));
+  writeFileSync(join(workspace, ".jj", "repo"), store);
+  return workspace;
+}
+
 // Plants a real, non-empty file under .cocoindex_code/ that hasIndexArtifacts() (in
 // ccc-index.ts) will see as "an index exists" — the filesystem-level stand-in for a real `ccc
 // index` run. Needed by any test that hand-writes a watermark via writeWatermarkFile() instead of
@@ -197,6 +206,7 @@ if [ "${name}" = ccc ] && [ "\${FAKE_CCC_REQUIRE_SINGLE_SPACE_PATH:-0}" = 1 ] &&
   fi
 fi
 if [ "${name}" = ccc ] && [ "\${FAKE_SEARCH_EMPTY:-0}" != 1 ]; then printf '%s\\n' '--- Result 1 (score: 0.9) ---'; fi
+if [ "${name}" = ccc ] && [ "$1" = search ] && [ -n "\${FAKE_CCC_RESULT_FILE:-}" ]; then printf 'File: %s/%s\\n' "$PWD" "$FAKE_CCC_RESULT_FILE"; fi
 exit "\${FAKE_SEARCH_EXIT:-0}"
 `,
     );
@@ -267,6 +277,89 @@ describe("repo-retrieve route contract", () => {
     expect(result.log).toContain("--path src/**/*.ts");
     expect(result.log).not.toContain("--refresh");
     expect(result.stdout).toContain("RESULT: PASS route=concept engine=ccc");
+  });
+
+  test("concept in a jj workspace uses the backing repo index and identifies its scope", () => {
+    const { dir: backing } = registerFreshGitProject();
+    const workspace = jjWorkspace(backing);
+    const result = run(
+      workspace,
+      ["about", "--query", "workspace backing index"],
+      { FAKE_SEARCH_EXPECT_CWD: backing },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("ccc daemon status");
+    expect(result.log).toContain("ccc search workspace backing index");
+    expect(result.stderr).toContain(`project=${backing}`);
+    expect(result.stderr).toContain(`INDEX: backing repo ${backing}`);
+    expect(result.stderr).toContain("workspace changes are not indexed");
+    expect(result.stdout).toContain("RESULT: PASS route=concept engine=ccc");
+
+    const absent = run(
+      workspace,
+      [
+        "absent",
+        "--query",
+        "unindexed workspace edits",
+        "--query",
+        "workspace-only changes",
+        "--query",
+        "files absent from the backing index",
+      ],
+      { FAKE_SEARCH_EXPECT_CWD: backing },
+    );
+    expect(absent.code).toBe(0);
+    expect(absent.log).toContain("ccc search unindexed workspace edits");
+    expect(absent.stderr).toContain(`project=${backing}`);
+    expect(absent.stderr).toContain(`INDEX: backing repo ${backing}`);
+    expect(absent.stdout).toContain("RESULT: PASS route=battery engine=ccc");
+  });
+
+  test("semantic results map backing repo paths into matching workspace files", () => {
+    const { dir: backing } = registerFreshGitProject();
+    const workspace = jjWorkspace(backing);
+    mkdirSync(join(backing, "src"));
+    mkdirSync(join(workspace, "src"));
+    writeFileSync(join(backing, "src", "entry.ts"), "backing\n");
+    writeFileSync(join(workspace, "src", "entry.ts"), "workspace\n");
+    const result = run(
+      workspace,
+      ["about", "--query", "workspace path mapping"],
+      {
+        FAKE_SEARCH_EXPECT_CWD: backing,
+        FAKE_CCC_RESULT_FILE: "src/entry.ts",
+      },
+    );
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain(join(workspace, "src", "entry.ts"));
+    expect(result.stdout).not.toContain(join(backing, "src", "entry.ts"));
+  });
+
+  test("semantic routes do not index a backing repo on behalf of its workspace", () => {
+    const { dir: backing } = registerGitProject();
+    const workspace = jjWorkspace(backing);
+    for (const args of [
+      ["about", "--query", "unindexed backing"],
+      ["exists", "--query", "unindexed backing"],
+    ]) {
+      const result = run(workspace, args, { REPO_RETRIEVE_AUTO_INDEX: "1" });
+      expect(result.code).toBe(3);
+      expect(result.stderr).toContain("NO_INDEX");
+      expect(result.log).not.toContain("ccc index");
+      expect(result.stderr).toContain(`project=${backing}`);
+    }
+  });
+
+  test("index refuses a jj workspace", () => {
+    const { dir: backing } = registerFreshGitProject();
+    const workspace = jjWorkspace(backing);
+    const result = run(workspace, ["index"]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("index refused in jj workspace");
+    expect(result.log).toBe("");
   });
 
   test("--project searches another registered corpus while --path stays inside it", () => {

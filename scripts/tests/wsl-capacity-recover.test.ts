@@ -15,7 +15,9 @@ import {
   memoryEmergency,
   parseHostMemory,
   recoveryVerdictRecord,
+  recoverMemoryEmergency,
   selectStopTargets,
+  shouldDropPageCache,
   shouldReclaim,
   startTicks,
   stopCompute,
@@ -86,6 +88,164 @@ describe("WSL capacity recovery decisions", () => {
       windows_available_mb: 900,
       recorded_at: "2026-10-12T00:00:00.000Z",
     });
+  });
+
+  test("HOLD check drops guest cache when installed lever can restore Windows memory", async () => {
+    const events: string[] = [];
+    const result = await recoverMemoryEmergency({
+      before: { availableMb: 1100, pageReadsPerSecond: 10 },
+      beforeBuffCacheMb: 15_000,
+      thresholdMb: 2048,
+      isLeverAvailable: () => true,
+      startLever: () => {
+        events.push("drop");
+        return true;
+      },
+      fallbackDrop: () => false,
+      wait: () => Promise.resolve(),
+      measure: () => ({ availableMb: 2600, pageReadsPerSecond: 10 }),
+      measureBuffCache: () => 9000,
+      canAttemptDrop: () => true,
+      markDropAttempt: () => {
+        events.push("stamp");
+      },
+      isRestored: (memory) => memory !== null && memory.availableMb >= 2048,
+      stopOnFailure: false,
+      stopCompute: () => {
+        events.push("stop");
+      },
+    });
+    expect(result).toMatchObject({
+      dropAttempted: true,
+      beforeMb: 1100,
+      afterMb: 2600,
+      beforeBuffCacheMb: 15_000,
+      afterBuffCacheMb: 9000,
+      outcome: "restored",
+      stopped: false,
+    });
+    expect(events).toEqual(["stamp", "drop"]);
+  });
+
+  test("HOLD remains and compute is not terminated when cache drop misses the threshold", async () => {
+    const events: string[] = [];
+    const result = await recoverMemoryEmergency({
+      before: { availableMb: 1100, pageReadsPerSecond: 10 },
+      thresholdMb: 2048,
+      isLeverAvailable: () => true,
+      startLever: () => {
+        events.push("drop");
+        return true;
+      },
+      fallbackDrop: () => false,
+      wait: () => Promise.resolve(),
+      measure: () => ({ availableMb: 1200, pageReadsPerSecond: 10 }),
+      canAttemptDrop: () => true,
+      markDropAttempt: () => true,
+      isRestored: (memory) => memory !== null && memory.availableMb >= 2048,
+      stopOnFailure: false,
+      stopCompute: () => {
+        events.push("stop");
+      },
+    });
+    expect(result).toMatchObject({
+      dropAttempted: true,
+      outcome: "no-effect",
+      stopped: false,
+      afterMb: 1200,
+    });
+    expect(events).toEqual(["drop"]);
+  });
+
+  test("page-cache lever is rate-limited to one attempt per ten minutes", () => {
+    expect(shouldDropPageCache(0, 10 * 60 * 1000 - 1)).toBe(false);
+    expect(shouldDropPageCache(0, 10 * 60 * 1000)).toBe(true);
+  });
+
+  test("installed drop-cache lever restores memory before compute is stopped", async () => {
+    const events: string[] = [];
+    const result = await recoverMemoryEmergency({
+      thresholdMb: 2048,
+      isLeverAvailable: () => true,
+      startLever: () => {
+        events.push("start");
+        return true;
+      },
+      fallbackDrop: () => {
+        events.push("fallback");
+        return false;
+      },
+      wait: () => {
+        events.push("wait");
+      },
+      measure: () => {
+        events.push("measure");
+        return { availableMb: 3000, pageReadsPerSecond: 1 };
+      },
+      stopCompute: () => {
+        events.push("stop");
+      },
+      before: { availableMb: 700, pageReadsPerSecond: 1923 },
+    });
+    expect(result).toMatchObject({
+      leverAttempted: true,
+      beforeMb: 700,
+      afterMb: 3000,
+      outcome: "restored",
+      stopped: false,
+    });
+    expect(events).toEqual(["start", "wait", "measure"]);
+  });
+
+  test("installed drop-cache lever with no effect is followed by TERM", async () => {
+    const events: string[] = [];
+    const result = await recoverMemoryEmergency({
+      thresholdMb: 2048,
+      isLeverAvailable: () => true,
+      startLever: () => true,
+      fallbackDrop: () => false,
+      wait: () => {},
+      measure: () => ({ availableMb: 700, pageReadsPerSecond: 1923 }),
+      stopCompute: () => {
+        events.push("stop");
+      },
+      before: { availableMb: 700, pageReadsPerSecond: 1923 },
+    });
+    expect(result).toMatchObject({
+      leverAttempted: true,
+      beforeMb: 700,
+      afterMb: 700,
+      outcome: "no-effect",
+      stopped: true,
+    });
+    expect(events).toEqual(["stop"]);
+  });
+
+  test("unavailable lever retains fallback cache drop and then stops if still low", async () => {
+    const events: string[] = [];
+    const result = await recoverMemoryEmergency({
+      thresholdMb: 2048,
+      isLeverAvailable: () => false,
+      startLever: () => false,
+      fallbackDrop: () => {
+        events.push("fallback");
+        return true;
+      },
+      wait: () => {},
+      measure: () => ({ availableMb: 700, pageReadsPerSecond: 1923 }),
+      stopCompute: () => {
+        events.push("stop");
+      },
+      before: { availableMb: 700, pageReadsPerSecond: 1923 },
+    });
+    expect(result).toMatchObject({
+      leverAttempted: false,
+      beforeMb: 700,
+      afterMb: 700,
+      outcome: "unavailable-fallback",
+      stopped: true,
+    });
+    expect(events).toEqual(["fallback", "stop"]);
   });
 
   test("loads the host thresholds from the canonical TOML path without WSL", () => {

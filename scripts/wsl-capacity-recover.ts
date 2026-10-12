@@ -43,6 +43,10 @@ const VERDICT_PATH = join(
   homedir(),
   ".local/state/wsl-capacity-recover/latest-verdict.json",
 );
+const CACHE_DROP_STAMP_PATH = join(
+  homedir(),
+  ".local/state/wsl-capacity-recover/last-cache-drop",
+);
 const COMPUTE_NAMES = new Set([
   "julia",
   "cargo",
@@ -56,6 +60,8 @@ const POWERSHELL =
   "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
 const WSL_DISTRO = "Ubuntu-24.04";
 const MEMORY_AVAILABLE_EMERGENCY_MB = 2048;
+const CACHE_DROP_COOLDOWN_MS = 10 * 60 * 1000;
+const DROP_CACHE_UNIT = "dotfiles-dropcache.service";
 const HARD_PAGE_READS_EMERGENCY_PER_SECOND = 500;
 let cliError: string | undefined;
 
@@ -192,6 +198,47 @@ function markAttempt(): void {
   }
 }
 
+export function shouldDropPageCache(
+  lastAttemptMs: number,
+  nowMs: number,
+): boolean {
+  return nowMs - lastAttemptMs >= CACHE_DROP_COOLDOWN_MS;
+}
+
+function readLastCacheDropMs(): number {
+  return fromThrowable(() =>
+    Number(readFileSync(CACHE_DROP_STAMP_PATH, "utf8").trim()),
+  )()
+    .map((value) => (Number.isFinite(value) ? value : 0))
+    .unwrapOr(0);
+}
+
+function markCacheDropAttempt(): boolean {
+  const result = fromThrowable(() => {
+    mkdirSync(join(homedir(), ".local/state/wsl-capacity-recover"), {
+      recursive: true,
+    });
+    writeFileSync(
+      CACHE_DROP_STAMP_PATH,
+      `${Temporal.Now.instant().epochMilliseconds}\n`,
+    );
+  })();
+  if (result.isErr()) {
+    process.stderr.write(
+      `WARN cache-drop rate-limit stamp unavailable: ${String(result.error)}\n`,
+    );
+    return false;
+  }
+  return true;
+}
+
+function cacheDropAllowed(): boolean {
+  return shouldDropPageCache(
+    readLastCacheDropMs(),
+    Temporal.Now.instant().epochMilliseconds,
+  );
+}
+
 async function runBounded(
   argv: string[],
   timeoutMs: number,
@@ -261,6 +308,170 @@ export function memoryEmergency(memory: HostMemory | null): boolean {
     memory.availableMb < MEMORY_AVAILABLE_EMERGENCY_MB &&
     memory.pageReadsPerSecond > HARD_PAGE_READS_EMERGENCY_PER_SECOND
   );
+}
+
+type MemoryEmergencyOptions = {
+  before: HostMemory;
+  beforeBuffCacheMb?: number | null;
+  thresholdMb: number;
+  isLeverAvailable: () => boolean | Promise<boolean>;
+  startLever: () => boolean | Promise<boolean>;
+  fallbackDrop: () => boolean | Promise<boolean>;
+  wait: () => void | Promise<void>;
+  measure: () => HostMemory | null | Promise<HostMemory | null>;
+  measureBuffCache?: () => number | null;
+  canAttemptDrop?: () => boolean;
+  markDropAttempt?: () => boolean | void;
+  fallbackWhenUnavailable?: boolean;
+  isRestored?: (memory: HostMemory | null) => boolean;
+  stopOnFailure?: boolean;
+  stopCompute: () => void | Promise<void>;
+};
+
+async function performCacheDrop(
+  options: MemoryEmergencyOptions,
+  available: boolean,
+): Promise<{
+  leverAttempted: boolean;
+  dropAttempted: boolean;
+  outcome: string;
+}> {
+  if (!available && options.fallbackWhenUnavailable === false) {
+    return {
+      leverAttempted: false,
+      dropAttempted: false,
+      outcome: "unavailable",
+    };
+  }
+  if (options.markDropAttempt?.() === false) {
+    return {
+      leverAttempted: false,
+      dropAttempted: false,
+      outcome: "rate-limit-state-unavailable",
+    };
+  }
+  if (available) {
+    const started = await options.startLever();
+    if (started) {
+      return { leverAttempted: true, dropAttempted: true, outcome: "started" };
+    }
+    process.stderr.write(
+      `WARN ${DROP_CACHE_UNIT} start failed; using existing WSL-root cache drop fallback\n`,
+    );
+    const dropped = await options.fallbackDrop();
+    return {
+      leverAttempted: true,
+      dropAttempted: true,
+      outcome: dropped
+        ? "start-failed-fallback"
+        : "start-failed-fallback-failed",
+    };
+  }
+  process.stderr.write(
+    `INFO ${DROP_CACHE_UNIT} unavailable; using existing WSL-root cache drop fallback\n`,
+  );
+  const dropped = await options.fallbackDrop();
+  return {
+    leverAttempted: false,
+    dropAttempted: true,
+    outcome: dropped ? "unavailable-fallback" : "unavailable-fallback-failed",
+  };
+}
+
+export async function recoverMemoryEmergency(
+  options: MemoryEmergencyOptions,
+): Promise<{
+  leverAttempted: boolean;
+  dropAttempted: boolean;
+  beforeMb: number;
+  afterMb: number | null;
+  memoryAfter: HostMemory | null;
+  beforeBuffCacheMb: number | null;
+  afterBuffCacheMb: number | null;
+  outcome: string;
+  stopped: boolean;
+}> {
+  const available = await options.isLeverAvailable();
+  let leverAttempted = false;
+  let dropAttempted = false;
+  let outcome: string = "rate-limited";
+  const canAttempt = options.canAttemptDrop?.() ?? true;
+  if (canAttempt) {
+    const result = await performCacheDrop(options, available);
+    leverAttempted = result.leverAttempted;
+    dropAttempted = result.dropAttempted;
+    outcome = result.outcome;
+  }
+  if (dropAttempted) await options.wait();
+  const after = await options.measure();
+  const afterBuffCacheMb = options.measureBuffCache?.() ?? null;
+  const restored =
+    options.isRestored !== undefined
+      ? options.isRestored(after)
+      : after !== null &&
+        !(
+          after.availableMb < options.thresholdMb &&
+          after.pageReadsPerSecond > HARD_PAGE_READS_EMERGENCY_PER_SECOND
+        );
+  if (restored && dropAttempted) outcome = "restored";
+  else if (outcome === "started") outcome = "no-effect";
+  process.stdout.write(
+    `MEM_RECLAIM lever=${leverAttempted ? DROP_CACHE_UNIT : "unavailable"} ` +
+      `attempted=${dropAttempted} ` +
+      `before_mb=${options.before.availableMb} after_mb=${after?.availableMb ?? "unknown"} ` +
+      `delta_mb=${after === null ? "unknown" : after.availableMb - options.before.availableMb} ` +
+      `before_buff_cache_mb=${options.beforeBuffCacheMb ?? "unknown"} ` +
+      `after_buff_cache_mb=${afterBuffCacheMb ?? "unknown"} ` +
+      `buff_cache_delta_mb=${afterBuffCacheMb === null || options.beforeBuffCacheMb === null || options.beforeBuffCacheMb === undefined ? "unknown" : afterBuffCacheMb - options.beforeBuffCacheMb} ` +
+      `outcome=${outcome}\n`,
+  );
+  const stopped = !restored && options.stopOnFailure !== false;
+  if (stopped) await options.stopCompute();
+  return {
+    leverAttempted,
+    dropAttempted,
+    beforeMb: options.before.availableMb,
+    afterMb: after?.availableMb ?? null,
+    memoryAfter: after,
+    beforeBuffCacheMb: options.beforeBuffCacheMb ?? null,
+    afterBuffCacheMb,
+    outcome,
+    stopped,
+  };
+}
+
+function guestBuffCacheMb(): number | null {
+  const result = fromThrowable(() => readFileSync("/proc/meminfo", "utf8"))();
+  if (result.isErr()) return null;
+  const values = new Map(
+    [
+      ...result.value.matchAll(
+        /^(Buffers|Cached|SReclaimable|Shmem):\s+(\d+) kB$/gmu,
+      ),
+    ].map((match) => [match[1], Number(match[2])]),
+  );
+  const names = ["Buffers", "Cached", "SReclaimable", "Shmem"];
+  if (names.some((name) => !values.has(name))) return null;
+  const total =
+    (values.get("Buffers") ?? 0) +
+    (values.get("Cached") ?? 0) +
+    (values.get("SReclaimable") ?? 0) -
+    (values.get("Shmem") ?? 0);
+  return Math.max(0, Math.round(total / 1024));
+}
+
+async function dropCacheLeverAvailable(): Promise<boolean> {
+  const result = await fromAsyncThrowable(() =>
+    runBounded(["systemctl", "cat", DROP_CACHE_UNIT], 5_000),
+  )();
+  return result.isOk() && result.value.code === 0 && !result.value.timedOut;
+}
+
+async function startDropCacheLever(): Promise<boolean> {
+  const result = await fromAsyncThrowable(() =>
+    runBounded(["sudo", "-n", "systemctl", "start", DROP_CACHE_UNIT], 30_000),
+  )();
+  return result.isOk() && result.value.code === 0 && !result.value.timedOut;
 }
 
 async function probeHostMemory(): Promise<HostMemory | null> {
@@ -594,7 +805,10 @@ async function main(): Promise<void> {
     process.stderr.write("WARN Windows memory could not be measured\n");
   }
   const memoryLow = memoryEmergency(memoryBefore);
-  if (free >= policy.denyBytes && !memoryLow) {
+  const memoryAvailableLow =
+    memoryBefore !== null &&
+    memoryBefore.availableMb < MEMORY_AVAILABLE_EMERGENCY_MB;
+  if (free >= policy.denyBytes && !memoryAvailableLow) {
     writeRecoveryVerdict(
       recoveryVerdictRecord(
         "OK",
@@ -635,10 +849,59 @@ async function main(): Promise<void> {
     return;
   }
   const diskEmergency = free < policy.stopBytes;
+  let memoryStillLow = memoryAvailableLow;
+  let memoryLatest = memoryBefore;
+  let memoryStopPerformed = false;
+  if (memoryLow) {
+    const memoryResult = await recoverMemoryEmergency({
+      before: memoryBefore!,
+      beforeBuffCacheMb: guestBuffCacheMb(),
+      thresholdMb: MEMORY_AVAILABLE_EMERGENCY_MB,
+      isLeverAvailable: dropCacheLeverAvailable,
+      startLever: startDropCacheLever,
+      fallbackDrop: dropPageCache,
+      wait: () => Bun.sleep(2_000),
+      measure: probeHostMemory,
+      measureBuffCache: guestBuffCacheMb,
+      canAttemptDrop: cacheDropAllowed,
+      markDropAttempt: markCacheDropAttempt,
+      stopCompute: async () => {
+        memoryStopPerformed = true;
+        await stopCompute(liveTargets());
+      },
+    });
+    memoryStillLow =
+      memoryResult.afterMb === null ||
+      memoryResult.afterMb < MEMORY_AVAILABLE_EMERGENCY_MB;
+    memoryLatest = memoryResult.memoryAfter;
+  } else if (memoryAvailableLow) {
+    const holdMemoryResult = await recoverMemoryEmergency({
+      before: memoryBefore,
+      beforeBuffCacheMb: guestBuffCacheMb(),
+      thresholdMb: MEMORY_AVAILABLE_EMERGENCY_MB,
+      isLeverAvailable: dropCacheLeverAvailable,
+      startLever: startDropCacheLever,
+      fallbackDrop: dropPageCache,
+      fallbackWhenUnavailable: false,
+      wait: () => Bun.sleep(2_000),
+      measure: probeHostMemory,
+      measureBuffCache: guestBuffCacheMb,
+      canAttemptDrop: cacheDropAllowed,
+      markDropAttempt: markCacheDropAttempt,
+      isRestored: (memory) =>
+        memory !== null && memory.availableMb >= MEMORY_AVAILABLE_EMERGENCY_MB,
+      stopOnFailure: false,
+      stopCompute: () => Promise.resolve(),
+    });
+    memoryStillLow =
+      holdMemoryResult.afterMb === null ||
+      holdMemoryResult.afterMb < MEMORY_AVAILABLE_EMERGENCY_MB;
+    memoryLatest = holdMemoryResult.memoryAfter;
+  }
   if (diskEmergency) {
     // Stop the known writers before a potentially slow cache walk. Once C: is at this floor,
     // spending minutes scanning while they keep writing can exhaust Windows first.
-    await stopCompute(liveTargets());
+    if (!memoryStopPerformed) await stopCompute(liveTargets());
     const measured = freeBytes(policy.path);
     if (measured.isErr()) {
       process.stderr.write(`FATAL: ${String(measured.error)}\n`);
@@ -654,20 +917,7 @@ async function main(): Promise<void> {
     }
     free = reclaimed.value;
   }
-  let memoryStillLow = memoryLow;
-  let memoryLatest = memoryBefore;
-  if (memoryLow) {
-    await dropPageCache();
-    await Bun.sleep(2_000);
-    const memoryAfter = await probeHostMemory();
-    memoryLatest = memoryAfter;
-    memoryStillLow = memoryAfter === null || memoryEmergency(memoryAfter);
-    process.stdout.write(
-      `MEM_CHECK before=${JSON.stringify(memoryBefore)} after=${JSON.stringify(memoryAfter)} ` +
-        `still_low=${memoryStillLow}\n`,
-    );
-  }
-  if (memoryStillLow || (!diskEmergency && free < policy.stopBytes)) {
+  if (!diskEmergency && free < policy.stopBytes) {
     await stopCompute(liveTargets());
     const measured = freeBytes(policy.path);
     if (measured.isErr()) {
@@ -698,7 +948,7 @@ async function main(): Promise<void> {
     writeRecoveryVerdict(
       recoveryVerdictRecord(
         "HOLD",
-        memoryStillLow,
+        memoryEmergency(memoryLatest),
         memoryLatest,
         Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
       ),

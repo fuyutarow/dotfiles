@@ -3760,6 +3760,13 @@ async function launch(l: Launch): Promise<number> {
       ticket?.writes?.length ?? 0,
       ticket?.timeout_s,
     );
+    const escalationMaskedRows = hasXhighMaxJustification(
+      ticket?.capabilities ?? [],
+    )
+      ? []
+      : roster.choice
+          .filter((candidate) => ["xhigh", "max"].includes(candidate.effort))
+          .map((candidate) => candidate.id);
     const nextRow = overridden
       ? row
       : escalationRow(
@@ -3770,6 +3777,7 @@ async function launch(l: Launch): Promise<number> {
           ),
           row,
           ticket?.budget_usd,
+          escalationMaskedRows,
         );
     if (nextRow === undefined || (overridden && !session.success)) {
       dispatchError(
@@ -3789,7 +3797,7 @@ async function launch(l: Launch): Promise<number> {
     );
     const rule = overridden
       ? "owner-approved row: resume the same row and session; no resampling; AA index unchanged"
-      : "cheapest available row with AA index >= failed row; same-family next effort breaks price ties; no Jev or epsilon";
+      : "cheapest available unmasked row with AA index >= failed row; same-family next effort breaks price ties; no Jev or epsilon";
     const nextPick: Pick = overridden
       ? { ...pick, reason: rule }
       : { source: "escalation", choice: nextRow.id, reason: rule };

@@ -58,6 +58,44 @@ describe("deterministic escalation", () => {
     ).toBe("sol-max");
   });
 
+  test("hard-masked high effort cannot route back to the failed row", () => {
+    const failed = {
+      id: "luna-high",
+      model: "luna",
+      effort: "high",
+      aa_index: 33,
+      price_in: 0.1,
+      price_out: 0.5,
+    };
+    const lunaXhigh = {
+      id: "luna-xhigh",
+      model: "luna",
+      effort: "xhigh",
+      aa_index: 35,
+      price_in: 0.1,
+      price_out: 0.5,
+    };
+    const terraHigh = {
+      id: "terra-high",
+      model: "terra",
+      effort: "high",
+      aa_index: 34,
+      price_in: 2,
+      price_out: 12,
+    };
+
+    const selected = escalationRow(
+      [failed, lunaXhigh, terraHigh],
+      failed,
+      undefined,
+      [lunaXhigh.id],
+    );
+
+    expect(selected?.id).toBe("terra-high");
+    expect(selected?.id).not.toBe(failed.id);
+    expect(selected?.aa_index).toBeGreaterThanOrEqual(failed.aa_index);
+  });
+
   test("unknown capability or price cannot establish a safe cheapest escalation", () => {
     const row = { id: "sol-high", model: "sol", effort: "high" };
     expect(escalationRow([row], row)).toBeUndefined();

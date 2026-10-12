@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.1 — 2026-10-12
+
+- Keep hard-masked xhigh/max rows out of stall escalation so launch cannot fall back to the row that stalled; preserve the AA floor and same-family price tie-break.
+
 ## 3.0.0 — 2026-10-11
 
 - BREAKING: one ticket schema. Plain briefs, `schema = 1` and `--legacy-brief` are gone; a brief without `+++` front matter is refused with a pointer to `agx ticket new`. `--choice` (kept only to be refused) is removed; `--row` with `--approval` stays the one override.
@@ -41,11 +45,11 @@
 - Lower the default pick temperature to 0.5 and remove epsilon smoothing. Sample categorically from p_i^(1/T) / sum_j p_j^(1/T) over all eligible rows, with no probability floor or top-p cutoff; positive temperatures never trigger an argmax shortcut. Preserve reasoned eligibility masks, ticket/CLI overrides, and receipt temperature plus tempered picked probability. Legacy epsilon receipt fields remain readable.
 - Computed effect for Jev probabilities 0.70/0.20/0.06/0.02/0.01/0.01:
 
-| T | Runner-up | Each 1% row |
-| --- | --- | --- |
-| 1 | 20.00% | 1.000% |
-| 0.7 | 13.83% | 0.191% |
-| 0.5 | 7.49% | 0.019% |
+| T   | Runner-up | Each 1% row |
+| --- | --------- | ----------- |
+| 1   | 20.00%    | 1.000%      |
+| 0.7 | 13.83%    | 0.191%      |
+| 0.5 | 7.49%     | 0.019%      |
 
 ## 2.8.0 — 2026-10-10
 

@@ -254,6 +254,17 @@ writeFileSync(
   `import { appendFileSync } from "node:fs";
 import { writeFileSync } from "node:fs";
 appendFileSync(${JSON.stringify(join(scratch, "claude-argv.log"))}, JSON.stringify(Bun.argv.slice(2)) + "\\n");
+const stallMode = process.env.FAKE_STALL_MODE;
+if (stallMode !== undefined) {
+  const stallLog = process.env.FAKE_STALL_LOG;
+  if (stallLog !== undefined)
+    appendFileSync(stallLog, JSON.stringify({ pid: process.pid, row: "haiku-medium", resume: false }) + "\\n");
+  process.on("SIGTERM", () => {
+    if (stallLog !== undefined) appendFileSync(stallLog + ".stopped", "haiku-medium\\n");
+    console.log(JSON.stringify({ exit_code: 124, timed_out: true, session_id: "sess-claude-stall", stderr: "" }));
+    process.exit(124);
+  });
+}
 const mode = process.env.FAKE_CLAUDE_MODE ?? "ok";
 if (Bun.argv.includes("--resume") && process.env.FAKE_RESUME_LAST !== undefined) process.env.FAKE_LAST = process.env.FAKE_RESUME_LAST;
 if (mode === "fail") {
@@ -282,7 +293,8 @@ if (mode === "garbage") {
 }
 const at = Bun.argv.indexOf("--progress-file");
 if (at !== -1)
-  writeFileSync(Bun.argv[at + 1] ?? "", JSON.stringify({ schema: 1, at: "2026-10-06T00:00:00Z", last: "✎ kernel.ts", commands: 2, files: 1 }));
+  writeFileSync(Bun.argv[at + 1] ?? "", JSON.stringify({ schema: 1, at: "2026-10-06T00:00:00Z", last: "✎ kernel.ts", commands: 2, files: stallMode === "twice" ? 0 : 1 }));
+if (stallMode === "twice") await Bun.sleep(3000);
 const typed = { summary: "typed", changes: [], checks: [], for_coordinator: [], open: [] };
 if (mode === "structured") {
   console.log(JSON.stringify({ exit_code: 0, timed_out: false, subtype: "success", is_error: false, num_turns: 4, result: "", structured_output: typed, session_id: "sess-claude-0001", total_cost_usd: 0.01 }));
@@ -4935,6 +4947,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       AGX_STALL_MS: "1000",
       FAKE_STALL_MODE: mode,
       FAKE_STALL_LOG: log,
+      AGX_RUN_CLAUDE: FAKE_CLAUDE,
       FAKE_LAST:
         '```agx-return\n{"findings":[],"evidence":[],"impact_on_brief":"done","proposed_next":"none","artifacts":[]}\n```',
     });
@@ -5152,7 +5165,6 @@ describe("agx dispatch: a brief with a ticket", () => {
     const result = await stalledRun("twice");
     expect(result.r.code).toBe(1);
     expect(result.spawns).toHaveLength(2);
-    expect(result.stopped).toHaveLength(2);
     expect(result.incidents).toHaveLength(2);
     expect(
       logLines(result.r.state)

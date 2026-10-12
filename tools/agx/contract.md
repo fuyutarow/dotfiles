@@ -4,10 +4,10 @@
 
 - Consumer regimes: human-interactive, agent, shell-pipeline, ci
 
-| Regime | Supported work | Noninteractive path | Machine-readable result |
-| --- | --- | --- | --- |
+| Regime                    | Supported work                          | Noninteractive path                      | Machine-readable result            |
+| ------------------------- | --------------------------------------- | ---------------------------------------- | ---------------------------------- |
 | human-interactive / agent | Dispatch, continue and inspect a ticket | Explicit files, ticket names and sandbox | Dispatch receipt; show/ps `--json` |
-| shell-pipeline / ci | Inspect records and verify contracts | No interactive prompts; explicit flags | Schema-tagged JSON and exit status |
+| shell-pipeline / ci       | Inspect records and verify contracts    | No interactive prompts; explicit flags   | Schema-tagged JSON and exit status |
 
 ## C1 INVOCATION
 
@@ -29,11 +29,11 @@ and terminal event, then ends. JSON events carry `schema`, `run_id`, `state` and
 Existing events are replayed before following new ones. Resume and amendment stay attached by
 default; `--detach` hands them to the OS manager and prints `agx wait <ticket>`.
 
-| Invocation | Input | Work resolution |
-| --- | --- | --- |
-| `dispatch --prompt-file brief.md --cd DIR --sandbox read-only` | Brief file | Create a state ticket |
-| `dispatch --resume ticket --repick --file next.md` | Ticket and instruction file | Latest run of that ticket |
-| `show ticket`; `ledger note ticket` | Ticket name | Live inspection; latest finished acknowledgement |
+| Invocation                                                     | Input                       | Work resolution                                  |
+| -------------------------------------------------------------- | --------------------------- | ------------------------------------------------ |
+| `dispatch --prompt-file brief.md --cd DIR --sandbox read-only` | Brief file                  | Create a state ticket                            |
+| `dispatch --resume ticket --repick --file next.md`             | Ticket and instruction file | Latest run of that ticket                        |
+| `show ticket`; `ledger note ticket`                            | Ticket name                 | Live inspection; latest finished acknowledgement |
 
 ## C2 EFFECTS
 
@@ -69,11 +69,11 @@ corresponding Codex sandbox. Automatic names combine second-resolution time with
 creation exclusively claims a sibling directory until setup completes or fails. A collision fails
 before invoking the workspace creator. Detached children reuse the prepared workspace.
 
-| Effect boundary | Partial state | Recovery |
-| --- | --- | --- |
-| Dispatch / repick | Durable ticket, archived instructions, run receipt | Resume or amend the ticket |
-| Amendment | Old instructions remain in the same file | Append a corrective amendment |
-| Live interruption | Partial run and vendor session recorded | Continue by ticket after graceful stop |
+| Effect boundary   | Partial state                                      | Recovery                               |
+| ----------------- | -------------------------------------------------- | -------------------------------------- |
+| Dispatch / repick | Durable ticket, archived instructions, run receipt | Resume or amend the ticket             |
+| Amendment         | Old instructions remain in the same file           | Append a corrective amendment          |
+| Live interruption | Partial run and vendor session recorded            | Continue by ticket after graceful stop |
 
 ## C3 CHANNELS
 
@@ -82,22 +82,22 @@ before invoking the workspace creator. Detached children reuse the prepared work
 - Machine compatibility: additive fields; old records may omit ticket identity and live selection fields. Unknown fields are tolerated by readers. Removed command names acquire no compatibility aliases.
 - Waits / liveness: worker and verification waits retain their declared bounds; stderr progress defaults to 300 seconds. Amendment waits at most 30 seconds; detached manager acknowledgement at most 15 seconds. Live show exposes row, picked probability, cumulative worker cost in USD, phase, last activity and its timestamp, and elapsed time. Unreported probability/cost are unknown, not zero. JSON adds `name`, `row`, `picked_probability`, `last_activity`, `last_activity_at`, and `elapsed_s` to the marker.
 
-| Mode / TTY | stdout | stderr | Framing |
-| --- | --- | --- | --- |
-| Dispatch, piped or TTY | One receipt | Routing, worker progress and diagnostics | Schema-tagged JSON |
-| Human show / ps | Live fields / ticket rows | Lookup diagnostics | Plain readable text |
-| `show --json` / `ps --json` | Snapshot / run list | Lookup diagnostics | One JSON object |
+| Mode / TTY                  | stdout                    | stderr                                   | Framing             |
+| --------------------------- | ------------------------- | ---------------------------------------- | ------------------- |
+| Dispatch, piped or TTY      | One receipt               | Routing, worker progress and diagnostics | Schema-tagged JSON  |
+| Human show / ps             | Live fields / ticket rows | Lookup diagnostics                       | Plain readable text |
+| `show --json` / `ps --json` | Snapshot / run list       | Lookup diagnostics                       | One JSON object     |
 
 ## C4 OUTCOMES
 
 - Fallbacks / handoffs: row-selection fallbacks remain recorded; resume preserves the selected row and vendor session, while repick explicitly starts a fresh selection and session. A detached acknowledgement confirms manager handoff, not completed work. A live resume directs callers to amendment rather than starting a concurrent continuation.
 
-| Outcome class | Exit / status | Output | Retry / next action |
-| --- | --- | --- | --- |
-| Completed / returned | 0 / receipt result | Verification and final report on stdout | Inspect or acknowledge the ticket |
-| Timeout / interruption | 3 (Codex), 124 (Claude), 130 / 143 (signals) | Partial receipt, recorded vendor session | Resume or amend the ticket |
-| Invalid local request | 2 | Diagnostic on stderr | Correct input; no worker starts |
-| No grading decision | Run exit unchanged | `grade-waived` with `decision: "no-decision"` for returned/stopped runs | Explicit grading/acceptance remains possible |
+| Outcome class          | Exit / status                                | Output                                                                  | Retry / next action                          |
+| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------- |
+| Completed / returned   | 0 / receipt result                           | Verification and final report on stdout                                 | Inspect or acknowledge the ticket            |
+| Timeout / interruption | 3 (Codex), 124 (Claude), 130 / 143 (signals) | Partial receipt, recorded vendor session                                | Resume or amend the ticket                   |
+| Invalid local request  | 2                                            | Diagnostic on stderr                                                    | Correct input; no worker starts              |
+| No grading decision    | Run exit unchanged                           | `grade-waived` with `decision: "no-decision"` for returned/stopped runs | Explicit grading/acceptance remains possible |
 
 Dispatch emits no warning about historical ungraded runs. A no-decision counts one finished
 run without a grading judgment; it is neither a pass nor acceptance. Existing grades and waivers
@@ -108,34 +108,34 @@ retain their meanings.
 - Positive receipt: `bun test tools/agx/tests/agx.test.ts -t 'prompt-file dispatch creates a ticket|repick accepts instruction files'` exits 0 and proves amendment by ticket, both instruction files and resolved ledger acknowledgements. `bun test tools/agx/tests/run-control.test.ts` proves live human/JSON fields and ticket names in ps.
 - Negative receipt: the ticket-home fixture attempts to replace an amended ticket with a fresh brief and receives an error while preserving history; invalid target combinations and instruction files refuse before worker interruption.
 
-| Surface | Promise | Change / deprecation | Verification receipt |
-| --- | --- | --- | --- |
-| Ticket identity | One handle and file per unit of work | Every dispatch has a ticket; prompt-file copies are state-owned | Ticket creation, live amendment and repick fixtures |
-| Run / vendor identifiers | Existing records and explicit IDs remain usable | Latest continuation in one vendor session is selectable | Resume and historical ledger fixtures |
-| Live marker / receipt | Schema-tagged additive fields | Picked probability and canonical ticket path are recorded | Live show, state writer and ps fixtures |
-| Grading | Explicit grades remain readable | Warning removed; returned/stopped runs record no-decision | Historical warning and no-decision fixtures |
+| Surface                  | Promise                                         | Change / deprecation                                            | Verification receipt                                |
+| ------------------------ | ----------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------- |
+| Ticket identity          | One handle and file per unit of work            | Every dispatch has a ticket; prompt-file copies are state-owned | Ticket creation, live amendment and repick fixtures |
+| Run / vendor identifiers | Existing records and explicit IDs remain usable | Latest continuation in one vendor session is selectable         | Resume and historical ledger fixtures               |
+| Live marker / receipt    | Schema-tagged additive fields                   | Picked probability and canonical ticket path are recorded       | Live show, state writer and ps fixtures             |
+| Grading                  | Explicit grades remain readable                 | Warning removed; returned/stopped runs record no-decision       | Historical warning and no-decision fixtures         |
 
 ## Command layout
 
 The suite has eight top-level commands: dispatch, pick, ticket, ledger, show, ps, wait and follow.
 There are no former command aliases.
 
-| Operation                           | Command                                                     |
-| ----------------------------------- | ----------------------------------------------------------- |
-| Run a worker                        | `agx dispatch --prompt-file <brief> --cd <dir> --sandbox …` |
-| Resume a worker                     | `agx dispatch --resume <ticket>`                            |
-| Choose a row                        | `agx pick --prompt-file <brief> [--cd <dir>]`               |
-| Ask typed selection questions       | `agx pick ask --request <file                               | ->`                    |
-| Inspect route availability          | `agx pick doctor`                                           |
-| Replay ticket grading               | `agx ticket replay <dir> [--expect <file.tsv>]`             |
-| Grade or waive a finished run       | `agx ticket grade <ticket> --evidence <file>                | --waive <why>`         |
-| List workers                        | `agx ledger ls`                                             |
-| Show statistics                     | `agx ledger stats`                                          |
-| Export/import the routing record    | `agx ledger record export                                   | import`                |
-| Note artifact consumption/rejection | `agx ledger note <ticket> --consumed                        | --rejected [--note …]` |
-| Export runs                         | `agx ledger export`                                         |
-| Show a run result or stored brief   | `agx show <ticket> [--json]`; `agx ledger result <ticket> [--json | --brief]` |
-| List work                           | `agx ps [--all] [--json]` |
+| Operation                           | Command                                                           |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| Run a worker                        | `agx dispatch --prompt-file <brief> --cd <dir> --sandbox …`       |
+| Resume a worker                     | `agx dispatch --resume <ticket>`                                  |
+| Choose a row                        | `agx pick --prompt-file <brief> [--cd <dir>]`                     |
+| Ask typed selection questions       | `agx pick ask --request <file                                     | ->`                    |
+| Inspect route availability          | `agx pick doctor`                                                 |
+| Replay ticket grading               | `agx ticket replay <dir> [--expect <file.tsv>]`                   |
+| Grade or waive a finished run       | `agx ticket grade <ticket> --evidence <file>                      | --waive <why>`         |
+| List workers                        | `agx ledger ls`                                                   |
+| Show statistics                     | `agx ledger stats`                                                |
+| Export/import the routing record    | `agx ledger record export                                         | import`                |
+| Note artifact consumption/rejection | `agx ledger note <ticket> --consumed                              | --rejected [--note …]` |
+| Export runs                         | `agx ledger export`                                               |
+| Show a run result or stored brief   | `agx show <ticket> [--json]`; `agx ledger result <ticket> [--json | --brief]`              |
+| List work                           | `agx ps [--all] [--json]`                                         |
 
 Flags and output retain their existing meanings. Runtime state is only in
 `$XDG_STATE_HOME/agx` (default `~/.local/state/agx`), with `AGX_STATE_DIR` as the test seam.

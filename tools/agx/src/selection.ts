@@ -18,6 +18,7 @@ export function escalationRow<T extends EscalationRow>(
   rows: readonly T[],
   failed: EscalationRow,
   budgetUsd?: number,
+  maskedRows: readonly string[] = [],
 ): T | undefined {
   const minimum = failed.aa_index;
   if (minimum === undefined || !Number.isFinite(minimum)) return undefined;
@@ -29,6 +30,7 @@ export function escalationRow<T extends EscalationRow>(
     .filter(
       (row) =>
         row.id !== failed.id &&
+        !maskedRows.includes(row.id) &&
         row.aa_index !== undefined &&
         Number.isFinite(row.aa_index) &&
         row.aa_index >= minimum &&

@@ -8,25 +8,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
-
 import {
-  stripNonProse,
-  japaneseShare,
-  hasEnglishProseSegment,
-} from "../../../tools/agx-usehooks/src/english.ts";
-export {
-  stripNonProse,
-  proseSegments,
-  identifierHeavy,
-  hasEnglishProseSegment,
-} from "../../../tools/agx-usehooks/src/english.ts";
-
-const MIN_LETTERS = 40;
-// WHY 0.3: allow Japanese prose that contains ordinary English identifiers while still catching
-// a mostly-English answer; code and paths are removed before calculating the share.
-const MIN_JAPANESE_SHARE = 0.3;
-const BLOCK_REASON =
-  "直前の返答が英語です。日本語で書き直してください（コードや識別子は原文のままで構いません）。";
+  classifyJapanesePrimary,
+  JAPANESE_REPLY_BLOCK_REASON,
+  requiredReplyLanguage,
+  type JapaneseClassification,
+} from "../../hooks/reply-language.ts";
 
 function stderrLine(reason: string): void {
   hookStderr(`enforce-reply-language: ${reason.replaceAll(/\s+/gu, " ")}\n`);
@@ -41,8 +28,9 @@ type DecisionAudit = {
   language?: string | undefined;
   text_source?: "last_assistant_message" | "transcript";
   message_chars?: number;
-  letters?: number;
-  japanese_share?: number;
+  classifier_outcome?: JapaneseClassification["outcome"];
+  classifier_reason?: JapaneseClassification["reason"];
+  classifier_scope?: JapaneseClassification["scope"];
 };
 
 // Metadata only: distinguish loop guards, HOME/settings mismatches, stale input and errors
@@ -147,21 +135,6 @@ function withoutToolInputs(text: string, toolInputs: string[]): string {
   );
 }
 
-function stripCodeLikeTableCells(text: string): string {
-  const codeLikeCell =
-    /`[^`]*`|(?:^|\s)--?[\w-]+|\b(?:[\w.-]+\/)+[\w.-]+\b|\b[\w-]+\.[A-Za-z0-9]{1,8}\b|\b[A-Za-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*\b|\b\w+_\w+\b|\b(?:[A-Za-z0-9_-]+:)+[A-Za-z0-9_-]+\b/u;
-  return text
-    .split("\n")
-    .map((line) => {
-      if (!/^\s*\|.*\|\s*$/u.test(line)) return line;
-      return line
-        .split("|")
-        .map((cell) => (codeLikeCell.test(cell) ? "" : cell))
-        .join("|");
-    })
-    .join("\n");
-}
-
 async function main(audit: DecisionAudit): Promise<number> {
   const payload = parseJson(await Bun.stdin.text());
   audit.session_id = strAt(payload, "session_id");
@@ -183,8 +156,18 @@ async function main(audit: DecisionAudit): Promise<number> {
     stderrLine("check failed open: malformed ~/.claude/settings.json");
     return recordDecision(audit, "allow", "malformed_settings");
   }
+  const policy = await attempt(() => requiredReplyLanguage("claude"));
+  if (!policy.ok) {
+    const error = errorMessage(policy.error);
+    stderrLine(`check failed open: ${error}`);
+    return recordDecision(audit, "allow", "policy_error", error);
+  }
+  if (policy.value instanceof Error) {
+    stderrLine(`check failed open: ${policy.value.message}`);
+    return recordDecision(audit, "allow", "policy_error", policy.value.message);
+  }
   audit.language = strAt(settings, "language");
-  if (audit.language !== "japanese")
+  if (audit.language !== policy.value)
     return recordDecision(audit, "allow", "language_not_japanese");
 
   // Keep the Stop response when it contains visible prose, but remove tool_use input strings
@@ -235,19 +218,17 @@ async function main(audit: DecisionAudit): Promise<number> {
     text = responseText ?? "";
   }
   audit.message_chars = text.length;
-  const prose = stripNonProse(stripCodeLikeTableCells(text));
-  const { letters, share } = japaneseShare(prose);
-  audit.letters = letters;
-  audit.japanese_share = share;
-  const segmentBlocks = hasEnglishProseSegment(stripCodeLikeTableCells(text));
-  const wholeReplyBlocks = letters >= MIN_LETTERS && share < MIN_JAPANESE_SHARE;
-  if (!wholeReplyBlocks && !segmentBlocks)
-    return recordDecision(audit, "allow", "no_language_violation");
+  const classification = classifyJapanesePrimary(text);
+  audit.classifier_outcome = classification.outcome;
+  audit.classifier_reason = classification.reason;
+  audit.classifier_scope = classification.scope;
+  if (classification.outcome !== "non-japanese")
+    return recordDecision(audit, "allow", classification.reason);
 
   process.stdout.write(
-    `${hookJson({ decision: "block", reason: BLOCK_REASON })}\n`,
+    `${hookJson({ decision: "block", reason: JAPANESE_REPLY_BLOCK_REASON })}\n`,
   );
-  return recordDecision(audit, "block", "english_prose");
+  return recordDecision(audit, "block", classification.reason);
 }
 
 if (import.meta.main) {

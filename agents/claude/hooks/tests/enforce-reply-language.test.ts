@@ -72,7 +72,7 @@ describe("enforce-reply-language", () => {
       text_source: "last_assistant_message",
       message_chars: text.length,
       decision: "block",
-      reason: "english_prose",
+      reason: "english-prose",
     });
     expect(JSON.stringify(record)).not.toContain(text);
   });
@@ -132,10 +132,26 @@ describe("enforce-reply-language", () => {
     expect(result.stderr).toBe("");
   });
 
+  test("identifier-heavy Japanese status reply is allowed end to end", () => {
+    const result = runHook(
+      HOOK,
+      {
+        ...stopPayload(writeTranscript([])),
+        last_assistant_message:
+          "th600_salv の再実行は bench_rep で失敗、u_dirty は未確認です。",
+      },
+      { HOME: settingsHome("japanese") },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
   test.each([
     { active: true, language: "japanese", reason: "stop_hook_active" },
     { active: false, language: "english", reason: "language_not_japanese" },
-    { active: false, language: "japanese", reason: "no_language_violation" },
+    { active: false, language: "japanese", reason: "japanese-dominant" },
   ])("logs silent allow: $reason", ({ active, language, reason }) => {
     const home = settingsHome(language);
     const result = runHook(
@@ -228,7 +244,7 @@ describe("enforce-reply-language", () => {
       JSON.stringify({
         decision: "block",
         reason:
-          "[dotfiles:reply-language] 直前の返答が英語です。日本語で書き直してください（コードや識別子は原文のままで構いません）。",
+          "[dotfiles:reply-language] 直前の返答が日本語中心ではありません。日本語で書き直してください（コードや識別子は原文のままで構いません）。",
       }),
     );
     expect(result.stderr).toBe("");
@@ -246,6 +262,21 @@ describe("enforce-reply-language", () => {
     });
 
     expect(result.stdout).toContain('"decision":"block"');
+  });
+
+  test("Chinese prose does not pass as Japanese merely because English is absent", () => {
+    const transcript = writeTranscript([
+      user("説明してください"),
+      assistant(
+        "这是中文事故说明，检查不能只确认英语不存在，否则中文会被当成日语。请使用共享分类器判断主要语言。",
+      ),
+    ]);
+    const result = runHook(HOOK, stopPayload(transcript), {
+      HOME: settingsHome("japanese"),
+    });
+
+    expect(result.stdout).toContain('"decision":"block"');
+    expect(result.stdout).toContain("日本語中心ではありません");
   });
 
   test("Japanese prose with identifiers, paths, and a command table -> allows", () => {
@@ -351,7 +382,7 @@ describe("enforce-reply-language", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("one short English sentence under 120 letters -> allows", () => {
+  test("short English prose -> blocks", () => {
     const transcript = writeTranscript([
       user("説明してください"),
       assistant("処理を確認しました。 The change is ready."),
@@ -360,7 +391,7 @@ describe("enforce-reply-language", () => {
       HOME: settingsHome("japanese"),
     });
 
-    expect(result.stdout).toBe("");
+    expect(result.stdout).toContain('"decision":"block"');
     expect(result.stderr).toBe("");
   });
 

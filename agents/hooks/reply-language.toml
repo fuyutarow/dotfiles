@@ -1,0 +1,7 @@
+# The declared Japanese-primary policy for user-scope reply Stop hooks.  Claude retains its
+# existing per-settings opt-in; Codex is explicitly enabled by the owner's declared policy.
+[claude]
+language = "japanese"
+
+[codex]
+language = "japanese"

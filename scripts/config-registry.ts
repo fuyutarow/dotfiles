@@ -433,6 +433,7 @@ const OTHER: readonly Surface[] = [
       "tools/agent-resource-run/package.json",
       "tools/disk-reclaim/package.json",
       "tools/storage-headroom/package.json",
+      "tools/detect-japanese/package.json",
       "tools/statusline/package.json",
       "tools/serena-foreground/package.json",
       "tools/agx/package.json",
@@ -567,9 +568,11 @@ const OTHER: readonly Surface[] = [
     sources: [
       "agents/hooks/storage-headroom.toml",
       "agents/hooks/model-floor.toml",
+      "agents/hooks/reply-language.toml",
     ],
     deployed: "the checkout, via ~/.agents/hooks",
-    consumer: "the storage-headroom and model-floor hooks (Claude Code, Codex)",
+    consumer:
+      "the storage-headroom, model-floor, and reply-language hooks (Claude Code, Codex)",
     writer: "human, in the repo",
     verify: "mise run test:hooks",
   },

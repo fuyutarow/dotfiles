@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/detect-japanese",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "detect-japanese": "src/cli.ts"
+  }
+}

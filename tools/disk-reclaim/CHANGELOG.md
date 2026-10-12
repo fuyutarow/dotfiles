@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1 — 2026-10-12
+
+- Keep reclaiming healthy targets when workspace listing or the Windows host probe fails; report each failed target and exit 1 when any target fails.
+- Skip only unreadable workspace stores, preserve healthy workspace candidates, and finish progress output cleanly after target failures.
+
 ## 1.1.0 — 2026-10-11
 
 - Emit Windows host levers as JSONL records with allocated SizeOnDisk bytes, including Windows Update, crash dumps, tool caches, and owner-only system items.

@@ -59,6 +59,8 @@ export type VhdxRunner = (
 ) => Promise<{ code: number; out: string; timedOut: boolean }>;
 const VHDX_PROBE = `$ErrorActionPreference='SilentlyContinue'; $env:WSL_UTF8=1; $state=((wsl.exe -l -v|Out-String)-split "\`n"|Select-String 'Ubuntu-24.04') -replace "\\s+"," "; "state="+$state.Trim(); "optimize_vhd="+[bool](Get-Command Optimize-VHD -ErrorAction SilentlyContinue); $lx=Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss'; foreach($k in $lx){$p=Get-ItemProperty $k.PSPath;if($p.DistributionName -eq 'Ubuntu-24.04' -and $p.BasePath){$v=($p.BasePath -replace '^\\\\\\\\\\?\\\\','')+'\\ext4.vhdx';"vhdx_path="+$v;if(Test-Path $v){"vhdx_logical="+(Get-Item $v).Length}}}`;
 const sshRunner: VhdxRunner = async (host, script) => {
+  if (Bun.which("ssh") === null)
+    return { code: 127, out: "ssh executable unavailable", timedOut: false };
   const command =
     script === "$probe"
       ? `powershell.exe -NoProfile -EncodedCommand ${Buffer.from(VHDX_PROBE, "utf16le").toString("base64")}`

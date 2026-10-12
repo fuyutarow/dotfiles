@@ -271,6 +271,7 @@ function wsTest(
     w: ReturnType<typeof workspace>,
   ) => void,
   colocated = false,
+  expectedExit = 0,
 ) {
   test(
     name,
@@ -285,7 +286,7 @@ function wsTest(
         children.defer(f.stopChildren);
         return f.run("run", "workspaces", "--yes", "--json");
       })();
-      expect(r.exit, r.out + r.err).toBe(0);
+      expect(r.exit, r.out + r.err).toBe(expectedExit);
       const parsed = jsonOf(Plan).safeParse(r.out);
       expect(parsed.success).toBe(true);
       if (!parsed.success) return;
@@ -356,9 +357,15 @@ wsTest(
     writeFileSync(join(w.ws, "fresh"), "unsnapshotted content");
   },
 );
-wsTest("§3 orphan discovery: missing store is ASK", "ASK", (f, w) => {
-  f.must(["mv", join(w.repo, ".jj/repo/store"), join(f.root, "moved-store")]);
-});
+wsTest(
+  "§3 orphan discovery: missing store is ASK and named as a target failure",
+  "ASK",
+  (f, w) => {
+    f.must(["mv", join(w.repo, ".jj/repo/store"), join(f.root, "moved-store")]);
+  },
+  false,
+  1,
+);
 test.skipIf(process.platform !== "linux")(
   "§3.6 process cwd in workspace is protected (requires Linux /proc semantics)",
   async () => {

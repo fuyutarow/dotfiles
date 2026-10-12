@@ -49,7 +49,7 @@ export type Context = {
   procDir?: string | undefined;
   verbose?: boolean | undefined;
   reportActivity?: ((unit: string, task: string) => void) | undefined;
-  reportPlanError?: ((message: string) => void) | undefined;
+  reportPlanError?: ((message: string, partial?: boolean) => void) | undefined;
   reportProcessFailures?:
     | ((summary: string, details: string[]) => void)
     | undefined;

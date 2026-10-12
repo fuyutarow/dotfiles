@@ -48,7 +48,10 @@ and host require owner selection, purge must be named, and vhdx/audit are plan-o
 `targets --json` lists their tiers and availability without scanning candidates.
 Within blind-tier targets, a failed candidate does not prevent later candidates from being
 attempted; the run still exits 1 if any candidate fails. `--stop-on-error` stops the target at its
-first failure. Clean selects only Julia's `compiled` and `scratchspaces` directories; it keeps
+first failure. A target planning failure is recorded in that target's `skip_reason`, the target
+is skipped, and other targets continue. An unreadable jj store is skipped while other stores
+remain eligible. Target failures make `run --yes` exit 1; invocation errors exit 2. Clean selects
+only Julia's `compiled` and `scratchspaces` directories; it keeps
 both while a same-uid Julia process is live. It keeps Cargo registry and git caches while a
 same-uid `cargo`, `rustc`, or `rust-analyzer` process is live.
 `--fetch` is opt-in for plan/run: it refreshes jj Git remotes before judging workspaces; failure

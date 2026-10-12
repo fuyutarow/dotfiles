@@ -228,6 +228,21 @@ export async function plan(
     { length: targets.length },
     () => null,
   );
+  const partialErrors = Array.from({ length: targets.length }, () => false);
+  const failTarget = (index: number, target: Target, message: string): void => {
+    const error = `${target.name}: ${message}`;
+    errors[index] = error;
+    rows[index] = {
+      name: target.name,
+      tier: target.tier,
+      available: false,
+      skip_reason: message,
+      exit: 1,
+      candidates: [],
+      totals: totals([]),
+    };
+    options.context.reportProgress?.(target.name, target.name, 0, 0, true);
+  };
   let cursor = 0;
   const scan = async (): Promise<void> => {
     while (cursor < targets.length) {
@@ -244,8 +259,9 @@ export async function plan(
       const ctx = {
         ...options.context,
         targetName: target.name,
-        reportPlanError: (message: string) => {
-          errors[index] = `${target.name}: ${message}`;
+        reportPlanError: (message: string, partial = false) => {
+          errors[index] = message;
+          partialErrors[index] = partial;
         },
         reportProgress:
           reportProgress === undefined
@@ -298,7 +314,7 @@ export async function plan(
         target.available(ctx),
       )();
       if (available.isErr()) {
-        errors[index] = `${target.name}: ${errorMessage(available.error)}`;
+        failTarget(index, target, errorMessage(available.error));
         continue;
       }
       const { available: present, skip_reason } = available.value;
@@ -308,19 +324,45 @@ export async function plan(
       );
       const planned = await planTarget(target, ctx, heartbeat, present);
       if (planned !== null && planned.isErr()) {
-        errors[index] = `${target.name}: ${errorMessage(planned.error)}`;
+        failTarget(index, target, errorMessage(planned.error));
         continue;
       }
-      if (errors[index] !== null) continue;
+      const targetError = errors[index] ?? null;
+      if (targetError !== null && partialErrors[index] !== true) {
+        failTarget(index, target, targetError);
+        continue;
+      }
       const parsed = Candidate.array().safeParse(
         planned !== null && planned.isOk() ? planned.value : [],
       );
       if (!parsed.success) {
-        errors[index] = `${target.name}: ${parsed.error.message}`;
+        failTarget(index, target, parsed.error.message);
         continue;
       }
       if (new Set(parsed.data.map((c) => c.id)).size !== parsed.data.length) {
-        errors[index] = `${target.name}: duplicate candidate id`;
+        failTarget(index, target, "duplicate candidate id");
+        continue;
+      }
+      if (targetError !== null) {
+        rows[index] = {
+          name: target.name,
+          tier: target.tier,
+          available: present,
+          skip_reason: targetError,
+          exit: 1,
+          candidates: parsed.data,
+          totals: totals(parsed.data),
+        };
+        reportProgress?.(
+          target.name,
+          target.name,
+          parsed.data.length,
+          parsed.data.reduce(
+            (sum, candidate) => sum + (candidate.bytes ?? 0),
+            0,
+          ),
+          true,
+        );
         continue;
       }
       reportProgress?.(
@@ -349,15 +391,12 @@ export async function plan(
   };
   const workers = Math.min(targets.length, cpus().length, 4);
   await Promise.all(Array.from({ length: workers }, () => scan()));
-  const error = errors.find((item) => item !== null);
-  if (error !== undefined && error !== null)
-    return { exit: 2, plan: null, error };
   const completeRows = rows.flatMap((row) => (row === null ? [] : [row]));
   if (completeRows.length !== targets.length)
     return { exit: 2, plan: null, error: "target scan did not complete" };
   markOwnershipConflicts(completeRows);
   return {
-    exit: 0,
+    exit: errors.some((item) => item !== null) ? 1 : 0,
     plan: aggregate(completeRows, "plan", headroom, null),
     error: null,
   };
@@ -602,6 +641,7 @@ async function executeTarget(
       });
     },
   };
+  const plannedFailure = row.exit === 1 ? row.skip_reason : null;
   row.exit = 0;
   ctx.reportProgress?.(target.name, target.name, 0, 0, false, "delete");
   const availability = await fromAsyncThrowable(async () =>
@@ -616,7 +656,7 @@ async function executeTarget(
     ctx.log(`SKIP ${target.name}: ${row.skip_reason ?? "unavailable"}`);
   } else {
     row.available = true;
-    row.skip_reason = null;
+    row.skip_reason = plannedFailure;
     // Earlier targets may have removed delegated workspaces. Refresh this target's
     // candidates under the lock, then still recheck each RECLAIM immediately before act.
     const fresh = await fromAsyncThrowable(async () =>
@@ -653,6 +693,7 @@ async function executeTarget(
       await executeCandidates(target, row, ctx, actions, options);
     }
   }
+  if (plannedFailure !== null && row.exit === 0) row.exit = 1;
   row.totals = totals(row.candidates);
   const completed = receipt();
   const path = writeReceipt(completed, dir);
@@ -742,6 +783,7 @@ async function executeTargetIfPresent(
   previous: string | null,
 ): Promise<string | null> {
   if (row === undefined) return previous;
+  if (row.exit === 1 && !row.available) return previous;
   return executeTarget(target, row, options, dir);
 }
 

@@ -72,7 +72,12 @@ const flags = {
     default: false,
     description: "Plan all registered targets",
   },
-  yes: { type: Boolean, default: false, description: "Authorize run" },
+  yes: {
+    type: Boolean,
+    default: false,
+    description:
+      "Authorize run; exit 1 if any target fails (2 for invocation errors)",
+  },
   underPressure: {
     type: Boolean,
     default: false,
@@ -255,9 +260,9 @@ function planTable(value: Plan): string {
     "TARGET\tTIER\tVERDICT\tPATH\tBYTES\tLIVE-SAFE\tAPPROVAL\tC: DELTA\tREASON",
   ];
   for (const target of value.targets) {
-    if (!target.available)
+    if (target.exit === 1 || !target.available)
       process.stderr.write(
-        `disk-reclaim: SKIP ${target.name}: ${target.skip_reason ?? "unavailable"}\n`,
+        `disk-reclaim: ${target.exit === 1 ? "FAILED" : "SKIP"} ${target.name}: ${target.skip_reason ?? "unavailable"}\n`,
       );
     lines.push(
       ...target.candidates.map(
@@ -394,7 +399,7 @@ export async function main(
     {
       ...common,
       name: "disk-reclaim",
-      version: "1.1.0",
+      version: "1.1.1",
       parameters: ["[targets...]"],
       commands,
       flags: planFlags,

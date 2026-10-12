@@ -207,10 +207,12 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
   const emptyProbe = invoke(["plan", "host", "--host", "r99-lan", "--json"], {
     HOST_STUB_EMPTY: "1",
   });
-  expect(emptyProbe.exitCode).toBe(2);
-  expect(emptyProbe.stdout.toString()).toBe("");
+  expect(emptyProbe.exitCode).toBe(1);
+  expect(jsonOf(Plan).safeParse(emptyProbe.stdout.toString()).success).toBe(
+    true,
+  );
   expect(emptyProbe.stderr.toString()).toContain(
-    "host PowerShell probe failed: PowerShell returned no usable probe records",
+    "FAILED host: host PowerShell probe failed: PowerShell returned no usable probe records",
   );
   expect(emptyProbe.stderr.toString()).toContain("stdout: <empty>");
 }, 30_000);

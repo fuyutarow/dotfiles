@@ -11,6 +11,7 @@ import {
   listWorkspaces,
   storeOf,
   walkRoots,
+  type Found,
   type Listed,
 } from "../jj/discover.ts";
 import { jj, unpushedRevset, workingCopyRevset } from "../jj/jj.ts";
@@ -40,6 +41,8 @@ export type WorkspacesOptions = {
   openPaths?: (dir: string) => OpenPaths;
   owner?: RemoveTreeOptions["owner"];
   immutable?: RemoveTreeOptions["immutable"];
+  discover?: (roots: string[]) => Found;
+  list?: typeof listWorkspaces;
 };
 
 const real = (path: string): string => {
@@ -115,9 +118,11 @@ function storeCandidates(
       log(`workspaces: ${fetchError}`);
     }
   }
-  const { listed, error } = listWorkspaces(store);
+  const { listed, error } = (options.list ?? listWorkspaces)(store);
   if (listed === null) {
-    log(`workspaces: cannot list ${store}: ${error}`);
+    const message = `workspaces: cannot list ${store}: ${error}`;
+    log(message);
+    context.reportPlanError?.(message, true);
     return [];
   }
   return listed.flatMap((entry) => {
@@ -340,7 +345,7 @@ export function createWorkspacesTarget(
               : { procs: { procRoot: ctx.procDir } },
           ),
       };
-      const found = walkRoots([
+      const found = (options.discover ?? walkRoots)([
         ...ctx.config.repo_roots,
         ...ctx.config.scratch_roots,
         ...ctx.config.repos,

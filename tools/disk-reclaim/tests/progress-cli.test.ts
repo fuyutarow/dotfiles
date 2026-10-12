@@ -76,16 +76,21 @@ test("JSON plan remains a single valid document without escape codes", () => {
   expect(result.out).toContain("fd/10:");
 }, 15_000);
 
-test("real PTY abort and engine failure finalize Clack without terminal-mode leaks", () => {
-  const modes: Record<string, string>[] = [
-    { RECLAIM_FIXTURE_ABORT: "1", RECLAIM_FIXTURE_SLOW: "1" },
-    { RECLAIM_FIXTURE_ERROR: "1" },
-  ];
-  for (const controls of modes) {
-    const result = invoke(true, [], controls);
-    const transcript = result.out + result.err;
-    expect(transcript).toContain("Progress interrupted");
-    expect(transcript).not.toContain("?25l");
-    expect(stripVTControlCharacters(transcript).endsWith("\n")).toBe(true);
-  }
+test("real PTY abort and target failure finalize Clack without terminal-mode leaks", () => {
+  const aborted = invoke(true, [], {
+    RECLAIM_FIXTURE_ABORT: "1",
+    RECLAIM_FIXTURE_SLOW: "1",
+  });
+  const interrupted = aborted.out + aborted.err;
+  expect(interrupted).toContain("Progress interrupted");
+  expect(interrupted).not.toContain("?25l");
+  expect(stripVTControlCharacters(interrupted).endsWith("\n")).toBe(true);
+
+  const failed = invoke(true, [], { RECLAIM_FIXTURE_ERROR: "1" });
+  const finished = failed.out + failed.err;
+  expect(failed.exit).toBe(1);
+  expect(finished).toContain("Progress finished");
+  expect(finished).not.toContain("Progress interrupted");
+  expect(finished).not.toContain("?25l");
+  expect(stripVTControlCharacters(finished).endsWith("\n")).toBe(true);
 }, 30_000);

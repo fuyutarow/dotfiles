@@ -7,6 +7,8 @@ import { loadConfig, plan, run, type EngineOptions } from "../src/engine.ts";
 import { Plan, ReceiptV2 } from "../src/model.ts";
 import { readReceipts } from "../src/receipt.ts";
 import { createSystemTarget } from "../src/targets/system.ts";
+import { createWorkspacesTarget } from "../src/targets/workspaces.ts";
+import { createHostTarget } from "../src/targets/host.ts";
 import { candidate, fakeTarget } from "./fixtures/fake-target.ts";
 import { tempRoot } from "./fixtures/temp.ts";
 
@@ -72,6 +74,71 @@ test("concurrent scans preserve serial target results and refusals do not block 
   expect(result.exit).toBe(0);
   expect(first.acted).toEqual([]);
   expect(second.acted).toEqual(["delete"]);
+});
+test("invalid target plans are recorded per target and do not block healthy targets", async () => {
+  const broken = fakeTarget({ name: "broken" });
+  const duplicate = candidate("duplicate");
+  broken.target.plan = () => [duplicate, structuredClone(duplicate)];
+  const healthy = fakeTarget({ name: "healthy" });
+  const result = await run([broken.target, healthy.target], options());
+  expect(result.exit).toBe(1);
+  expect(result.plan?.targets.map((row) => row.name)).toEqual([
+    "broken",
+    "healthy",
+  ]);
+  expect(result.plan?.targets[0]).toMatchObject({
+    exit: 1,
+    available: false,
+    skip_reason: "duplicate candidate id",
+  });
+  expect(healthy.acted).toEqual(["delete"]);
+});
+test("jj listing and refused SSH probes skip only their targets and name failures", async () => {
+  const progress: { name: string; done: boolean }[] = [];
+  const opts = options();
+  opts.context.reportProgress = (
+    name,
+    _root,
+    _entries,
+    _bytes,
+    done = false,
+  ) => {
+    progress.push({ name, done });
+  };
+  const workspaces = createWorkspacesTarget({
+    discover: () => ({ stores: ["/tmp/broken-store"], workspaces: [] }),
+    list: (store) => ({
+      store,
+      listed: null,
+      error: "Object 7fcec09b of type commit not found",
+    }),
+  });
+  const host = createHostTarget({
+    runner: () =>
+      Promise.resolve({
+        code: 255,
+        out: "",
+        err: "ssh: connect to host r99 port 22: Connection refused",
+        timedOut: false,
+      }),
+  });
+  const healthy = fakeTarget({ name: "healthy" });
+  const result = await run([workspaces, host, healthy.target], opts);
+  expect(result.exit).toBe(1);
+  expect(result.plan?.targets.map((row) => row.name)).toEqual([
+    "workspaces",
+    "host",
+    "healthy",
+  ]);
+  expect(result.plan?.targets[0]?.exit).toBe(1);
+  expect(result.plan?.targets[0]?.skip_reason).toContain("/tmp/broken-store");
+  expect(result.plan?.targets[1]?.exit).toBe(1);
+  expect(result.plan?.targets[1]?.available).toBe(false);
+  expect(result.plan?.targets[1]?.skip_reason).toContain("Connection refused");
+  expect(healthy.acted).toEqual(["delete"]);
+  expect(progress.filter((row) => row.done).map((row) => row.name)).toContain(
+    "workspaces",
+  );
 });
 test("plan reports progress while a slow target is discovering candidates", async () => {
   const { target } = fakeTarget();
@@ -280,7 +347,7 @@ test("unknown check cannot masquerade as RECLAIM", async () => {
   bad.checks[0]!.ok = null;
   expect(
     (await plan([fakeTarget({ candidates: [bad] }).target], options())).exit,
-  ).toBe(2);
+  ).toBe(1);
 });
 
 function missingCandidates(): ReturnType<typeof candidate>[] {

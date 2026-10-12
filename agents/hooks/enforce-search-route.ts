@@ -218,17 +218,153 @@ function isAllowedPipeProducer(c: ShellCommand, command: string): boolean {
   return true;
 }
 
-function onlyLineLimitArgs(args: string[]): boolean {
+function optionOnlyArgs(
+  args: string[],
+  valueOptions: ReadonlySet<string>,
+  attachedPrefixes: readonly string[] = [],
+  positionalLimit = 0,
+): boolean {
+  let positionalCount = 0;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] ?? "";
-    if (/^-\d+$/u.test(arg)) continue;
-    if (arg !== "-n" || !/^\d+$/u.test(args[i + 1] ?? "")) return false;
-    i++;
+    if (arg === "-") continue;
+    if (arg === "--") {
+      positionalCount += args.length - i - 1;
+      break;
+    }
+    if (valueOptions.has(arg) && args[i + 1] === undefined) return false;
+    if (valueOptions.has(arg)) {
+      i++;
+      continue;
+    }
+    if (/^--[^=]+=./u.test(arg)) continue;
+    if (arg.startsWith("--")) return false;
+    if (
+      arg.startsWith("-") &&
+      attachedPrefixes.some(
+        (prefix) => arg.startsWith(prefix) && arg.length > prefix.length,
+      )
+    )
+      continue;
+    if (arg.startsWith("-")) continue;
+    positionalCount++;
   }
-  return true;
+  return positionalCount <= positionalLimit;
 }
 
-function isPipePassThrough(c: ShellCommand): boolean {
+function stdinSedArgs(args: string[]): boolean {
+  let programs = 0;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "-f" || arg === "--file") return false;
+    if ((arg === "-e" || arg === "--expression") && args[i + 1] === undefined)
+      return false;
+    if (arg === "-e" || arg === "--expression") {
+      programs++;
+      i++;
+      continue;
+    }
+    if (
+      [
+        "-n",
+        "-E",
+        "-r",
+        "-u",
+        "--quiet",
+        "--silent",
+        "--regexp-extended",
+      ].includes(arg)
+    )
+      continue;
+    if (arg.startsWith("-") && arg !== "-") return false;
+    if (arg !== "-") programs++;
+  }
+  return programs > 0;
+}
+
+function stdinAwkArgs(args: string[]): boolean {
+  let programSeen = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (["-f", "--file", "-i", "--include"].includes(arg)) return false;
+    if (
+      (arg === "-F" ||
+        arg === "-v" ||
+        arg === "--field-separator" ||
+        arg === "--assign") &&
+      args[i + 1] === undefined
+    )
+      return false;
+    if (
+      arg === "-F" ||
+      arg === "-v" ||
+      arg === "--field-separator" ||
+      arg === "--assign"
+    ) {
+      i++;
+      continue;
+    }
+    if (arg.startsWith("-") && arg !== "-") continue;
+    if (arg === "-") continue;
+    if (!programSeen) programSeen = true;
+    else if (!arg.includes("=")) return false;
+  }
+  return programSeen;
+}
+
+function stdinJqArgs(args: string[]): boolean {
+  let programSeen = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (["--from-file", "--slurpfile", "--rawfile", "--libdir"].includes(arg))
+      return false;
+    if ((arg === "--arg" || arg === "--argjson") && args[i + 2] === undefined)
+      return false;
+    if (arg === "--arg" || arg === "--argjson") {
+      i += 2;
+      continue;
+    }
+    if (arg === "--indent" && args[i + 1] === undefined) return false;
+    if (arg === "--indent") {
+      i++;
+      continue;
+    }
+    if (
+      [
+        "-r",
+        "-c",
+        "-e",
+        "-s",
+        "-R",
+        "-n",
+        "-M",
+        "-S",
+        "-C",
+        "-a",
+        "--raw-output",
+        "--compact-output",
+        "--exit-status",
+        "--slurp",
+        "--raw-input",
+        "--null-input",
+        "--monochrome-output",
+        "--sort-keys",
+        "--ascii-output",
+        "--color-output",
+        "--seq",
+        "--stream",
+      ].includes(arg)
+    )
+      continue;
+    if (arg.startsWith("-") && arg !== "-") return false;
+    if (arg === "-") continue;
+    if (!programSeen) programSeen = true;
+    else return false;
+  }
+  return programSeen;
+}
+
+function isStdinTextStage(c: ShellCommand): boolean {
   const eff = effective(c);
   if (
     eff === undefined ||
@@ -238,12 +374,80 @@ function isPipePassThrough(c: ShellCommand): boolean {
     c.redirects.length > 0
   )
     return false;
-  if (isStreamFilter(c)) return true;
-  if (eff.name === "head" || eff.name === "tail")
-    return onlyLineLimitArgs(eff.args);
-  if (["cat", "bat", "sed", "awk"].includes(eff.name))
-    return !readsRegisteredProjectFile(c, eff.name);
+  const { name, args } = eff;
+  if (name === "head" || name === "tail")
+    return optionOnlyArgs(args, new Set(["-n", "-c", "--lines", "--bytes"]), [
+      "-n",
+      "-c",
+    ]);
+  if (name === "cut")
+    return optionOnlyArgs(
+      args,
+      new Set([
+        "-b",
+        "-c",
+        "-d",
+        "-f",
+        "--bytes",
+        "--characters",
+        "--delimiter",
+        "--fields",
+        "--output-delimiter",
+      ]),
+      ["-b", "-c", "-d", "-f"],
+    );
+  if (name === "sort") {
+    if (
+      args.some(
+        (arg) =>
+          arg === "-o" ||
+          arg.startsWith("-o") ||
+          arg === "--output" ||
+          arg.startsWith("--output="),
+      )
+    )
+      return false;
+    return optionOnlyArgs(
+      args,
+      new Set([
+        "-k",
+        "-t",
+        "-S",
+        "-T",
+        "--key",
+        "--field-separator",
+        "--buffer-size",
+        "--temporary-directory",
+        "--parallel",
+      ]),
+      ["-k", "-t", "-S", "-T"],
+    );
+  }
+  if (name === "uniq")
+    return optionOnlyArgs(
+      args,
+      new Set([
+        "-f",
+        "-s",
+        "-w",
+        "--skip-fields",
+        "--skip-chars",
+        "--check-chars",
+      ]),
+      ["-f", "-s", "-w"],
+    );
+  if (name === "wc") return optionOnlyArgs(args, new Set(["--total"]));
+  if (name === "tr") return true;
+  if (name === "jq") return stdinJqArgs(args);
+  if (name === "sed") return stdinSedArgs(args);
+  if (name === "awk") return stdinAwkArgs(args);
+  if (["cat", "bat"].includes(name))
+    return !args.some((arg) => arg !== "-" && !arg.startsWith("-"));
   return false;
+}
+
+function isPipePassThrough(c: ShellCommand): boolean {
+  return isStreamFilter(c) || isStdinTextStage(c);
 }
 
 function isAllowedStreamFilterPipeline(
@@ -275,7 +479,8 @@ function isAllowedStreamFilterPipeline(
         return (
           priorFilter &&
           eff !== undefined &&
-          (eff.name === "head" || eff.name === "tail")
+          (eff.name === "head" || eff.name === "tail") &&
+          isStdinTextStage(stage)
         );
       })
     );

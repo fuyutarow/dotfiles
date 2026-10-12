@@ -283,6 +283,31 @@ describe("enforce-search-route", () => {
     }
   });
 
+  test("allows the live PreToolUse reproduction through downstream text stages", () => {
+    const project = registerProject();
+    for (const command of [
+      "agx show pushrace 2>&1 | grep -e '^VERIFY' -e 'result='",
+      "cd /home/fuyu/dotfiles && agx show pushrace 2>&1 | grep -e A -e B",
+      "agx show pushrace 2>&1 | grep -e A -e B | cut -c1-150",
+      "cd /home/fuyu/dotfiles && agx show pushrace 2>&1 | grep -e '^VERIFY' -e 'result=' | cut -c1-150",
+      "rr text x 2>&1 | grep -F -e y | head",
+      "agx ps | grep x | tail -n 5",
+      "agx ps | grep x | sort -r | uniq -c | wc -l",
+      "agx ps | grep x | tr a-z A-Z",
+      "agx ps | grep x | jq -r '.name'",
+      "agx ps | grep x | jq --arg key value '.name + $key'",
+      "agx ps | grep x | awk '{print $1}'",
+      "agx ps | grep x | sed -n '1p'",
+      "agx ps | grep x | sed -e '1p' -e '2p'",
+    ]) {
+      const result = runHook(HOOK, bashPayload(project, command), withCcc());
+      expect({ command, decision: decisionOf(result.stdout) }).toEqual({
+        command,
+        decision: null,
+      });
+    }
+  });
+
   test("keeps file readers, recursive search, and xargs outside stream-filter exemptions", () => {
     const project = registerProject();
     for (const command of [
@@ -326,6 +351,7 @@ describe("enforce-search-route", () => {
       "repo-retrieve files | grep -- wanted | rg raw",
       "repo-retrieve literal --query needle ; grep -- wanted file.txt",
       "repo-retrieve literal --query needle | grep -- wanted < file.txt",
+      "agx ps | grep foo | cut -c1-150 file.txt",
     ]) {
       expect(
         decisionOf(

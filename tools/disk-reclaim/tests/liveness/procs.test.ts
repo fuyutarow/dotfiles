@@ -18,6 +18,7 @@ import {
   collectProcesses,
   openPathsUnder,
   procFs,
+  processDecisionText,
 } from "../../src/lib/procs.ts";
 import { protectedReason } from "../../src/lib/protected.ts";
 import { judgeWorkspace, type WorkspaceFacts } from "../../src/jj/safety.ts";
@@ -37,6 +38,24 @@ const safeWorkspace: Omit<WorkspaceFacts, "open"> = {
   session: null,
   lastFetch: "fixture",
 };
+
+test("unknown unreadable process keeps comm and exe in the plan reason", () => {
+  const root = tempRoot("reclaim-polysearch-process-");
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+  for (const code of ["EACCES", "EPERM"]) {
+    const proc = procFixture(join(root, code), "polysearch-ws", ["cwd"], code);
+    const open = collectProcesses(proc).openPaths(root);
+    const judgement = judgeWorkspace({ ...safeWorkspace, open });
+    expect(judgement.verdict).toBe("ASK");
+    const reason = processDecisionText(judgement.reason);
+    expect(reason).toContain("pid 9999999");
+    expect(reason).toContain("comm=polysearch-ws");
+    expect(reason).toContain("exe=/usr/bin/polysearch-ws");
+  }
+});
 
 const cases: [string, Candidate["verdict"]][] = [
   ["sshd", "RECLAIM"],

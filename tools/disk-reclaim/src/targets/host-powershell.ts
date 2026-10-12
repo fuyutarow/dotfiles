@@ -1,6 +1,7 @@
 // PowerShell 5.1: no junction traversal and no generic deletion of virtual disks.
 export const hostFunctions = String.raw`
 $ErrorActionPreference='Stop'
+function Probe-Step($step) { [Console]::Error.WriteLine("disk-reclaim-step=$step") }
 function Free-C {
   $c=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
   if ($null -eq $c.FreeSpace) { throw 'C: free measurement unavailable' }
@@ -64,6 +65,7 @@ function Eligible($id) {
 export const hostProbe =
   hostFunctions +
   String.raw`
+Probe-Step 'PowerShell allocation helper'
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -78,13 +80,16 @@ function SizeOnDisk($path) {
   if ($low -eq [uint32]::MaxValue -and [Runtime.InteropServices.Marshal]::GetLastWin32Error() -ne 0) { throw "allocation size unavailable: $path" }
   ([uint64]$high*4294967296)+$low
 }
+Probe-Step 'C: free-space measurement'
 "c_free=$(Free-C)"
 "c_total=$((Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'").Size)"
+Probe-Step 'TEMP swap scan'
 Get-ChildItem -LiteralPath $env:TEMP -Directory -ErrorAction SilentlyContinue |
   Where-Object { !($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } |
   ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'swap.vhdx') -ErrorAction SilentlyContinue } |
   ForEach-Object { "swap=$([int64]($_.LastWriteTime.ToUniversalTime()-(Get-Date '1970-01-01Z')).TotalMilliseconds)|$(SizeOnDisk $_.FullName)|$($_.FullName)" }
 foreach($id in $roots.Keys) {
+  Probe-Step "lever $id allocation scan"
   $bytes='?'
   if ($id -eq 'claude-vm-bundles') {
     [uint64]$total=0
@@ -97,18 +102,21 @@ foreach($id in $roots.Keys) {
   }
   "lever=$id|$bytes|$($roots[$id] -join '; ')"
 }
+Probe-Step 'pagefile measurement'
 $pageFiles=Get-CimInstance Win32_PageFileUsage -ErrorAction Stop
 [uint64]$pageFileBytes=0
 foreach($pageFile in $pageFiles) { $pageFileBytes += [uint64]$pageFile.AllocatedBaseSize * 1MB }
 "lever=pagefile-size|$pageFileBytes|$($pageFiles.Name -join '; ')"
 $states=@{}
 if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
+  Probe-Step 'wsl.exe -l -v'
   $env:WSL_UTF8=1
   wsl.exe -l -v | ForEach-Object {
     $line=$_ -replace "\x00",''
     if ($line -match '^\s*\*?\s*(.+?)\s+(Running|Stopped)\s+\d+\s*$') { $states[$matches[1]]=$matches[2] }
   }
 }
+Probe-Step 'WSL registry and VHDX allocation scan'
 Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss' -ErrorAction SilentlyContinue | ForEach-Object {
   $p=Get-ItemProperty $_.PSPath
   if ([string]::IsNullOrWhiteSpace($p.BasePath)) { return }

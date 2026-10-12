@@ -1,19 +1,25 @@
 // Fixture binary only: inspect SSH argv and return PowerShell protocol output.
 import { appendFileSync } from "node:fs";
+if (process.env.HOST_STUB_HANG_CONNECT === "1") await Bun.sleep(60_000);
 const args = Bun.argv.slice(2);
 const command = args.at(-1) ?? "";
 const encoded = /-EncodedCommand ([A-Za-z0-9+/=]+)$/u.exec(command)?.[1];
 const log = process.env.HOST_STUB_LOG;
 if (encoded === undefined || log === undefined) process.exit(99);
 const wrapper = Buffer.from(encoded, "base64").toString("utf16le");
-const script = await Bun.stdin.text();
+const script = Buffer.from((await Bun.stdin.text()).trim(), "base64").toString(
+  "utf8",
+);
 if (
   !wrapper.includes(".ps1'") ||
-  !wrapper.includes("[Console]::In.ReadToEnd()") ||
+  !wrapper.includes("[Console]::In.ReadLine()") ||
+  !wrapper.includes("[Convert]::FromBase64String") ||
   !wrapper.includes("Remove-Item -LiteralPath $scriptPath")
 )
   process.exit(99);
 appendFileSync(log, `${JSON.stringify(args)}\n${wrapper}\n${script}\n`);
+process.stderr.write("disk-reclaim-step=lever npm-cache allocation scan\n");
+if (process.env.HOST_STUB_HANG === "1") await Bun.sleep(60_000);
 if (process.env.HOST_STUB_EMPTY === "1") process.exit(0);
 const snapshot = [
   "c_free=4294967296",

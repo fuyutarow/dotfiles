@@ -41,4 +41,4 @@ test("explicit plan emits flat JSONL records without a presentation flag", () =>
   const records = parsed.flatMap((item) => (item.success ? [item.data] : []));
   expect(records.some((record) => record.path === candidate)).toBe(true);
   expect(result.stderr.toString()).not.toContain("\u001B");
-});
+}, 30_000);

@@ -467,6 +467,10 @@ function outputPlan(
     return;
   }
   if (mode === "jsonl") {
+    for (const target of value.targets.filter((row) => row.exit === 1))
+      process.stderr.write(
+        `disk-reclaim: FAILED ${target.name}: ${safeStderr(target.skip_reason ?? "target failed")}\n`,
+      );
     process.stdout.write(
       `${records.map((record) => JSON.stringify(record)).join("\n")}${records.length === 0 ? "" : "\n"}`,
     );
@@ -487,7 +491,7 @@ export async function main(
     {
       ...common,
       name: "disk-reclaim",
-      version: "1.1.3",
+      version: "1.1.4",
       parameters: ["[targets...]"],
       commands,
       flags: planFlags,

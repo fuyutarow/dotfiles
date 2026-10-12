@@ -117,6 +117,7 @@ function traceUnknown(
 
 const eaccesIdentity = (base: string, fs: ProcFs): string => {
   const comm = procResult<string>(() => fs.readText(join(base, "comm")));
+  const exe = procResult<string>(() => fs.readlink(join(base, "exe")));
   const stat = procResult<string>(() => fs.readText(join(base, "stat")));
   const status = procResult<string>(() => fs.readText(join(base, "status")));
   const state = stat.ok
@@ -125,7 +126,7 @@ const eaccesIdentity = (base: string, fs: ProcFs): string => {
   const uidLine = status.ok
     ? (/^Uid:.*$/mu.exec(status.value)?.[0] ?? "unavailable")
     : "unavailable";
-  return `comm=${comm.ok ? comm.value.trim() : "unavailable"} state=${state} uid_line=${uidLine}`;
+  return `comm=${comm.ok ? comm.value.trim() : "unavailable"} exe=${exe.ok ? cleaned(exe.value) : "unavailable"} state=${state} uid_line=${uidLine}`;
 };
 
 /** Only an EACCES on proc facts of an exactly allowlisted process is exempt. */
@@ -239,7 +240,7 @@ export function collectProcesses(options: ProcOptions = {}): ProcessSnapshot {
       )
         unknown.push({
           uid: owner.value,
-          detail: `pid ${pid} ${via}: ${message(result.error)}${errorCode(result.error) === "EACCES" ? ` [${eaccesIdentity(base, fs)}]` : ""}`,
+          detail: `pid ${pid} ${via}: ${message(result.error)} [${eaccesIdentity(base, fs)}]`,
         });
       return undefined;
     };
@@ -360,9 +361,8 @@ export function summarizeProcessFailures(details: readonly string[]): string[] {
 }
 
 export function processDecisionText(text: string): string {
-  const start = text.indexOf("pid ");
-  if (start < 0 || !/\b(EACCES|EPERM)\b/u.test(text)) return text;
-  return `${text.slice(0, start)}same-uid process paths unreadable; treated as unknown (see live-process scan summary)`;
+  // Plan reasons must retain pid/comm/exe so the owner can identify unknown processes.
+  return text;
 }
 
 export function openPathsUnder(

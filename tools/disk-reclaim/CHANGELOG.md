@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.4 — 2026-10-12
+
+- Treat rumdl, Ruff, pytest, mypy, and node_modules tool caches as regenerable workspace content.
+- Frame Windows PowerShell script transfer as one base64 line rather than waiting for SSH stdin EOF; bound the read-only probe to 90 seconds with a 10-second SSH connection timeout.
+- Report the current SSH/PowerShell step on stderr and name the last step on timeout, without emitting partial candidate records.
+- Preserve PID, comm, and executable identity for unknown unreadable same-uid processes; keep their conservative ASK verdict.
+
 ## 1.1.3 — 2026-10-12
 
 - Summarize `--yes` results for humans, log one final per-path outcome as JSONL, and refuse contradictory duplicate plan records before acting.

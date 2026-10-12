@@ -26,11 +26,14 @@ export type CommandResult = {
   out: string;
   err?: string;
   timedOut: boolean;
+  step?: string;
+  timeoutMs?: number;
 };
 export type HostRunner = (
   host: string,
   script: string,
-  signal?: AbortSignal,
+  parentSignal?: AbortSignal,
+  reportStep?: (step: string) => void,
 ) => Promise<CommandResult>;
 const capturedStream = (value: string | undefined) => {
   const output = value?.trim() ?? "";
@@ -40,7 +43,7 @@ const isAborted = (signal: AbortSignal | undefined): boolean =>
   signal?.aborted === true;
 const probeFailure = (result: CommandResult, reason: string): string =>
   [
-    `host PowerShell probe failed: ${reason}; exit=${result.code}${result.timedOut ? "; timed out" : ""}`,
+    `host PowerShell probe failed: ${reason}; step=${result.step ?? "SSH/PowerShell"}; exit=${result.code}${result.timedOut ? `; timed out after ${result.timeoutMs ?? "unknown"} ms` : ""}`,
     `stdout: ${capturedStream(result.out)}`,
     `stderr: ${capturedStream(result.err)}`,
   ].join("\n");
@@ -87,78 +90,131 @@ export function parseProbe(out: string): HostSnapshot {
   }
   return s;
 }
-const sshRunner: HostRunner = async (host, script, parentSignal) => {
-  if (isAborted(parentSignal))
-    return { code: 1, out: "", err: "SSH probe cancelled", timedOut: false };
-  let timeout = 120_000;
-  if (script.includes("dism.exe")) timeout = 3_600_000;
-  else if (script === "$probe") timeout = 600_000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => {
-    controller.abort();
-  }, timeout);
-  const abort = () => {
-    controller.abort();
-  };
-  parentSignal?.addEventListener("abort", abort, { once: true });
-  const name = `disk-reclaim-${randomUUID()}.ps1`;
-  const wrapper = [
-    "$ErrorActionPreference='Stop'",
-    "$ProgressPreference='SilentlyContinue'",
-    `$scriptPath=Join-Path $env:TEMP '${name}'`,
-    "$source=[Console]::In.ReadToEnd()",
-    "[IO.File]::WriteAllText($scriptPath,$source,[Text.UTF8Encoding]::new($true))",
-    "$exitCode=0",
-    "try {",
-    "  & powershell.exe -NoProfile -NonInteractive -File $scriptPath",
-    "  if ($null -ne $LASTEXITCODE) { $exitCode=$LASTEXITCODE }",
-    "} finally {",
-    "  Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue",
-    "}",
-    "exit $exitCode",
-  ].join("\n");
-  const encoded = Buffer.from(wrapper, "utf16le").toString("base64");
-  const proc = Bun.spawn(
-    [
-      "ssh",
-      "-o",
-      "BatchMode=yes",
-      "-o",
-      "ConnectTimeout=10",
-      host,
-      `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
-    ],
-    {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-      signal: controller.signal,
-    },
-  );
-  const result = await fromAsyncThrowable(async () => {
-    await proc.stdin.write(script === "$probe" ? hostProbe : script);
-    await proc.stdin.end();
-    const [out, err, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
-    return {
-      code,
-      out: out.replaceAll("\r", ""),
-      err: err.replaceAll("\r", ""),
-      timedOut: controller.signal.aborted && !isAborted(parentSignal),
+export const HOST_PROBE_TIMEOUT_MS = 90_000;
+export const createSshRunner =
+  (options: { probeTimeoutMs?: number } = {}): HostRunner =>
+  async (host, script, parentSignal, reportStep) => {
+    if (isAborted(parentSignal))
+      return { code: 1, out: "", err: "SSH probe cancelled", timedOut: false };
+    let timeout = 120_000;
+    if (script.includes("dism.exe")) timeout = 3_600_000;
+    else if (script === "$probe")
+      timeout = options.probeTimeoutMs ?? HOST_PROBE_TIMEOUT_MS;
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeout);
+    const abort = () => {
+      controller.abort();
     };
-  })();
-  clearTimeout(timer);
-  parentSignal?.removeEventListener("abort", abort);
-  return result.unwrapOr({
-    code: 1,
-    out: "",
-    err: controller.signal.aborted ? "SSH probe aborted" : "SSH probe failed",
-    timedOut: controller.signal.aborted && !isAborted(parentSignal),
-  });
-};
+    parentSignal?.addEventListener("abort", abort, { once: true });
+    let step = "SSH connect/authenticate (ConnectTimeout=10s)";
+    const activity = (next: string) => {
+      step = next;
+      reportStep?.(`${next}; total timeout ${timeout / 1000}s`);
+    };
+    activity(step);
+    const name = `disk-reclaim-${randomUUID()}.ps1`;
+    const wrapper = [
+      "$ErrorActionPreference='Stop'",
+      "$ProgressPreference='SilentlyContinue'",
+      "[Console]::Error.WriteLine('disk-reclaim-step=PowerShell stdin transfer')",
+      `$scriptPath=Join-Path $env:TEMP '${name}'`,
+      "$source=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadLine()))",
+      "[IO.File]::WriteAllText($scriptPath,$source,[Text.UTF8Encoding]::new($true))",
+      "$exitCode=0",
+      "try {",
+      "  [Console]::Error.WriteLine('disk-reclaim-step=PowerShell script launch')",
+      "  & powershell.exe -NoProfile -NonInteractive -File $scriptPath",
+      "  if ($null -ne $LASTEXITCODE) { $exitCode=$LASTEXITCODE }",
+      "} finally {",
+      "  [Console]::Error.WriteLine('disk-reclaim-step=PowerShell script cleanup')",
+      "  Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue",
+      "}",
+      "exit $exitCode",
+    ].join("\n");
+    const encoded = Buffer.from(wrapper, "utf16le").toString("base64");
+    const proc = Bun.spawn(
+      [
+        "ssh",
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "-o",
+        "ConnectionAttempts=1",
+        host,
+        `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
+      ],
+      {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+        signal: controller.signal,
+        killSignal: "SIGKILL",
+      },
+    );
+    const captureError = async () => {
+      const reader = proc.stderr.getReader();
+      const decoder = new TextDecoder();
+      let output = "";
+      let pending = "";
+      const lines = (chunk: string) => {
+        output += chunk;
+        pending += chunk;
+        const completed = pending.split("\n");
+        pending = completed.pop() ?? "";
+        for (const line of completed) {
+          const marker = /^disk-reclaim-step=(.+)$/u.exec(line.trim())?.[1];
+          if (marker !== undefined) activity(marker);
+        }
+      };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        lines(decoder.decode(value, { stream: true }));
+      }
+      lines(`${decoder.decode()}\n`);
+      return output;
+    };
+    const result = await fromAsyncThrowable(async () => {
+      const source = script === "$probe" ? hostProbe : script;
+      const send = fromAsyncThrowable(async () => {
+        await proc.stdin.write(
+          `${Buffer.from(source, "utf8").toString("base64")}\n`,
+        );
+        await proc.stdin.end();
+      })();
+      const [out, err, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        captureError(),
+        proc.exited,
+        send,
+      ]);
+      return {
+        code,
+        out: out.replaceAll("\r", ""),
+        err: err.replaceAll("\r", ""),
+        timedOut,
+        step,
+        timeoutMs: timeout,
+      };
+    })();
+    clearTimeout(timer);
+    parentSignal?.removeEventListener("abort", abort);
+    return result.unwrapOr({
+      code: 1,
+      out: "",
+      err: controller.signal.aborted ? "SSH probe aborted" : "SSH probe failed",
+      timedOut,
+      step,
+      timeoutMs: timeout,
+    });
+  };
+const sshRunner = createSshRunner();
 const definitions: Record<
   string,
   { live: boolean; approval: string | null; note: string }
@@ -302,7 +358,9 @@ export function createHostTarget(options: {
       ctx.reportActivity?.("host", `waiting for SSH ${hostname(ctx)} probe`);
       const result =
         options.snapshot === undefined
-          ? await options.runner(hostname(ctx), "$probe", ctx.signal)
+          ? await options.runner(hostname(ctx), "$probe", ctx.signal, (step) =>
+              ctx.reportActivity?.("host", `waiting for ${step}`),
+            )
           : null;
       if (result?.timedOut === true) {
         ctx.reportPlanError?.(probeFailure(result, "SSH step timed out"));

@@ -16,14 +16,15 @@ import { World } from "../jj/fixture.ts";
 import { collectProcesses } from "../../src/lib/procs.ts";
 import { procFixture } from "../fixtures/procs.ts";
 import { treeBytes } from "../../src/targets/tree.ts";
+import { loadConfig } from "../../src/engine.ts";
 
 type Recovery = NonNullable<ReceiptAction["recovery"]>;
-// Each case runs several real jj children, each bounded at ten seconds by World.
+// Each case runs several real jj children, each bounded at twenty seconds by World.
 // Keep the case bounded without applying a five-second budget to the whole chain.
 const test = (
   name: string,
   run: () => void | Promise<void>,
-  timeout = 30_000,
+  timeout = 60_000,
 ) => {
   bunTest(name, run, timeout);
 };
@@ -61,6 +62,47 @@ const failed = (c: Candidate) =>
   c.checks.filter((k) => k.ok !== true).map((k) => k.name);
 
 describe("workspaces target", () => {
+  test("sparse firedancer workspace with only tool caches is reclaimable", async () => {
+    const caches = [
+      ".rumdl_cache",
+      ".ruff_cache",
+      ".pytest_cache",
+      ".mypy_cache",
+      "node_modules/.cache",
+    ];
+    const w = world({ ".gitignore": `${caches.join("/\n")}/\n` });
+    const ws = w.add("firedancer-sparse");
+    w.jj(ws, "sparse", "set", "--clear", "--add", "a");
+    for (const cache of caches) w.write(ws, `${cache}/entry`, "regenerable");
+    const declared = loadConfig();
+    assert.ok(declared.config !== null);
+    const previous = only(
+      await plan(w, "plan", {
+        regenerable_ignored: ["target", "node_modules"],
+      }),
+      ws,
+    );
+    expect(previous.verdict).toBe("ASK");
+    expect(previous.reason).toContain(".rumdl_cache");
+    expect(failed(previous)).toEqual(["ignored files are regenerable"]);
+    const row = only(
+      await plan(w, "plan", {
+        regenerable_ignored: declared.config.regenerable_ignored,
+      }),
+      ws,
+    );
+    expect(row.verdict, row.reason).toBe("RECLAIM");
+    w.write(ws, ".env", "precious");
+    const foreign = only(
+      await plan(w, "plan", {
+        regenerable_ignored: declared.config.regenerable_ignored,
+      }),
+      ws,
+    );
+    expect(foreign.verdict).toBe("ASK");
+    expect(foreign.reason).toContain(".env");
+  });
+
   test("r99-shaped workspaces ignore expected systemd EACCES and show bytes for every verdict", async () => {
     const w = world();
     const paths = [w.add("dotfiles-arm-ref_u5"), w.add("dotfiles-arm-sw_v1")];

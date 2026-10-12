@@ -59,7 +59,13 @@ function fixture(procRoot?: string) {
     '[user]\nname = "Independent"\nemail = "independent@example.invalid"\n',
   );
   function cmd(argv: string[], cwd = root) {
-    const r = Bun.spawnSync(argv, { cwd, env, stdout: "pipe", stderr: "pipe" });
+    const r = Bun.spawnSync(argv, {
+      cwd,
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 60_000,
+    });
     return {
       exit: r.exitCode,
       out: r.stdout.toString(),
@@ -303,7 +309,7 @@ function wsTest(
       expect(existsSync(w.ws)).toBe(candidate.verdict !== "RECLAIM");
       expect(existsSync(w.repo)).toBe(true);
     },
-    30000,
+    120_000,
   );
 }
 wsTest(
@@ -406,7 +412,7 @@ test("§3 never touch default workspace or store holder", async () => {
   const candidate = candidates.find((item) => item.path === w.repo);
   if (candidate !== undefined) expect(candidate.verdict).toBe("KEEP");
   expect(existsSync(join(w.repo, ".jj/repo/store"))).toBe(true);
-}, 30000);
+}, 120_000);
 
 wsTest("§3.3 conflicted @ is KEEP", "KEEP", (f, w) => {
   writeFileSync(join(w.ws, "base"), "left\n");

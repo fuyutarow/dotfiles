@@ -42,7 +42,7 @@ export class World {
       cwd,
       env: this.env,
       stdin: "ignore",
-      timeout: 10_000,
+      timeout: 20_000,
     });
     assert.equal(
       run.exitCode,

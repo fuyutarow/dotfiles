@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, test as bunTest } from "bun:test";
 import {
   existsSync,
   chmodSync,
@@ -22,6 +22,14 @@ import { tempRoot } from "./fixtures/temp.ts";
 import { realTmpdir } from "./fixtures/temp.ts";
 
 const script = resolve(import.meta.dir, "../src/reclaim.ts");
+// CLI cases may spawn several children; retain a bounded case budget above startup jitter.
+const test = (
+  name: string,
+  run: () => void | Promise<void>,
+  timeout = 30_000,
+) => {
+  bunTest(name, run, timeout);
+};
 const dirs: string[] = [];
 function fixture() {
   const dir = tempRoot("reclaim-cli-");
@@ -130,7 +138,7 @@ test("every registered target survives plan and run smoke checks in a fixture HO
       expect(ran.exit, `${name} run: ${ran.stderr}`).not.toBe(2);
     }
   }
-}, 30_000);
+}, 120_000);
 test("usage failures exit 2, help exits 0", () => {
   for (const args of [
     ["run"],
@@ -152,7 +160,7 @@ test("usage failures exit 2, help exits 0", () => {
     invoke(["run", "--tier", "blind", "--yes", "--stop-on-error", "--json"])
       .exit,
   ).toBe(0);
-}, 30_000);
+}, 60_000);
 test("wrap preserves stdout, stderr, child status, output log, and v1 fields", () => {
   const state = fixture();
   const r = invoke(

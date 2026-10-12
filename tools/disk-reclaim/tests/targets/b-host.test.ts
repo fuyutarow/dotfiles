@@ -15,6 +15,7 @@ import {
   classifySwaps,
   createHostTarget,
   parseProbe,
+  HOST_PROBE_TIMEOUT_MS,
 } from "../../src/targets/host.ts";
 import type { Context } from "../../src/targets/index.ts";
 
@@ -126,7 +127,7 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
         resolve(import.meta.dir, "../fixtures/cli-fixture.ts"),
         ...args,
       ],
-      { env: { ...env, ...overrides }, cwd: root, timeout: 20_000 },
+      { env: { ...env, ...overrides }, cwd: root, timeout: 120_000 },
     );
   const preview = invoke(["plan", "host", "--host", "r99-lan", "--json"]);
   expect(preview.exitCode, preview.stderr.toString()).toBe(0);
@@ -184,7 +185,12 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
   let log = readFileSync(env.HOST_STUB_LOG, "utf8");
   expect(log).toContain("r99-lan");
   expect(log).toContain(".ps1'");
-  expect(log).toContain("[Console]::In.ReadToEnd()");
+  expect(log).toContain("[Console]::In.ReadLine()");
+  expect(log).toContain("[Convert]::FromBase64String");
+  expect(log).toContain('"ConnectTimeout=10"');
+  expect(log).toContain('"BatchMode=yes"');
+  expect(log).toContain('"ConnectionAttempts=1"');
+  expect(log).toContain('"-T"');
   expect(log).toContain("Remove-Item -LiteralPath $scriptPath");
   expect(log).not.toContain("Clear-RecycleBin");
   expect(log).not.toContain("powercfg.exe /h off");
@@ -215,7 +221,54 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
     "FAILED host: host PowerShell probe failed: PowerShell returned no usable probe records",
   );
   expect(emptyProbe.stderr.toString()).toContain("stdout: <empty>");
-}, 30_000);
+}, 300_000);
+
+test("Windows CLI times out a real SSH child and names its last PowerShell step", async () => {
+  expect(HOST_PROBE_TIMEOUT_MS).toBeLessThan(180_000);
+  const root = tempRoot("reclaim-host-timeout-");
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+  const env = {
+    ...cliEnv(root),
+    HOST_STUB_LOG: join(root, "ssh.log"),
+    HOST_STUB_HANG: "1",
+  };
+  symlinkSync(process.execPath, join(env.PATH, "bun"));
+  const stub = join(env.PATH, "ssh");
+  await Bun.write(
+    stub,
+    `#!/usr/bin/env bun\n${await Bun.file(resolve(import.meta.dir, "../fixtures/host-ssh.ts")).text()}`,
+  );
+  chmodSync(stub, 0o755);
+  for (const connect of [false, true]) {
+    const started = performance.now();
+    const run = Bun.spawnSync(
+      [
+        process.execPath,
+        resolve(import.meta.dir, "../fixtures/host-timeout-cli.ts"),
+        "plan",
+        "--on",
+        "windows",
+      ],
+      {
+        env: { ...env, HOST_STUB_HANG_CONNECT: connect ? "1" : "0" },
+        cwd: root,
+        timeout: 15_000,
+      },
+    );
+    const step = connect
+      ? "SSH connect/authenticate"
+      : "lever npm-cache allocation scan";
+    expect(run.exitCode, run.stderr.toString()).toBe(1);
+    expect(performance.now() - started).toBeLessThan(15_000);
+    expect(run.stdout.toString()).toBe("");
+    expect(run.stderr.toString()).toContain(`waiting for ${step}`);
+    expect(run.stderr.toString()).toContain(`step=${step}`);
+    expect(run.stderr.toString()).toContain("timed out after 5000 ms");
+  }
+}, 40_000);
 
 test("host plan matches dry-run swap selection and runner is injected", async () => {
   const data = parseProbe(

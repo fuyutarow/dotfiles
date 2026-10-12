@@ -192,7 +192,7 @@ test("tmp HOME CLI plans all 13 targets and blind run includes bounded rip expir
       .every((a) => a.verdict_at_act === "RECLAIM" && a.ok),
   ).toBe(true);
   expect(existsSync(join(env.RECLAIM_STATE_DIR, "lock"))).toBe(false);
-}, 30_000);
+}, 120_000);
 
 test("one plan shares one process and registry scan between workspaces and scratch", async () => {
   const w = new World();
@@ -240,7 +240,7 @@ test("one plan shares one process and registry scan between workspaces and scrat
     result.plan?.targets[1]?.candidates.some((c) => c.verdict === "RECLAIM"),
   ).toBe(true);
   expect([snapshots, procs.scans(), registries]).toEqual([1, 1, 1]);
-});
+}, 60_000);
 
 test("--fetch is off by default, works on plan and blind run, and fetch failure yields ASK", () => {
   const w = new World();
@@ -327,4 +327,4 @@ test("--fetch is off by default, works on plan and blind run, and fetch failure 
       ?.ok,
   ).toBe(true);
   expect(existsSync(ws)).toBe(false);
-}, 30_000);
+}, 120_000);

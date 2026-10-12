@@ -64,6 +64,8 @@ available in workers.
 
 Configuration resolves beside the executable, or at `RECLAIM_CONFIG` when set. `reclaim.toml`
 owns repository, scratch, and delete roots; delete roots default to `/tmp` and `~/.cache`.
+Its regenerable workspace entries include `.rumdl_cache`, `.ruff_cache`, `.pytest_cache`,
+`.mypy_cache`, and `node_modules/.cache`. Other untracked content still requires review.
 `~` and `{uid}` expand to absolute paths. If omitted, `ignore_unreadable_procs` defaults to
 `["sshd"]`, matching the shipped configuration. The setting exempts only
 EACCES on same-uid cwd/fd/environ/maps probes whose readable comm or exe basename exactly matches
@@ -104,3 +106,11 @@ readable positive use still blocks reclamation. Other unreadable processes remai
 unknown. Workspace rows show allocated bytes for every verdict, or unknown bytes
 if sizing fails. Use `--verbose` on plan/run for per-probe details;
 the JSON plan retains its original facts.
+
+`plan --on windows` uses noninteractive SSH with a 10-second connect timeout and a
+90-second total probe timeout. Script transfer uses a base64 line so Windows SSH stdin EOF
+does not hold up PowerShell. Stderr names the current transfer, measurement, allocation scan,
+or WSL query step. Timeout exits 2 with the last step and captured output; it emits no partial
+JSONL plan. The installed bin reads its linked checkout, so workspace changes take effect only
+when that checkout is updated. Unknown unreadable processes remain ASK with PID, comm, and exe
+in the plan reason; an unavailable identity is named explicitly.

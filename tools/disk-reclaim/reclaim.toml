@@ -20,6 +20,11 @@ regenerable_ignored = [
   "build",
   "dist",
   "__pycache__",
+  ".rumdl_cache",
+  ".ruff_cache",
+  ".pytest_cache",
+  ".mypy_cache",
+  "node_modules/.cache",
   ".julia/compiled",
 ]
 session_grace_hours = 24

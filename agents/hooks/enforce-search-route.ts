@@ -127,106 +127,169 @@ const ROUTES = new Set([
   "definition",
 ]);
 
-// The documented display filter, by structure: [cd <dir> &&] <router> <route> … [2>&1|2>/dev/null]
-// | grep|rg [-F -i -v -w -n -c] (-e PAT | -- PAT) [| head|tail [-n N | -N]] — one pattern, no file
-// operand, nothing dynamic. The words are already unquoted, so `<`, `|` or `$` inside a quoted
-// argument no longer matter (2026-10-06: `rr text '<x>' 2>&1 | grep -F -e '.ts:'` was denied).
-function isRoutedStreamFilter(commands: ShellCommand[]): boolean {
+// A grep/rg command on a pipe is a display filter when its pipeline starts with a non-search
+// producer and no stage reads repository files. Keep the pipeline shape explicit: one producer,
+// then stdin-only filters/shorteners. This accepts agx/journalctl/jj/test output while refusing
+// `cat file | grep`, recursive listing, xargs, and another repository search.
+function isStreamFilter(c: ShellCommand): boolean {
+  const eff = effective(c);
+  const readsPatternFile =
+    eff?.args.some(
+      (arg) =>
+        arg === "-f" ||
+        arg === "--file" ||
+        arg.startsWith("--file=") ||
+        (arg.startsWith("-f") && arg.length > 2),
+    ) ?? false;
+  return (
+    eff !== undefined &&
+    (eff.name === "grep" || eff.name === "rg") &&
+    c.sep === "|" &&
+    !c.dynamic &&
+    c.heredocs.length === 0 &&
+    c.redirects.length === 0 &&
+    !readsPatternFile &&
+    searchOperands(c, true).length === 0
+  );
+}
+
+function isRouterProducer(c: ShellCommand): boolean {
+  const eff = effective(c);
+  if (eff === undefined) return false;
+  if (
+    (eff.name === "rr" || eff.name === "repo-retrieve") &&
+    ROUTES.has(eff.args[0] ?? "")
+  )
+    return true;
+  return (
+    c.words[0] === "bun" &&
+    /(?:^~\/\.claude\/hooks|^\/.*)\/repo-retrieve\.ts$/u.test(
+      c.words[1] ?? "",
+    ) &&
+    ROUTES.has(c.words[2] ?? "")
+  );
+}
+
+function readsRegisteredProjectFile(c: ShellCommand, name: string): boolean {
+  const project = registeredProject(c.cwd);
+  if (project === null) return false;
+  const eff = effective(c);
+  if (eff === undefined) return true;
+  const args = eff.args;
+  let operands: string[] = [];
+  if (name === "cat" || name === "bat") {
+    operands = args.filter((arg) => arg === "-" || !arg.startsWith("-"));
+  } else if (name === "sed" || name === "awk") {
+    const positional = args.filter((arg) => !arg.startsWith("-"));
+    operands = positional.slice(1);
+    operands = operands.filter((arg) => arg !== "-" && !arg.includes("="));
+  }
+  return operands.some((operand) => {
+    if (operand === "-") return false;
+    const target = readPath(operand, c);
+    return target.resolved && insidePath(target.path, physicalPath(project));
+  });
+}
+
+function isAllowedPipeProducer(c: ShellCommand, command: string): boolean {
+  const eff = effective(c);
+  if (
+    eff === undefined ||
+    c.dynamic ||
+    c.heredocs.length > 0 ||
+    c.redirects.some(
+      (redirect) =>
+        !(redirect.op === "2>&" && redirect.target === "1") &&
+        !(redirect.op === "2>" && redirect.target === "/dev/null"),
+    ) ||
+    SEARCH_PROGRAMS.has(eff.name) ||
+    ENUMERATORS.has(eff.name) ||
+    (eff.name === "ls" &&
+      eff.args.some((arg) => arg === "--recursive" || /^-[^-]*R/u.test(arg))) ||
+    eff.name === "xargs" ||
+    (RUNTIMES.test(eff.name) &&
+      !(eff.name === "bun" && eff.args[0] === "test") &&
+      !isRouterProducer(c)) ||
+    (commandSearches(c, command) && !isRouterProducer(c))
+  )
+    return false;
+  if (["cat", "bat", "sed", "awk"].includes(eff.name))
+    return !readsRegisteredProjectFile(c, eff.name);
+  return true;
+}
+
+function onlyLineLimitArgs(args: string[]): boolean {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (/^-\d+$/u.test(arg)) continue;
+    if (arg !== "-n" || !/^\d+$/u.test(args[i + 1] ?? "")) return false;
+    i++;
+  }
+  return true;
+}
+
+function isPipePassThrough(c: ShellCommand): boolean {
+  const eff = effective(c);
+  if (
+    eff === undefined ||
+    c.sep !== "|" ||
+    c.dynamic ||
+    c.heredocs.length > 0 ||
+    c.redirects.length > 0
+  )
+    return false;
+  if (isStreamFilter(c)) return true;
+  if (eff.name === "head" || eff.name === "tail")
+    return onlyLineLimitArgs(eff.args);
+  if (["cat", "bat", "sed", "awk"].includes(eff.name))
+    return !readsRegisteredProjectFile(c, eff.name);
+  return false;
+}
+
+function isAllowedStreamFilterPipeline(
+  commands: ShellCommand[],
+  command: string,
+): boolean {
   const rest = [...commands];
   if (rest.length > 0 && rest[0]?.words[0] === "cd") {
     const cd = rest.shift();
     if (cd === undefined || cd.words.length !== 2 || cd.dynamic) return false;
     if (rest[0]?.sep !== "&&") return false;
   }
-  const router = rest[0];
-  const filter = rest[1];
-  if (router === undefined || filter === undefined || rest.length > 3)
-    return false;
-  let producer = false;
-  if (router.words[0] === "jj")
-    producer =
-      router.words.length === 3 &&
-      router.words[1] === "workspace" &&
-      router.words[2] === "list";
-  else if (router.words[0] === "agx")
-    producer = router.words.length === 2 && router.words[1] === "ps";
-  if (producer) {
-    if (
-      router.dynamic ||
-      router.heredocs.length > 0 ||
-      router.redirects.length > 0
-    )
-      return false;
-    if (filter.sep !== "|") return false;
-    const [prog = "", ...args] = filter.words;
-    if (prog === "awk")
-      return (
-        rest.length === 2 &&
-        !filter.dynamic &&
-        filter.redirects.length === 0 &&
-        args.length === 1
-      );
-    if (prog !== "grep" && prog !== "rg") return false;
-    let i = 0;
-    while (/^-[Fivwnc]+$/u.test(args[i] ?? "")) i++;
-    if (args[i] === "-e" || args[i] === "--") i++;
+  if (rest.length < 2 || rest[0] === undefined) return false;
+  if (!isAllowedPipeProducer(rest[0], command)) return false;
+  if (rest.slice(1).some((stage) => !isPipePassThrough(stage))) return false;
+  const filters = rest.slice(1).filter((stage) => isStreamFilter(stage));
+  if (filters.length === 0) return false;
+  // The original rr contract is intentionally narrower: one display grep, optionally shortened
+  // by head/tail. Keep its existing xargs/second-search deny behavior intact.
+  if (isRouterProducer(rest[0])) {
     return (
-      rest.length === 2 &&
-      !filter.dynamic &&
-      filter.redirects.length === 0 &&
-      args.length === i + 1
+      filters.length === 1 &&
+      rest.slice(1).every((stage, index) => {
+        if (isStreamFilter(stage)) return true;
+        const priorFilter = rest
+          .slice(1, index + 1)
+          .some((candidate) => isStreamFilter(candidate));
+        const eff = effective(stage);
+        return (
+          priorFilter &&
+          eff !== undefined &&
+          (eff.name === "head" || eff.name === "tail")
+        );
+      })
     );
   }
-  const [head, route] =
-    router.words[0] === "bun"
-      ? [router.words[1] ?? "", router.words[2]]
-      : [router.words[0] ?? "", router.words[1]];
-  const routerOk =
-    (/^(?:rr|repo-retrieve)$/u.test(head) ||
-      (router.words[0] === "bun" &&
-        /(?:^~\/\.claude\/hooks|^\/.*)\/repo-retrieve\.ts$/u.test(head))) &&
-    route !== undefined &&
-    ROUTES.has(route);
-  if (!routerOk || router.dynamic || router.heredocs.length > 0) return false;
-  if (
-    !router.redirects.every(
-      (r) =>
-        (r.op === "2>&" && r.target === "1") ||
-        (r.op === "2>" && r.target === "/dev/null"),
-    )
-  )
-    return false;
-  if (
-    filter.sep !== "|" ||
-    filter.dynamic ||
-    filter.redirects.length > 0 ||
-    filter.heredocs.length > 0
-  )
-    return false;
-  const [prog = "", ...args] = filter.words;
-  if (prog !== "grep" && prog !== "rg") return false;
-  let k = 0;
-  while (/^-[Fivwnc]+$/u.test(args[k] ?? "")) k++;
-  if ((args[k] !== "-e" && args[k] !== "--") || args.length !== k + 2)
-    return false;
-  const tail = rest[2];
-  if (tail === undefined) return true;
-  const [tprog = "", ...targs] = tail.words;
-  return (
-    tail.sep === "|" &&
-    !tail.dynamic &&
-    tail.redirects.length === 0 &&
-    (tprog === "head" || tprog === "tail") &&
-    (targs.length === 0 ||
-      (targs.length === 1 && /^-\d+$/u.test(targs[0] ?? "")) ||
-      (targs.length === 2 &&
-        targs[0] === "-n" &&
-        /^\d+$/u.test(targs[1] ?? "")))
-  );
+  return true;
 }
 
 function rawSearchBySyntax(parsed: ParsedShell, command: string): boolean {
-  if (isRoutedStreamFilter(parsed.commands.filter((c) => !c.nested)))
+  if (
+    isAllowedStreamFilterPipeline(
+      parsed.commands.filter((c) => !c.nested),
+      command,
+    )
+  )
     return false;
   return parsed.commands.some(
     (c) =>
@@ -370,7 +433,7 @@ function isRecursiveOption(arg: string): boolean {
 }
 
 /** File/directory operands searched by one parsed search command; empty means stdin. */
-function searchOperands(c: ShellCommand): string[] {
+function searchOperands(c: ShellCommand, pipedInput = false): string[] {
   const eff = effective(c);
   if (eff === undefined) return [];
   const { name } = eff;
@@ -434,7 +497,8 @@ function searchOperands(c: ShellCommand): string[] {
     .map((redirect) => redirect.target);
   if (paths.length > 0 || redirectedInput.length > 0)
     return [...paths, ...redirectedInput];
-  return recursive || (name !== "grep" && name !== "egrep" && name !== "fgrep")
+  return recursive ||
+    (!pipedInput && name !== "grep" && name !== "egrep" && name !== "fgrep")
     ? [c.cwd]
     : [];
 }
@@ -446,7 +510,13 @@ function searchTargets(payload: unknown): string[] {
   if (cwd === "") cwd = process.cwd();
   const parsed = parseShell(command, cwd);
   if (parsed === undefined) return [startPath(payload)];
-  if (isRoutedStreamFilter(parsed.commands.filter((c) => !c.nested))) return [];
+  if (
+    isAllowedStreamFilterPipeline(
+      parsed.commands.filter((c) => !c.nested),
+      command,
+    )
+  )
+    return [];
   const targets = parsed.commands.flatMap((c) => {
     if (!commandSearches(c, command)) return [];
     // Shell-local assignments are not the hook environment. Do not reuse its values after one.
@@ -456,6 +526,17 @@ function searchTargets(payload: unknown): string[] {
     )
       return [physicalPath(c.cwd)];
     if (fileScopedSearch(c)) return [];
+    const eff = effective(c);
+    // An unapproved grep stage with no explicit file operand is still part of a search pipeline:
+    // its producer may be reading the registered tree. Attribute that search to the project cwd
+    // so an unsafe producer cannot make the filter disappear as an empty stdin target.
+    if (
+      eff !== undefined &&
+      SEARCH_PROGRAMS.has(eff.name) &&
+      c.sep === "|" &&
+      searchOperands(c).length === 0
+    )
+      return [physicalPath(c.cwd)];
     const root = registeredProject(c.cwd);
     return searchOperands(c).flatMap((operand) => {
       const target = readPath(operand, c);

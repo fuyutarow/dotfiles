@@ -41,6 +41,17 @@ describe("search-route reads syntax, not text", () => {
       expect(verdict(command)).toBeUndefined();
   });
 
+  test("non-search command output can be filtered with any grep/rg flags", () => {
+    for (const command of [
+      `agx ps --all 2>&1 | grep -E 'a|b'`,
+      `journalctl -u service | rg -v x | head`,
+      `jj log --limit 10 | rg -E -v -i 'foo|bar'`,
+      `bun test agents/hooks/tests | rg -v 'pass' | head -n 20`,
+      `printf '%s\\n' a b | grep -e a -e b`,
+    ])
+      expect(verdict(command)).toBeUndefined();
+  });
+
   test("grep words inside quotes or heredoc data are not searches", () => {
     for (const command of [
       `echo "grep -rn needle src/"`,
@@ -53,9 +64,12 @@ describe("search-route reads syntax, not text", () => {
   test("the same constructs used for real are still denied", () => {
     for (const command of [
       `rr text '<x>' | grep -F -e '.ts:' src/`,
-      `rr text '<x>' | grep -F -e 'a' -e 'b'`,
       `rr text '<x>' | grep -F -e '.ts:' | sort`,
       `rr text '<x>' $(grep -rn x .)`,
+      `cat file.txt | grep foo`,
+      `sed -n '1,5p' src/file.ts | rg foo`,
+      `find . -type f | grep foo`,
+      `grep -r foo .`,
       `grep -rn needle src/`,
       `cat <<EOF\n$(grep -rn needle .)\nEOF`,
       `bash <<EOF\nfind . -name x\nEOF`,
@@ -63,7 +77,10 @@ describe("search-route reads syntax, not text", () => {
       `cd src && rg needle`,
       `python3 - <<EOF\nimport os\nos.walk('.')\nEOF`,
     ])
-      expect(verdict(command)).toBe("deny");
+      expect({ command, verdict: verdict(command) }).toEqual({
+        command,
+        verdict: "deny",
+      });
   });
 
   test("unparseable syntax keeps the text-based behaviour", () => {

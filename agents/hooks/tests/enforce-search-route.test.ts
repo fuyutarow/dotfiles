@@ -263,18 +263,45 @@ describe("enforce-search-route", () => {
     }
   });
 
-  test("allows a single grep/awk display filter after the named safe producers", () => {
+  test("allows grep and rg stdin filters after non-search producers", () => {
     const project = registerProject();
     for (const command of [
       "rr text 'needle' | grep -F -e X",
       "jj workspace list | awk '{print $1}'",
       "agx ps | grep run-123",
+      "agx ps --all 2>&1 | grep -E 'a|b'",
+      "journalctl -u service | rg -v x | head",
+      "bun test agents/hooks/tests | rg -v 'pass' | head -n 20",
+      "jj log --limit 10 | rg -E -v -i 'foo|bar'",
+      "printf '%s\\n' a b | grep -e a -e b",
     ]) {
       expect(
         decisionOf(
           runHook(HOOK, bashPayload(project, command), withCcc()).stdout,
         ),
       ).toBeNull();
+    }
+  });
+
+  test("keeps file readers, recursive search, and xargs outside stream-filter exemptions", () => {
+    const project = registerProject();
+    for (const command of [
+      "cat agents/hooks/enforce-search-route.ts | grep foo",
+      "bat agents/hooks/enforce-search-route.ts | rg foo",
+      "sed -n '1,5p' agents/hooks/enforce-search-route.ts | grep foo",
+      "awk '{print}' agents/hooks/enforce-search-route.ts | rg foo",
+      "find . -type f | grep foo",
+      "ls -laR . | rg foo",
+      "agx ps --all | grep -f agents/hooks/patterns.txt",
+      "grep -r foo .",
+      "agx ps --all | grep foo | xargs cat",
+    ]) {
+      expect({
+        command,
+        decision: decisionOf(
+          runHook(HOOK, bashPayload(project, command), withCcc()).stdout,
+        )?.permissionDecision,
+      }).toEqual({ command, decision: "deny" });
     }
   });
 

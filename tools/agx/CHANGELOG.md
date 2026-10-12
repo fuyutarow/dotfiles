@@ -1,10 +1,12 @@
 # Changelog
 
+## 3.4.2 — 2026-10-12
+
+- Preserve Claude dispatcher attribution when the internal override is blank, and reject ticket workspace routing instead of silently using the prior cwd.
+
 ## 3.4.1 — 2026-10-12
 
-- Add optional `requires_gpu = true` ticket metadata. Detached GPU work checks for visible GPU 0
-  with bounded retry/backoff, skips the probe for CPU-only tickets, and distinguishes a timed-out
-  probe from an absent GPU or missing `nvidia-smi` binary.
+- Add optional requires_gpu = true ticket metadata. Detached GPU work checks for visible GPU 0 with bounded retry/backoff, skips the probe for CPU-only tickets, and distinguishes a timed-out probe from an absent GPU or missing nvidia-smi binary.
 
 ## 3.4.0 — 2026-10-12
 

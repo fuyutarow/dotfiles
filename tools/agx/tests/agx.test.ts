@@ -6664,6 +6664,7 @@ describe("agx dispatch --resume", () => {
       AGX_TEST_CLAUDE_ROUTE: "unavailable",
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       CLAUDE_CODE_SESSION_ID: "  detached-dispatch-session  ",
+      AGX_DISPATCHER_SESSION: "  ",
       FAKE_SLEEP_MS: "1500",
       FAKE_RESUME_SLEEP_MS: "700",
       FAKE_LAST: report,
@@ -6687,6 +6688,13 @@ describe("agx dispatch --resume", () => {
       repoRoot: dispatchCwd,
       payload: { session_id: "detached-dispatch-session" },
     };
+    const activeMarker = (): string => {
+      const active = join(state, "active");
+      const file = readdirSync(active).find(
+        (name) => name.endsWith(".json") && !name.endsWith(".progress.json"),
+      );
+      return file === undefined ? "" : readFileSync(join(active, file), "utf8");
+    };
     let ownRuns: Awaited<ReturnType<typeof runningRuns>> = [];
     const deadline = performance.now() + 5000;
     while (ownRuns.length === 0 && performance.now() < deadline) {
@@ -6697,6 +6705,9 @@ describe("agx dispatch --resume", () => {
       if (ownRuns.length === 0) await Bun.sleep(25);
     }
     expect(ownRuns).toHaveLength(1);
+    expect(activeMarker()).toContain(
+      '"dispatcher_session":"detached-dispatch-session"',
+    );
     expect(
       await runningRuns(ctx, {
         session: "manager-unrelated",
@@ -6714,6 +6725,25 @@ describe("agx dispatch --resume", () => {
     expect(followed.code, followed.err).toBe(0);
     expect(followed.out).toContain('"state":"verify result"');
     expect(followed.out).toContain('"state":"terminal"');
+    const ticketDetached = await router(
+      ["dispatch", "--ticket", "detached_watch", "--detach"],
+      env,
+    );
+    expect(ticketDetached.code, ticketDetached.err).toBe(0);
+    let ticketRuns: Awaited<ReturnType<typeof runningRuns>> = [];
+    const ticketDeadline = performance.now() + 5000;
+    while (ticketRuns.length === 0 && performance.now() < ticketDeadline) {
+      ticketRuns = await runningRuns(ctx, {
+        session: ctx.payload.session_id,
+        stateDirs: [state],
+      });
+      if (ticketRuns.length === 0) await Bun.sleep(25);
+    }
+    expect(ticketRuns).toHaveLength(1);
+    expect(activeMarker()).toContain(
+      '"dispatcher_session":"detached-dispatch-session"',
+    );
+    expect((await router(["wait", "detached_watch"], env)).code).toBe(0);
     const resumed = await router(
       ["dispatch", "--resume", "detached_watch", "--detach"],
       env,
@@ -6754,6 +6784,22 @@ describe("agx dispatch --resume", () => {
           env,
         );
         expect(amended.code, amended.err).toBe(0);
+        let amendmentRuns: Awaited<ReturnType<typeof runningRuns>> = [];
+        const amendmentDeadline = performance.now() + 5000;
+        while (
+          amendmentRuns.length === 0 &&
+          performance.now() < amendmentDeadline
+        ) {
+          amendmentRuns = await runningRuns(ctx, {
+            session: ctx.payload.session_id,
+            stateDirs: [state],
+          });
+          if (amendmentRuns.length === 0) await Bun.sleep(25);
+        }
+        expect(amendmentRuns).toHaveLength(1);
+        expect(activeMarker()).toContain(
+          '"dispatcher_session":"detached-dispatch-session"',
+        );
         amendmentWait = await router(["wait", "detached_watch"], env);
       },
     );
@@ -6823,6 +6869,22 @@ describe("agx dispatch --resume", () => {
       expect(rejected.err).not.toContain("workspace path already exists");
       expect(rejected.err).toMatch(/schema|timeout_reason|protected/u);
     }
+  });
+
+  test("ticket dispatch refuses workspace routing instead of using the old cwd", async () => {
+    const rejected = await router([
+      "dispatch",
+      "--ticket",
+      "ticket-needing-workspace",
+      "--workspace",
+      "fixture-workspace",
+      "--detach",
+    ]);
+    expect(rejected.code).toBe(2);
+    expect(rejected.err).toContain("agx: REFUSED:");
+    expect(rejected.err).toContain(
+      "--workspace is not supported with --ticket",
+    );
   });
   const argvLines = (file: string): string[][] =>
     readFileSync(join(scratch, file), "utf8")

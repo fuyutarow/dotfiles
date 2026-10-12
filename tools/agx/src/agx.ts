@@ -277,10 +277,12 @@ function newRunId(): string {
   return `${now().replaceAll(":", "-")}-${process.pid}-${suffix}`;
 }
 const currentDispatcherSession = (): string | undefined => {
-  const id = (
-    process.env.AGX_DISPATCHER_SESSION ?? process.env.CLAUDE_CODE_SESSION_ID
-  )?.trim();
-  return id === undefined || id === "" ? undefined : id;
+  return [
+    process.env.AGX_DISPATCHER_SESSION,
+    process.env.CLAUDE_CODE_SESSION_ID,
+  ]
+    .map((id) => id?.trim())
+    .find((id) => id !== undefined && id !== "");
 };
 const epochMilliseconds = (): number =>
   Temporal.Now.instant().epochMilliseconds;
@@ -7063,6 +7065,7 @@ async function detachDispatch(
   childArgs = withOption(childArgs, "--name", name);
   const logDir = resolve(STATE_DIR, "detached");
   if (platform === "darwin") mkdirSync(logDir, { recursive: true });
+  const dispatcherSession = currentDispatcherSession();
   const detachedLaunch = buildDetachedLaunch({
     platform,
     unit,
@@ -7071,7 +7074,7 @@ async function detachDispatch(
     env: {
       ...process.env,
       HOME: process.env.HOME ?? homedir(),
-      AGX_DISPATCHER_SESSION: currentDispatcherSession() ?? "",
+      AGX_DISPATCHER_SESSION: dispatcherSession ?? "",
       AGX_DISPATCH_ROOT: flags.dispatchRoot ?? workspaceRoot(flags.cd),
     },
     logDir,
@@ -7100,7 +7103,7 @@ async function detachDispatch(
   journalRunEvent({
     kind: "detached",
     run_id: runId,
-    dispatcher_session: currentDispatcherSession(),
+    dispatcher_session: dispatcherSession,
     ticket: { name, path: ticketFile, writes: [] },
     cwd: flags.cd,
     sandbox: flags.sandbox,
@@ -7138,6 +7141,12 @@ async function main(): Promise<number | undefined> {
   let amendedPrevious: Logged | undefined;
   let selectedTicketFile: string | undefined;
   let repickPromptFile: string | undefined;
+  if (
+    argv.command === "dispatch" &&
+    argv.flags.workspace !== undefined &&
+    (argv.flags.ticket !== undefined || argv.flags.amend !== undefined)
+  )
+    fatal("--workspace is not supported with --ticket or --amend");
   if (
     argv.command === "dispatch" &&
     argv.flags.detach === true &&

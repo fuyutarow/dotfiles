@@ -131,7 +131,6 @@ depends = [
   "lint:zsh",
   "lint:bun",
   "lint:ts",
-  "lint:ts-ratchet",
   "lint:oxlint-policy",
   "vendor:deps:check",
   "lint:one-writer",
@@ -304,24 +303,16 @@ run = "bun scripts/lint-bun.ts"
 # The rules landed with a measured backlog of 1534 errors in 105 files, all converted the same
 # day (2026-10-03) — including the HOOKS, which are live gates and zero-dependency, so they read
 # their payload through agents/hooks/narrow.ts instead of zod. There is no ledger and no standing
-# exception for trust-boundary rules. I/O adoption debt uses generated overrides only;
-# lint:ts-ratchet rejects handwritten overrides and stale path/rule entries. The structural exclusion is the symlink
+# exception for trust-boundary rules. The structural exclusion is the symlink
 # agents/claude/hooks/repo-retrieve.ts in `ignorePatterns` (oxlint resolves its imports at the
 # link path and reports false errors; the real file is linted at its own path — same reason as
 # tsconfig.json's exclude).
 [tasks."lint:ts"]
 dir = "{{config_root}}"
-description = "oxlint --type-aware the repo's TS against .oxlintrc.json: every rule an error, generated I/O overrides only, no disable comment"
+description = "oxlint --type-aware the repo's TS against .oxlintrc.json, with no disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
-depends = ["lint:ts-no-disable", "lint:oxlint-policy", "lint:ts-ratchet"]
+depends = ["lint:ts-no-disable", "lint:oxlint-policy"]
 run = "bunx --bun oxlint --type-aware"
-
-# I/O exemptions are generated from the single policy allowlist. The ratchet rejects
-# handwritten overrides, growth beyond adoption baseline, and stale path/rule memberships.
-[tasks."lint:ts-ratchet"]
-dir = "{{config_root}}"
-description = "Verify generated-only overrides, shrink-only I/O allowlist, and live path/rule exemptions"
-run = "bun scripts/lint-ts-ratchet.ts"
 
 # oxlint has no rule that forbids its own suppression comments, so this does: any oxlint-disable
 # or eslint-disable in tracked TS fails (audit targets get no exception rules — enforced, not

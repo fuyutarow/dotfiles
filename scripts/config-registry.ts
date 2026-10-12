@@ -427,7 +427,6 @@ const OTHER: readonly Surface[] = [
     sources: [
       "tools/shared/package.json",
       "tools/agx-usehooks/package.json",
-      "tools/oxlint-plugin-dotfiles/package.json",
       "tools/smart-open/package.json",
       "tools/repo-retrieve/package.json",
       "tools/agent-resource-run/package.json",

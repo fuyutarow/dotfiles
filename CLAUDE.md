@@ -19,6 +19,9 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
   with tmux.
 - **Editor**: VS Code — `e` / `ee` open it (on WSL via the Remote-WSL launcher, see `zsh/zprofile.wsl`).
   Cursor was retired 2026-07-14; do not reintroduce it.
+- **Codex provider**: `agents/codex/runtime.toml` selects the standalone CLI on macOS/Linux and
+  Windows Desktop on WSL. WSL's `codex` is the runtime-owned facade to that Desktop provider;
+  never install or prefer a second Linux Codex there. Other development tools remain native to WSL.
 
 ### Package Managers
 
@@ -131,6 +134,10 @@ All repo tasks go through **mise** (`mise tasks` to list):
   or experiment toolchains. Bun/uv come from brew; hooks and SSH commands reach them via the quiet
   prefix PATH rule. Experiment toolchains are each repo's `mise.toml`, never dotfiles.
   Renting/destroying: `renting-cloud-gpus` skill.
+- **Approved remote coredev target**: `coredev deploy <alias>` uses SSH to make the target host
+  read its own `$DOTFILES` (or `$HOME/dotfiles`) declaration and run its selected existing `mise`
+  tasks. It never falls back to local execution, clones a checkout, or transfers profiles or
+  credentials. The host registry's declared `kind` (including WSL) is the caller contract.
 - **Relink dotfiles**: `mise run link:dots` · **Install tools**: `mise run install:tools`
 - **Audit tools**: `mise run tools:audit` · **Update everything**: `mise run up`
 - **MCP servers**: `mise run cc:install-mcp`

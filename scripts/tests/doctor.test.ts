@@ -18,6 +18,8 @@ import { release, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { sshSupportsAttachMatch } from "../link-dots.ts";
 import {
+  checkCodexRemote,
+  checkCodexRuntime,
   checkGoogleDrive,
   checkWslGpuManagerPath,
   type Ctx,
@@ -67,6 +69,7 @@ function doctor(
     env: {
       ...process.env,
       ...env,
+      CODEX_CONFIG_HOME: env.HOME,
       DOCTOR_ONLY: only,
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: tmp("doctor-bun-cache-"),
     },
@@ -267,7 +270,7 @@ describe("doctor", () => {
     },
   );
 
-  test("codex-remote: unmanaged server warns without taking it over", () => {
+  test("codex-remote: unmanaged server follows platform ownership", () => {
     const home = tmp("doctor-home-");
     const bin = tmp("doctor-fake-path-");
     writeFileSync(join(bin, "codex"), "#!/bin/sh\nexit 99\n");
@@ -279,9 +282,81 @@ describe("doctor", () => {
     chmodSync(join(bin, "ps"), 0o755);
     const r = doctor("codex-remote", { HOME: home, DOTFILES: REPO, PATH: bin });
     expect(r.code).toBe(0);
-    expect(r.out).toContain("WARN  codex-remote");
-    expect(r.out).toContain(
+    if (/microsoft/iu.test(release())) {
+      expect(r.out).toContain("SKIP  codex-remote");
+      expect(r.out).toContain(
+        "Windows Desktop owns the native Codex app-server",
+      );
+    } else {
+      expect(r.out).toContain("WARN  codex-remote");
+      expect(r.out).toContain(
+        "restart it as a managed daemon when the desktop session is not in use",
+      );
+    }
+  });
+  test("codex-remote: non-WSL unmanaged server warns without taking it over", async () => {
+    const home = tmp("doctor-home-");
+    const bin = tmp("doctor-fake-path-");
+    writeFileSync(join(bin, "codex"), "#!/bin/sh\nexit 99\n");
+    writeFileSync(
+      join(bin, "ps"),
+      "#!/bin/sh\nprintf '%s\\n' 'codex -c features.code_mode_host=true app-server --listen unix://'\n",
+    );
+    chmodSync(join(bin, "codex"), 0o755);
+    chmodSync(join(bin, "ps"), 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = bin;
+    using _restorePath = {
+      [Symbol.dispose]: () => {
+        if (previousPath === undefined) delete process.env.PATH;
+        else process.env.PATH = previousPath;
+      },
+    };
+    const finding = await checkCodexRemote({
+      home,
+      dotfiles: REPO,
+      isMac: false,
+      isWsl: false,
+      isCoreBox: false,
+    });
+
+    expect(finding.verdict).toBe("WARN");
+    expect(finding.fix).toBe(
       "restart it as a managed daemon when the desktop session is not in use",
+    );
+  });
+  test("codex-remote: WSL leaves the native Windows Desktop app-server alone", async () => {
+    const finding = await checkCodexRemote({
+      home: tmp("doctor-wsl-codex-home-"),
+      dotfiles: REPO,
+      isMac: false,
+      isWsl: true,
+      isCoreBox: false,
+    });
+
+    expect(finding.verdict).toBe("SKIP");
+    expect(finding.detail).toContain(
+      "Windows Desktop owns the native Codex app-server",
+    );
+  });
+  test("codex-runtime: WSL refuses a standalone Codex declaration before probing any launcher", async () => {
+    const dotfiles = tmp("doctor-wsl-codex-runtime-");
+    mkdirSync(join(dotfiles, "agents", "codex"), { recursive: true });
+    writeFileSync(
+      join(dotfiles, "agents", "codex", "runtime.toml"),
+      '[providers]\nmac = "standalone"\nlinux = "standalone"\nwsl = "standalone"\n',
+    );
+    const finding = await checkCodexRuntime({
+      home: tmp("doctor-wsl-codex-home-"),
+      dotfiles,
+      isMac: false,
+      isWsl: true,
+      isCoreBox: false,
+    });
+
+    expect(finding.verdict).toBe("FAIL");
+    expect(finding.detail).toContain(
+      "not the required windows-desktop provider",
     );
   });
   test("post-merge runs codex:config after relinking dotfiles", () => {

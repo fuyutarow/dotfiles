@@ -344,14 +344,6 @@
     },
     {
       "files": [
-        "agents/codex/codex-config.ts"
-      ],
-      "rules": {
-        "node/no-sync": "off"
-      }
-    },
-    {
-      "files": [
         "agents/codex/hooks/enforce-dispatch-contract.ts"
       ],
       "rules": {
@@ -1138,30 +1130,6 @@
     {
       "files": [
         "tools/coredev/src/hosts.ts"
-      ],
-      "rules": {
-        "node/no-sync": "off"
-      }
-    },
-    {
-      "files": [
-        "tools/coredev/src/login-shell.ts"
-      ],
-      "rules": {
-        "node/no-sync": "off"
-      }
-    },
-    {
-      "files": [
-        "tools/coredev/src/tool-steps.ts"
-      ],
-      "rules": {
-        "node/no-sync": "off"
-      }
-    },
-    {
-      "files": [
-        "tools/coredev/src/transfer-steps.ts"
       ],
       "rules": {
         "node/no-sync": "off"

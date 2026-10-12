@@ -345,7 +345,12 @@ run = "bunx --bun tsgo --noEmit"
 [tasks.test]
 alias = "t"
 description = "Test the repo: hooks, resource control, repo-retrieve, Bun script floor, skills, zsh terminal hygiene, and toolchain scope"
-depends = ["test:hooks", "test:resource-control", "test:agx", "test:scripts", "test:skills", "test:android", "test:zsh", "test:mise-scope"]
+depends = ["test:hooks", "test:resource-control", "test:agx", "test:scripts", "test:codex", "test:skills", "test:android", "test:zsh", "test:mise-scope"]
+
+[tasks."test:codex"]
+dir = "{{config_root}}"
+description = "Narrow Codex integration regression suite: runtime/config tests, provider installer selection, coredev selector, and Codex doctor checks. Pass Bun filters with `mise run test:codex -- --filter <text>`."
+run = "bun test agents/codex/tests scripts/tests/install-ai-clis.test.ts scripts/tests/doctor.test.ts tools/coredev/tests"
 
 [tasks."test:android"]
 dir = "{{config_root}}"
@@ -520,6 +525,16 @@ run = 'bun ~/dotfiles/scripts/wsl-reap.ts'
 description = "Install the full CLI toolbox (single source: Brewfile)"
 run = 'brew bundle --file=~/dotfiles/Brewfile'
 
+[tasks."core:install"]
+description = "Install only the core developer utilities declared by Brewfile.core; desktop extras remain outside this selector."
+dir = "{{config_root}}"
+run = 'brew bundle --file="${MISE_PROJECT_ROOT}/Brewfile.core"'
+
+[tasks."core:doctor"]
+description = "Read-only core selection verification: core Brewfile commands, dependencies, bins, skills, MCP/Codex configuration, and the declared runtime; excludes desktop and unrelated OS services."
+dir = "{{config_root}}"
+run = "DOCTOR_ONLY=core-tools,deps,bins,skills,mcp,codex-config,codex-runtime bun scripts/doctor.ts"
+
 # `bun link` after the install: package.json's `bin` entries (agent-resource-run, disk-reclaim,
 # storage-headroom, statusline, serena-foreground, repo-retrieve) are this repo's PATH commands,
 # and `bun link` is what turns a `bin` entry into a symlink in bun's global bin dir (~/.bun/bin,
@@ -541,10 +556,7 @@ run = "bun install --frozen-lockfile && bun link && bun scripts/deps-prune.ts"
 # through agy (driving-antigravity). Standalone: not wired into mac:init/wsl:init.
 [tasks."install:ai-clis"]
 description = "Install the AI coding-agent CLIs through each vendor's self-updating installer: Claude Code native (claude.ai/install.sh), Codex standalone (chatgpt.com/codex/install.sh). Never bun/npm — an npm claude cannot self-update where npm has no global version."
-run = [
-  "curl -fsSL https://claude.ai/install.sh | bash",
-  "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
-]
+run = "bun scripts/install-ai-clis.ts"
 
 [tasks."mac:init"]
 description = "Initialize Mac environment (all-in-one setup)"
@@ -793,3 +805,18 @@ run = "bun agents/codex/codex-remote-control.ts"
 [tasks."codex:config"]
 description = "Converge declared Codex model limits, workspace-write network settings, and .mcp.json MCP entries into ~/.codex/config.toml."
 run = "bun agents/codex/codex-config.ts"
+
+[tasks."codex:runtime"]
+description = "Deploy the declared WSL-to-Windows Codex runtime integration."
+dir = "{{config_root}}"
+run = "bun agents/codex/codex-runtime.ts deploy"
+
+[tasks."codex:runtime:check"]
+description = "Verify the actual selected WSL-to-Windows Codex runtime integration without writing."
+dir = "{{config_root}}"
+run = "bun agents/codex/codex-runtime.ts --check"
+
+[tasks."coredev:selection"]
+description = "Print the canonical coredev selected task set. Usage: mise run coredev:selection -- --kind <linux|wsl|mac> --phase <deploy|doctor> [--json]"
+dir = "{{config_root}}"
+run = "bun scripts/deployment-selection.ts"

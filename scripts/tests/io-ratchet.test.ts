@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkOverrides, staleExemptions } from "../lint-ts-ratchet.ts";
+import {
+  checkOverrides,
+  probeDiagnostics,
+  staleExemptions,
+} from "../lint-ts-ratchet.ts";
 import {
   generatedOverrides,
   loadPolicy,
@@ -61,6 +65,35 @@ test("staleness is checked per rule, even when the other rule still fires", () =
     ]),
   ).toEqual([]);
   expect(staleExemptions(allowlist, [])).toHaveLength(2);
+});
+
+test("the probe bounds OXLint JSON to one allowlisted path at a time", async () => {
+  const paths = ["src/one.ts", "src/two.ts"];
+  const calls: string[] = [];
+  const result = await probeDiagnostics(paths, (path) => {
+    calls.push(path);
+    return Promise.resolve({
+      exit: 1,
+      stderr: "",
+      stdout: JSON.stringify({
+        diagnostics: [
+          {
+            code: "node(no-sync)",
+            filename: path,
+            labels: Array.from({ length: 2_000 }, () => ({
+              span: { line: 1 },
+            })),
+          },
+        ],
+        number_of_files: 1,
+      }),
+    });
+  });
+  expect(calls).toEqual(paths);
+  expect(result).toEqual({
+    diagnostics: paths.map((filename) => ({ code: "node(no-sync)", filename })),
+    ok: true,
+  });
 });
 
 test("test-pattern override disables only the two I/O rules", () => {

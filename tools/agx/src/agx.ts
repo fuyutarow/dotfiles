@@ -91,12 +91,11 @@ import {
   type StallInputs,
 } from "./lifecycle.ts";
 import { escalationRow, sampleRow } from "./selection.ts";
+import { currentHost, probeRoutes, type Routes } from "./routes.ts";
 import {
-  currentHost,
-  probeRoutes,
-  routeCachePath,
-  type Routes,
-} from "./routes.ts";
+  admissionRouteCachePath,
+  codexAdmissionRoute,
+} from "./admission-routes.ts";
 import { dispatchStats } from "./dispatch-stats.ts";
 import { appendLedgerLine, ledgerLines, rotateRunsLog } from "./ledger.ts";
 import {
@@ -611,7 +610,7 @@ export interface Pick {
   selection_record_unavailable?: string;
 }
 
-function hostRoutes(): Routes {
+function hostRoutes(sandbox = "sandboxed"): Routes {
   const codexPath = Bun.which(process.env.CODEX_BIN ?? "codex");
   const codexVersion =
     codexPath === null
@@ -626,32 +625,39 @@ function hostRoutes(): Routes {
   return probeRoutes({
     host: currentHost(),
     version: codexVersion,
-    cachePath: routeCachePath(STATE_DIR),
+    cachePath: admissionRouteCachePath(STATE_DIR, sandbox),
     now: epochMilliseconds,
     codexProbe: () => {
-      if (process.env.AGX_TEST_CODEX_ROUTE === "unavailable")
-        return { available: false, reason: "injected sandbox denial" };
-      if (process.env.AGX_CODEX_WORKER !== undefined)
-        return { available: true, reason: "test worker override" };
-      if (codexPath === null)
-        return { available: false, reason: "codex is not on PATH" };
-      const r = Bun.spawnSync([codexPath, "sandbox", "true"], {
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 5_000,
+      return codexAdmissionRoute({
+        sandbox,
+        codexPath,
+        codexVersion,
+        sandboxProbe: () => {
+          if (process.env.AGX_TEST_CODEX_ROUTE === "unavailable")
+            return { available: false, reason: "injected sandbox denial" };
+          if (process.env.AGX_CODEX_WORKER !== undefined)
+            return { available: true, reason: "test worker override" };
+          if (codexPath === null)
+            return { available: false, reason: "codex is not on PATH" };
+          const r = Bun.spawnSync([codexPath, "sandbox", "true"], {
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 5_000,
+          });
+          const output =
+            `${r.stdout.toString()}${r.stderr.toString()}`
+              .trim()
+              .split("\n")
+              .at(0) ?? "";
+          if (r.exitCode === 0)
+            return { available: true, reason: "Codex sandbox probe passed" };
+          const reason =
+            output === ""
+              ? `sandbox probe exited ${r.exitCode}`
+              : output.slice(0, 300);
+          return { available: false, reason };
+        },
       });
-      const output =
-        `${r.stdout.toString()}${r.stderr.toString()}`
-          .trim()
-          .split("\n")
-          .at(0) ?? "";
-      if (r.exitCode === 0)
-        return { available: true, reason: "Codex sandbox probe passed" };
-      const reason =
-        output === ""
-          ? `sandbox probe exited ${r.exitCode}`
-          : output.slice(0, 300);
-      return { available: false, reason };
     },
     codexLoggedIn: () => {
       if (process.env.AGX_CODEX_WORKER !== undefined) return true;
@@ -1338,9 +1344,10 @@ async function pickFor(
   writesCount = 0,
   timeoutS?: number,
   includeThroughput = false,
+  sandbox = "sandboxed",
 ): Promise<Pick> {
   const capabilities = capabilityTags(requestedCapabilities);
-  const routes = hostRoutes();
+  const routes = hostRoutes(sandbox);
   const available = availableRoster(roster, routes);
   const hardMasks = new Set<string>();
   const hardMaskReasons = new Map<string, string>();
@@ -2378,6 +2385,7 @@ async function run(flags: RunFlags): Promise<number> {
           ticket?.writes?.length ?? 0,
           ticket?.timeout_s,
           flags.verbose === true,
+          flags.sandbox,
         )
       : {
           source: "override",
@@ -2556,7 +2564,7 @@ async function launch(l: Launch): Promise<number> {
   } else timeout = { seconds: DEFAULT_TIMEOUT_S, source: "default" };
   const row = refuseUnrunnable(roster, pick.choice);
   stderrRun = { displayId, route: row.route };
-  const routeStatus = hostRoutes()[row.route];
+  const routeStatus = hostRoutes(flags.sandbox)[row.route];
   if (!routeStatus.available)
     fatal(
       `${row.route} route is unavailable on ${hostname()}: ${routeStatus.reason}`,

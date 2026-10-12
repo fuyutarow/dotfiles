@@ -33,10 +33,15 @@
 // Script-scoped, not a library: this import (not an `export {}`, now redundant with it in
 // scope) makes the file a module so the top-level `await` calls below are legal under tsgo.
 import { jsonOf, z } from "../hooks/zod.ts";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { resolveRuntime } from "./runtime.ts";
 const recoverInvalid = <T extends z.ZodType>(schema: T) =>
   schema.optional().catch(undefined);
 
 const CODEX = "codex";
+const DOTFILES =
+  process.env.DOTFILES ?? join(process.env.HOME ?? homedir(), "dotfiles");
 
 // A field that is absent or not a string reads as undefined; a non-object payload is "no version".
 const DaemonVersionSchema = z.object({
@@ -53,28 +58,53 @@ const QUERY_TIMEOUT_MS = 30_000;
 const RESTART_TIMEOUT_MS = 2 * 60_000;
 
 async function run(args: string[]): Promise<{ code: number; stdout: string }> {
+  const signal = AbortSignal.timeout(UPDATE_TIMEOUT_MS);
   const proc = Bun.spawn([CODEX, ...args], {
     stdout: "pipe",
-    stderr: "inherit",
-    timeout: UPDATE_TIMEOUT_MS,
+    stderr: "pipe",
+    signal,
   });
-  const stdout = await new Response(proc.stdout).text();
-  const code = await proc.exited;
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
   process.stdout.write(stdout);
-  return { code, stdout };
+  process.stderr.write(stderr);
+  return { code: signal.aborted ? 124 : code, stdout };
 }
 
 async function daemonVersion(): Promise<DaemonVersion | null> {
   // stderr swallowed: "no daemon running" is an ordinary outcome here, not a failure.
+  const signal = AbortSignal.timeout(QUERY_TIMEOUT_MS);
   const proc = Bun.spawn([CODEX, "app-server", "daemon", "version"], {
     stdout: "pipe",
     stderr: "ignore",
-    timeout: QUERY_TIMEOUT_MS,
+    signal,
   });
-  const out = await new Response(proc.stdout).text();
-  if ((await proc.exited) !== 0) return null;
+  const [out, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    proc.exited,
+  ]);
+  if (code !== 0 || signal.aborted) return null;
   const version = jsonOf(DaemonVersionSchema).safeParse(out);
   return version.success ? version.data : null;
+}
+
+// The Windows desktop package owns its bundle update lifecycle. Calling `codex update` through
+// the WSL shim would wrongly treat the app-owned executable as a standalone payload.
+const runtime = await resolveRuntime(DOTFILES);
+if (runtime.provider === "windows-desktop") {
+  console.log(
+    "codex: Windows desktop owns updates — standalone update skipped",
+  );
+  const config = Bun.spawn(["bun", `${import.meta.dir}/codex-config.ts`], {
+    stdout: "inherit",
+    stderr: "inherit",
+    timeout: RESTART_TIMEOUT_MS,
+    env: { ...process.env, DOTFILES },
+  });
+  process.exit(await config.exited);
 }
 
 // Shared with macOS, where codex may simply be absent: skip, never fail the topgrade run.

@@ -1,0 +1,5 @@
+# The CLI provider is selected by dotfiles, not by whichever executable wins PATH.
+[providers]
+mac = "standalone"
+linux = "standalone"
+wsl = "windows-desktop"

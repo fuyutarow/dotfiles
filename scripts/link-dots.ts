@@ -201,6 +201,7 @@ function cachedWslDriveTargets(
   root: string,
   cachePath: string,
   maxDiscoveryMs: number,
+  persistCache: boolean,
 ): { root?: string; personal?: string } {
   const cached = readDriveCache(cachePath);
   if (cached !== undefined) {
@@ -233,13 +234,13 @@ function cachedWslDriveTargets(
         relativeTarget !== ".." &&
         !relativeTarget.startsWith(`..${sep}`)))
   ) {
-    writeDriveCache(cachePath, root, linkedPersonal);
+    if (persistCache) writeDriveCache(cachePath, root, linkedPersonal);
     return { root, personal: linkedPersonal };
   }
 
   const myDrive = join(root, "My Drive");
   if (!isDir(myDrive)) {
-    writeDriveCache(cachePath, root, undefined);
+    if (persistCache) writeDriveCache(cachePath, root, undefined);
     return { root };
   }
 
@@ -278,7 +279,7 @@ function cachedWslDriveTargets(
     say(
       `Google Drive discovery stopped at its ${maxDiscoveryMs / 1000}s time limit`,
     );
-  writeDriveCache(cachePath, root, personal);
+  if (persistCache) writeDriveCache(cachePath, root, personal);
   return { root, ...(personal === undefined ? {} : { personal }) };
 }
 
@@ -289,6 +290,7 @@ export function googleDriveTargets(
     wslRoot?: string;
     cachePath?: string;
     maxDiscoveryMs?: number;
+    persistCache?: boolean;
   } = {},
 ): { root?: string; personal?: string } {
   let root: string | undefined;
@@ -308,6 +310,7 @@ export function googleDriveTargets(
       root,
       options.cachePath ?? driveCachePath(home),
       options.maxDiscoveryMs ?? DRIVE_MAX_DISCOVERY_MS,
+      options.persistCache ?? true,
     );
   }
   if (root === undefined) return {};
@@ -336,7 +339,9 @@ export function googleDriveTargets(
 
 export function linkGoogleDrive(ctx: Ctx): void {
   if (ctx.os === "linux") return;
-  const targets = googleDriveTargets(ctx.home, ctx.os);
+  const targets = googleDriveTargets(ctx.home, ctx.os, {
+    persistCache: ctx.mode !== "check",
+  });
   for (const [, source, name] of LINKS) {
     if (!source.startsWith("@google-drive/")) continue;
     const isRoot = source === "@google-drive/root";

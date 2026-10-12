@@ -50,7 +50,6 @@ apis = [
 "agents/claude/hooks/quote-command.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
 "agents/claude/hooks/repo-retrieve.ts" = { rules = ["no-sync"], reason = "adoption baseline: agents/claude/hooks/repo-retrieve.ts preserves its current synchronous caller contract (Unexpected sync method: 'realpathSync'. Unexpected sync method: 'statSync'.); migrate with callers before retiring this exemption" }
 "agents/claude/hooks/resolve-agent-name.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
-"agents/codex/codex-config.ts" = { rules = ["no-sync"], reason = "adoption baseline: agents/codex/codex-config.ts preserves its current synchronous caller contract (Unexpected sync method: 'mkdirSync'. Unexpected sync method: 'writeFileSync'.); migrate with callers before retiring this exemption" }
 "agents/codex/hooks/enforce-dispatch-contract.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
 "agents/codex/hooks/goal-kernel.ts" = { rules = ["no-sync"], reason = "protocol: synchronous hook path" }
 "agents/codex/remote-control.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
@@ -149,9 +148,6 @@ apis = [
 "tools/agx/src/workers/codex.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/agx/src/workers/run-claude.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/coredev/src/hosts.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
-"tools/coredev/src/login-shell.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
-"tools/coredev/src/tool-steps.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
-"tools/coredev/src/transfer-steps.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/disk-reclaim/src/delete.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/disk-reclaim/src/engine.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }
 "tools/disk-reclaim/src/jj/discover.ts" = { rules = ["no-sync"], reason = "pending: synchronous startup/helper contract; migrate with callers" }

@@ -2,12 +2,13 @@
 // Exit: 0 converged/no-op · 1 drift in check mode or still drifting · 2 bad declaration/config.
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { drift, edit, readDeclared, readLive } from "./sandbox-network.ts";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
+import { configHome } from "./runtime.ts";
 
-const home = process.env.HOME ?? homedir();
-const dotfiles = process.env.DOTFILES ?? join(home, "dotfiles");
+const dotfiles =
+  process.env.DOTFILES ?? join(process.env.HOME ?? homedir(), "dotfiles");
 const checkOnly = process.argv.includes("--check");
 if (process.argv.slice(2).some((arg) => arg !== "--check")) {
   console.error("codex:config: usage: codex-config.ts [--check]");
@@ -18,6 +19,12 @@ if (declared instanceof Error) {
   console.error(`codex:config: ${declared.message}`);
   process.exit(2);
 }
+const resolvedHome = await attempt(() => configHome(dotfiles));
+if (!resolvedHome.ok) {
+  console.error(`codex:config: ${errorMessage(resolvedHome.error)}`);
+  process.exit(2);
+}
+const home = resolvedHome.value;
 const before = await readLive(home);
 if (before instanceof Error) {
   console.error(`codex:config: ${before.message}`);
@@ -34,9 +41,9 @@ if (checkOnly) {
   console.error(`codex:config: drift — ${differences.join("; ")}`);
   process.exit(1);
 }
-const write = await attempt(() => {
-  mkdirSync(join(home, ".codex"), { recursive: true });
-  writeFileSync(path, edit(before.contents, declared), { encoding: "utf8" });
+const write = await attempt(async () => {
+  await mkdir(join(home, ".codex"), { recursive: true });
+  await Bun.write(path, edit(before.contents, declared));
 });
 if (!write.ok) {
   console.error(
@@ -49,4 +56,4 @@ if (after instanceof Error || drift(declared, after).length > 0) {
   console.error("codex:config: still drifting after write");
   process.exit(1);
 }
-console.log(`codex:config: updated ${path}`);
+process.stdout.write(`codex:config: updated ${path}\n`);

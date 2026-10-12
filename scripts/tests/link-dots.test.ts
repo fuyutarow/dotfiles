@@ -405,7 +405,9 @@ describe("CLI", () => {
     expect(r.code).toBe(1);
     expect(r.out).toMatch(/^drift: .*\.zshenv \(want -> /mu);
     expect(r.out).toMatch(/^check: \d+ drift\(s\)$/mu);
-    // bun itself may create its cache dir under HOME; link-dots writes nothing else.
+    // Bun may create its own cache dir under HOME; check mode must not persist the WSL
+    // Google Drive discovery cache under .local/state/dotfiles.
+    expect(existsSync(join(home, ".local"))).toBe(false);
     expect(readdirSync(home).filter((n) => !BUN_OWN.has(n))).toEqual([]);
   });
 

@@ -67,6 +67,7 @@ import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
 import { RENDERED } from "./config-registry.ts";
 import { googleDriveTargets } from "./link-dots.ts";
 import { brewPrefix, coreCommands, corePathProblems } from "./core-tools.ts";
+import { configHome, declaredProvider } from "../agents/codex/runtime.ts";
 import { danglingRepoBins } from "./deps-prune.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText } from "../agents/hooks/zod.ts";
@@ -251,7 +252,9 @@ export function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
           ["/mnt/g is not a mounted filesystem"],
         );
     }
-    const targets = googleDriveTargets(ctx.home, ctx.isMac ? "mac" : "wsl");
+    const targets = googleDriveTargets(ctx.home, ctx.isMac ? "mac" : "wsl", {
+      persistCache: false,
+    });
     const problems: string[] = [];
     for (const [name, target] of [
       ["Google Drive", targets.root],
@@ -1022,6 +1025,13 @@ export async function checkBunFloor(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
+  // The Windows Desktop owns its native app-server. A WSL daemon would be a second owner and
+  // can neither observe nor safely restart the desktop process.
+  if (ctx.isWsl)
+    return skip(
+      "codex-remote",
+      "Windows Desktop owns the native Codex app-server on WSL",
+    );
   if (Bun.which("codex") === null)
     return skip("codex-remote", "codex not installed");
   const declared = await readDeclared(ctx.dotfiles);
@@ -1055,8 +1065,70 @@ export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
   );
 }
 
+// Runtime ownership is intentionally delegated to agents/codex/codex-runtime.ts. That command
+// validates the declared WSL provider, Windows Desktop launcher, and Windows configuration home
+// without re-implementing its deployment contract in the doctor.
+export async function checkCodexRuntime(ctx: Ctx): Promise<Finding> {
+  const provider = await declaredProvider(ctx.dotfiles, "wsl");
+  if (provider.isErr())
+    return fail(
+      "codex-runtime",
+      `invalid runtime declaration: ${provider.error}`,
+      "repair agents/codex/runtime.toml",
+    );
+  if (provider.value !== "windows-desktop")
+    return fail(
+      "codex-runtime",
+      `WSL declares ${provider.value}, not the required windows-desktop provider`,
+      'set providers.wsl = "windows-desktop" in agents/codex/runtime.toml',
+    );
+  const runtime = join(ctx.dotfiles, "agents/codex/codex-runtime.ts");
+  if (!existsSync(runtime))
+    return fail(
+      "codex-runtime",
+      "WSL Windows Desktop runtime deployment script is missing",
+      "restore agents/codex/codex-runtime.ts",
+    );
+  // Reuse this verified Bun instead of resolving an ambient `bun`: under a fixture HOME that
+  // name can be a mise shim, whose cache creation would violate the doctor's read-only contract.
+  const r = await run([process.execPath, runtime, "--check"], {
+    ms: 30_000,
+    env: { HOME: ctx.home, DOTFILES: ctx.dotfiles },
+  });
+  if (r.missing)
+    return fail(
+      "codex-runtime",
+      "bun is not on PATH; cannot validate the Windows Codex launcher",
+      "mise run deps",
+    );
+  if (r.timedOut)
+    return warn(
+      "codex-runtime",
+      "Windows Codex runtime validation timed out after 30s",
+    );
+  if (r.code === 0)
+    return pass(
+      "codex-runtime",
+      "WSL uses the declared Windows Desktop provider, launcher, and Windows config home",
+    );
+  const [firstLine = ""] = (r.out + r.err).trim().split("\n");
+  const detail =
+    firstLine === "" ? `runtime check exited ${r.code}` : firstLine;
+  return fail("codex-runtime", detail, "mise run install:ai-clis");
+}
+
 export async function checkCodexSandboxNetwork(ctx: Ctx): Promise<Finding> {
-  if (!existsSync(join(ctx.home, ".codex")))
+  const configuredHome = await attempt(() =>
+    configHome(ctx.dotfiles, ctx.home),
+  );
+  if (!configuredHome.ok)
+    return fail(
+      "codex-config",
+      `cannot resolve the declared Codex configuration home: ${errorMessage(configuredHome.error)}`,
+      "mise run codex:runtime",
+    );
+  const home = configuredHome.value;
+  if (!existsSync(join(home, ".codex")))
     return skip("codex-config", "~/.codex does not exist yet");
   const declared = await readSandboxNetworkDeclared(ctx.dotfiles);
   if (declared instanceof Error)
@@ -1065,7 +1137,7 @@ export async function checkCodexSandboxNetwork(ctx: Ctx): Promise<Finding> {
       declared.message,
       "fix agents/codex/config.declared.toml",
     );
-  const live = await readSandboxNetworkLive(ctx.home);
+  const live = await readSandboxNetworkLive(home);
   if (live instanceof Error)
     return fail("codex-config", live.message, "repair ~/.codex/config.toml");
   const lines = sandboxNetworkDrift(declared, live);
@@ -1292,6 +1364,11 @@ export const CHECKS: Check[] = [
   { name: "mise-scope", run: checkMiseScope, applies: always },
   { name: "bun-floor", run: checkBunFloor, applies: always },
   { name: "mcp", run: checkMcp, applies: always },
+  {
+    name: "codex-runtime",
+    run: checkCodexRuntime,
+    applies: (c) => (c.isWsl ? null : "WSL only"),
+  },
   { name: "codex-remote", run: checkCodexRemote, applies: always },
   {
     name: "codex-config",
@@ -1378,15 +1455,13 @@ async function main(): Promise<void> {
     only.length > 0 ? CHECKS.filter((c) => only.includes(c.name)) : CHECKS;
   // Independent probes run concurrently; the report keeps the declared order.
   const findings = await Promise.all(
-    selected.map((c) => {
+    selected.map(async (c) => {
       const why = c.applies(ctx);
-      return why === null
-        ? c
-            .run(ctx)
-            .catch((e: unknown) =>
-              warn(c.name, `check crashed: ${errorMessage(e)}`),
-            )
-        : Promise.resolve(skip(c.name, why));
+      if (why !== null) return skip(c.name, why);
+      const finding = await attempt(() => c.run(ctx));
+      return finding.ok
+        ? finding.value
+        : warn(c.name, `check crashed: ${errorMessage(finding.error)}`);
     }),
   );
   process.stdout.write(render(findings));

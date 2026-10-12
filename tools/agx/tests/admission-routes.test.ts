@@ -3,6 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { admitCodexWorker, codexWorkerLimit } from "../src/admission.ts";
+import {
+  admissionRouteCachePath,
+  codexAdmissionRoute,
+} from "../src/admission-routes.ts";
 import { probeRoutes } from "../src/routes.ts";
 
 const dirs: string[] = [];
@@ -196,6 +200,40 @@ describe("route capability cache", () => {
 });
 
 describe("codex worker admission", () => {
+  test("explicit none bypasses only the sandbox probe and has its own cache key", () => {
+    let probes = 0;
+    const sandboxProbe = () => {
+      probes += 1;
+      return { available: false, reason: "sandbox probe exited 143" };
+    };
+
+    expect(
+      codexAdmissionRoute({
+        sandbox: "none",
+        codexPath: "/bin/codex",
+        codexVersion: "0.162.0-alpha.17.2",
+        sandboxProbe,
+      }),
+    ).toEqual({
+      available: true,
+      reason:
+        "Codex executable/version check passed for explicit --sandbox none",
+    });
+    expect(probes).toBe(0);
+    expect(
+      codexAdmissionRoute({
+        sandbox: "workspace-write",
+        codexPath: "/bin/codex",
+        codexVersion: "0.162.0-alpha.17.2",
+        sandboxProbe,
+      }),
+    ).toEqual({ available: false, reason: "sandbox probe exited 143" });
+    expect(probes).toBe(1);
+    expect(admissionRouteCachePath("/state", "none")).not.toBe(
+      admissionRouteCachePath("/state", "workspace-write"),
+    );
+  });
+
   test("computes the process-limit bound and accepts unlimited", () => {
     expect(codexWorkerLimit("500")).toBe(3);
     expect(codexWorkerLimit("unlimited")).not.toBeDefined();

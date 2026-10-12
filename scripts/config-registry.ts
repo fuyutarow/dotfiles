@@ -47,6 +47,48 @@ export const LAND_HOSTS: readonly {
   },
 ];
 
+// Coredev is deliberately a selector, not a second deployment system. This is its complete
+// authority: task names already owned by mise.toml, grouped by the capability they realize.
+// scripts/deployment-selection.ts is the machine-readable view; tools/coredev executes the
+// selected tasks for an approved remote alias or the current local host.
+export type CoredevHostKind = "linux" | "wsl" | "mac";
+export type CoredevPhase = "deploy" | "doctor";
+export type CoredevTask = {
+  readonly task: string;
+  readonly timeoutSeconds: number;
+};
+export type CoredevTaskSet = Readonly<
+  Record<CoredevPhase, readonly CoredevTask[]>
+>;
+
+export const COREDEV_SELECTION: Readonly<
+  Record<"core" | CoredevHostKind, CoredevTaskSet>
+> = {
+  core: {
+    deploy: [
+      { task: "core:install", timeoutSeconds: 1_800 },
+      { task: "deps", timeoutSeconds: 300 },
+      { task: "link:dots", timeoutSeconds: 120 },
+      { task: "link:skills", timeoutSeconds: 120 },
+      { task: "install:ai-clis", timeoutSeconds: 900 },
+      { task: "cc:install-mcp", timeoutSeconds: 120 },
+    ],
+    doctor: [{ task: "core:doctor", timeoutSeconds: 180 }],
+  },
+  linux: {
+    deploy: [{ task: "codex:runtime", timeoutSeconds: 120 }],
+    doctor: [{ task: "codex:runtime:check", timeoutSeconds: 60 }],
+  },
+  wsl: {
+    deploy: [{ task: "codex:runtime", timeoutSeconds: 120 }],
+    doctor: [{ task: "codex:runtime:check", timeoutSeconds: 60 }],
+  },
+  mac: {
+    deploy: [{ task: "codex:runtime", timeoutSeconds: 120 }],
+    doctor: [{ task: "codex:runtime:check", timeoutSeconds: 60 }],
+  },
+};
+
 // [when, repo-relative source, home-relative destination]
 export const LINKS: readonly (readonly [When, string, string])[] = [
   // The source tokens are resolved from the live Google Drive installation by link-dots.ts; they
@@ -339,6 +381,17 @@ const OTHER: readonly Surface[] = [
     writer:
       "human, in the repo; mise run codex:config converges model_context_window, model_auto_compact_token_limit, sandbox_workspace_write.network_access, and .mcp.json MCP entries",
     verify: `${DOCTOR} (codex-config)`,
+  },
+  {
+    kind: "applied",
+    when: "wsl",
+    sources: ["agents/codex/runtime.toml", "agents/codex/codex-runtime.ts"],
+    deployed:
+      "Windows Codex CLI runtime configuration and WSL launch integration (rendered into the Windows-readable target by codex:runtime)",
+    consumer: "Windows Codex CLI launched from WSL",
+    writer:
+      "human, in the repo; mise run codex:runtime deploys the declared runtime without a second provider policy",
+    verify: "mise run codex:runtime:check",
   },
   {
     kind: "applied",

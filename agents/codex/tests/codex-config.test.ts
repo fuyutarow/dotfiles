@@ -18,6 +18,7 @@ function run(home: string, args: string[] = []) {
     env: {
       ...process.env,
       HOME: home,
+      CODEX_CONFIG_HOME: home,
       DOTFILES: repo,
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: join(home, "cache"),
     },

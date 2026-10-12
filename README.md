@@ -148,7 +148,10 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    Standard-prefix bottles are preferred; source builds are allowed, including herdr and
    non-standard-prefix dependencies. At a nonstandard Linux prefix, Bun uses its official
    `oven-sh/bun/bun` Homebrew tap release instead of compiling WebKit; Bundle supplies its bunx
-   alias. Both providers are Homebrew-managed. The agent CLIs use their native self-updating installers.
+   alias. Both providers are Homebrew-managed. Claude Code uses its native self-updating installer.
+   Codex follows `agents/codex/runtime.toml`: macOS and Linux use the standalone installer, while
+   WSL uses the Windows Desktop provider through a runtime-owned Linux facade (never a second
+   Linux Codex installation).
    It is not a portable container image, and
    it never builds an experiment environment: Julia, CUDA, Python and their versions are each
    repo's `mise.toml` (`mise install` in that repo). A machine where an alias is missing is a
@@ -195,6 +198,11 @@ cd ~/dotfiles && brew install mise && mise run wsl:init
 exec zsh
 ```
 
+On WSL, install the Windows Codex Desktop app first, then run `mise run install:ai-clis` from the
+WSL checkout. The task keeps Claude native to WSL and deploys the declared `windows-desktop` Codex
+facade; it does not download a Linux Codex. `mise run doctor` verifies the provider, launcher, and
+Windows configuration home. Linux development tools other than Codex remain native to WSL.
+
 When Google Drive for Windows is available as `G:`, `wsl/wsl.conf` enables WSL automount at
 `/mnt`. Google Drive's virtual `G:` is not found by WSL automount. Run `mise run wsl:drive-mount`
 once to install the declared drvfs entry from `wsl/gdrive.fstab` into `/etc/fstab`; WSL will mount
@@ -232,6 +240,14 @@ legacy downloader links. It checks `/proc` executable links, mapped files and in
 prints deferred links, and leaves them until their jobs/sessions finish. It never deletes mise
 installations, including Julia experiment toolchains. Re-run migration later to complete cleanup.
 Doctor requires brew and checks core command paths against the host's declared prefix.
+
+`coredev deploy <approved-alias>` is target-owned: it connects to that approved SSH alias, reads
+the remote checkout's `scripts/deployment-selection.ts`, and runs the selected existing `mise`
+tasks there. The remote checkout is `$DOTFILES` when that remote environment declares it, otherwise
+`$HOME/dotfiles`; a missing checkout or transport failure stops without a local fallback. Live
+remote support remains limited to an already-prepared host; `coredev` neither clones a checkout nor
+copies profiles, credentials, or installers. WSL remains an explicit caller identity in the host
+registry, rather than inferred from the machine issuing the command.
 
 ```bash
 # as root on the box (one line; creates user fuyu, then runs `mise run linux:init` as that user)

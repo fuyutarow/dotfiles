@@ -16,9 +16,47 @@ export function checkOverrides(actual: unknown, expected: unknown): string[] {
       ];
 }
 
-const Report = z.object({
+export const Report = z.object({
   diagnostics: z.array(z.object({ code: z.string(), filename: z.string() })),
 });
+export function parseReport(stdout: string) {
+  return jsonOf(Report).safeParse(stdout);
+}
+type ProbeResult = {
+  exit: number;
+  stderr: string;
+  stdout: string;
+};
+function probeFailureDetails(
+  stderr: string,
+  stdout: string,
+  report: ReturnType<typeof parseReport>,
+): string {
+  if (stderr !== "") return stderr;
+  if (report.success) return stdout;
+  return JSON.stringify(report.error.issues);
+}
+export async function probeDiagnostics(
+  paths: string[],
+  probe: (path: string) => Promise<ProbeResult>,
+): Promise<
+  | { diagnostics: z.output<typeof Report>["diagnostics"]; ok: true }
+  | { message: string; ok: false }
+> {
+  const diagnostics: z.output<typeof Report>["diagnostics"] = [];
+  for (const path of paths) {
+    const { exit, stderr, stdout } = await probe(path);
+    const report = parseReport(stdout);
+    if (!report.success || (exit !== 0 && exit !== 1)) {
+      return {
+        ok: false,
+        message: `lint:ts-ratchet: probe failed for ${path} (${exit}): ${probeFailureDetails(stderr, stdout, report)}`,
+      };
+    }
+    diagnostics.push(...report.data.diagnostics);
+  }
+  return { diagnostics, ok: true };
+}
 export type IoEntry = {
   rules: ("no-sync" | "prefer-bun-api")[];
   reason: string;
@@ -86,37 +124,36 @@ async function main() {
       },
     }),
   );
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      join(root, "node_modules/oxlint/bin/oxlint"),
-      "-c",
-      target,
-      "--format",
-      "json",
-      ...Object.keys(policy.io_allowlist),
-    ],
-    { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 60_000 },
+  const probe = await probeDiagnostics(
+    Object.keys(policy.io_allowlist),
+    async (path) => {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          join(root, "node_modules/oxlint/bin/oxlint"),
+          "-c",
+          target,
+          "--format",
+          "json",
+          path,
+        ],
+        { cwd: root, stdout: "pipe", stderr: "pipe", timeout: 60_000 },
+      );
+      const [stdout, stderr, exit] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { exit, stderr, stdout };
+    },
   );
-  const [stdout, stderr, exit] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
   await rm(scratch, { recursive: true, force: true });
-  const report = jsonOf(Report).safeParse(stdout);
-  if (!report.success || (exit !== 0 && exit !== 1))
-    return {
-      exit: 2,
-      messages: [
-        `lint:ts-ratchet: probe failed (${exit}): ${stderr.length > 0 ? stderr : stdout}`,
-      ],
-    };
-  const diagnostics = report.data.diagnostics.map((d) => ({
+  if (!probe.ok) return { exit: 2, messages: [probe.message] };
+  const normalizedDiagnostics = probe.diagnostics.map((d) => ({
     code: d.code,
     filename: d.filename.replaceAll("\\", "/"),
   }));
-  const stale = staleExemptions(policy.io_allowlist, diagnostics);
+  const stale = staleExemptions(policy.io_allowlist, normalizedDiagnostics);
   return {
     exit: stale.length > 0 ? 1 : 0,
     messages:

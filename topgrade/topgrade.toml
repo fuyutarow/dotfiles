@@ -23,24 +23,14 @@ disable = ["flutter", "tlmgr", "gcloud", "snap"]
 #   grok    -> installed as a brew CASK (`grok-build`), so `brew_cask` upgrades it
 #   agy     -> a symlink to a Windows WinGet .exe; no Linux binary exists, so nothing in a
 #              WSL topgrade run can update it (it belongs to `winget` on the Windows side)
-#   codex   -> HAS a native step, but that step SKIPS this install. topgrade resolves the
-#              binary's realpath and requires it to sit under ~/.local/bin; the standalone
-#              installer puts ~/.local/bin/codex as a SYMLINK into
-#              ~/.codex/packages/standalone/current/bin/, so the check fails and the step
-#              reports "codex is not installed under ~/.local/bin" in the same run whose debug
-#              line reads `Detected "/home/fuyu/.local/bin/codex"`. Hence this entry.
+#   codex   -> provider-owned by agents/codex/codex-update.ts. On WSL that script updates the
+#              Windows Desktop provider and refreshes its facade; native macOS/Linux retain the
+#              standalone updater. Topgrade must not infer ownership from the Linux launcher.
 # Guarded with `command -v` because this file is shared with macOS: an absent tool must skip,
 # not fail the run. The guard preserves the updater's own exit code when it IS present.
 #
-# `codex update` only repoints the `current` symlink to the newest downloaded release; it does
-# NOT touch the long-lived `codex app-server` daemon (remote control / ChatGPT desktop
-# connector), which keeps running the binary it was launched with until something restarts it.
-# Measured 2026-08-23: a daemon started 2026-08-03 was still serving 0.146.0 after `current` had
-# moved through 0.146.1 -> 0.147.0 -> 0.149.0 across several intervening `codex update` runs —
-# `codex app-server daemon version` reports the gap as `appServerVersion` (running) vs
-# `managedCodexVersion` (what `current` now points at). Restart only when they actually differ,
-# so a no-op `mise up` doesn't gratuitously kill a live remote-controlled session; and preserve
-# `codex update`'s own exit code as this step's status, per the guard note above.
+# Provider-specific update/restart behavior belongs to codex-update.ts. The WSL desktop owns its
+# app-server; a WSL updater must not create or restart a second daemon.
 # KEEP CUSTOM STEPS TO ONE LINE THAT CALLS A REAL FILE. Anything with branching, exit-code
 # capture, or JSON belongs in a script under version control, not in this string.
 #
@@ -53,4 +43,4 @@ disable = ["flutter", "tlmgr", "gcloud", "snap"]
 # and shellcheck could not have caught it anyway because it does not analyse zsh.
 # As agents/codex/codex-update.ts it is covered by the existing fmt:ts / lint:bun tasks.
 [commands]
-"Codex CLI (standalone)" = 'bun ~/dotfiles/agents/codex/codex-update.ts'
+"Codex CLI (declared provider)" = 'bun ~/dotfiles/agents/codex/codex-update.ts'

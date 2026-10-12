@@ -38,8 +38,10 @@ esac
 # Curated allowlist, NOT full interop:
 #  * Windows-ONLY tools earn a symlink into ~/.local/bin (explorer, powershell, agy, the IDE
 #    launchers). The huge parent dirs stay OFF $PATH — TAB-completion over 9p is slow.
-#  * Cross-platform tools (uv/uvx, codex, claude, rg …) use the LINUX install — never link their
-#    .exe twins even though winget ships them; the Linux binary must win.
+#  * Cross-platform development tools (uv/uvx, claude, rg …) retain their Linux install and
+#    priority. Codex is the deliberate exception: its `windows-desktop` provider owns a `codex`
+#    launcher in ~/.local/bin. Never add `codex.exe` here: the runtime facade owns path conversion,
+#    Windows CODEX_HOME, and refresh after a Desktop upgrade.
 #  * Why symlinks and not PATH: ~/.local/bin is already on the PATH of every long-lived env
 #    snapshot (herdr's server freezes its env at start and has no way to refresh it). A new
 #    symlink changes directory CONTENT, not PATH — so it lands in ALL live panes instantly.
@@ -73,6 +75,9 @@ link-win-exes() {
   for name in "$HOME"/.local/bin/*(N@); do
     [[ -e "$name" ]] && continue                      # resolves → keep
     [[ -n "${_WIN_EXES[${name:t}]:-}" ]] && continue  # allowlisted → relinked above
+    # Runtime-owned launchers are not this symlink farm's stale state. In particular, deleting a
+    # Codex facade during shell startup races its Windows Desktop upgrade/redeployment.
+    [[ ${name:t} == codex ]] && continue
     command rm -f -- "$name"
   done
 }

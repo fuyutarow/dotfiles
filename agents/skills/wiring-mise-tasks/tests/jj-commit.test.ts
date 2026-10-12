@@ -243,6 +243,87 @@ describe("jj gated commit (J1)", () => {
     expect(readFileSync(f.marker, "utf8")).toBe("");
   });
 
+  test("--push rebases and retries when a competing writer moves alpha after fetch", () => {
+    const f = fixture();
+    const remote = join(f.dir, "remote");
+    f.jj("git", "init", "--no-colocate", remote);
+    const bare = join(remote, ".jj/repo/store/git");
+    f.jj("git", "remote", "add", "origin", bare);
+    const transport = Bun.which("git");
+    expect(transport).not.toBeNull();
+    rmSync(join(f.bin, "git"));
+    if (transport !== null) symlinkSync(transport, join(f.bin, "git"));
+    f.jj("bookmark", "set", "alpha", "-r", "@-");
+    f.jj("git", "push", "--bookmark", "alpha", "--remote", "origin");
+    f.jj("bookmark", "track", "alpha@origin");
+    const rival = join(f.dir, "rival");
+    f.jj("git", "clone", "--no-colocate", bare, rival);
+    const rivalEnv = {
+      ...process.env,
+      HOME: f.dir,
+      XDG_CONFIG_HOME: join(f.dir, "config"),
+      JJ_CONFIG: join(f.dir, "jj.toml"),
+      PATH: `${f.bin}:/usr/bin:/bin`,
+    };
+    const rivalJj = (...args: string[]) => {
+      const r = Bun.spawnSync(["jj", "-R", rival, ...args], {
+        cwd: rival,
+        env: rivalEnv,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(r.exitCode, r.stderr.toString()).toBe(0);
+      return r.stdout.toString().trim();
+    };
+    rivalJj("bookmark", "track", "alpha@origin");
+    rivalJj("new", "alpha@origin");
+    writeFileSync(join(rival, "competitor.txt"), "other writer\n");
+    rivalJj("commit", "-m", "competing writer");
+    rivalJj("bookmark", "set", "alpha", "-r", "@-");
+    const competitor = rivalJj(
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha",
+      "-T",
+      "commit_id",
+    );
+
+    // Move alpha after commit but immediately before this process's first fetch. The marker keeps
+    // the rival's own transport invocation from recursively triggering another rival push.
+    const pushed = join(f.dir, "rival-pushed");
+    const jjBin = Bun.which("jj") ?? "jj";
+    const gitTransport = transport ?? "git";
+    rmSync(join(f.bin, "git"));
+    writeFileSync(
+      join(f.bin, "git"),
+      `#!${process.execPath}\nimport { existsSync, writeFileSync } from "node:fs"; import { spawnSync } from "node:child_process"; const marker=${JSON.stringify(pushed)}; if (!existsSync(marker) && process.argv.includes("fetch")) { writeFileSync(marker, "1"); const p=spawnSync(${JSON.stringify(jjBin)}, ["-R", ${JSON.stringify(rival)}, "git", "push", "--bookmark", "alpha", "--remote", "origin"], { cwd:${JSON.stringify(rival)}, env:process.env, stdio:"inherit" }); if (p.status !== 0) process.exit(p.status ?? 1); } const r=spawnSync(${JSON.stringify(gitTransport)}, process.argv.slice(2), { stdio:"inherit" }); process.exit(r.status ?? 1);\n`,
+      { mode: 0o755 },
+    );
+    writeFileSync(join(f.root, "selected.txt"), "local writer\n");
+    const r = f.commit(["selected.txt"], ["--push"]);
+    expect(r.exitCode, `${r.stdout.toString()}\n${r.stderr.toString()}`).toBe(
+      0,
+    );
+    expect(r.stderr.toString()).toContain("push race with competing commit");
+    f.jj("git", "fetch", "--remote", "origin");
+    const remoteHead = f.jj(
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha@origin",
+      "-T",
+      "commit_id",
+    );
+    expect(remoteHead).not.toBe(competitor);
+    expect(
+      f.jj("log", "--no-graph", "-r", "alpha@origin", "-T", "description"),
+    ).toContain("J1 selected commit");
+    expect(
+      f.jj("log", "--no-graph", "-r", "alpha@origin-", "-T", "commit_id"),
+    ).toBe(competitor);
+  }, 30_000);
+
   test("literal directories, newlines, deletion and fileset metacharacters stay in scope", async () => {
     const f = fixture();
     mkdirSync(join(f.root, "notes"));

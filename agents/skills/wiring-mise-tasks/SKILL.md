@@ -20,7 +20,7 @@ description: >-
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2610.3.0 (2026-10-08) — J1 commit gates use immutable jj snapshots and explicit selected paths.
+> **Version**: v2610.4.0 (2026-10-13) — J1 `--push` rebases and retries when a concurrent writer moves alpha.
 > Owns the task graph, naming, template fragments and resolution gate.
 > Dated tool facts, provenance and rulings live in `references/recipes.md`.
 
@@ -120,8 +120,13 @@ A nonzero hook exit aborts without a commit, bookmark move or push. The paths fi
 through the hook and is removed on success or failure. `--records` appends resolved finished
 `research_record/` paths to any explicit selection; unfinished run directories stay excluded.
 After a passing gate, `jj commit` records the literal selection; other dirty paths remain in `@`.
-`--push` uses `jj git fetch` and `jj git push` with the existing fast-forward guard and remote
-receipt. The installed jj transport may itself require Git for remote operations.
+`--push` fetches and pushes with a three-attempt bound. If alpha moves between fetch and push, it
+reports the competing commit, rebases the new commit onto `alpha@origin`, and retries; it never
+force-pushes or discards the local commit. A conflicted rebase stops with the conflicted paths and
+the `jj resolve` recovery command. After a clean rebase, the pre-commit gate reruns only when a
+selected path changed; otherwise the script reports that the original selected snapshot remains
+valid. Exhausted retries name the push race and competing commit. The installed jj transport may
+itself require Git for remote operations.
 
 When `PRECOMMIT_VCS` is unset, a migrating consumer keeps its old Git-index/ tracked-file path.
 Mark each fallback `TODO(J1)` and remove it after firedancer and polysearch adopt this interface.

@@ -4,7 +4,8 @@
 //   2. passes PRECOMMIT_VCS=jj, PRECOMMIT_PATHS_FILE (NUL-delimited), PRECOMMIT_REV (@ commit ID)
 //      and PRECOMMIT_BASE (@- commit ID) to `mise run --jobs 1 hook:pre-commit`,
 //   3. `jj commit`s exactly those paths (literal root filesets), sets the bookmark to @- explicitly,
-//   4. prints receipts, optionally pushes the named bookmark, and runs .githooks/post-commit.
+//   4. prints receipts, optionally pushes the named bookmark (rebasing and retrying push races),
+//      and runs .githooks/post-commit.
 //
 //   mise run commit -- -m "<message>" [--records] [--push] [-- <path>...]
 //   mise run commit -- -F <message-file> ...
@@ -12,8 +13,8 @@
 // --records  every changed path under research_record/ (@ vs @-), EXCLUDING the directory of a run
 //            whose research_record/runs/<id>.json does not exist yet (a run in flight: commit only
 //            finished run dirs).
-// --push     then `jj git push --bookmark $BOOKMARK --remote origin` — fast-forward only: it fetches
-//            first and refuses (exit 1, commit kept) when $BOOKMARK@origin is not an ancestor.
+// --push     fetches and pushes the bookmark; if another writer moves the remote, rebase this
+//            commit onto it and retry, bounded to three attempts (never force-push).
 // BOOKMARK   env, default alpha.
 // Exit: 0 committed · 1 the gate refused (nothing committed) · 2 usage or empty selection.
 import { $ } from "bun";
@@ -176,6 +177,32 @@ const gateCode = await gate.exited.finally(() => {
 });
 if (gateCode !== 0) die("hook:pre-commit refused; nothing committed", 1);
 
+async function rerunGate(revision: string, parent: string): Promise<void> {
+  const rerunDir = mkdtempSync(join(tmpdir(), "jj-precommit-rebase-"));
+  const rerunPaths = join(rerunDir, "paths");
+  await Bun.write(rerunPaths, `${sel.join("\0")}\0`);
+  const rerun = Bun.spawn(["mise", "run", "--jobs", "1", "hook:pre-commit"], {
+    stdin: "ignore",
+    stdout: "inherit",
+    stderr: "inherit",
+    env: {
+      ...process.env,
+      PRECOMMIT_VCS: "jj",
+      PRECOMMIT_PATHS_FILE: rerunPaths,
+      PRECOMMIT_REV: revision,
+      PRECOMMIT_BASE: parent,
+    },
+  });
+  const code = await rerun.exited.finally(() => {
+    rmSync(rerunDir, { recursive: true, force: true });
+  });
+  if (code !== 0)
+    die(
+      "hook:pre-commit refused the rebased commit; commit kept, not pushed",
+      1,
+    );
+}
+
 // Reject changed candidate bytes or a changed parent after the gate checked an immutable snapshot.
 const selection = filesets(sel);
 const drift =
@@ -202,48 +229,119 @@ await $`jj log --no-graph -r @- -T ${tpl}`;
 console.log((await $`jj diff -r @- --stat`.text()).trim().split("\n").at(-1));
 await $`jj bookmark list ${bookmark}`;
 
-if (push) {
-  // Fast-forward only. `jj git push` moves a bookmark SIDEWAYS whenever the remote still matches the
-  // last fetch, i.e. it force-pushes; on 2026-10-06 that dropped two commits from alpha@origin that
-  // the local alpha did not contain. Fetch, and refuse unless the remote bookmark is an ancestor.
-  await $`jj git fetch --remote origin`.quiet().nothrow();
-  const remote = `${bookmark}@origin`;
-  const exists = (
-    await $`jj log --no-graph -r ${`present(${remote})`} -T ${'"x"'}`
-      .nothrow()
-      .text()
-  ).trim();
-  const behind = (
-    await $`jj log --no-graph -r ${`::${remote} ~ ::${bookmark}`} -T ${'commit_id.short() ++ " " ++ description.first_line() ++ "\\n"'}`
-      .nothrow()
-      .text()
-  ).trim();
-  if (exists === "x" && behind !== "")
+async function rebaseCandidate(
+  candidate: string,
+  remoteId: string,
+  remote: string,
+): Promise<string> {
+  const competing = remoteId.slice(0, 12);
+  console.error(
+    `jj-commit: push race with competing commit ${competing}; rebasing ${candidate.slice(0, 12)} onto ${remote}`,
+  );
+  const rebase = await $`jj rebase -b ${bookmark} -d ${remote}`.nothrow();
+  if (rebase.exitCode !== 0) {
+    const conflicts = (await $`jj status`.nothrow().text()).trim();
     die(
-      `not pushed: ${remote} has commits ${bookmark} lacks (a push would drop them) — run \`mise run pull\`, then push:\n${behind}`,
+      `push race with competing commit ${competing}; rebase conflicted. Resolve the listed paths with \`jj resolve\`, then run \`jj git push --bookmark ${bookmark} --remote origin\`:\n${conflicts}`,
       1,
     );
-  // In a colocated repo jj refreshes Git HEAD/index after the push; another writer's index.lock
-  // (polysearch LAND runs `git add`) can fail that refresh AFTER the remote moved (observed
-  // 2026-09-30). Judge the push by the remote bookmark, not by the exit code.
-  const r =
-    await $`jj git push --bookmark ${bookmark} --remote origin`.nothrow();
-  const onRemote = (
-    await $`jj log --no-graph -r ${`${bookmark} & ${bookmark}@origin`} -T ${'"x"'}`
-      .nothrow()
-      .text()
-  ).trim();
-  if (onRemote !== "x")
-    die(
-      `push failed (exit ${r.exitCode}); ${bookmark}@origin is not at ${bookmark}`,
-      1,
-    );
-  if (r.exitCode !== 0)
+  }
+  const rebased = await at(bookmark);
+  const rebasedPaths = (
+    await $`jj diff --from ${candidate} --to ${rebased} --name-only`.text()
+  )
+    .trim()
+    .split("\n")
+    .filter((path) => path !== "");
+  const invalidated = rebasedPaths.filter((path) => selected(sel, path));
+  if (invalidated.length > 0) {
+    await rerunGate(rebased, remoteId);
     console.log(
-      "jj-commit: push landed; the local Git refresh failed (index.lock) and is re-imported by the next jj command",
+      `jj-commit: pre-commit gate rerun because rebase changed selected path(s): ${invalidated.join(", ")}`,
+    );
+  } else {
+    console.log(
+      "jj-commit: rebase was clean and touched no selected paths; pre-commit gate not rerun",
+    );
+  }
+  return rebased;
+}
+
+async function pushWithRetry(): Promise<void> {
+  const remote = `${bookmark}@origin`;
+  const original = await at(bookmark);
+  let candidate = original;
+  const maxAttempts = 3;
+  let landed = false;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const fetched = await $`jj git fetch --remote origin`.quiet().nothrow();
+    if (fetched.exitCode !== 0)
+      die(
+        `push race recovery: fetch failed before attempt ${attempt}/${maxAttempts}; competing commit unknown`,
+        1,
+      );
+    // A rejected push can leave local and tracking refs conflicted. Keep our rebased candidate
+    // explicit while the remote tracking ref advances.
+    await $`jj bookmark set ${bookmark} -r ${candidate} --allow-backwards`
+      .quiet()
+      .nothrow();
+    await $`jj bookmark track ${remote}`.quiet().nothrow();
+    const remoteId = (
+      await $`jj log --no-graph -r ${`present(${remote})`} -T ${"commit_id"}`
+        .nothrow()
+        .text()
+    ).trim();
+    const localId = await at(bookmark);
+    const competingCommits =
+      remoteId === ""
+        ? ""
+        : (
+            await $`jj log --no-graph -r ${`${remote} ~ ::${bookmark}`} -T ${'commit_id ++ "\\n"'}`
+              .nothrow()
+              .text()
+          ).trim();
+    if (remoteId !== "" && remoteId !== localId && competingCommits !== "") {
+      candidate = await rebaseCandidate(candidate, remoteId, remote);
+    }
+    // In a colocated repo jj refreshes Git HEAD/index after the push; another writer's index.lock
+    // can fail that refresh AFTER the remote moved. Judge by the remote bookmark, not exit alone.
+    const r =
+      await $`jj git push --bookmark ${bookmark} --remote origin`.nothrow();
+    const onRemote = (
+      await $`jj log --no-graph -r ${`${bookmark} & ${bookmark}@origin`} -T ${'"x"'}`
+        .nothrow()
+        .text()
+    ).trim();
+    if (onRemote === "x" && r.exitCode !== 0)
+      console.log(
+        "jj-commit: push landed; the local Git refresh failed (index.lock) and is re-imported by the next jj command",
+      );
+    if (onRemote === "x") {
+      landed = true;
+      break;
+    }
+    const latest = (
+      await $`jj log --no-graph -r ${`present(${remote})`} -T ${"commit_id"}`
+        .nothrow()
+        .text()
+    ).trim();
+    if (attempt === maxAttempts)
+      die(
+        `push race with competing commit ${latest === "" ? "unknown" : latest.slice(0, 12)}; retry limit ${maxAttempts} reached (local commit ${original.slice(0, 12)} kept, not pushed)`,
+        1,
+      );
+    console.error(
+      `jj-commit: push race with competing commit ${latest === "" ? "unknown" : latest.slice(0, 12)}; fetching and retrying (${attempt + 1}/${maxAttempts})`,
+    );
+  }
+  if (!landed)
+    die(
+      `push race: ${bookmark} was not pushed after ${maxAttempts} attempts`,
+      1,
     );
   await $`jj bookmark list ${bookmark} --all-remotes`;
 }
+if (push) await pushWithRetry();
 
 // post-commit: warm the search index (fail-open, same as .githooks/post-commit)
 if (existsSync(".githooks/post-commit"))

@@ -146,7 +146,10 @@ commands = ["sh ~/.claude/hooks/run.sh herdr-tab-name.ts"]
 [[vendor_hook]]
 slug = "claude-goal-kernel"
 script = "claude/hooks/goal-kernel.ts"
-commands = ["sh ~/.claude/hooks/run-goal-kernel.sh --enforce","sh ~/.claude/hooks/run-goal-kernel.sh"]
+commands = [
+  "sh ~/.claude/hooks/run-goal-kernel.sh --enforce",
+  "sh ~/.claude/hooks/run-goal-kernel.sh",
+]
 
 [[vendor_hook]]
 slug = "claude-task-continuity"
@@ -163,10 +166,24 @@ slug = "codex-herdr-metadata"
 script = "codex/hooks/report-herdr-metadata.ts"
 commands = ["sh ~/.codex/hooks/run-herdr-metadata.sh"]
 
+# One bridge identity can register one event under the current registry's unique
+# slug/script contract. Existing vendor SessionStart/Stop declarations stay in place.
+[[hook]]
+slug = "codex-herdr-metadata-post-tool"
+script = "report-codex-herdr-metadata.ts"
+event = "PostToolUse"
+matcher = "*"
+fail_closed = false
+timeout = 10
+vendors = ["codex"]
+
 [[vendor_hook]]
 slug = "codex-goal-kernel"
 script = "codex/hooks/goal-kernel.ts"
-commands = ["sh ~/.codex/hooks/run-goal-kernel.sh","sh ~/.codex/hooks/run-goal-kernel.sh --enforce"]
+commands = [
+  "sh ~/.codex/hooks/run-goal-kernel.sh",
+  "sh ~/.codex/hooks/run-goal-kernel.sh --enforce",
+]
 
 [[vendor_hook]]
 slug = "codex-task-continuity"

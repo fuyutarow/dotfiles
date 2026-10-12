@@ -1,7 +1,14 @@
 import { afterEach, expect, test } from "bun:test";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile, utimes } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  mkdtemp,
+  rm,
+  writeFile,
+  utimes,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { jsonOf, z } from "../../../../tools/shared/src/zod.ts";
@@ -21,15 +28,21 @@ function rollout(threadId: string, model: string, effort?: string): string {
       id: threadId,
       session_id: threadId,
       cwd: "/same/cwd",
-      model,
       originator: "codex-tui",
     },
   };
-  const turn =
-    effort === undefined
-      ? ""
-      : `${JSON.stringify({ type: "turn_context", payload: { model, effort } })}\n`;
-  return `${JSON.stringify(meta)}\n${turn}`;
+  const settings = {
+    type: "event_msg",
+    payload: {
+      type: "thread_settings_applied",
+      thread_settings: { model, reasoning_effort: effort },
+    },
+  };
+  const filler = {
+    type: "response_item",
+    payload: { text: "x".repeat(600 * 1024) },
+  };
+  return `${JSON.stringify(meta)}\n${JSON.stringify(settings)}\n${JSON.stringify(filler)}\n`;
 }
 
 test("natural retry reports exact thread metadata and requires Herdr pane context", async () => {
@@ -78,11 +91,19 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
     server.listen(socketPath, resolve);
   });
   server.unref();
-  const hook = join(import.meta.dir, "..", "report-herdr-metadata.ts");
+  const hook = join(
+    import.meta.dir,
+    "..",
+    "..",
+    "..",
+    "hooks",
+    "report-codex-herdr-metadata.ts",
+  );
   const runHook = (
     event: string,
     herdrEnv: string,
     threadId = "target-thread",
+    paneId = "fixture-pane",
   ) =>
     new Promise<{ status: number | null; stdout: string; stderr: string }>(
       (resolve, reject) => {
@@ -91,9 +112,10 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
           env: {
             ...process.env,
             HOME: home,
+            TMPDIR: home,
             HERDR_ENV: herdrEnv,
             HERDR_SOCKET_PATH: socketPath,
-            HERDR_PANE_ID: "fixture-pane",
+            HERDR_PANE_ID: paneId,
             HERDR_TAB_ID: "",
           },
           stdio: ["pipe", "pipe", "pipe"],
@@ -133,6 +155,10 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
     params: { tokens: { model: "gpt-6.1-sol", effort: "unknown" } },
   });
 
+  const unchanged = await runHook("PostToolUse", "1");
+  expect(unchanged).toEqual({ status: 0, stdout: "", stderr: "" });
+  expect(requests).toHaveLength(1);
+
   await writeFile(target, rollout("target-thread", "gpt-6.1-sol", "xhigh"));
   expect(
     await readCodexThreadStatus(
@@ -140,11 +166,8 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
       join(home, ".codex", "sessions"),
     ),
   ).toMatchObject({ effort: "xhigh" });
-  const stop = await runHook("Stop", "1");
-  expect(stop.stderr).toBe("");
-  expect(stop.stdout).toBe("");
-  expect(stop.status).toBe(0);
-  expect(requests.length).toBe(2);
+  const during = await runHook("PostToolUse", "1");
+  expect(during).toEqual({ status: 0, stdout: "", stderr: "" });
   expect(requests).toHaveLength(2);
   expect(requests[1]).toMatchObject({
     method: "pane.report_metadata",
@@ -154,9 +177,61 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
     },
   });
 
+  expect((await runHook("PostToolUse", "1")).status).toBe(0);
+  expect(requests).toHaveLength(2);
+  const stop = await runHook("Stop", "1");
+  expect(stop).toEqual({ status: 0, stdout: "", stderr: "" });
+  expect(requests).toHaveLength(3); // lifecycle events reassert despite dedupe
+
+  await appendFile(
+    target,
+    `${JSON.stringify({
+      type: "event_msg",
+      payload: {
+        type: "thread_settings_applied",
+        thread_settings: { model: "gpt-6-luna", reasoning_effort: "low" },
+      },
+    })}\n`,
+  );
+  expect((await runHook("PostToolUse", "1")).status).toBe(0);
+  expect(requests).toHaveLength(4);
+  expect(requests[3]).toMatchObject({
+    params: { tokens: { model: "gpt-6-luna", effort: "low" } },
+  });
+  expect(
+    (await runHook("PostToolUse", "1", "target-thread", "other-pane")).status,
+  ).toBe(0);
+  expect(requests).toHaveLength(5); // dedupe includes pane identity
+
+  const key = new Bun.CryptoHasher("sha256")
+    .update(JSON.stringify([socketPath, "fixture-pane", "target-thread"]))
+    .digest("hex");
+  const stamp = join(
+    home,
+    `dotfiles-codex-herdr-${process.getuid?.() ?? "user"}`,
+    `${key}.json`,
+  );
+  await writeFile(
+    stamp,
+    JSON.stringify({
+      pair: JSON.stringify(["gpt-6-luna", "low"]),
+      at: Temporal.Now.instant().epochMilliseconds - 31_000,
+    }),
+  );
+  expect((await runHook("PostToolUse", "1")).status).toBe(0);
+  expect(requests).toHaveLength(6); // unchanged values retry after the short TTL
+
+  for (const id of ["", "../target-thread", "missing-thread"]) {
+    expect((await runHook("PostToolUse", "1", id)).status).toBe(0);
+  }
+  expect((await runHook("PostToolUse", "1", "target-thread", "")).status).toBe(
+    0,
+  );
+  expect(requests).toHaveLength(6);
+
   const outside = await runHook("Stop", "0");
   expect(outside.status).toBe(0);
-  expect(requests).toHaveLength(2); // no Herdr pane, no report
+  expect(requests).toHaveLength(6); // no Herdr pane, no report
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
       if (error !== undefined) {
@@ -166,4 +241,9 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
       }
     });
   });
+  expect(await runHook("Stop", "1")).toEqual({
+    status: 0,
+    stdout: "",
+    stderr: "",
+  }); // unavailable socket fails open
 });

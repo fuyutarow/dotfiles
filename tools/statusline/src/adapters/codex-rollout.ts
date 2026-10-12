@@ -1,15 +1,24 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { SessionStatus } from "../session-status.ts";
+import { jsonlLines, readJsonlTail } from "../../../shared/src/jsonl.ts";
+import {
+  hashSettingsPrefix,
+  readCodexSettingsEvents,
+} from "./codex-settings-stream.ts";
 import { jsonText, maybe, z } from "../zod.ts";
 
+function settingText() {
+  return maybe(z.string().trim().min(1)).catch(undefined);
+}
+const SETTING_TEXT = settingText();
 const SESSION_META = z.object({
   type: z.literal("session_meta"),
   payload: z.object({
     id: maybe(z.string()),
     session_id: maybe(z.string()),
     cwd: maybe(z.string()),
-    model: maybe(z.string()),
+    model: SETTING_TEXT,
     originator: maybe(z.string()),
   }),
 });
@@ -26,11 +35,45 @@ const TOKEN_COUNT = z.object({
 });
 const TURN_CONTEXT = z.object({
   type: z.literal("turn_context"),
-  payload: z.object({ model: maybe(z.string()), effort: maybe(z.string()) }),
+  payload: z.object({
+    model: SETTING_TEXT,
+    effort: SETTING_TEXT,
+    reasoning_effort: SETTING_TEXT,
+  }),
+});
+const THREAD_SETTINGS = z.object({
+  type: z.literal("event_msg"),
+  payload: z.object({
+    type: z.literal("thread_settings_applied"),
+    thread_settings: z.object({
+      model: SETTING_TEXT,
+      reasoning_effort: SETTING_TEXT,
+    }),
+  }),
 });
 
 const MAX_META_BYTES = 4 * 1024 * 1024;
 const TAIL_BYTES = 512 * 1024;
+const MAX_SETTINGS_CACHE = 32;
+const SETTINGS_SOURCE_BUDGET_MS = 7500;
+const SCAN_COMPLETE = z.object({
+  type: z.literal("settings_scan_complete"),
+  offset: z.number(),
+  digest: z.string(),
+});
+const FINAL_LINE = z.object({ settings_final_line: z.literal(true) });
+type Settings = { model: string | undefined; effort: string | undefined };
+type SettingsCache = Settings & {
+  ino: number;
+  dev: number;
+  size: number;
+  offset: number;
+  mtimeMs: number;
+  ctimeMs: number;
+  digest: string;
+  complete: Settings;
+};
+const settingsCache = new Map<string, SettingsCache>();
 
 async function firstLine(path: string): Promise<string | null> {
   await using file = await open(path, "r");
@@ -210,14 +253,121 @@ async function matchingRolloutBySessionId(root: string, sessionId: string) {
   );
 }
 
-async function readTail(path: string): Promise<string> {
-  await using file = await open(path, "r");
-  const info = await file.stat();
-  const length = Math.min(info.size, TAIL_BYTES);
-  const buffer = Buffer.alloc(length);
-  const { bytesRead } = await file.read(buffer, 0, length, info.size - length);
-  const text = buffer.subarray(0, bytesRead).toString("utf8");
-  return length < info.size ? text.slice(text.indexOf("\n") + 1) : text;
+// Fold in file order, including /model settings between turn_context records. A head
+// value is never a fallback across an unread gap: an unseen /model may supersede it.
+function applySettings(previous: Settings, value: unknown): Settings {
+  const turn = TURN_CONTEXT.safeParse(value);
+  if (turn.success) {
+    return {
+      model: turn.data.payload.model ?? previous.model,
+      effort:
+        turn.data.payload.effort ??
+        turn.data.payload.reasoning_effort ??
+        previous.effort,
+    };
+  }
+  const settings = THREAD_SETTINGS.safeParse(value);
+  if (!settings.success) return previous;
+  return {
+    model: settings.data.payload.thread_settings.model ?? previous.model,
+    effort:
+      settings.data.payload.thread_settings.reasoning_effort ?? previous.effort,
+  };
+}
+
+async function readSettings(
+  path: string,
+  legacyModel: string | undefined,
+): Promise<Settings | undefined> {
+  const deadline = performance.now() + SETTINGS_SOURCE_BUDGET_MS;
+  let resolved: Settings | null | undefined = null;
+  // One retry handles a source mutation during a scan without publishing mixed snapshots.
+  for (
+    let attempt = 0;
+    attempt < 2 && performance.now() < deadline;
+    attempt++
+  ) {
+    resolved = await readSettingsSnapshot(path, legacyModel, deadline);
+    if (resolved !== null) break;
+  }
+  return resolved ?? undefined;
+}
+
+async function readSettingsSnapshot(
+  path: string,
+  legacyModel: string | undefined,
+  deadline: number,
+): Promise<Settings | null | undefined> {
+  const info = await stat(path);
+  const cached = settingsCache.get(path);
+  const sameFile =
+    cached !== undefined && cached.ino === info.ino && cached.dev === info.dev;
+  if (
+    sameFile &&
+    cached.size === info.size &&
+    cached.mtimeMs === info.mtimeMs &&
+    cached.ctimeMs === info.ctimeMs
+  )
+    return cached;
+  let start = 0;
+  let prefix: Awaited<ReturnType<typeof hashSettingsPrefix>> = undefined;
+  if (sameFile && info.size > cached.size) {
+    prefix = await hashSettingsPrefix(path, cached.offset, deadline);
+    if (prefix === undefined || prefix === null) return undefined;
+    if (prefix.digest === cached.digest) start = cached.offset;
+    else prefix = undefined;
+  }
+  let current: Settings = {
+    model: start > 0 ? cached?.complete.model : legacyModel,
+    effort: start > 0 ? cached?.complete.effort : undefined,
+  };
+  let complete = current;
+  let scan: z.output<typeof SCAN_COMPLETE> | undefined;
+  // A cold process must observe intervening /model changes throughout the file.
+  for await (const event of readCodexSettingsEvents(
+    path,
+    info.size,
+    deadline,
+    start,
+    prefix?.hash,
+  )) {
+    const finished = SCAN_COMPLETE.safeParse(event);
+    if (finished.success) {
+      scan = finished.data;
+      continue;
+    }
+    current = applySettings(current, event);
+    if (!FINAL_LINE.safeParse(event).success) complete = current;
+  }
+  if (scan === undefined) return undefined;
+  const next = {
+    ...current,
+    ino: info.ino,
+    dev: info.dev,
+    size: info.size,
+    offset: scan.offset,
+    digest: scan.digest,
+    complete,
+    mtimeMs: info.mtimeMs,
+    ctimeMs: info.ctimeMs,
+  };
+  const after = await stat(path);
+  // Do not bind facts from a mixed read to a cache provenance snapshot.
+  settingsCache.delete(path);
+  if (
+    after.ino === info.ino &&
+    after.dev === info.dev &&
+    after.size === info.size &&
+    after.mtimeMs === info.mtimeMs &&
+    after.ctimeMs === info.ctimeMs
+  ) {
+    settingsCache.set(path, next);
+  } else return null;
+  if (settingsCache.size > MAX_SETTINGS_CACHE) {
+    const oldest = settingsCache.keys().next().value;
+    if (oldest !== undefined) settingsCache.delete(oldest);
+  }
+  return current;
 }
 
 async function readSelectedSessionStatus(
@@ -225,19 +375,17 @@ async function readSelectedSessionStatus(
   cwd: string | undefined,
 ): Promise<SessionStatus | undefined> {
   if (selected === null) return undefined;
-  const tail = await readTail(selected.path).catch(() => "");
-  let model = selected.meta.payload.model;
-  let effort: string | undefined;
+  const tail = await readJsonlTail(selected.path, TAIL_BYTES).catch(() => null);
+  const settings = await readSettings(
+    selected.path,
+    selected.meta.payload.model,
+  ).catch(() => null);
+  const model = settings?.model;
+  const effort = settings?.effort;
   let context: SessionStatus["context"];
-  for (const line of tail.split("\n")) {
+  for (const line of jsonlLines(tail?.text ?? "")) {
     const json = jsonText.safeParse(line);
     if (!json.success) continue;
-    const turn = TURN_CONTEXT.safeParse(json.data);
-    if (turn.success) {
-      model = turn.data.payload.model ?? model;
-      effort = turn.data.payload.effort ?? effort;
-      continue;
-    }
     const usage = TOKEN_COUNT.safeParse(json.data);
     if (!usage.success) continue;
     const window = usage.data.payload.info.model_context_window;

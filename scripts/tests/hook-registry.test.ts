@@ -1,15 +1,77 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import {
   commandFor,
   type HookSpec,
   type HooksConfig,
   parseRegistry,
+  loadRegistry,
+  HooksConfigSchema,
   wire,
 } from "../hook-registry.ts";
 
 const ROOT = join(import.meta.dir, "..", "..");
+
+test("Codex metadata bridge is canonical, Codex-only and wired once without replacing external Herdr ownership", async () => {
+  const { specs, errors } = loadRegistry(join(ROOT, "agents/hooks"));
+  expect(errors).toEqual([]);
+  const metadata = specs.filter(
+    (spec) => spec.script === "report-codex-herdr-metadata.ts",
+  );
+  expect(metadata).toEqual([
+    {
+      script: "report-codex-herdr-metadata.ts",
+      event: "PostToolUse",
+      matcher: "*",
+      fail_closed: false,
+      timeout: 10,
+      vendors: ["codex"],
+    },
+  ]);
+  const vendor = jsonOf(z.object({ hooks: HooksConfigSchema })).safeParse(
+    await Bun.file(join(ROOT, "agents/codex/hooks.json")).text(),
+  );
+  expect(vendor.success).toBe(true);
+  if (!vendor.success) return;
+  expect(JSON.stringify(vendor.data.hooks)).not.toContain(
+    "report-codex-herdr-metadata.ts",
+  );
+  const once = wire(vendor.data.hooks, specs, "codex");
+  const twice = wire(once, specs, "codex");
+  expect(twice).toEqual(once);
+  expect(
+    once.PostToolUse?.flatMap((group) => group.hooks).filter(
+      (hook) =>
+        hook.command ===
+        "sh ~/.agents/hooks/run.sh report-codex-herdr-metadata.ts",
+    ),
+  ).toHaveLength(1);
+  expect(JSON.stringify(wire({}, specs, "claude"))).not.toContain(
+    "report-codex-herdr-metadata.ts",
+  );
+  expect(
+    once.SessionStart?.flatMap((group) => group.hooks).filter(
+      (hook) => hook.command === "sh ~/.codex/herdr-agent-state.sh session",
+    ),
+  ).toHaveLength(1);
+  const identities = z
+    .object({
+      hook: z.array(z.object({ slug: z.string(), script: z.string() })),
+      vendor_hook: z.array(z.object({ slug: z.string(), script: z.string() })),
+    })
+    .safeParse(
+      Bun.TOML.parse(
+        await Bun.file(join(ROOT, "agents/hooks/hooks.toml")).text(),
+      ),
+    );
+  expect(identities.success).toBe(true);
+  if (!identities.success) return;
+  const all = [...identities.data.hook, ...identities.data.vendor_hook];
+  expect(new Set(all.map((identity) => identity.slug)).size).toBe(all.length);
+  expect(new Set(all.map((identity) => identity.script)).size).toBe(all.length);
+});
 
 const storage: HookSpec = {
   script: "enforce-storage-headroom.ts",
@@ -49,7 +111,10 @@ describe("wire", () => {
     const r = spawnSync(
       process.execPath,
       [join(ROOT, "scripts/one-writer-check.ts")],
-      { encoding: "utf8", env: { ...process.env, DOTFILES: ROOT } },
+      {
+        encoding: "utf8",
+        env: { ...process.env, DOTFILES: ROOT },
+      },
     );
     expect(r.stdout).not.toContain("two writers:");
     expect(r.status).toBe(0);

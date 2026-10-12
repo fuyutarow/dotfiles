@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.1 — 2026-10-12
+
+- Stream current Codex thread settings and turn metadata across the full rollout with bounded memory, preserving cold-process and later model/effort changes. Validate cached prefixes before incremental append reads and keep the context tail bounded.
+- Retry exact-thread Herdr metadata reporting on PostToolUse through the canonical hook registry, deduplicating unchanged reports briefly.
+
 ## 0.14.0 — 2026-10-11
 
 - Refresh Codex status in place every five seconds on a TTY; add `--once`, `--watch` and validated `--interval` controls with clean terminal restoration.

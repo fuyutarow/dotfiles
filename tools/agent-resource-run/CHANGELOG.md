@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1 — 2026-10-12
+
+- Retry timed-out `nvidia-smi` probes with bounded backoff, preserve timeout as an indeterminate
+  result instead of reporting an absent GPU, and include exit status, stderr, attempts and elapsed
+  time in probe warnings and denials. Missing tools and confirmed missing devices remain explicit.
+
 ## 1.3.0 — 2026-10-11
 
 - Added machine-wide FIFO `julia-compile` slot admission for manifest-declared compile work and

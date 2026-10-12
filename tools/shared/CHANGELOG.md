@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 — 2026-10-11
+
+- Add a shared GPU-tool visibility diagnostic for explicit GPU requests.
+
 ## 0.5.0 — 2026-10-11
 
 - Add a reusable stderr progress adapter over pinned `@clack/prompts` 1.8.1 taskLog groups, with concurrent status rows, injected clocks/output, plain fallback, counters, rates, optional ETA, and idempotent cleanup.

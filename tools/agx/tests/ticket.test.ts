@@ -66,6 +66,11 @@ describe("parseTicket", () => {
     });
   });
 
+  test("requires_gpu explicitly marks a detached ticket's GPU need", () => {
+    const parsed = parseTicket(valid("writes = []\nrequires_gpu = true"));
+    expect(parsed.kind === "ticket" && parsed.ticket.requires_gpu).toBe(true);
+  });
+
   test("premises are accepted", () => {
     const parsed = parseTicket(
       valid(

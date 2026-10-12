@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.4.1 — 2026-10-12
+
+- Add optional `requires_gpu = true` ticket metadata. Detached GPU work checks for visible GPU 0
+  with bounded retry/backoff, skips the probe for CPU-only tickets, and distinguishes a timed-out
+  probe from an absent GPU or missing `nvidia-smi` binary.
+
 ## 3.4.0 — 2026-10-12
 
 - Preserve the dispatch repository root across detached workspace launches and clean up a prepared workspace when the OS manager refuses to start it. Refuse workspace dispatch below measured backing-drive headroom: (live sparse workspaces + 1) × one measured sparse checkout.

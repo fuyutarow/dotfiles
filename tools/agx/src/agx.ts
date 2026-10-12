@@ -58,13 +58,14 @@ import {
 } from "node:fs";
 import { createHash, randomInt } from "node:crypto";
 import assert from "node:assert/strict";
-import { homedir, hostname } from "node:os";
+import { homedir, hostname, release } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { cli, command } from "cleye";
 import pkg from "../package.json" with { type: "json" };
 import { fromThrowable } from "neverthrow";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { jsonOf, jsonText, z } from "../../shared/src/zod.ts";
+import { probeGpuVisibility } from "../../shared/src/gpu-visibility.ts";
 import { deriveRunResult } from "../../shared/src/run-result.ts";
 import {
   DEFAULT_JSONL_TAIL_BYTES,
@@ -6997,6 +6998,34 @@ async function detachDispatch(
   const brief = readFileSync(flags.promptFile, "utf8");
   const parsed = parseTicket(brief);
   if (parsed.kind === "invalid") fatal(parsed.reason);
+  if (parsed.ticket.requires_gpu === true) {
+    const denial = probeGpuVisibility(
+      {
+        requested: true,
+        executableFound:
+          Bun.which(
+            "nvidia-smi",
+            process.env.PATH === undefined ? {} : { PATH: process.env.PATH },
+          ) !== null,
+        path: process.env.PATH,
+        isWsl: /microsoft/iu.test(release()),
+      },
+      () => {
+        const result = Bun.spawnSync(["nvidia-smi", "-L"], {
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 5_000,
+        });
+        const stdout = result.stdout.toString();
+        const stderr = result.stderr.toString().trim().replaceAll(/\s+/gu, " ");
+        if (result.exitCode === 0 && /^GPU 0:/mu.test(stdout))
+          return { kind: "visible" };
+        if (result.exitCode === null) return { kind: "timeout" };
+        return { kind: "absent", exitCode: result.exitCode, stderr };
+      },
+    );
+    if (denial !== undefined) fatal(denial);
+  }
   const detachGrade = await lintTicket(brief, resolve(flags.cd));
   if (detachGrade.violations.length > 0)
     fatal(renderTicketLint(detachGrade).join("; "));

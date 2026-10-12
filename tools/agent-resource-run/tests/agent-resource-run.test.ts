@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -39,6 +41,7 @@ import {
   validateJobId as validateJobIdResult,
   validateManifest as validateManifestResult,
   verifyAdmissionReceipt,
+  queryNvidiaSmi,
   type AdmissionFailure,
   type AdmissionResult,
   type HostSnapshot,
@@ -52,6 +55,7 @@ import { decoded, decodedJson } from "../../shared/src/decode.ts";
 // container has no user systemd).
 const NO_UTIL_LINUX =
   Bun.which("taskset") === null || Bun.which("setsid") === null;
+const TIMEOUT = Bun.which("timeout") ?? "/usr/bin/timeout";
 const NO_CGROUP_SCOPES =
   NO_UTIL_LINUX || !valueOf(probeKernelEnforcementResult()).available;
 
@@ -88,8 +92,8 @@ const readHostOptIn = (...args: Parameters<typeof readHostOptInResult>) =>
 const resolveEnforcement = (
   ...args: Parameters<typeof resolveEnforcementResult>
 ) => valueOf(resolveEnforcementResult(...args));
-const probeHostSnapshot = (cwd: string) =>
-  valueOf(probeHostSnapshotResult(cwd));
+const probeHostSnapshot = (cwd: string, includeGpu = true) =>
+  valueOf(probeHostSnapshotResult(cwd, includeGpu));
 const probeKernelEnforcement = () => valueOf(probeKernelEnforcementResult());
 const checkJob = async (...args: Parameters<typeof checkJobResult>) =>
   valueOf(await checkJobResult(...args));
@@ -319,6 +323,104 @@ describe("admission", () => {
     const result = decideAdmission(manifest, hostSnapshot(), []);
     expect(result.ok).toBe(true);
   });
+
+  test("a GPU manifest reports the missing executable before generic device denial", () => {
+    const previousPath = process.env.PATH;
+    process.env.PATH = tmpdir();
+    const result = denied(
+      decideAdmission(gpuManifest(), hostSnapshot({ gpus: [] }), []),
+    );
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    expect(result.reason).toContain("GPU not visible in this unit");
+    expect(result.reason).toContain("nvidia-smi not found on PATH=");
+  });
+
+  test.skipIf(process.platform !== "linux")(
+    "CPU admission skips a hanging nvidia-smi probe",
+    () => {
+      const bin = mkdtempSync(join(tmpdir(), "cpu-no-gpu-probe-"));
+      const marker = join(bin, "invoked");
+      const executable = join(bin, "nvidia-smi");
+      writeFileSync(executable, `#!/bin/sh\n: > '${marker}'\nexec sleep 30\n`);
+      chmodSync(executable, 0o755);
+      const previousPath = process.env.PATH;
+      process.env.PATH = `${bin}:${previousPath ?? ""}`;
+      const startedAt = performance.now();
+      const snapshot = probeHostSnapshot(process.cwd(), false);
+      const result = decideAdmission(cpuManifest(), snapshot, []);
+      const elapsedMs = performance.now() - startedAt;
+      const invoked = existsSync(marker);
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      rmSync(bin, { recursive: true, force: true });
+      expect(result.ok).toBe(true);
+      expect(invoked).toBe(false);
+      expect(elapsedMs).toBeLessThan(1_000);
+    },
+  );
+
+  test.skipIf(Bun.which("timeout") === null)(
+    "GPU admission names a bounded probe timeout as indeterminate",
+    () => {
+      const bin = mkdtempSync(join(tmpdir(), "gpu-timeout-probe-"));
+      const executable = join(bin, "nvidia-smi");
+      writeFileSync(executable, "#!/bin/sh\nexec sleep 30\n");
+      chmodSync(executable, 0o755);
+      const previousPath = process.env.PATH;
+      process.env.PATH = `${bin}:${previousPath ?? ""}`;
+      const query = queryNvidiaSmi(["--query-gpu=test"], {
+        timeoutMs: 100,
+        totalTimeoutMs: 300,
+        backoffMs: [100, 100],
+        executablePath: executable,
+        timeoutPath: TIMEOUT,
+      });
+      const result = denied(
+        decideAdmission(
+          gpuManifest(),
+          hostSnapshot({ gpus: [], gpu_probe: query.report }),
+          [],
+        ),
+      );
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      rmSync(bin, { recursive: true, force: true });
+      expect(query.report.status).toBe("timeout");
+      expect(result.reason).toContain("probe timed out after");
+      expect(result.reason).not.toContain("is not visible to nvidia-smi");
+    },
+  );
+
+  test.skipIf(Bun.which("timeout") === null)(
+    "nvidia-smi retries a timeout with backoff and admits the recovered probe",
+    () => {
+      const bin = mkdtempSync(join(tmpdir(), "gpu-probe-bin-"));
+      const marker = join(bin, "first-attempt");
+      const calls = join(bin, "calls");
+      const executable = join(bin, "nvidia-smi");
+      writeFileSync(
+        executable,
+        `#!/bin/sh\nprintf x >> '${calls}'\nif [ ! -e '${marker}' ]; then : > '${marker}'; sleep 3; exit 0; fi\nprintf "0, 12288, 1024, 0, [N/A]\\n"\n`,
+      );
+      chmodSync(executable, 0o755);
+      const result = queryNvidiaSmi(["--query-gpu=test"], {
+        timeoutMs: 2_000,
+        backoffMs: [20],
+        executablePath: executable,
+        timeoutPath: TIMEOUT,
+      });
+      const callCount = readFileSync(calls, "utf8").length;
+      const markerCreated = existsSync(marker);
+      rmSync(bin, { recursive: true, force: true });
+      expect(result.report.status).toBe("visible");
+      expect(result.report.attempts).toBe(2);
+      expect(callCount).toBe(2);
+      expect(markerCreated).toBe(true);
+      expect(result.stdout).toContain("0, 12288, 1024");
+    },
+    10_000,
+  );
 
   test("subtracts concurrent reservations and preserves system headroom", () => {
     const existing = reservation({

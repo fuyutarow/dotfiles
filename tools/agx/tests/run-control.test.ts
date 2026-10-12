@@ -548,3 +548,33 @@ test("dispatch --detach builds Linux systemd-run argv through a stub and reaps s
   expect(childArgs).toContain("--name");
   expect(childArgs).toContain("detach_test");
 });
+
+test("dispatch --detach refuses a GPU ticket when nvidia-smi is absent", () => {
+  const state = join(scratch, "detach-gpu-state");
+  const emptyPath = join(scratch, "detach-gpu-path");
+  mkdirSync(emptyPath, { recursive: true });
+  const prompt = join(scratch, "detached-gpu-brief.md");
+  writeFileSync(
+    prompt,
+    completeTicket("+++\nschema = 2\nrequires_gpu = true\n+++\nGPU task\n"),
+  );
+  const result = cli(
+    [
+      "dispatch",
+      "--prompt-file",
+      prompt,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "none",
+      "--name",
+      "detach_gpu",
+      "--detach",
+    ],
+    state,
+    { AGX_DETACH_PLATFORM: "linux", PATH: emptyPath },
+  );
+  expect(result.code).not.toBe(0);
+  expect(result.err).toContain("GPU not visible in this unit");
+  expect(result.err).toContain(`nvidia-smi not found on PATH=${emptyPath}`);
+});

@@ -162,6 +162,7 @@ export const TicketSchema = z
     budget_usd: z.number().positive().optional(),
     stall_s: z.number().int().positive().optional(),
     pick_temperature: z.number().min(0).max(5).optional(),
+    requires_gpu: z.boolean().optional(),
     capabilities: z.array(CapabilitySchema).default([]),
     reuses: z.array(z.string().trim().min(1)).optional(),
     premises: z.array(premise).optional(),

@@ -19,7 +19,7 @@ import {
 } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
-import { homedir, tmpdir } from "node:os";
+import { homedir, release, tmpdir } from "node:os";
 import { cli } from "cleye";
 import {
   err,
@@ -30,6 +30,7 @@ import {
   type ResultAsync,
 } from "neverthrow";
 import { jsonOf, jsonText, z } from "../../shared/src/zod.ts";
+import { missingGpuToolDenial } from "../../shared/src/gpu-visibility.ts";
 import pkg from "../package.json" with { type: "json" };
 import { cgroupMemory } from "./lib/cgroup-memory.ts";
 import {
@@ -425,12 +426,21 @@ export type GpuSnapshot = {
   rerank_active?: boolean;
 };
 
+export type GpuProbeReport = {
+  status: "visible" | "absent" | "timeout" | "error";
+  attempts: number;
+  elapsed_ms: number;
+  exit_code: number | null;
+  stderr: string;
+};
+
 export type HostSnapshot = {
   allowed_cpu_ids: number[];
   mem_total_bytes: number;
   mem_available_bytes: number;
   scratch_available_bytes: number;
   gpus: GpuSnapshot[];
+  gpu_probe?: GpuProbeReport;
 };
 
 export type Reservation = {
@@ -982,36 +992,148 @@ export function hasUnmanagedGpuLoad(
   );
 }
 
-function probeGpus(): Result<GpuSnapshot[], StateError> {
-  if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null)
-    return ok([]);
-  // bounded: GNU timeout caps the local nvidia-smi probe at five seconds.
-  const spawned = fromThrowable(() =>
-    Bun.spawnSync(
-      [
-        "timeout",
-        "5s",
-        "nvidia-smi",
-        "--query-gpu=index,memory.total,memory.used,utilization.gpu,power.draw",
-        "--format=csv,noheader,nounits",
-      ],
-      { stdout: "pipe", stderr: "ignore" },
-    ),
-  )();
-  if (spawned.isErr() || spawned.value.exitCode !== 0) return ok([]);
-  const rerankActive = rerankServiceActive();
+type NvidiaSmiQuery = { stdout: string; report: GpuProbeReport };
+
+const GPU_QUERY_TIMEOUT_MS = 5_000;
+const GPU_QUERY_TOTAL_TIMEOUT_MS = 12_000;
+const GPU_QUERY_BACKOFF_MS = [250, 500] as const;
+
+export function queryNvidiaSmi(
+  args: string[],
+  options: {
+    timeoutMs?: number;
+    totalTimeoutMs?: number;
+    backoffMs?: readonly number[];
+    executablePath?: string;
+    timeoutPath?: string;
+  } = {},
+): NvidiaSmiQuery {
+  const startedAt = performance.now();
+  const timeoutMs = options.timeoutMs ?? GPU_QUERY_TIMEOUT_MS;
+  const totalTimeoutMs = options.totalTimeoutMs ?? GPU_QUERY_TOTAL_TIMEOUT_MS;
+  const backoffMs = options.backoffMs ?? GPU_QUERY_BACKOFF_MS;
+  const deadline = startedAt + totalTimeoutMs;
+  const executable =
+    options.executablePath ??
+    Bun.which(
+      "nvidia-smi",
+      process.env.PATH === undefined ? {} : { PATH: process.env.PATH },
+    );
+  const timeout =
+    options.timeoutPath ??
+    Bun.which(
+      "timeout",
+      process.env.PATH === undefined ? {} : { PATH: process.env.PATH },
+    );
+  if (executable === null || timeout === null) {
+    const missing = executable === null ? "nvidia-smi" : "timeout";
+    return {
+      stdout: "",
+      report: {
+        status: "absent",
+        attempts: 0,
+        elapsed_ms: 0,
+        exit_code: 127,
+        stderr: `${missing} not found on PATH=${process.env.PATH ?? ""}`,
+      },
+    };
+  }
+
+  let lastExitCode: number | null = null;
+  let lastStderr = "";
+  let lastStdout = "";
+  let attempts = 0;
+  let lastTimedOut = false;
+  for (let attempt = 0; attempt <= backoffMs.length; attempt += 1) {
+    const remainingMs = Math.max(0, deadline - performance.now());
+    if (remainingMs <= 0) {
+      lastTimedOut = true;
+      break;
+    }
+    const attemptTimeoutMs = Math.max(1, Math.min(timeoutMs, remainingMs));
+    attempts += 1;
+    const spawned = fromThrowable(() =>
+      Bun.spawnSync(
+        [timeout, `${attemptTimeoutMs / 1_000}s`, executable, ...args],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: Math.max(1, Math.floor(remainingMs)),
+        },
+      ),
+    )();
+    if (spawned.isErr()) {
+      lastExitCode = null;
+      lastStderr =
+        spawned.error instanceof Error
+          ? spawned.error.message
+          : String(spawned.error);
+      lastTimedOut = false;
+      break;
+    }
+    lastExitCode = spawned.value.exitCode;
+    lastStderr = spawned.value.stderr.toString().trim();
+    lastStdout = spawned.value.stdout.toString();
+    lastTimedOut =
+      lastExitCode === 124 ||
+      lastExitCode === 137 ||
+      (lastExitCode === null && spawned.value.signalCode !== null);
+    if (!lastTimedOut) break;
+    const delay = backoffMs[attempt];
+    if (delay === undefined) break;
+    const pauseMs = Math.min(delay, Math.max(0, deadline - performance.now()));
+    if (pauseMs > 0)
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pauseMs);
+    if (performance.now() >= deadline) break;
+  }
+  const noDevices = /no devices (?:were )?found|no gpu(?:s)?/iu.test(
+    `${lastStdout}\n${lastStderr}`,
+  );
+  let status: GpuProbeReport["status"] = "error";
+  if (lastTimedOut) status = "timeout";
+  else if (noDevices) status = "absent";
+  else if (lastExitCode === 0) status = "visible";
+  const report: GpuProbeReport = {
+    status,
+    attempts,
+    elapsed_ms: Math.round(performance.now() - startedAt),
+    exit_code: lastExitCode,
+    stderr: lastStderr.replaceAll(/\s+/gu, " ").slice(0, 400),
+  };
+  return { stdout: lastStdout, report };
+}
+
+function probeGpus(): Result<
+  { gpus: GpuSnapshot[]; report: GpuProbeReport },
+  StateError
+> {
+  const query = queryNvidiaSmi([
+    "--query-gpu=index,memory.total,memory.used,utilization.gpu,power.draw",
+    "--format=csv,noheader,nounits",
+  ]);
+  const parsedGpus =
+    query.report.status === "visible"
+      ? parseGpuRows(query.stdout, rerankServiceActive())
+      : ok([] satisfies GpuSnapshot[]);
+  if (parsedGpus.isErr()) return err(parsedGpus.error);
+  const snapshots = parsedGpus.value;
+  let status = query.report.status;
+  if (status === "visible" && snapshots.length === 0) status = "absent";
+  else if (snapshots.length > 0) status = "visible";
+  const report = { ...query.report, status } satisfies GpuProbeReport;
+  return ok({ gpus: snapshots, report });
+}
+
+function parseGpuRows(
+  output: string,
+  rerankActive: boolean,
+): Result<GpuSnapshot[], StateError> {
   const snapshots: GpuSnapshot[] = [];
-  for (const row of spawned.value.stdout
-    .toString()
-    .trim()
-    .split("\n")
-    .filter(Boolean)) {
+  for (const row of output.trim().split("\n").filter(Boolean)) {
     const parsed = parseNvidiaSmiGpuRow(row);
     if (parsed.isErr()) return err(parsed.error);
     snapshots.push(
-      rerankActive
-        ? Object.assign({}, parsed.value, { rerank_active: true })
-        : parsed.value,
+      rerankActive ? { ...parsed.value, rerank_active: true } : parsed.value,
     );
   }
   return ok(snapshots);
@@ -1041,7 +1163,10 @@ function rerankServiceActive(): boolean {
   return probe.isOk() && probe.value.exitCode === 0;
 }
 
-export function probeHostSnapshot(cwd: string): Result<HostSnapshot, Error> {
+export function probeHostSnapshot(
+  cwd: string,
+  includeGpu = true,
+): Result<HostSnapshot, Error> {
   if (process.platform !== "linux") {
     return err(
       new StateError(
@@ -1070,7 +1195,9 @@ export function probeHostSnapshot(cwd: string): Result<HostSnapshot, Error> {
   if (total.isErr()) return err(total.error);
   const available = meminfoBytes(meminfoResult.value, "MemAvailable");
   if (available.isErr()) return err(available.error);
-  const gpus = probeGpus();
+  const gpus = includeGpu
+    ? probeGpus()
+    : ok({ gpus: [] satisfies GpuSnapshot[], report: undefined });
   if (gpus.isErr()) return err(gpus.error);
   // In a container /proc/meminfo is the HOST; admit against the cgroup limit when one caps memory
   // below it (Vast 2026-10-06: host 503 GB "available 307 GB", container limit 171 GiB at 95% anon).
@@ -1089,12 +1216,25 @@ export function probeHostSnapshot(cwd: string): Result<HostSnapshot, Error> {
         : Math.min(available.value, cg.limitBytes - cg.usedBytes),
     scratch_available_bytes:
       filesystemResult.value.bavail * filesystemResult.value.bsize,
-    gpus: gpus.value,
+    gpus: gpus.value.gpus,
+    ...(gpus.value.report === undefined
+      ? {}
+      : { gpu_probe: gpus.value.report }),
   });
 }
 
 function oneLineDiagnostic(text: string): string {
   return text.trim().replaceAll(/\s+/gu, " ").slice(0, 400);
+}
+
+function gpuProbeDiagnostic(report: GpuProbeReport | undefined): string {
+  if (report === undefined) return "probe=unavailable";
+  const details =
+    `attempts=${report.attempts} exit=${report.exit_code ?? "unknown"} ` +
+    `stderr=${JSON.stringify(report.stderr)} elapsed_ms=${report.elapsed_ms}`;
+  if (report.status === "timeout")
+    return `probe timed out after ${Math.max(1, Math.ceil(report.elapsed_ms / 1_000))} s; ${details}`;
+  return `probe=${report.status} ${details}`;
 }
 
 export function probeKernelEnforcement(): Result<KernelEnforcement, Error> {
@@ -1502,9 +1642,24 @@ function decideAdmissionWithPolicy(
   const gpuId = manifest.device.gpu_id;
   const gpu = snapshot.gpus.find((item) => item.id === gpuId);
   if (gpu === undefined) {
+    const missingTool = missingGpuToolDenial({
+      requested: true,
+      executableFound:
+        Bun.which(
+          "nvidia-smi",
+          process.env.PATH === undefined ? {} : { PATH: process.env.PATH },
+        ) !== null,
+      path: process.env.PATH,
+      isWsl: /microsoft/iu.test(release()),
+    });
     return {
       ok: false,
-      reason: `GPU ${manifest.device.gpu_id} is not visible to nvidia-smi`,
+      reason:
+        missingTool ??
+        (snapshot.gpu_probe?.status === "timeout" ||
+        snapshot.gpu_probe?.status === "error"
+          ? `GPU visibility is indeterminate after nvidia-smi probe failure; ${gpuProbeDiagnostic(snapshot.gpu_probe)}`
+          : `GPU ${manifest.device.gpu_id} is not visible to nvidia-smi; ${gpuProbeDiagnostic(snapshot.gpu_probe)}`),
     };
   }
   const denial = gpuHeadroomDenial(
@@ -1961,25 +2116,12 @@ function parseNvidiaSmiDeviceMemoryOutput(
 }
 
 function sampleGpuDeviceMemory(gpuId: number): number | null {
-  if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null)
-    return null;
-  const spawned = fromThrowable(() =>
-    Bun.spawnSync(
-      [
-        "timeout",
-        "5s",
-        "nvidia-smi",
-        "--query-gpu=index,memory.used",
-        "--format=csv,noheader,nounits",
-      ],
-      { stdout: "pipe", stderr: "ignore" },
-    ),
-  )();
-  if (spawned.isErr() || spawned.value.exitCode !== 0) return null;
-  return parseNvidiaSmiDeviceMemoryOutput(
-    spawned.value.stdout.toString(),
-    gpuId,
-  );
+  const query = queryNvidiaSmi([
+    "--query-gpu=index,memory.used",
+    "--format=csv,noheader,nounits",
+  ]);
+  if (query.report.status !== "visible") return null;
+  return parseNvidiaSmiDeviceMemoryOutput(query.stdout, gpuId);
 }
 
 function injectedOrSampledDeviceMemory(
@@ -2017,38 +2159,30 @@ function measuredVramFields(
   return fields;
 }
 
-function admissionGpuUsage(
-  options: ExecuteOptions,
-): Map<number, number> | null {
+type GpuUsageProbe = { usage: Map<number, number> | null; diagnostic?: string };
+
+function admissionGpuUsage(options: ExecuteOptions): GpuUsageProbe {
   const gpuComputeAppsOutput = options.gpuComputeAppsOutput;
   if (gpuComputeAppsOutput === undefined) return sampleGpuComputeApps();
   const injected = gpuComputeAppsOutput([]);
-  return injected === null ? null : computeAppsFromOutput(injected);
+  return {
+    usage: injected === null ? null : computeAppsFromOutput(injected),
+  };
 }
 
 // Always samples once; the once-a-second throttle lives at the one call site (executeJob's
 // onSample), via GPU_VRAM_SAMPLE_INTERVAL_MS — not in here.
-function sampleGpuComputeApps(): Map<number, number> | null {
-  if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null) {
-    return null;
-  }
-  // no GPU / no driver / transient nvidia-smi failure -> this sample contributes nothing; the
-  // running peak this job has already observed is unaffected.
-  const spawned = fromThrowable(() =>
-    // bounded: GNU timeout caps this nvidia-smi probe at five seconds.
-    Bun.spawnSync(
-      [
-        "timeout",
-        "5s",
-        "nvidia-smi",
-        "--query-compute-apps=pid,used_memory",
-        "--format=csv,noheader,nounits",
-      ],
-      { stdout: "pipe", stderr: "ignore" },
-    ),
-  )();
-  if (spawned.isErr() || spawned.value.exitCode !== 0) return null;
-  return computeAppsFromOutput(spawned.value.stdout.toString());
+function sampleGpuComputeApps(): GpuUsageProbe {
+  const query = queryNvidiaSmi([
+    "--query-compute-apps=pid,used_memory",
+    "--format=csv,noheader,nounits",
+  ]);
+  if (query.report.status !== "visible")
+    return {
+      usage: null,
+      diagnostic: gpuProbeDiagnostic(query.report),
+    };
+  return { usage: computeAppsFromOutput(query.stdout) };
 }
 
 /**
@@ -2535,12 +2669,18 @@ async function checkJobResult(
   if (loadedPolicy.isErr()) return err(loadedPolicy.error);
   const probedSnapshot =
     options.snapshot === undefined
-      ? probeHostSnapshot(cwd)
+      ? probeHostSnapshot(cwd, manifest.device.kind === "gpu")
       : ok(options.snapshot);
   if (probedSnapshot.isErr()) return err(probedSnapshot.error);
-  const gpuUsage = admissionGpuUsage(options);
+  const gpuUsageProbe =
+    manifest.device.kind === "gpu"
+      ? admissionGpuUsage(options)
+      : { usage: null };
+  const gpuUsage = gpuUsageProbe.usage;
   if (manifest.device.kind === "gpu" && gpuUsage === null) {
-    const warning = `WARN job=${manifest.job_id} VRAM measurement failed; using declared-sum admission (fail-closed basis)`;
+    const warning =
+      `WARN job=${manifest.job_id} VRAM measurement failed; ${gpuUsageProbe.diagnostic ?? "probe=unavailable"}; ` +
+      "using declared-sum admission (fail-closed basis)";
     process.stderr.write(`${warning}\n`);
     report(warning);
   }
@@ -2647,12 +2787,18 @@ async function executeJobResult(
   if (loadedPolicy.isErr()) return err(loadedPolicy.error);
   const probedSnapshot =
     options.snapshot === undefined
-      ? probeHostSnapshot(cwd)
+      ? probeHostSnapshot(cwd, manifest.device.kind === "gpu")
       : ok(options.snapshot);
   if (probedSnapshot.isErr()) return err(probedSnapshot.error);
-  const gpuUsageAtAdmission = admissionGpuUsage(options);
+  const gpuUsageProbe =
+    manifest.device.kind === "gpu"
+      ? admissionGpuUsage(options)
+      : { usage: null };
+  const gpuUsageAtAdmission = gpuUsageProbe.usage;
   if (manifest.device.kind === "gpu" && gpuUsageAtAdmission === null) {
-    const warning = `WARN job=${manifest.job_id} VRAM measurement failed; using declared-sum admission (fail-closed basis)`;
+    const warning =
+      `WARN job=${manifest.job_id} VRAM measurement failed; ${gpuUsageProbe.diagnostic ?? "probe=unavailable"}; ` +
+      "using declared-sum admission (fail-closed basis)";
     process.stderr.write(`${warning}\n`);
     report(warning);
   }
@@ -2728,6 +2874,7 @@ async function executeJobResult(
   let vramCapExceededSamples = 0;
   let vramCapExceeded = false;
   let lastGpuSampleAtMs = 0;
+  let gpuSampleWarningLogged = false;
   let signalFailure: Error | undefined;
   const onSample = (usage: GroupUsage): "vram" | void => {
     peakRssBytes = Math.max(peakRssBytes, usage.rssBytes);
@@ -2738,12 +2885,21 @@ async function executeJobResult(
     lastGpuSampleAtMs = now;
     const gpuComputeAppsOutput = options.gpuComputeAppsOutput;
     let gpuUsage: Map<number, number> | null;
+    let gpuUsageDiagnostic: string | undefined;
     if (gpuComputeAppsOutput === undefined) {
-      gpuUsage = sampleGpuComputeApps();
+      const probe = sampleGpuComputeApps();
+      gpuUsage = probe.usage;
+      gpuUsageDiagnostic = probe.diagnostic;
     } else {
       const injectedOutput = gpuComputeAppsOutput(usage.pids);
       gpuUsage =
         injectedOutput === null ? null : computeAppsFromOutput(injectedOutput);
+    }
+    if (gpuUsageDiagnostic !== undefined && !gpuSampleWarningLogged) {
+      report(
+        `WARN job=${manifest.job_id} VRAM measurement failed; ${gpuUsageDiagnostic}; trying device-wide delta`,
+      );
+      gpuSampleWarningLogged = true;
     }
     const jobPids =
       scopeUnit === null ? usage.pids : processIdsInScope(scopeUnit);

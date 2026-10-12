@@ -42,7 +42,10 @@ test("sampler uses GPU PID plus daemon indexing, caches probes and resets idle",
   const calls = join(dir, "calls");
   const procRoot = join(dir, "proc");
   await mkdir(join(procRoot, "42"), { recursive: true });
-  await writeFile(join(procRoot, "42/cmdline"), "ccc\0run-daemon\0");
+  await writeFile(
+    join(procRoot, "42/cmdline"),
+    "python\0/repo/cocoindex/ccc-daemon-launch.py\0",
+  );
   await writeFile(
     nvidia,
     `#!/bin/sh\nprintf 'gpu\\n' >> '${calls}'\nprintf '42\\n'\n`,
@@ -60,7 +63,8 @@ test("sampler uses GPU PID plus daemon indexing, caches probes and resets idle",
     ccc,
     procRoot,
     now: () => now,
-    boundMs: 1_000,
+    boundMs: 5_000,
+    policyStatusPaths: [join(dir, "policy.json")],
   };
   const first = await sampleCccIndexing(options);
   expect(first.since).toBe(now);
@@ -81,4 +85,91 @@ test("sampler uses GPU PID plus daemon indexing, caches probes and resets idle",
     (await sampleCccIndexing({ ...options, boundMs: 100 })).pid,
   ).toBeNull();
   expect(performance.now() - start).toBeLessThan(1_000);
+}, 20_000);
+
+test("CPU deferral is visible immediately, expires, and clears when GPU policy resumes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ccc-deferred-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(dir, { recursive: true, force: true }),
+  };
+  const policyStatusPath = join(dir, "policy.json");
+  const now = 1_000_000;
+  await writeFile(
+    policyStatusPath,
+    JSON.stringify({
+      at: now,
+      pid: 42,
+      deferring: true,
+      reason: "GPU reservation live",
+    }),
+  );
+  const options = {
+    cachePath: join(dir, "cache.json"),
+    policyStatusPaths: [policyStatusPath],
+    nvidia: join(dir, "missing-nvidia"),
+    now: () => now,
+  };
+  const deferred = await sampleCccIndexing(options);
+  expect(cccBadge(deferred, now)).toBe("ccc deferring (GPU reservation live)");
+  expect(cccBadge(deferred, now + 76_000)).toBeUndefined();
+  await writeFile(
+    policyStatusPath,
+    JSON.stringify({
+      at: now,
+      pid: 42,
+      deferring: false,
+      reason: null,
+    }),
+  );
+  expect(cccBadge(await sampleCccIndexing(options), now)).toBeUndefined();
+  await writeFile(policyStatusPath, "corrupt");
+  expect(cccBadge(await sampleCccIndexing(options), now)).toBeUndefined();
+});
+
+test("the newest fresh policy signal wins across runtime and SSH status paths", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ccc-policy-paths-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(dir, { recursive: true, force: true }),
+  };
+  const primary = join(dir, "runtime.json");
+  const fallback = join(dir, "ssh.json");
+  let now = 1_000_000;
+  await writeFile(
+    primary,
+    JSON.stringify({
+      at: now - 1000,
+      pid: 42,
+      deferring: false,
+      reason: null,
+    }),
+  );
+  await writeFile(
+    fallback,
+    JSON.stringify({
+      at: now,
+      pid: 42,
+      deferring: true,
+      reason: "GPU reservation live",
+    }),
+  );
+  const options = {
+    cachePath: join(dir, "cache.json"),
+    policyStatusPaths: [primary, fallback],
+    nvidia: join(dir, "missing-nvidia"),
+    now: () => now,
+  };
+  expect(cccBadge(await sampleCccIndexing(options), now)).toContain(
+    "GPU reservation live",
+  );
+  now += 1000;
+  await writeFile(
+    primary,
+    JSON.stringify({
+      at: now,
+      pid: 42,
+      deferring: false,
+      reason: null,
+    }),
+  );
+  expect(cccBadge(await sampleCccIndexing(options), now)).toBeUndefined();
 });

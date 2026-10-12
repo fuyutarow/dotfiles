@@ -62,10 +62,20 @@ StartLimitBurst=8
 
 [Service]
 Type=simple
-# Through the VRAM-partition launcher (owner ruling 2026-10-01): same `ccc run-daemon`, capped to
-# gpu_partition_ccc_mib in tools/agent-resource-run/resource-policy.toml, or on CPU when that much
-# is not free. ccc's own interpreter, so cocoindex_code imports from the env `ccc` uses.
+# Reservation-aware launcher: models stay on CPU; CUDA batches share the runner's .lock.
+# VRAM ceiling: gpu_partition_ccc_mib in tools/agent-resource-run/resource-policy.toml
+# (currently 2048 MiB, including a 512 MiB context allowance). No live GPU reservation
+# may overlap a CUDA batch. Busy/invalid ledger, window or duty ceiling -> CPU indexing.
+# Utilization ceiling is averaged CUDA duty time (including transfers), NOT instantaneous
+# nvidia-smi SM utilization. Four-text batches yield the lock between calls. CPUQuota/RAM
+# remain the daemon's supervisor-owned limits; no watcher/restart or second daemon.
 ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/cocoindex/ccc-daemon-launch.py
+Environment="CCC_GPU_UTILIZATION_PERCENT=20"
+Environment="CCC_GPU_BATCH_SIZE=4"
+# Optional HH:MM-HH:MM host-local window, end exclusive, wrapping midnight supported.
+# Equal endpoints permit all day; utilization 0 disables GPU indexing entirely.
+Environment="CCC_GPU_WINDOW=00:00-00:00"
+Environment="COCOINDEX_RUN_GPU_IN_SUBPROCESS=0"
 Restart=always
 RestartSec=2
 

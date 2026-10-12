@@ -766,17 +766,23 @@ export async function checkWslconfig(ctx: Ctx): Promise<Finding> {
       );
 }
 
-export async function checkCccDaemon(ctx: Ctx): Promise<Finding> {
+export async function checkCccDaemon(
+  ctx: Ctx,
+  probe: typeof run = run,
+): Promise<Finding> {
   if (ctx.isMac) return skip("ccc-daemon", "macOS uses lazy ccc startup");
-  if (Bun.which("systemctl") === null || Bun.which("systemctl") === undefined)
+  if (
+    probe === run &&
+    (Bun.which("systemctl") === null || Bun.which("systemctl") === undefined)
+  )
     return skip("ccc-daemon", "no systemctl on this host");
-  const r = await run(
+  const r = await probe(
     ["systemctl", "--user", "is-active", "ccc-daemon.service"],
     { ms: 10_000 },
   );
   const state = r.out.trim();
   if (r.missing) return skip("ccc-daemon", "no systemctl on this host");
-  const enabled = await run(
+  const enabled = await probe(
     ["systemctl", "--user", "is-enabled", "ccc-daemon.service"],
     { ms: 10_000 },
   );
@@ -794,6 +800,20 @@ export async function checkCccDaemon(ctx: Ctx): Promise<Finding> {
   const stateLabel = state === "" ? "unknown" : state;
   const enablementLabel =
     enabled.out.trim() === "" ? "unknown enablement" : enabled.out.trim();
+  const declaration = join(ctx.dotfiles, "cocoindex/ccc-daemon.service.wsl");
+  const declared = await attemptOr(() => readFileSync(declaration, "utf8"), "");
+  const actual = installed
+    ? await attemptOr(() => readFileSync(unit, "utf8"), "")
+    : "";
+  const policyLines = declared
+    .split("\n")
+    .filter((line) =>
+      /^Environment="(?:CCC_GPU_|COCOINDEX_RUN_GPU_IN_SUBPROCESS)/u.test(line),
+    );
+  const yieldPolicy =
+    policyLines.length === 4 &&
+    policyLines.every((line) => actual.split("\n").includes(line)) &&
+    actual.includes("ccc-daemon-launch.py");
   return r.code === 0 &&
     !r.timedOut &&
     state === "active" &&
@@ -801,14 +821,15 @@ export async function checkCccDaemon(ctx: Ctx): Promise<Finding> {
     !enabled.timedOut &&
     enabled.out.trim() === "enabled" &&
     installed &&
-    edge
+    edge &&
+    yieldPolicy
     ? pass(
         "ccc-daemon",
-        "ccc-daemon.service is enabled into default.target and active (capped by its unit)",
+        `ccc-daemon.service enabled and active; GPU yields to live reservations via admission lock; VRAM: gpu_partition_ccc_mib (resource-policy.toml); ${policyLines.join("; ")}. Unit declaration checked; restart is required to activate changed launcher policy in an incumbent daemon`,
       )
     : fail(
         "ccc-daemon",
-        `ccc-daemon.service is ${enablementLabel} / ${stateLabel}; real unit: ${installed}; default.target edge: ${edge} — supervised searches need an enabled, active daemon`,
+        `ccc-daemon.service is ${enablementLabel} / ${stateLabel}; real unit: ${installed}; default.target edge: ${edge}; reservation-yield policy: ${yieldPolicy} — supervised searches need an enabled, active daemon with the declared GPU policy`,
         "mise run link:dots",
       );
 }

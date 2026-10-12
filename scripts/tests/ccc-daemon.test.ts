@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import {
-  chmodSync,
+  appendFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -13,60 +13,66 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deployCccDaemon } from "../../cocoindex/deploy-daemon.ts";
+import { checkCccDaemon } from "../doctor.ts";
 import { z, jsonOf } from "../../agents/hooks/zod.ts";
 
 const REPO = join(import.meta.dir, "../..");
 function fixture(enabled = "disabled", active = "inactive") {
   const home = mkdtempSync(join(tmpdir(), "ccc-systemd-"));
-  const bin = join(home, "bin");
-  mkdirSync(bin);
-  const fake = join(bin, "systemctl");
-  writeFileSync(
-    fake,
-    `#!${process.execPath}\nawait import(${JSON.stringify(join(import.meta.dir, "fake-systemctl.ts"))});\n`,
-  );
-  chmodSync(fake, 0o755);
   writeFileSync(join(home, "state.json"), JSON.stringify({ enabled, active }));
-  const env = {
-    ...process.env,
-    HOME: home,
-    PATH: `${bin}:${process.env.PATH ?? ""}`,
-  };
   const ctx = { home, dotfiles: REPO, os: "linux", mode: "safe" };
   const run = (args: string[]) => {
-    const r = Bun.spawnSync([fake, "--user", ...args], { env, timeout: 5000 });
-    return { code: r.exitCode, out: r.stdout.toString().trim() };
+    appendFileSync(join(home, "calls"), `--user ${args.join(" ")}\n`);
+    const checked = jsonOf(
+      z.object({ enabled: z.string(), active: z.string() }),
+    ).safeParse(readFileSync(join(home, "state.json"), "utf8"));
+    if (!checked.success) return { code: 2, out: "invalid fixture state" };
+    const state = checked.data;
+    const verb = args[0];
+    if (verb === "is-active")
+      return { code: state.active === "active" ? 0 : 3, out: state.active };
+    if (verb === "is-enabled")
+      return {
+        code: state.enabled === "enabled" || state.enabled === "alias" ? 0 : 1,
+        out: state.enabled,
+      };
+    if (verb === "enable") {
+      const dir = join(home, ".config/systemd/user/default.target.wants");
+      mkdirSync(dir, { recursive: true });
+      const edge = join(dir, "ccc-daemon.service");
+      if (!existsSync(edge)) symlinkSync("../ccc-daemon.service", edge);
+      state.enabled = "enabled";
+    }
+    if (verb === "start") state.active = "active";
+    writeFileSync(join(home, "state.json"), JSON.stringify(state));
+    return { code: 0, out: "" };
   };
-  const doctor = () => {
-    const r = Bun.spawnSync(
-      [
-        process.execPath,
-        "-e",
-        `import { checkCccDaemon } from ${JSON.stringify(join(REPO, "scripts/doctor.ts"))}; process.stdout.write(JSON.stringify(await checkCccDaemon(${JSON.stringify({ home, dotfiles: REPO, isMac: false, isWsl: false, isCoreBox: true })})));`,
-      ],
-      { env, timeout: 15000 },
+  const doctor = () =>
+    checkCccDaemon(
+      { home, dotfiles: REPO, isMac: false, isWsl: false, isCoreBox: true },
+      (cmd) => {
+        const result = run(cmd.slice(2));
+        return Promise.resolve({
+          ...result,
+          err: "",
+          timedOut: false,
+          missing: false,
+        });
+      },
     );
-    expect(r.exitCode).toBe(0);
-    const parsed = jsonOf(
-      z.object({ verdict: z.string(), fix: z.string().optional() }),
-    ).safeParse(r.stdout.toString());
-    if (!parsed.success)
-      return { verdict: "fixture parse failed", fix: "fixture parse failed" };
-    return parsed.data;
-  };
   return { home, ctx, run, doctor };
 }
 
-test("deploy migrates the suffix alias, enables default.target and starts once; repeated deploy preserves the process and file", () => {
+test("deploy migrates the suffix alias, enables default.target and starts once; repeated deploy preserves the process and file", async () => {
   const f = fixture("alias");
   const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
   mkdirSync(join(f.home, ".config/systemd/user"), { recursive: true });
   symlinkSync(join(REPO, "cocoindex/ccc-daemon.service.wsl"), unit);
-  expect(f.doctor().verdict).toBe("FAIL");
+  expect((await f.doctor()).verdict).toBe("FAIL");
   expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
   expect(lstatSync(unit).isFile()).toBe(true);
   expect(readFileSync(unit, "utf8")).toContain("WantedBy=default.target");
-  expect(f.doctor().verdict).toBe("PASS");
+  expect((await f.doctor()).verdict).toBe("PASS");
   const inode = statSync(unit).ino;
   expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
   expect(statSync(unit).ino).toBe(inode);
@@ -74,21 +80,22 @@ test("deploy migrates the suffix alias, enables default.target and starts once; 
   expect(calls.match(/--user start /gu)).toHaveLength(1);
   expect(calls.match(/--user enable /gu)).toHaveLength(2);
   expect(calls).not.toMatch(/\b(stop|restart)\b/u);
-});
+}, 30_000);
 
 test.each(["linux", "wsl"])(
   "active but disabled on %s is repaired without starting or restarting",
-  (os) => {
+  async (os) => {
     const f = fixture("disabled", "active");
     expect(deployCccDaemon({ ...f.ctx, os }, f.run, true)).toBeUndefined();
-    expect(f.doctor().verdict).toBe("PASS");
+    expect((await f.doctor()).verdict).toBe("PASS");
     expect(readFileSync(join(f.home, "calls"), "utf8")).not.toMatch(
       /\b(start|stop|restart)\b/u,
     );
   },
+  20_000,
 );
 
-test("an old enable edge pointing directly at the repo declaration migrates to the real unit", () => {
+test("an old enable edge pointing directly at the repo declaration migrates to the real unit", async () => {
   const f = fixture("alias", "active");
   const dir = join(f.home, ".config/systemd/user/default.target.wants");
   mkdirSync(dir, { recursive: true });
@@ -97,28 +104,46 @@ test("an old enable edge pointing directly at the repo declaration migrates to t
     join(dir, "ccc-daemon.service"),
   );
   expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
-  expect(f.doctor().verdict).toBe("PASS");
-});
+  expect((await f.doctor()).verdict).toBe("PASS");
+}, 20_000);
+
+test("doctor reports the reservation-yield policy and rejects an old CPU/RAM-only unit", async () => {
+  const f = fixture("enabled", "active");
+  expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
+  expect((await f.doctor()).detail).toContain(
+    "GPU yields to live reservations",
+  );
+  const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
+  writeFileSync(
+    unit,
+    readFileSync(unit, "utf8").replace(
+      'Environment="CCC_GPU_UTILIZATION_PERCENT=20"',
+      "",
+    ),
+  );
+  expect((await f.doctor()).verdict).toBe("FAIL");
+}, 20_000);
 
 test.each(["disabled", "alias", "enabled-runtime", "masked"])(
   "doctor rejects %s even while active, names deploy repair",
-  (enabled) => {
+  async (enabled) => {
     const f = fixture(enabled, "active");
-    const finding = f.doctor();
+    const finding = await f.doctor();
     expect(finding.verdict).toBe("FAIL");
     expect(finding.fix).toBe("mise run link:dots");
   },
+  20_000,
 );
 
-test("doctor rejects enabled without the default.target edge and enabled but inactive", () => {
+test("doctor rejects enabled without the default.target edge and enabled but inactive", async () => {
   const f = fixture("enabled", "active");
-  expect(f.doctor().verdict).toBe("FAIL");
+  expect((await f.doctor()).verdict).toBe("FAIL");
   expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
   writeFileSync(
     join(f.home, "state.json"),
     JSON.stringify({ enabled: "enabled", active: "inactive" }),
   );
-  expect(f.doctor().verdict).toBe("FAIL");
+  expect((await f.doctor()).verdict).toBe("FAIL");
 }, 20_000);
 
 test("macOS, check mode and hosts without systemd skip without writes or commands", () => {
@@ -145,4 +170,5 @@ test.each(["daemon-reload", "enable", "start"])(
     const error = deployCccDaemon(f.ctx, run, true);
     expect(error?.message).toContain("mise run link:dots");
   },
+  20_000,
 );

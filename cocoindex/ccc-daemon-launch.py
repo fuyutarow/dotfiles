@@ -1,22 +1,33 @@
-"""Start the ccc daemon inside its standing VRAM partition (ExecStart of ccc-daemon.service.wsl).
+"""Start ccc with reservation-aware GPU batches; never load the resident model onto CUDA.
 
-Exactly `ccc run-daemon`, after tools/agent-resource-run/gpu_partition.py has capped this process to
-`gpu_partition_ccc_mib` (resource-policy.toml) — or hidden the GPU when that much is not free, so the
-embedder runs on CPU instead of growing into research jobs' memory. Run under ccc's own
-interpreter (the unit names it), so cocoindex_code imports from the same environment `ccc` uses.
+Run under ccc's own interpreter (the unit names it). The existing standing VRAM partition
+still caps GPU batches, but their admission now yields to agent-resource-run's live ledger.
 """
 
+import os
 import sys
 from pathlib import Path
 
 DOTFILES = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(DOTFILES / "tools" / "agent-resource-run"))
 
-from gpu_partition import apply  # noqa: E402 — must run before torch is imported
+from ccc_gpu_yield import (
+    Policy,
+    YieldGuard,
+    install,
+    prepare_partition,
+    state_directories,
+)
+from gpu_partition import apply
 
-apply("ccc")
+# The patched adapter and lock must stay in this process, including direct launcher use.
+os.environ["COCOINDEX_RUN_GPU_IN_SUBPROCESS"] = "0"
+directories = state_directories()
+guard = YieldGuard(directories[0], Policy.from_environment(), directories[1:])
+partition_mode = prepare_partition(guard, apply)
+install(guard, lambda _service: partition_mode)
 
-from cocoindex_code.cli import app  # noqa: E402
+from cocoindex_code.cli import app
 
 sys.argv = ["ccc", "run-daemon"]
 sys.exit(app())

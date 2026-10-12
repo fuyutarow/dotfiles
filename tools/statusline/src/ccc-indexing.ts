@@ -6,6 +6,8 @@
 // Only the existing GPU sampler calls this module. Renderer reads its cached observation.
 // A streak means consecutive observations, not continuous measurement between probes.
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { findGpuExecutableAsync } from "../../shared/src/gpu-samples.ts";
 import {
   execAsyncWithin,
@@ -21,6 +23,7 @@ export const CccIndexSchema = z.object({
   at: z.number().int().nonnegative(),
   pid: z.number().int().positive().nullable(),
   since: z.number().int().nonnegative().nullable(),
+  deferring: z.string().optional(),
 });
 export type CccIndex = z.output<typeof CccIndexSchema>;
 
@@ -46,6 +49,11 @@ export function cccBadge(
   now: number,
 ): string | undefined {
   if (
+    observation?.deferring !== undefined &&
+    within(observation.at, now, CCC_PROBE_TTL_MS + 15_000)
+  )
+    return `ccc deferring (${observation.deferring})`;
+  if (
     observation === undefined ||
     observation.pid === null ||
     observation.since === null ||
@@ -65,7 +73,29 @@ type Options = {
   procRoot?: string;
   now?: () => number;
   boundMs?: number;
+  policyStatusPaths?: string[];
 };
+
+const PolicyStatusSchema = z.object({
+  at: z.number().int().nonnegative(),
+  pid: z.number().int().positive(),
+  deferring: z.boolean(),
+  reason: z.string().nullable(),
+});
+
+function policyStatusPaths(): string[] {
+  const runtime = process.env.XDG_RUNTIME_DIR;
+  const uid = process.getuid?.() ?? "unknown";
+  const directories = [
+    join(tmpdir(), `agent-resource-control-${uid}`),
+    `/run/user/${uid}/agent-resource-control`,
+  ];
+  if (runtime !== undefined && runtime.startsWith("/"))
+    directories.push(join(runtime, "agent-resource-control"));
+  return [...new Set(directories)].map((directory) =>
+    join(directory, "ccc-gpu-status.json"),
+  );
+}
 
 async function daemonPid(options: Options): Promise<number | null> {
   const nvidia = options.nvidia ?? (await findGpuExecutableAsync());
@@ -90,7 +120,11 @@ async function daemonPid(options: Options): Promise<number | null> {
       `${options.procRoot ?? "/proc"}/${parsed.data}/cmdline`,
       "utf8",
     ).catch(() => "");
-    if (/\bccc run-daemon\b/u.test(cmdline.replaceAll("\0", " ")))
+    if (
+      /\bccc run-daemon\b|\bccc-daemon-launch\.py(?:\s|$)/u.test(
+        cmdline.replaceAll("\0", " "),
+      )
+    )
       return parsed.data;
   }
   return null;
@@ -114,6 +148,33 @@ export async function sampleCccIndexing(options: Options): Promise<CccIndex> {
   const clock = options.now ?? (() => Temporal.Now.instant().epochMilliseconds);
   const previous = await readJsonAsync(options.cachePath, CccIndexSchema);
   const now = clock();
+  // Read the launcher's policy signal even when ccc has no NVIDIA context (CPU fallback).
+  // A crashed/idle writer's observation expires; never turn old state into a live warning.
+  const paths = options.policyStatusPaths ?? policyStatusPaths();
+  const policies = await Promise.all(
+    paths.map((path) => readJsonAsync(path, PolicyStatusSchema)),
+  );
+  const policy = policies
+    .filter((item) => item !== undefined)
+    .filter((item) => within(item.at, now, CCC_PROBE_TTL_MS + 15_000))
+    .toSorted((a, b) => b.at - a.at)[0];
+  if (
+    policy !== undefined &&
+    policy.deferring &&
+    policy.reason !== null &&
+    within(policy.at, now, CCC_PROBE_TTL_MS + 15_000)
+  ) {
+    const observation = {
+      at: policy.at,
+      pid: policy.pid,
+      since: null,
+      deferring: policy.reason,
+    };
+    await writeCacheAsync(options.cachePath, observation);
+    return observation;
+  }
+  // A cached deferral cannot outlive or override its launcher's current policy state.
+  if (previous?.deferring !== undefined) previous.deferring = undefined;
   if (previous !== undefined && within(previous.at, now, CCC_PROBE_TTL_MS))
     return previous;
   const pid = await daemonPid(options);

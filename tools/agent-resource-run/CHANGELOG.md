@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 — 2026-10-11
+
+- Added machine-wide FIFO `julia-compile` slot admission for manifest-declared compile work and
+  `--slot julia-compile` invocations. Host capacity comes from `slots.toml`, defaulting to one
+  slot per six available CPUs with a floor of one; dead controller owners are reclaimed.
+
 ## 1.2.0 — 2026-10-09
 
 - Fall back from missing per-process GPU rows to the admitted device's used-VRAM delta from a

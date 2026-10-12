@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.0 — 2026-10-12
+
+- Route tickets labeled `julia-compile` through the host-wide `agent-resource-run` compile slot,
+  preserving the ticket's declared resource envelope.
+
 ## 3.1.0 — 2026-10-12
 
 - Resolve default ticket projects from the backing jj repository so workspaces share ticket state; explicit `--project` still takes precedence.

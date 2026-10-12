@@ -75,6 +75,21 @@ raw `julia` / `python` / test runnerで発射せず、指定pathを `agent-resou
 へ渡す。dispatch hookの実装は `agents/{claude,codex}/hooks/`、実行の正本は
 `tools/agent-resource-run/src/agent-resource-run.ts` である。
 
+### Julia compile admission
+
+Julia package compilation uses the host-wide `julia-compile` slot pool. A manifest that may
+precompile packages declares `"compile_slots": ["julia-compile"]`; a direct Julia command uses
+`agent-resource-run --manifest <envelope> --slot julia-compile -- julia …`. The host declaration
+is `~/.config/agent-resource/slots.toml` (`schema = 1`, `julia_compile = <positive count>`); absent
+that file, capacity is `max(1, floor(available host CPUs / 6))`. Waiters are admitted FIFO and
+report the holder count and number ahead. Dead controller PIDs release their slots on the next
+queue pass.
+
+All Julia workers on one host use the same canonical project path and `JULIA_DEPOT_PATH`, including
+test runs launched from separate jj workspaces. This shares precompile caches and avoids repeating
+package compilation just because a worker has a different checkout path. Do not place worker-local
+workspace paths in the depot or project selection when the test targets are identical.
+
 ### 資源envelope schema
 
 次のJSONを全欄必須とする。`child_fanout` は現在 `0` だけを受理する。nested agentは親の見込みに

@@ -44,6 +44,27 @@ overhead; two samples avoid killing on one transient reading. Scratch remains an
 reservation only. On WSL2 `nvidia-smi` reports no per-process VRAM (`used_memory` is `[N/A]`), so
 the runner warns and uses declared-sum admission; its sampled cap enforcement is unavailable there.
 
+## Julia precompile slot
+
+Julia package precompilation is admitted through one host-wide `julia-compile` slot pool, shared
+across repository and jj workspace paths. Manifests that perform Julia compilation declare
+`"compile_slots": ["julia-compile"]`; a direct Julia invocation can request the same gate with
+`agent-resource-run --manifest job.resource.json --slot julia-compile -- julia …`. Queue tickets
+are served FIFO. A waiter prints `WAIT slot=julia-compile holders=<held>/<capacity> ahead=<n>`
+once while queued, and dead controller PIDs are reclaimed on the next admission.
+
+The optional host declaration `~/.config/agent-resource/slots.toml` sets the machine capacity:
+
+```toml
+schema = 1
+julia_compile = 2
+```
+
+`AGENT_RESOURCE_SLOTS` may point to another absolute declaration path. Without a declaration the
+capacity is `max(1, floor(available host CPUs / 6))`. Julia test workers should all use the same
+canonical `JULIA_DEPOT_PATH` and project path so package precompile caches are reused across runs
+and workspace checkouts.
+
 ## Operator policy: `resource-policy.toml`
 
 CONFIG vs MECHANISM, as in `agents/hooks/storage-headroom.toml`. Every operator-tunable threshold

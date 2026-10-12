@@ -32,6 +32,11 @@ import {
 import { jsonOf, jsonText, z } from "../../shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 import { cgroupMemory } from "./lib/cgroup-memory.ts";
+import {
+  acquireJuliaCompileSlot,
+  juliaCompileSlotCapacity,
+  type CompileSlotLease,
+} from "./lib/compile-slot.ts";
 
 const KiB = 1024;
 const MiB = 1024 ** 2;
@@ -400,6 +405,7 @@ export type ResourceManifest = {
   device: CpuDevice | GpuDevice;
   scratch_bytes: number;
   child_fanout: 0;
+  compile_slots?: "julia-compile"[];
   walltime_seconds: number;
   cleanup: {
     mode: "term-then-kill";
@@ -541,6 +547,12 @@ type ExecuteOptions = {
   gpuComputeAppsOutput?: (jobPids?: number[]) => string | null;
   /** Injected `index,memory.used` query result for deterministic device-delta tests. */
   gpuDeviceMemoryOutput?: (gpuId: number) => string | null;
+  /** Slots requested directly by the CLI, independent of manifest declarations. */
+  requestedSlots?: "julia-compile"[];
+  /** Test seams for compile-slot admission. Production uses the host-wide default directory. */
+  compileSlotDirectory?: string;
+  compileSlotCapacity?: number;
+  slotReport?: (line: string) => void;
 };
 
 type Lease = {
@@ -785,6 +797,7 @@ export function validateManifest(
       "device",
       "scratch_bytes",
       "child_fanout",
+      "compile_slots",
       "walltime_seconds",
       "cleanup",
     ],
@@ -802,6 +815,19 @@ export function validateManifest(
   // (no nested agent fanout is supported yet), so the checked value is used as that literal below.
   const childFanout = integer(value.child_fanout, "child_fanout", 0, 0);
   if (childFanout.isErr()) return err(childFanout.error);
+  const compileSlotsRaw = value.compile_slots;
+  const compileSlotsParsed = z
+    .array(z.literal("julia-compile"))
+    .safeParse(compileSlotsRaw ?? []);
+  if (
+    !compileSlotsParsed.success ||
+    new Set(compileSlotsParsed.data).size !== compileSlotsParsed.data.length
+  )
+    return err(
+      new UsageError(
+        'compile_slots must be a duplicate-free array containing only "julia-compile"',
+      ),
+    );
   const runClass = oneOf(
     value.run_class,
     ["pilot", "full", "test", "service"] as const,
@@ -848,6 +874,9 @@ export function validateManifest(
     device: device.value,
     scratch_bytes: scratchBytes.value,
     child_fanout: 0,
+    ...(compileSlotsParsed.data.length === 0
+      ? {}
+      : { compile_slots: compileSlotsParsed.data }),
     walltime_seconds: walltimeSeconds.value,
     cleanup: { mode: "term-then-kill", grace_seconds: graceSeconds.value },
   });
@@ -2627,6 +2656,29 @@ async function executeJobResult(
     process.stderr.write(`${warning}\n`);
     report(warning);
   }
+  const requestedSlots = new Set([
+    ...(manifest.compile_slots ?? []),
+    ...(options.requestedSlots ?? []),
+  ]);
+  let compileSlotLease: CompileSlotLease | undefined;
+  using _compileSlotRelease = {
+    [Symbol.dispose]: () => compileSlotLease?.release(),
+  };
+  if (requestedSlots.has("julia-compile")) {
+    const capacityResult =
+      options.compileSlotCapacity === undefined
+        ? await juliaCompileSlotCapacity()
+        : ok(options.compileSlotCapacity);
+    if (capacityResult.isErr()) return err(capacityResult.error);
+    const slotResult = await acquireJuliaCompileSlot({
+      stateDirectory:
+        options.compileSlotDirectory ?? join(defaultStateDirectory(), "slots"),
+      capacity: capacityResult.value,
+      report: options.slotReport ?? report,
+    });
+    if (slotResult.isErr()) return err(slotResult.error);
+    compileSlotLease = slotResult.value;
+  }
   const acquired = await acquireLease(
     manifest,
     probedSnapshot.value,
@@ -2634,8 +2686,12 @@ async function executeJobResult(
     options.stateDirectory,
     gpuUsageAtAdmission,
   );
-  if (acquired.isErr()) return err(acquired.error);
+  if (acquired.isErr()) {
+    compileSlotLease?.release();
+    return err(acquired.error);
+  }
   if (!acquired.value.ok) {
+    compileSlotLease?.release();
     report(`DENY job=${manifest.job_id} reason=${acquired.value.reason}`);
     return ok({ ok: false, exitCode: 69, reason: "admission" });
   }
@@ -2644,6 +2700,7 @@ async function executeJobResult(
   const policy = resourcePolicy();
   if (policy.isErr()) {
     const released = await releaseLease(lease);
+    compileSlotLease?.release();
     if (released.isErr()) return err(released.error);
     return err(policy.error);
   }
@@ -2948,6 +3005,7 @@ async function executeJobResult(
       const scopeStopped = scopeUnit === null ? true : scopeCleanup(scopeUnit);
       const released = await releaseLease(lease);
       if (released.isErr()) return err(released.error);
+      compileSlotLease?.release();
       cleanupFailed = !scopeStopped;
       return ok(undefined);
     },
@@ -3011,6 +3069,9 @@ async function main(): Promise<Result<number, Error>> {
         // is omitted; this only overrides it, and validateJobId() applies the exact same
         // filesystem-safety rule the manifest field itself is checked against.
         jobId: { type: String },
+        // Acquire a machine-wide named slot for a direct command, e.g.
+        // `agent-resource-run --manifest job.json --slot julia-compile -- julia …`.
+        slot: { type: String },
         checkOnly: { type: Boolean, default: false },
       },
     },
@@ -3030,6 +3091,8 @@ async function main(): Promise<Result<number, Error>> {
   if (parsed.flags.jobId === "") {
     return err(new UsageError("--job-id requires a value"));
   }
+  if (parsed.flags.slot !== undefined && parsed.flags.slot !== "julia-compile")
+    return err(new UsageError('--slot must be "julia-compile"'));
   const manifestPath = resolve(parsed.flags.manifest);
   const readResult = fromThrowable(() => readFileSync(manifestPath))();
   if (readResult.isErr()) {
@@ -3071,9 +3134,17 @@ async function main(): Promise<Result<number, Error>> {
   if (parsed.flags.checkOnly && command.length > 0) {
     return err(new UsageError("--check-only does not accept a command"));
   }
-  const result = parsed.flags.checkOnly
-    ? await checkJob(manifest)
-    : await executeJob(manifest, command, { manifestSource });
+  let result;
+  if (parsed.flags.checkOnly) {
+    result = await checkJob(manifest);
+  } else if (parsed.flags.slot === undefined) {
+    result = await executeJob(manifest, command, { manifestSource });
+  } else {
+    result = await executeJob(manifest, command, {
+      manifestSource,
+      requestedSlots: ["julia-compile"],
+    });
+  }
   if (result.isErr()) return err(result.error);
   return ok(result.value.exitCode);
 }

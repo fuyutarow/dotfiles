@@ -294,7 +294,9 @@ row selection with the prior report and open items as a compact handoff. `--file
 The worker receives a compact promise before the body: outcome, consumer, absolute write
 paths/globs, first-return artifact and seconds, verify, kind, labels, and sandbox mode.
 RESOURCE-CLASS(NONCOMPUTE) derives `token`; RESOURCE-ENVELOPE derives `compute`. Kind is
-computed, never a user field. Optional labels are opaque strings; active markers store
+computed, never a user field. Optional labels are opaque strings except `julia-compile`, which
+adds worker instructions to route Julia commands that may precompile through the named
+`agent-resource-run` slot; active markers store
 `kind`/`labels`, and ledger run rows store `resource: { kind, labels }` because ledger `kind`
 already identifies the event type.
 

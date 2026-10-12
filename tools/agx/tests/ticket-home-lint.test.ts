@@ -64,6 +64,25 @@ describe("ticket promises and resource metadata", () => {
     },
   );
 
+  test("routes the julia-compile ticket label through the named slot", () => {
+    const parsed = parseTicket(
+      complete(
+        "RESOURCE-ENVELOPE(/tmp/resources.json): agent-resource-run only",
+        'labels = ["julia-compile"]',
+      ),
+    );
+    expect(parsed.kind).toBe("ticket");
+    if (parsed.kind !== "ticket") return;
+    const promise = promiseBlock(
+      parsed.ticket,
+      scratch,
+      "read-only",
+      "compute",
+    );
+    expect(promise).toContain("--slot julia-compile -- julia");
+    expect(promise).toContain("keep the ticket's declared envelope");
+  });
+
   test.each([
     ["RESOURCE-CLASS(NONCOMPUTE): CLI and tests", "token"],
     [

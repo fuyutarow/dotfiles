@@ -274,6 +274,11 @@ export function promiseBlock(
     `verify: ${JSON.stringify(ticket.verify)}${ticket.read_only_diagnostic === true ? " (read_only_diagnostic)" : ""}`,
     `kind: ${kind ?? "undeclared"}`,
     `labels: ${JSON.stringify(ticket.labels)}`,
+    ...(ticket.labels.includes("julia-compile")
+      ? [
+          "Julia compile routing: run every Julia command that may precompile through `agent-resource-run --manifest <declared-envelope.json> --slot julia-compile -- julia …`; keep the ticket's declared envelope.",
+        ]
+      : []),
     `Sandbox mode: ${sandbox}${sandbox === "none" ? " (unsandboxed)" : ""}.`,
   ].join("\n");
 }

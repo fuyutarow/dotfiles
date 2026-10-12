@@ -241,6 +241,21 @@ describe("resource manifest", () => {
     expect(validateManifest(cpuManifest())).toEqual(cpuManifest());
   });
 
+  test("accepts a manifest-declared Julia compile slot and rejects duplicates", () => {
+    expect(
+      validateManifest({
+        ...cpuManifest(),
+        compile_slots: ["julia-compile"],
+      }).compile_slots,
+    ).toEqual(["julia-compile"]);
+    const duplicate = validateManifestResult({
+      ...cpuManifest(),
+      compile_slots: ["julia-compile", "julia-compile"],
+    });
+    expect(duplicate.isErr()).toBe(true);
+    expect(duplicate._unsafeUnwrapErr().message).toContain("compile_slots");
+  });
+
   test("validateJobId enforces the same rule for the manifest field and the --job-id override", () => {
     expect(validateJobId("firedancer-ticket-42", "--job-id")).toBe(
       "firedancer-ticket-42",

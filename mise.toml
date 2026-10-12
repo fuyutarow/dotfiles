@@ -684,6 +684,14 @@ run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 description = "Install the declared Google Drive G: drvfs entry in /etc/fstab so WSL mounts the virtual drive on future starts; preserves unrelated entries."
 run = "bun wsl/drive-mount.ts"
 
+[tasks."wsl:install-root-levers"]
+description = "Install the WSL fstrim and page-cache oneshot units plus the exact per-user sudoers rule; run once from the owner account."
+run = "bun wsl/install-root-levers.ts"
+
+[tasks."wsl:root-levers:doctor"]
+description = "Read-only check for installed WSL root-lever units and passwordless authorization to start only those units."
+run = "bun wsl/root-levers-doctor.ts"
+
 # Start WSL on a Windows host parked at its LOGON SCREEN — the thing that actually fixes the
 # "Windows Update rebooted overnight and the box was unreachable for 5 hours" failure.
 #

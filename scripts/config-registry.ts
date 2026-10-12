@@ -519,6 +519,21 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "wsl",
+    sources: [
+      "wsl/dotfiles-fstrim.service.wsl",
+      "wsl/dotfiles-dropcache.service.wsl",
+      "wsl/dotfiles-root-levers.sudoers",
+    ],
+    deployed: "/etc/systemd/system and /etc/sudoers.d (installed with sudo)",
+    consumer:
+      "disk-reclaim fstrim and wsl-capacity-recover cache drop; start only the declared oneshot units",
+    writer:
+      "human, in the repo; mise run wsl:install-root-levers installs once",
+    verify: "mise run wsl:root-levers:doctor",
+  },
+  {
+    kind: "applied",
+    when: "wsl",
     sources: ["wsl/winget.win.json"],
     deployed: "the Windows host's winget packages",
     consumer: "winget",

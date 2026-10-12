@@ -1,0 +1,6 @@
+[Unit]
+Description=Trim free blocks on the WSL root filesystem
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/fstrim -v /

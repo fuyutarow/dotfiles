@@ -1,0 +1,4 @@
+# Install after replacing @USER@ with the installing account's login name.
+# API: sudo /usr/bin/systemctl start dotfiles-fstrim.service
+#      sudo /usr/bin/systemctl start dotfiles-dropcache.service
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl start dotfiles-fstrim.service, /usr/bin/systemctl start dotfiles-dropcache.service

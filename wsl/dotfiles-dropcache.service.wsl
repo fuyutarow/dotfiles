@@ -1,0 +1,7 @@
+[Unit]
+Description=Drop clean page cache in WSL
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/sync
+ExecStart=/bin/sh -c "echo 1 > /proc/sys/vm/drop_caches"

@@ -19,6 +19,7 @@ import { purge, purgeRip } from "./purge.ts";
 import { host } from "./host.ts";
 import { vhdx } from "./vhdx.ts";
 import { audit } from "./audit.ts";
+import { tmpfs } from "./tmpfs.ts";
 
 export type Context = {
   mode: "plan" | "run";
@@ -77,6 +78,13 @@ export interface Target {
 }
 // Registry order is execution order. Workspaces remove nested working copies before scratch.
 export const registry: Target[] = [
+  {
+    ...tmpfs,
+    description: {
+      what: "stale temporary directories and RAM-backed rip graveyards",
+      why: "recover tmpfs inodes without touching active session data",
+    },
+  },
   {
     ...clean,
     description: {

@@ -9,9 +9,11 @@ export function cliEnv(
   const home = join(root, "home");
   const bin = join(root, "bin");
   const procRoot = join(root, "proc");
+  const tmpfsRoot = join(root, "tmpfs");
   mkdirSync(home, { recursive: true });
   mkdirSync(bin, { recursive: true });
   mkdirSync(procRoot, { recursive: true });
+  mkdirSync(tmpfsRoot, { recursive: true });
   for (const name of ["jj", "git", "lsattr", "pgrep", "sh", "true"]) {
     const source = Bun.which(name);
     if (source !== null) symlinkSync(source, join(bin, name));
@@ -38,6 +40,7 @@ export function cliEnv(
     RECLAIM_CONFIG: declaration,
     RECLAIM_STATE_DIR: join(root, "state"),
     RECLAIM_UNIT_PROC_ROOT: procRoot,
+    RECLAIM_TEST_TMPFS_ROOT: tmpfsRoot,
     AUDIT_PROJECTS: join(home, "Workspace"),
     KONDO_DIR: home,
     RUSTUP_HOME: join(home, ".rustup"),

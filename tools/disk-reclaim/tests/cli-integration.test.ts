@@ -65,7 +65,7 @@ function validPlan(result: ReturnType<typeof invoke>): Plan {
   return parsed.data;
 }
 
-test("tmp HOME CLI plans all 13 targets and blind run includes bounded rip expiry; v2 receipts persist", () => {
+test("tmp HOME CLI plans all 14 targets and blind run includes bounded rip expiry; v2 receipts persist", () => {
   const w = new World();
   using cleanup = new DisposableStack();
   cleanup.defer(() => {
@@ -100,7 +100,7 @@ test("tmp HOME CLI plans all 13 targets and blind run includes bounded rip expir
   expect(preview.targets.map((t) => [t.name, t.tier])).toEqual(
     registry.map((t) => [t.name, t.tier]),
   );
-  expect(preview.targets).toHaveLength(13);
+  expect(preview.targets).toHaveLength(14);
   const ripExpiry = preview.targets.find((t) => t.name === "rip-expire")!;
   expect(ripExpiry.tier).toBe("blind");
   expect(
@@ -133,6 +133,7 @@ test("tmp HOME CLI plans all 13 targets and blind run includes bounded rip expir
   expect(result.exit, `blind run: ${result.stderr}\n${result.stdout}`).toBe(0);
   const executed = validPlan(result);
   expect(executed.targets.map((t) => t.name)).toEqual([
+    "tmpfs",
     "clean",
     "builds",
     "rust",
@@ -163,7 +164,7 @@ test("tmp HOME CLI plans all 13 targets and blind run includes bounded rip expir
   const lines = readFileSync(join(env.RECLAIM_STATE_DIR, "log.jsonl"), "utf8")
     .trim()
     .split("\n");
-  expect(lines).toHaveLength(8);
+  expect(lines).toHaveLength(9);
   const receipts = lines.map((line) => {
     const parsed = jsonOf(ReceiptV2).safeParse(line);
     if (!parsed.success) {

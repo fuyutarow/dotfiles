@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 — 2026-10-12
+
+- Add tmpfs usage reporting, safe stale temporary-directory cleanup, and verified relocation of RAM-backed rip graveyards.
+
 ## 1.1.5 — 2026-10-12
 
 - Treat rumdl, Ruff, pytest, mypy, and node_modules tool caches as regenerable workspace content.

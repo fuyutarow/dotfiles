@@ -2,7 +2,7 @@
 
 Plan configured reclamation as one JSONL record per candidate. `apply` reads those records from
 stdin, revalidates each fingerprint and target safety, then acts only on selected safe records.
-The CLI registers thirteen reclaim targets. The no-argument invocation renders the same plan
+The CLI registers fourteen reclaim targets. The no-argument invocation renders the same plan
 for a person; `--yes` composes planning and application.
 
 ```text
@@ -39,13 +39,23 @@ continuing with siblings. The no-`--yes` plan reports that nested store checks a
 traversal. A listed jj workspace must first be forgotten with `jj workspace forget`, or handled
 through the `workspaces` target.
 
-The blind tier selects clean, builds, rust, toolchains, workspaces, scratch, `rip-expire`, and
-system (sudo). Rip expiry removes only entries in `RIP_GRAVEYARD` older than the configured
+The blind tier selects tmpfs, clean, builds, rust, toolchains, workspaces, scratch, `rip-expire`,
+and system (sudo). Rip expiry removes only entries in `RIP_GRAVEYARD` older than the configured
 24-hour retention. It leaves XDG Trash for owner approval. The graveyard location comes from
 the `RIP_GRAVEYARD` environment setting exported by the shell setup. Workspaces runs before
 scratch; both share one liveness snapshot per plan and recheck facts under the lock. Judgment
 and host require owner selection, purge must be named, and vhdx/audit are plan-only.
 `targets --json` lists their tiers and availability without scanning candidates.
+
+The `tmpfs` target reports inode and byte use for each detected tmpfs mount, then selects only
+top-level, current-user temporary directories with a mkdtemp-style suffix, an age over 60 minutes,
+and no open process references. Claude/herdr session directories, systemd-private directories,
+other users' files, and open or indeterminate paths are kept or asked. Removal calls direct
+recursive unlink/rmdir operations; it does not use `rip`, which would copy deleted entries and
+their inode use into a graveyard. A rip graveyard located on tmpfs is copied to the configured
+disk graveyard (`$XDG_DATA_HOME/graveyard`, falling back to `~/.local/share/graveyard`), verified,
+and only then removed from tmpfs. The action summary reports tmpfs inode and byte use before and
+after.
 Within blind-tier targets, a failed candidate does not prevent later candidates from being
 attempted; the run still exits 1 if any candidate fails. `--stop-on-error` stops the target at its
 first failure. A target planning failure is recorded in that target's `skip_reason`, the target

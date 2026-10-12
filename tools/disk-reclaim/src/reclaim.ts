@@ -491,7 +491,7 @@ export async function main(
     {
       ...common,
       name: "disk-reclaim",
-      version: "1.1.4",
+      version: "1.2.0",
       parameters: ["[targets...]"],
       commands,
       flags: planFlags,

@@ -86,6 +86,7 @@ test("registry exposes every production target with its contract tier", () => {
   if (!parsed.success) return;
   const rows = parsed.data;
   expect(rows.map(({ name, tier }) => [name, tier])).toEqual([
+    ["tmpfs", "blind"],
     ["clean", "blind"],
     ["builds", "blind"],
     ["rust", "blind"],
@@ -103,6 +104,7 @@ test("registry exposes every production target with its contract tier", () => {
 });
 test("every registered target survives plan and run smoke checks in a fixture HOME", () => {
   const names = [
+    "tmpfs",
     "clean",
     "builds",
     "rust",

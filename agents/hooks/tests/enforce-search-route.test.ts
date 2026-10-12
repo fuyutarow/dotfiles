@@ -409,6 +409,7 @@ describe("enforce-search-route", () => {
     const output = join(outside, "out.txt");
     const cases: ReadonlyArray<readonly [string, string]> = [
       [project, `grep needle ${output}`],
+      [project, "grep needle ~/.local/state/agx/worker-receipts/receipt.json"],
       [project, `find ${outside} -name out.txt`],
       [project, "ls | grep foo"],
       [project, "grep -r foo ."],

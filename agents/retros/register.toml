@@ -438,3 +438,120 @@ principle = "Provide a sanctioned ticket-generation path for interacting reposit
 enforcement = { type = "manual", locus = "agents/retros/README.md" }
 status = "open"
 recurrences = []
+
+[[lesson]]
+id = "R2610-0C-hooks-source"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Declare hooks in their source and render deployed configuration; do not wire hooks by hand in an interactive session."
+enforcement = { type = "manual", locus = "agents/codex/hooks.json" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-main-checkout"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Sessions outside an agx workspace can still write the main checkout; check the actual write destination before attributing edits."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-usehooks-consumer"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "A breaking exported type change needs a consumer check before shipping."
+enforcement = { type = "test", locus = "tools/agx/tests/agx.test.ts" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-agx-follow-ticket"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Require a ticket for agx follow --all-live and keep monitor output concise."
+enforcement = { type = "manual", locus = "tools/agx/src/agx.ts" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-agx-ps-consumer"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Check downstream consumers when changing agx ps columns."
+enforcement = { type = "test", locus = "tools/agx/tests/agx.test.ts" }
+status = "in-progress"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-deployed-path"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Call a change fixed only after checking its deployed path, including Windows plans and statusline behavior."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-windows-dust"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Treat Windows dust output as apparent size, not allocated disk usage."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-ccc-gpu-cap"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Set an explicit GPU resource cap for the ccc daemon."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-julia-precompile-slot"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Reserve a machine-wide slot for Julia precompile work."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-systemd-wsl-lib"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Provide /usr/lib/wsl/lib to the systemd user manager when its services need WSL interop."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-nvidia-probe"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Treat nvidia-smi timeouts as unknown, not GPU absence, and avoid probing CPU-only jobs."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-worker-preamble"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Do not stop a worker preamble over trivial mismatches that do not change the task."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = []
+
+[[lesson]]
+id = "R2610-0C-reuse-check"
+first_seen = "2026-10-11"
+sources = ["session"]
+principle = "Check existing house decisions and tools before writing a new brief."
+enforcement = { type = "manual", locus = "agents/retros/README.md" }
+status = "open"
+recurrences = ["2026-10-11"]

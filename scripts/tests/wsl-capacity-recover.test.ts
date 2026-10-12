@@ -49,8 +49,8 @@ describe("WSL capacity recovery decisions", () => {
     if (loaded.isErr()) return;
     expect(loaded.value).toEqual({
       path: "/mnt/c",
-      denyBytes: 20 * GiB,
-      stopBytes: 10 * GiB,
+      denyBytes: 6 * GiB,
+      stopBytes: 4 * GiB,
     });
   });
 

@@ -1,6 +1,6 @@
 # statusline
 
-Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.14.2.
+Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.15.1.
 `agents/claude/settings.json` declares `statusLine.command` as `~/.bun/bin/statusline`, this package's `bin`
 (root `package.json` `bin`, installed by `bun link` / `mise run deps`). The former Claude implementation
 has been retired; parity fixtures preserve its expected behavior.
@@ -32,8 +32,9 @@ The Claude adapter parses Claude Code statusline JSON on stdin and normalizes it
 Existing environment variables, cache locations, schema
 checks, explicit absence messages, 2 s enrichment limits, 3 s agent lookup limit, 4 s shared
 render deadline, 5 s GPU cache and 30 s agent-name cache are preserved. Same-session renders
-are serialized across processes; a concurrent call returns the previous rendered output, or
-waits for the first cold render to finish. Git state and process/dispatch scans use 1–1.5 s
+are serialized across processes; a concurrent call reuses a frame only when it is under five
+seconds old, belongs to the same input, and a live owner is rendering. Each persisted frame records
+its render time and input. Git state and process/dispatch scans use 1–1.5 s
 persistent TTLs, disk readings and rates use 5 s, and Codex rollout selection uses 1 s. Selected
 metadata, streamed settings and context are reread on every call; live refresh remains pinned
 to its initially selected session. The GPU sampler remains
@@ -107,9 +108,9 @@ outside this scaffolding step.
 | src/model-context.ts              |    60 | Model normalization and context labels                                    |
 | src/prompt-stamp.ts               |    95 | Temporal clock, offset, tilde path and prompt fields                      |
 | src/rate-limits.ts                |   158 | Scoped model caps, window percentages and reset countdowns                |
-| src/render-cache.ts               |   144 | Persistent source caches and per-session cross-process render guard       |
+| src/render-cache.ts               |   205 | Persistent source caches and per-session cross-process render guard       |
 | src/repo-state.ts                 |    36 | Bounded branch lookup and explicit git failures                           |
-| src/statusline.ts                 |   349 | Claude/Codex entry, live refresh, render guard and snapshot writes        |
+| src/statusline.ts                 |   359 | Claude/Codex entry, live refresh, render guard and snapshot writes        |
 | src/storage.ts                    |   130 | Storage TOML reads, disk measurements, shared threshold calculation       |
 | src/zod.ts                        |    44 | Local JSON codecs and nullable-field schema helper                        |
 

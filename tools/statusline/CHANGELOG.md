@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.1 — 2026-10-12
+
+- Recover stale per-session render locks before considering cached output; only reuse a frame younger than five seconds while a live owner renders the same input, and persist its render time and input.
+
 ## 0.15.0 — 2026-10-12
 
 - Select this session's agx runs using the same dispatcher-session environment precedence as `agx ps --mine`, and summarize live named runs in `Job:` so detached systemd runs are visible there too.

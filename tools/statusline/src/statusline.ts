@@ -286,16 +286,20 @@ if (liveMode) {
         return 2;
       }
       pinnedSession ??= current;
-      return withSessionRender(`codex:${current.sessionId}`, async () => {
-        const frame = await buildDataframe(current, {
-          codex: true,
-          sources: {
-            codexRate: () => readCodexRate(undefined, current.sessionId),
-          },
-        });
-        await writeSysSnapshot(frame);
-        return render(frame, { codex: true });
-      });
+      return withSessionRender(
+        `codex:${current.sessionId}`,
+        async () => {
+          const frame = await buildDataframe(current, {
+            codex: true,
+            sources: {
+              codexRate: () => readCodexRate(undefined, current.sessionId),
+            },
+          });
+          await writeSysSnapshot(frame);
+          return render(frame, { codex: true });
+        },
+        { input: current },
+      );
     },
   });
   process.exit(code);
@@ -318,7 +322,13 @@ if (liveMode) {
   const output =
     session?.sessionId === undefined || session.sessionId === ""
       ? await makeOutput()
-      : await withSessionRender(`${provider}:${session.sessionId}`, makeOutput);
+      : await withSessionRender(
+          `${provider}:${session.sessionId}`,
+          makeOutput,
+          {
+            input: session,
+          },
+        );
   process.stdout.write(`${output}${codexMode && onceMode ? "\n" : ""}`);
   // The active renderer owns snapshots; a contender reused output without source reads.
   if (df === undefined) process.exit(0);

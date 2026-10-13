@@ -43,7 +43,10 @@ const commandNames = (output: string): string[] => {
 test("the suite has one bin and a major version for the CLI break", () => {
   expect(pkg.name).toBe("agx");
   expect(pkg.version).toMatch(/^3\./u);
-  expect(pkg.bin).toEqual({ agx: "src/main.ts" });
+  expect(pkg.bin).toEqual({
+    agx: "src/main.ts",
+    "agx-next": "src/next/cli.ts",
+  });
 });
 
 test("bare and unknown commands list the root command nouns", () => {

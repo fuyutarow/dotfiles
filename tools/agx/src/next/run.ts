@@ -1,0 +1,359 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
+import { basename, join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { jsonOf, z } from "../../../shared/src/zod.ts";
+import { checkPremises } from "../premises.ts";
+import { verifyLine } from "../ticket.ts";
+import { parseReport, parseReturn, withReportInstruction } from "../report.ts";
+import { parseNextTicket, type NextTicket } from "./ticket.ts";
+import {
+  append,
+  events,
+  foldedRuns,
+  importLegacyRecords,
+  now,
+  overlapWarnings,
+  recordPath,
+  stateDir,
+} from "./store.ts";
+import { route } from "./route.ts";
+
+export type Flags = Readonly<Record<string, string | boolean | undefined>>;
+const fatal = (message: string, exitCode = 2): never => {
+  process.stderr.write(`agx-next: ${message}\n`);
+  process.exit(exitCode);
+};
+const value = (flags: Flags, key: string): string | undefined =>
+  typeof flags[key] === "string" ? flags[key] : undefined;
+const ticketFor = (path: string) => {
+  if (!existsSync(path)) fatal(`no such ticket: ${path}`, 2);
+  const text = readFileSync(path, "utf8");
+  const parsed = parseNextTicket(text);
+  const accepted = parsed.success
+    ? parsed
+    : fatal(`invalid ticket: ${parsed.reason}`, 2);
+  if (accepted.warnings.length > 0)
+    process.stderr.write(
+      `WARN ignored legacy ticket fields: ${accepted.warnings.join(", ")}\n`,
+    );
+  return { ticket: accepted.ticket, prose: accepted.prose };
+};
+const renderPromise = (
+  ticket: NextTicket,
+  cwd: string,
+  sandbox: string,
+  prose: string,
+): string =>
+  withReportInstruction(
+    [
+      `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}`,
+      `refuted_by: ${ticket.proposition.refuted_by}`,
+      "Everything below serves this proposition; do not let a side task displace it.",
+      "",
+      "Promise:",
+      `outcome: ${ticket.outcome}`,
+      `writes: ${JSON.stringify(ticket.writes.map((glob) => resolve(cwd, glob)))}`,
+      ...(ticket.verify.length === 0 ? [] : [verifyLine(ticket.verify)]),
+      `Sandbox mode: ${sandbox}${sandbox === "none" ? " (unsandboxed)" : ""}.`,
+      "",
+      prose.trim(),
+    ].join("\n"),
+  );
+const persistInterim = (id: string, path: string, message: string): void => {
+  const parsed = parseReturn(message);
+  if (parsed.kind !== "valid" || parsed.record.interim !== true) return;
+  const progressText = `${JSON.stringify(parsed.record)}\n`;
+  if (existsSync(path) && readFileSync(path, "utf8") === progressText) return;
+  writeFileSync(path, progressText);
+  append({ kind: "progress", id, at: now(), path });
+};
+
+export function check(flags: Flags): number {
+  const path = value(flags, "ticket");
+  const cwd = resolve(value(flags, "cd") ?? process.cwd());
+  if (path === undefined) return fatal("check requires positional TICKET", 2);
+  const { ticket } = ticketFor(path);
+  overlapWarnings(ticket.writes);
+  const premises = checkPremises(ticket.premises, cwd);
+  if (premises.status === "missing") {
+    return fatal(
+      `missing premises in --cd tree: ${premises.premises.join(", ")}`,
+      2,
+    );
+  }
+  if (premises.status === "timeout") fatal("premise check timed out", 2);
+  process.stdout.write(
+    `OK ticket=${ticket.name ?? basename(path)} cwd=${cwd}\n`,
+  );
+  return 0;
+}
+
+export async function run(flags: Flags): Promise<number> {
+  const path = value(flags, "ticket");
+  const cwd = resolve(value(flags, "cd") ?? process.cwd());
+  const sandbox = value(flags, "sandbox") ?? "workspace-write";
+  if (path === undefined) return fatal("run requires positional TICKET", 2);
+  if (!new Set(["none", "read-only", "workspace-write"]).has(sandbox))
+    return fatal("--sandbox must be none, read-only, or workspace-write", 2);
+  const { ticket, prose } = ticketFor(path);
+  overlapWarnings(ticket.writes);
+  const premises = checkPremises(ticket.premises, cwd);
+  if (premises.status === "missing")
+    return fatal(
+      `missing premises in --cd tree: ${premises.premises.join(", ")}`,
+      2,
+    );
+  if (premises.status === "timeout") return fatal("premise check timed out", 2);
+  const continuationId = value(flags, "continue");
+  const previous =
+    continuationId === undefined
+      ? undefined
+      : foldedRuns().find((entry) => entry.id === continuationId);
+  if (continuationId !== undefined && previous === undefined)
+    return fatal(`cannot continue unknown run ${continuationId}`, 2);
+  if (previous !== undefined && previous.vendor_session === null)
+    return fatal(`run ${previous.id} has no vendor session to continue`, 2);
+  const resumeSession = previous?.vendor_session ?? undefined;
+  const routeTask = `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`;
+  const row = await route(routeTask, ticket.capabilities);
+  const id = randomUUID();
+  const runDir = join(stateDir(), "runs", id);
+  mkdirSync(runDir, { recursive: true });
+  const reportPath = join(runDir, "report.json");
+  const workerBrief = join(runDir, "brief.md");
+  const progressPath = join(runDir, "last-progress.json");
+  const interimPath = join(runDir, "interim.jsonl");
+  const agxDispatcherSession = process.env.AGX_DISPATCHER_SESSION;
+  const claudeSession = process.env.CLAUDE_CODE_SESSION_ID;
+  let dispatcher: string | null = null;
+  if (agxDispatcherSession !== undefined && agxDispatcherSession !== "")
+    dispatcher = agxDispatcherSession;
+  else if (claudeSession !== undefined && claudeSession !== "")
+    dispatcher = claudeSession;
+  const workspace = resolve(cwd);
+  writeFileSync(
+    workerBrief,
+    withReportInstruction(renderPromise(ticket, cwd, sandbox, prose)),
+  );
+  append({
+    kind: "started",
+    id,
+    at: now(),
+    ticket: ticket.name ?? basename(path),
+    writes: ticket.writes,
+    cwd,
+    workspace,
+    row: row.id,
+    dispatcher_session: dispatcher,
+    vendor_session: resumeSession ?? null,
+    continues: continuationId ?? null,
+    pid: process.pid,
+  });
+
+  const workerPath =
+    process.env.AGX_NEXT_WORKER ??
+    join(
+      import.meta.dir,
+      "..",
+      "workers",
+      row.route === "codex" ? "codex.ts" : "run-claude.ts",
+    );
+  const workerArgs = (): string[] => {
+    if (process.env.AGX_NEXT_WORKER !== undefined)
+      return [
+        workerPath,
+        "--ticket",
+        path,
+        "--cd",
+        cwd,
+        "--row",
+        row.id,
+        ...(resumeSession === undefined ? [] : ["--resume", resumeSession]),
+      ];
+    if (row.route === "codex")
+      return [
+        workerPath,
+        "--choice",
+        row.id,
+        "--sandbox",
+        sandbox,
+        "--cd",
+        cwd,
+        "--prompt-file",
+        workerBrief,
+        "--run-id",
+        id,
+        "--receipt-dir",
+        runDir,
+        "--timeout-s",
+        String(ticket.timeout_s ?? 600),
+        ...(resumeSession === undefined ? [] : ["--resume", resumeSession]),
+      ];
+    let permissionMode = "acceptEdits";
+    if (sandbox === "read-only") permissionMode = "plan";
+    if (sandbox === "none") permissionMode = "bypassPermissions";
+    return [
+      workerPath,
+      "--target",
+      cwd,
+      "--prompt-file",
+      workerBrief,
+      "--model",
+      row.model,
+      "--effort",
+      row.effort,
+      "--permission-mode",
+      permissionMode,
+      "--max-turns",
+      "60",
+      "--max-budget-usd",
+      "2",
+      "--timeout-ms",
+      String((ticket.timeout_s ?? 600) * 1000),
+      "--progress-file",
+      join(runDir, "worker-progress.jsonl"),
+      "--persist-session",
+      ...(resumeSession === undefined ? [] : ["--resume", resumeSession]),
+    ];
+  };
+  const child = Bun.spawn([process.execPath, ...workerArgs()], {
+    cwd,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "inherit",
+    env: { ...process.env, AGX_INTERIM_REPORTS_FILE: interimPath },
+  });
+  const outputPromise =
+    child.stdout === null
+      ? Promise.resolve("")
+      : new Response(child.stdout).text();
+  let progressOffset = 0;
+  const progressWatcher = setInterval(() => {
+    if (!existsSync(interimPath)) return;
+    const data = readFileSync(interimPath, "utf8");
+    const fresh = data.slice(progressOffset);
+    progressOffset = data.length;
+    const last = fresh.trim().split("\n").at(-1);
+    if (last === undefined || last === "") return;
+    const record = jsonOf(
+      z.looseObject({ last_message: z.string() }),
+    ).safeParse(last);
+    if (!record.success) return;
+    persistInterim(id, progressPath, record.data.last_message);
+  }, 100);
+  const exit = await child.exited;
+  clearInterval(progressWatcher);
+  const output = await outputPromise;
+  const receiptLine = output.trim().split("\n").at(-1) ?? "";
+  const receipt = jsonOf(
+    z.looseObject({
+      report: z.unknown().optional(),
+      structured_output: z.unknown().optional(),
+      last_message: z.string().optional(),
+      vendor_session: z.string().optional(),
+      session: z.string().optional(),
+    }),
+  ).safeParse(receiptLine);
+  const workerReceipt = receipt.success ? receipt.data : {};
+  const parsedReport = parseReport(
+    workerReceipt.structured_output ?? workerReceipt.report,
+    workerReceipt.last_message ?? receiptLine,
+  );
+  const report = parsedReport.ok
+    ? parsedReport.report
+    : {
+        summary: workerReceipt.last_message ?? output.trim(),
+        changes: [],
+        checks: [],
+        for_coordinator: [],
+        open: [],
+      };
+  writeFileSync(reportPath, `${JSON.stringify(report)}\n`);
+  const vendorSession =
+    workerReceipt.vendor_session ?? workerReceipt.session ?? null;
+  if (existsSync(interimPath)) {
+    const finalInterim = readFileSync(interimPath, "utf8")
+      .trim()
+      .split("\n")
+      .at(-1);
+    const interim =
+      finalInterim === undefined
+        ? undefined
+        : jsonOf(z.looseObject({ last_message: z.string() })).safeParse(
+            finalInterim,
+          );
+    if (interim?.success === true)
+      persistInterim(id, progressPath, interim.data.last_message);
+  }
+  append({
+    kind: "ended",
+    id,
+    at: now(),
+    exit,
+    report_path: reportPath,
+    vendor_session: vendorSession,
+  });
+  process.stdout.write(
+    `${JSON.stringify({ id, ticket: ticket.name ?? basename(path), row: row.id, exit, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,
+  );
+  return exit;
+}
+
+export function list(flags: Flags): number {
+  const rows = foldedRuns();
+  const asJson = value(flags, "json") === "true" || flags.json === true;
+  let output = rows
+    .map(
+      (entry) =>
+        `${entry.id} ${entry.state} ${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"}`,
+    )
+    .join("\n");
+  if (asJson) output = `${JSON.stringify(rows)}\n`;
+  else if (rows.length > 0) output += "\n";
+  process.stdout.write(output);
+  return 0;
+}
+
+export function judgeRun(flags: Flags): number {
+  const id = value(flags, "id");
+  const decision = value(flags, "decision");
+  if (id === undefined || decision === undefined)
+    return fatal("judge requires RUN_ID and accept|reject", 2);
+  if (decision !== "accept" && decision !== "reject")
+    return fatal("judge decision must be accept or reject", 2);
+  if (!foldedRuns().some((entry) => entry.id === id))
+    return fatal(`unknown run ${id}`, 2);
+  append({
+    kind: "judged",
+    id,
+    at: now(),
+    decision,
+    note: value(flags, "note") ?? "",
+  });
+  return 0;
+}
+
+export async function stats(flags: Flags): Promise<number> {
+  const importFlag =
+    flags.importLegacy === true || value(flags, "import-legacy") === "true";
+  const legacyImport = importFlag ? await importLegacyRecords() : undefined;
+  const all = events();
+  const runs = foldedRuns();
+  const report = {
+    runs: runs.length,
+    running: runs.filter((entry) => entry.state === "running").length,
+    ended: runs.filter((entry) => entry.state === "ended").length,
+    orphaned: runs.filter((entry) => entry.state === "orphaned").length,
+    judgments: all.filter((event) => event.kind === "judged").length,
+    ...(legacyImport === undefined ? {} : { legacy_import: legacyImport }),
+    by_row: Object.fromEntries(
+      [...new Set(runs.map((entry) => entry.row))].map((row) => [
+        row,
+        runs.filter((entry) => entry.row === row).length,
+      ]),
+    ),
+  };
+  process.stdout.write(`${JSON.stringify(report)}\n`);
+  return 0;
+}

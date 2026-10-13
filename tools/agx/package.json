@@ -1,9 +1,10 @@
 {
-  "version": "3.7.0",
+  "version": "3.8.0",
   "name": "agx",
   "private": true,
   "type": "module",
   "bin": {
-    "agx": "src/main.ts"
+    "agx": "src/main.ts",
+    "agx-next": "src/next/cli.ts"
   }
 }

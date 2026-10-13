@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.8.0 — 2026-10-14
+
+- Add the parallel `agx-next` CLI with five commands and one append-only event log; preserve the existing `agx` entrypoint.
+- Accept positional ticket paths, pass the selected sandbox to workers, and import legacy run, judgment, and interim rows idempotently from real `runs*.jsonl` logs.
+- Add positional `judge RUN_ID accept|reject`, dispatcher-session fallback, and `run --continue RUN_ID` lineage with vendor-session resume.
+
 ## 3.7.0 — 2026-10-13
 
 - Derive write leases from `lifecycle.jsonl` and serialize only the fold recheck plus `admitted` append on that log; remove admission/cache files and the 3.5.0 compatibility path.

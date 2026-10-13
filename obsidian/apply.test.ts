@@ -22,6 +22,37 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
 });
 
+test("routes txt to markdown without registering it in code-view", () => {
+  const plugins = readJson(join(import.meta.dir, "plugins.json"));
+  expect(plugins).toMatchObject({
+    "obsidian-custom-file-extensions-plugin": {
+      repo: "meeptech/obsidian-custom-file-extensions-plugin",
+      version: "1.2.1",
+      sha256: {
+        "main.js":
+          "0cd164f9bc9b732ba87e0e3149ce77b3821ae9c27c1c750c7e8dd75d3d69e3cc",
+        "manifest.json":
+          "82675c42eca77f5ce39f68d795b14accfc17eb46ce9b765d960931df3a2dc6a0",
+      },
+      settings: { types: { markdown: ["txt"] } },
+    },
+  });
+  const codeView = z
+    .object({
+      "code-view": z.object({
+        settings: z.object({ extensions: z.string() }),
+      }),
+    })
+    .safeParse(plugins);
+  expect(codeView.success).toBe(true);
+  if (codeView.success) {
+    const extensions =
+      codeView.data["code-view"].settings.extensions.split(",");
+    expect(extensions).not.toContain("txt");
+    expect(extensions).toContain("log");
+  }
+});
+
 test("merges declared settings atomically and keeps check read-only", async () => {
   const home = mkdtempSync(join(tmpdir(), "obsidian-apply-test-"));
   tempDirs.push(home);

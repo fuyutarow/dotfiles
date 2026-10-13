@@ -15,7 +15,7 @@
 //            finished run dirs).
 // --push     fetches and pushes the bookmark; if another writer moves the remote, rebase this
 //            commit onto it and retry, bounded to three attempts (never force-push).
-// BOOKMARK   env, default alpha.
+// --bookmark / BOOKMARK env, default alpha outside agx workspaces.
 // Exit: 0 committed · 1 the gate refused (nothing committed) · 2 usage or empty selection.
 import { $ } from "bun";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -35,7 +35,7 @@ const die = (m: string, code = 2): never => {
   process.exit(code);
 };
 
-const bookmark = process.env.BOOKMARK ?? "alpha";
+const envBookmark = process.env.BOOKMARK;
 
 // strictFlags alone lets --__proto__ reach type-flag before the unknown-flag check (BG1).
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -75,6 +75,11 @@ const parsed = cli(
         type: Boolean,
         default: false,
         description: "push the bookmark to origin afterwards",
+      },
+      bookmark: {
+        type: String,
+        default: envBookmark ?? "",
+        description: "bookmark to move to the commit (or set BOOKMARK)",
       },
     },
   },
@@ -129,8 +134,38 @@ function isAgxWorkspace(workspaceRoot: string): boolean {
   }
   return false;
 }
-if (isAgxWorkspace(root))
-  die("agx workspaces must land through `mise run land -- <ws> -m …`", 1);
+const agxWorkspace = isAgxWorkspace(root);
+const explicitBookmark = parsed.flags.bookmark !== "";
+if (agxWorkspace && !explicitBookmark)
+  die(
+    "agx workspace commit needs an explicit target: pass `--bookmark <name>` or set `BOOKMARK`; trunk targets must go through `mise run land`",
+    1,
+  );
+const bookmark = parsed.flags.bookmark !== "" ? parsed.flags.bookmark : "alpha";
+if (agxWorkspace) {
+  const trunkRevset = "trunk()";
+  const trunkBookmarks =
+    await $`jj --ignore-working-copy log --no-graph -r ${trunkRevset} -T ${"bookmarks"}`
+      .quiet()
+      .nothrow();
+  if (trunkBookmarks.exitCode !== 0)
+    die(
+      `cannot inspect repository trunk: ${trunkBookmarks.stderr.toString().trim()}`,
+      1,
+    );
+  const configuredTrunk = trunkBookmarks.stdout
+    .toString()
+    .split(/[\\s,]+/u)
+    .filter(Boolean);
+  const isTrunk = new Set(["alpha", "main", "trunk", ...configuredTrunk]).has(
+    bookmark,
+  );
+  if (isTrunk)
+    die(
+      `cannot move trunk bookmark '${bookmark}' from an agx workspace; use mise run land`,
+      1,
+    );
+}
 const { records, push } = parsed.flags;
 const named: string[] = [...parsed._];
 const msg =

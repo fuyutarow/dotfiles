@@ -147,7 +147,62 @@ function recorded(f: ReturnType<typeof fixture>) {
 }
 
 describe("jj gated commit (J1)", () => {
-  test("refuses commits from agx-created workspaces and points to land", () => {
+  test("agx workspace allows a diagnostic bookmark and refuses alpha", () => {
+    const f = fixture();
+    const worker = join(f.dir, "repo-arm-agx-test");
+    f.jj("bookmark", "set", "alpha", "-r", "@-");
+    f.jj(
+      "workspace",
+      "add",
+      "--name",
+      "repo-arm-agx-test",
+      "-r",
+      "alpha",
+      worker,
+    );
+    writeFileSync(join(worker, "selected.txt"), "worker edit\n");
+    const runWorkerCommit = (bookmark?: string) =>
+      Bun.spawnSync(
+        [
+          "mise",
+          "run",
+          "commit",
+          "--",
+          "-m",
+          "worker commit",
+          ...(bookmark !== undefined ? ["--bookmark", bookmark] : []),
+          "--",
+          "selected.txt",
+        ],
+        {
+          cwd: worker,
+          env: {
+            ...f.env,
+            MISE_TRUSTED_CONFIG_PATHS: worker,
+            PATH: `${f.bin}:/usr/bin:/bin`,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 60_000,
+        },
+      );
+    writeFileSync(join(worker, "selected.txt"), "diagnostic edit\n");
+    const diagnostic = runWorkerCommit("diag/x");
+    expect(diagnostic.exitCode, diagnostic.stderr.toString()).toBe(0);
+    expect(f.jj("log", "--no-graph", "-r", "diag/x", "-T", "description")).toBe(
+      "worker commit",
+    );
+    writeFileSync(join(worker, "selected.txt"), "trunk edit\n");
+    const trunk = runWorkerCommit("alpha");
+    expect(trunk.exitCode).toBe(1);
+    expect(trunk.stderr.toString()).toContain("use mise run land");
+    expect(f.jj("log", "--no-graph", "-r", "alpha", "-T", "description")).toBe(
+      "fixture base",
+    );
+    expect(existsSync(f.receipt)).toBe(true);
+  });
+
+  test("agx workspace without an explicit bookmark names both target options", () => {
     const f = fixture();
     const worker = join(f.dir, "repo-arm-agx-test");
     f.jj("bookmark", "set", "alpha", "-r", "@-");
@@ -162,7 +217,7 @@ describe("jj gated commit (J1)", () => {
     );
     writeFileSync(join(worker, "selected.txt"), "worker edit\n");
     const result = Bun.spawnSync(
-      ["mise", "run", "commit", "--", "-m", "bypass", "--", "selected.txt"],
+      ["mise", "run", "commit", "--", "-m", "worker", "--", "selected.txt"],
       {
         cwd: worker,
         env: {
@@ -176,13 +231,9 @@ describe("jj gated commit (J1)", () => {
       },
     );
     expect(result.exitCode).toBe(1);
-    expect(result.stderr.toString()).toContain(
-      "agx workspaces must land through `mise run land -- <ws> -m …`",
-    );
-    expect(f.jj("log", "--no-graph", "-r", "alpha", "-T", "description")).toBe(
-      "fixture base",
-    );
-    expect(existsSync(f.receipt)).toBe(false);
+    expect(result.stderr.toString()).toContain("--bookmark <name>");
+    expect(result.stderr.toString()).toContain("BOOKMARK");
+    expect(result.stderr.toString()).toContain("mise run land");
   });
 
   test("passes the snapshot interface and preserves selected paths exactly", async () => {

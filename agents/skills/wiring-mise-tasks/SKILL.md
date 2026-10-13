@@ -71,11 +71,13 @@ jj runs no git hooks, so these provide the commit gate, post-merge step, and gua
 
 | Token | Tier | Meaning |
 |---|---|---|
-| `commit` | HARD in a jj repo | validate named paths, snapshot `@`, run `hook:pre-commit` with the J1 interface below, `jj commit` exactly those paths, move the bookmark (`BOOKMARK`, default `alpha`) to `@-`, `--push` pushes and checks the remote; then the `post-commit` shim. No Git binary or index is needed to commit. Body = `scripts/jj-commit.ts`, run, never copied |
+| `commit` | HARD in a jj repo | validate named paths, snapshot `@`, run `hook:pre-commit` with the J1 interface below, `jj commit` exactly those paths, move the bookmark (`--bookmark`, else `BOOKMARK`, default `alpha`) to `@-`, `--push` pushes and checks the remote; then the `post-commit` shim. No Git binary or index is needed to commit. Body = `scripts/jj-commit.ts`, run, never copied |
 | `pull` | HARD in a jj repo | `jj git fetch`, then `jj rebase -b @ -d 'trunk()'`; a repo with `hook:post-merge` runs it last |
 | `push` | HARD in a jj repo | show `alpha@origin..alpha`, refuse divergence or conflicts, then `jj git push -b alpha`; `--dry-run` prints the list without pushing. Body = `scripts/jj-push.ts`, run, never copied |
 
 Dotfiles landing: `mise run land -- <workspace-name> -m '<message>' [--hosts sol,r99-u26] [--smoke '<cmd>'] [--dry-run]` checks overlap, rebases onto alpha and formats exactly the changed paths before the gated commit and push.
+
+In an agx-created workspace, `mise run commit` requires an explicit target via `--bookmark <name>` or `BOOKMARK`. It refuses targets that name the trunk (`alpha`, `main`, `trunk`, or a bookmark attached to the repository's configured `trunk()` revision), directing those changes through `mise run land`; non-trunk bookmarks such as `diag/x` and `mod/x` remain publishable by workers. Outside agx workspaces, the default remains `alpha`.
 Defaults live in `scripts/config-registry.ts` (`LAND_HOSTS`); deployment runs pull then deps per host only after push succeeds, and dry-run previews in disposable copies without changing the original checkouts.
 
 - **Resolution** = the token is a LOCAL task name or alias (`mise tasks ls --json`, source under

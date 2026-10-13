@@ -2,7 +2,6 @@
 // paths LAND_MISE and LAND_SSH (argv is never interpreted by a local shell).
 import {
   cpSync,
-  appendFileSync,
   existsSync,
   lstatSync,
   mkdtempSync,
@@ -35,10 +34,13 @@ import {
   type LandReport,
 } from "./land-verdict.ts";
 
-function recordWorkspaceAcceptance(workspace: string): number {
+function recordWorkspaceAcceptance(
+  workspace: string,
+  review: string | undefined,
+): ResultAsync<number, Error> {
   const state = dispatchStateDir();
   const log = join(state, "runs.jsonl");
-  if (!existsSync(log)) return 0;
+  if (!existsSync(log)) return ResultAsync.fromSafePromise(Promise.resolve(0));
   const target = realpathSync(workspace);
   const lines = readFileSync(log, "utf8").split("\n").filter(Boolean);
   const ids = new Set<string>();
@@ -54,12 +56,20 @@ function recordWorkspaceAcceptance(workspace: string): number {
     if (realpathSync(parsed.data.cwd) !== target) continue;
     ids.add(parsed.data.run_id);
   }
-  for (const run_id of ids)
-    appendFileSync(
-      log,
-      `${JSON.stringify({ kind: "acceptance", run_id, accept: true, at: Temporal.Now.instant().toString(), workspace: target })}\n`,
-    );
-  return ids.size;
+  return safeTry(async function* () {
+    for (const run_id of ids)
+      yield* run(workspace, [
+        process.env.LAND_AGX ?? "agx",
+        "ledger",
+        "note",
+        run_id,
+        "--accept",
+        ...(review === undefined
+          ? ["--no-review", "landed by coordinator after live check"]
+          : ["--review", review]),
+      ]);
+    return ok(ids.size);
+  });
 }
 
 const emit = (text: string): void => {
@@ -674,6 +684,10 @@ async function main(
           default: false,
           description: "Print the queue journal and lock owners as JSON.",
         },
+        review: {
+          type: String,
+          description: "Independent agx run ID reviewing this acceptance.",
+        },
         message: {
           type: String,
           alias: "m",
@@ -707,7 +721,8 @@ async function main(
       parsed.flags.dryRun ||
       (parsed.flags.enqueue === undefined &&
         (parsed.flags.message !== undefined ||
-          parsed.flags.smoke !== undefined));
+          parsed.flags.smoke !== undefined ||
+          parsed.flags.review !== undefined));
     if (invalid) {
       emit(
         "[land] queue: FAIL select exactly one queue mode; positional workspace and --dry-run are not allowed",
@@ -731,6 +746,9 @@ async function main(
           ...(parsed.flags.smoke === undefined
             ? {}
             : { smoke: parsed.flags.smoke }),
+          ...(parsed.flags.review === undefined
+            ? {}
+            : { review: parsed.flags.review }),
         });
         return result instanceof Error ? result : 0;
       }
@@ -742,6 +760,7 @@ async function main(
             "-m",
             item.msg,
             ...(item.smoke === undefined ? [] : ["--smoke", item.smoke]),
+            ...(item.review === undefined ? [] : ["--review", item.review]),
           ],
           true,
           (value) => {
@@ -774,6 +793,8 @@ async function main(
         return reject(`package bin check failed: ${binProblems.join("; ")}`);
       if (parsed._.length !== 1 || (parsed.flags.message?.trim() ?? "") === "")
         return reject("one workspace and -m <message> are required");
+      if (parsed.flags.review?.trim() === "")
+        return reject("--review requires a non-empty agx run ID");
       for (const host of LAND_HOSTS)
         hostResults.set(
           host.alias,
@@ -951,7 +972,10 @@ async function main(
       if (parsed.flags.dryRun) emit("[land] commit: ok preview gated commit");
       emit(`[land] push: ok ${parsed.flags.dryRun ? "preview" : commit}`);
       if (!parsed.flags.dryRun) {
-        const accepted = recordWorkspaceAcceptance(workerRoot);
+        const accepted = yield* recordWorkspaceAcceptance(
+          workerRoot,
+          parsed.flags.review,
+        );
         emit(
           `[land] acceptance: recorded ${accepted} run(s) from this workspace`,
         );

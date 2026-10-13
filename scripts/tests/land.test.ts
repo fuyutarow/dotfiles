@@ -142,6 +142,7 @@ function fixture() {
   ]);
   const mise = join(temp, "mise-stub");
   const ssh = join(temp, "ssh-stub");
+  const agx = join(temp, "agx-stub");
   writeFileSync(
     mise,
     `#!${process.execPath}\nimport { appendFileSync, writeSync } from 'node:fs';
@@ -182,8 +183,24 @@ if (begin !== undefined && end !== undefined) process.stdout.write('\\n' + begin
 if (process.env.LAND_UNREACHABLE_SSH === host) { process.stderr.write('ssh: connect to host ' + host + ' failed\\n'); process.exit(255); }
 process.exit(process.env.LAND_FAIL_SSH === host ? 7 : 0);\n`,
   );
+  writeFileSync(
+    agx,
+    `#!${process.execPath}\nimport { appendFileSync } from 'node:fs';
+import { join } from 'node:path';
+const args = process.argv.slice(2);
+appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['agx', ...args]) + '\\n');
+if (args[0] === 'ledger' && args[1] === 'note' && args[3] === '--accept') {
+  const review = args.indexOf('--review');
+  const noReview = args.indexOf('--no-review');
+  const record = { kind: 'acceptance', run_id: args[2], accept: true,
+    ...(review < 0 ? {} : { review: args[review + 1] }),
+    ...(noReview < 0 ? {} : { no_review: args[noReview + 1] }) };
+  appendFileSync(join(process.env.AGX_STATE_DIR, 'runs.jsonl'), JSON.stringify(record) + '\\n');
+}\n`,
+  );
   chmodSync(mise, 0o755);
   chmodSync(ssh, 0o755);
+  chmodSync(agx, 0o755);
   for (const formatter of ["bunx", "rumdl", "shfmt"]) {
     const path = join(temp, formatter);
     writeFileSync(
@@ -204,6 +221,7 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['format', '${formatter}'
         ...env,
         PATH: `${temp}:${process.env.PATH ?? ""}`,
         LAND_MISE: mise,
+        LAND_AGX: agx,
         LAND_SSH: ssh,
         ...extraEnv,
       },
@@ -238,6 +256,7 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['format', '${formatter}'
         ...env,
         PATH: `${temp}:${process.env.PATH ?? ""}`,
         LAND_MISE: mise,
+        LAND_AGX: agx,
         LAND_SSH: ssh,
       },
       stdin: "ignore",
@@ -397,6 +416,47 @@ describe("land workspace", () => {
       run_id: "run-from-workspace",
       accept: true,
     });
+    expect(f.log().filter((event) => event[0] === "agx")).toEqual([
+      [
+        "agx",
+        "ledger",
+        "note",
+        "run-from-workspace",
+        "--accept",
+        "--no-review",
+        "landed by coordinator after live check",
+      ],
+    ]);
+  });
+
+  test("landing records acceptance through agx with the supplied review", () => {
+    const f = fixture();
+    const state = join(f.main, "..", "agx-state");
+    mkdirSync(state, { recursive: true });
+    appendFileSync(
+      join(state, "runs.jsonl"),
+      `${JSON.stringify({ kind: "run", run_id: "reviewed-run", cwd: f.worker })}\n`,
+    );
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land(["--review", "independent-review"]);
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(f.log().filter((event) => event[0] === "agx")).toEqual([
+      [
+        "agx",
+        "ledger",
+        "note",
+        "reviewed-run",
+        "--accept",
+        "--review",
+        "independent-review",
+      ],
+    ]);
+    expect(readFileSync(join(state, "runs.jsonl"), "utf8")).toContain(
+      '"run_id":"reviewed-run","accept":true,"review":"independent-review"',
+    );
   });
 
   test("dry-run preserves tracked relative symlinks instead of inventing overlap", () => {
@@ -777,11 +837,23 @@ describe("land workspace", () => {
     ]);
     writeFileSync(join(f.worker, "keep.txt"), "failed worker\n");
     writeFileSync(join(second, "delete.txt"), "successful worker\n");
+    mkdirSync(f.env.AGX_STATE_DIR, { recursive: true });
+    appendFileSync(
+      join(f.env.AGX_STATE_DIR, "runs.jsonl"),
+      `${JSON.stringify({ kind: "run", run_id: "queued-run", cwd: second })}\n`,
+    );
     expect(
       f.command(["--enqueue", f.worker, "-m", "Fail queued"]).exitCode,
     ).toBe(0);
     expect(
-      f.command(["--enqueue", "second", "-m", "Good queued"]).exitCode,
+      f.command([
+        "--enqueue",
+        "second",
+        "-m",
+        "Good queued",
+        "--review",
+        "queued-review",
+      ]).exitCode,
     ).toBe(0);
     const result = f.command(["--run-queue"]);
     expect(
@@ -797,6 +869,17 @@ describe("land workspace", () => {
       "successful worker\n",
     );
     expect(existsSync(second)).toBe(false);
+    expect(f.log().filter((event) => event[0] === "agx")).toEqual([
+      [
+        "agx",
+        "ledger",
+        "note",
+        "queued-run",
+        "--accept",
+        "--review",
+        "queued-review",
+      ],
+    ]);
     const state = landStateDir(realpathSync(f.main));
     // State belongs to this isolated fixture, rather than the test runner's own AGX state.
     const actualState = join(f.env.AGX_STATE_DIR, "land", basename(state));

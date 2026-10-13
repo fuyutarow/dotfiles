@@ -1,6 +1,7 @@
 import { lstatSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fromThrowable } from "../../../shared/src/zod.ts";
+import { checkScanDeadline } from "../lib/scan-cache.ts";
 
 export type Scan = {
   /** tracked files modified after the working-copy tree_state was written */
@@ -34,6 +35,7 @@ export function scanWorkspace(
   }
   const scan: Scan = { newer: [], foreign: [] };
   const visit = (rel: string) => {
+    checkScanDeadline();
     const names = fromThrowable(() =>
       readdirSync(rel === "" ? root : join(root, rel)),
     )();

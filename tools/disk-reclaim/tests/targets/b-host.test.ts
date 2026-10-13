@@ -254,7 +254,7 @@ test("non-WSL CLI uses only encoded SSH stubs, records per-lever deltas, and gat
   expect(log).toContain(".ps1'");
   expect(log).toContain("[Console]::In.ReadLine()");
   expect(log).toContain("[Convert]::FromBase64String");
-  expect(log).toContain('"ConnectTimeout=10"');
+  expect(log).toContain('"ConnectTimeout=3"');
   expect(log).toContain('"BatchMode=yes"');
   expect(log).toContain('"ConnectionAttempts=1"');
   expect(log).toContain('"-T"');
@@ -407,4 +407,29 @@ test("host swap classification depends on mtime rather than input order", () => 
   expect(classifySwaps([a, b, c]).live).toBe(b);
   expect(classifySwaps([c, b, a]).live).toBe(b);
   expect(classifySwaps([b, a, c]).live).toBe(b);
+});
+
+test("one plan shares a failed short SSH probe across remote targets", async () => {
+  let calls = 0;
+  const target = createHostTarget({
+    skipUnreachable: true,
+    runner: () => {
+      calls++;
+      return Promise.resolve({
+        code: 255,
+        out: "",
+        err: "connection refused",
+        timedOut: false,
+      });
+    },
+  });
+  const ctx: Context = { ...context, remoteProbes: new Map() };
+  const [first, second] = await Promise.all([
+    target.available(ctx),
+    target.available({ ...ctx }),
+  ]);
+  expect(first.available).toBe(false);
+  expect(second).toEqual(first);
+  expect(first.skip_reason).toContain("skipped after one short SSH probe");
+  expect(calls).toBe(1);
 });

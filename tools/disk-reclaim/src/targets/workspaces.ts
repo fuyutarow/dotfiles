@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
 import {
   listWorkspaces,
+  expandRoot,
   storeOf,
   walkRoots,
   type Found,
@@ -30,7 +31,8 @@ import {
 import type { ActionResult, Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { measuredTreeBytes } from "./tree.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable, z } from "../../../shared/src/zod.ts";
+import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
 import { protectedReason } from "../lib/protected.ts";
 
 export type WorkspacesOptions = {
@@ -119,7 +121,18 @@ async function storeCandidates(
       log(`workspaces: ${fetchError}`);
     }
   }
-  const { listed, error } = (options.list ?? listWorkspaces)(store);
+  const listingCache = scanCache(store, "workspace-list-v1", context, [
+    join(store, ".jj/repo/op_heads"),
+    join(store, ".jj/repo/workspace_store/index"),
+  ]);
+  const savedListing = z
+    .array(z.object({ name: z.string(), root: z.string().nullable() }))
+    .safeParse(listingCache.value);
+  const { listed, error } =
+    options.list === undefined && savedListing.success
+      ? { listed: savedListing.data, error: null }
+      : (options.list ?? listWorkspaces)(store);
+  if (listed !== null && !savedListing.success) listingCache.save(listed);
   if (listed === null) {
     const message = `workspaces: cannot list ${store}: ${error}`;
     log(message);
@@ -128,6 +141,7 @@ async function storeCandidates(
   }
   const candidates: Candidate[] = [];
   for (const entry of listed) {
+    checkScanDeadline(context);
     if (entry.root !== null) covered.add(entry.root);
     if (entry.name === "default" || entry.root === store) continue;
     if (fetchError === null) {
@@ -154,6 +168,7 @@ function gather(
   ctx: Context,
   options: WorkspacesOptions,
 ): WorkspaceFacts {
+  checkScanDeadline(ctx);
   const snapshot = ctx.liveness ?? createLivenessSnapshot(ctx.config);
   const open = (options.openPaths ?? snapshot.openPaths)(root);
   const scratch = ctx.config.scratch_roots
@@ -171,6 +186,20 @@ function gather(
     if (verdict === null) detail = "session liveness unknown";
     else if (verdict) detail = "session is dead";
     session = { ok: verdict, detail };
+  }
+  // Filesystem metadata alone cannot invalidate a configuration-dependent classification.
+  const policy = JSON.stringify(
+    [...new Set(ctx.config.regenerable_ignored)].toSorted(),
+  );
+  const cache = scanCache(root, `workspace-facts-v3:${policy}`, ctx, [
+    join(root, ".jj/working_copy/tree_state"),
+    join(store, ".jj/repo/op_heads"),
+    join(store, ".jj/repo/workspace_store/index"),
+  ]);
+  const saved = WorkspaceScanFacts.safeParse(cache.value);
+  if (saved.success) {
+    ctx.reportActivity?.("workspaces", `cache hit facts ${root}`);
+    return { ...saved.data, open, session };
   }
   let fresh: WorkspaceFacts["fresh"];
   let treeStateMs: number | null = null;
@@ -231,7 +260,7 @@ function gather(
     fresh = { ok: null, detail: "jj file list failed" };
   }
   const unpushed = unpushedRevset(name);
-  return {
+  const facts = {
     fresh,
     unpushed: ids(store, `${unpushed} ~ (empty() & description(exact:""))`),
     conflicts: ids(store, `${unpushed} & conflicts()`),
@@ -241,6 +270,44 @@ function gather(
     session,
     lastFetch: lastFetch(store),
   };
+  if (
+    facts.fresh.ok !== null &&
+    facts.unpushed !== null &&
+    facts.conflicts !== null &&
+    facts.bookmarks !== null &&
+    facts.foreign !== null
+  )
+    cache.save({ ...facts, open: undefined, session: undefined });
+  return facts;
+}
+
+const WorkspaceScanFacts = z.object({
+  fresh: z.object({ ok: z.boolean().nullable(), detail: z.string() }),
+  unpushed: z.array(z.string()).nullable(),
+  conflicts: z.array(z.string()).nullable(),
+  bookmarks: z.array(z.string()).nullable(),
+  foreign: z.array(z.string()).nullable(),
+  lastFetch: z.string(),
+});
+
+const FoundRoots = z.object({
+  stores: z.array(z.string()),
+  workspaces: z.array(z.string()),
+});
+function cachedWorkspaceRoots(patterns: string[], ctx: Context): Found {
+  const found: Found = { stores: [], workspaces: [] };
+  for (const root of patterns.flatMap((pattern) => expandRoot(pattern))) {
+    checkScanDeadline(ctx);
+    const cache = scanCache(root, "workspace-discovery-v1", ctx);
+    const saved = FoundRoots.safeParse(cache.value);
+    const current = saved.success ? saved.data : walkRoots([root]);
+    if (saved.success)
+      ctx.reportActivity?.("workspaces", `cache hit discovery ${root}`);
+    else cache.save(current);
+    found.stores.push(...current.stores);
+    found.workspaces.push(...current.workspaces);
+  }
+  return found;
 }
 
 const ask = (
@@ -353,11 +420,15 @@ export function createWorkspacesTarget(
               : { procs: { procRoot: ctx.procDir } },
           ),
       };
-      const found = (options.discover ?? walkRoots)([
+      const roots = [
         ...ctx.config.repo_roots,
         ...ctx.config.scratch_roots,
         ...ctx.config.repos,
-      ]);
+      ];
+      const found =
+        options.discover === undefined
+          ? cachedWorkspaceRoots(roots, ctx)
+          : options.discover(roots);
       const stores = new Set(found.stores);
       for (const workspace of found.workspaces) {
         const store = storeOf(workspace);
@@ -366,6 +437,7 @@ export function createWorkspacesTarget(
       const candidates: Candidate[] = [];
       const covered = new Set<string>();
       for (const store of [...stores].toSorted()) {
+        checkScanDeadline(ctx);
         candidates.push(
           ...(await storeCandidates(store, context, options, covered, ctx.log)),
         );
@@ -381,6 +453,7 @@ export function createWorkspacesTarget(
       }
       const rows: Candidate[] = [];
       for (const candidate of candidates) {
+        checkScanDeadline(ctx);
         const path = candidate.path;
         if (candidate.bytes === null && path !== null)
           candidate.bytes = (

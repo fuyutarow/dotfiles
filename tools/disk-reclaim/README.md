@@ -28,7 +28,28 @@ or changed paths are skipped. Owner-only rows remain ASK until their item is sup
 `--approve <owner-item>`; XDG Trash uses `--approve xdg-trash`. `--yes` is the single-process
 equivalent of `plan | apply`.
 
-Plan is read-only. Legacy `run` requires named targets or `--tier blind`, plus `--yes`. `delete`
+Plan reads candidate data without deleting it and maintains a measurement cache under
+`$RECLAIM_STATE_DIR/scan-cache` (default: the reclaim state directory). Each root's change key
+contains device/inode, size, mtime/ctime, and sorted top-level entry metadata. An unchanged key
+reuses previous sizing and discovery results; changed roots are scanned again. Completed
+subdirectories are cached as well, so an interrupted large-root scan can reuse those measurements
+on its next attempt rather than starting every branch again. These are shallow
+estimates: a modification deeper than the top level can leave the key unchanged. Remove the
+cache directory to request a full measurement. Process and session safety are refreshed for
+every plan, and action revalidation bypasses the cache. Workspace facts also include jj tree-state,
+operation-head and workspace-index metadata in their keys. Their classification cache also
+includes the normalized `regenerable_ignored` policy, so changing allowed tool caches reclassifies
+unchanged workspaces.
+
+Progress reports scan starts, cache hits and elapsed time on stderr. A tree worker stops after
+ten seconds without advancing entry counters; heartbeats alone do not count as progress.
+Progressing plans have no total elapsed-time limit. Only a lack of advancing scan counters or
+metadata probes stops a tree worker; user cancellation remains available. Pipe output includes
+periodic progress lines on stderr. A cold scan can take as long as needed to complete every target.
+An unreachable Windows host is skipped after one probe bounded to five seconds (three seconds
+for SSH connection establishment). `--no-progress` suppresses progress lines.
+
+Legacy `run` requires named targets or `--tier blind`, plus `--yes`. `delete`
 prints its checks and byte estimate without `--yes`; with `--yes` it repeats every check under
 the shared state lock, then removes only paths beneath configured roots. It refuses `/`, `$HOME`,
 repo store roots, listed jj workspaces, symlink paths, and paths used by same-uid processes.

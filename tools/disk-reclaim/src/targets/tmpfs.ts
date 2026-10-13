@@ -11,7 +11,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { countEntries } from "../lib/purge-progress.ts";
 import { removeTree } from "../lib/remove-tree.ts";
 import { collectProcesses } from "../lib/procs.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable, z } from "../../../shared/src/zod.ts";
+import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 
@@ -65,21 +66,23 @@ function awaitMountInfo(): Mount[] | null {
   });
 }
 
-function treeOwnedBy(path: string, owner: number): boolean {
+function treeOwnedBy(path: string, owner: number, ctx?: Context): boolean {
+  checkScanDeadline(ctx);
   const stat = lstatSync(path);
   if (stat.uid !== owner) return false;
   if (stat.isDirectory() && !stat.isSymbolicLink())
     return readdirSync(path).every((name) =>
-      treeOwnedBy(join(path, name), owner),
+      treeOwnedBy(join(path, name), owner, ctx),
     );
   return true;
 }
 
-function allocatedBytes(path: string): number {
+function allocatedBytes(path: string, ctx?: Context): number {
+  checkScanDeadline(ctx);
   const stat = lstatSync(path);
   if (!stat.isDirectory() || stat.isSymbolicLink()) return stat.blocks * 512;
   return readdirSync(path).reduce(
-    (sum, name) => sum + allocatedBytes(join(path, name)),
+    (sum, name) => sum + allocatedBytes(join(path, name), ctx),
     0,
   );
 }
@@ -188,6 +191,7 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
             }).openPaths("/"))
           : undefined;
       const planOptions: PlanOptions = {
+        context: ctx,
         uid: uid(),
         now: now(),
         openPaths:
@@ -267,6 +271,7 @@ function logUsage(
 }
 
 type PlanOptions = {
+  context: Context;
   uid: number;
   now: number;
   openPaths: string[];
@@ -283,6 +288,7 @@ function planEntry(
   name: string,
   options: PlanOptions,
 ): Candidate | null {
+  checkScanDeadline(options.context);
   const stat = fromThrowable(() => lstatSync(path))();
   if (stat.isErr()) return null;
   const st = stat.value;
@@ -306,7 +312,19 @@ function planEntry(
       kind: "command",
       argv: [],
     });
-  const owned = fromThrowable(() => treeOwnedBy(path, options.uid))();
+  const ownershipCache = scanCache(
+    path,
+    `tmpfs-owner-${options.uid}`,
+    options.context,
+  );
+  const cachedOwnership = z.boolean().safeParse(ownershipCache.value);
+  const owned = fromThrowable(() =>
+    cachedOwnership.success
+      ? cachedOwnership.data
+      : treeOwnedBy(path, options.uid, options.context),
+  )();
+  if (owned.isOk() && !cachedOwnership.success)
+    ownershipCache.save(owned.value);
   if (owned.isErr() || !owned.value)
     return candidate(
       path,
@@ -340,17 +358,45 @@ function planEntry(
     });
   }
   if (isGraveyard) {
-    const bytes = fromThrowable(() => allocatedBytes(path))().unwrapOr(null);
+    const measurementCache = scanCache(
+      path,
+      "tmpfs-size-inodes-v1",
+      options.context,
+    );
+    const cachedMeasurement = z
+      .object({
+        bytes: z.number().nonnegative(),
+        inodes: z.number().nonnegative(),
+      })
+      .safeParse(measurementCache.value);
+    const measurement = fromThrowable(() =>
+      cachedMeasurement.success
+        ? cachedMeasurement.data
+        : {
+            bytes: allocatedBytes(path, options.context),
+            inodes: 1 + countEntries(path),
+          },
+    )().unwrapOr(null);
+    if (measurement !== null && !cachedMeasurement.success)
+      measurementCache.save(measurement);
+    const bytes = measurement?.bytes ?? null;
     return candidate(
       path,
       "RECLAIM",
-      `stale RAM-backed graveyard; permanent purge; ${1 + countEntries(path)} inodes; ${bytes ?? "unmeasured"} bytes`,
+      `stale RAM-backed graveyard; permanent purge; ${measurement?.inodes ?? "unmeasured"} inodes; ${bytes ?? "unmeasured"} bytes`,
       bytes,
       { kind: "delete", argv: [path] },
     );
   }
   if (!isTempDirectory) return null;
-  const bytes = fromThrowable(() => allocatedBytes(path))().unwrapOr(null);
+  const sizeCache = scanCache(path, "tmpfs-size-v1", options.context);
+  const cachedSize = z.number().nonnegative().safeParse(sizeCache.value);
+  const bytes = fromThrowable(() =>
+    cachedSize.success
+      ? cachedSize.data
+      : allocatedBytes(path, options.context),
+  )().unwrapOr(null);
+  if (bytes !== null && !cachedSize.success) sizeCache.save(bytes);
   if (options.now - st.mtimeMs < 60 * 60_000)
     return candidate(path, "KEEP", "younger than 60 minutes", bytes, {
       kind: "command",

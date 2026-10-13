@@ -6,11 +6,13 @@ import { collectProcesses, resolveProcRoot } from "../lib/procs.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
 import type { Context, Target } from "./index.ts";
 import { deleteTree, treeCandidate } from "./tree.ts";
+import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
 
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
 
-function findTargets(root: string, depth = 0): string[] {
+function findTargets(root: string, depth = 0, ctx?: Context): string[] {
+  checkScanDeadline(ctx);
   if (depth > 4) return [];
   const names = fromThrowable(() => readdirSync(root))()
     .map((entries) => entries.toSorted())
@@ -25,7 +27,7 @@ function findTargets(root: string, depth = 0): string[] {
     )
       return [];
     if (name === "target") return [path];
-    return findTargets(path, depth + 1);
+    return findTargets(path, depth + 1, ctx);
   });
 }
 
@@ -147,7 +149,13 @@ export const createRustTarget = (root?: () => string) =>
             ]
           : [root()];
       const targets = [
-        ...new Set(roots.flatMap((scanRoot) => findTargets(scanRoot))),
+        ...new Set(
+          roots.flatMap((scanRoot) =>
+            cachedDiscovery(scanRoot, "rust-discovery-v1", ctx, () =>
+              findTargets(scanRoot, 0, ctx),
+            ),
+          ),
+        ),
       ];
       const snapshot = collectProcesses({
         procRoot: resolveProcRoot(ctx.procDir),

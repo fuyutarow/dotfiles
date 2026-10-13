@@ -25,7 +25,7 @@ function fixture() {
   const ssh = join(dir, "ssh");
   writeFileSync(
     mise,
-    `#!${process.execPath}\nconst args=process.argv.slice(2); if(args.at(-1)==="doctor") process.stdout.write("PASS healthy\\nRESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0\\n");\n`,
+    `#!${process.execPath}\nconst args=process.argv.slice(2); if(args.at(-1)==="doctor") process.stdout.write(process.env.DEPLOY_DOCTOR_OUTPUT ?? "PASS healthy\\nRESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0\\n");\n`,
   );
   writeFileSync(
     ssh,
@@ -87,5 +87,28 @@ test("unresolvable deploy host is skipped without hiding later host results", ()
   );
   expect(result.stdout.toString()).toContain(
     "[deploy] r99-u26: ok; doctor PASS 1 / FAIL 0",
+  );
+});
+
+test("deploy uses the final doctor RESULT counts rather than earlier summaries", () => {
+  const f = fixture();
+  const result = Bun.spawnSync([process.execPath, script], {
+    cwd: root,
+    env: {
+      ...process.env,
+      DEPLOY_MISE: f.mise,
+      DEPLOY_SSH: f.ssh,
+      DEPLOY_EVENTS: join(f.dir, "events"),
+      DEPLOY_DOCTOR_OUTPUT:
+        "RESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0\n" +
+        "RESULT: FAIL 7 · WARN 2 · PASS 14 · SKIP 3\n",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 20_000,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout.toString()).toContain(
+    "local: ok (doctor FAIL 7); doctor PASS 14 / FAIL 7",
   );
 });

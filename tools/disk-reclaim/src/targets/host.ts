@@ -90,7 +90,7 @@ export function parseProbe(out: string): HostSnapshot {
   }
   return s;
 }
-export const HOST_PROBE_TIMEOUT_MS = 90_000;
+export const HOST_PROBE_TIMEOUT_MS = 45_000;
 export const createSshRunner =
   (options: { probeTimeoutMs?: number } = {}): HostRunner =>
   async (host, script, parentSignal, reportStep) => {
@@ -110,7 +110,7 @@ export const createSshRunner =
       controller.abort();
     };
     parentSignal?.addEventListener("abort", abort, { once: true });
-    let step = "SSH connect/authenticate (ConnectTimeout=10s)";
+    let step = "SSH connect/authenticate (ConnectTimeout=3s)";
     const activity = (next: string) => {
       step = next;
       reportStep?.(`${next}; total timeout ${timeout / 1000}s`);
@@ -143,7 +143,7 @@ export const createSshRunner =
         "-o",
         "BatchMode=yes",
         "-o",
-        "ConnectTimeout=10",
+        "ConnectTimeout=3",
         "-o",
         "ConnectionAttempts=1",
         host,
@@ -215,6 +215,47 @@ export const createSshRunner =
     });
   };
 const sshRunner = createSshRunner();
+const connectSsh: HostRunner = async (host, _script, parentSignal) => {
+  const timeout = AbortSignal.timeout(5000);
+  const signal =
+    parentSignal === undefined
+      ? timeout
+      : AbortSignal.any([parentSignal, timeout]);
+  const proc = Bun.spawn(
+    [
+      "ssh",
+      "-T",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ConnectTimeout=3",
+      "-o",
+      "ConnectionAttempts=1",
+      host,
+      "exit 0",
+    ],
+    {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+      killSignal: "SIGKILL",
+    },
+  );
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return {
+    code,
+    out,
+    err,
+    timedOut: timeout.aborted,
+    step: "SSH connectivity",
+    timeoutMs: 5000,
+  };
+};
 const definitions: Record<
   string,
   { live: boolean; approval: string | null; note: string }
@@ -361,25 +402,53 @@ export function createHostTarget(options: {
   host?: string;
   runner: HostRunner;
   snapshot?: () => Promise<HostSnapshot>;
+  skipUnreachable?: boolean;
+  connect?: HostRunner;
 }): Target {
   const hostname = (ctx: Context) => ctx.host ?? options.host ?? "r99";
+  const probes = new WeakMap<Context, Awaited<ReturnType<HostRunner>>>();
   return {
     name: "host",
     tier: "owner",
-    available: () => ({
-      available:
+    available: async (ctx) => {
+      const present =
         options.snapshot !== undefined ||
         options.runner !== sshRunner ||
-        Bun.which("ssh") !== null,
-      skip_reason: null,
-    }),
+        Bun.which("ssh") !== null;
+      if (!present) return { available: false, skip_reason: "ssh unavailable" };
+      if (options.skipUnreachable !== true || options.snapshot !== undefined)
+        return { available: true, skip_reason: null };
+      const prior = ctx.remoteProbes?.get(hostname(ctx));
+      if (prior !== undefined) return prior;
+      ctx.reportActivity?.("host", `short SSH probe ${hostname(ctx)}`);
+      const probe = (options.connect ?? options.runner)(
+        hostname(ctx),
+        "$probe",
+        ctx.signal,
+      ).then((result) => {
+        if (options.connect === undefined) probes.set(ctx, result);
+        return {
+          available: result.code === 0 && !result.timedOut,
+          skip_reason:
+            result.code === 0 && !result.timedOut
+              ? null
+              : probeFailure(
+                  result,
+                  "unreachable; skipped after one short SSH probe",
+                ),
+        };
+      });
+      ctx.remoteProbes?.set(hostname(ctx), probe);
+      return probe;
+    },
     plan: async (ctx) => {
       ctx.reportActivity?.("host", `waiting for SSH ${hostname(ctx)} probe`);
       const result =
         options.snapshot === undefined
-          ? await options.runner(hostname(ctx), "$probe", ctx.signal, (step) =>
+          ? (probes.get(ctx) ??
+            (await options.runner(hostname(ctx), "$probe", ctx.signal, (step) =>
               ctx.reportActivity?.("host", `waiting for ${step}`),
-            )
+            )))
           : null;
       if (result?.timedOut === true) {
         ctx.reportPlanError?.(probeFailure(result, "SSH step timed out"));
@@ -499,4 +568,8 @@ export function createHostTarget(options: {
     },
   };
 }
-export const host = createHostTarget({ runner: sshRunner });
+export const host = createHostTarget({
+  runner: sshRunner,
+  skipUnreachable: true,
+  connect: connectSsh,
+});

@@ -6,6 +6,7 @@ import { protectedReason } from "../lib/protected.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { deleteTree, treeCandidate } from "./tree.ts";
+import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
 
 const BUILD_NAMES = new Set([
   "target",
@@ -14,7 +15,13 @@ const BUILD_NAMES = new Set([
   "dist",
   ".venv",
 ]);
-function scan(root: string, depth = 0, device?: number): string[] {
+function scan(
+  root: string,
+  depth = 0,
+  device?: number,
+  ctx?: Context,
+): string[] {
+  checkScanDeadline(ctx);
   if (depth > 4 || !existsSync(root)) return [];
   const rootStat = fromThrowable(() => statSync(root))();
   if (rootStat.isErr()) return [];
@@ -31,7 +38,7 @@ function scan(root: string, depth = 0, device?: number): string[] {
     )
       return [];
     if (BUILD_NAMES.has(name)) return [path];
-    return scan(path, depth + 1, rootDevice);
+    return scan(path, depth + 1, rootDevice, ctx);
   });
 }
 export const createBuildsTarget = (
@@ -44,7 +51,12 @@ export const createBuildsTarget = (
     available: () => ({ available: true, skip_reason: null }),
     plan: async (ctx: Context) => {
       const rows: Candidate[] = [];
-      for (const path of scan(root()).toSorted()) {
+      for (const path of cachedDiscovery(
+        root(),
+        "build-discovery-v1",
+        ctx,
+        () => scan(root(), 0, undefined, ctx),
+      ).toSorted()) {
         const reason = protectedReason(path, {
           home: process.env.HOME ?? homedir(),
           procDir: ctx.procDir,

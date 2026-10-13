@@ -5,6 +5,10 @@ const args = Bun.argv.slice(2);
 const command = args.at(-1) ?? "";
 const encoded = /-EncodedCommand ([A-Za-z0-9+/=]+)$/u.exec(command)?.[1];
 const log = process.env.HOST_STUB_LOG;
+if (command === "exit 0" && log !== undefined) {
+  appendFileSync(log, `${JSON.stringify(args)}\n`);
+  process.exit(0);
+}
 if (encoded === undefined || log === undefined) process.exit(99);
 const wrapper = Buffer.from(encoded, "base64").toString("utf16le");
 const script = Buffer.from((await Bun.stdin.text()).trim(), "base64").toString(

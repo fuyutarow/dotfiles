@@ -68,17 +68,40 @@ const sshRunner: VhdxRunner = async (host, script, signal) => {
     script === "$probe"
       ? `powershell.exe -NoProfile -EncodedCommand ${Buffer.from(VHDX_PROBE, "utf16le").toString("base64")}`
       : `bash -lc ${JSON.stringify(script)}`;
-  const proc = Bun.spawn(["ssh", "-o", "ConnectTimeout=10", host, command], {
-    stdout: "pipe",
-    stderr: "pipe",
-    ...(signal === undefined ? {} : { signal }),
-  });
+  const bounded =
+    signal === undefined
+      ? AbortSignal.timeout(5000)
+      : AbortSignal.any([signal, AbortSignal.timeout(5000)]);
+  const proc = Bun.spawn(
+    [
+      "ssh",
+      "-T",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ConnectionAttempts=1",
+      "-o",
+      "ConnectTimeout=3",
+      host,
+      command,
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: bounded,
+      killSignal: "SIGKILL",
+    },
+  );
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
-  return { code, out: `${out}${err}`.replaceAll("\r", ""), timedOut: false };
+  return {
+    code,
+    out: `${out}${err}`.replaceAll("\r", ""),
+    timedOut: bounded.aborted,
+  };
 };
 export function probeFailure(
   r: { code: number; out: string; timedOut: boolean },
@@ -101,10 +124,14 @@ export function createVhdxTarget(options: {
   return {
     name: "vhdx",
     tier: "plan-only",
-    available: async () => ({
-      available: await runningInWsl(),
-      skip_reason: "vhdx planner requires WSL",
-    }),
+    available: async (ctx: Context) => {
+      if (!(await runningInWsl()))
+        return { available: false, skip_reason: "vhdx planner requires WSL" };
+      const connection = await ctx.remoteProbes?.get(options.host ?? "r99");
+      return connection?.available === false
+        ? connection
+        : { available: true, skip_reason: null };
+    },
     plan: async (_ctx: Context) => {
       const host = options.host ?? "r99";
       const hostResult =

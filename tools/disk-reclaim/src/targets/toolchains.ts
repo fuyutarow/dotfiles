@@ -10,8 +10,10 @@ import {
 import type { Context, Target } from "./index.ts";
 import { deleteTree, keepTreeCandidate, treeCandidate } from "./tree.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
+import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
 
 const walkPins = (root: string, depth = 0): string[] => {
+  checkScanDeadline();
   if (depth > 5) return [];
   const names = fromThrowable(() => readdirSync(root))().unwrapOr([]);
   return names.flatMap((name) => {
@@ -41,6 +43,7 @@ export const createToolchainsTarget = (
         Bun.spawnSync(["rustup", "show", "active-toolchain"], {
           stdout: "pipe",
           stderr: "ignore",
+          timeout: 5000,
         }),
       )()
         .map((result) => result.stdout.toString().trim().split(/\s+/u)[0])
@@ -60,7 +63,12 @@ export const createToolchainsTarget = (
       const live = liveExecutables(_ctx.procDir);
       const candidates = [];
       const rustupDir = join(home, ".rustup/toolchains");
-      const pins = walkPins(projects)
+      const pins = cachedDiscovery(
+        projects,
+        "toolchain-pin-discovery-v1",
+        _ctx,
+        () => walkPins(projects),
+      )
         .flatMap((path) =>
           fromThrowable(() => readFileSync(path, "utf8"))()
             .map((text) => [channel(text) ?? ""])
@@ -129,6 +137,7 @@ export const createToolchainsTarget = (
           Bun.spawnSync(["pgrep", "-f", hash], {
             stdout: "ignore",
             stderr: "ignore",
+            timeout: 5000,
           }),
         )();
         const stat = fromThrowable(() => statSync(path))();

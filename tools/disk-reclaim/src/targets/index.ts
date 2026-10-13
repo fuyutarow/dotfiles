@@ -23,6 +23,8 @@ import { tmpfs } from "./tmpfs.ts";
 
 export type Context = {
   mode: "plan" | "run";
+  scanCacheDir?: string | undefined;
+  remoteProbes?: Map<string, Promise<Availability>> | undefined;
   signal?: AbortSignal;
   /** Whether the user named this target instead of receiving it through a tier. */
   explicit?: boolean;

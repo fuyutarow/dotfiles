@@ -8,7 +8,7 @@ const fixture = () => tempRoot("disk-reclaim-audit-parity-");
 const rowsFor = (home: string, projects = join(home, "Workspace")) =>
   auditCandidates(home, { HOME: home, AUDIT_PROJECTS: projects });
 
-test("audit is read-only and includes cache, graveyard and receipt evidence", () => {
+test("audit is read-only and includes cache, graveyard and receipt evidence", async () => {
   const root = tempRoot("disk-reclaim-audit-");
   mkdirSync(join(root, ".cache/item"), { recursive: true });
   mkdirSync(join(root, "grave"));
@@ -35,14 +35,14 @@ test("audit is read-only and includes cache, graveyard and receipt evidence", ()
     RIP_GRAVEYARD: join(root, "grave"),
     XDG_STATE_HOME: join(root, "state"),
   };
-  const rows = auditCandidates(root, env);
+  const rows = await auditCandidates(root, env);
   expect(rows.map((r) => r.id)).toContain("cache:item");
   expect(rows.some((r) => r.id.startsWith("graveyard:"))).toBe(true);
   expect(rows.some((r) => r.id.startsWith("receipt:"))).toBe(true);
   expect(rows.every((r) => r.verdict === "KEEP")).toBe(true);
 });
 
-test("audit reports rust-toolchain pins with their selected channel and size", () => {
+test("audit reports rust-toolchain pins with their selected channel and size", async () => {
   const home = fixture();
   const projects = join(home, "Workspace/project");
   mkdirSync(projects, { recursive: true });
@@ -50,20 +50,22 @@ test("audit reports rust-toolchain pins with their selected channel and size", (
     join(projects, "rust-toolchain.toml"),
     '[toolchain]\nchannel = "nightly-2026-10-01"\n',
   );
-  const row = rowsFor(home).find((r) => r.id.includes("rust-pin:"));
+  const row = (await rowsFor(home)).find((r) => r.id.includes("rust-pin:"));
   expect(row?.reason).toContain("nightly-2026-10-01");
   expect(row?.bytes).toBeGreaterThan(0);
 });
 
-test("audit reports installed rustup toolchains with byte estimates", () => {
+test("audit reports installed rustup toolchains with byte estimates", async () => {
   const home = fixture();
   mkdirSync(join(home, ".rustup/toolchains/stable/bin"), { recursive: true });
   writeFileSync(join(home, ".rustup/toolchains/stable/bin/rustc"), "fixture");
-  const row = rowsFor(home).find((r) => r.id === "rust-toolchain:stable");
+  const row = (await rowsFor(home)).find(
+    (r) => r.id === "rust-toolchain:stable",
+  );
   expect(row?.bytes).toBeGreaterThan(0);
 });
 
-test("audit reports Stable VS Code server versions with byte estimates", () => {
+test("audit reports Stable VS Code server versions with byte estimates", async () => {
   const home = fixture();
   mkdirSync(join(home, ".vscode-server/cli/servers/Stable-abc/server"), {
     recursive: true,
@@ -72,11 +74,13 @@ test("audit reports Stable VS Code server versions with byte estimates", () => {
     join(home, ".vscode-server/cli/servers/Stable-abc/server/code"),
     "fixture",
   );
-  const row = rowsFor(home).find((r) => r.id === "vscode-server:Stable-abc");
+  const row = (await rowsFor(home)).find(
+    (r) => r.id === "vscode-server:Stable-abc",
+  );
   expect(row?.bytes).toBeGreaterThan(0);
 });
 
-test("audit reports self-updating CLI releases with byte estimates", () => {
+test("audit reports self-updating CLI releases with byte estimates", async () => {
   const home = fixture();
   mkdirSync(join(home, ".local/share/claude/versions/1.2.3"), {
     recursive: true,
@@ -85,11 +89,13 @@ test("audit reports self-updating CLI releases with byte estimates", () => {
     join(home, ".local/share/claude/versions/1.2.3/cli"),
     "fixture",
   );
-  const row = rowsFor(home).find((r) => r.id === "version-store:claude:1.2.3");
+  const row = (await rowsFor(home)).find(
+    (r) => r.id === "version-store:claude:1.2.3",
+  );
   expect(row?.bytes).toBeGreaterThan(0);
 });
 
-test("audit preserves the current self-updating CLI release status", () => {
+test("audit preserves the current self-updating CLI release status", async () => {
   const home = fixture();
   const versions = join(home, ".local/share/claude/versions");
   mkdirSync(join(versions, "1.2.3"), { recursive: true });
@@ -97,11 +103,12 @@ test("audit preserves the current self-updating CLI release status", () => {
   mkdirSync(join(home, ".local/bin"), { recursive: true });
   symlinkSync(join(versions, "1.2.3/cli"), join(home, ".local/bin/claude"));
   expect(
-    rowsFor(home).find((r) => r.id === "version-store:claude:1.2.3")?.reason,
+    (await rowsFor(home)).find((r) => r.id === "version-store:claude:1.2.3")
+      ?.reason,
   ).toContain("current");
 });
 
-test("audit reports the eight largest build directories with byte estimates", () => {
+test("audit reports the eight largest build directories with byte estimates", async () => {
   const home = fixture();
   const projects = join(home, "projects");
   for (let n = 0; n < 9; n++) {
@@ -109,7 +116,7 @@ test("audit reports the eight largest build directories with byte estimates", ()
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "artifact"), "x".repeat((n + 1) * 2048));
   }
-  const builds = rowsFor(home, projects).filter((r) =>
+  const builds = (await rowsFor(home, projects)).filter((r) =>
     r.id.startsWith("build:"),
   );
   expect(builds).toHaveLength(8);
@@ -117,11 +124,11 @@ test("audit reports the eight largest build directories with byte estimates", ()
   expect(builds[0]?.bytes).toBeGreaterThan(builds.at(-1)?.bytes ?? 0);
 });
 
-test("audit reports optional rust-docs with byte estimates", () => {
+test("audit reports optional rust-docs with byte estimates", async () => {
   const home = fixture();
   const docs = join(home, ".rustup/toolchains/stable/share/doc/rust/html");
   mkdirSync(docs, { recursive: true });
   writeFileSync(join(docs, "index.html"), "fixture");
-  const row = rowsFor(home).find((r) => r.id === "rust-docs:stable");
+  const row = (await rowsFor(home)).find((r) => r.id === "rust-docs:stable");
   expect(row?.bytes).toBeGreaterThan(0);
 });

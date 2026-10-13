@@ -31,6 +31,7 @@ import {
   writeReceipt,
 } from "./receipt.ts";
 import type { Context, Target } from "./targets/index.ts";
+import { withScanSignal } from "./lib/scan-cache.ts";
 
 const expand = (p: string) =>
   p
@@ -208,7 +209,9 @@ async function planTarget(
     clearInterval(heartbeat);
     return null;
   }
-  const planned = await fromAsyncThrowable(async () => target.plan(ctx))();
+  const planned = await fromAsyncThrowable(async () =>
+    withScanSignal(ctx.signal, () => target.plan(ctx)),
+  )();
   clearInterval(heartbeat);
   return planned;
 }
@@ -218,6 +221,7 @@ export async function plan(
   options: EngineOptions,
 ): Promise<EngineResult> {
   const headroom = options.headroom ?? readHeadroom();
+  const remoteProbes: Context["remoteProbes"] = new Map();
   const liveness = (
     options.captureLiveness ??
     ((config) => snapshotFor(config, options.context))
@@ -253,6 +257,8 @@ export async function plan(
       cursor += 1;
       const target = targets[index];
       if (target === undefined) continue;
+      const started = performance.now();
+      options.context.reportActivity?.(target.name, "scan started");
       const reportProgress = options.context.reportProgress;
       reportProgress?.(target.name, target.name, 0, 0);
       const scannedPaths = new Map<
@@ -261,6 +267,8 @@ export async function plan(
       >();
       const ctx = {
         ...options.context,
+        remoteProbes,
+        scanCacheDir: options.state ?? options.context.scanCacheDir,
         targetName: target.name,
         reportPlanError: (message: string, partial = false) => {
           errors[index] = message;
@@ -322,10 +330,23 @@ export async function plan(
       }
       const { available: present, skip_reason } = available.value;
       const heartbeat = setInterval(
-        () => reportProgress?.(target.name, target.name, 0, 0),
+        () => {
+          const sum = [...scannedPaths.values()].reduce(
+            (all, path) => ({
+              entries: all.entries + path.entries,
+              bytes: all.bytes + path.bytes,
+            }),
+            { entries: 0, bytes: 0 },
+          );
+          reportProgress?.(target.name, target.name, sum.entries, sum.bytes);
+        },
         options.context.progressTty === true ? 250 : 2000,
       );
       const planned = await planTarget(target, ctx, heartbeat, present);
+      options.context.reportActivity?.(
+        target.name,
+        `scan finished in ${((performance.now() - started) / 1000).toFixed(3)}s${present ? "" : `; skipped: ${skip_reason ?? "unavailable"}`}`,
+      );
       if (planned !== null && planned.isErr()) {
         failTarget(index, target, errorMessage(planned.error));
         continue;

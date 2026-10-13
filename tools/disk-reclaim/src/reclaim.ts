@@ -623,6 +623,7 @@ export async function main(
     Map<string, { entries: number; bytes: number }>
   >();
   let preflight = true;
+  const lastScanReport = new Map<string, number>();
   const reportProgress = (
     target: string,
     root: string,
@@ -633,6 +634,18 @@ export async function main(
     totalBytes?: number,
   ): void => {
     activePhase = phase === "delete" ? "deletion" : "scan";
+    if (
+      !progressTty &&
+      !f.noProgress &&
+      phase === "scan" &&
+      entries > 0 &&
+      performance.now() - (lastScanReport.get(target) ?? 0) >= 2000
+    ) {
+      lastScanReport.set(target, performance.now());
+      process.stderr.write(
+        `disk-reclaim: ${safeStderr(target)}: scanned ${entries} entries, ${bytes} bytes\n`,
+      );
+    }
     if (preflight) {
       progressReporter.update({
         id: "preflight",
@@ -864,7 +877,10 @@ export async function main(
     if (!validated.success) return fail(validated.error.message);
     if (selectedCommand === "plan") await cachePlanReport(validated.data);
     reportProcessDiagnostics(validated.data, processDetails, f.verbose);
-    const records = await recordsFromPlan(validated.data);
+    const records =
+      selectedCommand === "plan" && !f.yes && f.json
+        ? []
+        : await recordsFromPlan(validated.data);
     if (cancelledWith !== undefined && selectedCommand === "run") {
       const completedPaths = completedDeletionPaths(validated.data);
       const summary = completedPaths.map((path) => safeStderr(path)).join(", ");
@@ -909,5 +925,5 @@ if (import.meta.main) {
   const result = await fromAsyncThrowable(main)();
   if (result.isErr())
     process.stderr.write(`reclaim: ${errorMessage(result.error)}\n`);
-  process.exit(result.isOk() ? result.value : 2);
+  process.exitCode = result.isOk() ? result.value : 2;
 }

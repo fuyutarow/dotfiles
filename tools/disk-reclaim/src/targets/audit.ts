@@ -17,6 +17,8 @@ import {
 } from "../lib/version-stores.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
+import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
+import { measuredTreeBytes } from "./tree.ts";
 
 function treeSize(
   path: string,
@@ -44,7 +46,8 @@ function treeSize(
   return total;
 }
 
-function rustPins(root: string, depth = 0): string[] {
+function rustPins(root: string, depth = 0, ctx?: Context): string[] {
+  checkScanDeadline(ctx);
   if (depth > 5) return [];
   const names = fromThrowable(() => readdirSync(root))();
   if (names.isErr()) return [];
@@ -62,16 +65,17 @@ function rustPins(root: string, depth = 0): string[] {
       stat.value.isSymbolicLink()
     )
       continue;
-    found.push(...rustPins(path, depth + 1));
+    found.push(...rustPins(path, depth + 1, ctx));
   }
   return found;
 }
 
-export function auditCandidates(
+export async function auditCandidates(
   home: string,
   env: Record<string, string | undefined>,
   progress?: Context["reportProgress"],
-): Candidate[] {
+  context?: Context,
+): Promise<Candidate[]> {
   const rows: Candidate[] = [];
   const staleDays = Number(env.STALE_DAYS ?? "180");
   const cutoff =
@@ -136,11 +140,23 @@ export function auditCandidates(
     });
   };
   const size = (path: string) =>
-    treeSize(path, (root, entries, bytes) =>
-      progress?.("audit", root, entries, bytes),
-    );
+    context === undefined
+      ? Promise.resolve(
+          treeSize(path, (root, entries, bytes) =>
+            progress?.("audit", root, entries, bytes),
+          ),
+        )
+      : measuredTreeBytes(path, context);
   const projects = env.AUDIT_PROJECTS ?? join(home, "Workspace");
-  const pins = projects.split(":").flatMap((root) => rustPins(root));
+  const pins = projects
+    .split(":")
+    .flatMap((root) =>
+      context === undefined
+        ? rustPins(root)
+        : cachedDiscovery(root, "audit-pin-discovery-v1", context, () =>
+            rustPins(root, 0, context),
+          ),
+    );
   for (const path of pins) {
     const text = fromThrowable(() => readFileSync(path, "utf8"))();
     if (text.isErr()) continue;
@@ -152,7 +168,7 @@ export function auditCandidates(
       `rust-pin:${path}`,
       path,
       `rust-toolchain pin: ${channel}`,
-      size(path),
+      await size(path),
       channel,
     );
   }
@@ -168,7 +184,7 @@ export function auditCandidates(
       `rust-toolchain:${name}`,
       path,
       "installed rustup toolchain",
-      size(path),
+      await size(path),
     );
   }
   const servers = join(home, ".vscode-server/cli/servers");
@@ -180,7 +196,12 @@ export function auditCandidates(
     const path = join(servers, name);
     const stat = fromThrowable(() => statSync(path))();
     if (!stat.isOk() || !stat.value.isDirectory()) continue;
-    report(`vscode-server:${name}`, path, "VS Code server version", size(path));
+    report(
+      `vscode-server:${name}`,
+      path,
+      "VS Code server version",
+      await size(path),
+    );
   }
   const live = liveExecutables();
   const nowSec = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
@@ -206,12 +227,13 @@ export function auditCandidates(
         `version-store:${store.name}:${release.name}`,
         release.path,
         `self-updating CLI release${status === "" ? "" : ` (${status})`}`,
-        size(release.path),
+        await size(release.path),
       );
     }
   }
   const buildDirs: string[] = [];
   const findBuildDirs = (root: string, depth: number): void => {
+    checkScanDeadline(context);
     if (depth >= 4) return;
     const names = fromThrowable(() => readdirSync(root))();
     if (names.isErr()) return;
@@ -231,9 +253,21 @@ export function auditCandidates(
       findBuildDirs(path, depth + 1);
     }
   };
-  for (const root of projects.split(":")) findBuildDirs(root, 0);
-  for (const { path: candidatePath, bytes } of buildDirs
-    .map((itemPath) => ({ path: itemPath, bytes: size(itemPath) }))
+  for (const root of projects.split(":")) {
+    if (context === undefined) findBuildDirs(root, 0);
+    else
+      buildDirs.push(
+        ...cachedDiscovery(root, "audit-build-discovery-v1", context, () => {
+          const start = buildDirs.length;
+          findBuildDirs(root, 0);
+          return buildDirs.splice(start);
+        }),
+      );
+  }
+  const measuredBuilds = [];
+  for (const itemPath of buildDirs)
+    measuredBuilds.push({ path: itemPath, bytes: await size(itemPath) });
+  for (const { path: candidatePath, bytes } of measuredBuilds
     .toSorted((a, b) => b.bytes - a.bytes)
     .slice(0, 8)) {
     report(
@@ -246,7 +280,12 @@ export function auditCandidates(
   for (const name of rustupEntries.toSorted((a, b) => a.localeCompare(b))) {
     const path = join(toolchains, name, "share/doc/rust/html");
     if (!existsSync(path)) continue;
-    report(`rust-docs:${name}`, path, "optional offline rust-docs", size(path));
+    report(
+      `rust-docs:${name}`,
+      path,
+      "optional offline rust-docs",
+      await size(path),
+    );
   }
   for (const g of existingGraveyards(graveyardCandidates(env, home))) {
     rows.push({
@@ -296,6 +335,7 @@ export const audit: Target = {
   name: "audit",
   tier: "plan-only",
   available: () => ({ available: true, skip_reason: null }),
-  plan: (ctx) => auditCandidates(homedir(), process.env, ctx.reportProgress),
+  plan: (ctx) =>
+    auditCandidates(homedir(), process.env, ctx.reportProgress, ctx),
   act: () => ({ ok: false, bytes_freed: null, error: "audit is read-only" }),
 };

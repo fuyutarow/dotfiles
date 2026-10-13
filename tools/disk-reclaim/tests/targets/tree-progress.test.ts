@@ -49,3 +49,34 @@ test("aborting a tree scan terminates its worker", async () => {
   expect(result).toBeInstanceOf(Error);
   if (result instanceof Error) expect(result.message).toContain("aborted");
 });
+
+test("tree scanner stops itself when heartbeat counters do not advance", async () => {
+  const started = performance.now();
+  const result = await treeBytes("fixture", undefined, undefined, {
+    stallMs: 100,
+    workerUrl: new URL("../fixtures/stalled-tree-worker.ts", import.meta.url),
+  }).then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(result).toBeInstanceOf(Error);
+  if (result instanceof Error) expect(result.message).toContain("no progress");
+  expect(performance.now() - started).toBeLessThan(1000);
+});
+
+test("a progressing scan survives multiple inactivity windows", async () => {
+  const started = performance.now();
+  const result = await treeBytes("fixture", undefined, undefined, {
+    stallMs: 80,
+    timeoutMs: 60,
+    workerUrl: new URL(
+      "../fixtures/progressing-tree-worker.ts",
+      import.meta.url,
+    ),
+  }).then(
+    (bytes) => bytes,
+    (error: unknown) => error,
+  );
+  expect(result).toBe(123);
+  expect(performance.now() - started).toBeGreaterThan(250);
+});

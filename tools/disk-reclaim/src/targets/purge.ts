@@ -11,7 +11,8 @@ import { countEntries } from "../lib/purge-progress.ts";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ActionResult, Candidate, Config, Headroom } from "../model.ts";
 import type { Context, Target } from "./index.ts";
-import { fromThrowable } from "../../../shared/src/zod.ts";
+import { fromThrowable, z } from "../../../shared/src/zod.ts";
+import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
 import { judge } from "../liveness/predicate.ts";
 import { scratchRef, type LivenessSnapshot } from "../liveness/facts.ts";
 
@@ -32,13 +33,14 @@ function driveForPath(path: string, headroom: Headroom | undefined) {
     .toSorted((left, right) => right.path.length - left.path.length)[0];
 }
 
-function size(path: string): number {
+function size(path: string, ctx?: Context): number {
+  checkScanDeadline(ctx);
   const stat = fromThrowable(() => lstatSync(path))();
   if (stat.isErr()) return 0;
   if (!stat.value.isDirectory() || stat.value.isSymbolicLink())
     return stat.value.blocks * 512;
   return graveyardEntries(path).reduce(
-    (total, entry) => total + size(entry),
+    (total, entry) => total + size(entry, ctx),
     0,
   );
 }
@@ -58,6 +60,7 @@ export function purgeCandidates(
     underPressure?: boolean;
     ripOnly?: boolean;
     now?: number;
+    context?: Context;
   } = {},
 ): Candidate[] {
   const now = options.now ?? Temporal.Now.instant().epochMilliseconds;
@@ -77,6 +80,7 @@ export function purgeCandidates(
     const entries = graveyardEntries(graveyard.path);
     const records = ripRecords(graveyard.path);
     const entryCandidates = entries.map((entry) => {
+      checkScanDeadline(options.context);
       const entryRecords = records.filter(
         (record) =>
           record.destination === entry ||
@@ -146,6 +150,10 @@ export function purgeCandidates(
       else if (isRecent && !belowDenyLine) reason = `recent: rip'd ${age} ago`;
       else
         reason = `older than ${options.config?.graveyard_min_age_hours ?? 24}h; origin is not live`;
+      const cache = scanCache(entry, "purge-allocated-v1", options.context);
+      const cached = z.number().nonnegative().safeParse(cache.value);
+      const bytes = cached.success ? cached.data : size(entry, options.context);
+      if (!cached.success) cache.save(bytes);
       return {
         id: `${graveyard.label}: ${entry.slice(graveyard.path.length + 1)}`,
         path: entry,
@@ -158,7 +166,7 @@ export function purgeCandidates(
             detail: "top-level graveyard entry",
           },
         ],
-        bytes: size(entry),
+        bytes,
         bytes_kind: "estimate" as const,
         action: { kind: "delete" as const, argv: ["removeTree", entry] },
         result: null,
@@ -190,6 +198,7 @@ function makeDirectoriesOwnerWritable(path: string): void {
 
 function purgePlan(ctx: Context, ripOnly: boolean): Candidate[] {
   return purgeCandidates(process.env, homedir(), {
+    context: ctx,
     config: ctx.config,
     ...(ctx.headroom === undefined ? {} : { headroom: ctx.headroom }),
     underPressure: ctx.underPressure === true,

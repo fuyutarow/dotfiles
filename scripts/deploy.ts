@@ -73,7 +73,30 @@ function diagnostic(stderr: string): string {
 }
 
 function reportDoctor(name: string, output: string | undefined): string {
-  const doctor = doctorReport(output);
+  // The final RESULT is authoritative; nested tasks may print earlier summaries.
+  const final = output
+    ?.split("\n")
+    .toReversed()
+    .find((line) => /RESULT:/u.test(line));
+  const counts =
+    final === undefined
+      ? null
+      : /RESULT:[^\n]*?\bFAIL (\d+) · WARN (\d+) · PASS (\d+) · SKIP (\d+)/u.exec(
+          final,
+        );
+  const normalized =
+    counts === null
+      ? output
+          ?.split("\n")
+          .filter((line) => !/RESULT:/u.test(line) || line === final)
+          .join("\n")
+      : [
+          ...(output ?? "")
+            .split("\n")
+            .filter((line) => !/RESULT:/u.test(line)),
+          `RESULT: summary · FAIL ${counts[1]} · WARN ${counts[2]} · PASS ${counts[3]} · SKIP ${counts[4]}`,
+        ].join("\n");
+  const doctor = doctorReport(normalized);
   for (const line of doctor.lines) emit(`doctor: ${name} ${line}`);
   return `${doctor.status}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`;
 }

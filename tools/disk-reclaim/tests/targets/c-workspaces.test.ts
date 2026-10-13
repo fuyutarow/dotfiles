@@ -49,7 +49,10 @@ afterEach(() => {
   for (const w of worlds.splice(0)) w.dispose();
 });
 const plan = (w: World, mode: "plan" | "run" = "plan", extra = {}) =>
-  target.plan(w.context(mode, extra));
+  target.plan({
+    ...w.context(mode, extra),
+    scanCacheDir: join(w.root, "scan-state"),
+  });
 const only = (candidates: Candidate[], path: string) => {
   const found = candidates.find((c) => c.path === path);
   assert.ok(
@@ -92,6 +95,14 @@ describe("workspaces target", () => {
       ws,
     );
     expect(row.verdict, row.reason).toBe("RECLAIM");
+    const restricted = only(
+      await plan(w, "plan", {
+        regenerable_ignored: ["target", "node_modules"],
+      }),
+      ws,
+    );
+    expect(restricted.verdict).toBe("ASK");
+    expect(restricted.reason).toContain(".rumdl_cache");
     w.write(ws, ".env", "precious");
     const foreign = only(
       await plan(w, "plan", {

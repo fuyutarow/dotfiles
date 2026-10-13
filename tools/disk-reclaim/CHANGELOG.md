@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0 — 2026-10-13
+
+- Invalidate workspace classification caches when the regenerable-tool-cache policy changes, including changes back to a more restrictive policy.
+- Allow progressing plans to finish regardless of elapsed time; stop only stalled tree scans, and count metadata probes as progress.
+
+- Reuse per-root scan measurements and discovery results with shallow metadata change keys; refresh process/session safety and bypass caches for run-time revalidation.
+- Report target timing and cache activity, and stop worker scans without advancing counters or metadata probes.
+- Skip unreachable Windows hosts after one five-second SSH probe instead of waiting ninety seconds.
+- Drain large plan output before exiting so coordinators receive a complete document.
+
 ## 1.2.1 — 2026-10-12
 
 - Discover legacy graveyard-* directories on tmpfs/ramfs and permanently purge them in the blind tier, reporting bytes and inode entry counts.

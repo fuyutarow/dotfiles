@@ -503,7 +503,7 @@ describe("land workspace", () => {
         {
           kind: "run",
           run_id: "landsplit-stopped",
-          cwd: f.worker,
+          workspace: f.worker,
           ticket: { name: "landsplit" },
           outcome: "stopped",
         },
@@ -513,15 +513,18 @@ describe("land workspace", () => {
           cwd: f.worker,
           ticket: { name: "landsplit" },
         },
-        {
-          kind: "acceptance",
-          run_id: "landsplit-amended",
-          accept: true,
-          at: "2026-10-13T08:25:10.000Z",
-        },
       ]
         .map((row) => JSON.stringify(row))
         .join("\n") + "\n",
+    );
+    writeFileSync(
+      join(state, "lifecycle.jsonl"),
+      `${JSON.stringify({
+        type: "judged",
+        run_id: "landsplit-amended",
+        decision: "accept",
+        at: "2026-10-13T08:25:10.000Z",
+      })}\n`,
     );
     writeFileSync(join(f.worker, "keep.txt"), "accepted amended run\n");
     const result = f.land();

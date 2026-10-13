@@ -4,6 +4,7 @@ import {
   landExit,
   landSummary,
   ledgerAcceptances,
+  lifecycleJudgments,
 } from "../land-verdict.ts";
 
 test("land verdict covers only its commit and push", () => {
@@ -14,6 +15,39 @@ test("land verdict covers only its commit and push", () => {
   expect(landSummary(report, "abc")).toContain("landed and pushed");
   expect(landExit({ commit: "failed", push: "pending" })).toBe(1);
   expect(landExit({ commit: "ok", push: "failed" })).toBe(1);
+});
+
+test("lifecycle judged events map accept and reject decisions to run judgments", () => {
+  expect(
+    lifecycleJudgments([
+      JSON.stringify({
+        type: "judged",
+        run_id: "accepted-run",
+        decision: "accept",
+        at: "2026-10-13T08:25:10.000Z",
+      }),
+      JSON.stringify({
+        type: "judged",
+        run_id: "rejected-run",
+        decision: "reject",
+        at: "2026-10-13T08:26:10.000Z",
+      }),
+      JSON.stringify({ type: "judged", run_id: "invalid", decision: "maybe" }),
+    ]),
+  ).toEqual([
+    {
+      run_id: "accepted-run",
+      accept: true,
+      at: "2026-10-13T08:25:10.000Z",
+      order: 0,
+    },
+    {
+      run_id: "rejected-run",
+      accept: false,
+      at: "2026-10-13T08:26:10.000Z",
+      order: 1,
+    },
+  ]);
 });
 
 test("only a valid machine refusal classifies foreign WIP", () => {

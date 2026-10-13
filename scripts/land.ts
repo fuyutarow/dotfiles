@@ -31,6 +31,7 @@ import {
   landExit,
   landSummary,
   ledgerAcceptances,
+  lifecycleJudgments,
   type LandReport,
 } from "./land-verdict.ts";
 
@@ -45,14 +46,17 @@ function workspaceRuns(workspace: string): ResultAsync<WorkspaceRun[], Error> {
       z.looseObject({
         kind: z.literal("run"),
         run_id: z.string(),
-        cwd: z.string(),
+        cwd: z.string().optional(),
+        workspace: z.string().optional(),
         ticket: z.looseObject({ name: z.string() }).optional(),
       }),
     ).safeParse(line);
+    const matchesWorkspace = (path: string | undefined): boolean =>
+      path !== undefined && existsSync(path) && realpathSync(path) === target;
     if (
       parsed.success &&
-      existsSync(parsed.data.cwd) &&
-      realpathSync(parsed.data.cwd) === target
+      (matchesWorkspace(parsed.data.cwd) ||
+        matchesWorkspace(parsed.data.workspace))
     )
       runs.set(parsed.data.run_id, {
         run_id: parsed.data.run_id,
@@ -72,6 +76,11 @@ function workspaceLedgerLines(): string[] {
   const live = join(state, "runs.jsonl");
   const ledgerPaths = existsSync(live) ? [...archives, live] : archives;
   return ledgerPaths.flatMap((path) => readFileSync(path, "utf8").split("\n"));
+}
+
+function lifecycleLines(): string[] {
+  const path = join(dispatchStateDir(), "lifecycle.jsonl");
+  return existsSync(path) ? readFileSync(path, "utf8").split("\n") : [];
 }
 
 type WorkspaceJudgment = {
@@ -106,6 +115,37 @@ function timestampMilliseconds(value: string | undefined): number | undefined {
     errorMessage,
   )();
   return parsed.isOk() ? parsed.value : undefined;
+}
+
+export type WorkspacePreflightVerdict = { ticket: string; accept: boolean };
+
+export function workspacePreflightVerdicts(
+  workspace: string,
+): ResultAsync<WorkspacePreflightVerdict[], Error> {
+  return safeTry(async function* () {
+    const runs = yield* workspaceRuns(workspace);
+    const ticketByRun = new Map(
+      runs.map((workspaceRun) => [workspaceRun.run_id, workspaceRun.ticket]),
+    );
+    const judgments: WorkspaceJudgment[] = [
+      ...ledgerAcceptances(workspaceLedgerLines()),
+      ...lifecycleJudgments(lifecycleLines()),
+    ].flatMap((judgment, order) => {
+      const ticket = ticketByRun.get(judgment.run_id);
+      return ticket === undefined
+        ? []
+        : [{ ...judgment, ticket, kind: "acceptance", order }];
+    });
+    const tickets = [
+      ...new Set(runs.map((workspaceRun) => workspaceRun.ticket)),
+    ];
+    return ok(
+      tickets.map((ticket) => ({
+        ticket,
+        accept: latestJudgment(judgments, ticket)?.accept === true,
+      })),
+    );
+  });
 }
 
 function recordWorkspaceLanding(
@@ -778,30 +818,11 @@ async function main(
         mainRoot = copies.main;
         workerRoot = copies.worker;
       }
-      const runs = parsed.flags.dryRun ? [] : yield* workspaceRuns(workerRoot);
-      const ticketByRun = new Map(
-        runs.map((workspaceRun) => [workspaceRun.run_id, workspaceRun.ticket]),
-      );
-      const judgments: WorkspaceJudgment[] = ledgerAcceptances(
-        workspaceLedgerLines(),
-      ).flatMap((acceptance) => {
-        const ticket = ticketByRun.get(acceptance.run_id);
-        return ticket === undefined
-          ? []
-          : [
-              {
-                ...acceptance,
-                ticket,
-                kind: "acceptance",
-              },
-            ];
-      });
-      const tickets = [
-        ...new Set(runs.map((workspaceRun) => workspaceRun.ticket)),
-      ];
-      for (const ticket of tickets) {
-        const judgment = latestJudgment(judgments, ticket);
-        if (judgment?.kind !== "acceptance" || judgment.accept !== true) {
+      const verdicts = parsed.flags.dryRun
+        ? []
+        : yield* workspacePreflightVerdicts(workerRoot);
+      for (const { ticket, accept } of verdicts) {
+        if (!accept) {
           const judge =
             parsed.flags.review === undefined
               ? `agx ledger note ${ticket} --accept --no-review "<reason>"`
@@ -813,7 +834,7 @@ async function main(
       }
       if (!parsed.flags.dryRun)
         emit(
-          `[land] judgment: ok ${tickets.length} accepted ticket lineage(s)`,
+          `[land] judgment: ok ${verdicts.length} accepted ticket lineage(s)`,
         );
       yield* jj(workerRoot, ["status"]);
       yield* jj(mainRoot, ["status"]);

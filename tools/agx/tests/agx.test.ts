@@ -6952,7 +6952,14 @@ process.exit(0);
         path = join(state, "events", `${runId}.jsonl`);
       if (pathKind === "ledger-note") {
         const noted = await router(
-          ["ledger", "note", "show_acceptance", "--accept"],
+          [
+            "ledger",
+            "note",
+            "show_acceptance",
+            "--accept",
+            "--no-review",
+            "fixture live check",
+          ],
           { AGX_STATE_DIR: state },
         );
         expect(noted.code, noted.err).toBe(0);

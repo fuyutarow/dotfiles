@@ -99,6 +99,25 @@ ledger appear in `ps` as `refused` with their reason.
 `show` reads acceptance and landing rows without routing fields from every ledger shard and run
 journal. The latest timestamped judgment for the run supplies `accept`; a landing counts as accepted.
 
+`agx ledger note <ticket|run> --accept` requires exactly one of `--review <run_id>`
+or `--no-review "<reason>"`, with nonblank values. A review must identify an existing run
+outside the judged attempt's lineage: predecessor/resume links in either direction and
+the same ticket name plus workspace or shared vendor session identify that lineage,
+including sibling attempts. Independence is checked after finalization so newly recorded
+lineage metadata participates in the gate.
+The review run may still be live; this gate checks provenance, not its verdict.
+Acceptance rows persist `review` (the resolved run ID) or `no_review` (the reason).
+`show --json` adds the latest `judgment` row; human show includes `review` and `no_review`.
+`--reject` needs neither and review flags require `--accept`.
+
+Ledger notes pin the resolved attempt and wait up to 60 seconds while its router is live
+for a terminal run row, including the RETURN-to-verification-to-finalization window.
+They print the wait on stderr. If the router is gone or the bound expires, refusal exits 2,
+states the last observed phase/event and prints the exact retry command without writing a judgment.
+Acceptance/rejection also supports abandoned attempts; consumption notes require a finished run.
+The landing caller must pass `--no-review "landed by coordinator after live check"`
+unless the coordinator supplies `--review <id>` to `mise run land -- …`.
+
 Capabilities accept plain routing tags or `{ need, lower_effort_lacks }` objects with non-empty
 strings. Only an object justifies xhigh/max. Without one, positive selection mass goes to the
 highest admissible lower effort in the same model family; receipt masks and fallback reasons

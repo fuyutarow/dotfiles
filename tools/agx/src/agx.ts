@@ -5445,19 +5445,67 @@ function waive(runId: string, reason: string): number {
   return 0;
 }
 
-function ack(
+const noteShellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+
+/** Pin the attempt before waiting: a ticket may acquire a successor during finalization. */
+async function finishedForNote(
+  runId: string,
+  acknowledgement: boolean,
+  retryArgs: string[],
+) {
+  const resolved = resolveRunId(runId);
+  const deadline = performance.now() + 60_000;
+  let announced = false;
+  while (true) {
+    const rows = readLeaseEvidence(STATE_DIR);
+    const finished = rows.findLast(
+      (line) =>
+        line.run_id === resolved &&
+        (line.kind === "run" ||
+          (!acknowledgement && line.kind === "abandoned")),
+    );
+    if (finished !== undefined) return { resolved, logged: finished };
+    const live = activeRunFor(resolved);
+    const stopped = live === undefined || performance.now() >= deadline;
+    // The router can persist its receipt between the read and the liveness check.
+    const final = stopped
+      ? readLeaseEvidence(STATE_DIR).findLast(
+          (line) =>
+            line.run_id === resolved &&
+            (line.kind === "run" ||
+              (!acknowledgement && line.kind === "abandoned")),
+        )
+      : undefined;
+    if (final !== undefined) return { resolved, logged: final };
+    if (stopped) {
+      const state =
+        live?.active.phase ??
+        rows.findLast((line) => line.run_id === resolved)?.kind ??
+        "unknown";
+      const retry = `agx ledger note ${noteShellQuote(resolved)} ${retryArgs.map((value) => (/^--[a-z-]+$/u.test(value) ? value : noteShellQuote(value))).join(" ")}`;
+      fatal(
+        `no finished run ${resolved} in ${LOG_FILE}; state=${state}; no ${acknowledgement ? "acknowledgement" : "acceptance"} recorded; retry: ${retry}`,
+      );
+    }
+    if (!announced) {
+      dispatchError(
+        `agx: ${resolved} state=${live?.active.phase ?? "working"}; waiting up to 60s for finalization`,
+      );
+      announced = true;
+    }
+    await Bun.sleep(100);
+  }
+}
+
+async function ack(
   runId: string,
   consumed: boolean,
   note: string | undefined,
-): number {
-  const resolved = resolveRunId(runId);
-  const logged = readAllLog().find(
-    (line) => line.kind === "run" && line.run_id === resolved,
-  );
-  if (logged === undefined)
-    fatal(
-      `no finished run ${runId} in ${LOG_FILE}; no acknowledgement recorded`,
-    );
+): Promise<number> {
+  const { resolved } = await finishedForNote(runId, true, [
+    consumed ? "--consumed" : "--rejected",
+    ...(note === undefined ? [] : ["--note", note]),
+  ]);
   const record = {
     kind: "ack",
     run_id: resolved,
@@ -5471,24 +5519,86 @@ function ack(
   return 0;
 }
 
-function acceptRun(
+function validateIndependentReview(resolved: string, reviewId: string) {
+  const rows = readLeaseEvidence(STATE_DIR);
+  if (
+    !rows.some(
+      (line) =>
+        line.run_id === reviewId &&
+        ["run", "started", "admitted", "detached"].includes(line.kind ?? ""),
+    )
+  )
+    fatal(
+      `review run ${reviewId} does not exist; retry with --review <existing independent run_id> or --no-review "<reason>"`,
+    );
+  const neighbors = new Map<string, Set<string>>();
+  const tickets = new Map<string, string>();
+  const sessions = new Map<string, string>();
+  const connect = (a: string, b: string) => {
+    const left = neighbors.get(a) ?? new Set<string>();
+    const right = neighbors.get(b) ?? new Set<string>();
+    left.add(b);
+    right.add(a);
+    neighbors.set(a, left);
+    neighbors.set(b, right);
+  };
+  rows.forEach((line) => {
+    const id = line.run_id;
+    if (id === undefined) return;
+    [line.predecessor, line.resumed_from].forEach((parent) => {
+      if (parent !== undefined) connect(id, parent);
+    });
+    const session = line.worker?.session;
+    if (session !== undefined) {
+      const member = sessions.get(session);
+      if (member !== undefined) connect(id, member);
+      sessions.set(session, id);
+    }
+    if (line.ticket?.name !== undefined && line.cwd !== undefined) {
+      const key = JSON.stringify([line.ticket.name, resolve(line.cwd)]);
+      const member = tickets.get(key);
+      if (member !== undefined) connect(id, member);
+      tickets.set(key, id);
+    }
+  });
+  const lineage = new Set<string>();
+  const pending = [resolved];
+  while (pending.length > 0) {
+    const id = pending.pop();
+    if (id === undefined || lineage.has(id)) continue;
+    lineage.add(id);
+    pending.push(...(neighbors.get(id) ?? []));
+  }
+  if (lineage.has(reviewId))
+    fatal(
+      `review run ${reviewId} is in judged run ${resolved}'s lineage; retry with --review <independent run_id> or --no-review "<reason>"`,
+    );
+}
+
+async function acceptRun(
   runId: string,
   accept: boolean,
   note: string | undefined,
-): number {
+  review: string | undefined,
+  noReview: string | undefined,
+): Promise<number> {
   const resolved = resolveRunId(runId);
-  const logged = readLeaseEvidence(STATE_DIR).findLast(
-    (line) =>
-      (line.kind === "run" || line.kind === "abandoned") &&
-      line.run_id === resolved,
-  );
-  if (logged === undefined)
-    fatal(`no finished run ${runId} in ${LOG_FILE}; no acceptance recorded`);
+  const reviewId = review === undefined ? undefined : resolveRunId(review);
+  const { logged } = await finishedForNote(resolved, false, [
+    accept ? "--accept" : "--reject",
+    ...(reviewId === undefined ? [] : ["--review", reviewId]),
+    ...(noReview === undefined ? [] : ["--no-review", noReview]),
+    ...(note === undefined ? [] : ["--note", note]),
+  ]);
+  // Finalization may reveal resume/predecessor metadata not present when RETURN arrived.
+  if (reviewId !== undefined) validateIndependentReview(resolved, reviewId);
   const record = {
     kind: "acceptance",
     run_id: resolved,
     accept,
     at: now(),
+    ...(reviewId === undefined ? {} : { review: reviewId }),
+    ...(noReview === undefined ? {} : { no_review: noReview }),
     ...(note === undefined ? {} : { note }),
   };
   appendLog(record);
@@ -7121,6 +7231,15 @@ async function parseAgx() {
                 type: Boolean,
                 description: "mark this delivery unaccepted",
               },
+              review: {
+                type: String,
+                description: "independent review run required for acceptance",
+              },
+              noReview: {
+                type: String,
+                description:
+                  "explicit reason to accept without independent review",
+              },
               consumed: {
                 type: Boolean,
                 description: "the artifact was consumed (default)",
@@ -7879,11 +7998,30 @@ async function main(): Promise<number | undefined> {
       fatal("choose acceptance flags or legacy consumed flags");
     if (argv.flags.accept === true && argv.flags.reject === true)
       fatal("choose either --accept or --reject");
+    if (argv.flags.review !== undefined && argv.flags.noReview !== undefined)
+      fatal('choose either --review <run_id> or --no-review "<reason>"');
+    if (argv.flags.review?.trim() === "" || argv.flags.noReview?.trim() === "")
+      fatal("--review and --no-review require non-empty values");
+    if (
+      (argv.flags.review !== undefined || argv.flags.noReview !== undefined) &&
+      argv.flags.accept !== true
+    )
+      fatal("--review and --no-review require --accept");
+    if (
+      argv.flags.accept === true &&
+      argv.flags.review === undefined &&
+      argv.flags.noReview === undefined
+    )
+      fatal(
+        '--accept requires --review <independent run_id> or --no-review "<reason>"; retry: agx ledger note <ticket|run> --accept --review <independent run_id>',
+      );
     if (argv.flags.accept === true || argv.flags.reject === true)
       return acceptRun(
         argv._.ticket,
         argv.flags.reject !== true,
         argv.flags.note,
+        argv.flags.review,
+        argv.flags.noReview,
       );
     return ack(argv._.ticket, argv.flags.rejected !== true, argv.flags.note);
   }
@@ -8349,7 +8487,7 @@ function reportNoteFor(
   return "no typed final report (this run was recorded before typed reports)";
 }
 
-function latestAcceptance(runId: string): boolean | undefined {
+function latestAcceptanceRow(runId: string) {
   const row = readLeaseEvidence(STATE_DIR)
     .filter(
       (line) =>
@@ -8361,6 +8499,11 @@ function latestAcceptance(runId: string): boolean | undefined {
         (instantMilliseconds(a.at) ?? 0) - (instantMilliseconds(b.at) ?? 0),
     )
     .at(-1);
+  return row;
+}
+
+function latestAcceptance(runId: string): boolean | undefined {
+  const row = latestAcceptanceRow(runId);
   return row?.kind === "landed" ? true : row?.accept;
 }
 
@@ -8379,6 +8522,7 @@ function resultCommand(
     const snapshot = {
       ...active,
       accept: latestAcceptance(active.run_id) ?? null,
+      judgment: latestAcceptanceRow(active.run_id) ?? null,
       name: active.ticket?.name ?? active.display_id ?? active.run_id,
       row: active.choice,
       picked_probability: active.picked_probability ?? null,
@@ -8402,6 +8546,8 @@ function resultCommand(
       `proposition=${active.proposition ?? "-"}`,
       `run=${active.run_id}`,
       `accept=${snapshot.accept ?? "pending"}`,
+      `review=${snapshot.judgment?.review ?? "-"}`,
+      `no_review=${JSON.stringify(snapshot.judgment?.no_review ?? null)}`,
       `row=${snapshot.row}`,
       `probability=${snapshot.picked_probability ?? "?"}`,
       `cost=${snapshot.cost_usd === null ? "?" : `$${snapshot.cost_usd.toFixed(6)}`}`,
@@ -8443,7 +8589,7 @@ function resultCommand(
   const reportNote = reportNoteFor(logged, typed);
   if (asJson) {
     process.stdout.write(
-      `${JSON.stringify({ ...logged, accept: acceptance ?? null })}\n`,
+      `${JSON.stringify({ ...logged, accept: acceptance ?? null, judgment: latestAcceptanceRow(resolved) ?? null })}\n`,
     );
     if (reportNote !== undefined) dispatchError(`agx: ${reportNote}`);
     if (report.trim() === "" && !typed.success)
@@ -8457,6 +8603,8 @@ function resultCommand(
     `row=${logged.pick.choice}`,
     `result=${logged.result ?? outcome}`,
     `accept=${acceptance ?? "pending"}`,
+    `review=${latestAcceptanceRow(resolved)?.review ?? "-"}`,
+    `no_review=${JSON.stringify(latestAcceptanceRow(resolved)?.no_review ?? null)}`,
     `kind=${logged.resource?.kind ?? "unknown"}`,
     `labels=${(logged.resource?.labels ?? []).join(",")}`,
     `turns=${logged.facts?.turns ?? "?"}`,

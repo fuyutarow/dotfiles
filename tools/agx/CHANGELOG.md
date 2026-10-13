@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.5.4 — 2026-10-13
+
+- Let ledger notes wait up to 60 seconds for a live attempt to finalize after RETURN, pinning the attempt even if its ticket resumes. Refusals include the observed state and an exact retry command.
+- Require acceptance to name an existing independent review with `--review <run_id>` or explain its absence with `--no-review "<reason>"`. Persist `review` or `no_review` in the acceptance row and expose the latest judgment in human and JSON show output. Rejection needs neither flag.
+
 ## 3.5.3 — 2026-10-13
 
 - Complete detached validation, routing, worker-slot and write-lease admission in the dispatcher before workspace creation or OS-manager handoff. Pass the admitted pick, launch data and roster snapshot to the unit; it never routes or reclaims the lease. Lease refusals, including lock timeouts, exit 2 in the dispatcher without printing a run handle.

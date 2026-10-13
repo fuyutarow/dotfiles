@@ -57,10 +57,12 @@ function fixture() {
     ...process.env,
     HOME: dir,
     XDG_CONFIG_HOME: join(dir, "config"),
+    XDG_STATE_HOME: join(dir, "state"),
     JJ_CONFIG: config,
     PATH: `${bin}:/usr/bin:/bin`,
     MISE_TRUSTED_CONFIG_PATHS: root,
     MISE_GLOBAL_CONFIG_FILE: join(dir, "no-global.toml"),
+    MISE_STATE_DIR: join(dir, "mise-state"),
     MISE_USE_TOML: "1",
     MISE_YES: "1",
     PRECOMMIT_VCS: undefined,
@@ -121,7 +123,7 @@ process.exit(Number(process.env.FAIL_HOOK ?? "0"));
       ],
       extra,
     );
-  return { dir, root, bin, marker, receipt, run, jj, base, commit };
+  return { dir, root, bin, marker, receipt, run, jj, base, commit, env };
 }
 
 function recorded(f: ReturnType<typeof fixture>) {
@@ -145,6 +147,44 @@ function recorded(f: ReturnType<typeof fixture>) {
 }
 
 describe("jj gated commit (J1)", () => {
+  test("refuses commits from agx-created workspaces and points to land", () => {
+    const f = fixture();
+    const worker = join(f.dir, "repo-arm-agx-test");
+    f.jj("bookmark", "set", "alpha", "-r", "@-");
+    f.jj(
+      "workspace",
+      "add",
+      "--name",
+      "repo-arm-agx-test",
+      "-r",
+      "alpha",
+      worker,
+    );
+    writeFileSync(join(worker, "selected.txt"), "worker edit\n");
+    const result = Bun.spawnSync(
+      ["mise", "run", "commit", "--", "-m", "bypass", "--", "selected.txt"],
+      {
+        cwd: worker,
+        env: {
+          ...f.env,
+          MISE_TRUSTED_CONFIG_PATHS: worker,
+          PATH: `${f.bin}:/usr/bin:/bin`,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 60_000,
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain(
+      "agx workspaces must land through `mise run land -- <ws> -m …`",
+    );
+    expect(f.jj("log", "--no-graph", "-r", "alpha", "-T", "description")).toBe(
+      "fixture base",
+    );
+    expect(existsSync(f.receipt)).toBe(false);
+  });
+
   test("passes the snapshot interface and preserves selected paths exactly", async () => {
     const f = fixture();
     mkdirSync(join(f.root, "notes"));

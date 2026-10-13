@@ -464,6 +464,14 @@ async function localDeployVerdict(
   return `${doctor.status}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`;
 }
 
+function executionFailure(result: HostExecutionResult): string | undefined {
+  if (!result.ok) return result.reason;
+  if (result.value.timedOut)
+    return `command exited ${result.value.code} (timeout)`;
+  if (result.value.code !== 0) return `command exited ${result.value.code}`;
+  return undefined;
+}
+
 const jj = (cwd: string, argv: string[]) =>
   run(cwd, ["jj", "--no-pager", "--color", "never", ...argv]);
 const read = (cwd: string, argv: string[]) =>
@@ -682,12 +690,6 @@ async function main(
           description:
             "Preview the landing and host results without committing or deploying.",
         },
-        keepWorkspace: {
-          type: Boolean,
-          default: false,
-          description:
-            "Keep the accepted workspace for post-deployment verification or a long host migration.",
-        },
       },
     },
     undefined,
@@ -705,8 +707,7 @@ async function main(
       parsed.flags.dryRun ||
       (parsed.flags.enqueue === undefined &&
         (parsed.flags.message !== undefined ||
-          parsed.flags.smoke !== undefined ||
-          parsed.flags.keepWorkspace));
+          parsed.flags.smoke !== undefined));
     if (invalid) {
       emit(
         "[land] queue: FAIL select exactly one queue mode; positional workspace and --dry-run are not allowed",
@@ -730,7 +731,6 @@ async function main(
           ...(parsed.flags.smoke === undefined
             ? {}
             : { smoke: parsed.flags.smoke }),
-          keep_workspace: parsed.flags.keepWorkspace,
         });
         return result instanceof Error ? result : 0;
       }
@@ -742,7 +742,6 @@ async function main(
             "-m",
             item.msg,
             ...(item.smoke === undefined ? [] : ["--smoke", item.smoke]),
-            ...(item.keep_workspace ? ["--keep-workspace"] : []),
           ],
           true,
           (value) => {
@@ -952,26 +951,39 @@ async function main(
       if (parsed.flags.dryRun) emit("[land] commit: ok preview gated commit");
       emit(`[land] push: ok ${parsed.flags.dryRun ? "preview" : commit}`);
       if (!parsed.flags.dryRun) {
-        stage = "deps";
-        yield* run(mainRoot, [process.env.LAND_MISE ?? "mise", "run", "deps"]);
-        emit("[land] deps: ok local main checkout");
-        const deployEnv = {
-          ...process.env,
-          DOTFILES_RENDER_REV: commit,
-          DOTFILES_RENDER_FROM_WORKING_COPY: "0",
-          DOCTOR_ONLY: "",
-        };
-        stage = "deploy";
-        const localState = await localDeployVerdict(mainRoot, deployEnv);
-        hostResults.set("local", localState);
-        const [localVerdict, ...localDetails] = localState.split(";");
-        const suffix =
-          localDetails.length === 0 ? "" : `;${localDetails.join(";")}`;
-        emit(`[land] deploy: ${localVerdict} local${suffix}`);
         const accepted = recordWorkspaceAcceptance(workerRoot);
         emit(
           `[land] acceptance: recorded ${accepted} run(s) from this workspace`,
         );
+        yield* jj(root, ["workspace", "forget", workspaceName]);
+        rmSync(workerRoot, { recursive: true, force: true });
+        emit(`[land] workspace: removed ${workspaceName}`);
+        stage = "deploy";
+        const deps = await runHost(mainRoot, [
+          process.env.LAND_MISE ?? "mise",
+          "run",
+          "deps",
+        ]);
+        const depsFailure = executionFailure(deps);
+        if (depsFailure !== undefined) {
+          const reason = `deps ${depsFailure}`;
+          hostResults.set("local", `FAIL ${reason}`);
+          emit(`[land] deploy: FAIL local dependencies: ${reason}`);
+        } else {
+          emit("[land] deps: ok local main checkout");
+          const deployEnv = {
+            ...process.env,
+            DOTFILES_RENDER_REV: commit,
+            DOTFILES_RENDER_FROM_WORKING_COPY: "0",
+            DOCTOR_ONLY: "",
+          };
+          const localState = await localDeployVerdict(mainRoot, deployEnv);
+          hostResults.set("local", localState);
+          const [localVerdict, ...localDetails] = localState.split(";");
+          const suffix =
+            localDetails.length === 0 ? "" : `;${localDetails.join(";")}`;
+          emit(`[land] deploy: ${localVerdict} local${suffix}`);
+        }
       }
       stage = "deploy";
       const smokeBegin = `__LAND_SMOKE_BEGIN_${process.pid}__`;
@@ -1064,11 +1076,6 @@ async function main(
           status.startsWith("FAIL ") || status.startsWith("unreachable "),
       );
       if (failedHosts) return reject("one or more host deployments failed");
-      if (!parsed.flags.dryRun && !parsed.flags.keepWorkspace) {
-        yield* jj(root, ["workspace", "forget", workspaceName]);
-        rmSync(workerRoot, { recursive: true, force: true });
-        emit(`[land] workspace: removed ${workspaceName}`);
-      }
       return ok(undefined);
     }),
   ).finally(() => {

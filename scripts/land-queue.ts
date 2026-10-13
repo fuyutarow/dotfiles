@@ -17,7 +17,7 @@ const Enqueue = z.strictObject({
   msg: z.string().trim().min(1),
   queued_at: z.string(),
   smoke: z.string().optional(),
-  keep_workspace: z.boolean(),
+  keep_workspace: z.boolean().optional(),
 });
 const Start = z.strictObject({
   schema: z.literal(1),
@@ -130,7 +130,7 @@ async function append(state: string, event: QueueEvent): Promise<void> {
 
 export async function enqueue(
   mainRoot: string,
-  request: { ws: string; msg: string; smoke?: string; keep_workspace: boolean },
+  request: { ws: string; msg: string; smoke?: string },
 ): Promise<string | Error> {
   const state = landStateDir(mainRoot);
   return journal(state, async () => {

@@ -20,7 +20,7 @@
 import { $ } from "bun";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { cli } from "cleye";
 import {
   filesets,
@@ -90,6 +90,47 @@ if (rootRun.exitCode !== 0)
   );
 const root = rootRun.stdout.toString().trim();
 process.chdir(root);
+function isAgxWorkspace(workspaceRoot: string): boolean {
+  const workspaceList = Bun.spawnSync(["jj", "workspace", "list"], {
+    cwd: workspaceRoot,
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 10_000,
+  });
+  if (workspaceList.exitCode !== 0)
+    die(
+      `cannot inspect jj workspaces: ${workspaceList.stderr.toString().trim()}`,
+      1,
+    );
+  const current = resolve(workspaceRoot);
+  const currentName = basename(current);
+  for (const line of workspaceList.stdout.toString().split("\n")) {
+    if (line.trim() === "") continue;
+    const separator = line.indexOf(":");
+    if (separator < 0) die(`cannot parse jj workspace entry: ${line}`, 1);
+    const name = line.slice(0, separator).trim();
+    const otherRoot = Bun.spawnSync(
+      ["jj", "workspace", "root", "--name", name],
+      { cwd: workspaceRoot, stdout: "pipe", stderr: "pipe", timeout: 10_000 },
+    );
+    if (otherRoot.exitCode !== 0)
+      die(
+        `cannot inspect jj workspace ${name}: ${otherRoot.stderr.toString().trim()}`,
+        1,
+      );
+    if (
+      resolve(otherRoot.stdout.toString().trim()) !== current &&
+      currentName.startsWith(
+        `${basename(resolve(otherRoot.stdout.toString().trim()))}-arm-`,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+if (isAgxWorkspace(root))
+  die("agx workspaces must land through `mise run land -- <ws> -m …`", 1);
 const { records, push } = parsed.flags;
 const named: string[] = [...parsed._];
 const msg =

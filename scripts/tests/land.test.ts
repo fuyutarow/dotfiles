@@ -109,6 +109,7 @@ function fixture() {
     JJ_EDITOR: "true",
     LAND_EVENTS: events,
     AGX_STATE_DIR: join(temp, "agx-state"),
+    LAND_EXPECT_WORKSPACE: worker,
   };
   writeFileSync(
     env.JJ_CONFIG,
@@ -160,9 +161,13 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['pushed']) + '\\n');\n`,
   );
   writeFileSync(
     ssh,
-    `#!${process.execPath}\nimport { appendFileSync } from 'node:fs';
+    `#!${process.execPath}\nimport { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 const args = process.argv.slice(2);
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['ssh', ...args]) + '\\n');
+const runLog = join(process.env.AGX_STATE_DIR, 'runs.jsonl');
+const accepted = existsSync(runLog) && readFileSync(runLog, 'utf8').includes('"accept":true');
+if (process.env.LAND_ASSERT_DEPLOY_PRECONDITION === '1') appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['deploy-state', String(existsSync(process.env.LAND_EXPECT_WORKSPACE)), String(accepted)]) + '\\n');
 const host = args[2] ?? 'unknown';
 if (process.env.LAND_BLOCKED_SSH === host) { process.stderr.write('FATAL: uncommitted render inputs\\nDOTFILES_RENDER_REFUSAL_V1={"reason":"foreign-wip","paths":["agents/hooks/storage-headroom.toml"]}\\n'); process.exit(2); }
 const command = args.at(-1) ?? '';
@@ -411,16 +416,27 @@ describe("land workspace", () => {
     );
   });
 
-  test("--keep-workspace preserves an accepted workspace for live migration checks", () => {
+  test("land records acceptance and removes the workspace before best-effort deploy", () => {
     const f = fixture();
-    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    const result = f.land(["--keep-workspace"]);
-    expect(result.exitCode).toBe(0);
-    expect(existsSync(f.worker)).toBe(true);
-    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "worker version\n",
+    const state = join(f.main, "..", "agx-state");
+    mkdirSync(state, { recursive: true });
+    appendFileSync(
+      join(state, "runs.jsonl"),
+      `${JSON.stringify({ kind: "run", run_id: "deploy-failure-run", cwd: f.worker })}\n`,
     );
-    expect(result.stdout.toString()).not.toContain("workspace: removed");
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land([], {
+      LAND_UNREACHABLE_SSH: "sol",
+      LAND_ASSERT_DEPLOY_PRECONDITION: "1",
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout.toString()).toContain("landed, deploy failed");
+    expect(existsSync(f.worker)).toBe(false);
+    const deployment = f.log().find((event) => event[0] === "deploy-state");
+    expect(deployment).toEqual(["deploy-state", "false", "true"]);
+    expect(readFileSync(join(state, "runs.jsonl"), "utf8")).toContain(
+      '"run_id":"deploy-failure-run","accept":true',
+    );
   });
 
   test("invocation in a worker checkout discovers the main checkout", () => {
@@ -654,7 +670,7 @@ describe("land workspace", () => {
     const result = f.land(["--smoke", "printf smoke"], {
       LAND_FAIL_SSH: "sol",
     });
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(2);
     expect(result.stdout.toString()).toContain(
       "[land] deploy: FAIL sol: remote command exited 7",
     );
@@ -698,7 +714,7 @@ describe("land workspace", () => {
       const f = fixture();
       writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
       const result = f.land([], { LAND_UNREACHABLE_SSH: "sol" });
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.stdout.toString()).toContain(
         "[land] deploy: unreachable sol: ssh: connect to host sol failed",
       );

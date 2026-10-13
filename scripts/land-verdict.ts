@@ -10,9 +10,14 @@ export const LandReportSchema = z.strictObject({
 export type LandReport = z.output<typeof LandReportSchema>;
 
 export function landExit(report: LandReport): number {
-  return report.commit === "ok" &&
-    report.push === "ok" &&
+  const landed = report.commit === "ok" && report.push === "ok";
+  const deployFailed = Object.values(report.hosts).some(
+    (state) => state.startsWith("FAIL ") || state.startsWith("unreachable "),
+  );
+  if (landed && (report.failure !== undefined || deployFailed)) return 2;
+  return landed &&
     report.failure === undefined &&
+    !deployFailed &&
     Object.values(report.hosts).every(
       (state) =>
         state.startsWith("ok") ||
@@ -26,7 +31,12 @@ export function landExit(report: LandReport): number {
 
 export function landSummary(report: LandReport, commit?: string): string {
   const landed = report.commit === "ok" && report.push === "ok";
-  return `summary: ${landExit(report) === 0 ? "ok" : "FAIL"} commit=${commit ?? "none"} ${landed ? "landed and pushed" : `commit=${report.commit} push=${report.push}`} hosts=${JSON.stringify(report.hosts)}`;
+  const exit = landExit(report);
+  let status: string;
+  if (exit === 0) status = "ok";
+  else if (exit === 2) status = "landed, deploy failed";
+  else status = "FAIL";
+  return `summary: ${status} commit=${commit ?? "none"} ${landed ? "landed and pushed" : `commit=${report.commit} push=${report.push}`} hosts=${JSON.stringify(report.hosts)}`;
 }
 
 export function foreignWip(output: string): string[] | undefined {

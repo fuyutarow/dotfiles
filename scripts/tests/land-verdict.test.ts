@@ -1,25 +1,14 @@
 import { expect, test } from "bun:test";
 import { foreignWip, landExit, landSummary } from "../land-verdict.ts";
 
-test("landed and pushed stays explicit for healthy, blocked and failed hosts", () => {
-  for (const [state, exit] of [
-    ["ok", 0],
-    ["blocked: foreign WIP (agents/hooks/storage-headroom.toml)", 0],
-    ["skipped: unresolvable", 0],
-    ["skipped (damaged)", 0],
-    ["FAIL remote command exited 7", 2],
-  ] satisfies [string, number][]) {
-    const report = {
-      commit: "ok",
-      push: "ok",
-      hosts: { host: state },
-    } satisfies Parameters<typeof landExit>[0];
-    expect(landExit(report)).toBe(exit);
-    expect(landSummary(report, "abc")).toContain("landed and pushed");
-    expect(landSummary(report, "abc")).toContain(state);
-  }
-  expect(landExit({ commit: "failed", push: "pending", hosts: {} })).toBe(1);
-  expect(landExit({ commit: "ok", push: "failed", hosts: {} })).toBe(1);
+test("land verdict covers only its commit and push", () => {
+  const report = { commit: "ok", push: "ok" } satisfies Parameters<
+    typeof landExit
+  >[0];
+  expect(landExit(report)).toBe(0);
+  expect(landSummary(report, "abc")).toContain("landed and pushed");
+  expect(landExit({ commit: "failed", push: "pending" })).toBe(1);
+  expect(landExit({ commit: "ok", push: "failed" })).toBe(1);
 });
 
 test("only a valid machine refusal classifies foreign WIP", () => {

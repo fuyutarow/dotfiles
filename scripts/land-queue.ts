@@ -16,6 +16,7 @@ const Enqueue = z.strictObject({
   ws: z.string().min(1),
   msg: z.string().trim().min(1),
   queued_at: z.string(),
+  // Retain old queue rows; deployment and smoke execution now belong to `mise run deploy`.
   smoke: z.string().optional(),
   review: z.string().trim().min(1).optional(),
   keep_workspace: z.boolean().optional(),
@@ -131,7 +132,7 @@ async function append(state: string, event: QueueEvent): Promise<void> {
 
 export async function enqueue(
   mainRoot: string,
-  request: { ws: string; msg: string; smoke?: string; review?: string },
+  request: { ws: string; msg: string; review?: string },
 ): Promise<string | Error> {
   const state = landStateDir(mainRoot);
   return journal(state, async () => {

@@ -1,6 +1,7 @@
 // Consumer: human/agent. Stage verdicts; stop on the first failure. Test seams are executable
 // paths LAND_MISE and LAND_SSH (argv is never interpreted by a local shell).
 import {
+  appendFileSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -22,62 +23,94 @@ import {
   filesets,
   validPath,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
-import { LAND_HOSTS } from "./config-registry.ts";
 import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
 import { enqueue, landLock, queueStatus, runQueue } from "./land-queue.ts";
 import { renderRefusal } from "./render-source.ts";
-import { doctorReport, doctorStep } from "./land-doctor.ts";
-import {
-  foreignWip,
-  landExit,
-  landSummary,
-  type LandReport,
-} from "./land-verdict.ts";
+import { landExit, landSummary, type LandReport } from "./land-verdict.ts";
 
-function recordWorkspaceAcceptance(
-  workspace: string,
-  review: string | undefined,
-): ResultAsync<number, Error> {
-  const state = dispatchStateDir();
-  const log = join(state, "runs.jsonl");
-  if (!existsSync(log)) return ResultAsync.fromSafePromise(Promise.resolve(0));
+type WorkspaceRun = { run_id: string; ticket: string };
+
+function workspaceRuns(workspace: string): ResultAsync<WorkspaceRun[], Error> {
+  const log = join(dispatchStateDir(), "runs.jsonl");
+  if (!existsSync(log)) return ResultAsync.fromSafePromise(Promise.resolve([]));
   const target = realpathSync(workspace);
-  const lines = readFileSync(log, "utf8").split("\n").filter(Boolean);
-  const ids = new Set<string>();
-  for (const line of lines) {
+  const runs = new Map<string, WorkspaceRun>();
+  for (const line of readFileSync(log, "utf8").split("\n").filter(Boolean)) {
     const parsed = jsonOf(
       z.looseObject({
         kind: z.literal("run"),
         run_id: z.string(),
         cwd: z.string(),
+        ticket: z.looseObject({ name: z.string() }).optional(),
       }),
     ).safeParse(line);
-    if (!parsed.success || !existsSync(parsed.data.cwd)) continue;
-    if (realpathSync(parsed.data.cwd) !== target) continue;
-    ids.add(parsed.data.run_id);
+    if (
+      parsed.success &&
+      existsSync(parsed.data.cwd) &&
+      realpathSync(parsed.data.cwd) === target
+    )
+      runs.set(parsed.data.run_id, {
+        run_id: parsed.data.run_id,
+        ticket: parsed.data.ticket?.name ?? parsed.data.run_id,
+      });
   }
+  return ResultAsync.fromSafePromise(Promise.resolve([...runs.values()]));
+}
+
+type WorkspaceJudgment = {
+  run_id: string;
+  ticket: string;
+  kind: string;
+  accept?: boolean;
+  at?: string;
+  order: number;
+};
+
+function latestJudgment(
+  judgments: WorkspaceJudgment[],
+  ticket: string,
+): WorkspaceJudgment | undefined {
+  return judgments
+    .filter((judgment) => judgment.ticket === ticket)
+    .toSorted((left, right) => {
+      const leftAt = timestampMilliseconds(left.at);
+      const rightAt = timestampMilliseconds(right.at);
+      if (leftAt !== undefined && rightAt !== undefined && leftAt !== rightAt)
+        return leftAt - rightAt;
+      return left.order - right.order;
+    })
+    .at(-1);
+}
+
+function timestampMilliseconds(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = fromThrowable(
+    () => Temporal.Instant.from(value).epochMilliseconds,
+    errorMessage,
+  )();
+  return parsed.isOk() ? parsed.value : undefined;
+}
+
+function recordWorkspaceLanding(
+  workspace: string,
+  commit: string,
+): ResultAsync<number, Error> {
   return safeTry(async function* () {
-    for (const run_id of ids)
-      yield* run(workspace, [
-        process.env.LAND_AGX ?? "agx",
-        "ledger",
-        "note",
-        run_id,
-        "--accept",
-        ...(review === undefined
-          ? ["--no-review", "landed by coordinator after live check"]
-          : ["--review", review]),
-      ]);
-    return ok(ids.size);
+    const ids = yield* workspaceRuns(workspace);
+    const log = join(dispatchStateDir(), "runs.jsonl");
+    for (const { run_id } of ids)
+      appendFileSync(
+        log,
+        `${JSON.stringify({ kind: "landed", run_id, commit, at: Temporal.Now.instant().toString() })}\n`,
+        { mode: 0o600 },
+      );
+    return ok(ids.length);
   });
 }
 
 const emit = (text: string): void => {
   process.stdout.write(`${text}\n`);
 };
-const shellQuote = (value: string): string =>
-  `'${value.replaceAll("'", "'\\''")}'`;
-
 export async function packageBinProblems(root: string): Promise<string[]> {
   const problems: string[] = [];
   for await (const manifest of new Bun.Glob("**/package.json").scan({
@@ -373,121 +406,6 @@ function run(
   });
 }
 
-type HostExecution = {
-  code: number;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-};
-
-type HostExecutionResult =
-  | { ok: true; value: HostExecution }
-  | { ok: false; reason: string };
-
-async function runHost(
-  cwd: string,
-  argv: string[],
-  timeoutMs = 600_000,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<HostExecutionResult> {
-  const result = await attempt(async () => {
-    const signal = AbortSignal.timeout(timeoutMs);
-    const child = Bun.spawn(argv, {
-      cwd,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-      env,
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return { code, stdout, stderr, timedOut: signal.aborted };
-  });
-  return result.ok ? result : { ok: false, reason: errorMessage(result.error) };
-}
-
-function extractSmoke(
-  stdout: string,
-  begin: string,
-  end: string,
-): { output: string; smoke: string | undefined } {
-  const beginToken = `\n${begin}\n`;
-  const endToken = `\n${end}\n`;
-  const start = stdout.lastIndexOf(beginToken);
-  if (start < 0) return { output: stdout, smoke: undefined };
-  const finish = stdout.indexOf(endToken, start + beginToken.length);
-  if (finish < 0) return { output: stdout, smoke: undefined };
-  return {
-    output: stdout.slice(0, start) + stdout.slice(finish + endToken.length),
-    smoke: stdout.slice(start + beginToken.length, finish).trim(),
-  };
-}
-
-function printSmoke(host: string, smoke: string | undefined): void {
-  if (smoke === undefined) return;
-  emit(`[land] smoke: ${host}${smoke === "" ? " (empty)" : ""}`);
-  if (smoke !== "") emit(smoke);
-}
-
-function hostDiagnostic(stderr: string): string {
-  return stderr.trim().replaceAll(/\s+/gu, " ").slice(-1000);
-}
-
-function isUnresolvableHost(diagnostic: string): boolean {
-  return /(?:could not resolve hostname|name or service not known|temporary failure in name resolution|nodename nor servname provided)/iu.test(
-    diagnostic,
-  );
-}
-
-async function localDeployVerdict(
-  root: string,
-  env: NodeJS.ProcessEnv,
-): Promise<string> {
-  const deployed = await runHost(
-    root,
-    [process.env.LAND_MISE ?? "mise", "run", "hook:post-merge"],
-    600_000,
-    env,
-  );
-  if (!deployed.ok) return `FAIL ${deployed.reason}`;
-  if (deployed.value.timedOut) return "FAIL local render timed out";
-  if (deployed.value.code !== 0) {
-    const blocked = foreignWip(
-      `${deployed.value.stdout}\n${deployed.value.stderr}`,
-    );
-    if (blocked !== undefined)
-      return `blocked: foreign WIP (${blocked.join(", ")})`;
-    return `FAIL local render exited ${deployed.value.code}: ${hostDiagnostic(deployed.value.stderr)}`;
-  }
-  const proof = await runHost(
-    root,
-    [process.env.LAND_MISE ?? "mise", "run", "doctor"],
-    90_000,
-    env,
-  );
-  let code = proof.ok ? proof.value.code : 2;
-  if (proof.ok && proof.value.timedOut) code = 124;
-  const doctor = doctorReport(
-    proof.ok
-      ? `${proof.value.stdout}\n__LAND_DOCTOR_EXIT_${code}__`
-      : undefined,
-  );
-  for (const line of doctor.lines) emit(`[land] doctor: local ${line}`);
-  return `${doctor.status}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`;
-}
-
-function executionFailure(result: HostExecutionResult): string | undefined {
-  if (!result.ok) return result.reason;
-  if (result.value.timedOut)
-    return `command exited ${result.value.code} (timeout)`;
-  if (result.value.code !== 0) return `command exited ${result.value.code}`;
-  return undefined;
-}
-
 const jj = (cwd: string, argv: string[]) =>
   run(cwd, ["jj", "--no-pager", "--color", "never", ...argv]);
 const read = (cwd: string, argv: string[]) =>
@@ -699,11 +617,6 @@ async function main(
           alias: "m",
           description: "Commit message for the landed workspace.",
         },
-        smoke: {
-          type: String,
-          description:
-            "Run this command on each deployed host after pull and deps, and print its output.",
-        },
         dryRun: {
           type: Boolean,
           default: false,
@@ -727,7 +640,6 @@ async function main(
       parsed.flags.dryRun ||
       (parsed.flags.enqueue === undefined &&
         (parsed.flags.message !== undefined ||
-          parsed.flags.smoke !== undefined ||
           parsed.flags.review !== undefined));
     if (invalid) {
       emit(
@@ -749,9 +661,6 @@ async function main(
         const result = await enqueue(mainRoot, {
           ws: parsed.flags.enqueue,
           msg: parsed.flags.message ?? "",
-          ...(parsed.flags.smoke === undefined
-            ? {}
-            : { smoke: parsed.flags.smoke }),
           ...(parsed.flags.review === undefined
             ? {}
             : { review: parsed.flags.review }),
@@ -765,7 +674,6 @@ async function main(
             item.ws,
             "-m",
             item.msg,
-            ...(item.smoke === undefined ? [] : ["--smoke", item.smoke]),
             ...(item.review === undefined ? [] : ["--review", item.review]),
           ],
           true,
@@ -790,8 +698,7 @@ async function main(
   let tmp: string | undefined;
   let landedRoot: string | undefined;
   let restoredPaths: string[] = [];
-  const hostResults = new Map<string, string>();
-  const report: LandReport = { commit: "pending", push: "pending", hosts: {} };
+  const report: LandReport = { commit: "pending", push: "pending" };
   const captured = await attempt(() =>
     safeTry(async function* () {
       const binProblems = await packageBinProblems(process.cwd());
@@ -801,11 +708,6 @@ async function main(
         return reject("one workspace and -m <message> are required");
       if (parsed.flags.review?.trim() === "")
         return reject("--review requires a non-empty agx run ID");
-      for (const host of LAND_HOSTS)
-        hostResults.set(
-          host.alias,
-          host.deploy ? "pending" : `skipped (${host.reason ?? "disabled"})`,
-        );
       const root = (yield* read(process.cwd(), ["workspace", "root"])).trim();
       let mainRoot = mainCheckout(root);
       const release = queueLockHeld ? () => {} : await landLock(mainRoot);
@@ -859,6 +761,66 @@ async function main(
         mainRoot = copies.main;
         workerRoot = copies.worker;
       }
+      const runs = parsed.flags.dryRun ? [] : yield* workspaceRuns(workerRoot);
+      const judgments: WorkspaceJudgment[] = [];
+      for (const [order, workspaceRun] of runs.entries()) {
+        const shown = yield* run(workerRoot, [
+          process.env.LAND_AGX ?? "agx",
+          "show",
+          workspaceRun.run_id,
+          "--json",
+        ]);
+        const decoded = jsonOf(
+          z.looseObject({
+            judgment: z
+              .looseObject({
+                kind: z.string(),
+                accept: z.boolean().optional(),
+                at: z.string().optional(),
+              })
+              .optional(),
+          }),
+        ).safeParse(shown);
+        if (!decoded.success)
+          judgments.push({
+            run_id: workspaceRun.run_id,
+            ticket: workspaceRun.ticket,
+            kind: "unreadable",
+            order,
+          });
+        else if (decoded.data.judgment !== undefined) {
+          const judgment = decoded.data.judgment;
+          judgments.push({
+            run_id: workspaceRun.run_id,
+            ticket: workspaceRun.ticket,
+            kind: judgment.kind,
+            ...(judgment.accept === undefined
+              ? {}
+              : { accept: judgment.accept }),
+            ...(judgment.at === undefined ? {} : { at: judgment.at }),
+            order,
+          });
+        }
+      }
+      const tickets = [
+        ...new Set(runs.map((workspaceRun) => workspaceRun.ticket)),
+      ];
+      for (const ticket of tickets) {
+        const judgment = latestJudgment(judgments, ticket);
+        if (judgment?.kind !== "acceptance" || judgment.accept !== true) {
+          const judge =
+            parsed.flags.review === undefined
+              ? `agx ledger note ${ticket} --accept --no-review "<reason>"`
+              : `agx ledger note ${ticket} --accept --review ${parsed.flags.review}`;
+          return reject(
+            `ticket ${ticket} has no current accept judgment; judge first: ${judge}`,
+          );
+        }
+      }
+      if (!parsed.flags.dryRun)
+        emit(
+          `[land] judgment: ok ${tickets.length} accepted ticket lineage(s)`,
+        );
       yield* jj(workerRoot, ["status"]);
       yield* jj(mainRoot, ["status"]);
       const alpha = yield* at(mainRoot, "alpha");
@@ -978,136 +940,17 @@ async function main(
       if (parsed.flags.dryRun) emit("[land] commit: ok preview gated commit");
       emit(`[land] push: ok ${parsed.flags.dryRun ? "preview" : commit}`);
       if (!parsed.flags.dryRun) {
-        const accepted = yield* recordWorkspaceAcceptance(
+        stage = "landed";
+        const recorded = yield* recordWorkspaceLanding(
           workerRoot,
-          parsed.flags.review,
+          commit ?? "alpha",
         );
-        emit(
-          `[land] acceptance: recorded ${accepted} run(s) from this workspace`,
-        );
+        emit(`[land] landed: recorded ${recorded} run(s)`);
+        stage = "workspace";
         yield* jj(root, ["workspace", "forget", workspaceName]);
         rmSync(workerRoot, { recursive: true, force: true });
         emit(`[land] workspace: removed ${workspaceName}`);
-        stage = "deploy";
-        const deps = await runHost(mainRoot, [
-          process.env.LAND_MISE ?? "mise",
-          "run",
-          "deps",
-        ]);
-        const depsFailure = executionFailure(deps);
-        if (depsFailure !== undefined) {
-          const reason = `deps ${depsFailure}`;
-          hostResults.set("local", `FAIL ${reason}`);
-          emit(`[land] deploy: FAIL local dependencies: ${reason}`);
-        } else {
-          emit("[land] deps: ok local main checkout");
-          const deployEnv = {
-            ...process.env,
-            DOTFILES_RENDER_REV: commit,
-            DOTFILES_RENDER_FROM_WORKING_COPY: "0",
-            DOCTOR_ONLY: "",
-          };
-          const localState = await localDeployVerdict(mainRoot, deployEnv);
-          hostResults.set("local", localState);
-          const [localVerdict, ...localDetails] = localState.split(";");
-          const suffix =
-            localDetails.length === 0 ? "" : `;${localDetails.join(";")}`;
-          emit(`[land] deploy: ${localVerdict} local${suffix}`);
-        }
       }
-      stage = "deploy";
-      const smokeBegin = `__LAND_SMOKE_BEGIN_${process.pid}__`;
-      const smokeEnd = `__LAND_SMOKE_END_${process.pid}__`;
-      for (const host of LAND_HOSTS) {
-        if (!host.deploy) {
-          const reason = host.reason ?? "disabled";
-          hostResults.set(host.alias, `skipped (${reason})`);
-          continue;
-        }
-        if (parsed.flags.dryRun) {
-          hostResults.set(host.alias, "would pull, deps and smoke");
-          emit(`[land] deploy: ok ${host.alias} preview`);
-          continue;
-        }
-        const smokeStep =
-          parsed.flags.smoke === undefined
-            ? ""
-            : ` && { printf '\\n${smokeBegin}\\n'; ( ${parsed.flags.smoke}\n ) 2>&1; _land_smoke_status=$?; printf '\\n${smokeEnd}\\n'; exit "$_land_smoke_status"; }`;
-        const remoteWork = `cd ~/dotfiles && export DOTFILES_RENDER_REV=${shellQuote(commit ?? "alpha")} && mise run pull && mise run deps${doctorStep(smokeBegin, smokeEnd)}${smokeStep}`;
-        const locked = `flock -w 600 ~/.cache/dotfiles-land.lock sh -c ${shellQuote(remoteWork)}`;
-        const command = `mkdir -p ~/.cache; setsid sh -c ${shellQuote(locked)} & _land_pid=$!; trap 'kill -TERM -$_land_pid 2>/dev/null || true; wait $_land_pid 2>/dev/null || true' HUP TERM INT; wait $_land_pid; _land_status=$?; trap - HUP TERM INT; exit $_land_status`;
-        emit(`[land] deploy: waiting for host lock ${host.alias}`);
-        const deployed = await runHost(mainRoot, [
-          process.env.LAND_SSH ?? "ssh",
-          "-o",
-          "BatchMode=yes",
-          host.alias,
-          command,
-        ]);
-        if (!deployed.ok) {
-          const state = `FAIL ${deployed.reason}`;
-          hostResults.set(host.alias, state);
-          emit(`[land] deploy: FAIL ${host.alias}: ${deployed.reason}`);
-          continue;
-        }
-        const capturedDoctor = extractSmoke(
-          deployed.value.stdout,
-          `${smokeBegin}_DOCTOR`,
-          `${smokeEnd}_DOCTOR`,
-        );
-        const capturedSmoke = extractSmoke(
-          capturedDoctor.output,
-          smokeBegin,
-          smokeEnd,
-        );
-        printSmoke(host.alias, capturedSmoke.smoke);
-        const diagnostic = hostDiagnostic(deployed.value.stderr);
-        if (deployed.value.timedOut) {
-          const reason = `SSH command timed out${diagnostic === "" ? "" : `: ${diagnostic}`}`;
-          hostResults.set(host.alias, `FAIL ${reason}`);
-          emit(`[land] deploy: FAIL ${host.alias}: ${reason}`);
-          continue;
-        }
-        if (deployed.value.code === 255 && isUnresolvableHost(diagnostic)) {
-          hostResults.set(host.alias, "skipped: unresolvable");
-          continue;
-        }
-        if (deployed.value.code === 255) {
-          const reason = diagnostic.length > 0 ? diagnostic : "ssh exited 255";
-          hostResults.set(host.alias, `FAIL ${reason}`);
-          emit(`[land] deploy: FAIL ${host.alias}: ${reason}`);
-          continue;
-        }
-        const blockedPaths = foreignWip(
-          `${deployed.value.stdout}\n${deployed.value.stderr}`,
-        );
-        if (deployed.value.code !== 0 && blockedPaths !== undefined) {
-          const state = `blocked: foreign WIP (${blockedPaths.join(", ")})`;
-          hostResults.set(host.alias, state);
-          emit(`[land] deploy: ${state} ${host.alias}`);
-          continue;
-        }
-        if (deployed.value.code !== 0) {
-          const reason = `remote command exited ${deployed.value.code}${diagnostic === "" ? "" : `: ${diagnostic}`}`;
-          hostResults.set(host.alias, `FAIL ${reason}`);
-          emit(`[land] deploy: FAIL ${host.alias}: ${reason}`);
-          continue;
-        }
-        const doctor = doctorReport(capturedDoctor.smoke);
-        for (const line of doctor.lines)
-          emit(`[land] doctor: ${host.alias} ${line}`);
-        hostResults.set(
-          host.alias,
-          `${doctor.status}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`,
-        );
-        emit(
-          `[land] deploy: ${doctor.status} ${host.alias}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`,
-        );
-      }
-      const failedHosts = [...hostResults.values()].some((status) =>
-        status.startsWith("FAIL "),
-      );
-      if (failedHosts) return reject("one or more host deployments failed");
       return ok(undefined);
     }),
   ).finally(() => {
@@ -1142,7 +985,6 @@ async function main(
         : `[land] queue: residue restore FAIL ${errorMessage(cleaned.error)}`,
     );
   }
-  report.hosts = Object.fromEntries(hostResults);
   onReport?.(report);
   emit(`[land] ${landSummary(report, commit)}`);
   return landExit(report);

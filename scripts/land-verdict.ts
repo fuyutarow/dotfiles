@@ -4,28 +4,16 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 export const LandReportSchema = z.strictObject({
   commit: z.enum(["pending", "ok", "failed"]),
   push: z.enum(["pending", "ok", "failed"]),
-  hosts: z.record(z.string(), z.string()),
+  // Read legacy queue results, but never produce or judge by deployment details here.
+  hosts: z.record(z.string(), z.string()).optional(),
   failure: z.string().optional(),
 });
 export type LandReport = z.output<typeof LandReportSchema>;
 
 export function landExit(report: LandReport): number {
-  const landed = report.commit === "ok" && report.push === "ok";
-  const deployFailed = Object.values(report.hosts).some((state) =>
-    state.startsWith("FAIL "),
-  );
-  if (landed && (report.failure !== undefined || deployFailed)) return 2;
-  return landed &&
-    report.failure === undefined &&
-    !deployFailed &&
-    Object.values(report.hosts).every(
-      (state) =>
-        state.startsWith("ok") ||
-        state.startsWith("blocked: foreign WIP (") ||
-        state.startsWith("skipped (") ||
-        state === "skipped: unresolvable" ||
-        state.startsWith("would "),
-    )
+  return report.commit === "ok" &&
+    report.push === "ok" &&
+    report.failure === undefined
     ? 0
     : 1;
 }
@@ -35,9 +23,8 @@ export function landSummary(report: LandReport, commit?: string): string {
   const exit = landExit(report);
   let status: string;
   if (exit === 0) status = "ok";
-  else if (exit === 2) status = "landed, deploy failed";
   else status = "FAIL";
-  return `summary: ${status} commit=${commit ?? "none"} ${landed ? "landed and pushed" : `commit=${report.commit} push=${report.push}`}; skipped hosts appear in hosts below; mark a host inactive with deploy: false in LAND_HOSTS hosts=${JSON.stringify(report.hosts)}`;
+  return `summary: ${status} commit=${commit ?? "none"} ${landed ? "landed and pushed" : `commit=${report.commit} push=${report.push}`}`;
 }
 
 export function foreignWip(output: string): string[] | undefined {

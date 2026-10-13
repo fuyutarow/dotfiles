@@ -473,8 +473,12 @@ description = "jj gated commit: snapshot, run hook:pre-commit with PRECOMMIT_VCS
 run = "bun agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
 
 [tasks.land]
-description = "Land a workspace with one shared lock, commit/push alpha, deploy committed inputs and report host doctor counts; --enqueue <ws> -m <msg>, --run-queue, --queue-status; --dry-run previews in disposable copies"
+description = "Preflight, commit and push an accepted workspace, record its landed disposition and remove it; deployment is a separate mise run deploy task"
 run = "bun scripts/land.ts"
+
+[tasks.deploy]
+description = "Deploy dotfiles to each configured host independently; optionally select a revision with --since <commit>"
+run = "bun scripts/deploy.ts"
 
 [tasks.pull]
 description = "jj pull: fetch origin, rebase the working-copy branch onto trunk() (= alpha@origin, jj/config.toml), then run hook:post-merge (relink dotfiles + skills) — what .githooks/post-merge did for git pull."

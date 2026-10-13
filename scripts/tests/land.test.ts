@@ -17,7 +17,6 @@ import {
 import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { LAND_HOSTS } from "../config-registry.ts";
 import { packageBinProblems } from "../land.ts";
 import { landStateDir } from "../land-queue.ts";
 import { doctorReport } from "../land-doctor.ts";
@@ -151,6 +150,7 @@ const argv = process.argv.slice(2);
 if (argv[1] === 'deps' || argv[1] === 'hook:post-merge') process.exit(0);
 if (argv[1] === 'usehooks:consumers') { process.stdout.write('PASS fixture consumer\\n'); process.exit(process.env.LAND_FAIL_CONSUMERS === '1' ? 1 : 0); }
 if (argv[1] === 'doctor') { process.stdout.write('PASS fixture healthy\\nRESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0\\n'); process.exit(0); }
+if (argv[0] === 'show') { process.stdout.write(JSON.stringify({ judgment: process.env.LAND_NO_ACCEPT === '1' ? null : { kind: 'acceptance', accept: true } })); process.exit(0); }
 if (process.env.LAND_FAIL_COMMIT === '1' || argv[argv.indexOf('-m') + 1] === 'Fail queued') { if (process.env.LAND_NOISY_COMMIT === '1') writeSync(1, 'FAIL settings.json:4 → missing target retired.ts\\n' + 'fixture output\\n'.repeat(12000)); process.stderr.write('hook:pre-commit refused: fixture refusal\\n'); process.exit(9); }
 const paths = argv.slice(argv.lastIndexOf('--') + 1).map(p => 'root:' + JSON.stringify(p));
 for (const args of [['commit', '-m', argv[argv.indexOf('-m') + 1], '--', ...paths], ['bookmark', 'set', 'alpha', '-r', '@-']]) {
@@ -190,6 +190,11 @@ process.exit(process.env.LAND_FAIL_SSH === host ? 7 : 0);\n`,
 import { join } from 'node:path';
 const args = process.argv.slice(2);
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['agx', ...args]) + '\\n');
+if (args[0] === 'show') {
+  const judgments = JSON.parse(process.env.LAND_JUDGMENTS ?? '{}');
+  const judgment = process.env.LAND_NO_ACCEPT === '1' ? null : judgments[args[1]] ?? { kind: 'acceptance', accept: true, at: '2026-10-13T00:00:00.000Z' };
+  process.stdout.write(JSON.stringify({ judgment })); process.exit(0);
+}
 if (args[0] === 'ledger' && args[1] === 'note' && args[3] === '--accept') {
   const review = args.indexOf('--review');
   const noReview = args.indexOf('--no-review');
@@ -384,79 +389,170 @@ describe("land workspace", () => {
     ]);
     writeFileSync(join(aliasPath, "keep.txt"), "worker version\n");
     const result = f.land([], {}, f.main, basename(aliasPath));
-    expect(result.exitCode).toBe(0);
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
     expect(result.stdout.toString()).toContain(
       "[land] workspace: removed bunexec-1010",
     );
     expect(existsSync(aliasPath)).toBe(false);
   });
 
-  test("landing records acceptance for every run from the workspace", () => {
+  test("land requires an existing accept judgment and records a landed row", () => {
     const f = fixture();
     const state = join(f.main, "..", "agx-state");
     mkdirSync(state, { recursive: true });
     appendFileSync(
       join(state, "runs.jsonl"),
-      `${JSON.stringify({ kind: "run", run_id: "run-from-workspace", cwd: f.worker })}\n`,
+      `${JSON.stringify({ kind: "run", run_id: "run-from-workspace", cwd: f.worker, ticket: { name: "landsplit" } })}\n`,
     );
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const refused = f.land([], { LAND_NO_ACCEPT: "1" });
+    expect(refused.exitCode).toBe(1);
+    expect(refused.stdout.toString()).toContain(
+      'agx ledger note landsplit --accept --no-review "<reason>"',
+    );
+    expect(
+      f.log().some((event) => event[0] === "run" && event[1] === "commit"),
+    ).toBe(false);
     const result = f.land();
-    expect(result.exitCode).toBe(0);
-    const lines = readFileSync(join(state, "runs.jsonl"), "utf8")
-      .trim()
-      .split("\n");
-    const acceptance = jsonOf(
-      z.looseObject({
-        kind: z.string(),
-        run_id: z.string(),
-        accept: z.boolean(),
-      }),
-    ).safeParse(lines.at(-1) ?? "");
-    expect(acceptance.success ? acceptance.data : undefined).toMatchObject({
-      kind: "acceptance",
-      run_id: "run-from-workspace",
-      accept: true,
-    });
-    expect(f.log().filter((event) => event[0] === "agx")).toEqual([
-      [
-        "agx",
-        "ledger",
-        "note",
-        "run-from-workspace",
-        "--accept",
-        "--no-review",
-        "landed by coordinator after live check",
-      ],
-    ]);
-  });
-
-  test("landing records acceptance through agx with the supplied review", () => {
-    const f = fixture();
-    const state = join(f.main, "..", "agx-state");
-    mkdirSync(state, { recursive: true });
-    appendFileSync(
-      join(state, "runs.jsonl"),
-      `${JSON.stringify({ kind: "run", run_id: "reviewed-run", cwd: f.worker })}\n`,
-    );
-    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    const result = f.land(["--review", "independent-review"]);
     expect(
       result.exitCode,
       result.stdout.toString() + result.stderr.toString(),
     ).toBe(0);
+    const lines = readFileSync(join(state, "runs.jsonl"), "utf8")
+      .trim()
+      .split("\n");
+    const landing = jsonOf(
+      z.looseObject({
+        kind: z.string(),
+        run_id: z.string(),
+      }),
+    ).safeParse(lines.at(-1) ?? "");
+    expect(landing.success ? landing.data : undefined).toMatchObject({
+      kind: "landed",
+      run_id: "run-from-workspace",
+    });
     expect(f.log().filter((event) => event[0] === "agx")).toEqual([
-      [
-        "agx",
-        "ledger",
-        "note",
-        "reviewed-run",
-        "--accept",
-        "--review",
-        "independent-review",
-      ],
+      ["agx", "show", "run-from-workspace", "--json"],
+      ["agx", "show", "run-from-workspace", "--json"],
     ]);
-    expect(readFileSync(join(state, "runs.jsonl"), "utf8")).toContain(
-      '"run_id":"reviewed-run","accept":true,"review":"independent-review"',
+  });
+
+  test("accept judgment on the latest run in the workspace ticket lineage is sufficient", () => {
+    const f = fixture();
+    const state = join(f.main, "..", "agx-state");
+    mkdirSync(state, { recursive: true });
+    appendFileSync(
+      join(state, "runs.jsonl"),
+      [
+        {
+          kind: "run",
+          run_id: "landsplit-first",
+          cwd: f.worker,
+          ticket: { name: "landsplit" },
+        },
+        {
+          kind: "run",
+          run_id: "landsplit-resume",
+          cwd: f.worker,
+          ticket: { name: "landsplit" },
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n") + "\n",
+    );
+    writeFileSync(join(f.worker, "keep.txt"), "workspace lineage change\n");
+    const result = f.land([], {
+      LAND_JUDGMENTS: JSON.stringify({
+        "landsplit-resume": {
+          kind: "acceptance",
+          accept: true,
+          at: "2026-10-13T08:25:10.000Z",
+        },
+      }),
+    });
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(
+      f.log().filter((event) => event[0] === "agx" && event[1] === "show"),
+    ).toEqual([
+      ["agx", "show", "landsplit-first", "--json"],
+      ["agx", "show", "landsplit-resume", "--json"],
+    ]);
+    expect(result.stdout.toString()).toContain(
+      "judgment: ok 1 accepted ticket lineage(s)",
+    );
+  });
+
+  test("a later reject in the same workspace ticket lineage overrides an earlier accept", () => {
+    const f = fixture();
+    const state = join(f.main, "..", "agx-state");
+    mkdirSync(state, { recursive: true });
+    appendFileSync(
+      join(state, "runs.jsonl"),
+      [
+        {
+          kind: "run",
+          run_id: "landsplit-first",
+          cwd: f.worker,
+          ticket: { name: "landsplit" },
+        },
+        {
+          kind: "run",
+          run_id: "landsplit-resume",
+          cwd: f.worker,
+          ticket: { name: "landsplit" },
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n") + "\n",
+    );
+    writeFileSync(join(f.worker, "keep.txt"), "workspace lineage change\n");
+    const result = f.land([], {
+      LAND_JUDGMENTS: JSON.stringify({
+        "landsplit-first": {
+          kind: "acceptance",
+          accept: true,
+          at: "2026-10-13T08:24:00.000Z",
+        },
+        "landsplit-resume": {
+          kind: "acceptance",
+          accept: false,
+          at: "2026-10-13T08:25:10.000Z",
+        },
+      }),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toContain(
+      'ticket landsplit has no current accept judgment; judge first: agx ledger note landsplit --accept --no-review "<reason>"',
+    );
+    expect(
+      f.log().some((event) => event[0] === "run" && event[1] === "commit"),
+    ).toBe(false);
+  });
+
+  test("land prints the exact supplied-review judge command when judgment is missing", () => {
+    const f = fixture();
+    const state = join(f.main, "..", "agx-state");
+    mkdirSync(state, { recursive: true });
+    appendFileSync(
+      join(state, "runs.jsonl"),
+      `${JSON.stringify({ kind: "run", run_id: "reviewed-run", cwd: f.worker, ticket: { name: "reviewed" } })}\n`,
+    );
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const refused = f.land(["--review", "independent-review"], {
+      LAND_NO_ACCEPT: "1",
+    });
+    expect(refused.exitCode).toBe(1);
+    expect(refused.stdout.toString()).toContain(
+      "agx ledger note reviewed --accept --review independent-review",
+    );
+    expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
+      '"kind":"acceptance","run_id":"reviewed-run"',
     );
   });
 
@@ -477,26 +573,28 @@ describe("land workspace", () => {
     );
   });
 
-  test("land records acceptance and removes the workspace before best-effort deploy", () => {
+  test("land succeeds without deploying and records no acceptance judgment", () => {
     const f = fixture();
     const state = join(f.main, "..", "agx-state");
     mkdirSync(state, { recursive: true });
     appendFileSync(
       join(state, "runs.jsonl"),
-      `${JSON.stringify({ kind: "run", run_id: "deploy-failure-run", cwd: f.worker })}\n`,
+      `${JSON.stringify({ kind: "run", run_id: "deploy-failure-run", cwd: f.worker, ticket: { name: "deploy" } })}\n`,
     );
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
     const result = f.land([], {
       LAND_UNREACHABLE_SSH: "sol",
       LAND_ASSERT_DEPLOY_PRECONDITION: "1",
     });
-    expect(result.exitCode).toBe(2);
-    expect(result.stdout.toString()).toContain("landed, deploy failed");
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).not.toContain("[land] deploy:");
     expect(existsSync(f.worker)).toBe(false);
-    const deployment = f.log().find((event) => event[0] === "deploy-state");
-    expect(deployment).toEqual(["deploy-state", "false", "true"]);
+    expect(f.log().filter((event) => event[0] === "ssh")).toEqual([]);
     expect(readFileSync(join(state, "runs.jsonl"), "utf8")).toContain(
-      '"run_id":"deploy-failure-run","accept":true',
+      '"kind":"landed","run_id":"deploy-failure-run"',
+    );
+    expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
+      '"kind":"acceptance","run_id":"deploy-failure-run"',
     );
   });
 
@@ -552,7 +650,7 @@ describe("land workspace", () => {
   );
 
   test(
-    "rename reports and commits both paths as exact argv; deploy follows push",
+    "rename reports and commits both paths as exact argv without deployment",
     () => {
       const f = fixture();
       renameSync(
@@ -560,7 +658,7 @@ describe("land workspace", () => {
         join(f.worker, "new name.txt"),
       );
       writeFileSync(join(f.main, "keep.txt"), "unrelated dirty main\n");
-      const result = f.land(["--smoke", "printf '%s' smoke"]);
+      const result = f.land();
       expect(result.exitCode).toBe(0);
       expect(result.stdout.toString()).toContain(
         '[land] paths: ok ["new name.txt","old name.txt"]',
@@ -587,41 +685,8 @@ describe("land workspace", () => {
         "old name.txt",
       ]);
       expect(f.log()[1]).toEqual(["pushed"]);
-      expect(f.log()[5]?.slice(0, 4)).toEqual([
-        "ssh",
-        "-o",
-        "BatchMode=yes",
-        "sol",
-      ]);
-      expect(f.log()[5]?.[4]).toContain("export DOTFILES_RENDER_REV=");
-      expect(f.log()[5]?.[4]).toContain("mise run pull && mise run deps");
-      expect(f.log()[5]?.[4]).toContain("smoke");
-      expect(f.log()[5]?.[4]).toContain(
-        "flock -w 600 ~/.cache/dotfiles-land.lock",
-      );
-      expect(f.log()[5]?.[4]).toContain("setsid sh -c");
-      expect(f.log()[5]?.[4]).toContain("trap 'kill -TERM");
-      expect(f.log()[6]?.[3]).toBe("r99-u26");
-      expect(result.stdout.toString()).toContain(
-        "[land] smoke: sol\nsmoke output for sol",
-      );
-      expect(result.stdout.toString()).toContain(
-        "[land] smoke: r99-u26\nsmoke output for r99-u26",
-      );
-      expect(result.stdout.toString()).toContain(
-        '"r99-u24":"skipped (damaged)"',
-      );
-      expect(
-        f
-          .log()
-          .filter((event) => event[0] === "ssh")
-          .map((event) => event[3]),
-      ).toEqual(
-        LAND_HOSTS.filter((host) => host.deploy).map((host) => host.alias),
-      );
-      expect(LAND_HOSTS.find((host) => host.alias === "r99-u24")?.deploy).toBe(
-        false,
-      );
+      expect(f.log().filter((event) => event[0] === "ssh")).toEqual([]);
+      expect(result.stdout.toString()).not.toContain("hosts=");
       expect(result.stdout.toString()).toMatch(/summary: ok commit=[0-9a-f]+/u);
     },
     LAND_FORMATTER_TEST_TIMEOUT_MS,
@@ -725,120 +790,20 @@ describe("land workspace", () => {
     );
   });
 
-  test("one failing host is reported while later hosts still deploy", () => {
-    const f = fixture();
-    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    const result = f.land(["--smoke", "printf smoke"], {
-      LAND_FAIL_SSH: "sol",
-    });
-    expect(result.exitCode).toBe(2);
-    expect(result.stdout.toString()).toContain(
-      "[land] deploy: FAIL sol: remote command exited 7",
-    );
-    expect(result.stdout.toString()).toContain("[land] deploy: ok r99-u26");
-    expect(result.stdout.toString()).toContain(
-      "[land] smoke: sol\nsmoke output for sol",
-    );
-    expect(result.stdout.toString()).toContain(
-      "[land] smoke: r99-u26\nsmoke output for r99-u26",
-    );
-    expect(result.stdout.toString()).toContain(
-      'hosts={"sol":"FAIL remote command exited 7","r99-u26":"ok; doctor PASS 1 / FAIL 0","r99-u24":"skipped (damaged)","local":"ok; doctor PASS 1 / FAIL 0"}',
-    );
-    expect(f.log().filter((event) => event[0] === "ssh")).toHaveLength(2);
-  });
-
-  test("foreign render WIP blocks only its host and queue status retains the verdicts", () => {
+  test("queued landing records only land outcomes and never deploys", () => {
     const f = fixture();
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
     expect(
-      f.command(["--enqueue", f.worker, "-m", "Blocked host"]).exitCode,
+      f.command(["--enqueue", f.worker, "-m", "Queue without deploy"]).exitCode,
     ).toBe(0);
-    const result = f.command(["--run-queue"], { LAND_BLOCKED_SSH: "r99-u26" });
-    expect(result.exitCode, result.stderr.toString()).toBe(0);
-    expect(result.stdout.toString()).toContain(
-      "blocked: foreign WIP (agents/hooks/storage-headroom.toml) r99-u26",
-    );
-    expect(result.stdout.toString()).toContain("landed and pushed");
+    const result = f.command(["--run-queue"], { LAND_FAIL_SSH: "sol" });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toContain("OK " + f.worker);
+    expect(f.log().filter((event) => event[0] === "ssh")).toEqual([]);
     const status = f.command(["--queue-status"]).stdout.toString();
-    expect(status).toContain('"push": "ok"');
     expect(status).toContain('"commit": "ok"');
-    expect(status).toContain(
-      '"r99-u26": "blocked: foreign WIP (agents/hooks/storage-headroom.toml)"',
-    );
-    expect(existsSync(f.worker)).toBe(false);
-  });
-
-  test(
-    "an unresolvable host is skipped once and later hosts still deploy",
-    () => {
-      const f = fixture();
-      writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-      const result = f.land([], { LAND_UNRESOLVABLE_SSH: "sol" });
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.toString()).not.toContain(
-        "[land] deploy: unreachable sol",
-      );
-      expect(result.stdout.toString()).toContain(
-        'hosts={"sol":"skipped: unresolvable","r99-u26":"ok; doctor PASS 1 / FAIL 0","r99-u24":"skipped (damaged)"',
-      );
-      expect(result.stdout.toString()).toContain(
-        "mark a host inactive with deploy: false in LAND_HOSTS",
-      );
-      expect(result.stdout.toString()).toContain("[land] deploy: ok r99-u26");
-      expect(f.log().filter((event) => event[0] === "ssh")).toHaveLength(2);
-    },
-    LAND_FORMATTER_TEST_TIMEOUT_MS,
-  );
-
-  test("a reachable SSH failure remains a deploy failure", () => {
-    const f = fixture();
-    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    const result = f.land([], { LAND_UNREACHABLE_SSH: "sol" });
-    expect(result.exitCode).toBe(2);
-    expect(result.stdout.toString()).toContain(
-      "[land] deploy: FAIL sol: ssh: connect to host sol failed",
-    );
-    expect(result.stdout.toString()).toContain("[land] deploy: ok r99-u26");
-  });
-
-  test("doctor failures show their lines and counts while land succeeds", () => {
-    const f = fixture();
-    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    const result = f.land([], { LAND_DOCTOR_FAIL: "sol" });
-    expect(result.exitCode, result.stderr.toString()).toBe(0);
-    expect(result.stdout.toString()).toContain(
-      "ok (doctor FAIL 5) sol; doctor PASS 1 / FAIL 5",
-    );
-    expect(result.stdout.toString()).toContain(
-      "[land] doctor: sol FAIL fixture-4 drift",
-    );
-    expect(result.stdout.toString()).toContain(
-      '"sol":"ok (doctor FAIL 5); doctor PASS 1 / FAIL 5"',
-    );
-    const remote =
-      f
-        .log()
-        .find((event) => event[0] === "ssh")
-        ?.at(-1) ?? "";
-    expect(remote).toContain("timeout --kill-after=5s 90s mise run doctor");
-    expect(remote.indexOf("mise run deps")).toBeLessThan(
-      remote.indexOf("mise run doctor"),
-    );
-  });
-
-  test("uncommitted render inputs refuse before restore or deploy", () => {
-    const f = fixture();
-    mkdirSync(join(f.main, "agents/codex"), { recursive: true });
-    writeFileSync(join(f.main, "agents/codex/hooks.json"), '{"hooks":{}}\n');
-    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    const result = f.land();
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout.toString()).toContain("uncommitted render inputs");
-    expect(f.log()).toEqual([]);
-    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "keep content\n",
-    );
+    expect(status).toContain('"push": "ok"');
+    expect(status).not.toContain('"hosts"');
   });
 
   test("the queue lands two items serially, records a failure, and continues", () => {
@@ -858,7 +823,7 @@ describe("land workspace", () => {
     mkdirSync(f.env.AGX_STATE_DIR, { recursive: true });
     appendFileSync(
       join(f.env.AGX_STATE_DIR, "runs.jsonl"),
-      `${JSON.stringify({ kind: "run", run_id: "queued-run", cwd: second })}\n`,
+      `${JSON.stringify({ kind: "run", run_id: "queued-run", cwd: second, ticket: { name: "queued" } })}\n`,
     );
     expect(
       f.command(["--enqueue", f.worker, "-m", "Fail queued"]).exitCode,
@@ -888,15 +853,7 @@ describe("land workspace", () => {
     );
     expect(existsSync(second)).toBe(false);
     expect(f.log().filter((event) => event[0] === "agx")).toEqual([
-      [
-        "agx",
-        "ledger",
-        "note",
-        "queued-run",
-        "--accept",
-        "--review",
-        "queued-review",
-      ],
+      ["agx", "show", "queued-run", "--json"],
     ]);
     const state = landStateDir(realpathSync(f.main));
     // State belongs to this isolated fixture, rather than the test runner's own AGX state.

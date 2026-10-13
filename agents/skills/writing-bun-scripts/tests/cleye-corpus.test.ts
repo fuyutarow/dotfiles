@@ -11,6 +11,7 @@ type CorpusEntry = Readonly<{
   // flag") declares it here, and the test then holds it to THAT. tex-oracle reserves exit 1 for
   // "the oracle does not hold", so its usage errors are exit 2 (see rejectPrototypeFlag there).
   unknownFlag?: Readonly<{ exit: number; message: string }>;
+  cli?: boolean;
 }>;
 
 const CORPUS = [
@@ -18,6 +19,11 @@ const CORPUS = [
   { path: "agents/codex/hooks/quote-command.ts" },
   { path: "agents/goal-kernel/cli.ts" },
   { path: "tools/agx/src/agx.ts" },
+  {
+    path: "tools/agx/src/events.ts",
+    // An embedded subcommand parser; its entrypoint is `agx events`, not this module.
+    cli: false,
+  },
   { path: "tools/agx/src/main.ts" },
   { path: "tools/agx/src/migrate-state.ts" },
   { path: "tools/agx/src/workers/codex.ts" },
@@ -119,6 +125,7 @@ const CORPUS = [
   { path: "scripts/link-skills.ts" },
   { path: "scripts/skills-doctor.ts" },
   { path: "scripts/land.ts" },
+  { path: "scripts/deploy.ts" },
   { path: "scripts/vendor-skill.ts" },
   { path: "scripts/wsl-audit.ts" },
   { path: "scripts/wsl-capacity-recover.ts" },
@@ -190,6 +197,7 @@ describe("production Cleye corpus boundary", () => {
   });
 
   for (const entry of CORPUS) {
+    if (entry.cli === false) continue;
     test(entry.path, () => {
       const help = run(entry, ["--help"]);
       expect(help.exitCode).toBe(0);

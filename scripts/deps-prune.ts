@@ -71,7 +71,7 @@ export async function danglingRepoBins(
     if (target !== undefined && target.startsWith(`${repo}${sep}`))
       dangling.push(path);
   }
-  return dangling;
+  return dangling.toSorted();
 }
 
 export async function pruneRepoBins(

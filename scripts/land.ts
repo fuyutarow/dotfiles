@@ -437,6 +437,12 @@ function hostDiagnostic(stderr: string): string {
   return stderr.trim().replaceAll(/\s+/gu, " ").slice(-1000);
 }
 
+function isUnresolvableHost(diagnostic: string): boolean {
+  return /(?:could not resolve hostname|name or service not known|temporary failure in name resolution|nodename nor servname provided)/iu.test(
+    diagnostic,
+  );
+}
+
 async function localDeployVerdict(
   root: string,
   env: NodeJS.ProcessEnv,
@@ -1016,7 +1022,6 @@ async function main(
         if (!host.deploy) {
           const reason = host.reason ?? "disabled";
           hostResults.set(host.alias, `skipped (${reason})`);
-          emit(`[land] deploy: skipped ${host.alias} (${reason})`);
           continue;
         }
         if (parsed.flags.dryRun) {
@@ -1063,10 +1068,14 @@ async function main(
           emit(`[land] deploy: FAIL ${host.alias}: ${reason}`);
           continue;
         }
+        if (deployed.value.code === 255 && isUnresolvableHost(diagnostic)) {
+          hostResults.set(host.alias, "skipped: unresolvable");
+          continue;
+        }
         if (deployed.value.code === 255) {
           const reason = diagnostic.length > 0 ? diagnostic : "ssh exited 255";
-          hostResults.set(host.alias, `unreachable ${reason}`);
-          emit(`[land] deploy: unreachable ${host.alias}: ${reason}`);
+          hostResults.set(host.alias, `FAIL ${reason}`);
+          emit(`[land] deploy: FAIL ${host.alias}: ${reason}`);
           continue;
         }
         const blockedPaths = foreignWip(
@@ -1095,9 +1104,8 @@ async function main(
           `[land] deploy: ${doctor.status} ${host.alias}; doctor PASS ${doctor.pass} / FAIL ${doctor.fail}`,
         );
       }
-      const failedHosts = [...hostResults.values()].some(
-        (status) =>
-          status.startsWith("FAIL ") || status.startsWith("unreachable "),
+      const failedHosts = [...hostResults.values()].some((status) =>
+        status.startsWith("FAIL "),
       );
       if (failedHosts) return reject("one or more host deployments failed");
       return ok(undefined);

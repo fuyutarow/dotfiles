@@ -113,7 +113,7 @@ function cleanup(...dirs: string[]): void {
 function assertHookCommand(command: string): void {
   if (command.includes("herdr-agent-state.sh"))
     expect(command).toStartWith("sh ");
-  else expect(command).toMatch(/^HOOK_SLUG=dotfiles:[a-z][a-z0-9-]* sh /u);
+  else expect(command).toMatch(/^HOOK_SLUG=dotfiles:[a-z][a-z0-9:-]* sh /u);
   expect(command).not.toContain("dotfiles:dotfiles:");
 }
 

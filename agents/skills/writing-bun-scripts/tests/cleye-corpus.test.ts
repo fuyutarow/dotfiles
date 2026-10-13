@@ -14,20 +14,30 @@ type CorpusEntry = Readonly<{
 }>;
 
 const CORPUS = [
+  { path: "agents/codex/codex-runtime.ts" },
+  { path: "agents/codex/hooks/quote-command.ts" },
   { path: "agents/goal-kernel/cli.ts" },
   { path: "tools/agx/src/agx.ts" },
   { path: "tools/agx/src/main.ts" },
   { path: "tools/agx/src/migrate-state.ts" },
   { path: "tools/agx/src/workers/codex.ts" },
   { path: "scripts/render-oxlintrc.ts" },
+  { path: "scripts/deployment-selection.ts" },
+  { path: "scripts/install-ai-clis.ts" },
+  { path: "scripts/retros-check.ts" },
+  {
+    path: "scripts/retros-recur.ts",
+    // The required <id> parameter is checked before the prototype flag.
+    prototypeFlag: { exit: 1, message: "Missing required parameter" },
+  },
   { path: "scripts/vendor-deps.ts" },
   { path: "agents/models/check-releases.ts" },
   { path: "agents/research-control/cli.ts" },
   { path: "tools/agent-resource-run/src/agent-resource-run.ts" },
   {
     path: "tools/coredev/src/coredev.ts",
-    // The prototype flag is parsed before the required positional command check.
-    prototypeFlag: { exit: 1, message: "Missing required parameter" },
+    // The CLI's local prototype guard rejects the flag before required-command validation.
+    prototypeFlag: { exit: 2, message: "unknown flag(s)" },
   },
   {
     path: "tools/disk-reclaim/src/reclaim.ts",

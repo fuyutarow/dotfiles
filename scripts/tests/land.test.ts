@@ -180,6 +180,7 @@ if (begin !== undefined && end !== undefined && command.includes('mise run docto
   process.stdout.write('\\n' + begin + '_DOCTOR\\nPASS fixture healthy\\n' + lines + '\\nRESULT: ' + (fails ? 'FAIL' : 'PASS') + ' · FAIL ' + fails + ' · WARN 0 · PASS 1 · SKIP 0\\n__LAND_DOCTOR_EXIT_' + (fails ? 1 : 0) + '__\\n' + end + '_DOCTOR\\n');
 }
 if (begin !== undefined && end !== undefined) process.stdout.write('\\n' + begin + '\\n  smoke output for ' + host + '  \\n' + end + '\\n');
+if (process.env.LAND_UNRESOLVABLE_SSH === host) { process.stderr.write('ssh: Could not resolve hostname ' + host + ': Name or service not known\\n'); process.exit(255); }
 if (process.env.LAND_UNREACHABLE_SSH === host) { process.stderr.write('ssh: connect to host ' + host + ' failed\\n'); process.exit(255); }
 process.exit(process.env.LAND_FAIL_SSH === host ? 7 : 0);\n`,
   );
@@ -608,7 +609,7 @@ describe("land workspace", () => {
         "[land] smoke: r99-u26\nsmoke output for r99-u26",
       );
       expect(result.stdout.toString()).toContain(
-        "[land] deploy: skipped r99-u24 (damaged)",
+        '"r99-u24":"skipped (damaged)"',
       );
       expect(
         f
@@ -769,20 +770,37 @@ describe("land workspace", () => {
   });
 
   test(
-    "an unreachable host is reported and later hosts still deploy",
+    "an unresolvable host is skipped once and later hosts still deploy",
     () => {
       const f = fixture();
       writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-      const result = f.land([], { LAND_UNREACHABLE_SSH: "sol" });
-      expect(result.exitCode).toBe(2);
+      const result = f.land([], { LAND_UNRESOLVABLE_SSH: "sol" });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toString()).not.toContain(
+        "[land] deploy: unreachable sol",
+      );
       expect(result.stdout.toString()).toContain(
-        "[land] deploy: unreachable sol: ssh: connect to host sol failed",
+        'hosts={"sol":"skipped: unresolvable","r99-u26":"ok; doctor PASS 1 / FAIL 0","r99-u24":"skipped (damaged)"',
+      );
+      expect(result.stdout.toString()).toContain(
+        "mark a host inactive with deploy: false in LAND_HOSTS",
       );
       expect(result.stdout.toString()).toContain("[land] deploy: ok r99-u26");
       expect(f.log().filter((event) => event[0] === "ssh")).toHaveLength(2);
     },
     LAND_FORMATTER_TEST_TIMEOUT_MS,
   );
+
+  test("a reachable SSH failure remains a deploy failure", () => {
+    const f = fixture();
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land([], { LAND_UNREACHABLE_SSH: "sol" });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout.toString()).toContain(
+      "[land] deploy: FAIL sol: ssh: connect to host sol failed",
+    );
+    expect(result.stdout.toString()).toContain("[land] deploy: ok r99-u26");
+  });
 
   test("doctor failures show their lines and counts while land succeeds", () => {
     const f = fixture();

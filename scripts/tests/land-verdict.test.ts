@@ -5,7 +5,9 @@ test("landed and pushed stays explicit for healthy, blocked and failed hosts", (
   for (const [state, exit] of [
     ["ok", 0],
     ["blocked: foreign WIP (agents/hooks/storage-headroom.toml)", 0],
-    ["FAIL remote command exited 7", 1],
+    ["skipped: unresolvable", 0],
+    ["skipped (damaged)", 0],
+    ["FAIL remote command exited 7", 2],
   ] satisfies [string, number][]) {
     const report = {
       commit: "ok",

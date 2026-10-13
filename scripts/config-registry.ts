@@ -24,7 +24,9 @@
 export type When = "all" | "mac" | "wsl" | "linux" | "not-mac";
 
 // Landing targets are SSH aliases; connection details remain in ~/.ssh/config.local.
-// Keep the damaged r99-u24 visible in the inventory, but do not deploy there until repaired.
+// `deploy: false` is the registry's inactive/retired switch: retain the row and reason, and set
+// it true only when the owner has repaired and reactivated that host. r99-u24 is retained as
+// damaged; the inventory records no more specific diagnosis.
 export const LAND_HOSTS: readonly {
   alias: string;
   deploy: boolean;

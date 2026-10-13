@@ -61,6 +61,12 @@ function writeToolChangelog(root: string, entry: string): void {
     `# Changelog\n\n## ${entry}\n\n- entry\n\n## 1.0.0 — 2026-10-01\n\n- initial\n`,
   );
 }
+function appendAcceptance(state: string, runId: string, accept = true): void {
+  appendFileSync(
+    join(state, "runs.jsonl"),
+    `${JSON.stringify({ kind: "acceptance", run_id: runId, accept })}\n`,
+  );
+}
 afterEach(() => {
   for (const path of temporary.splice(0))
     rmSync(path, { recursive: true, force: true });
@@ -416,6 +422,7 @@ describe("land workspace", () => {
     expect(
       f.log().some((event) => event[0] === "run" && event[1] === "commit"),
     ).toBe(false);
+    appendAcceptance(state, "run-from-workspace");
     const result = f.land();
     expect(
       result.exitCode,
@@ -434,10 +441,7 @@ describe("land workspace", () => {
       kind: "landed",
       run_id: "run-from-workspace",
     });
-    expect(f.log().filter((event) => event[0] === "agx")).toEqual([
-      ["agx", "show", "run-from-workspace", "--json"],
-      ["agx", "show", "run-from-workspace", "--json"],
-    ]);
+    expect(f.log().filter((event) => event[0] === "agx")).toEqual([]);
   });
 
   test("accept judgment on the latest run in the workspace ticket lineage is sufficient", () => {
@@ -459,6 +463,12 @@ describe("land workspace", () => {
           cwd: f.worker,
           ticket: { name: "landsplit" },
         },
+        {
+          kind: "acceptance",
+          run_id: "landsplit-resume",
+          accept: true,
+          at: "2026-10-13T08:25:10.000Z",
+        },
       ]
         .map((row) => JSON.stringify(row))
         .join("\n") + "\n",
@@ -477,12 +487,49 @@ describe("land workspace", () => {
       result.exitCode,
       result.stdout.toString() + result.stderr.toString(),
     ).toBe(0);
+    expect(f.log().filter((event) => event[0] === "agx")).toEqual([]);
+    expect(result.stdout.toString()).toContain(
+      "judgment: ok 1 accepted ticket lineage(s)",
+    );
+  });
+
+  test("an unreported stopped predecessor does not block an accepted latest run", () => {
+    const f = fixture();
+    const state = join(f.main, "..", "agx-state");
+    mkdirSync(state, { recursive: true });
+    appendFileSync(
+      join(state, "runs.jsonl"),
+      [
+        {
+          kind: "run",
+          run_id: "landsplit-stopped",
+          cwd: f.worker,
+          ticket: { name: "landsplit" },
+          outcome: "stopped",
+        },
+        {
+          kind: "run",
+          run_id: "landsplit-amended",
+          cwd: f.worker,
+          ticket: { name: "landsplit" },
+        },
+        {
+          kind: "acceptance",
+          run_id: "landsplit-amended",
+          accept: true,
+          at: "2026-10-13T08:25:10.000Z",
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n") + "\n",
+    );
+    writeFileSync(join(f.worker, "keep.txt"), "accepted amended run\n");
+    const result = f.land();
     expect(
-      f.log().filter((event) => event[0] === "agx" && event[1] === "show"),
-    ).toEqual([
-      ["agx", "show", "landsplit-first", "--json"],
-      ["agx", "show", "landsplit-resume", "--json"],
-    ]);
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(f.log().filter((event) => event[0] === "agx")).toEqual([]);
     expect(result.stdout.toString()).toContain(
       "judgment: ok 1 accepted ticket lineage(s)",
     );
@@ -581,6 +628,7 @@ describe("land workspace", () => {
       join(state, "runs.jsonl"),
       `${JSON.stringify({ kind: "run", run_id: "deploy-failure-run", cwd: f.worker, ticket: { name: "deploy" } })}\n`,
     );
+    appendAcceptance(state, "deploy-failure-run");
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
     const result = f.land([], {
       LAND_UNREACHABLE_SSH: "sol",
@@ -593,9 +641,11 @@ describe("land workspace", () => {
     expect(readFileSync(join(state, "runs.jsonl"), "utf8")).toContain(
       '"kind":"landed","run_id":"deploy-failure-run"',
     );
-    expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
-      '"kind":"acceptance","run_id":"deploy-failure-run"',
-    );
+    expect(
+      readFileSync(join(state, "runs.jsonl"), "utf8").match(
+        /"kind":"acceptance","run_id":"deploy-failure-run"/gu,
+      ),
+    ).toHaveLength(1);
   });
 
   test("invocation in a worker checkout discovers the main checkout", () => {
@@ -825,6 +875,7 @@ describe("land workspace", () => {
       join(f.env.AGX_STATE_DIR, "runs.jsonl"),
       `${JSON.stringify({ kind: "run", run_id: "queued-run", cwd: second, ticket: { name: "queued" } })}\n`,
     );
+    appendAcceptance(f.env.AGX_STATE_DIR, "queued-run");
     expect(
       f.command(["--enqueue", f.worker, "-m", "Fail queued"]).exitCode,
     ).toBe(0);
@@ -852,9 +903,7 @@ describe("land workspace", () => {
       "successful worker\n",
     );
     expect(existsSync(second)).toBe(false);
-    expect(f.log().filter((event) => event[0] === "agx")).toEqual([
-      ["agx", "show", "queued-run", "--json"],
-    ]);
+    expect(f.log().filter((event) => event[0] === "agx")).toEqual([]);
     const state = landStateDir(realpathSync(f.main));
     // State belongs to this isolated fixture, rather than the test runner's own AGX state.
     const actualState = join(f.env.AGX_STATE_DIR, "land", basename(state));

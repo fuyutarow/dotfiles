@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { foreignWip, landExit, landSummary } from "../land-verdict.ts";
+import {
+  foreignWip,
+  landExit,
+  landSummary,
+  ledgerAcceptances,
+} from "../land-verdict.ts";
 
 test("land verdict covers only its commit and push", () => {
   const report = { commit: "ok", push: "ok" } satisfies Parameters<
@@ -25,4 +30,18 @@ test("only a valid machine refusal classifies foreign WIP", () => {
       'DOTFILES_RENDER_REFUSAL_V1={"reason":"foreign-wip","paths":[]}',
     ),
   ).toBeUndefined();
+});
+
+test("ledger acceptance extraction ignores run rows without a final judgment", () => {
+  expect(
+    ledgerAcceptances([
+      JSON.stringify({ kind: "run", run_id: "stopped", outcome: "stopped" }),
+      JSON.stringify({ kind: "acceptance", run_id: "accepted", accept: true }),
+      "not json",
+      JSON.stringify({ kind: "acceptance", run_id: "rejected", accept: false }),
+    ]),
+  ).toEqual([
+    { run_id: "accepted", accept: true, order: 1 },
+    { run_id: "rejected", accept: false, order: 3 },
+  ]);
 });

@@ -6,6 +6,7 @@ import {
   existsSync,
   lstatSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -26,16 +27,20 @@ import {
 import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
 import { enqueue, landLock, queueStatus, runQueue } from "./land-queue.ts";
 import { renderRefusal } from "./render-source.ts";
-import { landExit, landSummary, type LandReport } from "./land-verdict.ts";
+import {
+  landExit,
+  landSummary,
+  ledgerAcceptances,
+  type LandReport,
+} from "./land-verdict.ts";
 
 type WorkspaceRun = { run_id: string; ticket: string };
 
 function workspaceRuns(workspace: string): ResultAsync<WorkspaceRun[], Error> {
-  const log = join(dispatchStateDir(), "runs.jsonl");
-  if (!existsSync(log)) return ResultAsync.fromSafePromise(Promise.resolve([]));
+  const lines = workspaceLedgerLines();
   const target = realpathSync(workspace);
   const runs = new Map<string, WorkspaceRun>();
-  for (const line of readFileSync(log, "utf8").split("\n").filter(Boolean)) {
+  for (const line of lines) {
     const parsed = jsonOf(
       z.looseObject({
         kind: z.literal("run"),
@@ -55,6 +60,18 @@ function workspaceRuns(workspace: string): ResultAsync<WorkspaceRun[], Error> {
       });
   }
   return ResultAsync.fromSafePromise(Promise.resolve([...runs.values()]));
+}
+
+function workspaceLedgerLines(): string[] {
+  const state = dispatchStateDir();
+  if (!existsSync(state)) return [];
+  const archives = readdirSync(state)
+    .filter((name) => /^runs-\d{4}-\d{2}-\d{2}\.jsonl$/u.test(name))
+    .toSorted()
+    .map((name) => join(state, name));
+  const live = join(state, "runs.jsonl");
+  const ledgerPaths = existsSync(live) ? [...archives, live] : archives;
+  return ledgerPaths.flatMap((path) => readFileSync(path, "utf8").split("\n"));
 }
 
 type WorkspaceJudgment = {
@@ -762,46 +779,23 @@ async function main(
         workerRoot = copies.worker;
       }
       const runs = parsed.flags.dryRun ? [] : yield* workspaceRuns(workerRoot);
-      const judgments: WorkspaceJudgment[] = [];
-      for (const [order, workspaceRun] of runs.entries()) {
-        const shown = yield* run(workerRoot, [
-          process.env.LAND_AGX ?? "agx",
-          "show",
-          workspaceRun.run_id,
-          "--json",
-        ]);
-        const decoded = jsonOf(
-          z.looseObject({
-            judgment: z
-              .looseObject({
-                kind: z.string(),
-                accept: z.boolean().optional(),
-                at: z.string().optional(),
-              })
-              .optional(),
-          }),
-        ).safeParse(shown);
-        if (!decoded.success)
-          judgments.push({
-            run_id: workspaceRun.run_id,
-            ticket: workspaceRun.ticket,
-            kind: "unreadable",
-            order,
-          });
-        else if (decoded.data.judgment !== undefined) {
-          const judgment = decoded.data.judgment;
-          judgments.push({
-            run_id: workspaceRun.run_id,
-            ticket: workspaceRun.ticket,
-            kind: judgment.kind,
-            ...(judgment.accept === undefined
-              ? {}
-              : { accept: judgment.accept }),
-            ...(judgment.at === undefined ? {} : { at: judgment.at }),
-            order,
-          });
-        }
-      }
+      const ticketByRun = new Map(
+        runs.map((workspaceRun) => [workspaceRun.run_id, workspaceRun.ticket]),
+      );
+      const judgments: WorkspaceJudgment[] = ledgerAcceptances(
+        workspaceLedgerLines(),
+      ).flatMap((acceptance) => {
+        const ticket = ticketByRun.get(acceptance.run_id);
+        return ticket === undefined
+          ? []
+          : [
+              {
+                ...acceptance,
+                ticket,
+                kind: "acceptance",
+              },
+            ];
+      });
       const tickets = [
         ...new Set(runs.map((workspaceRun) => workspaceRun.ticket)),
       ];

@@ -338,19 +338,21 @@ async function writeNoIndexDiagnostic(
     );
   } else if (reindex.value.started) {
     process.stderr.write(
-      `INDEX: stale since ${staleSince}; reindex started (pid ${reindex.value.pid ?? "unknown"}); lexical routes now: rr text/regex/files\n`,
+      `INDEX: stale since ${staleSince}; reindex is running (pid ${reindex.value.pid ?? "unknown"}); check progress with 'rr index --status'; lexical routes now: rr text/regex/files\n`,
     );
   } else {
     process.stderr.write(
-      `INDEX: stale since ${staleSince}; reindex already requested within 2m; lexical routes now: rr text/regex/files\n`,
+      `INDEX: stale since ${staleSince}; reindex already requested within 2m; check progress with 'rr index --status'; lexical routes now: rr text/regex/files\n`,
     );
   }
   const daemon = await daemonAvailability(project);
   process.stderr.write(
     freshnessMessage +
       `Cause: no current certified ccc index is recorded for this repo; ${daemon}.\n` +
-      `Repair: from this project root run 'ccc init' if it is not registered, then ` +
-      `'repo-retrieve index' to run ccc index and record the freshness watermark.\n` +
+      (reindex.isErr()
+        ? `Repair: from this project root run 'ccc init' if it is not registered, then ` +
+          `'repo-retrieve index' to run ccc index and record the freshness watermark.\n`
+        : "") +
       `Available now: lexical routes 'rr text', 'rr regex', and 'rr files' read the working tree.\n`,
   );
   if (json) {

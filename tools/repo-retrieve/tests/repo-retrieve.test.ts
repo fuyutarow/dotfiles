@@ -391,7 +391,7 @@ describe("repo-retrieve route contract", () => {
       expect(result.code).toBe(3);
       expect(result.stderr).toContain("NO_INDEX");
       expect(result.stderr).toContain(
-        index === 0 ? "reindex started (pid" : "reindex already requested",
+        index === 0 ? "reindex is running (pid" : "reindex already requested",
       );
       expect(result.stderr).toContain(`project=${backing}`);
     }
@@ -471,7 +471,7 @@ describe("repo-retrieve route contract", () => {
     );
 
     expect(result.code).toBe(3);
-    expect(result.stderr).toContain("reindex started (pid");
+    expect(result.stderr).toContain("reindex is running (pid");
     expect(result.stderr).toContain("NO_INDEX");
     expect(result.log).not.toContain("ccc search known reduction");
     await Bun.sleep(1_000);
@@ -876,8 +876,12 @@ describe("repo-retrieve route contract", () => {
       expect(result.code).toBe(3);
       expect(result.stderr).toContain(`RESULT: NO_INDEX route=${resultRoute}`);
       expect(result.stderr).toContain("Cause: no current certified ccc index");
-      expect(result.stderr).toContain("'ccc init'");
-      expect(result.stderr).toContain("'repo-retrieve index'");
+      expect(result.stderr).toContain(
+        "check progress with 'rr index --status'",
+      );
+      expect(result.stderr).not.toContain(
+        "Repair: from this project root run 'ccc init'",
+      );
       expect(result.stderr).toContain("rr text");
       expect(result.stderr).toContain("rr regex");
       expect(result.stderr).toContain("rr files");
@@ -1249,7 +1253,11 @@ describe("repo-retrieve route contract", () => {
     const result = run(dir, ["concept", "--query", "x"]);
     expect(result.code).toBe(3);
     expect(result.stderr).toContain(`INDEX: stale since`);
-    expect(result.stderr).toContain(`reindex started (pid`);
+    expect(result.stderr).toContain(`reindex is running (pid`);
+    expect(result.stderr).toContain("check progress with 'rr index --status'");
+    expect(result.stderr).not.toContain(
+      "Repair: from this project root run 'ccc init'",
+    );
     expect(result.stderr).toContain("lexical routes now: rr text/regex/files");
     expect(result.stdout).toBe("");
   });
@@ -1265,7 +1273,7 @@ describe("repo-retrieve route contract", () => {
       FAKE_CCC_INDEXING: "1",
     });
     expect(result.code).toBe(3);
-    expect(result.stderr).toContain("reindex started (pid");
+    expect(result.stderr).toContain("reindex is running (pid");
   });
 
   test("automatic reindex is not disabled by the legacy catch-up environment flag", () => {
@@ -1277,7 +1285,7 @@ describe("repo-retrieve route contract", () => {
 
     const result = run(dir, ["concept", "--query", "x"]);
     expect(result.code).toBe(3);
-    expect(result.stderr).toContain("reindex started (pid");
+    expect(result.stderr).toContain("reindex is running (pid");
   });
 
   test("a HEAD drift that changes no path is not staleness: served, with a NOTE", () => {
@@ -1401,7 +1409,7 @@ describe("repo-retrieve route contract", () => {
 
     expect(first.code).toBe(3);
     expect(first.stderr).toMatch(
-      /INDEX: stale since .*; reindex started \(pid \d+\)/u,
+      /INDEX: stale since .*; reindex is running \(pid \d+\); check progress with 'rr index --status'/u,
     );
     expect(second.code).toBe(3);
     expect(second.stderr).toContain("reindex already requested within 2m");

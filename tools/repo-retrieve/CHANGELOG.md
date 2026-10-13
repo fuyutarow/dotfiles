@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.7 — 2026-10-14
+
+- Report the detached reindex status command in NO_INDEX output and omit manual registration/reindex repair advice when a reindex was requested.
+
 ## 1.0.6 — 2026-10-13
 
 - Start one detached, rate-limited reindex when semantic search finds a stale index; report the stale state and lexical routes available meanwhile.

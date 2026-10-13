@@ -88,8 +88,16 @@ discard unjudged workspace changes. Admission refuses overlapping write globs wi
 prints judgment, landing and abandonment recovery instructions. Amend/resume/repick inherits
 its own lineage without overlap refusal and transfers the lease to the successor. Segment-exact
 overlap uses `*` within one segment and `**` across segments. Admitted metadata is durable
-before launching in every mode. Detached dispatch completes schema, RESOURCE, premise and lease
-admission before invoking systemd or launchd; a refusal prints no `run_id`.
+before launching in every mode. Detached dispatch completes schema, RESOURCE, premise, routing,
+worker-slot and write-lease admission in the dispatching process. Lease admission checks and
+records under the repository lock and releases it before workspace or ticket creation and before
+invoking systemd or launchd. The unit receives the admitted pick and launch data with the roster
+snapshot and never repeats routing or admission. A refusal exits 2 in the dispatcher, prints no
+`run_id` or watch line, and creates no workspace or ticket. Routed lease refusals retained in the
+ledger appear in `ps` as `refused` with their reason.
+
+`show` reads acceptance and landing rows without routing fields from every ledger shard and run
+journal. The latest timestamped judgment for the run supplies `accept`; a landing counts as accepted.
 
 Capabilities accept plain routing tags or `{ need, lower_effort_lacks }` objects with non-empty
 strings. Only an object justifies xhigh/max. Without one, positive selection mass goes to the

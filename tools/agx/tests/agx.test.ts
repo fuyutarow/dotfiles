@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import { ROSTER_PATH } from "../../../agents/models/roster.ts";
@@ -4084,7 +4085,7 @@ describe("agx dispatch: a brief with a ticket", () => {
     );
     expect(redispatched.code, redispatched.err).toBe(0);
     expect(redispatched.err).toContain(
-      "amend: worker not running — amended ticket and redispatched",
+      "amend: worker not running — staged amendment for redispatch admission",
     );
     expect(readFileSync(ticket, "utf8").match(/^## AMEND /gmu)).toHaveLength(2);
     const calls = readFileSync(join(scratch, "argv.log"), "utf8")
@@ -4116,7 +4117,7 @@ describe("agx dispatch: a brief with a ticket", () => {
       env,
     );
     expect(fresh.code, fresh.err).toBe(0);
-    expect(fresh.err).toContain("amended ticket and redispatched");
+    expect(fresh.err).toContain("staged amendment for redispatch admission");
     const freshCall = readFileSync(join(scratch, "argv.log"), "utf8")
       .trim()
       .split("\n")
@@ -6724,6 +6725,400 @@ describe("agx dispatch --resume", () => {
     expect(compactLines.every((line) => !line.startsWith("{"))).toBe(true);
   });
 
+  test("detached routing lease refusal exits in the dispatcher before manager handoff", async () => {
+    const bin = join(scratch, "refusal-manager-bin");
+    mkdirSync(bin);
+    const manager = join(bin, "systemd-run");
+    writeFileSync(
+      manager,
+      `#!${process.execPath}
+import { appendFileSync, openSync } from "node:fs";
+const args = Bun.argv.slice(2);
+appendFileSync(process.env.AGX_STATE_DIR + "/manager-called", "called");
+const child = Bun.spawn(args.slice(args.indexOf("--") + 1), {
+  env: { ...process.env, ...Object.fromEntries(args.filter(a => a.startsWith("--setenv=")).map(a => { const value = a.slice(9); const at = value.indexOf("="); return [value.slice(0, at), value.slice(at + 1)]; })) },
+  stdin: "ignore", stdout: "ignore", stderr: openSync(process.env.AGX_STATE_DIR + "/unit-error", "w"), detached: true, timeout: 10000,
+});
+child.unref();
+process.exit(0);
+`,
+    );
+    chmodSync(manager, 0o755);
+    const state = join(scratch, "detach-lease-refusal-state");
+    const cwd = freshCwd();
+    onJevRequest = () => {
+      const admissions = join(state, "admissions");
+      mkdirSync(admissions, { recursive: true });
+      writeFileSync(
+        join(admissions, "competing.json"),
+        JSON.stringify({
+          kind: "admitted",
+          lease_version: 1,
+          run_id: "competing",
+          repo: cwd,
+          cwd,
+          pid: process.pid,
+          started_at: "2026-10-13T00:00:00Z",
+          dispatcher_session: "other",
+          ticket: { name: "other", writes: ["src/**"] },
+        }),
+      );
+    };
+    const dispatched = await router(
+      [
+        ...runArgs(
+          brief(
+            "detach-lease-refusal",
+            ticketText('writes = ["src/**"]\nverify = []'),
+          ),
+          cwd,
+          "workspace-write",
+        ),
+        "--name",
+        "refused_detach",
+        "--detach",
+      ],
+      {
+        AGX_STATE_DIR: state,
+        AGX_DETACH_PLATFORM: "linux",
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+      },
+    );
+    if (dispatched.code === 0) {
+      const until = performance.now() + 5000;
+      while (
+        performance.now() < until &&
+        (!existsSync(join(state, "unit-error")) ||
+          !readFileSync(join(state, "unit-error"), "utf8").includes("REFUSED"))
+      )
+        await Bun.sleep(25);
+      expect(readFileSync(join(state, "unit-error"), "utf8")).toContain(
+        "write lease refused",
+      );
+    }
+    expect(dispatched.code, dispatched.err).toBe(2);
+    expect(dispatched.err).toContain("competing");
+    expect(dispatched.out).not.toMatch(/run_id:|watch:/u);
+    expect(existsSync(join(state, "manager-called"))).toBe(false);
+    expect(existsSync(join(state, "tickets"))).toBe(false);
+    const listed = await router(["ps", "--json"], { AGX_STATE_DIR: state });
+    expect(listed.out).toContain('"state":"refused"');
+    expect(listed.out).toContain("competing");
+  });
+
+  test("detached unit consumes one admitted pick even with a blocked lease lock and changed routes", async () => {
+    const bin = join(scratch, "admitted-manager-bin");
+    mkdirSync(bin);
+    const manager = join(bin, "systemd-run");
+    writeFileSync(
+      manager,
+      `#!${process.execPath}
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+const args = Bun.argv.slice(2);
+const env = { ...process.env, ...Object.fromEntries(args.filter(a => a.startsWith("--setenv=")).map(a => { const value = a.slice(9); const at = value.indexOf("="); return [value.slice(0, at), value.slice(at + 1)]; })) };
+const decision = JSON.parse(readFileSync(env.AGX_ADMITTED_LAUNCH, "utf8"));
+const hash = text => createHash("sha256").update(text).digest("hex");
+const leaseDir = env.AGX_STATE_DIR + "/write-leases/" + hash(decision.flags.cd);
+if (!existsSync(env.AGX_STATE_DIR + "/admissions/" + hash(decision.flags.runId) + ".json") || existsSync(leaseDir + "/.lock")) process.exit(19);
+writeFileSync(leaseDir + "/.lock", env.AGX_FIXTURE_LOCK_PID);
+writeFileSync(env.AGX_STATE_DIR + "/manager-admission", JSON.stringify({ pick: decision.pick.choice, run_id: decision.flags.runId, lockReleased: true }));
+const child = Bun.spawn(args.slice(args.indexOf("--") + 1), { env: { ...env, AGX_TEST_CODEX_ROUTE: "unavailable" }, stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true, timeout: 10000 });
+child.unref();
+process.exit(0);
+`,
+    );
+    chmodSync(manager, 0o755);
+    const state = join(scratch, "admitted-detach-state");
+    const cwd = freshCwd();
+    const routedBefore = bodies.length;
+    const env = {
+      AGX_STATE_DIR: state,
+      AGX_DETACH_PLATFORM: "linux",
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      FAKE_TOUCH: "src/delivered.ts",
+      AGX_FIXTURE_LOCK_PID: String(process.pid),
+      FAKE_CHECKPOINT: "1",
+      FAKE_BLOCK_UNTIL_FILE: join(state, "unblock-worker"),
+    };
+    const dispatched = await router(
+      [
+        ...runArgs(
+          brief(
+            "admitted-detach",
+            ticketText('writes = ["src/**"]\nverify = []'),
+          ),
+          cwd,
+          "workspace-write",
+        ),
+        "--name",
+        "admitted_detach",
+        "--detach",
+      ],
+      env,
+    );
+    expect(dispatched.code, dispatched.err).toBe(0);
+    const admittedRun = decodedJson(
+      z.looseObject({ run_id: z.string() }),
+      readFileSync(join(state, "manager-admission"), "utf8"),
+    ).run_id;
+    const lock = join(
+      state,
+      "write-leases",
+      createHash("sha256").update(cwd).digest("hex"),
+      ".lock",
+    );
+    let workerStarted = false;
+    const waited = await router(["wait", "admitted_detach"], env, async () => {
+      const deadline = performance.now() + 5000;
+      const progress = join(state, "active", `${admittedRun}.progress.json`);
+      while (!existsSync(progress) && performance.now() < deadline)
+        await Bun.sleep(25);
+      workerStarted = existsSync(progress) && existsSync(lock);
+      rmSync(lock, { force: true });
+      writeFileSync(env.FAKE_BLOCK_UNTIL_FILE, "continue");
+    });
+    expect(workerStarted).toBe(true);
+    expect(waited.code, waited.out).toBe(0);
+    expect(bodies.length - routedBefore).toBe(1);
+    expect(readFileSync(join(state, "manager-admission"), "utf8")).toContain(
+      '"lockReleased":true',
+    );
+    const admissions = readdirSync(join(state, "admissions"));
+    expect(admissions).toHaveLength(1);
+    const admission = decodedJson(
+      z.looseObject({ run_id: z.string(), pid: z.number() }),
+      readFileSync(join(state, "admissions", admissions[0] ?? ""), "utf8"),
+    );
+    const record = decodedJson(
+      z.looseObject({
+        run_id: z.string(),
+        pick: z.looseObject({ choice: z.string() }),
+        pid: z.number().optional(),
+      }),
+      waited.out,
+    );
+    expect(record.run_id).toBe(admission.run_id);
+    expect(record.pick.choice).toBe("luna-low");
+    const events = readFileSync(
+      join(state, "events", `${admittedRun}.jsonl`),
+      "utf8",
+    )
+      .trim()
+      .split("\n")
+      .map((line) =>
+        decodedJson(
+          z.looseObject({ kind: z.string(), pid: z.number().optional() }),
+          line,
+        ),
+      );
+    expect(events.find((row) => row.kind === "started")?.pid).not.toBe(
+      admission.pid,
+    );
+  });
+
+  test.each(["live", "archive", "journal", "landed", "ledger-note"])(
+    "show reads %s acceptance without routing fields and keeps the latest judgment",
+    async (pathKind) => {
+      const state = join(scratch, `show-acceptance-${pathKind}`);
+      const dispatched = await router(
+        [
+          ...runArgs(
+            brief(
+              `show-acceptance-${pathKind}`,
+              ticketText("writes = []\nverify = []"),
+            ),
+            freshCwd(),
+          ),
+          "--name",
+          "show_acceptance",
+        ],
+        { AGX_STATE_DIR: state },
+      );
+      expect(dispatched.code, dispatched.err).toBe(0);
+      const runId = decodedJson(
+        z.looseObject({ run_id: z.string() }),
+        dispatched.out,
+      ).run_id;
+      const judgment = {
+        kind: pathKind === "landed" ? "landed" : "acceptance",
+        run_id: runId,
+        accept: true,
+        at: Temporal.Now.instant().subtract({ seconds: 1 }).toString(),
+      };
+      let path = join(state, "runs.jsonl");
+      if (pathKind === "archive") path = join(state, "runs-2026-10-13.jsonl");
+      if (pathKind === "journal")
+        path = join(state, "events", `${runId}.jsonl`);
+      if (pathKind === "ledger-note") {
+        const noted = await router(
+          ["ledger", "note", "show_acceptance", "--accept"],
+          { AGX_STATE_DIR: state },
+        );
+        expect(noted.code, noted.err).toBe(0);
+      } else appendFileSync(path, `${JSON.stringify(judgment)}\n`);
+      const shown = await router(["show", "show_acceptance"], {
+        AGX_STATE_DIR: state,
+      });
+      expect(shown.code, shown.err).toBe(0);
+      expect(shown.out).toContain("accept=true");
+      appendFileSync(
+        join(state, "runs.jsonl"),
+        `${JSON.stringify({ kind: "acceptance", run_id: runId, accept: false, at: Temporal.Now.instant().add({ seconds: 1 }).toString() })}\n`,
+      );
+      const latest = await router(["show", "show_acceptance", "--json"], {
+        AGX_STATE_DIR: state,
+      });
+      expect(
+        decodedJson(z.looseObject({ accept: z.boolean() }), latest.out).accept,
+      ).toBe(false);
+    },
+  );
+
+  test("detached lease lock timeout exits 2 before starting a unit", async () => {
+    const cwd = freshCwd();
+    const state = join(scratch, "detached-lock-timeout-state");
+    const leaseDir = join(
+      state,
+      "write-leases",
+      createHash("sha256").update(cwd).digest("hex"),
+    );
+    mkdirSync(leaseDir, { recursive: true });
+    writeFileSync(
+      join(leaseDir, ".lock"),
+      JSON.stringify({
+        pid: process.pid,
+        run_id: "lock-holder",
+        ticket: "holder",
+        since: "2026-10-13T00:00:00Z",
+      }),
+    );
+    const dispatched = await router(
+      [
+        ...runArgs(
+          brief(
+            "detached-lock-timeout",
+            ticketText('writes = ["src/**"]\nverify = []'),
+          ),
+          cwd,
+          "workspace-write",
+        ),
+        "--name",
+        "lock_refusal",
+        "--detach",
+      ],
+      { AGX_STATE_DIR: state, AGX_DETACH_PLATFORM: "linux" },
+    );
+    expect(dispatched.code, dispatched.err).toBe(2);
+    expect(dispatched.err).toContain("timed out after 30000ms");
+    expect(dispatched.err).toContain("lock-holder");
+    expect(dispatched.out).not.toMatch(/run_id:|watch:/u);
+    expect(existsSync(join(state, "admissions"))).toBe(false);
+    expect(existsSync(join(state, "detached"))).toBe(false);
+    expect(existsSync(join(state, "tickets"))).toBe(false);
+  }, 45_000);
+
+  test("detached workspace lease refusal leaves its planned workspace uncreated", async () => {
+    const cwd = freshCwd();
+    const state = join(scratch, "detached-workspace-refusal-state");
+    const bin = join(scratch, "workspace-refusal-bin");
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "jj"),
+      `#!${process.execPath}\nif (Bun.argv.includes("add")) { await Bun.write(process.env.AGX_STATE_DIR + "/workspace-created", "bad"); process.exit(1); }\nprocess.exit(0);\n`,
+    );
+    chmodSync(join(bin, "jj"), 0o755);
+    mkdirSync(join(state, "admissions"), { recursive: true });
+    writeFileSync(
+      join(state, "admissions", "holder.json"),
+      JSON.stringify({
+        kind: "admitted",
+        lease_version: 1,
+        run_id: "workspace-holder",
+        repo: cwd,
+        cwd,
+        pid: process.pid,
+        ticket: { name: "holder", writes: ["src/**"] },
+      }),
+    );
+    const dispatched = await router(
+      [
+        ...runArgs(
+          brief(
+            "detached-workspace-refusal",
+            ticketText('writes = ["src/**"]\nverify = []'),
+          ),
+          cwd,
+          "workspace-write",
+        ),
+        "--workspace",
+        "refused",
+        "--detach",
+      ],
+      {
+        AGX_STATE_DIR: state,
+        AGX_DETACH_PLATFORM: "linux",
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+      },
+    );
+    expect(dispatched.code, dispatched.err).toBe(2);
+    expect(dispatched.err).toContain("workspace-holder");
+    expect(existsSync(join(state, "workspace-created"))).toBe(false);
+    expect(existsSync(join(cwd, "..", `${basename(cwd)}-arm-refused`))).toBe(
+      false,
+    );
+    expect(existsSync(join(state, "tickets"))).toBe(false);
+  });
+
+  test("a refused detached amendment leaves the original ticket bytes unchanged", async () => {
+    const cwd = freshCwd();
+    const state = join(scratch, "detached-amend-refusal-state");
+    const env = { AGX_STATE_DIR: state, AGX_DETACH_PLATFORM: "linux" };
+    const first = await router(
+      [
+        ...runArgs(
+          brief(
+            "detached-amend-refusal",
+            ticketText('writes = ["src/**"]\nverify = []'),
+          ),
+          cwd,
+          "workspace-write",
+        ),
+        "--name",
+        "amend_refusal",
+      ],
+      env,
+    );
+    expect(first.code, first.err).toBe(0);
+    const ticket = decodedJson(
+      z.looseObject({ ticket: z.looseObject({ path: z.string() }) }),
+      first.out,
+    ).ticket.path;
+    const before = readFileSync(ticket, "utf8");
+    const amendment = join(scratch, "refused-amendment.md");
+    writeFileSync(amendment, "Add a stricter check.");
+    writeFileSync(
+      join(state, "admissions", "holder.json"),
+      JSON.stringify({
+        kind: "admitted",
+        lease_version: 1,
+        run_id: "amend-holder",
+        repo: cwd,
+        cwd,
+        pid: process.pid,
+        ticket: { name: "other", writes: ["src/**"] },
+      }),
+    );
+    const dispatched = await router(
+      ["dispatch", "--amend", "amend_refusal", "--file", amendment, "--detach"],
+      env,
+    );
+    expect(dispatched.code, dispatched.err).toBe(2);
+    expect(dispatched.err).toContain("amend-holder");
+    expect(dispatched.out).not.toMatch(/run_id:|watch:/u);
+    expect(readFileSync(ticket, "utf8")).toBe(before);
+  });
+
   test("detached fake-worker runs can be waited and followed, including detached resume", async () => {
     const bin = join(scratch, "fake-manager-bin");
     mkdirSync(bin, { recursive: true });
@@ -6909,12 +7304,10 @@ describe("agx dispatch --resume", () => {
       ["dispatch", "--resume", "legacy_watch", "--detach"],
       { ...env, DISPATCH_ROSTER_PATH: retired },
     );
-    expect(refused.code, refused.err).toBe(0);
-    const refusedWait = await router(["wait", "legacy_watch"], env);
-    expect(refusedWait.code, refusedWait.err).toBe(1);
-    expect(refusedWait.out).toContain(
-      "dispatch exited before writing its terminal receipt",
-    );
+    expect(refused.code, refused.err).toBe(2);
+    expect(refused.err).toContain("no longer a roster row");
+    expect(refused.out).not.toMatch(/run_id:|watch:/u);
+    expect((await router(["wait", "legacy_watch"], env)).code).toBe(0);
     const continued = await router(
       ["dispatch", "--resume", "legacy_watch"],
       env,

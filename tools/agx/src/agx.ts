@@ -76,6 +76,7 @@ import {
   criterionFor,
   costMultiple,
   loadRoster,
+  ROSTER_PATH,
   ROUTING_OBJECTIVE,
   type Choice,
   type Roster,
@@ -140,6 +141,7 @@ import {
   parseReturn,
   renderReport,
   ReturnSchema,
+  TicketGradeSchema,
   type TicketGrade,
   withReportInstruction,
   WorkerReport,
@@ -205,6 +207,7 @@ import {
   promiseBlock,
   resourceKind,
   verifyLine,
+  TicketSchema,
   type Ticket,
 } from "./ticket.ts";
 import {
@@ -605,12 +608,22 @@ function fatal(
   return process.exit(exitCode);
 }
 
+const rosterSources = new WeakMap<Roster, string>();
 async function loadRosterOrDie(): Promise<Roster> {
   const path = process.env.DISPATCH_ROSTER_PATH;
+  const source = await attempt(() =>
+    readFileSync(
+      path === undefined || path === "" ? ROSTER_PATH : path,
+      "utf8",
+    ),
+  );
+  if (!source.ok)
+    fatal(`cannot read the dispatch roster: ${errorMessage(source.error)}`);
   const r = await (path === undefined || path === ""
     ? loadRoster()
     : loadRoster(path));
   if (!r.ok) fatal(`cannot read the dispatch roster: ${r.error}`);
+  rosterSources.set(r.value, source.value);
   return r.value;
 }
 
@@ -627,28 +640,50 @@ const JevAnswer = z.looseObject({
   usage: z.looseObject({}).optional(),
 });
 
-export interface Pick {
-  source: "explicit" | "jev" | "default" | "resume" | "override" | "escalation";
-  choice: string;
-  approval?: string;
-  mode?: "sample" | "argmax" | "fallback";
-  argmax_row?: string;
-  sampled_row?: string;
-  temperature?: number;
-  seed?: string;
-  masked_rows?: { row: string; reason: string }[];
-  sampled_probability?: number;
-  epsilon?: number;
-  epsilon_rows?: string[];
-  pick_fallback_reason?: string;
-  reason: string;
-  confidence?: number;
-  probabilities?: Record<string, number>;
-  jev?: JevTrace;
-  routes_unavailable?: Partial<Record<"codex" | "claude", string>>;
-  default_fallback?: string;
-  selection_record_unavailable?: string;
-}
+const PickSchema = z.object({
+  source: z.enum([
+    "explicit",
+    "jev",
+    "default",
+    "resume",
+    "override",
+    "escalation",
+  ]),
+  choice: z.string(),
+  approval: z.string().optional(),
+  mode: z.enum(["sample", "argmax", "fallback"]).optional(),
+  argmax_row: z.string().optional(),
+  sampled_row: z.string().optional(),
+  temperature: z.number().optional(),
+  seed: z.string().optional(),
+  masked_rows: z
+    .array(z.object({ row: z.string(), reason: z.string() }))
+    .optional(),
+  sampled_probability: z.number().optional(),
+  epsilon: z.number().optional(),
+  epsilon_rows: z.array(z.string()).optional(),
+  pick_fallback_reason: z.string().optional(),
+  reason: z.string(),
+  confidence: z.number().optional(),
+  probabilities: z.record(z.string(), z.number()).optional(),
+  jev: z
+    .object({
+      endpoint: z.string(),
+      request: z.unknown(),
+      latency_ms: z.number(),
+      key_source: z.string().optional(),
+      status: z.number().optional(),
+      response: z.unknown().optional(),
+      error: z.string().optional(),
+    })
+    .optional(),
+  routes_unavailable: z
+    .object({ codex: z.string().optional(), claude: z.string().optional() })
+    .optional(),
+  default_fallback: z.string().optional(),
+  selection_record_unavailable: z.string().optional(),
+});
+export type Pick = z.output<typeof PickSchema>;
 
 function hostRoutes(sandbox = "sandboxed"): Routes {
   const codexPath = Bun.which(process.env.CODEX_BIN ?? "codex");
@@ -1697,33 +1732,75 @@ interface RunFlags {
   promptFile: string;
   cd: string;
   sandbox: string;
-  row: string | undefined;
-  approval: string | undefined;
-  label: string | undefined;
-  name: string | undefined;
-  timeoutS: number | undefined;
-  timeoutReason: string | undefined;
+  row?: string | undefined;
+  approval?: string | undefined;
+  label?: string | undefined;
+  name?: string | undefined;
+  timeoutS?: number | undefined;
+  timeoutReason?: string | undefined;
   noGrader: boolean;
   pickTemperature?: number | undefined;
   pickSeed?: string | undefined;
-  runId?: string;
-  verbose?: boolean;
-  workspaceName?: string;
-  dispatchRoot?: string;
-  ticketFile?: string;
-  project?: string;
+  runId?: string | undefined;
+  verbose?: boolean | undefined;
+  workspaceName?: string | undefined;
+  dispatchRoot?: string | undefined;
+  ticketFile?: string | undefined;
+  project?: string | undefined;
   instructionFiles?: string[];
   handoff?: string;
+  workspacePlan?: { name: string; path: string; root: string };
 }
 
-async function prepareWorkspace(
-  root: string,
-  nameHint: string | undefined,
-): Promise<{ name: string; path: string; root: string }> {
-  root = workspaceRoot(root);
-  const plan = await planWorkspace(root, nameHint);
-  if (!plan.ok) fatal(plan.error);
-  const { name, path } = plan;
+let pendingAmendment:
+  | { path: string; before: string | undefined; text: string }
+  | undefined;
+
+function dispatchBrief(path: string): string {
+  return pendingAmendment?.path === path
+    ? pendingAmendment.text
+    : readFileSync(path, "utf8");
+}
+
+function stageDispatchAmendment(
+  path: string,
+  brief: string,
+  amendment: string,
+): void {
+  if (amendment.trim() === "") fatal("amendment file is empty");
+  pendingAmendment = {
+    path,
+    before: existsSync(path) ? readFileSync(path, "utf8") : undefined,
+    text: `${brief.trimEnd()}\n\n## AMEND ${now()}\n\n${amendment.trimEnd()}\n`,
+  };
+}
+
+function publishDispatchAmendment(
+  flags: RunFlags,
+  ticket: Ticket | undefined,
+  runId: string,
+): void {
+  if (pendingAmendment === undefined) return;
+  const current = existsSync(pendingAmendment.path)
+    ? readFileSync(pendingAmendment.path, "utf8")
+    : undefined;
+  if (current !== pendingAmendment.before) {
+    releaseRunWrites(flags, ticket, runId);
+    fatal(
+      "ticket changed while amendment was being admitted; retry with the current ticket",
+    );
+  }
+  mkdirSync(dirname(pendingAmendment.path), { recursive: true });
+  writeFileSync(pendingAmendment.path, pendingAmendment.text);
+  pendingAmendment = undefined;
+}
+
+async function prepareWorkspace(plan: {
+  name: string;
+  path: string;
+  root: string;
+}): Promise<{ name: string; path: string; root: string }> {
+  const { name, path, root } = plan;
   const prepared = await createSparseWorkspace(root, name, path);
   if (!prepared.ok) fatal(errorMessage(prepared.error));
   dispatchError(`agx: workspace receipt: ${JSON.stringify(prepared.value)}`);
@@ -2462,7 +2539,7 @@ async function run(flags: RunFlags): Promise<number> {
     fatal(`no such brief: ${flags.promptFile}`);
   if (!existsSync(flags.cd)) fatal(`no such --cd directory: ${flags.cd}`);
   const instructions = instructionText(flags.instructionFiles ?? []);
-  const source = readFileSync(flags.promptFile, "utf8");
+  const source = dispatchBrief(flags.promptFile);
   const brief = [source, flags.handoff, instructions]
     .filter((text) => text !== undefined && text !== "")
     .join("\n\n");
@@ -2632,8 +2709,8 @@ interface Launch {
   };
 }
 
-/** Start the worker for a pick, wait for it, verify and grade; shared by `run` and `resume`. */
-async function launch(l: Launch): Promise<number> {
+/** Complete admission in the dispatcher, before any workspace or ticket projection. */
+async function admitLaunch(l: Launch): Promise<void> {
   const selected = l.roster.choice.find((row) => row.id === l.pick.choice);
   if (
     selected !== undefined &&
@@ -2663,44 +2740,13 @@ async function launch(l: Launch): Promise<number> {
       pick_fallback_reason: `${selected.id} inadmissible without structured justification; same family fallback ${lower.id}`,
     };
   }
-  const {
-    roster,
-    flags,
-    brief,
-    ticket,
-    ticketGrade,
-    pick,
-    label,
-    displayId,
-    resume,
-  } = l;
-  let timeout: {
-    seconds: number;
-    source: "cli" | "ticket" | "default";
-    reason?: string;
-  };
-  if (flags.timeoutS !== undefined) {
-    const reason =
-      flags.timeoutReason ??
-      (ticket?.timeout_s === flags.timeoutS
-        ? ticket.timeout_reason
-        : undefined);
-    timeout = {
-      seconds: flags.timeoutS,
-      source: "cli",
-      ...(reason === undefined ? {} : { reason }),
-    };
-  } else if (ticket?.timeout_s !== undefined) {
-    timeout = {
-      seconds: ticket.timeout_s,
-      source: "ticket",
-      ...(ticket.timeout_reason === undefined
-        ? {}
-        : { reason: ticket.timeout_reason }),
-    };
-  } else timeout = { seconds: DEFAULT_TIMEOUT_S, source: "default" };
+  const { roster, flags, brief, ticket, pick, displayId, resume } = l;
   const row = refuseUnrunnable(roster, pick.choice);
   stderrRun = { displayId, route: row.route };
+  const admissionGrade = await lintTicket(brief, resolve(flags.cd));
+  if (admissionGrade.violations.length > 0)
+    fatal(renderTicketLint(admissionGrade).join("; "));
+  if (ticket?.requires_gpu === true) checkDispatchGpu();
   const routeStatus = hostRoutes(flags.sandbox)[row.route];
   if (!routeStatus.available)
     fatal(
@@ -2742,7 +2788,64 @@ async function launch(l: Launch): Promise<number> {
     if (!admitted.ok) fatal(admitted.reason);
   }
   const runId = flags.runId ?? newRunId();
-  claimRunWrites(flags, ticket, runId, resume?.from);
+  flags.runId = runId;
+  claimRunWrites(flags, ticket, runId, resume?.from, pick);
+}
+
+/** Execute a selected run; OS children consume admission without repeating it. */
+async function launch(l: Launch, admitted = false): Promise<number> {
+  if (!admitted) await admitLaunch(l);
+  const {
+    roster,
+    flags,
+    brief,
+    ticket,
+    ticketGrade,
+    pick,
+    label,
+    displayId,
+    resume,
+  } = l;
+  let timeout: {
+    seconds: number;
+    source: "cli" | "ticket" | "default";
+    reason?: string;
+  };
+  if (flags.timeoutS !== undefined) {
+    const reason =
+      flags.timeoutReason ??
+      (ticket?.timeout_s === flags.timeoutS
+        ? ticket.timeout_reason
+        : undefined);
+    timeout = {
+      seconds: flags.timeoutS,
+      source: "cli",
+      ...(reason === undefined ? {} : { reason }),
+    };
+  } else if (ticket?.timeout_s !== undefined) {
+    timeout = {
+      seconds: ticket.timeout_s,
+      source: "ticket",
+      ...(ticket.timeout_reason === undefined
+        ? {}
+        : { reason: ticket.timeout_reason }),
+    };
+  } else timeout = { seconds: DEFAULT_TIMEOUT_S, source: "default" };
+  const row = refuseUnrunnable(roster, pick.choice);
+  stderrRun = { displayId, route: row.route };
+  const runId = flags.runId ?? newRunId();
+  flags.runId = runId;
+  if (!admitted) {
+    publishDispatchAmendment(flags, ticket, runId);
+    if (flags.workspacePlan !== undefined) {
+      const prepared = await prepareWorkspace(flags.workspacePlan);
+      flags.cd = prepared.path;
+      flags.workspaceName = prepared.name;
+      delete flags.workspacePlan;
+    }
+    if (argv.command === "dispatch" && argv.flags.detach === true)
+      return detachDispatch(l);
+  }
   const ticketName =
     flags.name ?? ticket?.name ?? displayId.slice("agt_".length);
   const home = ticketHome(
@@ -4629,21 +4732,34 @@ function claimRunWrites(
   ticket: Ticket | undefined,
   runId: string,
   predecessor?: string,
+  pick?: Pick,
 ): void {
   const writes = ticket?.writes ?? [];
   if (writes.length === 0) return;
   const result = claimWriteLease({
-    ...currentRepoLeaseInput(flags.cd),
+    ...currentRepoLeaseInput(flags.dispatchRoot ?? flags.cd),
     ...(predecessor === undefined ? {} : { predecessor }),
     run_id: runId,
-    cwd: resolve(flags.cd),
+    cwd: resolve(flags.workspacePlan?.path ?? flags.cd),
     writes,
     ticket: flags.name ?? ticket?.name ?? runId,
     dispatcher_session: currentDispatcherSession() ?? "unknown",
     since: now(),
   });
-  if (!result.ok)
-    fatal(`agx: write lease refused: ${result.error}`, 2, result.exitCode ?? 2);
+  if (!result.ok) {
+    if (pick !== undefined)
+      appendLog({
+        kind: "refusal",
+        run_id: runId,
+        pick,
+        cwd: resolve(flags.cd),
+        ticket: { name: flags.name ?? ticket?.name ?? runId, writes },
+        dispatcher_session: currentDispatcherSession(),
+        at: now(),
+        reason: result.error,
+      });
+    fatal(`agx: write lease refused: ${result.error}`);
+  }
 }
 
 function releaseRunWrites(
@@ -4663,9 +4779,16 @@ function releaseRunWrites(
     );
 }
 
-type RunState = "running" | "returned" | "done" | "failed" | "abandoned";
+type RunState =
+  | "running"
+  | "returned"
+  | "done"
+  | "failed"
+  | "abandoned"
+  | "refused";
 
 function stateOfRecord(record: Logged): RunState {
+  if (record.kind === "refusal") return "refused";
   if (record.kind === "abandoned") return "abandoned";
   if (record.kind !== "run") return "running";
   if (record.worker?.outcome === "returned" || record.return !== undefined)
@@ -4895,6 +5018,7 @@ interface PsRow {
   age: string;
   summary: string | null;
   dispatcher_session: string | null;
+  reason: string | null;
 }
 
 function ageLabel(startedAt: string | undefined, endedAt?: string): string {
@@ -4960,7 +5084,7 @@ function psCommand(
   for (const entry of recent)
     if (
       entry.run_id !== undefined &&
-      (entry.kind === "run" || entry.kind === "abandoned")
+      ["run", "abandoned", "refusal"].includes(entry.kind)
     )
       latest.set(entry.run_id, entry);
 
@@ -5010,6 +5134,7 @@ function psCommand(
           kind: marker?.active.kind ?? logged?.resource?.kind ?? "unknown",
           labels: marker?.active.labels ?? logged?.resource?.labels ?? [],
           state,
+          reason: z.string().safeParse(logged?.reason).data ?? null,
           age: ageLabel(
             marker?.active.started_at ?? logged?.started_at,
             endedAt,
@@ -5048,7 +5173,7 @@ function psCommand(
   );
   for (const row of visibleRows)
     process.stdout.write(
-      `${row.name}\t${row.proposition ?? "-"}\t${row.row}\t${row.kind}\t${row.labels.join(",")}\t${row.state}\t${row.age}\t${row.summary ?? ""}\t${row.dispatcher_session?.slice(0, 8) ?? "-"}\t${row.id}\n`,
+      `${row.name}\t${row.proposition ?? "-"}\t${row.row}\t${row.kind}\t${row.labels.join(",")}\t${row.state}\t${row.age}\t${row.reason ?? row.summary ?? ""}\t${row.dispatcher_session?.slice(0, 8) ?? "-"}\t${row.id}\n`,
     );
   return 0;
 }
@@ -5948,11 +6073,14 @@ async function resumeCommand(
     fatal(`run ${runId}: its sandbox was not recorded, cannot continue it`);
   const canonical = ticketFile ?? logged.ticket?.path;
   const existingTicket =
-    canonical !== undefined && existsSync(canonical) ? canonical : undefined;
+    canonical !== undefined &&
+    (existsSync(canonical) || pendingAmendment?.path === canonical)
+      ? canonical
+      : undefined;
   const brief =
     existingTicket === undefined
       ? loggedBrief(logged)
-      : readFileSync(existingTicket, "utf8");
+      : dispatchBrief(existingTicket);
   if (brief === undefined) fatal(`run ${runId}: its brief is no longer stored`);
   const parsed = parseTicket(brief);
   if (parsed.kind === "invalid")
@@ -6121,7 +6249,7 @@ function latestTicketRun(path: string, cd: string): Logged | undefined {
 }
 
 function amendmentMessage(path: string, runId: string): string {
-  const message = lastAmendment(readFileSync(path, "utf8"));
+  const message = lastAmendment(dispatchBrief(path));
   const file = join(STATE_DIR, "briefs", `${runId}.amend.md`);
   mkdirSync(join(STATE_DIR, "briefs"), { recursive: true });
   writeFileSync(file, message);
@@ -6190,13 +6318,14 @@ async function amendRunningCommand(
     logged.ticket?.path ??
     logged.brief?.path ??
     join(STATE_DIR, "briefs", `${active.active.run_id}.amended.md`);
-  mkdirSync(dirname(path), { recursive: true });
-  if (!existsSync(path)) writeFileSync(path, brief);
-  const amended = amendTicket(path, amendment);
-  if (amended instanceof Error) fatal(amended.message);
+  stageDispatchAmendment(
+    path,
+    existsSync(path) ? readFileSync(path, "utf8") : brief,
+    amendment,
+  );
   const gap = Math.round((performance.now() - started) / 100) / 10;
   process.stderr.write(
-    `agx: appended amendment to run ${active.active.run_id}; graceful-stop gap ${gap}s; resuming vendor session\n`,
+    `agx: staged amendment to run ${active.active.run_id}; graceful-stop gap ${gap}s; resuming vendor session after admission\n`,
   );
   if (repick)
     return repickResumeCommand(
@@ -6240,11 +6369,14 @@ async function repickResumeCommand(
     fatal(`run ${runId}: its sandbox was not recorded, cannot repick`);
   const canonical = ticketFile ?? logged.ticket?.path;
   const existingTicket =
-    canonical !== undefined && existsSync(canonical) ? canonical : undefined;
+    canonical !== undefined &&
+    (existsSync(canonical) || pendingAmendment?.path === canonical)
+      ? canonical
+      : undefined;
   const brief =
     existingTicket === undefined
       ? loggedBrief(logged)
-      : readFileSync(existingTicket, "utf8");
+      : dispatchBrief(existingTicket);
   if (brief === undefined) fatal(`run ${runId}: its brief is no longer stored`);
   const handoff = [
     "## COMPACT HANDOFF",
@@ -7108,28 +7240,6 @@ process.once("exit", (exit) => {
   }, errorMessage)();
 });
 
-function withoutOption(
-  args: string[],
-  option: string,
-  takesValue: boolean,
-): string[] {
-  const kept: string[] = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const value = args[index] ?? "";
-    if (value === option) {
-      index += Number(takesValue);
-      continue;
-    }
-    if (value.startsWith(`${option}=`)) continue;
-    kept.push(value);
-  }
-  return kept;
-}
-
-function withOption(args: string[], option: string, value: string): string[] {
-  return [...withoutOption(args, option, true), option, value];
-}
-
 function resolveDetachPlatform(
   forcedPlatform: string | undefined,
 ): DetachPlatform | undefined {
@@ -7141,63 +7251,85 @@ function resolveDetachPlatform(
   return undefined;
 }
 
-async function detachDispatch(
-  flags: RunFlags,
-  originalArgs: string[],
-): Promise<number> {
-  const forcedPlatform = process.env.AGX_DETACH_PLATFORM;
-  const platform = resolveDetachPlatform(forcedPlatform);
-  if (platform === undefined && forcedPlatform === undefined)
-    fatal(`--detach is supported on Linux and macOS, not ${process.platform}`);
+function checkDispatchGpu(): void {
+  const denial = probeGpuVisibility(
+    {
+      requested: true,
+      executableFound:
+        Bun.which(
+          "nvidia-smi",
+          process.env.PATH === undefined ? {} : { PATH: process.env.PATH },
+        ) !== null,
+      path: process.env.PATH,
+      isWsl: /microsoft/iu.test(release()),
+    },
+    () => {
+      const result = Bun.spawnSync(["nvidia-smi", "-L"], {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 5_000,
+      });
+      const stdout = result.stdout.toString();
+      const stderr = result.stderr.toString().trim().replaceAll(/\s+/gu, " ");
+      if (result.exitCode === 0 && /^GPU 0:/mu.test(stdout))
+        return { kind: "visible" };
+      if (result.exitCode === null) return { kind: "timeout" };
+      return { kind: "absent", exitCode: result.exitCode, stderr };
+    },
+  );
+  if (denial !== undefined) fatal(denial);
+}
+
+/** The OS child consumes this decision; it never routes or takes the admission lock. */
+const AdmittedLaunchSchema = z.object({
+  rosterPath: z.string(),
+  flags: z.object({
+    promptFile: z.string(),
+    cd: z.string(),
+    sandbox: z.string(),
+    row: z.string().optional(),
+    approval: z.string().optional(),
+    label: z.string().optional(),
+    name: z.string().optional(),
+    timeoutS: z.number().optional(),
+    timeoutReason: z.string().optional(),
+    noGrader: z.boolean(),
+    pickTemperature: z.number().optional(),
+    pickSeed: z.string().optional(),
+    runId: z.string(),
+    verbose: z.boolean().optional(),
+    workspaceName: z.string().optional(),
+    dispatchRoot: z.string().optional(),
+    ticketFile: z.string(),
+    project: z.string().optional(),
+  }),
+  brief: z.string(),
+  ticket: TicketSchema.optional(),
+  ticketGrade: TicketGradeSchema,
+  pick: PickSchema,
+  label: z.string(),
+  displayId: z.string(),
+  workerText: z.string().optional(),
+  resume: z.object({ from: z.string(), session: z.string() }).optional(),
+});
+
+function detachPlatformOrDie(): DetachPlatform {
+  const forced = process.env.AGX_DETACH_PLATFORM;
+  const platform = resolveDetachPlatform(forced);
   if (platform === undefined)
     fatal(
-      `AGX_DETACH_PLATFORM must be linux or darwin, not '${forcedPlatform}'`,
+      forced === undefined
+        ? `--detach is supported on Linux and macOS, not ${process.platform}`
+        : `AGX_DETACH_PLATFORM must be linux or darwin, not '${forced}'`,
     );
+  return platform;
+}
 
-  const brief = readFileSync(flags.promptFile, "utf8");
-  const parsed = parseTicket(brief);
-  if (parsed.kind === "invalid") fatal(parsed.reason);
-  if (parsed.ticket.requires_gpu === true) {
-    const denial = probeGpuVisibility(
-      {
-        requested: true,
-        executableFound:
-          Bun.which(
-            "nvidia-smi",
-            process.env.PATH === undefined ? {} : { PATH: process.env.PATH },
-          ) !== null,
-        path: process.env.PATH,
-        isWsl: /microsoft/iu.test(release()),
-      },
-      () => {
-        const result = Bun.spawnSync(["nvidia-smi", "-L"], {
-          stdout: "pipe",
-          stderr: "pipe",
-          timeout: 5_000,
-        });
-        const stdout = result.stdout.toString();
-        const stderr = result.stderr.toString().trim().replaceAll(/\s+/gu, " ");
-        if (result.exitCode === 0 && /^GPU 0:/mu.test(stdout))
-          return { kind: "visible" };
-        if (result.exitCode === null) return { kind: "timeout" };
-        return { kind: "absent", exitCode: result.exitCode, stderr };
-      },
-    );
-    if (denial !== undefined) fatal(denial);
-  }
-  const detachGrade = await lintTicket(brief, resolve(flags.cd));
-  if (detachGrade.violations.length > 0)
-    fatal(renderTicketLint(detachGrade).join("; "));
+async function detachDispatch(l: Launch): Promise<number> {
+  const { flags, brief, ticket, displayId, pick } = l;
+  const platform = detachPlatformOrDie();
   const runId = flags.runId ?? newRunId();
-  claimRunWrites(flags, parsed.ticket, runId);
-  const ticketName = parsed.kind === "ticket" ? parsed.ticket.name : undefined;
-  const liveDisplayId = originalArgs.some(
-    (arg) => arg === "--amend" || arg.startsWith("--amend="),
-  )
-    ? activeRunFor(flags.name ?? ticketName ?? "")?.active.display_id
-    : undefined;
-  const displayId = liveDisplayId ?? chooseDisplayId(flags.name ?? ticketName);
-  const name = flags.name ?? ticketName ?? displayId.slice("agt_".length);
+  const name = flags.name ?? ticket?.name ?? displayId.slice("agt_".length);
   const home = ticketHome(
     workspaceRoot(flags.cd),
     flags.cd,
@@ -7208,32 +7340,41 @@ async function detachDispatch(
   const ticketFile =
     flags.ticketFile ?? dispatchTicketAtHome(home, name, brief);
   if (ticketFile instanceof Error) fatal(ticketFile.message);
+  flags.ticketFile = ticketFile;
+  flags.runId = runId;
+  flags.name = name;
   const unit = `agx-${name}-${sha256(runId).slice(0, 8)}`;
-  let childArgs = withoutOption(originalArgs, "--detach", false);
-  const workspaceAt = childArgs.indexOf("--workspace");
-  const workspaceValue =
-    workspaceAt < 0 ? undefined : childArgs[workspaceAt + 1];
-  childArgs = withoutOption(
-    childArgs,
-    "--workspace",
-    workspaceValue !== undefined && !workspaceValue.startsWith("--"),
-  );
-  childArgs = withOption(childArgs, "--cd", flags.cd);
-  childArgs = withOption(childArgs, "--run-id", runId);
-  childArgs = withOption(childArgs, "--name", name);
   const logDir = resolve(STATE_DIR, "detached");
-  if (platform === "darwin") mkdirSync(logDir, { recursive: true });
+  mkdirSync(logDir, { recursive: true });
+  const rosterPath = join(logDir, `${runId}.roster.toml`);
+  const rosterSource = rosterSources.get(l.roster);
+  if (rosterSource === undefined) fatal("admitted roster snapshot is missing");
+  writeFileSync(rosterPath, rosterSource, { mode: 0o600 });
+  const decisionPath = join(logDir, `${runId}.admitted.json`);
+  writeFileSync(
+    decisionPath,
+    JSON.stringify({ ...l, roster: undefined, rosterPath }),
+    { mode: 0o600 },
+  );
   const dispatcherSession = currentDispatcherSession();
   const detachedLaunch = buildDetachedLaunch({
     platform,
     unit,
     cwd: resolve(flags.cd),
-    command: [process.execPath, join(import.meta.dir, "main.ts"), ...childArgs],
+    command: [
+      process.execPath,
+      join(import.meta.dir, "main.ts"),
+      "dispatch",
+      "--run-id",
+      runId,
+    ],
     env: {
       ...process.env,
       HOME: process.env.HOME ?? homedir(),
       AGX_DISPATCHER_SESSION: dispatcherSession ?? "",
       AGX_DISPATCH_ROOT: flags.dispatchRoot ?? workspaceRoot(flags.cd),
+      AGX_ADMITTED_LAUNCH: decisionPath,
+      DISPATCH_ROSTER_PATH: rosterPath,
     },
     logDir,
   });
@@ -7247,14 +7388,14 @@ async function detachDispatch(
     }),
   );
   if (!started.ok) {
-    releaseRunWrites(flags, parsed.ticket, runId);
+    releaseRunWrites(flags, ticket, runId);
     await cleanupPreparedWorkspace(flags);
     fatal(
       `cannot start ${detachedLaunch.executable}: ${errorMessage(started.error)}`,
     );
   }
   if (started.value.exitCode !== 0) {
-    releaseRunWrites(flags, parsed.ticket, runId);
+    releaseRunWrites(flags, ticket, runId);
     await cleanupPreparedWorkspace(flags);
     fatal(
       `${detachedLaunch.executable} failed (exit ${started.value.exitCode}): ${started.value.stderr.toString().trim()}`,
@@ -7264,12 +7405,12 @@ async function detachDispatch(
     kind: "detached",
     run_id: runId,
     dispatcher_session: dispatcherSession,
-    ticket: { name, path: ticketFile, writes: parsed.ticket.writes },
+    ticket: { name, path: ticketFile, writes: ticket?.writes ?? [] },
     repo: workspaceRoot(flags.cd),
     unit: detachedLaunch.unit,
     cwd: flags.cd,
     sandbox: flags.sandbox,
-    pick: { source: "pending", choice: "pending" },
+    pick,
     at: now(),
   });
   process.stdout.write(
@@ -7284,6 +7425,29 @@ void recordWritesViolationGrade;
 void recordClaimsWithoutDiffGrade;
 
 async function main(): Promise<number | undefined> {
+  const decisionPath = process.env.AGX_ADMITTED_LAUNCH;
+  if (argv.command === "dispatch" && decisionPath !== undefined) {
+    const decision = jsonOf(AdmittedLaunchSchema).safeParse(
+      readFileSync(decisionPath, "utf8"),
+    );
+    if (!decision.success) fatal("invalid admitted launch decision");
+    if (decision.data.flags.runId !== argv.flags.runId)
+      fatal("admitted launch run_id mismatch");
+    const roster = await loadRoster(decision.data.rosterPath);
+    if (!roster.ok) fatal(`cannot read admitted roster: ${roster.error}`);
+    process.env.DISPATCH_ROSTER_PATH = decision.data.rosterPath;
+    delete process.env.AGX_ADMITTED_LAUNCH;
+    return launch(
+      {
+        ...decision.data,
+        roster: roster.value,
+        workerText: decision.data.workerText,
+        resume: decision.data.resume,
+        ticket: decision.data.ticket,
+      },
+      true,
+    );
+  }
   if (argv.command === "wait" || argv.command === "follow") {
     if (
       argv._.length > 1 ||
@@ -7309,55 +7473,6 @@ async function main(): Promise<number | undefined> {
     (argv.flags.ticket !== undefined || argv.flags.amend !== undefined)
   )
     fatal("--workspace is not supported with --ticket or --amend");
-  if (
-    argv.command === "dispatch" &&
-    argv.flags.detach === true &&
-    (argv.flags.resume !== undefined ||
-      argv.flags.amend !== undefined ||
-      argv.flags.ticket !== undefined)
-  ) {
-    const target =
-      argv.flags.resume ?? argv.flags.amend ?? argv.flags.ticket ?? "";
-    const live = activeRunFor(target, argv.flags.cd);
-    const id = live?.active.run_id ?? resolveRunId(target, argv.flags.cd);
-    const logged = continuableRun(id);
-    const promptFile =
-      z.string().safeParse(live?.active.ticket?.path).data ??
-      logged?.ticket?.path ??
-      logged?.brief?.path;
-    if (promptFile === undefined && argv.flags.ticket === undefined)
-      fatal(`no stored ticket for ${target}`);
-    if (argv.flags.amend !== undefined && argv.flags.file === undefined)
-      fatal("dispatch --amend needs --file <path>");
-    instructionText(
-      [
-        argv.flags.file,
-        argv.flags.resume === undefined ? undefined : argv.flags.promptFile,
-      ].filter((file) => file !== undefined),
-    );
-    if (promptFile !== undefined)
-      return detachDispatch(
-        {
-          promptFile,
-          cd: live?.active.cwd ?? logged?.cwd ?? process.cwd(),
-          sandbox:
-            live?.active.sandbox ??
-            logged?.sandbox ??
-            logged?.worker?.sandbox ??
-            "read-only",
-          row: undefined,
-          approval: undefined,
-          label: undefined,
-          name: live?.active.ticket?.name ?? logged?.ticket?.name,
-          timeoutS: argv.flags.timeoutS,
-          timeoutReason: argv.flags.timeoutReason,
-          noGrader: false,
-          ticketFile: promptFile,
-          runId: newRunId(),
-        },
-        rawArgs,
-      );
-  }
   const project = z
     .looseObject({ project: z.string().optional() })
     .safeParse(argv.flags).data?.project;
@@ -7370,6 +7485,7 @@ async function main(): Promise<number | undefined> {
   )
     fatal("--project must be one non-empty directory name, not . or ..");
   if (argv.command === "dispatch") {
+    if (argv.flags.detach === true) detachPlatformOrDie();
     if (
       [argv.flags.resume, argv.flags.ticket, argv.flags.amend].filter(
         (value) => value !== undefined,
@@ -7421,10 +7537,13 @@ async function main(): Promise<number | undefined> {
       argv.flags.project,
     );
     amendedPrevious = latestTicketRun(path, argv.flags.cd ?? process.cwd());
-    const amended = amendTicket(path, readFileSync(argv.flags.file, "utf8"));
-    if (amended instanceof Error) fatal(amended.message);
+    stageDispatchAmendment(
+      path,
+      readFileSync(path, "utf8"),
+      readFileSync(argv.flags.file, "utf8"),
+    );
     process.stderr.write(
-      "amend: worker not running — amended ticket and redispatched\n",
+      "amend: worker not running — staged amendment for redispatch admission\n",
     );
     argv.flags.ticket = target;
   }
@@ -7524,7 +7643,7 @@ async function main(): Promise<number | undefined> {
       fatal(
         `--sandbox must be none, read-only or workspace-write, not '${f.sandbox}'`,
       );
-    const preflight = readFileSync(f.promptFile, "utf8");
+    const preflight = dispatchBrief(f.promptFile);
     const preflightGrade = await lintTicket(
       preflight,
       resolve(f.cd ?? process.cwd()),
@@ -7550,10 +7669,11 @@ async function main(): Promise<number | undefined> {
     const prepared =
       f.workspace === undefined
         ? undefined
-        : await prepareWorkspace(dispatchRoot, f.workspace);
+        : await planWorkspace(dispatchRoot, f.workspace);
+    if (prepared !== undefined && !prepared.ok) fatal(prepared.error);
     const flags: RunFlags = {
       promptFile: f.promptFile,
-      cd: prepared?.path ?? f.cd ?? process.cwd(),
+      cd: f.cd ?? process.cwd(),
       sandbox: f.sandbox,
       row: f.row,
       approval: f.approval,
@@ -7574,10 +7694,18 @@ async function main(): Promise<number | undefined> {
         repickPromptFile,
         f.amend === undefined ? f.file : undefined,
       ].filter((path) => path !== undefined),
-      ...(prepared === undefined ? {} : { workspaceName: prepared.name }),
+      ...(prepared === undefined
+        ? {}
+        : {
+            workspacePlan: {
+              name: prepared.name,
+              path: prepared.path,
+              root: dispatchRoot,
+            },
+          }),
       dispatchRoot,
     };
-    return f.detach === true ? detachDispatch(flags, rawArgs) : run(flags);
+    return run(flags);
   }
   if (argv.command === "ticket-lint") {
     const lintPath = existsSync(argv._.file)
@@ -8151,8 +8279,10 @@ function resolveRunId(
     if (previous?.kind === "started" && entry.kind === "detached") continue;
     unique.set(entry.run_id, entry);
   }
-  const runs = [...unique.values()].toSorted((a, b) =>
-    (a.started_at ?? a.at ?? "").localeCompare(b.started_at ?? b.at ?? ""),
+  const runs = [...unique.values()].toSorted(
+    (a, b) =>
+      (instantMilliseconds(a.started_at ?? a.at) ?? 0) -
+      (instantMilliseconds(b.started_at ?? b.at) ?? 0),
   );
   if (id === "latest") return runs.at(-1)?.run_id ?? id;
   if (id === "" || runs.some((l) => l.run_id === id)) return id;
@@ -8219,6 +8349,21 @@ function reportNoteFor(
   return "no typed final report (this run was recorded before typed reports)";
 }
 
+function latestAcceptance(runId: string): boolean | undefined {
+  const row = readLeaseEvidence(STATE_DIR)
+    .filter(
+      (line) =>
+        ["acceptance", "landed"].includes(line.kind ?? "") &&
+        line.run_id === runId,
+    )
+    .toSorted(
+      (a, b) =>
+        (instantMilliseconds(a.at) ?? 0) - (instantMilliseconds(b.at) ?? 0),
+    )
+    .at(-1);
+  return row?.kind === "landed" ? true : row?.accept;
+}
+
 /** Show a completed run's compact receipt header and the worker's own final report. */
 function resultCommand(
   id: string,
@@ -8233,6 +8378,7 @@ function resultCommand(
     const reports = active.interim_reports ?? [];
     const snapshot = {
       ...active,
+      accept: latestAcceptance(active.run_id) ?? null,
       name: active.ticket?.name ?? active.display_id ?? active.run_id,
       row: active.choice,
       picked_probability: active.picked_probability ?? null,
@@ -8255,6 +8401,7 @@ function resultCommand(
       `ticket=${snapshot.name}`,
       `proposition=${active.proposition ?? "-"}`,
       `run=${active.run_id}`,
+      `accept=${snapshot.accept ?? "pending"}`,
       `row=${snapshot.row}`,
       `probability=${snapshot.picked_probability ?? "?"}`,
       `cost=${snapshot.cost_usd === null ? "?" : `$${snapshot.cost_usd.toFixed(6)}`}`,
@@ -8288,9 +8435,7 @@ function resultCommand(
     return 0;
   }
   const worker = logged.worker;
-  const acceptance = readAllLog().findLast(
-    (line) => line.kind === "acceptance" && line.run_id === resolved,
-  )?.accept;
+  const acceptance = latestAcceptance(resolved);
   const outcome = worker?.outcome ?? "unknown";
   const cause = worker?.cause;
   const report = worker?.last_message ?? "";

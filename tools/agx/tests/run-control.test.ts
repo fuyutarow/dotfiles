@@ -44,6 +44,16 @@ function cli(
   };
 }
 
+function detachedAdmissionEnv(stubDir: string): Record<string, string> {
+  const codex = join(stubDir, "codex");
+  writeFileSync(
+    codex,
+    `#!${process.execPath}\nprocess.stdout.write("codex 0.162.0-fixture\\n");\n`,
+  );
+  chmodSync(codex, 0o755);
+  return { AGX_CODEX_WORKER: codex, CODEX_BIN: codex };
+}
+
 function marker(
   runId: string,
   pid: number,
@@ -467,6 +477,37 @@ test("ledger gc records dead markers, leaves live markers, and supports dry-run"
   ).toBe("abandoned");
 });
 
+test("ticket lookup orders fractional timestamps chronologically for show and ledger note", () => {
+  const state = join(scratch, "fractional-timestamp-lookup");
+  mkdirSync(state);
+  const rows = [
+    { run_id: "earlier", started_at: "2026-10-13T04:00:00.1Z" },
+    { run_id: "latest", started_at: "2026-10-13T04:00:00.11Z" },
+  ].map(({ run_id, started_at }) => ({
+    run_id,
+    started_at,
+    kind: "run",
+    cwd: scratch,
+    ticket: { name: "latest_note", writes: [] },
+    pick: { source: "fixture", choice: "luna-low" },
+    worker: { outcome: "ok", last_message: "done" },
+  }));
+  writeFileSync(
+    join(state, "runs.jsonl"),
+    rows.map((row) => JSON.stringify(row)).join("\n") + "\n",
+  );
+  const shown = cli(["show", "latest_note", "--json"], state);
+  expect(shown.code, shown.err).toBe(0);
+  expect(
+    decodedJson(z.looseObject({ run_id: z.string() }), shown.out).run_id,
+  ).toBe("latest");
+  const noted = cli(["ledger", "note", "latest_note", "--consumed"], state);
+  expect(noted.code, noted.err).toBe(0);
+  expect(
+    decodedJson(z.looseObject({ run_id: z.string() }), noted.out).run_id,
+  ).toBe("latest");
+});
+
 test("dispatch --detach builds Linux systemd-run argv through a stub and reaps stale markers", () => {
   const state = join(scratch, "detach-state");
   const active = join(state, "active");
@@ -509,9 +550,15 @@ test("dispatch --detach builds Linux systemd-run argv through a stub and reaps s
       "--name",
       "detach_test",
       "--detach",
+      "--row",
+      "luna-low",
+      "--approval",
+      "fixture",
+      "--no-grader",
     ],
     state,
     {
+      ...detachedAdmissionEnv(stubDir),
       AGX_DETACH_PLATFORM: "linux",
       AGX_CAPTURE: capture,
       AGX_PROBE: "forwarded",
@@ -520,7 +567,7 @@ test("dispatch --detach builds Linux systemd-run argv through a stub and reaps s
       PATH: `${stubDir}:${process.env.PATH ?? ""}`,
     },
   );
-  expect(result.code).toBe(0);
+  expect(result.code, result.err).toBe(0);
   expect(result.err).toContain("marked 1 abandoned run");
   expect(existsSync(staleMarker)).toBe(false);
   expect(result.out).toContain("journalctl --user -u agx-detach_test-");
@@ -549,8 +596,23 @@ test("dispatch --detach builds Linux systemd-run argv through a stub and reaps s
   const runId = childArgs[runIdIndex + 1];
   expect(runId).toBeDefined();
   expect(result.out).toContain(`run_id: ${runId}`);
-  expect(childArgs).toContain("--name");
-  expect(childArgs).toContain("detach_test");
+  const decisionArg = args.find((arg) =>
+    arg.startsWith("--setenv=AGX_ADMITTED_LAUNCH="),
+  );
+  expect(decisionArg).toBeDefined();
+  const decision = decodedJson(
+    z.looseObject({
+      flags: z.looseObject({ name: z.string(), runId: z.string() }),
+      pick: z.looseObject({ choice: z.string() }),
+    }),
+    readFileSync(
+      decisionArg?.slice("--setenv=AGX_ADMITTED_LAUNCH=".length) ?? "",
+      "utf8",
+    ),
+  );
+  expect(decision.flags.name).toBe("detach_test");
+  expect(runId).toBe(decision.flags.runId);
+  expect(decision.pick.choice).toBe("luna-low");
 });
 
 test("dispatch --detach refuses a GPU ticket when nvidia-smi is absent", () => {
@@ -560,7 +622,9 @@ test("dispatch --detach refuses a GPU ticket when nvidia-smi is absent", () => {
   const prompt = join(scratch, "detached-gpu-brief.md");
   writeFileSync(
     prompt,
-    completeTicket("+++\nschema = 2\nrequires_gpu = true\n+++\nGPU task\n"),
+    completeTicket(
+      "+++\nschema = 2\nrequires_gpu = true\n+++\nRESOURCE-CLASS(NONCOMPUTE): fixture visibility probe\nGPU task\n",
+    ),
   );
   const result = cli(
     [
@@ -574,6 +638,11 @@ test("dispatch --detach refuses a GPU ticket when nvidia-smi is absent", () => {
       "--name",
       "detach_gpu",
       "--detach",
+      "--row",
+      "luna-low",
+      "--approval",
+      "fixture",
+      "--no-grader",
     ],
     state,
     { AGX_DETACH_PLATFORM: "linux", PATH: emptyPath },
@@ -740,16 +809,22 @@ test("dispatch --detach reports lease refusal before creating a unit or run_id",
       "--name",
       "detach_lease",
       "--detach",
+      "--row",
+      "luna-low",
+      "--approval",
+      "fixture",
+      "--no-grader",
     ],
     state,
     {
+      ...detachedAdmissionEnv(stubDir),
       AGX_DETACH_PLATFORM: "linux",
       AGX_CAPTURE: capture,
       CLAUDE_CODE_SESSION_ID: "session-detached-lease",
       PATH: `${stubDir}:${process.env.PATH ?? ""}`,
     },
   );
-  expect(result.code).toBe(2);
+  expect(result.code, result.err).toBe(2);
   expect(result.err).toContain("existing-live-holder");
   expect(result.out).not.toContain("run_id:");
   expect(existsSync(capture)).toBe(false);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.5.3 — 2026-10-13
+
+- Complete detached validation, routing, worker-slot and write-lease admission in the dispatcher before workspace creation or OS-manager handoff. Pass the admitted pick, launch data and roster snapshot to the unit; it never routes or reclaims the lease. Lease refusals, including lock timeouts, exit 2 in the dispatcher without printing a run handle.
+- Show routed lease refusals as `refused` with their reason in `ps`. Read acceptance and landing records without requiring routing fields, across the live ledger, dated shards and run journals; `show` reports the latest judgment. Resolve the latest ticket run chronologically, including timestamps with different fractional precision.
+
 ## 3.5.2 — 2026-10-13
 
 - Move workspace and process liveness observations out of the repository write-lease critical section; admission rechecks current evidence and overlapping write scopes while holding the lock, then records the admission only after a conflict-free decision.

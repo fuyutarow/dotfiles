@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.5.2 — 2026-10-13
+
+- Move workspace and process liveness observations out of the repository write-lease critical section; admission rechecks current evidence and overlapping write scopes while holding the lock, then records the admission only after a conflict-free decision.
+- Bound repository write-lease lock waits to 30 seconds, reclaim locks with dead owners, include holder pid/run/ticket and held duration in timeout refusals, and use exit code 75 for lock timeouts.
+
 ## 3.5.1 — 2026-10-13
 
 - Require a lease-aware admission; run history alone never creates holders. Recognize a 3.5.0 lease receipt only when its run ID, repository, workspace, ticket and writes match independent run metadata, and upgrade it to an explicit admission during GC or admission. Transfer ownership to an amend/resume/repick successor and propagate judgment through predecessor links.

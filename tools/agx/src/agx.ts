@@ -598,10 +598,11 @@ function claudeTranscript(cwd: string, session: string): string {
 function fatal(
   message: string,
   reasonCount = Math.max(1, message.split("; ").length),
+  exitCode = 2,
 ): never {
   const count = `${reasonCount} ${reasonCount === 1 ? "reason" : "reasons"}`;
   process.stderr.write(`agx: REFUSED: ${message} (${count})\n`);
-  return process.exit(2);
+  return process.exit(exitCode);
 }
 
 async function loadRosterOrDie(): Promise<Roster> {
@@ -4641,7 +4642,8 @@ function claimRunWrites(
     dispatcher_session: currentDispatcherSession() ?? "unknown",
     since: now(),
   });
-  if (!result.ok) fatal(`agx: write lease refused: ${result.error}`, 2);
+  if (!result.ok)
+    fatal(`agx: write lease refused: ${result.error}`, 2, result.exitCode ?? 2);
 }
 
 function releaseRunWrites(

@@ -52,6 +52,105 @@ function row(run_id: string, cwd: string, name = run_id): LeaseEvidence {
   };
 }
 
+test("four admissions after a slow router do not time out on disjoint leases", async () => {
+  const input = context("slow-router-race");
+  const admissions = await Promise.all(
+    Array.from({ length: 4 }, async (_, index) => {
+      await Bun.sleep(100);
+      const cwd = join(scratch, `slow-router-workspace-${index}`);
+      mkdirSync(join(cwd, ".jj"), { recursive: true });
+      return claimWriteLease({
+        ...input,
+        run_id: `slow-${index}`,
+        cwd,
+        writes: [`tools/part-${index}/**`],
+        ticket: `slow-${index}`,
+        dispatcher_session: "test-session",
+        since: Temporal.Now.instant().toString(),
+        evidence: [],
+        workspaceChanges: () => ({ changed: false }),
+      });
+    }),
+  );
+  expect(admissions.every((result) => result.ok)).toBe(true);
+
+  const overlap = claimWriteLease({
+    ...input,
+    run_id: "overlap",
+    cwd: join(scratch, "slow-router-workspace-overlap"),
+    writes: ["tools/part-2/file.ts"],
+    ticket: "overlap",
+    dispatcher_session: "test-session",
+    since: Temporal.Now.instant().toString(),
+    evidence: [],
+    workspaceChanges: () => ({ changed: false }),
+  });
+  expect(overlap.ok).toBe(false);
+  if (!overlap.ok) expect(overlap.error).toContain("held by run slow-2");
+});
+
+test("lock timeout names its live holder and uses a distinct exit code", () => {
+  const input = context("lock-timeout");
+  const dir = join(input.stateDir, "write-leases", hash(input.repo));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, ".lock"),
+    JSON.stringify({
+      pid: process.pid,
+      run_id: "holder-run",
+      ticket: "holder-ticket",
+      since: Temporal.Now.instant().subtract({ seconds: 8 }).toString(),
+    }),
+  );
+  const result = claimWriteLease({
+    ...input,
+    run_id: "waiter",
+    cwd: input.cwd,
+    writes: ["tools/new/**"],
+    ticket: "waiter-ticket",
+    dispatcher_session: "test-session",
+    since: Temporal.Now.instant().toString(),
+    evidence: [],
+    lockWaitMs: 40,
+  });
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.exitCode).toBe(75);
+    expect(result.error).toContain("pid ");
+    expect(result.error).toContain("run holder-run");
+    expect(result.error).toContain("ticket holder-ticket");
+    expect(result.error).toContain("held 8s");
+  }
+});
+
+test("a lock held by a dead pid is reclaimed for admission", () => {
+  const input = context("stale-lock");
+  const dir = join(input.stateDir, "write-leases", hash(input.repo));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, ".lock"),
+    JSON.stringify({
+      pid: 2_147_483_647,
+      run_id: "dead-run",
+      ticket: "dead-ticket",
+      since: Temporal.Now.instant().toString(),
+    }),
+  );
+  const result = claimWriteLease({
+    ...input,
+    run_id: "new-after-stale",
+    cwd: input.cwd,
+    writes: ["tools/new/**"],
+    ticket: "new-after-stale",
+    dispatcher_session: "test-session",
+    since: Temporal.Now.instant().toString(),
+    evidence: [],
+    lockWaitMs: 100,
+  });
+  expect(result.ok).toBe(true);
+  expect(existsSync(join(dir, ".lock"))).toBe(false);
+});
+
 test("live OR unjudged unlanded changes: live holds even after judgment or workspace removal", () => {
   const input = context("formula");
   const evidence = [

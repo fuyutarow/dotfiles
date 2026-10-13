@@ -35,11 +35,13 @@ const processTreeAvailable = (await processTreeCpu(process.pid)) !== undefined;
 // Every request body the fake Jev received, in order (what left the machine).
 const bodies: string[] = [];
 let onJevRequest: ((body: string) => void) | undefined;
+let jevDelayMs = 0;
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   fetch: async (req) => {
     const body = await req.text();
+    if (jevDelayMs > 0) await Bun.sleep(jevDelayMs);
     bodies.push(body);
     const requestHook = onJevRequest;
     onJevRequest = undefined;
@@ -449,6 +451,80 @@ const ExportRecord = z.looseObject({
 const RunIdSchema = z.looseObject({ run_id: z.string() });
 
 describe("agx dispatch", () => {
+  test("four concurrent admissions survive slow Jev routing and still reject overlap", async () => {
+    const cwd = freshCwd();
+    const state = join(scratch, "state-slow-routing-leases");
+    const routedBriefs = Array.from({ length: 4 }, (_, index) =>
+      brief(
+        `slow-route-${index}`,
+        ticketText(
+          `name = "slow-route-${index}"\nwrites = ["tools/part-${index}/**"]\nverify = ["true"]`,
+          "Make the disjoint change.\n",
+        ),
+      ),
+    );
+    jevDelayMs = 500;
+    const settled = await Promise.allSettled(
+      routedBriefs.map((promptFile) =>
+        router(
+          [
+            "dispatch",
+            "--prompt-file",
+            promptFile,
+            "--cd",
+            cwd,
+            "--sandbox",
+            "read-only",
+          ],
+          { AGX_STATE_DIR: state, FAKE_SLEEP_MS: "900" },
+        ),
+      ),
+    );
+    jevDelayMs = 0;
+    const results = settled.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    expect(results).toHaveLength(4);
+    expect(results.map((result) => result.code)).toEqual([0, 0, 0, 0]);
+
+    const overlapState = join(scratch, "state-slow-routing-overlap");
+    const overlappingBriefs = ["overlap-a", "overlap-b"].map((name) =>
+      brief(
+        name,
+        ticketText(
+          `name = "${name}"\nwrites = ["tools/shared/**"]\nverify = ["true"]`,
+          "Make the overlapping change.\n",
+        ),
+      ),
+    );
+    jevDelayMs = 500;
+    const overlappingSettled = await Promise.allSettled(
+      overlappingBriefs.map((promptFile) =>
+        router(
+          [
+            "dispatch",
+            "--prompt-file",
+            promptFile,
+            "--cd",
+            cwd,
+            "--sandbox",
+            "read-only",
+          ],
+          { AGX_STATE_DIR: overlapState, FAKE_SLEEP_MS: "1500" },
+        ),
+      ),
+    );
+    jevDelayMs = 0;
+    const overlapping = overlappingSettled.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    expect(overlapping).toHaveLength(2);
+    expect(overlapping.filter((result) => result.code === 0)).toHaveLength(1);
+    const refusal = overlapping.find((result) => result.code !== 0);
+    expect(refusal?.code).toBe(2);
+    expect(refusal?.err).toContain("held by run");
+  });
+
   test("several interim RETURNs stay in one run and keep the same vendor session", async () => {
     const cwd = freshCwd();
     const calls = join(cwd, "continuation-calls.jsonl");

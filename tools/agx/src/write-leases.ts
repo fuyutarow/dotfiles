@@ -339,7 +339,20 @@ function saveLease(dir: string, lease: WriteLease): void {
   renameSync(temp, path);
 }
 
-type LockResult<T> = { ok: true; value: T } | { ok: false; error: string };
+type LockResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string; exitCode?: number };
+
+const REPO_LOCK_WAIT_MS = 30_000;
+const REPO_LOCK_TIMEOUT_EXIT = 75;
+const epochMilliseconds = () => Temporal.Now.instant().epochMilliseconds;
+type LockHolder = Readonly<{ run_id?: string; ticket?: string }>;
+type LockOwner = Readonly<{
+  pid: number;
+  run_id?: string;
+  ticket?: string;
+  since: string;
+}>;
 
 function lockOwnerIsDead(path: string): boolean {
   const ownerText = fromThrowable(
@@ -347,13 +360,71 @@ function lockOwnerIsDead(path: string): boolean {
     errorMessage,
   )();
   if (ownerText.isErr()) return false;
-  const pid = Number(ownerText.value);
+  const parsed = jsonOf(
+    z.object({ pid: z.number().int().positive() }),
+  ).safeParse(ownerText.value);
+  const pid = parsed.success ? parsed.data.pid : Number(ownerText.value);
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   const alive = fromThrowable(() => process.kill(pid, 0), errorMessage)();
   return alive.isErr() && alive.error.includes("ESRCH");
 }
 
-function withRepoLock<T>(dir: string, operation: () => T): LockResult<T> {
+function waitForLockOrReap(
+  path: string,
+  wait: Int32Array,
+  remainingMs: number,
+): void {
+  if (lockOwnerIsDead(path)) {
+    fromThrowable(() => {
+      unlinkSync(path);
+    }, errorMessage)();
+    return;
+  }
+  Atomics.wait(wait, 0, 0, Math.min(25, remainingMs));
+}
+
+function lockHolderDescription(path: string): string {
+  const ownerText = fromThrowable(
+    () => readFileSync(path, "utf8"),
+    errorMessage,
+  )();
+  if (ownerText.isErr()) return "holder unknown";
+  const parsed = jsonOf(
+    z.object({
+      pid: z.number().int().positive(),
+      run_id: z.string().optional(),
+      ticket: z.string().optional(),
+      since: z.string(),
+    }),
+  ).safeParse(ownerText.value);
+  if (!parsed.success) {
+    if (/^\d+$/u.test(ownerText.value))
+      return `pid ${ownerText.value}, held duration unknown`;
+    return "holder unknown";
+  }
+  const owner = parsed.data;
+  const held = fromThrowable(
+    () =>
+      Math.max(
+        0,
+        epochMilliseconds() -
+          Temporal.Instant.from(owner.since).epochMilliseconds,
+      ),
+    errorMessage,
+  )();
+  const run = owner.run_id === undefined ? "" : `, run ${owner.run_id}`;
+  const ticket = owner.ticket === undefined ? "" : `, ticket ${owner.ticket}`;
+  let duration = "unknown duration";
+  if (held.isOk()) duration = `${Math.round(held.value / 1000)}s`;
+  return `pid ${owner.pid}${run}${ticket}, held ${duration}`;
+}
+
+function withRepoLock<T>(
+  dir: string,
+  holder: LockHolder,
+  operation: () => T,
+  waitMs = REPO_LOCK_WAIT_MS,
+): LockResult<T> {
   const made = fromThrowable(
     () => mkdirSync(dir, { recursive: true }),
     errorMessage,
@@ -361,37 +432,43 @@ function withRepoLock<T>(dir: string, operation: () => T): LockResult<T> {
   if (made.isErr()) return { ok: false, error: made.error };
   const lock = join(dir, ".lock");
   const wait = new Int32Array(new SharedArrayBuffer(4));
+  const startedAt = epochMilliseconds();
   let descriptor: number | undefined;
-  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+  while (epochMilliseconds() - startedAt < waitMs) {
     const opened = fromThrowable(() => openSync(lock, "wx"), errorMessage)();
-    if (opened.isOk()) {
-      descriptor = opened.value;
-      break;
-    }
-    if (!opened.error.includes("EEXIST"))
+    if (opened.isErr() && !opened.error.includes("EEXIST"))
       return { ok: false, error: opened.error };
-    if (lockOwnerIsDead(lock)) {
+    if (opened.isErr()) {
+      waitForLockOrReap(lock, wait, waitMs - (epochMilliseconds() - startedAt));
+      continue;
+    }
+    const acquiredDescriptor = opened.value;
+    descriptor = acquiredDescriptor;
+    const owner: LockOwner = {
+      pid: process.pid,
+      ...(holder.run_id === undefined ? {} : { run_id: holder.run_id }),
+      ...(holder.ticket === undefined ? {} : { ticket: holder.ticket }),
+      since: Temporal.Now.instant().toString(),
+    };
+    const written = fromThrowable(() => {
+      writeSync(acquiredDescriptor, JSON.stringify(owner));
+      closeSync(acquiredDescriptor);
+    }, errorMessage)();
+    if (written.isErr()) {
       fromThrowable(() => {
         unlinkSync(lock);
       }, errorMessage)();
-      continue;
+      return { ok: false, error: written.error };
     }
-    Atomics.wait(wait, 0, 0, 10);
+    break;
   }
-  if (descriptor === undefined)
+  if (descriptor === undefined) {
+    const identity = lockHolderDescription(lock);
     return {
       ok: false,
-      error: "timed out waiting for the repository write-lease lock",
+      error: `timed out after ${waitMs}ms waiting for the repository write-lease lock (${identity})`,
+      exitCode: REPO_LOCK_TIMEOUT_EXIT,
     };
-  const closed = fromThrowable(() => {
-    writeSync(descriptor, String(process.pid));
-    closeSync(descriptor);
-  }, errorMessage)();
-  if (closed.isErr()) {
-    fromThrowable(() => {
-      unlinkSync(lock);
-    }, errorMessage)();
-    return { ok: false, error: closed.error };
   }
   const result = fromThrowable(operation, errorMessage)();
   const released = fromThrowable(() => {
@@ -640,7 +717,7 @@ export function reconcileWriteLeases(
   input: FoldInput,
 ): LockResult<WriteLease[]> {
   const dir = repoLeaseDir(input.stateDir, input.repo);
-  const result = withRepoLock(dir, () => {
+  const result = withRepoLock(dir, {}, () => {
     for (const admission of legacyAdmissions({
       ...input,
       evidence: [...readLeaseEvidence(input.stateDir), ...input.evidence],
@@ -709,77 +786,120 @@ export function claimWriteLease(input: {
   dispatcher_session: string;
   since: string;
   predecessor?: string;
+  lockWaitMs?: number;
   activeRunIds: ReadonlySet<string>;
   evidence: readonly LeaseEvidence[];
   workspaceChanges?: (cwd: string) => WorkspaceChanges;
   unitAlive?: (unit: string) => boolean;
+  processAlive?: (pid: number | undefined) => boolean;
 }): LockResult<void> {
   if (input.writes.length === 0) return { ok: true, value: undefined };
   const dir = repoLeaseDir(input.stateDir, input.repo);
-  const result = withRepoLock(dir, () => {
-    const decisions = foldWriteLeases({
-      ...input,
-      evidence: [...readLeaseEvidence(input.stateDir), ...input.evidence],
-    });
-    for (const decision of decisions.filter((item) => item.abandoned)) {
-      const appended = appendLedgerLine(
-        input.stateDir,
-        JSON.stringify({
-          kind: "abandoned",
-          run_id: decision.lease.run_id,
-          cwd: decision.lease.cwd,
-          ticket: {
-            name: decision.lease.ticket,
-            writes: decision.lease.writes,
-          },
-          at: Temporal.Now.instant().toString(),
-          reason: "stopped externally",
-        }) + "\n",
-      );
-      if (!appended.ok) return { ok: false as const, reason: appended.error };
-    }
-    const leases = rebuildLeases(dir, decisions);
-    const conflict = overlapReason(input.run_id, input.writes, leases, input);
-    if (conflict !== undefined) {
-      const unavailable = decisions
-        .filter((item) => item.held && item.error !== undefined)
-        .map((item) => item.error)
-        .join("; ");
-      return {
-        ok: false as const,
-        reason: `${conflict}${unavailable === "" ? "" : `; workspace check failed closed: ${unavailable}`}`,
-      };
-    }
-    const predecessor =
-      input.predecessor ??
-      leases.find(
-        (lease) =>
-          lease.ticket === input.ticket &&
-          workspaceDirectory(lease.cwd) === workspaceDirectory(input.cwd),
-      )?.run_id;
-    saveAdmission(input.stateDir, {
-      kind: "admitted",
-      lease_version: 1,
-      ...(predecessor === undefined ? {} : { predecessor }),
-      run_id: input.run_id,
-      repo: input.repo,
-      cwd: input.cwd,
-      ticket: { name: input.ticket, writes: input.writes },
-      dispatcher_session: input.dispatcher_session,
-      started_at: input.since,
-      pid: process.pid,
-    });
-    saveLease(dir, {
-      repo: input.repo,
-      run_id: input.run_id,
-      cwd: input.cwd,
-      writes: input.writes,
-      ticket: input.ticket,
-      dispatcher_session: input.dispatcher_session,
-      since: input.since,
-    });
-    return { ok: true as const };
+  const workspaceSnapshots = new Map<string, WorkspaceChanges>();
+  const processSnapshots = new Map<number | undefined, boolean>();
+  const unitSnapshots = new Map<string, boolean>();
+  const snapshotEvidence = [
+    ...readLeaseEvidence(input.stateDir),
+    ...input.evidence,
+  ];
+  foldWriteLeases({
+    ...input,
+    evidence: snapshotEvidence,
+    workspaceChanges: (cwd) => {
+      const result = (input.workspaceChanges ?? workspaceChanges)(cwd);
+      workspaceSnapshots.set(resolve(cwd), result);
+      return result;
+    },
+    processAlive: (pid) => {
+      const result = (input.processAlive ?? processAlive)(pid);
+      processSnapshots.set(pid, result);
+      return result;
+    },
+    unitAlive: (unit) => {
+      const result = (input.unitAlive ?? unitAlive)(unit);
+      unitSnapshots.set(unit, result);
+      return result;
+    },
   });
+  const result = withRepoLock(
+    dir,
+    input,
+    () => {
+      const decisions = foldWriteLeases({
+        ...input,
+        evidence: [...readLeaseEvidence(input.stateDir), ...input.evidence],
+        workspaceChanges: (cwd) =>
+          workspaceSnapshots.get(resolve(cwd)) ?? {
+            changed: true,
+            error:
+              "workspace appeared after admission preflight; assuming changes (fail closed)",
+          },
+        processAlive: (pid) => processSnapshots.get(pid) ?? true,
+        unitAlive: (unit) => unitSnapshots.get(unit) ?? true,
+      });
+      const leases = decisions
+        .filter((decision) => decision.held)
+        .map((decision) => decision.lease);
+      const conflict = overlapReason(input.run_id, input.writes, leases, input);
+      if (conflict !== undefined) {
+        const unavailable = decisions
+          .filter((item) => item.held && item.error !== undefined)
+          .map((item) => item.error)
+          .join("; ");
+        return {
+          ok: false as const,
+          reason: `${conflict}${unavailable === "" ? "" : `; workspace check failed closed: ${unavailable}`}`,
+        };
+      }
+      for (const decision of decisions.filter((item) => item.abandoned)) {
+        const appended = appendLedgerLine(
+          input.stateDir,
+          JSON.stringify({
+            kind: "abandoned",
+            run_id: decision.lease.run_id,
+            cwd: decision.lease.cwd,
+            ticket: {
+              name: decision.lease.ticket,
+              writes: decision.lease.writes,
+            },
+            at: Temporal.Now.instant().toString(),
+            reason: "stopped externally",
+          }) + "\n",
+        );
+        if (!appended.ok) return { ok: false as const, reason: appended.error };
+      }
+      const predecessor =
+        input.predecessor ??
+        leases.find(
+          (lease) =>
+            lease.ticket === input.ticket &&
+            workspaceDirectory(lease.cwd) === workspaceDirectory(input.cwd),
+        )?.run_id;
+      saveAdmission(input.stateDir, {
+        kind: "admitted",
+        lease_version: 1,
+        ...(predecessor === undefined ? {} : { predecessor }),
+        run_id: input.run_id,
+        repo: input.repo,
+        cwd: input.cwd,
+        ticket: { name: input.ticket, writes: input.writes },
+        dispatcher_session: input.dispatcher_session,
+        started_at: input.since,
+        pid: process.pid,
+      });
+      saveLease(dir, {
+        repo: input.repo,
+        run_id: input.run_id,
+        cwd: input.cwd,
+        writes: input.writes,
+        ticket: input.ticket,
+        dispatcher_session: input.dispatcher_session,
+        since: input.since,
+      });
+      return { ok: true as const };
+    },
+    input.lockWaitMs,
+  );
   if (!result.ok) return result;
   return result.value.ok
     ? { ok: true, value: undefined }
@@ -792,7 +912,7 @@ export function releaseWriteLease(input: {
   run_id: string;
 }): LockResult<void> {
   const dir = repoLeaseDir(input.stateDir, input.repo);
-  return withRepoLock(dir, () => {
+  return withRepoLock(dir, { run_id: input.run_id }, () => {
     const appended = appendLedgerLine(
       input.stateDir,
       JSON.stringify({

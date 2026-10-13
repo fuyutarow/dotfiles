@@ -20,7 +20,15 @@
 // the fact something already recorded. See the long comment above gitHead() for the reasoning and
 // the reproduction that motivated it, and checkIndexFreshness() for the read-side mechanics.
 
-import { readdir, rename } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  readdir,
+  rename,
+  stat as statFile,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -151,9 +159,120 @@ const WatermarkSchema = z.object({
 
 const WATERMARK_BASENAME = "INDEXED_AT";
 const INDEX_REQUEST_BASENAME = "INDEX_REQUEST.json";
+const AUTO_REINDEX_STAMP_BASENAME = "AUTO_REINDEX_AT";
+const AUTO_REINDEX_LOCK_BASENAME = "AUTO_REINDEX.lock";
 const INDEX_ATTEMPTS = 3;
 const INDEX_POLL_MS = 1_000;
 const INDEX_STALL_MS = 600_000;
+const AUTO_REINDEX_WINDOW_MS = 120_000;
+const ErrnoCodeSchema = z.object({ code: z.string() });
+
+function errnoCode(error: unknown): string | null {
+  const parsed = ErrnoCodeSchema.safeParse(error);
+  return parsed.success ? parsed.data.code : null;
+}
+
+async function acquireAutoReindexLock(
+  path: string,
+): Promise<Result<Awaited<ReturnType<typeof open>> | null, Error>> {
+  const create = () => fromAsyncThrowable(() => open(path, "wx"), asError)();
+  const first = await create();
+  if (first.isOk()) return ok(first.value);
+  if (errnoCode(first.error) !== "EEXIST") return err(first.error);
+
+  const info = await fromAsyncThrowable(() => statFile(path), asError)();
+  if (info.isErr() && errnoCode(info.error) !== "ENOENT")
+    return err(info.error);
+  if (
+    info.isOk() &&
+    Temporal.Now.instant().epochMilliseconds - info.value.mtimeMs <
+      AUTO_REINDEX_WINDOW_MS
+  )
+    return ok(null);
+
+  const removed = await fromAsyncThrowable(() => unlink(path), asError)();
+  if (removed.isErr() && errnoCode(removed.error) !== "ENOENT")
+    return err(removed.error);
+  const retry = await create();
+  return retry.match(
+    (file) => ok(file),
+    (error) => (errnoCode(error) === "EEXIST" ? ok(null) : err(error)),
+  );
+}
+
+export async function requestAutoReindex(
+  project: string,
+): Promise<Result<{ started: boolean; pid?: number }, Error>> {
+  const directory = resolveDbDir(project);
+  if (directory.isErr()) return err(directory.error);
+  const created = await fromAsyncThrowable(
+    () => mkdir(directory.value, { recursive: true }),
+    asError,
+  )();
+  if (created.isErr()) return err(created.error);
+  const lockPath = join(directory.value, AUTO_REINDEX_LOCK_BASENAME);
+  const stampPath = join(directory.value, AUTO_REINDEX_STAMP_BASENAME);
+  const acquired = await acquireAutoReindexLock(lockPath);
+  if (acquired.isErr()) return err(acquired.error);
+  if (acquired.value === null) return ok({ started: false });
+  const lockFile = acquired.value;
+
+  const run = async (): Promise<
+    Result<{ started: boolean; pid?: number }, Error>
+  > => {
+    const previous = await fromAsyncThrowable(
+      async () => Number((await Bun.file(stampPath).text()).trim()),
+      asError,
+    )();
+    if (
+      previous.isOk() &&
+      Number.isFinite(previous.value) &&
+      Temporal.Now.instant().epochMilliseconds - previous.value <
+        AUTO_REINDEX_WINDOW_MS
+    )
+      return ok({ started: false });
+    if (previous.isErr() && errnoCode(previous.error) !== "ENOENT")
+      return err(previous.error);
+
+    const now = Temporal.Now.instant().epochMilliseconds;
+    const stamped = await fromAsyncThrowable(
+      () => writeFile(stampPath, `${now}\n`),
+      asError,
+    )();
+    if (stamped.isErr()) return err(stamped.error);
+    const child = fromThrowable(
+      () =>
+        // bounded: the detached worker's index command uses INDEX_STALL_MS.
+        Bun.spawn(
+          [
+            process.execPath,
+            fileURLToPath(new URL("./repo-retrieve.ts", import.meta.url)),
+            "index",
+            "--detach",
+          ],
+          {
+            cwd: project,
+            env: process.env,
+            stdin: "ignore",
+            stdout: "ignore",
+            stderr: "ignore",
+            detached: true,
+          },
+        ),
+      asError,
+    )();
+    if (child.isErr()) {
+      await fromAsyncThrowable(() => unlink(stampPath), asError)();
+      return err(child.error);
+    }
+    child.value.unref();
+    return ok({ started: true, pid: child.value.pid });
+  };
+  const result = await run();
+  await fromAsyncThrowable(() => lockFile.close(), asError)();
+  await fromAsyncThrowable(() => unlink(lockPath), asError)();
+  return result;
+}
 
 export type IndexProgressSource = {
   now: () => number;
@@ -454,66 +573,6 @@ async function isWorkingTreeDirty(
   );
 }
 
-const AUTO_INDEX_MS = 120_000;
-
-// The search routes' catch-up: re-index a project whose index exists but trails HEAD. Skipped when
-// disabled, when there is no index to update incrementally, or when the one shared daemon is
-// already indexing — a search would then wait out the whole bound behind another project.
-async function autoCatchUp(
-  project: string,
-): Promise<Result<{ ok: boolean; why: string }, Error>> {
-  if (process.env.REPO_RETRIEVE_AUTO_INDEX === "0") {
-    return ok({
-      ok: false,
-      why: "Automatic catch-up is disabled (REPO_RETRIEVE_AUTO_INDEX=0).",
-    });
-  }
-  const artifacts = await hasIndexArtifacts(project);
-  if (artifacts.isErr()) return err(artifacts.error);
-  if (!artifacts.value)
-    return ok({ ok: false, why: "No index exists to catch up incrementally." });
-  const ccc = requireExecutable("ccc");
-  if (ccc.isErr()) return err(ccc.error);
-  const statusResult = await fromAsyncThrowable(
-    () =>
-      runChildCaptured([ccc.value, "daemon", "status"], 10_000, false, project),
-    asError,
-  )();
-  if (statusResult.isErr()) return err(statusResult.error);
-  const status = statusResult.value;
-  const busy = status.stdout
-    .split("\n")
-    .filter((line) => line.includes("[indexing]"))
-    .map((line) => line.replace("[indexing]", "").trim());
-  if (busy.length > 0) {
-    return ok({
-      ok: false,
-      why: `Automatic catch-up skipped: the ccc daemon is indexing ${busy.join(", ")}.`,
-    });
-  }
-  const started = Temporal.Now.instant().epochMilliseconds;
-  process.stderr.write(
-    `NOTE: index trails HEAD; catching up (bounded ${AUTO_INDEX_MS / 1000}s)\n`,
-  );
-  const runResult = await reindexCertified(project, ccc.value, AUTO_INDEX_MS);
-  if (runResult.isErr()) return err(runResult.error);
-  const run = runResult.value;
-  const seconds = (
-    (Temporal.Now.instant().epochMilliseconds - started) /
-    1000
-  ).toFixed(1);
-  if (run.code === 0) {
-    process.stderr.write(
-      `NOTE: caught up in ${seconds}s; index certified at HEAD=${headLabel(run.head)}\n`,
-    );
-    return ok({ ok: true, why: "" });
-  }
-  return ok({
-    ok: false,
-    why: `Automatic catch-up did not certify the index (exit ${run.code} after ${seconds}s).`,
-  });
-}
-
 function scopeLine(drift: ScopeDrift | null): string {
   if (drift === null) return "";
   const shown = drift.inScope.slice(0, 5).join(", ");
@@ -543,7 +602,6 @@ type Freshness =
 export async function checkIndexFreshness(
   project: string,
   route: string,
-  allowCatchUp = true,
 ): Promise<Result<Freshness, Error>> {
   const watermarkFile = watermarkPath(project);
   if (watermarkFile.isErr()) return err(watermarkFile.error);
@@ -616,23 +674,8 @@ export async function checkIndexFreshness(
         "the index scope (ccc's own matcher), so the index is current\n",
     );
   } else if (watermark.value.head !== currentHead) {
-    // Behind through in-scope (or undecidable) changes. Catch up instead of refusing: a bounded,
-    // incremental re-index, then the same gate again — never a stale answer (owner ruling
-    // 2026-09-25). firedancer commits ~43 times an hour; the post-commit re-index skips whenever
-    // the shared daemon is busy and never retries, so searches there answered NO_INDEX for
-    // stretches, and a pipeline filtering for hits read that as "no hits" (2026-09-25).
-    const catchUpResult = allowCatchUp ? await autoCatchUp(project) : null;
-    let catchUpError: Error | undefined;
-    const catchUp =
-      catchUpResult?.match(
-        (value) => value,
-        (error) => {
-          catchUpError = error;
-          return null;
-        },
-      ) ?? null;
-    if (catchUpError !== undefined) return err(catchUpError);
-    if (catchUp?.ok === true) return checkIndexFreshness(project, route, false);
+    // Refuse this semantic request immediately. The caller starts one rate-limited detached
+    // `index --detach` request while keeping NO_INDEX as the observable result.
     return ok({
       status: "stale",
       // indexedAt is surfaced here (2026-09-04) because this is the ONE NO_INDEX case where a
@@ -650,7 +693,6 @@ export async function checkIndexFreshness(
         `gate exists to refuse serving. cite=${citationToken(watermark.value)} names the index's own ` +
         `(now-superseded) state for a citation such as --hit NO_INDEX:${citationToken(watermark.value)}. ` +
         scopeLine(drift) +
-        (catchUp === null ? "" : `${catchUp.why} `) +
         `Remedy: ${remedy(project)}\n`,
     });
   }

@@ -270,6 +270,7 @@ describe("enforce-search-route", () => {
       "jj workspace list | awk '{print $1}'",
       "agx ps | grep run-123",
       "agx ps --all 2>&1 | grep -E 'a|b'",
+      "agx ps --all --json | jq -r .x | rg -i y | head",
       "journalctl -u service | rg -v x | head",
       "bun test agents/hooks/tests | rg -v 'pass' | head -n 20",
       "jj log --limit 10 | rg -E -v -i 'foo|bar'",

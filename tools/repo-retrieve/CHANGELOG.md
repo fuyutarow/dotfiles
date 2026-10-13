@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.6 — 2026-10-13
+
+- Start one detached, rate-limited reindex when semantic search finds a stale index; report the stale state and lexical routes available meanwhile.
+- Add `rr regex -i` and permit grep/rg filters after jq in non-search output pipelines.
+
 ## 1.0.5 — 2026-10-13
 
 - Wait for observable ccc indexing progress instead of timing out on a fixed clock; add detached indexing with persistent status and HEAD-staleness reporting.

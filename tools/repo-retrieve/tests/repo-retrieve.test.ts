@@ -273,8 +273,7 @@ function run(
       ...process.env,
       PATH: `${tools.bin}:${process.env.PATH ?? ""}`,
       FAKE_SEARCH_LOG: tools.log,
-      // These tests pin the freshness GATE; its automatic catch-up has its own tests below,
-      // which set this back to "1".
+      // Most tests pin the freshness gate without depending on a live ccc installation.
       REPO_RETRIEVE_AUTO_INDEX: "0",
       ...env,
     },
@@ -381,17 +380,19 @@ describe("repo-retrieve route contract", () => {
     expect(result.stdout).not.toContain(join(backing, "src", "entry.ts"));
   });
 
-  test("semantic routes do not index a backing repo on behalf of its workspace", () => {
+  test("semantic routes request reindex from the backing repo, never the jj workspace", () => {
     const { dir: backing } = registerGitProject();
     const workspace = jjWorkspace(backing);
-    for (const args of [
+    for (const [index, args] of [
       ["about", "--query", "unindexed backing"],
       ["exists", "--query", "unindexed backing"],
-    ]) {
+    ].entries()) {
       const result = run(workspace, args, { REPO_RETRIEVE_AUTO_INDEX: "1" });
       expect(result.code).toBe(3);
       expect(result.stderr).toContain("NO_INDEX");
-      expect(result.log).not.toContain("ccc index");
+      expect(result.stderr).toContain(
+        index === 0 ? "reindex started (pid" : "reindex already requested",
+      );
       expect(result.stderr).toContain(`project=${backing}`);
     }
   });
@@ -458,9 +459,9 @@ describe("repo-retrieve route contract", () => {
     expect(result.log).toBe("");
   });
 
-  test("automatic catch-up indexes the selected corpus, not the caller", () => {
+  test("automatic reindex targets the selected corpus, not the caller", async () => {
     const caller = registerFreshGitProject().dir;
-    const { dir: corpus, head } = registerGitProject();
+    const { dir: corpus } = registerGitProject();
     plantIndexArtifact(corpus);
     writeWatermarkFile(corpus, { head: "a".repeat(40) });
     const result = run(
@@ -469,10 +470,17 @@ describe("repo-retrieve route contract", () => {
       { FAKE_SEARCH_EXPECT_CWD: corpus, REPO_RETRIEVE_AUTO_INDEX: "1" },
     );
 
-    expect(result.code).toBe(0);
-    expect(result.log).toContain("ccc index");
-    expect(result.log).toContain("ccc search known reduction");
-    expect(readFileSync(watermarkFilePath(corpus), "utf8")).toContain(head);
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain("reindex started (pid");
+    expect(result.stderr).toContain("NO_INDEX");
+    expect(result.log).not.toContain("ccc search known reduction");
+    await Bun.sleep(1_000);
+    expect(
+      existsSync(join(corpus, ".cocoindex_code", "INDEX_REQUEST.json")),
+    ).toBe(true);
+    expect(
+      existsSync(join(caller, ".cocoindex_code", "INDEX_REQUEST.json")),
+    ).toBe(false);
   });
 
   test("a downstream head that closes stdout does not produce an EPIPE stack trace", () => {
@@ -1232,25 +1240,21 @@ describe("repo-retrieve route contract", () => {
     expect(fresh.code).toBe(0);
   });
 
-  test("in-scope drift is caught up automatically: re-indexed, then served fresh", () => {
+  test("in-scope drift starts a detached reindex and remains NO_INDEX for this request", () => {
     const { dir } = registerGitProject();
     run(dir, ["index"]);
     writeFileSync(join(dir, "later.md"), "later\n");
     gitCmd(dir, ["add", "later.md"]);
     gitCmd(dir, ["commit", "-q", "-m", "later"]);
-    const head = gitCmd(dir, ["rev-parse", "HEAD"]).trim();
-
-    const result = run(dir, ["concept", "--query", "x"], {
-      REPO_RETRIEVE_AUTO_INDEX: "1",
-    });
-    expect(result.code).toBe(0);
-    expect(result.stderr).toContain(`caught up in`);
-    expect(result.stderr).toContain(`HEAD=${head}`);
-    expect(result.stdout).not.toContain("INDEXED"); // stdout carries search results only
-    expect(readFileSync(watermarkFilePath(dir), "utf8")).toContain(head);
+    const result = run(dir, ["concept", "--query", "x"]);
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain(`INDEX: stale since`);
+    expect(result.stderr).toContain(`reindex started (pid`);
+    expect(result.stderr).toContain("lexical routes now: rr text/regex/files");
+    expect(result.stdout).toBe("");
   });
 
-  test("catch-up is skipped while the daemon indexes something else: NO_INDEX names why", () => {
+  test("stale search requests detached reindex even while the daemon is busy", () => {
     const { dir } = registerGitProject();
     run(dir, ["index"]);
     writeFileSync(join(dir, "later.md"), "later\n");
@@ -1258,14 +1262,13 @@ describe("repo-retrieve route contract", () => {
     gitCmd(dir, ["commit", "-q", "-m", "later"]);
 
     const result = run(dir, ["concept", "--query", "x"], {
-      REPO_RETRIEVE_AUTO_INDEX: "1",
       FAKE_CCC_INDEXING: "1",
     });
     expect(result.code).toBe(3);
-    expect(result.stderr).toContain("Automatic catch-up skipped");
+    expect(result.stderr).toContain("reindex started (pid");
   });
 
-  test("with catch-up disabled, drift stays NO_INDEX and says so", () => {
+  test("automatic reindex is not disabled by the legacy catch-up environment flag", () => {
     const { dir } = registerGitProject();
     run(dir, ["index"]);
     writeFileSync(join(dir, "later.md"), "later\n");
@@ -1274,7 +1277,7 @@ describe("repo-retrieve route contract", () => {
 
     const result = run(dir, ["concept", "--query", "x"]);
     expect(result.code).toBe(3);
-    expect(result.stderr).toContain("REPO_RETRIEVE_AUTO_INDEX=0");
+    expect(result.stderr).toContain("reindex started (pid");
   });
 
   test("a HEAD drift that changes no path is not staleness: served, with a NOTE", () => {
@@ -1364,6 +1367,46 @@ describe("repo-retrieve route contract", () => {
     expect(result.log).toContain("rg --line-number");
     expect(result.log).not.toContain("--fixed-strings");
     expect(result.log).toContain("-- TODO|FIXME .");
+  });
+
+  test("regex -i passes case-insensitivity through to rg", () => {
+    const result = run(registerProject(), ["regex", "-i", "TODO|FIXME"]);
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain(
+      "rg --line-number --color never --ignore-case",
+    );
+    expect(result.log).toContain("-- TODO|FIXME .");
+  });
+
+  test("a stale semantic route requests one detached reindex per rate window", async () => {
+    const { dir } = registerGitProject();
+    plantIndexArtifact(dir);
+    writeWatermarkFile(dir, { head: "a".repeat(40) });
+    const log = join(
+      tmpdir(),
+      `repo-retrieve-auto-index-${crypto.randomUUID()}.log`,
+    );
+
+    const first = run(dir, ["concept", "--query", "one"], {
+      FAKE_SEARCH_LOG: log,
+      REPO_RETRIEVE_AUTO_INDEX: "1",
+      FAKE_CCC_INDEX_SLEEP: "1",
+    });
+    const second = run(dir, ["concept", "--query", "two"], {
+      FAKE_SEARCH_LOG: log,
+      REPO_RETRIEVE_AUTO_INDEX: "1",
+      FAKE_CCC_INDEX_SLEEP: "1",
+    });
+
+    expect(first.code).toBe(3);
+    expect(first.stderr).toMatch(
+      /INDEX: stale since .*; reindex started \(pid \d+\)/u,
+    );
+    expect(second.code).toBe(3);
+    expect(second.stderr).toContain("reindex already requested within 2m");
+    await Bun.sleep(2_250);
+    expect(readFileSync(log, "utf8").match(/ccc index\n/gu)?.length).toBe(1);
   });
 
   test("files routes to rg --files without a query", () => {

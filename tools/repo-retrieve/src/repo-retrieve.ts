@@ -69,6 +69,7 @@ import {
   citationToken,
   findRegisteredProject,
   headLabel,
+  requestAutoReindex,
   resolveRegisteredProject,
   runIndexStatus,
   runIndexWrapper,
@@ -326,6 +327,24 @@ async function writeNoIndexDiagnostic(
   freshnessMessage: string,
   json: boolean,
 ): Promise<void> {
+  const reindex = await requestAutoReindex(project);
+  const staleSince =
+    freshnessMessage.match(/index was built at HEAD=([^ ]+)/u)?.[1] ??
+    freshnessMessage.match(/current HEAD=([^;]+);/u)?.[1] ??
+    "unknown";
+  if (reindex.isErr()) {
+    process.stderr.write(
+      `INDEX: stale since ${staleSince}; reindex could not start (${reindex.error.message}); lexical routes now: rr text/regex/files\n`,
+    );
+  } else if (reindex.value.started) {
+    process.stderr.write(
+      `INDEX: stale since ${staleSince}; reindex started (pid ${reindex.value.pid ?? "unknown"}); lexical routes now: rr text/regex/files\n`,
+    );
+  } else {
+    process.stderr.write(
+      `INDEX: stale since ${staleSince}; reindex already requested within 2m; lexical routes now: rr text/regex/files\n`,
+    );
+  }
   const daemon = await daemonAvailability(project);
   process.stderr.write(
     freshnessMessage +
@@ -427,11 +446,7 @@ async function runCccSearch(
 
   if (resolution.workspace !== null) backingIndexNote(project);
 
-  const freshnessResult = await checkIndexFreshness(
-    project,
-    route,
-    resolution.workspace === null,
-  );
+  const freshnessResult = await checkIndexFreshness(project, route);
   if (freshnessResult.isErr()) return err(freshnessResult.error);
   const freshness = freshnessResult.value;
   if (freshness.status === "stale") {
@@ -843,7 +858,7 @@ function timeoutFlag() {
 
 function rgSearchFlags() {
   return {
-    ignoreCase: Boolean,
+    ignoreCase: { type: Boolean, alias: "i" },
     hidden: Boolean,
     context: rawString,
     filesWithMatches: Boolean,
@@ -1101,11 +1116,7 @@ async function runDefinition(
     );
   }
   if (resolution.workspace !== null) backingIndexNote(project);
-  const freshness = await checkIndexFreshness(
-    project,
-    "exists",
-    resolution.workspace === null,
-  );
+  const freshness = await checkIndexFreshness(project, "exists");
   if (freshness.isErr()) return err(freshness.error);
   if (freshness.value.status === "stale") {
     await writeNoIndexDiagnostic(

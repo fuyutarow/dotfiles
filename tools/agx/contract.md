@@ -412,3 +412,119 @@ offline candidate. Candidate JSON is `{ "rules": [{ "when": { "row": "...", "eff
 "ticket_schema": 2, "capability_tags": ["..."], "confidence_bin": "high" }, "row": "..." }] }`;
 rules are tried in order and omitted predicate fields are ignored. A candidate row's accepted rate
 comes from the measured window. The estimate assumes row rates are independent of task.
+
+## One run lifecycle
+
+### Authority and event record
+
+There is exactly one lifecycle authority per agx state directory: `lifecycle.jsonl`. It is an
+append-only JSONL stream, one complete JSON object per line, opened with `O_APPEND` and serialized
+under one state-directory `flock`. Each event has `schema`, monotonically increasing `seq`, unique
+`event_id`, `at`, `run_id`, `lineage_id`, `session_id` when known, and `type`; type-specific fields
+are documented below. A writer checks the folded state and appends while holding the lock. It never
+rewrites an earlier line. A partial/corrupt final line is reported and ignored for reads; a writer
+must refuse to append until explicit repair preserves the raw bytes. Snapshot caches are optional,
+keyed by exact log byte offset and schema, and may be deleted and rebuilt.
+
+`run_id` identifies one attempt. `lineage_id` is assigned at first admission and retained by
+amend, restart, resume and repick. A successor's `superseded` event names its `session_id` and
+successor run; that event transfers continuation-record ownership and the lease to the successor.
+The successor promise says `you own <record path>, previously written by <session>`. The record
+body remains an external artifact; its owner and handoff are lifecycle state.
+
+| Event | Required meaning and fields |
+| --- | --- |
+| `admitted` | First authorized state after local validation and lease checks; includes repo/root, workspace, ticket, declared write globs, dispatcher session, resource declaration, predecessor if any, and continuation-record path/owner. |
+| `running` | Supervisor confirmed worker/unit launch; includes PID or unit identity and start time. A spawn failure still receives `terminal{failed}` after admission. |
+| `progress` | Optional interim observation, including source, progress payload/reference and event time. It is never terminal and does not claim the coordinator's decision. |
+| `terminal` | Sole final event for an attempt: `done`, `returned`, `failed`, `timeout`, or `abandoned` (including stopped externally). Includes exit/cause, session, workspace observation and whether changes remain when known. Supervisor appends on normal completion; GC or next admission appends `abandoned` when the unit/process is gone without terminal. A locked folded-state check makes append idempotent. |
+| `superseded` | Closes the predecessor in favor of a successor; includes `by_run`, successor `session_id`, lineage, and transferred lease and continuation-record ownership. A live predecessor first receives its one `terminal{returned}` after its worker is stopped and final workspace observation is captured; then `superseded` transfers ownership. A superseded predecessor cannot later receive another terminal. |
+| `judged` | Coordinator decision, `decision: accept|reject`, note, judged lineage/run, and optional evidence reference. `ledger note --batch` appends a validated deterministic batch under one lock. |
+| `noted` | Advisory for an existing worker. The next worker turn boundary reads it; it does not stop, replace, or restart the run. |
+| `dispose-requested` | Idempotent intent to land, salvage, or keep a workspace; includes exact workspace and target. It keeps the lease held and makes interrupted cleanup visible for retry. |
+| `disposed` | Completed workspace disposition: `land(commit)`, `salvage(bookmark)`, or `keep-for(run)`, with exact workspace and resulting reference. Append only after the external action succeeds; if append fails after the action, reconciliation records completion and the lease remains held until then. |
+| `observed` | Reconciliation fact from an external authority (unit liveness, workspace-change snapshot, or continuation owner). Carries observer, scope and observation time. It makes the observation foldable without pretending the log can sense the OS or filesystem. |
+
+No marker, admission file, lease file, or per-run journal is authoritative after migration. Process
+liveness, current workspace changes and human judgments originate outside the log; their authorized
+observer/coordinator appends an `observed`, `judged`, or disposition event before exposing that
+lifecycle state. A fold cannot detect an external kill or file edit without an observation.
+`agx-usehooks` emits current events and derived facts only; the coordinator decides what they mean.
+
+Admission is side-effect free until it appends exactly one `admitted` event. All schema, RESOURCE,
+premise, name-collision and lease checks finish first. Hold the state flock only for the pure local
+check and append (milliseconds); do not route or call Jev while holding it. Only then create the
+workspace, unit, ticket/run files or other projections. If admission refuses, the state directory,
+workspace set, units and ticket files remain byte-identical. A crash after `admitted` is recoverable
+as an admitted-but-not-running attempt.
+
+If the flock needs a lock file, remove a newly created lock and any temporary files before returning
+a refusal; an admission refusal leaves even the state directory bytes unchanged. Do not create the
+state directory as a preflight side effect.
+
+### Folds and visible behavior
+
+All run views are pure folds over `lifecycle.jsonl`; an external observation is appended first as
+an `observed` event. Views never repair, append, or trust a cache. `ps` and `show` report the
+folded attempt, lineage, ownership, terminal/judgment/disposition and pending release command.
+Statusline `Job:` uses the same live-run fold and progress events. `wait --mine --next --after N`
+returns the next terminal event for the caller's `session_id` with `seq > N`, then returns the new
+cursor; the caller owns this cursor, so the log has no mutable per-consumer acknowledgement. Without
+`--after`, it starts at the earliest matching terminal in retained history. GC's listing is a view
+of reclaimable/pending events; the explicit GC action appends reconciliation/disposition before
+applying cleanup.
+
+The write lease is a fold, never a file. `lease(run)` iff it was admitted, is not disposed, and is
+live or terminal with unlanded workspace changes while its lineage remains unjudged.
+`superseded` transfers the lease. A judgment or landed disposition releases every non-live lineage
+member; live members remain held until their own terminal. Lease overlap is segment-exact (`*`
+within one segment; `**` across segments). `ps --leases` shows each held lease and the exact release
+command (`ledger note`/judgment or `mise run land`); old workspaces from before leases existed are
+observations, never implicit admissions.
+
+`--amend` has two distinct operations. `note` appends `noted`; the worker reads it at its next turn
+boundary. `restart` appends `superseded` and admits a successor in the same lineage, transferring
+the lease and continuation-record ownership. It does not mutate the old prompt or reuse its run ID.
+A terminal attempt gets one terminal event even when a manager stops it or the host reboots: the
+supervisor handles normal exits, and GC/next admission reconciles missing units within one GC
+interval. A returned run with unlanded changes remains visible in `ps --leases` with its release
+command until judged or disposed.
+
+### Migration slices
+
+Each slice lands independently. Acceptance includes its consumer check and a workspace-build probe
+against the LIVE state directory before landing, for example `bun <ws>/tools/agx/src/main.ts ps
+--leases`. Run that probe with the 2026-10-13 lease-ghost fixtures restored into a copy of the real
+state directory. No slice is PASS without its verify command and the coordinator's live probe.
+
+| Order | Slice | Consumer / behavior delivered | Acceptance check |
+| --- | --- | --- | --- |
+| 1 | Lifecycle log, schema, flocked append and read-only fold primitives; dual-write current lifecycle. | Dispatch, event readers, `ps`, `show`; establishes event IDs, sequence and recovery without switching authority. | Append/replay, corrupt-tail refusal, concurrent append; readers under read-only state-dir bind. |
+| 2 | `finishevents`: exactly-once terminal from supervisor plus abandoned reconciliation from GC/next admission. | `wait`, `follow`, statusline and hooks see all endings, including external stops. | Fault injection for systemctl stop, kill and reboot-equivalent missing unit; each admitted run has one terminal within one GC interval. |
+| 3 | `superseded`: lineage, successor session, lease and continuation ownership transfer. | amend/restart/resume/repick and successor promise. | Supersession-chain property test; promise names prior owner and successor; no predecessor double-terminal. |
+| 4 | `disposition`: land/salvage/keep-for before workspace cleanup; route land through shared appender. | `mise run land`, GC view and coordinator release instructions. | Land acceptance/cleanup fixtures; append failure leaves workspace intact and pending. |
+| 5 | `note-vs-restart`: advisory append separated from explicit restart/supersede. | Worker turn boundary, coordinator, `ledger note` and dispatch restart. | Note is read without interruption; restart creates new run ID in same lineage and carries ownership. |
+| 6 | `ledger --batch`: judgments appended under one lock with deterministic validation and no partial batch. | Serial coordinator grading of several outcomes. | Valid batch folds wholly; invalid/duplicate batch appends nothing; reader sees pre- or post-batch only. |
+| 7 | `leases-as-fold`: remove admissions and mutable lease files as authorities; derive leases and release instructions from events plus observations. | Dispatch admission, `ps --leases`, hook facts and coordinator release path. | `write-leases.ghosts-20261013` plus random-event property tests; date rollover, superseded chain, foreground, legacy workspace; 10^5-event `agx ls` under 1 s using a deletable offset snapshot. |
+| 8 | Horizon compaction and removal of dual writes/legacy stores. | All coordinators and agx readers; bounded state directory. | Replay checkpoint plus post-horizon events equals pre-compaction fold; disposed runs compact past horizon and log growth is bounded. |
+
+### Tiger conformance ledger
+
+| Level / ID | Contract rule or workload | Rejected alternative / negative case | Required evidence / retirement condition |
+| --- | --- | --- | --- |
+| T0 workload | About 3 concurrent coordinators, peak about 30 runs/hour, about 10^4 runs/month, state dir currently 399 MB, admissions race across sessions. | Design for one writer or an empty state dir. | Live-copy probe and 10^5-event scale receipt; revisit if measured workload materially changes. |
+| T1 risk | High: two outages blocked every coordinator for about 1 hour each (2026-10-12 23:09 and 2026-10-13 night). | Treat lifecycle as cosmetic bookkeeping. | Retire high-risk only after I1-I4 pass on workspace build and real-state copy. |
+| D1 | One append-only event log per state dir, one JSON line/event, appended under flock. | Per-concern files and date shards; date shards caused missed judgment. | Concurrent append/replay tests; revise only if a measured single-log limit cannot meet B1/B2. |
+| D2 | Every view is a fold; optional offset-keyed snapshot can be deleted and rebuilt. | Mutable lease, marker and receipt files as truth. | Cache deletion/rebuild equivalence and read-only-reader tests. |
+| D3 | Pure admission checks under the same flock, one `admitted` append, then side effects. Lock covers milliseconds, never routing. | Create then check; Jev/routing inside lock. | I3 byte-identical refusal and admission race tests. In 3.5.1 (2026-10-13), one dispatch timed out on the repo write-lease lock while another appeared to include Jev in admission. |
+| D4 | Assign lineage at first admission; amend, restart, resume and repick preserve it; successor takes lease and record ownership. | New unrelated lineage or stale predecessor ownership. | Supersession-chain and continuation ownership tests. |
+| D5 | Supervisor writes terminal; GC/next admission appends abandoned when a unit is gone without terminal. | External stop leaves run in limbo. | I1 fault injection for systemctl stop, kill and host reboot. |
+| T2 / I1 | Every admitted run has exactly one terminal within one GC interval after its unit ends. | systemctl stop, kill, host reboot. | Fault-injection test. |
+| T2 / I2 | Lease iff admitted, not disposed, and live or terminal with unlanded changes and unjudged lineage. | Date rollover, superseded chain, foreground mode, pre-lease workspace. | `write-leases.ghosts-20261013` fixtures and random-event property test. |
+| T2 / I3 | Refusal has no side effects. | Refusal leaves workspace or ticket that blocks retry. | State dir, workspaces and units byte-identical before/after refusal. |
+| T2 / I4 | Readers (`ls`, `show`, `wait`, `events`) do not write. | Hidden reconciliation during display. | Read-only bind-mount state-dir tests. |
+| T2 / I5 | Glob overlap is segment-exact. | Prefix collision such as `frame_rev6` and `fo_rel2`. | Table tests including `frame_rev6/fo_rel2`. |
+| T2 / B1 | `agx ls` under 1 s at 10^5 events. | Full unbounded replay for every view. | Timed scale test with offset snapshot. |
+| T2 / B2 | Disposed runs compact past a horizon so log size remains bounded. | Retain every event forever. | Compaction fold-equivalence and repeated-horizon size trend. |
+| T3 exception | Until migration, 3.5.x lease files remain de-facto store; owner is dotfiles coordinator; expiry is slice 7. | Remove compatibility store before fold readers are live. | Coordinator closes exception after slice 7 live-state probe. |
+| T4 gate | No PASS without verify command and coordinator live probe from workspace build against real-state copy with ghosts restored. | Source-only review or synthetic-only fixtures. | Verify command plus coordinator probe receipt before landing. |

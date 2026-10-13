@@ -19,6 +19,7 @@ import { ROSTER_PATH } from "../../../agents/models/roster.ts";
 import { decodedJson } from "./decode.ts";
 import { attemptOr } from "../../shared/src/attempt.ts";
 import { processTreeCpu } from "../src/lifecycle.ts";
+import { foldByRun, readLifecycle } from "../src/lifecycle-log.ts";
 import { planWorkspace } from "../src/workspaces.ts";
 // Cross-package acceptance test for the public hook consumer contract.
 import { runningRuns } from "../../agx-usehooks/src/index.ts";
@@ -4249,6 +4250,30 @@ describe("agx dispatch: a brief with a ticket", () => {
     expect(readFileSync(join(scratch, "prompt.log"), "utf8")).toContain(
       "Owner correction for this run.",
     );
+    const events = readLifecycle(state);
+    expect(events.errors).toEqual([]);
+    const runs = [...foldByRun(events.events).values()];
+    expect(runs).toHaveLength(2);
+    expect(new Set(runs.map((run) => run.lineage_id)).size).toBe(1);
+    for (const run of runs) {
+      expect(
+        events.events
+          .filter((event) => event.run_id === run.run_id)
+          .map((event) => event.type),
+      ).toEqual(["admitted", "running", "terminal"]);
+      expect(run.terminal).toBeDefined();
+    }
+    const listed = await router(["ps", "--all", "--json"], env);
+    const ps = decodedJson(
+      z.object({
+        runs: z.array(z.looseObject({ id: z.string(), state: z.string() })),
+      }),
+      listed.out,
+    );
+    for (const row of ps.runs)
+      expect(foldByRun(events.events).get(row.id)?.state === row.state).toBe(
+        true,
+      );
   }, 30_000);
 
   test("repick accepts instruction files and prompt-file while retaining the ticket and resolving ledger note", async () => {

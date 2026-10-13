@@ -27,6 +27,13 @@ const suiteOptions = {
   help: suiteHelp,
   commands: [
     command({
+      name: "events",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: { description: "Read lifecycle events without changing state" },
+    }),
+    command({
       name: "wait",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -94,4 +101,7 @@ if (rawArgs.length === 0) {
   process.exit(2);
 }
 
-await import("./agx.ts");
+if (rawArgs[0] === "events") {
+  const { eventsCommand } = await import("./events.ts");
+  await eventsCommand(rawArgs.slice(1));
+} else await import("./agx.ts");

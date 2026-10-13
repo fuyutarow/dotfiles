@@ -63,6 +63,7 @@ test("bare and unknown commands list the root command nouns", () => {
     expect(result.exitCode).toBe(2);
     const output = result.stdout.toString();
     expect(commandNames(output)).toEqual([
+      "events",
       "wait",
       "follow",
       "ticket",
@@ -83,6 +84,7 @@ test("minimal environment and piped stdout list all nouns from an unrelated cwd"
     const result = invoke(args, minimal, cwd);
     expect(result.exitCode).toBe(args.includes("--help") ? 0 : 2);
     expect(commandNames(result.stdout.toString())).toEqual([
+      "events",
       "wait",
       "follow",
       "ticket",
@@ -112,6 +114,7 @@ test("forced color, no color and narrow columns keep suite headings and nouns st
       const result = invoke(args, env);
       expect(result.exitCode).toBe(args.includes("--help") ? 0 : 2);
       expect(commandNames(result.stdout.toString())).toEqual([
+        "events",
         "wait",
         "follow",
         "ticket",

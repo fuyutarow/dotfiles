@@ -17,6 +17,8 @@ import { join } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { errorMessage } from "../../shared/src/attempt.ts";
 import { JsonlLineReader, readJsonlTailSync } from "../../shared/src/jsonl.ts";
+import { jsonOf, z } from "../../shared/src/zod.ts";
+import { dualWriteLifecycle } from "./lifecycle-log.ts";
 
 const ARCHIVE_PATTERN = /^runs-\d{4}-\d{2}-\d{2}\.jsonl$/u;
 const COPY_CHUNK_BYTES = 64 * 1024;
@@ -115,9 +117,14 @@ export function appendLedgerLine(
   stateDir: string,
   line: string,
 ): LockResult<void> {
-  return withLedgerLock(stateDir, () => {
+  const result = withLedgerLock(stateDir, () => {
     appendFileSync(join(stateDir, "runs.jsonl"), line);
   });
+  if (result.ok) {
+    const record = jsonOf(z.unknown()).safeParse(line);
+    if (record.success) dualWriteLifecycle(stateDir, record.data);
+  }
+  return result;
 }
 
 function appendPrefix(

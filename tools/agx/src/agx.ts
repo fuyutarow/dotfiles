@@ -109,6 +109,7 @@ import {
   rotateRunsLog,
 } from "./ledger.ts";
 import { createFollowWaiter } from "./follow-watch.ts";
+import { dualWriteLifecycle } from "./lifecycle-log.ts";
 import {
   parseSince,
   replayStats,
@@ -1614,6 +1615,8 @@ async function pickFor(
 
 // --- state: active markers and the log -------------------------------------------------------------
 
+const lifecycleAttempts = new Map<string, Record<string, unknown>>();
+
 function appendLog(record: Record<string, unknown>): void {
   const appended = appendLedgerLine(
     STATE_DIR,
@@ -2790,11 +2793,44 @@ async function admitLaunch(l: Launch): Promise<void> {
   const runId = flags.runId ?? newRunId();
   flags.runId = runId;
   claimRunWrites(flags, ticket, runId, resume?.from, pick);
+  const admission = {
+    kind: "admitted",
+    run_id: runId,
+    repo: workspaceRoot(flags.dispatchRoot ?? flags.cd),
+    cwd: resolve(flags.workspacePlan?.path ?? flags.cd),
+    ticket: {
+      ...ticket,
+      name: flags.name ?? ticket?.name ?? runId,
+      writes: ticket?.writes ?? [],
+    },
+    dispatcher_session: currentDispatcherSession(),
+    predecessor: resume?.from,
+    resource: {
+      declaration: brief
+        .split("\n")
+        .find((line) => /^RESOURCE-(?:CLASS|ENVELOPE)\(/u.test(line)),
+      kind: resourceKind(brief),
+      labels: ticket?.labels ?? [],
+    },
+    pick,
+    at: now(),
+  };
+  lifecycleAttempts.set(runId, admission);
+  dualWriteLifecycle(STATE_DIR, admission);
 }
 
 /** Execute a selected run; OS children consume admission without repeating it. */
 async function launch(l: Launch, admitted = false): Promise<number> {
   if (!admitted) await admitLaunch(l);
+  if (admitted && l.flags.runId !== undefined) {
+    lifecycleAttempts.set(l.flags.runId, {
+      run_id: l.flags.runId,
+      cwd: l.flags.cd,
+      ticket: l.ticket,
+      pick: l.pick,
+      dispatcher_session: currentDispatcherSession(),
+    });
+  }
   const {
     roster,
     flags,
@@ -3007,6 +3043,19 @@ async function launch(l: Launch, admitted = false): Promise<number> {
     fatal(`cannot start worker: ${errorMessage(spawned.error)}`);
   }
   let child = spawned.value;
+  dualWriteLifecycle(STATE_DIR, {
+    kind: "started",
+    run_id: runId,
+    pid: child.pid,
+    started_at: active.started_at,
+    cwd: active.cwd,
+    ticket: workTicket,
+    pick,
+    resource: { kind: active.kind, labels: active.labels },
+    dispatcher_session: active.dispatcher_session,
+    display_id: displayId,
+    label,
+  });
   const interimReports: {
     at: string;
     session?: string;
@@ -6578,6 +6627,13 @@ const suiteOptions = {
   help: suiteHelp,
   commands: [
     command({
+      name: "events",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: { description: "Read lifecycle events without changing state" },
+    }),
+    command({
       name: "wait",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -7321,6 +7377,22 @@ async function parseAgx() {
   return process.exit(2);
 }
 const argv = await parseAgx();
+// Mirror early failures after admission even when the legacy CLI has no run-id receipt yet.
+process.once("exit", (exit) => {
+  for (const [runId, admission] of lifecycleAttempts) {
+    dualWriteLifecycle(STATE_DIR, {
+      ...admission,
+      kind: "run",
+      run_id: runId,
+      ended_at: now(),
+      exit: exit === 0 ? 1 : exit,
+      worker: {
+        outcome: "failed",
+        cause: "dispatch exited before writing its terminal receipt",
+      },
+    });
+  }
+});
 // A manager-owned child can refuse before launch. Its wait handle must still become terminal.
 process.once("exit", (exit) => {
   const runId =
@@ -7532,6 +7604,7 @@ async function detachDispatch(l: Launch): Promise<number> {
     pick,
     at: now(),
   });
+  lifecycleAttempts.delete(runId); // Acknowledged handoff: the manager-owned child records its end.
   process.stdout.write(
     `ticket: ${name}\nunit: ${detachedLaunch.unit}\nlogs: ${detachedLaunch.logCommand}\nrun_id: ${runId}\nwatch: agx wait ${name}\n`,
   );
@@ -8108,6 +8181,8 @@ function journalRunEvent(
     join(directory, `${record.run_id}.jsonl`),
     `${JSON.stringify(record)}\n`,
   );
+  // The journal also carries early spawn/setup failures when no ledger receipt exists.
+  if (record.kind === "run") dualWriteLifecycle(STATE_DIR, record);
 }
 
 function runEvents(): Logged[] {

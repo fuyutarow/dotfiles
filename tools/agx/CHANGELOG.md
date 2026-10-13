@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.6.0 — 2026-10-13
+
+- Add lifecycle migration slice 1: a schema-tagged, append-only `lifecycle.jsonl`, native flock serialization, sequence/event IDs, corrupt-tail refusal and read-only run/session/live folds.
+- Mirror admissions, confirmed worker starts, all recorded terminal endings and ledger judgments while existing stores remain authoritative. Mirror failures are reported without changing dispatch outcomes.
+- Add `agx events [--mine] [--follow] [--json]` as a read-only lifecycle filter.
+
 ## 3.5.4 — 2026-10-13
 
 - Let ledger notes wait up to 60 seconds for a live attempt to finalize after RETURN, pinning the attempt even if its ticket resumes. Refusals include the observed state and an exact retry command.

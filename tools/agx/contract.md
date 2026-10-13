@@ -180,7 +180,7 @@ retain their meanings.
 
 ## Command layout
 
-The suite has eight top-level commands: dispatch, pick, ticket, ledger, show, ps, wait and follow.
+The suite has nine top-level commands: dispatch, pick, ticket, ledger, show, ps, wait, follow and events.
 There are no former command aliases.
 
 | Operation                           | Command                                                           |
@@ -441,6 +441,30 @@ rules are tried in order and omitted predicate fields are ignored. A candidate r
 comes from the measured window. The estimate assumes row rates are independent of task.
 
 ## One run lifecycle
+
+Slice 1 (3.6.0) dual-writes `admitted`, `running`, `terminal` and `judged` events;
+existing admission, marker, journal and ledger stores remain authoritative until later slices.
+`agx events [--mine] [--follow] [--json]` reads the log without creating files or taking a lock.
+It replays history before following; `--mine` uses the same dispatcher-session resolution as `ps`.
+JSON mode emits one complete event per line; text mode prints sequence, time, run and type.
+An invalid line or incomplete tail is reported on stderr (one-shot exit 1); follow mode reports
+each distinct diagnostic once and continues reading valid appended events.
+
+The slice-1 schema is `LifecycleEventSchema` in `src/lifecycle-log.ts`, version 1. Each event
+has a positive safe-integer `seq`, UUID `event_id`, ISO `at`, `run_id`, `lineage_id`, nullable
+dispatcher `session_id`, `type`, and the legacy source `record` for equivalence inspection.
+`admitted` adds `repo`, `workspace`, ticket name, `writes`, resource metadata, optional predecessor
+and continuation metadata; `running` adds confirmed worker `pid` and `started_at`; `terminal`
+adds `outcome` (done/returned/failed/timeout/abandoned) and optional exit, cause, vendor session,
+workspace and changes observation; `judged` adds accept/reject decision and optional note/evidence.
+Unknown observations remain absent. The writer retains a predecessor's known lineage and a run's
+dispatcher session. Under native flock on `lifecycle.lock`, it checks the fold, assigns the next
+sequence and writes one line with `O_APPEND`; repeated admission/start/terminal writes are idempotent.
+The lock inode is retained so concurrent writers cannot lock different replacement inodes. Readers
+never open it. Corruption refuses further append; explicit repair must preserve the raw bytes.
+Mirror failures are diagnosed on stderr without altering legacy outcomes. Live folds represent
+recorded starts without a terminal, and do not infer external process liveness. `ps` compatibility
+continues to map timeout to failed; the lifecycle terminal retains the more specific timeout.
 
 ### Authority and event record
 

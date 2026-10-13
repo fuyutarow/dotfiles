@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.5.1 — 2026-10-13
+
+- Require a lease-aware admission; run history alone never creates holders. Recognize a 3.5.0 lease receipt only when its run ID, repository, workspace, ticket and writes match independent run metadata, and upgrade it to an explicit admission during GC or admission. Transfer ownership to an amend/resume/repick successor and propagate judgment through predecessor links.
+- Intersect write globs segment by segment: `*` and `?` never cross `/`, `**` spans segments, and literal suffixes, character classes and brace alternatives distinguish disjoint paths. Fix frame_rev6/fo_rel2 false overlap.
+- Ignore backfilled 3.5.0 receipts for terminal runs admitted before `2026-10-12T13:39:37Z` (alpha `54746865`). Live runs with declared writes hold in every era. `AGX_LIVE_RUN_IDS_FILE` accepts a complete JSON host-liveness snapshot for read-only sandboxed probes.
+
+- Derive write leases from admission, run journals and full ledger history. Fold acceptance, rejection and landing over runs with the same ticket and workspace; live processes or units hold their writes in every dispatch mode, including foreground workspace dispatch.
+- Make `ps --leases` read-only. Admission and GC rebuild the lease cache from the same computation and record unfinished externally stopped runs as abandoned. Current workspace checks use read-only jj and fail closed with a recovery command when unavailable.
+
 ## 3.5.0 — 2026-10-12
 
 - Add repository-wide write leases at new-run admission. Release them after acceptance or rejection, landing, abandonment, a terminal run with no changed files, or workspace removal. `agx ps --leases` and `agx ledger gc` use the same pruning rules; historical runs never create lease files. Detached dispatch completes ticket, RESOURCE, premise and lease admission before starting its OS unit, so refusals exit 2 without printing a run_id.

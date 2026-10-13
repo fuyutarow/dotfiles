@@ -583,6 +583,53 @@ test("dispatch --detach refuses a GPU ticket when nvidia-smi is absent", () => {
   expect(result.err).toContain(`nvidia-smi not found on PATH=${emptyPath}`);
 });
 
+test("host snapshot lists detached writers without admissions or visible PIDs, while empty writes stay unleased", () => {
+  const state = join(scratch, "host-liveness");
+  mkdirSync(state);
+  const ids = ["m10_v2", "ed_unify", "si_unify", "sbk_restore2"];
+  const rows = ids.flatMap((run_id) => [
+    {
+      kind: "detached",
+      run_id,
+      cwd: process.cwd(),
+      ticket: { name: run_id, writes: [] },
+    },
+    ...(run_id === "sbk_restore2"
+      ? []
+      : [
+          {
+            kind: "started",
+            run_id,
+            pid: 2147483647,
+            cwd: process.cwd(),
+            ticket: { name: run_id, writes: [`${run_id}/**`] },
+          },
+        ]),
+  ]);
+  writeFileSync(
+    join(state, "runs.jsonl"),
+    rows.map((row) => JSON.stringify(row)).join("\n") + "\n",
+  );
+  const snapshot = join(state, "live.json");
+  writeFileSync(snapshot, JSON.stringify(ids));
+  const result = cli(["ps", "--leases", "--json"], state, {
+    AGX_LIVE_RUN_IDS_FILE: snapshot,
+  });
+  expect(result.code).toBe(0);
+  expect(result.out).toContain("m10_v2");
+  expect(result.out).toContain("ed_unify");
+  expect(result.out).toContain("si_unify");
+  expect(result.out).not.toContain("sbk_restore2");
+  expect(existsSync(join(state, "write-leases"))).toBe(false);
+  expect(existsSync(join(state, "admissions"))).toBe(false);
+  writeFileSync(snapshot, "[]");
+  expect(
+    cli(["ps", "--leases", "--json"], state, {
+      AGX_LIVE_RUN_IDS_FILE: snapshot,
+    }).out.trim(),
+  ).toBe('{"schema":1,"leases":[]}');
+});
+
 test("ledger gc prunes judged write leases and ps --leases uses the same result", () => {
   const state = join(scratch, "gc-write-lease-state");
   const repo = workspaceRoot(process.cwd());
@@ -604,8 +651,17 @@ test("ledger gc prunes judged write leases and ps --leases uses the same result"
   );
   writeFileSync(
     join(state, "runs.jsonl"),
-    `${JSON.stringify({ kind: "acceptance", run_id: runId, accept: true, at: "2026-10-12T00:01:00Z" })}\n`,
+    `${JSON.stringify({ kind: "run", run_id: runId, repo, cwd: scratch, ticket: { name: "judged", writes: ["tools/agx/**"] }, facts: { changed_files: ["tools/agx/src/agx.ts"] }, pick: { source: "fixture", choice: "luna-low" } })}\n${JSON.stringify({ kind: "acceptance", run_id: runId, accept: false, at: "2026-10-12T00:01:00Z" })}\n`,
   );
+
+  const beforeGc = cli(["ps", "--leases", "--json"], state);
+  expect(beforeGc.code, beforeGc.err).toBe(0);
+  expect(
+    decodedJson(z.looseObject({ leases: z.array(z.unknown()) }), beforeGc.out)
+      .leases,
+  ).toEqual([]);
+  expect(existsSync(join(leaseDir, `${hash(runId)}.json`))).toBe(true);
+  expect(existsSync(join(leaseDir, ".lock"))).toBe(false);
 
   const collected = cli(["ledger", "gc"], state);
   expect(collected.code, collected.err).toBe(0);
@@ -630,7 +686,10 @@ test("dispatch --detach reports lease refusal before creating a unit or run_id",
   const hash = hashText;
   writeFileSync(
     join(active, `${runId}.json`),
-    JSON.stringify(marker(runId, process.pid, "holder-session", timestamp)),
+    JSON.stringify({
+      ...marker(runId, process.pid, "holder-session", timestamp),
+      ticket: { name: "existing-holder", writes: ["tools/agx/**"] },
+    }),
   );
   const leaseDir = join(state, "write-leases", hash(repo));
   mkdirSync(leaseDir, { recursive: true });
@@ -645,6 +704,17 @@ test("dispatch --detach reports lease refusal before creating a unit or run_id",
       dispatcher_session: "holder-session",
       since: timestamp,
     }),
+  );
+  writeFileSync(
+    join(state, "runs.jsonl"),
+    JSON.stringify({
+      kind: "admitted",
+      lease_version: 1,
+      run_id: runId,
+      repo,
+      cwd: scratch,
+      ticket: { name: "existing-holder", writes: ["tools/agx/**"] },
+    }) + "\n",
   );
   const capture = join(scratch, "detach-lease-argv.txt");
   const stub = join(stubDir, "systemd-run");

@@ -5093,7 +5093,8 @@ describe("agx dispatch: a brief with a ticket", () => {
       const b = brief(
         `lifecycle-${mode}`,
         ticketText(
-          `writes = ${mode === "writes" ? '["delivered.txt"]' : "[]"}\nverify = []\nfirst_return_s = 60\nstall_s = 1`,
+          // Linux ps reports whole CPU seconds; allow the burner to cross that boundary.
+          `writes = ${mode === "writes" ? '["delivered.txt"]' : "[]"}\nverify = []\nfirst_return_s = 60\nstall_s = ${mode === "cpu" ? 2 : 1}`,
         ),
       );
       const start = performance.now();
@@ -6059,6 +6060,17 @@ describe("agx ticket write enforcement", () => {
         ticket: { writes: ["shared.txt"] },
       }),
     );
+    writeFileSync(
+      join(state, "runs.jsonl"),
+      JSON.stringify({
+        kind: "admitted",
+        lease_version: 1,
+        run_id: "sibling",
+        repo: cwd,
+        cwd,
+        ticket: { name: "sibling", writes: ["shared.txt"] },
+      }) + "\n",
+    );
     const r = await router(
       runArgs(
         brief(
@@ -6075,19 +6087,10 @@ describe("agx ticket write enforcement", () => {
           '```agx-return\n{"findings":[],"evidence":[],"impact_on_brief":"other writer","proposed_next":"none","artifacts":[]}\n```',
       },
     );
-    const receipt = decodedJson(
-      z.looseObject({
-        writes_check: z.array(z.string()),
-        writes_unattributed: z.array(z.string()),
-        writes_violations: z.array(z.string()).optional(),
-      }),
-      r.out.trim(),
-    );
-    expect(receipt.writes_check).toEqual([]);
-    expect(receipt.writes_unattributed).toEqual(["shared.txt"]);
-    expect(receipt.writes_violations).toBeUndefined();
-    expect(r.err).toContain("changed by others (not attributed): shared.txt");
-    expect(r.code).toBe(0);
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("write lease refused");
+    expect(r.err).toContain("run sibling");
+    expect(r.out).toBe("");
   });
 
   test("unavailable change listing is recorded with its cause", async () => {

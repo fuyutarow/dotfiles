@@ -1,0 +1,597 @@
+{
+  "leases": [
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T05-03-37.419434052Z-3531075-sso74f",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012044930-8629b1a4-bb44-449b-b12e-c67ce4bf35d8",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/**",
+        "tools/agx/CHANGELOG.md",
+        "tools/agx/package.json"
+      ],
+      "ticket": "stallesc",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T05:03:40.954739207Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T06-13-45.027821307Z-224778-sv304r",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012055505-6cb66dfd-eaa0-48be-a683-3ab9f1a8c591",
+      "writes": [
+        "tools/agx/src/durable.ts",
+        "tools/agx/src/state.ts",
+        "tools/agx/src/ledger.ts",
+        "tools/agx/tests/durable.test.ts",
+        "tools/agx/tests/state.test.ts",
+        "tools/agx/tests/ledger.test.ts"
+      ],
+      "ticket": "durable",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T06:13:57.018124598Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T07-43-02.677339104Z-1153305-qizlig",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/suite-layout.test.ts",
+        "tools/agx/contract.md"
+      ],
+      "ticket": "agxsplit",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T07:43:36.945368644Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T08-07-25.48592454Z-1403340-x0cwuh",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/suite-layout.test.ts",
+        "tools/agx/contract.md"
+      ],
+      "ticket": "agxsplit",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T08:07:46.496364238Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T05-55-08.280656577Z-41309-sb02au",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012055505-6cb66dfd-eaa0-48be-a683-3ab9f1a8c591",
+      "writes": [
+        "tools/agx/src/durable.ts",
+        "tools/agx/src/state.ts",
+        "tools/agx/src/ledger.ts",
+        "tools/agx/tests/durable.test.ts",
+        "tools/agx/tests/state.test.ts",
+        "tools/agx/tests/ledger.test.ts"
+      ],
+      "ticket": "durable",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T05:56:28.831561263Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T12-42-56.116155232Z-3426560-i372ti",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012124254-2d5208c7-f2de-4df1-99c1-9e617892abe6",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/**",
+        "tools/agx/CHANGELOG.md",
+        "tools/agx/package.json",
+        "tools/agx/contract.md"
+      ],
+      "ticket": "writelease",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T12:43:38.43353043Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T05-26-02.213598476Z-3916878-v159nq",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012044930-8629b1a4-bb44-449b-b12e-c67ce4bf35d8",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/**",
+        "tools/agx/CHANGELOG.md",
+        "tools/agx/package.json"
+      ],
+      "ticket": "stallesc",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T05:26:07.584856693Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T06-21-11.010074021Z-328410-mbuo9w",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012053814-b637c7f6-eeeb-44b1-95c7-5d1d27741502",
+      "writes": ["tools/agx/**"],
+      "ticket": "agxops",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T06:21:21.128717969Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T05-38-15.776812411Z-4063030-bb5inp",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012053814-b637c7f6-eeeb-44b1-95c7-5d1d27741502",
+      "writes": ["tools/agx/**"],
+      "ticket": "agxops",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T05:39:21.898248831Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T04-49-32.322401013Z-3253662-xdhsvc",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012044930-8629b1a4-bb44-449b-b12e-c67ce4bf35d8",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/**",
+        "tools/agx/CHANGELOG.md",
+        "tools/agx/package.json"
+      ],
+      "ticket": "stallesc",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T04:49:55.894943216Z"
+    },
+    {
+      "repo": "/home/fuyu/dotfiles",
+      "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/suite-layout.test.ts",
+        "tools/agx/contract.md"
+      ],
+      "ticket": "agxsplit",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "since": "2026-10-12T08:28:29.922894362Z"
+    },
+    {
+      "repo": "/home/fuyu/Workspace/polysearch-v1",
+      "run_id": "2026-10-12T22-54-10.995700277Z-2964755-1nzley",
+      "cwd": "/home/fuyu/Workspace/polysearch-v1-ws/v1health",
+      "writes": ["crates/**", "spec/SPEC.md", "mise.toml", "target/integ/**"],
+      "ticket": "chainacc",
+      "dispatcher_session": "20c933cd-8c9d-4702-84ff-b306d19f9c6c",
+      "since": "2026-10-12T22:54:11.010145878Z"
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "acceptance",
+      "run_id": "2026-10-12T12-42-56.116155232Z-3426560-i372ti",
+      "at": "2026-10-12T13:39:37.954398495Z",
+      "accept": true
+    },
+    {
+      "kind": "acceptance",
+      "run_id": "2026-10-12T12-42-56.116155232Z-3426560-i372ti",
+      "at": "2026-10-12T14:34:14.216071396Z",
+      "accept": false
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T22-29-16.211417076Z-2534139-5bdz7l",
+      "cwd": "/home/fuyu/Workspace/polysearch-v1-ws/v1health",
+      "display_id": "agt_chainacc",
+      "dispatcher_session": "20c933cd-8c9d-4702-84ff-b306d19f9c6c",
+      "started_at": "2026-10-12T22:29:47.492384663Z",
+      "ticket": {
+        "name": "chainacc",
+        "writes": ["crates/**", "spec/SPEC.md", "mise.toml", "target/integ/**"]
+      },
+      "facts": {
+        "changed_files": []
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T22-29-16.211417076Z-2534139-5bdz7l"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T04-49-32.322401013Z-3253662-xdhsvc",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012044930-8629b1a4-bb44-449b-b12e-c67ce4bf35d8",
+      "display_id": "agt_stallesc",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T04:49:55.894943216Z",
+      "ticket": {
+        "name": "stallesc",
+        "writes": [
+          "tools/agx/src/**",
+          "tools/agx/tests/**",
+          "tools/agx/CHANGELOG.md",
+          "tools/agx/package.json"
+        ]
+      },
+      "facts": {
+        "changed_files": [
+          "tools/agx/src/agx.ts",
+          "tools/agx/src/selection.ts",
+          "tools/agx/tests/selection.test.ts",
+          "tools/agx/CHANGELOG.md",
+          "tools/agx/package.json"
+        ]
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T04-49-32.322401013Z-3253662-xdhsvc"
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T05-03-37.419434052Z-3531075-sso74f",
+      "at": "2026-10-12T05:05:43.983068964Z"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T05-03-37.419434052Z-3531075-sso74f",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012044930-8629b1a4-bb44-449b-b12e-c67ce4bf35d8",
+      "display_id": "agt_stallesc",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T05:03:40.954739207Z",
+      "ticket": {
+        "name": "stallesc",
+        "writes": [
+          "tools/agx/src/**",
+          "tools/agx/tests/**",
+          "tools/agx/CHANGELOG.md",
+          "tools/agx/package.json"
+        ]
+      },
+      "facts": {
+        "changed_files": ["tools/agx/tests/agx.test.ts"]
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T05-03-37.419434052Z-3531075-sso74f"
+    },
+    {
+      "kind": "acceptance",
+      "run_id": "2026-10-12T05-03-37.419434052Z-3531075-sso74f",
+      "at": "2026-10-12T05:23:29.315226546Z",
+      "accept": true
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T05-26-02.213598476Z-3916878-v159nq",
+      "at": "2026-10-12T05:27:59.07411232Z"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T05-26-02.213598476Z-3916878-v159nq",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012044930-8629b1a4-bb44-449b-b12e-c67ce4bf35d8",
+      "display_id": "agt_stallesc",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T05:26:07.584856693Z",
+      "ticket": {
+        "name": "stallesc",
+        "writes": [
+          "tools/agx/src/**",
+          "tools/agx/tests/**",
+          "tools/agx/CHANGELOG.md",
+          "tools/agx/package.json"
+        ]
+      },
+      "facts": {
+        "changed_files": [
+          "tools/agx/CHANGELOG.md",
+          "tools/agx/tests/agx.test.ts"
+        ]
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T05-26-02.213598476Z-3916878-v159nq"
+    },
+    {
+      "kind": "acceptance",
+      "run_id": "2026-10-12T05-26-02.213598476Z-3916878-v159nq",
+      "at": "2026-10-12T05:35:32.318363411Z",
+      "accept": true
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T05-55-08.280656577Z-41309-sb02au",
+      "at": "2026-10-12T05:58:57.232232657Z"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T05-55-08.280656577Z-41309-sb02au",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012055505-6cb66dfd-eaa0-48be-a683-3ab9f1a8c591",
+      "display_id": "agt_durable",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T05:56:28.831561263Z",
+      "ticket": {
+        "name": "durable",
+        "writes": [
+          "tools/agx/src/durable.ts",
+          "tools/agx/src/state.ts",
+          "tools/agx/src/ledger.ts",
+          "tools/agx/tests/durable.test.ts",
+          "tools/agx/tests/state.test.ts",
+          "tools/agx/tests/ledger.test.ts"
+        ]
+      },
+      "facts": {
+        "changed_files": [
+          "tools/agx/src/state.ts",
+          "tools/agx/src/ledger.ts",
+          "tools/agx/tests/state.test.ts",
+          "tools/agx/tests/ledger.test.ts",
+          "tools/agx/src/durable.ts",
+          "tools/agx/tests/durable.test.ts"
+        ]
+      }
+    },
+    {
+      "kind": "acceptance",
+      "run_id": "2026-10-12T05-55-08.280656577Z-41309-sb02au",
+      "at": "2026-10-12T06:09:15.379972037Z",
+      "accept": true
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T05-38-15.776812411Z-4063030-bb5inp",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012053814-b637c7f6-eeeb-44b1-95c7-5d1d27741502",
+      "display_id": "agt_agxops",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T05:39:21.898248831Z",
+      "ticket": {
+        "name": "agxops",
+        "writes": ["tools/agx/**"]
+      },
+      "facts": {
+        "changed_files": [
+          "tools/agx/tests/agx.test.ts",
+          "tools/agx/src/agx.ts",
+          "tools/agx/src/lifecycle.ts",
+          "tools/agx/src/ticket-home.ts",
+          "tools/agx/contract.md",
+          "tools/agx/CHANGELOG.md",
+          "tools/agx/package.json"
+        ]
+      }
+    },
+    {
+      "kind": "acceptance",
+      "run_id": "2026-10-12T05-38-15.776812411Z-4063030-bb5inp",
+      "at": "2026-10-12T06:14:22.445921734Z",
+      "accept": true
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T06-13-45.027821307Z-224778-sv304r",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012055505-6cb66dfd-eaa0-48be-a683-3ab9f1a8c591",
+      "display_id": "agt_durable",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T06:13:57.018124598Z",
+      "ticket": {
+        "name": "durable",
+        "writes": [
+          "tools/agx/src/durable.ts",
+          "tools/agx/src/state.ts",
+          "tools/agx/src/ledger.ts",
+          "tools/agx/tests/durable.test.ts",
+          "tools/agx/tests/state.test.ts",
+          "tools/agx/tests/ledger.test.ts"
+        ]
+      },
+      "facts": {
+        "changed_files": [
+          "tools/agx/src/durable.ts",
+          ".oxlintrc.json",
+          "oxlint-policy.toml"
+        ]
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T06-13-45.027821307Z-224778-sv304r"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T06-21-11.010074021Z-328410-mbuo9w",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012053814-b637c7f6-eeeb-44b1-95c7-5d1d27741502",
+      "display_id": "agt_agxops",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T06:21:21.128717969Z",
+      "ticket": {
+        "name": "agxops",
+        "writes": ["tools/agx/**"]
+      },
+      "facts": {
+        "changed_files": ["tools/agx/tests/agx.test.ts"]
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T06-21-11.010074021Z-328410-mbuo9w"
+    },
+    {
+      "kind": "acceptance",
+      "run_id": "2026-10-12T06-21-11.010074021Z-328410-mbuo9w",
+      "at": "2026-10-12T06:34:20.965040343Z",
+      "accept": true
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T06-54-25.913057736Z-715108-hl1og4",
+      "at": "2026-10-12T06:56:44.24155055Z"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T06-54-25.913057736Z-715108-hl1og4",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+      "display_id": "agt_agxsplit",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T06:54:53.649946865Z",
+      "ticket": {
+        "name": "agxsplit",
+        "writes": [
+          "tools/agx/src/**",
+          "tools/agx/tests/suite-layout.test.ts",
+          "tools/agx/contract.md"
+        ]
+      },
+      "facts": {
+        "changed_files": []
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T06-54-25.913057736Z-715108-hl1og4"
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T07-40-51.883902068Z-1127700-4cffyu",
+      "at": "2026-10-12T07:42:01.093031305Z"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T07-40-51.883902068Z-1127700-4cffyu",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+      "display_id": "agt_agxsplit",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T07:41:11.641753384Z",
+      "ticket": {
+        "name": "agxsplit",
+        "writes": [
+          "tools/agx/src/**",
+          "tools/agx/tests/suite-layout.test.ts",
+          "tools/agx/contract.md"
+        ]
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T07-40-51.883902068Z-1127700-4cffyu"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T07-43-02.677339104Z-1153305-qizlig",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+      "display_id": "agt_agxsplit",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T07:43:36.945368644Z",
+      "ticket": {
+        "name": "agxsplit",
+        "writes": [
+          "tools/agx/src/**",
+          "tools/agx/tests/suite-layout.test.ts",
+          "tools/agx/contract.md"
+        ]
+      },
+      "facts": {
+        "changed_files": [
+          "tools/statusline/src/adapters/codex-rollout.ts",
+          "tools/statusline/src/statusline.ts",
+          "tools/statusline/tests/statusline-codex.test.ts"
+        ]
+      }
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T08-07-25.48592454Z-1403340-x0cwuh",
+      "at": "2026-10-12T08:08:23.174417333Z"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T08-07-25.48592454Z-1403340-x0cwuh",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+      "display_id": "agt_agxsplit",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T08:07:46.496364238Z",
+      "ticket": {
+        "name": "agxsplit",
+        "writes": [
+          "tools/agx/src/**",
+          "tools/agx/tests/suite-layout.test.ts",
+          "tools/agx/contract.md"
+        ]
+      },
+      "facts": {
+        "changed_files": [
+          "mise.toml",
+          "tools/agx/src/ticket.ts",
+          "tools/agx/contract.md"
+        ]
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T08-07-25.48592454Z-1403340-x0cwuh"
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm",
+      "at": "2026-10-12T08:30:27.808220083Z"
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm",
+      "at": "2026-10-12T08:34:06.452368669Z"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+      "display_id": "agt_agxsplit",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T08:28:29.922894362Z",
+      "ticket": {
+        "name": "agxsplit",
+        "writes": [
+          "tools/agx/src/**",
+          "tools/agx/tests/suite-layout.test.ts",
+          "tools/agx/contract.md"
+        ]
+      },
+      "facts": {
+        "changed_files": [
+          "agents/hooks/enforce-storage-headroom.ts",
+          "agents/hooks/tests/enforce-storage-headroom.test.ts",
+          "tools/agx/src/agx.ts",
+          "tools/agx/src/lifecycle.ts",
+          "tools/agx/src/follow-watch.ts"
+        ]
+      }
+    },
+    {
+      "kind": "grade-waived",
+      "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm"
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T12-42-56.116155232Z-3426560-i372ti",
+      "at": "2026-10-12T12:45:16.043821845Z"
+    },
+    {
+      "kind": "interim",
+      "run_id": "2026-10-12T12-42-56.116155232Z-3426560-i372ti",
+      "at": "2026-10-12T12:45:25.698070259Z"
+    },
+    {
+      "kind": "run",
+      "run_id": "2026-10-12T12-42-56.116155232Z-3426560-i372ti",
+      "cwd": "/home/fuyu/dotfiles-arm-agx-20261012124254-2d5208c7-f2de-4df1-99c1-9e617892abe6",
+      "display_id": "agt_writelease",
+      "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
+      "started_at": "2026-10-12T12:43:38.43353043Z",
+      "ticket": {
+        "name": "writelease",
+        "writes": [
+          "tools/agx/src/**",
+          "tools/agx/tests/**",
+          "tools/agx/CHANGELOG.md",
+          "tools/agx/package.json",
+          "tools/agx/contract.md"
+        ]
+      },
+      "facts": {
+        "changed_files": ["e:coord-2610.4"]
+      }
+    }
+  ]
+}

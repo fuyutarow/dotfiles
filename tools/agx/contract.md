@@ -59,14 +59,37 @@ opens the worker's promise block, and its id is kept on the marker and run recor
 the short dispatcher session id; `ps --json` rows include the full `dispatcher_session` (or
 `null` when the run has no recorded dispatcher session).
 
-Write leases are created only while admitting a new run and are shared by repository root across
-dispatcher sessions. Admission refuses overlapping write globs with exit 2. `agx ps --leases`
-lists the current repository's pruned lease set; `agx ledger gc` applies the same pruning rules.
-Only live runs and finished runs with changed files, no acceptance/rejection or landing decision,
-and an existing workspace retain a lease. Acceptance, rejection, landing, abandonment, a terminal
-run without changed files, or a missing workspace releases it. Historical ledger rows never create
-leases. Detached dispatch completes schema, RESOURCE, premise and lease admission before invoking
-systemd or launchd; a refusal is printed by the caller, exits 2, and prints no `run_id`.
+An explicit `kind: "admitted"` record authorizes a write lease. New admissions are saved in
+`admissions/` before launch, including declared writes, workspace and router PID; an optional
+predecessor records ownership transfer. Run receipts, markers and lease cache files alone never
+backfill a lease. For 3.5.0 compatibility, a lease file is an admission receipt only when its run ID,
+repository, workspace, ticket name and write scopes match independent run metadata and the run
+was admitted at or after the first 3.5.0 deployment, `2026-10-12T13:39:37Z` (alpha `54746865`).
+Earlier terminal runs never hold, even when 3.5.0 backfilled matching lease files. Read-only
+listing recognizes that corroborated receipt; admission and GC persist its explicit admission
+before rebuilding the cache, preserving existing admission metadata. Journals and the full ledger,
+including dated shards, supply lifecycle evidence. Leases are shared by repository root across
+dispatcher sessions. One computation serves admission,
+`agx ps --leases` and `agx ledger gc`: a live process or OS unit with declared writes holds its lease
+in every admission era; otherwise its
+exact ticket-name/workspace lineage must be unjudged and unlanded, its workspace must exist, and
+that workspace must have changes outside trunk. Any acceptance (including rejection) or landing
+of a lineage member releases all non-live members. Historical changed-file receipts are not a
+current workspace observation. jj observations use `--ignore-working-copy` and are cached per
+computation; failure assumes changes and appears in an admission refusal.
+
+Lease files are a disposable cache. `ps --leases` only reads, without creating a directory, lock
+or changing the copied state. For sandboxed probes, `AGX_LIVE_RUN_IDS_FILE` may name a JSON array
+of live run IDs captured by the host. This complete snapshot replaces PID and unit liveness;
+it does not create admissions or write declarations. Without it, native liveness is used.
+Listing creates no abandonment record. Admission and GC record an unfinished run whose process/unit is gone as
+`abandoned` with reason `stopped externally`, then rebuild the cache. Abandonment alone does not
+discard unjudged workspace changes. Admission refuses overlapping write globs with exit 2 and
+prints judgment, landing and abandonment recovery instructions. Amend/resume/repick inherits
+its own lineage without overlap refusal and transfers the lease to the successor. Segment-exact
+overlap uses `*` within one segment and `**` across segments. Admitted metadata is durable
+before launching in every mode. Detached dispatch completes schema, RESOURCE, premise and lease
+admission before invoking systemd or launchd; a refusal prints no `run_id`.
 
 Capabilities accept plain routing tags or `{ need, lower_effort_lacks }` objects with non-empty
 strings. Only an object justifies xhigh/max. Without one, positive selection mass goes to the

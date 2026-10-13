@@ -160,7 +160,7 @@ describe("parseTicket", () => {
   });
 });
 
-describe("globsOverlap (conservative literal-prefix rule)", () => {
+describe("globsOverlap (segment-exact intersection)", () => {
   test.each([
     ["tools/agx/**", "agents/models/roster.ts", false],
     ["tools/agx/**", "tools/agx/tests/a.ts", true],
@@ -168,10 +168,27 @@ describe("globsOverlap (conservative literal-prefix rule)", () => {
     ["**", "anything/at/all", true],
     ["a/b.ts", "a/b.ts", true],
     ["a/b.ts", "a/c.ts", false],
-    ["a/*/x.ts", "a/b/y.ts", true],
+    ["a/*/x.ts", "a/b/y.ts", false],
     ["a/b/**", "a/bc/**", false],
     ["./a/b/", "a/b/c", true],
     ["src/*.ts", "docs/*.md", false],
+    [
+      "launcher/frame_integrity*.test.*",
+      "launcher/designs/module-ledger.toml",
+      false,
+    ],
+    [
+      "launcher/frame_integrity*.test.*",
+      "launcher/frame_integrity_v6.test.ts",
+      true,
+    ],
+    ["src/*.ts", "src/sub/file.ts", false],
+    ["src/**/file.ts", "src/file.ts", true],
+    ["src/**/file.ts", "src/sub/file.ts", true],
+    ["a/[ab].{ts,js}", "a/b.js", true],
+    ["a/[ab].ts", "a/c.ts", false],
+    ["a/[a-a].ts", "a/-.ts", false],
+    ["a/[😀-😃].ts", "a/😁.ts", true],
   ])("%s vs %s → %s (symmetric)", (a, b, expected) => {
     expect(globsOverlap(a, b)).toBe(expected);
     expect(globsOverlap(b, a)).toBe(expected);

@@ -151,6 +151,9 @@ import {
   claimWriteLease,
   listWriteLeases,
   releaseWriteLease,
+  readLeaseEvidence,
+  reconcileWriteLeases,
+  foldWriteLeases,
 } from "./write-leases.ts";
 import { planWorkspace } from "./workspaces.ts";
 import { createSparseWorkspace } from "./prepare-workspace.ts";
@@ -1595,7 +1598,14 @@ function readActive(): { active: Active; alive: boolean; file: string }[] {
     .filter((f) => f.endsWith(".json"))
     .flatMap((f) => {
       const file = join(ACTIVE_DIR, f);
-      const parsed = jsonOf(ActiveSchema).safeParse(readFileSync(file, "utf8"));
+      const text = fromThrowable(
+        () => readFileSync(file, "utf8"),
+        errorMessage,
+      )();
+      if (text.isErr() && text.error.includes("ENOENT")) return [];
+      if (text.isErr())
+        fatal(`cannot read active marker ${file}: ${text.error}`);
+      const parsed = jsonOf(ActiveSchema).safeParse(text.value);
       return parsed.success
         ? [{ active: parsed.data, alive: alive(parsed.data.pid), file }]
         : [];
@@ -2731,7 +2741,7 @@ async function launch(l: Launch): Promise<number> {
     if (!admitted.ok) fatal(admitted.reason);
   }
   const runId = flags.runId ?? newRunId();
-  claimRunWrites(flags, ticket, runId);
+  claimRunWrites(flags, ticket, runId, resume?.from);
   const ticketName =
     flags.name ?? ticket?.name ?? displayId.slice("agt_".length);
   const home = ticketHome(
@@ -4571,28 +4581,65 @@ function readAllLog(): Logged[] {
   return parseLogLines(ledgerLines(STATE_DIR));
 }
 
+function currentRepoLeaseInput(cwd: string) {
+  const repo = workspaceRoot(cwd);
+  const markers = readActive();
+  // A complete host snapshot lets read-only probes run without access to host PIDs/units.
+  const snapshotPath = process.env.AGX_LIVE_RUN_IDS_FILE;
+  let snapshot: string[] | undefined;
+  if (snapshotPath !== undefined) {
+    const parsed = jsonOf(z.array(z.string().min(1))).safeParse(
+      readFileSync(snapshotPath, "utf8"),
+    );
+    if (!parsed.success)
+      fatal(
+        `invalid AGX_LIVE_RUN_IDS_FILE: ${parsed.error.issues[0]?.message ?? "expected a JSON array of run IDs"}`,
+      );
+    snapshot = parsed.data;
+  }
+  return {
+    stateDir: STATE_DIR,
+    repo,
+    activeRunIds: new Set(
+      snapshot ??
+        markers
+          .filter(
+            (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
+          )
+          .map((entry) => entry.active.run_id),
+    ),
+    ...(snapshot === undefined
+      ? {}
+      : { unitAlive: () => false, processAlive: () => false }),
+    evidence: [
+      ...readLeaseEvidence(STATE_DIR),
+      ...markers.map((entry) =>
+        Object.assign({}, entry.active, {
+          repo: workspaceRoot(entry.active.cwd),
+          kind: "started",
+        }),
+      ),
+    ],
+  };
+}
+
 function claimRunWrites(
   flags: RunFlags,
   ticket: Ticket | undefined,
   runId: string,
+  predecessor?: string,
 ): void {
   const writes = ticket?.writes ?? [];
   if (writes.length === 0) return;
-  const repo = workspaceRoot(flags.cd);
-  const active = readActive().filter(
-    (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
-  );
   const result = claimWriteLease({
-    stateDir: STATE_DIR,
-    repo,
+    ...currentRepoLeaseInput(flags.cd),
+    ...(predecessor === undefined ? {} : { predecessor }),
     run_id: runId,
     cwd: resolve(flags.cd),
     writes,
     ticket: flags.name ?? ticket?.name ?? runId,
     dispatcher_session: currentDispatcherSession() ?? "unknown",
     since: now(),
-    activeRunIds: new Set(active.map((entry) => entry.active.run_id)),
-    evidence: [...readAllLog(), ...runEvents()],
   });
   if (!result.ok) fatal(`agx: write lease refused: ${result.error}`, 2);
 }
@@ -4632,7 +4679,18 @@ function collectDeadMarkers(dryRun = false): {
   if (dryRun) return { found: dead.length, removed: 0 };
   if (dead.length === 0) return { found: 0, removed: 0 };
   const log = readLog();
+  const lifecycle = readLeaseEvidence(STATE_DIR);
   for (const { active, file } of dead) {
+    if (
+      lifecycle.some(
+        (row) =>
+          row.run_id === active.run_id &&
+          (row.kind === "run" || row.kind === "abandoned"),
+      )
+    ) {
+      rmSync(file, { force: true });
+      continue;
+    }
     const previous = log.findLast((entry) => entry.run_id === active.run_id);
     const at = now();
     appendLog({
@@ -4640,6 +4698,8 @@ function collectDeadMarkers(dryRun = false): {
       run_id: active.run_id,
       when: at,
       at,
+      reason: "stopped externally",
+      ticket: active.ticket,
       last_known_state:
         previous === undefined ? "running" : stateOfRecord(previous),
       display_id: active.display_id,
@@ -4793,6 +4853,12 @@ function gcCommand(
     if (rotation.error !== undefined)
       fatal(`cannot rotate ${LOG_FILE}: ${rotation.error}`);
   }
+  if (dryRun) {
+    const decisions = foldWriteLeases(currentRepoLeaseInput(process.cwd()));
+    process.stdout.write(
+      `agx ledger gc: ${decisions.filter((item) => item.held).length} held lease(s); ${decisions.filter((item) => item.abandoned).length} unfinished run(s) would be abandoned\n`,
+    );
+  }
   if (dryRun)
     process.stdout.write(
       `agx ledger gc: ${result.found === 0 ? "no stale markers" : `would mark ${result.found} abandoned and remove ${result.found} marker(s)`}\n`,
@@ -4812,19 +4878,7 @@ function gcCommand(
 }
 
 function pruneCurrentRepoLeases(cwd = process.cwd()): void {
-  const repo = workspaceRoot(cwd);
-  const result = listWriteLeases({
-    stateDir: STATE_DIR,
-    repo,
-    activeRunIds: new Set(
-      readActive()
-        .filter(
-          (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
-        )
-        .map((entry) => entry.active.run_id),
-    ),
-    evidence: [...readAllLog(), ...runEvents()],
-  });
+  const result = reconcileWriteLeases(currentRepoLeaseInput(cwd));
   if (!result.ok) fatal(`cannot prune write leases: ${result.error}`);
 }
 
@@ -4877,19 +4931,7 @@ function psCommand(
   leasesOnly: boolean,
 ): number {
   if (leasesOnly) {
-    const repo = workspaceRoot(process.cwd());
-    const result = listWriteLeases({
-      stateDir: STATE_DIR,
-      repo,
-      activeRunIds: new Set(
-        readActive()
-          .filter(
-            (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
-          )
-          .map((entry) => entry.active.run_id),
-      ),
-      evidence: [...readAllLog(), ...runEvents()],
-    });
+    const result = listWriteLeases(currentRepoLeaseInput(process.cwd()));
     if (!result.ok) fatal(`cannot read write leases: ${result.error}`);
     if (asJson)
       process.stdout.write(
@@ -5308,8 +5350,10 @@ function acceptRun(
   note: string | undefined,
 ): number {
   const resolved = resolveRunId(runId);
-  const logged = readAllLog().find(
-    (line) => line.kind === "run" && line.run_id === resolved,
+  const logged = readLeaseEvidence(STATE_DIR).findLast(
+    (line) =>
+      (line.kind === "run" || line.kind === "abandoned") &&
+      line.run_id === resolved,
   );
   if (logged === undefined)
     fatal(`no finished run ${runId} in ${LOG_FILE}; no acceptance recorded`);
@@ -7218,7 +7262,9 @@ async function detachDispatch(
     kind: "detached",
     run_id: runId,
     dispatcher_session: dispatcherSession,
-    ticket: { name, path: ticketFile, writes: [] },
+    ticket: { name, path: ticketFile, writes: parsed.ticket.writes },
+    repo: workspaceRoot(flags.cd),
+    unit: detachedLaunch.unit,
     cwd: flags.cd,
     sandbox: flags.sandbox,
     pick: { source: "pending", choice: "pending" },

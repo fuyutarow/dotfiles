@@ -1,0 +1,251 @@
+[
+  {
+    "kind": "interim",
+    "run_id": "2026-10-12T06-54-25.913057736Z-715108-hl1og4",
+    "at": "2026-10-12T06:56:44.24155055Z"
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T06-54-25.913057736Z-715108-hl1og4",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+    "ticket": {
+      "name": "agxsplit",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/suite-layout.test.ts",
+        "tools/agx/contract.md"
+      ]
+    }
+  },
+  {
+    "kind": "grade-waived",
+    "run_id": "2026-10-12T06-54-25.913057736Z-715108-hl1og4"
+  },
+  {
+    "kind": "interim",
+    "run_id": "2026-10-12T07-40-51.883902068Z-1127700-4cffyu",
+    "at": "2026-10-12T07:42:01.093031305Z"
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T07-40-51.883902068Z-1127700-4cffyu",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+    "ticket": {
+      "name": "agxsplit",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/suite-layout.test.ts",
+        "tools/agx/contract.md"
+      ]
+    },
+    "resumed_from": "2026-10-12T06-54-25.913057736Z-715108-hl1og4"
+  },
+  {
+    "kind": "grade-waived",
+    "run_id": "2026-10-12T07-40-51.883902068Z-1127700-4cffyu"
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T07-43-02.677339104Z-1153305-qizlig",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+    "ticket": {
+      "name": "agxsplit",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/suite-layout.test.ts",
+        "tools/agx/contract.md"
+      ]
+    },
+    "resumed_from": "2026-10-12T07-40-51.883902068Z-1127700-4cffyu"
+  },
+  {
+    "kind": "interim",
+    "run_id": "2026-10-12T08-07-25.48592454Z-1403340-x0cwuh",
+    "at": "2026-10-12T08:08:23.174417333Z"
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T08-07-25.48592454Z-1403340-x0cwuh",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+    "ticket": {
+      "name": "agxsplit",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/suite-layout.test.ts",
+        "tools/agx/contract.md"
+      ]
+    },
+    "resumed_from": "2026-10-12T07-43-02.677339104Z-1153305-qizlig"
+  },
+  {
+    "kind": "grade-waived",
+    "run_id": "2026-10-12T08-07-25.48592454Z-1403340-x0cwuh"
+  },
+  {
+    "kind": "interim",
+    "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm",
+    "at": "2026-10-12T08:30:27.808220083Z"
+  },
+  {
+    "kind": "interim",
+    "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm",
+    "at": "2026-10-12T08:34:06.452368669Z"
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012065423-04856291-9f0a-450d-907e-718cf411ae7b",
+    "ticket": {
+      "name": "agxsplit",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/suite-layout.test.ts",
+        "tools/agx/contract.md"
+      ]
+    },
+    "resumed_from": "2026-10-12T08-07-25.48592454Z-1403340-x0cwuh"
+  },
+  {
+    "kind": "grade-waived",
+    "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm"
+  },
+  {
+    "kind": "interim",
+    "run_id": "2026-10-12T13-35-48.888040363Z-4000929-7vzcus",
+    "at": "2026-10-12T13:43:30.586279751Z"
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T13-35-48.888040363Z-4000929-7vzcus",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012133547-1b886479-2696-45c1-aa9c-688b6880540e",
+    "ticket": {
+      "name": "tmpinode",
+      "writes": [
+        "agents/hooks/enforce-storage-headroom.ts",
+        "agents/hooks/tests/enforce-storage-headroom*.test.ts",
+        "tools/disk-reclaim/**",
+        "scripts/doctor.ts",
+        "scripts/tests/doctor.test.ts"
+      ]
+    }
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T14-37-07.944574596Z-206687-llv24u",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012133547-1b886479-2696-45c1-aa9c-688b6880540e",
+    "ticket": {
+      "name": "tmpinode",
+      "writes": [
+        "agents/hooks/enforce-storage-headroom.ts",
+        "agents/hooks/tests/enforce-storage-headroom*.test.ts",
+        "tools/disk-reclaim/**",
+        "scripts/doctor.ts",
+        "scripts/tests/doctor.test.ts"
+      ]
+    },
+    "resumed_from": "2026-10-12T13-35-48.888040363Z-4000929-7vzcus"
+  },
+  {
+    "kind": "grade-waived",
+    "run_id": "2026-10-12T14-37-07.944574596Z-206687-llv24u"
+  },
+  {
+    "kind": "interim",
+    "run_id": "2026-10-12T14-34-23.75219347Z-177297-zx6xqx",
+    "at": "2026-10-12T14:41:16.258074094Z"
+  },
+  {
+    "kind": "interim",
+    "run_id": "2026-10-12T14-34-23.75219347Z-177297-zx6xqx",
+    "at": "2026-10-12T14:41:33.937854761Z"
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T14-34-23.75219347Z-177297-zx6xqx",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012143422-3104f98c-effb-4365-ae83-184c9bc8ef43",
+    "ticket": {
+      "name": "leasefix",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/**",
+        "tools/agx/CHANGELOG.md",
+        "tools/agx/package.json",
+        "tools/agx/contract.md"
+      ]
+    }
+  },
+  {
+    "kind": "interim",
+    "run_id": "2026-10-12T22-13-08.579581898Z-2315445-d03kbb",
+    "at": "2026-10-12T22:16:29.543622653Z"
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T22-13-08.579581898Z-2315445-d03kbb",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012221307-eadc59fb-772e-40c7-85f5-a8bd734baa9a",
+    "ticket": {
+      "name": "rrworkspace",
+      "writes": ["tools/repo-retrieve/**", "tools/shared/**"]
+    }
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T22-17-18.504460445Z-2356159-58kz5n",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012133547-1b886479-2696-45c1-aa9c-688b6880540e",
+    "ticket": {
+      "name": "tmpinode",
+      "writes": [
+        "agents/hooks/enforce-storage-headroom.ts",
+        "agents/hooks/tests/enforce-storage-headroom*.test.ts",
+        "tools/disk-reclaim/**",
+        "scripts/doctor.ts",
+        "scripts/tests/doctor.test.ts"
+      ]
+    },
+    "resumed_from": "2026-10-12T14-37-07.944574596Z-206687-llv24u"
+  },
+  {
+    "kind": "grade-waived",
+    "run_id": "2026-10-12T22-17-18.504460445Z-2356159-58kz5n"
+  },
+  {
+    "kind": "run",
+    "run_id": "2026-10-12T22-16-58.759111144Z-2354391-agtjyo",
+    "cwd": "/home/fuyu/dotfiles-arm-agx-20261012143422-3104f98c-effb-4365-ae83-184c9bc8ef43",
+    "ticket": {
+      "name": "leasefix",
+      "writes": [
+        "tools/agx/src/**",
+        "tools/agx/tests/**",
+        "tools/agx/CHANGELOG.md",
+        "tools/agx/package.json",
+        "tools/agx/contract.md"
+      ]
+    },
+    "resumed_from": "2026-10-12T14-34-23.75219347Z-177297-zx6xqx"
+  },
+  {
+    "kind": "acceptance",
+    "run_id": "2026-10-12T22-17-18.504460445Z-2356159-58kz5n",
+    "at": "2026-10-13T00:09:55.620368757Z",
+    "accept": true
+  },
+  {
+    "kind": "acceptance",
+    "run_id": "2026-10-12T22-13-08.579581898Z-2315445-d03kbb",
+    "at": "2026-10-13T00:11:22.259128728Z",
+    "accept": true
+  },
+  {
+    "kind": "acceptance",
+    "run_id": "2026-10-12T08-27-24.588156522Z-1512407-90cvpm",
+    "at": "2026-10-13T00:12:43.628133498Z",
+    "accept": true
+  },
+  {
+    "kind": "acceptance",
+    "run_id": "2026-10-12T22-16-58.759111144Z-2354391-agtjyo",
+    "at": "2026-10-13T00:14:15.077709023Z",
+    "accept": true
+  }
+]

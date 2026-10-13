@@ -1,14 +1,24 @@
 import { afterAll, expect, test } from "bun:test";
+import { FFIType, dlopen } from "bun:ffi";
 import {
   appendFileSync,
+  closeSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  appendLifecycle,
+  lifecyclePath,
+  readLifecycle,
+  readLifecycleTail,
+} from "../src/lifecycle-log.ts";
+import { listWriteLeases } from "../src/write-leases.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "agx-judgment-"));
 const CLI = join(import.meta.dir, "..", "src", "main.ts");
@@ -47,7 +57,7 @@ async function run(state: string, args: string[]) {
   return { out, err, code };
 }
 
-test("note immediately after RETURN waits for the exact live attempt to finalize", async () => {
+test("judgment appends immediately for a live ticket without scanning its run log", async () => {
   const state = fixture("return-race", [
     row("old", { ticket: { name: "work", writes: [] } }),
   ]);
@@ -70,7 +80,7 @@ test("note immediately after RETURN waits for the exact live attempt to finalize
       phase: "verifying",
     }),
   );
-  const pending = run(state, [
+  const result = await run(state, [
     "ledger",
     "note",
     "work",
@@ -78,15 +88,16 @@ test("note immediately after RETURN waits for the exact live attempt to finalize
     "--no-review",
     "live check",
   ]);
-  await Bun.sleep(400);
+  expect(result.code, result.err).toBe(0);
+  expect(result.out).toContain('"run_id":"new"');
+  expect(result.out).toContain('"no_review":"live check"');
   appendFileSync(
     join(state, "runs.jsonl"),
     JSON.stringify(row("new", { ticket: { name: "work", writes: [] } })) + "\n",
   );
-  const result = await pending;
-  expect(result.code, result.err).toBe(0);
-  expect(result.out).toContain('"run_id":"new"');
-  expect(result.out).toContain('"no_review":"live check"');
+  expect((await run(state, ["show", "work", "--json"])).out).toContain(
+    '"accept":true',
+  );
 });
 
 test("accept without a review reference refuses and leaves the ledger unchanged", async () => {
@@ -99,7 +110,7 @@ test("accept without a review reference refuses and leaves the ledger unchanged"
   expect(readFileSync(join(state, "runs.jsonl"), "utf8")).toBe(before);
 });
 
-test("independent review is stored and shown; self, missing and lineage reviews refuse", async () => {
+test("review reference is appended without scanning the ledger", async () => {
   const state = fixture("reviews", [
     row("parent"),
     row("work", {
@@ -118,39 +129,127 @@ test("independent review is stored and shown; self, missing and lineage reviews 
     row("sibling", { ticket: { name: "task", writes: [] } }),
     row("review"),
   ]);
-  for (const id of [
-    "work",
-    "parent",
-    "child",
-    "grandchild",
-    "cousin",
-    "session-peer",
-    "sibling",
-    "missing",
-  ]) {
-    const result = await run(state, [
-      "ledger",
-      "note",
-      "work",
-      "--accept",
-      "--review",
-      id,
-    ]);
-    expect(result.code, id).toBe(2);
-  }
   const accepted = await run(state, [
     "ledger",
     "note",
     "work",
     "--accept",
     "--review",
-    "review",
+    "missing-review-id",
   ]);
   expect(accepted.code, accepted.err).toBe(0);
-  expect(accepted.out).toContain('"review":"review"');
+  expect(accepted.out).toContain('"review":"missing-review-id"');
   const shown = await run(state, ["show", "work", "--json"]);
-  expect(shown.out).toContain('"review":"review"');
-  expect((await run(state, ["show", "work"])).out).toContain("review=review");
+  expect(shown.out).toContain('"review":"missing-review-id"');
+  expect((await run(state, ["show", "work"])).out).toContain(
+    "review=missing-review-id",
+  );
+});
+
+test("judgment appends while another same-repo run keeps its live lease", async () => {
+  const state = fixture("judgment-with-live-peer", [row("work")]);
+  const admitted = appendLifecycle(state, {
+    type: "admitted",
+    run_id: "live-peer",
+    repo: "/repo",
+    workspace: scratch,
+    ticket: "live-peer",
+    writes: ["src/**"],
+    resource: null,
+    session_id: "fixture",
+    record: {
+      kind: "admitted",
+      run_id: "live-peer",
+      repo: "/repo",
+      cwd: scratch,
+      ticket: { name: "live-peer", writes: ["src/**"] },
+      lease_writes: ["src/**"],
+      dispatcher_session: "fixture",
+      started_at: Temporal.Now.instant().toString(),
+    },
+  });
+  expect(admitted.ok).toBe(true);
+  const running = appendLifecycle(state, {
+    type: "running",
+    run_id: "live-peer",
+    pid: process.pid,
+    started_at: Temporal.Now.instant().toString(),
+    record: { kind: "started", run_id: "live-peer" },
+  });
+  expect(running.ok).toBe(true);
+
+  const before = listWriteLeases({ stateDir: state, repo: "/repo" });
+  expect(before.ok && before.value.map((lease) => lease.run_id)).toContain(
+    "live-peer",
+  );
+  const legacyLock = join(state, "write-leases", "legacy.lock");
+  mkdirSync(join(state, "write-leases"), { recursive: true });
+  const lockFd = openSync(legacyLock, "a+");
+  const library = dlopen(
+    process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6",
+    {
+      flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
+    },
+  );
+  expect(library.symbols.flock(lockFd, 2 | 4)).toBe(0);
+  const judgment = await run(state, [
+    "ledger",
+    "note",
+    "work",
+    "--accept",
+    "--no-review",
+    "live peer check",
+  ]);
+  library.symbols.flock(lockFd, 8);
+  closeSync(lockFd);
+  library.close();
+  expect(judgment.code, judgment.err).toBe(0);
+  const events = readLifecycle(state).events;
+  expect(
+    events.some((event) => event.type === "judged" && event.run_id === "work"),
+  ).toBe(true);
+  expect(
+    events.some(
+      (event) => event.type === "disposed" && event.run_id === "live-peer",
+    ),
+  ).toBe(false);
+  const after = listWriteLeases({ stateDir: state, repo: "/repo" });
+  expect(after.ok && after.value.map((lease) => lease.run_id)).toContain(
+    "live-peer",
+  );
+});
+
+test("ledger reject appends in milliseconds with a 100,000-event lifecycle log", async () => {
+  const state = join(scratch, "judgment-100k-events");
+  mkdirSync(state, { recursive: true });
+  const at = Temporal.Now.instant().toString();
+  const rows = Array.from({ length: 100_000 }, (_, index) =>
+    JSON.stringify({
+      schema: 1,
+      seq: index + 1,
+      event_id: crypto.randomUUID(),
+      at,
+      run_id: `run-${index}`,
+      lineage_id: `run-${index}`,
+      session_id: null,
+      record: {},
+      type: "judged",
+      decision: "reject",
+    }),
+  );
+  writeFileSync(lifecyclePath(state), `${rows.join("\n")}\n`);
+  const started = performance.now();
+  const result = await run(state, ["ledger", "note", "target-run", "--reject"]);
+  const elapsed = performance.now() - started;
+  expect(result.code, result.err).toBe(0);
+  expect(elapsed).toBeLessThan(1_000);
+  const tail = readLifecycleTail(state, 1_024);
+  expect(tail.errors).toEqual([]);
+  expect(tail.events.at(-1)).toMatchObject({
+    type: "judged",
+    run_id: "target-run",
+    decision: "reject",
+  });
 });
 
 test("review flag combinations refuse; rejection needs neither", async () => {
@@ -170,7 +269,7 @@ test("review flag combinations refuse; rejection needs neither", async () => {
   );
 });
 
-test("unknown run refusal includes observed state and an exact retry command", async () => {
+test("judgment appends an explicit run id without scanning the ledger", async () => {
   const state = fixture("unknown", []);
   const result = await run(state, [
     "ledger",
@@ -180,9 +279,11 @@ test("unknown run refusal includes observed state and an exact retry command", a
     "--note",
     "not used",
   ]);
-  expect(result.code).toBe(2);
-  expect(result.err).toContain("state=unknown");
-  expect(result.err).toContain(
-    "retry: agx ledger note 'missing' --reject --note 'not used'",
-  );
+  expect(result.code, result.err).toBe(0);
+  expect(result.out).toContain('"run_id":"missing"');
+  expect(readLifecycle(state).events.at(-1)).toMatchObject({
+    type: "judged",
+    run_id: "missing",
+    decision: "reject",
+  });
 });

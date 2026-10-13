@@ -1,5 +1,4 @@
 import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -15,10 +14,9 @@ import { z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
 import { completeTicket } from "./fixture-ticket.ts";
 import { workspaceRoot } from "../src/lifecycle.ts";
+import { appendLifecycle } from "../src/lifecycle-log.ts";
 
 const CLI = join(import.meta.dir, "..", "src", "agx.ts");
-const hashText = (value: string): string =>
-  createHash("sha256").update(value).digest("hex");
 // Each integration case can launch several bounded CLI children; allow loaded CI hosts.
 setDefaultTimeout(20_000);
 const scratch = mkdtempSync(join(tmpdir(), "agx-run-control-"));
@@ -74,6 +72,41 @@ function marker(
     cwd: scratch,
     dispatcher_session: dispatcherSession,
   };
+}
+
+function appendLeaseAdmission(
+  state: string,
+  runId: string,
+  cwd: string,
+  writes: string[],
+  options: { exclusive?: boolean } = {},
+): void {
+  const repo = workspaceRoot(cwd);
+  const record = {
+    kind: "admitted",
+    run_id: runId,
+    repo,
+    cwd,
+    ticket: { name: runId, writes },
+    lease: "repository",
+    exclusive: options.exclusive ?? false,
+    dispatcher_session: "fixture-session",
+    started_at: Temporal.Now.instant().toString(),
+    tracked_paths: ["tools/agx/src/agx.ts", "src/main.ts"],
+    pid: process.pid,
+  };
+  const result = appendLifecycle(state, {
+    type: "admitted",
+    run_id: runId,
+    repo,
+    workspace: cwd,
+    ticket: runId,
+    writes,
+    resource: null,
+    session_id: "fixture-session",
+    record,
+  });
+  expect(result.ok).toBe(true);
 }
 
 const PsRun = z.looseObject({
@@ -652,7 +685,7 @@ test("dispatch --detach refuses a GPU ticket when nvidia-smi is absent", () => {
   expect(result.err).toContain(`nvidia-smi not found on PATH=${emptyPath}`);
 });
 
-test("host snapshot lists detached writers without admissions or visible PIDs, while empty writes stay unleased", () => {
+test("host liveness snapshots and run history alone do not create write leases", () => {
   const state = join(scratch, "host-liveness");
   mkdirSync(state);
   const ids = ["m10_v2", "ed_unify", "si_unify", "sbk_restore2"];
@@ -685,10 +718,7 @@ test("host snapshot lists detached writers without admissions or visible PIDs, w
     AGX_LIVE_RUN_IDS_FILE: snapshot,
   });
   expect(result.code).toBe(0);
-  expect(result.out).toContain("m10_v2");
-  expect(result.out).toContain("ed_unify");
-  expect(result.out).toContain("si_unify");
-  expect(result.out).not.toContain("sbk_restore2");
+  expect(result.out).toBe('{"schema":1,"leases":[]}\n');
   expect(existsSync(join(state, "write-leases"))).toBe(false);
   expect(existsSync(join(state, "admissions"))).toBe(false);
   writeFileSync(snapshot, "[]");
@@ -699,29 +729,24 @@ test("host snapshot lists detached writers without admissions or visible PIDs, w
   ).toBe('{"schema":1,"leases":[]}');
 });
 
-test("ledger gc prunes judged write leases and ps --leases uses the same result", () => {
+test("judged lifecycle events release leases without materializing a cache", () => {
   const state = join(scratch, "gc-write-lease-state");
-  const repo = workspaceRoot(process.cwd());
   const runId = "judged-write-lease";
-  const hash = hashText;
-  const leaseDir = join(state, "write-leases", hash(repo));
-  mkdirSync(leaseDir, { recursive: true });
-  writeFileSync(
-    join(leaseDir, `${hash(runId)}.json`),
-    JSON.stringify({
-      repo,
-      run_id: runId,
-      cwd: scratch,
-      writes: ["tools/agx/**"],
-      ticket: "judged",
-      dispatcher_session: "fixture-session",
-      since: "2026-10-12T00:00:00Z",
-    }),
-  );
-  writeFileSync(
-    join(state, "runs.jsonl"),
-    `${JSON.stringify({ kind: "run", run_id: runId, repo, cwd: scratch, ticket: { name: "judged", writes: ["tools/agx/**"] }, facts: { changed_files: ["tools/agx/src/agx.ts"] }, pick: { source: "fixture", choice: "luna-low" } })}\n${JSON.stringify({ kind: "acceptance", run_id: runId, accept: false, at: "2026-10-12T00:01:00Z" })}\n`,
-  );
+  const cwd = process.cwd();
+  appendLeaseAdmission(state, runId, cwd, ["tools/agx/**"]);
+  appendLifecycle(state, {
+    type: "terminal",
+    run_id: runId,
+    outcome: "done",
+    workspace: cwd,
+    record: { kind: "run", run_id: runId, cwd },
+  });
+  appendLifecycle(state, {
+    type: "judged",
+    run_id: runId,
+    decision: "reject",
+    record: { kind: "acceptance", run_id: runId, accept: false },
+  });
 
   const beforeGc = cli(["ps", "--leases", "--json"], state);
   expect(beforeGc.code, beforeGc.err).toBe(0);
@@ -729,12 +754,11 @@ test("ledger gc prunes judged write leases and ps --leases uses the same result"
     decodedJson(z.looseObject({ leases: z.array(z.unknown()) }), beforeGc.out)
       .leases,
   ).toEqual([]);
-  expect(existsSync(join(leaseDir, `${hash(runId)}.json`))).toBe(true);
-  expect(existsSync(join(leaseDir, ".lock"))).toBe(false);
+  expect(existsSync(join(state, "write-leases"))).toBe(false);
 
   const collected = cli(["ledger", "gc"], state);
   expect(collected.code, collected.err).toBe(0);
-  expect(existsSync(join(leaseDir, `${hash(runId)}.json`))).toBe(false);
+  expect(existsSync(join(state, "write-leases"))).toBe(false);
   const listed = cli(["ps", "--leases", "--json"], state);
   expect(listed.code, listed.err).toBe(0);
   expect(
@@ -743,16 +767,14 @@ test("ledger gc prunes judged write leases and ps --leases uses the same result"
   ).toEqual([]);
 });
 
-test("dispatch --detach reports lease refusal before creating a unit or run_id", () => {
+test("dispatch --detach reports lifecycle lease refusal before creating a unit or run_id", () => {
   const state = join(scratch, "detach-lease-state");
   const active = join(state, "active");
   const stubDir = join(scratch, "detach-lease-stub");
   mkdirSync(active, { recursive: true });
   mkdirSync(stubDir, { recursive: true });
   const runId = "existing-live-holder";
-  const repo = resolve(scratch);
   const timestamp = Temporal.Now.instant().toString();
-  const hash = hashText;
   writeFileSync(
     join(active, `${runId}.json`),
     JSON.stringify({
@@ -760,31 +782,14 @@ test("dispatch --detach reports lease refusal before creating a unit or run_id",
       ticket: { name: "existing-holder", writes: ["tools/agx/**"] },
     }),
   );
-  const leaseDir = join(state, "write-leases", hash(repo));
-  mkdirSync(leaseDir, { recursive: true });
-  writeFileSync(
-    join(leaseDir, `${hash(runId)}.json`),
-    JSON.stringify({
-      repo,
-      run_id: runId,
-      cwd: scratch,
-      writes: ["tools/agx/**"],
-      ticket: "existing-holder",
-      dispatcher_session: "holder-session",
-      since: timestamp,
-    }),
-  );
-  writeFileSync(
-    join(state, "runs.jsonl"),
-    JSON.stringify({
-      kind: "admitted",
-      lease_version: 1,
-      run_id: runId,
-      repo,
-      cwd: scratch,
-      ticket: { name: "existing-holder", writes: ["tools/agx/**"] },
-    }) + "\n",
-  );
+  appendLeaseAdmission(state, runId, process.cwd(), ["tools/agx/**"]);
+  appendLifecycle(state, {
+    type: "running",
+    run_id: runId,
+    pid: process.pid,
+    started_at: timestamp,
+    record: { kind: "started", run_id: runId, pid: process.pid },
+  });
   const capture = join(scratch, "detach-lease-argv.txt");
   const stub = join(stubDir, "systemd-run");
   writeFileSync(stub, '#!/bin/sh\nprintf "%s\\n" "$@" > "$AGX_CAPTURE"\n');
@@ -803,7 +808,7 @@ test("dispatch --detach reports lease refusal before creating a unit or run_id",
       "--prompt-file",
       prompt,
       "--cd",
-      scratch,
+      process.cwd(),
       "--sandbox",
       "none",
       "--name",

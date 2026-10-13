@@ -3,7 +3,8 @@ import { readFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
-import { listWriteLeases, type LeaseEvidence } from "../src/write-leases.ts";
+import { appendLifecycle } from "../src/lifecycle-log.ts";
+import { listWriteLeases } from "../src/write-leases.ts";
 const fixture = jsonOf(
   z.array(
     z.object({
@@ -30,7 +31,7 @@ const scratch = mkdtempSync(join(tmpdir(), "agx-preland-admissions-"));
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
-test("five agxsplit runs and other landed live shapes release after actual judgments, with synthetic lease-aware admissions", () => {
+test("lifecycle admissions and judgments release historical lineages; run history alone creates no lease", () => {
   expect(fixture.success).toBe(true);
   const rows = fixture.success ? fixture.data : [];
   const paths = new Map<string, string>();
@@ -40,38 +41,63 @@ test("five agxsplit runs and other landed live shapes release after actual judgm
     mkdirSync(join(cwd, ".jj"), { recursive: true });
     paths.set(row.cwd, cwd);
   }
-  const evidence: LeaseEvidence[] = rows.map((row) =>
-    Object.assign({}, row, {
-      repo: "/repo",
-      cwd: row.cwd === undefined ? undefined : paths.get(row.cwd),
-    }),
+  const runRows = rows.filter((row) => row.kind === "run");
+  expect(runRows.filter((row) => row.ticket?.name === "agxsplit")).toHaveLength(
+    5,
   );
-  const admissions = evidence
-    .filter((row) => row.kind === "run")
-    .map((row): LeaseEvidence => Object.assign({}, row, { kind: "admitted" }));
-  expect(
-    admissions.filter((row) => row.ticket?.name === "agxsplit"),
-  ).toHaveLength(5);
-  expect(
-    evidence.filter((row) => row.kind === "acceptance").length,
-  ).toBeGreaterThan(0);
-  expect(
-    listWriteLeases({
-      stateDir: scratch,
+  for (const row of runRows) {
+    const cwd = row.cwd === undefined ? undefined : paths.get(row.cwd);
+    if (cwd === undefined || row.ticket?.name === undefined) continue;
+    const writes = row.ticket.writes ?? [];
+    const record = {
+      ...row,
       repo: "/repo",
-      evidence: [...admissions, ...evidence],
-      activeRunIds: new Set(),
-      unitAlive: () => false,
-      workspaceChanges: () => ({ changed: true }),
-    }),
-  ).toEqual({ ok: true, value: [] });
-  expect(
-    listWriteLeases({
-      stateDir: scratch,
-      repo: "/repo",
-      evidence,
-      activeRunIds: new Set(),
-      workspaceChanges: () => ({ changed: true }),
-    }),
-  ).toEqual({ ok: true, value: [] });
+      cwd,
+    };
+    expect(
+      appendLifecycle(scratch, {
+        type: "admitted",
+        run_id: row.run_id,
+        repo: "/repo",
+        workspace: cwd,
+        ticket: row.ticket.name,
+        writes,
+        resource: null,
+        predecessor: row.resumed_from,
+        record,
+      }).ok,
+    ).toBe(true);
+    expect(
+      appendLifecycle(scratch, {
+        type: "terminal",
+        run_id: row.run_id,
+        outcome: "done",
+        workspace: cwd,
+        record,
+      }).ok,
+    ).toBe(true);
+  }
+  for (const row of rows.filter(
+    (item) => item.kind === "acceptance" || item.kind === "landed",
+  ))
+    expect(
+      appendLifecycle(scratch, {
+        type: "judged",
+        run_id: row.run_id,
+        decision:
+          row.kind === "landed" || row.accept === true ? "accept" : "reject",
+        record: row,
+      }).ok,
+    ).toBe(true);
+  expect(listWriteLeases({ stateDir: scratch, repo: "/repo" })).toEqual({
+    ok: true,
+    value: [],
+  });
+
+  const historyOnly = join(scratch, "history-only");
+  mkdirSync(historyOnly);
+  expect(listWriteLeases({ stateDir: historyOnly, repo: "/repo" })).toEqual({
+    ok: true,
+    value: [],
+  });
 });

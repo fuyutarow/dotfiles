@@ -109,7 +109,13 @@ import {
   rotateRunsLog,
 } from "./ledger.ts";
 import { createFollowWaiter } from "./follow-watch.ts";
-import { dualWriteLifecycle } from "./lifecycle-log.ts";
+import {
+  appendLifecycle,
+  dualWriteLifecycle,
+  foldByRun,
+  readLifecycle,
+  readLifecycleTail,
+} from "./lifecycle-log.ts";
 import {
   parseSince,
   replayStats,
@@ -151,12 +157,12 @@ import { floorTicketGrade, hasXhighMaxJustification } from "./ticket-grade.ts";
 import { checkPremises } from "./premises.ts";
 import { buildDetachedLaunch, type DetachPlatform } from "./detach.ts";
 import {
+  appendLeaseSnapshot,
   claimWriteLease,
   listWriteLeases,
   releaseWriteLease,
   readLeaseEvidence,
-  reconcileWriteLeases,
-  foldWriteLeases,
+  writeLeaseDecisions,
 } from "./write-leases.ts";
 import { planWorkspace } from "./workspaces.ts";
 import { createSparseWorkspace } from "./prepare-workspace.ts";
@@ -2792,7 +2798,8 @@ async function admitLaunch(l: Launch): Promise<void> {
   }
   const runId = flags.runId ?? newRunId();
   flags.runId = runId;
-  claimRunWrites(flags, ticket, runId, resume?.from, pick);
+  if (resume?.from !== undefined)
+    terminalizeResumePredecessor(resume.from, runId);
   const admission = {
     kind: "admitted",
     run_id: runId,
@@ -2815,8 +2822,47 @@ async function admitLaunch(l: Launch): Promise<void> {
     pick,
     at: now(),
   };
+  claimRunWrites(flags, ticket, runId, resume?.from, pick, admission);
   lifecycleAttempts.set(runId, admission);
   dualWriteLifecycle(STATE_DIR, admission);
+}
+
+function terminalizeResumePredecessor(
+  predecessorId: string,
+  successorId: string,
+) {
+  const lifecycle = readLifecycle(STATE_DIR);
+  if (lifecycle.errors.length > 0)
+    fatal(
+      `cannot read lifecycle before continuation: ${lifecycle.errors.join("; ")}`,
+    );
+  const predecessor = foldByRun(lifecycle.events).get(predecessorId);
+  if (predecessor?.terminal !== undefined) return;
+  const active = readActive().find(
+    (entry) => entry.active.run_id === predecessorId && entry.alive,
+  );
+  if (active !== undefined)
+    fatal(
+      `cannot admit successor ${successorId} while predecessor ${predecessorId} is live`,
+    );
+  const admission = lifecycle.events.find(
+    (event) => event.type === "admitted" && event.run_id === predecessorId,
+  );
+  if (admission?.type !== "admitted") return;
+  const terminal = appendLifecycle(STATE_DIR, {
+    type: "terminal",
+    run_id: predecessorId,
+    outcome: "superseded",
+    workspace: admission.workspace,
+    record: {
+      kind: "superseded",
+      run_id: predecessorId,
+      cwd: admission.workspace,
+      successor: successorId,
+    },
+  });
+  if (!terminal.ok)
+    fatal(`cannot terminate predecessor ${predecessorId}: ${terminal.error}`);
 }
 
 /** Execute a selected run; OS children consume admission without repeating it. */
@@ -4004,7 +4050,6 @@ async function launch(l: Launch, admitted = false): Promise<number> {
     ...(runStats.cost_usd === null ? {} : { cost_usd: runStats.cost_usd }),
   };
   appendLog({ kind: "run", ...receipt, stats: runStats });
-  pruneCurrentRepoLeases(active.cwd);
   const completedOutcome = WorkerReceipt.safeParse(workerData).data?.outcome;
   if (
     parsedReturn.kind === "valid" ||
@@ -4579,6 +4624,8 @@ const LogLine = z.looseObject({
   ticket_grade: z.unknown().optional(),
   result: z.enum(["delivered", "returned", "failed", "abandoned"]).optional(),
   accept: z.boolean().optional(),
+  review: z.string().optional(),
+  no_review: z.string().optional(),
   workspace: z.string().optional(),
   facts: z
     .looseObject({
@@ -4613,7 +4660,10 @@ const LogLine = z.looseObject({
     pick_fallback_reason: z.string().optional(),
     confidence: z.number().optional(),
     jev: z
-      .looseObject({ latency_ms: z.number(), response: z.unknown().optional() })
+      .looseObject({
+        latency_ms: z.number(),
+        response: z.unknown().optional(),
+      })
       .optional(),
   }),
   exit: z.number().optional(),
@@ -4736,43 +4786,9 @@ function readAllLog(): Logged[] {
 
 function currentRepoLeaseInput(cwd: string) {
   const repo = workspaceRoot(cwd);
-  const markers = readActive();
-  // A complete host snapshot lets read-only probes run without access to host PIDs/units.
-  const snapshotPath = process.env.AGX_LIVE_RUN_IDS_FILE;
-  let snapshot: string[] | undefined;
-  if (snapshotPath !== undefined) {
-    const parsed = jsonOf(z.array(z.string().min(1))).safeParse(
-      readFileSync(snapshotPath, "utf8"),
-    );
-    if (!parsed.success)
-      fatal(
-        `invalid AGX_LIVE_RUN_IDS_FILE: ${parsed.error.issues[0]?.message ?? "expected a JSON array of run IDs"}`,
-      );
-    snapshot = parsed.data;
-  }
   return {
     stateDir: STATE_DIR,
     repo,
-    activeRunIds: new Set(
-      snapshot ??
-        markers
-          .filter(
-            (entry) => entry.alive && workspaceRoot(entry.active.cwd) === repo,
-          )
-          .map((entry) => entry.active.run_id),
-    ),
-    ...(snapshot === undefined
-      ? {}
-      : { unitAlive: () => false, processAlive: () => false }),
-    evidence: [
-      ...readLeaseEvidence(STATE_DIR),
-      ...markers.map((entry) =>
-        Object.assign({}, entry.active, {
-          repo: workspaceRoot(entry.active.cwd),
-          kind: "started",
-        }),
-      ),
-    ],
   };
 }
 
@@ -4782,6 +4798,7 @@ function claimRunWrites(
   runId: string,
   predecessor?: string,
   pick?: Pick,
+  admissionRecord?: Record<string, unknown>,
 ): void {
   const writes = ticket?.writes ?? [];
   if (writes.length === 0) return;
@@ -4794,6 +4811,9 @@ function claimRunWrites(
     ticket: flags.name ?? ticket?.name ?? runId,
     dispatcher_session: currentDispatcherSession() ?? "unknown",
     since: now(),
+    ...(ticket?.lease === undefined ? {} : { lease: ticket.lease }),
+    exclusive: ticket?.exclusive ?? false,
+    ...(admissionRecord === undefined ? {} : { admissionRecord }),
   });
   if (!result.ok) {
     if (pick !== undefined)
@@ -4853,7 +4873,7 @@ function collectDeadMarkers(dryRun = false): {
   if (dryRun) return { found: dead.length, removed: 0 };
   if (dead.length === 0) return { found: 0, removed: 0 };
   const log = readLog();
-  const lifecycle = readLeaseEvidence(STATE_DIR);
+  const lifecycle = readAllLog();
   for (const { active, file } of dead) {
     if (
       lifecycle.some(
@@ -5004,6 +5024,13 @@ function forgetWorkspace(
   rmSync(item.path, { recursive: true, force: true });
 }
 
+function snapshotRepoLeasesOrFatal(
+  input: Parameters<typeof appendLeaseSnapshot>[0],
+) {
+  const snapshot = appendLeaseSnapshot(input);
+  if (!snapshot.ok) fatal(`cannot snapshot write leases: ${snapshot.error}`);
+}
+
 function gcCommand(
   dryRun: boolean,
   workspaces: boolean,
@@ -5014,7 +5041,7 @@ function gcCommand(
     const result = workspaceGc(yes, days);
     if (yes) {
       const expired = expireUnacceptedDeliveries(days);
-      pruneCurrentRepoLeases();
+      snapshotRepoLeasesOrFatal(currentRepoLeaseInput(process.cwd()));
       process.stdout.write(
         `agx ledger gc: marked ${expired} unaccepted delivery/deliveries (${days}d)\n`,
       );
@@ -5028,7 +5055,12 @@ function gcCommand(
       fatal(`cannot rotate ${LOG_FILE}: ${rotation.error}`);
   }
   if (dryRun) {
-    const decisions = foldWriteLeases(currentRepoLeaseInput(process.cwd()));
+    const leaseResult = writeLeaseDecisions(
+      currentRepoLeaseInput(process.cwd()),
+    );
+    if (!leaseResult.ok)
+      fatal(`cannot fold write leases: ${leaseResult.error}`);
+    const decisions = leaseResult.value;
     process.stdout.write(
       `agx ledger gc: ${decisions.filter((item) => item.held).length} held lease(s); ${decisions.filter((item) => item.abandoned).length} unfinished run(s) would be abandoned\n`,
     );
@@ -5043,17 +5075,12 @@ function gcCommand(
     );
   if (!dryRun) {
     const expired = expireUnacceptedDeliveries(days);
-    pruneCurrentRepoLeases();
+    snapshotRepoLeasesOrFatal(currentRepoLeaseInput(process.cwd()));
     process.stdout.write(
       `agx ledger gc: marked ${expired} unaccepted delivery/deliveries (${days}d)\n`,
     );
   }
   return 0;
-}
-
-function pruneCurrentRepoLeases(cwd = process.cwd()): void {
-  const result = reconcileWriteLeases(currentRepoLeaseInput(cwd));
-  if (!result.ok) fatal(`cannot prune write leases: ${result.error}`);
 }
 
 interface PsRow {
@@ -5506,7 +5533,7 @@ async function finishedForNote(
   const deadline = performance.now() + 60_000;
   let announced = false;
   while (true) {
-    const rows = readLeaseEvidence(STATE_DIR);
+    const rows = readAllLog();
     const finished = rows.findLast(
       (line) =>
         line.run_id === resolved &&
@@ -5518,7 +5545,7 @@ async function finishedForNote(
     const stopped = live === undefined || performance.now() >= deadline;
     // The router can persist its receipt between the read and the liveness check.
     const final = stopped
-      ? readLeaseEvidence(STATE_DIR).findLast(
+      ? readAllLog().findLast(
           (line) =>
             line.run_id === resolved &&
             (line.kind === "run" ||
@@ -5568,79 +5595,15 @@ async function ack(
   return 0;
 }
 
-function validateIndependentReview(resolved: string, reviewId: string) {
-  const rows = readLeaseEvidence(STATE_DIR);
-  if (
-    !rows.some(
-      (line) =>
-        line.run_id === reviewId &&
-        ["run", "started", "admitted", "detached"].includes(line.kind ?? ""),
-    )
-  )
-    fatal(
-      `review run ${reviewId} does not exist; retry with --review <existing independent run_id> or --no-review "<reason>"`,
-    );
-  const neighbors = new Map<string, Set<string>>();
-  const tickets = new Map<string, string>();
-  const sessions = new Map<string, string>();
-  const connect = (a: string, b: string) => {
-    const left = neighbors.get(a) ?? new Set<string>();
-    const right = neighbors.get(b) ?? new Set<string>();
-    left.add(b);
-    right.add(a);
-    neighbors.set(a, left);
-    neighbors.set(b, right);
-  };
-  rows.forEach((line) => {
-    const id = line.run_id;
-    if (id === undefined) return;
-    [line.predecessor, line.resumed_from].forEach((parent) => {
-      if (parent !== undefined) connect(id, parent);
-    });
-    const session = line.worker?.session;
-    if (session !== undefined) {
-      const member = sessions.get(session);
-      if (member !== undefined) connect(id, member);
-      sessions.set(session, id);
-    }
-    if (line.ticket?.name !== undefined && line.cwd !== undefined) {
-      const key = JSON.stringify([line.ticket.name, resolve(line.cwd)]);
-      const member = tickets.get(key);
-      if (member !== undefined) connect(id, member);
-      tickets.set(key, id);
-    }
-  });
-  const lineage = new Set<string>();
-  const pending = [resolved];
-  while (pending.length > 0) {
-    const id = pending.pop();
-    if (id === undefined || lineage.has(id)) continue;
-    lineage.add(id);
-    pending.push(...(neighbors.get(id) ?? []));
-  }
-  if (lineage.has(reviewId))
-    fatal(
-      `review run ${reviewId} is in judged run ${resolved}'s lineage; retry with --review <independent run_id> or --no-review "<reason>"`,
-    );
-}
-
-async function acceptRun(
+function acceptRun(
   runId: string,
   accept: boolean,
   note: string | undefined,
   review: string | undefined,
   noReview: string | undefined,
-): Promise<number> {
-  const resolved = resolveRunId(runId);
-  const reviewId = review === undefined ? undefined : resolveRunId(review);
-  const { logged } = await finishedForNote(resolved, false, [
-    accept ? "--accept" : "--reject",
-    ...(reviewId === undefined ? [] : ["--review", reviewId]),
-    ...(noReview === undefined ? [] : ["--no-review", noReview]),
-    ...(note === undefined ? [] : ["--note", note]),
-  ]);
-  // Finalization may reveal resume/predecessor metadata not present when RETURN arrived.
-  if (reviewId !== undefined) validateIndependentReview(resolved, reviewId);
+): number {
+  const reviewId = review;
+  const resolved = resolveJudgmentRunId(runId);
   const record = {
     kind: "acceptance",
     run_id: resolved,
@@ -5650,10 +5613,36 @@ async function acceptRun(
     ...(noReview === undefined ? {} : { no_review: noReview }),
     ...(note === undefined ? {} : { note }),
   };
-  appendLog(record);
-  pruneCurrentRepoLeases(logged.cwd ?? process.cwd());
+  const appended = appendLifecycle(STATE_DIR, {
+    type: "judged",
+    run_id: resolved,
+    decision: accept ? "accept" : "reject",
+    ...(note === undefined ? {} : { note }),
+    ...(reviewId === undefined ? {} : { evidence: reviewId }),
+    at: record.at,
+    record,
+  });
+  if (!appended.ok) fatal(`cannot append judgment: ${appended.error}`);
   process.stdout.write(`${JSON.stringify({ schema: SCHEMA, ...record })}\n`);
   return 0;
+}
+
+function resolveJudgmentRunId(id: string): string {
+  const active = activeRunFor(id);
+  if (active !== undefined) return active.active.run_id;
+  const tail = readLifecycleTail(STATE_DIR);
+  if (tail.errors.length > 0)
+    fatal(
+      `cannot resolve judgment target from lifecycle tail: ${tail.errors.join("; ")}`,
+    );
+  const match = tail.events.findLast(
+    (event) =>
+      event.type === "admitted" &&
+      (event.run_id === id ||
+        event.run_id.startsWith(id) ||
+        event.ticket === id),
+  );
+  return match?.run_id ?? id;
 }
 
 function stats(flags: {
@@ -8562,13 +8551,33 @@ function reportNoteFor(
   return "no typed final report (this run was recorded before typed reports)";
 }
 
+const JudgmentRowSchema = z.looseObject({
+  kind: z.enum(["acceptance", "landed"]),
+  run_id: z.string(),
+  at: z.string().optional(),
+  accept: z.boolean().optional(),
+  review: z.string().optional(),
+  no_review: z.string().optional(),
+});
+
 function latestAcceptanceRow(runId: string) {
-  const row = readLeaseEvidence(STATE_DIR)
-    .filter(
-      (line) =>
-        ["acceptance", "landed"].includes(line.kind ?? "") &&
-        line.run_id === runId,
-    )
+  const eventDirectory = join(STATE_DIR, "events");
+  const eventLines = existsSync(eventDirectory)
+    ? readdirSync(eventDirectory)
+        .filter((name) => name.endsWith(".jsonl"))
+        .flatMap((name) =>
+          readFileSync(join(eventDirectory, name), "utf8").split("\n"),
+        )
+    : [];
+  const rows = [
+    ...ledgerLines(STATE_DIR),
+    ...eventLines,
+    ...readLeaseEvidence(STATE_DIR).map((row) => JSON.stringify(row)),
+  ].flatMap((line) => {
+    const parsed = jsonOf(JudgmentRowSchema).safeParse(line);
+    return parsed.success && parsed.data.run_id === runId ? [parsed.data] : [];
+  });
+  const row = rows
     .toSorted(
       (a, b) =>
         (instantMilliseconds(a.at) ?? 0) - (instantMilliseconds(b.at) ?? 0),

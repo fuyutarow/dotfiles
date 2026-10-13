@@ -146,6 +146,8 @@ export const TicketSchema = z
       .regex(/^[A-Za-z0-9_-]+$/u)
       .optional(),
     writes: z.array(writeGlob),
+    lease: z.literal("workspace").optional(),
+    exclusive: z.boolean().default(false),
     verify: z.array(z.string().trim().min(1)).optional(),
     verify_timeout_s: z.number().positive().default(DEFAULT_VERIFY_TIMEOUT_S),
     timeout_s: z.number().int().min(60).max(MAX_TIMEOUT_S).optional(),
@@ -425,7 +427,7 @@ function segmentsIntersect(a: string, b: string): boolean {
   }
   return false;
 }
-function expandBraces(pattern: string): string[] {
+export function expandBraces(pattern: string): string[] {
   const start = pattern.indexOf("{");
   if (start < 0) return [pattern];
   let depth = 0,

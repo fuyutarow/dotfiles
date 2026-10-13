@@ -1,10 +1,13 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { FFIType, dlopen } from "bun:ffi";
 import {
   appendFileSync,
   chmodSync,
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -12,14 +15,17 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import { ROSTER_PATH } from "../../../agents/models/roster.ts";
 import { decodedJson } from "./decode.ts";
 import { attemptOr } from "../../shared/src/attempt.ts";
-import { processTreeCpu } from "../src/lifecycle.ts";
-import { foldByRun, readLifecycle } from "../src/lifecycle-log.ts";
+import { processTreeCpu, workspaceRoot } from "../src/lifecycle.ts";
+import {
+  appendLifecycle,
+  foldByRun,
+  readLifecycle,
+} from "../src/lifecycle-log.ts";
 import { planWorkspace } from "../src/workspaces.ts";
 // Cross-package acceptance test for the public hook consumer contract.
 import { runningRuns } from "../../agx-usehooks/src/index.ts";
@@ -34,6 +40,20 @@ const CLI = join(import.meta.dir, "..", "src", "agx.ts");
 setDefaultTimeout(20_000);
 const scratch = mkdtempSync(join(tmpdir(), "agx-test-"));
 const processTreeAvailable = (await processTreeCpu(process.pid)) !== undefined;
+function lifecycleLockIsFree(path: string): boolean {
+  const library = dlopen(
+    process.platform === "darwin" ? "/usr/lib/libSystem.B.dylib" : "libc.so.6",
+    {
+      flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
+    },
+  );
+  const fd = openSync(path, "r");
+  const acquired = library.symbols.flock(fd, 2 | 4) === 0;
+  if (acquired) library.symbols.flock(fd, 8);
+  closeSync(fd);
+  library.close();
+  return acquired;
+}
 // Every request body the fake Jev received, in order (what left the machine).
 const bodies: string[] = [];
 let onJevRequest: ((body: string) => void) | undefined;
@@ -454,13 +474,13 @@ const RunIdSchema = z.looseObject({ run_id: z.string() });
 
 describe("agx dispatch", () => {
   test("four concurrent admissions survive slow Jev routing and still reject overlap", async () => {
-    const cwd = freshCwd();
+    const cwd = process.cwd();
     const state = join(scratch, "state-slow-routing-leases");
     const routedBriefs = Array.from({ length: 4 }, (_, index) =>
       brief(
         `slow-route-${index}`,
         ticketText(
-          `name = "slow-route-${index}"\nwrites = ["tools/part-${index}/**"]\nverify = ["true"]`,
+          `name = "slow-route-${index}"\nwrites = [${JSON.stringify(["tools/agx/src/agx.ts", "tools/agx/src/ticket.ts", "tools/agx/src/ledger.ts", "tools/agx/src/lifecycle-log.ts"][index])}]\nverify = ["true"]`,
           "Make the disjoint change.\n",
         ),
       ),
@@ -494,7 +514,7 @@ describe("agx dispatch", () => {
       brief(
         name,
         ticketText(
-          `name = "${name}"\nwrites = ["tools/shared/**"]\nverify = ["true"]`,
+          `name = "${name}"\nwrites = ["tools/agx/src/agx.ts"]\nverify = ["true"]`,
           "Make the overlapping change.\n",
         ),
       ),
@@ -6142,10 +6162,18 @@ describe("agx ticket write enforcement", () => {
     expect(r.code).toBe(0);
   });
 
-  test("a live sibling owns an overlapping write even from another subdirectory of the workspace", async () => {
+  test("a live sibling owns a tracked overlapping write from another subdirectory", async () => {
     const cwd = freshCwd();
     mkdirSync(join(cwd, ".jj"));
     mkdirSync(join(cwd, "child"));
+    writeFileSync(join(cwd, "shared.txt"), "fixture\n");
+    const bin = join(scratch, "live-overlap-bin");
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "jj"),
+      `#!${process.execPath}\nif (Bun.argv.includes("file") && Bun.argv.includes("list")) process.stdout.write("shared.txt\\n");\nprocess.exit(0);\n`,
+    );
+    chmodSync(join(bin, "jj"), 0o755);
     const state = join(scratch, `live-overlap-${stateSeq++}`);
     mkdirSync(join(state, "active"), { recursive: true });
     writeFileSync(
@@ -6162,17 +6190,26 @@ describe("agx ticket write enforcement", () => {
         ticket: { writes: ["shared.txt"] },
       }),
     );
-    writeFileSync(
-      join(state, "runs.jsonl"),
-      JSON.stringify({
+    appendLifecycle(state, {
+      type: "admitted",
+      run_id: "sibling",
+      repo: workspaceRoot(cwd),
+      workspace: cwd,
+      ticket: "sibling",
+      writes: ["shared.txt"],
+      resource: null,
+      session_id: "sibling-session",
+      record: {
         kind: "admitted",
-        lease_version: 1,
         run_id: "sibling",
-        repo: cwd,
+        repo: workspaceRoot(cwd),
         cwd,
+        pid: process.pid,
         ticket: { name: "sibling", writes: ["shared.txt"] },
-      }) + "\n",
-    );
+        dispatcher_session: "sibling-session",
+        tracked_paths: ["shared.txt"],
+      },
+    });
     const r = await router(
       runArgs(
         brief(
@@ -6182,9 +6219,8 @@ describe("agx ticket write enforcement", () => {
         cwd,
       ),
       {
-        ...gitStatus("?? shared.txt\n"),
         AGX_STATE_DIR: state,
-        FAKE_TOUCH: "shared.txt",
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
         FAKE_LAST:
           '```agx-return\n{"findings":[],"evidence":[],"impact_on_brief":"other writer","proposed_next":"none","artifacts":[]}\n```',
       },
@@ -6770,31 +6806,35 @@ process.exit(0);
     );
     chmodSync(manager, 0o755);
     const state = join(scratch, "detach-lease-refusal-state");
-    const cwd = freshCwd();
+    const cwd = process.cwd();
     onJevRequest = () => {
-      const admissions = join(state, "admissions");
-      mkdirSync(admissions, { recursive: true });
-      writeFileSync(
-        join(admissions, "competing.json"),
-        JSON.stringify({
+      appendLifecycle(state, {
+        type: "admitted",
+        run_id: "competing",
+        repo: workspaceRoot(cwd),
+        workspace: cwd,
+        ticket: "other",
+        writes: ["tools/agx/src/agx.ts"],
+        resource: null,
+        session_id: "other",
+        record: {
           kind: "admitted",
-          lease_version: 1,
           run_id: "competing",
-          repo: cwd,
+          repo: workspaceRoot(cwd),
           cwd,
           pid: process.pid,
-          started_at: "2026-10-13T00:00:00Z",
           dispatcher_session: "other",
-          ticket: { name: "other", writes: ["src/**"] },
-        }),
-      );
+          ticket: { name: "other", writes: ["tools/agx/src/agx.ts"] },
+          tracked_paths: ["tools/agx/src/agx.ts"],
+        },
+      });
     };
     const dispatched = await router(
       [
         ...runArgs(
           brief(
             "detach-lease-refusal",
-            ticketText('writes = ["src/**"]\nverify = []'),
+            ticketText('writes = ["tools/agx/src/agx.ts"]\nverify = []'),
           ),
           cwd,
           "workspace-write",
@@ -6831,22 +6871,19 @@ process.exit(0);
     expect(listed.out).toContain("competing");
   });
 
-  test("detached unit consumes one admitted pick even with a blocked lease lock and changed routes", async () => {
+  test("detached unit consumes one admitted pick and worker starts after lifecycle lock release", async () => {
     const bin = join(scratch, "admitted-manager-bin");
     mkdirSync(bin);
     const manager = join(bin, "systemd-run");
     writeFileSync(
       manager,
       `#!${process.execPath}
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 const args = Bun.argv.slice(2);
 const env = { ...process.env, ...Object.fromEntries(args.filter(a => a.startsWith("--setenv=")).map(a => { const value = a.slice(9); const at = value.indexOf("="); return [value.slice(0, at), value.slice(at + 1)]; })) };
 const decision = JSON.parse(readFileSync(env.AGX_ADMITTED_LAUNCH, "utf8"));
-const hash = text => createHash("sha256").update(text).digest("hex");
-const leaseDir = env.AGX_STATE_DIR + "/write-leases/" + hash(decision.flags.cd);
-if (!existsSync(env.AGX_STATE_DIR + "/admissions/" + hash(decision.flags.runId) + ".json") || existsSync(leaseDir + "/.lock")) process.exit(19);
-writeFileSync(leaseDir + "/.lock", env.AGX_FIXTURE_LOCK_PID);
+const events = readFileSync(env.AGX_STATE_DIR + "/lifecycle.jsonl", "utf8").trim().split("\\n").map(JSON.parse);
+if (!events.some(event => event.type === "admitted" && event.run_id === decision.flags.runId)) process.exit(19);
 writeFileSync(env.AGX_STATE_DIR + "/manager-admission", JSON.stringify({ pick: decision.pick.choice, run_id: decision.flags.runId, lockReleased: true }));
 const child = Bun.spawn(args.slice(args.indexOf("--") + 1), { env: { ...env, AGX_TEST_CODEX_ROUTE: "unavailable" }, stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true, timeout: 10000 });
 child.unref();
@@ -6862,7 +6899,6 @@ process.exit(0);
       AGX_DETACH_PLATFORM: "linux",
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       FAKE_TOUCH: "src/delivered.ts",
-      AGX_FIXTURE_LOCK_PID: String(process.pid),
       FAKE_CHECKPOINT: "1",
       FAKE_BLOCK_UNTIL_FILE: join(state, "unblock-worker"),
     };
@@ -6887,20 +6923,15 @@ process.exit(0);
       z.looseObject({ run_id: z.string() }),
       readFileSync(join(state, "manager-admission"), "utf8"),
     ).run_id;
-    const lock = join(
-      state,
-      "write-leases",
-      createHash("sha256").update(cwd).digest("hex"),
-      ".lock",
-    );
     let workerStarted = false;
     const waited = await router(["wait", "admitted_detach"], env, async () => {
       const deadline = performance.now() + 5000;
       const progress = join(state, "active", `${admittedRun}.progress.json`);
       while (!existsSync(progress) && performance.now() < deadline)
         await Bun.sleep(25);
-      workerStarted = existsSync(progress) && existsSync(lock);
-      rmSync(lock, { force: true });
+      workerStarted =
+        existsSync(progress) &&
+        lifecycleLockIsFree(join(state, "lifecycle.jsonl"));
       writeFileSync(env.FAKE_BLOCK_UNTIL_FILE, "continue");
     });
     expect(workerStarted).toBe(true);
@@ -6909,12 +6940,11 @@ process.exit(0);
     expect(readFileSync(join(state, "manager-admission"), "utf8")).toContain(
       '"lockReleased":true',
     );
-    const admissions = readdirSync(join(state, "admissions"));
-    expect(admissions).toHaveLength(1);
-    const admission = decodedJson(
-      z.looseObject({ run_id: z.string(), pid: z.number() }),
-      readFileSync(join(state, "admissions", admissions[0] ?? ""), "utf8"),
+    const lifecycle = readLifecycle(state).events;
+    const admissions = lifecycle.filter(
+      (event) => event.type === "admitted" && event.run_id === admittedRun,
     );
+    expect(admissions).toHaveLength(1);
     const record = decodedJson(
       z.looseObject({
         run_id: z.string(),
@@ -6923,7 +6953,7 @@ process.exit(0);
       }),
       waited.out,
     );
-    expect(record.run_id).toBe(admission.run_id);
+    expect(record.run_id).toBe(admittedRun);
     expect(record.pick.choice).toBe("luna-low");
     const events = readFileSync(
       join(state, "events", `${admittedRun}.jsonl`),
@@ -6937,9 +6967,7 @@ process.exit(0);
           line,
         ),
       );
-    expect(events.find((row) => row.kind === "started")?.pid).not.toBe(
-      admission.pid,
-    );
+    expect(events.find((row) => row.kind === "started")?.pid).toBeDefined();
   });
 
   test.each(["live", "archive", "journal", "landed", "ledger-note"])(
@@ -7007,72 +7035,38 @@ process.exit(0);
     },
   );
 
-  test("detached lease lock timeout exits 2 before starting a unit", async () => {
-    const cwd = freshCwd();
-    const state = join(scratch, "detached-lock-timeout-state");
-    const leaseDir = join(
-      state,
-      "write-leases",
-      createHash("sha256").update(cwd).digest("hex"),
-    );
-    mkdirSync(leaseDir, { recursive: true });
-    writeFileSync(
-      join(leaseDir, ".lock"),
-      JSON.stringify({
-        pid: process.pid,
-        run_id: "lock-holder",
-        ticket: "holder",
-        since: "2026-10-13T00:00:00Z",
-      }),
-    );
-    const dispatched = await router(
-      [
-        ...runArgs(
-          brief(
-            "detached-lock-timeout",
-            ticketText('writes = ["src/**"]\nverify = []'),
-          ),
-          cwd,
-          "workspace-write",
-        ),
-        "--name",
-        "lock_refusal",
-        "--detach",
-      ],
-      { AGX_STATE_DIR: state, AGX_DETACH_PLATFORM: "linux" },
-    );
-    expect(dispatched.code, dispatched.err).toBe(2);
-    expect(dispatched.err).toContain("timed out after 30000ms");
-    expect(dispatched.err).toContain("lock-holder");
-    expect(dispatched.out).not.toMatch(/run_id:|watch:/u);
-    expect(existsSync(join(state, "admissions"))).toBe(false);
-    expect(existsSync(join(state, "detached"))).toBe(false);
-    expect(existsSync(join(state, "tickets"))).toBe(false);
-  }, 45_000);
-
   test("detached workspace lease refusal leaves its planned workspace uncreated", async () => {
     const cwd = freshCwd();
+    mkdirSync(join(cwd, ".jj"));
+    mkdirSync(join(cwd, "src"));
+    writeFileSync(join(cwd, "src", "main.ts"), "fixture\n");
     const state = join(scratch, "detached-workspace-refusal-state");
     const bin = join(scratch, "workspace-refusal-bin");
     mkdirSync(bin);
     writeFileSync(
       join(bin, "jj"),
-      `#!${process.execPath}\nif (Bun.argv.includes("add")) { await Bun.write(process.env.AGX_STATE_DIR + "/workspace-created", "bad"); process.exit(1); }\nprocess.exit(0);\n`,
+      `#!${process.execPath}\nif (Bun.argv.includes("add")) { await Bun.write(process.env.AGX_STATE_DIR + "/workspace-created", "bad"); process.exit(1); }\nif (Bun.argv.includes("file") && Bun.argv.includes("list")) process.stdout.write("src/main.ts\\n");\nprocess.exit(0);\n`,
     );
     chmodSync(join(bin, "jj"), 0o755);
-    mkdirSync(join(state, "admissions"), { recursive: true });
-    writeFileSync(
-      join(state, "admissions", "holder.json"),
-      JSON.stringify({
+    appendLifecycle(state, {
+      type: "admitted",
+      run_id: "workspace-holder",
+      repo: workspaceRoot(cwd),
+      workspace: cwd,
+      ticket: "holder",
+      writes: ["src/**"],
+      resource: null,
+      session_id: "fixture",
+      record: {
         kind: "admitted",
-        lease_version: 1,
         run_id: "workspace-holder",
-        repo: cwd,
+        repo: workspaceRoot(cwd),
         cwd,
         pid: process.pid,
         ticket: { name: "holder", writes: ["src/**"] },
-      }),
-    );
+        tracked_paths: ["src/main.ts"],
+      },
+    });
     const dispatched = await router(
       [
         ...runArgs(
@@ -7103,7 +7097,7 @@ process.exit(0);
   });
 
   test("a refused detached amendment leaves the original ticket bytes unchanged", async () => {
-    const cwd = freshCwd();
+    const cwd = process.cwd();
     const state = join(scratch, "detached-amend-refusal-state");
     const env = { AGX_STATE_DIR: state, AGX_DETACH_PLATFORM: "linux" };
     const first = await router(
@@ -7111,7 +7105,7 @@ process.exit(0);
         ...runArgs(
           brief(
             "detached-amend-refusal",
-            ticketText('writes = ["src/**"]\nverify = []'),
+            ticketText('writes = ["tools/agx/src/agx.ts"]\nverify = []'),
           ),
           cwd,
           "workspace-write",
@@ -7129,18 +7123,52 @@ process.exit(0);
     const before = readFileSync(ticket, "utf8");
     const amendment = join(scratch, "refused-amendment.md");
     writeFileSync(amendment, "Add a stricter check.");
+    const active = join(state, "active");
+    mkdirSync(active, { recursive: true });
     writeFileSync(
-      join(state, "admissions", "holder.json"),
+      join(active, "amend-holder.json"),
       JSON.stringify({
-        kind: "admitted",
-        lease_version: 1,
+        schema: 1,
         run_id: "amend-holder",
-        repo: cwd,
-        cwd,
+        display_id: "agt_amend_holder",
+        kind: "token",
+        labels: [],
         pid: process.pid,
-        ticket: { name: "other", writes: ["src/**"] },
+        label: "other live ticket",
+        choice: "luna-low",
+        pick_source: "fixture",
+        started_at: Temporal.Now.instant().toString(),
+        cwd,
+        dispatcher_session: "fixture",
+        ticket: { name: "other", writes: ["tools/agx/src/agx.ts"] },
       }),
     );
+    appendLifecycle(state, {
+      type: "admitted",
+      run_id: "amend-holder",
+      repo: workspaceRoot(cwd),
+      workspace: cwd,
+      ticket: "other",
+      writes: ["tools/agx/src/agx.ts"],
+      resource: null,
+      session_id: "fixture",
+      record: {
+        kind: "admitted",
+        run_id: "amend-holder",
+        repo: workspaceRoot(cwd),
+        cwd,
+        pid: process.pid,
+        ticket: { name: "other", writes: ["tools/agx/src/agx.ts"] },
+        tracked_paths: ["tools/agx/src/agx.ts"],
+      },
+    });
+    appendLifecycle(state, {
+      type: "running",
+      run_id: "amend-holder",
+      pid: process.pid,
+      started_at: Temporal.Now.instant().toString(),
+      record: { kind: "started", run_id: "amend-holder", pid: process.pid },
+    });
     const dispatched = await router(
       ["dispatch", "--amend", "amend_refusal", "--file", amendment, "--detach"],
       env,

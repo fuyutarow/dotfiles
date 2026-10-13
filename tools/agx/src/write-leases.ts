@@ -1,27 +1,15 @@
 // Repository-wide write ownership shared by dispatcher sessions through agx's state directory.
-import { createHash } from "node:crypto";
-import {
-  closeSync,
-  existsSync,
-  fsyncSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-  writeSync,
-} from "node:fs";
+import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { errorMessage } from "../../shared/src/attempt.ts";
-import { jsonOf, z } from "../../shared/src/zod.ts";
-import { ledgerLines, appendLedgerLine } from "./ledger.ts";
-import { workspaceRoot } from "./lifecycle.ts";
-import { globsOverlap } from "./ticket.ts";
+import { z } from "../../shared/src/zod.ts";
+import {
+  appendLifecycle,
+  readLifecycle,
+  type LifecycleEvent,
+} from "./lifecycle-log.ts";
+import { expandBraces, globsOverlap } from "./ticket.ts";
 
 export type WriteLease = Readonly<{
   repo: string;
@@ -31,8 +19,24 @@ export type WriteLease = Readonly<{
   ticket: string;
   dispatcher_session: string;
   since: string;
+  lease: "repository" | "workspace";
+  exclusive: boolean;
 }>;
-
+const SnapshotLeaseSchema = z.object({
+  lease: z.object({
+    repo: z.string(),
+    run_id: z.string(),
+    cwd: z.string(),
+    writes: z.array(z.string()),
+    ticket: z.string(),
+    dispatcher_session: z.string(),
+    since: z.string(),
+    lease: z.enum(["repository", "workspace"]),
+    exclusive: z.boolean(),
+  }),
+  live: z.boolean(),
+  abandoned: z.boolean(),
+});
 const EvidenceSchema = z.object({
   run_id: z.string().optional(),
   kind: z.string().optional(),
@@ -49,6 +53,9 @@ const EvidenceSchema = z.object({
       name: z.string().optional(),
     })
     .optional(),
+  lease: z.enum(["repository", "workspace"]).optional(),
+  exclusive: z.boolean().optional(),
+  lease_writes: z.array(z.string()).optional(),
   started_at: z.string().optional(),
   at: z.string().optional(),
   accept: z.boolean().optional(),
@@ -64,116 +71,62 @@ const EvidenceSchema = z.object({
 export type LeaseEvidence = z.output<typeof EvidenceSchema>;
 export type WorkspaceChanges = { changed: boolean; error?: string };
 
-function* leaseEvidenceLines(stateDir: string): Generator<string> {
-  const events = join(stateDir, "events");
-  const admissions = join(stateDir, "admissions");
-  if (existsSync(admissions))
-    for (const entryName of readdirSync(admissions).filter((name) =>
-      name.endsWith(".json"),
-    ))
-      yield readFileSync(join(admissions, entryName), "utf8");
-  yield* ledgerLines(stateDir);
-  if (existsSync(events))
-    for (const name of readdirSync(events).filter((entryName) =>
-      entryName.endsWith(".jsonl"),
-    ))
-      yield* readFileSync(join(events, name), "utf8").split("\n");
+function evidenceFromLifecycle(
+  events: readonly LifecycleEvent[],
+  legacyLeaseWrites: ReadonlyMap<string, readonly string[]> = new Map(),
+): LeaseEvidence[] {
+  return events.flatMap((event) => {
+    if (event.type === "lease_snapshot") return [];
+    const record = event.record;
+    const common = { ...record, run_id: event.run_id, at: event.at };
+    const row = (value: unknown): LeaseEvidence[] => {
+      const parsed = EvidenceSchema.safeParse(value);
+      return parsed.success ? [parsed.data] : [];
+    };
+    if (event.type === "admitted") {
+      const storedLeaseWrites = z
+        .array(z.string())
+        .safeParse(record.lease_writes);
+      const leaseWrites = (
+        storedLeaseWrites.success
+          ? storedLeaseWrites.data
+          : (legacyLeaseWrites.get(event.run_id) ?? event.writes)
+      ).filter((glob) => event.writes.includes(glob));
+      return row({
+        ...common,
+        kind: "admitted",
+        repo: event.repo,
+        cwd: event.workspace,
+        lease: record.lease === "workspace" ? "workspace" : "repository",
+        exclusive: record.exclusive === true,
+        lease_writes: leaseWrites,
+        ticket: { name: event.ticket, writes: leaseWrites },
+        dispatcher_session: event.session_id ?? "unknown",
+        started_at: event.at,
+      });
+    }
+    if (event.type === "running")
+      return row({ ...common, kind: "started", pid: event.pid });
+    if (event.type === "terminal")
+      return row({
+        ...common,
+        kind: event.outcome === "abandoned" ? "abandoned" : "run",
+        cwd: event.workspace ?? record.cwd,
+        worker: { outcome: event.outcome },
+      });
+    if (event.type === "judged")
+      return row({
+        ...common,
+        kind: "acceptance",
+        accept: event.decision === "accept",
+      });
+    return row({ ...common, kind: "lease-released" });
+  });
 }
 
-/** Lifecycle rows do not require routing fields; streaming bounds memory on large ledgers. */
+/** Lease evidence is projected only from lifecycle.jsonl. */
 export function readLeaseEvidence(stateDir: string): LeaseEvidence[] {
-  const rows: LeaseEvidence[] = [];
-  let previous: string | undefined;
-  for (const line of leaseEvidenceLines(stateDir)) {
-    // An identical adjacent receipt adds no lifecycle evidence.
-    if (line === previous) continue;
-    previous = line;
-    const parsed = jsonOf(EvidenceSchema).safeParse(line);
-    if (parsed.success) rows.push(parsed.data);
-  }
-  return rows;
-}
-
-const LegacyLease = z.object({
-  repo: z.string(),
-  run_id: z.string(),
-  cwd: z.string(),
-  writes: z.array(z.string()),
-  ticket: z.string(),
-  dispatcher_session: z.string(),
-  since: z.string(),
-});
-
-/** A 3.5.0 receipt requires independent matching run metadata; cache content alone grants nothing. */
-const FIRST_LEASE_DEPLOYMENT_MS = Temporal.Instant.from(
-  "2026-10-12T13:39:37Z",
-).epochMilliseconds;
-
-function leaseEra(row: LeaseEvidence): boolean {
-  const encoded =
-    /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2}(?:\.\d+)?)Z/u.exec(
-      row.run_id ?? "",
-    );
-  const at =
-    encoded === null
-      ? row.started_at
-      : `${encoded[1]}T${encoded[2]}:${encoded[3]}:${encoded[4]}Z`;
-  if (at === undefined) return false;
-  const parsed = fromThrowable(
-    () => Temporal.Instant.from(at).epochMilliseconds,
-    errorMessage,
-  )();
-  return parsed.isOk() && parsed.value >= FIRST_LEASE_DEPLOYMENT_MS;
-}
-
-function legacyAdmissions(input: FoldInput): LeaseEvidence[] {
-  const dir = repoLeaseDir(input.stateDir, input.repo);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((name) => name.endsWith(".json"))
-    .flatMap((name) => {
-      const parsed = jsonOf(LegacyLease).safeParse(
-        readFileSync(join(dir, name), "utf8"),
-      );
-      if (!parsed.success) return [];
-      const lease = parsed.data;
-      if (
-        input.evidence.some(
-          (row) =>
-            row.run_id === lease.run_id &&
-            row.kind === "admitted" &&
-            row.cwd !== undefined &&
-            row.ticket?.name !== undefined &&
-            (row.ticket.writes?.length ?? 0) > 0,
-        )
-      )
-        return [];
-      const matches = input.evidence.some(
-        (row) =>
-          row.run_id === lease.run_id &&
-          leaseEra(row) &&
-          row.cwd !== undefined &&
-          (row.repo ?? workspaceRoot(row.cwd)) === input.repo &&
-          workspaceDirectory(row.cwd) === workspaceDirectory(lease.cwd) &&
-          row.ticket?.name === lease.ticket &&
-          row.ticket.writes !== undefined &&
-          JSON.stringify(row.ticket.writes.toSorted()) ===
-            JSON.stringify(lease.writes.toSorted()),
-      );
-      if (!matches || lease.repo !== input.repo) return [];
-      return [
-        {
-          kind: "admitted",
-          lease_version: 1,
-          run_id: lease.run_id,
-          repo: lease.repo,
-          cwd: lease.cwd,
-          ticket: { name: lease.ticket, writes: lease.writes },
-          dispatcher_session: lease.dispatcher_session,
-          started_at: lease.since,
-        } satisfies LeaseEvidence,
-      ];
-    });
+  return evidenceFromLifecycle(readLifecycle(stateDir).events);
 }
 
 type ReadOnlyObservation = {
@@ -280,224 +233,236 @@ export function workspaceChanges(
   return result.isOk() ? result.value : { changed: true, error: result.error };
 }
 
-function processAlive(pid: number | undefined): boolean {
-  if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 0) return false;
-  const result = fromThrowable(() => process.kill(pid, 0), errorMessage)();
-  return result.isOk() || result.error.includes("EPERM");
+function characterClassWitness(
+  segment: string,
+  index: number,
+): { end: number; witness: string } | undefined {
+  const end = segment.indexOf("]", index + 1);
+  if (end <= index + 1) return undefined;
+  const chars = segment.slice(index + 1, end);
+  const excluded = chars.startsWith("!") || chars.startsWith("^");
+  const first = chars[excluded ? 1 : 0];
+  return {
+    end,
+    witness: excluded && first === "x" ? "y" : (first ?? "x"),
+  };
 }
 
-function unitAlive(unit: string): boolean {
-  const command =
-    process.platform === "darwin"
-      ? ["launchctl", "list", unit]
-      : [
-          "systemctl",
-          "--user",
-          "show",
-          unit,
-          "--property=ActiveState",
-          "--value",
-        ];
-  const result = fromThrowable(
-    () =>
-      Bun.spawnSync(command, {
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 2_000,
-      }),
+function witnessSegment(segment: string): string {
+  if (segment === "**") return "agx-lease-probe";
+  let witness = "";
+  for (let index = 0; index < segment.length; index += 1) {
+    const char = segment[index];
+    if (char === "\\" && index + 1 < segment.length) {
+      index += 1;
+      witness += segment[index];
+      continue;
+    }
+    if (char === "*" || char === "?") {
+      witness += "x";
+      continue;
+    }
+    const grouped =
+      char === "[" ? characterClassWitness(segment, index) : undefined;
+    if (grouped !== undefined) {
+      witness += grouped.witness;
+      index = grouped.end;
+      continue;
+    }
+    witness += char;
+  }
+  return witness === "" ? "x" : witness;
+}
+
+function globWitnesses(glob: string): string[] {
+  const pattern = glob.endsWith("/") ? `${glob}**` : glob;
+  return expandBraces(pattern).flatMap((expanded) => {
+    const segments = expanded
+      .split("/")
+      .filter((segment) => segment !== "" && segment !== ".");
+    let witnesses = [""];
+    for (const [index, segment] of segments.entries()) {
+      const choices =
+        segment === "**" && index < segments.length - 1
+          ? ["", "agx-lease-probe"]
+          : [witnessSegment(segment)];
+      witnesses = witnesses.flatMap((prefix) =>
+        choices.map((choice) => {
+          if (prefix === "") return choice;
+          if (choice === "") return prefix;
+          return `${prefix}/${choice}`;
+        }),
+      );
+    }
+    return witnesses.filter((witness) => witness !== "");
+  });
+}
+
+function gitDirectory(cwd: string): string | undefined {
+  const dotGit = join(cwd, ".git");
+  if (existsSync(dotGit)) return undefined;
+  const store = join(cwd, ".jj", "repo", "store");
+  const targetFile = join(store, "git_target");
+  if (!existsSync(targetFile)) return undefined;
+  const target = fromThrowable(
+    () => readFileSync(targetFile, "utf8").trim(),
     errorMessage,
   )();
-  if (result.isErr() || result.value.exitCode !== 0) return false;
-  if (process.platform === "darwin")
-    return /"PID"\s*=\s*\d+/u.test(result.value.stdout.toString());
-  return ["active", "activating", "reloading"].includes(
-    result.value.stdout.toString().trim(),
+  if (target.isErr() || target.value === "") return undefined;
+  const directory = resolve(store, target.value);
+  return existsSync(directory) ? directory : undefined;
+}
+
+function ignoreRule(
+  cwd: string,
+  candidate: string,
+  cache: Map<string, string | null>,
+): string | undefined {
+  const key = JSON.stringify([resolve(cwd), candidate]);
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached ?? undefined;
+  const gitDir = gitDirectory(cwd);
+  if (!existsSync(join(cwd, ".git")) && gitDir === undefined) {
+    cache.set(key, null);
+    return undefined;
+  }
+  const args = [
+    "git",
+    ...(gitDir === undefined
+      ? []
+      : [`--git-dir=${gitDir}`, `--work-tree=${resolve(cwd)}`]),
+    "check-ignore",
+    "--no-index",
+    "--verbose",
+    "--",
+    candidate,
+  ];
+  const checked = Bun.spawnSync(args, {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 2_000,
+  });
+  if (checked.exitCode !== 0) {
+    cache.set(key, null);
+    return undefined;
+  }
+  const details = checked.stdout.toString().trim().split("\t", 1)[0];
+  const pattern = details?.split(":").slice(2).join(":");
+  cache.set(key, pattern ?? null);
+  return pattern;
+}
+
+function ignoreRuleCoversGlob(rule: string, glob: string): boolean {
+  const normalizedRule = rule.replace(/^\//u, "");
+  return expandBraces(glob).every((expanded) => {
+    const normalizedGlob = expanded.endsWith("/") ? `${expanded}**` : expanded;
+    if (normalizedRule === normalizedGlob) return true;
+    const directory = normalizedRule.endsWith("/**")
+      ? normalizedRule.slice(0, -3)
+      : normalizedRule.replace(/\/$/u, "");
+    if (normalizedRule.endsWith("/") || normalizedRule.endsWith("/**"))
+      return (
+        normalizedGlob === directory ||
+        normalizedGlob === `${directory}/**` ||
+        normalizedGlob.startsWith(`${directory}/`)
+      );
+    if (!normalizedRule.includes("/") && !/[?*[{]/u.test(normalizedRule))
+      return (
+        normalizedGlob === normalizedRule ||
+        normalizedGlob === `${normalizedRule}/**` ||
+        normalizedGlob.startsWith(`${normalizedRule}/`)
+      );
+    return false;
+  });
+}
+
+function leaseableWriteGlobs(
+  cwd: string,
+  writes: readonly string[],
+  cache = new Map<string, string | null>(),
+): string[] {
+  return writes.filter((glob) => {
+    const witnesses = globWitnesses(glob);
+    if (witnesses.length === 0) return true;
+    const rules = witnesses.map((candidate) =>
+      ignoreRule(cwd, candidate, cache),
+    );
+    return !rules.every(
+      (rule) => rule !== undefined && ignoreRuleCoversGlob(rule, glob),
+    );
+  });
+}
+
+function legacyLeaseWriteObservations(
+  events: readonly LifecycleEvent[],
+  repo: string,
+): Map<string, readonly string[]> {
+  const observations = new Map<string, readonly string[]>();
+  const ignoreCache = new Map<string, string | null>();
+  const snapshot = events.findLast(
+    (event) => event.type === "lease_snapshot" && event.record.repo === repo,
   );
-}
-
-const hash = (text: string): string =>
-  createHash("sha256").update(text).digest("hex");
-
-function repoLeaseDir(stateDir: string, repo: string): string {
-  return join(stateDir, "write-leases", hash(repo));
-}
-
-/** Admission metadata is authority; write-lease files are only a disposable projection. */
-function saveAdmission(stateDir: string, record: LeaseEvidence): void {
-  const dir = join(stateDir, "admissions");
-  mkdirSync(dir, { recursive: true });
-  const path = join(dir, hash(record.run_id ?? "") + ".json");
-  const temporary = path + "." + process.pid + ".tmp";
-  writeFileSync(temporary, JSON.stringify(record));
-  const descriptor = openSync(temporary, "r");
-  fsyncSync(descriptor);
-  closeSync(descriptor);
-  renameSync(temporary, path);
-}
-
-function saveLease(dir: string, lease: WriteLease): void {
-  const path = join(dir, `${hash(lease.run_id)}.json`);
-  const temp = `${path}.${process.pid}.tmp`;
-  writeFileSync(temp, JSON.stringify(lease));
-  renameSync(temp, path);
+  for (const event of events) {
+    if (
+      event.type !== "admitted" ||
+      event.repo !== repo ||
+      (snapshot !== undefined && event.seq < snapshot.seq) ||
+      z.array(z.string()).safeParse(event.record.lease_writes).success
+    )
+      continue;
+    observations.set(
+      event.run_id,
+      leaseableWriteGlobs(event.workspace, event.writes, ignoreCache),
+    );
+  }
+  return observations;
 }
 
 type LockResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: string; exitCode?: number };
-
-const REPO_LOCK_WAIT_MS = 30_000;
-const REPO_LOCK_TIMEOUT_EXIT = 75;
-const epochMilliseconds = () => Temporal.Now.instant().epochMilliseconds;
-type LockHolder = Readonly<{ run_id?: string; ticket?: string }>;
-type LockOwner = Readonly<{
-  pid: number;
-  run_id?: string;
-  ticket?: string;
-  since: string;
-}>;
-
-function lockOwnerIsDead(path: string): boolean {
-  const ownerText = fromThrowable(
-    () => readFileSync(path, "utf8"),
-    errorMessage,
-  )();
-  if (ownerText.isErr()) return false;
-  const parsed = jsonOf(
-    z.object({ pid: z.number().int().positive() }),
-  ).safeParse(ownerText.value);
-  const pid = parsed.success ? parsed.data.pid : Number(ownerText.value);
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  const alive = fromThrowable(() => process.kill(pid, 0), errorMessage)();
-  return alive.isErr() && alive.error.includes("ESRCH");
-}
-
-function waitForLockOrReap(
-  path: string,
-  wait: Int32Array,
-  remainingMs: number,
-): void {
-  if (lockOwnerIsDead(path)) {
-    fromThrowable(() => {
-      unlinkSync(path);
-    }, errorMessage)();
-    return;
-  }
-  Atomics.wait(wait, 0, 0, Math.min(25, remainingMs));
-}
-
-function lockHolderDescription(path: string): string {
-  const ownerText = fromThrowable(
-    () => readFileSync(path, "utf8"),
-    errorMessage,
-  )();
-  if (ownerText.isErr()) return "holder unknown";
-  const parsed = jsonOf(
-    z.object({
-      pid: z.number().int().positive(),
-      run_id: z.string().optional(),
-      ticket: z.string().optional(),
-      since: z.string(),
-    }),
-  ).safeParse(ownerText.value);
-  if (!parsed.success) {
-    if (/^\d+$/u.test(ownerText.value))
-      return `pid ${ownerText.value}, held duration unknown`;
-    return "holder unknown";
-  }
-  const owner = parsed.data;
-  const held = fromThrowable(
-    () =>
-      Math.max(
-        0,
-        epochMilliseconds() -
-          Temporal.Instant.from(owner.since).epochMilliseconds,
-      ),
-    errorMessage,
-  )();
-  const run = owner.run_id === undefined ? "" : `, run ${owner.run_id}`;
-  const ticket = owner.ticket === undefined ? "" : `, ticket ${owner.ticket}`;
-  let duration = "unknown duration";
-  if (held.isOk()) duration = `${Math.round(held.value / 1000)}s`;
-  return `pid ${owner.pid}${run}${ticket}, held ${duration}`;
-}
-
-function withRepoLock<T>(
-  dir: string,
-  holder: LockHolder,
-  operation: () => T,
-  waitMs = REPO_LOCK_WAIT_MS,
-): LockResult<T> {
-  const made = fromThrowable(
-    () => mkdirSync(dir, { recursive: true }),
-    errorMessage,
-  )();
-  if (made.isErr()) return { ok: false, error: made.error };
-  const lock = join(dir, ".lock");
-  const wait = new Int32Array(new SharedArrayBuffer(4));
-  const startedAt = epochMilliseconds();
-  let descriptor: number | undefined;
-  while (epochMilliseconds() - startedAt < waitMs) {
-    const opened = fromThrowable(() => openSync(lock, "wx"), errorMessage)();
-    if (opened.isErr() && !opened.error.includes("EEXIST"))
-      return { ok: false, error: opened.error };
-    if (opened.isErr()) {
-      waitForLockOrReap(lock, wait, waitMs - (epochMilliseconds() - startedAt));
-      continue;
-    }
-    const acquiredDescriptor = opened.value;
-    descriptor = acquiredDescriptor;
-    const owner: LockOwner = {
-      pid: process.pid,
-      ...(holder.run_id === undefined ? {} : { run_id: holder.run_id }),
-      ...(holder.ticket === undefined ? {} : { ticket: holder.ticket }),
-      since: Temporal.Now.instant().toString(),
-    };
-    const written = fromThrowable(() => {
-      writeSync(acquiredDescriptor, JSON.stringify(owner));
-      closeSync(acquiredDescriptor);
-    }, errorMessage)();
-    if (written.isErr()) {
-      fromThrowable(() => {
-        unlinkSync(lock);
-      }, errorMessage)();
-      return { ok: false, error: written.error };
-    }
-    break;
-  }
-  if (descriptor === undefined) {
-    const identity = lockHolderDescription(lock);
-    return {
-      ok: false,
-      error: `timed out after ${waitMs}ms waiting for the repository write-lease lock (${identity})`,
-      exitCode: REPO_LOCK_TIMEOUT_EXIT,
-    };
-  }
-  const result = fromThrowable(operation, errorMessage)();
-  const released = fromThrowable(() => {
-    unlinkSync(lock);
-  }, errorMessage)();
-  if (result.isErr()) return { ok: false, error: result.error };
-  if (released.isErr()) return { ok: false, error: released.error };
-  return { ok: true, value: result.value };
-}
-
 type FoldInput = {
-  stateDir: string;
   repo: string;
-  activeRunIds: ReadonlySet<string>;
-  evidence: readonly LeaseEvidence[];
-  workspaceChanges?: (cwd: string) => WorkspaceChanges;
-  unitAlive?: (unit: string) => boolean;
-  processAlive?: (pid: number | undefined) => boolean;
+  legacyLeaseWrites?: ReadonlyMap<string, readonly string[]>;
 };
+type LeaseReadInput = FoldInput & { stateDir: string };
 type LeaseDecision = {
   lease: WriteLease;
   live: boolean;
   held: boolean;
+  hard: boolean;
   abandoned: boolean;
   error?: string;
 };
+
+function leaseFromAdmission(
+  row: LeaseEvidence,
+  repo: string,
+): WriteLease | undefined {
+  const cwd = row.cwd;
+  const writes = row.lease_writes ?? row.ticket?.writes ?? [];
+  if (
+    row.kind !== "admitted" ||
+    cwd === undefined ||
+    row.ticket?.name === undefined ||
+    writes.length === 0 ||
+    row.repo !== repo ||
+    row.run_id === undefined
+  )
+    return undefined;
+  return {
+    repo,
+    run_id: row.run_id,
+    cwd: resolve(cwd),
+    writes,
+    ticket: row.ticket.name,
+    dispatcher_session: row.dispatcher_session ?? "unknown",
+    since: row.started_at ?? row.at ?? row.run_id,
+    lease: row.lease ?? "repository",
+    exclusive: row.exclusive ?? false,
+  };
+}
 
 function workspaceDirectory(cwd: string): string {
   let directory = resolve(cwd);
@@ -515,259 +480,157 @@ function workspaceDirectory(cwd: string): string {
   return resolve(cwd);
 }
 
-const lineage = (lease: WriteLease) =>
-  JSON.stringify([lease.ticket, workspaceDirectory(lease.cwd)]);
+/** A pure fold over lifecycle events; only live and unresolved exclusive runs hold leases. */
+export function foldWriteLeases(
+  events: readonly LifecycleEvent[],
+  input: FoldInput,
+): LeaseDecision[] {
+  const snapshot = events.findLast(
+    (event) =>
+      event.type === "lease_snapshot" && event.record.repo === input.repo,
+  );
+  const snapshotState = z
+    .array(SnapshotLeaseSchema)
+    .safeParse(snapshot?.record.lease_state);
+  const leases = new Map<string, LeaseDecision>();
+  if (snapshot !== undefined && snapshotState.success)
+    for (const entry of snapshotState.data)
+      leases.set(entry.lease.run_id, {
+        lease: entry.lease,
+        live: entry.live,
+        held: true,
+        hard: true,
+        abandoned: entry.abandoned,
+      });
 
-function propagateJudgments(parents: string[][], judged: Set<string>): boolean {
-  let propagated = false;
-  for (const [id, parent] of parents) {
-    if (id === undefined || parent === undefined) continue;
-    if (!(judged.has(id) || judged.has(parent))) continue;
-    const before = judged.size;
-    judged.add(id);
-    judged.add(parent);
-    propagated = propagated || judged.size !== before;
-  }
-  return propagated;
-}
-
-/** One computation for admission, listing and GC. Lease files are never an input. */
-export function foldWriteLeases(input: FoldInput): LeaseDecision[] {
-  const records = new Map<string, LeaseEvidence>();
-  const admitted = new Set<string>();
-  const finished = new Set<string>();
-  const judged = new Set<string>();
-  const detached = new Map<string, LeaseEvidence>();
-  const started = new Set<string>();
-  const released = new Set<string>();
-  for (const row of [...legacyAdmissions(input), ...input.evidence]) {
+  const offset =
+    snapshot !== undefined && snapshotState.success ? snapshot.seq : 0;
+  const delta = events.filter((event) => event.seq > offset);
+  for (const row of evidenceFromLifecycle(delta, input.legacyLeaseWrites)) {
     if (row.run_id === undefined) continue;
-    if (
-      row.kind === "admitted" &&
-      row.cwd !== undefined &&
-      row.ticket?.name !== undefined &&
-      (row.ticket.writes?.length ?? 0) > 0
-    )
-      admitted.add(row.run_id);
-    const merged = EvidenceSchema.safeParse(
-      Object.assign(
-        {},
-        records.get(row.run_id),
-        Object.fromEntries(
-          Object.entries(row).filter(([, value]) => value !== undefined),
-        ),
-      ),
-    );
-    if (merged.success) records.set(row.run_id, merged.data);
-    if (["run", "abandoned", "lease-released"].includes(row.kind ?? ""))
-      finished.add(row.run_id);
-    if (row.kind === "acceptance" || row.kind === "landed")
-      judged.add(row.run_id);
-    if (row.kind === "detached") detached.set(row.run_id, row);
-    if (["admitted", "started", "detached"].includes(row.kind ?? ""))
-      started.add(row.run_id);
-    if (row.kind === "lease-released") released.add(row.run_id);
-  }
-  const leases = new Map<string, WriteLease>();
-  for (const [runId, row] of records) {
-    const eligible = admitted.has(runId);
-    if (
-      !eligible &&
-      !input.activeRunIds.has(runId) &&
-      ((finished.has(runId) && !detached.has(runId)) || !started.has(runId))
-    )
+    const lease = leaseFromAdmission(row, input.repo);
+    if (lease !== undefined) {
+      leases.set(row.run_id, {
+        lease,
+        live: true,
+        held: true,
+        hard: true,
+        abandoned: false,
+      });
       continue;
-    const cwd = row.cwd;
-    const writes = row.ticket?.writes ?? [];
-    if (cwd === undefined || (eligible && writes.length === 0)) continue;
-    const repo = row.repo ?? workspaceRoot(cwd);
-    if (repo !== input.repo) continue;
-    leases.set(runId, {
-      repo,
-      run_id: runId,
-      cwd: workspaceDirectory(cwd),
-      writes,
-      ticket:
-        row.ticket?.name ?? row.display_id?.replace(/^agt_/u, "") ?? runId,
-      dispatcher_session: row.dispatcher_session ?? "unknown",
-      since: row.started_at ?? row.at ?? runId,
+    }
+    const previous = leases.get(row.run_id);
+    if (previous === undefined) continue;
+    if (
+      row.kind === "acceptance" &&
+      row.accept === false &&
+      previous.lease.exclusive
+    ) {
+      leases.delete(row.run_id);
+      continue;
+    }
+    if (row.kind === "lease-released" || row.kind === "disposed") {
+      leases.delete(row.run_id);
+      continue;
+    }
+    if (row.kind !== "run" && row.kind !== "abandoned") continue;
+    if (!previous.lease.exclusive) {
+      leases.delete(row.run_id);
+      continue;
+    }
+    leases.set(row.run_id, {
+      ...previous,
+      live: false,
+      abandoned: row.kind === "abandoned",
     });
   }
-  const parents = [...records.entries()].flatMap(([id, row]) => {
-    const parent = row.predecessor ?? row.resumed_from;
-    if (parent === undefined || row.cwd === undefined) return [];
-    const parentCwd = records.get(parent)?.cwd;
-    return admitted.has(id) &&
-      parentCwd !== undefined &&
-      workspaceDirectory(parentCwd) === workspaceDirectory(row.cwd)
-      ? [[id, parent]]
-      : [];
-  });
-  while (propagateJudgments(parents, judged)) {
-    /* bounded by the number of run IDs */
-  }
-  const judgedLineages = new Set(
-    [...leases.values()]
-      .filter((lease) => judged.has(lease.run_id))
-      .map((lease) => lineage(lease)),
-  );
-  for (const [runId, row] of records) {
-    if (
-      judged.has(runId) &&
-      row.cwd !== undefined &&
-      row.ticket?.name !== undefined
-    )
-      judgedLineages.add(
-        JSON.stringify([row.ticket.name, workspaceDirectory(row.cwd)]),
-      );
-  }
-  const transferred = new Set(
-    parents.flatMap((pair) =>
-      pair[0] === undefined || pair[1] === undefined || released.has(pair[0])
-        ? []
-        : [pair[1]],
-    ),
-  );
-  const changes = new Map<string, WorkspaceChanges>();
-  const decisions: LeaseDecision[] = [];
-  for (const lease of leases.values()) {
-    const decision = decideLease(
-      lease,
-      input,
-      records,
-      detached,
-      finished,
-      started,
-      released,
-      judgedLineages,
-      changes,
-      admitted.has(lease.run_id),
-    );
-    decisions.push(
-      transferred.has(lease.run_id)
-        ? Object.assign({}, decision, { held: false })
-        : decision,
-    );
-  }
-  return decisions;
+  return [...leases.values()];
 }
 
-function decideLease(
-  lease: WriteLease,
-  input: FoldInput,
-  records: Map<string, LeaseEvidence>,
-  detached: Map<string, LeaseEvidence>,
-  finished: Set<string>,
-  started: Set<string>,
-  released: Set<string>,
-  judgedLineages: Set<string>,
-  changes: Map<string, WorkspaceChanges>,
-  eligible: boolean,
-): LeaseDecision {
-  const row = records.get(lease.run_id);
-  const pending = detached.get(lease.run_id);
-  const unit =
-    pending?.unit ??
-    (pending === undefined
-      ? undefined
-      : "agx-" + lease.ticket + "-" + hash(lease.run_id).slice(0, 8));
-  const live =
-    input.activeRunIds.has(lease.run_id) ||
-    (unit !== undefined && (input.unitAlive ?? unitAlive)(unit)) ||
-    (!finished.has(lease.run_id) &&
-      (input.processAlive ?? processAlive)(row?.pid));
-  const abandoned =
-    !live &&
-    !finished.has(lease.run_id) &&
-    row !== undefined &&
-    started.has(lease.run_id);
-  if (live)
-    return { lease, live, held: lease.writes.length > 0, abandoned: false };
-  if (!eligible) return { lease, live, held: false, abandoned };
-  if (
-    released.has(lease.run_id) ||
-    judgedLineages.has(lineage(lease)) ||
-    !existsSync(lease.cwd)
-  )
-    return { lease, live, held: false, abandoned };
-  let observation = changes.get(lease.cwd);
-  if (observation === undefined) {
-    observation = (input.workspaceChanges ?? workspaceChanges)(lease.cwd);
-    changes.set(lease.cwd, observation);
-  }
-  return {
-    lease,
-    live,
-    held: observation.changed,
-    abandoned,
-    ...(observation.error === undefined ? {} : { error: observation.error }),
-  };
-}
-
-function rebuildLeases(dir: string, decisions: LeaseDecision[]): WriteLease[] {
-  for (const name of readdirSync(dir).filter((entryName) =>
-    entryName.endsWith(".json"),
-  ))
-    unlinkSync(join(dir, name));
-  const held = decisions
-    .filter((decision) => decision.held)
-    .map((decision) => decision.lease);
-  for (const lease of held) saveLease(dir, lease);
-  return held;
+export function appendLeaseSnapshot(input: LeaseReadInput): LockResult<number> {
+  const current = readLifecycle(input.stateDir);
+  if (current.errors.length > 0)
+    return { ok: false, error: current.errors.join("; ") };
+  const legacyLeaseWrites = legacyLeaseWriteObservations(
+    current.events,
+    input.repo,
+  );
+  const record: Record<string, unknown> = { repo: input.repo };
+  const appended = appendLifecycle(
+    input.stateDir,
+    {
+      type: "lease_snapshot",
+      run_id: "__lease_snapshot__",
+      record,
+    },
+    (events) => {
+      const decisions = foldWriteLeases(events, {
+        repo: input.repo,
+        legacyLeaseWrites,
+      });
+      record.snapshot_offset = events.at(-1)?.seq ?? 0;
+      const ticketIndex = new Map<string, string>();
+      const lineageIndex = new Map<string, string>();
+      for (const event of events)
+        if (event.type === "admitted" && event.repo === input.repo) {
+          ticketIndex.set(event.ticket, event.run_id);
+          lineageIndex.set(event.run_id, event.lineage_id);
+        }
+      record.ticket_index = Object.fromEntries(ticketIndex);
+      record.lineage_index = Object.fromEntries(lineageIndex);
+      record.lease_state = decisions
+        .filter((decision) => decision.held)
+        .map((decision) => ({
+          lease: decision.lease,
+          live: decision.live,
+          abandoned: decision.abandoned,
+        }));
+      return null;
+    },
+  );
+  return appended.ok
+    ? { ok: true, value: appended.event.seq }
+    : { ok: false, error: appended.error };
 }
 
 export function reconcileWriteLeases(
-  input: FoldInput,
+  input: LeaseReadInput,
 ): LockResult<WriteLease[]> {
-  const dir = repoLeaseDir(input.stateDir, input.repo);
-  const result = withRepoLock(dir, {}, () => {
-    for (const admission of legacyAdmissions({
-      ...input,
-      evidence: [...readLeaseEvidence(input.stateDir), ...input.evidence],
-    }))
-      saveAdmission(input.stateDir, admission);
-    const decisions = foldWriteLeases({
-      ...input,
-      evidence: [...readLeaseEvidence(input.stateDir), ...input.evidence],
-    });
-    for (const decision of decisions.filter((item) => item.abandoned)) {
-      const appended = appendLedgerLine(
-        input.stateDir,
-        JSON.stringify({
-          kind: "abandoned",
-          run_id: decision.lease.run_id,
-          cwd: decision.lease.cwd,
-          ticket: {
-            name: decision.lease.ticket,
-            writes: decision.lease.writes,
-          },
-          at: Temporal.Now.instant().toString(),
-          reason: "stopped externally",
-        }) + "\n",
-      );
-      if (!appended.ok) return appended;
-    }
-    return { ok: true as const, value: rebuildLeases(dir, decisions) };
+  const lifecycle = readLifecycle(input.stateDir);
+  if (lifecycle.errors.length > 0)
+    return { ok: false, error: lifecycle.errors.join("; ") };
+  const decisions = foldWriteLeases(lifecycle.events, {
+    ...input,
+    legacyLeaseWrites: legacyLeaseWriteObservations(
+      lifecycle.events,
+      input.repo,
+    ),
   });
-  return result.ok ? result.value : result;
+  return {
+    ok: true,
+    value: decisions
+      .filter((decision) => decision.held)
+      .map((decision) => decision.lease),
+  };
 }
 
 function overlapReason(
   runId: string,
   writes: string[],
   leases: readonly WriteLease[],
-  owner: { ticket: string; cwd: string; predecessor?: string },
+  owner: {
+    ticket: string;
+    cwd: string;
+    lease: "repository" | "workspace";
+  },
 ): string | undefined {
   const first = writes.flatMap((mine) =>
     leases.flatMap((held) =>
       held.run_id !== runId &&
       !(
-        held.run_id === owner.predecessor &&
-        workspaceDirectory(held.cwd) === workspaceDirectory(owner.cwd)
-      ) &&
-      !(
-        held.ticket === owner.ticket &&
-        workspaceDirectory(held.cwd) === workspaceDirectory(owner.cwd)
+        owner.lease === "workspace" &&
+        held.lease === "workspace" &&
+        held.cwd !== owner.cwd
       ) &&
       held.writes.some((glob) => globsOverlap(mine, glob))
         ? [{ mine, held }]
@@ -789,124 +652,65 @@ export function claimWriteLease(input: {
   dispatcher_session: string;
   since: string;
   predecessor?: string;
-  lockWaitMs?: number;
-  activeRunIds: ReadonlySet<string>;
-  evidence: readonly LeaseEvidence[];
-  workspaceChanges?: (cwd: string) => WorkspaceChanges;
-  unitAlive?: (unit: string) => boolean;
-  processAlive?: (pid: number | undefined) => boolean;
+  lease?: "workspace";
+  exclusive?: boolean;
+  admissionRecord?: Record<string, unknown>;
 }): LockResult<void> {
   if (input.writes.length === 0) return { ok: true, value: undefined };
-  const dir = repoLeaseDir(input.stateDir, input.repo);
-  const workspaceSnapshots = new Map<string, WorkspaceChanges>();
-  const processSnapshots = new Map<number | undefined, boolean>();
-  const unitSnapshots = new Map<string, boolean>();
-  const snapshotEvidence = [
-    ...readLeaseEvidence(input.stateDir),
-    ...input.evidence,
-  ];
-  foldWriteLeases({
-    ...input,
-    evidence: snapshotEvidence,
-    workspaceChanges: (cwd) => {
-      const result = (input.workspaceChanges ?? workspaceChanges)(cwd);
-      workspaceSnapshots.set(resolve(cwd), result);
-      return result;
+  const cwd = workspaceDirectory(input.cwd);
+  const ownWrites = leaseableWriteGlobs(cwd, input.writes);
+  const admission = {
+    type: "admitted" as const,
+    run_id: input.run_id,
+    repo: input.repo,
+    workspace: cwd,
+    ticket: input.ticket,
+    writes: input.writes,
+    resource: null,
+    predecessor: input.predecessor,
+    session_id: input.dispatcher_session,
+    record: {
+      ...input.admissionRecord,
+      cwd,
+      lease_writes: ownWrites,
+      lease: input.lease ?? "repository",
+      exclusive: input.exclusive ?? false,
+      ...(input.admissionRecord === undefined
+        ? {
+            kind: "admitted",
+            run_id: input.run_id,
+            repo: input.repo,
+            cwd,
+            ticket: { name: input.ticket, writes: input.writes },
+            dispatcher_session: input.dispatcher_session,
+            started_at: input.since,
+            predecessor: input.predecessor,
+            pid: process.pid,
+          }
+        : {}),
     },
-    processAlive: (pid) => {
-      const result = (input.processAlive ?? processAlive)(pid);
-      processSnapshots.set(pid, result);
-      return result;
-    },
-    unitAlive: (unit) => {
-      const result = (input.unitAlive ?? unitAlive)(unit);
-      unitSnapshots.set(unit, result);
-      return result;
-    },
-  });
-  const result = withRepoLock(
-    dir,
-    input,
-    () => {
-      const decisions = foldWriteLeases({
-        ...input,
-        evidence: [...readLeaseEvidence(input.stateDir), ...input.evidence],
-        workspaceChanges: (cwd) =>
-          workspaceSnapshots.get(resolve(cwd)) ?? {
-            changed: true,
-            error:
-              "workspace appeared after admission preflight; assuming changes (fail closed)",
-          },
-        processAlive: (pid) => processSnapshots.get(pid) ?? true,
-        unitAlive: (unit) => unitSnapshots.get(unit) ?? true,
-      });
-      const leases = decisions
-        .filter((decision) => decision.held)
-        .map((decision) => decision.lease);
-      const conflict = overlapReason(input.run_id, input.writes, leases, input);
-      if (conflict !== undefined) {
-        const unavailable = decisions
-          .filter((item) => item.held && item.error !== undefined)
-          .map((item) => item.error)
-          .join("; ");
-        return {
-          ok: false as const,
-          reason: `${conflict}${unavailable === "" ? "" : `; workspace check failed closed: ${unavailable}`}`,
-        };
-      }
-      for (const decision of decisions.filter((item) => item.abandoned)) {
-        const appended = appendLedgerLine(
-          input.stateDir,
-          JSON.stringify({
-            kind: "abandoned",
-            run_id: decision.lease.run_id,
-            cwd: decision.lease.cwd,
-            ticket: {
-              name: decision.lease.ticket,
-              writes: decision.lease.writes,
-            },
-            at: Temporal.Now.instant().toString(),
-            reason: "stopped externally",
-          }) + "\n",
-        );
-        if (!appended.ok) return { ok: false as const, reason: appended.error };
-      }
-      const predecessor =
-        input.predecessor ??
-        leases.find(
-          (lease) =>
-            lease.ticket === input.ticket &&
-            workspaceDirectory(lease.cwd) === workspaceDirectory(input.cwd),
-        )?.run_id;
-      saveAdmission(input.stateDir, {
-        kind: "admitted",
-        lease_version: 1,
-        ...(predecessor === undefined ? {} : { predecessor }),
-        run_id: input.run_id,
-        repo: input.repo,
-        cwd: input.cwd,
-        ticket: { name: input.ticket, writes: input.writes },
-        dispatcher_session: input.dispatcher_session,
-        started_at: input.since,
-        pid: process.pid,
-      });
-      saveLease(dir, {
-        repo: input.repo,
-        run_id: input.run_id,
-        cwd: input.cwd,
-        writes: input.writes,
+    at: input.since,
+  };
+  const appended = appendLifecycle(input.stateDir, admission, (events) => {
+    const decisions = foldWriteLeases(events, {
+      repo: input.repo,
+      legacyLeaseWrites: legacyLeaseWriteObservations(events, input.repo),
+    });
+    const eligible = decisions.filter((decision) => decision.held);
+    const conflict = overlapReason(
+      input.run_id,
+      ownWrites,
+      eligible.map((decision) => decision.lease),
+      {
         ticket: input.ticket,
-        dispatcher_session: input.dispatcher_session,
-        since: input.since,
-      });
-      return { ok: true as const };
-    },
-    input.lockWaitMs,
-  );
-  if (!result.ok) return result;
-  return result.value.ok
-    ? { ok: true, value: undefined }
-    : { ok: false, error: result.value.reason };
+        cwd,
+        lease: input.lease ?? "repository",
+      },
+    );
+    return conflict ?? null;
+  });
+  if (!appended.ok) return { ok: false, error: appended.error };
+  return { ok: true, value: undefined };
 }
 
 export function releaseWriteLease(input: {
@@ -914,31 +718,43 @@ export function releaseWriteLease(input: {
   repo: string;
   run_id: string;
 }): LockResult<void> {
-  const dir = repoLeaseDir(input.stateDir, input.repo);
-  return withRepoLock(dir, { run_id: input.run_id }, () => {
-    const appended = appendLedgerLine(
-      input.stateDir,
-      JSON.stringify({
-        kind: "lease-released",
-        run_id: input.run_id,
-        at: Temporal.Now.instant().toString(),
-      }) + "\n",
-    );
-    if (!appended.ok) return;
-    const path = join(dir, `${hash(input.run_id)}.json`);
-    if (existsSync(path)) unlinkSync(path);
+  const appended = appendLifecycle(input.stateDir, {
+    type: "disposed",
+    run_id: input.run_id,
+    record: { repo: input.repo },
   });
+  return appended.ok
+    ? { ok: true, value: undefined }
+    : { ok: false, error: appended.error };
 }
 
-export function listWriteLeases(input: FoldInput): LockResult<WriteLease[]> {
-  const result = fromThrowable(
-    () =>
-      foldWriteLeases(input)
-        .filter((decision) => decision.held)
-        .map((decision) => decision.lease),
-    errorMessage,
-  )();
-  return result.isOk()
-    ? { ok: true, value: result.value }
-    : { ok: false, error: result.error };
+export function writeLeaseDecisions(
+  input: LeaseReadInput,
+): LockResult<LeaseDecision[]> {
+  const lifecycle = readLifecycle(input.stateDir);
+  if (lifecycle.errors.length > 0)
+    return { ok: false, error: lifecycle.errors.join("; ") };
+  return {
+    ok: true,
+    value: foldWriteLeases(lifecycle.events, {
+      ...input,
+      legacyLeaseWrites: legacyLeaseWriteObservations(
+        lifecycle.events,
+        input.repo,
+      ),
+    }),
+  };
+}
+
+export function listWriteLeases(
+  input: LeaseReadInput,
+): LockResult<WriteLease[]> {
+  const result = writeLeaseDecisions(input);
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    value: result.value
+      .filter((decision) => decision.held)
+      .map((decision) => decision.lease),
+  };
 }

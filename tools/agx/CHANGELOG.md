@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.7.0 — 2026-10-13
+
+- Derive write leases from `lifecycle.jsonl` and serialize only the fold recheck plus `admitted` append on that log; remove admission/cache files and the 3.5.0 compatibility path.
+- Hold ordinary leases only while runs are live; terminal events release them, while exclusive leases remain hard until disposal or reject judgment.
+- Exclude paths covered by repository ignore rules while leasing untracked and not-yet-created paths; support workspace-root lease scope.
+- Fold admissions from the latest in-log snapshot offset; keep judgment to one lifecycle append without lease folding, ledger scans or pruning.
+- Terminalize an amend/restart predecessor before admitting its successor; remove soft holds and lineage lease transfers.
+
 ## 3.6.0 — 2026-10-13
 
 - Add lifecycle migration slice 1: a schema-tagged, append-only `lifecycle.jsonl`, native flock serialization, sequence/event IDs, corrupt-tail refusal and read-only run/session/live folds.

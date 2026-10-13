@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -19,6 +20,7 @@ import {
   lifecyclePath,
   LifecycleEventSchema,
   readLifecycle,
+  readLifecycleTail,
 } from "../src/lifecycle-log.ts";
 import { appendLedgerLine } from "../src/ledger.ts";
 import { z } from "../../shared/src/zod.ts";
@@ -71,6 +73,40 @@ test("concurrent appenders produce strictly increasing seq and complete unique l
     Array.from({ length: 96 }, (_, index) => index + 1),
   );
   expect(new Set(read.events.map((event) => event.event_id)).size).toBe(96);
+});
+
+test("judgment append stays below 500ms with 100,000 lifecycle events", () => {
+  const state = join(root, "judgment-100k");
+  mkdirSync(state, { recursive: true });
+  const at = Temporal.Now.instant().toString();
+  const lines = Array.from({ length: 100_000 }, (_, index) =>
+    JSON.stringify({
+      schema: 1,
+      seq: index + 1,
+      event_id: crypto.randomUUID(),
+      at,
+      run_id: `run-${index}`,
+      lineage_id: `run-${index}`,
+      session_id: null,
+      record: {},
+      type: "judged",
+      decision: "reject",
+    }),
+  );
+  writeFileSync(lifecyclePath(state), `${lines.join("\n")}\n`);
+  const started = performance.now();
+  const appended = appendLifecycle(state, {
+    type: "judged",
+    run_id: "target-run",
+    decision: "reject",
+    record: { kind: "acceptance", run_id: "target-run", accept: false },
+  });
+  const elapsed = performance.now() - started;
+  expect(appended.ok).toBe(true);
+  expect(elapsed).toBeLessThan(500);
+  const tail = readLifecycleTail(state, 1024);
+  expect(tail.errors).toEqual([]);
+  expect(tail.events.at(-1)?.run_id).toBe("target-run");
 });
 
 test("read-only and missing state readers create no files", () => {

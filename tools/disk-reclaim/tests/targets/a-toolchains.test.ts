@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -18,6 +18,11 @@ import {
 } from "../../src/lib/version-stores.ts";
 import { createToolchainsTarget } from "../../src/targets/toolchains.ts";
 
+const cacheRoot = tempRoot("reclaim-toolchains-cache-");
+afterAll(() => {
+  rmSync(cacheRoot, { recursive: true, force: true });
+});
+
 const config = {
   repo_roots: [],
   repos: [],
@@ -29,6 +34,7 @@ const config = {
 };
 const context = {
   mode: "plan" as const,
+  scanCacheDir: cacheRoot,
   explicit: false,
   config,
   log: () => {},

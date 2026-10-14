@@ -1,11 +1,17 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
 import { createBuildsTarget } from "../../src/targets/builds.ts";
 
+const cacheRoot = tempRoot("reclaim-builds-cache-");
+afterAll(() => {
+  rmSync(cacheRoot, { recursive: true, force: true });
+});
+
 const context = (repoRoots: string[], procDir: string) => ({
   mode: "plan" as const,
+  scanCacheDir: cacheRoot,
   explicit: false,
   procDir,
   config: {

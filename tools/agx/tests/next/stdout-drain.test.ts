@@ -3,9 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../../../tools/shared/src/zod.ts";
+import { createTempTracker } from "../temp.ts";
+
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
 
 const CLI = join(import.meta.dir, "..", "..", "src", "next", "cli.ts");
-const scratch = mkdtempSync(join(tmpdir(), "agx-stdout-drain-"));
+const scratch = registerTempDir(
+  mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-stdout-drain-`)),
+);
 const state = join(scratch, "state");
 const expectedRuns = 3_000;
 mkdirSync(state);
@@ -28,6 +34,7 @@ writeFileSync(join(state, "records.jsonl"), `${records}\n`);
 
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
+  tempDirs.assertRemoved();
 });
 
 test("ls JSON drains completely when the pipe reader starts slowly", async () => {

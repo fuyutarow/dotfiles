@@ -29,7 +29,9 @@ or changed paths are skipped. Owner-only rows remain ASK until their item is sup
 equivalent of `plan | apply`.
 
 Plan reads candidate data without deleting it and maintains a measurement cache under
-`$RECLAIM_STATE_DIR/scan-cache` (default: the reclaim state directory). Each root's change key
+`$XDG_CACHE_HOME/disk-reclaim/scan-cache` (default: `~/.cache/disk-reclaim/scan-cache`); tests and
+callers can provide a private cache root. The cache evicts the oldest entries above 2,048 JSON
+records. Each root's change key
 contains device/inode, size, mtime/ctime, and sorted top-level entry metadata. An unchanged key
 reuses previous sizing and discovery results; changed roots are scanned again. Completed
 subdirectories are cached as well, so an interrupted large-root scan can reuse those measurements
@@ -68,10 +70,15 @@ scratch; both share one liveness snapshot per plan and recheck facts under the l
 and host require owner selection, purge must be named, and vhdx/audit are plan-only.
 `targets --json` lists their tiers and availability without scanning candidates.
 
-The `tmpfs` target reports inode and byte use for each detected tmpfs mount, then selects only
-top-level, current-user temporary directories with a mkdtemp-style suffix, an age over 60 minutes,
-and no open process references. Claude/herdr session directories, systemd-private directories,
-other users' files, and open or indeterminate paths are kept or asked. Removal calls direct
+The `tmpfs` target reports inode and byte use for each detected tmpfs mount, then considers every
+top-level directory owned by the current user. The mkdtemp-style name remains a recognition signal,
+but fixed-name directories also qualify when their tree's newest mtime is over 60 minutes old, the
+bounded safety walk completes, and no process has the directory or a descendant open. One walk
+checks ownership, newest mtime and allocated bytes, with limits of 4 seconds, 1,048,576 entries
+and 64 levels. Fresh and open directories skip the walk; reaching a limit produces an ASK row.
+Claude/herdr
+session directories, systemd-private directories, scratchpads, configured protected paths, other users' files, unreadable or
+oversized trees, and open or indeterminate paths are kept or asked. Removal calls direct
 recursive unlink/rmdir operations; it does not use `rip`, which would copy deleted entries and
 their inode use into a graveyard. Legacy `graveyard-*` directories and configured rip graveyards
 on tmpfs/ramfs are already-deleted data: the blind tier permanently purges them after ownership

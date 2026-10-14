@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
@@ -7,6 +7,11 @@ import { run } from "../../src/engine.ts";
 import { processBusy } from "../../src/lib/busy.ts";
 import { z } from "../../../shared/src/zod.ts";
 import { loadConfig } from "../../src/engine.ts";
+
+const cacheRoot = tempRoot("reclaim-clean-cache-");
+afterAll(() => {
+  rmSync(cacheRoot, { recursive: true, force: true });
+});
 
 const config = {
   repo_roots: [],
@@ -19,6 +24,7 @@ const config = {
 };
 const context = {
   mode: "plan" as const,
+  scanCacheDir: cacheRoot,
   explicit: false,
   config,
   log: () => {},

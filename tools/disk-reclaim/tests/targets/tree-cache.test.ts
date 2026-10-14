@@ -1,16 +1,25 @@
-import { expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { afterAll, expect, test } from "bun:test";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "../../src/engine.ts";
 import { measuredTreeBytes } from "../../src/targets/tree.ts";
 import { tempRoot } from "../fixtures/temp.ts";
 
+const roots: string[] = [];
+afterAll(() => {
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
+});
+
 test("unchanged plan roots reuse persisted measurements without a second walk", async () => {
   const root = tempRoot("reclaim-incremental-");
-  using cleanup = new DisposableStack();
-  cleanup.defer(() => {
-    rmSync(root, { recursive: true, force: true });
-  });
+  roots.push(root);
   const path = join(root, "tree");
   mkdirSync(join(path, "nested"), { recursive: true });
   for (let n = 0; n < 300; n++)
@@ -45,4 +54,32 @@ test("unchanged plan roots reuse persisted measurements without a second walk", 
   await measuredTreeBytes(path, { ...ctx, mode: "run" });
   expect(activity.some((task) => task.includes("cache hit"))).toBe(false);
   expect(activity.some((task) => task.includes("walking"))).toBe(true);
+});
+
+test("worker subtree cache uses XDG storage when no private cache root is supplied", async () => {
+  const root = tempRoot("reclaim-worker-cache-");
+  roots.push(root);
+  const previousCache = process.env.XDG_CACHE_HOME;
+  const previousState = process.env.RECLAIM_STATE_DIR;
+  using restore = new DisposableStack();
+  restore.defer(() => {
+    if (previousCache === undefined) delete process.env.XDG_CACHE_HOME;
+    else process.env.XDG_CACHE_HOME = previousCache;
+    if (previousState === undefined) delete process.env.RECLAIM_STATE_DIR;
+    else process.env.RECLAIM_STATE_DIR = previousState;
+  });
+  process.env.XDG_CACHE_HOME = join(root, "xdg-cache");
+  process.env.RECLAIM_STATE_DIR = join(root, "state");
+  const path = join(root, "tree");
+  mkdirSync(join(path, "nested"), { recursive: true });
+  writeFileSync(join(path, "nested", "entry"), "fixture");
+  await measuredTreeBytes(path, {
+    mode: "plan",
+    config: loadConfig().config!,
+    log: () => {},
+  });
+  expect(
+    readdirSync(join(root, "xdg-cache", "disk-reclaim", "scan-cache")),
+  ).toHaveLength(2);
+  expect(existsSync(join(root, "state", "scan-cache"))).toBe(false);
 });

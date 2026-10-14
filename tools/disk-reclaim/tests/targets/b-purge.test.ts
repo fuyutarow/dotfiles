@@ -1,15 +1,16 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   utimesSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { tempRoot } from "../fixtures/temp.ts";
+import { tempRoot as allocateTempRoot } from "../fixtures/temp.ts";
 import { purge, purgeRip } from "../../src/targets/purge.ts";
 import { main as reclaimMain } from "../../src/reclaim.ts";
 import { purgeCandidates } from "../../src/targets/purge.ts";
@@ -23,6 +24,17 @@ import type {
   LivenessFacts,
   LivenessSnapshot,
 } from "../../src/liveness/facts.ts";
+
+const roots: string[] = [];
+const tempRoot = (prefix: string) => {
+  const root = allocateTempRoot(prefix);
+  roots.push(root);
+  return root;
+};
+afterAll(() => {
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
+});
 
 async function purgeTty(
   keys: string,
@@ -59,6 +71,7 @@ async function purgeTty(
       HOME: root,
       RIP_GRAVEYARD: grave,
       XDG_DATA_HOME: join(root, "xdg"),
+      XDG_CACHE_HOME: join(root, "cache"),
       XDG_STATE_HOME: join(root, "state"),
       RECLAIM_STATE_DIR: join(root, "state/reclaim"),
       RECLAIM_UNIT_PROC_ROOT: procDir,

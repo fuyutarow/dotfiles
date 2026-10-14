@@ -102,6 +102,7 @@ export class World {
     return {
       mode,
       procDir,
+      scanCacheDir: join(this.root, "scan-cache-state"),
       config: this.config(extra),
       log: () => {},
       recordRecovery: (_candidate, r) => {

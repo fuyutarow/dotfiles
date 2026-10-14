@@ -1,4 +1,11 @@
-import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  describe,
+  expect,
+  setDefaultTimeout,
+  test,
+} from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,6 +14,11 @@ import { z } from "../../shared/src/zod.ts";
 import { asRecord, runClaude, toRelay } from "../src/workers/run-claude.ts";
 import { decodedJson } from "./decode.ts";
 import { AGX_WORKER_ENV } from "../../shared/src/worker-env.ts";
+import { createTempTracker } from "./temp.ts";
+
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
+afterAll(tempDirs.assertRemoved);
 
 const ErrorEnvelope = z.object({ exit_code: z.number(), error: z.string() });
 // Positive fake-binary probes need startup room; the explicit 20ms timeout case stays unchanged.
@@ -18,6 +30,19 @@ function parseErrorEnvelope(stdout: string): z.output<typeof ErrorEnvelope> {
 
 const fixture = resolve(import.meta.dir, "fake-claude.ts");
 const runnerScript = resolve(import.meta.dir, "../src/workers/run-claude.ts");
+const roots: string[] = [];
+afterEach(async () => {
+  for (const root of roots.splice(0))
+    await rm(root, { recursive: true, force: true });
+});
+
+async function scratch(prefix: string): Promise<string> {
+  const root = registerTempDir(
+    await mkdtemp(join(tmpdir(), `agx-test-${process.pid}-${prefix}`)),
+  );
+  roots.push(root);
+  return root;
+}
 
 function runCli(
   script: string,
@@ -36,7 +61,7 @@ function runCli(
 }
 
 async function withTarget<T>(fn: (target: string) => Promise<T>): Promise<T> {
-  const target = await mkdtemp(join(tmpdir(), "run-claude-test-"));
+  const target = await scratch("run-claude-target-");
   return Promise.try(() => fn(target)).then(
     async (value) => {
       await rm(target, { recursive: true, force: true });
@@ -137,7 +162,7 @@ describe("tools/agx argv boundary", () => {
 
 describe("tools/agx dispatchner: --progress-file", () => {
   test("streams what claude is doing into the progress file; the result event is the answer", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "run-claude-progress-"));
+    const dir = await scratch("run-claude-progress-");
     const progressFile = join(dir, "p.progress.json");
     const run = await withTarget((target) =>
       runClaude({
@@ -177,7 +202,7 @@ describe("tools/agx dispatchner: --progress-file", () => {
 
 describe("tools/agx dispatchner: session persistence and --resume", () => {
   const argvOf = async (extra: Record<string, unknown>): Promise<string[]> => {
-    const dir = await mkdtemp(join(tmpdir(), "run-claude-argv-"));
+    const dir = await scratch("run-claude-argv-");
     const log = join(dir, "fake-claude-argv.log");
     const run = await runClaude({
       target: dir,
@@ -207,7 +232,7 @@ describe("tools/agx dispatchner: session persistence and --resume", () => {
   });
 
   test("marks the Claude child as an agx worker", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "run-claude-env-"));
+    const dir = await scratch("run-claude-env-");
     const run = await runClaude({
       target: dir,
       prompt: "Reply exactly OK",

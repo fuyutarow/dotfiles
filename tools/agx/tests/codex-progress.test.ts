@@ -1,8 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
+import { createTempTracker } from "./temp.ts";
+
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
+afterAll(tempDirs.assertRemoved);
 import {
   emptyTally,
   foldEvent,
@@ -11,6 +16,12 @@ import {
 } from "../src/workers/codex-progress.ts";
 
 // codex-progress: the fold from `codex exec --json` lines to the statusline's progress record.
+
+const roots: string[] = [];
+afterEach(() => {
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
+});
 
 const ev = (o: unknown): string => JSON.stringify(o);
 const fold = (lines: string[]) =>
@@ -134,12 +145,10 @@ test("turn completion adds cumulative usage to progress", () => {
 });
 
 test("progress writer persists usage and row-priced cost immediately", () => {
-  const dir = mkdtempSync(join(tmpdir(), "codex-progress-cost-"));
-  using _cleanup = {
-    [Symbol.dispose]: () => {
-      rmSync(dir, { recursive: true, force: true });
-    },
-  };
+  const dir = registerTempDir(
+    mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-codex-progress-cost-`)),
+  );
+  roots.push(dir);
   const path = join(dir, "worker.progress.json");
   const writer = progressWriter(path, undefined, {
     input: 2,

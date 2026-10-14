@@ -9,12 +9,19 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkPremises } from "../src/premises.ts";
+import { createTempTracker } from "./temp.ts";
 
-const scratch = mkdtempSync(join(tmpdir(), "agx-premises-"));
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
+
+const scratch = registerTempDir(
+  mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-premises-`)),
+);
 const source = join(scratch, "src");
 const docs = join(scratch, "docs");
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
+  tempDirs.assertRemoved();
 });
 mkdirSync(join(source, "next"), { recursive: true });
 mkdirSync(docs);

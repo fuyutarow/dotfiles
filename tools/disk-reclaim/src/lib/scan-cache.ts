@@ -6,14 +6,17 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fromThrowable, jsonOf, z } from "../../../shared/src/zod.ts";
-import { stateDir } from "../receipt.ts";
 import type { Context } from "../targets/index.ts";
 
 const Entry = z.object({ key: z.string(), value: z.unknown() });
+export const MAX_SCAN_CACHE_ENTRIES = 2048;
 const scanSignal = new AsyncLocalStorage<AbortSignal | undefined>();
 export const withScanSignal = <T>(
   signal: AbortSignal | undefined,
@@ -45,6 +48,14 @@ export function changeKey(path: string, onProbe?: () => void): string {
 type CacheContext = Pick<Context, "mode" | "scanCacheDir" | "log"> & {
   onProbe?: (() => void) | undefined;
 };
+export function defaultScanCacheDir(): string {
+  const declared = process.env.XDG_CACHE_HOME;
+  return join(
+    (declared === "" ? undefined : declared) ?? join(homedir(), ".cache"),
+    "disk-reclaim",
+  );
+}
+
 export function scanCache(
   path: string,
   kind: string,
@@ -60,7 +71,8 @@ export function scanCache(
       ),
     ]);
   const key = enabled ? fromThrowable(currentKey)().unwrapOr(null) : null;
-  const dir = join(ctx?.scanCacheDir ?? stateDir(), "scan-cache");
+  const cacheRoot = ctx?.scanCacheDir ?? defaultScanCacheDir();
+  const dir = join(cacheRoot, "scan-cache");
   const file = join(
     dir,
     `${createHash("sha256")
@@ -85,15 +97,47 @@ export function scanCache(
         if (currentKey() !== key) return;
         mkdirSync(dir, { recursive: true, mode: 0o700 });
         const temporary = `${file}.${randomUUID()}`;
+        using cleanup = new DisposableStack();
+        cleanup.defer(() => {
+          rmSync(temporary, { force: true });
+        });
         writeFileSync(temporary, JSON.stringify({ key, value: result }), {
           mode: 0o600,
         });
         renameSync(temporary, file);
+        evictOldEntries(dir);
       })();
       if (written.isErr())
         ctx?.log(`scan cache unavailable: ${String(written.error)}`);
     },
   };
+}
+
+function evictOldEntries(dir: string): void {
+  const entries = fromThrowable(() =>
+    readdirSync(dir, { withFileTypes: true }).filter(
+      (entry) => entry.isFile() && entry.name.endsWith(".json"),
+    ),
+  )();
+  if (entries.isErr() || entries.value.length <= MAX_SCAN_CACHE_ENTRIES) return;
+  const sorted = fromThrowable(() =>
+    entries.value
+      .map((entry) => {
+        const path = join(dir, entry.name);
+        return { path, mtimeMs: statSync(path).mtimeMs };
+      })
+      .toSorted((left, right) => {
+        if (left.mtimeMs === right.mtimeMs)
+          return left.path.localeCompare(right.path);
+        return left.mtimeMs < right.mtimeMs ? -1 : 1;
+      }),
+  )();
+  if (sorted.isErr()) return;
+  const keep = Math.floor(MAX_SCAN_CACHE_ENTRIES * 0.75);
+  for (const entry of sorted.value.slice(0, sorted.value.length - keep))
+    fromThrowable(() => {
+      rmSync(entry.path, { force: true });
+    })();
 }
 
 export function cachedDiscovery(

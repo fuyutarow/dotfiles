@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2 — 2026-10-14
+
+- Reclaim stale, owned tmpfs directories regardless of naming convention, using one bounded ownership, age and sizing walk; keep protected, open and fresh trees safe and report incomplete scans as ASK.
+- Keep both main and worker scan caches under XDG cache storage with a 2,048-entry eviction cap, and remove cache and audit/purge test fixtures after their suites.
+
 ## 1.3.1 — 2026-10-14
 
 - Bound rip graveyard size scans to 40 seconds and report incomplete measurements as conservative lower bounds.

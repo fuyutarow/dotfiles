@@ -2,6 +2,10 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createTempTracker } from "./temp.ts";
+
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
 import { parseActiveMarker } from "../../shared/src/dispatch-state.ts";
 import {
   briefLabel,
@@ -14,6 +18,7 @@ const roots: string[] = [];
 afterAll(() => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
+  tempDirs.assertRemoved();
 });
 
 // A worker's default label skips the dispatch declaration every brief starts with (Vast 2026-10-06:
@@ -34,7 +39,9 @@ test.each([
 });
 
 test("active marker updates atomically retain phase, final usage, cost and worker session", () => {
-  const root = mkdtempSync(join(tmpdir(), "agx-active-marker-"));
+  const root = registerTempDir(
+    mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-active-marker-`)),
+  );
   roots.push(root);
   const path = join(root, "active.json");
   const active = {

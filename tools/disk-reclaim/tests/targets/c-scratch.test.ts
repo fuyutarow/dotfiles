@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
@@ -10,6 +10,11 @@ import type {
 } from "../../src/liveness/facts.ts";
 import { createScratchTarget } from "../../src/targets/scratch.ts";
 import type { Context } from "../../src/targets/index.ts";
+
+const cacheRoot = tempRoot("reclaim-scratch-cache-");
+afterAll(() => {
+  rmSync(cacheRoot, { recursive: true, force: true });
+});
 
 const uuidA = "123e4567-e89b-42d3-a456-426614174000";
 const uuidB = "223e4567-e89b-42d3-a456-426614174000";
@@ -67,6 +72,7 @@ describe("scratch target", () => {
     mkdirSync(procDir, { recursive: true });
     const context: Context = {
       mode: "plan",
+      scanCacheDir: cacheRoot,
       procDir,
       config: config(root),
       log: () => {},
@@ -98,6 +104,7 @@ describe("scratch target", () => {
     });
     const rows = await target.plan({
       mode: "plan",
+      scanCacheDir: cacheRoot,
       config: config(root),
       log: () => {},
     });
@@ -126,7 +133,12 @@ describe("scratch target", () => {
     });
     expect(
       (
-        await target.plan({ mode: "plan", config: config(root), log: () => {} })
+        await target.plan({
+          mode: "plan",
+          scanCacheDir: cacheRoot,
+          config: config(root),
+          log: () => {},
+        })
       )[0]?.reason,
     ).toBe("delegated: jj workspace");
     expect(probed).toBe(false);
@@ -163,6 +175,7 @@ describe("scratch target", () => {
     mkdirSync(procDir, { recursive: true });
     const context: Context = {
       mode: "plan",
+      scanCacheDir: cacheRoot,
       procDir,
       config: config(root),
       log: () => {},

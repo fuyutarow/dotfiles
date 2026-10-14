@@ -1,4 +1,10 @@
-import { afterEach, describe, expect, test as bunTest } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  describe,
+  expect,
+  test as bunTest,
+} from "bun:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
@@ -46,6 +52,9 @@ const world = (files?: Record<string, string>) => {
   return w;
 };
 afterEach(() => {
+  for (const w of worlds.splice(0)) w.dispose();
+});
+afterAll(() => {
   for (const w of worlds.splice(0)) w.dispose();
 });
 const plan = (w: World, mode: "plan" | "run" = "plan", extra = {}) =>

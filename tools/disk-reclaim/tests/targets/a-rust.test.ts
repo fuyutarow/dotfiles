@@ -1,8 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
 import { createRustTarget } from "../../src/targets/rust.ts";
+
+const cacheRoot = tempRoot("reclaim-rust-cache-");
+afterAll(() => {
+  rmSync(cacheRoot, { recursive: true, force: true });
+});
 
 const config = {
   repo_roots: [],
@@ -16,6 +21,7 @@ const config = {
 
 const context = (procDir: string) => ({
   mode: "plan" as const,
+  scanCacheDir: cacheRoot,
   explicit: false,
   config,
   procDir,

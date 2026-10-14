@@ -1,23 +1,39 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
+import { createTempTracker } from "../temp.ts";
+
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
+afterAll(tempDirs.assertRemoved);
 
 const servers: ReturnType<typeof Bun.spawn>[] = [];
+const roots: string[] = [];
 afterEach(() => {
   for (const server of servers.splice(0)) server.kill();
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
+const scratch = (prefix: string): string => {
+  const root = registerTempDir(
+    mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-${prefix}`)),
+  );
+  roots.push(root);
+  return root;
+};
 
 describe("agx-next run", () => {
   test("routes through Jev, starts a worker, and records its report", async () => {
-    const root = mkdtempSync(join(tmpdir(), "agx-next-run-"));
+    const root = scratch("next-run-");
     const state = join(root, "state");
     const ticket = join(root, "ticket.md");
     const worker = join(root, "fake-worker.ts");
@@ -358,7 +374,7 @@ describe("agx-next run", () => {
   }, 15_000);
 
   test("runs ticket verification in order and records every exit and log", async () => {
-    const root = mkdtempSync(join(tmpdir(), "agx-next-verify-"));
+    const root = scratch("next-verify-");
     const state = join(root, "state");
     const ticket = join(root, "ticket.md");
     const worker = join(root, "fake-worker.ts");
@@ -448,7 +464,7 @@ describe("agx-next run", () => {
   });
 
   test("validation refusal exits 2", () => {
-    const root = mkdtempSync(join(tmpdir(), "agx-next-invalid-ticket-"));
+    const root = scratch("next-invalid-ticket-");
     const ticket = join(root, "invalid.md");
     writeFileSync(
       ticket,
@@ -473,7 +489,7 @@ describe("agx-next run", () => {
   });
 
   test("imports sampled real legacy line shapes once", () => {
-    const root = mkdtempSync(join(tmpdir(), "agx-next-import-"));
+    const root = scratch("next-import-");
     const source = join(root, "legacy");
     const destination = join(root, "next");
     const fixture = join(import.meta.dir, "fixtures/legacy-real-shapes.jsonl");
@@ -553,7 +569,7 @@ describe("agx-next run", () => {
   });
 
   test("folds only accept and reject judgments from legacy decisions", () => {
-    const root = mkdtempSync(join(tmpdir(), "agx-next-judgment-fold-"));
+    const root = scratch("next-judgment-fold-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
     const at = "2026-10-14T00:00:00Z";
@@ -702,7 +718,7 @@ describe("agx-next run", () => {
   });
 
   test("ignores unknown record fields and bounds human ls without changing JSON order", () => {
-    const root = mkdtempSync(join(tmpdir(), "agx-next-forward-fields-"));
+    const root = scratch("next-forward-fields-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
     const records: Record<string, unknown>[] = Array.from(

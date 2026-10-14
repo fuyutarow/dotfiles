@@ -8,11 +8,10 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { countEntries } from "../lib/purge-progress.ts";
 import { removeTree } from "../lib/remove-tree.ts";
 import { collectProcesses } from "../lib/procs.ts";
-import { fromThrowable, z } from "../../../shared/src/zod.ts";
-import { scanCache, checkScanDeadline } from "../lib/scan-cache.ts";
+import { fromThrowable } from "../../../shared/src/zod.ts";
+import { checkScanDeadline } from "../lib/scan-cache.ts";
 import type { Candidate } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 
@@ -34,12 +33,16 @@ type TmpfsOptions = {
   ripGraveyard?: () => string | undefined;
   diskGraveyard?: () => string;
   isDiskPath?: (path: string) => boolean;
+  scanMaxEntries?: number;
+  scanMaxMs?: number;
 };
 
 const TMPFS_MAGIC = 0x01021994n;
 const RAMFS_MAGIC = 0x858458f6n;
 const protectedName = /^(?:claude-|herdr-)|^systemd-private-|scratchpad/iu;
 const tempName = /^.+-[A-Za-z0-9]{6,}$/u;
+const MAX_TREE_SCAN_ENTRIES = 1_048_576;
+const MAX_TREE_SCAN_MS = 4000;
 
 function mountedTmpfs(): Mount[] {
   const fixtureRoot = process.env.RECLAIM_TEST_TMPFS_ROOT;
@@ -66,25 +69,36 @@ function awaitMountInfo(): Mount[] | null {
   });
 }
 
-function treeOwnedBy(path: string, owner: number, ctx?: Context): boolean {
-  checkScanDeadline(ctx);
-  const stat = lstatSync(path);
-  if (stat.uid !== owner) return false;
-  if (stat.isDirectory() && !stat.isSymbolicLink())
-    return readdirSync(path).every((name) =>
-      treeOwnedBy(join(path, name), owner, ctx),
-    );
-  return true;
-}
-
-function allocatedBytes(path: string, ctx?: Context): number {
-  checkScanDeadline(ctx);
-  const stat = lstatSync(path);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) return stat.blocks * 512;
-  return readdirSync(path).reduce(
-    (sum, name) => sum + allocatedBytes(join(path, name), ctx),
-    0,
-  );
+function inspectTree(path: string, options: PlanOptions, cutoff?: number) {
+  const summary = {
+    bytes: 0,
+    inodes: 0,
+    newestMtime: Number.NEGATIVE_INFINITY,
+    owned: true,
+    complete: false,
+  };
+  const started = performance.now();
+  const pending = [{ path, depth: 0 }];
+  while (pending.length > 0) {
+    checkScanDeadline(options.context);
+    if (
+      summary.inodes >= options.scanMaxEntries ||
+      performance.now() - started >= options.scanMaxMs
+    )
+      return summary;
+    const node = pending.pop();
+    if (node === undefined || node.depth > 64) return summary;
+    const stat = lstatSync(node.path);
+    summary.inodes += 1;
+    summary.bytes += stat.blocks * 512;
+    summary.newestMtime = Math.max(summary.newestMtime, stat.mtimeMs);
+    if (stat.uid !== options.uid) return { ...summary, owned: false };
+    if (cutoff !== undefined && summary.newestMtime > cutoff) return summary;
+    if (!stat.isDirectory() || stat.isSymbolicLink()) continue;
+    for (const name of readdirSync(node.path))
+      pending.push({ path: join(node.path, name), depth: node.depth + 1 });
+  }
+  return { ...summary, complete: true };
 }
 
 function candidate(
@@ -204,6 +218,8 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
         ripGraveyard: ripGraveyard(),
         diskGraveyard: diskGraveyard(),
         isDiskPath: options.isDiskPath ?? isDiskBacked,
+        scanMaxEntries: options.scanMaxEntries ?? MAX_TREE_SCAN_ENTRIES,
+        scanMaxMs: options.scanMaxMs ?? MAX_TREE_SCAN_MS,
       };
       const roots = new Set(mountList.map((mount) => resolve(mount.path)));
       const rows = mountList.flatMap((mount) =>
@@ -237,13 +253,6 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
           bytes_freed: null,
           error: "tmpfs candidate is not reclaimable",
         };
-      const size = fromThrowable(() => allocatedBytes(path))();
-      if (size.isErr())
-        return {
-          ok: false,
-          bytes_freed: null,
-          error: "cannot measure tmpfs candidate",
-        };
       const removed = await removeTree(path, { uid: uid(), progress: false });
       if (!removed.ok)
         return {
@@ -252,7 +261,7 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
           error: `direct tmpfs removal failed: ${JSON.stringify([...removed.refused, ...removed.errors])}`,
         };
       for (const [root, before] of beforeUse) logUsage(root, before, _ctx.log);
-      return { ok: true, bytes_freed: size.value, error: null };
+      return { ok: true, bytes_freed: removed.statfs_bytes_freed, error: null };
     },
   } satisfies Target;
 }
@@ -281,6 +290,8 @@ type PlanOptions = {
   ripGraveyard: string | undefined;
   diskGraveyard: string;
   isDiskPath: (path: string) => boolean;
+  scanMaxEntries: number;
+  scanMaxMs: number;
 };
 
 function planEntry(
@@ -300,32 +311,34 @@ function planEntry(
       null,
       { kind: "command", argv: [] },
     );
+  const protectedPaths = options.context.config.protected ?? [];
+  const configuredProtection = protectedPaths.some((entry) => {
+    const root = resolve(
+      entry.replace(/^~(?=\/|$)/u, process.env.HOME ?? homedir()),
+    );
+    return (
+      path === root ||
+      path.startsWith(`${root}/`) ||
+      root.startsWith(`${path}/`)
+    );
+  });
+  if (configuredProtection)
+    return candidate(path, "KEEP", "configured protected path", null, {
+      kind: "command",
+      argv: [],
+    });
   const isGraveyard =
     path === options.ripGraveyard ||
     name === "graveyard" ||
     name.startsWith("graveyard-");
-  const isTempDirectory =
-    st.isDirectory() && !st.isSymbolicLink() && tempName.test(name);
+  const isTempDirectory = st.isDirectory() && !st.isSymbolicLink();
   if (!isGraveyard && !isTempDirectory) return null;
   if (st.isSymbolicLink())
     return candidate(path, "KEEP", "graveyard symlink is not traversed", null, {
       kind: "command",
       argv: [],
     });
-  const ownershipCache = scanCache(
-    path,
-    `tmpfs-owner-${options.uid}`,
-    options.context,
-  );
-  const cachedOwnership = z.boolean().safeParse(ownershipCache.value);
-  const owned = fromThrowable(() =>
-    cachedOwnership.success
-      ? cachedOwnership.data
-      : treeOwnedBy(path, options.uid, options.context),
-  )();
-  if (owned.isOk() && !cachedOwnership.success)
-    ownershipCache.save(owned.value);
-  if (owned.isErr() || !owned.value)
+  if (st.uid !== options.uid)
     return candidate(
       path,
       "KEEP",
@@ -357,58 +370,57 @@ function planEntry(
       argv: [],
     });
   }
-  if (isGraveyard) {
-    const measurementCache = scanCache(
-      path,
-      "tmpfs-size-inodes-v1",
-      options.context,
-    );
-    const cachedMeasurement = z
-      .object({
-        bytes: z.number().nonnegative(),
-        inodes: z.number().nonnegative(),
-      })
-      .safeParse(measurementCache.value);
-    const measurement = fromThrowable(() =>
-      cachedMeasurement.success
-        ? cachedMeasurement.data
-        : {
-            bytes: allocatedBytes(path, options.context),
-            inodes: 1 + countEntries(path),
-          },
-    )().unwrapOr(null);
-    if (measurement !== null && !cachedMeasurement.success)
-      measurementCache.save(measurement);
-    const bytes = measurement?.bytes ?? null;
-    return candidate(
-      path,
-      "RECLAIM",
-      `stale RAM-backed graveyard; permanent purge; ${measurement?.inodes ?? "unmeasured"} inodes; ${bytes ?? "unmeasured"} bytes`,
-      bytes,
-      { kind: "delete", argv: [path] },
-    );
-  }
-  if (!isTempDirectory) return null;
-  const sizeCache = scanCache(path, "tmpfs-size-v1", options.context);
-  const cachedSize = z.number().nonnegative().safeParse(sizeCache.value);
-  const bytes = fromThrowable(() =>
-    cachedSize.success
-      ? cachedSize.data
-      : allocatedBytes(path, options.context),
-  )().unwrapOr(null);
-  if (bytes !== null && !cachedSize.success) sizeCache.save(bytes);
-  if (options.now - st.mtimeMs < 60 * 60_000)
-    return candidate(path, "KEEP", "younger than 60 minutes", bytes, {
+  const cutoff = options.now - 60 * 60_000;
+  if (!isGraveyard && st.mtimeMs > cutoff)
+    return candidate(path, "KEEP", "younger than 60 minutes", null, {
       kind: "command",
       argv: [],
     });
-  return candidate(
-    path,
-    "RECLAIM",
-    "stale mkdtemp-style directory; not open",
-    bytes,
-    { kind: "delete", argv: [path] },
-  );
+  const measurement = fromThrowable(() =>
+    inspectTree(path, options, isGraveyard ? undefined : cutoff),
+  )().unwrapOr(null);
+  if (measurement !== null && !measurement.owned)
+    return candidate(
+      path,
+      "KEEP",
+      "owned by another user or ownership unreadable",
+      null,
+      {
+        kind: "command",
+        argv: [],
+      },
+    );
+  if (!isGraveyard && measurement !== null && measurement.newestMtime > cutoff)
+    return candidate(path, "KEEP", "younger than 60 minutes", null, {
+      kind: "command",
+      argv: [],
+    });
+  if (measurement === null || !measurement.complete)
+    return candidate(
+      path,
+      "ASK",
+      "tree safety scan limit exceeded or unreadable",
+      null,
+      {
+        kind: "command",
+        argv: [],
+      },
+    );
+  if (isGraveyard)
+    return candidate(
+      path,
+      "RECLAIM",
+      `stale RAM-backed graveyard; permanent purge; ${measurement.inodes} inodes; ${measurement.bytes} bytes`,
+      measurement.bytes,
+      { kind: "delete", argv: [path] },
+    );
+  const reason = tempName.test(name)
+    ? "stale mkdtemp-style directory; not open"
+    : "stale fixed-name directory; not open";
+  return candidate(path, "RECLAIM", reason, measurement.bytes, {
+    kind: "delete",
+    argv: [path],
+  });
 }
 
 function planMount(

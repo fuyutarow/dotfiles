@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { afterAll, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
 import {
@@ -7,8 +7,12 @@ import {
   judgmentCandidates,
 } from "../../src/targets/judgment.ts";
 
+const root = tempRoot("disk-reclaim-judgment-");
+afterAll(() => {
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("judgment owns rust-docs only; Rust target directories belong to rust", () => {
-  const root = tempRoot("disk-reclaim-judgment-");
   const project = join(root, "project");
   const target = join(project, "target");
   const docs = join(root, ".rustup/toolchains/stable/share/doc/rust/html");

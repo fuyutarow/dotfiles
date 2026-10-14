@@ -8,15 +8,22 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createTempTracker } from "./temp.ts";
+
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
 
 const CLI = join(import.meta.dir, "..", "src", "next", "cli.ts");
-const scratch = mkdtempSync(join(tmpdir(), "agx-startup-"));
+const scratch = registerTempDir(
+  mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-startup-`)),
+);
 const state = join(scratch, "unreadable-state");
 mkdirSync(state);
 chmodSync(state, 0);
 afterAll(() => {
   chmodSync(state, 0o700);
   rmSync(scratch, { recursive: true, force: true });
+  tempDirs.assertRemoved();
 });
 
 function run(args: string[]): { code: number; out: string; err: string } {

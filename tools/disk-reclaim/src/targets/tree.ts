@@ -1,9 +1,8 @@
 import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import type { Candidate } from "../model.ts";
 import type { Context } from "./index.ts";
-import { scanCache } from "../lib/scan-cache.ts";
+import { defaultScanCacheDir, scanCache } from "../lib/scan-cache.ts";
 import { z } from "../../../shared/src/zod.ts";
-import { stateDir } from "../receipt.ts";
 
 export async function treeBytes(
   path: string,
@@ -153,7 +152,7 @@ export async function measuredTreeBytes(
     {
       onMetadataProgress,
       ...(ctx?.mode === "plan"
-        ? { cacheDir: ctx.scanCacheDir ?? stateDir() }
+        ? { cacheDir: ctx.scanCacheDir ?? defaultScanCacheDir() }
         : {}),
     },
   );

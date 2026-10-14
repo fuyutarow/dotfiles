@@ -26,6 +26,7 @@ function options(extra: Partial<EngineOptions> = {}): EngineOptions {
       explicit: false,
       config: loaded.config!,
       procDir,
+      scanCacheDir: join(state, "cache"),
       log: () => {},
     },
     headroom: { drives: [] },

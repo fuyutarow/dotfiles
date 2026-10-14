@@ -1,15 +1,24 @@
-import { expect, test } from "bun:test";
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { afterAll, expect, test } from "bun:test";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
 import { auditCandidates } from "../../src/targets/audit.ts";
 
-const fixture = () => tempRoot("disk-reclaim-audit-parity-");
+const roots: string[] = [];
+const fixture = () => {
+  const root = tempRoot("disk-reclaim-audit-parity-");
+  roots.push(root);
+  return root;
+};
+afterAll(() => {
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
+});
 const rowsFor = (home: string, projects = join(home, "Workspace")) =>
   auditCandidates(home, { HOME: home, AUDIT_PROJECTS: projects });
 
 test("audit is read-only and includes cache, graveyard and receipt evidence", async () => {
-  const root = tempRoot("disk-reclaim-audit-");
+  const root = fixture();
   mkdirSync(join(root, ".cache/item"), { recursive: true });
   mkdirSync(join(root, "grave"));
   mkdirSync(join(root, "state/reclaim"), { recursive: true });

@@ -31,7 +31,7 @@ import {
   writeReceipt,
 } from "./receipt.ts";
 import type { Context, Target } from "./targets/index.ts";
-import { withScanSignal } from "./lib/scan-cache.ts";
+import { defaultScanCacheDir, withScanSignal } from "./lib/scan-cache.ts";
 
 const expand = (p: string) =>
   p
@@ -268,7 +268,7 @@ export async function plan(
       const ctx = {
         ...options.context,
         remoteProbes,
-        scanCacheDir: options.state ?? options.context.scanCacheDir,
+        scanCacheDir: options.context.scanCacheDir ?? defaultScanCacheDir(),
         targetName: target.name,
         reportPlanError: (message: string, partial = false) => {
           errors[index] = message;

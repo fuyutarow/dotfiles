@@ -1,9 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
+import { createTempTracker } from "./temp.ts";
+
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
+afterAll(tempDirs.assertRemoved);
 import {
   parseReport,
   interimReturnWriter,
@@ -13,6 +18,12 @@ import {
   withReportInstruction,
   WorkerReport,
 } from "../src/report.ts";
+
+const roots: string[] = [];
+afterEach(() => {
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
+});
 
 const GOOD: WorkerReport = {
   summary: "s",
@@ -27,12 +38,10 @@ const interimMessage = (text: string): string =>
 
 describe("report", () => {
   test("stream interim journal retains checkpoints once and parsing chooses the last RETURN", async () => {
-    const scratch = mkdtempSync(join(tmpdir(), "agx-interim-journal-"));
-    using _scratch = {
-      [Symbol.dispose]: () => {
-        rmSync(scratch, { recursive: true, force: true });
-      },
-    };
+    const scratch = registerTempDir(
+      mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-interim-journal-`)),
+    );
+    roots.push(scratch);
     const path = join(scratch, "worker", "interim.jsonl");
     const record = {
       findings: [],
@@ -58,12 +67,10 @@ describe("report", () => {
     });
   });
   test("queued async checkpoints flush in order before worker exit", async () => {
-    const scratch = mkdtempSync(join(tmpdir(), "agx-interim-flush-"));
-    using _scratch = {
-      [Symbol.dispose]: () => {
-        rmSync(scratch, { recursive: true, force: true });
-      },
-    };
+    const scratch = registerTempDir(
+      mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-interim-flush-`)),
+    );
+    roots.push(scratch);
     const path = join(scratch, "worker", "interim.jsonl");
     const first = interimMessage("first");
     const second = interimMessage("second");

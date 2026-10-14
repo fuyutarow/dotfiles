@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
@@ -12,6 +12,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
+import { createTempTracker } from "./temp.ts";
+
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
+afterAll(tempDirs.assertRemoved);
 
 /**
  * agx.ts as a real child process against a fake `codex` (AGX_CODEX_BIN). The fake logs its
@@ -25,7 +30,9 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 function scratch(): string {
-  const d = mkdtempSync(join(tmpdir(), "agx-"));
+  const d = registerTempDir(
+    mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-codex-`)),
+  );
   dirs.push(d);
   return d;
 }

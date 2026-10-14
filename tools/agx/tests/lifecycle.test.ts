@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +12,11 @@ import {
 } from "../src/lifecycle.ts";
 import { parseTicket } from "../src/ticket.ts";
 import { completeTicket } from "./fixture-ticket.ts";
+import { createTempTracker } from "./temp.ts";
+
+const tempDirs = createTempTracker();
+const registerTempDir = tempDirs.register;
+afterAll(tempDirs.assertRemoved);
 
 const roots: string[] = [];
 afterEach(() => {
@@ -19,7 +24,9 @@ afterEach(() => {
     rmSync(root, { recursive: true, force: true });
 });
 const scratch = (): string => {
-  const root = mkdtempSync(join(tmpdir(), "agx-lifecycle-"));
+  const root = registerTempDir(
+    mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-lifecycle-`)),
+  );
   roots.push(root);
   return root;
 };

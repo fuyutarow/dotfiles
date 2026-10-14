@@ -1,10 +1,12 @@
 # Architecture decisions — T0
 
-> **SOLE owner:** the T0 design section of the Tiger conformance ledger.
+> **SOLE owner:** detailed T0 design fields and design prompts.
 > Decision prompts are skill-supplied. They adapt the bounded SoK.
 
 ## Start from the affected system
 
+First select task mode and applicable constraints with `SKILL.md`.
+Use this reference for new design choices or a path crossing components.
 Read the existing design and implementation before proposing a new topology.
 For greenfield work, sketch components, data flow, durable state, and external effects.
 Reuse an existing design locus; do not create a second architecture document.
@@ -26,7 +28,8 @@ State the sacrificed property and the condition under which the choice must chan
 
 ## Decision lookup
 
-Select relevant rows. This is not an exhaustive taxonomy of software architecture.
+Use only the rows corresponding to conditions selected in `SKILL.md`.
+This lookup elaborates those decisions; it adds no second applicability test.
 
 | Design question | Required decision | Implementation/check link | Copying trap |
 |---|---|---|---|
@@ -45,7 +48,8 @@ Name where ownership transfers and who cleans up after cancellation.
 
 ## One ledger section, no parallel authority
 
-Add a design entry to the existing ledger:
+Add a design entry to the existing record. The fields below are content to preserve, not a mandatory form.
+For one local requirement, ordinary prose and a code locus suffice.
 
 ```text
 design_id:
@@ -56,15 +60,16 @@ components_and_flow:
 state_owner_and_transition:
 resource_and_failure_boundaries:
 decision:
-alternative_rejected:
+alternative_rejected: # New/changed choice only; cite existing rationale for unchanged design
 tradeoff_and_applicability:
 revisit_if:
 obligation_ids:
-status: proposed | checked | open
+unresolved_decisions:
 ```
 
 T1–T4 and obligation fields remain owned by `ledger-and-calibration.md`.
-A design-only request may end with proposed decisions and planned checks.
+A Design-mode request may end with proposed decisions and planned checks.
+Determine readiness and implementation evidence separately using `ledger-and-calibration.md`.
 Never label those checks as run or the system as release-ready.
 
 For an existing narrow change, cite the current design and record only its affected boundary.
@@ -75,6 +80,10 @@ Do not force a full deployment or domain-model redesign to complete a local cont
 This example is constructed; it is not TigerBeetle's architecture.
 
 - Design D1: a durable job record owns state; worker completions carry a lease generation.
+- Selection: mutation/ordering and resource limits apply.
+  Failure handling, persistent effects, and the provider contract also apply.
+- Consequence: High because an unintended charge violates a financial obligation.
+  A lease does not establish payment deduplication.
 - Alternative rejected: workers independently write a boolean completion flag.
 - Trade-off: lease validation adds state and recovery logic to reject stale completions.
 - Obligation O1: after reassignment, an older generation cannot commit a completion.
@@ -84,3 +93,7 @@ This example is constructed; it is not TigerBeetle's architecture.
 
 If O1 passes but duplicate external effects remain, reopen the external-effect boundary.
 A passing local check does not close the whole request path.
+With no implementation observations, evidence is OPEN.
+If reconciliation/unknown-outcome handling has no decision, design readiness is OPEN too.
+Once every selected constraint has a concrete proposal and check plan, readiness may be DESIGN-READY;
+implementation evidence remains OPEN until checks support it.

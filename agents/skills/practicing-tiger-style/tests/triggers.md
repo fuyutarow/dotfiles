@@ -10,7 +10,7 @@ These expectations are routing oracles, not live invocation measurements.
 | F1 | Tiger Styleで永続job queueのアーキテクチャを設計。まだコードはない。 | FIRE; start T0 |
 | F2 | 課金ジョブが再起動で二重実行される。所有権と復旧境界を直したい。 | implementation diagnosis first, then Tiger |
 | F3 | High throughput with bursty producers: make queues, retries, and in-flight work bounded. | FIRE; whole-path capacity |
-| F4 | Promote a prototype migration to production; partial writes and replay must not corrupt data. | FIRE; T0–T4 |
+| F4 | Promote a prototype migration to production; partial writes and replay must not corrupt data. | FIRE; selected recovery/state/capacity contracts; T3 only if an exception is proposed |
 | F5 | Costly R&D runner: invalid checkpoints must not enter reported results. | FIRE; integrity boundary |
 | F6 | Tigerレビュー: control plane/data planeとI/O待ちを分けたい。 | FIRE; applicable design choices |
 | F7 | Design state ownership and cancellation for a durable worker before implementation. | FIRE; design-only outcome |
@@ -58,16 +58,45 @@ Inspect the output/artifact, not whether the model says it followed the skill.
 | B17 | A disposable run aborts on late corruption and publishes no result | Explicit whole-run quarantine may satisfy handling; preserve trusted inputs | Demand rollback despite containment and no continued trusted use |
 | B18 | Recovery deletes speculative entries but their descendants remain; observed entries share the table | Track dependency/provenance or rebuild from trusted observations, then test future reads | Delete only direct bad entries or erase trusted observations without reconstruction |
 | B19 | Requirement forbids all exceptions, but a failing case is put on a test allowlist | Original requirement remains unmet | Test green means strict conformance |
-| B20 | Risk owner accepts a documented temporary exception for one use | Permit only that scoped use and report the original unmet clause | Ban all use or claim unqualified original conformance |
+| B20 | Risk owner accepts a documented temporary exception for one use; every other selected obligation has evidence | ACCEPTED-WITH-EXCEPTIONS for that use; preserve original unmet clause and its observation | Ban all use, return unqualified PASS, or claim original strict conformance |
 | B21 | Requirement explicitly demands query dependence on payload values; test only verifies the function accepts x | Use a violating payload-independent implementation as a falsifying witness | Signature or added position channel proves the required dependency |
 | B22 | Parameter alpha has a comment naming a standard theory, but no derivation or choice basis | Classify and justify the actual selected value for the workload | Comment presence proves necessity or optimality |
 | B23 | Requirement meaning is settled and a narrow checker has a demonstrated violating case | Use that scoped check with its coverage limit | Require full research reauthorization for every local check |
 | B24 | Ambiguous external standard has no available owner | Report the stated interpretation and unresolved alternative; withhold unqualified conformance | Stop all read-only assessment until an owner appears |
 | B25 | Throughput requirement is checked by a timing predicate or a construction proof | Record the predicate/argument and its scope | Require an input-rejection mechanism for every positive property |
+| B26 | Review a retained disk cache; trusted inputs reconstruct it, effects are contained, no financial/safety exposure | Review mode; Medium; scope chosen before checks; persistence alone does not require High | Automatically classify any durable file as High or redesign the whole application |
+| B27 | Throwaway prototype sends a non-reversible payment | High wins over disposable label; external-effect/failure contracts selected | Low because the code will be discarded |
+| B28 | Retained worker's only copy/recovery and budget are unknown | Classification unresolved; scoped inspection/plans continue; readiness and implementation acceptance OPEN | Guess Medium/High or demand approval before read-only inspection |
+| B29 | Design a bounded in-memory queue; losses contained; workload estimate labeled, ownership/overflow and all selected check plans decided | DESIGN-READY; implementation evidence OPEN; concrete implementation next action | HAND-OFF replaces evidence status, or absent runtime tests prevent finishing the design |
+| B30 | Same queue design leaves overflow handling undecided | Design readiness OPEN and a concrete resolving action | DESIGN-READY merely because the open issue was written down |
+| B31 | Existing local check ordering has a known violation; review requested, no edits | Review finishes with finding, inspected locus, clearing check, and STOP for that requirement | STOP halts all assessment or author edits the reviewed target |
+| B32 | All selected checks pass; exceptions are absent | exceptions: none; no T3 fields; PASS and next action reported separately | Require an exception owner/date or HAND-OFF instead of PASS |
+| B33 | One obligation has an accepted exception, another is untested and unwaived | Aggregate OPEN; preserve exception and missing evidence separately | Aggregate ACCEPTED-WITH-EXCEPTIONS or PASS from one waiver |
+| B34 | Accepted exception plus a different uncovered observed violation | Aggregate STOP takes precedence over OPEN/qualified acceptance | A waiver makes the whole scope accepted |
+| B35 | One local logical requirement, no numeric capacity or speed requirement | Compact requirement/enforcement/check/evidence record; logical predicate for bound; no new files | Invent numeric quotas, a cost model, rejected alternatives for unchanged code, or separate ledger documents |
+| B36 | High boundary has a separately specified consumer oracle but no subagents | Assess the oracle's independence and coverage; no second agent required | Headcount determines independent closure |
+| B37 | Explicit Tiger review of immutable, total, constant-work code with no selected consequence | Explain no applicable constraint; no conformance assessment | PASS from empty selection or invent risks to fill the table |
+| B38 | Cache-load review: decoder allocates full unbounded output before enforcing caller's 32 MiB allocation budget | Select allocation/failure/persisted-cache contracts; report late-check violation and a compressed expansion check | "Cache is Medium" permits skipping selected evidence or a size check after allocation proves capacity |
+| B39 | Risk owner names no expiry, or governing requirement forbids exceptions | Exception invalid; known violation remains STOP; absent evidence remains OPEN | Accepted exception from an owner name alone |
+
+## Procedure rehearsal prompts
+
+Use the skill and raw input below without supplying this table's expected outcomes to an evaluator.
+Keep the exercise read-only. Inspect mode, selected/skipped conditions, work required, and completion axes.
+These are semantic desk/rehearsal cases, not executable wording tests or proof of live selection accuracy.
+
+| Case | Raw request / artifact | Coverage |
+|---|---|---|
+| R1 | Tigerレビューして。ローカルdisk cacheは信頼済み入力から再構築可能で、外部副作用なし。writerは一つ、書き換えはatomic。loaderは隔離されており、失敗は再構築可能なcacheと使い捨ての作業だけを失う。loadの割当予算は32 MiB。decoderは内部上限なく全出力を割り当て、その後にサイズを検査する。コード修正は求めない。 | B26/B31/B38; required selection and read-only completion |
+| R2 | Tiger Styleでin-memory queueを設計して。データは元入力から再生成可能、課金・安全上の影響なし。局所失敗は隔離・再実行可能。推定burstは100件。受信payloadは1 KiB以下、受信・queue・in-flight・retryの合計を100件に制限する。入力bufferとmetadataを含む予約総量は200 KiB以下、満杯時は送信元へ拒否を返す。state ownerは一つ、cancel時に枠を解放する。実装はまだない。制限が成立する入力範囲とチェック、次の一手まで。 | B29; design plan vs evidence, no exception ceremony |
+| R3 | 同じqueue設計だが、満杯時に拒否するか待つかは未決定。設計レビューを終えて、今の状態と次の作業を返して。 | B30; readiness with unresolved design |
+| R4 | 本実装の確認範囲はA/B/C。Aは要求を満たし同じrevision/workloadで独立oracleも通過。Bは既知の違反を担当ownerが期限・補償措置・範囲付きで正式に受容、仕様は例外を許す。Cは未検証で例外なし。総合状態と次の行動を答えて。次にCも同じ対象で合格した場合、さらにAが違反した場合も評価して。riskはHighと確定。 | B20/B33/B34; OPEN → qualified acceptance → STOP |
+| R5 | 保持する部品のレビュー。信頼状態の唯一のcopyか、復旧可能か、運転budget内かがまだ不明。わかる範囲をレビューして。 | B28; unresolved consequence without invented tier |
+| R6 | 一つの内部状態遷移だけ確認。要求はold generationの完了を拒否すること。immutable snapshot v1と固定workload W1を検査した記録がある。2026-10-13にconsumerがvalid completionの受理とlate completionの拒否を観測した生結果、境界locus、検査commandが提示済み。解釈のownerはqueue担当。状態は失っても元入力から再構築可能で、資源・副作用の損失は既定の使い捨て予算内に隔離。変更・例外・性能要求なし。対象はこの拒否条件だけ。 | B32/B35; compact Medium evidence, no T3 or speed model |
 
 ## Incumbent comparison protocol
 
-Use Git HEAD as the pre-edit incumbent when reviewing this reforge.
-Compare B1, B2, B3, B5, B6, and B9 using the same prompt and each skill version.
+Freeze the actual pre-edit files as the incumbent; in this repository use jj, not Git commands.
+For this procedure revision, compare B26–B39 and relevant earlier cases using the same raw input and each skill version.
 Record textual affordances separately from actual fresh-context executions.
 Desk review cannot establish task-success gains or installed-trigger reliability.

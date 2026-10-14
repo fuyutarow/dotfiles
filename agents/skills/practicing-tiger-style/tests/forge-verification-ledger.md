@@ -1,8 +1,80 @@
 # Forge verification ledger — `practicing-tiger-style`
 
+## 2026-10-13 — procedure and completion, v2610.1.0
+
+This section governs the procedure revision. Earlier acceptance records apply only to their recorded versions.
+User-supplied base label: `survey-2610.1`; it was not resolved as a corpus or repository revision.
+Actual pre-edit core: v2609.3.3, read in this session before editing.
+
+### Observed failure and correction
+
+The user reported that the skill lacked a visible practical outline and unambiguous execution rules.
+Review found overlapping risk classes, T0–T4 presented as a sequence despite conditional exceptions,
+and completion labels mixing evidence with handoff actions.
+
+Preserved function: required behavior/loss → explicit state ownership, bounded work, failure handling → enforcement → normal/violating checks.
+Modes now follow requested actions. Constraint selection precedes detailed records.
+Skip conditions and completion boundaries are explicit; T0–T4 remain record labels.
+Readiness, evidence, and next action are separate.
+PASS excludes waived obligations; qualified exception acceptance preserves the unmet clause.
+
+### Source and scope
+
+Inspected the existing `soks` position plus TigerStyle and architecture evidence documents named in `source-ledger.md`.
+The position is dated 2026-09-23 and all three documents remain draft.
+No external primary source was opened; no new source finding or duplicate corpus home was created.
+The ordered risk rules, omission conditions, statuses, and local cache example are skill-supplied adaptations.
+They are not new official rules or measured improvements in model behavior.
+
+### Serial semantic checks
+
+Method: same author inspected the revised procedure against R1–R6 and B26–B39.
+The following are scoped desk-rehearsal results, not independent fresh-context agent runs or runtime tests.
+
+| Raw case | Derived result | Work required / omitted |
+|---|---|---|
+| R1 cache review | Review; Medium; readiness OPEN; allocation violation STOP; other gaps OPEN; aggregate STOP | Ownership, allocation, failure cleanup, and persisted-entry checks; no target edit, speed model, determinism mandate, or T3 fields |
+| R2 bounded queue design | Design; Medium; DESIGN-READY under the declared input/reservation regime; implementation OPEN | One owner, whole-operation count/byte limits, admission and cancellation plans; burst above cap is rejected; no runtime PASS or exception ceremony |
+| R3 overflow undecided | Review of a design; readiness OPEN; implementation OPEN; decide overflow response next | Complete the requested assessment without presenting an undecided policy as ready |
+| R4 exception and mixed evidence | OPEN with C untested; ACCEPTED-WITH-EXCEPTIONS when C passes; STOP if A then violates | Preserve B's observed violation and accepted exception; status precedence excludes aggregate PASS |
+| R5 unknown recovery/budget | Unresolved tier; readiness OPEN; evidence OPEN | Continue inspection and plans; no guessed High/Medium or approval for read-only work |
+| R6 scoped transition evidence | Review; Medium; existing boundary/check plan ready; scoped PASS; next action separate | Compact logical predicate and supplied identities/observations; no invented numeric quota, performance model, or exception record |
+
+Additional boundary checks: disposable code with irreversible payments is High (B27).
+An independent consumer oracle can satisfy High check independence without subagents (B36).
+An empty selection produces no conformance assessment (B37).
+Ownerless, expired, or forbidden exceptions cannot cover a violation (B39).
+Relevant earlier cases retain identity binding, speed/semantics separation, whole-path bounds, and late-state recovery requirements.
+The eight-column official-source interface and B6 were preserved; no external claim check was executed.
+
+### Corrections during review
+
+- The initial short cache example covered only allocation despite selecting other constraints.
+  Expanded it to show each selected property and untested coverage before finishing the review.
+- Unknown risk initially forced OPEN even for a known violation.
+  Aligned it with status precedence: uncovered observed violations are STOP; missing classification blocks acceptance.
+- Distinguished a local capacity cap from a non-disposable consequence budget.
+  Cache isolation/rebuildability must be established, not inferred from its name.
+- Supplied payload and total-reservation assumptions for the queue design rehearsal.
+  A count cap alone does not establish a byte bound.
+
+### Verification
+
+| Check | Observed result / scope |
+|---|---|
+| `bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/practicing-tiger-style` | Exit 0; no structural errors or core prose warnings; two reference sentences exceed the heuristic 120-character threshold. Reviewed as readability cautions, not evidence of behavioral correctness. |
+| `rumdl check --no-exclude agents/skills/practicing-tiger-style` | Exit 0; all 9 Markdown files checked; no issues. |
+| `mise run lint:md` | Exit 0; default repository scope is 60 files and does not replace the explicit package check. |
+| `mise run lint:skills-floor` with jj candidate inputs | Exit 0; BASE=`@-`, REV=current snapshot, selected path only `agents/skills/practicing-tiger-style`. 59 skills / 51,461 static name+description characters; budget passed. Collection prose warnings remain distinct from structural acceptance. |
+| `readlink -f` on personal Codex and Claude skill paths | Both resolve to `/home/fuyu/dotfiles/agents/skills/practicing-tiger-style`; no link layout changed. |
+
+An attempted `jj diff --check` was unsupported (exit 2) and is not counted as verification.
+No Git fallback was used. The scoped diff was inspected with jj; Markdown validation covers the edited documents.
+No live selector benchmark, matched baseline comparison, or independent evaluator result is claimed.
+
 ## 2026-09-23 — architecture through implementation, v2609.1.0
 
-This section governs the current reforge. Earlier PASS records below are historical only.
+This section governs the September reforge only. Earlier PASS records below are historical only.
 Incumbent: dotfiles commit `d2caa63142818c80c98c74c58827864a34c2ecb1`.
 Editor: root Codex session. Read-only reviewers use separate Terra contexts.
 

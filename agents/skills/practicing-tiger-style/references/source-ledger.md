@@ -60,6 +60,21 @@ Unsupported universal transfer is `PORTABILITY-STOP`: retain the source's actual
 These stops reject the claim; they do not forbid a clearly labeled conditional alternative.
 An instruction to skip checking does not establish support.
 
+## 2026-10-13 procedure revision — reuse of existing synthesis
+
+Consumer revision: `practicing-tiger-style` v2610.1.0; user-supplied base label: `survey-2610.1`.
+The label is request context, not a verified corpus revision or a replacement for the identities above.
+Read the existing position and the TigerStyle/architecture evidence documents in the installed corpus.
+The existing position's generated date is 2026-09-23; all three inspected documents remain draft.
+No external primary source was opened and no new survey claim or corpus document was introduced.
+Reuse the existing homes instead of duplicating their source captures in `soks`.
+
+The revised procedure addresses the user's demonstrated ambiguity.
+Select mode and constraints, then connect enforcement to checks.
+Report readiness, evidence, and next action separately.
+Ordered consequence classification, skip rules, completion precedence, and the cache example are skill-supplied.
+They do not add official TigerBeetle prescriptions or measured effectiveness claims.
+
 ## Historical primary-source map (observed 2026-08-03)
 
 These original source records retain their observation date.
@@ -105,11 +120,11 @@ Do not transfer source-local truth into a universal disposition.
 | Skill-supplied atom | Exact local locus | Form / grade | Disposition |
 |---|---|---|---|
 | T0 DESIGN | `references/architecture-decisions.md` | `[skill-supplied]` | Design section of the same ledger; not a universal architecture method. |
-| T1 CONSEQUENCE | `SKILL.md` T1 table | `[skill-supplied]` | admission artifact only. |
-| T2 OBLIGATION | `SKILL.md` T2 table | `[skill-supplied]` | material-row schema only. |
-| T3 REVERSAL | `SKILL.md` T3 table | `[skill-supplied]` | exception protocol only. |
-| T4 EXTERNAL CHECK | `SKILL.md` T4 table | `[skill-supplied]` | evidence-closure preference only. |
-| Low/Medium/High tiering | `references/ledger-and-calibration.md` Admission and tier | `[constructed]` | cross-language calibration, not external authority. |
+| T1 CONSEQUENCE | `references/ledger-and-calibration.md` T1 | `[skill-supplied]` | scope/consequence record. |
+| T2 OBLIGATION | `references/ledger-and-calibration.md` T2 | `[skill-supplied]` | selected-requirement schema. |
+| T3 REVERSAL | `references/ledger-and-calibration.md` T3 | `[skill-supplied]` | conditional exception protocol. |
+| T4 EXTERNAL CHECK | `references/ledger-and-calibration.md` T4 and Completion | `[skill-supplied]` | scoped evidence assessment. |
+| Low/Medium/High tiering | `references/ledger-and-calibration.md` Risk classification | `[constructed]` | ordered consequence rules, not external authority. |
 | Tiger conformance ledger | `SKILL.md` LAW; `references/ledger-and-calibration.md` Ledger record | `[constructed]` | skill decision record, not source-authored. |
 
 | False-authority input atom | Source-local truth | Universal Rust/Julia status / disposition |

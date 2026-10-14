@@ -20,12 +20,14 @@ The bounded review located no direct controlled evaluation of this skill's effec
 Do not turn that search result into a claim that no such research exists anywhere.
 Do not promise improved agent correctness, safety, speed, or research throughput.
 
-The T0 map and T1–T4 ledger are engineered adaptations.
+The procedure, risk classification, T0 map, and T1–T4 record are engineered adaptations.
 Their usefulness must be checked on the target; they are not experimentally validated TigerBeetle artifacts.
 
 ## Interpretation rules
 
 - A planned test is a plan; mark it unrun until an actual result exists.
+- DESIGN-READY describes a concrete design/check plan; implemented-boundary evidence can still be OPEN.
+- PASS excludes waived obligations; accepted exceptions use ACCEPTED-WITH-EXCEPTIONS and retain unmet clauses.
 - A source's local mandate may be supported while its universal translation is unsupported.
 - A compiler or passing test establishes only the property that it checks.
 - Runtime limits need units, scope, justification, and an overrun outcome.

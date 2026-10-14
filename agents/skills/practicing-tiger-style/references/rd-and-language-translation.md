@@ -9,7 +9,7 @@
 |---|---|---|
 | Exploration | Preserve inputs, stochastic seed, environment, status, and a cheap work budget | A result guides a decision or a component is retained |
 | Trusted kernel | Stabilize its input/output and failure contract; test relevant negatives | Shared use, performance claim, or durable service dependency |
-| Production / costly infrastructure | Check recovery, capacity, and state transitions through T0–T4 | Exposure or resource regime changes |
+| Production / costly infrastructure | Select mode, consequence, and applicable constraints; verify the relied-on recovery/capacity/state contracts | Exposure or resource regime changes |
 
 Do not impose static allocation or a recursion ban on an exploratory algorithm without a specific reason.
 If non-finite or unstable behavior is the research subject, tag it according to the experiment protocol.
@@ -29,6 +29,10 @@ remaining_assumptions:
 ```
 
 Add a check when a consumer starts relying on a new property.
+Reclassify the affected consequence with the ordered rules in `ledger-and-calibration.md`.
+Persistence or the label "production" alone does not set the tier.
+T3 is omitted unless a specific exception is proposed; T4 plans and observations remain distinct.
+Finish the promotion assessment with design readiness, implementation evidence, and next action separately.
 Do not validate a prototype solely by relabeling its stage.
 Use a meaningful rerun or independent oracle before trusting reproducibility claims.
 

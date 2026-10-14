@@ -4,6 +4,7 @@ import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync as writeFile,
   writeFileSync,
@@ -11,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
+import { agxJobRunsAsync } from "../src/dispatch-runs.ts";
 import { ProgressReaderSchema } from "../../shared/src/dispatch-state.ts";
 import { decodedJson } from "./decode.ts";
 import { isolatedStatuslineEnv } from "./helpers.ts";
@@ -36,6 +38,7 @@ const bin = join(scratch, "bin");
 mkdirSync(bin);
 for (const [name, body] of Object.entries({
   claude: "echo '[]'",
+  agx: 'if [ -n "$AGX_LOG" ]; then printf x >> "$AGX_LOG"; fi; printf "%s\\n" "${AGX_JSON:-[]}"',
   ps: "exit 0",
   git: "echo 'fatal: not a git repository' >&2; exit 128",
 })) {
@@ -122,6 +125,7 @@ async function render(
   stateDir?: string,
   xdgStateHome?: string,
   dispatcherSession?: string,
+  agxJson?: string,
 ): Promise<string> {
   const p = Bun.spawn([process.execPath, STATUSLINE], {
     stdin: new Blob([PAYLOAD]),
@@ -141,6 +145,7 @@ async function render(
             AGX_DISPATCHER_SESSION: dispatcherSession,
             CLAUDE_CODE_SESSION_ID: "environment-session-mismatch",
           }),
+      ...(agxJson === undefined ? {} : { AGX_JSON: agxJson }),
     },
     timeout: 30_000,
   });
@@ -213,7 +218,7 @@ describe("statusline Run row", () => {
     },
   );
 
-  test("shared writer fixtures render fresh and resumed own rows, skip malformed, and count stale/unreadable", async () => {
+  test("shared writer fixtures render fresh and resumed own rows, skip malformed, and count stale only", async () => {
     const dir = join(scratch, "shared-marker-contract");
     const active = join(dir, "active");
     mkdirSync(active, { recursive: true });
@@ -254,7 +259,7 @@ describe("statusline Run row", () => {
     expect(rows.join("\n")).toContain("Repo: dotfiles");
     expect(rows.join("\n")).toContain("resume:");
     expect(out).toContain("stale 1");
-    expect(out).toContain("unreadable 1");
+    expect(out).not.toMatch(/\bunreadable \d+/u);
   });
 
   test("a live worker shows its row, elapsed time and label", async () => {
@@ -936,10 +941,99 @@ describe("statusline Run row", () => {
       "integrev",
     );
 
-    const out = await render(dir, undefined, "dispatcher-short");
+    const out = await render(
+      dir,
+      undefined,
+      "dispatcher-short",
+      JSON.stringify([
+        {
+          id: "run-1",
+          ticket: "t20arch",
+          state: "running",
+          dispatcher_session: "dispatcher-short",
+        },
+        {
+          id: "run-2",
+          ticket: "integrev",
+          state: "running",
+          dispatcher_session: "dispatcher-short",
+        },
+      ]),
+    );
     expect(out).toContain("Job: 2 (t20arch, integrev)");
     expect(out).toContain("architecture");
     expect(out).toContain("integration review");
+  });
+
+  test("Job counts only running agx records owned by this session", async () => {
+    const dir = join(scratch, "records-job-count");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "records.jsonl"), "fixture records\n");
+    const out = await render(
+      dir,
+      undefined,
+      "dispatcher-short",
+      JSON.stringify([
+        {
+          id: "a-id",
+          ticket: "a",
+          state: "running",
+          dispatcher_session: "dispatcher-short",
+        },
+        {
+          id: "b-id",
+          ticket: "b",
+          state: "running",
+          dispatcher_session: "dispatcher-short",
+        },
+        {
+          id: "other-id",
+          ticket: "other",
+          state: "running",
+          dispatcher_session: "elsewhere",
+        },
+        {
+          id: "ended-id",
+          ticket: "ended",
+          state: "ended",
+          dispatcher_session: "dispatcher-short",
+        },
+      ]),
+    );
+    expect(out).toContain("Job: 2 (a, b)");
+  });
+
+  test("agx ls output is reused while records path, mtime and size stay fixed", async () => {
+    const dir = join(scratch, "records-cache-hit");
+    const home = join(scratch, "records-cache-home");
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(home, { recursive: true });
+    const records = join(dir, "records.jsonl");
+    const log = join(dir, "agx-invocations");
+    writeFileSync(records, "fixture records\n");
+    const env = {
+      ...isolatedStatuslineEnv({ HOME: home, PATH: bin }),
+      HOME: home,
+      PATH: bin,
+      AGX_STATE_DIR: dir,
+      AGX_LOG: log,
+      AGX_JSON: JSON.stringify([
+        {
+          id: "a-id",
+          ticket: "a",
+          state: "running",
+          dispatcher_session: "dispatcher-short",
+        },
+      ]),
+    };
+    const first = await agxJobRunsAsync("dispatcher-short", env);
+    const started = performance.now();
+    const second = await agxJobRunsAsync("dispatcher-short", env);
+    const warmMs = performance.now() - started;
+    expect(first.map(({ ticket }) => ticket)).toEqual(["a"]);
+    expect(second).toEqual(first);
+    expect(readFileSync(log, "utf8")).toBe("x");
+    console.info(`agx records warm cache: ${warmMs.toFixed(2)}ms`);
   });
 
   test("a marker whose process is gone is counted as stale, not hidden", async () => {

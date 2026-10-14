@@ -123,20 +123,20 @@ export function render(
 
   let jobLine: string | undefined;
   const dispatcherSession = currentDispatcherSession(df.sid);
-  const ownRuns =
-    df.routes?.isOk() === true && dispatcherSession !== undefined
-      ? df.routes.value.runs
-          .filter(
-            (run) => run.alive && run.dispatcherSession === dispatcherSession,
-          )
-          .toSorted((a, b) => b.secs - a.secs)
-      : [];
-  const runNames = ownRuns.map((run) => {
-    const displayId = run.displayId?.replace(/^agt_/u, "");
-    return displayId ?? run.label.replace(/^resume:\s*/u, "");
-  });
-  if (ownRuns.length > 0) {
-    const jobDetails = [`${ownRuns.length} (${runNames.join(", ")})`];
+  let runNames: string[] = [];
+  if (df.jobRuns !== undefined) {
+    runNames = df.jobRuns.map((run) => run.ticket);
+  } else if (df.routes?.isOk() === true && dispatcherSession !== undefined) {
+    runNames = df.routes.value.runs
+      .filter((run) => run.alive && run.dispatcherSession === dispatcherSession)
+      .toSorted((a, b) => b.secs - a.secs)
+      .map((run) => {
+        const displayId = run.displayId?.replace(/^agt_/u, "");
+        return displayId ?? run.label.replace(/^resume:\s*/u, "");
+      });
+  }
+  if (runNames.length > 0) {
+    const jobDetails = [`${runNames.length} (${runNames.join(", ")})`];
     if (df.jobScanWhy !== undefined)
       jobDetails.push(naSegment("scan", df.jobScanWhy));
     else if (df.jobs.length > 0)
@@ -161,11 +161,7 @@ export function render(
   if (df.routes !== undefined && df.routes.isErr())
     runLines = [naSegment("agx", df.routes.error)];
   else if (df.routes !== undefined)
-    runLines = routeLines(
-      df.routes.value.runs,
-      df.sid,
-      df.routes.value.unreadable,
-    );
+    runLines = routeLines(df.routes.value.runs, df.sid, 0);
   if (df.dispatchWarning !== undefined)
     runLines.push(`${ESC}[38;5;178m${df.dispatchWarning}${RST}`);
 

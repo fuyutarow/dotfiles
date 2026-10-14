@@ -109,6 +109,8 @@ const extraWorker = (
   if (session !== undefined)
     writeFileSync(join(active, `${name}.progress.json`), progressFor(session));
 };
+const AGX_FIXTURE_RUNNER =
+  'const fs=require("node:fs");const path=require("node:path");const dir=path.join(process.env.AGX_STATE_DIR??"","active");const rows=fs.readdirSync(dir).filter((name)=>name.endsWith(".json")&&!name.endsWith(".progress.json")).map((name)=>{const marker=JSON.parse(fs.readFileSync(path.join(dir,name),"utf8"));let alive=true;try{process.kill(marker.pid,0)}catch{alive=false}const label=marker.label.replace(/^resume:\\s*/u,"");return{id:marker.run_id,ticket:marker.display_id??label,state:alive?"running":"orphaned",dispatcher_session:marker.dispatcher_session??null}});process.stdout.write(JSON.stringify(rows));';
 
 // Extra agx state on top of the base worker, written before both entries run.
 const stateVariants: [string, (state: string) => void][] = [
@@ -359,6 +361,7 @@ function expectGolden(
       chmodSync(path, 0o755);
     };
     fake("git", "echo fixture-branch");
+    fake("agx", `exec "${process.execPath}" -e '${AGX_FIXTURE_RUNNER}'`);
     fake(
       "ps",
       "echo '9 02:00 /x/agent-resource-run --manifest /m/job.resource.json'\necho '1 00:30 /x/scratchpad/leak'",

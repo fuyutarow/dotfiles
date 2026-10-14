@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
-import { execError } from "./bounded.ts";
+import { execAsyncBounded, execError } from "./bounded.ts";
 import { activeDirs, ProgressSchema } from "./dispatch-state.ts";
 import { DIM, ESC, RST } from "./ansi.ts";
 import { dur } from "./jobs.ts";
@@ -14,7 +15,7 @@ import {
   dispatchRowPrice,
   formatCostUsd,
 } from "../../shared/src/dispatch-pricing.ts";
-import { homedir } from "node:os";
+import { cachedSource } from "./render-cache.ts";
 
 // Run row source: one marker per worker agx started (tools/agx/src/state.ts).
 // A marker is written at start and removed at exit, so a marker whose process is gone means
@@ -61,6 +62,63 @@ function doingOf(dir: string, runId: string): RouteRun["doing"] {
 export interface RouteScan {
   runs: RouteRun[];
   unreadable: number;
+}
+export interface JobRun {
+  id: string;
+  ticket: string;
+  state: "running" | "ended" | "orphaned";
+  dispatcher_session: string | null;
+}
+const AgxJobRunsSchema = z.array(
+  z.object({
+    id: z.string(),
+    ticket: z.string(),
+    state: z.enum(["running", "ended", "orphaned"]),
+    dispatcher_session: z.string().nullable(),
+  }),
+);
+const recordsPath = (env: NodeJS.ProcessEnv): string => {
+  const nextDir = env.AGX_NEXT_STATE_DIR;
+  if (nextDir !== undefined && nextDir !== "")
+    return join(nextDir, "records.jsonl");
+  const stateDir = env.AGX_STATE_DIR;
+  if (stateDir !== undefined && stateDir !== "")
+    return join(stateDir, "records.jsonl");
+  const xdgStateHome = env.XDG_STATE_HOME;
+  if (xdgStateHome !== undefined && xdgStateHome !== "")
+    return join(xdgStateHome, "agx-next", "records.jsonl");
+  return join(env.HOME ?? homedir(), ".local/state/agx-next/records.jsonl");
+};
+/** Read the Job segment's named runs from agx's folded records, cached by records-file identity. */
+export async function agxJobRunsAsync(
+  sessionId: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<JobRun[]> {
+  const path = recordsPath(env);
+  const info = await stat(path).catch(() => null);
+  const signature = info === null ? "missing" : `${info.mtimeMs}:${info.size}`;
+  const rows = await cachedSource({
+    key: `agx-records:${path}:${signature}`,
+    ttlMs: Number.MAX_SAFE_INTEGER,
+    schema: AgxJobRunsSchema,
+    root: join(env.HOME ?? homedir(), ".cache/claude/statusline/sources"),
+    load: async () => {
+      const result = await execAsyncBounded(
+        "agx",
+        "agx",
+        ["ls", "--json"],
+        2000,
+        env,
+      );
+      if (result.isErr()) return [];
+      const parsed = jsonOf(AgxJobRunsSchema).safeParse(result.value);
+      return parsed.success ? parsed.data : [];
+    },
+  });
+  if (sessionId === undefined || sessionId === "") return [];
+  return rows.filter(
+    (run) => run.state === "running" && run.dispatcher_session === sessionId,
+  );
 }
 const pidAlive = fromThrowable((pid: number) => process.kill(pid, 0));
 const sinceSecs = fromThrowable((iso: string) =>

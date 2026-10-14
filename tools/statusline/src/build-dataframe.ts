@@ -2,7 +2,7 @@ import { err, ok, type Result } from "neverthrow";
 import type { SessionStatus } from "./session-status.ts";
 import type { Dataframe } from "./dataframe.ts";
 import type { HostLoad } from "./host-load.ts";
-import type { RouteRun, RouteScan } from "./dispatch-runs.ts";
+import type { JobRun, RouteRun, RouteScan } from "./dispatch-runs.ts";
 import type { Admitted } from "./jobs.ts";
 import type { DiskEntry } from "./storage.ts";
 import type { ModelLimit } from "./rate-limits.ts";
@@ -20,7 +20,11 @@ import { contextLabel, firstNonEmpty, modelName } from "./model-context.ts";
 import { repoStateAsync } from "./repo-state.ts";
 import { scanOutOfHarnessAsync } from "./jobs.ts";
 import { readHostLoadAsync } from "./host-load.ts";
-import { routeRunsAsync } from "./dispatch-runs.ts";
+import {
+  agxJobRunsAsync,
+  currentDispatcherSession,
+  routeRunsAsync,
+} from "./dispatch-runs.ts";
 import { readDispatchWarningAsync } from "./dispatch-warning.ts";
 import { diskReadingsAsync } from "./storage.ts";
 import type { DiskReading } from "./storage.ts";
@@ -56,6 +60,7 @@ type Sources = {
   }>;
   hostLoad: () => Promise<Omit<HostLoad, "disks">>;
   routes: () => Promise<Result<RouteScan, string> | undefined>;
+  jobRuns: (sessionId: string | undefined) => Promise<JobRun[]>;
   dispatchWarning: () => Promise<string | undefined>;
   storage: () => Promise<Result<DiskEntry[], string>>;
   herdrReport: (
@@ -80,6 +85,7 @@ const BUDGETS_MS: Record<keyof Sources, number> = {
   jobScan: 2000,
   hostLoad: 2000,
   routes: 2000,
+  jobRuns: 2000,
   dispatchWarning: 1500,
   storage: 1500,
   herdrReport: 200,
@@ -330,6 +336,7 @@ const DEFAULT_SOURCES: Sources = {
   },
   hostLoad: readHostLoadAsync,
   routes: cachedRoutes,
+  jobRuns: agxJobRunsAsync,
   dispatchWarning: readDispatchWarningAsync,
   storage: cachedStorage,
   herdrReport: reportToHerdr,
@@ -385,6 +392,7 @@ export async function buildDataframe(
     scanResult,
     hostResult,
     routesResult,
+    jobRunsResult,
     warningResult,
     storageResult,
     codexRateResult,
@@ -414,6 +422,9 @@ export async function buildDataframe(
     runBounded("process scan", budget("jobScan"), sources.jobScan),
     runBounded("host load", budget("hostLoad"), sources.hostLoad),
     runBounded("dispatch", budget("routes"), sources.routes),
+    runBounded("agx Job runs", budget("jobRuns"), () =>
+      sources.jobRuns(currentDispatcherSession(sid)),
+    ),
     runBounded(
       "dispatch warning",
       budget("dispatchWarning"),
@@ -456,6 +467,7 @@ export async function buildDataframe(
     "host load",
   );
   const routes = settled(routesResult, undefined, "dispatch");
+  const jobRuns = settled(jobRunsResult, [], "agx Job runs");
   const warning = settled(warningResult, undefined, "dispatch warning");
   const storage = settled(storageResult, err("storage unavailable"), "storage");
   const codexRate = settled(
@@ -530,6 +542,7 @@ export async function buildDataframe(
     orphans,
     jobScanWhy: scan.why ?? scan.value.failed,
     routes: routes.why === undefined ? routes.value : err(routes.why),
+    jobRuns: jobRuns.why === undefined ? jobRuns.value : [],
     dispatchWarning:
       warning.why === undefined ? warning.value : "dispatch warning …",
     vram,

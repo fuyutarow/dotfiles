@@ -6,7 +6,9 @@ import { COMMANDS } from "../src/next/cli.ts";
 test("the package exposes the five-command CLI as agx and keeps its alias", () => {
   expect(rootPackage.bin.agx).toBe("tools/agx/src/next/cli.ts");
   expect(rootPackage.bin["agx-next"]).toBe("tools/agx/src/next/cli.ts");
-  expect(packageJson.version).toBe("4.7.0");
+  expect(packageJson.version).toMatch(
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u,
+  );
   expect(packageJson.bin).toEqual({
     agx: "src/next/cli.ts",
     "agx-next": "src/next/cli.ts",

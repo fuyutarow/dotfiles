@@ -20,6 +20,7 @@ import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { packageBinProblems } from "../land.ts";
 import { landStateDir } from "../land-queue.ts";
 import { doctorReport } from "../land-doctor.ts";
+import { applyToolChangesets } from "../land-changesets.ts";
 import { tryAcquire } from "../../tools/shared/src/dir-lock.ts";
 
 const script = join(import.meta.dir, "../land.ts");
@@ -432,20 +433,10 @@ describe("land workspace", () => {
       consumer,
     );
   });
-  test("resolves package version and CHANGELOG only conflicts with the workspace bump level", () => {
+  test("lands disjoint changesets after another ticket released the same tool", () => {
     const f = fixture();
     writeToolPackage(f.main, "1.0.0");
     writeToolChangelog(f.main, "1.0.0 — 2026-10-01");
-    const baseChangelog = readFileSync(
-      join(f.main, "tools", "agx", "CHANGELOG.md"),
-      "utf8",
-    );
-    const prependChangelog = (root: string, entry: string): void => {
-      writeFileSync(
-        join(root, "tools", "agx", "CHANGELOG.md"),
-        `# Changelog\n\n## ${entry}\n\n- new entry\n\n${baseChangelog.slice(baseChangelog.indexOf("## "))}`,
-      );
-    };
     f.jj(f.main, ["commit", "-m", "add agx package"]);
     f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
     f.jj(f.main, ["workspace", "forget", "dotfiles-arm-worker"]);
@@ -459,12 +450,19 @@ describe("land workspace", () => {
       "alpha",
       f.worker,
     ]);
-    writeToolPackage(f.worker, "1.1.0");
-    prependChangelog(f.worker, "1.1.0 — 2026-10-10");
+    mkdirSync(join(f.worker, "tools", "agx", ".changes"), { recursive: true });
+    writeFileSync(
+      join(f.worker, "tools", "agx", ".changes", "worker-ticket.md"),
+      "---\nbump: minor\n---\nAdd a worker-ticket feature\n",
+    );
     f.jj(f.worker, ["status"]);
-    writeToolPackage(f.main, "1.0.1");
-    prependChangelog(f.main, "1.0.1 — 2026-10-10");
-    f.jj(f.main, ["commit", "-m", "alpha version bump"]);
+    mkdirSync(join(f.main, "tools", "agx", ".changes"), { recursive: true });
+    writeFileSync(
+      join(f.main, "tools", "agx", ".changes", "prior-ticket.md"),
+      "---\nbump: patch\n---\nFix a prior-ticket issue\n",
+    );
+    applyToolChangesets(f.main, "2026-10-10");
+    f.jj(f.main, ["commit", "-m", "land prior ticket release"]);
     f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
     const result = f.land();
     expect(
@@ -476,9 +474,12 @@ describe("land workspace", () => {
     ).toContain('"version": "1.1.0"');
     expect(
       readFileSync(join(f.main, "tools", "agx", "CHANGELOG.md"), "utf8"),
-    ).toMatch(/^## 1\.1\.0 — 2026-10-10/mu);
+    ).toContain("- Fix a prior-ticket issue");
+    expect(
+      readFileSync(join(f.main, "tools", "agx", "CHANGELOG.md"), "utf8"),
+    ).toContain("- Add a worker-ticket feature");
     expect(result.stdout.toString()).toContain(
-      "resolved version-only conflict",
+      "agx 1.1.0 (1 changeset entries)",
     );
   });
 

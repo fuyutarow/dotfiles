@@ -89,7 +89,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ~/dotfiles/
 ├── zsh/         # zshenv (tiny, SSH-safe), zshrc, aliases.zsh (+ IS_MAC/IS_WSL), mac.zsh / wsl.zsh
 ├── git/         # gitconfig + local.mac / local.wsl (per-OS include)
-├── tools/       # repo CLIs and libraries, one directory each (package.json with semver, CHANGELOG.md, src/, tests/); may import its own dir and tools/shared/
+├── tools/       # repo CLIs and libraries, one directory each (release notes in .changes/, generated package.json semver + CHANGELOG.md, src/, tests/); may import its own dir and tools/shared/
 │   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   ├── agx/ # agx (Jev-selected worker routing; append-only records stay in ~/.local/state/agx-next)
@@ -120,6 +120,12 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── Brewfile           # union used for full Homebrew Bundle installs
 └── mise.toml    # the task runner (no justfile)
 ```
+
+Each tool change records its release intent in a separate `tools/<name>/.changes/<slug>.md`
+file: frontmatter `bump: patch|minor|major`, then one plain-text entry line. Tickets do not edit
+`package.json` versions or `CHANGELOG.md`. At land, `scripts/land.ts` applies the highest pending
+bump per tool, prepends all entries under one new SemVer heading, and removes the changeset files
+in the same landed commit. Landing with no changesets leaves tool versions and changelogs alone.
 
 **Single sources of truth** — each fact has one home, so nothing drifts:
 

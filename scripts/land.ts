@@ -34,6 +34,7 @@ import {
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
 import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
 import { enqueue, landLock, queueStatus, runQueue } from "./land-queue.ts";
+import { applyToolChangesets } from "./land-changesets.ts";
 import { renderRefusal } from "./render-source.ts";
 import {
   landExit,
@@ -312,62 +313,6 @@ function packageBinTargetProblems(
   return problems;
 }
 
-type Version = { major: number; minor: number; patch: number };
-const parseVersion = (value: string): Version | undefined => {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(value);
-  if (match === null) return undefined;
-  return {
-    major: Number(match[1]),
-    minor: Number(match[2]),
-    patch: Number(match[3]),
-  };
-};
-const versionText = ({ major, minor, patch }: Version): string =>
-  `${major}.${minor}.${patch}`;
-function nextVersion(
-  alpha: string,
-  base: string,
-  workspace: string,
-): string | undefined {
-  const a = parseVersion(alpha);
-  const b = parseVersion(base);
-  const w = parseVersion(workspace);
-  if (a === undefined || b === undefined || w === undefined) return undefined;
-  let bump: "major" | "minor" | "patch" | undefined;
-  if (w.major > b.major) bump = "major";
-  else if (w.minor > b.minor) bump = "minor";
-  else if (w.patch > b.patch) bump = "patch";
-  if (bump === undefined) return undefined;
-  if (bump === "major")
-    return versionText({ major: a.major + 1, minor: 0, patch: 0 });
-  if (bump === "minor")
-    return versionText({ major: a.major, minor: a.minor + 1, patch: 0 });
-  return versionText({ major: a.major, minor: a.minor, patch: a.patch + 1 });
-}
-
-function changelogParts(
-  text: string,
-): { preamble: string; top: string; rest: string } | undefined {
-  const start = text.indexOf("## ");
-  if (start < 0) return undefined;
-  const next = text.indexOf("\n## ", start + 3);
-  return {
-    preamble: text.slice(0, start).trimEnd(),
-    top: text.slice(start, next < 0 ? text.length : next).trimEnd(),
-    rest: next < 0 ? "" : text.slice(next + 1).trim(),
-  };
-}
-
-function samePackageExceptVersion(left: string, right: string): boolean {
-  const packageRecord = z.record(z.string(), z.unknown());
-  const a = jsonOf(packageRecord).safeParse(left);
-  const b = jsonOf(packageRecord).safeParse(right);
-  if (!a.success || !b.success) return false;
-  delete a.data.version;
-  delete b.data.version;
-  return JSON.stringify(a.data) === JSON.stringify(b.data);
-}
-
 function unresolvedConflictPaths(root: string, pathList: string[]): string[] {
   const conflicts: string[] = [];
   for (const path of pathList) {
@@ -383,132 +328,6 @@ function unresolvedConflictPaths(root: string, pathList: string[]): string[] {
   return conflicts;
 }
 
-function resolveVersionOnlyConflict(
-  workerRoot: string,
-  mainRoot: string,
-  alpha: string,
-  workspaceChange: string,
-  workspaceBase: string,
-  conflictPaths: string[],
-): ResultAsync<{ packagePath: string; version: string }, Error> {
-  return safeTry(async function* () {
-    const packagePath = conflictPaths.find((path) =>
-      /^tools\/[^/]+\/package\.json$/u.test(path),
-    );
-    if (packagePath === undefined)
-      return reject(
-        `rebase introduced conflicts: ${JSON.stringify(conflictPaths)}`,
-      );
-    const changelogPath = packagePath.replace(
-      /package\.json$/u,
-      "CHANGELOG.md",
-    );
-    if (conflictPaths.length !== 2 || !conflictPaths.includes(changelogPath))
-      return reject(
-        `rebase introduced conflicts: ${JSON.stringify(conflictPaths)}`,
-      );
-    const basePackageText = yield* jj(workerRoot, [
-      "file",
-      "show",
-      "-r",
-      workspaceBase,
-      packagePath,
-    ]);
-    const workspacePackageText = yield* jj(workerRoot, [
-      "file",
-      "show",
-      "-r",
-      workspaceChange,
-      packagePath,
-    ]);
-    const alphaPackageText = yield* jj(mainRoot, [
-      "file",
-      "show",
-      "-r",
-      alpha,
-      packagePath,
-    ]);
-    const packageVersion = z.looseObject({ version: z.string() });
-    const basePackage = jsonOf(packageVersion).safeParse(basePackageText);
-    const workspacePackage =
-      jsonOf(packageVersion).safeParse(workspacePackageText);
-    const alphaPackage = jsonOf(packageVersion).safeParse(alphaPackageText);
-    if (
-      !basePackage.success ||
-      !workspacePackage.success ||
-      !alphaPackage.success
-    )
-      return reject(`cannot parse package versions: ${packagePath}`);
-    if (!samePackageExceptVersion(basePackageText, workspacePackageText))
-      return reject(
-        `version conflict also changes package fields: ${packagePath}`,
-      );
-    const version = nextVersion(
-      alphaPackage.data.version,
-      basePackage.data.version,
-      workspacePackage.data.version,
-    );
-    if (version === undefined)
-      return reject(
-        `cannot infer the workspace version bump level: ${packagePath}`,
-      );
-    const baseChangelog = yield* jj(workerRoot, [
-      "file",
-      "show",
-      "-r",
-      workspaceBase,
-      changelogPath,
-    ]);
-    const workspaceChangelog = yield* jj(workerRoot, [
-      "file",
-      "show",
-      "-r",
-      workspaceChange,
-      changelogPath,
-    ]);
-    const alphaChangelog = yield* jj(mainRoot, [
-      "file",
-      "show",
-      "-r",
-      alpha,
-      changelogPath,
-    ]);
-    const workspaceParts = changelogParts(workspaceChangelog);
-    const alphaParts = changelogParts(alphaChangelog);
-    const baseParts = changelogParts(baseChangelog);
-    if (
-      workspaceParts === undefined ||
-      alphaParts === undefined ||
-      baseParts === undefined
-    )
-      return reject(`cannot parse top CHANGELOG sections: ${changelogPath}`);
-    const baseSections =
-      `${baseParts.top}${baseParts.rest === "" ? "" : `\n\n${baseParts.rest}`}`.trim();
-    if (
-      workspaceParts.preamble !== alphaParts.preamble ||
-      workspaceParts.rest.trim() !== baseSections
-    )
-      return reject(
-        `CHANGELOG conflict is not a single additive top entry: ${changelogPath}`,
-      );
-    if (!/^## \d+\.\d+\.\d+/u.test(workspaceParts.top))
-      return reject(
-        `workspace CHANGELOG entry has no semantic version: ${changelogPath}`,
-      );
-    const workspaceTop = workspaceParts.top.replace(
-      /^## \d+\.\d+\.\d+/u,
-      `## ${version}`,
-    );
-    alphaPackage.data.version = version;
-    writeFileSync(
-      join(workerRoot, packagePath),
-      `${JSON.stringify(alphaPackage.data, null, 2)}\n`,
-    );
-    const mergedChangelog = `${alphaParts.preamble}\n\n${workspaceTop}\n\n${alphaParts.top}${alphaParts.rest === "" ? "" : `\n\n${alphaParts.rest}`}\n`;
-    writeFileSync(join(workerRoot, changelogPath), mergedChangelog);
-    return ok({ packagePath, version });
-  });
-}
 const reject = (reason: string) => err(new Error(reason));
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -1029,8 +848,6 @@ async function main(
       yield* jj(workerRoot, ["status"]);
       yield* jj(mainRoot, ["status"]);
       const alpha = yield* at(mainRoot, "alpha");
-      const workspaceChange = yield* at(workerRoot, "@");
-      const workspaceBase = yield* at(workerRoot, "@-");
       if ((yield* at(workerRoot, "@", "conflict")) !== "false")
         return reject("workspace change has conflicts");
       const initial = yield* paths(workerRoot, "@-", "@");
@@ -1054,28 +871,15 @@ async function main(
       yield* jj(workerRoot, ["rebase", "-r", "@", "-o", alpha]);
       if ((yield* at(workerRoot, "@", "conflict")) !== "false") {
         const conflictPaths = unresolvedConflictPaths(workerRoot, initial);
-        const repaired = yield* resolveVersionOnlyConflict(
-          workerRoot,
-          mainRoot,
-          alpha,
-          workspaceChange,
-          workspaceBase,
-          conflictPaths,
-        );
-        yield* jj(workerRoot, ["status"]);
-        if ((yield* at(workerRoot, "@", "conflict")) !== "false")
-          return reject(
-            "version-only conflict repair left unresolved conflicts",
-          );
-        emit(
-          `[land] rebase: resolved version-only conflict ${repaired.packagePath} -> ${repaired.version}`,
+        return reject(
+          `rebase introduced conflicts: ${JSON.stringify(conflictPaths)}`,
         );
       }
       emit(
         `[land] rebase: ok ${parsed.flags.dryRun ? "preview " : ""}onto alpha`,
       );
       stage = "paths";
-      const changed = yield* paths(workerRoot, alpha, "@");
+      let changed = yield* paths(workerRoot, alpha, "@");
       if (changed.length === 0)
         return reject("workspace change is empty after rebase");
       const collisions = overlap(changed, dirty);
@@ -1098,6 +902,21 @@ async function main(
       emit(
         `[land] restore: ok ${parsed.flags.dryRun ? "would restore" : "restored"} ${changed.length} paths`,
       );
+      if (!parsed.flags.dryRun) {
+        stage = "changesets";
+        const appliedChangesets = applyToolChangesets(mainRoot);
+        if (appliedChangesets.isErr())
+          return reject(errorMessage(appliedChangesets.error));
+        const landedChangesets = appliedChangesets.value;
+        changed = [
+          ...new Set([...changed, ...landedChangesets.paths]),
+        ].toSorted();
+        restoredPaths = changed;
+        for (const toolRelease of landedChangesets.releases)
+          emit(
+            `[land] release: ${toolRelease.tool} ${toolRelease.version} (${toolRelease.entries} changeset entries)`,
+          );
+      }
       stage = "format";
       if (!parsed.flags.dryRun) yield* format(mainRoot, changed);
       emit(

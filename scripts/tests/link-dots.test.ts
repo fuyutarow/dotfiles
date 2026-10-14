@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { LINKS } from "../config-registry.ts";
 import {
   applies,
@@ -93,17 +93,40 @@ test("the WSL systemd environment drop-in is registered and linked into XDG conf
   };
   const entry = LINKS.find(
     ([when, source]) =>
-      when === "wsl" && source === "wsl/environment.d/10-wsl-gpu.conf",
+      when === "wsl" && source === "wsl/environment.d/99-zz-wsl-gpu.conf",
   );
   expect(entry).toEqual([
     "wsl",
-    "wsl/environment.d/10-wsl-gpu.conf",
-    ".config/environment.d/10-wsl-gpu.conf",
+    "wsl/environment.d/99-zz-wsl-gpu.conf",
+    ".config/environment.d/99-zz-wsl-gpu.conf",
   ]);
   if (entry === undefined) return;
-  expect(readFileSync(join(REPO, entry[1]), "utf8")).toBe(
-    "PATH=/usr/lib/wsl/lib:${PATH}\nLD_LIBRARY_PATH=/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n",
+  expect(basename(entry[1]) > "99-environment.conf").toBe(true);
+  const destination = join(home, entry[2]);
+  link(ctx, entry[1], destination);
+  expect(readlinkSync(destination)).toBe(join(REPO, entry[1]));
+});
+
+test("the systemd user PATH drop-in is registered and linked into XDG config", () => {
+  const home = tmp("systemd-path-home-");
+  const ctx: Ctx = {
+    home,
+    dotfiles: REPO,
+    os: "linux",
+    mode: "safe",
+    drift: [],
+  };
+  const entry = LINKS.find(
+    ([when, source]) =>
+      when === "not-mac" && source === "zsh/environment.d/99-zz-path.conf",
   );
+  expect(entry).toEqual([
+    "not-mac",
+    "zsh/environment.d/99-zz-path.conf",
+    ".config/environment.d/99-zz-path.conf",
+  ]);
+  if (entry === undefined) return;
+  expect(basename(entry[1]) > "99-environment.conf").toBe(true);
   const destination = join(home, entry[2]);
   link(ctx, entry[1], destination);
   expect(readlinkSync(destination)).toBe(join(REPO, entry[1]));

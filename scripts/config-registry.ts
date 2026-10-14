@@ -117,6 +117,11 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
     "zsh/environment.d/10-rip.conf",
     ".config/environment.d/10-rip.conf",
   ],
+  [
+    "not-mac",
+    "zsh/environment.d/99-zz-path.conf",
+    ".config/environment.d/99-zz-path.conf",
+  ],
 
   // --- git (per-OS identity/credential include) ---
   // git reads BOTH ~/.config/git/config and ~/.gitconfig. The repo's config is linked to the
@@ -202,8 +207,8 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ],
   [
     "wsl",
-    "wsl/environment.d/10-wsl-gpu.conf",
-    ".config/environment.d/10-wsl-gpu.conf",
+    "wsl/environment.d/99-zz-wsl-gpu.conf",
+    ".config/environment.d/99-zz-wsl-gpu.conf",
   ],
 
   // --- update steps, process monitor, jj ---

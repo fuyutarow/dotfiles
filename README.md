@@ -76,6 +76,9 @@ Install tier follows when a tool is needed; OS guards remain in the Brewfiles:
 
 `mise run tool:which <cmd>` reports the declaration tier and formula. The root `Brewfile` is the
 union of core and on-demand entries for full Homebrew Bundle installs.
+For large research-store objects, `git-lfs` is on-demand: check it with
+`mise run tool:which git-lfs`, then install it with `mise run tool:get git-lfs`. In the repo that
+needs LFS, run `git lfs install --local` so the setup stays repo-local.
 
 ## Architecture
 

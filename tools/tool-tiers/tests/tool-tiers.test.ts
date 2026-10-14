@@ -27,7 +27,7 @@ function fixture(): string {
   );
   writeFileSync(
     join(root, "Brewfile.ondemand"),
-    'if OS.linux?\n  brew "bubblewrap"\nelse\n  brew "poppler"\nend\nif OS.mac?\n  cask "maccy"\nend\n',
+    'if OS.linux?\n  brew "bubblewrap"\nelse\n  brew "poppler"\nend\nbrew "git-lfs"\nif OS.mac?\n  cask "maccy"\nend\n',
   );
   return root;
 }
@@ -49,6 +49,11 @@ test("tool declarations resolve tier and formula while honoring OS guards", asyn
     tier: "ondemand",
     formula: "bubblewrap",
   });
+  expect(await toolDeclaration(root, "git-lfs", linux)).toEqual({
+    command: "git-lfs",
+    tier: "ondemand",
+    formula: "git-lfs",
+  });
   expect(await toolDeclaration(root, "bwrap", mac)).toBeUndefined();
   expect(await toolDeclaration(root, "maccy", mac)).toBeUndefined();
   expect(
@@ -56,6 +61,7 @@ test("tool declarations resolve tier and formula while honoring OS guards", asyn
   ).toEqual([
     ["formula", "bun"],
     ["formula", "poppler"],
+    ["formula", "git-lfs"],
     ["cask", "maccy"],
   ]);
 });
@@ -84,4 +90,18 @@ test("tool:get only installs a declared missing formula", async () => {
   });
   expect(undeclared.status).toBe("undeclared");
   expect(installed).toEqual(["poppler"]);
+
+  const gitLfs = await getTool(root, "git-lfs", {
+    host: linux,
+    isInstalled: () => false,
+    install: (formula) => {
+      installed.push(formula);
+      return Promise.resolve(0);
+    },
+  });
+  expect(gitLfs).toEqual({
+    status: "installed",
+    declaration: { command: "git-lfs", tier: "ondemand", formula: "git-lfs" },
+  });
+  expect(installed).toEqual(["poppler", "git-lfs"]);
 });

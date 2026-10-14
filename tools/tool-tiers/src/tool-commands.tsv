@@ -1,6 +1,7 @@
 # formula<TAB>space-separated commands; '-' means the formula has no direct command entrypoint.
 coreutils	-
 git-delta	delta
+git-lfs	git-lfs
 ripgrep	rg
 rm-improved	rip
 choose-rust	choose

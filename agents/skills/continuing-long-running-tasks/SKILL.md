@@ -15,7 +15,7 @@ description: >-
 
 # Continuing long-running tasks
 
-> **Version**: v2608.1.1 (2026-08-02) — durable topology co-fire order.
+> **Version**: v2610.1.0 (2026-10-14) — dispatched workers use their brief and workspace without binding continuation records.
 
 ## LAW — continuity is an artifact, not a conversation
 
@@ -57,6 +57,10 @@ record is local/private. A deliberately versioned record must be safe to publish
 injected slot. Without a trusted injected slot, do not initialize or claim resumability: configure
 the harness or provide a clearly non-durable summary. Never invent a session or human writer token.
 Never create hidden state for a one-shot task or where storage authority is unclear.
+
+Dispatched agx workers do not bind continuation records; their brief and workspace are the whole
+state. With no slot, this run is its own writer for its brief and workspace; do not treat another
+session's record as a reason to become read-only.
 
 Exactly one writer may modify the canonical record. Encode its trusted slot basename as
 `session:<platform>-<hash>`. Other bound sessions are readers until an explicit, reconciled handoff changes

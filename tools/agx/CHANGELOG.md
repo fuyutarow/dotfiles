@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.6.0 — 2026-10-14
+
+- Launch Claude and Codex workers with an explicit environment allow-list, excluding coordinator continuation slots and vendor session IDs.
+- Treat a SessionStart without a bound continuation slot as this run's own brief/workspace state; dispatched agx workers do not bind records.
+
 ## 4.5.0 — 2026-10-14
 
 - Validate bookmark, mise task, and jj revision premises in the selected tree before dispatch; refusals name each premise and include command output.

@@ -25,7 +25,7 @@ Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` valida
 | Notifications and recap demands | Hooks consuming `agx ls --json` | Hooks can derive notifications from folded state; they must run the installed tool, not a checkout's working copy. |
 | Searching code | `rr` | Code retrieval belongs to the repository search tool, not agx. |
 | Routing quality | Jev, corrected through the brief and roster `use_for` | Routing is Jev's choice among roster rows; agx has no routing override. |
-| Worker continuity records (`TASK_CONTINUATION_SLOT`) | The worker harness | Continuation records belong to the harness; agx only passes a vendor session when continuing a run. |
+| Worker continuity records | The worker harness | A dispatched worker receives a bounded environment without coordinator slot or vendor session IDs. It owns its brief and workspace and does not bind a continuation record. |
 
 ## 3. Derived, not stored
 
@@ -48,7 +48,12 @@ Only an ask that fits a job and cannot be answered by folding existing events ma
 
 Codex and Claude workers receive a closed stdin stream. Their prompts remain explicit arguments
 (the final `codex exec` argument and `claude -p <prompt>`), so a vendor cannot wait for an interactive
-input stream. A Codex `Reading additional input from stdin...` stderr line with no subsequent
-stdout event for 30 seconds ends the worker with a `stdin-wait` receipt and the line as its cause.
-Five identical consecutive tool errors end the worker with a `spin` receipt; a wall-clock bound
-remains `timeout`.
+input stream. Their environment is rebuilt from `PATH`, `HOME`, `LANG`, `TZ`,
+`AGX_DISPATCHER_SESSION`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+`CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`, and `CODEX_API_KEY`, with `AGX_WORKER=1`. Coordinator
+continuation slots and vendor session IDs are omitted; each vendor creates its own session identity.
+When a worker hook has no
+bound continuation record, the worker owns its brief and workspace and does not become read-only.
+A Codex `Reading additional input from stdin...` stderr line with no subsequent stdout event for 30
+seconds ends the worker with a `stdin-wait` receipt and the line as its cause. Five identical
+consecutive tool errors end the worker with a `spin` receipt; a wall-clock bound remains `timeout`.

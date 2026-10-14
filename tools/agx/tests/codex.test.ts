@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { decodedJson } from "./decode.ts";
 import { createTempTracker } from "./temp.ts";
@@ -45,6 +45,11 @@ function fakeCodex(dir: string): { bin: string; log: string } {
   writeFileSync(
     bin,
     `#!/bin/sh
+fixture_dir=$(dirname "$0")
+FAKE_CODEX_MODE=$(cat "$fixture_dir/fake-mode" 2>/dev/null || true)
+FAKE_CODEX_SLEEP=$(cat "$fixture_dir/fake-sleep" 2>/dev/null || true)
+FAKE_CODEX_STDIN_LOG=$(cat "$fixture_dir/fake-stdin-log" 2>/dev/null || true)
+env | sort > "$fixture_dir/worker-env.log"
 printf '%s\\n' "$@" > "${log}"
 out=""; prev=""
 for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
@@ -156,6 +161,19 @@ function run(
   env: Record<string, string>,
   prompt = "Audit this.",
 ): Run {
+  const fakeBin = env.AGX_CODEX_BIN;
+  if (fakeBin !== undefined) {
+    const fixtureDir = dirname(fakeBin);
+    if (env.FAKE_CODEX_MODE !== undefined)
+      writeFileSync(join(fixtureDir, "fake-mode"), env.FAKE_CODEX_MODE);
+    if (env.FAKE_CODEX_SLEEP !== undefined)
+      writeFileSync(join(fixtureDir, "fake-sleep"), env.FAKE_CODEX_SLEEP);
+    if (env.FAKE_CODEX_STDIN_LOG !== undefined)
+      writeFileSync(
+        join(fixtureDir, "fake-stdin-log"),
+        env.FAKE_CODEX_STDIN_LOG,
+      );
+  }
   const dir = scratch();
   const promptFile = join(dir, "prompt.md");
   writeFileSync(promptFile, prompt);
@@ -250,6 +268,41 @@ describe("agx", () => {
     expect(r.code).toBe(0);
     expect(readFileSync(stdinLog, "utf8")).toBe("stdin-eof\n");
     expect(readFileSync(log, "utf8").split("\n")).toContain("Audit this.");
+  });
+
+  test("Codex receives the declared worker environment without coordinator state", () => {
+    const fixtureDir = scratch();
+    const { bin } = fakeCodex(fixtureDir);
+    const r = run(FULL, {
+      AGX_CODEX_BIN: bin,
+      AGX_DISPATCHER_SESSION: "dispatcher-session-fixture",
+      ANTHROPIC_API_KEY: "anthropic-auth-fixture",
+      ANTHROPIC_AUTH_TOKEN: "anthropic-token-fixture",
+      CLAUDE_CODE_OAUTH_TOKEN: "claude-oauth-fixture",
+      OPENAI_API_KEY: "openai-auth-fixture",
+      CODEX_API_KEY: "codex-auth-fixture",
+      TASK_CONTINUATION_SLOT: "/coordinator/.agent-state/continuations/ACTIVE",
+      CLAUDE_CODE_SESSION_ID: "coordinator-claude-session",
+      CODEX_SESSION_ID: "coordinator-codex-session",
+      AGX_TEST_UNLISTED: "must-not-cross",
+    });
+    expect(r.code).toBe(0);
+    const childEnv = readFileSync(join(fixtureDir, "worker-env.log"), "utf8");
+    expect(childEnv).toContain(`PATH=${process.env.PATH}`);
+    expect(childEnv).toContain(`HOME=${process.env.HOME}`);
+    expect(childEnv).toContain(
+      "AGX_DISPATCHER_SESSION=dispatcher-session-fixture",
+    );
+    expect(childEnv).toContain("ANTHROPIC_API_KEY=anthropic-auth-fixture");
+    expect(childEnv).toContain("ANTHROPIC_AUTH_TOKEN=anthropic-token-fixture");
+    expect(childEnv).toContain("CLAUDE_CODE_OAUTH_TOKEN=claude-oauth-fixture");
+    expect(childEnv).toContain("OPENAI_API_KEY=openai-auth-fixture");
+    expect(childEnv).toContain("CODEX_API_KEY=codex-auth-fixture");
+    expect(childEnv).toContain("AGX_WORKER=1");
+    expect(childEnv).not.toContain("TASK_CONTINUATION_SLOT=");
+    expect(childEnv).not.toContain("CLAUDE_CODE_SESSION_ID=");
+    expect(childEnv).not.toContain("CODEX_SESSION_ID=");
+    expect(childEnv).not.toContain("AGX_TEST_UNLISTED=");
   });
 
   test("a stalled stdin-wait diagnostic gets its own bounded outcome", () => {

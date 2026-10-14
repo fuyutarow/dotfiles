@@ -456,6 +456,58 @@ describe("compact lifecycle adapters", () => {
     ["Codex", "codex", codexHook],
     ["Claude", "claude", claudeHook],
   ] as const)(
+    "%s worker without its own slot owns its brief even when the workspace has another session's record",
+    (_, platform, hook) => {
+      const root = fixtureRoot();
+      const coordinatorSession = "coordinator-session";
+      const workerSession = "agx-worker-session";
+      const coordinatorSlot = continuationSlotPath(
+        platform,
+        root,
+        coordinatorSession,
+      );
+      const workerSlot = continuationSlotPath(platform, root, workerSession);
+      if (coordinatorSlot === undefined || workerSlot === undefined) {
+        expect(coordinatorSlot).toBeDefined();
+        expect(workerSlot).toBeDefined();
+        return;
+      }
+      const path = join(
+        root,
+        ".agent-state",
+        "tasks",
+        "coordinator",
+        "TASK-CONTINUATION.md",
+      );
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, validRecord(path, "closed", "none"));
+      expect(bindContinuationSlot(coordinatorSlot, path)).toEqual([]);
+      expect(existsSync(coordinatorSlot)).toBe(true);
+      expect(existsSync(path)).toBe(true);
+      expect(existsSync(workerSlot)).toBe(false);
+
+      const result = run(
+        hook,
+        payload("SessionStart", root, workerSession, "startup"),
+      );
+      expect(result.code).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("No continuation record is bound");
+      expect(result.stdout).toContain(
+        "This run is the writer for its own brief and workspace",
+      );
+      expect(result.stdout).toContain(
+        "A dispatched agx worker does not bind continuation records",
+      );
+      expect(result.stdout).not.toContain(path);
+      expect(result.stdout).not.toContain("read-only");
+    },
+  );
+
+  test.each([
+    ["Codex", "codex", codexHook],
+    ["Claude", "claude", claudeHook],
+  ] as const)(
     "%s manual compact passes valid records silently",
     (_, platform, hook) => {
       const root = fixtureRoot();

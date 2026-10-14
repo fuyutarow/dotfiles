@@ -86,7 +86,6 @@ export function handleCompactHook(
     return undefined;
   }
   const binding = readContinuationBinding(platform, cwd, sessionId);
-  if (binding === undefined) return undefined;
 
   if (event === "SessionStart") {
     const source = stringField(input, "source");
@@ -96,6 +95,15 @@ export function handleCompactHook(
       !["startup", "resume", "compact"].includes(source)
     ) {
       return undefined;
+    }
+    if (binding === undefined || binding.status === "unbound") {
+      return JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "SessionStart",
+          additionalContext:
+            "No continuation record is bound to this run. This run is the writer for its own brief and workspace. A dispatched agx worker does not bind continuation records; its brief and workspace are the whole state. Do not use another session's continuation record to decide this run's write authority.",
+        },
+      });
     }
     return JSON.stringify({
       hookSpecificOutput: {
@@ -108,6 +116,7 @@ export function handleCompactHook(
     });
   }
 
+  if (binding === undefined) return undefined;
   if (event !== "PreCompact") return undefined;
   const trigger = stringField(input, "trigger");
   if (

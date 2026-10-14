@@ -74,6 +74,28 @@ async function withTarget<T>(fn: (target: string) => Promise<T>): Promise<T> {
   );
 }
 
+function restoreEnvironment(
+  previous: Record<string, string | undefined>,
+): void {
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+
+function withEnvironment<T>(
+  values: Record<string, string>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const previous = Object.fromEntries(
+    Object.keys(values).map((key) => [key, process.env[key]]),
+  );
+  Object.assign(process.env, values);
+  return Promise.try(fn).finally(() => {
+    restoreEnvironment(previous);
+  });
+}
+
 describe("tools/agx dispatchner", () => {
   test("Claude reads EOF from stdin while its prompt remains in argv", async () => {
     await withTarget(async (target) => {
@@ -259,24 +281,52 @@ describe("tools/agx dispatchner: session persistence and --resume", () => {
 
   test("marks the Claude child as an agx worker", async () => {
     const dir = await scratch("run-claude-env-");
-    const run = await runClaude({
-      target: dir,
-      prompt: "Reply exactly OK",
-      model: "sonnet",
-      permissionMode: "plan",
-      maxTurns: 1,
-      timeoutMs: 5_000,
-      safeMode: true,
-      bare: false,
-      claudeBin: fixture,
-    });
+    const supplied = {
+      AGX_DISPATCHER_SESSION: "dispatcher-session-fixture",
+      ANTHROPIC_API_KEY: "anthropic-auth-fixture",
+      ANTHROPIC_AUTH_TOKEN: "anthropic-token-fixture",
+      CLAUDE_CODE_OAUTH_TOKEN: "claude-oauth-fixture",
+      OPENAI_API_KEY: "openai-auth-fixture",
+      CODEX_API_KEY: "codex-auth-fixture",
+      TASK_CONTINUATION_SLOT: "/coordinator/.agent-state/continuations/ACTIVE",
+      CLAUDE_CODE_SESSION_ID: "coordinator-claude-session",
+      CODEX_SESSION_ID: "coordinator-codex-session",
+      AGX_TEST_UNLISTED: "must-not-cross",
+    };
+    const run = await withEnvironment(supplied, () =>
+      runClaude({
+        target: dir,
+        prompt: "Reply exactly OK",
+        model: "sonnet",
+        permissionMode: "plan",
+        maxTurns: 1,
+        timeoutMs: 5_000,
+        safeMode: true,
+        bare: false,
+        claudeBin: fixture,
+      }),
+    );
     expect(run.exitCode).toBe(0);
-    expect(
-      decodedJson(
-        z.object({ [AGX_WORKER_ENV]: z.string() }),
-        readFileSync(join(dir, "fake-claude-env.log"), "utf8").trim(),
-      ),
-    ).toEqual({ [AGX_WORKER_ENV]: "1" });
+    const childEnv = decodedJson(
+      z.record(z.string(), z.string()),
+      readFileSync(join(dir, "fake-claude-env.log"), "utf8").trim(),
+    );
+    expect(childEnv.PATH).toBe(process.env.PATH);
+    expect(childEnv.HOME).toBe(process.env.HOME);
+    if (process.env.LANG !== undefined)
+      expect(childEnv.LANG).toBe(process.env.LANG);
+    if (process.env.TZ !== undefined) expect(childEnv.TZ).toBe(process.env.TZ);
+    expect(childEnv.AGX_DISPATCHER_SESSION).toBe("dispatcher-session-fixture");
+    expect(childEnv.ANTHROPIC_API_KEY).toBe("anthropic-auth-fixture");
+    expect(childEnv.ANTHROPIC_AUTH_TOKEN).toBe("anthropic-token-fixture");
+    expect(childEnv.CLAUDE_CODE_OAUTH_TOKEN).toBe("claude-oauth-fixture");
+    expect(childEnv.OPENAI_API_KEY).toBe("openai-auth-fixture");
+    expect(childEnv.CODEX_API_KEY).toBe("codex-auth-fixture");
+    expect(childEnv[AGX_WORKER_ENV]).toBe("1");
+    expect(childEnv.TASK_CONTINUATION_SLOT).toBeUndefined();
+    expect(childEnv.CLAUDE_CODE_SESSION_ID).toBeUndefined();
+    expect(childEnv.CODEX_SESSION_ID).toBeUndefined();
+    expect(childEnv.AGX_TEST_UNLISTED).toBeUndefined();
     await rm(dir, { recursive: true, force: true });
   });
 

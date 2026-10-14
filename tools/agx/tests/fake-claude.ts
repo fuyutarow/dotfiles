@@ -12,7 +12,29 @@ appendFileSync(
 );
 appendFileSync(
   join(process.cwd(), "fake-claude-env.log"),
-  `${JSON.stringify({ [AGX_WORKER_ENV]: process.env[AGX_WORKER_ENV] })}\n`,
+  `${JSON.stringify(
+    Object.fromEntries(
+      [
+        "PATH",
+        "HOME",
+        "LANG",
+        "TZ",
+        "AGX_DISPATCHER_SESSION",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "OPENAI_API_KEY",
+        "CODEX_API_KEY",
+        AGX_WORKER_ENV,
+        "TASK_CONTINUATION_SLOT",
+        "CLAUDE_CODE_SESSION_ID",
+        "CODEX_SESSION_ID",
+        "AGX_TEST_UNLISTED",
+      ].flatMap((key) =>
+        process.env[key] === undefined ? [] : [[key, process.env[key]]],
+      ),
+    ),
+  )}\n`,
 );
 const stdinText = await Bun.stdin.text();
 appendFileSync(join(process.cwd(), "fake-claude-stdin.log"), stdinText);

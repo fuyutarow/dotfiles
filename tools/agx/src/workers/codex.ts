@@ -68,6 +68,7 @@ import { costUsd } from "../dispatch-cost.ts";
 import { activityWriter } from "../lifecycle.ts";
 import { interimReturnWriter, parseReturn } from "../report.ts";
 import { progressIntervalMs, progressThrottle } from "../progress.ts";
+import { workerEnvironment } from "./environment.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["none", "read-only", "workspace-write"];
@@ -497,6 +498,7 @@ const spawned = await attempt(() =>
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    env: workerEnvironment(),
     signal: deadline.signal,
     killSignal: "SIGKILL",
   }),

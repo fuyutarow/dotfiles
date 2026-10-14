@@ -5,10 +5,7 @@ import { err, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../../../shared/src/zod.ts";
 import { interimReturnWriter, parseReturn } from "../report.ts";
 import { activityWriter } from "../lifecycle.ts";
-import {
-  AGX_WORKER_ENV,
-  AGX_WORKER_VALUE,
-} from "../../../shared/src/worker-env.ts";
+import { workerEnvironment } from "./environment.ts";
 import { progressWriter } from "./codex-progress.ts";
 import { foldClaudeEvent, resultEvent } from "./claude-progress.ts";
 
@@ -154,10 +151,7 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
-    env: {
-      ...process.env,
-      [AGX_WORKER_ENV]: AGX_WORKER_VALUE,
-    },
+    env: workerEnvironment(),
     signal: signal,
     killSignal: "SIGTERM",
   });

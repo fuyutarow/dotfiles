@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.9 — 2026-10-14
+
+- Count startup and preflight checks against the reindex search deadline, reserving time to return BUSY within ten seconds end to end.
+- Bound semantic search during daemon reindexing; report BUSY and lexical routes when the search child times out.
+- Record the detached index worker PID so BUSY diagnostics can identify it.
+
 ## 1.0.8 — 2026-10-14
 
 - Serve completed indexes within the configured staleness bound while detached reindexing runs, and report the watermark, gap, changed files, and reindex status.

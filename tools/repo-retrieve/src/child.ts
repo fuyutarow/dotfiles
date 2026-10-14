@@ -40,7 +40,13 @@ export async function runChildCaptured(
   timeoutMs: number,
   relay = true,
   cwd = process.cwd(),
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  reportTimeout = true,
+): Promise<{
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}> {
   const signal = AbortSignal.timeout(timeoutMs);
   const child = Bun.spawn({
     cmd: command,
@@ -59,10 +65,12 @@ export async function runChildCaptured(
   if (relay && stdout !== "") process.stdout.write(stdout);
   if (relay && stderr !== "") process.stderr.write(stderr);
   if (signal.aborted) {
+    if (!reportTimeout)
+      return { exitCode: 124, stdout, stderr, timedOut: true };
     process.stderr.write(
       `FATAL: search child timed out after ${timeoutMs}ms: ${command[0]}\n`,
     );
-    return { exitCode: 124, stdout, stderr };
+    return { exitCode: 124, stdout, stderr, timedOut: true };
   }
-  return { exitCode, stdout, stderr };
+  return { exitCode, stdout, stderr, timedOut: false };
 }

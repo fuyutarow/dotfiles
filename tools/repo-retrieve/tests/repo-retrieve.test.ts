@@ -195,6 +195,7 @@ function fakeTools(): { bin: string; log: string } {
 printf '%s\\n' '${name} '"$*" >> "$FAKE_SEARCH_LOG"
 if [ -n "\${FAKE_SEARCH_EXPECT_CWD:-}" ] && [ "$(pwd -P)" != "$(cd "$FAKE_SEARCH_EXPECT_CWD" && pwd -P)" ]; then exit 9; fi
 if [ "${name}" = ccc ] && [ "$1" = daemon ] && [ "$2" = status ]; then
+sleep "\${FAKE_CCC_STATUS_SLEEP_SECONDS:-0}"
 if [ "\${FAKE_CCC_DAEMON_DOWN:-0}" = 1 ]; then
     printf 'daemon unavailable\n' >&2
     exit 1
@@ -217,6 +218,7 @@ if [ "${name}" = ccc ] && [ "$1" = index ]; then
   touch "$PWD/.cocoindex_code/fake_target.db" 2>/dev/null || true
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_INDEX_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
+if [ "${name}" = ccc ] && [ "$1" = search ] && [ -n "\${FAKE_CCC_SEARCH_SLEEP_SECONDS:-}" ]; then exec sleep "$FAKE_CCC_SEARCH_SLEEP_SECONDS"; fi
 if [ "${name}" = ccc ] && [ "\${FAKE_CCC_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
 if [ "${name}" = rg ] && [ "\${FAKE_RG_THREE_LINES:-0}" = 1 ]; then
   printf '%s\\n' first second third
@@ -256,6 +258,18 @@ exit "\${FAKE_SEARCH_EXIT:-0}"
     );
     chmodSync(path, 0o755);
   }
+  const git = Bun.which("git");
+  if (git !== null) {
+    const path = join(bin, "git");
+    writeFileSync(
+      path,
+      `#!/bin/sh
+if [ "\${3:-}" = rev-parse ]; then sleep "\${FAKE_GIT_HEAD_SLEEP_SECONDS:-0}"; fi
+exec '${git.replaceAll("'", "'\\''")}' "$@"
+`,
+    );
+    chmodSync(path, 0o755);
+  }
   return { bin, log };
 }
 
@@ -263,12 +277,13 @@ function run(
   cwd: string,
   args: string[],
   env: Record<string, string> = {},
+  timeout = 5_000,
 ): { code: number | null; stdout: string; stderr: string; log: string } {
   const tools = fakeTools();
   const result = spawnSync(process.execPath, [ROUTER, ...args], {
     cwd,
     encoding: "utf8",
-    timeout: 5_000,
+    timeout,
     env: {
       ...process.env,
       PATH: `${tools.bin}:${process.env.PATH ?? ""}`,
@@ -320,6 +335,79 @@ describe("repo-retrieve route contract", () => {
     expect(result.log).toContain("--path src/**/*.ts");
     expect(result.log).not.toContain("--refresh");
     expect(result.stdout).toContain("RESULT: PASS route=concept engine=ccc");
+  });
+
+  test("a search timeout while the daemon is reindexing reports BUSY and lexical routes", () => {
+    const { dir } = registerFreshGitProject();
+    writeFileSync(
+      join(dir, ".cocoindex_code", "INDEX_REQUEST.json"),
+      `${JSON.stringify({
+        head: gitCmd(dir, ["rev-parse", "HEAD"]).trim(),
+        pid: 4242,
+        requestedAt: Temporal.Now.instant().toString(),
+        state: "pending",
+      })}\n`,
+    );
+    const startedAt = performance.now();
+    const result = run(
+      dir,
+      ["about", "--query", "reindex busy handling", "--timeout-ms", "250"],
+      { FAKE_CCC_INDEXING: "1", FAKE_CCC_SLEEP: "1" },
+    );
+
+    expect(performance.now() - startedAt).toBeLessThan(1_500);
+    expect(result.code).toBe(75);
+    expect(result.stderr).toContain(
+      "RESULT: BUSY route=concept; reindex running (pid 4242); lexical routes work now: rr text|regex|files",
+    );
+    expect(result.stderr).not.toContain("search child timed out");
+    const slowStatus = run(
+      dir,
+      ["about", "--query", "reindex status busy", "--timeout-ms", "250"],
+      { FAKE_CCC_STATUS_SLEEP_SECONDS: "2" },
+    );
+    expect(slowStatus.code).toBe(75);
+    expect(slowStatus.stderr).toContain(
+      "RESULT: BUSY route=concept; reindex running (pid 4242); lexical routes work now: rr text|regex|files",
+    );
+    expect(slowStatus.stderr).not.toContain("search child timed out");
+  });
+
+  test("reindex BUSY stays below ten seconds including slow preflight checks", () => {
+    const { dir } = registerFreshGitProject();
+    const startedAt = performance.now();
+    const result = run(
+      dir,
+      ["about", "--query", "end to end reindex deadline"],
+      {
+        FAKE_CCC_INDEXING: "1",
+        FAKE_GIT_HEAD_SLEEP_SECONDS: "2.5",
+        FAKE_CCC_STATUS_SLEEP_SECONDS: "1.5",
+        FAKE_CCC_SEARCH_SLEEP_SECONDS: "30",
+      },
+      12_000,
+    );
+
+    expect(performance.now() - startedAt).toBeLessThan(10_000);
+    expect(result.code).toBe(75);
+    expect(result.stderr).toContain("RESULT: BUSY route=concept;");
+    expect(result.stderr).toContain(
+      "lexical routes work now: rr text|regex|files",
+    );
+    expect(result.stderr).not.toContain("search child timed out");
+  }, 15_000);
+
+  test("without a reindex, the configured search timeout keeps its normal failure", () => {
+    const { dir } = registerFreshGitProject();
+    const result = run(
+      dir,
+      ["about", "--query", "normal timeout behavior", "--timeout-ms", "250"],
+      { FAKE_CCC_SLEEP: "1" },
+    );
+
+    expect(result.code).toBe(124);
+    expect(result.stderr).toContain("search child timed out after 250ms");
+    expect(result.stderr).not.toContain("RESULT: BUSY");
   });
 
   test("concept in a jj workspace uses the backing repo index and identifies its scope", () => {

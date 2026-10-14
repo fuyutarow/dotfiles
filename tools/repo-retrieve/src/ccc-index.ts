@@ -367,12 +367,14 @@ function watermarkPath(project: string): Result<string, Error> {
 
 type IndexRequest = {
   head: string | null;
+  pid?: number | undefined;
   requestedAt: string;
   state: "pending" | "complete" | "stale" | "failed";
 };
 
 const IndexRequestSchema = z.object({
   head: z.union([z.null(), z.string().regex(/^[0-9a-f]{40}$/iu)]),
+  pid: z.number().int().positive().optional(),
   requestedAt: z.string(),
   state: z.enum(["pending", "complete", "stale", "failed"]),
 });
@@ -390,6 +392,11 @@ async function readIndexRequest(project: string): Promise<IndexRequest | null> {
   if (!(await file.exists())) return null;
   const parsed = jsonOf(IndexRequestSchema).safeParse(await file.text());
   return parsed.success ? parsed.data : null;
+}
+
+export async function runningIndexPid(project: string): Promise<number | null> {
+  const request = await readIndexRequest(project);
+  return request?.state === "pending" ? (request.pid ?? null) : null;
 }
 
 async function writeIndexRequest(
@@ -1018,6 +1025,14 @@ export async function runIndexWrapper(
       return err(child.error);
     }
     child.value.unref();
+    const recorded = await writeIndexRequest(project, {
+      ...request,
+      pid: child.value.pid,
+    });
+    if (recorded.isErr())
+      process.stderr.write(
+        `NOTE: could not record detached index pid: ${recorded.error.message}\n`,
+      );
     process.stdout.write(
       `RESULT: INDEX_REQUESTED project=${project} head=${headLabel(head.value)} state=pending\n`,
     );

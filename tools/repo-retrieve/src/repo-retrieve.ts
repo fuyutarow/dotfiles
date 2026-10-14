@@ -73,6 +73,7 @@ import {
   resolveRegisteredProject,
   runIndexStatus,
   runIndexWrapper,
+  runningIndexPid,
 } from "./ccc-index.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
 import { findDefinitions, refreshCatalog, renderCards } from "./definitions.ts";
@@ -486,7 +487,13 @@ async function runCccSearch(
 
   const ccc = requireExecutable("ccc");
   if (ccc.isErr()) return err(ccc.error);
-  const statusTimeoutMs = Math.min(timeoutMs, 5_000);
+  const requestedIndexPid =
+    freshness.reindexPid ?? (await runningIndexPid(project));
+  const statusTimeoutMs = Math.min(
+    timeoutMs,
+    5_000,
+    Math.max(1, Math.floor(9_000 - process.uptime() * 1_000)),
+  );
   const statusResult = await fromAsyncThrowable(
     () =>
       runChildCaptured(
@@ -494,26 +501,50 @@ async function runCccSearch(
         statusTimeoutMs,
         false,
         project,
+        requestedIndexPid === null,
       ),
     asError,
   )();
   if (statusResult.isErr()) return err(statusResult.error);
   const status = statusResult.value;
+  if (status.timedOut && requestedIndexPid !== null) {
+    process.stderr.write(
+      `RESULT: BUSY route=${route}; reindex running (pid ${requestedIndexPid}); lexical routes work now: rr text|regex|files\n`,
+    );
+    return ok(75);
+  }
   if (status.exitCode !== 0) {
     process.stderr.write(
       `FATAL: could not read ccc daemon status before ${route} search\n`,
     );
     return ok(status.exitCode);
   }
-  if (status.stdout.includes(`${project} [indexing]`)) {
+  const reindexing = status.stdout.includes(`${project} [indexing]`);
+  const indexPid = reindexing ? requestedIndexPid : null;
+  if (reindexing)
     process.stderr.write(
-      `INDEX: reindex running (pid ${freshness.reindexPid ?? "unknown"})\n`,
+      `INDEX: reindex running (pid ${indexPid ?? "unknown"})\n`,
     );
-  }
+  // Include Bun startup, imports, freshness checks, and daemon status in the budget.
+  // Leave one second for process termination and delivery of the BUSY result.
+  const searchDeadline = reindexing
+    ? Temporal.Now.instant().epochMilliseconds +
+      Math.min(timeoutMs, Math.floor(9_000 - process.uptime() * 1_000))
+    : null;
   const cccPath = path === undefined ? undefined : cccSearchPath(project, path);
   let matchedQueries = 0;
 
   for (const [index, query] of queries.entries()) {
+    const remainingMs =
+      searchDeadline === null
+        ? timeoutMs
+        : searchDeadline - Temporal.Now.instant().epochMilliseconds;
+    if (remainingMs <= 0) {
+      process.stderr.write(
+        `RESULT: BUSY route=${route}; reindex running (pid ${indexPid ?? "unknown"}); lexical routes work now: rr text|regex|files\n`,
+      );
+      return ok(75);
+    }
     const searchArgs = [ccc.value, "search", query, "--limit", String(limit)];
     if (cccPath !== undefined) searchArgs.push("--path", cccPath);
     if (refresh && index === 0) searchArgs.push("--refresh");
@@ -522,7 +553,14 @@ async function runCccSearch(
       `ROUTE: ${route} -> ccc search (${index + 1}/${queries.length}) project=${project}\n`,
     );
     const searchResult = await fromAsyncThrowable(
-      () => runChildCaptured(searchArgs, timeoutMs, false, project),
+      () =>
+        runChildCaptured(
+          searchArgs,
+          Math.min(timeoutMs, remainingMs),
+          false,
+          project,
+          !reindexing,
+        ),
       asError,
     )();
     if (searchResult.isErr()) return err(searchResult.error);
@@ -533,6 +571,12 @@ async function runCccSearch(
       resolution.workspace,
     );
     if (mappedOutput !== "") process.stdout.write(mappedOutput);
+    if (reindexing && result.timedOut) {
+      process.stderr.write(
+        `RESULT: BUSY route=${route}; reindex running (pid ${indexPid ?? "unknown"}); lexical routes work now: rr text|regex|files\n`,
+      );
+      return ok(75);
+    }
     if (result.exitCode !== 0) return ok(result.exitCode);
     if (cccResultCount(result.stdout) > 0) matchedQueries += 1;
   }

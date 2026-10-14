@@ -128,6 +128,17 @@ function fixture() {
     expect(`${result.exitCode}: ${result.stderr.toString()}`).toStartWith("0:");
     return result.stdout.toString().trim();
   }
+  function git(cwd: string, argv: string[]) {
+    const result = Bun.spawnSync(["git", ...argv], {
+      cwd,
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 30_000,
+    });
+    expect(`${result.exitCode}: ${result.stderr.toString()}`).toStartWith("0:");
+    return result.stdout.toString().trim();
+  }
   jj(temp, ["git", "init", "--colocate", main]);
   writeFileSync(join(main, "old name.txt"), "rename content\n");
   writeFileSync(join(main, "delete.txt"), "delete content\n");
@@ -136,6 +147,16 @@ function fixture() {
   writeFileSync(join(main, "remove.md"), "# Remove\n");
   jj(main, ["commit", "-m", "base"]);
   jj(main, ["bookmark", "set", "alpha", "-r", "@-"]);
+  const origin = join(temp, "origin.git");
+  git(temp, ["init", "--bare", origin]);
+  jj(main, ["git", "remote", "add", "origin", origin]);
+  jj(main, ["git", "push", "--bookmark", "alpha", "--remote", "origin"]);
+  jj(main, ["git", "fetch", "--remote", "origin"]);
+  writeFileSync(
+    join(origin, "hooks", "pre-receive"),
+    '#!/bin/sh\n[ "${LAND_FAIL_PUSH:-0}" = 1 ] && exit 1\nexit 0\n',
+  );
+  chmodSync(join(origin, "hooks", "pre-receive"), 0o755);
   jj(main, [
     "workspace",
     "add",
@@ -163,8 +184,17 @@ for (const args of [['commit', '-m', argv[argv.indexOf('-m') + 1], '--', ...path
  const r = Bun.spawnSync(['jj', ...args], { stdout: 'pipe', stderr: 'pipe', timeout: 30000 });
  if (r.exitCode !== 0) { process.stderr.write(r.stderr); process.exit(r.exitCode); }
 }
-if (process.env.LAND_FAIL_PUSH === '1') { process.stderr.write('push refused: fixture failure\\n'); process.exit(7); }
-appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['pushed']) + '\\n');\n`,
+if (process.env.LAND_ADVANCE_ORIGIN === '1') {
+ const competitor = process.env.LAND_COMPETITOR;
+ const path = process.env.LAND_ADVANCE_PATH ?? 'origin-advanced.txt';
+ const fs = await import('node:fs'); const pathModule = await import('node:path');
+ fs.mkdirSync(pathModule.dirname(pathModule.join(competitor, path)), { recursive: true });
+ fs.writeFileSync(pathModule.join(competitor, path), process.env.LAND_ADVANCE_CONTENT ?? 'origin advanced\\n');
+ for (const args of [['bookmark', 'track', 'alpha@origin'], ['status'], ['commit', '-m', 'Advance origin'], ['bookmark', 'set', 'alpha', '-r', '@-', '--allow-backwards'], ['git', 'push', '--bookmark', 'alpha', '--remote', 'origin']]) {
+  const r = Bun.spawnSync(['jj', ...args], { cwd: competitor, stdout: 'pipe', stderr: 'pipe', timeout: 30000 });
+  if (r.exitCode !== 0) { process.stderr.write(r.stderr); process.exit(r.exitCode); }
+ }
+}\n`,
   );
   writeFileSync(
     ssh,
@@ -277,7 +307,7 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['format', '${formatter}'
       signal: AbortSignal.timeout(20_000),
     });
   }
-  return { main, worker, jj, land, command, start, log, env };
+  return { main, worker, origin, jj, git, land, command, start, log, env };
 }
 
 function digest(root: string): string {
@@ -824,12 +854,10 @@ describe("land workspace", () => {
         "--",
         "-m",
         "Land test",
-        "--push",
         "--",
         "new name.txt",
         "old name.txt",
       ]);
-      expect(f.log()[1]).toEqual(["pushed"]);
       expect(f.log().filter((event) => event[0] === "ssh")).toEqual([]);
       expect(result.stdout.toString()).not.toContain("hosts=");
       expect(result.stdout.toString()).toMatch(/summary: ok commit=[0-9a-f]+/u);
@@ -895,6 +923,72 @@ describe("land workspace", () => {
     expect(result.stdout.toString()).toContain("[land] commit: ok");
     expect(result.stdout.toString()).toContain("[land] push: FAIL");
     expect(result.stdout.toString()).not.toContain("landed and pushed");
+    expect(f.log().filter((event) => event[0] === "ssh")).toEqual([]);
+  });
+
+  test("fetches and rebases onto an origin advance made after the land commit", () => {
+    const f = fixture();
+    const competitor = join(dirname(f.main), "competitor");
+    f.jj(dirname(f.main), ["git", "clone", "--colocate", f.origin, competitor]);
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land([], {
+      LAND_ADVANCE_ORIGIN: "1",
+      LAND_COMPETITOR: competitor,
+      LAND_ADVANCE_PATH: "origin-advanced.txt",
+    });
+    expect(
+      result.exitCode,
+      result.stderr.toString() + result.stdout.toString(),
+    ).toBe(0);
+    const local = f.jj(f.main, [
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha",
+      "-T",
+      "commit_id",
+    ]);
+    const remote = f.jj(f.main, [
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha@origin",
+      "-T",
+      "commit_id",
+    ]);
+    expect(local).toBe(remote);
+    expect(
+      f.jj(f.main, ["file", "show", "-r", "alpha", "origin-advanced.txt"]),
+    ).toBe("origin advanced");
+    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
+      "worker version",
+    );
+    expect(result.stdout.toString()).toContain("[land] push: ok");
+  });
+
+  test("a push rebase conflict names files and restores both workspaces", () => {
+    const f = fixture();
+    const competitor = join(dirname(f.main), "competitor");
+    f.jj(dirname(f.main), ["git", "clone", "--colocate", f.origin, competitor]);
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    const result = f.land([], {
+      LAND_ADVANCE_ORIGIN: "1",
+      LAND_COMPETITOR: competitor,
+      LAND_ADVANCE_PATH: "keep.txt",
+      LAND_ADVANCE_CONTENT: "origin version\n",
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toContain('conflicted on ["keep.txt"]');
+    expect(result.stdout.toString()).toContain("workspace restored");
+    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
+      "worker version\n",
+    );
+    expect(readFileSync(join(f.worker, "keep.txt"), "utf8")).toBe(
+      "worker version\n",
+    );
+    expect(
+      f.jj(f.main, ["log", "--no-graph", "-r", "alpha", "-T", "conflict"]),
+    ).toBe("false");
     expect(f.log().filter((event) => event[0] === "ssh")).toEqual([]);
   });
 

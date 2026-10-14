@@ -1,5 +1,13 @@
 # Script changes
 
+## 2026-10-14 — land pushes after rebasing onto origin
+
+`mise run land` commits without an inline push, fetches `origin`, rebases `alpha`
+onto `alpha@origin`, then pushes the rebased bookmark. A push-rebase conflict
+reports the conflicted paths and restores the repository to its pre-rebase state.
+Land fixtures now use temporary local bare remotes and cover an origin advance
+after the landing commit, including a conflicting advance.
+
 ## 2026-10-11 — land stage verdicts and automatic bin repair
 
 Land reports commit, push and each host separately. Its summary explicitly says

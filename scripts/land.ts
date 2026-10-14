@@ -580,6 +580,63 @@ const at = (cwd: string, rev: string, template = "commit_id") =>
     text.trim(),
   );
 
+function pushLandCommit(
+  root: string,
+  commit: string,
+): ResultAsync<void, Error> {
+  return safeTry(async function* () {
+    yield* jj(root, ["git", "fetch", "--remote", "origin"]);
+    yield* jj(root, [
+      "bookmark",
+      "set",
+      "alpha",
+      "-r",
+      commit,
+      "--allow-backwards",
+    ]);
+    const beforeRebase = yield* jj(root, [
+      "op",
+      "log",
+      "--no-graph",
+      "-n",
+      "1",
+      "-T",
+      "id",
+    ]);
+    yield* jj(root, ["rebase", "-b", "alpha", "-d", "alpha@origin"]);
+    if ((yield* at(root, "alpha", "conflict")) !== "false") {
+      const conflicts = yield* jj(root, ["resolve", "--list", "-r", "alpha"]);
+      const conflictPaths = conflicts
+        .split("\n")
+        .map((line) => line.replace(/\s+\d+-sided conflict$/u, "").trim())
+        .filter((line) => line !== "");
+      const restored = await jj(root, [
+        "op",
+        "restore",
+        beforeRebase.trim(),
+        "--what",
+        "repo",
+      ]);
+      if (restored.isErr())
+        return reject(
+          `push rebase conflicted on ${JSON.stringify(conflictPaths)}; restoring the workspace also failed: ${errorMessage(restored.error)}`,
+        );
+      return reject(
+        `push rebase conflicted on ${JSON.stringify(conflictPaths)}; workspace restored to its pre-rebase state`,
+      );
+    }
+    yield* jj(root, [
+      "git",
+      "push",
+      "--bookmark",
+      "alpha",
+      "--remote",
+      "origin",
+    ]);
+    return ok(undefined);
+  });
+}
+
 function findWorkspaceListMatch(
   output: string,
   requestedPath: string,
@@ -1013,7 +1070,6 @@ async function main(
           "--",
           "-m",
           parsed.flags.message ?? "",
-          "--push",
           "--",
           ...changed,
         ]);
@@ -1039,8 +1095,12 @@ async function main(
         commit = after.value;
       }
       report.commit = "ok";
-      report.push = "ok";
       if (parsed.flags.dryRun) emit("[land] commit: ok preview gated commit");
+      if (!parsed.flags.dryRun) {
+        stage = "push";
+        yield* pushLandCommit(mainRoot, commit ?? "@-");
+      }
+      report.push = "ok";
       emit(`[land] push: ok ${parsed.flags.dryRun ? "preview" : commit}`);
       if (!parsed.flags.dryRun) {
         stage = "landed";

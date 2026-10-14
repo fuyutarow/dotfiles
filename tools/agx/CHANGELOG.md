@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.6.1 — 2026-10-14
+
+- Forward the user bus, XDG, mise, TLS, identity, terminal, and graveyard environment required by worker tools; retain the AGX namespace while excluding coordinator continuation and vendor session state.
+
 ## 4.6.0 — 2026-10-14
 
 - Launch Claude and Codex workers with an explicit environment allow-list, excluding coordinator continuation slots and vendor session IDs.

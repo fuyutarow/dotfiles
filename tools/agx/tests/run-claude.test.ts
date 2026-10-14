@@ -291,7 +291,7 @@ describe("tools/agx dispatchner: session persistence and --resume", () => {
       TASK_CONTINUATION_SLOT: "/coordinator/.agent-state/continuations/ACTIVE",
       CLAUDE_CODE_SESSION_ID: "coordinator-claude-session",
       CODEX_SESSION_ID: "coordinator-codex-session",
-      AGX_TEST_UNLISTED: "must-not-cross",
+      AGX_TEST_SETTING: "agx-namespace-fixture",
     };
     const run = await withEnvironment(supplied, () =>
       runClaude({
@@ -323,6 +323,7 @@ describe("tools/agx dispatchner: session persistence and --resume", () => {
     expect(childEnv.OPENAI_API_KEY).toBe("openai-auth-fixture");
     expect(childEnv.CODEX_API_KEY).toBe("codex-auth-fixture");
     expect(childEnv[AGX_WORKER_ENV]).toBe("1");
+    expect(childEnv.AGX_TEST_SETTING).toBe("agx-namespace-fixture");
     expect(childEnv.TASK_CONTINUATION_SLOT).toBeUndefined();
     expect(childEnv.CLAUDE_CODE_SESSION_ID).toBeUndefined();
     expect(childEnv.CODEX_SESSION_ID).toBeUndefined();

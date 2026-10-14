@@ -284,7 +284,7 @@ describe("agx", () => {
       TASK_CONTINUATION_SLOT: "/coordinator/.agent-state/continuations/ACTIVE",
       CLAUDE_CODE_SESSION_ID: "coordinator-claude-session",
       CODEX_SESSION_ID: "coordinator-codex-session",
-      AGX_TEST_UNLISTED: "must-not-cross",
+      AGX_TEST_SETTING: "agx-namespace-fixture",
     });
     expect(r.code).toBe(0);
     const childEnv = readFileSync(join(fixtureDir, "worker-env.log"), "utf8");
@@ -299,6 +299,7 @@ describe("agx", () => {
     expect(childEnv).toContain("OPENAI_API_KEY=openai-auth-fixture");
     expect(childEnv).toContain("CODEX_API_KEY=codex-auth-fixture");
     expect(childEnv).toContain("AGX_WORKER=1");
+    expect(childEnv).toContain("AGX_TEST_SETTING=agx-namespace-fixture");
     expect(childEnv).not.toContain("TASK_CONTINUATION_SLOT=");
     expect(childEnv).not.toContain("CLAUDE_CODE_SESSION_ID=");
     expect(childEnv).not.toContain("CODEX_SESSION_ID=");

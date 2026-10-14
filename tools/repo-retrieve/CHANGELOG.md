@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-10-14
+
+- Own hook search classification, project resolution, rewrite generation, and denial guidance through `decideSearchRoute`; reduce the hook to protocol adaptation.
+
 ## 1.0.9 — 2026-10-14
 
 - Count startup and preflight checks against the reindex search deadline, reserving time to return BUSY within ten seconds end to end.

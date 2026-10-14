@@ -39,6 +39,33 @@ const withCcc = () => ({
   PATH: `${cccPath()}:${process.env.PATH ?? ""}`,
 });
 
+test("recorded coordinator search commands retain their allow/deny envelopes", () => {
+  const project = registerProject();
+  const scratch = tempDir("search-route-coordinator-");
+  const log = join(scratch, "coordinator.log");
+  writeFileSync(log, "WARN route check\nERROR route check\n");
+  const commands: ReadonlyArray<readonly [string, string | undefined]> = [
+    [`grep -E 'WARN|ERROR' ${log}`, undefined],
+    [`awk '/WARN|ERROR/ { print $0 }' ${log}`, undefined],
+    ["find . -type f -name '*.ts'", "deny"],
+    ["rr regex 'needle' | awk '{ print $1 }'", undefined],
+    ['rg -n "needle" src/', "deny"],
+    ["git grep -n 'needle'", "deny"],
+    ["fd needle .", "deny"],
+    ["tree .", "deny"],
+    ["ccc grep 'needle'", "deny"],
+    ["grep -rn foo .", "deny"],
+  ];
+  for (const [command, expected] of commands) {
+    const result = runHook(HOOK, bashPayload(project, command), withCcc());
+    expect({
+      command,
+      code: result.code,
+      decision: decisionOf(result.stdout)?.permissionDecision,
+    }).toEqual({ command, code: 0, decision: expected });
+  }
+});
+
 /** 統治宣言(`rnd.config.json`)を持ち、かつ ccc 登録もされた repo。 */
 function governedAndRegistered(): string {
   const dir = registerProject();
@@ -136,7 +163,7 @@ describe("enforce-search-route", () => {
         /(?:rr|repo-retrieve|bun \S*repo-retrieve\.ts) (?:regex|files) '(?:foo|\*)'/u,
       );
     }
-  });
+  }, 15_000);
 
   test("allows one project output file but denies project source-file searches", () => {
     const project = registerProject();

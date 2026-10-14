@@ -452,7 +452,6 @@ const OTHER: readonly Surface[] = [
       "tools/tool-tiers/package.json",
       "tools/agx/package.json",
       "tools/coredev/package.json",
-      "tools/shell-command/package.json",
     ],
     deployed: "the checkout",
     consumer:

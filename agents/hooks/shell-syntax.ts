@@ -1,1 +1,1 @@
-export * from "../../tools/shell-command/src/shell-syntax.ts";
+export * from "../../tools/shared/src/shell-syntax.ts";

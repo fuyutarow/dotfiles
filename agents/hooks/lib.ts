@@ -11,12 +11,12 @@
 //     permissionDecision "deny"/"allow", permissionDecisionReason, and additionalContext.
 //     "ask" is Claude-only — Codex marks it a FAILED hook run — so a portable hook never asks.
 
-import { constants, readFileSync, readSync, statSync } from "node:fs";
-import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
-import { obj, parseJson, strAt } from "./narrow.ts";
-import { parseShell } from "./shell-syntax.ts";
+import { readFileSync, readSync } from "node:fs";
+import { obj, parseJson } from "./narrow.ts";
 import { slugForScript } from "./slugs.ts";
+
+export { bashCwd } from "../../tools/shared/src/bash-cwd.ts";
+export { findExe } from "../../tools/shared/src/find-executable.ts";
 
 /** Registry identity, also passed by the renderer for launcher diagnostics. */
 export function hookSlug(): string {
@@ -119,65 +119,4 @@ export function decidePre(
     }),
   );
   process.exit(0);
-}
-
-// Any-execute-bit check without throwing: statSync(throwIfNoEntry: false) returns undefined for
-// a missing path instead of throwing, so the X_OK check below never needs a catch to "keep
-// looking" past a missing or non-executable candidate.
-// Non-throwing stand-in for accessSync(p, X_OK), so findExe stays synchronous for its callers.
-// Two deliberate differences: a directory no longer counts (X_OK passed for a searchable dir of
-// the same name), and any x bit counts rather than the one for this process's uid/gid — for a
-// PATH lookup of a named binary neither case is a real executable.
-function isExecutable(p: string): boolean {
-  const st = statSync(p, { throwIfNoEntry: false });
-  if (st === undefined || !st.isFile()) return false;
-  return (
-    (st.mode & constants.S_IXUSR) !== 0 ||
-    (st.mode & constants.S_IXGRP) !== 0 ||
-    (st.mode & constants.S_IXOTH) !== 0
-  );
-}
-
-// Locate an executable: $PATH first, then fallback dirs (hooks may run with a narrow PATH).
-export function findExe(
-  name: string,
-  fallbackDirs: string[] = [],
-): string | null {
-  const dirs = (process.env.PATH ?? "")
-    .split(":")
-    .filter(Boolean)
-    .concat(fallbackDirs);
-  for (const dir of dirs) {
-    const p = join(dir, name);
-    if (isExecutable(p)) return p;
-  }
-  return null;
-}
-
-// The directory a Bash command ends up in: the payload cwd, then each plain `cd <dir>` the
-// command itself runs (quoted or bare, after start / && / ;). Not a shell: `cd "$X"` and
-// `pushd` are not followed. Shared by the gates that judge a command by where it runs.
-const SIMPLE_CD = /(?:^|&&|;)\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/gu;
-function expandHome(path: string): string {
-  if (path === "~") return homedir();
-  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
-  return path;
-}
-
-export function bashCwd(payload: unknown): string {
-  const cwd = strAt(payload, "cwd");
-  const initial = cwd !== undefined && cwd !== "" ? cwd : process.cwd();
-  const command = strAt(payload, "tool_input", "command") ?? "";
-
-  // Read as syntax: a `cd` in a heredoc body or a quoted word moves nothing (shell-syntax.ts).
-  const parsed = parseShell(command, initial);
-  if (parsed !== undefined) return parsed.endCwd;
-
-  let current = resolve(initial);
-  for (const match of command.matchAll(SIMPLE_CD)) {
-    const raw = expandHome(match[1] ?? match[2] ?? match[3] ?? "");
-    if (raw === "") continue;
-    current = isAbsolute(raw) ? resolve(raw) : resolve(current, raw);
-  }
-  return current;
 }

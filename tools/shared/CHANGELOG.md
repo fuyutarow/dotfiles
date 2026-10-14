@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0 — 2026-10-14
+
+- Own shared Bash syntax parsing and hook path resolution, including shell-safe quoting.
+- Separate dependency-free value readers from the JSON codec so decision modules need not load the codec bundle.
+
 ## 0.6.0 — 2026-10-11
 
 - Add a shared GPU-tool visibility diagnostic for explicit GPU requests.

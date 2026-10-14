@@ -16,13 +16,40 @@ export function runHook(
   env: Record<string, string> = {},
   cwd?: string,
 ): { code: number | null; stdout: string; stderr: string } {
-  const r = spawnSync(process.execPath, [join(HOOKS_DIR, name)], {
-    input: typeof payload === "string" ? payload : JSON.stringify(payload),
-    encoding: "utf8",
-    env: { ...process.env, ...env },
-    ...(cwd !== undefined && cwd !== "" ? { cwd } : {}),
-  });
-  return { code: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+  const input = typeof payload === "string" ? payload : JSON.stringify(payload);
+  const baseline =
+    name === "enforce-search-route.ts"
+      ? process.env.SEARCH_ROUTE_BASELINE_HOOK
+      : undefined;
+  const hookEnv = {
+    ...process.env,
+    ...env,
+    ...(baseline === undefined ? {} : { HOOK_SLUG: "dotfiles:search-route" }),
+  };
+  const execute = (script: string) =>
+    spawnSync(process.execPath, [script], {
+      input,
+      env: hookEnv,
+      ...(cwd !== undefined && cwd !== "" ? { cwd } : {}),
+    });
+  const r = execute(join(HOOKS_DIR, name));
+  if (baseline !== undefined) {
+    const before = execute(baseline);
+    expect({
+      code: r.status,
+      stdout: r.stdout ?? Buffer.alloc(0),
+      stderr: r.stderr ?? Buffer.alloc(0),
+    }).toEqual({
+      code: before.status,
+      stdout: before.stdout ?? Buffer.alloc(0),
+      stderr: before.stderr ?? Buffer.alloc(0),
+    });
+  }
+  return {
+    code: r.status,
+    stdout: (r.stdout ?? Buffer.alloc(0)).toString("utf8"),
+    stderr: (r.stderr ?? Buffer.alloc(0)).toString("utf8"),
+  };
 }
 
 // The fields of a PreToolUse decision the hook tests read; a field the hook did not print is undefined.

@@ -57,7 +57,7 @@ import {
   type ShellCommand,
   effective as effectiveCommand,
   parseShell,
-} from "../../shell-command/src/shell-syntax.ts";
+} from "../../shared/src/shell-syntax.ts";
 import {
   type Obj,
   arr,

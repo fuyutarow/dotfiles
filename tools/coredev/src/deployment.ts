@@ -1,4 +1,5 @@
 import { jsonOf, z } from "../../shared/src/zod.ts";
+import { shellQuote } from "../../shared/src/read-path.ts";
 import { err, ok, type Result } from "neverthrow";
 
 export type HostKind = "linux" | "wsl" | "mac";
@@ -117,10 +118,6 @@ export async function executeSelection(
     write(`PASS ${step.task}`);
   }
   return ok(undefined);
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\"'\"'")}'`;
 }
 
 function remoteExecutable(command: Command): readonly string[] | undefined {

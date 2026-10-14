@@ -89,13 +89,12 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ~/dotfiles/
 ├── zsh/         # zshenv (tiny, SSH-safe), zshrc, aliases.zsh (+ IS_MAC/IS_WSL), mac.zsh / wsl.zsh
 ├── git/         # gitconfig + local.mac / local.wsl (per-OS include)
-├── tools/       # repo CLIs and libraries, one directory each (package.json with semver, CHANGELOG.md, src/, tests/); may import its own dir, tools/shared/, and the reusable tools/shell-command/ library
+├── tools/       # repo CLIs and libraries, one directory each (package.json with semver, CHANGELOG.md, src/, tests/); may import its own dir and tools/shared/
 │   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   ├── agx/ # agx (Jev-selected worker routing; append-only records stay in ~/.local/state/agx-next)
-│   ├── shell-command/ # Bash syntax parsing and hook path resolution
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
-│   └── shared/      # code several tools import (zod, attempt, narrow, typesafe-key, sockets, model-orders, worker-env)
+│   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, sockets, model-orders, worker-env)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
 ├── tmux/        # tmux.conf, clipboard.conf, scripts/ (status bar, layouts)
 ├── herdr/       # config.toml (agent multiplexer; tmux muscle-memory port)

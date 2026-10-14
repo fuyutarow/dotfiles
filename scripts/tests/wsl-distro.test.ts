@@ -1,11 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   generatePlan,
-  repairManagedSmartOpenTags,
+  normalizeManagedWslConfig,
+  repairConfigLocal,
+  unifiedConfigDiff,
   migratePrimaryConfig,
   updateConfigLocal,
   validateOptions,
@@ -69,7 +79,7 @@ describe("wsl:distro argument contract and dry-run plan", () => {
 });
 
 describe("~/.ssh/config.local writer", () => {
-  test("repairs a stale WSL block by inserting only the tag line", () => {
+  test("repairs a stale WSL block by adding its code alias and smart-open tag", () => {
     const fixture = [
       "# BEGIN dotfiles-wsl:r99-u26",
       "# WSL-Distro: r99-u26",
@@ -85,7 +95,7 @@ describe("~/.ssh/config.local writer", () => {
       "# BEGIN dotfiles-wsl:r99-u26",
       "# WSL-Distro: r99-u26",
       "# WSL-Wake: off",
-      "Host r99-u26",
+      "Host r99-u26 r99-u26-code",
       "    Tag smart-open",
       "    HostName localhost",
       "    Port 2226",
@@ -94,11 +104,17 @@ describe("~/.ssh/config.local writer", () => {
       "# END dotfiles-wsl:r99-u26",
     ].join("\n");
 
-    expect(repairManagedSmartOpenTags(fixture)).toBe(expected);
-    expect(repairManagedSmartOpenTags(expected)).toBe(expected);
+    expect(normalizeManagedWslConfig(fixture).contents).toBe(expected);
+    expect(normalizeManagedWslConfig(expected).contents).toBe(expected);
+    expect(normalizeManagedWslConfig(fixture).blocks).toEqual([
+      {
+        id: "r99-u26",
+        missing: ["r99-u26-code alias", "Tag smart-open"],
+      },
+    ]);
   });
 
-  test("repairs only untagged managed blocks and is idempotent", () => {
+  test("repairs only managed blocks and is idempotent", () => {
     const fixture = [
       "Host unmanaged",
       "    HostName unmanaged.invalid",
@@ -120,9 +136,7 @@ describe("~/.ssh/config.local writer", () => {
       "    User fuyu",
       "# END dotfiles-wsl:r99-u24",
     ].join("\n");
-    const repaired = repairManagedSmartOpenTags(fixture);
-    expect(repaired).not.toBeInstanceOf(Error);
-    if (repaired instanceof Error) return;
+    const repaired = normalizeManagedWslConfig(fixture).contents;
     expect(repaired).toContain(
       "# BEGIN dotfiles-wsl:r99-u26\n# WSL-Distro: Ubuntu-26.04\nHost r99-u26 r99-u26-code\n    Tag smart-open\n    HostName 100.110.117.86\n    Port 2226\n    User fuyu\n# END dotfiles-wsl:r99-u26",
     );
@@ -132,7 +146,151 @@ describe("~/.ssh/config.local writer", () => {
     expect(repaired).toContain(
       "# BEGIN dotfiles-wsl:r99-u24\n# WSL-Distro: Ubuntu-24.04\nHost r99-u24 r99-u24-code\n    Tag smart-open",
     );
-    expect(repairManagedSmartOpenTags(repaired)).toBe(repaired);
+    expect(normalizeManagedWslConfig(repaired).contents).toBe(repaired);
+  });
+
+  test("changes only the Host line when a managed block already has smart-open", () => {
+    const fixture = [
+      "Host private-box",
+      "    HostName private.invalid",
+      "# BEGIN dotfiles-wsl:r99-u26",
+      "# WSL-Distro: Ubuntu-26.04",
+      "Host r99-u26",
+      "    Tag smart-open",
+      "    HostName localhost",
+      "    Port 2226",
+      "    User fuyu",
+      "    ProxyJump r99",
+      "# END dotfiles-wsl:r99-u26",
+      "",
+    ].join("\r\n");
+    const expected = fixture.replace(
+      "Host r99-u26\r\n",
+      "Host r99-u26 r99-u26-code\r\n",
+    );
+
+    expect(normalizeManagedWslConfig(fixture).contents).toBe(expected);
+    expect(normalizeManagedWslConfig(expected).contents).toBe(expected);
+  });
+
+  test("check mode returns a unified diff and leaves a fixture untouched", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wsl-repair-check-"));
+    const path = join(root, "config.local");
+    const fixture =
+      "# BEGIN dotfiles-wsl:box\nHost box\n# END dotfiles-wsl:box\n";
+    writeFileSync(path, fixture, { mode: 0o600 });
+
+    const result = await repairConfigLocal(path, true);
+
+    expect(result).not.toBeInstanceOf(Error);
+    if (result instanceof Error) return;
+    expect(result.changed).toBe(true);
+    expect(result.diff).toContain("--- a/~/.ssh/config.local");
+    expect(result.diff).toContain("+Host box box-code");
+    expect(result.diff).toContain("+    Tag smart-open");
+    expect(readFileSync(path, "utf8")).toBe(fixture);
+    expect(readdirSync(root)).toEqual(["config.local"]);
+
+    writeFileSync(
+      path,
+      fixture.replace("Host box\n", "Host box box-code\n    Tag smart-open\n"),
+    );
+    const clean = await repairConfigLocal(path, true);
+    expect(clean).not.toBeInstanceOf(Error);
+    if (clean instanceof Error) return;
+    expect(clean).toEqual({ changed: false, diff: "" });
+    expect(readdirSync(root)).toEqual(["config.local"]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("repair-config --check exits 1 for pending changes and 0 when clean", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wsl-repair-cli-check-"));
+    const sshDir = join(root, ".ssh");
+    const path = join(sshDir, "config.local");
+    mkdirSync(sshDir, { mode: 0o700 });
+    const fixture =
+      "# BEGIN dotfiles-wsl:box\nHost box\n    Tag smart-open\n# END dotfiles-wsl:box\n";
+    writeFileSync(path, fixture, { mode: 0o600 });
+    const script = join(import.meta.dir, "..", "wsl-distro.ts");
+    const runCheck = () =>
+      Bun.spawn(["bun", script, "repair-config", "--check"], {
+        env: { ...process.env, HOME: root },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+    const pending = runCheck();
+    const [pendingOut, pendingErr, pendingExit] = await Promise.all([
+      new Response(pending.stdout).text(),
+      new Response(pending.stderr).text(),
+      pending.exited,
+    ]);
+    expect(pendingExit).toBe(1);
+    expect(pendingErr).toBe("");
+    expect(pendingOut).toContain("+Host box box-code");
+    expect(readFileSync(path, "utf8")).toBe(fixture);
+    expect(readdirSync(sshDir)).toEqual(["config.local"]);
+
+    writeFileSync(path, fixture.replace("Host box\n", "Host box box-code\n"));
+    const clean = runCheck();
+    const [cleanOut, cleanErr, cleanExit] = await Promise.all([
+      new Response(clean.stdout).text(),
+      new Response(clean.stderr).text(),
+      clean.exited,
+    ]);
+    expect(cleanExit).toBe(0);
+    expect(cleanErr).toBe("");
+    expect(cleanOut).toBe("");
+    expect(readdirSync(sshDir)).toEqual(["config.local"]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("apply backs up before atomic replacement, preserves mode, and skips clean files", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wsl-repair-apply-"));
+    const path = join(root, "config.local");
+    const fixture =
+      "# BEGIN dotfiles-wsl:box\nHost box\n    Tag smart-open\n# END dotfiles-wsl:box\n";
+    writeFileSync(path, fixture, { mode: 0o600 });
+    const inodeBefore = statSync(path).ino;
+
+    const result = await repairConfigLocal(path);
+
+    expect(result).not.toBeInstanceOf(Error);
+    if (result instanceof Error) return;
+    expect(result.changed).toBe(true);
+    expect(readFileSync(path, "utf8")).toBe(
+      fixture.replace("Host box\n", "Host box box-code\n"),
+    );
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(statSync(path).ino).not.toBe(inodeBefore);
+    const backup = readdirSync(root).find((name) =>
+      /^config\.local\.bak-\d{8}T\d{9}Z$/u.test(name),
+    );
+    expect(backup).toBeDefined();
+    expect(readFileSync(join(root, backup ?? ""), "utf8")).toBe(fixture);
+    expect(
+      readdirSync(root).filter((name) => name.includes(".tmp-")).length,
+    ).toBe(0);
+
+    const inodeClean = statSync(path).ino;
+    const entriesClean = readdirSync(root).toSorted();
+    const clean = await repairConfigLocal(path);
+    expect(clean).toEqual({ changed: false, diff: "" });
+    expect(statSync(path).ino).toBe(inodeClean);
+    expect(readdirSync(root).toSorted()).toEqual(entriesClean);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("unified diff is empty for identical config and includes line context", () => {
+    expect(unifiedConfigDiff("same\n", "same\n")).toBe("");
+    expect(
+      unifiedConfigDiff(
+        "before\nHost box\nafter\n",
+        "before\nHost box box-code\nafter\n",
+      ),
+    ).toContain(
+      "@@ -1,3 +1,3 @@\n before\n-Host box\n+Host box box-code\n after",
+    );
   });
 
   test("marks the renamed primary and requested alias idempotently without changing other blocks", async () => {

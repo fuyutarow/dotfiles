@@ -1,6 +1,9 @@
 import { cli } from "cleye";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { chmod, copyFile, rename, stat, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 export type Options = {
   name: string;
@@ -125,50 +128,229 @@ function markedContents(contents: string, id: string): string | undefined {
     : lines.slice(begin, end + 1).join("\n");
 }
 
-/** Whether a dotfiles-managed block opts into smart-open; undefined means unmanaged/missing. */
-export function managedBlockHasSmartOpenTag(
-  contents: string,
-  id: string,
-): boolean | undefined {
-  const block = markedContents(contents, id);
-  return block === undefined
-    ? undefined
-    : /^\s*Tag\s+smart-open\s*$/imu.test(block);
-}
+export type ManagedWslBlockNormalization = { id: string; missing: string[] };
+export type ManagedWslNormalization = {
+  contents: string;
+  blocks: ManagedWslBlockNormalization[];
+};
 
-/** Add the current smart-open tag only to valid managed blocks that are missing it. */
-export function repairManagedSmartOpenTags(contents: string): string | Error {
+/** Normalize all marked WSL blocks and report which declared pieces were absent. */
+export function normalizeManagedWslConfig(
+  contents: string,
+): ManagedWslNormalization {
   const ids = [
     ...contents.matchAll(
       /^# BEGIN dotfiles-wsl:([A-Za-z0-9][A-Za-z0-9._-]*)\s*$/gmu,
     ),
-  ]
-    .map((match) => match[1] ?? "")
-    .filter((id) => managedBlockHasSmartOpenTag(contents, id) === false);
+  ].map((match) => match[1] ?? "");
   let updated = contents;
+  const blocks: ManagedWslBlockNormalization[] = [];
   for (const id of ids) {
     const block = markedContents(updated, id);
-    if (block === undefined)
-      return new Error(`the ${id} config block has no matching END marker`);
-    const hostLine = /^[ \t]*Host[ \t]+[^\r\n]*(\r\n|\n)/mu.exec(block);
-    if (hostLine === null)
-      return new Error(
-        `the ${id} config block needs a Host line ending in a newline`,
-      );
+    if (block === undefined) {
+      blocks.push({ id, missing: ["matching END marker"] });
+      continue;
+    }
+    const missing: string[] = [];
+    const hasSmartOpen = /^\s*Tag\s+smart-open\s*$/imu.test(block);
+    const hostLine = /^([ \t]*Host[ \t]+)([^\r\n]*?)([ \t]*)(\r\n|\n)/mu.exec(
+      block,
+    );
+    if (hostLine === null) {
+      blocks.push({ id, missing: ["Host line"] });
+      continue;
+    }
+    const aliases =
+      hostLine[2]
+        ?.trim()
+        .split(/[ \t]+/u)
+        .filter(Boolean) ?? [];
+    const hasCodeAlias = aliases.includes(`${id}-code`);
+    if (!hasCodeAlias) missing.push(`${id}-code alias`);
+    if (!hasSmartOpen) missing.push("Tag smart-open");
     const begin = updated.indexOf(`# BEGIN dotfiles-wsl:${id}`);
-    const insertAt = begin + hostLine.index + hostLine[0].length;
-    updated = `${updated.slice(0, insertAt)}    Tag smart-open${hostLine[1]}${updated.slice(insertAt)}`;
+    const hostStart = begin + hostLine.index;
+    const hostEnd = hostStart + hostLine[0].length;
+    let hostReplacement = hostLine[0];
+    if (!hasCodeAlias) {
+      const separator = hostLine[2] === "" ? "" : " ";
+      hostReplacement = `${hostLine[1]}${hostLine[2]}${separator}${id}-code${hostLine[3]}${hostLine[4]}`;
+    }
+    updated = `${updated.slice(0, hostStart)}${hostReplacement}${updated.slice(hostEnd)}`;
+    if (!hasSmartOpen) {
+      const tagAt = hostStart + hostReplacement.length;
+      updated = `${updated.slice(0, tagAt)}    Tag smart-open${hostLine[4]}${updated.slice(tagAt)}`;
+    }
+    blocks.push({ id, missing });
   }
-  return updated;
+  return { contents: updated, blocks };
 }
 
-export async function repairConfigLocal(path: string): Promise<void | Error> {
+function diffLines(contents: string): string[] {
+  if (contents === "") return [];
+  const lines = contents.split(/\r?\n/u);
+  if (contents.endsWith("\n")) lines.pop();
+  return lines;
+}
+
+/** A compact unified diff for the line-preserving normalizer's output. */
+export function unifiedConfigDiff(
+  before: string,
+  after: string,
+  label = "~/.ssh/config.local",
+): string {
+  if (before === after) return "";
+  const oldLines = diffLines(before);
+  const newLines = diffLines(after);
+  const width = newLines.length + 1;
+  const cells = (oldLines.length + 1) * width;
+  if (cells > 4_000_000) {
+    const oldStart = oldLines.length === 0 ? 0 : 1;
+    const newStart = newLines.length === 0 ? 0 : 1;
+    return [
+      `--- a/${label}`,
+      `+++ b/${label}`,
+      `@@ -${oldStart},${oldLines.length} +${newStart},${newLines.length} @@`,
+      ...oldLines.map((line) => `-${line}`),
+      ...newLines.map((line) => `+${line}`),
+      "",
+    ].join("\n");
+  }
+  const lcs = new Uint32Array((oldLines.length + 1) * width);
+  for (let oldIndex = oldLines.length - 1; oldIndex >= 0; oldIndex -= 1) {
+    for (let newIndex = newLines.length - 1; newIndex >= 0; newIndex -= 1) {
+      const here = oldIndex * width + newIndex;
+      lcs[here] =
+        oldLines[oldIndex] === newLines[newIndex]
+          ? 1 + (lcs[(oldIndex + 1) * width + newIndex + 1] ?? 0)
+          : Math.max(
+              lcs[(oldIndex + 1) * width + newIndex] ?? 0,
+              lcs[oldIndex * width + newIndex + 1] ?? 0,
+            );
+    }
+  }
+  const operations: Array<{
+    kind: "context" | "delete" | "add";
+    line: string;
+    oldBefore: number;
+    newBefore: number;
+  }> = [];
+  let oldIndex = 0;
+  let newIndex = 0;
+  while (oldIndex < oldLines.length || newIndex < newLines.length) {
+    const oldLine = oldLines[oldIndex];
+    const newLine = newLines[newIndex];
+    if (oldLine !== undefined && oldLine === newLine) {
+      operations.push({
+        kind: "context",
+        line: oldLine,
+        oldBefore: oldIndex,
+        newBefore: newIndex,
+      });
+      oldIndex += 1;
+      newIndex += 1;
+    } else if (
+      oldLine !== undefined &&
+      (newLine === undefined ||
+        (lcs[(oldIndex + 1) * width + newIndex] ?? 0) >=
+          (lcs[oldIndex * width + newIndex + 1] ?? 0))
+    ) {
+      operations.push({
+        kind: "delete",
+        line: oldLine,
+        oldBefore: oldIndex,
+        newBefore: newIndex,
+      });
+      oldIndex += 1;
+    } else if (newLine !== undefined) {
+      operations.push({
+        kind: "add",
+        line: newLine,
+        oldBefore: oldIndex,
+        newBefore: newIndex,
+      });
+      newIndex += 1;
+    }
+  }
+  const changed = operations.flatMap((operation, index) =>
+    operation.kind === "context" ? [] : [index],
+  );
+  const hunks: Array<[number, number]> = [];
+  for (const index of changed) {
+    const start = Math.max(0, index - 3);
+    const end = Math.min(operations.length, index + 4);
+    const previous = hunks.at(-1);
+    if (previous !== undefined && start <= previous[1]) previous[1] = end;
+    else hunks.push([start, end]);
+  }
+  const lines = [`--- a/${label}`, `+++ b/${label}`];
+  const prefixes = { context: " ", delete: "-", add: "+" };
+  for (const [start, end] of hunks) {
+    const hunk = operations.slice(start, end);
+    const first = hunk[0];
+    if (first === undefined) continue;
+    const oldCount = hunk.filter(
+      (operation) => operation.kind !== "add",
+    ).length;
+    const newCount = hunk.filter(
+      (operation) => operation.kind !== "delete",
+    ).length;
+    const oldStart = first.oldBefore + (oldCount === 0 ? 0 : 1);
+    const newStart = first.newBefore + (newCount === 0 ? 0 : 1);
+    lines.push(`@@ -${oldStart},${oldCount} +${newStart},${newCount} @@`);
+    for (const operation of hunk) {
+      lines.push(`${prefixes[operation.kind]}${operation.line}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+export type RepairConfigResult = { changed: boolean; diff: string };
+
+export async function repairConfigLocal(
+  path: string,
+  check = false,
+): Promise<RepairConfigResult | Error> {
   const contents = await Bun.file(path)
     .text()
-    .catch(() => "");
-  const updated = repairManagedSmartOpenTags(contents);
-  if (updated instanceof Error) return updated;
-  await Bun.write(path, updated);
+    .catch(
+      (error: unknown) => new Error(`could not read ${path}: ${String(error)}`),
+    );
+  if (contents instanceof Error) return contents;
+  const normalized = normalizeManagedWslConfig(contents).contents;
+  const diff = unifiedConfigDiff(contents, normalized);
+  if (normalized === contents || check)
+    return { changed: normalized !== contents, diff };
+  const fileInfo = await stat(path).catch(
+    (error: unknown) => new Error(`could not stat ${path}: ${String(error)}`),
+  );
+  if (fileInfo instanceof Error) return fileInfo;
+  const timestamp = Temporal.Now.instant().toString({
+    fractionalSecondDigits: 3,
+  });
+  const backupPath = `${path}.bak-${timestamp.replaceAll(/[-:.]/gu, "")}`;
+  const backup = await copyFile(path, backupPath, constants.COPYFILE_EXCL)
+    .then(() => true)
+    .catch(
+      (error: unknown) =>
+        new Error(`could not create backup ${backupPath}: ${String(error)}`),
+    );
+  if (backup instanceof Error) return backup;
+  const temporary = join(
+    dirname(path),
+    `.${basename(path)}.tmp-${randomUUID()}`,
+  );
+  const write = await Bun.write(temporary, normalized)
+    .then(() => chmod(temporary, fileInfo.mode & 0o777))
+    .then(() => rename(temporary, path))
+    .then(() => true)
+    .catch(async (error: unknown) => {
+      await unlink(temporary).catch(() => null);
+      return new Error(
+        `could not atomically replace ${path}: ${String(error)}`,
+      );
+    });
+  return write instanceof Error ? write : { changed: true, diff };
 }
 
 function blockHostName(block: string): string | undefined {
@@ -524,6 +706,11 @@ async function main(): Promise<number | Error> {
           default: false,
           description: "print every planned command without running it",
         },
+        check: {
+          type: Boolean,
+          default: false,
+          description: "show pending config repairs without writing",
+        },
       },
     },
     undefined,
@@ -534,13 +721,21 @@ async function main(): Promise<number | Error> {
       return new Error(`Unexpected argument '${String(parsed._[0])}'`);
     const repaired = await repairConfigLocal(
       join(homedir(), ".ssh", "config.local"),
+      parsed.flags.check,
     );
     if (repaired instanceof Error) return repaired;
+    if (parsed.flags.check && repaired.diff !== "")
+      process.stdout.write(repaired.diff);
+    if (parsed.flags.check) return repaired.changed ? 1 : 0;
     process.stdout.write(
-      "repaired managed WSL smart-open tags in ~/.ssh/config.local\n",
+      repaired.changed
+        ? "repaired managed WSL code aliases and smart-open tags in ~/.ssh/config.local\n"
+        : "managed WSL config in ~/.ssh/config.local is already normalized\n",
     );
     return 0;
   }
+  if (parsed.flags.check)
+    return new Error("--check requires the repair-config action");
   const options = validateOptions(parsed);
   if (options instanceof Error) return options;
   const plan = generatePlan(options);

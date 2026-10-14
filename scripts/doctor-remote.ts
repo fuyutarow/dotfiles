@@ -22,7 +22,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
-import { managedBlockHasSmartOpenTag } from "./wsl-distro.ts";
+import { normalizeManagedWslConfig } from "./wsl-distro.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 type Finding = { name: string; verdict: Verdict; detail: string; fix?: string };
@@ -364,15 +364,18 @@ async function checkCommands(host: string): Promise<Finding> {
       );
 }
 
-export function managedSmartOpenConfigFinding(
+export function managedWslConfigFinding(
   host: string,
   configLocal: string,
 ): Finding | undefined {
-  return managedBlockHasSmartOpenTag(configLocal, host) === false
+  const block = normalizeManagedWslConfig(configLocal).blocks.find(
+    (candidate) => candidate.id === host,
+  );
+  return block !== undefined && block.missing.length > 0
     ? finding(
-        "smart-open",
+        "wsl-config",
         "FAIL",
-        `${host} is a managed dotfiles WSL block without Tag smart-open`,
+        `${host} is a managed dotfiles WSL block missing ${block.missing.join(", ")}`,
         "mise run wsl:repair",
       )
     : undefined;
@@ -382,7 +385,7 @@ async function checkSmartOpen(host: string): Promise<Finding> {
   const configLocal = await Promise.try(() =>
     readFileSync(join(homedir(), ".ssh", "config.local"), "utf8"),
   ).catch(() => "");
-  const managedFinding = managedSmartOpenConfigFinding(host, configLocal);
+  const managedFinding = managedWslConfigFinding(host, configLocal);
   if (managedFinding !== undefined) return managedFinding;
   const g = await run(["ssh", "-G", host], null, 10_000);
   const forward = g.out

@@ -720,8 +720,9 @@ description = "Create a named WSL distro and SSH alias; requires r99-u24 running
 run = 'bun ~/dotfiles/scripts/wsl-distro.ts'
 
 [tasks."wsl:repair"]
-description = "Add Tag smart-open to untagged dotfiles-managed WSL blocks in ~/.ssh/config.local; does not provision WSL."
-run = 'bun ~/dotfiles/scripts/wsl-distro.ts repair-config'
+description = "Add missing <alias>-code aliases and Tag smart-open to dotfiles-managed WSL blocks in ~/.ssh/config.local. --check prints a diff without writing."
+dir = "{{config_root}}"
+run = "bun scripts/wsl-distro.ts repair-config"
 
 # READ-ONLY resource evidence, both halves at once. It is the second half that carries the
 # signal: every r99 outage this repo debugged was INVISIBLE from inside the guest — C: at 1.08 MB

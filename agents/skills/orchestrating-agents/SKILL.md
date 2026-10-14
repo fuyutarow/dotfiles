@@ -79,8 +79,8 @@ artifact が無い規則は、実行済みとして数えない。
 | `acceptance` | 凍結した完成定義に対する監督の最終採否。 |
 | `candidate packet` | 候補、証拠、仮定、弱点、費用を揃えた正規化単位。 |
 | `LOW-EFFORT(<段>)` | 既定より低い effort で腕を発射するときに prompt へ置く grep 可能な宣言。 |
-| `RESOURCE-CLASS(NONCOMPUTE)` | 数値実験、benchmark、resident service、parallel test、nested fanoutを含まないdispatchの宣言。 |
-| `RESOURCE-ENVELOPE(<path>)` | 発射前に凍結したCPU/RAM/VRAM/process/walltime envelopeへの絶対path。 |
+| Compute resource admission | 数値実験などのcompute workはP7で資源上限を決め、必要なら `agent-resource-run` にenvelopeを渡す。 |
+| agx ticket | resource declaration lineは不要。worker dispatchは `agx run <ticket>` を使う。 |
 
 ## LAW
 
@@ -357,7 +357,7 @@ agent枠と計算資源を別々に扱う。独立した有益な仕事は利用
 
 | 担い手 | 起動 | 並列にするとき | 受け取るもの |
 |---|---|---|---|
-| luna 行 | main loop の Bash で `agx dispatch --prompt-file <brief> --cd <dir> --sandbox none\|read-only\|workspace-write`（none は network または ssh が必要な worker に明示指定）（唯一の入口。`--choice` を省くと Jev が行を選び、確信が足りなければ既定の行に理由つきで戻る。`--choice <id>` で指定も可） | 各呼び出しを background で起動する | 各 JSON receipt（`outcome`、`usage`、`last_message`） |
+| luna 行 | main loop の Bash で `agx run <ticket> [--cd <dir>] [--sandbox none\|read-only\|workspace-write]`。Jev が roster から worker を選択する。 | durable run は `systemd-run --user --unit=agx-<name> --collect -- agx run …` | `agx ls` の run record と worker の最終 RETURN |
 | Claude 行（roster で `enabled = true` のときだけ。2026-10-05 の config は全て off） | Agent tool、`subagent_type` = 行の id | 一つの message に複数の Agent 呼び出しを並べる | agent の最終 text |
 | 他の CLI（grok、agy、ccc など） | 各 `driving-*` skill の一回呼び出しを Bash で | 各呼び出しを background で起動する | 各 skill が定める受領形 |
 

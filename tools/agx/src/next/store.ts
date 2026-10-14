@@ -91,7 +91,7 @@ export function events(): NextEvent[] {
   const invalid = parsed.find((event) => !event.success);
   if (invalid !== undefined) {
     process.stderr.write(
-      `agx-next: invalid record log line: ${invalid.error.message}\n`,
+      `agx: invalid record log line: ${invalid.error.message}\n`,
     );
     process.exit(1);
   }

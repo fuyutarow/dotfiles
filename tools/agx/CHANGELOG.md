@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.0 — 2026-10-14
+
+- Switch `agx` to the five-command CLI: `run`, `check`, `ls`, `judge`, and `stats`; retain `agx-next` as a one-release alias.
+- Remove the legacy dispatch router, ticket store, lease/lifecycle implementation, grader, detach controls, and old command modules.
+- Remove resource-declaration requirements from dispatch hooks and policy; use `systemd-run --user --unit=agx-<name> --collect -- agx run …` for durable runs.
+
 ## 3.8.0 — 2026-10-14
 
 - Add the parallel `agx-next` CLI with five commands and one append-only event log; preserve the existing `agx` entrypoint.

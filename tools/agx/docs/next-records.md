@@ -1,13 +1,13 @@
-# agx-next records
+# agx run records
 
-`agx-next` stores one append-only JSONL file at `$AGX_NEXT_STATE_DIR/records.jsonl`
+`agx` (also available as `agx-next` for one release) stores one append-only JSONL file at `$AGX_NEXT_STATE_DIR/records.jsonl`
 (default: `$AGX_STATE_DIR/records.jsonl` when that override is set, otherwise
 `$XDG_STATE_HOME/agx-next/records.jsonl` or `~/.local/state/agx-next/records.jsonl`).
 Each line is one event. Readers ignore an incomplete trailing line and reject malformed
 complete lines. Event `at` values are RFC 3339 timestamps. Ticket paths are positional:
-`agx-next check TICKET.md` and `agx-next run TICKET.md --cd TREE`.
-Judgments use `agx-next judge RUN_ID accept|reject [--note TEXT]`; a continuation
-uses `agx-next run TICKET.md --continue PREVIOUS_RUN_ID`.
+`agx check TICKET.md` and `agx run TICKET.md --cd TREE`.
+Judgments use `agx judge RUN_ID accept|reject [--note TEXT]`; a continuation
+uses `agx run TICKET.md --continue PREVIOUS_RUN_ID`.
 
 The next ticket schema requires `proposition.id`, `proposition.claim`, and
 `proposition.refuted_by`; legacy `decides`, `serves`, and `graph_node` are optional
@@ -31,7 +31,7 @@ Ticket validation and premise refusals exit 2.
 - `judged`: `{ "kind": "judged", "id", "at", "decision", "note" }`.
 
 Imported events may carry `legacy_key`, a deterministic deduplication key.
-`agx-next stats --import-legacy` reads `runs*.jsonl` from `$AGX_STATE_DIR` (default
+`agx stats --import-legacy` reads `runs*.jsonl` from `$AGX_STATE_DIR` (default
 `~/.local/state/agx`), folds `run`, `acceptance`, `grade`, `grade-waived`, `interim`,
 and `landed` rows into the same event log, skips malformed lines, and reports import
 counts. Importing the same source again adds no duplicate events.
@@ -40,7 +40,7 @@ Events are append-only. The current run view folds events by `id`: the latest
 progress and judgment win; a `started` with no `ended` is `running` while its
 dispatcher process exists and `orphaned` otherwise; a run with `ended` is `ended`.
 
-## `agx-next ls --json`
+## `agx ls --json`
 
 The output is an array of objects with these contract fields:
 
@@ -58,7 +58,7 @@ The output is an array of objects with these contract fields:
 | `judgment` | `null` or `{ "decision", "note" }`. |
 | `report_path` | Final report path, or `null` until ended. |
 | `last_progress_path` | Most recent interim-return path, or `null`. |
-| `continues` | Previous agx-next run id supplied via `--continue`, or `null` for a fresh run. |
+| `continues` | Previous agx run id supplied via `--continue`, or `null` for a fresh run. |
 | `vendor_session` | Latest worker vendor session identifier, or `null`. |
 
 ## Behavior notes

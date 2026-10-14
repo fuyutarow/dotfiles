@@ -109,22 +109,28 @@ describe("dispatch roster", () => {
     rmSync(folder, { recursive: true, force: true });
   });
 
-  test("rendered roster policy gives codex the tie-break when capability is comparable", async () => {
+  test("rendered roster policy describes the five agx commands", async () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     const policy = rosterPolicy(loaded.value);
-    const sentence = policy.split("\n")[0] ?? "";
-    expect(sentence).toContain(
-      "when a codex and a claude row are comparable, pick codex",
+    expect(policy.split("\n")[0]).toContain(
+      "when codex and claude rows are comparable, choose codex",
     );
-    expect(policy).toContain("`--choice` is refused");
-    expect(policy).toContain("the default `luna-high` runs");
-    expect(policy).toContain("hard worker bound defaults to 600 seconds");
-    expect(policy).toContain("hard maximum 14400");
-    expect(policy).toContain("values above 600 require `timeout_reason`");
-    expect(policy).toContain("outcome `returned`");
-    expect(policy).toContain("--sandbox none|read-only|workspace-write");
-    expect(policy).toContain("workers that need network or ssh");
+    for (const command of [
+      "agx run",
+      "agx check",
+      "agx ls",
+      "agx judge",
+      "agx stats",
+    ])
+      expect(policy).toContain(command);
+    expect(policy).toContain(
+      "systemd-run --user --unit=agx-<name> --collect -- agx run",
+    );
+    expect(policy).toContain("--continue");
+    expect(policy).not.toMatch(/\bagx (?:dispatch|ticket|ps|ledger)\b/u);
+    expect(policy).not.toContain("RESOURCE-CLASS");
+    expect(policy).not.toContain("Ticket amend");
   });
 });

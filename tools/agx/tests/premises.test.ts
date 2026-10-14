@@ -16,9 +16,12 @@ const docs = join(scratch, "docs");
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
-mkdirSync(source);
+mkdirSync(join(source, "next"), { recursive: true });
 mkdirSync(docs);
-writeFileSync(join(source, "main.ts"), "export function routeWorker() {}\n");
+writeFileSync(
+  join(source, "next", "cli.ts"),
+  "export function routeWorker() {}\n",
+);
 writeFileSync(join(docs, "design.md"), "routeWorker is the entry point\n");
 
 const fakeRg = (argv: string[], cwd: string) => {
@@ -26,7 +29,7 @@ const fakeRg = (argv: string[], cwd: string) => {
   const glob = patternAt < 0 ? undefined : argv[patternAt + 1];
   const separator = argv.indexOf("--");
   const needle = argv[separator + 1] ?? "";
-  const paths = ["src/main.ts", "docs/design.md"].filter(
+  const paths = ["src/next/cli.ts", "docs/design.md"].filter(
     (path) => glob === undefined || new Bun.Glob(glob).match(path),
   );
   const matches = paths.filter((path) =>
@@ -38,7 +41,7 @@ const fakeRg = (argv: string[], cwd: string) => {
 describe("premise checks", () => {
   test("present file and symbol premises pass", () => {
     expect(
-      checkPremises(["file:src/main.ts", "symbol:routeWorker"], scratch, {
+      checkPremises(["file:src/next/cli.ts", "symbol:routeWorker"], scratch, {
         runner: fakeRg,
       }),
     ).toEqual({ status: "ok" });

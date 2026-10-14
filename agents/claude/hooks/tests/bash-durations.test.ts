@@ -33,10 +33,7 @@ describe("commandKey", () => {
     ["mise run commit -- -m x --push -- a.ts", "mise run commit"],
     ["cd /Users/fuyu/dotfiles && mise run commit -- -m x", "mise run commit"],
     ["FOO=1 bun test scripts/tests/x.test.ts", "bun test"],
-    [
-      "agx dispatch --prompt-file b.md --cd x",
-      "agx dispatch --prompt-file --cd",
-    ],
+    ["agx run b.md --cd x", "agx run --cd"],
     [
       "polysearch leaderboard --all --format json",
       "polysearch leaderboard --all --format",

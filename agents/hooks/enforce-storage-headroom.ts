@@ -834,7 +834,7 @@ export function agxWorkspaceAddReason(
   const parsed = parseShell(command, cwd);
   if (parsed === undefined)
     return /\bjj\s+workspace\s+add\b/u.test(command)
-      ? "cannot resolve this jj workspace add; use `agx dispatch --workspace`"
+      ? "cannot resolve this jj workspace add; use the sparse workspace workflow"
       : null;
   for (const c of parsed.commands) {
     const add = workspaceAdd(c);
@@ -848,7 +848,7 @@ export function agxWorkspaceAddReason(
       continue;
     const root = checkoutRoot(add);
     if (root !== null && existsSync(join(root, ".agx.toml")))
-      return `refusing raw jj workspace add in a repo with .agx.toml; use agx dispatch --workspace`;
+      return "refusing raw jj workspace add in a repo with .agx.toml; use the sparse workspace workflow";
   }
   return null;
 }
@@ -882,11 +882,10 @@ export function isRecoveryOrRead(command: string, cwd: string): boolean {
       const [sub = "", third = ""] = eff.args;
       if (eff.name === "cargo" && sub === "clean")
         return cargoCleanInProject(c);
-      // Ticket write scope is not visible in this command line. Dispatch state is small, and
-      // every spawned worker still passes through its own storage gate.
+      // agx writes bounded run records; its worker still passes through the storage gate.
       if (
         eff.name === "agx" &&
-        ["run", "resume", "grade", "ack", "stats"].includes(sub)
+        ["run", "check", "ls", "judge", "stats"].includes(sub)
       )
         return true;
       if (eff.name === "disk-reclaim" || eff.name === "storage-headroom")

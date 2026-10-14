@@ -293,7 +293,7 @@ export function parseTicket(text: string): ParsedBrief {
     return {
       kind: "invalid",
       reason:
-        "a brief starts with +++ ticket front matter (agx ticket new prints a skeleton)",
+        "a ticket starts with +++ front matter; save it as a file and pass it to agx run",
     };
   const end = lines.findIndex((l, i) => i > 0 && isFence(l));
   if (end === -1)

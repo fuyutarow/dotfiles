@@ -277,7 +277,7 @@ function decideWithEnv(command: string, env: NodeJS.ProcessEnv): string {
 // outer shell (firedancer coordinator, 2026-10-08): denied unless the script waits for the job.
 describe("unwaitedJobs", () => {
   const INCIDENT =
-    "agx dispatch --resume run-123 --prompt-file /tmp/brief.md > /tmp/out.log 2>&1 &";
+    "agx run /tmp/brief.md --continue run-123 > /tmp/out.log 2>&1 &";
 
   test.each([
     ["the incident command", INCIDENT],
@@ -332,7 +332,7 @@ describe("unwaitedJobs", () => {
 
 describe("shell-level & as a hook", () => {
   const INCIDENT =
-    "agx dispatch --resume run-123 --prompt-file /tmp/brief.md > /tmp/out.log 2>&1 &";
+    "agx run /tmp/brief.md --continue run-123 > /tmp/out.log 2>&1 &";
 
   test.each([
     INCIDENT,

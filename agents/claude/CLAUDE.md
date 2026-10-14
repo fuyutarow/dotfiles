@@ -8,12 +8,10 @@
 <!-- roster:begin -->
 <!-- The dispatch policy is rendered HERE at deploy time (scripts/render-home.ts, from agents/models/dispatch-roster.toml) into ~/.claude/CLAUDE.md. This file keeps only the markers: one writer per file. -->
 <!-- roster:end -->
-- **Every dispatch declares its resource class exactly once.** Use
-  `RESOURCE-CLASS(NONCOMPUTE): <reason>` only when the arm contains no numerical experiment,
-  benchmark, resident service, parallel test, or nested fanout. Otherwise use
-  `RESOURCE-ENVELOPE(/absolute/path.json): agent-resource-run only`; pilot is not exempt.
-  The hook denies missing, malformed, relative-path, or duplicate declarations. The schema and
-  GPU-first/CPU-exception rules live only in `orchestrating-agents` P7.
+- **Dispatch workers through agx's five commands.** Start with `agx run <ticket>`; use
+  `agx check <ticket>`, `agx ls`, `agx judge <run> accept|reject`, and `agx stats` as needed.
+  Durable runs use `systemd-run --user --unit=agx-<name> --collect -- agx run …`; continue a
+  vendor session with `agx run <ticket> --continue <run>`.
 - **Execution stays observable; durability is earned, not stolen.** A PreToolUse hook denies
   Bash that orphans work to init — `setsid` (bare), `nohup`, `disown`, a detacher inside a
   nested shell string, detached `tmux`/`screen` launches, and `at`/`batch`/`crontab` writes.
@@ -21,10 +19,9 @@
   waits, and agent-resource-run's own launch form) and `systemd-run --user --unit=<name>`
   (manager-owned, so stoppable, journal-streamed, and exit-status recorded) stay open. Order of
   preference: `run_in_background:true` to watch it now → `agent-resource-run --manifest` for
-  compute → a named transient user unit to outlive the session. If none fit, STOP and say so;
-  do not invent a fourth way. Live jobs and orphan count render in the statusline's `Job:`
-  segment. NOTE: `agent-resource-run` still admits via `--scope` (caller-owned), so an admitted
-  multi-hour job dies with its caller — the durable `--detach` mode is not built yet.
+  compute → `systemd-run --user --unit=agx-<name> --collect -- agx run …` for durable agx runs.
+  If none fit, STOP and say so; do not invent another way. Live jobs and orphan count render in
+  the statusline's `Job:` segment.
 - **ccc-registered repos: raw search is banned; say WHAT you are looking for through `rr`.**
   (覆せる既定 2026-07-30) When ccc is installed and `.cocoindex_code/settings.yml` exists,
   a PreToolUse hook denies raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious

@@ -543,17 +543,17 @@ describe("enforce-storage-headroom", () => {
       5 * GiB,
       100 * GiB,
     );
-    for (const subcommand of ["run", "resume", "grade", "ack", "stats"]) {
+    for (const subcommand of ["run", "check", "ls", "judge", "stats"]) {
       expect(
         decisionOf(runHook(HOOK, bash(`agx ${subcommand}`), env).stdout),
       ).toBeNull();
     }
     expect(
-      decisionOf(runHook(HOOK, bash("agx pick ask"), env).stdout)
+      decisionOf(runHook(HOOK, bash("agx unknown"), env).stdout)
         ?.permissionDecision,
     ).toBe("deny");
     expect(
-      decisionOf(runHook(HOOK, bash("agx ledger stats && cp x y"), env).stdout)
+      decisionOf(runHook(HOOK, bash("agx stats && cp x y"), env).stdout)
         ?.permissionDecision,
     ).toBe("deny");
   });

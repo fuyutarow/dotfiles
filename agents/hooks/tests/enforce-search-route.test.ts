@@ -250,8 +250,8 @@ describe("enforce-search-route", () => {
   test("ignores search words in ticket text and heredoc bodies", () => {
     const project = registerProject();
     for (const command of [
-      `agx dispatch --prompt 'Please use grep to inspect the ticket'`,
-      `agx dispatch --prompt-file /tmp/ticket-with-grep.md`,
+      `agx run /tmp/ticket.md --sandbox read-only`,
+      `agx run /tmp/ticket-with-grep.md`,
       `cat <<'TICKET'\nThe ticket asks to use grep and rg.\nTICKET`,
       `printf '%s' 'grep is mentioned in this ticket'`,
     ]) {
@@ -268,9 +268,9 @@ describe("enforce-search-route", () => {
     for (const command of [
       "rr text 'needle' | grep -F -e X",
       "jj workspace list | awk '{print $1}'",
-      "agx ps | grep run-123",
-      "agx ps --all 2>&1 | grep -E 'a|b'",
-      "agx ps --all --json | jq -r .x | rg -i y | head",
+      "agx ls | grep run-123",
+      "agx ls 2>&1 | grep -E 'a|b'",
+      "agx ls --json | jq -r .x | rg -i y | head",
       "journalctl -u service | rg -v x | head",
       "bun test agents/hooks/tests | rg -v 'pass' | head -n 20",
       "jj log --limit 10 | rg -E -v -i 'foo|bar'",
@@ -287,19 +287,19 @@ describe("enforce-search-route", () => {
   test("allows the live PreToolUse reproduction through downstream text stages", () => {
     const project = registerProject();
     for (const command of [
-      "agx show pushrace 2>&1 | grep -e '^VERIFY' -e 'result='",
-      "cd /home/fuyu/dotfiles && agx show pushrace 2>&1 | grep -e A -e B",
-      "agx show pushrace 2>&1 | grep -e A -e B | cut -c1-150",
-      "cd /home/fuyu/dotfiles && agx show pushrace 2>&1 | grep -e '^VERIFY' -e 'result=' | cut -c1-150",
+      "agx ls --json 2>&1 | grep -e '^VERIFY' -e 'result='",
+      "cd /home/fuyu/dotfiles && agx ls --json 2>&1 | grep -e A -e B",
+      "agx ls --json 2>&1 | grep -e A -e B | cut -c1-150",
+      "cd /home/fuyu/dotfiles && agx ls --json 2>&1 | grep -e '^VERIFY' -e 'result=' | cut -c1-150",
       "rr text x 2>&1 | grep -F -e y | head",
-      "agx ps | grep x | tail -n 5",
-      "agx ps | grep x | sort -r | uniq -c | wc -l",
-      "agx ps | grep x | tr a-z A-Z",
-      "agx ps | grep x | jq -r '.name'",
-      "agx ps | grep x | jq --arg key value '.name + $key'",
-      "agx ps | grep x | awk '{print $1}'",
-      "agx ps | grep x | sed -n '1p'",
-      "agx ps | grep x | sed -e '1p' -e '2p'",
+      "agx ls | grep x | tail -n 5",
+      "agx ls | grep x | sort -r | uniq -c | wc -l",
+      "agx ls | grep x | tr a-z A-Z",
+      "agx ls --json | jq -r '.name'",
+      "agx ls --json | jq --arg key value '.name + $key'",
+      "agx ls | awk '{print $1}'",
+      "agx ls | sed -n '1p'",
+      "agx ls | sed -e '1p' -e '2p'",
     ]) {
       const result = runHook(HOOK, bashPayload(project, command), withCcc());
       expect({ command, decision: decisionOf(result.stdout) }).toEqual({
@@ -318,9 +318,9 @@ describe("enforce-search-route", () => {
       "awk '{print}' agents/hooks/enforce-search-route.ts | rg foo",
       "find . -type f | grep foo",
       "ls -laR . | rg foo",
-      "agx ps --all | grep -f agents/hooks/patterns.txt",
+      "agx ls | grep -f agents/hooks/patterns.txt",
       "grep -r foo .",
-      "agx ps --all | grep foo | xargs cat",
+      "agx ls | grep foo | xargs cat",
     ]) {
       expect({
         command,
@@ -352,7 +352,7 @@ describe("enforce-search-route", () => {
       "repo-retrieve files | grep -- wanted | rg raw",
       "repo-retrieve literal --query needle ; grep -- wanted file.txt",
       "repo-retrieve literal --query needle | grep -- wanted < file.txt",
-      "agx ps | grep foo | cut -c1-150 file.txt",
+      "agx ls | grep foo | cut -c1-150 file.txt",
     ]) {
       expect(
         decisionOf(

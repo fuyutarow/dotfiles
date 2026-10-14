@@ -1,13 +1,12 @@
 import { hookJson, hookStderr } from "./lib.ts";
 // Codex PreToolUse gate for spawn_agent (hook tool name "Agent"): every subagent names its model
-// AND reasoning_effort explicitly, as one of the owner's allowed pairs (ALLOWED below), and declares
-// exactly one resource class. Nothing is injected. Fail closed: malformed input exits 2.
+// AND reasoning_effort explicitly, as one of the owner's allowed pairs (ALLOWED below). Nothing is
+// injected. Fail closed: malformed input exits 2.
 // The allowlist is mechanical only; role rationale belongs in orchestrating-agents. The generation
 // floor is shared with enforce-model-floor.ts (agents/hooks/model-floor.toml).
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resourceDeclarationResult } from "../../../tools/agent-resource-run/src/lib/dispatch-declaration.ts";
 import { attempt } from "../../hooks/attempt.ts";
 import {
   compareVersions,
@@ -145,11 +144,6 @@ async function main(): Promise<void> {
   const model = str(rawModel) ?? null;
   const effort = str(rawEffort) ?? null;
 
-  const problems: string[] = [];
-  const resource = resourceDeclarationResult(dispatchText);
-  if (!resource.ok) {
-    problems.push(resource.reason);
-  }
   const floors = await attempt(() =>
     parseFloorConfig(Bun.TOML.parse(readFileSync(CONFIG_PATH, "utf8"))),
   );
@@ -159,16 +153,8 @@ async function main(): Promise<void> {
       `${CONFIG_PATH} is invalid — ${floors.value.errors.join("; ")}`,
     );
   const pair = pairProblem(model, effort, floors.value.floors);
-  if (pair !== null) problems.push(pair);
-  if (problems.length === 0) return;
-  // BATCHED(resource, pair): independent checks, reported together in one decision.
-  output(
-    "deny",
-    problems.length === 1
-      ? `dispatch-contract: ${problems[0]}.`
-      : `dispatch-contract: ${problems.length} violations — fix them all, then re-invoke.\n` +
-          problems.map((p) => `  - ${p}`).join("\n"),
-  );
+  if (pair === null) return;
+  output("deny", `dispatch-contract: ${pair}.`);
 }
 
 await main();

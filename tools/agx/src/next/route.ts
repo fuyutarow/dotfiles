@@ -27,9 +27,7 @@ export async function route(
   const rosterPath = process.env.DISPATCH_ROSTER_PATH;
   const loaded = await loadRoster(rosterPath);
   if (!loaded.ok) {
-    process.stderr.write(
-      `agx-next: cannot read dispatch roster: ${loaded.error}\n`,
-    );
+    process.stderr.write(`agx: cannot read dispatch roster: ${loaded.error}\n`);
     process.exit(1);
   }
   const roster = loaded.value;

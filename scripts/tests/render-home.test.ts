@@ -185,28 +185,19 @@ describe("render-home: base only", () => {
     expect(lstatSync(dest(home)).isSymbolicLink()).toBe(false);
     const policy = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
     for (const text of [
-      "promise block",
-      "RESOURCE derives `kind = token|compute`",
-      ".agents/tickets",
-      "agx ticket new",
-      "agx ticket new|ls|lint|amend",
-      "AGX_TICKET_HOME",
-      "--home state",
-      "$AGX_STATE_DIR/tickets/<project>",
-      "agx ticket import <dir> [--project P]",
-      "interim: true",
-      "continue; send the final report when done",
-      "agx dispatch --amend",
-      "accepted-delivery record",
-      "accepted-throughput argmax",
-      "The bounded pre-run grader remains an admission warning/remand tool.",
-      "Historical grade/confidence fields remain readable.",
-      "agx ps [--all] [--json]",
-      "agx ledger gc [--dry-run]",
-      "agx dispatch --detach",
-      "agx dispatch --verbose",
+      "agx run <ticket.md>",
+      "agx check <ticket.md>",
+      "agx ls [--json]",
+      "agx judge <run> accept|reject",
+      "agx stats [--import-legacy]",
+      "systemd-run --user --unit=agx-<name> --collect -- agx run <ticket.md>",
+      "agx run <ticket.md> --continue <run>",
+      "$XDG_STATE_HOME/agx-next/records.jsonl",
+      "Ticket time boxes: `timeout_s` defaults to 600 seconds",
     ])
       expect(policy).toContain(text);
+    expect(policy).not.toMatch(/\bagx (?:dispatch|ticket|ps|ledger)\b/u);
+    expect(policy).not.toContain("RESOURCE-");
     cleanup(dotfiles, home);
   });
 
@@ -496,29 +487,23 @@ describe("render-home: the rest of the rendered half", () => {
     run({ HOME: home, DOTFILES: dotfiles });
     const md = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
     expect(md).toMatch(
-      /^# policy\n\n<!-- roster:begin -->\n<!-- RENDERED [^\n]*-->\n  Run control:[^\n]*\n  Durable\/noise controls:[^\n]*\n- \*\*Every dispatch goes through/u,
+      /^# policy\n\n<!-- roster:begin -->\n<!-- RENDERED [^\n]*-->\n- \*\*Every worker starts with `agx run <ticket>`/u,
     );
     expect(md).toContain(
       "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
     );
-    expect(md).toContain(
-      "Objective: maximize this ticket's expected accepted-returns-per-hour: expected acceptance rate multiplied by 3600 and divided by expected time to first return, using the comparable-ticket tradeoff line (same capability tags and size class from writes-glob count and brief length). Weigh comparable-ticket median time to first return, timeout rate, accepted rate, and cost per accepted ahead of overall records and benchmark scores. Each row marks the best observed expected throughput; when comparable history is little, treat it as uncertainty and do not silently substitute overall averages. Choose the lowest effort that does not lower that throughput; xhigh/max only when the ticket names a capability lower effort measurably lacks. Among rows within noise of each other, pick the cheaper, and when a codex and a claude row are comparable, pick codex. Cost excludes a row only when its expected cost exceeds the ticket's declared budget.",
-    );
-    expect(md).toContain("temperature T (default 0.5)");
-    expect(md).toContain("over ALL eligible rows");
-    expect(md).toContain("| 1 | 20.00% | 1.000% |");
-    expect(md).toContain("| 0.7 | 13.83% | 0.191% |");
-    expect(md).toContain("| 0.5 | 7.49% | 0.019% |");
-    expect(md).toContain("hard worker bound defaults to 600 seconds");
-    expect(md).toContain("outcome `returned`");
-    expect(md).toContain("--sandbox none|read-only|workspace-write");
-    expect(md).toContain("workers that need network or ssh");
-    expect(md).toContain("agx show <run_id|name|latest>");
-    expect(md).toContain("Scope violations are warning facts");
-    expect(md).toContain(
-      "Ticket `return_policy` defaults to `hard-blockers-only`",
-    );
-    expect(md).toContain("`any-contradiction` available for stricter tickets");
+    for (const command of [
+      "agx run <ticket.md>",
+      "agx check <ticket.md>",
+      "agx ls [--json]",
+      "agx judge <run> accept|reject",
+      "agx stats [--import-legacy]",
+      "systemd-run --user --unit=agx-<name> --collect -- agx run <ticket.md>",
+      "agx run <ticket.md> --continue <run>",
+    ])
+      expect(md).toContain(command);
+    expect(md).not.toMatch(/\bagx (?:dispatch|ticket|ps|ledger)\b/u);
+    expect(md).not.toContain("RESOURCE-");
     expect(md.endsWith("<!-- roster:end -->\n")).toBe(true);
     expect(
       readFileSync(join(dotfiles, "agents", "claude", "CLAUDE.md"), "utf8"),
@@ -603,7 +588,7 @@ describe("render-home: committed jj inputs", () => {
     writeFileSync(
       rosterCode,
       readFileSync(rosterCode, "utf8").replaceAll(
-        "Run control:",
+        "How to run:",
         "Newer renderer:",
       ),
     );
@@ -614,7 +599,7 @@ describe("render-home: committed jj inputs", () => {
     expect(result.out).toContain(`render source: commit ${f.commit}`);
     expect(readDest(f.home).model).toBe("committed-model");
     expect(readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8")).toContain(
-      "Run control:",
+      "How to run:",
     );
     expect(
       readFileSync(join(f.home, ".claude/CLAUDE.md"), "utf8"),

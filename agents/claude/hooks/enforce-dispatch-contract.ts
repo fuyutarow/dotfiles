@@ -1,5 +1,5 @@
 // PreToolUse gate — the Agent, Task and Workflow tools dispatch nothing; every worker starts
-// through `agx dispatch`. matcher: Agent|Task|Workflow   (settings.json: run.sh --fail-closed)
+// through `agx run <ticket>`. matcher: Agent|Task|Workflow (settings.json: run.sh --fail-closed)
 //
 // THE ROSTER (agents/models/dispatch-roster.toml, read through agents/models/roster.ts) is the one
 // home of what may be dispatched, and agx is the one entry point: Jev picks a row from the
@@ -21,9 +21,7 @@ import { loadRoster, rosterTable } from "../../models/roster.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const ROSTER_FILE = "agents/models/dispatch-roster.toml";
-const ENTRY =
-  "`agx dispatch --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` " +
-  "from Bash with run_in_background: true";
+const ENTRY = "`agx run <ticket>`";
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
@@ -46,10 +44,11 @@ async function main(): Promise<void> {
   // SINGLE-AXIS: one question (is this the entry point?) — the tool is never it, whatever its input.
   decidePre(
     "deny",
-    `dispatch-contract: the ${tool} tool dispatches nothing — every worker, codex or claude, starts with ${ENTRY}. ` +
-      `Jev picks the row from the brief (choose the cheapest row sufficient for its needs); ` +
-      `put scope, risk and difficulty in the brief, and declare the resource class there. ` +
-      `For parallel work start several in the background.\nRoster (${ROSTER_FILE}):\n${rosterTable(loaded.value)}`,
+    `dispatch-contract: the ${tool} tool dispatches nothing — every worker starts with ${ENTRY}. ` +
+      "Use `agx check <ticket>` to validate a ticket, `agx ls` to inspect runs, " +
+      "`agx judge <run> accept|reject` to record a judgment, and `agx stats` for run statistics. " +
+      "For durable runs use `systemd-run --user --unit=agx-<name> --collect -- agx run …`; " +
+      `continue with \`agx run <ticket> --continue <run>\`.\nRoster (${ROSTER_FILE}):\n${rosterTable(loaded.value)}`,
   );
 }
 

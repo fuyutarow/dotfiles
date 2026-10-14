@@ -4,7 +4,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "../../shared/src/zod.ts";
-import { probeModels } from "../src/workers/claude-probe.ts";
 import { asRecord, runClaude, toRelay } from "../src/workers/run-claude.ts";
 import { decodedJson } from "./decode.ts";
 import { AGX_WORKER_ENV } from "../../shared/src/worker-env.ts";
@@ -19,7 +18,6 @@ function parseErrorEnvelope(stdout: string): z.output<typeof ErrorEnvelope> {
 
 const fixture = resolve(import.meta.dir, "fake-claude.ts");
 const runnerScript = resolve(import.meta.dir, "../src/workers/run-claude.ts");
-const probeScript = resolve(import.meta.dir, "../src/workers/claude-probe.ts");
 
 function runCli(
   script: string,
@@ -91,17 +89,6 @@ describe("tools/agx dispatchner", () => {
     expect(run.exitCode).toBe(124);
   });
 
-  test("reports probe success only for a parseable result and session", async () => {
-    const records = await probeModels(["sonnet", "reject"], {
-      claudeBin: fixture,
-      maxBudgetUsd: 0.2,
-      timeoutMs: 5_000,
-    });
-
-    expect(records[0]?.kind).toBe("AVAILABLE");
-    expect(records[1]?.kind).toBe("INCONCLUSIVE");
-  });
-
   test("relays normal JSON output even when optional schema fields are absent", () => {
     const relay = toRelay({
       exitCode: 0,
@@ -145,13 +132,6 @@ describe("tools/agx argv boundary", () => {
       expect(envelope.error).toContain(`${flag} requires a value`);
       expect(result.stderr).toBe("");
     }
-  });
-
-  test("probe-models rejects --__proto__ before resolving Claude", () => {
-    const result = runCli(probeScript, ["--__proto__"]);
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("unknown option '--__proto__'");
-    expect(result.stdout).toBe("");
   });
 });
 

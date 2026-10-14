@@ -367,11 +367,6 @@ dir = "{{config_root}}"
 description = "repo-retrieve route and CLI contract tests (fake ccc/rg executables); also run by test:scripts via tools/*/tests"
 run = "bun test tools/repo-retrieve/tests"
 
-[tasks."agx:migrate-state"]
-dir = "{{config_root}}"
-description = "Move previous dispatch state to ~/.local/state/agx once; refuse live runs or two state directories"
-run = "bun tools/agx/src/migrate-state.ts"
-
 [tasks."test:agx"]
 dir = "{{config_root}}"
 description = "agx (the one worker entry point) tests: fake agx, fake Jev, scratch state dir"

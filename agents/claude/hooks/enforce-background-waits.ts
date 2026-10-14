@@ -21,7 +21,7 @@
 // never measured passes once; from then on its own history decides. run_in_background is a Claude
 // Code tool field (Codex has no such mode), so this is a Claude hook (agents/claude/settings.json).
 //
-// THE OTHER DIRECTION (2026-10-08, firedancer coordinator): `agx dispatch --resume … &` run inside a
+// THE OTHER DIRECTION (2026-10-08, firedancer coordinator): `agx run … --continue … &` run inside a
 // call that already had run_in_background:true. The harness observes the OUTER shell; the inner `&`
 // job outlives it unobserved, so its result never reached the session and nothing caught it. So when
 // run_in_background is true, a shell-level `&` whose job is never `wait`ed in the same script is

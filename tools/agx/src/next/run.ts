@@ -21,7 +21,7 @@ import { route } from "./route.ts";
 
 export type Flags = Readonly<Record<string, string | boolean | undefined>>;
 const fatal = (message: string, exitCode = 2): never => {
-  process.stderr.write(`agx-next: ${message}\n`);
+  process.stderr.write(`agx: ${message}\n`);
   process.exit(exitCode);
 };
 const value = (flags: Flags, key: string): string | undefined =>

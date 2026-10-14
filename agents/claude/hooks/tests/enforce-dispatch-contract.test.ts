@@ -6,9 +6,8 @@ import { at, obj, parseJson, strAt } from "../../../hooks/narrow.ts";
 import { ROSTER_PATH } from "../../../models/roster.ts";
 import { runHook } from "./helpers.ts";
 
-// enforce-dispatch-contract: the Agent, Task and Workflow tools dispatch nothing. Every worker,
-// codex or claude, starts through `agx dispatch` (Jev picks the row from the roster's
-// declared weights), so every one of these calls is denied with that entry point and the roster
+// enforce-dispatch-contract: the Agent, Task and Workflow tools dispatch nothing. Every worker
+// starts through `agx run`, so every one of these calls is denied with that entry point and the roster
 // table. The roster itself loads strictly: an unknown key — including the retired `enabled`
 // switch — rejects the load, and the hook then fails closed.
 const HOOK = "enforce-dispatch-contract.ts";
@@ -51,13 +50,19 @@ describe("enforce-dispatch-contract", () => {
     ["Task", { subagent_type: "general-purpose" }],
     ["Workflow", { script: "export const meta = {}" }],
   ])(
-    "%s %o is denied with the agx entry point and the roster",
+    "%s %o is denied with the agx run entry point and the roster",
     (tool, input) => {
       const d = decisionOf(runHook(HOOK, call(tool, input)).stdout);
       expect(d.decision).toBe("deny");
       expect(d.reason).toContain(`the ${tool} tool dispatches nothing`);
-      expect(d.reason).toContain("agx dispatch --prompt-file <brief>");
-      expect(d.reason).toContain("run_in_background: true");
+      expect(d.reason).toContain("every worker starts with `agx run <ticket>`");
+      expect(d.reason).toContain("agx check <ticket>");
+      expect(d.reason).toContain("agx ls");
+      expect(d.reason).toContain("agx judge <run> accept|reject");
+      expect(d.reason).toContain("agx stats");
+      expect(d.reason).toContain(
+        "systemd-run --user --unit=agx-<name> --collect -- agx run …",
+      );
       // the table names every candidate, claude rows included, with its measured numbers and cost
       expect(d.reason).toContain("| ● | `luna-high` | codex | 33 | 4.5 |");
       expect(d.reason).toContain("| ○ | `sonnet-high` | claude | 47 | 43.9 |");

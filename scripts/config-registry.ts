@@ -605,7 +605,8 @@ const OTHER: readonly Surface[] = [
       "agents/models/dispatch-roster.contract.md",
     ],
     deployed: "the checkout; rendered into ~/.claude/CLAUDE.md",
-    consumer: "dispatch hook, agx dispatch, codex worker, render-home",
+    consumer:
+      "dispatch hook, agx run/check/ls/judge/stats, codex worker, render-home",
     writer:
       "human, in the repo (CONFIGURATION CONTRACT: dispatch-roster.contract.md)",
     verify: `mise run test:hooks · test:agx · ${DOCTOR} (rendered)`,

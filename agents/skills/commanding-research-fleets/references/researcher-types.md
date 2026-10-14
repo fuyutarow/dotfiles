@@ -8,7 +8,7 @@
 A Researcher is the executor-equivalent role (`orchestrating-agents`' generic executor,
 role-specialized for this fleet). Every Researcher dispatch declares exactly one archetype —
 never a blend. Use the current project model policy and orchestration roster rather than a model fixed in this charter.
-Include one `RESOURCE-CLASS`/`RESOURCE-ENVELOPE` declaration under the orchestration dispatch contract.
+Resource admission remains a separate P7 concern for compute work; the agx ticket and dispatch contract does not require a resource declaration line.
 
 | Archetype | Function |
 |---|---|

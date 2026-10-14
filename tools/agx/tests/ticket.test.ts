@@ -27,7 +27,7 @@ describe("parseTicket", () => {
   test("no front matter is invalid and names the skeleton command", () => {
     const r = parseTicket("RESOURCE-CLASS(NONCOMPUTE): x\n# task\n");
     expect(r.kind).toBe("invalid");
-    expect(r.kind === "invalid" && r.reason).toContain("agx ticket new");
+    expect(r.kind === "invalid" && r.reason).toContain("pass it to agx run");
   });
 
   test("a valid ticket: fields, defaults, and the prose without the front matter", () => {
@@ -74,12 +74,12 @@ describe("parseTicket", () => {
   test("premises are accepted", () => {
     const parsed = parseTicket(
       valid(
-        'writes = []\npremises = ["file:src/main.ts", "symbol:run", "symbol:main@src/**"]',
+        'writes = []\npremises = ["file:src/next/cli.ts", "symbol:run", "symbol:main@src/**"]',
       ),
     );
     expect(parsed.kind).toBe("ticket");
     expect(parsed.kind === "ticket" && parsed.ticket.premises).toEqual([
-      "file:src/main.ts",
+      "file:src/next/cli.ts",
       "symbol:run",
       "symbol:main@src/**",
     ]);

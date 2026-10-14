@@ -15,7 +15,8 @@
     "disk-reclaim": "tools/disk-reclaim/src/reclaim.ts",
     "storage-headroom": "tools/storage-headroom/src/storage-headroom.ts",
     "statusline": "tools/statusline/src/statusline.ts",
-    "agx": "tools/agx/src/main.ts",
+    "agx": "tools/agx/src/next/cli.ts",
+    "agx-next": "tools/agx/src/next/cli.ts",
     "coredev": "tools/coredev/src/coredev.ts"
   },
   "dependencies": {

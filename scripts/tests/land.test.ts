@@ -417,7 +417,7 @@ describe("land workspace", () => {
     const refused = f.land([], { LAND_NO_ACCEPT: "1" });
     expect(refused.exitCode).toBe(1);
     expect(refused.stdout.toString()).toContain(
-      'agx ledger note landsplit --accept --no-review "<reason>"',
+      'agx judge run-from-workspace accept --note "<reason>"',
     );
     expect(
       f.log().some((event) => event[0] === "run" && event[1] === "commit"),
@@ -538,6 +538,57 @@ describe("land workspace", () => {
     );
   });
 
+  test("land preflight reads an accepted judgment from agx ls records", () => {
+    const f = fixture();
+    const state = join(f.main, "agx-next-state");
+    mkdirSync(state, { recursive: true });
+    writeFileSync(
+      join(state, "records.jsonl"),
+      [
+        {
+          kind: "started",
+          id: "next-land-run",
+          at: "2026-10-14T00:00:00Z",
+          ticket: "landsplit",
+          writes: ["keep.txt"],
+          cwd: f.worker,
+          workspace: f.worker,
+          row: "luna-high",
+          dispatcher_session: null,
+          vendor_session: null,
+          continues: null,
+          pid: 0,
+        },
+        {
+          kind: "ended",
+          id: "next-land-run",
+          at: "2026-10-14T00:01:00Z",
+          exit: 0,
+          report_path: null,
+          vendor_session: null,
+        },
+        {
+          kind: "judged",
+          id: "next-land-run",
+          at: "2026-10-14T00:02:00Z",
+          decision: "accept",
+          note: "accepted fixture",
+        },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n") + "\n",
+    );
+    writeFileSync(join(f.worker, "keep.txt"), "accepted next run\n");
+    const result = f.land([], { AGX_NEXT_STATE_DIR: state });
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(result.stdout.toString()).toContain(
+      "judgment: ok 1 accepted ticket lineage(s)",
+    );
+  });
+
   test("a later reject in the same workspace ticket lineage overrides an earlier accept", () => {
     const f = fixture();
     const state = join(f.main, "..", "agx-state");
@@ -578,14 +629,14 @@ describe("land workspace", () => {
     });
     expect(result.exitCode).toBe(1);
     expect(result.stdout.toString()).toContain(
-      'ticket landsplit has no current accept judgment; judge first: agx ledger note landsplit --accept --no-review "<reason>"',
+      'ticket landsplit has no current accept judgment; import legacy runs if needed with `agx stats --import-legacy`, inspect `agx ls --json`, then judge run `landsplit-resume` with `agx judge landsplit-resume accept --note "<reason>"`',
     );
     expect(
       f.log().some((event) => event[0] === "run" && event[1] === "commit"),
     ).toBe(false);
   });
 
-  test("land prints the exact supplied-review judge command when judgment is missing", () => {
+  test("land prints the agx judge command with supplied review context", () => {
     const f = fixture();
     const state = join(f.main, "..", "agx-state");
     mkdirSync(state, { recursive: true });
@@ -599,7 +650,7 @@ describe("land workspace", () => {
     });
     expect(refused.exitCode).toBe(1);
     expect(refused.stdout.toString()).toContain(
-      "agx ledger note reviewed --accept --review independent-review",
+      'agx judge reviewed-run accept --note "independent review independent-review"',
     );
     expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
       '"kind":"acceptance","run_id":"reviewed-run"',

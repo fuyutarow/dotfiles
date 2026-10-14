@@ -43,8 +43,8 @@ describe("search-route reads syntax, not text", () => {
 
   test("non-search command output can be filtered with any grep/rg flags", () => {
     for (const command of [
-      `agx ps --all 2>&1 | grep -E 'a|b'`,
-      `agx ps --all --json | jq -r .x | rg -i y | head`,
+      `agx ls 2>&1 | grep -E 'a|b'`,
+      `agx ls --json | jq -r .x | rg -i y | head`,
       `journalctl -u service | rg -v x | head`,
       `jj log --limit 10 | rg -E -v -i 'foo|bar'`,
       `bun test agents/hooks/tests | rg -v 'pass' | head -n 20`,

@@ -8,9 +8,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import pkg from "../package.json" with { type: "json" };
 
-const CLI = join(import.meta.dir, "..", "src", "main.ts");
+const CLI = join(import.meta.dir, "..", "src", "next", "cli.ts");
 const scratch = mkdtempSync(join(tmpdir(), "agx-startup-"));
 const state = join(scratch, "unreadable-state");
 mkdirSync(state);
@@ -22,7 +21,7 @@ afterAll(() => {
 
 function run(args: string[]): { code: number; out: string; err: string } {
   const result = Bun.spawnSync([process.execPath, CLI, ...args], {
-    env: { ...process.env, AGX_STATE_DIR: state },
+    env: { ...process.env, AGX_NEXT_STATE_DIR: state },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -33,20 +32,15 @@ function run(args: string[]): { code: number; out: string; err: string } {
   };
 }
 
-test("root version, help and bare invocation do not touch state", () => {
-  const version = run(["--version"]);
-  expect(version.code).toBe(0);
-  expect(version.out.trim()).toBe(pkg.version);
-  expect(version.err).toBe("");
-
+test("help and bare invocation do not touch run state", () => {
   const help = run(["--help"]);
   expect(help.code).toBe(0);
-  expect(help.out).toContain(`agx v${pkg.version}`);
+  expect(help.out).toContain("agx");
   expect(help.err).toBe("");
 
   const bare = run([]);
   expect(bare.code).toBe(2);
-  expect(bare.out).toContain("USAGE:");
+  expect(bare.out).toBe("");
   chmodSync(state, 0o700);
   expect(readdirSync(state)).toEqual([]);
 });

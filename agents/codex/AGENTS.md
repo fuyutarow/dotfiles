@@ -8,18 +8,9 @@ guarded by `~/.codex/hooks.json`; the Desktop `collaboration.spawn_agent` path s
 fresh-session live probe, so do not claim that Desktop path is enforced yet. This is advisory
 context, not the guard itself.
 
-Every local `Agent` dispatch also carries exactly one resource declaration in its message:
-
-- `RESOURCE-CLASS(NONCOMPUTE): <reason>` only when it contains no numerical experiment,
-  benchmark, resident service, parallel test, or nested fanout.
-- `RESOURCE-ENVELOPE(/absolute/path.json): agent-resource-run only` for compute/heavy work.
-
-The local hook checks the declaration. The envelope schema, GPU-first placement, aggregate
-CPU/RAM/VRAM reservation, and stop rules live only in
-`orchestrating-agents/references/measurement-and-resources.md` P7. The Desktop
-`collaboration.spawn_agent` path remains unproven for both the model and resource axes until a
-fresh-session live probe succeeds; apply the declaration manually there and do not claim hook
-enforcement.
+Use `agx run <ticket>` for worker dispatch. The local hook validates the model and effort pair;
+it does not require a resource declaration. The Desktop `collaboration.spawn_agent` path remains
+unproven until a fresh-session live probe succeeds; do not claim hook enforcement there.
 
 ## Claude-Aware Repositories
 

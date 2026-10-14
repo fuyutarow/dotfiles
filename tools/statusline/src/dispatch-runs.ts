@@ -428,7 +428,7 @@ export function routeLines(
   return lines;
 }
 
-/** Match agx ps --mine: explicit agx override, Claude session environment, then payload. */
+/** Match agx ls: explicit agx override, Claude session environment, then payload. */
 export function currentDispatcherSession(
   payloadSession: string | undefined,
 ): string | undefined {

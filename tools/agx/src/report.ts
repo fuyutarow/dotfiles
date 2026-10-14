@@ -241,7 +241,7 @@ export function parseReport(
 const bullets = (items: string[], empty = "(none)"): string =>
   items.length === 0 ? `  ${empty}` : items.map((i) => `  - ${i}`).join("\n");
 
-/** The report as readable sections (what `agx ledger result` prints). */
+/** The worker report as readable sections for callers and run summaries. */
 export function renderReport(r: WorkerReport): string {
   return [
     `## Summary\n${r.summary}`,

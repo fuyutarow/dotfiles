@@ -14,18 +14,11 @@ type CorpusEntry = Readonly<{
   cli?: boolean;
 }>;
 
-const CORPUS = [
+const CORPUS: CorpusEntry[] = [
   { path: "agents/codex/codex-runtime.ts" },
   { path: "agents/codex/hooks/quote-command.ts" },
   { path: "agents/goal-kernel/cli.ts" },
-  { path: "tools/agx/src/agx.ts" },
-  {
-    path: "tools/agx/src/events.ts",
-    // An embedded subcommand parser; its entrypoint is `agx events`, not this module.
-    cli: false,
-  },
-  { path: "tools/agx/src/main.ts" },
-  { path: "tools/agx/src/migrate-state.ts" },
+  { path: "tools/agx/src/next/cli.ts", cli: true },
   { path: "tools/agx/src/workers/codex.ts" },
   { path: "scripts/render-oxlintrc.ts" },
   { path: "scripts/deployment-selection.ts" },
@@ -76,9 +69,7 @@ const CORPUS = [
   { path: "agents/skills/directing-research/scripts/research-check.ts" },
   { path: "agents/skills/directing-research/scripts/research-run-check.ts" },
   { path: "agents/skills/driving-antigravity/scripts/probe-models.ts" },
-  { path: "tools/agx/src/workers/claude-probe.ts" },
   { path: "tools/agx/src/workers/run-claude.ts" },
-  { path: "tools/agx/src/workers/codex-probe.ts" },
   { path: "agents/skills/driving-git/scripts/git-check.ts" },
   { path: "agents/skills/driving-grok/scripts/probe-models.ts" },
   { path: "agents/skills/forging-novel-theses/scripts/gate-check.ts" },

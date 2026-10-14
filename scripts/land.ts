@@ -17,7 +17,15 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { cli } from "cleye";
-import { err, fromThrowable, ok, ResultAsync, safeTry } from "neverthrow";
+import {
+  errAsync,
+  err,
+  fromThrowable,
+  ok,
+  okAsync,
+  ResultAsync,
+  safeTry,
+} from "neverthrow";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
@@ -35,7 +43,54 @@ import {
   type LandReport,
 } from "./land-verdict.ts";
 
-type WorkspaceRun = { run_id: string; ticket: string };
+type WorkspaceRun = {
+  run_id: string;
+  ticket: string;
+  workspace?: string;
+  judgment?: { decision: "accept" | "reject" } | null;
+};
+
+function nextAgxRuns(): ResultAsync<WorkspaceRun[], Error> {
+  const command = Bun.spawnSync(
+    [
+      process.execPath,
+      join(import.meta.dir, "../tools/agx/src/next/cli.ts"),
+      "ls",
+      "--json",
+    ],
+    { cwd: process.cwd(), env: process.env, timeout: 5_000 },
+  );
+  if (command.exitCode !== 0)
+    return errAsync(
+      new Error(`agx ls --json failed: ${command.stderr.toString().trim()}`),
+    );
+  const parsed = jsonOf(
+    z.array(
+      z.looseObject({
+        id: z.string(),
+        ticket: z.string(),
+        workspace: z.string(),
+        judgment: z
+          .looseObject({ decision: z.enum(["accept", "reject"]) })
+          .nullable(),
+      }),
+    ),
+  ).safeParse(command.stdout.toString());
+  if (!parsed.success)
+    return errAsync(
+      new Error(
+        `agx ls --json returned invalid output: ${parsed.error.message}`,
+      ),
+    );
+  return okAsync(
+    parsed.data.map((entry) => ({
+      run_id: entry.id,
+      ticket: entry.ticket,
+      workspace: entry.workspace,
+      judgment: entry.judgment,
+    })),
+  );
+}
 
 function workspaceRuns(workspace: string): ResultAsync<WorkspaceRun[], Error> {
   const lines = workspaceLedgerLines();
@@ -63,7 +118,15 @@ function workspaceRuns(workspace: string): ResultAsync<WorkspaceRun[], Error> {
         ticket: parsed.data.ticket?.name ?? parsed.data.run_id,
       });
   }
-  return ResultAsync.fromSafePromise(Promise.resolve([...runs.values()]));
+  return nextAgxRuns().map((nextRuns) => {
+    const matchingNextRuns = nextRuns.filter((entry) => {
+      const path = entry.workspace;
+      return (
+        path !== undefined && existsSync(path) && realpathSync(path) === target
+      );
+    });
+    return Array.from(runs.values()).concat(matchingNextRuns);
+  });
 }
 
 function workspaceLedgerLines(): string[] {
@@ -117,7 +180,11 @@ function timestampMilliseconds(value: string | undefined): number | undefined {
   return parsed.isOk() ? parsed.value : undefined;
 }
 
-export type WorkspacePreflightVerdict = { ticket: string; accept: boolean };
+export type WorkspacePreflightVerdict = {
+  ticket: string;
+  run_id: string;
+  accept: boolean;
+};
 
 export function workspacePreflightVerdicts(
   workspace: string,
@@ -130,6 +197,19 @@ export function workspacePreflightVerdicts(
     const judgments: WorkspaceJudgment[] = [
       ...ledgerAcceptances(workspaceLedgerLines()),
       ...lifecycleJudgments(lifecycleLines()),
+      ...runs.flatMap((entry, order) =>
+        entry.judgment === undefined || entry.judgment === null
+          ? []
+          : [
+              {
+                run_id: entry.run_id,
+                ticket: entry.ticket,
+                kind: "judged",
+                accept: entry.judgment.decision === "accept",
+                order: Number.MAX_SAFE_INTEGER + order,
+              },
+            ],
+      ),
     ].flatMap((judgment, order) => {
       const ticket = ticketByRun.get(judgment.run_id);
       return ticket === undefined
@@ -140,10 +220,18 @@ export function workspacePreflightVerdicts(
       ...new Set(runs.map((workspaceRun) => workspaceRun.ticket)),
     ];
     return ok(
-      tickets.map((ticket) => ({
-        ticket,
-        accept: latestJudgment(judgments, ticket)?.accept === true,
-      })),
+      tickets.flatMap((ticket) => {
+        const latestRun = runs.findLast((entry) => entry.ticket === ticket);
+        return latestRun === undefined
+          ? []
+          : [
+              {
+                ticket,
+                run_id: latestRun.run_id,
+                accept: latestJudgment(judgments, ticket)?.accept === true,
+              },
+            ];
+      }),
     );
   });
 }
@@ -821,14 +909,14 @@ async function main(
       const verdicts = parsed.flags.dryRun
         ? []
         : yield* workspacePreflightVerdicts(workerRoot);
-      for (const { ticket, accept } of verdicts) {
+      for (const { ticket, run_id, accept } of verdicts) {
         if (!accept) {
-          const judge =
-            parsed.flags.review === undefined
-              ? `agx ledger note ${ticket} --accept --no-review "<reason>"`
-              : `agx ledger note ${ticket} --accept --review ${parsed.flags.review}`;
           return reject(
-            `ticket ${ticket} has no current accept judgment; judge first: ${judge}`,
+            `ticket ${ticket} has no current accept judgment; import legacy runs if needed with ` +
+              `\`agx stats --import-legacy\`, inspect \`agx ls --json\`, then judge run \`${run_id}\` ` +
+              (parsed.flags.review === undefined
+                ? `with \`agx judge ${run_id} accept --note "<reason>"\``
+                : `with \`agx judge ${run_id} accept --note "independent review ${parsed.flags.review}"\``),
           );
         }
       }

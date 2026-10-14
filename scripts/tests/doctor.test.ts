@@ -18,9 +18,11 @@ import { release, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { sshSupportsAttachMatch } from "../link-dots.ts";
 import {
+  checkCccDbMap,
   checkCodexRemote,
   checkCodexRuntime,
   checkGoogleDrive,
+  checkRipGraveyard,
   checkWslGpuManagerPath,
   type Ctx,
 } from "../doctor.ts";
@@ -101,6 +103,45 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("rip-graveyard warns when its bounded scan cannot confirm the cap", async () => {
+    const home = tmp("doctor-rip-graveyard-bounded-");
+    const finding = await checkRipGraveyard(
+      { home, dotfiles: REPO, isMac: false, isWsl: true, isCoreBox: false },
+      () => ({
+        bytes: 512,
+        ramBacked: false,
+        complete: false,
+        timedOut: true,
+        visited: 12,
+        elapsedMs: 5_000,
+      }),
+    );
+    expect(finding.verdict).toBe("WARN");
+    expect(finding.detail).toContain("measured at least 512 bytes");
+    expect(finding.detail).toContain("time limit reached");
+  });
+
+  test("ccc-db-map names the bounded ccc doctor timeout", async () => {
+    const home = tmp("doctor-ccc-timeout-");
+    const finding = await checkCccDbMap(
+      { home, dotfiles: REPO, isMac: false, isWsl: true, isCoreBox: false },
+      (_cmd, options) => {
+        expect(options.ms).toBe(8_000);
+        expect(options.cwd).toBe(home);
+        return Promise.resolve({
+          code: 124,
+          out: "",
+          err: "",
+          timedOut: true,
+          missing: false,
+        });
+      },
+      "/home/fuyu=/home/fuyu/.cache/cocoindex-code/db",
+    );
+    expect(finding.verdict).toBe("WARN");
+    expect(finding.detail).toContain("timed out after 8s");
+  });
+
   test("wsl-gpu-path checks the user manager PATH and gives the reexec repair", () => {
     const present = checkWslGpuManagerPath("/usr/lib/wsl/lib:/usr/bin");
     expect(present.verdict).toBe("PASS");

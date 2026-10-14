@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 — 2026-10-14
+
+- Bound rip graveyard size scans to 40 seconds and report incomplete measurements as conservative lower bounds.
+
 ## 1.3.0 — 2026-10-13
 
 - Invalidate workspace classification caches when the regenerable-tool-cache policy changes, including changes back to a more restrictive policy.

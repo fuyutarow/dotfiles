@@ -286,7 +286,10 @@ export function checkGoogleDrive(ctx: Ctx): Promise<Finding> {
   });
 }
 
-export async function checkRipGraveyard(ctx: Ctx): Promise<Finding> {
+export async function checkRipGraveyard(
+  ctx: Ctx,
+  inspect: typeof inspectRipGraveyard = inspectRipGraveyard,
+): Promise<Finding> {
   const declaration = readFileSync(join(ctx.dotfiles, "zsh/zshenv"), "utf8");
   const lines = declaration.split("\n");
   const hasRipDeclaration =
@@ -313,7 +316,7 @@ export async function checkRipGraveyard(ctx: Ctx): Promise<Finding> {
     );
   if (!isAbsolute(effective))
     problems.push(`effective location is not absolute: ${effective}`);
-  const measured = await attempt(() => inspectRipGraveyard(effective));
+  const measured = await attempt(() => inspect(effective));
   if (!measured.ok) {
     problems.push(
       `cannot inspect ${effective}: ${errorMessage(measured.error)}`,
@@ -321,10 +324,21 @@ export async function checkRipGraveyard(ctx: Ctx): Promise<Finding> {
   } else {
     if (measured.value.ramBacked)
       problems.push(`${effective} is on tmpfs/ramfs`);
-    if (measured.value.bytes > RIP_GRAVEYARD_MAX_BYTES)
+    if (measured.value.bytes > RIP_GRAVEYARD_MAX_BYTES) {
+      const qualifier = measured.value.complete ? "" : "at least ";
       problems.push(
-        `${effective} is ${measured.value.bytes} bytes; limit is ${RIP_GRAVEYARD_MAX_BYTES}`,
+        `${effective} is ${qualifier}${measured.value.bytes} bytes; limit is ${RIP_GRAVEYARD_MAX_BYTES}`,
       );
+    }
+  }
+
+  let scanWarning: string | undefined;
+  if (measured.ok && !measured.value.complete) {
+    const reason = measured.value.timedOut ? "time limit" : "scan limit";
+    scanWarning = `${effective} measured at least ${measured.value.bytes} bytes across ${measured.value.visited} entries; ${reason} reached after ${measured.value.elapsedMs} ms, so the 10 GiB limit could not be confirmed`;
+  }
+  if (scanWarning !== undefined && problems.length === 0) {
+    return warn("rip-graveyard", scanWarning);
   }
 
   return problems.length === 0
@@ -906,10 +920,14 @@ async function checkWslGpuPath(): Promise<Finding> {
 // watermark look where the client's points. zsh/zshenv declares the client value and
 // cocoindex/ccc-daemon.service.wsl the daemon's; a daemon started before either changed keeps
 // the old one until restarted. `ccc doctor` is the only CLI that reports the daemon's mapping.
-export async function checkCccDbMap(ctx: Ctx): Promise<Finding> {
-  if (Bun.which("ccc") === undefined)
+export async function checkCccDbMap(
+  ctx: Ctx,
+  probe: typeof run = run,
+  rawMapping = process.env[MAPPING_ENV],
+): Promise<Finding> {
+  if (probe === run && Bun.which("ccc") === undefined)
     return skip("ccc-db-map", "ccc is not installed");
-  const parsed = parseMapping(process.env[MAPPING_ENV]).map((mappings) =>
+  const parsed = parseMapping(rawMapping).map((mappings) =>
     mappings.map((m) => `${m.source}=${m.target}`),
   );
   if (parsed.isErr()) {
@@ -927,8 +945,8 @@ export async function checkCccDbMap(ctx: Ctx): Promise<Finding> {
       "open a new shell (zsh/zshenv exports it)",
     );
   }
-  const r = await run(["ccc", "doctor"], { ms: 60_000, cwd: ctx.home });
-  if (r.timedOut) return warn("ccc-db-map", "`ccc doctor` timed out after 60s");
+  const r = await probe(["ccc", "doctor"], { ms: 8_000, cwd: ctx.home });
+  if (r.timedOut) return warn("ccc-db-map", "`ccc doctor` timed out after 8s");
   const lines = r.out.split("\n");
   const start = lines.findIndex((l) => l.trim() === "DB path mappings:");
   const daemon: string[] = [];

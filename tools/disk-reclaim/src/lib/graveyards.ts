@@ -22,20 +22,52 @@ export const RIP_GRAVEYARD_MAX_BYTES = 10 * 1024 ** 3;
 const TMPFS_MAGIC = 0x01021994n;
 const RAMFS_MAGIC = 0x858458f6n;
 
-export function inspectRipGraveyard(path: string): {
+export function inspectRipGraveyard(
+  path: string,
+  timeoutMs = 40_000,
+): {
   bytes: number;
   ramBacked: boolean;
+  complete: boolean;
+  timedOut: boolean;
+  visited: number;
+  elapsedMs: number;
 } {
   let bytes = 0;
-  const visit = (entry: string): void => {
+  const started = Temporal.Now.instant().epochMilliseconds;
+  const elapsed = (): number =>
+    Temporal.Now.instant().epochMilliseconds - started;
+  let visited = 0;
+  let timedOut = false;
+  const pending = existsSync(path) ? [path] : [];
+  const inspect = (entry: string): boolean => {
     const stat = lstatSync(entry, { bigint: true });
-    if (stat.isDirectory() && !stat.isSymbolicLink()) {
-      for (const name of readdirSync(entry)) visit(join(entry, name));
-    } else {
+    visited += 1;
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
       bytes += Number(stat.size);
+      return false;
     }
+    for (const child of readdirSync(entry, { withFileTypes: true })) {
+      const childPath = join(entry, child.name);
+      if (child.isDirectory()) pending.push(childPath);
+      else {
+        bytes += Number(lstatSync(childPath, { bigint: true }).size);
+        visited += 1;
+      }
+      if (elapsed() >= timeoutMs) return true;
+    }
+    return false;
   };
-  if (existsSync(path)) visit(path);
+  while (pending.length > 0) {
+    if (elapsed() >= timeoutMs) {
+      timedOut = true;
+      break;
+    }
+    const entry = pending.pop();
+    if (entry === undefined) break;
+    timedOut = inspect(entry);
+    if (timedOut) break;
+  }
 
   let filesystemPath = path;
   while (!existsSync(filesystemPath)) {
@@ -47,6 +79,10 @@ export function inspectRipGraveyard(path: string): {
   return {
     bytes,
     ramBacked: type === TMPFS_MAGIC || type === RAMFS_MAGIC,
+    complete: !timedOut && pending.length === 0,
+    timedOut,
+    visited,
+    elapsedMs: elapsed(),
   };
 }
 

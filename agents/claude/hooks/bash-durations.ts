@@ -44,6 +44,8 @@ function stepKey(step: string): string | undefined {
   const lead = firstFlag === -1 ? words : words.slice(0, firstFlag);
   const stop = lead.findIndex((w) => NOT_A_WORD.test(w) || w.includes("/"));
   const head = (stop === -1 ? lead : lead.slice(0, stop)).slice(0, 3);
+  const commandHead =
+    head[0] === "agx" && head[1] === "run" ? head.slice(0, 2) : head;
   const flags =
     firstFlag === -1
       ? []
@@ -52,7 +54,9 @@ function stepKey(step: string): string | undefined {
           .filter((w) => w.startsWith("-"))
           .map((w) => w.replace(/=.*$/u, ""))
           .slice(0, 3);
-  return head.length === 0 ? undefined : [...head, ...flags].join(" ");
+  return commandHead.length === 0
+    ? undefined
+    : [...commandHead, ...flags].join(" ");
 }
 
 /** The key of every step of a compound command (`a && b; c`), `cd …` and assignment-only steps

@@ -64,6 +64,8 @@ The output is an array of objects with these contract fields:
 | Field | Meaning |
 | --- | --- |
 | `id` | Run identifier. |
+| `started_at` | RFC 3339 timestamp from the run's `started` event. |
+| `ended_at` | RFC 3339 timestamp from the run's `ended` event, or `null` while running or orphaned. |
 | `ticket` | Ticket name, or the prompt filename when unnamed. |
 | `state` | `running`, `ended`, or `orphaned`. |
 | `exit` | Worker exit code, or `null` while not ended. |

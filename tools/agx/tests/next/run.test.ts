@@ -101,6 +101,7 @@ describe("agx-next run", () => {
     const lineSchema = z.looseObject({
       kind: z.string(),
       id: z.string().optional(),
+      at: z.string().optional(),
       row: z.string().optional(),
       exit: z.number().optional(),
       dispatcher_session: z.string().nullable().optional(),
@@ -116,6 +117,7 @@ describe("agx-next run", () => {
     const started = lines[0];
     const ended = lines.at(-1);
     if (started === undefined || ended === undefined) return;
+    if (started.at === undefined || ended.at === undefined) return;
     expect(lines.map((line) => line.kind)).toEqual([
       "started",
       "progress",
@@ -239,6 +241,8 @@ describe("agx-next run", () => {
     const listedSchema = z.array(
       z.looseObject({
         id: z.string(),
+        started_at: z.string(),
+        ended_at: z.string().nullable(),
         ticket: z.string(),
         state: z.enum(["running", "ended", "orphaned"]),
         exit: z.number().nullable(),
@@ -290,6 +294,8 @@ describe("agx-next run", () => {
     expect(firstRow.continues).toBeNull();
     expect(firstRow.judgment?.decision).toBe("accept");
     expect(firstRow.verify).toEqual([]);
+    expect(firstRow.started_at).toBe(started.at);
+    expect(firstRow.ended_at).toBe(ended.at);
     expect(secondRow.dispatcher_session).toBe("claude-session");
     expect(secondRow.continues).toBe(started.id);
     expect(secondRow.vendor_session).toBe("continued-vendor-1");
@@ -309,6 +315,8 @@ describe("agx-next run", () => {
     expect(rejected.exitCode).toBe(0);
     expect(Object.keys(firstRow).toSorted()).toEqual(
       [
+        "ended_at",
+        "started_at",
         "continues",
         "cwd",
         "dispatcher_session",
@@ -507,6 +515,28 @@ describe("agx-next run", () => {
       ignored_rows: 2,
     });
 
+    const listed = Bun.spawnSync(
+      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      { cwd: process.cwd(), env },
+    );
+    const legacyRows = jsonOf(
+      z.array(
+        z.looseObject({
+          ticket: z.string(),
+          started_at: z.string(),
+          ended_at: z.string().nullable(),
+        }),
+      ),
+    ).safeParse(listed.stdout.toString());
+    expect(listed.exitCode).toBe(0);
+    expect(legacyRows.success).toBe(true);
+    if (legacyRows.success)
+      expect(legacyRows.data[0]).toMatchObject({
+        ticket: "legacy_fixture",
+        started_at: "2026-10-10T12:00:00Z",
+        ended_at: "2026-10-10T12:02:00Z",
+      });
+
     const second = Bun.spawnSync(
       [
         process.execPath,
@@ -600,6 +630,75 @@ describe("agx-next run", () => {
           decision !== null && decision !== "accept" && decision !== "reject",
       ),
     ).toEqual([]);
+  });
+
+  test("ls JSON exposes started and ended event timestamps", () => {
+    const root = mkdtempSync(join(tmpdir(), "agx-next-run-timestamps-"));
+    const state = join(root, "state");
+    mkdirSync(state, { recursive: true });
+    const runningAt = "2026-10-14T01:02:03Z";
+    const endedStartedAt = "2026-10-14T02:03:04Z";
+    const endedAt = "2026-10-14T02:05:06Z";
+    const started = (id: string, at: string) => ({
+      kind: "started",
+      id,
+      at,
+      ticket: id,
+      writes: [],
+      cwd: root,
+      workspace: root,
+      row: "fixture",
+      dispatcher_session: null,
+      vendor_session: null,
+      pid: id === "running" ? process.pid : 0,
+    });
+    const records = [
+      started("running", runningAt),
+      started("ended", endedStartedAt),
+      {
+        kind: "ended",
+        id: "ended",
+        at: endedAt,
+        exit: 0,
+        report_path: null,
+        vendor_session: null,
+        verify: [],
+      },
+    ];
+    writeFileSync(
+      join(state, "records.jsonl"),
+      records.map((event) => JSON.stringify(event)).join("\n") + "\n",
+    );
+    const result = Bun.spawnSync(
+      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+      },
+    );
+    const rows = jsonOf(
+      z.array(
+        z.looseObject({
+          id: z.string(),
+          state: z.enum(["running", "ended", "orphaned"]),
+          started_at: z.string(),
+          ended_at: z.string().nullable(),
+        }),
+      ),
+    ).safeParse(result.stdout.toString());
+    expect(result.exitCode).toBe(0);
+    expect(rows.success).toBe(true);
+    if (!rows.success) return;
+    expect(rows.data.find(({ id }) => id === "running")).toMatchObject({
+      state: "running",
+      started_at: runningAt,
+      ended_at: null,
+    });
+    expect(rows.data.find(({ id }) => id === "ended")).toMatchObject({
+      state: "ended",
+      started_at: endedStartedAt,
+      ended_at: endedAt,
+    });
   });
 
   test("ignores unknown record fields and bounds human ls without changing JSON order", () => {

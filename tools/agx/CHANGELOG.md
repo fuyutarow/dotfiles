@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.3.0 — 2026-10-14
+
+- Add each run's `started_at` and nullable `ended_at` event timestamps to `agx ls --json`.
+
 ## 4.2.0 — 2026-10-14
 
 - Record dispatcher sessions from `--session`, `AGX_DISPATCHER_SESSION`, `CLAUDE_CODE_SESSION_ID`, or `CODEX_SESSION_ID`; warn when no session is available.

@@ -381,6 +381,8 @@ export function foldedRuns() {
     string,
     {
       id: string;
+      started_at: string;
+      ended_at: string | null;
       ticket: string;
       state: "running" | "ended" | "orphaned";
       exit: number | null;
@@ -402,6 +404,8 @@ export function foldedRuns() {
     if (event.kind === "started")
       runs.set(event.id, {
         id: event.id,
+        started_at: event.at,
+        ended_at: null,
         ticket: event.ticket,
         state: "orphaned",
         exit: null,
@@ -423,6 +427,7 @@ export function foldedRuns() {
     if (event.kind === "progress") run.last_progress_path = event.path;
     if (event.kind === "ended") {
       run.state = "ended";
+      run.ended_at = event.at;
       run.exit = event.exit;
       run.report_path = event.report_path;
       run.verify = event.verify;

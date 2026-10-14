@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.5.0 — 2026-10-14
+
+- Validate bookmark, mise task, and jj revision premises in the selected tree before dispatch; refusals name each premise and include command output.
+
 ## 4.4.0 — 2026-10-14
 
 - Close stdin for Codex and Claude worker processes; classify a stalled Codex stdin-wait diagnostic and repeated identical tool errors as distinct receipt outcomes.

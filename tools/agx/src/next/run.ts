@@ -116,7 +116,7 @@ export function check(flags: Flags): number {
   const premises = checkPremises(ticket.premises, cwd);
   if (premises.status === "missing") {
     return fatal(
-      `missing premises in --cd tree: ${premises.premises.join(", ")}`,
+      `missing premises in --cd tree: ${premises.details.join("; ")}`,
       2,
     );
   }
@@ -139,7 +139,7 @@ export async function run(flags: Flags): Promise<number> {
   const premises = checkPremises(ticket.premises, cwd);
   if (premises.status === "missing")
     return fatal(
-      `missing premises in --cd tree: ${premises.premises.join(", ")}`,
+      `missing premises in --cd tree: ${premises.details.join("; ")}`,
       2,
     );
   if (premises.status === "timeout") return fatal("premise check timed out", 2);

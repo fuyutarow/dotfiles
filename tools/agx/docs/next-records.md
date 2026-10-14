@@ -91,3 +91,13 @@ are expanded. Overlap is reported and never blocks a command.
 `check` evaluates declared premises in the `--cd` tree. The caller must pass an
 up-to-date tree. `workspace` is the resolved `--cd` directory unless a ticket
 declares a separate workspace.
+
+Premises may be `file:<path>`, `symbol:<name>` or `symbol:<name>@<glob>`,
+`bookmark:<name>` or `bookmark:<name>@<remote>`, `task:<mise-task>`, and
+`rev:<jj-revset>`. Bookmark names are emitted with a jj template, excluding
+human-readable commit descriptions. Bookmark and revision premises use jj when
+the selected tree is a jj repository; bookmark checks fall back to Git refs in
+a non-jj Git tree.
+Task names come from `mise tasks --json`. All premise commands share a five
+second total budget. A failed premise refuses `check` and `run` with exit 2,
+including the premise and at most the last three trimmed lines of command output.

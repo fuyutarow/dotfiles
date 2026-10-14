@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import {
   mkdtempSync,
   mkdirSync,
+  chmodSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -42,7 +43,7 @@ const fakeRg = (argv: string[], cwd: string) => {
   const matches = paths.filter((path) =>
     readFileSync(join(cwd, path), "utf8").includes(needle),
   );
-  return { exitCode: matches.length === 0 ? 1 : 0, stdout: matches.join("\n") };
+  return { exitCode: matches.length === 0 ? 1 : 0, output: matches.join("\n") };
 };
 
 describe("premise checks", () => {
@@ -58,13 +59,18 @@ describe("premise checks", () => {
     expect(checkPremises(["file:src/missing.ts"], scratch)).toEqual({
       status: "missing",
       premises: ["file:src/missing.ts"],
+      details: ["file:src/missing.ts: file does not exist"],
     });
   });
 
   test("an absent symbol premise is reported", () => {
     expect(
       checkPremises(["symbol:missingFunction"], scratch, { runner: fakeRg }),
-    ).toEqual({ status: "missing", premises: ["symbol:missingFunction"] });
+    ).toEqual({
+      status: "missing",
+      premises: ["symbol:missingFunction"],
+      details: ["symbol:missingFunction: no matching text"],
+    });
   });
 
   test("a symbol glob restricts the search", () => {
@@ -80,13 +86,98 @@ describe("premise checks", () => {
     ).toEqual({
       status: "missing",
       premises: ["symbol:routeWorker@tests/**"],
+      details: ["symbol:routeWorker@tests/**: no matching text"],
     });
+  });
+
+  const withFakeTools = (
+    tools: Record<string, string>,
+    run: (
+      runner: (
+        argv: string[],
+        cwd: string,
+        timeoutMs: number,
+      ) => { exitCode: number | null; output: string },
+    ) => void,
+  ): void => {
+    const bin = join(scratch, "fake-bin");
+    mkdirSync(bin, { recursive: true });
+    for (const [name, script] of Object.entries(tools)) {
+      const path = join(bin, name);
+      writeFileSync(path, `#!/bin/sh\n${script}\n`);
+      chmodSync(path, 0o755);
+    }
+    const oldPath = process.env.PATH;
+    process.env.PATH = `${bin}:${oldPath ?? ""}`;
+    using _restorePath = {
+      [Symbol.dispose]: () => {
+        if (oldPath === undefined) delete process.env.PATH;
+        else process.env.PATH = oldPath;
+      },
+    };
+    run((argv, cwd, timeoutMs) => {
+      const result = Bun.spawnSync(
+        ["sh", "-c", 'exec "$@"', "agx-test", ...argv],
+        {
+          cwd,
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env },
+          timeout: Math.max(1, Math.floor(timeoutMs)),
+        },
+      );
+      return {
+        exitCode: result.exitCode,
+        output: `${result.stdout.toString()}${result.stderr.toString()}`,
+      };
+    });
+  };
+
+  test("bookmark, task, and rev premises pass or refuse using fake PATH tools", () => {
+    withFakeTools(
+      {
+        jj: 'if [ "$1" = root ]; then echo fake-root; exit 0; fi\nif [ "$1" = bookmark ]; then\n  if [ "$4" != "-T" ]; then echo "human bookmark output"; echo "  multiline description"; exit 0; fi\n  echo "main"; echo "release@origin"; echo "wip-u26-headroom: qzmvvrst 0a83339d wip(u26): ..."; echo "  description continuation"; echo "  final description line"; exit 0\nfi\nif [ "$1" = log ] && [ "$3" = @ ]; then echo abc123; exit 0; fi\necho "No revisions match" >&2\nexit 1',
+        mise: `echo '[{"name":"land"},{"name":"check"}]'`,
+      },
+      (runner) => {
+        expect(
+          checkPremises(["bookmark:main", "bookmark:release@origin"], scratch, {
+            runner,
+          }),
+        ).toEqual({ status: "ok" });
+        expect(checkPremises(["task:land"], scratch, { runner })).toEqual({
+          status: "ok",
+        });
+        expect(checkPremises(["rev:@"], scratch, { runner })).toEqual({
+          status: "ok",
+        });
+        expect(
+          checkPremises(["bookmark:unknown@origin"], scratch, { runner }),
+        ).toEqual({
+          status: "missing",
+          premises: ["bookmark:unknown@origin"],
+          details: [
+            "bookmark:unknown@origin: wip-u26-headroom: qzmvvrst 0a83339d wip(u26): ...\ndescription continuation\nfinal description line",
+          ],
+        });
+        expect(checkPremises(["task:missing"], scratch, { runner })).toEqual({
+          status: "missing",
+          premises: ["task:missing"],
+          details: ['task:missing: [{"name":"land"},{"name":"check"}]'],
+        });
+        expect(checkPremises(["rev:missing()"], scratch, { runner })).toEqual({
+          status: "missing",
+          premises: ["rev:missing()"],
+          details: ["rev:missing(): No revisions match"],
+        });
+      },
+    );
   });
 
   test("a timeout skips the check without refusing", () => {
     expect(
       checkPremises(["symbol:routeWorker"], scratch, {
-        runner: () => ({ exitCode: null, stdout: "" }),
+        runner: () => ({ exitCode: null, output: "" }),
       }),
     ).toEqual({ status: "timeout" });
   });

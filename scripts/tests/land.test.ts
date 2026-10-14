@@ -325,6 +325,36 @@ function digest(root: string): string {
 }
 
 describe("land workspace", () => {
+  test("workspace name and relative path resolve to the same listed workspace", () => {
+    const f = fixture();
+    writeFileSync(join(f.worker, "keep.txt"), "workspace change\n");
+    const byName = f.land(["--dry-run"]);
+    const byPath = f.land(["--dry-run"], {}, f.main, "../dotfiles-arm-worker");
+    for (const result of [byName, byPath]) {
+      expect(
+        result.exitCode,
+        result.stdout.toString() + result.stderr.toString(),
+      ).toBe(0);
+      expect(result.stdout.toString()).toContain(
+        "[land] workspace: ok dotfiles-arm-worker",
+      );
+    }
+  });
+
+  test("unknown workspace is refused with the known workspace names", () => {
+    const f = fixture();
+    const result = f.land([], {}, f.main, "not-a-workspace");
+    expect(result.exitCode).toBe(1);
+    const refusals = result.stdout
+      .toString()
+      .split("\n")
+      .filter((line) => line.includes("unknown workspace"));
+    expect(refusals).toEqual([
+      '[land] preflight: FAIL unknown workspace "not-a-workspace"; known workspaces: default, dotfiles-arm-worker',
+    ]);
+    expect(result.stdout.toString()).not.toContain("workspace_root");
+  });
+
   test("checks package bin targets in the workspace being landed", () => {
     const f = fixture();
     const packageRoot = join(f.main, "tools", "fixture-bin");
@@ -364,6 +394,10 @@ describe("land workspace", () => {
       statSync(join(f.main, "tools", "fixture-bin", "src", "main.ts")).mode &
         0o111,
     ).not.toBe(0);
+    expect(result.stdout.toString()).toContain(
+      "[land] NOT LIVE until: mise run deploy (changed: tools/fixture-bin/src/main.ts)",
+    );
+    expect(result.stdout.toString()).toContain("[land] summary: NOT LIVE");
   });
 
   test("usehooks changes check consumers before commit and refuse hook errors", () => {

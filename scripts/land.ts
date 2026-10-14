@@ -15,7 +15,15 @@ import {
   writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  join,
+  relative as relativePath,
+  resolve,
+  sep,
+} from "node:path";
 import { cli } from "cleye";
 import {
   errAsync,
@@ -37,6 +45,7 @@ import { enqueue, landLock, queueStatus, runQueue } from "./land-queue.ts";
 import { renderRefusal } from "./render-source.ts";
 import {
   landExit,
+  landLiveness,
   landSummary,
   ledgerAcceptances,
   lifecycleJudgments,
@@ -637,36 +646,85 @@ function pushLandCommit(
   });
 }
 
-function findWorkspaceListMatch(
+function parseWorkspaceList(
   output: string,
-  requestedPath: string,
-  requestedBasename: string,
-): { name: string; path: string } | undefined {
-  for (const line of output.split("\n")) {
-    const [name, path] = line.split("\t");
-    if (name === undefined || path === undefined) continue;
-    if (
-      resolve(path) === resolve(requestedPath) ||
-      basename(path) === requestedBasename
-    )
-      return { name, path };
-  }
-  return undefined;
+  root: string,
+): { name: string; path: string }[] {
+  return output
+    .split("\n")
+    .flatMap((line) => {
+      const match = /^([^:]+): (.+?) [a-z0-9]{8,} [0-9a-f]{8,} /u.exec(line);
+      if (match?.[1] === undefined || match[2] === undefined) return [];
+      return [{ name: match[1].trim(), path: resolve(root, match[2]) }];
+    })
+    .toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
-async function listWorkspaceMatch(
+async function resolveWorkspace(
   root: string,
-  requestedPath: string,
-  requestedBasename: string,
-): Promise<{ name: string; path: string } | undefined> {
-  const listed = await read(root, [
-    "workspace",
-    "list",
-    "--template",
-    'name ++ "\\t" ++ workspace_root ++ "\\n"',
-  ]);
-  if (listed.isErr()) return undefined;
-  return findWorkspaceListMatch(listed.value, requestedPath, requestedBasename);
+  requested: string,
+): Promise<{ name?: string; path?: string; knownNames: string[] }> {
+  const listed = await read(root, ["workspace", "list"]);
+  if (listed.isErr()) return { knownNames: [] };
+  const entries = parseWorkspaceList(listed.value, root);
+  const names = entries.map(({ name }) => name);
+  const roots = new Map(entries.map(({ name, path }) => [name, path]));
+  const aliasedName = requested.startsWith("dotfiles-arm-")
+    ? requested.slice("dotfiles-arm-".length)
+    : requested;
+  const requestedName = roots.has(requested) ? requested : aliasedName;
+  const namedRoot = roots.get(requestedName);
+  if (namedRoot !== undefined)
+    return { name: requestedName, path: namedRoot, knownNames: names };
+
+  const candidatePath = resolve(requested);
+  if (!existsSync(candidatePath)) return { knownNames: names };
+  const candidateRoot = await read(candidatePath, ["workspace", "root"]);
+  if (candidateRoot.isErr()) return { knownNames: names };
+  const candidate = realpathSync(candidateRoot.value.trim());
+  const match = entries.find(({ path }) => realpathSync(path) === candidate);
+  if (match !== undefined)
+    return { name: match.name, path: match.path, knownNames: names };
+  return { knownNames: names };
+}
+
+async function packageBinTargets(root: string): Promise<string[]> {
+  const targets: string[] = [];
+  for await (const manifest of new Bun.Glob("**/package.json").scan({
+    cwd: root,
+    onlyFiles: true,
+  })) {
+    if (
+      ["node_modules/", ".jj/", ".git/", "archives/"].some((prefix) =>
+        manifest.startsWith(prefix),
+      )
+    )
+      continue;
+    const manifestSource = fromThrowable(
+      () => readFileSync(join(root, manifest), "utf8"),
+      errorMessage,
+    )();
+    if (manifestSource.isErr()) continue;
+    const parsed = jsonOf(
+      z.looseObject({
+        bin: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
+      }),
+    ).safeParse(manifestSource.value);
+    if (!parsed.success || parsed.data.bin === undefined) continue;
+    const values =
+      typeof parsed.data.bin === "string"
+        ? [parsed.data.bin]
+        : Object.values(parsed.data.bin);
+    targets.push(
+      ...values
+        .map((target) =>
+          relativePath(root, resolve(dirname(join(root, manifest)), target)),
+        )
+        .filter((target) => target !== ".." && !target.startsWith(`..${sep}`))
+        .map((target) => target.split(sep).join("/")),
+    );
+  }
+  return targets;
 }
 
 function paths(
@@ -914,40 +972,18 @@ async function main(
       using _landLock = { [Symbol.dispose]: release };
       landedRoot = mainRoot;
       const requestedWorkspace = parsed._[0] ?? "";
-      const workspaceBasename = basename(requestedWorkspace);
-      const directWorkspace = await read(root, [
-        "workspace",
-        "root",
-        "--name",
-        workspaceBasename,
-      ]);
-      let workspaceName = workspaceBasename;
-      let workspacePath = directWorkspace.isOk()
-        ? directWorkspace.value.trim()
-        : undefined;
-      if (workspacePath === undefined) {
-        const listedMatch = await listWorkspaceMatch(
-          root,
-          requestedWorkspace,
-          workspaceBasename,
+      const workspace = await resolveWorkspace(root, requestedWorkspace);
+      if (workspace.path === undefined || workspace.name === undefined) {
+        const knownNames = workspace.knownNames;
+        const namesMessage =
+          knownNames.length === 0 ? "(none)" : knownNames.join(", ");
+        return reject(
+          `unknown workspace ${JSON.stringify(requestedWorkspace)}; known workspaces: ${namesMessage}`,
         );
-        if (listedMatch !== undefined) {
-          workspaceName = listedMatch.name;
-          workspacePath = listedMatch.path;
-        }
       }
-      if (workspacePath === undefined) {
-        workspaceName = workspaceBasename.startsWith("dotfiles-arm-")
-          ? workspaceBasename.slice("dotfiles-arm-".length)
-          : workspaceBasename;
-        workspacePath = (yield* read(root, [
-          "workspace",
-          "root",
-          "--name",
-          workspaceName,
-        ])).trim();
-      }
-      let workerRoot = workspacePath;
+      const workspaceName = workspace.name;
+      let workerRoot = workspace.path;
+      emit(`[land] workspace: ok ${workspaceName}`);
       if (workerRoot === mainRoot || !existsSync(workerRoot))
         return reject(
           "worker workspace must exist and differ from the main checkout",
@@ -1103,6 +1139,15 @@ async function main(
       report.push = "ok";
       emit(`[land] push: ok ${parsed.flags.dryRun ? "preview" : commit}`);
       if (!parsed.flags.dryRun) {
+        const liveness = landLiveness(
+          changed,
+          await packageBinTargets(mainRoot),
+        );
+        report.live = liveness.live;
+        if (!liveness.live)
+          emit(
+            `[land] NOT LIVE until: mise run deploy (changed: ${liveness.deployPaths.join(", ")})`,
+          );
         stage = "landed";
         const recorded = yield* recordWorkspaceLanding(
           workerRoot,

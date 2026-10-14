@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   foreignWip,
   landExit,
+  landLiveness,
   landSummary,
   ledgerAcceptances,
   lifecycleJudgments,
@@ -15,6 +16,24 @@ test("land verdict covers only its commit and push", () => {
   expect(landSummary(report, "abc")).toContain("landed and pushed");
   expect(landExit({ commit: "failed", push: "pending" })).toBe(1);
   expect(landExit({ commit: "ok", push: "failed" })).toBe(1);
+});
+
+test("land liveness distinguishes package bins, hook sources and plain docs", () => {
+  expect(
+    landLiveness(["tools/agx/src/cli.ts"], ["tools/agx/src/cli.ts"]),
+  ).toEqual({ live: false, deployPaths: ["tools/agx/src/cli.ts"] });
+  expect(landLiveness(["tools/agx/package.json"], [])).toEqual({
+    live: false,
+    deployPaths: ["tools/agx/package.json"],
+  });
+  expect(landLiveness(["agents/hooks/attempt.ts"], [])).toEqual({
+    live: false,
+    deployPaths: ["agents/hooks/attempt.ts"],
+  });
+  expect(landLiveness(["docs/notes.md"], [])).toEqual({
+    live: true,
+    deployPaths: [],
+  });
 });
 
 test("lifecycle judged events map accept and reject decisions to run judgments", () => {

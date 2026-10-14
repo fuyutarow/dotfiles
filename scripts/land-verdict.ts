@@ -1,9 +1,11 @@
 // Shared human/queue verdict protocol. Doctor findings are advisory deploy details.
 import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { ETC_LINKS, LINKS, RENDERED, TOOL_OWNED } from "./config-registry.ts";
 
 export const LandReportSchema = z.strictObject({
   commit: z.enum(["pending", "ok", "failed"]),
   push: z.enum(["pending", "ok", "failed"]),
+  live: z.boolean().optional(),
   // Read legacy queue results, but never produce or judge by deployment details here.
   hosts: z.record(z.string(), z.string()).optional(),
   failure: z.string().optional(),
@@ -22,9 +24,47 @@ export function landSummary(report: LandReport, commit?: string): string {
   const landed = report.commit === "ok" && report.push === "ok";
   const exit = landExit(report);
   let status: string;
-  if (exit === 0) status = "ok";
+  if (exit === 0 && report.live === false) status = "NOT LIVE";
+  else if (exit === 0) status = "ok";
   else status = "FAIL";
   return `summary: ${status} commit=${commit ?? "none"} ${landed ? "landed and pushed" : `commit=${report.commit} push=${report.push}`}`;
+}
+
+const deployInputRoots = [
+  ...LINKS.map(([, source]) => source),
+  ...ETC_LINKS.map(([, source]) => source),
+  ...TOOL_OWNED,
+  ...RENDERED.flatMap(({ inputs }) => inputs),
+  "agents/claude/hooks",
+  "agents/codex/hooks.json",
+  "agents/hooks",
+].toSorted();
+
+function isAtOrUnder(path: string, root: string): boolean {
+  return path === root || path.startsWith(`${root}/`);
+}
+
+/** Returns only landed paths whose effects require `mise run deploy` to become live. */
+export function landDeployPaths(
+  changedPaths: readonly string[],
+  packageBinTargets: readonly string[],
+): string[] {
+  return [...new Set(changedPaths)]
+    .filter(
+      (path) =>
+        path.endsWith("package.json") ||
+        packageBinTargets.includes(path) ||
+        deployInputRoots.some((root) => isAtOrUnder(path, root)),
+    )
+    .toSorted();
+}
+
+export function landLiveness(
+  changedPaths: readonly string[],
+  packageBinTargets: readonly string[],
+): { live: boolean; deployPaths: string[] } {
+  const deployPaths = landDeployPaths(changedPaths, packageBinTargets);
+  return { live: deployPaths.length === 0, deployPaths };
 }
 
 export type LedgerAcceptance = {

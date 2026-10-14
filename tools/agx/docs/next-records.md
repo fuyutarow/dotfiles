@@ -16,7 +16,10 @@ with a `WARN` line.
 verify should include `mise run gate:land` for a change that will land in dotfiles.
 
 Human `agx ls` shows runs newest first, limited to the last 30 by default; `agx ls --all` shows
-the full list. `agx ls --json` remains complete and preserves append/fold order.
+the full list. `agx ls --json` remains complete and preserves append/fold order when no selector
+is supplied. `agx ls SELECTOR [--json]` selects an exact run id, unique run-id prefix, or exact
+ticket name. A ticket selection is ordered oldest first so its latest run is last. Ambiguous
+prefixes and unmatched selectors exit 2 with one candidate line.
 
 The next ticket schema requires `proposition.id`, `proposition.claim`, and
 `proposition.refuted_by`; legacy `decides`, `serves`, and `graph_node` are optional

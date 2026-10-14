@@ -105,10 +105,10 @@ async function main(): Promise<void> {
     const parsed = cli(
       {
         name: "agx ls",
-        parameters: [],
+        parameters: ["[selector]"],
         help: {
           description:
-            "List runs newest first (last 30 by default; use --all for everything).",
+            "List runs newest first (last 30 by default; use --all for everything). SELECTOR is a run id/prefix or ticket name.",
         },
         flags: {
           json: { type: Boolean, description: "emit the ls JSON contract" },
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
       undefined,
       commandArgs,
     );
-    exit = list(parsed.flags satisfies Flags);
+    exit = list({ ...parsed.flags, selector: parsed._[0] } satisfies Flags);
   } else if (commandName === "judge") {
     const parsed = cli(
       {

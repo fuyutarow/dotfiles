@@ -350,29 +350,73 @@ export async function run(flags: Flags): Promise<number> {
   return exit;
 }
 
+const selectedRuns = (
+  rows: ReturnType<typeof foldedRuns>,
+  selector: string | undefined,
+  startedAt: Map<string, string>,
+): { rows: ReturnType<typeof foldedRuns>; error?: string } => {
+  const newestFirst = rows.toSorted((a, b) =>
+    (startedAt.get(b.id) ?? "").localeCompare(startedAt.get(a.id) ?? ""),
+  );
+  if (selector === undefined) return { rows: newestFirst };
+  const exactId = rows.find((entry) => entry.id === selector);
+  if (exactId !== undefined) return { rows: [exactId] };
+  const ticketRuns = rows.filter((entry) => entry.ticket === selector);
+  if (ticketRuns.length > 0)
+    return {
+      rows: ticketRuns.toSorted((a, b) =>
+        (startedAt.get(a.id) ?? "").localeCompare(startedAt.get(b.id) ?? ""),
+      ),
+    };
+  const idMatches = rows.filter((entry) => entry.id.startsWith(selector));
+  if (idMatches.length === 1) return { rows: idMatches };
+  if (idMatches.length > 1)
+    return {
+      rows: [],
+      error: `selector '${selector}' is ambiguous; run id candidates: ${idMatches
+        .map((entry) => entry.id)
+        .toSorted()
+        .join(", ")}`,
+    };
+  return {
+    rows: [],
+    error: `no run id or exact ticket matches '${selector}'; ticket candidates: ${[
+      ...new Set(rows.map((entry) => entry.ticket)),
+    ]
+      .toSorted()
+      .slice(0, 10)
+      .join(", ")}`,
+  };
+};
+
 export function list(flags: Flags): number {
   const rows = foldedRuns();
   const asJson = value(flags, "json") === "true" || flags.json === true;
   const all = flags.all === true || value(flags, "all") === "true";
+  const selector = value(flags, "selector");
   const startedAt = new Map(
     events().flatMap((event) =>
       event.kind === "started" ? [[event.id, event.at] as const] : [],
     ),
   );
-  const newestFirst = rows.toSorted((a, b) =>
-    (startedAt.get(b.id) ?? "").localeCompare(startedAt.get(a.id) ?? ""),
-  );
-  const visible = all || asJson ? newestFirst : newestFirst.slice(0, 30);
+  const selection = selectedRuns(rows, selector, startedAt);
+  if (selection.error !== undefined) {
+    process.stderr.write(`agx: ${selection.error}\n`);
+    return 2;
+  }
+  let visible = selection.rows;
+  if (selector === undefined && !all && !asJson) visible = visible.slice(0, 30);
   let output = visible
     .map(
       (entry) =>
         `${entry.id} ${entry.state} ${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"}`,
     )
     .join("\n");
-  if (asJson) output = `${JSON.stringify(rows)}\n`;
-  else if (visible.length > 0) {
+  if (asJson)
+    output = `${JSON.stringify(selector === undefined ? rows : visible)}\n`;
+  else if (selector === undefined && visible.length > 0) {
     output += "\n";
-    const older = newestFirst.length - visible.length;
+    const older = rows.length - visible.length;
     if (older > 0) output += `… ${older} older (agx ls --all)\n`;
   }
   process.stdout.write(output);

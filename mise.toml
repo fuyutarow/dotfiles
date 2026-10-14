@@ -26,6 +26,11 @@
 bun = "1.4"
 rumdl = "0.2.78"
 
+[tasks.accept]
+description = "READ-ONLY acceptance view for the latest selected agx run; does not judge or land. Usage: mise run accept -- <ticket|run-id>"
+dir = "{{config_root}}"
+run = "bun scripts/agx-accept.ts"
+
 [tasks.up]
 alias = "u"
 description = "Update system packages"

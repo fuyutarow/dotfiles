@@ -11,6 +11,8 @@ agx has four jobs:
 
 Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` validates ticket premises in the supplied tree and reports overlapping live write globs; it does not reserve writes. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
 
+`ls` owns fold and selection: `agx ls [SELECTOR] [--json]` accepts a run id, a unique run-id prefix, or an exact ticket name. Ticket selection returns that ticket's runs oldest first, with the newest run last. Ambiguous ID prefixes and unmatched selectors exit 2 with one line naming candidates. The acceptance view is composed outside agx by `scripts/agx-accept.ts`; agx deliberately does not render reports or inspect workspace diffs.
+
 ## 2. agx does not
 
 | concern | owner | why |

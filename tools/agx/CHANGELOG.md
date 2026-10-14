@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.7.0 — 2026-10-14
+
+- Add run-id/prefix and exact ticket selectors to `agx ls`; ticket selections are ordered oldest first so the newest run is last.
+- Report selector candidates on refusal and render elapsed time in statusline format, including running rows.
+- Add the read-only `scripts/agx-accept.ts` composer through `mise run accept -- SELECTOR` for verify, report, workspace diff, and next-command presentation.
+
 ## 4.6.1 — 2026-10-14
 
 - Forward the user bus, XDG, mise, TLS, identity, terminal, and graveyard environment required by worker tools; retain the AGX namespace while excluding coordinator continuation and vendor session state.
@@ -7,7 +13,7 @@
 ## 4.6.0 — 2026-10-14
 
 - Launch Claude and Codex workers with an explicit environment allow-list, excluding coordinator continuation slots and vendor session IDs.
-- Treat a SessionStart without a bound continuation slot as this run's own brief/workspace state; dispatched agx workers do not bind records.
+- Treat an unbound SessionStart as a worker-owned brief and workspace; dispatched agx workers do not bind continuation records.
 
 ## 4.5.0 — 2026-10-14
 

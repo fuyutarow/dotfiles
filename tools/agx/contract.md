@@ -7,7 +7,7 @@ an alias for one release. The CLI has exactly five commands:
 | --- | --- |
 | `agx run TICKET [--cd TREE] [--sandbox MODE] [--continue RUN_ID] [--session ID]` | Route a ticket to a roster worker, run it, and append run records. |
 | `agx check TICKET [--cd TREE]` | Validate a ticket and its premises without starting a worker. |
-| `agx ls [--json]` | List runs and judgments. |
+| `agx ls [SELECTOR] [--json]` | List runs and judgments; SELECTOR is a run id, unique run-id prefix, or exact ticket name. Ticket selections put the newest run last. |
 | `agx judge RUN_ID accept\|reject [--note TEXT]` | Append an acceptance or rejection judgment. |
 | `agx stats [--import-legacy]` | Report run counts; optionally import legacy run records. |
 
@@ -21,6 +21,10 @@ Use `agx ls --json` as the machine-readable view. Its rows include the run ID, t
 workspace, selected roster row, write globs, judgment, report path, progress path, and continuation
 metadata. `scripts/land.ts` consumes this view alongside legacy run records when deciding whether a
 workspace has an accepted run.
+
+`scripts/agx-accept.ts SELECTOR`, exposed as `mise run accept -- SELECTOR`, composes the selected
+latest run's verification exits, report preview, workspace diff stat, and suggested judge/land
+commands. It is read-only; the coordinator runs those commands separately.
 
 `dispatcher_session` uses `--session ID` first, then `AGX_DISPATCHER_SESSION`,
 `CLAUDE_CODE_SESSION_ID`, and `CODEX_SESSION_ID`. If none is available, the run records `null`

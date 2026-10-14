@@ -3,14 +3,14 @@ import { hookStderr } from "./lib.ts";
 //
 // BLOCKS (exit 2) when the assistant's own prose-audit / style-review report uses
 // self-justifying or unbounded gate language — the "監査完了 / PASS / 核は stable /
-// 私の起因でない" performance the linting-prose skill forbids. The skill states the
+// 私の起因でない" performance the dotfiles:linting-prose skill forbids. The skill states the
 // criterion; this hook makes it actually FAIL instead of "be careful".
 //
 // Safety:
 //   0. FAIL OPEN     — any error -> exit 0 (never break a turn).
 //   1. LOOP GUARD    — stop_hook_active -> exit 0 (force-stop cap is 8 consecutive blocks).
 //   2. CONTEXT GATE  — only audit/review turns: the user asked for a prose/style/skill
-//                      review, OR the assistant invoked linting-prose.
+//                      review, OR the assistant invoked dotfiles:linting-prose.
 //   3. TURN-SCOPED   — only this turn's assistant text.
 //   4. CODE-STRIPPED — fences, inline spans, and > blockquotes removed first, so a
 //                      QUOTED bad example never fires.

@@ -16,6 +16,7 @@ import {
   thirdPartySkillFiles,
   type SkillFile,
 } from "./skills-declaration.ts";
+import { validateDotfilesPluginFiles } from "./skills-plugin.ts";
 
 const git = (args: string[]): { code: number; out: string } => {
   const p = Bun.spawnSync(["git", ...args], {
@@ -100,6 +101,31 @@ function listSkillPaths(): { code: number; out: string; error: string } {
 const listed = listSkillPaths();
 if (listed.code !== 0) {
   console.log("❌ tracked-files failed — " + listed.error);
+  process.exit(1);
+}
+
+const marketplaceFile = readCandidateFile(".claude-plugin/marketplace.json");
+const pluginFile = readCandidateFile(
+  "agents/skills/.claude-plugin/plugin.json",
+);
+if (marketplaceFile.code !== 0 || pluginFile.code !== 0) {
+  console.log(
+    "❌ missing Claude plugin marketplace or plugin manifest in the commit candidate",
+  );
+  process.exit(1);
+}
+const candidateNames = listed.out
+  .split("\0")
+  .filter(Boolean)
+  .map((path) => path.split("/")[2] ?? "");
+const plugin = validateDotfilesPluginFiles(
+  ROOT,
+  marketplaceFile.out,
+  pluginFile.out,
+  candidateNames,
+);
+if (plugin.isErr()) {
+  console.log(`❌ invalid Claude plugin manifests: ${plugin.error}`);
   process.exit(1);
 }
 

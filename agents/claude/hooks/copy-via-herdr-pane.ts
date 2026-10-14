@@ -1,7 +1,7 @@
 // COPY_PAYLOAD_FILE=<payload-file> bun copy-via-herdr-pane.ts
 //   exit 0 = delivered (prints the pane id it used, already closed by then), non-zero =
 //   could not deliver. The file path rides the ENVIRONMENT, not argv: a hook is zero-dep
-//   (writing-bun-scripts BG3) and BG1 forbids hand-parsing process.argv without Cleye, which a
+//   (dotfiles:writing-bun-scripts BG3) and BG1 forbids hand-parsing process.argv without Cleye, which a
 //   zero-dep file cannot import — an env var needs no parser at all.
 //
 // WHY THIS EXISTS. Claude Code cannot put arbitrary text on the clipboard, by design:

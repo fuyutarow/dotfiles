@@ -1,13 +1,13 @@
 import { hookJson, hookStderr } from "./lib.ts";
 // PreToolUse gate (matcher: Write|Edit|MultiEdit) — NO-NEW-BASH, made deterministic.
 //
-// The rule lives in writing-bun-scripts (THE LAW, gate BG0): local automation is Bun
+// The rule lives in dotfiles:writing-bun-scripts (THE LAW, gate BG0): local automation is Bun
 // TypeScript; bash survives only as a declared thin shim. Prose alone did not hold it, so:
 //
 //   1. Any Write/Edit that leaves a shell script behind gets a NUDGE — exit 0 + JSON
 //      `additionalContext` recommending a `.ts` run by bun. That is the only channel that
 //      reaches the model on PreToolUse without blocking: raw stdout goes to the debug log and
-//      stderr on exit 0 is not fed back (operating-the-harness references/hooks.md). No
+//      stderr on exit 0 is not fed back (dotfiles:operating-the-harness references/hooks.md). No
 //      permissionDecision is set, so the normal permission flow still applies.
 //   2. If the result would exceed MAX_LINES physical lines, the Write/Edit is DENIED —
 //      but only when it creates the file or grows it. A legacy script already over the limit
@@ -135,7 +135,7 @@ function main(): void {
       "deny",
       `no-new-bash: refusing this ${tool} — ${path} would be ${lines} lines ` +
         `(${prev === null ? "new file" : `was ${prev}`}; limit ${MAX_LINES}). NO-NEW-BASH ` +
-        `(writing-bun-scripts BG0): local automation is a Bun TypeScript file run as ` +
+        `(dotfiles:writing-bun-scripts BG0): local automation is a Bun TypeScript file run as ` +
         `\`bun <path>.ts\`; bash survives only as a thin shim marked \`# shim: <bootstrap|` +
         `hook-entry|exec-wrapper|vendored>\`. Write the logic as .ts (Bun.$ for shell-outs, ` +
         `Bun.spawn with a native timeout for anything that can hang) and keep at most a ` +
@@ -153,7 +153,7 @@ function main(): void {
         additionalContext:
           `no-new-bash: ${path} is a shell script (${lines} lines after this ${tool}; ` +
           `hard stop above ${MAX_LINES} when a file is created or grows). NO-NEW-BASH ` +
-          `(writing-bun-scripts): prefer a .ts run by bun — the first conditional, loop, or ` +
+          `(dotfiles:writing-bun-scripts): prefer a .ts run by bun — the first conditional, loop, or ` +
           `JSON access in a .sh is the signal it should have been .ts.${marker}`,
       },
     }) + "\n",

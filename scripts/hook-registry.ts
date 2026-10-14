@@ -2,8 +2,8 @@
 // config. Pure functions, zero-dep (zod comes from the committed agents/hooks/zod.ts bundle), so
 // scripts/render-home.ts can wire at DEPLOY time on a half-set-up machine.
 //
-// WHY. Skills were vendor-agnostic (agents/skills → link:skills → Claude AND Codex) but hooks were
-// not: agents/claude/hooks was wired into Claude only. On 2026-09-26 a Codex session on r99 ran
+// WHY. Skills and hooks have different vendor adapters: in-house skills use the Claude plugin and
+// Codex copy installer, while agents/claude/hooks was wired into Claude only. On 2026-09-26 a Codex session on r99 ran
 // 1,530 cargo calls and rebuilt 145 GB of target/ with C: at 3% free — the storage-headroom gate
 // that would have refused it existed, but only Claude ran it. The fix is the skills shape: one
 // source dir (agents/hooks, linked to ~/.agents/hooks), one registry, N vendors.

@@ -17,7 +17,11 @@ export const STEPS: Step[] = [
     args: ["agents/codex/codex-config.ts"],
     boundMs: 5_000,
   },
-  { name: "link:skills", args: ["scripts/link-skills.ts"], boundMs: 10_000 },
+  {
+    name: "skills:sync:in-house",
+    args: ["scripts/skills-sync.ts", "--in-house-only"],
+    boundMs: 10_000,
+  },
 ];
 
 export async function runSteps(

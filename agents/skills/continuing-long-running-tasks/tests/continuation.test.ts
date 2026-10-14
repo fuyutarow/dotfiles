@@ -449,6 +449,17 @@ describe("compact lifecycle adapters", () => {
       expect(result.stdout).toContain(path);
       expect(result.stdout).not.toContain("SECRET-SENTINEL");
       expect(result.stdout).not.toContain("src/auth.ts:42");
+      if (platform === "claude") {
+        expect(result.stdout).toContain(
+          "dotfiles:continuing-long-running-tasks",
+        );
+        expect(result.stdout).not.toContain("$continuing-long-running-tasks");
+      } else {
+        expect(result.stdout).toContain("$continuing-long-running-tasks");
+        expect(result.stdout).not.toContain(
+          "dotfiles:continuing-long-running-tasks",
+        );
+      }
     },
   );
 

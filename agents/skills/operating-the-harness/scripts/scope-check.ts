@@ -16,17 +16,15 @@
 //     §5 item 8 owns that budget question; this script never prices anything.
 //
 // Scope of the walk is deliberately narrow — `settings*.json` plus `hooks/` — so the check
-// never wanders into `~/.claude/skills` (a symlink farm into the dotfiles repo) and never
-// scans itself.
+// never wanders into `~/.claude/skills` (tool-owned plugin/discovery data) and never scans itself.
 
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-// Bare specifier, not pinned inline: this tree is NOT zero-dep. It is symlinked (never
-// mirrored/copied) into ~/.claude/skills by `mise run link:skills`, so the repo-root graduation
-// project (package.json + bun.lock) governs it — Bun resolves through the symlink to this
-// file's realpath and finds that root from any cwd (BG3).
+// Bare specifier, not pinned inline: this check is run from the repository source tree, whose
+// package.json + bun.lock govern the dependency. Claude loads the skill from that same in-place
+// local plugin path; the installed Codex copy is for skill guidance, not this repository check.
 import { cli } from "cleye";
 
 const HOME = homedir();

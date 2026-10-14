@@ -1,6 +1,6 @@
 # Agent Skills
 
-Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
+Operating manuals for AI coding agents, installed for Claude Code and Codex by `mise run skills:sync`.
 Each active skill is a durable rule-set the agent loads on demand.
 Retired manuals are listed in [the archive](../../archives/skills/README.md); they are not callable skills.
 A reference to a retired skill means its archived contract, not automatic reactivation.

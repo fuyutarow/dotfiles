@@ -85,6 +85,37 @@ export async function runSkillsCli(
   return { exitCode, timedOut: signal.aborted };
 }
 
+/** Run an explicit skills CLI subcommand through the pinned Bun-based launcher. */
+export async function runPinnedSkillsCommand(
+  version: string,
+  args: readonly string[],
+  home: string,
+  cwd: string,
+): Promise<{ exitCode: number; timedOut: boolean }> {
+  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  if (Bun.which("bunx") === null) return { exitCode: 127, timedOut: false };
+  const proc = Bun.spawn(
+    ["bunx", "--bun", "--yes", `skills@${version}`, ...args],
+    {
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit",
+      cwd,
+      env: {
+        ...process.env,
+        HOME: home,
+        BUN_INSTALL_CACHE_DIR:
+          process.env.BUN_INSTALL_CACHE_DIR ??
+          resolve(homedir(), ".bun/install/cache"),
+      },
+      signal,
+      killSignal: "SIGTERM",
+    },
+  );
+  const exitCode = await proc.exited;
+  return { exitCode, timedOut: signal.aborted };
+}
+
 export function newlyInstalledStowaways(
   before: SkillLock,
   after: SkillLock,

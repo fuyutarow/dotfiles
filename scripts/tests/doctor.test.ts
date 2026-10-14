@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -103,6 +104,47 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("skills skips an absent Codex global skill root when no unsafe links exist", () => {
+    const home = tmp("doctor-skills-fresh-");
+    const result = doctor("skills", { HOME: home, DOTFILES: REPO });
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("SKIP  skills");
+  });
+
+  test("skills reports all 57 in-house tool links and the sync repair", () => {
+    const home = tmp("doctor-skills-links-");
+    const skillRoot = join(REPO, "agents/skills");
+    const skillNames = readdirSync(skillRoot, { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          existsSync(join(skillRoot, entry.name, "SKILL.md")),
+      )
+      .map((entry) => entry.name);
+    mkdirSync(join(home, ".claude/skills"), { recursive: true });
+    for (const name of skillNames)
+      symlinkSync(join(skillRoot, name), join(home, ".claude/skills", name));
+
+    const result = doctor("skills", { HOME: home, DOTFILES: REPO });
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("FAIL  skills");
+    expect(result.out).toContain("57 repo-owned tool skill symlink(s) remain");
+    expect(result.out).toContain("mise run skills:sync");
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  test("skills reports missing Codex copies and the sync repair", () => {
+    const home = tmp("doctor-skills-codex-missing-");
+    mkdirSync(join(home, ".agents/skills"), { recursive: true });
+    const result = doctor("skills", { HOME: home, DOTFILES: REPO });
+    expect(result.code).toBe(1);
+    expect(result.out).toContain(
+      "Codex in-house skill copy/copies are missing",
+    );
+    expect(result.out).toContain("mise run skills:sync");
+    rmSync(home, { recursive: true, force: true });
+  });
+
   test("rip-graveyard warns when its bounded scan cannot confirm the cap", async () => {
     const home = tmp("doctor-rip-graveyard-bounded-");
     const finding = await checkRipGraveyard(

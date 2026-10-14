@@ -34,9 +34,9 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
-// Bare specifier, not pinned inline: this tree is NOT zero-dep. It is symlinked (never
-// mirrored/copied) into ~/.claude/skills by `mise run link:skills`, so the repo-root graduation
-// project (package.json + bun.lock) governs it (BG3).
+// Bare specifier, not pinned inline: this check runs from the repository source tree, whose
+// package.json + bun.lock govern the dependency. Claude loads the skill from that same in-place
+// local plugin path; the installed Codex copy is for skill guidance, not this repository check.
 import { cli } from "cleye";
 
 // PreToolUse gates only — the decidePre JSON channel. See the header note on detect-*.ts.

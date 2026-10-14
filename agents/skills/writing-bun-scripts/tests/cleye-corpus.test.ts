@@ -113,7 +113,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/link-dots.ts" },
   { path: "scripts/secrets-push.ts" },
   { path: "scripts/auth-push.ts" },
-  { path: "scripts/link-skills.ts" },
+  { path: "scripts/link-agent-assets.ts" },
   { path: "scripts/skills-doctor.ts" },
   { path: "scripts/skills-migrate.ts" },
   { path: "scripts/skills-sync.ts" },

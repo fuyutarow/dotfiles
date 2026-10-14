@@ -71,12 +71,13 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    unguarded OS-specific commands; branch on `$IS_MAC` / `$IS_WSL`, guard with existence checks.
 3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `LINKS` in
    `scripts/config-registry.ts` (realized by `scripts/link-dots.ts`)
-   (one source → one destination); in-house `agents/` assets → `mise.toml`'s `link:skills` (one
-   source → N AI tools). `link:skills` links in-house skills only; third-party skills are listed in
-   `agents/skills.thirdparty.toml` and installed into tool-owned global directories by
-   `skills:add` / `skills:sync`. It never links `~/.agents/skills` as a whole into the repo. Both
-   linkers PRUNE links into this repo that no longer resolve, so a rename cannot leave a phantom
-   skill or a dead hook link behind. **PATH commands are neither**: a repo CLI that
+   (one source → one destination); agent commands and Codex guidance → `mise.toml`'s
+   `agents:link`. In-house skills are installed through `skills:sync`: Claude Code gets the
+   local `dotfiles` plugin from `.claude-plugin/marketplace.json`, and Codex gets copies via the
+   `skills` CLI. No skill directory is linked into a tool home. Third-party skills remain listed in
+   `agents/skills.thirdparty.toml` and are installed into tool-owned global directories by
+   `skills:add` / `skills:sync`. Sync removes symlinks into this checkout from skill directories
+   before installing. **PATH commands are neither**: a repo CLI that
    should be callable by name (`agent-resource-run`, `serena-foreground`, `repo-retrieve`) is a
    `package.json` `bin` entry, installed into `~/.bun/bin` by `bun link` (`mise run deps`) —
    never a hand-made symlink of a `.ts` into `~/.local/bin`, which holds standalone binaries
@@ -124,8 +125,9 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    `agents/claude/CLAUDE.md` — `mise run lint:one-writer` fails on both); never link a path a
    tool writes (`git config --global`, `jj config set --user`) — make it tool-owned and give the
    repo's half a read-only path; declare third-party skills in `agents/skills.thirdparty.toml` and
-   install them globally with `skills:add` / `skills:sync`. Run `skills:migrate` first if a global
-   skill target still resolves into a repo. A value has one home (the time zone is `zsh/timezone`).
+   install them with `skills:add` / `skills:sync`. `skills:sync` installs Claude's `dotfiles:<name>`
+   skills and Codex's bare-name copies. Run `skills:migrate` first if a global skill target still
+   resolves into another repository. A value has one home (the time zone is `zsh/timezone`).
 7. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
 8. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
    skills use one consistent shape — the official-recommended **gerund** form
@@ -135,10 +137,13 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    skills must not contain the reserved words `claude`/`anthropic`. Keep tool names and trigger
    keywords in
    `description:` (3rd person, "what + when") — that field, with the name, is what the model
-   matches on. Don't mix naming shapes across the collection (inconsistency is the documented
-   anti-pattern). Ref: docs.claude.com Agent Skills → best-practices. The full CRAFT of
-   creating/reforging skills (gates, pipeline, trigger test sets, verification fleet) is the
-   `forging-skills` skill — read it before any skill work.
+   matches on. Keep `name:` bare in the skill file: Claude Code invokes in-house skills as
+   `dotfiles:<name>`; Codex invokes them by the bare name. Shared skill bodies use bare names as
+   IDs, so translate them to `dotfiles:<name>` when invoking a sibling in Claude Code. Don't mix
+   naming shapes across the collection (inconsistency is the documented anti-pattern). Ref:
+   docs.claude.com Agent Skills → best-practices. The full CRAFT of creating/reforging skills
+   (gates, pipeline, trigger test sets, verification fleet) is the `dotfiles:forging-skills` skill —
+   read it before any skill work.
 
 ## Setup / Tasks
 
@@ -156,7 +161,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
   executable/mapped-file/PATH use, prints deferred links and never removes mise runtime installs
   or experiment toolchains. Bun/uv come from brew; hooks and SSH commands reach them via the quiet
   prefix PATH rule. Experiment toolchains are each repo's `mise.toml`, never dotfiles.
-  Renting/destroying: `renting-cloud-gpus` skill.
+  Renting/destroying: `dotfiles:renting-cloud-gpus` skill.
 - **Approved remote coredev target**: `coredev deploy <alias>` uses SSH to make the target host
   read its own `$DOTFILES` (or `$HOME/dotfiles`) declaration and run its selected existing `mise`
   tasks. It never falls back to local execution, clones a checkout, or transfers profiles or
@@ -164,6 +169,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - **Relink dotfiles**: `mise run link:dots` · **Install tools**: `mise run install:tools`
 - **Audit tools**: `mise run tools:audit` · **Update everything**: `mise run up`
 - **MCP servers**: `mise run cc:install-mcp`
+- **Install agent skills**: `mise run skills:sync` (Claude plugin + Codex copies + declared vendors)
 - **Is this machine what the repo declares?** `mise run doctor` (read-only; each FAIL names its repair)
 
 (`j` = `jj` since 2026-10-01, with git-mirroring subcommand aliases in `jj/config.toml`: `j s`, `j d`, `j pu` …; `jl` = `just -l` remains for OTHER projects' justfiles.)
@@ -188,7 +194,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 - **Agents do not run git in this repo** (2026-10-01, same as firedancer). The repo is a colocated
   jj repo (`.git` + `.jj`); `.claude/settings.json` denies `Bash(git:*)`. Operate it with jj
-  (`driving-jujutsu` skill). jj runs no Git hooks, so record and sync through mise:
+  (`dotfiles:driving-jujutsu` skill). jj runs no Git hooks, so record and sync through mise:
   `mise run commit -- -m "<msg>" [--push] -- <path>...` (stages exactly those paths, runs
   `hook:pre-commit`, `jj commit`s them, moves `alpha` to `@-`) and `mise run pull` (fetch, rebase
   onto `alpha`, then `hook:post-merge`). mise tasks may still call git internally.
@@ -214,7 +220,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
   and prints the disambiguated replacement instead of running — branches → `git switch
 [<branch>|-c <branch>]`, files → `git restore [-- <path>]`. Never suggest raw `git checkout`;
   use `git switch`/`git restore` directly. Interactive shells only (scripts/CI/hooks get the
-  real binary via `command git`). Git operations follow the `driving-git` skill; `git/gitconfig`
+  real binary via `command git`). Git operations follow the `dotfiles:driving-git` skill; `git/gitconfig`
   carries the modern defaults (rerere, updateRefs, zdiff3, histogram, autoSetupRemote …).
 - **Terminal state is repaired by WRITING a known-good state, never by querying the terminal.**
   A dropped link never delivers the remote TUI's disable sequences, so the terminal keeps

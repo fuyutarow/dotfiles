@@ -13,7 +13,8 @@
 //   etc-link      the same under /etc, via sudo (WSL)                    writer: human, in the repo
 //   rendered      a function of several declarations (render-home)        writer: render-home.ts
 //   tool-owned    a real machine-local file a tool rewrites on command    writer: that tool
-//   fan-out       one source → N agent tools (mise run link:skills)       writer: human, in the repo
+//   fan-out       agent assets / plugin install → N tools (agents:link, skills:sync)
+//                                                                        writer: task from the repo
 //   applied       converged into a tool or the OS by a task               writer: the task (from the repo)
 //   in-place      read from the checkout itself, never deployed           writer: as named
 //   machine-local exists only on the machine, never in the repo           writer: the human there
@@ -71,8 +72,9 @@ export const COREDEV_SELECTION: Readonly<
       { task: "core:install", timeoutSeconds: 1_800 },
       { task: "deps", timeoutSeconds: 300 },
       { task: "link:dots", timeoutSeconds: 120 },
-      { task: "link:skills", timeoutSeconds: 120 },
       { task: "install:ai-clis", timeoutSeconds: 900 },
+      { task: "agents:link", timeoutSeconds: 120 },
+      { task: "skills:sync", timeoutSeconds: 600 },
       { task: "cc:install-mcp", timeoutSeconds: 120 },
     ],
     doctor: [{ task: "core:doctor", timeoutSeconds: 180 }],
@@ -166,7 +168,7 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
     ".claude/agents/sonnet-medium.md",
   ],
 
-  // --- codex (user-level hooks; AGENTS.md / prompts / skills fan out via link:skills) ---
+  // --- codex (user-level hooks; guidance/prompts link, skills copy-install via skills:sync) ---
   ["all", "agents/codex/hooks", ".codex/hooks"],
   ["all", "agents/codex/terminal", ".codex/terminal"],
 
@@ -352,12 +354,18 @@ const OTHER: readonly Surface[] = [
   {
     kind: "fan-out",
     when: "all",
-    sources: ["agents/skills", "agents/commands", "agents/codex/AGENTS.md"],
+    sources: [
+      ".claude-plugin/marketplace.json",
+      "agents/skills/.claude-plugin/plugin.json",
+      "agents/skills",
+      "agents/commands",
+      "agents/codex/AGENTS.md",
+    ],
     deployed:
-      "in-house skill links under ~/.claude/skills/* and ~/.agents/skills/*; commands and Codex guidance",
+      "Claude local plugin dotfiles:skill-name; Codex copies under ~/.agents/skills/*; commands and Codex guidance links",
     consumer: "Claude Code, Codex, Antigravity",
     writer:
-      "human, in the repo; mise run link:skills links in-house skills and commands; skills:add/sync install declared vendors",
+      "human, in the repo; skills:sync installs the plugin and Codex copies; agents:link links commands and Codex guidance; skills:add/sync install declared vendors",
     verify: `${DOCTOR} (skills)`,
   },
   {

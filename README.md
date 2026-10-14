@@ -13,9 +13,10 @@ macOS + WSL2 · one history since 2017 · plain `ln -sfn` symlinks, no templatin
 Most dotfiles configure a shell. Two things here are less usual:
 
 - **Your coding agent is a first-class topic, not an afterthought.** `agents/` sits beside `zsh/`
-  and `git/`. `mise run link:skills` links in-house Agent Skills and slash-commands to their tools;
-  it never links third-party skills. `agents/skills/` contains in-house skills only. Third-party
-  source/name pairs live in [`agents/skills.thirdparty.toml`](agents/skills.thirdparty.toml) and
+  and `git/`. `mise run skills:sync` installs in-house skills as Claude's `dotfiles:<name>` plugin
+  and Codex copies; `mise run agents:link` links slash-commands and Codex guidance. It never
+  links `agents/skills` into a tool directory. `agents/skills/` contains in-house skills only.
+  Third-party source/name pairs live in [`agents/skills.thirdparty.toml`](agents/skills.thirdparty.toml) and
   `mise run skills:sync` installs them into tool-owned global directories. The authored skills —
   `forging-skills`, `linting-prose`, `systematizing-knowledge`, `operating-the-harness`, … — are in
   the [full index](agents/skills/). One `.mcp.json` supplies both Claude and Codex.
@@ -200,9 +201,10 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
      linked `~/.config/git/config`; jj's `config.toml` beside the linked `conf.d/dotfiles.toml`).
      Measured 2026-10-06: through a link, `git config --global` and `jj config set --user` both
      rewrote the repo. Third-party skills are declared in `agents/skills.thirdparty.toml` and
-     installed globally with `mise run skills:add`; `mise run skills:sync` rebuilds that set.
-     If a global skill path still links into a repo, `mise run skills:migrate` copies it into a
-     real tool-owned directory before add/sync.
+     installed globally with `mise run skills:add`; `mise run skills:sync` installs that set with
+     the in-house plugin and Codex copies. Sync removes old links into this checkout. If a global
+     skill path still links into another repo, `mise run skills:migrate` copies it into a real
+     tool-owned directory before add/sync.
    - A value has one home: the zone name is `zsh/timezone`, read by zshenv/bashrc, rendered into
      Claude Code's `env.TZ`, and expected by `doctor:remote`.
    - Remaining human-driven write-through, by design: `sheldon add` (edits `sheldon/plugins.toml`,
@@ -310,5 +312,6 @@ mise run tool:which pdftoppm # declaration tier and formula
 mise run tool:get pdftoppm  # install a declared formula on first need
 mise run doctor       # does this machine realize the repo? (read-only) — scripts/doctor.ts
 mise run install:tools  # install core + on-demand formulas and casks — Brewfile union
-mise run link:skills  # deploy agents/ (skills → Claude/Codex, commands → +Gemini)
+mise run agents:link      # deploy commands + Codex guidance links
+mise run skills:sync       # install Claude plugin + Codex copies + declared vendors
 ```

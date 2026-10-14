@@ -1,22 +1,17 @@
-// `mise run lint:skills-wiring` checks in-house skill links, third-party provenance boundaries,
-// and that global skill paths no longer write through into a repository.
+// `mise run lint:skills-wiring` checks repository-owned skill declarations only.
 
-import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
 import {
-  homeRepoLinkedSkillTargets,
   readDeclaration,
   skillFiles,
   thirdPartySkillFiles,
 } from "./skills-declaration.ts";
+import { readDotfilesPlugin } from "./skills-plugin.ts";
 
-const USAGE =
-  "Usage: bun scripts/skills-doctor.ts [--dotfiles <path>] [--home <path>]\n";
+const USAGE = "Usage: bun scripts/skills-doctor.ts [--dotfiles <path>]\n";
 
-type Finding = { level: "FAIL" | "SKIP"; line: string };
+type Finding = { level: "FAIL"; line: string };
 
 function print(line: string): void {
   process.stdout.write(`${line}\n`);
@@ -30,69 +25,11 @@ function rejectPrototypeFlag(
   if (type === "unknown-flag" && flag === "__proto__") prototypeFlagSeen = true;
 }
 
-function isDir(path: string): boolean {
-  return fromThrowable((value: string) => statSync(value))(path)
-    .map((stat) => stat.isDirectory())
-    .unwrapOr(false);
-}
-
-function isRealPath(path: string): boolean {
-  return fromThrowable((value: string) => lstatSync(value))(path)
-    .map((stat) => !stat.isSymbolicLink())
-    .unwrapOr(false);
-}
-
-function listSkillNames(skillsDir: string): string[] {
-  return fromThrowable((path: string) => readdirSync(path))(skillsDir)
-    .map((names) =>
-      names
-        .filter((name) => !name.startsWith("."))
-        .filter((name) => isDir(join(skillsDir, name)))
-        .toSorted(),
-    )
-    .unwrapOr([]);
-}
-
-function checkShadowing(home: string, dotfiles: string): Finding[] {
-  const claudeSkills = resolve(home, ".claude/skills");
-  if (!isDir(claudeSkills))
-    return [
-      {
-        level: "SKIP",
-        line: `SHADOW: ${claudeSkills} absent — nothing linked yet`,
-      },
-    ];
-  const findings: Finding[] = [];
-  for (const name of listSkillNames(resolve(dotfiles, "agents/skills"))) {
-    const destination = join(claudeSkills, name);
-    if (!isRealPath(destination)) continue;
-    findings.push({
-      level: "FAIL",
-      line:
-        `SHADOW: ${destination} is a real path, so agents/skills/${name} is never read. ` +
-        `Run: rip ${destination} && mise run link:skills`,
-    });
-  }
-  return findings;
-}
-
-function checkGlobalTargets(home: string, dotfiles: string): Finding[] {
-  const universalRoot = resolve(home, ".agents/skills");
-  const declaration = readDeclaration(dotfiles);
-  if (declaration.isErr())
-    return [{ level: "FAIL", line: `DECLARATION: ${declaration.error}` }];
-  const names = declaration.value.skills.map((entry) => entry.skill);
-  const unsafe = homeRepoLinkedSkillTargets(home, dotfiles, names);
-  const findings: Finding[] = unsafe.map((path) => ({
-    level: "FAIL",
-    line: `Refusing: ${path} resolves into a repository; run mise run skills:migrate`,
-  }));
-  if (!existsSync(universalRoot))
-    findings.push({
-      level: "SKIP",
-      line: `WIRING: ${universalRoot} absent — no Codex global skills installed`,
-    });
-  return findings;
+function checkPluginManifest(dotfiles: string): Finding[] {
+  const plugin = readDotfilesPlugin(dotfiles);
+  return plugin.isErr()
+    ? [{ level: "FAIL", line: `PLUGIN: ${plugin.error}` }]
+    : [];
 }
 
 function checkRepoProvenance(dotfiles: string): Finding[] {
@@ -117,11 +54,10 @@ function main(): void {
       parameters: [],
       help: {
         description:
-          "Fail when third-party skill bytes reappear in the repo or global paths write through into a repository.",
+          "Check the Claude plugin manifest and in-house versus third-party skill boundary in this repository.",
       },
       flags: {
         dotfiles: { type: String },
-        home: { type: String },
       },
     },
     undefined,
@@ -132,10 +68,8 @@ function main(): void {
     process.exitCode = 2;
     return;
   }
-  if (parsed.flags.dotfiles === "" || parsed.flags.home === "") {
-    process.stderr.write(
-      `--dotfiles and --home require non-empty values\n${USAGE}`,
-    );
+  if (parsed.flags.dotfiles === "") {
+    process.stderr.write(`--dotfiles requires a non-empty value\n${USAGE}`);
     process.exitCode = 2;
     return;
   }
@@ -147,18 +81,15 @@ function main(): void {
     return;
   }
 
-  const home = parsed.flags.home ?? process.env.HOME ?? homedir();
   const dotfiles =
     parsed.flags.dotfiles ??
     process.env.DOTFILES ??
     resolve(import.meta.dir, "..");
   const findings = [
+    ...checkPluginManifest(dotfiles),
     ...checkRepoProvenance(dotfiles),
-    ...checkShadowing(home, dotfiles),
-    ...checkGlobalTargets(home, dotfiles),
   ];
-  for (const finding of findings)
-    print(`${finding.level === "FAIL" ? "❌" : "⏭"} ${finding.line}`);
+  for (const finding of findings) print(`❌ ${finding.line}`);
 
   const failures = findings.filter(
     (finding) => finding.level === "FAIL",
@@ -169,7 +100,7 @@ function main(): void {
     return;
   }
   print(
-    "✅ SKILLS-WIRING PASS: in-house skills only, tool-owned global targets",
+    "✅ SKILLS-WIRING PASS: plugin manifest and in-house skill tree are valid",
   );
 }
 

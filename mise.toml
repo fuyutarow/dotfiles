@@ -171,12 +171,12 @@ run = 'bun ~/dotfiles/scripts/lint-zsh.ts'
 [tasks."lint:skills-index"]
 dir = "{{config_root}}"
 env = { SKILLS_LINT_WORKTREE = "1" }
-description = "Require every in-house skill in the catalog and reject third-party provenance under agents/skills"
+description = "Require every in-house skill in the catalog and Claude plugin manifest; reject third-party provenance under agents/skills"
 run = "bun scripts/lint-skills-index.ts"
 
 [tasks."lint:skills-wiring"]
 dir = "{{config_root}}"
-description = "Fail on third-party skills in agents/skills, shadowed in-house Claude links, or global skill paths that write through into a repo. Machine checks SKIP on a fresh clone."
+description = "Fail on third-party skills, plugin manifest drift, or tool skill symlinks into agents/skills. Machine checks SKIP on a fresh clone."
 run = "bun scripts/skills-doctor.ts"
 
 # forging-skills' own floor, run over the WHOLE collection. It existed since the skill was forged
@@ -593,7 +593,9 @@ run = [
   { task = "mac:rosetta" },
   { task = "deps" }, # before link:dots — scripts/link-dots.ts imports Cleye from node_modules
   { task = "link:dots" },
-  { task = "link:skills" },
+  { task = "agents:link" },
+  { task = "install:ai-clis" },
+  { task = "skills:sync" },
   { task = "tmux:plugins" },
   { task = "mac:defaults" },
   { task = "mac:obsidian" },
@@ -822,15 +824,15 @@ run = 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh'
 description = "Apply .mcp.json (single declarative source) to Claude Code (user scope) AND Codex. Idempotent. mac & WSL."
 run = 'bun ~/dotfiles/scripts/install-mcp.ts && bun ~/dotfiles/agents/codex/codex-config.ts'
 
-[tasks."link:skills"]
+[tasks."agents:link"]
 dir = "{{config_root}}"
-description = "Link in-house skills and agent commands into AI tool config directories"
-run = "bun scripts/link-skills.ts"
+description = "Link agent commands and Codex guidance into AI tool config directories"
+run = "bun scripts/link-agent-assets.ts"
 
 # Third-party skills are declared only in agents/skills.thirdparty.toml. The pinned skills CLI
 # writes into tool-owned global directories; scripts pass -g plus explicit --skill values and
-# remove new unrequested lock entries (including find-skills). link:skills handles in-house
-# skills only and never points the ~/.agents/skills root into this repo.
+# remove new unrequested lock entries (including find-skills). skills:sync installs in-house
+# skills through Claude's local plugin and Codex's copy installer.
 [tasks."skills:migrate"]
 dir = "{{config_root}}"
 description = "Copy global skill links that point into repositories into real tool-owned paths; preserves current Codex/Claude skills"
@@ -843,7 +845,7 @@ run = "bun scripts/vendor-skill.ts"
 
 [tasks."skills:sync"]
 dir = "{{config_root}}"
-description = "Install missing or out-of-date global third-party skills from agents/skills.thirdparty.toml and report undeclared installs"
+description = "Install the dotfiles Claude plugin and Codex skill copies; reconcile declared third-party skills from agents/skills.thirdparty.toml"
 run = "bun scripts/skills-sync.ts"
 
 [tasks."codex:remote-control"]

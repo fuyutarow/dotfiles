@@ -1,7 +1,7 @@
 // AGENT_NAME_SESSION_ID=<session_id> bun resolve-agent-name.ts  ->  prints the addressable
 // name (e.g. "firedancer-fe") to stdout, or nothing on any failure. Exit code is always 0 —
 // the caller (hooks/quote-command.ts) treats empty output as "name unavailable" and falls back.
-// The input rides the ENVIRONMENT, not argv: a hook is zero-dep (writing-bun-scripts BG3), and
+// The input rides the ENVIRONMENT, not argv: a hook is zero-dep (dotfiles:writing-bun-scripts BG3), and
 // BG1 says a zero-dep tree that needs argv parsing must graduate first — zero-dep is never
 // permission to hand-parse process.argv. An env var needs no parser.
 //

@@ -541,7 +541,7 @@ function main(): AbortError | UsageError | undefined {
   return undefined;
 }
 
-// Guarded (unlike the sibling link:skills port): THIS file is also `import`ed by its own test
+// Guarded (unlike the sibling agent-assets linker): THIS file is also `import`ed by its own test
 // file to unit-test the pure helpers (buildPlan/jqOr/shellWords/commOnlyInSecond/
 // loadMcpServers) without spawning a subprocess. Without this guard, merely importing the
 // module would run `main()` for real — with `Bun.argv.slice(2)` empty (the test runner's own

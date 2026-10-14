@@ -1,48 +1,61 @@
-# Language spec, Move.toml, naming, attributes
+# Syntax, manifest and error contracts
 
-> M2024-* (compile-forced), Move.toml, NAME-*, ATTR-*. Parent: `../SKILL.md`.
+Scope: M2024-*, NAME-* and ATTR-*.
+Primary-source loci and the survey position are linked from
+[sources-and-adoption.md](sources-and-adoption.md).
 
-## Part I — Move 2024 required (ERROR, compile-forced)
+## Manifest and syntax
 
-Move 2024 sacrifices backward compat for type-safety and explicitness; these are enforced at
-**compile time** — `sui move build` fails without them.
+- **M2024-001:** Move 2024 requires explicit `public struct`.
+  Fields, packing and unpacking remain internal to the defining module.
+- **M2024-002:** bindings reassigned or mutably borrowed need the appropriate `mut`.
+  Let the installed compiler diagnose the specific case.
+- **M2024-003:** prefer the module label `module app::counter;`.
+  Brace form is valid; report a style issue only when a relevant convention applies.
+- **M2024-004:** reserved identifiers must follow the target language's escaping rules.
+  Do not invent a blanket ban on names without checking the compiler.
+- **M2024-005:** avoid redundant imports of default aliases.
+  Do not classify a redundant import as a build failure without a diagnostic.
 
-- **M2024-001 struct visibility explicit** — `❌ struct Counter has key { .. }` → `✅ public struct Counter has key { .. }`. Auto-fixable. Makes cross-module access control explicit.
-- **M2024-002 `mut` on reassigned locals** — `❌ let value = x; value = value + 1;` → `✅ let mut value = x; value = value + 1;`. Auto-fixable. Mutability visible at a glance.
-- **M2024-003 semicolon module form** — `❌ module counter_app::counter { .. }` → `✅ module counter_app::counter;` (body follows). Separates declaration from body.
-- **M2024-004 no reserved words as identifiers** — `enum`, `match` are reserved. `❌ let enum = 5; let match = true;` → `✅ let enum_type = 5; let match_result = true;`.
-- **M2024-005 no redundant default aliases** [WARNING] — Move 2024 auto-provides aliases; explicit imports warn.
-  - Available without `use`: types `UID`, `ID`, `TxContext`; modules `sui::object`, `sui::transfer`, `sui::tx_context`.
-  - `❌ use sui::object::{Self, ID, UID};` / `❌ use sui::transfer;` → `✅` use `UID`, `TxContext`, `object::new()` directly; import only what is NOT default (`Coin<SUI>`, `event`, `clock::Clock`).
-
-## 1.2 Move.toml (ERROR)
+A current minimal manifest is:
 
 ```toml
 [package]
-name = "CounterApp"        # PascalCase required (NAME-001)
-version = "0.0.1"
-edition = "2024"           # required for enum/match
-
-[addresses]
-counter_app = "0x0"
-
-[dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+name = "my_package"
+edition = "2024"
 ```
 
-## 1.3 Naming (ERROR)
+Modern Sui tooling supplies framework dependencies implicitly.
+Inspect the resolver version and declared external/local dependencies before migration.
+Do not add a legacy framework Git dependency or remove addresses/lock/published metadata
+by rote. Keep the package's identity and published compatibility contract intact.
 
-- **NAME-001 package = PascalCase** — `❌ name = "counter_app"` → `✅ name = "CounterApp"`.
-- **NAME-002 error consts** — `E`-prefixed PascalCase; `#[error]` for custom messages.
-  - `❌ const ERROR_INVALID: u64 = 0;` (prefix) · `❌ const EInvalidInput: vector<u8> = b"..";` (missing `#[error]`)
-  - `✅ const EInvalidInput: u64 = 0;` (u64 code) · `✅ #[error] const EInvalidInput: vector<u8> = b"..";` (custom message)
-  - **Best practice — the error-code contract**: declaration order == error code, so **keep declaration order**, **never delete an existing error** (it renumbers everything after it), mark unused ones `#[deprecated]`, and group with category comments.
-- **NAME-003 consts = UPPER_SNAKE_CASE** — `❌ const maxValue` → `✅ const MAX_VALUE`.
-- **NAME-004 fns = snake_case** — `❌ public fun CreateCounter()` → `✅ public fun create_counter()`.
-- **NAME-005 no `get_` prefix** — `❌ get_balance(self: &Account): u64` → `✅ balance(self: &Account): u64`.
-- **NAME-006 constructor patterns** — `new()` (returns object only) · `create_and_share()` (create + share) · `create_for_user()` (create + transfer).
+## Naming is a convention
 
-## 2.3 Attributes (ATTR)
+- **NAME-001:** follow package/module naming in the project; PascalCase package names are
+  not mandatory. Official examples use `my_package`.
+- **NAME-002:** use `EPascalCase` for error names.
+- **NAME-003–004:** ordinary constants use `UPPER_SNAKE_CASE`; functions use `snake_case`.
+- **NAME-005:** prefer field-name getters and `field_mut`, rather than redundant `get_`.
+- **NAME-006:** choose constructors and return/transfer wrappers by behavior;
+  do not force every constructor into a fixed name set.
+- Capabilities conventionally end in `Cap`; positional dynamic-field keys can end in `Key`.
+  Avoid `Potato` in hot-potato names.
+- Event guidance differs: Move Book recommends past tense; Sui best practices recommends
+  an `Event` suffix. Preserve the project's documented convention.
 
-- **ATTR-001 test attributes** [ERROR/WARNING] — `#[test]` on test fns, `#[test_only]` on test helpers, `#[expected_failure(abort_code = EInvalidInput)]` on failure tests.
-- **ATTR-002 `#[error]` auto-numbering** [WARNING] — `✅ #[error] const EInvalidInput: vector<u8> = b"..";` (auto); `❌ #[error(code = 1)] ..` (manual code not needed).
+## Error values and test attributes
+
+**ATTR-001:** use `#[test]`, `#[test_only]` and scoped `#[expected_failure(...)]`
+as supported by the package's toolchain. Attribute placement is formatting advice.
+
+**ATTR-002 / NAME-002:** distinguish:
+1. explicit `u64` constants, whose assigned values form their numeric contract;
+2. clever errors using `#[error]`, whose generated raw value includes source information;
+3. `#[error(code = n)]`, which adds a developer-chosen 8-bit code on supporting versions.
+
+Clever-error values can change after edits or formatting.
+An explicit code is separate from the line component and does not freeze the whole raw value.
+Do not infer numbering from declaration order or forbid explicit codes.
+Before changing or removing an error, inspect client/test decoding and compatibility expectations.
+A message-valued `vector<u8>` error constant is an example, not the only possible constant type.

@@ -25,7 +25,7 @@ Archived names in an active manual refer to the contract below; read the archive
 | [`cloudflare-one-migrations`](cloudflare-one-migrations/SKILL.md) | 2026-06-19 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
 | [`directing-research-sections`](directing-research-sections/SKILL.md) | 2026-08-04 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
 | [`durable-objects`](durable-objects/SKILL.md) | 2026-06-19 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
-| [`linting-sui-move`](linting-sui-move/SKILL.md) | 2026-07-04 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
+| [`linting-sui-move`](linting-sui-move/SKILL.md) | 2026-07-04 | 2026-10-14 | Restored for source review, then replaced by official Mysten Labs packages; no distinct authored capability demonstrated |
 | [`mintlify`](mintlify/SKILL.md) | 2026-08-15 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
 | [`operationalizing-research-gaps`](operationalizing-research-gaps/SKILL.md) | 2026-08-06 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
 | [`prompting-llms`](prompting-llms/SKILL.md) | 2026-07-03 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
@@ -42,6 +42,13 @@ Restore only on an explicit request: move the complete directory back to `agents
 ## Restored
 
 `transcribing-media` was restored to `agents/skills/` on 2026-10-03 at the user's request.
+
+`linting-sui-move` was restored and researched on 2026-10-14, then retired again after
+the user questioned the need for an independent authored guide. Its source-review history
+is preserved here. Nine official packages now own ordinary Sui source development.
+BCS review knowledge remains in the existing soks position/ledger; pinned corrections and
+deployment provenance live in [the official package integration notes](../../agents/skills/sui-move/LOCAL-NOTES.md).
+The archived guide is historical evidence, not an active overlay. It has no vendor-ledger entry.
 
 ## 2026-10-06 absorbed-skill retirement
 

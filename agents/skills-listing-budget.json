@@ -1,10 +1,24 @@
 {
-  "maxListingChars": 51683,
-  "measuredOn": "2026-10-11",
-  "skillsAtMeasurement": 59,
+  "maxListingChars": 55525,
+  "measuredOn": "2026-10-14",
+  "skillsAtMeasurement": 68,
   "why": "A local ratchet over the static sum of active skill names and descriptions. This is a conservative character-footprint proxy, not measured per-turn tokens: host selection, truncation, invocation policy and tokenization affect observed listing cost. F4 in forging-skills owns membership and the retire/merge/shorten/raise decision. The shared floor compares the proxy against maxListingChars. A ceiling raise needs an explicit reason in the same reviewable change; recovered footprint may lower the ceiling.",
-  "evidenceAtMeasurement": "The structural floor measured 59 active skills and 51,683 name+description chars after this admission; the ceiling equals that measured total.",
+  "evidenceAtMeasurement": "The scoped jj candidate admits nine official Sui packages (3,842 name+description chars) and retires the 213-character authored selector: 68 skills / 55,525 chars, excluding unrelated Tiger edits. The cap matches this candidate with no slack.",
   "raises": [
+    {
+      "date": "2026-10-14",
+      "from": 51896,
+      "to": 55525,
+      "spentBy": "official-sui-source-development",
+      "reason": "The user authorized selected official packages and questioned retaining an in-house skill. Admit sui-move, modern-move-syntax, naming-conventions, composable-move-functions, sui-object-model, move-security, move-unit-testing, sui-move-project and sui-build at their upstream identities. Their entries cost 3,842 characters; retiring linting-sui-move recovers 213, for a net 3,629. The core routes to specialized owners; local integration notes contain only ownership, pinned corrections and a BCS corpus locator. No authored replacement selector, other ecosystem packages, unrelated description drift or extra slack is admitted. Upstream bytes were compared to commit 15f9e20110e4e4deeb3090209dd8f4776ebf4f69 before annotation; provenance is importer-owned in skills-lock.json."
+    },
+    {
+      "date": "2026-10-14",
+      "from": 51683,
+      "to": 51896,
+      "spentBy": "linting-sui-move",
+      "reason": "Intermediate restoration under survey-2610.1 admitted a 213-character authored entry. The later official-package adoption on the same date retires this selector and recovers the entire 213 characters. Canonical technical position remains urn:uuid:01a1380c-4295-76fc-9c22-eb1545f23c6e; no independent authored Sui selector remains active."
+    },
     {
       "date": "2026-10-11",
       "from": 51223,

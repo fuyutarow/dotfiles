@@ -36,7 +36,7 @@ states the order. Created v2607.1.0 (2026-07-06).
 | Ask | Route |
 |---|---|
 | 「Rust project の構成を文献と事例からサーベイして」 | `systematizing-knowledge`; no implementation decision yet |
-| 「Sui の Move.toml と sources/greeting.move を直して」 | Move task; `linting-sui-move` for house Move review, not Rust platform layout |
+| 「Sui の Move.toml と sources/greeting.move を直して」 | Move task; official `sui-move-project` and `sui-move` own configuration and source, not Rust platform layout |
 | "Wire only mise.toml for an already specified Cargo workspace" | `wiring-mise-tasks`; consume the settled scope |
 | 「ripgrep をインストールして」 / "install eza / bat / fd" | Rust-*written* end-user tool → package management (Brewfile / cargo install), NOT writing Rust |
 | 「Rust って Go より速いの?」 | language comparison, no code → plain answer |

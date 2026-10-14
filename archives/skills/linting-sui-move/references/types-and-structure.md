@@ -1,51 +1,51 @@
-# Method syntax, enums/match, file structure
+# Methods, types and composable APIs
 
-> MS-*, ENUM-*, STRUCT-*, public(package). Parent: `../SKILL.md`.
+Scope: MS-*, ENUM-* and STRUCT-*.
+The [source map](sources-and-adoption.md) links method resolution, struct visibility
+and the official code-quality checklist.
 
-## 2.1 Method syntax (WARNING) — the flagship Move 2024 ergonomic
+## Methods
 
-- **MS-001 principle** — a fn whose first arg is `&T`/`&mut T` **of its own struct** MUST name it
-  `self` and be called `obj.f()`.
-  - `✅` receiver: `self: &Counter`, `self: &mut Account`.
-  - `❌` NOT a receiver (keep `module::fn` form): `ctx: &TxContext`, `coin: &mut Coin<SUI>`, `clock: &Clock`.
-  - Checkpoints: (1) first arg `&YourStruct`/`&mut YourStruct` → `self` required; (2) first arg external type → no `self`; (3) constructor (`new`) → no `self`.
-  ```move
-  public fun balance(self: &Account): u64 { self.balance_value }
-  let bal = account.balance();   // ✅ reads cleanly
-  ```
-- **MS-002 stdlib is method-syntax-complete** — prefer the receiver form:
+- **MS-001:** automatic method aliases depend on the first argument's type and defining
+  module, not the spelling `self`. Receivers can be by value or reference.
+- **MS-002:** prefer readable method syntax when it resolves.
+  Examples: `ctx.sender()`, `coin.value()`, `payment.split(amount, ctx)`,
+  `v.length()`, `id.delete()`.
+- **MS-003:** `use fun` can add aliases for externally defined types.
+  Constructors without a receiver and calls clearer in module form can remain module calls.
 
-  | | old → method |
-  |---|---|
-  | Vector | `vector::length(&v)` → `v.length()` · `vector::push_back(&mut v, x)` → `v.push_back(x)` · `vector::pop_back(&mut v)` → `v.pop_back()` |
-  | Option | `option::is_some(&o)` → `o.is_some()` · `option::borrow(&o)` → `o.borrow()` |
-  | String | `string::length(&s)` → `s.length()` · `string::is_empty(&s)` → `s.is_empty()` |
-  | Coin | `coin::value(&c)` → `c.value()` · `coin::split(&mut c, n)` → `c.split(n)` |
-  | Object | `object::id(&o)` → `o.id()` · `object::id_address(&o)` → `o.id_address()` |
+Do not exclude `TxContext`, `Clock` or `Coin` wholesale.
+Inspect the actual function signature and alias availability.
+In particular, `Coin::split` needs a transaction context; do not drop it when converting syntax.
+A conventional receiver name may be a house preference, not a resolution requirement.
 
-- **MS-003 exceptions (keep `module::function`)** — static/constructor/factory (`Counter::new(0, ctx)`); type-inference-hard (`bcs::to_bytes(&data)`); deliberate module-boundary clarity (`transfer::public_transfer(obj, addr)`).
+## Types and matching
 
-## 2.2 Enums & pattern matching
+- **ENUM-001:** validate variant forms against the target compiler.
+- **ENUM-002:** match coverage is required; a wildcard can provide coverage.
+  Prefer explicit variants when a new variant must force review.
+  Do not call every wildcard a compiler error.
+- **ENUM-003:** PascalCase variant names are style guidance.
+- **ENUM-004:** published enum changes require an upgrade-compatibility review.
+  Do not prescribe adding variants or V2 migration without checking the package policy.
 
-- **ENUM-001 variant forms** [ERROR] — unit `Pending`; tuple `Processing(u64)`; named `Completed { amount: u64, timestamp: u64 }`.
-- **ENUM-002 exhaustive match** [ERROR] — cover **all** variants; **avoid `_` wildcard** (it silently swallows newly-added variants → regressions).
-  ```move
-  match status {                                 // ✅ exhaustive
-      OrderStatus::Pending => handle_pending(),
-      OrderStatus::Processing(amount) => handle_processing(amount),
-      OrderStatus::Completed { amount, timestamp } => handle_completed(amount, timestamp),
-  }
-  // ❌ `_ => ..` hides missing handling when a variant is added
-  ```
-- **ENUM-003 variant names = PascalCase** [ERROR] — `❌ pending, PROCESSING` → `✅ Pending, Processing`.
-- **ENUM-004 versioning** [WARNING] — adding a variant to an existing enum is breaking. Define `OrderStatusV2`, provide a migration fn, keep V1.
+**STRUCT-003:** Sui recommends ability order `key, copy, drop, store`.
+Include only abilities the fields support and the design needs.
+This ordering does not authorize `key, copy, drop` on an object containing `UID`.
+The compiler and Sui verifier enforce ability/field constraints.
 
-## 3.1 File structure (WARNING)
+## API and file organization
 
-- **STRUCT-001 section comments** — order: `=== Imports ===` → `Constants` → `Errors` → `Structs` → `Events` → `Public Functions` → `Package Functions` → `Private Functions` → `Test Functions`.
-- **STRUCT-002 visibility order** — entry → public → `public(package)` → private → test.
-- **STRUCT-003 ability order** — canonical `key, copy, drop, store`. `❌ has store, key, drop` → `✅ has key, drop, store`.
+**STRUCT-001–002:** use project section layout and group by purpose/user flow;
+the old universal section/visibility sequence is not a compiler contract.
 
-## 3.2 public(package) over friend (INFO)
+Prefer `public(package)` for package-only cooperation over legacy friend declarations.
+Prefer public functions that return composable values; use intentional endpoint wrappers
+when transfer to a recipient is part of the API.
+The checklist recommends avoiding redundant `public entry`; it is a lint/style issue,
+not a claim that the combination is illegal.
 
-`friend` is deprecated. `❌ friend module; public(friend) fun f()` → `✅ public(package) fun f()`.
+Typical readable parameter order is primary object, capability, values, Clock, TxContext.
+Authorization still depends on validating the capability, not its position in a signature.
+Before narrowing/removing a published public API, check upgrade compatibility and external callers.
+An absence of callers inside the package is insufficient evidence that an API is unused.

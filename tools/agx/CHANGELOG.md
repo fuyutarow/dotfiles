@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.4.0 — 2026-10-14
+
+- Close stdin for Codex and Claude worker processes; classify a stalled Codex stdin-wait diagnostic and repeated identical tool errors as distinct receipt outcomes.
+
 ## 4.3.0 — 2026-10-14
 
 - Add each run's `started_at` and nullable `ended_at` event timestamps to `agx ls --json`.

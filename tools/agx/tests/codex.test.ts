@@ -49,6 +49,11 @@ printf '%s\\n' "$@" > "${log}"
 out=""; prev=""
 for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
 case "$FAKE_CODEX_MODE" in
+  read-stdin)
+    if IFS= read -r _; then printf 'stdin-open\\n' > "$FAKE_CODEX_STDIN_LOG"; else printf 'stdin-eof\\n' > "$FAKE_CODEX_STDIN_LOG"; fi ;;
+  stdin-wait)
+    echo 'Reading additional input from stdin...' >&2
+    sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
   slow) sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
   kill) kill -KILL "$$" ;;
   fail) echo 'ERROR: stream disconnected' >&2; exit 7 ;;
@@ -107,7 +112,15 @@ exit 0
 const Receipt = z.object({
   schema: z.literal(1),
   run_id: z.string(),
-  outcome: z.enum(["ok", "codex-failed", "refused", "timeout", "killed"]),
+  outcome: z.enum([
+    "ok",
+    "codex-failed",
+    "refused",
+    "timeout",
+    "stdin-wait",
+    "spin",
+    "killed",
+  ]),
   model: z.string().nullable(),
   sandbox: z.string().nullable(),
   sandbox_effective: z.string().nullable(),
@@ -225,6 +238,34 @@ describe("agx", () => {
     );
     expect(r.stderr).toMatch(/agx\[codex\]: ok after \d+(\.\d)? s — receipt /u);
   });
+
+  test("Codex reads EOF from stdin while the unchanged prompt still arrives in argv", () => {
+    const { bin, log } = fakeCodex(scratch());
+    const stdinLog = join(scratch(), "stdin.log");
+    const r = run(FULL, {
+      AGX_CODEX_BIN: bin,
+      FAKE_CODEX_MODE: "read-stdin",
+      FAKE_CODEX_STDIN_LOG: stdinLog,
+    });
+    expect(r.code).toBe(0);
+    expect(readFileSync(stdinLog, "utf8")).toBe("stdin-eof\n");
+    expect(readFileSync(log, "utf8").split("\n")).toContain("Audit this.");
+  });
+
+  test("a stalled stdin-wait diagnostic gets its own bounded outcome", () => {
+    const { bin } = fakeCodex(scratch());
+    const t0 = performance.now();
+    const r = run([...FULL, "--timeout-s", "10"], {
+      AGX_CODEX_BIN: bin,
+      AGX_CODEX_TEST_STDIN_WAIT_MS: "100",
+      FAKE_CODEX_MODE: "stdin-wait",
+      FAKE_CODEX_SLEEP: "5",
+    });
+    expect(performance.now() - t0).toBeLessThan(5_000);
+    expect(r.code).toBe(3);
+    expect(r.receipt.outcome).toBe("stdin-wait");
+    expect(r.receipt.cause).toBe("Reading additional input from stdin...");
+  }, 10_000);
 
   test.each(["none", "read-only", "workspace-write"])(
     "explicit sandbox %s reaches Codex and the receipt, including resume",
@@ -689,7 +730,7 @@ describe("agx", () => {
     expect(r.receipt.cause).toContain("waiting for network");
   }, 20_000);
 
-  test("five identical tool errors stop early with a resumable timeout receipt naming the cause", () => {
+  test("five identical tool errors stop early with a resumable spin receipt naming the cause", () => {
     const { bin } = fakeCodex(scratch());
     const t0 = performance.now();
     const r = run([...FULL, "--timeout-s", "10"], {
@@ -699,7 +740,7 @@ describe("agx", () => {
     });
     expect(performance.now() - t0).toBeLessThan(5_000);
     expect(r.code).toBe(3);
-    expect(r.receipt.outcome).toBe("timeout");
+    expect(r.receipt.outcome).toBe("spin");
     expect(r.receipt.cause).toBe(
       "stopped: 5 identical consecutive tool errors: apply_patch verification failed: invalid patch: multiple operations target <same file>",
     );

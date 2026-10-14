@@ -43,3 +43,12 @@ These are folds or interpretations of existing events and ticket inputs; they do
 3. Can a fold of existing events answer it?
 
 Only an ask that fits a job and cannot be answered by folding existing events may add code to agx.
+
+## 5. Worker input and bounded outcomes
+
+Codex and Claude workers receive a closed stdin stream. Their prompts remain explicit arguments
+(the final `codex exec` argument and `claude -p <prompt>`), so a vendor cannot wait for an interactive
+input stream. A Codex `Reading additional input from stdin...` stderr line with no subsequent
+stdout event for 30 seconds ends the worker with a `stdin-wait` receipt and the line as its cause.
+Five identical consecutive tool errors end the worker with a `spin` receipt; a wall-clock bound
+remains `timeout`.

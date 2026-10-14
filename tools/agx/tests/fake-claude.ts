@@ -14,6 +14,8 @@ appendFileSync(
   join(process.cwd(), "fake-claude-env.log"),
   `${JSON.stringify({ [AGX_WORKER_ENV]: process.env[AGX_WORKER_ENV] })}\n`,
 );
+const stdinText = await Bun.stdin.text();
+appendFileSync(join(process.cwd(), "fake-claude-stdin.log"), stdinText);
 
 const modelIndex = Bun.argv.indexOf("--model");
 const model = modelIndex === -1 ? "" : Bun.argv[modelIndex + 1];

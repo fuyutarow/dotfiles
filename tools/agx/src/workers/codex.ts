@@ -26,7 +26,7 @@
 //   C4  outcomes    exit 0 ok (codex exit 0 and a non-empty last message)
 //                        1 codex-failed (nonzero exit, or exit 0 with no last message)
 //                        2 refused (usage, floor, sandbox/effort policy) — codex never started
-//                        3 timeout (killed at --timeout-s; the receipt says so)
+//                        3 timeout, stdin-wait or spin (the receipt distinguishes them)
 //                      every non-ok receipt has a non-empty `cause` (codex's last error event, else
 //                      "codex printed no error event" + the last stderr line); every receipt has
 //                      `progress` {last, commands, files} — at a timeout, where the worker was.
@@ -74,6 +74,10 @@ const SANDBOXES = ["none", "read-only", "workspace-write"];
 const MAX_TIMEOUT_S = 14400;
 const DEFAULT_TIMEOUT_S = 900;
 const IDENTICAL_TOOL_ERROR_LIMIT = 5; // Stop a worker that is retrying the same broken call indefinitely.
+const STDIN_WAIT_MS =
+  process.env.AGX_CODEX_TEST_STDIN_WAIT_MS === undefined
+    ? 30_000
+    : Math.max(1, Number(process.env.AGX_CODEX_TEST_STDIN_WAIT_MS));
 const PROGRESS_INTERVAL_MS = progressIntervalMs();
 const FLOOR_CONFIG =
   process.env.MODEL_FLOOR_CONFIG ??
@@ -90,13 +94,22 @@ const FLOOR_CONFIG =
 // Test seam: the codex binary to run (a fake in tests). Never a model or sandbox override.
 const CODEX_BIN = process.env.AGX_CODEX_BIN ?? "codex";
 
-type Outcome = "ok" | "codex-failed" | "refused" | "timeout" | "killed";
+type Outcome =
+  | "ok"
+  | "codex-failed"
+  | "refused"
+  | "timeout"
+  | "stdin-wait"
+  | "spin"
+  | "killed";
 const EXIT: Record<Outcome, number> = {
   ok: 0,
   "codex-failed": 1,
   killed: 1,
   refused: 2,
   timeout: 3,
+  "stdin-wait": 3,
+  spin: 3,
 };
 type Usage = {
   input_tokens: number;
@@ -462,6 +475,9 @@ say(
 );
 const deadline = new AbortController();
 let boundFired = false;
+let stdinWaitFired = false;
+let stdinWaitCause: string | undefined;
+let stdinWaitTimer: ReturnType<typeof setTimeout> | undefined;
 const expire = (): void => {
   boundFired = true;
   deadline.abort();
@@ -470,6 +486,7 @@ const boundTimer = setTimeout(expire, timeoutS * 1000);
 process.on("SIGUSR1", expire);
 const clearDeadline = (): void => {
   clearTimeout(boundTimer);
+  if (stdinWaitTimer !== undefined) clearTimeout(stdinWaitTimer);
   process.removeListener("SIGUSR1", expire);
 };
 const spawned = await attempt(() =>
@@ -534,6 +551,25 @@ const observeReturn = async (line: string): Promise<void> => {
 };
 let spinCause: string | undefined;
 const detectToolSpin = toolErrorStreak(IDENTICAL_TOOL_ERROR_LIMIT);
+const clearStdinWait = (): void => {
+  if (stdinWaitTimer === undefined) return;
+  clearTimeout(stdinWaitTimer);
+  stdinWaitTimer = undefined;
+  stdinWaitCause = undefined;
+};
+const watchStdinWait = (line: string): void => {
+  if (
+    !line.includes("Reading additional input from stdin...") ||
+    stdinWaitTimer !== undefined ||
+    stdinWaitFired
+  )
+    return;
+  stdinWaitCause = line.trim();
+  stdinWaitTimer = setTimeout(() => {
+    stdinWaitFired = true;
+    deadline.abort();
+  }, STDIN_WAIT_MS);
+};
 function readEvents(): Promise<string> {
   const decoder = new TextDecoder();
   let pending = "";
@@ -545,6 +581,12 @@ function readEvents(): Promise<string> {
       const lines = `${pending}${text}`.split("\n");
       pending = lines.pop() ?? "";
       for (const line of lines) {
+        const eventText = jsonText.safeParse(line);
+        if (
+          eventText.success &&
+          z.looseObject({ type: z.string() }).safeParse(eventText.data).success
+        )
+          clearStdinWait();
         progress?.feed(line);
         await observeReturn(line);
         const detectedCause = detectToolSpin(line);
@@ -559,12 +601,20 @@ function readEvents(): Promise<string> {
 }
 async function readErrors(): Promise<string> {
   let text = "";
+  let pending = "";
   const decoder = new TextDecoder();
   for await (const chunk of proc.stderr) {
     recordActivity(chunk.byteLength);
-    text += decoder.decode(chunk, { stream: true });
+    const decoded = decoder.decode(chunk, { stream: true });
+    text += decoded;
+    const lines = `${pending}${decoded}`.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) watchStdinWait(line);
   }
-  return text + decoder.decode();
+  const tail = decoder.decode();
+  text += tail;
+  watchStdinWait(`${pending}${tail}`);
+  return text;
 }
 // Both readers start now; each is cut PIPE_GRACE_MS after the child exits (graced waits for that).
 const completed = await attempt(() =>
@@ -648,8 +698,14 @@ const common = {
   stderr_tail: stderrTail,
 };
 
+if (stdinWaitFired)
+  emit("stdin-wait", {
+    ...common,
+    why: `codex printed ${stdinWaitCause ?? "Reading additional input from stdin..."} and emitted no further event for ${STDIN_WAIT_MS} ms`,
+    cause: stdinWaitCause ?? "Reading additional input from stdin...",
+  });
 if (spinCause !== undefined)
-  emit("timeout", {
+  emit("spin", {
     ...common,
     why: spinCause,
     cause: spinCause,

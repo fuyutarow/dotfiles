@@ -75,6 +75,32 @@ async function withTarget<T>(fn: (target: string) => Promise<T>): Promise<T> {
 }
 
 describe("tools/agx dispatchner", () => {
+  test("Claude reads EOF from stdin while its prompt remains in argv", async () => {
+    await withTarget(async (target) => {
+      const prompt = "Reply exactly OK";
+      const run = await runClaude({
+        target,
+        prompt,
+        model: "sonnet",
+        permissionMode: "plan",
+        maxTurns: 1,
+        timeoutMs: 5_000,
+        safeMode: true,
+        bare: false,
+        claudeBin: fixture,
+      });
+      expect(run.exitCode).toBe(0);
+      expect(readFileSync(join(target, "fake-claude-stdin.log"), "utf8")).toBe(
+        "",
+      );
+      const argv = decodedJson(
+        z.array(z.string()),
+        readFileSync(join(target, "fake-claude-argv.log"), "utf8").trim(),
+      );
+      expect(argv.slice(0, 2)).toEqual(["-p", prompt]);
+    });
+  });
+
   test("returns a bounded parsed Claude envelope", async () => {
     const run = await withTarget((target) =>
       runClaude({

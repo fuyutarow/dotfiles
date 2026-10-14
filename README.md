@@ -230,6 +230,8 @@ The task keeps Claude native to WSL, retains the two distinct config homes, and 
 old managed plain-Codex facade. macOS and ordinary Linux retain the standalone Codex installer.
 `mise run doctor` verifies both WSL providers and launchers.
 
+The WSL capacity controller runs every minute and reclaims stale `/tmp` directories at 80% inode use, before storage-headroom warns at 85%.
+
 When Google Drive for Windows is available as `G:`, `wsl/wsl.conf` enables WSL automount at
 `/mnt`. Google Drive's virtual `G:` is not found by WSL automount. Run `mise run wsl:drive-mount`
 once to install the declared drvfs entry from `wsl/gdrive.fstab` into `/etc/fstab`; WSL will mount

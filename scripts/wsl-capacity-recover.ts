@@ -63,6 +63,7 @@ const MEMORY_AVAILABLE_EMERGENCY_MB = 2048;
 const CACHE_DROP_COOLDOWN_MS = 10 * 60 * 1000;
 const DROP_CACHE_UNIT = "dotfiles-dropcache.service";
 const HARD_PAGE_READS_EMERGENCY_PER_SECOND = 500;
+const TMPFS_INODE_WARN_PERCENT = 85;
 let cliError: string | undefined;
 
 type Policy = {
@@ -177,6 +178,133 @@ export function shouldReclaim(
       ? EMERGENCY_RECLAIM_COOLDOWN_MS
       : REGULAR_RECLAIM_COOLDOWN_MS;
   return nowMs - lastAttemptMs >= cooldown;
+}
+
+export type TmpfsInodeUsage = {
+  used: number;
+  total: number;
+  percent: number;
+};
+
+export function tmpfsInodeUsage(
+  statfs: Pick<ReturnType<typeof statfsSync>, "files" | "ffree">,
+): Result<TmpfsInodeUsage, Error> {
+  const total = Number(statfs.files);
+  const free = Number(statfs.ffree);
+  const used = total - free;
+  if (
+    !Number.isSafeInteger(total) ||
+    !Number.isSafeInteger(free) ||
+    total <= 0 ||
+    free < 0 ||
+    used < 0 ||
+    used > total
+  ) {
+    return err(new Error("/tmp returned an invalid inode count"));
+  }
+  return ok({ used, total, percent: (used / total) * 100 });
+}
+
+export function tmpfsInodeThreshold(
+  raw: string | undefined,
+): Result<number, Error> {
+  const percent = Number(raw);
+  if (
+    raw === undefined ||
+    !Number.isInteger(percent) ||
+    percent <= 0 ||
+    percent >= TMPFS_INODE_WARN_PERCENT
+  ) {
+    return err(
+      new Error(
+        `TMPFS_INODE_RECLAIM_PERCENT must be an integer from 1 to ${TMPFS_INODE_WARN_PERCENT - 1}`,
+      ),
+    );
+  }
+  return ok(percent);
+}
+
+export async function recoverTmpfsInodes(options: {
+  thresholdPercent: number;
+  measure: () => Result<TmpfsInodeUsage, Error>;
+  runTarget: () => Promise<{ code: number; timedOut: boolean; output: string }>;
+  log: (message: string) => void;
+  warn: (message: string) => void;
+}): Promise<void> {
+  const measuredBefore = fromThrowable(options.measure)();
+  if (measuredBefore.isErr()) {
+    options.warn(
+      `WARN tmpfs inode measurement failed: ${String(measuredBefore.error)}\n`,
+    );
+    return;
+  }
+  if (measuredBefore.value.isErr()) {
+    options.warn(
+      `WARN tmpfs inode measurement failed: ${String(measuredBefore.value.error)}\n`,
+    );
+    return;
+  }
+  const before = measuredBefore.value.value;
+  if (before.percent < options.thresholdPercent) {
+    options.log(
+      `TMPFS HOLD used=${before.used}/${before.total} (${before.percent.toFixed(1)}%) threshold=${options.thresholdPercent}%\n`,
+    );
+    return;
+  }
+  const action = await fromAsyncThrowable(options.runTarget)();
+  if (action.isErr()) {
+    options.warn(`WARN tmpfs reclaim failed: ${String(action.error)}\n`);
+    return;
+  }
+  const measuredAfter = fromThrowable(options.measure)();
+  if (measuredAfter.isErr()) {
+    options.warn(
+      `WARN tmpfs post-reclaim measurement failed: ${String(measuredAfter.error)}\n`,
+    );
+    return;
+  }
+  if (measuredAfter.value.isErr()) {
+    options.warn(
+      `WARN tmpfs post-reclaim measurement failed: ${String(measuredAfter.value.error)}\n`,
+    );
+    return;
+  }
+  const result = action.value;
+  const after = measuredAfter.value.value;
+  const reclaimed = before.used - after.used;
+  const line =
+    `TMPFS_RECLAIM exit=${result.code} timeout=${result.timedOut} ` +
+    `before=${before.used}/${before.total} after=${after.used}/${after.total} ` +
+    `reclaimed_inodes=${reclaimed} detail=${JSON.stringify(result.output)}\n`;
+  if (result.code !== 0 || result.timedOut) options.warn(line);
+  else options.log(line);
+}
+
+function measureTmpfsInodes(): Result<TmpfsInodeUsage, Error> {
+  return tmpfsInodeUsage(statfsSync("/tmp", { bigint: true }));
+}
+
+async function runTmpfsTarget(): Promise<{
+  code: number;
+  timedOut: boolean;
+  output: string;
+}> {
+  const mise = Bun.which("mise") ?? "/home/linuxbrew/.linuxbrew/bin/mise";
+  return runBounded(
+    [
+      mise,
+      "exec",
+      "--",
+      "bun",
+      join(import.meta.dir, "../tools/disk-reclaim/src/reclaim.ts"),
+      "run",
+      "tmpfs",
+      "--yes",
+      "--no-progress",
+      "--json",
+    ],
+    120_000,
+  );
 }
 
 function readLastAttemptMs(): number {
@@ -794,6 +922,24 @@ async function main(): Promise<void> {
     process.stderr.write("FATAL: WSL host path required\n");
     process.exit(2);
   }
+  const tmpfsThreshold = tmpfsInodeThreshold(
+    process.env.TMPFS_INODE_RECLAIM_PERCENT,
+  );
+  if (tmpfsThreshold.isErr()) {
+    process.stderr.write(`FATAL: ${String(tmpfsThreshold.error)}\n`);
+    process.exit(2);
+  }
+  await recoverTmpfsInodes({
+    thresholdPercent: tmpfsThreshold.value,
+    measure: measureTmpfsInodes,
+    runTarget: runTmpfsTarget,
+    log: (message) => {
+      process.stdout.write(message);
+    },
+    warn: (message) => {
+      process.stderr.write(message);
+    },
+  });
   const initialFree = freeBytes(policy.path);
   if (initialFree.isErr()) {
     process.stderr.write(`FATAL: ${String(initialFree.error)}\n`);

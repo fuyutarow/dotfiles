@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ok } from "neverthrow";
 import { fromThrowable, jsonOf, z } from "../../tools/shared/src/zod.ts";
 import {
   hasLiveBuildProcess,
@@ -15,12 +16,15 @@ import {
   memoryEmergency,
   parseHostMemory,
   recoveryVerdictRecord,
+  recoverTmpfsInodes,
   recoverMemoryEmergency,
   selectStopTargets,
   shouldDropPageCache,
   shouldReclaim,
   startTicks,
   stopCompute,
+  tmpfsInodeUsage,
+  tmpfsInodeThreshold,
   writeRecoveryVerdict,
   type ComputeProcess,
 } from "../wsl-capacity-recover.ts";
@@ -281,6 +285,72 @@ describe("WSL capacity recovery decisions", () => {
     expect(shouldReclaim(50 * GiB, policy, 9_000_000, 10_000_000)).toBe(false);
     expect(shouldReclaim(50 * GiB, policy, 0, 10_000_000)).toBe(true);
     expect(shouldReclaim(20 * GiB, policy, 9_000_000, 10_000_000)).toBe(true);
+  });
+
+  test("tmpfs inodes HOLD below threshold and reclaim once at or above it", async () => {
+    const threshold = tmpfsInodeThreshold("80");
+    expect(threshold.isOk()).toBe(true);
+    if (threshold.isErr()) return;
+    const events: string[] = [];
+    let free = 21;
+    const measure = () => tmpfsInodeUsage({ files: 100, ffree: free });
+    const runTarget = () => {
+      events.push("target");
+      free = 19;
+      return Promise.resolve({ code: 0, timedOut: false, output: "ok" });
+    };
+    await recoverTmpfsInodes({
+      thresholdPercent: threshold.value,
+      measure,
+      runTarget,
+      log: (message) => {
+        events.push(message);
+      },
+      warn: (message) => {
+        events.push(message);
+      },
+    });
+    expect(events).toEqual(["TMPFS HOLD used=79/100 (79.0%) threshold=80%\n"]);
+
+    events.length = 0;
+    free = 15;
+    await recoverTmpfsInodes({
+      thresholdPercent: threshold.value,
+      measure,
+      runTarget,
+      log: (message) => {
+        events.push(message);
+      },
+      warn: (message) => {
+        events.push(message);
+      },
+    });
+    expect(events).toHaveLength(2);
+    expect(events[0]).toBe("target");
+    expect(events[1]).toContain("reclaimed_inodes=4");
+  });
+
+  test("tmpfs target failures are logged without escaping the controller", async () => {
+    const events: string[] = [];
+    await recoverTmpfsInodes({
+      thresholdPercent: 80,
+      measure: () => ok({ used: 85, total: 100, percent: 85 }),
+      runTarget: () =>
+        Promise.resolve({
+          code: 1,
+          timedOut: false,
+          output: "target unavailable",
+        }),
+      log: (message) => {
+        events.push(message);
+      },
+      warn: (message) => {
+        events.push(message);
+      },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toContain("TMPFS_RECLAIM exit=1");
+    expect(events[0]).toContain('detail="target unavailable"');
   });
 
   test("starttime is read after a parenthesized process name", () => {

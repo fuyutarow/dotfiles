@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+
+- Expose the storage allow/warn/deny decision as a tools entry; the PreToolUse hook only adapts stdin and the vendor envelope.
+- Move command, checkout, cache, budget, and recovery policy tests alongside the decision logic; reuse shared config validators.
+
 ## 0.1.3
 
 - Allow small hook writes to the current user's session scratchpad below the storage deny line.

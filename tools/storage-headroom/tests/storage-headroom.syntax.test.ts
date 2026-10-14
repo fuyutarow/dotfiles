@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { matchLauncher, type Launcher } from "../enforce-storage-headroom.ts";
+import { matchLauncher, type Launcher } from "../src/decision.ts";
 
 const LAUNCHERS: Launcher[] = [
   { command: "mise", subcommands: ["run"], tasks: ["test", "build"] },

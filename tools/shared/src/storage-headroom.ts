@@ -40,7 +40,11 @@ export type DriveAssessment = {
 
 const ObjectSchema = z.record(z.string(), z.unknown());
 
-function nonNegative(value: unknown, where: string, errors: string[]): number {
+export function nonNegative(
+  value: unknown,
+  where: string,
+  errors: string[],
+): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     errors.push(
       `${where}: expected a non-negative number, got ${JSON.stringify(value)}`,
@@ -61,7 +65,7 @@ function percent(value: unknown, where: string, errors: string[]): number {
   return n;
 }
 
-function nonEmptyString(
+export function nonEmptyString(
   value: unknown,
   where: string,
   errors: string[],

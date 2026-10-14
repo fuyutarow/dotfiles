@@ -128,30 +128,50 @@ async function checkSshCmd(host: string): Promise<Finding> {
 }
 
 async function checkCodexRoute(host: string): Promise<Finding> {
-  const r = await run([...SSH, host, "agx pick doctor"], null, 30_000);
-  const status = /agx: codex: (available|unavailable) — (.*)/u.exec(r.err);
-  if (status?.[1] === "available")
+  // Match agx's codex-resource-probe command shape and the worker's startup flags. The helper has
+  // no remote diagnostic CLI, so run the probe over SSH. `agx run` defaults to workspace-write;
+  // ask Codex to execute `true` so PASS confirms the sandbox actually ran a command. Allow 30 s
+  // for the model response; the helper's 5 s resource-probe bound is too short for this check.
+  const r = await run(
+    [
+      ...SSH,
+      host,
+      "codex exec --skip-git-repo-check --sandbox workspace-write -c 'approval_policy=\"never\"' -- 'Run true with the shell tool and report success.'",
+    ],
+    null,
+    30_000,
+  );
+  return codexRouteFinding(host, r);
+}
+
+export function codexRouteFinding(
+  host: string,
+  result: Readonly<{
+    code: number;
+    out: string;
+    err: string;
+    timedOut: boolean;
+  }>,
+): Finding {
+  if (result.code === 0)
     return finding(
       "codex-route",
       "PASS",
-      `agx pick doctor: codex available — ${status[2]}`,
+      "codex exec starts with the workspace-write sandbox",
     );
-  if (status?.[1] === "unavailable")
-    return finding(
-      "codex-route",
-      "FAIL",
-      `agx pick doctor: codex unavailable — ${status[2]}`,
-      status[2]?.includes("not logged in") === true
-        ? `from the Mac: mise run auth:push -- ${host}`
-        : `on ${host}: cd ~/dotfiles && mise run linux:init -- --rented (only for an owner's disposable Vast container; never on a shared server)`,
-    );
-  const diagnostic = r.err.trim();
-  const detail = diagnostic.length > 0 ? diagnostic : r.out.trim();
+  const stderr = result.err.trim();
+  const raw = stderr.length > 0 ? stderr : result.out.trim();
+  const detail = raw.length > 0 ? raw : "no diagnostic";
+  const timedOut = result.timedOut ? ", timed out" : "";
+  const authenticationFailure =
+    /not logged in|unauthorized|authentication/iu.test(raw);
   return finding(
     "codex-route",
     "FAIL",
-    `agx pick doctor did not report Codex route status (exit ${r.code}${r.timedOut ? ", timed out" : ""}): ${detail}`,
-    `on ${host}: cd ~/dotfiles && mise run linux:init; use --rented only for an owner's disposable Vast container`,
+    `codex exec --sandbox workspace-write could not start (exit ${result.code}${timedOut}): ${detail}`,
+    authenticationFailure
+      ? `from the Mac: mise run auth:push -- ${host}`
+      : `on ${host}: verify the Codex sandbox prerequisites; only if the host itself is the isolation boundary, declare that in ~/.config/agx/host.toml`,
   );
 }
 

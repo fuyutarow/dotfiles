@@ -1,5 +1,51 @@
 import { expect, test } from "bun:test";
-import { managedWslConfigFinding } from "../doctor-remote.ts";
+import {
+  codexRouteFinding,
+  managedWslConfigFinding,
+} from "../doctor-remote.ts";
+
+test("codex route passes when Codex starts in its default sandbox", () => {
+  expect(
+    codexRouteFinding("r99-u26", {
+      code: 0,
+      out: "",
+      err: "",
+      timedOut: false,
+    }),
+  ).toEqual({
+    name: "codex-route",
+    verdict: "PASS",
+    detail: "codex exec starts with the workspace-write sandbox",
+  });
+});
+
+test("codex route reports sandbox startup failures", () => {
+  expect(
+    codexRouteFinding("r99-u26", {
+      code: 1,
+      out: "",
+      err: "unshare: Operation not permitted",
+      timedOut: false,
+    }),
+  ).toEqual({
+    name: "codex-route",
+    verdict: "FAIL",
+    detail:
+      "codex exec --sandbox workspace-write could not start (exit 1): unshare: Operation not permitted",
+    fix: "on r99-u26: verify the Codex sandbox prerequisites; only if the host itself is the isolation boundary, declare that in ~/.config/agx/host.toml",
+  });
+});
+
+test("codex route sends authentication failures to the login repair", () => {
+  expect(
+    codexRouteFinding("r99-u26", {
+      code: 1,
+      out: "",
+      err: "not logged in",
+      timedOut: false,
+    }).fix,
+  ).toBe("from the Mac: mise run auth:push -- r99-u26");
+});
 
 test("managed WSL block without its -code alias is FAIL with the repair task", () => {
   const config = [

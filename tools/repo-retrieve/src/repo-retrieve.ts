@@ -507,10 +507,8 @@ async function runCccSearch(
   }
   if (status.stdout.includes(`${project} [indexing]`)) {
     process.stderr.write(
-      `RESULT: INDEXING route=${route} engine=ccc project=${project}; ` +
-        "wait for ccc daemon status to report [idle], then retry\n",
+      `INDEX: reindex running (pid ${freshness.reindexPid ?? "unknown"})\n`,
     );
-    return ok(75);
   }
   const cccPath = path === undefined ? undefined : cccSearchPath(project, path);
   let matchedQueries = 0;

@@ -165,6 +165,8 @@ const INDEX_ATTEMPTS = 3;
 const INDEX_POLL_MS = 1_000;
 const INDEX_STALL_MS = 600_000;
 const AUTO_REINDEX_WINDOW_MS = 120_000;
+const DEFAULT_MAX_STALE_COMMITS = 200;
+const DEFAULT_MAX_STALE_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const ErrnoCodeSchema = z.object({ code: z.string() });
 
 function errnoCode(error: unknown): string | null {
@@ -588,7 +590,12 @@ function remedy(project: string): string {
 }
 
 type Freshness =
-  | { status: "fresh"; watermark: Watermark }
+  | {
+      status: "fresh";
+      watermark: Watermark;
+      note?: string;
+      reindexPid?: number;
+    }
   | { status: "stale"; message: string };
 
 // Deliberately NOT self-healing: an earlier design considered treating "the index DB's mtime is
@@ -653,6 +660,8 @@ export async function checkIndexFreshness(
   // decided, or any in-scope path changed, the refusal below stands (owner ruling 2026-09-25:
   // never serve stale results).
   let drift: ScopeDrift | null = null;
+  let distance: number | null = null;
+  let changedPaths: string[] = [];
   if (
     watermark.value.head !== currentHead &&
     watermark.value.head !== null &&
@@ -666,6 +675,38 @@ export async function checkIndexFreshness(
       watermark.value.head,
       currentHead,
     );
+    const git = requireExecutable("git");
+    if (git.isErr()) return err(git.error);
+    const count = await runChildCaptured(
+      [
+        git.value,
+        "-C",
+        project,
+        "rev-list",
+        "--count",
+        watermark.value.head + ".." + currentHead,
+      ],
+      10_000,
+      false,
+    );
+    if (count.exitCode !== 0 || !/^\d+$/u.test(count.stdout.trim())) {
+      drift = null;
+    } else distance = Number(count.stdout.trim());
+    const paths = await runChildCaptured(
+      [
+        git.value,
+        "-C",
+        project,
+        "diff",
+        "--name-only",
+        watermark.value.head,
+        currentHead,
+      ],
+      10_000,
+      false,
+    );
+    if (paths.exitCode !== 0) drift = null;
+    else changedPaths = paths.stdout.split("\n").filter(Boolean);
   }
   if (drift !== null && drift.inScope.length === 0) {
     process.stderr.write(
@@ -674,6 +715,39 @@ export async function checkIndexFreshness(
         "the index scope (ccc's own matcher), so the index is current\n",
     );
   } else if (watermark.value.head !== currentHead) {
+    const maxCommits = Number(
+      process.env.REPO_RETRIEVE_MAX_STALE_COMMITS ?? DEFAULT_MAX_STALE_COMMITS,
+    );
+    const maxAgeMs = Number(
+      process.env.REPO_RETRIEVE_MAX_STALE_AGE_MS ?? DEFAULT_MAX_STALE_AGE_MS,
+    );
+    const ageMs =
+      Temporal.Now.instant().epochMilliseconds -
+      Temporal.Instant.from(watermark.value.indexedAt).epochMilliseconds;
+    if (
+      watermark.value.head !== null &&
+      currentHead !== null &&
+      distance !== null &&
+      distance <= maxCommits &&
+      ageMs <= maxAgeMs
+    ) {
+      const changed =
+        changedPaths.length > 0 ? changedPaths.join(", ") : "none";
+      process.stderr.write(
+        `INDEX: built at ${watermark.value.head.slice(0, 12)}, ${distance} commits / ${changedPaths.length} changed files behind; changed files: ${changed}\n`,
+      );
+      const reindex = await requestAutoReindex(project);
+      return ok({
+        status: "fresh",
+        watermark: watermark.value,
+        note: `INDEX: built at ${watermark.value.head.slice(0, 12)}, ${distance} commits / ${changedPaths.length} changed files behind; changed files: ${changed}`,
+        ...(reindex.isOk() &&
+        reindex.value.started &&
+        reindex.value.pid !== undefined
+          ? { reindexPid: reindex.value.pid }
+          : {}),
+      });
+    }
     // Refuse this semantic request immediately. The caller starts one rate-limited detached
     // `index --detach` request while keeping NO_INDEX as the observable result.
     return ok({
@@ -689,8 +763,9 @@ export async function checkIndexFreshness(
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
         `index was built at HEAD=${headLabel(watermark.value.head)} (indexedAt=${watermark.value.indexedAt}) ` +
-        `but the working tree is now at HEAD=${headLabel(currentHead)}; that drift is exactly what this ` +
-        `gate exists to refuse serving. cite=${citationToken(watermark.value)} names the index's own ` +
+        `but the working tree is now at HEAD=${headLabel(currentHead)}; gap=${distance} commits / ` +
+        `${changedPaths.length} changed files, age=${ageMs}ms (bounds ${maxCommits} commits / ${maxAgeMs}ms). ` +
+        `cite=${citationToken(watermark.value)} names the index's own ` +
         `(now-superseded) state for a citation such as --hit NO_INDEX:${citationToken(watermark.value)}. ` +
         scopeLine(drift) +
         `Remedy: ${remedy(project)}\n`,
@@ -760,30 +835,14 @@ async function reindexCertified(
     const headAfterResult = await gitHead(project);
     if (headAfterResult.isErr()) return err(headAfterResult.error);
     const headAfter = headAfterResult.value;
-    head = headAfter;
-    if (headBefore === headAfter) {
-      certified = true; // confirmed stable across the whole run: safe to certify
-      break;
-    }
-    const scopeResult = await scopeDrift(project, ccc, headBefore, headAfter);
-    if (scopeResult.isErr()) return err(scopeResult.error);
-    const drift = scopeResult.value;
-    if (drift !== null && drift.inScope.length === 0) {
+    head = headBefore;
+    if (headBefore !== headAfter) {
       process.stderr.write(
-        `NOTE: HEAD moved during 'ccc index' (${headLabel(headBefore)} -> ${headLabel(headAfter)}), ` +
-          `but all ${drift.changed} changed path(s) are outside the index scope; certifying ` +
-          `HEAD=${headLabel(headAfter)}\n`,
+        `NOTE: HEAD moved during 'ccc index' (${headLabel(headBefore)} -> ${headLabel(headAfter)}); recording the scan-start watermark\n`,
       );
-      certified = true;
-      break;
     }
-    process.stderr.write(
-      `NOTE: HEAD moved during 'ccc index' (${headLabel(headBefore)} -> ${headLabel(headAfter)})` +
-        (drift === null
-          ? "; index scope could not be decided"
-          : `; ${drift.inScope.length} in-scope path(s) changed`) +
-        ` — attempt ${indexAttempt}/${INDEX_ATTEMPTS}\n`,
-    );
+    certified = true;
+    break;
   }
   if (!certified) {
     process.stderr.write(
@@ -821,29 +880,9 @@ async function reindexCertified(
     return ok({ code: 2, head: null });
   }
 
-  if (expectedHead !== undefined && head !== expectedHead) {
-    process.stderr.write(
-      `FATAL: HEAD changed since detached index request (${headLabel(expectedHead)} -> ${headLabel(head)}); watermark left unwritten\n`,
-    );
-    return ok({ code: 2, head: null });
-  }
-
   const watermarkWrite = await writeWatermark(project, head, "index");
   if (watermarkWrite.isErr()) return err(watermarkWrite.error);
   return ok({ code: 0, head });
-}
-
-async function scopeDrift(
-  project: string,
-  ccc: string,
-  before: string | null,
-  after: string | null,
-): Promise<Result<ScopeDrift | null, Error>> {
-  if (before === null || after === null) return ok(null);
-  return fromAsyncThrowable(
-    () => inScopeChanges(project, ccc, before, after),
-    asError,
-  )();
 }
 
 async function runChildToStderr(
@@ -1056,22 +1095,46 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
       ),
     );
   const request = await readIndexRequest(project);
-  if (request === null) {
-    process.stdout.write(
-      `RESULT: INDEX_STATUS project=${project} state=none\n`,
-    );
-    return ok(0);
-  }
   const head = await gitHead(project);
   if (head.isErr()) return err(head.error);
-  if (head.value !== request.head) {
+  const watermark = await readWatermark(project);
+  if (watermark.isErr()) return err(watermark.error);
+  const builtHead =
+    watermark.value.kind === "ok" ? watermark.value.value.head : null;
+  let gap = "unknown";
+  if (
+    watermark.value.kind === "ok" &&
+    builtHead !== null &&
+    head.value !== null
+  ) {
+    const git = requireExecutable("git");
+    if (git.isErr()) return err(git.error);
+    const count = await runChildCaptured(
+      [
+        git.value,
+        "-C",
+        project,
+        "rev-list",
+        "--count",
+        builtHead + ".." + head.value,
+      ],
+      10_000,
+      false,
+    );
+    if (count.exitCode === 0) gap = count.stdout.trim();
+  }
+  if (request === null) {
     process.stdout.write(
-      `RESULT: INDEX_STATUS project=${project} state=stale requested=${headLabel(request.head)} current=${headLabel(head.value)}\n`,
+      `RESULT: INDEX_STATUS project=${project} state=${watermark.value.kind === "ok" ? "idle" : "none"} built=${headLabel(builtHead)} gap=${gap} reindex=not-running\n`,
     );
     return ok(0);
   }
-  const watermark = await readWatermark(project);
-  if (watermark.isErr()) return err(watermark.error);
+  if (head.value !== request.head && request.state !== "complete") {
+    process.stdout.write(
+      `RESULT: INDEX_STATUS project=${project} state=stale requested=${headLabel(request.head)} current=${headLabel(head.value)} built=${headLabel(builtHead)} gap=${gap} reindex=running\n`,
+    );
+    return ok(0);
+  }
   const complete =
     request.state === "complete" &&
     watermark.value.kind === "ok" &&
@@ -1093,7 +1156,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     .at(-1);
   const state = complete ? "complete" : request.state;
   process.stdout.write(
-    `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${projectState ?? "unknown"} head=${headLabel(request.head)}\n`,
+    `RESULT: INDEX_STATUS project=${project} state=${state} daemon=${projectState ?? "unknown"} built=${headLabel(builtHead)} gap=${gap} reindex=${request.state === "pending" ? "running" : "not-running"} head=${headLabel(request.head)}\n`,
   );
   return ok(0);
 }

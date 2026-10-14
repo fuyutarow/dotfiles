@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.8 — 2026-10-14
+
+- Serve completed indexes within the configured staleness bound while detached reindexing runs, and report the watermark, gap, changed files, and reindex status.
+
 ## 1.0.7 — 2026-10-14
 
 - Report the detached reindex status command in NO_INDEX output and omit manual registration/reindex repair advice when a reindex was requested.

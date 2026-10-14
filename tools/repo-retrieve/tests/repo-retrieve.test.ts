@@ -330,7 +330,6 @@ describe("repo-retrieve route contract", () => {
       ["about", "--query", "workspace backing index"],
       { FAKE_SEARCH_EXPECT_CWD: backing },
     );
-
     expect(result.code).toBe(0);
     expect(result.log).toContain("ccc daemon status");
     expect(result.log).toContain("ccc search workspace backing index");
@@ -805,7 +804,7 @@ describe("repo-retrieve route contract", () => {
     expect(result.log).toContain("--refresh");
   });
 
-  test("concept fails fast while its ccc project is indexing", () => {
+  test("a completed current index still serves while ccc refresh work is indexing", () => {
     const { dir } = registerFreshGitProject();
     const result = run(
       dir,
@@ -815,10 +814,31 @@ describe("repo-retrieve route contract", () => {
       { FAKE_CCC_INDEXING: "1" },
     );
 
-    expect(result.code).toBe(75);
+    expect(result.code).toBe(0);
     expect(result.log).toContain("ccc daemon status");
-    expect(result.log).not.toContain("ccc search");
-    expect(result.stderr).toContain("RESULT: INDEXING");
+    expect(result.log).toContain("ccc search semantic request");
+    expect(result.stdout).toContain("RESULT: PASS route=concept");
+    expect(result.stderr).toContain("INDEX: reindex running");
+  });
+
+  test("a completed stale index still serves results while its detached reindex runs", () => {
+    const { dir } = registerGitProject();
+    run(dir, ["index"]);
+    writeFileSync(join(dir, "later.md"), "later\n");
+    gitCmd(dir, ["add", "later.md"]);
+    gitCmd(dir, ["commit", "-q", "-m", "later"]);
+
+    const result = run(dir, ["concept", "--query", "semantic request"], {
+      FAKE_CCC_INDEXING: "1",
+      REPO_RETRIEVE_MAX_STALE_COMMITS: "2000",
+      REPO_RETRIEVE_MAX_STALE_AGE_MS: "999999999999",
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("--- Result 1");
+    expect(result.stdout).toContain("RESULT: PASS route=concept");
+    expect(result.stderr).toContain("INDEX: built at");
+    expect(result.stderr).toMatch(/INDEX: reindex running \(pid \d+\)/u);
+    expect(result.log).toContain("ccc search semantic request");
   });
 
   test("a fresh watermark matching current HEAD lets concept search proceed", () => {
@@ -1230,7 +1250,8 @@ describe("repo-retrieve route contract", () => {
 
     // Before re-indexing, the watermark from the first commit is now stale for the new HEAD.
     const stale = run(dir, ["concept", "--query", "x"]);
-    expect(stale.code).toBe(3);
+    expect(stale.code).toBe(0);
+    expect(stale.stderr).toContain("INDEX: built at");
 
     // repo-retrieve index closes the gap in one step: reindex + record the watermark at the
     // CURRENT head.
@@ -1244,22 +1265,16 @@ describe("repo-retrieve route contract", () => {
     expect(fresh.code).toBe(0);
   });
 
-  test("in-scope drift starts a detached reindex and remains NO_INDEX for this request", () => {
+  test("in-scope drift starts a detached reindex and serves the completed index", () => {
     const { dir } = registerGitProject();
     run(dir, ["index"]);
     writeFileSync(join(dir, "later.md"), "later\n");
     gitCmd(dir, ["add", "later.md"]);
     gitCmd(dir, ["commit", "-q", "-m", "later"]);
     const result = run(dir, ["concept", "--query", "x"]);
-    expect(result.code).toBe(3);
-    expect(result.stderr).toContain(`INDEX: stale since`);
-    expect(result.stderr).toContain(`reindex is running (pid`);
-    expect(result.stderr).toContain("check progress with 'rr index --status'");
-    expect(result.stderr).not.toContain(
-      "Repair: from this project root run 'ccc init'",
-    );
-    expect(result.stderr).toContain("lexical routes now: rr text/regex/files");
-    expect(result.stdout).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(`INDEX: built at`);
+    expect(result.stdout).toContain("RESULT: PASS route=concept");
   });
 
   test("stale search requests detached reindex even while the daemon is busy", () => {
@@ -1272,11 +1287,12 @@ describe("repo-retrieve route contract", () => {
     const result = run(dir, ["concept", "--query", "x"], {
       FAKE_CCC_INDEXING: "1",
     });
-    expect(result.code).toBe(3);
-    expect(result.stderr).toContain("reindex is running (pid");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("RESULT: PASS route=concept");
+    expect(result.stderr).toMatch(/INDEX: reindex running \(pid \d+\)/u);
   });
 
-  test("automatic reindex is not disabled by the legacy catch-up environment flag", () => {
+  test("automatic reindex leaves the stale completed index available for search", () => {
     const { dir } = registerGitProject();
     run(dir, ["index"]);
     writeFileSync(join(dir, "later.md"), "later\n");
@@ -1284,8 +1300,9 @@ describe("repo-retrieve route contract", () => {
     gitCmd(dir, ["commit", "-q", "-m", "later"]);
 
     const result = run(dir, ["concept", "--query", "x"]);
-    expect(result.code).toBe(3);
-    expect(result.stderr).toContain("reindex is running (pid");
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain("INDEX: built at");
+    expect(result.stdout).toContain("RESULT: PASS route=concept");
   });
 
   test("a HEAD drift that changes no path is not staleness: served, with a NOTE", () => {
@@ -1329,7 +1346,7 @@ describe("repo-retrieve route contract", () => {
 
   // --- Item 5 regression: a structural git mutation landing DURING an in-flight `ccc index`. --
 
-  test("index refuses to certify the watermark when HEAD moves mid-scan (the race the audit named)", () => {
+  test("index records the scan-start watermark when HEAD moves mid-scan", () => {
     const { dir, head: headBefore } = registerGitProject();
 
     const result = run(dir, ["index"], {
@@ -1339,11 +1356,9 @@ describe("repo-retrieve route contract", () => {
     const headAfter = gitCmd(dir, ["rev-parse", "HEAD"]).trim();
     expect(headAfter).not.toBe(headBefore); // the fake really did mutate git mid-run
 
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("FATAL: HEAD moved during 'ccc index'");
-    expect(result.stderr).toContain(headBefore);
-    expect(result.stderr).toContain(headAfter);
-    expect(existsSync(watermarkFilePath(dir))).toBe(false);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain("recording the scan-start watermark");
+    expect(readWrittenWatermark(dir).head).toBe(headBefore);
   });
 
   test("literal routes to fixed-string rg even in a ccc project", () => {

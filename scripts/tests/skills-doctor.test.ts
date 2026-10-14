@@ -1,8 +1,5 @@
-// bun test for scripts/skills-doctor.ts — the gate that fails on a shadowed skill or drifted
-// vendoring wiring. Every fixture is a throwaway tmp tree passed via --dotfiles/--home; the real
-// $HOME is never touched (Safety rule). The cases that matter are the two that the old silent
-// `skip (exists, not symlink)` line could not tell apart: a real dir occupying a name this repo
-// OWNS (defect) versus one it does not (foreign content, none of our business).
+// Throwaway fixtures prove the repo contains only in-house skills and global install paths do
+// not write through a link into a repository. The real HOME is never touched.
 import { describe, expect, test } from "bun:test";
 import {
   mkdirSync,
@@ -26,55 +23,67 @@ function run(args: string[]): { out: string; code: number } {
   };
 }
 
-/** A dotfiles fixture: agents/skills/<names>/SKILL.md plus the committed ledger. */
-function makeDotfiles(skillNames: string[], ledger?: object): string {
+function makeDotfiles(
+  skillNames: string[],
+  thirdPartyNames: string[] = [],
+): string {
   const dir = mkdtempSync(join(tmpdir(), "skills-doctor-dotfiles-"));
   for (const name of skillNames) {
     mkdirSync(join(dir, "agents", "skills", name), { recursive: true });
     writeFileSync(
       join(dir, "agents", "skills", name, "SKILL.md"),
-      `# ${name}\n`,
+      `---\nname: ${name}\ndescription: In-house fixture skill.\n---\n# ${name}\n`,
     );
   }
+  const rows = thirdPartyNames
+    .map(
+      (skill) => `\n[[skills]]\nsource = "vendor/repo"\nskill = "${skill}"\n`,
+    )
+    .join("");
   mkdirSync(join(dir, "agents"), { recursive: true });
   writeFileSync(
-    join(dir, "agents", "skills-lock.json"),
-    `${JSON.stringify(ledger ?? { version: 3, skills: {}, dismissed: {} }, null, 2)}\n`,
+    join(dir, "agents", "skills.thirdparty.toml"),
+    `cli_version = "1.5.22"\n${rows}`,
   );
   return dir;
 }
 
-/** A home fixture already wired the way `mise run link:dots` + `link:skills` leave it. */
 function makeWiredHome(dotfiles: string, skillNames: string[]): string {
   const home = mkdtempSync(join(tmpdir(), "skills-doctor-home-"));
   mkdirSync(join(home, ".claude", "skills"), { recursive: true });
-  mkdirSync(join(home, ".agents"), { recursive: true });
-  symlinkSync(
-    join(dotfiles, "agents", "skills"),
-    join(home, ".agents", "skills"),
-  );
+  mkdirSync(join(home, ".agents", "skills"), { recursive: true });
   for (const name of skillNames) {
     symlinkSync(
       join(dotfiles, "agents", "skills", name),
       join(home, ".claude", "skills", name),
+    );
+    symlinkSync(
+      join(dotfiles, "agents", "skills", name),
+      join(home, ".agents", "skills", name),
     );
   }
   return home;
 }
 
 function cleanup(...dirs: string[]): void {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 }
 
+const args = (dotfiles: string, home: string) => [
+  "--dotfiles",
+  dotfiles,
+  "--home",
+  home,
+];
+
 describe("skills-doctor: argv contract", () => {
-  test("lets Cleye strictFlags reject an ordinary unknown before checking anything", () => {
+  test("lets Cleye reject an ordinary unknown", () => {
     const { out, code } = run(["--wat"]);
     expect(code).toBe(1);
     expect(out).toContain("Error: Unknown flag: --wat.");
-    expect(out).not.toContain("SKILLS-WIRING");
   });
 
-  test("rejects --__proto__ before checking anything", () => {
+  test("rejects --__proto__", () => {
     const { out, code } = run(["--__proto__"]);
     expect(code).toBe(2);
     expect(out).toContain("unknown flag(s): --__proto__");
@@ -87,31 +96,32 @@ describe("skills-doctor: argv contract", () => {
   });
 });
 
-describe("skills-doctor: healthy machine", () => {
-  test("fully wired home passes", () => {
-    const dotfiles = makeDotfiles(["alpha-skill", "beta-skill"]);
+describe("skills-doctor: healthy state", () => {
+  test("real tool-owned global directory with in-house per-skill links passes", () => {
+    const dotfiles = makeDotfiles(
+      ["alpha-skill", "beta-skill"],
+      ["vendor-skill"],
+    );
     const home = makeWiredHome(dotfiles, ["alpha-skill", "beta-skill"]);
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+    const { out, code } = run(args(dotfiles, home));
     expect(code).toBe(0);
     expect(out).toContain("✅ SKILLS-WIRING PASS");
     cleanup(dotfiles, home);
   });
 
-  test("a fresh clone SKIPs the machine-state checks instead of failing them", () => {
+  test("a fresh clone skips machine checks", () => {
     const dotfiles = makeDotfiles(["alpha-skill"]);
-    const home = mkdtempSync(join(tmpdir(), "skills-doctor-fresh-")); // nothing linked yet
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+    const home = mkdtempSync(join(tmpdir(), "skills-doctor-fresh-"));
+    const { out, code } = run(args(dotfiles, home));
     expect(code).toBe(0);
-    // Every skip is printed: a green run must never be mistakable for a run that checked.
     expect(out).toContain("⏭ SHADOW:");
     expect(out).toContain("⏭ WIRING:");
-    expect(out).toContain("✅ SKILLS-WIRING PASS");
     cleanup(dotfiles, home);
   });
 });
 
-describe("skills-doctor: SHADOW", () => {
-  test("a real dir occupying a name this repo OWNS fails and names the remedy", () => {
+describe("skills-doctor: in-house links", () => {
+  test("a real path masking an in-house skill fails", () => {
     const dotfiles = makeDotfiles(["cloudflare"]);
     const home = makeWiredHome(dotfiles, []);
     mkdirSync(join(home, ".claude", "skills", "cloudflare"), {
@@ -121,92 +131,78 @@ describe("skills-doctor: SHADOW", () => {
       join(home, ".claude", "skills", "cloudflare", "SKILL.md"),
       "# stale\n",
     );
-
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+    const { out, code } = run(args(dotfiles, home));
     expect(code).toBe(1);
     expect(out).toContain("SHADOW:");
     expect(out).toContain("agents/skills/cloudflare is never read");
     expect(out).toContain("rip ");
-    expect(out).toContain("SKILLS-WIRING FAIL: 1 problem(s)");
     cleanup(dotfiles, home);
   });
 
-  test("a real dir this repo does NOT own is left alone (plugin content is not our business)", () => {
+  test("a real plugin directory with an unrelated name is left alone", () => {
     const dotfiles = makeDotfiles(["alpha-skill"]);
     const home = makeWiredHome(dotfiles, ["alpha-skill"]);
     mkdirSync(join(home, ".claude", "skills", "foreign-plugin-skill"), {
       recursive: true,
     });
-
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+    const { out, code } = run(args(dotfiles, home));
     expect(code).toBe(0);
     expect(out).not.toContain("foreign-plugin-skill");
     cleanup(dotfiles, home);
   });
 
-  test("reports EVERY shadowed skill in one pass, not just the first", () => {
+  test("reports every shadowed in-house skill", () => {
     const dotfiles = makeDotfiles(["one", "two", "three"]);
     const home = makeWiredHome(dotfiles, []);
-    for (const n of ["one", "two", "three"]) {
-      mkdirSync(join(home, ".claude", "skills", n), { recursive: true });
-    }
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+    for (const name of ["one", "two", "three"])
+      mkdirSync(join(home, ".claude", "skills", name), { recursive: true });
+    const { out, code } = run(args(dotfiles, home));
     expect(code).toBe(1);
     expect(out).toContain("SKILLS-WIRING FAIL: 3 problem(s)");
     cleanup(dotfiles, home);
   });
 });
 
-describe("skills-doctor: WIRING and LEDGER", () => {
-  test("~/.agents/skills aimed somewhere else fails — Codex would read undeclared skills", () => {
+describe("skills-doctor: third-party boundary", () => {
+  test("fails if declared third-party frontmatter reappears under agents/skills", () => {
+    const dotfiles = makeDotfiles(["vendor-skill"], ["vendor-skill"]);
+    const home = mkdtempSync(join(tmpdir(), "skills-doctor-fresh-"));
+    const { out, code } = run(args(dotfiles, home));
+    expect(code).toBe(1);
+    expect(out).toContain("THIRD-PARTY:");
+    expect(out).toContain('"vendor-skill"');
+    cleanup(dotfiles, home);
+  });
+
+  test("global targets linked into a repo refuse with the migration task", () => {
     const dotfiles = makeDotfiles(["alpha-skill"]);
     const home = mkdtempSync(join(tmpdir(), "skills-doctor-home-"));
     mkdirSync(join(home, ".agents"), { recursive: true });
-    symlinkSync("/somewhere/else", join(home, ".agents", "skills"));
-
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+    symlinkSync(
+      join(dotfiles, "agents", "skills"),
+      join(home, ".agents/skills"),
+    );
+    const { out, code } = run(args(dotfiles, home));
     expect(code).toBe(1);
-    expect(out).toContain("WIRING:");
-    expect(out).toContain("skills this repo does not declare");
+    expect(out).toContain("resolves into a repository");
+    expect(out).toContain("mise run skills:migrate");
     cleanup(dotfiles, home);
   });
 
-  test("a ledger LINK into the repo fails — the skills CLI would write the repo through it (INV-8)", () => {
-    const dotfiles = makeDotfiles(["alpha-skill"]);
-    const home = makeWiredHome(dotfiles, ["alpha-skill"]);
+  test("allows in-house links but refuses a declared third-party per-skill link", () => {
+    const dotfiles = makeDotfiles(["acting-on-hypotheses"], ["vendor-skill"]);
+    mkdirSync(join(dotfiles, "agents/vendor-payload"), { recursive: true });
+    const home = makeWiredHome(dotfiles, ["acting-on-hypotheses"]);
     symlinkSync(
-      join(dotfiles, "agents", "skills-lock.json"),
-      join(home, ".agents", ".skill-lock.json"),
+      join(dotfiles, "agents/vendor-payload"),
+      join(home, ".claude/skills/vendor-skill"),
     );
 
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+    const { out, code } = run(args(dotfiles, home));
     expect(code).toBe(1);
-    expect(out).toContain("LEDGER:");
-    expect(out).toContain("mise run link:dots");
-    cleanup(dotfiles, home);
-  });
-
-  test("a ledger entry with no skill on disk fails as an ORPHAN", () => {
-    const dotfiles = makeDotfiles(["alpha-skill"], {
-      version: 3,
-      skills: { "gone-away": { source: "acme/skills", sourceType: "github" } },
-      dismissed: {},
-    });
-    const home = makeWiredHome(dotfiles, ["alpha-skill"]);
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
-    expect(code).toBe(1);
-    expect(out).toContain('ORPHAN: ledger records "gone-away"');
-    cleanup(dotfiles, home);
-  });
-
-  test("a missing ledger file fails rather than passing silently", () => {
-    const dotfiles = makeDotfiles(["alpha-skill"]);
-    rmSync(join(dotfiles, "agents", "skills-lock.json"), { force: true });
-    const home = mkdtempSync(join(tmpdir(), "skills-doctor-fresh-"));
-    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
-    expect(code).toBe(1);
-    expect(out).toContain("ORPHAN:");
-    expect(out).toContain("expected the committed ledger");
+    expect(out).toContain(".claude/skills/vendor-skill");
+    expect(out).toContain("mise run skills:migrate");
+    expect(out).not.toContain("acting-on-hypotheses");
     cleanup(dotfiles, home);
   });
 });

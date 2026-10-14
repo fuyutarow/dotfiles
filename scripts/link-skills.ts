@@ -3,9 +3,11 @@
 // human/agent running `mise run link:skills` — output is verdict-style lines meant for
 // eyeballing (linked/skip/pruned/SHADOWED), not a machine envelope, matching the shell original.
 //
-// Links agents/commands + agents/skills from this dotfiles repo into Claude Code, Codex, and
-// Gemini's config directories, and prunes stale links that a rename/delete would otherwise
-// leave dangling. Four DISTINCT prune/exclusion mechanisms, do not conflate them:
+// Links in-house agents/skills entries + agents/commands from this dotfiles repo into Claude Code,
+// Codex, and Gemini's config directories. Global skill roots stay real tool-owned directories;
+// individual in-house skill entries are linked into them. Third-party skills arrive through
+// `mise run skills:add` / `skills:sync` and are never read from the repo.
+// Four DISTINCT prune/exclusion mechanisms, do not conflate them:
 //   (a) ~/.claude/skills legacy whole-dir symlink -> unlinked unconditionally if IS a symlink
 //       at all (no target check), then recreated as a real directory.
 //   (b) ~/.claude/skills/<name> per-skill -> pruned only if symlink AND dangling AND its raw
@@ -50,6 +52,7 @@ import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { homePathRefusals, readDeclaration } from "./skills-declaration.ts";
 
 const USAGE =
   "Usage: bun scripts/link-skills.ts [--dry-run] [--dotfiles <path>] [--home <path>]\n";
@@ -210,11 +213,16 @@ function linkSkill(
 function linkSkills(
   dotfilesSkillsDir: string,
   claudeSkillsDir: string,
+  thirdPartyNames: ReadonlySet<string>,
   dryRun: boolean,
 ): void {
   for (const name of listEntries(dotfilesSkillsDir).filter((n) =>
     isDir(`${dotfilesSkillsDir}/${n}`),
   )) {
+    if (thirdPartyNames.has(name)) {
+      print(`skip (declared third-party): ${dotfilesSkillsDir}/${name}`);
+      continue;
+    }
     if (!existsSync(`${dotfilesSkillsDir}/${name}/SKILL.md`)) {
       print(`skip (no SKILL.md): ${dotfilesSkillsDir}/${name}`);
       continue;
@@ -331,6 +339,24 @@ function main(): Result<void, UsageError> {
   const dotfiles =
     parsed.flags.dotfiles ?? process.env.DOTFILES ?? `${home}/dotfiles`;
 
+  const declaration = readDeclaration(dotfiles);
+  if (declaration.isErr())
+    return err(
+      new UsageError(`invalid skills declaration: ${declaration.error}`),
+    );
+  const thirdPartyNames = new Set(
+    declaration.value.skills.map((entry) => entry.skill),
+  );
+
+  const migrationRefusals = homePathRefusals(home, dotfiles, [
+    ...thirdPartyNames,
+  ]);
+  if (migrationRefusals.length > 0) {
+    for (const refusal of migrationRefusals) print(refusal);
+    process.exitCode = 1;
+    return ok(undefined);
+  }
+
   // Activate the post-merge hook so future `git pull`s auto-relink skills. Idempotent,
   // best-effort: the original swallows failure via `2>/dev/null || true` and never prints
   // either way — mirrored exactly (real run prints nothing for this step).
@@ -377,8 +403,18 @@ function main(): Result<void, UsageError> {
     });
 
   const dotfilesSkillsDir = `${dotfiles}/agents/skills`;
+  const universalSkillsDir = `${home}/.agents/skills`;
+  if (!dryRun) {
+    tryOp(() => {
+      mkdirSync(`${home}/.agents`, { recursive: true });
+    });
+    tryOp(() => {
+      mkdirSync(universalSkillsDir, { recursive: true });
+    });
+  }
   if (isDir(dotfilesSkillsDir)) {
-    linkSkills(dotfilesSkillsDir, claudeSkillsDir, dryRun);
+    linkSkills(dotfilesSkillsDir, claudeSkillsDir, thirdPartyNames, dryRun);
+    linkSkills(dotfilesSkillsDir, universalSkillsDir, thirdPartyNames, dryRun);
 
     // Prune renamed/deleted skills (b): the loop above only ADDS, so a rename leaves the old
     // link dangling and Claude keeps listing a skill that is gone. Remove only dangling links
@@ -390,18 +426,15 @@ function main(): Result<void, UsageError> {
     // An archived/retired skill may leave an empty directory behind in the checkout, so its
     // old symlink is not dangling. Prune such links under both per-skill target directories.
     pruneLinksWithoutSkillMd(claudeSkillsDir, dotfiles, dryRun);
-    pruneLinksWithoutSkillMd(`${home}/.agents/skills`, dotfiles, dryRun);
+    pruneLinksWithoutSkillMd(universalSkillsDir, dotfiles, dryRun);
   } else {
     print(`skip (missing): ${dotfilesSkillsDir}`);
   }
 
-  // Codex — global guidance, skills, and legacy markdown prompts
+  // Codex — global guidance and legacy markdown prompts; in-house skills were linked above.
   if (!dryRun) {
     tryOp(() => {
       mkdirSync(`${home}/.codex`, { recursive: true });
-    });
-    tryOp(() => {
-      mkdirSync(`${home}/.agents`, { recursive: true });
     });
   }
   linkPath(
@@ -409,7 +442,6 @@ function main(): Result<void, UsageError> {
     `${home}/.codex/AGENTS.md`,
     dryRun,
   );
-  linkPath(dotfilesSkillsDir, `${home}/.agents/skills`, dryRun);
   linkPath(`${dotfiles}/agents/commands`, `${home}/.codex/prompts`, dryRun);
 
   // PRUNE (d)

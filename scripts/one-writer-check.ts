@@ -20,10 +20,30 @@ import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { RENDERED } from "./config-registry.ts";
 import { HooksConfigSchema, owned } from "./hook-registry.ts";
+import {
+  readDeclaration,
+  skillFiles,
+  thirdPartySkillFiles,
+} from "./skills-declaration.ts";
 
 const root = process.env.DOTFILES ?? join(import.meta.dir, "..");
 const home = process.env.HOME ?? homedir();
 const violations: string[] = [];
+
+const declaration = readDeclaration(root);
+if (declaration.isErr()) {
+  violations.push(`agents/skills.thirdparty.toml: ${declaration.error}`);
+} else {
+  violations.push(
+    ...thirdPartySkillFiles(
+      skillFiles(join(root, "agents/skills")),
+      declaration.value,
+    ).map(
+      ({ path, skill }) =>
+        `${path}: third-party skill "${skill}" reappeared under agents/skills`,
+    ),
+  );
+}
 
 const VendorFile = z.looseObject({
   hooks: HooksConfigSchema.optional(),

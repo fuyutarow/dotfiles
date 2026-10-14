@@ -1,27 +1,56 @@
-#!/usr/bin/env bun
-// Fixture for vendor-skill.test.ts — emulates `skills add <source> -g … --skill <name>…` as
-// measured (vendor-skill.ts header): each named skill lands in $HOME/.agents/skills/<name>/ with
-// a ledger entry in $HOME/.agents/.skill-lock.json, plus the uninvited `find-skills` companion
-// (note 4). It writes only under $HOME, which the caller sets to its throwaway directory.
-// FAKE_SKILLS_NO_LEDGER=1 -> the skills arrive without ledger entries.
-import { mkdirSync, writeFileSync } from "node:fs";
+// Emulates the pinned skills CLI writing directly into global tool-owned directories. The
+// caller always sets HOME to a throwaway fixture. Optional find-skills models the measured prompt.
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { resolve } from "node:path";
+import { parseSkillLock } from "../skills-declaration.ts";
 
 const args = Bun.argv.slice(2);
 const home = process.env.HOME ?? "";
-const names = args.flatMap((a, i) =>
-  a === "--skill" && args[i + 1] !== undefined ? [args[i + 1] ?? ""] : [],
+const sourceIndex = args.indexOf("add") + 1;
+const source = args[sourceIndex] ?? "vendor/repo";
+const names = args.flatMap((arg, index) =>
+  arg === "--skill" && args[index + 1] !== undefined
+    ? [args[index + 1] ?? ""]
+    : [],
 );
-const all = [...names, "find-skills"];
-for (const n of all) {
-  mkdirSync(`${home}/.agents/skills/${n}`, { recursive: true });
-  writeFileSync(`${home}/.agents/skills/${n}/SKILL.md`, `# ${n} (fetched)\n`);
+const stowaway =
+  process.env.FAKE_SKILLS_STOWAWAY === "0" ? [] : ["find-skills"];
+const all = [...names, ...stowaway];
+const content = process.env.FAKE_SKILLS_CONTENT;
+
+const marker = process.env.FAKE_SKILLS_MARKER;
+if (marker !== undefined)
+  appendFileSync(marker, `${home}\t${process.cwd()}\t${all.join(",")}\n`);
+
+for (const name of all) {
+  for (const base of [".agents/skills", ".claude/skills"]) {
+    const dir = resolve(home, base, name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(resolve(dir, "SKILL.md"), content ?? `# ${name} (fetched)\n`);
+  }
 }
-const skills =
+
+const lockPath = resolve(home, ".agents/.skill-lock.json");
+const existing = Bun.file(lockPath);
+const previousText = (await existing.exists())
+  ? readFileSync(lockPath, "utf8")
+  : '{"skills":{}}';
+const previous = parseSkillLock(previousText).unwrapOr({ skills: {} });
+const oldSkills = previous.skills;
+const newSkills =
   process.env.FAKE_SKILLS_NO_LEDGER === "1"
-    ? {}
-    : Object.fromEntries(all.map((n) => [n, { source: args[1] }]));
+    ? oldSkills
+    : {
+        ...oldSkills,
+        ...Object.fromEntries(all.map((name) => [name, { source }])),
+      };
 writeFileSync(
-  `${home}/.agents/.skill-lock.json`,
-  JSON.stringify({ version: 3, skills }),
+  lockPath,
+  `${JSON.stringify({ ...previous, version: 3, skills: newSkills }, null, 2)}\n`,
 );
-process.stdout.write(`fake skills: added ${all.join(", ")}\n`);
+process.stdout.write(`fake skills: installed ${all.join(", ")}\n`);

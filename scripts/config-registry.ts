@@ -256,13 +256,9 @@ export const ETC_LINKS: readonly (readonly [string, string, string])[] = [
 // Retired destinations: links that still RESOLVE but must not exist (the dangling prune cannot see
 // them). Until 2026-09-13 three .ts CLIs were hand-symlinked into ~/.local/bin; they are now
 // package.json `bin` entries that `bun link` (mise run deps) installs into ~/.bun/bin.
-// ~/.agents/.skill-lock.json was a link into agents/skills-lock.json so that `skills add -g`
-// wrote provenance THROUGH it into the repo; since 2026-10-06 (INV-8) scripts/vendor-skill.ts runs
-// the CLI in a throwaway HOME and writes the ledger itself, so no deployed path writes the repo.
 export const RETIRED = [
   // Previously linked to scripts/bun-exec.sh; core Bun is now Homebrew on every OS.
   ".local/bin/bun",
-  ".agents/.skill-lock.json",
   // Linked until 2026-10-06; the tools WRITE these (measured), so they became TOOL_OWNED.
   ".gitconfig",
   ".config/jj/config.toml",
@@ -358,10 +354,10 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: ["agents/skills", "agents/commands", "agents/codex/AGENTS.md"],
     deployed:
-      "~/.claude/skills/*, ~/.agents/skills, ~/.claude/commands, ~/.codex/prompts, ~/.codex/AGENTS.md",
+      "in-house skill links under ~/.claude/skills/* and ~/.agents/skills/*; commands and Codex guidance",
     consumer: "Claude Code, Codex, Antigravity",
     writer:
-      "human, in the repo; mise run link:skills deploys (skills:add imports a vendored skill)",
+      "human, in the repo; mise run link:skills links in-house skills and commands; skills:add/sync install declared vendors",
     verify: `${DOCTOR} (skills)`,
   },
   {
@@ -672,11 +668,11 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["agents/skills-lock.json"],
+    sources: ["agents/skills.thirdparty.toml"],
     deployed: "the checkout",
-    consumer: "skills-doctor (provenance ledger)",
+    consumer: "skills:add, skills:sync, skills-doctor and provenance lints",
     writer:
-      "scripts/vendor-skill.ts (mise run skills:add) — never the skills CLI",
+      "scripts/vendor-skill.ts (skills:add) appends after install; skills:sync is read-only",
     verify: `${DOCTOR} (skills)`,
   },
   {

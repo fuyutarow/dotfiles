@@ -74,7 +74,7 @@ function fixture() {
   write("package.json", '{"name":"j1-fixture","private":true}\n');
   write(
     "scripts/config-registry.ts",
-    'export const surfaces = () => [{kind:"in-place",when:"all",sources:["package.json","agents/skills-listing-budget.json"],deployed:"fixture",consumer:"test",writer:"test",verify:"test"}];\n',
+    'export const surfaces = () => [{kind:"in-place",when:"all",sources:["package.json","agents/skills-listing-budget.json","agents/skills.thirdparty.toml"],deployed:"fixture",consumer:"test",writer:"test",verify:"test"}];\n',
   );
   write("scripts/good.ts", "export const value = 1;\n");
   write("selected.txt", "BASE\n");
@@ -83,6 +83,7 @@ function fixture() {
     "---\nname: doing-things\ndescription: >-\n  Does a concrete fixture task and verifies its outcome. Use when testing the J1 snapshot consumer interface.\n---\n\n# Doing things\n\nRead the supplied input and report the result.\n",
   );
   write("agents/skills/README.md", "[Doing things](doing-things/)\n");
+  write("agents/skills.thirdparty.toml", 'cli_version = "1.5.22"\n');
   write("agents/skills-listing-budget.json", '{"maxListingChars":10000}\n');
   command("commit", "-m", "consumer fixture base");
   const base = command("log", "--no-graph", "-r", "@-", "-T", "commit_id");
@@ -253,7 +254,7 @@ describe("J1 dotfiles consumers", () => {
     const good = f.snapshot(["scripts/good.ts"]);
     f.write(
       "scripts/config-registry.ts",
-      'export const surfaces = () => [{kind:"in-place",when:"all",sources:["unrelated-missing.json"],deployed:"fixture",consumer:"test",writer:"test",verify:"test"}];\n',
+      'export const surfaces = () => [{kind:"in-place",when:"all",sources:["unrelated-missing.json","agents/skills.thirdparty.toml"],deployed:"fixture",consumer:"test",writer:"test",verify:"test"}];\n',
     );
     const pass = good.run("scripts/config-map.ts", ["--check"]);
     expect(pass.exitCode, pass.stdout.toString() + pass.stderr.toString()).toBe(

@@ -1,10 +1,5 @@
-// bun test for scripts/vendor-skill.ts — the gates in front of `bunx skills add`, and the import
-// that follows it. Nothing here reaches the network: every case exercises a refusal, --dry-run,
-// the pure helpers, or the import against scripts/tests/fake-skills.ts (VENDOR_SKILL_CLI), so the
-// assertions are about the four measured hazards of the bare CLI (project-scope
-// litter, install-everything, silent same-name overwrite, the uninvited find-skills companion)
-// never getting the chance to happen. Fixtures are throwaway tmp trees passed via
-// --dotfiles/--home; the real $HOME is never touched (Safety rule).
+// Tests for skills:add. Every CLI invocation receives a throwaway HOME; the real HOME and network
+// are never touched. The fake preserves the pinned CLI's global target and find-skills behavior.
 import { describe, expect, test } from "bun:test";
 import {
   existsSync,
@@ -17,13 +12,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, z } from "../../agents/hooks/zod.ts";
-
-const Ledger = z.looseObject({ skills: z.record(z.string(), z.unknown()) });
-import { detectStowaways, mergeLedger } from "../vendor-skill.ts";
+import { parseSkillLock } from "../skills-declaration.ts";
 
 const FAKE = join(import.meta.dir, "fake-skills.ts");
-
 const SCRIPT = join(import.meta.dir, "..", "vendor-skill.ts");
 
 function run(
@@ -40,294 +31,236 @@ function run(
   };
 }
 
-function makeDotfiles(skillNames: string[]): string {
-  const dir = mkdtempSync(join(tmpdir(), "vendor-skill-dotfiles-"));
-  mkdirSync(join(dir, "agents", "skills"), { recursive: true });
-  for (const name of skillNames) {
-    mkdirSync(join(dir, "agents", "skills", name), { recursive: true });
+function makeDotfiles(
+  inHouseNames: string[] = [],
+  declared: { source: string; skill: string }[] = [],
+): string {
+  const root = mkdtempSync(join(tmpdir(), "skills-add-dotfiles-"));
+  for (const name of inHouseNames) {
+    mkdirSync(join(root, "agents/skills", name), { recursive: true });
     writeFileSync(
-      join(dir, "agents", "skills", name, "SKILL.md"),
-      `# ${name}\n`,
+      join(root, "agents/skills", name, "SKILL.md"),
+      `---\nname: ${name}\ndescription: In-house fixture.\n---\n# ${name}\n`,
     );
   }
-  return dir;
+  const rows = declared
+    .map(
+      ({ source, skill }) =>
+        `\n[[skills]]\nsource = "${source}"\nskill = "${skill}"\n`,
+    )
+    .join("");
+  mkdirSync(join(root, "agents"), { recursive: true });
+  writeFileSync(
+    join(root, "agents/skills.thirdparty.toml"),
+    `cli_version = "1.5.22"\n${rows}`,
+  );
+  return root;
 }
 
-/** Home wired the way link:skills leaves it — ~/.agents/skills pointing into the repo. */
-function makeWiredHome(dotfiles: string): string {
-  const home = mkdtempSync(join(tmpdir(), "vendor-skill-home-"));
-  mkdirSync(join(home, ".agents"), { recursive: true });
-  symlinkSync(
-    join(dotfiles, "agents", "skills"),
-    join(home, ".agents", "skills"),
+function makeHome(): string {
+  const home = mkdtempSync(join(tmpdir(), "skills-add-home-"));
+  mkdirSync(join(home, ".agents/skills"), { recursive: true });
+  mkdirSync(join(home, ".claude/skills"), { recursive: true });
+  writeFileSync(
+    join(home, ".agents/.skill-lock.json"),
+    '{"version":3,"skills":{}}\n',
   );
   return home;
 }
 
-function cleanup(...dirs: string[]): void {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+function cleanup(...paths: string[]): void {
+  for (const path of paths) rmSync(path, { recursive: true, force: true });
 }
 
-describe("vendor-skill: argv contract", () => {
-  test("missing <owner/repo> is a usage error", () => {
-    const { out, code } = run(["--skill", "mintlify"]);
-    expect(code).toBe(2);
-    expect(out).toContain("missing <owner/repo>");
+const flags = (dotfiles: string, home: string) => [
+  "--dotfiles",
+  dotfiles,
+  "--home",
+  home,
+];
+
+const fakeEnv = { VENDOR_SKILL_CLI: FAKE };
+
+describe("skills:add argv", () => {
+  test("requires a source and explicit --skill names", () => {
+    const missing = run(["--skill", "mintlify"]);
+    expect(missing.code).toBe(2);
+    expect(missing.out).toContain("missing <owner/repo>");
+    const all = run(["mintlify/docs"]);
+    expect(all.code).toBe(2);
+    expect(all.out).toContain("--skill is required");
+    expect(all.out).toContain("EVERY skill");
   });
 
-  test("lets Cleye strictFlags reject an ordinary unknown", () => {
-    const { out, code } = run(["acme/skills", "--wat"]);
-    expect(code).toBe(1);
-    expect(out).toContain("Error: Unknown flag: --wat.");
-  });
-
-  test("rejects --__proto__", () => {
-    const { out, code } = run(["--__proto__"]);
-    expect(code).toBe(2);
-    expect(out).toContain("unknown flag(s): --__proto__");
-  });
-
-  test("rejects a second positional", () => {
-    const { out, code } = run(["acme/skills", "extra", "--skill", "x"]);
-    expect(code).toBe(2);
-    expect(out).toContain("unexpected positional argument: extra");
-  });
-});
-
-describe("vendor-skill: --skill is mandatory", () => {
-  test("omitting it refuses, naming the install-everything hazard", () => {
-    const { out, code } = run(["mintlify/docs"]);
-    expect(code).toBe(2);
-    expect(out).toContain("--skill is required");
-    expect(out).toContain("EVERY skill in mintlify/docs");
+  test("rejects ordinary unknown, prototype, and extra positional arguments", () => {
+    expect(run(["acme/skills", "--wat"]).code).toBe(1);
+    expect(run(["--__proto__"]).code).toBe(2);
+    expect(run(["acme/skills", "extra", "--skill", "one"]).code).toBe(2);
   });
 });
 
-describe("vendor-skill: COLLISION gate", () => {
-  test("refuses a name this repo already owns — `add` would overwrite it with no prompt", () => {
+describe("skills:add refusal gates", () => {
+  test("refuses an in-house name before invoking the CLI", () => {
     const dotfiles = makeDotfiles(["writing-julia"]);
-    const home = makeWiredHome(dotfiles);
-    const { out, code } = run([
-      "acme/skills",
-      "--skill",
-      "writing-julia",
-      "--dotfiles",
-      dotfiles,
-      "--home",
-      home,
-    ]);
+    const home = makeHome();
+    const marker = join(home, "calls.log");
+    const { out, code } = run(
+      ["acme/skills", "--skill", "writing-julia", ...flags(dotfiles, home)],
+      { ...fakeEnv, FAKE_SKILLS_MARKER: marker },
+    );
     expect(code).toBe(3);
     expect(out).toContain("COLLISION: writing-julia");
-    expect(out).toContain("overwrites a same-named directory with no prompt");
+    expect(existsSync(marker)).toBe(false);
     cleanup(dotfiles, home);
   });
 
-  test("reports EVERY colliding name in one decision", () => {
-    const dotfiles = makeDotfiles(["one", "two"]);
-    const home = makeWiredHome(dotfiles);
-    const { out, code } = run([
-      "acme/skills",
-      "--skill",
-      "one",
-      "--skill",
-      "two",
-      "--dotfiles",
-      dotfiles,
-      "--home",
-      home,
-    ]);
+  test("refuses an already declared skill and directs to sync", () => {
+    const dotfiles = makeDotfiles(
+      [],
+      [{ source: "acme/skills", skill: "known" }],
+    );
+    const home = makeHome();
+    const { out, code } = run(
+      ["acme/skills", "--skill", "known", ...flags(dotfiles, home)],
+      fakeEnv,
+    );
     expect(code).toBe(3);
-    expect(out).toContain("REFUSED (2):");
-    expect(out).toContain("COLLISION: one");
-    expect(out).toContain("COLLISION: two");
+    expect(out).toContain("DECLARED: known");
+    expect(out).toContain("mise run skills:sync");
     cleanup(dotfiles, home);
   });
 
-  test("--force allows the overwrite and says what it is replacing", () => {
-    const dotfiles = makeDotfiles(["one"]);
-    const home = makeWiredHome(dotfiles);
-    const { out, code } = run([
-      "acme/skills",
-      "--skill",
-      "one",
-      "--force",
-      "--dry-run",
-      "--dotfiles",
-      dotfiles,
-      "--home",
-      home,
-    ]);
+  test("refuses a global target that resolves into a repo and names migration", () => {
+    const dotfiles = makeDotfiles();
+    const home = mkdtempSync(join(tmpdir(), "skills-add-linked-home-"));
+    mkdirSync(join(home, ".agents"), { recursive: true });
+    symlinkSync(join(dotfiles, "agents/skills"), join(home, ".agents/skills"));
+    const marker = join(home, "calls.log");
+    const { out, code } = run(
+      ["acme/skills", "--skill", "new-skill", ...flags(dotfiles, home)],
+      { ...fakeEnv, FAKE_SKILLS_MARKER: marker },
+    );
+    expect(out).toContain("resolves into a repository");
+    expect(out).toContain("mise run skills:migrate");
+    expect(code).toBe(3);
+    expect(existsSync(marker)).toBe(false);
+    cleanup(dotfiles, home);
+  });
+
+  test("refuses to overwrite an installed but undeclared global skill", () => {
+    const dotfiles = makeDotfiles();
+    const home = makeHome();
+    mkdirSync(join(home, ".agents/skills/foreign"), { recursive: true });
+    writeFileSync(join(home, ".agents/skills/foreign/SKILL.md"), "# keep\n");
+    const marker = join(home, "calls.log");
+    const { out, code } = run(
+      ["acme/skills", "--skill", "foreign", ...flags(dotfiles, home)],
+      { ...fakeEnv, FAKE_SKILLS_MARKER: marker },
+    );
+    expect(code).toBe(3);
+    expect(out).toContain("INSTALLED: foreign");
+    expect(existsSync(marker)).toBe(false);
+    cleanup(dotfiles, home);
+  });
+});
+
+describe("skills:add install", () => {
+  test("uses the pinned global command on a throwaway cwd and appends only requested rows", () => {
+    const dotfiles = makeDotfiles();
+    const home = makeHome();
+    mkdirSync(join(home, ".agents/skills/kept"), { recursive: true });
+    writeFileSync(join(home, ".agents/skills/kept/SKILL.md"), "# keep\n");
+    writeFileSync(
+      join(home, ".agents/.skill-lock.json"),
+      JSON.stringify({ version: 3, skills: { kept: { source: "old/repo" } } }),
+    );
+    const before = readFileSync(
+      join(dotfiles, "agents/skills.thirdparty.toml"),
+      "utf8",
+    );
+    const { out, code } = run(
+      [
+        "vendor/repo",
+        "--skill",
+        "alpha",
+        "--skill",
+        "beta",
+        ...flags(dotfiles, home),
+      ],
+      fakeEnv,
+    );
     expect(code).toBe(0);
-    expect(out).toContain(`force: will replace ${dotfiles}/agents/skills/one`);
-    expect(out).not.toContain("REFUSED");
+    expect(out).toContain(
+      "STOWAWAY: removed new unrequested global skill find-skills",
+    );
+    expect(out).toContain("installed: vendor/repo alpha");
+    expect(
+      readFileSync(join(home, ".agents/skills/alpha/SKILL.md"), "utf8"),
+    ).toBe("# alpha (fetched)\n");
+    expect(existsSync(join(home, ".claude/skills/beta/SKILL.md"))).toBe(true);
+    expect(existsSync(join(home, ".agents/skills/find-skills"))).toBe(false);
+    expect(existsSync(join(home, ".claude/skills/find-skills"))).toBe(false);
+    const lock = parseSkillLock(
+      readFileSync(join(home, ".agents/.skill-lock.json"), "utf8"),
+    ).unwrapOr({ skills: {} });
+    expect(Object.keys(lock.skills).toSorted()).toEqual([
+      "alpha",
+      "beta",
+      "kept",
+    ]);
+    const declaration = readFileSync(
+      join(dotfiles, "agents/skills.thirdparty.toml"),
+      "utf8",
+    );
+    expect(declaration).toContain('source = "vendor/repo"\nskill = "alpha"');
+    expect(declaration).toContain('source = "vendor/repo"\nskill = "beta"');
+    expect(declaration.startsWith('cli_version = "1.5.22"')).toBe(true);
+    expect(declaration).not.toBe(before);
+    expect(existsSync(join(dotfiles, ".agents"))).toBe(false);
     cleanup(dotfiles, home);
   });
-});
 
-describe("vendor-skill: detectStowaways (header note 4)", () => {
-  test("a name that appeared but was never requested is a stowaway", () => {
-    expect(
-      detectStowaways(["mintlify"], ["mintlify", "find-skills"], ["mintlify"]),
-    ).toEqual(["find-skills"]);
-  });
-
-  test("a requested name that newly appeared is not a stowaway", () => {
-    expect(
-      detectStowaways(
-        ["mintlify"],
-        ["mintlify", "typesafe-ai"],
-        ["typesafe-ai"],
-      ),
-    ).toEqual([]);
-  });
-
-  test("a name that already existed before the fetch is never a stowaway", () => {
-    expect(
-      detectStowaways(["writing-julia"], ["writing-julia"], ["typesafe-ai"]),
-    ).toEqual([]);
-  });
-
-  test("no surprises: unchanged before/after yields nothing", () => {
-    expect(detectStowaways(["a", "b"], ["a", "b"], ["a"])).toEqual([]);
-  });
-});
-
-describe("vendor-skill: --dry-run", () => {
-  test("prints the exact pinned, global, per-skill command and touches nothing", () => {
-    const dotfiles = makeDotfiles([]);
-    const home = makeWiredHome(dotfiles);
+  test("dry-run prints the measured CLI command and changes no files", () => {
+    const dotfiles = makeDotfiles();
+    const home = makeHome();
+    const before = readFileSync(
+      join(dotfiles, "agents/skills.thirdparty.toml"),
+      "utf8",
+    );
     const { out, code } = run([
       "mintlify/docs",
       "--skill",
       "mintlify",
       "--dry-run",
-      "--dotfiles",
-      dotfiles,
-      "--home",
-      home,
+      ...flags(dotfiles, home),
     ]);
     expect(code).toBe(0);
     expect(out).toContain(
-      "[dry-run] would run: bunx skills@1.5.22 add mintlify/docs -g " +
-        "--agent claude-code --agent codex -y --skill mintlify",
+      "bunx --bun --yes skills@1.5.22 add mintlify/docs --skill mintlify -g --agent claude-code codex --copy -y",
     );
-    expect(out).toContain(
-      `[dry-run] would vendor: ${dotfiles}/agents/skills/mintlify`,
-    );
-    expect(out).not.toContain("vendored:");
-    cleanup(dotfiles, home);
-  });
-
-  test("every requested skill is passed through explicitly", () => {
-    const dotfiles = makeDotfiles([]);
-    const home = makeWiredHome(dotfiles);
-    const { out } = run([
-      "acme/skills",
-      "--skill",
-      "a",
-      "--skill",
-      "b",
-      "--dry-run",
-      "--dotfiles",
-      dotfiles,
-      "--home",
-      home,
-    ]);
-    expect(out).toContain("--skill a --skill b");
-    cleanup(dotfiles, home);
-  });
-});
-
-describe("vendor-skill: the import (one writer: this script, never the CLI)", () => {
-  function vendor(
-    dotfiles: string,
-    home: string,
-    env: Record<string, string> = {},
-  ) {
-    return run(
-      [
-        "acme/skills",
-        "--skill",
-        "typesafe-ai",
-        "--dotfiles",
-        dotfiles,
-        "--home",
-        home,
-      ],
-      { VENDOR_SKILL_CLI: FAKE, ...env },
-    );
-  }
-
-  test("imports exactly the requested skill and its provenance; the stowaway stays behind", () => {
-    const dotfiles = makeDotfiles(["writing-julia"]);
-    writeFileSync(
-      join(dotfiles, "agents", "skills-lock.json"),
-      JSON.stringify({ version: 3, skills: { old: { source: "x/y" } } }),
-    );
-    // The old layout: a deployed path into the repo. The fetch must not write through it.
-    const home = makeWiredHome(dotfiles);
-    const { out, code } = vendor(dotfiles, home);
-    expect(code).toBe(0);
-    expect(out).toContain("STOWAWAY: ignored find-skills");
     expect(
-      readFileSync(
-        join(dotfiles, "agents", "skills", "typesafe-ai", "SKILL.md"),
-        "utf8",
-      ),
-    ).toBe("# typesafe-ai (fetched)\n");
-    expect(existsSync(join(dotfiles, "agents", "skills", "find-skills"))).toBe(
-      false,
-    );
-    const ledger = jsonOf(Ledger).safeParse(
-      readFileSync(join(dotfiles, "agents", "skills-lock.json"), "utf8"),
-    );
-    expect(ledger.success).toBe(true);
-    expect(ledger.data).toEqual({
-      version: 3,
-      skills: {
-        old: { source: "x/y" },
-        "typesafe-ai": { source: "acme/skills" },
-      },
-    });
-    expect(existsSync(join(home, ".agents", ".skill-lock.json"))).toBe(false);
+      readFileSync(join(dotfiles, "agents/skills.thirdparty.toml"), "utf8"),
+    ).toBe(before);
+    expect(existsSync(join(home, ".agents/skills/mintlify"))).toBe(false);
     cleanup(dotfiles, home);
   });
 
-  test("a skill fetched without provenance writes nothing to the repo", () => {
-    const dotfiles = makeDotfiles([]);
-    const home = makeWiredHome(dotfiles);
-    const { out, code } = vendor(dotfiles, home, {
-      FAKE_SKILLS_NO_LEDGER: "1",
-    });
+  test("does not declare a successful CLI response without a lock record", () => {
+    const dotfiles = makeDotfiles();
+    const home = makeHome();
+    const before = readFileSync(
+      join(dotfiles, "agents/skills.thirdparty.toml"),
+      "utf8",
+    );
+    const { out, code } = run(
+      ["vendor/repo", "--skill", "alpha", ...flags(dotfiles, home)],
+      { ...fakeEnv, FAKE_SKILLS_NO_LEDGER: "1", FAKE_SKILLS_STOWAWAY: "0" },
+    );
     expect(code).toBe(1);
-    expect(out).toContain("no SKILL.md or no ledger entry for: typesafe-ai");
-    expect(existsSync(join(dotfiles, "agents", "skills", "typesafe-ai"))).toBe(
-      false,
-    );
-    expect(existsSync(join(dotfiles, "agents", "skills-lock.json"))).toBe(
-      false,
-    );
-    cleanup(dotfiles, home);
-  });
-
-  test("mergeLedger refuses an unreadable ledger instead of guessing", () => {
-    expect(mergeLedger("{ not json", { b: 2 })).toBeUndefined();
+    expect(out).toContain("without installing and recording: alpha");
     expect(
-      mergeLedger(JSON.stringify({ skills: [] }), { b: 2 }),
-    ).toBeUndefined();
-  });
-
-  test("mergeLedger keeps every other key and entry", () => {
-    const merged = jsonOf(Ledger).safeParse(
-      mergeLedger(JSON.stringify({ version: 3, skills: { a: 1 }, x: true }), {
-        b: 2,
-      }) ?? "",
-    );
-    expect(merged.success).toBe(true);
-    expect(merged.data).toEqual({
-      version: 3,
-      skills: { a: 1, b: 2 },
-      x: true,
-    });
+      readFileSync(join(dotfiles, "agents/skills.thirdparty.toml"), "utf8"),
+    ).toBe(before);
+    cleanup(dotfiles, home);
   });
 });

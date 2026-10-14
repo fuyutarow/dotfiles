@@ -47,6 +47,10 @@ function fixture(opts: {
     join(root, "agents", "claude", "CLAUDE.md"),
     `# p\n\n${opts.md ?? MARKERS}`,
   );
+  writeFileSync(
+    join(root, "agents", "skills.thirdparty.toml"),
+    'cli_version = "1.5.22"\n',
+  );
   return { root, home };
 }
 
@@ -77,6 +81,24 @@ describe("one-writer-check", () => {
     const r = check(fixture({ md }));
     expect(r.code).toBe(1);
     expect(r.out).toContain("1 line(s) inside the roster block");
+  });
+
+  test("third-party provenance under agents/skills fails", () => {
+    const f = fixture({});
+    mkdirSync(join(f.root, "agents", "skills", "vendor-skill"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(f.root, "agents", "skills", "vendor-skill", "SKILL.md"),
+      "---\nname: vendor-skill\ndescription: Vendor fixture.\n---\n# Vendor\n",
+    );
+    writeFileSync(
+      join(f.root, "agents", "skills.thirdparty.toml"),
+      'cli_version = "1.5.22"\n[[skills]]\nsource = "vendor/repo"\nskill = "vendor-skill"\n',
+    );
+    const r = check(f);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('third-party skill "vendor-skill" reappeared');
   });
 
   test("a deployed path that is still a symlink fails", () => {

@@ -32,12 +32,22 @@ function run(args: string[]): { out: string; code: number } {
 }
 
 /** A minimal but complete dotfiles source tree: agents/{commands,codex,skills/<names>}. */
-function makeDotfiles(skillNames: string[]): string {
+function makeDotfiles(
+  skillNames: string[],
+  thirdPartyNames: string[] = [],
+): string {
   const dir = mkdtempSync(join(tmpdir(), "link-skills-dotfiles-"));
   mkdirSync(join(dir, "agents", "commands"), { recursive: true });
   writeFileSync(join(dir, "agents", "commands", "example.md"), "# example\n");
   mkdirSync(join(dir, "agents", "codex"), { recursive: true });
   writeFileSync(join(dir, "agents", "codex", "AGENTS.md"), "# AGENTS\n");
+  const rows = thirdPartyNames
+    .map((name) => `\n[[skills]]\nsource = "vendor/repo"\nskill = "${name}"\n`)
+    .join("");
+  writeFileSync(
+    join(dir, "agents", "skills.thirdparty.toml"),
+    `cli_version = "1.5.22"\n${rows}`,
+  );
   for (const name of skillNames) {
     mkdirSync(join(dir, "agents", "skills", name), { recursive: true });
     writeFileSync(
@@ -105,7 +115,7 @@ describe("link-skills: argv contract", () => {
 });
 
 describe("link-skills: fresh run", () => {
-  test("links commands, per-skill dirs, AGENTS.md, whole-tree Codex/Gemini targets", () => {
+  test("links in-house skills by name and keeps the Codex skills root real", () => {
     const dotfiles = makeDotfiles(["alpha-skill", "beta-skill"]);
     const home = makeHome();
     const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
@@ -121,11 +131,12 @@ describe("link-skills: fresh run", () => {
       `linked: ${home}/.claude/skills/beta-skill -> ${dotfiles}/agents/skills/beta-skill`,
     );
     expect(out).toContain(
-      `linked: ${home}/.codex/AGENTS.md -> ${dotfiles}/agents/codex/AGENTS.md`,
+      `linked: ${home}/.agents/skills/alpha-skill -> ${dotfiles}/agents/skills/alpha-skill`,
     );
     expect(out).toContain(
-      `linked: ${home}/.agents/skills -> ${dotfiles}/agents/skills`,
+      `linked: ${home}/.codex/AGENTS.md -> ${dotfiles}/agents/codex/AGENTS.md`,
     );
+    expect(out).not.toContain(`linked: ${home}/.agents/skills ->`);
     expect(out).toContain(
       `linked: ${home}/.codex/prompts -> ${dotfiles}/agents/commands`,
     );
@@ -139,9 +150,25 @@ describe("link-skills: fresh run", () => {
     expect(readlinkSync(`${home}/.claude/skills/alpha-skill`)).toBe(
       `${dotfiles}/agents/skills/alpha-skill`,
     );
-    expect(readlinkSync(`${home}/.agents/skills`)).toBe(
-      `${dotfiles}/agents/skills`,
+    expect(readlinkSync(`${home}/.agents/skills/alpha-skill`)).toBe(
+      `${dotfiles}/agents/skills/alpha-skill`,
     );
+    expect(lstatSync(`${home}/.agents/skills`).isDirectory()).toBe(true);
+    expect(lstatSync(`${home}/.agents/skills`).isSymbolicLink()).toBe(false);
+    cleanup(dotfiles, home);
+  });
+
+  test("skips declared third-party names even if one reappears in the repo", async () => {
+    const dotfiles = makeDotfiles(
+      ["house-skill", "vendor-skill"],
+      ["vendor-skill"],
+    );
+    const home = makeHome();
+    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+    expect(code).toBe(0);
+    expect(out).toContain("skip (declared third-party):");
+    expect(await isSymlink(`${home}/.claude/skills/house-skill`)).toBe(true);
+    expect(await isSymlink(`${home}/.claude/skills/vendor-skill`)).toBe(false);
     cleanup(dotfiles, home);
   });
 
@@ -179,7 +206,7 @@ describe("link-skills: fresh run", () => {
     cleanup(dotfiles, home);
   });
 
-  test("missing agents/skills prints skip(missing) TWICE and runs no prune pass", async () => {
+  test("missing agents/skills prints one skip and runs no prune pass", async () => {
     const dotfiles = makeDotfiles([]);
     rmSync(join(dotfiles, "agents", "skills"), {
       recursive: true,
@@ -197,7 +224,7 @@ describe("link-skills: fresh run", () => {
     expect(code).toBe(0);
     const skipMissing = `skip (missing): ${dotfiles}/agents/skills`;
     const occurrences = out.split(skipMissing).length - 1;
-    expect(occurrences).toBe(2); // once from the explicit else, once from link_path's own check
+    expect(occurrences).toBe(1);
     expect(out).not.toContain("pruned");
     expect(await isSymlink(`${home}/.claude/skills/ghost`)).toBe(true); // untouched
     cleanup(dotfiles, home);
@@ -208,7 +235,7 @@ describe("link-skills: PRUNE (a) whole-dir legacy symlink", () => {
   test("an existing whole-dir symlink at ~/.claude/skills is unlinked and replaced by a real dir", async () => {
     const dotfiles = makeDotfiles(["only-skill"]);
     const home = makeHome();
-    const legacyTarget = mkdtempSync(join(tmpdir(), "link-skills-legacy-"));
+    const legacyTarget = "/somewhere/legacy-skills";
     mkdirSync(`${home}/.claude`, { recursive: true });
     symlinkSync(legacyTarget, `${home}/.claude/skills`);
 
@@ -221,7 +248,7 @@ describe("link-skills: PRUNE (a) whole-dir legacy symlink", () => {
     );
     expect(await isSymlink(`${home}/.claude/skills`)).toBe(false);
     expect(lstatSync(`${home}/.claude/skills`).isDirectory()).toBe(true);
-    cleanup(dotfiles, home, legacyTarget);
+    cleanup(dotfiles, home);
   });
 
   test("no prior symlink at ~/.claude/skills: no removal message, still ends up a real dir", () => {
@@ -236,7 +263,7 @@ describe("link-skills: PRUNE (a) whole-dir legacy symlink", () => {
   test("reports a failed whole-dir unlink and continues the pass", () => {
     const dotfiles = makeDotfiles(["only-skill"]);
     const home = makeHome();
-    const legacyTarget = mkdtempSync(join(tmpdir(), "link-skills-legacy-"));
+    const legacyTarget = "/somewhere/legacy-skills";
     mkdirSync(`${home}/.claude`, { recursive: true });
     symlinkSync(legacyTarget, `${home}/.claude/skills`);
 
@@ -253,7 +280,7 @@ describe("link-skills: PRUNE (a) whole-dir legacy symlink", () => {
       `✅ Agent link pass complete. Source root: ${dotfiles}`,
     );
     expect(lstatSync(`${home}/.claude/skills`).isSymbolicLink()).toBe(true);
-    cleanup(dotfiles, home, legacyTarget);
+    cleanup(dotfiles, home);
   });
 });
 

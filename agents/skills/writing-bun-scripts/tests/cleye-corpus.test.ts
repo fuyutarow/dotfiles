@@ -115,6 +115,8 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/auth-push.ts" },
   { path: "scripts/link-skills.ts" },
   { path: "scripts/skills-doctor.ts" },
+  { path: "scripts/skills-migrate.ts" },
+  { path: "scripts/skills-sync.ts" },
   { path: "scripts/land.ts" },
   { path: "scripts/deploy.ts" },
   { path: "tools/tool-tiers/src/tool.ts" },

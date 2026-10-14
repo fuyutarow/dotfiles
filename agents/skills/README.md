@@ -5,7 +5,7 @@ Each active skill is a durable rule-set the agent loads on demand.
 Retired manuals are listed in [the archive](../../archives/skills/README.md); they are not callable skills.
 A reference to a retired skill means its archived contract, not automatic reactivation.
 
-The active collection contains authored manuals and vendored upstream skills (Web Perf, TypeSafe). This page is the human map;
+The active collection contains in-house manuals only. This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Collection design invariant
@@ -156,15 +156,6 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 
 - [`transcribing-media`](transcribing-media/) — Transcribe authorized audio/video locally into text or subtitles via Whisper.
 
-
-## Vendored (upstream)
-
-Third-party skills kept in-tree for convenience — vendor platform docs, not authored here.
-Acquired through `mise run skills:add`; provenance is recorded in `agents/skills-lock.json`.
-The pre-2026-08-14 Cloudflare entries predate that path and carry no ledger record.
-
-- [`web-perf`](web-perf/) — Audit page-load speed and Core Web Vitals with Chrome DevTools MCP.
-- [`typesafe-ai`](typesafe-ai/) — Build AI-powered features with TypeSafe: typed judgment/probability primitives (System One models, Jev) composable into routing, ranking, extraction, and verification.
 
 ---
 

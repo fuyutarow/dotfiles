@@ -1,15 +1,21 @@
 // Catalog completeness: every agents/skills/*/ with a SKILL.md must be linked in
 // agents/skills/README.md.
 //
-// Reads the GIT INDEX, not the working tree (wiring-repositories HOOK-1c: the commit gate judges
-// only what is committed). In this shared checkout another session's half-written skill sits in
-// the tree for minutes; a tree scan refused every other session's commit on it (2026-10-01,
-// keeping-research-notebooks). J1 jj mode checks BASE with the selected REV changes overlaid.
+// J1 commit-gate calls read BASE with selected REV changes overlaid. Standalone mise calls opt
+// into a worktree view so an uncommitted declaration or removal is still checkable before review.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   jjCandidate,
   jjContent,
   jjContext,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
+import { fromThrowable } from "neverthrow";
+import {
+  parseDeclaration,
+  thirdPartySkillFiles,
+  type SkillFile,
+} from "./skills-declaration.ts";
 
 const git = (args: string[]): { code: number; out: string } => {
   const p = Bun.spawnSync(["git", ...args], {
@@ -21,14 +27,29 @@ const git = (args: string[]): { code: number; out: string } => {
 };
 
 const idx = "agents/skills/README.md";
+const ROOT = join(import.meta.dir, "..");
 const context = jjContext();
 const candidate = context === undefined ? undefined : jjCandidate(context);
+
+function readCandidateFile(path: string): { code: number; out: string } {
+  if (context === undefined) {
+    if (process.env.SKILLS_LINT_WORKTREE === "1") {
+      const file = fromThrowable((value: string) =>
+        readFileSync(value, "utf8"),
+      )(join(ROOT, path));
+      return { code: file.isOk() ? 0 : 1, out: file.unwrapOr("") };
+    }
+    const result = git(["show", ":" + path]);
+    return { code: result.code, out: result.out };
+  }
+  const rev = candidate?.get(path);
+  return rev === undefined
+    ? { code: 1, out: "" }
+    : { code: 0, out: jjContent(context, path, rev).toString() };
+}
 // J1 migration fallback; TODO(J1): remove after jj consumer rollout.
 function readCandidateReadme(): { code: number; out: string } {
-  if (context === undefined) return git(["show", ":" + idx]);
-  const readmeRev = candidate?.get(idx);
-  if (readmeRev === undefined) return { code: 1, out: "" };
-  return { code: 0, out: jjContent(context, idx, readmeRev).toString() };
+  return readCandidateFile(idx);
 }
 const readme = readCandidateReadme();
 if (readme.code !== 0) {
@@ -36,38 +57,86 @@ if (readme.code !== 0) {
   process.exit(1);
 }
 
-const listed =
-  candidate === undefined
-    ? (() => {
-        const result = Bun.spawnSync(
-          [
-            "bun",
-            "scripts/tracked-files.ts",
-            "--git-index",
-            "--expect-non-empty",
-            "agents/skills/*/SKILL.md",
-          ],
-          { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
-        );
-        return {
-          code: result.exitCode ?? 1,
-          out: result.stdout.toString(),
-          error: result.stderr.toString().trim(),
-        };
-      })()
-    : {
-        code: 0,
-        out: [...candidate.keys()]
-          .filter((path) => /^agents\/skills\/[^/]+\/SKILL\.md$/u.test(path))
-          .map((path) => path + "\0")
-          .join(""),
-        error: "",
-      };
+function listSkillPaths(): { code: number; out: string; error: string } {
+  if (context !== undefined)
+    return {
+      code: 0,
+      out: [...(candidate?.keys() ?? [])]
+        .filter((path) => /^agents\/skills\/[^/]+\/SKILL\.md$/u.test(path))
+        .map((path) => path + "\0")
+        .join(""),
+      error: "",
+    };
+  if (process.env.SKILLS_LINT_WORKTREE === "1")
+    return {
+      code: 0,
+      out: [
+        ...new Bun.Glob("*/SKILL.md").scanSync({
+          cwd: join(ROOT, "agents/skills"),
+          onlyFiles: true,
+        }),
+      ]
+        .map((path) => `agents/skills/${path}\0`)
+        .join(""),
+      error: "",
+    };
+  const result = Bun.spawnSync(
+    [
+      "bun",
+      "scripts/tracked-files.ts",
+      "--git-index",
+      "--expect-non-empty",
+      "agents/skills/*/SKILL.md",
+    ],
+    { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
+  );
+  return {
+    code: result.exitCode ?? 1,
+    out: result.stdout.toString(),
+    error: result.stderr.toString().trim(),
+  };
+}
+
+const listed = listSkillPaths();
 if (listed.code !== 0) {
   console.log("❌ tracked-files failed — " + listed.error);
   process.exit(1);
 }
+
+const declarationFile = readCandidateFile("agents/skills.thirdparty.toml");
+if (declarationFile.code !== 0) {
+  console.log(
+    "❌ missing agents/skills.thirdparty.toml in the commit candidate",
+  );
+  process.exit(1);
+}
+const declaration = parseDeclaration(declarationFile.out);
+if (declaration.isErr()) {
+  console.log(`❌ invalid agents/skills.thirdparty.toml: ${declaration.error}`);
+  process.exit(1);
+}
+
+const candidateSkillFiles: SkillFile[] = [];
+for (const path of listed.out.split("\0").filter(Boolean)) {
+  const file = readCandidateFile(path);
+  if (file.code !== 0) {
+    console.log(`❌ unable to read ${path} from the commit candidate`);
+    process.exit(1);
+  }
+  candidateSkillFiles.push({ path, content: file.out });
+}
+for (const { path, skill } of thirdPartySkillFiles(
+  candidateSkillFiles,
+  declaration.value,
+)) {
+  console.log(
+    `❌ third-party skill "${skill}" reappeared in the candidate: ${path}`,
+  );
+  process.exitCode = 1;
+}
+
 let rc = 0;
+if (process.exitCode === 1) rc = 1;
 for (const path of listed.out.split("\0").filter(Boolean)) {
   const n = path.split("/")[2] ?? "";
   if (readme.out.includes(`](${n}/)`)) continue;

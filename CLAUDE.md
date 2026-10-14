@@ -66,9 +66,12 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    unguarded OS-specific commands; branch on `$IS_MAC` / `$IS_WSL`, guard with existence checks.
 3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `LINKS` in
    `scripts/config-registry.ts` (realized by `scripts/link-dots.ts`)
-   (one source → one destination); `agents/` → `mise.toml`'s `link:skills` (one source → N AI
-   tools). Both PRUNE links into this repo that no longer resolve, so a rename cannot leave a
-   phantom skill or a dead hook link behind. **PATH commands are neither**: a repo CLI that
+   (one source → one destination); in-house `agents/` assets → `mise.toml`'s `link:skills` (one
+   source → N AI tools). `link:skills` links in-house skills only; third-party skills are listed in
+   `agents/skills.thirdparty.toml` and installed into tool-owned global directories by
+   `skills:add` / `skills:sync`. It never links `~/.agents/skills` as a whole into the repo. Both
+   linkers PRUNE links into this repo that no longer resolve, so a rename cannot leave a phantom
+   skill or a dead hook link behind. **PATH commands are neither**: a repo CLI that
    should be callable by name (`agent-resource-run`, `serena-foreground`, `repo-retrieve`) is a
    `package.json` `bin` entry, installed into `~/.bun/bin` by `bun link` (`mise run deps`) —
    never a hand-made symlink of a `.ts` into `~/.local/bin`, which holds standalone binaries
@@ -115,8 +118,9 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    entries in `agents/claude/settings.json` / `agents/codex/hooks.json`, no rendered roster in
    `agents/claude/CLAUDE.md` — `mise run lint:one-writer` fails on both); never link a path a
    tool writes (`git config --global`, `jj config set --user`) — make it tool-owned and give the
-   repo's half a read-only path; run a third-party fetch in a throwaway HOME and import it
-   (`skills:add`). A value has one home (the time zone is `zsh/timezone`).
+   repo's half a read-only path; declare third-party skills in `agents/skills.thirdparty.toml` and
+   install them globally with `skills:add` / `skills:sync`. Run `skills:migrate` first if a global
+   skill target still resolves into a repo. A value has one home (the time zone is `zsh/timezone`).
 7. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
 8. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
    skills use one consistent shape — the official-recommended **gerund** form

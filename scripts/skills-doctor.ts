@@ -1,38 +1,20 @@
-// The gate that would have caught the 2026-05→08 shadowing. Consumer: `mise run lint:skills-wiring`
-// (wired into `mise run lint`) and any human running it directly. Output is verdict-style lines
-// plus a final PASS/FAIL, matching link-skills.ts / link-dots.ts.
-//
-// WHAT WENT WRONG, AND WHY A LINT CHECK IS THE FIX: link-skills.ts refuses to clobber a real
-// directory at ~/.claude/skills/<name>, which is correct — content this repo does not own must
-// survive. But when the repo DOES own that name, the refusal means the repo's copy is never
-// linked and never read, while the stale real directory is what the agent actually loads. That
-// state is silent: the linker prints one `skip` line among sixty and exits 0. Eight skills sat
-// shadowed for roughly three months. The linker stays tolerant; THIS is where it becomes loud.
-//
-// Machine-state checks are skipped, not failed, when the relevant home directory is absent — on
-// a fresh clone (or CI) nothing has been linked yet and there is nothing to be wrong about.
-// Every skip prints, so a green run can never be mistaken for a run that checked something.
-//
-// Usage: bun scripts/skills-doctor.ts [--dotfiles <path>] [--home <path>]
-// Exit: 0 every check passed or was skipped · 1 at least one FAIL · 2 usage.
+// `mise run lint:skills-wiring` checks in-house skill links, third-party provenance boundaries,
+// and that global skill paths no longer write through into a repository.
 
-import {
-  existsSync,
-  lstatSync,
-  readFileSync,
-  readdirSync,
-  readlinkSync,
-  statSync,
-} from "node:fs";
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { jsonText, z } from "../agents/hooks/zod.ts";
+import {
+  homeRepoLinkedSkillTargets,
+  readDeclaration,
+  skillFiles,
+  thirdPartySkillFiles,
+} from "./skills-declaration.ts";
 
 const USAGE =
   "Usage: bun scripts/skills-doctor.ts [--dotfiles <path>] [--home <path>]\n";
-
-class UsageError extends Error {}
 
 type Finding = { level: "FAIL" | "SKIP"; line: string };
 
@@ -45,158 +27,85 @@ function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    prototypeFlagSeen = true;
-  }
+  if (type === "unknown-flag" && flag === "__proto__") prototypeFlagSeen = true;
 }
 
-function nonEmptyString(flag: string): (value: string) => string {
-  void flag;
-  return (value) => value;
-}
-
-function isDir(p: string): boolean {
-  return fromThrowable((path: string) => statSync(path))(p)
-    .map((s) => s.isDirectory())
+function isDir(path: string): boolean {
+  return fromThrowable((value: string) => statSync(value))(path)
+    .map((stat) => stat.isDirectory())
     .unwrapOr(false);
 }
 
-function symlinkTarget(p: string): string | null {
-  const lstat = fromThrowable((path: string) => lstatSync(path))(p);
-  if (lstat.isErr() || !lstat.value.isSymbolicLink()) return null;
-  return readlinkSync(p);
-}
-
-/** True when p exists on disk as something OTHER than a symlink (a real file or directory). */
-function isRealPath(p: string): boolean {
-  return fromThrowable((path: string) => lstatSync(path))(p)
-    .map((s) => !s.isSymbolicLink())
+function isRealPath(path: string): boolean {
+  return fromThrowable((value: string) => lstatSync(value))(path)
+    .map((stat) => !stat.isSymbolicLink())
     .unwrapOr(false);
 }
 
 function listSkillNames(skillsDir: string): string[] {
-  return fromThrowable((dir: string) => readdirSync(dir))(skillsDir)
+  return fromThrowable((path: string) => readdirSync(path))(skillsDir)
     .map((names) =>
       names
-        .filter((n) => !n.startsWith("."))
-        .filter((n) => isDir(`${skillsDir}/${n}`))
+        .filter((name) => !name.startsWith("."))
+        .filter((name) => isDir(join(skillsDir, name)))
         .toSorted(),
     )
     .unwrapOr([]);
 }
 
-/** Every agents/skills/<name> this repo owns must reach Claude Code as a link, not be masked. */
 function checkShadowing(home: string, dotfiles: string): Finding[] {
-  const claudeSkills = `${home}/.claude/skills`;
-  if (!isDir(claudeSkills)) {
+  const claudeSkills = resolve(home, ".claude/skills");
+  if (!isDir(claudeSkills))
     return [
       {
         level: "SKIP",
         line: `SHADOW: ${claudeSkills} absent — nothing linked yet`,
       },
     ];
-  }
   const findings: Finding[] = [];
-  for (const name of listSkillNames(`${dotfiles}/agents/skills`)) {
-    const dst = `${claudeSkills}/${name}`;
-    if (!isRealPath(dst)) continue;
+  for (const name of listSkillNames(resolve(dotfiles, "agents/skills"))) {
+    const destination = join(claudeSkills, name);
+    if (!isRealPath(destination)) continue;
     findings.push({
       level: "FAIL",
       line:
-        `SHADOW: ${dst} is a real path, so agents/skills/${name} is never read. ` +
-        `Compare with \`diff -rq ${dotfiles}/agents/skills/${name} ${dst}\`, then ` +
-        `\`rip ${dst} && mise run link:skills\`.`,
+        `SHADOW: ${destination} is a real path, so agents/skills/${name} is never read. ` +
+        `Run: rip ${destination} && mise run link:skills`,
     });
   }
   return findings;
 }
 
-/**
- * ~/.agents/skills is the cross-agent ("universal") skill home: Codex reads it directly. It is a
- * read-only projection of agents/skills (INV-8: nothing writes through it — scripts/vendor-skill.ts
- * fetches in a throwaway HOME), so aimed elsewhere, Codex reads skills the repo does not declare.
- */
-function checkUniversalWiring(home: string, dotfiles: string): Finding[] {
-  const universal = `${home}/.agents/skills`;
-  const expected = `${dotfiles}/agents/skills`;
-  if (!existsSync(`${home}/.agents`)) {
-    return [
-      {
-        level: "SKIP",
-        line: `WIRING: ${home}/.agents absent — nothing linked yet`,
-      },
-    ];
-  }
-  const target = symlinkTarget(universal);
-  if (target === expected) return [];
-  return [
-    {
-      level: "FAIL",
-      line:
-        `WIRING: ${universal} should be a symlink to ${expected} but is ` +
-        `${target === null ? "not a symlink" : `aimed at ${target}`}. ` +
-        "Codex would read skills this repo does not declare. Run: mise run link:skills",
-    },
-  ];
+function checkGlobalTargets(home: string, dotfiles: string): Finding[] {
+  const universalRoot = resolve(home, ".agents/skills");
+  const declaration = readDeclaration(dotfiles);
+  if (declaration.isErr())
+    return [{ level: "FAIL", line: `DECLARATION: ${declaration.error}` }];
+  const names = declaration.value.skills.map((entry) => entry.skill);
+  const unsafe = homeRepoLinkedSkillTargets(home, dotfiles, names);
+  const findings: Finding[] = unsafe.map((path) => ({
+    level: "FAIL",
+    line: `Refusing: ${path} resolves into a repository; run mise run skills:migrate`,
+  }));
+  if (!existsSync(universalRoot))
+    findings.push({
+      level: "SKIP",
+      line: `WIRING: ${universalRoot} absent — no Codex global skills installed`,
+    });
+  return findings;
 }
 
-/** INV-8: the committed ledger has ONE writer, scripts/vendor-skill.ts. A link from the deployed
- * ~/.agents/.skill-lock.json into it (the pre-2026-10-06 layout) lets the skills CLI write the
- * repo directly, so it must be gone — `mise run link:dots` removes it (RETIRED). */
-function checkLedgerWiring(home: string, dotfiles: string): Finding[] {
-  const ledger = `${home}/.agents/.skill-lock.json`;
-  const target = symlinkTarget(ledger);
-  if (target === null || !target.startsWith(`${dotfiles}/`)) return [];
-  return [
-    {
-      level: "FAIL",
-      line:
-        `LEDGER: ${ledger} is a symlink into the repo (${target}) — a deployed path the skills CLI ` +
-        "writes through. Run: mise run link:dots",
-    },
-  ];
-}
-
-// Only the names under `skills` matter here; anything else in the ledger is not this check's.
-const LedgerSchema = z.object({ skills: z.record(z.string(), z.unknown()) });
-
-/** A ledger entry with no skill on disk means the record and the tree disagree. */
-function checkLedgerOrphans(dotfiles: string): Finding[] {
-  const path = `${dotfiles}/agents/skills-lock.json`;
-  if (!existsSync(path)) {
-    return [
-      {
-        level: "FAIL",
-        line: `ORPHAN: ${path} is missing — expected the committed ledger`,
-      },
-    ];
-  }
-  const textResult = fromThrowable(() => readFileSync(path, "utf8"))();
-  const decoded = textResult.isOk()
-    ? jsonText.safeParse(textResult.value)
-    : undefined;
-  if (textResult.isErr() || decoded?.success !== true) {
-    const error = textResult.isErr()
-      ? textResult.error
-      : (decoded?.error?.issues.map((i) => i.message).join("; ") ??
-        "not valid JSON");
-    return [
-      {
-        level: "FAIL",
-        line: `ORPHAN: ${path} is not readable JSON — ${error instanceof Error ? error.message : String(error)}`,
-      },
-    ];
-  }
-  const ledger = LedgerSchema.safeParse(decoded.data);
-  const names = ledger.success
-    ? Object.keys(ledger.data.skills).toSorted()
-    : [];
-  return names
-    .filter((n) => !existsSync(`${dotfiles}/agents/skills/${n}/SKILL.md`))
-    .map((n) => ({
-      level: "FAIL" as const,
-      line: `ORPHAN: ledger records "${n}" but agents/skills/${n}/SKILL.md does not exist`,
-    }));
+function checkRepoProvenance(dotfiles: string): Finding[] {
+  const declaration = readDeclaration(dotfiles);
+  if (declaration.isErr())
+    return [{ level: "FAIL", line: `DECLARATION: ${declaration.error}` }];
+  return thirdPartySkillFiles(
+    skillFiles(resolve(dotfiles, "agents/skills")),
+    declaration.value,
+  ).map(({ path, skill }) => ({
+    level: "FAIL",
+    line: `THIRD-PARTY: ${path} has declared vendor provenance for "${skill}"; remove it from agents/skills`,
+  }));
 }
 
 function main(): void {
@@ -208,30 +117,28 @@ function main(): void {
       parameters: [],
       help: {
         description:
-          "Fail loudly when a repo-owned skill is shadowed or the vendoring wiring has drifted.",
+          "Fail when third-party skill bytes reappear in the repo or global paths write through into a repository.",
       },
       flags: {
-        dotfiles: { type: nonEmptyString("--dotfiles") },
-        home: { type: nonEmptyString("--home") },
+        dotfiles: { type: String },
+        home: { type: String },
       },
     },
     undefined,
     Bun.argv.slice(2),
   );
-
   if (prototypeFlagSeen) {
     process.stderr.write(`unknown flag(s): --__proto__\n${USAGE}`);
     process.exitCode = 2;
     return;
   }
-  for (const [flag, value] of Object.entries(parsed.flags)) {
-    if (value === "") {
-      process.stderr.write(`--${flag} requires a value\n${USAGE}`);
-      process.exitCode = 2;
-      return;
-    }
+  if (parsed.flags.dotfiles === "" || parsed.flags.home === "") {
+    process.stderr.write(
+      `--dotfiles and --home require non-empty values\n${USAGE}`,
+    );
+    process.exitCode = 2;
+    return;
   }
-
   if (parsed._.length > 0) {
     process.stderr.write(
       `unexpected positional argument: ${parsed._[0]}\n${USAGE}`,
@@ -242,40 +149,35 @@ function main(): void {
 
   const home = parsed.flags.home ?? process.env.HOME ?? homedir();
   const dotfiles =
-    parsed.flags.dotfiles ?? process.env.DOTFILES ?? `${home}/dotfiles`;
-
+    parsed.flags.dotfiles ??
+    process.env.DOTFILES ??
+    resolve(import.meta.dir, "..");
   const findings = [
+    ...checkRepoProvenance(dotfiles),
     ...checkShadowing(home, dotfiles),
-    ...checkUniversalWiring(home, dotfiles),
-    ...checkLedgerWiring(home, dotfiles),
-    ...checkLedgerOrphans(dotfiles),
+    ...checkGlobalTargets(home, dotfiles),
   ];
+  for (const finding of findings)
+    print(`${finding.level === "FAIL" ? "❌" : "⏭"} ${finding.line}`);
 
-  for (const f of findings)
-    print(`${f.level === "FAIL" ? "❌" : "⏭"} ${f.line}`);
-
-  const failures = findings.filter((f) => f.level === "FAIL").length;
+  const failures = findings.filter(
+    (finding) => finding.level === "FAIL",
+  ).length;
   if (failures > 0) {
     print(`SKILLS-WIRING FAIL: ${failures} problem(s)`);
     process.exitCode = 1;
     return;
   }
-  print("✅ SKILLS-WIRING PASS: no shadowed skill, wiring and ledger intact");
+  print(
+    "✅ SKILLS-WIRING PASS: in-house skills only, tool-owned global targets",
+  );
 }
 
-// Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
-// is the sync equivalent of BG1's mandated `main().catch(...)`.
 process.on("uncaughtException", (error) => {
-  if (error instanceof UsageError) {
-    process.stderr.write(`${error.message}\n${USAGE}`);
-    process.exitCode = 2;
-  } else {
-    process.stderr.write(
-      `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-    process.exitCode = 1;
-  }
-  process.exit(process.exitCode ?? 0);
+  process.stderr.write(
+    `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
+  );
+  process.exit(1);
 });
 
 main();

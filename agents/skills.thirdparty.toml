@@ -1,0 +1,45 @@
+cli_version = "1.5.22"
+
+[[skills]]
+source = "typesafe-ai/skills"
+skill = "typesafe-ai"
+
+[[skills]]
+source = "cloudflare/skills"
+skill = "web-perf"
+
+[[skills]]
+source = "MystenLabs/skills"
+skill = "sui-move"
+
+[[skills]]
+source = "MystenLabs/skills"
+skill = "modern-move-syntax"
+
+[[skills]]
+source = "MystenLabs/skills"
+skill = "naming-conventions"
+
+[[skills]]
+source = "MystenLabs/skills"
+skill = "composable-move-functions"
+
+[[skills]]
+source = "MystenLabs/skills"
+skill = "sui-object-model"
+
+[[skills]]
+source = "MystenLabs/skills"
+skill = "move-security"
+
+[[skills]]
+source = "MystenLabs/skills"
+skill = "move-unit-testing"
+
+[[skills]]
+source = "MystenLabs/skills"
+skill = "sui-move-project"
+
+[[skills]]
+source = "MystenLabs/skills"
+skill = "sui-build"

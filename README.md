@@ -13,11 +13,12 @@ macOS + WSL2 · one history since 2017 · plain `ln -sfn` symlinks, no templatin
 Most dotfiles configure a shell. Two things here are less usual:
 
 - **Your coding agent is a first-class topic, not an afterthought.** `agents/` sits beside `zsh/`
-  and `git/`, and one `mise run link:skills` fans it out from a single source: **Agent Skills** to
-  Claude Code (and Codex), **slash-commands** to Claude, Codex, and Gemini, and one `.mcp.json` to
-  Claude and Codex. The tree holds a couple dozen authored skills — `forging-skills`, `linting-prose`,
-  `systematizing-knowledge`, `operating-the-harness`, … ([full index](agents/skills/)) — plus a dozen
-  vendored upstream (Cloudflare's).
+  and `git/`. `mise run link:skills` links in-house Agent Skills and slash-commands to their tools;
+  it never links third-party skills. `agents/skills/` contains in-house skills only. Third-party
+  source/name pairs live in [`agents/skills.thirdparty.toml`](agents/skills.thirdparty.toml) and
+  `mise run skills:sync` installs them into tool-owned global directories. The authored skills —
+  `forging-skills`, `linting-prose`, `systematizing-knowledge`, `operating-the-harness`, … — are in
+  the [full index](agents/skills/). One `.mcp.json` supplies both Claude and Codex.
   Three narrow **Stop-hook gates** (exit 2) block the agent before it hands you bad work: a
   garbled/mis-serialized tool call, a self-congratulatory "PASS" with no evidence, and accidental
   Japanese/English word-salad in the output.
@@ -193,8 +194,10 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
      into the repo, with the repo's half in a path the tool only reads (`~/.gitconfig` beside the
      linked `~/.config/git/config`; jj's `config.toml` beside the linked `conf.d/dotfiles.toml`).
      Measured 2026-10-06: through a link, `git config --global` and `jj config set --user` both
-     rewrote the repo. Third-party fetches run in a throwaway HOME and are imported explicitly
-     (`mise run skills:add`).
+     rewrote the repo. Third-party skills are declared in `agents/skills.thirdparty.toml` and
+     installed globally with `mise run skills:add`; `mise run skills:sync` rebuilds that set.
+     If a global skill path still links into a repo, `mise run skills:migrate` copies it into a
+     real tool-owned directory before add/sync.
    - A value has one home: the zone name is `zsh/timezone`, read by zshenv/bashrc, rendered into
      Claude Code's `env.TZ`, and expected by `doctor:remote`.
    - Remaining human-driven write-through, by design: `sheldon add` (edits `sheldon/plugins.toml`,

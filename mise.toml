@@ -164,13 +164,15 @@ description = "zsh syntax gate: `zsh -n` parse-only on boot-critical zsh config 
 run = 'bun ~/dotfiles/scripts/lint-zsh.ts'
 
 [tasks."lint:skills-index"]
-description = "Catalog completeness: every agents/skills/*/ with a SKILL.md must be linked in agents/skills/README.md"
-run = 'bun ~/dotfiles/scripts/lint-skills-index.ts'
+dir = "{{config_root}}"
+env = { SKILLS_LINT_WORKTREE = "1" }
+description = "Require every in-house skill in the catalog and reject third-party provenance under agents/skills"
+run = "bun scripts/lint-skills-index.ts"
 
 [tasks."lint:skills-wiring"]
 dir = "{{config_root}}"
-description = "Fail when a repo-owned skill is masked by a real dir in ~/.claude/skills, when ~/.agents/skills no longer points here, or when the provenance ledger drifts. Machine-state checks SKIP (not fail) on a fresh clone."
-run = "bun ~/dotfiles/scripts/skills-doctor.ts"
+description = "Fail on third-party skills in agents/skills, shadowed in-house Claude links, or global skill paths that write through into a repo. Machine checks SKIP on a fresh clone."
+run = "bun scripts/skills-doctor.ts"
 
 # forging-skills' own floor, run over the WHOLE collection. It existed since the skill was forged
 # but was only ever invoked by hand on one skill at a time during a forge, so nothing swept the
@@ -180,7 +182,8 @@ run = "bun ~/dotfiles/scripts/skills-doctor.ts"
 # what the collection charges every turn, against a declared ratchet.
 [tasks."lint:skills-floor"]
 dir = "{{config_root}}"
-description = "Structural skill floor and listing budget over the jj commit candidate (BASE plus selected REV paths), or the Git index during migration"
+env = { SKILLS_LINT_WORKTREE = "1" }
+description = "Structural skill floor and listing budget over the worktree; commit hooks use BASE plus selected REV paths"
 run = "bun scripts/lint-skills-floor.ts"
 
 # operating-the-harness P3: a rule naming ONE repo belongs in that repo's .claude/, never in user
@@ -336,7 +339,17 @@ run = "bunx --bun tsgo --noEmit"
 [tasks.test]
 alias = "t"
 description = "Test the repo: hooks, resource control, repo-retrieve, Bun script floor, skills, zsh terminal hygiene, and toolchain scope"
-depends = ["test:hooks", "test:resource-control", "test:agx", "test:scripts", "test:codex", "test:skills", "test:android", "test:zsh", "test:mise-scope"]
+depends = [
+  "test:hooks",
+  "test:resource-control",
+  "test:agx",
+  "test:scripts",
+  "test:codex",
+  "test:skills",
+  "test:android",
+  "test:zsh",
+  "test:mise-scope",
+]
 
 [tasks."test:codex"]
 dir = "{{config_root}}"
@@ -800,18 +813,28 @@ description = "Apply .mcp.json (single declarative source) to Claude Code (user 
 run = 'bun ~/dotfiles/scripts/install-mcp.ts && bun ~/dotfiles/agents/codex/codex-config.ts'
 
 [tasks."link:skills"]
-description = "Link agents/ commands and skills into AI tools' config directories"
-run = 'bun ~/dotfiles/scripts/link-skills.ts'
+dir = "{{config_root}}"
+description = "Link in-house skills and agent commands into AI tool config directories"
+run = "bun scripts/link-skills.ts"
 
-# Third-party skills. The bare `bunx skills add` is deliberately NOT the documented entrypoint:
-# without -g it writes four paths into the current directory, without --skill it installs every
-# skill the source repo ships, and `add` overwrites a same-named directory with no prompt — all
-# three measured against skills@1.5.22. The wrapper pins the version, forces -g (so the bytes
-# land in agents/skills via ~/.agents/skills) and refuses a name this repo already owns.
+# Third-party skills are declared only in agents/skills.thirdparty.toml. The pinned skills CLI
+# writes into tool-owned global directories; scripts pass -g plus explicit --skill values and
+# remove new unrequested lock entries (including find-skills). link:skills handles in-house
+# skills only and never points the ~/.agents/skills root into this repo.
+[tasks."skills:migrate"]
+dir = "{{config_root}}"
+description = "Copy global skill links that point into repositories into real tool-owned paths; preserves current Codex/Claude skills"
+run = "bun scripts/skills-migrate.ts"
+
 [tasks."skills:add"]
 dir = "{{config_root}}"
-description = "Vendor a third-party skill into agents/skills/. Usage: mise run skills:add -- <owner/repo> --skill <name> [--skill <name>…] [--dry-run]"
-run = 'bun ~/dotfiles/scripts/vendor-skill.ts'
+description = "Install and declare third-party skills globally. Usage: mise run skills:add -- <owner/repo> --skill <name> [--skill <name>…] [--dry-run]"
+run = "bun scripts/vendor-skill.ts"
+
+[tasks."skills:sync"]
+dir = "{{config_root}}"
+description = "Install missing or out-of-date global third-party skills from agents/skills.thirdparty.toml and report undeclared installs"
+run = "bun scripts/skills-sync.ts"
 
 [tasks."codex:remote-control"]
 description = "Converge the Codex app-server daemon's remote control (how the ChatGPT mobile app reaches this machine) to agents/codex/app-server.toml. Idempotent; on drift it persists the setting and restarts a running daemon. `mise run doctor` (codex-remote) reports the drift."

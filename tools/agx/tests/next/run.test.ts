@@ -357,10 +357,10 @@ describe("agx-next run", () => {
     expect(report.data.runs).toBe(1);
     expect(report.data.legacy_import).toEqual({
       runs_imported: 1,
-      judgments_imported: 3,
+      judgments_imported: 2,
       progress_imported: 1,
       malformed_lines: 0,
-      ignored_rows: 0,
+      ignored_rows: 2,
     });
 
     const second = Bun.spawnSync(
@@ -376,5 +376,85 @@ describe("agx-next run", () => {
     expect(second.exitCode).toBe(0);
     expect(repeat.success).toBe(true);
     if (repeat.success) expect(repeat.data.runs).toBe(1);
+  });
+
+  test("folds only accept and reject judgments from legacy decisions", () => {
+    const root = mkdtempSync(join(tmpdir(), "agx-next-judgment-fold-"));
+    const state = join(root, "state");
+    mkdirSync(state, { recursive: true });
+    const at = "2026-10-14T00:00:00Z";
+    const started = (id: string) => ({
+      kind: "started",
+      id,
+      at,
+      ticket: id,
+      writes: [],
+      cwd: root,
+      workspace: root,
+      row: "fixture",
+      dispatcher_session: null,
+      vendor_session: null,
+      pid: 0,
+    });
+    const judged = (id: string, decision: string) => ({
+      kind: "judged",
+      id,
+      at,
+      decision,
+      note: "fixture",
+    });
+    writeFileSync(
+      join(state, "records.jsonl"),
+      [
+        started("pass"),
+        judged("pass", "pass"),
+        started("waived"),
+        judged("waived", "waived"),
+        started("landed"),
+        judged("landed", "landed"),
+        started("later-valid"),
+        judged("later-valid", "pass"),
+        judged("later-valid", "reject"),
+      ]
+        .map((event) => JSON.stringify(event))
+        .join("\n") + "\n",
+    );
+    const result = Bun.spawnSync(
+      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+      },
+    );
+    const rows = jsonOf(
+      z.array(
+        z.looseObject({
+          id: z.string(),
+          judgment: z
+            .looseObject({ decision: z.string(), note: z.string() })
+            .nullable(),
+        }),
+      ),
+    ).safeParse(result.stdout.toString());
+    expect(result.exitCode).toBe(0);
+    expect(rows.success).toBe(true);
+    if (!rows.success) return;
+    const judgments = new Map(
+      rows.data.map((row) => [row.id, row.judgment?.decision ?? null]),
+    );
+    expect(judgments).toEqual(
+      new Map([
+        ["pass", null],
+        ["waived", null],
+        ["landed", "accept"],
+        ["later-valid", "reject"],
+      ]),
+    );
+    expect(
+      [...judgments.values()].filter(
+        (decision) =>
+          decision !== null && decision !== "accept" && decision !== "reject",
+      ),
+    ).toEqual([]);
   });
 });

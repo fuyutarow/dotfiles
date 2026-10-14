@@ -2,4 +2,5 @@
 {"kind":"acceptance","schema":1,"run_id":"legacy-fixture-run","at":"2026-10-10T12:03:00Z","accept":true,"note":"fixture accepted"}
 {"kind":"grade","schema":1,"run_id":"legacy-fixture-run","graded_at":"2026-10-10T12:04:00Z","grade":"pass","graded_by":"jev","confidence":0.9,"evidence":[],"probabilities":{}}
 {"kind":"grade-waived","schema":1,"run_id":"legacy-fixture-run","waived_at":"2026-10-10T12:05:00Z","waived_by":"coordinator","reason":"fixture waiver"}
+{"kind":"landed","schema":1,"run_id":"legacy-fixture-run","at":"2026-10-10T12:06:00Z","landed_by":"coordinator","reason":"fixture landed"}
 {"kind":"interim","schema":1,"run_id":"legacy-fixture-run","at":"2026-10-10T12:01:00Z","pick":{"choice":"luna-high"},"interim_report":{"at":"2026-10-10T12:01:00Z","last_message":"[redacted real worker message]","return":{"interim":true,"findings":[{"text":"fixture progress"}],"evidence":[],"impact_on_brief":"","proposed_next":"continue","artifacts":[]},"session":"vendor-fixture"}}

@@ -249,13 +249,7 @@ async function readLegacyFile(
       runsImported += importLegacyRun(legacy, runId, knownKeys);
       continue;
     }
-    const importable = [
-      "acceptance",
-      "grade",
-      "grade-waived",
-      "interim",
-      "landed",
-    ];
+    const importable = ["acceptance", "interim", "landed"];
     if (
       kind === undefined ||
       runId === undefined ||
@@ -296,11 +290,11 @@ function importLegacyEvent(
     append({ kind: "progress", id, at, path, legacy_key: key });
     return "progress";
   }
-  let decision = stringOf(row.grade) ?? "unknown";
+  let decision: string | undefined;
   if (kind === "acceptance")
     decision = row.accept === true ? "accept" : "reject";
-  else if (kind === "grade-waived") decision = "waived";
-  else if (kind === "landed") decision = "landed";
+  if (kind === "landed") decision = "accept";
+  if (decision === undefined) return undefined;
   const note = stringOf(row.note) ?? stringOf(row.reason) ?? "";
   append({ kind: "judged", id, at, decision, note, legacy_key: key });
   return "judged";
@@ -421,8 +415,10 @@ export function foldedRuns() {
       run.report_path = event.report_path;
       run.vendor_session = event.vendor_session;
     }
-    if (event.kind === "judged")
-      run.judgment = { decision: event.decision, note: event.note };
+    if (event.kind !== "judged") continue;
+    const decision = event.decision === "landed" ? "accept" : event.decision;
+    if (decision === "accept" || decision === "reject")
+      run.judgment = { decision, note: event.note };
   }
   for (const run of runs.values()) {
     if (run.state !== "ended") {

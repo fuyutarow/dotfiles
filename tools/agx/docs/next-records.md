@@ -6,7 +6,8 @@
 Each line is one event. Readers ignore an incomplete trailing line and reject malformed
 complete lines. Event `at` values are RFC 3339 timestamps. Ticket paths are positional:
 `agx check TICKET.md` and `agx run TICKET.md --cd TREE`.
-Judgments use `agx judge RUN_ID accept|reject [--note TEXT]`; a continuation
+Judgments use `agx judge RUN_ID accept|reject [--note TEXT]`; every `ls --json`
+`judgment.decision` is `accept`, `reject`, or `null`. A continuation
 uses `agx run TICKET.md --continue PREVIOUS_RUN_ID`.
 
 The next ticket schema requires `proposition.id`, `proposition.claim`, and
@@ -32,9 +33,13 @@ Ticket validation and premise refusals exit 2.
 
 Imported events may carry `legacy_key`, a deterministic deduplication key.
 `agx stats --import-legacy` reads `runs*.jsonl` from `$AGX_STATE_DIR` (default
-`~/.local/state/agx`), folds `run`, `acceptance`, `grade`, `grade-waived`, `interim`,
-and `landed` rows into the same event log, skips malformed lines, and reports import
-counts. Importing the same source again adds no duplicate events.
+`~/.local/state/agx`), folds `run`, `acceptance`, `interim`, and `landed` rows into the same
+event log, skips malformed lines, and reports import counts. Legacy `acceptance` rows become
+`accept` or `reject`; `landed` becomes `accept`. Legacy `grade` and `grade-waived` rows are
+ignored because grades are not judgments. Existing invalid `judged` decisions remain in the
+append-only log but are ignored when folding; `landed` decisions from earlier imports fold as
+`accept`. The latest valid judgment wins. Importing the same source again adds no duplicate
+events.
 
 Events are append-only. The current run view folds events by `id`: the latest
 progress and judgment win; a `started` with no `ended` is `running` while its
@@ -55,7 +60,7 @@ The output is an array of objects with these contract fields:
 | `cwd` | Working directory passed to the worker. |
 | `workspace` | Workspace root used for write globs and premise checks. |
 | `writes` | Ticket write globs. |
-| `judgment` | `null` or `{ "decision", "note" }`. |
+| `judgment` | `null` or `{ "decision": "accept" | "reject", "note" }`. |
 | `report_path` | Final report path, or `null` until ended. |
 | `last_progress_path` | Most recent interim-return path, or `null`. |
 | `continues` | Previous agx run id supplied via `--continue`, or `null` for a fresh run. |

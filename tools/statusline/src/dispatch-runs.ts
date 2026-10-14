@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { homedir } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
@@ -8,7 +8,11 @@ import { execAsyncBounded, execError } from "./bounded.ts";
 import { activeDirs, ProgressSchema } from "./dispatch-state.ts";
 import { DIM, ESC, RST } from "./ansi.ts";
 import { dur } from "./jobs.ts";
-import { readCodexUsage } from "./codex-rate.ts";
+import {
+  readCodexActivity,
+  readCodexUsage,
+  resolveCodexSession,
+} from "./codex-rate.ts";
 import { parseActiveMarker } from "../../shared/src/dispatch-state.ts";
 import {
   costUsd,
@@ -28,7 +32,7 @@ export interface RouteRun {
   phase: string | undefined;
   workerSession: string | undefined;
   markerCostUsd: number | undefined;
-  secs: number;
+  secs: number | undefined;
   alive: boolean;
   dispatcherSession: string | undefined;
   // what the worker is doing (agx progress file); undefined until its first event lands
@@ -69,14 +73,44 @@ export interface JobRun {
   state: "running" | "ended" | "orphaned";
   dispatcher_session: string | null;
 }
-const AgxJobRunsSchema = z.array(
-  z.object({
-    id: z.string(),
-    ticket: z.string(),
-    state: z.enum(["running", "ended", "orphaned"]),
-    dispatcher_session: z.string().nullable(),
-  }),
-);
+const AgxLsRowSchema = z.object({
+  id: z.string(),
+  ticket: z.string(),
+  state: z.enum(["running", "ended", "orphaned"]),
+  row: z.string(),
+  dispatcher_session: z.string().nullable(),
+  exit: z.unknown().optional(),
+  cwd: z.unknown().optional(),
+  workspace: z.unknown().optional(),
+  writes: z.unknown().optional(),
+  judgment: z.unknown().optional(),
+  report_path: z.unknown().optional(),
+  verify: z.unknown().optional(),
+  last_progress_path: z.unknown().optional(),
+  continues: z.unknown().optional(),
+  vendor_session: z.unknown().optional(),
+  pick_source: z.unknown().optional(),
+  phase: z.unknown().optional(),
+  cost_usd: z.unknown().optional(),
+  started_at: z.unknown().optional(),
+});
+const AgxJobRunsSchema = z.array(AgxLsRowSchema);
+function optionalString(value: unknown): string | undefined {
+  const parsed = z.string().safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+function optionalNullableString(value: unknown): string | null | undefined {
+  const parsed = z.string().nullable().safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+function optionalNumber(value: unknown): number | undefined {
+  const parsed = z.number().safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+function runPhase(row: z.output<typeof AgxLsRowSchema>): string | undefined {
+  if (row.state !== "running") return undefined;
+  return "working";
+}
 const recordsPath = (env: NodeJS.ProcessEnv): string => {
   const nextDir = env.AGX_NEXT_STATE_DIR;
   if (nextDir !== undefined && nextDir !== "")
@@ -99,7 +133,7 @@ export async function agxJobRunsAsync(
   const signature = info === null ? "missing" : `${info.mtimeMs}:${info.size}`;
   const rows = await cachedSource({
     key: `agx-records:${path}:${signature}`,
-    ttlMs: Number.MAX_SAFE_INTEGER,
+    ttlMs: 1_000,
     schema: AgxJobRunsSchema,
     root: join(env.HOME ?? homedir(), ".cache/claude/statusline/sources"),
     load: async () => {
@@ -120,6 +154,157 @@ export async function agxJobRunsAsync(
     (run) => run.state === "running" && run.dispatcher_session === sessionId,
   );
 }
+/** Read the cached agx ls rows for Run display and count malformed rows. */
+export async function agxRouteRunsAsync(
+  env: NodeJS.ProcessEnv = process.env,
+  sessionId?: string,
+): Promise<RouteScan> {
+  const path = recordsPath(env);
+  const info = await stat(path).catch(() => null);
+  const signature = info === null ? "missing" : `${info.mtimeMs}:${info.size}`;
+  const rows = await cachedSource({
+    key: `agx-records:${path}:${signature}`,
+    ttlMs: 1_000,
+    schema: z.array(z.unknown()),
+    root: join(env.HOME ?? homedir(), ".cache/claude/statusline/sources"),
+    load: async () => {
+      const result = await execAsyncBounded(
+        "agx",
+        "agx",
+        ["ls", "--json"],
+        2000,
+        env,
+      );
+      if (result.isErr()) return [];
+      const parsed = jsonOf(z.array(z.unknown())).safeParse(result.value);
+      return parsed.success ? parsed.data : [];
+    },
+  });
+  const now = Temporal.Now.instant();
+  const dispatcherSession = currentDispatcherSession(sessionId);
+  const runs: RouteRun[] = [];
+  let unreadable = 0;
+  for (const value of rows) {
+    const parsed = AgxLsRowSchema.safeParse(value);
+    if (!parsed.success) {
+      unreadable += 1;
+      continue;
+    }
+    const row = parsed.data;
+    if (row.state !== "running" && row.state !== "orphaned") continue;
+    const startedAt = optionalString(row.started_at);
+    const secs =
+      startedAt === undefined
+        ? undefined
+        : fromThrowable(() =>
+            Math.max(
+              0,
+              Math.floor(
+                now.since(Temporal.Instant.from(startedAt)).total("seconds"),
+              ),
+            ),
+          )().unwrapOr(undefined);
+    const phase = runPhase(row);
+    const enrich =
+      row.state === "running" && row.dispatcher_session === dispatcherSession;
+    const rolloutRoot = join(env.HOME ?? homedir(), ".codex", "sessions");
+    let vendorSession = optionalNullableString(row.vendor_session) ?? undefined;
+    const cwd = optionalString(row.cwd);
+    const lastProgressPath = optionalNullableString(row.last_progress_path);
+    const continues = optionalNullableString(row.continues);
+    if (enrich && vendorSession === undefined && startedAt !== undefined)
+      vendorSession =
+        cwd === undefined
+          ? undefined
+          : await resolveCodexSession(rolloutRoot, cwd, startedAt);
+    const activity =
+      !enrich || vendorSession === undefined
+        ? undefined
+        : await readCodexActivity(rolloutRoot, vendorSession, cwd);
+    let doing: RouteRun["doing"];
+    if (activity !== undefined) {
+      doing = {
+        ...activity,
+        ...(vendorSession === undefined ? {} : { session: vendorSession }),
+      };
+    } else if (
+      enrich &&
+      lastProgressPath !== null &&
+      lastProgressPath !== undefined
+    ) {
+      doing = await progressFromReturn(lastProgressPath, cwd);
+    }
+    const cost = enrich
+      ? await liveCodexCost(
+          row.row,
+          vendorSession,
+          doing?.costUsd,
+          undefined,
+          true,
+          rolloutRoot,
+        )
+      : undefined;
+    runs.push({
+      displayId: undefined,
+      choice: row.row,
+      label: row.ticket,
+      pickSource:
+        optionalString(row.pick_source) ??
+        (continues === null || continues === undefined ? "agx" : "resume"),
+      phase: optionalString(row.phase) ?? phase,
+      workerSession: vendorSession,
+      markerCostUsd: optionalNumber(row.cost_usd) ?? cost,
+      secs,
+      alive: row.state === "running",
+      dispatcherSession: row.dispatcher_session ?? undefined,
+      doing,
+    });
+  }
+  return { runs, unreadable };
+}
+async function progressFromReturn(
+  path: string,
+  cwd?: string,
+): Promise<RouteRun["doing"]> {
+  const text = await Bun.file(path)
+    .text()
+    .catch(() => null);
+  if (text === null) return undefined;
+  const parsed = jsonOf(ProgressSchema).safeParse(text);
+  if (parsed.success) {
+    return {
+      last: actionLine(parsed.data.last, cwd) ?? "",
+      commands: parsed.data.commands,
+      files: parsed.data.files,
+      ageSecs: sinceSecs(parsed.data.at).unwrapOr(0),
+      ...(parsed.data.cost_usd === undefined
+        ? {}
+        : { costUsd: parsed.data.cost_usd }),
+      ...(parsed.data.session === undefined
+        ? {}
+        : { session: parsed.data.session }),
+    };
+  }
+  const first = actionLine(text, cwd);
+  return first === undefined || first === ""
+    ? undefined
+    : { last: first, commands: 0, files: 0, ageSecs: 0 };
+}
+function actionLine(value: string, cwd?: string): string | undefined {
+  const first = value.split(/\r?\n|\\n/u, 1)[0]?.trim();
+  if (first === undefined || first === "") return undefined;
+  const edit = first.match(/^editing\s+(.+)$/u);
+  const path = edit?.[1];
+  if (cwd !== undefined && path !== undefined && path.startsWith("/"))
+    return `editing ${relative(cwd, path)}`;
+  return first;
+}
+function displayAction(value: string): string {
+  const action = actionLine(value) ?? "";
+  return action.startsWith("editing ")
+    ? truncateDisplay(action, RUN_LABEL_WIDTH)
+    : action;
+}
 const pidAlive = fromThrowable((pid: number) => process.kill(pid, 0));
 const sinceSecs = fromThrowable((iso: string) =>
   Math.max(
@@ -136,6 +321,7 @@ async function liveCodexCost(
   progressCost: number | undefined,
   usage: z.output<typeof ProgressSchema>["usage"],
   alive: boolean,
+  rolloutRoot = join(homedir(), ".codex", "sessions"),
 ): Promise<number | undefined> {
   if (
     progressCost !== undefined ||
@@ -146,10 +332,7 @@ async function liveCodexCost(
     return progressCost;
   const price = dispatchRowPrice(choice);
   if (price?.route !== "codex") return progressCost;
-  const tokens = await readCodexUsage(
-    join(homedir(), ".codex", "sessions"),
-    session,
-  );
+  const tokens = await readCodexUsage(rolloutRoot, session);
   return tokens === undefined ? progressCost : costUsd(price, tokens);
 }
 // Sync compatibility scan retained for sync callers; buildDataframe uses routeRunsAsync.
@@ -319,13 +502,13 @@ function doingText(d: RouteRun["doing"], phase: string | undefined): string {
   if (phase === undefined) {
     if (d === undefined) return `${DIM}│ no event yet${RST}`;
     const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
-    return `${DIM}│${RST} ${d.last}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
+    return `${DIM}│${RST} ${displayAction(d.last)}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
   }
   if (phase !== "working") return `${DIM}│${RST} ${phase}`;
   if (d === undefined || d.last === "starting")
     return `${DIM}│${RST} working · no event yet`;
   const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
-  const activity = `${d.last}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
+  const activity = `${displayAction(d.last)}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
   return `${DIM}│${RST} working · ${activity}`;
 }
 
@@ -417,7 +600,9 @@ export function routeLines(
   sessionId: string | undefined,
   unreadable = 0,
 ): string[] {
-  const live = runs.filter((r) => r.alive).toSorted((a, b) => b.secs - a.secs);
+  const live = runs
+    .filter((r) => r.alive)
+    .toSorted((a, b) => (b.secs ?? -1) - (a.secs ?? -1));
   const stale = runs.length - live.length;
   const attributed = live.filter(
     (r) => r.dispatcherSession !== undefined && r.dispatcherSession !== "",
@@ -436,7 +621,9 @@ export function routeLines(
     ...sessions.map((value) => Bun.stringWidth(value)),
   );
   const choices = shown.map((r) => r.choice);
-  const elapsed = shown.map((r) => dur(r.secs));
+  const elapsed = shown.map((r) =>
+    r.secs === undefined ? "n/a" : dur(r.secs),
+  );
   const costs = shown.map((r) =>
     r.phase === "working"
       ? (r.doing?.costUsd ?? r.markerCostUsd)

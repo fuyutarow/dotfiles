@@ -23,6 +23,8 @@ describe("buildDataframe source budgets", () => {
             ram: err("host unavailable"),
             vram: err("host unavailable"),
           }),
+        routes: () => Promise.resolve(undefined),
+        dispatchWarning: () => Promise.resolve(undefined),
         storage: () => Promise.resolve(ok([])),
         herdrReport: () => Promise.resolve(),
       },

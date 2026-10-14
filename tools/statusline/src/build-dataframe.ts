@@ -2,7 +2,7 @@ import { err, ok, type Result } from "neverthrow";
 import type { SessionStatus } from "./session-status.ts";
 import type { Dataframe } from "./dataframe.ts";
 import type { HostLoad } from "./host-load.ts";
-import type { JobRun, RouteRun, RouteScan } from "./dispatch-runs.ts";
+import type { RouteScan } from "./dispatch-runs.ts";
 import type { Admitted } from "./jobs.ts";
 import type { DiskEntry } from "./storage.ts";
 import type { ModelLimit } from "./rate-limits.ts";
@@ -20,11 +20,7 @@ import { contextLabel, firstNonEmpty, modelName } from "./model-context.ts";
 import { repoStateAsync } from "./repo-state.ts";
 import { scanOutOfHarnessAsync } from "./jobs.ts";
 import { readHostLoadAsync } from "./host-load.ts";
-import {
-  agxJobRunsAsync,
-  currentDispatcherSession,
-  routeRunsAsync,
-} from "./dispatch-runs.ts";
+import { agxRouteRunsAsync } from "./dispatch-runs.ts";
 import { readDispatchWarningAsync } from "./dispatch-warning.ts";
 import { diskReadingsAsync } from "./storage.ts";
 import type { DiskReading } from "./storage.ts";
@@ -32,9 +28,6 @@ import { readCodexRate } from "./codex-rate.ts";
 import { readJevUsage } from "./jev-usage.ts";
 import { cachedSource } from "./render-cache.ts";
 import { z } from "./zod.ts";
-import { activeDirs } from "./dispatch-state.ts";
-import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
 
 type IdentityFacts = {
   email: string | undefined;
@@ -59,8 +52,9 @@ type Sources = {
     failed?: string;
   }>;
   hostLoad: () => Promise<Omit<HostLoad, "disks">>;
-  routes: () => Promise<Result<RouteScan, string> | undefined>;
-  jobRuns: (sessionId: string | undefined) => Promise<JobRun[]>;
+  routes: (
+    sessionId?: string,
+  ) => Promise<Result<RouteScan, string> | undefined>;
   dispatchWarning: () => Promise<string | undefined>;
   storage: () => Promise<Result<DiskEntry[], string>>;
   herdrReport: (
@@ -85,7 +79,6 @@ const BUDGETS_MS: Record<keyof Sources, number> = {
   jobScan: 2000,
   hostLoad: 2000,
   routes: 2000,
-  jobRuns: 2000,
   dispatchWarning: 1500,
   storage: 1500,
   herdrReport: 200,
@@ -151,58 +144,6 @@ const JobScanCacheSchema = z.object({
   orphans: z.number(),
   failed: z.string().optional(),
 });
-const RouteRunCacheSchema = z.object({
-  displayId: z.string().optional(),
-  choice: z.string(),
-  label: z.string(),
-  pickSource: z.string(),
-  phase: z.string().optional(),
-  workerSession: z.string().optional(),
-  markerCostUsd: z.number().optional(),
-  secs: z.number(),
-  alive: z.boolean(),
-  dispatcherSession: z.string().optional(),
-  doing: z
-    .object({
-      last: z.string(),
-      commands: z.number(),
-      files: z.number(),
-      ageSecs: z.number(),
-      costUsd: z.number().optional(),
-      session: z.string().optional(),
-    })
-    .optional(),
-});
-const RouteScanCacheSchema = z.object({
-  runs: z.array(RouteRunCacheSchema),
-  unreadable: z.number(),
-});
-const RouteResultCacheSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("scan"), value: RouteScanCacheSchema }),
-  z.object({ kind: z.literal("none") }),
-  z.object({ kind: z.literal("error"), value: z.string() }),
-]);
-async function agxCacheKey(): Promise<string> {
-  const dirs = activeDirs();
-  const state = await Promise.all(
-    dirs.map(async (dir) => {
-      const names = await readdir(dir).catch(() => []);
-      const stamps = await Promise.all(
-        names
-          .filter((name) => name.endsWith(".json"))
-          .toSorted()
-          .map(async (name) => {
-            const mtime = await stat(join(dir, name))
-              .then((info) => info.mtimeMs)
-              .catch(() => 0);
-            return `${name}:${mtime}`;
-          }),
-      );
-      return `${dir}:${stamps.join(",")}`;
-    }),
-  );
-  return `agx-active-state:${state.join("|")}`;
-}
 const DiskEntryCacheSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("reading"),
@@ -242,34 +183,6 @@ function diskEntryFromCache(entry: z.output<typeof DiskEntryCacheSchema>) {
     reading.rateYellowMinutes = entry.rateYellowMinutes;
   return reading;
 }
-function routeRunFromCache(
-  run: z.output<typeof RouteRunCacheSchema>,
-): RouteRun {
-  let doing: RouteRun["doing"];
-  if (run.doing !== undefined) {
-    doing = {
-      last: run.doing.last,
-      commands: run.doing.commands,
-      files: run.doing.files,
-      ageSecs: run.doing.ageSecs,
-    };
-    if (run.doing.costUsd !== undefined) doing.costUsd = run.doing.costUsd;
-    if (run.doing.session !== undefined) doing.session = run.doing.session;
-  }
-  return {
-    displayId: run.displayId,
-    choice: run.choice,
-    label: run.label,
-    pickSource: run.pickSource,
-    phase: run.phase,
-    workerSession: run.workerSession,
-    markerCostUsd: run.markerCostUsd,
-    secs: run.secs,
-    alive: run.alive,
-    dispatcherSession: run.dispatcherSession,
-    doing,
-  };
-}
 const cachedStorage: Sources["storage"] = async () => {
   const cached = await cachedSource({
     key: "configured-disk-statfs-and-rates",
@@ -287,26 +200,8 @@ const cachedStorage: Sources["storage"] = async () => {
     ? err(cached.value)
     : ok(cached.entries.map(diskEntryFromCache));
 };
-const cachedRoutes: Sources["routes"] = async () => {
-  const cached = await cachedSource({
-    key: await agxCacheKey(),
-    ttlMs: 1_000,
-    schema: RouteResultCacheSchema,
-    load: async () => {
-      const result = await routeRunsAsync();
-      if (result === undefined) return { kind: "none" as const };
-      return result.match(
-        (value) => ({ kind: "scan" as const, value }),
-        (value) => ({ kind: "error" as const, value }),
-      );
-    },
-  });
-  if (cached.kind === "none") return void 0;
-  if (cached.kind === "error") return err(cached.value);
-  return ok({
-    unreadable: cached.value.unreadable,
-    runs: cached.value.runs.map(routeRunFromCache),
-  });
+const cachedRoutes: Sources["routes"] = async (sessionId) => {
+  return ok(await agxRouteRunsAsync(process.env, sessionId));
 };
 const DEFAULT_SOURCES: Sources = {
   identity: identityFacts,
@@ -336,7 +231,6 @@ const DEFAULT_SOURCES: Sources = {
   },
   hostLoad: readHostLoadAsync,
   routes: cachedRoutes,
-  jobRuns: agxJobRunsAsync,
   dispatchWarning: readDispatchWarningAsync,
   storage: cachedStorage,
   herdrReport: reportToHerdr,
@@ -392,7 +286,6 @@ export async function buildDataframe(
     scanResult,
     hostResult,
     routesResult,
-    jobRunsResult,
     warningResult,
     storageResult,
     codexRateResult,
@@ -421,10 +314,7 @@ export async function buildDataframe(
     runBounded("git", budget("repoState"), () => sources.repoState(cwd)),
     runBounded("process scan", budget("jobScan"), sources.jobScan),
     runBounded("host load", budget("hostLoad"), sources.hostLoad),
-    runBounded("dispatch", budget("routes"), sources.routes),
-    runBounded("agx Job runs", budget("jobRuns"), () =>
-      sources.jobRuns(currentDispatcherSession(sid)),
-    ),
+    runBounded("dispatch", budget("routes"), () => sources.routes(sid)),
     runBounded(
       "dispatch warning",
       budget("dispatchWarning"),
@@ -467,7 +357,6 @@ export async function buildDataframe(
     "host load",
   );
   const routes = settled(routesResult, undefined, "dispatch");
-  const jobRuns = settled(jobRunsResult, [], "agx Job runs");
   const warning = settled(warningResult, undefined, "dispatch warning");
   const storage = settled(storageResult, err("storage unavailable"), "storage");
   const codexRate = settled(
@@ -542,7 +431,6 @@ export async function buildDataframe(
     orphans,
     jobScanWhy: scan.why ?? scan.value.failed,
     routes: routes.why === undefined ? routes.value : err(routes.why),
-    jobRuns: jobRuns.why === undefined ? jobRuns.value : [],
     dispatchWarning:
       warning.why === undefined ? warning.value : "dispatch warning …",
     vram,

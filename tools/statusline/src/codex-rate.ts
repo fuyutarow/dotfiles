@@ -1,5 +1,5 @@
 import { open, readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, maybe, z } from "./zod.ts";
 import {
@@ -57,6 +57,33 @@ const TOKEN_COUNT = z.object({
   payload: z.object({
     type: z.literal("token_count"),
     info: z.object({ total_token_usage: TOKEN_USAGE }),
+  }),
+});
+const CODEX_EXEC_CALL = z.object({
+  timestamp: z.string().optional(),
+  type: z.literal("response_item"),
+  payload: z.object({
+    type: z.literal("function_call"),
+    name: z.string(),
+    arguments: z.string(),
+  }),
+});
+const CODEX_CUSTOM_CALL = z.object({
+  timestamp: z.string().optional(),
+  type: z.literal("response_item"),
+  payload: z.object({
+    type: z.literal("custom_tool_call"),
+    name: z.string(),
+    input: z.string(),
+  }),
+});
+const CODEX_SESSION_META = z.object({
+  type: z.literal("session_meta"),
+  payload: z.object({
+    id: z.string().optional(),
+    session_id: z.string().optional(),
+    cwd: z.string().optional(),
+    timestamp: z.string().optional(),
   }),
 });
 
@@ -173,6 +200,199 @@ async function rolloutForSession(
     if (name !== undefined) return join(dir, name);
   }
   return undefined;
+}
+
+async function rolloutSessionMeta(path: string) {
+  await using fd = await open(path, "r");
+  const buffer = Buffer.alloc(64 * 1024);
+  const read = await fd.read(buffer, 0, buffer.length, 0);
+  const newline = buffer.subarray(0, read.bytesRead).indexOf(10);
+  const firstLine = buffer
+    .subarray(0, newline < 0 ? read.bytesRead : newline)
+    .toString("utf8");
+  const parsed = jsonOf(CODEX_SESSION_META).safeParse(firstLine);
+  return parsed.success ? parsed.data.payload : undefined;
+}
+
+/** Recover a missing vendor id only when cwd and start time identify one rollout. */
+export async function resolveCodexSession(
+  root: string,
+  cwd: string,
+  startedAt: string,
+): Promise<string | undefined> {
+  const started = fromThrowable(
+    () => Temporal.Instant.from(startedAt).epochMilliseconds,
+  )();
+  if (started.isErr()) return undefined;
+  const base = Temporal.PlainDate.from(startedAt.slice(0, 10));
+  const dates = [base.subtract({ days: 1 }), base, base.add({ days: 1 })];
+  const paths = (
+    await Promise.all(
+      dates.map(async (day) => {
+        const dir = join(
+          root,
+          String(day.year),
+          pad2(day.month),
+          pad2(day.day),
+        );
+        const names = await readdir(dir).catch(() => []);
+        return names
+          .filter(
+            (name) => name.startsWith("rollout-") && name.endsWith(".jsonl"),
+          )
+          .map((name) => join(dir, name));
+      }),
+    )
+  ).flat();
+  const candidates = await Promise.all(
+    paths.map(async (path) => {
+      const meta = await rolloutSessionMeta(path).catch(() => null);
+      if (
+        meta === null ||
+        meta === undefined ||
+        meta.cwd !== cwd ||
+        meta.timestamp === undefined
+      )
+        return null;
+      const session = meta.session_id ?? meta.id;
+      if (session === undefined) return null;
+      const timestampText = meta.timestamp;
+      const timestamp = fromThrowable(
+        () => Temporal.Instant.from(timestampText).epochMilliseconds,
+      )();
+      if (timestamp.isErr()) return null;
+      return {
+        session,
+        distance: Math.abs(started.value - timestamp.value),
+      };
+    }),
+  );
+  const matches = candidates
+    .flatMap((candidate) =>
+      candidate !== null && candidate.distance <= 15_000 ? [candidate] : [],
+    )
+    .toSorted((a, b) => a.distance - b.distance);
+  const nearest = matches[0];
+  if (nearest === undefined) return undefined;
+  if (matches[1]?.distance === nearest.distance) return undefined;
+  return nearest.session;
+}
+
+/** Latest Codex shell action and bounded command/file counts from its rollout. */
+export async function readCodexActivity(
+  root: string,
+  session: string,
+  cwd?: string,
+): Promise<
+  { last: string; commands: number; files: number; ageSecs: number } | undefined
+> {
+  const path = await rolloutForSession(root, session);
+  if (path === undefined) return undefined;
+  const info = await stat(path).catch(() => null);
+  if (info === null || !info.isFile()) return undefined;
+  const length = Math.min(info.size, 512 * 1024);
+  if (length === 0) return undefined;
+  const buffer = Buffer.alloc(length);
+  await using fd = await open(path, "r");
+  const read = await fd
+    .read(buffer, 0, length, info.size - length)
+    .catch(() => ({ bytesRead: 0 }));
+  const lines = buffer.subarray(0, read.bytesRead).toString("utf8").split("\n");
+  if (length < info.size) lines.shift();
+  const calls: RolloutAction[] = [];
+  const files = new Set<string>();
+  for (const line of lines) {
+    const parsed = rolloutActions(line, cwd);
+    calls.push(...parsed.actions);
+    for (const file of parsed.files) files.add(file);
+  }
+  const latest = calls.at(-1);
+  if (latest === undefined) return undefined;
+  const commandCount = calls.filter(({ isCommand }) => isCommand).length;
+  const timestamp = latest.timestamp;
+  const at =
+    timestamp === undefined
+      ? info.mtimeMs
+      : fromThrowable(
+          () => Temporal.Instant.from(timestamp).epochMilliseconds,
+        )().unwrapOr(info.mtimeMs);
+  return {
+    last: latest.command,
+    commands: commandCount,
+    files: files.size,
+    ageSecs: Math.max(
+      0,
+      Math.floor((Temporal.Now.instant().epochMilliseconds - at) / 1000),
+    ),
+  };
+}
+
+type RolloutAction = {
+  command: string;
+  timestamp: string | undefined;
+  isCommand: boolean;
+};
+function rolloutActions(
+  line: string,
+  cwd: string | undefined,
+): { actions: RolloutAction[]; files: string[] } {
+  const exec = jsonOf(CODEX_EXEC_CALL).safeParse(line);
+  if (exec.success && exec.data.payload.name === "exec_command") {
+    const args = jsonOf(
+      z.object({ cmd: z.string().optional(), command: z.string().optional() }),
+    ).safeParse(exec.data.payload.arguments);
+    const command = args.success
+      ? (args.data.cmd ?? args.data.command)
+      : undefined;
+    return command === undefined
+      ? { actions: [], files: [] }
+      : {
+          actions: [
+            {
+              command: `$ ${command}`,
+              timestamp: exec.data.timestamp,
+              isCommand: true,
+            },
+          ],
+          files: [],
+        };
+  }
+  const custom = jsonOf(CODEX_CUSTOM_CALL).safeParse(line);
+  if (!custom.success) return { actions: [], files: [] };
+  const actions: RolloutAction[] = [];
+  const shellCalls = [
+    ...custom.data.payload.input.matchAll(
+      /tools\.exec_command\(\{\s*cmd:\s*"((?:\\.|[^"\\])*)"/gu,
+    ),
+  ];
+  for (const [source, command] of shellCalls) {
+    if (source === undefined || command === undefined) continue;
+    const value = jsonOf(z.string()).safeParse(`"${command}"`);
+    if (value.success)
+      actions.push({
+        command: `$ ${value.data}`,
+        timestamp: custom.data.timestamp,
+        isCommand: true,
+      });
+  }
+  const files: string[] = [];
+  const patchFiles = [
+    ...custom.data.payload.input.matchAll(
+      /(?:Update|Add|Delete) File:\s*([^\s\\]+)/gu,
+    ),
+  ];
+  for (const [, file] of patchFiles) {
+    if (file === undefined) continue;
+    files.push(file);
+    const displayPath =
+      cwd !== undefined && file.startsWith("/") ? relative(cwd, file) : file;
+    actions.push({
+      command: `editing ${displayPath}`,
+      timestamp: custom.data.timestamp,
+      isCommand: false,
+    });
+  }
+  return { actions, files };
 }
 
 function asWindow(

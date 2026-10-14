@@ -2,8 +2,10 @@ import { afterAll, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync as writeFile,
@@ -11,11 +13,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fromThrowable } from "neverthrow";
 import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
-import { agxJobRunsAsync } from "../src/dispatch-runs.ts";
+import { agxJobRunsAsync, agxRouteRunsAsync } from "../src/dispatch-runs.ts";
 import { ProgressReaderSchema } from "../../shared/src/dispatch-state.ts";
 import { decodedJson } from "./decode.ts";
 import { isolatedStatuslineEnv } from "./helpers.ts";
+import { jsonOf, z } from "../src/zod.ts";
 import {
   deadOwnMarker,
   malformedMarker,
@@ -39,7 +43,7 @@ mkdirSync(bin);
 for (const [name, body] of Object.entries({
   claude: "echo '[]'",
   agx: 'if [ -n "$AGX_LOG" ]; then printf x >> "$AGX_LOG"; fi; printf "%s\\n" "${AGX_JSON:-[]}"',
-  ps: "exit 0",
+  ps: "printf '%s\\n' \"${PS_OUTPUT:-}\"",
   git: "echo 'fatal: not a git repository' >&2; exit 128",
 })) {
   const path = join(bin, name);
@@ -47,6 +51,19 @@ for (const [name, body] of Object.entries({
   chmodSync(path, 0o755);
 }
 const SESSION = "00000000-0000-0000-0000-000000000000";
+const TestMarkerSchema = z.object({
+  run_id: z.string().optional(),
+  pid: z.number(),
+  label: z.string(),
+  choice: z.string(),
+  pick_source: z.string().optional(),
+  phase: z.string().optional(),
+  cost_usd: z.number().optional(),
+  dispatcher_session: z.string().nullable().optional(),
+  worker_session: z.string().nullable().optional(),
+  started_at: z.string(),
+  cwd: z.string().optional(),
+});
 const ANSI = new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu");
 const PAYLOAD = JSON.stringify({
   session_id: SESSION,
@@ -126,14 +143,80 @@ async function render(
   xdgStateHome?: string,
   dispatcherSession?: string,
   agxJson?: string,
+  psOutput?: string,
+  home = scratch,
 ): Promise<string> {
+  const active = stateDir === undefined ? undefined : join(stateDir, "active");
+  const agxRows =
+    agxJson ??
+    JSON.stringify(
+      active === undefined || !existsSync(active)
+        ? []
+        : readdirSync(active)
+            .filter(
+              (name) =>
+                name.endsWith(".json") && !name.endsWith(".progress.json"),
+            )
+            .flatMap((name) => {
+              const path = join(active, name);
+              const checked = jsonOf(TestMarkerSchema).safeParse(
+                readFileSync(path, "utf8"),
+              );
+              if (!checked.success) return [{}];
+              const source = checked.data;
+              const id = source.run_id ?? name.replace(/\.json$/u, "");
+              const alive = fromThrowable((pid: number) =>
+                process.kill(pid, 0),
+              )(source.pid).isOk();
+              const progressPath = join(active, `${id}.progress.json`);
+              let vendorSession = source.worker_session ?? null;
+              let lastProgressPath: string | null = null;
+              let state = "orphaned";
+              if (alive) state = "running";
+              let continues: string | null = null;
+              if (source.pick_source === "resume") continues = "previous";
+              if (existsSync(progressPath)) {
+                const progressText = readFileSync(progressPath, "utf8");
+                const progressInfo = jsonOf(
+                  z.object({ session: z.string().optional() }),
+                ).safeParse(progressText);
+                if (progressInfo.success) {
+                  vendorSession ??= progressInfo.data.session ?? null;
+                  lastProgressPath = progressPath;
+                }
+              }
+              return [
+                {
+                  id,
+                  ticket: source.label,
+                  state,
+                  row: source.choice,
+                  exit: null,
+                  cwd: source.cwd ?? scratch,
+                  workspace: source.cwd ?? scratch,
+                  writes: ["tools/statusline/**"],
+                  judgment: null,
+                  report_path: null,
+                  pick_source: source.pick_source,
+                  phase: source.phase,
+                  cost_usd: source.cost_usd,
+                  dispatcher_session: source.dispatcher_session ?? null,
+                  vendor_session: vendorSession,
+                  started_at: source.started_at,
+                  continues,
+                  last_progress_path: lastProgressPath,
+                  verify: [],
+                },
+              ];
+            }),
+    );
   const p = Bun.spawn([process.execPath, STATUSLINE], {
     stdin: new Blob([PAYLOAD]),
     stdout: "pipe",
     stderr: "pipe",
     env: {
       ...isolatedStatuslineEnv({
-        HOME: scratch,
+        HOME: home,
         PATH: bin,
         TZ: "UTC",
         AGX_STATE_DIR: stateDir,
@@ -145,7 +228,8 @@ async function render(
             AGX_DISPATCHER_SESSION: dispatcherSession,
             CLAUDE_CODE_SESSION_ID: "environment-session-mismatch",
           }),
-      ...(agxJson === undefined ? {} : { AGX_JSON: agxJson }),
+      AGX_JSON: agxRows,
+      ...(psOutput === undefined ? {} : { PS_OUTPUT: psOutput }),
     },
     timeout: 30_000,
   });
@@ -157,6 +241,27 @@ async function render(
 }
 
 describe("statusline Run row", () => {
+  test("accepts the captured agx 4.5 ls sample including legacy optional fields", async () => {
+    const dir = join(scratch, "captured-agx-ls-sample");
+    const stateDir = join(dir, "state");
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(join(stateDir, "records.jsonl"), "");
+    const rows = await Bun.file(
+      join(import.meta.dir, "fixtures", "agx-ls-sample.json"),
+    ).text();
+    const scan = await agxRouteRunsAsync(
+      isolatedStatuslineEnv({
+        HOME: dir,
+        PATH: bin,
+        XDG_STATE_HOME: join(dir, "xdg"),
+        AGX_STATE_DIR: stateDir,
+        AGX_JSON: rows,
+      }),
+    );
+    expect(scan.unreadable).toBe(0);
+    expect(scan.runs.filter((run) => !run.alive)).toHaveLength(15);
+  });
+
   test.each([false, true])(
     "renders real sidecar turns and rollout cost (future field: %s)",
     async (future) => {
@@ -258,8 +363,7 @@ describe("statusline Run row", () => {
     expect(rows).toHaveLength(2);
     expect(rows.join("\n")).toContain("Repo: dotfiles");
     expect(rows.join("\n")).toContain("resume:");
-    expect(out).toContain("stale 1");
-    expect(out).not.toMatch(/\bunreadable \d+/u);
+    expect(out).toContain("unreadable 2");
   });
 
   test("a live worker shows its row, elapsed time and label", async () => {
@@ -267,7 +371,7 @@ describe("statusline Run row", () => {
     marker(dir, "a", process.pid, "lint batch 7");
     const out = await render(dir);
     expect(out).toMatch(
-      /^luna-high 1m3\d+s \$– lint batch 7 │ no event yet$/mu,
+      /^luna-high 1m3\d+s \$– lint batch 7 │ working · no event yet$/mu,
     );
   });
 
@@ -275,7 +379,7 @@ describe("statusline Run row", () => {
     const dir = join(scratch, "own-session");
     marker(dir, "own", process.pid, "my worker", 90, SESSION);
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– my worker │ no event yet$/mu,
+      /^luna-high 1m3\d+s \$– my worker │ working · no event yet$/mu,
     );
   });
 
@@ -459,6 +563,71 @@ describe("statusline Run row", () => {
     expect(line).not.toMatch(/\$\d/u);
   });
 
+  test("Run activity comes from the vendor Codex rollout", async () => {
+    const session = "fixture-run-activity";
+    const cwd = "/home/fuyu/dotfiles-ws-hooksearch";
+    const day = Temporal.Now.plainDateISO();
+    const rolloutDir = join(
+      scratch,
+      ".codex",
+      "sessions",
+      String(day.year),
+      String(day.month).padStart(2, "0"),
+      String(day.day).padStart(2, "0"),
+    );
+    mkdirSync(rolloutDir, { recursive: true });
+    const fixture = readFileSync(
+      join(import.meta.dir, "fixtures", "codex-rollout-run-activity.jsonl"),
+      "utf8",
+    );
+    writeFileSync(
+      join(rolloutDir, `rollout-fixture-${session}.jsonl`),
+      `${JSON.stringify({
+        type: "session_meta",
+        payload: {
+          id: session,
+          session_id: session,
+          cwd,
+          timestamp: "2026-10-14T04:01:00Z",
+        },
+      })}\n${fixture}`,
+    );
+    const line = (
+      await render(
+        undefined,
+        undefined,
+        SESSION,
+        JSON.stringify([
+          {
+            id: "run-activity",
+            ticket: "rollout worker",
+            state: "running",
+            row: "luna-high",
+            exit: null,
+            cwd,
+            workspace: cwd,
+            writes: [],
+            judgment: null,
+            report_path: null,
+            dispatcher_session: SESSION,
+            vendor_session: null,
+            started_at: "2026-10-14T04:01:00Z",
+            continues: null,
+            verify: [],
+            last_progress_path: null,
+          },
+        ]),
+        undefined,
+        scratch,
+      )
+    )
+      .split("\n")
+      .find((value) => value.startsWith("luna-high "));
+    expect(line).toContain("editing tools/shared/src/shape.t");
+    expect(line).not.toContain("\\n");
+    expect(line).toContain("2 cmd · 1 files");
+  });
+
   test("a display ID replaces the session ID while legacy markers keep their session ID", async () => {
     const dir = join(scratch, "display-id-row");
     marker(
@@ -478,7 +647,7 @@ describe("statusline Run row", () => {
     );
     const out = await render(dir);
     expect(out).toMatch(
-      /^luna-high 1m3\ds \$– agt_lfix Repo: dotfiles │ \$ bun test/mu,
+      /^luna-high 1m3\ds \$– 0191\.\.abcd Repo: dotfiles │ working · \$ bun test/mu,
     );
 
     const legacyDir = join(scratch, "legacy-session-row");
@@ -504,7 +673,7 @@ describe("statusline Run row", () => {
     );
     const out = await render(dir);
     expect(out).toMatch(
-      /^sol-max 1m3\d+s \$– resume: J1 gated commit │ no event yet$/mu,
+      /^sol-max 1m3\d+s \$– resume: J1 gated commit │ working · no event yet$/mu,
     );
     expect(out).not.toContain("in other sessions");
   });
@@ -550,7 +719,9 @@ describe("statusline Run row", () => {
     );
     marker(dir, "dead-none", 2_147_483_000, "dead none", 70, null);
     const out = await render(dir);
-    expect(out).toMatch(/^luna-high 1m3\d+s \$– my worker │ no event yet$/mu);
+    expect(out).toMatch(
+      /^luna-high 1m3\d+s \$– my worker │ working · no event yet$/mu,
+    );
     expect(
       out
         .split("\n")
@@ -571,7 +742,7 @@ describe("statusline Run row", () => {
     expect(out).not.toMatch(/in other sessions|unattributed|stale/u);
   });
 
-  test("both migration directories count a duplicate run_id once and read local progress", async () => {
+  test("legacy active directories no longer supply Run rows", async () => {
     const base = join(scratch, "migration");
     const current = join(base, "agx");
     const legacy = join(base, "agent-router");
@@ -593,21 +764,17 @@ describe("statusline Run row", () => {
       progress("$ legacy progress", 1),
     );
     const out = await render(undefined, base);
-    expect(
-      out.split("\n").filter((line) => line.startsWith("luna-high ")),
-    ).toHaveLength(2);
-    expect(out).toContain("current copy");
+    expect(out.split("\n").some((line) => line.startsWith("luna-high "))).toBe(
+      false,
+    );
+    expect(out).not.toContain("current copy");
     expect(out).not.toContain("legacy copy");
-    expect(out).toContain("$ legacy progress");
-    expect(out).toContain("+1 in other sessions");
-    expect(out).toContain("unattributed 1");
-    expect(out).toContain("stale 1");
   });
 
   test("the legacy directory is read when the new directory is absent", async () => {
     const base = join(scratch, "legacy-only");
     marker(join(base, "agent-router"), "legacy", process.pid, "legacy only");
-    expect(await render(undefined, base)).toContain("legacy only");
+    expect(await render(undefined, base)).not.toContain("legacy only");
   });
 
   test("several workers: one line each, longest-running first", async () => {
@@ -617,10 +784,10 @@ describe("statusline Run row", () => {
     const lines = (await render(dir)).split("\n");
     const at = lines.findIndex((l) => l.startsWith("luna-high "));
     expect(lines[at]).toMatch(
-      /^luna-high 10m0\ds \$– long one +│ no event yet$/u,
+      /^luna-high 10m0\ds \$– long one +│ working · no event yet$/u,
     );
     expect(lines[at + 1]).toMatch(
-      /^luna-high +0m3\ds \$– short one │ no event yet$/u,
+      /^luna-high +0m3\ds \$– short one │ working · no event yet$/u,
     );
   });
 
@@ -687,7 +854,7 @@ describe("statusline Run row", () => {
       progress("$ bun test kernel.test.ts", 2),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– nothrow-0 │ \$ bun test kernel\.test\.ts · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$– nothrow-0 │ working · \$ bun test kernel\.test\.ts · 12 cmd · 3 files$/mu,
     );
     // a quiet worker (reasoning) is shown with the age of its last event, not as if it were live
     writeFileSync(
@@ -695,7 +862,7 @@ describe("statusline Run row", () => {
       progress("✎ kernel.ts", 125),
     );
     expect(await render(dir)).toMatch(
-      /│ ✎ kernel\.ts \(2m0\ds ago\) · 12 cmd · 3 files$/mu,
+      /│ working · ✎ kernel\.ts \(2m0\ds ago\) · 12 cmd · 3 files$/mu,
     );
     // the progress file is never mistaken for a second worker
     expect(
@@ -712,7 +879,7 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "01a1111b-7dab-7d61-8f9b-231c4cc9568a"),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– 01a1\.\.568a nothrow-1 │ \$ ls · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$– 01a1\.\.568a nothrow-1 │ working · \$ ls · 12 cmd · 3 files$/mu,
     );
   });
 
@@ -783,7 +950,7 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "01a11a74-cd83-7de1-b627-16537d8de67d"),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– 01a1\.\.e67d resume: continued worker │ \$ ls · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$– 01a1\.\.e67d resume: continued worker │ working · \$ ls · 12 cmd · 3 files$/mu,
     );
   });
 
@@ -950,22 +1117,44 @@ describe("statusline Run row", () => {
           id: "run-1",
           ticket: "t20arch",
           state: "running",
+          row: "luna-high",
+          exit: null,
+          cwd: scratch,
+          workspace: scratch,
+          writes: [],
+          judgment: null,
+          report_path: null,
+          verify: [],
+          last_progress_path: null,
+          continues: null,
+          vendor_session: null,
           dispatcher_session: "dispatcher-short",
         },
         {
           id: "run-2",
           ticket: "integrev",
           state: "running",
+          row: "luna-high",
+          exit: null,
+          cwd: scratch,
+          workspace: scratch,
+          writes: [],
+          judgment: null,
+          report_path: null,
+          verify: [],
+          last_progress_path: null,
+          continues: null,
+          vendor_session: null,
           dispatcher_session: "dispatcher-short",
         },
       ]),
     );
-    expect(out).toContain("Job: 2 (t20arch, integrev)");
-    expect(out).toContain("architecture");
-    expect(out).toContain("integration review");
+    expect(out).not.toContain("Job: 2 (t20arch, integrev)");
+    expect(out).not.toContain("architecture");
+    expect(out).not.toContain("integration review");
   });
 
-  test("Job counts only running agx records owned by this session", async () => {
+  test("Job ignores agx records; its source is the compute process scan", async () => {
     const dir = join(scratch, "records-job-count");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "records.jsonl"), "fixture records\n");
@@ -979,28 +1168,150 @@ describe("statusline Run row", () => {
           ticket: "a",
           state: "running",
           dispatcher_session: "dispatcher-short",
+          row: "luna-high",
+          exit: null,
+          cwd: scratch,
+          workspace: scratch,
+          writes: [],
+          judgment: null,
+          report_path: null,
+          verify: [],
+          last_progress_path: null,
+          continues: null,
+          vendor_session: null,
         },
         {
           id: "b-id",
           ticket: "b",
           state: "running",
           dispatcher_session: "dispatcher-short",
+          row: "luna-high",
+          exit: null,
+          cwd: scratch,
+          workspace: scratch,
+          writes: [],
+          judgment: null,
+          report_path: null,
+          verify: [],
+          last_progress_path: null,
+          continues: null,
+          vendor_session: null,
         },
         {
           id: "other-id",
           ticket: "other",
           state: "running",
           dispatcher_session: "elsewhere",
+          row: "luna-high",
+          exit: null,
+          cwd: scratch,
+          workspace: scratch,
+          writes: [],
+          judgment: null,
+          report_path: null,
+          verify: [],
+          last_progress_path: null,
+          continues: null,
+          vendor_session: null,
         },
         {
           id: "ended-id",
           ticket: "ended",
           state: "ended",
           dispatcher_session: "dispatcher-short",
+          row: "luna-high",
+          exit: 0,
+          cwd: scratch,
+          workspace: scratch,
+          writes: [],
+          judgment: null,
+          report_path: null,
+          verify: [],
+          last_progress_path: null,
+          continues: null,
+          vendor_session: null,
         },
       ]),
     );
-    expect(out).toContain("Job: 2 (a, b)");
+    expect(out).not.toContain("Job: 2 (a, b)");
+  });
+
+  test("Job displays admitted compute jobs and orphans only", async () => {
+    const out = await render(
+      join(scratch, "job-compute-only"),
+      undefined,
+      undefined,
+      "[]",
+      "1 00:10:00 agent-resource-run --manifest /tmp/compute.resource.json\n1 00:02:00 /tmp/scratchpad/orphan",
+      join(scratch, "job-home"),
+    );
+    expect(out).toContain("Job: compute 10m00s orphan×1");
+    expect(out).not.toContain("agx");
+  });
+
+  test("agx ls rows without started_at show explicit n/a elapsed", async () => {
+    const out = await render(
+      join(scratch, "missing-start-time"),
+      undefined,
+      SESSION,
+      JSON.stringify([
+        {
+          id: "run-no-start",
+          ticket: "worker without time",
+          state: "running",
+          row: "luna-high",
+          exit: null,
+          cwd: scratch,
+          workspace: scratch,
+          writes: [],
+          judgment: null,
+          report_path: null,
+          dispatcher_session: SESSION,
+          vendor_session: null,
+          last_progress_path: null,
+          continues: null,
+          verify: [],
+        },
+      ]),
+    );
+    expect(out).toMatch(
+      /^luna-high n\/a \$– worker without time │ working · no event yet$/mu,
+    );
+  });
+
+  test("ended rows with completed verify receipts do not render as live runs", async () => {
+    const stateDir = join(scratch, "ended-row-state");
+    mkdirSync(stateDir, { recursive: true });
+    const out = await render(
+      stateDir,
+      undefined,
+      SESSION,
+      JSON.stringify([
+        {
+          id: "run-ended-verify",
+          ticket: "finished worker",
+          state: "ended",
+          row: "luna-high",
+          exit: 0,
+          cwd: scratch,
+          workspace: scratch,
+          writes: [],
+          judgment: null,
+          report_path: null,
+          dispatcher_session: SESSION,
+          vendor_session: null,
+          started_at: Temporal.Now.instant().toString(),
+          continues: null,
+          verify: [
+            { cmd: "bun test tools/agx", exit: 0, log_path: "/tmp/verify.log" },
+          ],
+          last_progress_path: null,
+        },
+      ]),
+    );
+    expect(out).not.toMatch(/^luna-high /mu);
+    expect(out).not.toContain("verifying");
+    expect(out).not.toContain("stale ");
   });
 
   test("agx ls output is reused while records path, mtime and size stay fixed", async () => {
@@ -1022,6 +1333,18 @@ describe("statusline Run row", () => {
           id: "a-id",
           ticket: "a",
           state: "running",
+          row: "luna-high",
+          exit: null,
+          cwd: scratch,
+          workspace: scratch,
+          writes: [],
+          judgment: null,
+          report_path: null,
+          vendor_session: null,
+          started_at: Temporal.Now.instant().toString(),
+          continues: null,
+          verify: [],
+          last_progress_path: null,
           dispatcher_session: "dispatcher-short",
         },
       ]),

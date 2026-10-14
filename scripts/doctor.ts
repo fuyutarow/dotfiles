@@ -1193,7 +1193,7 @@ export async function checkCodexRuntime(ctx: Ctx): Promise<Finding> {
   if (r.code === 0)
     return pass(
       "codex-runtime",
-      "WSL plain codex uses Homebrew while explicit codex.exe uses Windows Desktop with separate config homes",
+      "WSL plain codex uses the Homebrew cask while explicit codex.exe uses Windows Desktop with separate config homes",
     );
   const [firstLine = ""] = (r.out + r.err).trim().split("\n");
   const detail =

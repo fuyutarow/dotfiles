@@ -20,7 +20,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 - **Editor**: VS Code — `e` / `ee` open it (on WSL via the Remote-WSL launcher, see `zsh/zprofile.wsl`).
   Cursor was retired 2026-07-14; do not reintroduce it.
 - **Codex provider**: macOS and ordinary Linux retain the standalone CLI for plain `codex`; WSL
-  declares its Homebrew CLI in `Brewfile.core`. On WSL, `codex.exe` is the separate runtime-owned
+  declares its Homebrew cask in `Brewfile.core`. On WSL, `codex.exe` is the separate runtime-owned
   facade to Windows Desktop and its Windows config home; never replace the Herdr `codex` function
   with it.
 
@@ -88,7 +88,7 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    `~/.config/jj/config.toml` are **tool-owned** real files (the repo's halves are linked to
    `~/.config/git/config` and `~/.config/jj/conf.d/dotfiles.toml`).
    Tool tiers live in `Brewfile.core` and `Brewfile.ondemand`; root `Brewfile` evaluates their
-   union. `tools/tool-tiers/src/tool-commands.tsv` is the single formula-to-command map used by lookup, audit,
+   union. `tools/tool-tiers/src/tool-commands.tsv` is the single package-to-command map used by lookup, audit,
    doctor and zsh's missing-command hint. Repo tasks live ONLY in `mise.toml` — this repo has NO justfile
    (retired); never reintroduce one.
 4. `zsh/mac.zsh` / `zsh/wsl.zsh` load **after** the common aliases, so they may override.

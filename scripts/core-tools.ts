@@ -1,4 +1,4 @@
-// Brewfile.core owns the formula list; tools/tool-tiers owns its command map and this module checks prefixes.
+// Brewfile.core owns the package list; tools/tool-tiers owns its command map and this module checks prefixes.
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { hostname, homedir, release } from "node:os";
@@ -21,8 +21,15 @@ export async function coreCommands(
   const names = (await Bun.file(join(root, "Brewfile.core")).text())
     .split("\n")
     .flatMap((line) => {
-      const name = /^\s*brew "([^"]+)"/u.exec(line)?.[1]?.split("/").at(-1);
-      if (name === undefined || (name === "codex" && !isWsl)) return [];
+      const match = /^\s*(brew|cask) "([^"]+)"/u.exec(line);
+      const kind = match?.[1];
+      const name = match?.[2]?.split("/").at(-1);
+      if (
+        name === undefined ||
+        (name === "codex" && !isWsl) ||
+        (kind === "cask" && !commandMap.has(name))
+      )
+        return [];
       return commandsForFormula(name, commandMap);
     });
   return [...new Set(names)];

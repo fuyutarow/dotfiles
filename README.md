@@ -224,7 +224,7 @@ cd ~/dotfiles && brew install mise && mise run wsl:init
 exec zsh
 ```
 
-On WSL, `Brewfile.core` declares the Homebrew `codex` formula. Install the Windows Codex Desktop
+On WSL, `Brewfile.core` declares the Homebrew `codex` cask. Install the Windows Codex Desktop
 app too, then run `mise run install:ai-clis` from the WSL checkout to deploy explicit `codex.exe`.
 The task keeps Claude native to WSL, retains the two distinct config homes, and retires only its
 old managed plain-Codex facade. macOS and ordinary Linux retain the standalone Codex installer.

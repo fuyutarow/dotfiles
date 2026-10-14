@@ -14,7 +14,7 @@ function auditCommand(declaration: ToolDeclaration): boolean {
   const installed = Bun.which(declaration.command) !== null;
   const status = installed ? "✅" : "❌";
   process.stdout.write(
-    `${status} ${declaration.command} (${declaration.tier} ${declaration.formula})\n`,
+    `${status} ${declaration.command} (${declaration.tier} ${declaration.kind} ${declaration.package})\n`,
   );
   return !installed;
 }
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
       parameters: ["<action>", "[command]"],
       help: {
         description:
-          "Look up declared Homebrew tools or install one declared formula on first need.",
+          "Look up declared Homebrew tools or install one declared formula or cask on first need.",
       },
     },
     undefined,
@@ -55,7 +55,7 @@ async function main(): Promise<void> {
       .map(({ command: name }) => name);
     process.stdout.write("---\n");
     if (missing.length === 0)
-      process.stdout.write("All formula tools installed.\n");
+      process.stdout.write("All declared Homebrew commands installed.\n");
     else
       process.stdout.write(
         `${missing.length} missing; use mise run tool:get <cmd>.\n`,
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
     process.stdout.write(
       declaration === undefined
         ? `${command} undeclared\n`
-        : `${command} ${declaration.tier} ${declaration.formula}\n`,
+        : `${command} ${declaration.tier} ${declaration.kind} ${declaration.package}\n`,
     );
     return;
   }
@@ -89,18 +89,18 @@ async function main(): Promise<void> {
   }
   if (result.status === "present") {
     process.stdout.write(
-      `${command} is already installed (${result.declaration.tier} ${result.declaration.formula})\n`,
+      `${command} is already installed (${result.declaration.tier} ${result.declaration.kind} ${result.declaration.package})\n`,
     );
     return;
   }
   if (result.status === "installed") {
     process.stdout.write(
-      `installed ${command} (${result.declaration.tier} ${result.declaration.formula})\n`,
+      `installed ${command} (${result.declaration.tier} ${result.declaration.kind} ${result.declaration.package})\n`,
     );
     return;
   }
   process.stderr.write(
-    `brew install ${result.declaration.formula} failed (exit ${result.exitCode})\n`,
+    `brew install ${result.declaration.kind === "cask" ? `--cask ${result.declaration.package}` : result.declaration.package} failed (exit ${result.exitCode})\n`,
   );
   process.exitCode = 1;
 }

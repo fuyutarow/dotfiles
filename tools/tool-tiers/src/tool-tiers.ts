@@ -17,7 +17,8 @@ export type ToolHost = {
 export type ToolDeclaration = {
   command: string;
   tier: ToolTier;
-  formula: string;
+  kind: BrewEntry["kind"];
+  package: string;
 };
 export type ToolGetResult =
   | { status: "undeclared" }
@@ -111,10 +112,11 @@ export async function toolDeclaration(
     const entry = entries.find(
       (candidate) =>
         candidate.tier === tier &&
-        candidate.kind === "formula" &&
+        (candidate.kind === "formula" || commandMap.has(candidate.name)) &&
         commandsForFormula(candidate.name, commandMap).includes(command),
     );
-    if (entry !== undefined) return { command, tier, formula: entry.name };
+    if (entry !== undefined)
+      return { command, tier, kind: entry.kind, package: entry.name };
   }
   return undefined;
 }
@@ -128,12 +130,13 @@ export async function declaredToolCommands(
   const declarations: ToolDeclaration[] = [];
   const seen = new Set<string>();
   const mapped = entries
-    .filter((entry) => entry.kind === "formula")
+    .filter((entry) => entry.kind === "formula" || commandMap.has(entry.name))
     .flatMap((entry) =>
       commandsForFormula(entry.name, commandMap).map((command) => ({
         command,
         tier: entry.tier,
-        formula: entry.name,
+        kind: entry.kind,
+        package: entry.name,
       })),
     );
   for (const declaration of mapped) {
@@ -150,7 +153,7 @@ export async function getTool(
   options: {
     host?: ToolHost;
     isInstalled?: (command: string) => boolean;
-    install?: (formula: string) => Promise<number>;
+    install?: (kind: BrewEntry["kind"], packageName: string) => Promise<number>;
   } = {},
 ): Promise<ToolGetResult> {
   const declaration = await toolDeclaration(root, command, options.host);
@@ -160,9 +163,11 @@ export async function getTool(
   if (isInstalled(command)) return { status: "present", declaration };
   const install =
     options.install ??
-    (async (formula: string) =>
-      (await Bun.$`brew install ${formula}`.nothrow()).exitCode);
-  const exitCode = await install(declaration.formula);
+    (async (kind, packageName) =>
+      kind === "cask"
+        ? (await Bun.$`brew install --cask ${packageName}`.nothrow()).exitCode
+        : (await Bun.$`brew install ${packageName}`.nothrow()).exitCode);
+  const exitCode = await install(declaration.kind, declaration.package);
   return exitCode === 0
     ? { status: "installed", declaration }
     : { status: "failed", declaration, exitCode };

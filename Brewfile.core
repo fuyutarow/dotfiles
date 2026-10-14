@@ -3,7 +3,7 @@
 # Linux uses /home/linuxbrew/.linuxbrew; LAND_HOSTS declares ~/.linuxbrew on no-root hosts.
 # Prefer bottles at the standard prefix; source builds (including herdr) are allowed.
 # Experiment toolchains belong to each repo's mise.toml; no global mise [tools].
-# Command-path checks use tools/tool-tiers/src/tool-commands.tsv and normalize qualified formula names.
+# Command-path checks use tools/tool-tiers/src/tool-commands.tsv and normalize qualified package names.
 
 brew "bat"          # better cat (alias: p)
 brew "eza"          # better ls (l, ll, la)
@@ -24,10 +24,10 @@ brew "sccache"      # cargo's compiler cache — RUSTC_WRAPPER=sccache is set un
 brew "fnox"         # secrets: Keychain (mac), age files elsewhere — scripts/secrets-push.ts fills a box
 # fnox uses age-encrypted files on WSL; keep its provider available on every host.
 brew "age"
-# WSL alone uses Homebrew for unqualified `codex`; macOS and ordinary Linux retain their
-# standalone installer. Probe procfs so SSH/herdr WSL sessions work too.
+# WSL alone uses the Homebrew Codex cask for unqualified `codex`; macOS and ordinary Linux
+# retain their standalone installer. Probe procfs so SSH/herdr WSL sessions work too.
 if OS.linux? && File.read("/proc/sys/kernel/osrelease").match?(/microsoft/iu)
-  brew "codex"
+  cask "codex"
 end
 # A nonstandard Linux prefix would build core Bun/WebKit from source. The vendor's official
 # Homebrew tap installs a verified release instead; Homebrew Bundle also owns its bunx alias.

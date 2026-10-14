@@ -140,6 +140,21 @@ test("command count includes extra runtime entrypoints", async () => {
   ]);
 });
 
+test("WSL core command inventory includes the Homebrew Codex cask", async () => {
+  const root = fixture();
+  const prefix = join(root, "brew");
+  mkdirSync(join(prefix, "bin"), { recursive: true });
+  exe(join(prefix, "bin/brew"));
+  exe(join(prefix, "bin/codex"));
+  writeFileSync(
+    join(root, "Brewfile.core"),
+    'if OS.linux? && File.read("/proc/sys/kernel/osrelease").match?(/microsoft/iu)\n  cask "codex"\nend\n',
+  );
+  expect(await coreCommands(root, { isWsl: true })).toEqual(["codex"]);
+  expect(corePathProblems(["codex"], prefix, join(prefix, "bin"))).toEqual([]);
+  expect(await coreCommands(root, { isWsl: false })).toEqual([]);
+});
+
 test("conditional Bun providers retain one pair of Homebrew runtime commands", async () => {
   const root = fixture();
   writeFileSync(

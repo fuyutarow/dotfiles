@@ -1,4 +1,4 @@
-# formula<TAB>space-separated commands; '-' means the formula has no direct command entrypoint.
+# package<TAB>space-separated commands; '-' means no direct command entrypoint.
 coreutils	-
 git-delta	delta
 git-lfs	git-lfs
@@ -13,3 +13,4 @@ poppler	pdftoppm pdfinfo
 wl-clipboard	wl-copy wl-paste
 bubblewrap	bwrap
 texlive	bibtex chktex kpsewhich latexmk lualatex tlmgr
+codex	codex

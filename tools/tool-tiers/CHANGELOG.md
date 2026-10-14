@@ -1,5 +1,5 @@
 # Changelog
 
-## 0.1.0 — 2026-10-14
+## 0.1.1 — 2026-10-14
 
-- Add the core/on-demand tool lookup, first-need installer and command audit.
+- Map the WSL Codex cask to its `codex` command, include casks in tier lookup, and install missing declared casks with `brew install --cask`.

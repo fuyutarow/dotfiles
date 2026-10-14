@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import { LINKS } from "../config-registry.ts";
 import { RENDER_INPUTS } from "../render-source.ts";
 
-test("commit candidate retires a hook before deployment, but refuses an unselected declaration update", async () => {
+test("candidate render includes imported siblings and refuses an unselected declaration update", async () => {
   const root = mkdtempSync(join(tmpdir(), "live-refs-commit-fixture-"));
   using _cleanup = {
     [Symbol.dispose]: () => {
@@ -48,6 +48,8 @@ test("commit candidate retires a hook before deployment, but refuses an unselect
   }
   const settings = "agents/claude/settings.json";
   const retired = "agents/claude/hooks/retired.ts";
+  const narrow = "tools/shared/src/narrow.ts";
+  const shape = "tools/shared/src/shape.ts";
   const oldSettings = JSON.stringify({
     hooks: {
       PreToolUse: [
@@ -79,6 +81,25 @@ test("commit candidate retires a hook before deployment, but refuses an unselect
   cpSync(base, rev, { recursive: true });
   rmSync(join(rev, retired));
   writeFileSync(join(rev, settings), "{}");
+  const narrowSource = readFileSync(join(rev, narrow), "utf8");
+  const narrowWithSibling = narrowSource.replace(
+    [
+      "export function arr(v: unknown): readonly unknown[] | undefined {",
+      "  return Array.isArray(v) ? v : undefined;",
+      "}",
+    ].join("\n"),
+    'export { arr } from "./shape.ts";',
+  );
+  expect(narrowWithSibling).not.toBe(narrowSource);
+  writeFileSync(join(rev, narrow), narrowWithSibling);
+  writeFileSync(
+    join(rev, shape),
+    [
+      "export function arr(v: unknown): readonly unknown[] | undefined {",
+      "  return Array.isArray(v) ? v : undefined;",
+      "}",
+    ].join("\n"),
+  );
   const fake = join(bin, "jj");
   writeFileSync(
     fake,
@@ -119,7 +140,7 @@ else process.exit(2);
     ]);
     return { out, err, exit };
   };
-  const consistent = await run([retired, settings]);
+  const consistent = await run([retired, settings, narrow, shape]);
   expect(consistent.exit, consistent.err).toBe(0);
   expect(consistent.out).toContain("PASS");
   expect(readFileSync(join(home, ".claude/settings.json"), "utf8")).toBe(

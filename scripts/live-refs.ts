@@ -15,7 +15,15 @@ import {
   rmSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  dirname,
+  isAbsolute,
+  join,
+  posix,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
@@ -23,6 +31,7 @@ import { LINKS, type When } from "./config-registry.ts";
 import {
   jjContext,
   jjCandidate,
+  jjContent,
   jjExport,
   selected,
   type JjPrecommit,
@@ -385,22 +394,82 @@ export function candidateFindings(
     },
   };
   const entries = jjCandidate(context);
-  // Liveness needs existence, not file contents. Export only render inputs and manifests.
+  const copied = new Map(
+    [...entries].filter(
+      ([path]) =>
+        selected(RENDER_INPUTS, path) || path.endsWith("package.json"),
+    ),
+  );
+  const candidates = new Set(entries.keys());
+  const pending = [...copied.keys()].filter((path) =>
+    /\.(?:[cm]?[jt]sx?)$/u.test(path),
+  );
+  const resolveCandidateImport = (
+    importer: string,
+    specifier: string,
+  ): string | undefined => {
+    if (!specifier.startsWith(".")) return undefined;
+    const target = posix.normalize(
+      posix.join(posix.dirname(importer), specifier),
+    );
+    if (target.startsWith("../") || target === ".." || target.startsWith("/"))
+      return undefined;
+    const options =
+      posix.extname(target) !== ""
+        ? [target]
+        : [
+            target,
+            `${target}.ts`,
+            `${target}.tsx`,
+            `${target}.mts`,
+            `${target}.cts`,
+            `${target}.js`,
+            `${target}.jsx`,
+            `${target}.mjs`,
+            `${target}.cjs`,
+            `${target}.json`,
+            `${target}/index.ts`,
+            `${target}/index.tsx`,
+            `${target}/index.mts`,
+            `${target}/index.cts`,
+            `${target}/index.js`,
+            `${target}/index.jsx`,
+            `${target}/index.mjs`,
+            `${target}/index.cjs`,
+          ];
+    return options.find((path) => candidates.has(path));
+  };
+  const includeImports = (importer: string, source: string): void => {
+    const imports = source.matchAll(
+      /\b(?:import|export)\s+(?:type\s+)?[\w$*{},\s]*?\s+from\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)/gu,
+    );
+    for (const item of imports) {
+      const dependency = resolveCandidateImport(
+        importer,
+        item[1] ?? item[2] ?? item[3] ?? "",
+      );
+      if (dependency === undefined || copied.has(dependency)) continue;
+      const dependencyRevision = entries.get(dependency);
+      if (dependencyRevision === undefined) continue;
+      copied.set(dependency, dependencyRevision);
+      if (/\.(?:[cm]?[jt]sx?)$/u.test(dependency)) pending.push(dependency);
+    }
+  };
+  for (let index = 0; index < pending.length; index++) {
+    const path = pending[index];
+    if (path === undefined) continue;
+    const revision = entries.get(path);
+    if (revision === undefined) continue;
+    const source = jjContent(context, path, revision);
+    includeImports(path, source.toString());
+  }
+  // Liveness needs existence for the rest; export candidate contents for render inputs and their imports.
   for (const path of entries.keys()) {
     const dest = join(repo, path);
     mkdirSync(dirname(dest), { recursive: true });
     writeFileSync(dest, "");
   }
-  jjExport(
-    context,
-    repo,
-    new Map(
-      [...entries].filter(
-        ([path]) =>
-          selected(RENDER_INPUTS, path) || path.endsWith("package.json"),
-      ),
-    ),
-  );
+  jjExport(context, repo, copied);
   const link = (source: string, destination: string): void => {
     const dest = join(targetHome, destination);
     if (lstatSync(dest, { throwIfNoEntry: false }) !== undefined) return;

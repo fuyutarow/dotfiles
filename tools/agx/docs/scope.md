@@ -18,7 +18,7 @@ Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` valida
 | Ticket storage, history, and amendments | Plain files plus jj | Tickets are inputs; `agx check` validates an input and does not own its history. |
 | Write exclusion between workers | jj workspaces plus rebase at land | agx only prints overlap `WARN` lines; it does not lock or block writes. |
 | Workspace creation and landing | `jj workspace` / `mise run land` | agx accepts a tree through `--cd`; it does not create or land workspaces. |
-| Durability or detach beyond the session | `systemd-run --user --unit=agx-<name> --collect -- agx run ...` | The caller chooses a service lifecycle; agx runs the worker in its current invocation. |
+| Durability or detach beyond the session | `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run ...` | The caller chooses a service lifecycle; `-E NAME` carries the dispatcher's session into the unit. |
 | CPU/GPU/RAM admission | `agent-resource-run` | Resource admission is outside agx's routing and event-recording jobs. |
 | Commits and pushes | `mise run commit` / `mise run land` | agx records worker outcomes; repository publication belongs to the repository tasks. |
 | Acceptance | A human or coordinator | Verify results are recorded facts; a human or coordinator reads them and decides acceptance. `agx judge` records the accept/reject decision and optional note; agx does not decide acceptance. |

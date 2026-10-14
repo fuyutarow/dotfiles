@@ -10,6 +10,9 @@ change type. Event `at` values are RFC 3339 timestamps. Ticket paths are positio
 Judgments use `agx judge RUN_ID accept|reject [--note TEXT]`; every `ls --json`
 `judgment.decision` is `accept`, `reject`, or `null`. A continuation
 uses `agx run TICKET.md --continue PREVIOUS_RUN_ID`.
+`agx run` records `dispatcher_session` from `--session ID`, then `AGX_DISPATCHER_SESSION`,
+`CLAUDE_CODE_SESSION_ID`, or `CODEX_SESSION_ID`; missing session context is recorded as `null`
+with a `WARN` line.
 
 Human `agx ls` shows runs newest first, limited to the last 30 by default; `agx ls --all` shows
 the full list. `agx ls --json` remains complete and preserves append/fold order.

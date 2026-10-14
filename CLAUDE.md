@@ -90,6 +90,8 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    `~/.local/share`; the `rip` shell function refuses tmpfs/ramfs graveyards. The linked
    `environment.d` declaration supplies the home-data fallback to systemd user services and
    `systemd-run --user`; `zsh/bashrc` exports both values for bash SSH commands. Bash reads the same prefix.
+   Durable `agx run` commands must pass `-E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID` to
+   `systemd-run --user`; `agx run` also accepts `--session ID` when a caller cannot forward env.
    Brewfile.core declares bun/uv for all cwd, including Claude hooks. Do not put Homebrew shellenv, plugins, prompts,
    completions, or anything that can print/hang there.
 6. **No implicit global toolchain (INV-6).** A managed tool is reachable where a config

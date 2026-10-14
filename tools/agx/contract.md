@@ -5,7 +5,7 @@ an alias for one release. The CLI has exactly five commands:
 
 | Command | Purpose |
 | --- | --- |
-| `agx run TICKET [--cd TREE] [--sandbox MODE] [--continue RUN_ID]` | Route a ticket to a roster worker, run it, and append run records. |
+| `agx run TICKET [--cd TREE] [--sandbox MODE] [--continue RUN_ID] [--session ID]` | Route a ticket to a roster worker, run it, and append run records. |
 | `agx check TICKET [--cd TREE]` | Validate a ticket and its premises without starting a worker. |
 | `agx ls [--json]` | List runs and judgments. |
 | `agx judge RUN_ID accept\|reject [--note TEXT]` | Append an acceptance or rejection judgment. |
@@ -22,10 +22,13 @@ workspace, selected roster row, write globs, judgment, report path, progress pat
 metadata. `scripts/land.ts` consumes this view alongside legacy run records when deciding whether a
 workspace has an accepted run.
 
-For a durable run on Linux, use a named transient systemd user unit:
+`dispatcher_session` uses `--session ID` first, then `AGX_DISPATCHER_SESSION`,
+`CLAUDE_CODE_SESSION_ID`, and `CODEX_SESSION_ID`. If none is available, the run records `null`
+and emits a `WARN` line. A durable systemd user unit does not inherit its caller's environment;
+forward both supported dispatcher variables explicitly:
 
 ```sh
-systemd-run --user --unit=agx-<name> --collect -- agx run TICKET.md
+systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run TICKET.md
 ```
 
 The dispatcher does not detach, amend, or create ticket stores and does not run a pre-dispatch

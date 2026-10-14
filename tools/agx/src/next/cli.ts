@@ -64,6 +64,10 @@ async function main(): Promise<void> {
             type: String,
             description: "previous agx run id to continue",
           },
+          session: {
+            type: String,
+            description: "dispatching Claude Code or Codex session id",
+          },
         },
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
@@ -76,6 +80,7 @@ async function main(): Promise<void> {
       cd: parsed.flags.cd,
       sandbox: parsed.flags.sandbox,
       continue: parsed.flags["continue"],
+      session: parsed.flags.session,
     } satisfies Flags;
     exit = await run(flags);
   } else if (commandName === "check") {

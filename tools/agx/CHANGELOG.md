@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.2.0 — 2026-10-14
+
+- Record dispatcher sessions from `--session`, `AGX_DISPATCHER_SESSION`, `CLAUDE_CODE_SESSION_ID`, or `CODEX_SESSION_ID`; warn when no session is available.
+- Forward caller session variables in durable systemd runs with `-E NAME`.
+
 ## 4.1.0 — 2026-10-14
 
 - Keep record readers forward-compatible with unknown fields, and document that required fields retain their types. Land the verify facts recorded in commit `19769560`.

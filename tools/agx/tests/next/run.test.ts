@@ -83,6 +83,8 @@ describe("agx-next run", () => {
         root,
         "--sandbox",
         "read-only",
+        "--session",
+        "flag-session",
       ],
       {
         cwd: process.cwd(),
@@ -121,7 +123,7 @@ describe("agx-next run", () => {
     ]);
     expect(started.row).toBe("luna-high");
     expect(ended.exit).toBe(0);
-    expect(started.dispatcher_session).toBe("dispatcher-session");
+    expect(started.dispatcher_session).toBe("flag-session");
     expect(started.continues).toBeNull();
     if (started.id === undefined) return;
 
@@ -160,6 +162,36 @@ describe("agx-next run", () => {
       "WARN ignored legacy ticket fields:",
     );
 
+    const codexDispatcher = Bun.spawnSync(
+      [
+        process.execPath,
+        "tools/agx/src/next/cli.ts",
+        "run",
+        ticket,
+        "--cd",
+        root,
+        "--sandbox",
+        "read-only",
+      ],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...workerEnv,
+          AGX_NEXT_STATE_DIR: state,
+          AGX_DISPATCHER_SESSION: "",
+          CLAUDE_CODE_SESSION_ID: "",
+          CODEX_SESSION_ID: "codex-session",
+        },
+        timeout: 10_000,
+      },
+    );
+    expect(codexDispatcher.exitCode).toBe(0);
+    const codexReceipt = jsonOf(z.looseObject({ id: z.string() })).safeParse(
+      codexDispatcher.stdout.toString().trim(),
+    );
+    expect(codexReceipt.success).toBe(true);
+    if (!codexReceipt.success) return;
+
     const noDispatcher = Bun.spawnSync(
       [
         process.execPath,
@@ -177,11 +209,20 @@ describe("agx-next run", () => {
           ...workerEnv,
           AGX_DISPATCHER_SESSION: "",
           CLAUDE_CODE_SESSION_ID: "",
+          CODEX_SESSION_ID: "",
         },
         timeout: 10_000,
       },
     );
     expect(noDispatcher.exitCode).toBe(0);
+    expect(
+      noDispatcher.stderr
+        .toString()
+        .split("\n")
+        .filter((line) => line.startsWith("WARN dispatcher session")),
+    ).toEqual([
+      "WARN dispatcher session is unavailable; pass --session ID or preserve CLAUDE_CODE_SESSION_ID/CODEX_SESSION_ID (systemd-run: use -E NAME).",
+    ]);
     const noDispatcherReceipt = jsonOf(
       z.looseObject({ id: z.string() }),
     ).safeParse(noDispatcher.stdout.toString().trim());
@@ -231,24 +272,28 @@ describe("agx-next run", () => {
     const noDispatcherRow = rows.find(
       (row) => row.id === noDispatcherReceipt.data.id,
     );
+    const codexRow = rows.find((row) => row.id === codexReceipt.data.id);
     expect(firstRow).toBeDefined();
     expect(secondRow).toBeDefined();
     expect(noDispatcherRow).toBeDefined();
+    expect(codexRow).toBeDefined();
     if (
       firstRow === undefined ||
       secondRow === undefined ||
-      noDispatcherRow === undefined
+      noDispatcherRow === undefined ||
+      codexRow === undefined
     )
       return;
     if (firstRow.last_progress_path === null) return;
     expect(existsSync(firstRow.last_progress_path)).toBe(true);
-    expect(firstRow.dispatcher_session).toBe("dispatcher-session");
+    expect(firstRow.dispatcher_session).toBe("flag-session");
     expect(firstRow.continues).toBeNull();
     expect(firstRow.judgment?.decision).toBe("accept");
     expect(firstRow.verify).toEqual([]);
     expect(secondRow.dispatcher_session).toBe("claude-session");
     expect(secondRow.continues).toBe(started.id);
     expect(secondRow.vendor_session).toBe("continued-vendor-1");
+    expect(codexRow.dispatcher_session).toBe("codex-session");
     expect(noDispatcherRow.dispatcher_session).toBeNull();
     expect(noDispatcherRow.continues).toBeNull();
     const rejected = Bun.spawnSync(

@@ -164,11 +164,21 @@ export async function run(flags: Flags): Promise<number> {
   const interimPath = join(runDir, "interim.jsonl");
   const agxDispatcherSession = process.env.AGX_DISPATCHER_SESSION;
   const claudeSession = process.env.CLAUDE_CODE_SESSION_ID;
+  const codexSession = process.env.CODEX_SESSION_ID;
   let dispatcher: string | null = null;
-  if (agxDispatcherSession !== undefined && agxDispatcherSession !== "")
+  const explicitSession = value(flags, "session");
+  if (explicitSession !== undefined && explicitSession !== "")
+    dispatcher = explicitSession;
+  else if (agxDispatcherSession !== undefined && agxDispatcherSession !== "")
     dispatcher = agxDispatcherSession;
   else if (claudeSession !== undefined && claudeSession !== "")
     dispatcher = claudeSession;
+  else if (codexSession !== undefined && codexSession !== "")
+    dispatcher = codexSession;
+  if (dispatcher === null)
+    process.stderr.write(
+      "WARN dispatcher session is unavailable; pass --session ID or preserve CLAUDE_CODE_SESSION_ID/CODEX_SESSION_ID (systemd-run: use -E NAME).\n",
+    );
   const workspace = resolve(cwd);
   writeFileSync(
     workerBrief,

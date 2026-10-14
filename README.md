@@ -131,6 +131,8 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    exports `GRAVEYARD` (the variable read by `rm-improved` rip) and `RIP_GRAVEYARD` (used by repo
    tools) under `$XDG_DATA_HOME` or `~/.local/share`. The `rip` function refuses tmpfs/ramfs
    graveyards; linked `environment.d` settings cover systemd user services and `systemd-run --user`.
+   For durable `agx run` dispatches, carry the caller's session with
+   `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run TICKET.md`.
    Bash SSH shells read the same prefix and export both variables. `brew shellenv` belongs in login
    profiles, never zshenv.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).

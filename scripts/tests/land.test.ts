@@ -295,6 +295,47 @@ function digest(root: string): string {
 }
 
 describe("land workspace", () => {
+  test("checks package bin targets in the workspace being landed", () => {
+    const f = fixture();
+    const packageRoot = join(f.main, "tools", "fixture-bin");
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(
+      join(packageRoot, "package.json"),
+      JSON.stringify({ bin: { "fixture-bin": "src/main.ts" } }),
+    );
+    mkdirSync(join(packageRoot, "src"), { recursive: true });
+    writeFileSync(
+      join(packageRoot, "src", "main.ts"),
+      "#!/usr/bin/env bun\nprocess.exit(0);\n",
+    );
+    chmodSync(join(packageRoot, "src", "main.ts"), 0o644);
+    f.jj(f.main, ["commit", "-m", "add non-executable fixture bin"]);
+    f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    f.jj(f.main, ["workspace", "forget", "dotfiles-arm-worker"]);
+    rmSync(f.worker, { recursive: true, force: true });
+    f.jj(f.main, [
+      "workspace",
+      "add",
+      "--name",
+      "dotfiles-arm-worker",
+      "-r",
+      "alpha",
+      f.worker,
+    ]);
+
+    chmodSync(join(f.worker, "tools", "fixture-bin", "src", "main.ts"), 0o755);
+    const result = f.land();
+
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(
+      statSync(join(f.main, "tools", "fixture-bin", "src", "main.ts")).mode &
+        0o111,
+    ).not.toBe(0);
+  });
+
   test("usehooks changes check consumers before commit and refuse hook errors", () => {
     const f = fixture();
     mkdirSync(join(f.worker, "tools/agx-usehooks/src"), { recursive: true });

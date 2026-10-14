@@ -846,9 +846,6 @@ async function main(
   const report: LandReport = { commit: "pending", push: "pending" };
   const captured = await attempt(() =>
     safeTry(async function* () {
-      const binProblems = await packageBinProblems(process.cwd());
-      if (binProblems.length > 0)
-        return reject(`package bin check failed: ${binProblems.join("; ")}`);
       if (parsed._.length !== 1 || (parsed.flags.message?.trim() ?? "") === "")
         return reject("one workspace and -m <message> are required");
       if (parsed.flags.review?.trim() === "")
@@ -898,6 +895,9 @@ async function main(
         return reject(
           "worker workspace must exist and differ from the main checkout",
         );
+      const binProblems = await packageBinProblems(workerRoot);
+      if (binProblems.length > 0)
+        return reject(`package bin check failed: ${binProblems.join("; ")}`);
       tmp = parsed.flags.dryRun
         ? mkdtempSync(join(tmpdir(), "land-preview-"))
         : undefined;

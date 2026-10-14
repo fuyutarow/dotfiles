@@ -293,6 +293,8 @@ Renting, choosing and destroying a GPU box (Vast.ai) is the `renting-cloud-gpus`
 
 All repo tasks are defined in `mise.toml` (single task runner — no justfile here):
 
+verify should include `mise run gate:land` for a change that will land in dotfiles.
+
 ```bash
 mise tasks            # list
 mise run up           # update everything (topgrade)

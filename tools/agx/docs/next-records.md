@@ -13,6 +13,7 @@ uses `agx run TICKET.md --continue PREVIOUS_RUN_ID`.
 `agx run` records `dispatcher_session` from `--session ID`, then `AGX_DISPATCHER_SESSION`,
 `CLAUDE_CODE_SESSION_ID`, or `CODEX_SESSION_ID`; missing session context is recorded as `null`
 with a `WARN` line.
+verify should include `mise run gate:land` for a change that will land in dotfiles.
 
 Human `agx ls` shows runs newest first, limited to the last 30 by default; `agx ls --all` shows
 the full list. `agx ls --json` remains complete and preserves append/fold order.

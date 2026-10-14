@@ -417,6 +417,11 @@ alias = "c"
 description = "全gate集約 (CI): fmt:check + lint + test"
 depends = ["fmt:check", "lint", "test", "usehooks:consumers"]
 
+# Single whole-tree, non-mutating check list used by tickets and hook:pre-commit.
+[tasks."gate:land"]
+description = "Whole-tree land gate: non-mutating formatting checks + lint"
+depends = ["fmt:check", "lint"]
+
 [tasks."usehooks:consumers"]
 dir = "{{config_root}}"
 description = "Read-only declared consumer typechecks against this workspace's agx-usehooks; absent consumers are SKIP"
@@ -457,8 +462,8 @@ run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json
 # lint せず、1 日で lint 違反 5 件が入った。整形後の whole-file `git add` は部分 stage の hunk も
 # 巻き込んでいた)。event の hook(post-commit / post-merge)は対応する verb が無いので run を持つ。
 [tasks."hook:pre-commit"]
-description = "The commit gate — exactly what .githooks/pre-commit runs. Depends-only over contract verbs (wiring-repositories HOOK-1). fmt:staged verifies selected jj snapshot bytes; the Git migration branch formats staged files."
-depends = ["fmt:staged", "lint"]
+description = "Commit gate: staged snapshot formatting plus the shared gate:land check list."
+depends = ["fmt:staged", "gate:land"]
 
 # 配線は tracked な core.hooksPath = .githooks(`git config core.hooksPath .githooks`)。
 [tasks."hook:post-commit"]

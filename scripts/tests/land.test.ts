@@ -394,10 +394,8 @@ describe("land workspace", () => {
       statSync(join(f.main, "tools", "fixture-bin", "src", "main.ts")).mode &
         0o111,
     ).not.toBe(0);
-    expect(result.stdout.toString()).toContain(
-      "[land] NOT LIVE until: mise run deploy (changed: tools/fixture-bin/src/main.ts)",
-    );
-    expect(result.stdout.toString()).toContain("[land] summary: NOT LIVE");
+    expect(result.stdout.toString()).not.toContain("[land] NOT LIVE until:");
+    expect(result.stdout.toString()).toContain("[land] summary: ok");
   });
 
   test("usehooks changes check consumers before commit and refuse hook errors", () => {

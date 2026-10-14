@@ -18,17 +18,45 @@ test("land verdict covers only its commit and push", () => {
   expect(landExit({ commit: "ok", push: "failed" })).toBe(1);
 });
 
-test("land liveness distinguishes package bins, hook sources and plain docs", () => {
-  expect(
-    landLiveness(["tools/agx/src/cli.ts"], ["tools/agx/src/cli.ts"]),
-  ).toEqual({ live: false, deployPaths: ["tools/agx/src/cli.ts"] });
-  expect(landLiveness(["tools/agx/package.json"], [])).toEqual({
-    live: false,
-    deployPaths: ["tools/agx/package.json"],
+test("land liveness follows checkout links and package bin map changes", () => {
+  expect(landLiveness(["tools/repo-retrieve/src/repo-retrieve.ts"])).toEqual({
+    live: true,
+    deployPaths: [],
   });
-  expect(landLiveness(["agents/hooks/attempt.ts"], [])).toEqual({
+  expect(landLiveness(["tools/repo-retrieve/package.json"])).toEqual({
+    live: true,
+    deployPaths: [],
+  });
+  expect(
+    landLiveness(
+      ["tools/repo-retrieve/package.json"],
+      ["tools/repo-retrieve/package.json"],
+    ),
+  ).toEqual({
     live: false,
-    deployPaths: ["agents/hooks/attempt.ts"],
+    deployPaths: ["tools/repo-retrieve/package.json"],
+  });
+  expect(landLiveness(["agents/hooks/attempt.ts"])).toEqual({
+    live: true,
+    deployPaths: [],
+  });
+  expect(landLiveness(["agents/hooks/hooks.toml"])).toEqual({
+    live: false,
+    deployPaths: ["agents/hooks/hooks.toml"],
+  });
+  expect(landLiveness(["scripts/config-registry.ts"])).toEqual({
+    live: false,
+    deployPaths: ["scripts/config-registry.ts"],
+  });
+  expect(
+    landLiveness(
+      ["zsh/environment.d/20-new.conf"],
+      [],
+      ["zsh/environment.d/20-new.conf"],
+    ),
+  ).toEqual({
+    live: false,
+    deployPaths: ["zsh/environment.d/20-new.conf"],
   });
   expect(landLiveness(["docs/notes.md"], [])).toEqual({
     live: true,

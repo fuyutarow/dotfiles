@@ -1,6 +1,6 @@
 // Shared human/queue verdict protocol. Doctor findings are advisory deploy details.
 import { jsonOf, z } from "../agents/hooks/zod.ts";
-import { ETC_LINKS, LINKS, RENDERED, TOOL_OWNED } from "./config-registry.ts";
+import { RENDERED } from "./config-registry.ts";
 
 export const LandReportSchema = z.strictObject({
   commit: z.enum(["pending", "ok", "failed"]),
@@ -30,30 +30,29 @@ export function landSummary(report: LandReport, commit?: string): string {
   return `summary: ${status} commit=${commit ?? "none"} ${landed ? "landed and pushed" : `commit=${report.commit} push=${report.push}`}`;
 }
 
-const deployInputRoots = [
-  ...LINKS.map(([, source]) => source),
-  ...ETC_LINKS.map(([, source]) => source),
-  ...TOOL_OWNED,
-  ...RENDERED.flatMap(({ inputs }) => inputs),
-  "agents/claude/hooks",
-  "agents/codex/hooks.json",
-  "agents/hooks",
-].toSorted();
+const deployInputRoots = RENDERED.flatMap(({ inputs }) => inputs).toSorted();
 
 function isAtOrUnder(path: string, root: string): boolean {
   return path === root || path.startsWith(`${root}/`);
 }
 
-/** Returns only landed paths whose effects require `mise run deploy` to become live. */
+/** Returns landed paths whose effects require `mise run deploy` to become live.
+ * Link targets and package bin targets are read from the checkout, so their content is live
+ * immediately. Callers supply package manifests whose `bin` map changed and added/removed
+ * environment.d declarations, the cases where installation or link creation must catch up. */
 export function landDeployPaths(
   changedPaths: readonly string[],
-  packageBinTargets: readonly string[],
+  changedBinMaps: readonly string[] = [],
+  changedEnvironmentDropins: readonly string[] = [],
 ): string[] {
+  const explicitDeployPaths = new Set([
+    ...changedBinMaps,
+    ...changedEnvironmentDropins,
+  ]);
   return [...new Set(changedPaths)]
     .filter(
       (path) =>
-        path.endsWith("package.json") ||
-        packageBinTargets.includes(path) ||
+        explicitDeployPaths.has(path) ||
         deployInputRoots.some((root) => isAtOrUnder(path, root)),
     )
     .toSorted();
@@ -61,9 +60,14 @@ export function landDeployPaths(
 
 export function landLiveness(
   changedPaths: readonly string[],
-  packageBinTargets: readonly string[],
+  changedBinMaps: readonly string[] = [],
+  changedEnvironmentDropins: readonly string[] = [],
 ): { live: boolean; deployPaths: string[] } {
-  const deployPaths = landDeployPaths(changedPaths, packageBinTargets);
+  const deployPaths = landDeployPaths(
+    changedPaths,
+    changedBinMaps,
+    changedEnvironmentDropins,
+  );
   return { live: deployPaths.length === 0, deployPaths };
 }
 

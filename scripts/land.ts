@@ -15,15 +15,7 @@ import {
   writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import {
-  basename,
-  dirname,
-  extname,
-  join,
-  relative as relativePath,
-  resolve,
-  sep,
-} from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { cli } from "cleye";
 import {
   errAsync,
@@ -688,43 +680,60 @@ async function resolveWorkspace(
   return { knownNames: names };
 }
 
-async function packageBinTargets(root: string): Promise<string[]> {
-  const targets: string[] = [];
-  for await (const manifest of new Bun.Glob("**/package.json").scan({
-    cwd: root,
-    onlyFiles: true,
-  })) {
-    if (
-      ["node_modules/", ".jj/", ".git/", "archives/"].some((prefix) =>
-        manifest.startsWith(prefix),
-      )
-    )
-      continue;
-    const manifestSource = fromThrowable(
-      () => readFileSync(join(root, manifest), "utf8"),
-      errorMessage,
-    )();
-    if (manifestSource.isErr()) continue;
-    const parsed = jsonOf(
-      z.looseObject({
-        bin: z.union([z.string(), z.record(z.string(), z.string())]).optional(),
-      }),
-    ).safeParse(manifestSource.value);
-    if (!parsed.success || parsed.data.bin === undefined) continue;
-    const values =
-      typeof parsed.data.bin === "string"
-        ? [parsed.data.bin]
-        : Object.values(parsed.data.bin);
-    targets.push(
-      ...values
-        .map((target) =>
-          relativePath(root, resolve(dirname(join(root, manifest)), target)),
-        )
-        .filter((target) => target !== ".." && !target.startsWith(`..${sep}`))
-        .map((target) => target.split(sep).join("/")),
+function packageBinMap(text: string): unknown {
+  const parsed = jsonOf(z.record(z.string(), z.unknown())).safeParse(text);
+  return parsed.success ? parsed.data.bin : Symbol.for("invalid-package-json");
+}
+
+function packageBinMapDiffers(
+  oldFile: string | undefined,
+  newFile: string | undefined,
+): boolean {
+  const oldBin = oldFile === undefined ? undefined : packageBinMap(oldFile);
+  const newBin = newFile === undefined ? undefined : packageBinMap(newFile);
+  return !Bun.deepEquals(oldBin, newBin);
+}
+
+function landDeployChanges(
+  root: string,
+  changedPaths: readonly string[],
+  before: string,
+  after: string,
+): ResultAsync<
+  { changedBinMaps: string[]; changedEnvironmentDropins: string[] },
+  Error
+> {
+  return safeTry(async function* () {
+    const beforePaths = new Set(
+      (yield* jj(root, ["file", "list", "-r", before])).split("\n"),
     );
-  }
-  return targets;
+    const afterPaths = new Set(
+      (yield* jj(root, ["file", "list", "-r", after])).split("\n"),
+    );
+    const changedBinMaps: string[] = [];
+    const changedEnvironmentDropins: string[] = [];
+    for (const path of changedPaths) {
+      const packageManifest = path.endsWith("package.json");
+      const environmentDropin = path.startsWith("zsh/environment.d/");
+      if (!packageManifest && !environmentDropin) continue;
+      const existedBefore = beforePaths.has(path);
+      const existsAfter = afterPaths.has(path);
+      if (environmentDropin && existedBefore !== existsAfter) {
+        changedEnvironmentDropins.push(path);
+        continue;
+      }
+      if (!packageManifest) continue;
+      const oldFile = existedBefore
+        ? yield* jj(root, ["file", "show", "-r", before, path])
+        : undefined;
+      const newFile = existsAfter
+        ? yield* jj(root, ["file", "show", "-r", after, path])
+        : undefined;
+      if (packageManifest && packageBinMapDiffers(oldFile, newFile))
+        changedBinMaps.push(path);
+    }
+    return ok({ changedBinMaps, changedEnvironmentDropins });
+  });
 }
 
 function paths(
@@ -1139,9 +1148,16 @@ async function main(
       report.push = "ok";
       emit(`[land] push: ok ${parsed.flags.dryRun ? "preview" : commit}`);
       if (!parsed.flags.dryRun) {
+        const deployChanges = yield* landDeployChanges(
+          mainRoot,
+          changed,
+          alpha,
+          commit ?? "alpha",
+        );
         const liveness = landLiveness(
           changed,
-          await packageBinTargets(mainRoot),
+          deployChanges.changedBinMaps,
+          deployChanges.changedEnvironmentDropins,
         );
         report.live = liveness.live;
         if (!liveness.live)

@@ -9,7 +9,8 @@
 //   rendered    scripts/render-home.ts           ~/.claude/settings.json, ~/.codex/hooks.json and
 //                                                ~/.claude/CLAUDE.md == a fresh render
 //   skills      scripts/skills-doctor.ts         no shadowed skill, wiring + ledger intact
-//   brew        Brewfile                         `brew bundle check` — declared tools installed
+//   brew        Brewfile.core                    core tools installed on every OS
+//   brew-ondemand Brewfile.ondemand              on-demand formulas and casks installed (INFO only)
 //   deps        package.json + node_modules      every pinned dependency installed at its pin
 //   bins        package.json `bin`               each PATH command in ~/.bun/bin resolves here;
 //                                                no dangling link left by a renamed bin
@@ -42,7 +43,8 @@
 //   HOME          machine root      (default: os.homedir())
 //   DOCTOR_ONLY   comma list of check names to run (default: all that apply to this OS)
 //
-// Verdicts: PASS · FAIL (declared ≠ live; a `fix:` line follows) · WARN (could not be decided,
+// Verdicts: PASS · FAIL (declared ≠ live; a `fix:` line follows) · INFO (on-demand drift, no failure)
+// · WARN (could not be decided,
 // e.g. a probe timed out — never reported as PASS) · SKIP (does not apply here; the reason prints,
 // so a green run can never be mistaken for one that checked something).
 // Exit: 0 no FAIL · 1 at least one FAIL · 2 FATAL (the doctor itself broke).
@@ -91,7 +93,7 @@ import {
   RIP_GRAVEYARD_MAX_BYTES,
 } from "../tools/disk-reclaim/src/lib/graveyards.ts";
 
-type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
+type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP" | "INFO";
 export type Finding = {
   name: string;
   verdict: Verdict;
@@ -105,7 +107,7 @@ export type Ctx = {
   isMac: boolean;
   isWsl: boolean;
   mountInfo?: string;
-  /** Plain Linux carries core only; desktop extras remain in Brewfile. */
+  /** Plain Linux carries core only; on-demand tools are installed as needed. */
   isCoreBox: boolean;
 };
 
@@ -167,6 +169,11 @@ const capped = (items: string[]): string[] =>
 const pass = (name: string, detail: string): Finding => ({
   name,
   verdict: "PASS",
+  detail,
+});
+const info = (name: string, detail: string): Finding => ({
+  name,
+  verdict: "INFO",
   detail,
 });
 const skip = (name: string, detail: string): Finding => ({
@@ -491,7 +498,7 @@ export async function checkSkills(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkBrew(ctx: Ctx): Promise<Finding> {
-  const file = ctx.isMac ? "Brewfile" : "Brewfile.core";
+  const file = "Brewfile.core";
   const r = await run(
     [
       "brew",
@@ -507,7 +514,7 @@ export async function checkBrew(ctx: Ctx): Promise<Finding> {
   if (r.missing)
     return fail(
       "brew",
-      "Homebrew is required by this host's Brewfile mode but is not on PATH",
+      "Homebrew is required for core tools but is not on PATH",
       "install Homebrew (README → bootstrap), then mise run install:tools; Linux: mise run linux:migrate-brew",
     );
   if (r.timedOut) return warn("brew", "brew bundle check timed out after 180s");
@@ -519,9 +526,46 @@ export async function checkBrew(ctx: Ctx): Promise<Finding> {
     .map((l) => l.replace(/^→\s*/u, ""));
   return fail(
     "brew",
-    `${missing.length > 0 ? missing.length : "some"} Brewfile entr(y/ies) not installed`,
-    ctx.isMac ? "mise run install:tools" : "mise run linux:migrate-brew",
+    `${missing.length > 0 ? missing.length : "some"} Brewfile.core entr(y/ies) not installed`,
+    "mise run install:tools",
     missing,
+  );
+}
+
+export async function checkBrewOndemand(ctx: Ctx): Promise<Finding> {
+  const file = "Brewfile.ondemand";
+  const result = await run(
+    [
+      "brew",
+      "bundle",
+      "check",
+      "--file",
+      join(ctx.dotfiles, file),
+      "--no-upgrade",
+      "--verbose",
+    ],
+    { ms: 180_000 },
+  );
+  if (result.missing)
+    return info(
+      "brew-ondemand",
+      "Homebrew is unavailable; on-demand declarations were not checked (formulas: mise run tool:get <cmd>; casks: mise run install:tools)",
+    );
+  if (result.timedOut)
+    return warn("brew-ondemand", "brew bundle check timed out after 180s");
+  if (result.code === 0)
+    return pass(
+      "brew-ondemand",
+      "all on-demand formulas and casks are installed",
+    );
+  const missing = (result.out + result.err)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("→"))
+    .map((line) => line.replace(/^→\s*/u, ""));
+  return info(
+    "brew-ondemand",
+    `${missing.length > 0 ? missing.join(", ") : "on-demand declarations are missing"}; formulas: mise run tool:get <cmd>; casks: mise run install:tools`,
   );
 }
 
@@ -1348,7 +1392,7 @@ export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
       "no Brewfile.core in this checkout",
       "jj/git pull",
     );
-  const names = await coreCommands(ctx.dotfiles);
+  const names = await coreCommands(ctx.dotfiles, { isWsl: ctx.isWsl });
   const prefix = brewPrefix(ctx.home);
   const shell = await run(["zsh", "-lc", "cd ~; print -r -- $PATH"], {
     ms: 30_000,
@@ -1358,9 +1402,7 @@ export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
     return warn("core-tools", "cannot inspect login shell PATH");
   const path = shell.out.trim().split("\n").at(-1) ?? "";
   const missing = corePathProblems(names, prefix, path);
-  const repair = ctx.isMac
-    ? "mise run install:tools"
-    : "mise run linux:migrate-brew";
+  const repair = "mise run install:tools";
   return missing.length === 0
     ? pass(
         "core-tools",
@@ -1392,6 +1434,7 @@ export const CHECKS: Check[] = [
     run: checkBrew,
     applies: always,
   },
+  { name: "brew-ondemand", run: checkBrewOndemand, applies: always },
   {
     name: "core-tools",
     run: checkCoreTools,

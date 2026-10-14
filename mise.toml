@@ -1,6 +1,6 @@
 # Mise configuration for dotfiles management — the ONLY task runner for this repo.
 # (justfile was retired; `j`/`jl` aliases remain for per-project justfiles elsewhere.)
-# Single sources of truth: symlinks -> scripts/link-dots.ts, tools -> Brewfile,
+# Single sources of truth: symlinks -> scripts/link-dots.ts, tools -> Brewfiles,
 # tool check -> scripts/check-tools.sh.
 # 命名は wiring-mise-tasks 契約 (fmt/f fmt:check lint/l test/t up/u check/c)。この repo は
 # 言語プロジェクトでなく機械設定ゆえ setup は OS 別 init に分割:
@@ -512,18 +512,28 @@ description = "Reap ORPHANED sshd on the Windows host: the per-connection `-R` p
 run = 'bun ~/dotfiles/scripts/wsl-reap.ts'
 
 [tasks."install:tools"]
-description = "Install the full CLI toolbox (single source: Brewfile)"
+description = "Install core and on-demand Homebrew formulas and casks (Brewfile is their union)"
 run = 'brew bundle --file=~/dotfiles/Brewfile'
 
+[tasks."tool:which"]
+description = "Show whether a command is declared core, on-demand, or undeclared, and its formula when applicable"
+raw = true
+run = 'bun "${MISE_PROJECT_ROOT}/tools/tool-tiers/src/tool.ts" which'
+
+[tasks."tool:get"]
+description = "Install one declared missing formula on first need; refuses undeclared commands and does not install casks"
+raw = true
+run = 'bun "${MISE_PROJECT_ROOT}/tools/tool-tiers/src/tool.ts" get'
+
 [tasks."core:install"]
-description = "Install only the core developer utilities declared by Brewfile.core; desktop extras remain outside this selector."
+description = "Install only the core developer utilities declared by Brewfile.core; on-demand formulas and casks remain outside this selector."
 dir = "{{config_root}}"
 run = 'brew bundle --file="${MISE_PROJECT_ROOT}/Brewfile.core"'
 
 [tasks."core:doctor"]
-description = "Read-only core selection verification: core Brewfile commands, dependencies, bins, skills, MCP/Codex configuration, and the declared runtime; excludes desktop and unrelated OS services."
+description = "Read-only core selection verification: core Brewfile commands, dependencies, bins, skills, MCP/Codex configuration, and the declared runtime; excludes on-demand tools and unrelated OS services."
 dir = "{{config_root}}"
-run = "DOCTOR_ONLY=core-tools,deps,bins,skills,mcp,codex-config,codex-runtime bun scripts/doctor.ts"
+run = "DOCTOR_ONLY=brew,core-tools,deps,bins,skills,mcp,codex-config,codex-runtime bun scripts/doctor.ts"
 
 # `bun link` after the install: package.json's `bin` entries (agent-resource-run, disk-reclaim,
 # storage-headroom, statusline, serena-foreground, repo-retrieve) are this repo's PATH commands,
@@ -537,7 +547,7 @@ description = "Restore the repo's pinned Bun dependencies from bun.lock and `bun
 run = "bun install --frozen-lockfile && bun link && bun scripts/deps-prune.ts"
 
 # AI coding-agent integration: Claude through its vendor's self-updating installer; Codex through
-# its standalone installer except on WSL, where Brewfile declares the Homebrew formula. Never use
+# its standalone installer except on WSL, where Brewfile.core declares the Homebrew formula. Never use
 # bun/npm for either.
 # An npm-installed claude self-updates by shelling out to `npm view`, and on a box where npm has
 # no global version (INV-6: a toolchain exists only where a config declares it) that dies as
@@ -547,7 +557,7 @@ run = "bun install --frozen-lockfile && bun link && bun scripts/deps-prune.ts"
 # installer. This task also deploys WSL's explicit Windows Desktop `codex.exe` launcher.
 # gemini-cli dropped: Gemini is reached through agy (driving-antigravity).
 [tasks."install:ai-clis"]
-description = "Install Claude Code and the standalone Codex CLI on macOS/Linux; on WSL deploy the explicit Windows Desktop codex.exe launcher while Brewfile supplies plain codex. Never bun/npm."
+description = "Install Claude Code and the standalone Codex CLI on macOS/Linux; on WSL deploy the explicit Windows Desktop codex.exe launcher while Brewfile.core supplies plain codex. Never bun/npm."
 run = "bun scripts/install-ai-clis.ts"
 
 [tasks."mac:init"]
@@ -618,11 +628,11 @@ run = 'bun ~/dotfiles/scripts/tmux-plugins.ts'
 # no gate, no exit-1 path. `tools:` here matches the existing audit-verb idiom (reclaim:audit,
 # repos:audit): report evidence, human decides.
 [tasks."tools:audit"]
-description = "Audit recommended tools against the Brewfile (single source: scripts/check-tools.sh; install missing ones via Brewfile)"
+description = "Audit declared formula commands using the same tier lookup as tool:which and tool:get"
 run = 'bash ~/dotfiles/scripts/check-tools.sh'
 
 [tasks.doctor]
-description = "READ-ONLY: does this machine realize what the dotfiles declare? Links, rendered settings, skills wiring, Brewfile, pinned deps, PATH bins, git hooks, login shell, INV-6, MCP registrations, the smart-open ssh forward, the Edge managed policy, and the per-OS pieces — one PASS/FAIL/WARN/SKIP line each, with the repairing command on every FAIL. DOCTOR_ONLY=links,bins to narrow."
+description = "READ-ONLY: does this machine realize what the dotfiles declare? Links, rendered settings, skills wiring, core and on-demand Brewfiles, pinned deps, PATH bins, git hooks, login shell, INV-6, MCP registrations, the smart-open ssh forward, the Edge managed policy, and the per-OS pieces — one PASS/FAIL/INFO/WARN/SKIP line each, with a repair on every FAIL. DOCTOR_ONLY=links,bins to narrow."
 dir = "{{config_root}}"
 run = 'bun scripts/doctor.ts'
 
@@ -736,7 +746,7 @@ run = "bun scripts/wsl-distro.ts repair-config"
 description = "READ-ONLY resource evidence for the WSL2 guest AND the Windows host under it, in one shot, with a threshold verdict (CPU/PSI, memory, swap, guest disk, C:, vmmemWSL, spinning processes, service crashes, vhdx allocated-vs-apparent). Deletes nothing. --json for machine use; --guest/--host take ssh aliases or 'local'."
 run = 'bun ~/dotfiles/scripts/wsl-audit.ts'
 
-# The Windows half of the Brewfile. Brewfile is the single source of truth for tools on macOS and
+# The Windows half of the tool declarations. Brewfiles are the source of truth for Homebrew tools on macOS and
 # WSL; the Windows host underneath had none — 113 winget-managed packages (2026-09-11) lived only
 # on the machine. `winget export` / `winget import` give the same source-of-truth shape, so the
 # tracked file is wsl/winget.win.json and these two verbs are the plumbing. dump and restore are each

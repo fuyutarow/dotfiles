@@ -408,12 +408,18 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "all",
-    sources: ["Brewfile", "Brewfile.core"],
+    sources: [
+      "Brewfile",
+      "Brewfile.core",
+      "Brewfile.ondemand",
+      "tools/tool-tiers/src/tool-commands.tsv",
+    ],
     deployed:
-      "installed CLIs (Homebrew everywhere; LAND_HOSTS declares Linux prefixes)",
-    consumer: "every shell",
-    writer: "human, in the repo; brew bundle --file=Brewfile.core",
-    verify: `${DOCTOR} (brew) · mise run tools:audit`,
+      "Homebrew formulas and casks; core/on-demand tier declarations plus the shared formula-to-command map",
+    consumer: "every shell, tool lookup, and doctor",
+    writer:
+      "human, in the repo; brew bundle --file=Brewfile installs the union",
+    verify: `${DOCTOR} (brew, brew-ondemand, core-tools) · mise run tools:audit`,
   },
   {
     kind: "applied",
@@ -447,6 +453,7 @@ const OTHER: readonly Surface[] = [
       "tools/detect-japanese/package.json",
       "tools/statusline/package.json",
       "tools/serena-foreground/package.json",
+      "tools/tool-tiers/package.json",
       "tools/agx/package.json",
       "tools/coredev/package.json",
       "tools/shell-command/package.json",

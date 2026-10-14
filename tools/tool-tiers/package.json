@@ -1,0 +1,12 @@
+{
+  "name": "@dotfiles/tool-tiers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "tool": "src/tool.ts"
+  },
+  "dependencies": {
+    "cleye": "2.6.0"
+  }
+}

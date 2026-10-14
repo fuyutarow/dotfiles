@@ -310,6 +310,40 @@ describe("doctor", () => {
     expect(r.out).not.toContain("check crashed");
   });
 
+  test("brew-ondemand: missing Homebrew is INFO and never fails the doctor", () => {
+    const home = tmp("doctor-home-");
+    const r = doctor("brew-ondemand", {
+      HOME: home,
+      DOTFILES: REPO,
+      PATH: tmp("doctor-empty-path-"),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("INFO  brew-ondemand");
+    expect(r.out).toContain("mise run tool:get <cmd>");
+    expect(r.out).not.toMatch(/^FAIL\s/mu);
+  });
+
+  test("brew-ondemand: missing formulae and casks are one INFO line", () => {
+    const home = tmp("doctor-home-");
+    const bin = tmp("doctor-fake-brew-");
+    writeFileSync(
+      join(bin, "brew"),
+      "#!/bin/sh\nprintf '→ poppler\\n→ Cask maccy is not installed\\n'\nexit 1\n",
+    );
+    chmodSync(join(bin, "brew"), 0o755);
+    const r = doctor("brew-ondemand", {
+      HOME: home,
+      DOTFILES: REPO,
+      PATH: bin,
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("INFO  brew-ondemand");
+    expect(r.out).toContain("poppler, Cask maccy is not installed");
+    expect(r.out).toContain("mise run tool:get <cmd>");
+    expect(r.out).toContain("mise run install:tools");
+    expect(r.out).not.toMatch(/^FAIL\s/mu);
+  });
+
   test.skipIf(process.platform !== "linux")(
     "brew: a legacy runtime directory never exempts Linux from Homebrew",
     () => {

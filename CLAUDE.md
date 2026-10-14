@@ -20,14 +20,22 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 - **Editor**: VS Code — `e` / `ee` open it (on WSL via the Remote-WSL launcher, see `zsh/zprofile.wsl`).
   Cursor was retired 2026-07-14; do not reintroduce it.
 - **Codex provider**: macOS and ordinary Linux retain the standalone CLI for plain `codex`; WSL
-  declares its Homebrew CLI in `Brewfile`. On WSL, `codex.exe` is the separate runtime-owned
+  declares its Homebrew CLI in `Brewfile.core`. On WSL, `codex.exe` is the separate runtime-owned
   facade to Windows Desktop and its Windows config home; never replace the Herdr `codex` function
   with it.
 
 ### Package Managers
 
-- **System**: Homebrew (both OSes — linuxbrew on WSL). `Brewfile` is the single source of truth.
+- **System**: Homebrew (both OSes — linuxbrew on WSL). `Brewfile.core` and
+  `Brewfile.ondemand` declare the two install tiers; `Brewfile` evaluates both for a full install.
 - **Node.js**: bun (preferred). **Rust**: cargo. **Python**: pip/uv.
+
+| Install tier | Declaration | Use |
+|---|---|---|
+| core | `Brewfile.core` | Always installed; missing commands point to `mise run install:tools`. |
+| on-demand | `Brewfile.ondemand` | Install a missing formula with `mise run tool:get <cmd>`; casks use `mise run install:tools`. |
+| repo `mise.toml` | that repo's `mise.toml` | Run `mise install` in that repo. |
+| `uvx` / `bunx` | no Brewfile declaration | Run the one-shot CLI through `uvx` or `bunx`. |
 
 ## Repo Architecture — topic-first, one tool = one directory
 
@@ -39,7 +47,8 @@ their own dir, `tools/shared/`, and the reusable `tools/shell-command/` library)
 Plumbing / single sources of truth: `scripts/config-registry.ts` (EVERY config surface — source,
 deploy kind, consumer, writer, verifier; `mise run config:map` prints it, `lint:config-map` fails on
 a config file in no row), `scripts/link-dots.ts` (realizes its links, OS-aware),
-`scripts/check-tools.sh`, `Brewfile` (tools), `mise.toml` (tasks, justfile retired), `.mcp.json` (MCP).
+`Brewfile.core` + `Brewfile.ondemand` (tool tiers), `tools/tool-tiers/` (lookup CLI and formula commands),
+`scripts/check-tools.sh` (audit entrypoint), `mise.toml` (tasks, justfile retired), `.mcp.json` (MCP).
 OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` / `*.win` (or `mac.zsh` / `wsl.zsh`).
 `*.win` = the Windows HOST under WSL (read by Windows, so copied, never symlinked).
 
@@ -75,9 +84,9 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    `mise run link:dots` (the post-merge hook already does). `~/.gitconfig` and
    `~/.config/jj/config.toml` are **tool-owned** real files (the repo's halves are linked to
    `~/.config/git/config` and `~/.config/jj/conf.d/dotfiles.toml`).
-   Tool list lives ONLY in `Brewfile` (+
-   `scripts/check-tools.sh` — a tool in the Brewfile but absent from that array is drift the
-   check cannot catch). Repo tasks live ONLY in `mise.toml` — this repo has NO justfile
+   Tool tiers live in `Brewfile.core` and `Brewfile.ondemand`; root `Brewfile` evaluates their
+   union. `tools/tool-tiers/src/tool-commands.tsv` is the single formula-to-command map used by lookup, audit,
+   doctor and zsh's missing-command hint. Repo tasks live ONLY in `mise.toml` — this repo has NO justfile
    (retired); never reintroduce one.
 4. `zsh/mac.zsh` / `zsh/wsl.zsh` load **after** the common aliases, so they may override.
    sheldon sources ONLY `zsh/aliases.zsh` (never `*.zsh` glob — OS files are conditional).
@@ -152,7 +161,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 ## Key Tools & Aliases
 
-### Modern CLI replacements (installed via Brewfile, aliased in zsh/aliases.zsh)
+### Modern CLI replacements (tiered Homebrew declarations, aliased in zsh/aliases.zsh)
 
 - `ls` → `eza` (l, ll, la) · `cat` → `bat` (p) · `grep` → `ripgrep` (gr) · `find` → `fd` (f)
 - `cd` → `zoxide` (`,` and `,,`) · `du` → `dust` (du2) · `ps` → `procs`

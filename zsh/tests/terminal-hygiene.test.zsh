@@ -44,6 +44,73 @@ pty_run() {
   print -r -- "$out"
 }
 
+# Exercise zshenv's missing-command handler against the repository declarations in a real pty.
+tool_home=$(mktemp -d) || exit 1
+mkdir -p "$tool_home/.config/dotfiles" "$tool_home/empty-bin"
+print -r -- "$tool_home/no-brew-prefix" >| "$tool_home/.config/dotfiles/brew-prefix"
+
+tool_pty_run() {
+  local requested="$1" out chunk
+  zpty -d TOOL_NOT_FOUND 2>/dev/null
+  zpty TOOL_NOT_FOUND zsh -f || { print -r -- "[FAIL] zpty could not start zshenv probe"; exit 1 }
+  zpty -w TOOL_NOT_FOUND "export HOME=${(q)tool_home} PATH=${(q)tool_home}/empty-bin LANG= LC_ALL="
+  zpty -w TOOL_NOT_FOUND "source ${(q)ROOT}/zsh/zshenv"
+  zpty -w TOOL_NOT_FOUND "$requested"
+  zpty -w TOOL_NOT_FOUND 'print -r -- STATUS=$?'
+  zpty -w TOOL_NOT_FOUND 'exit'
+  while zpty -r TOOL_NOT_FOUND chunk; do out+=$chunk; done
+  zpty -d TOOL_NOT_FOUND 2>/dev/null
+  print -r -- "$out"
+}
+
+out=$(tool_pty_run pdftoppm)
+want "zshenv explains a missing on-demand command" \
+  'zsh: pdftoppm is declared on-demand (formula poppler) → mise run tool:get pdftoppm' "$out"
+want "on-demand missing command returns 127" 'STATUS=127' "$out"
+out=$(tool_pty_run bun)
+want "zshenv explains a missing core command" \
+  'zsh: bun is a core tool but missing → mise run install:tools' "$out"
+want "core missing command returns 127" 'STATUS=127' "$out"
+out=$(tool_pty_run tool-tier-unknown-command)
+want "zshenv preserves the normal missing-command message" \
+  'zsh: command not found: tool-tier-unknown-command' "$out"
+want "undeclared missing command returns 127" 'STATUS=127' "$out"
+command rm -rf "$tool_home"
+
+# Match the non-interactive command shell used by agent Bash and ssh: source zshenv, then run the
+# missing command in one `zsh -f -c` invocation. CWD discovery must find this workspace's files.
+notfound_path=$(mktemp -d) || exit 1
+mkdir -p "$notfound_path/home/.config/dotfiles"
+print -r -- "$notfound_path/no-brew-prefix" >| "$notfound_path/home/.config/dotfiles/brew-prefix"
+typeset zsh_bin=${commands[zsh]}
+typeset tool_probe="source $ROOT/zsh/zshenv; pdftoppm -v"
+zpty -d TOOL_COMMAND_SHELL 2>/dev/null
+zpty TOOL_COMMAND_SHELL zsh -f || { print -r -- "[FAIL] could not start pty wrapper"; exit 1 }
+zpty -w TOOL_COMMAND_SHELL "export HOME=${(q)notfound_path}/home PATH=${(q)notfound_path} LANG= LC_ALL="
+zpty -w TOOL_COMMAND_SHELL 'cd /tmp'
+zpty -w TOOL_COMMAND_SHELL "exec ${(q)zsh_bin} -f -c ${(q)tool_probe}"
+zpty -w TOOL_COMMAND_SHELL 'exit'
+out=""
+while zpty -r TOOL_COMMAND_SHELL chunk; do out+=$chunk; done
+zpty -d TOOL_COMMAND_SHELL 2>/dev/null
+want "non-interactive zshenv lookup finds the workspace on-demand formula" \
+  'zsh: pdftoppm is declared on-demand (formula poppler) → mise run tool:get pdftoppm' "$out"
+command rm -rf "$notfound_path"
+unset zsh_bin tool_probe
+
+rip_missing_tmp=$(mktemp -d) || exit 1
+mkdir -p "$rip_missing_tmp/bin"
+print -r -- '#!/bin/sh' "printf 'RM_CALLED\\n'" >| "$rip_missing_tmp/bin/rm"
+chmod +x "$rip_missing_tmp/bin/rm"
+out=$(pty_run "PATH=${(q)rip_missing_tmp}/bin:${(q)PATH}" \
+              'whence() { return 1 }' \
+              'rip; print -r -- STATUS=$?')
+want "rip refuses loudly when its binary is missing" \
+  'rip missing: mise run install:tools' "$out"
+want "rip missing reports 127" 'STATUS=127' "$out"
+wantnot "rip never invokes rm as a fallback" 'RM_CALLED' "$out"
+command rm -rf "$rip_missing_tmp"
+
 # --- rip graveyard is disk-backed and follows XDG data home -------------------------------
 out=$(env -u GRAVEYARD -u RIP_GRAVEYARD ZSHENV_FILE="$ROOT/zsh/zshenv" zsh -f -c \
   'source "$ZSHENV_FILE"; print -r -- "GRAVEYARD=$GRAVEYARD RIP_GRAVEYARD=$RIP_GRAVEYARD"')

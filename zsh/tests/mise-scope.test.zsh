@@ -139,7 +139,8 @@ fi
 # ~/.local/state/fnm_multishells. Tombstone COMMENTS are fine; live references are not.
 for tool in fnm nvm volta nodenv asdf; do
   refs=""
-  for f in $ROOT/zsh/zprofile.mac $ROOT/zsh/zprofile.wsl $ROOT/zsh/zshenv $ROOT/zsh/zshrc $ROOT/Brewfile; do
+  for f in $ROOT/zsh/zprofile.mac $ROOT/zsh/zprofile.wsl $ROOT/zsh/zshenv $ROOT/zsh/zshrc \
+           $ROOT/Brewfile $ROOT/Brewfile.core $ROOT/Brewfile.ondemand; do
     refs+="$(live_refs $f $tool)"
   done
   [[ -n $refs ]] && bad "live '$tool' reference in shell startup: $refs" \

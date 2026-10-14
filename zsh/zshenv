@@ -39,6 +39,7 @@ fi
 # zsh/bashrc, scripts/render-claude-settings.ts (a Claude Code process not started from zsh) and
 # `mise run doctor:remote` read the same file. `$(<f)` is a builtin read in zsh — no fork.
 _zshenv_tzf=${${(%):-%x}:A:h}/timezone
+_zshenv_dotfiles_root=${${(%):-%x}:A:h:h}
 if [[ -z $TZ && -r $_zshenv_tzf ]]; then
   _zshenv_tz=$(<$_zshenv_tzf)
   [[ -n $_zshenv_tz && -e /usr/share/zoneinfo/$_zshenv_tz ]] && export TZ=$_zshenv_tz
@@ -241,3 +242,106 @@ fi
 # cocoindex/ccc-daemon.service.wsl. A mismatch makes client and daemon open different DBs;
 # `repo-retrieve index` refuses to certify one it cannot see, and `mise run doctor` compares both.
 export COCOINDEX_CODE_DB_PATH_MAPPING="$HOME=$HOME/.cache/cocoindex-code/db"
+
+# Resolve missing commands from the Homebrew tier declarations without starting a process.
+# This function reads the declarations only after zsh has failed to resolve a command.
+_dotfiles_tool_lookup() {
+  local requested="${1:-}" tier file line formula base command_list mapped
+  local map_formula map_commands condition_text condition frame parent kernel_release
+  local declarations_root=$_zshenv_dotfiles_root
+  local is_mac=false is_linux=false is_wsl=false active=true
+  local -a frames
+  local -A command_map
+
+  _DOTFILES_TOOL_TIER=""
+  _DOTFILES_TOOL_FORMULA=""
+
+  if [[ $HOMEBREW_PREFIX == /opt/homebrew || $HOMEBREW_PREFIX == /usr/local ]]; then
+    is_mac=true
+  elif [[ -r /proc/sys/kernel/osrelease ]]; then
+    is_linux=true
+    IFS= read -r kernel_release < /proc/sys/kernel/osrelease
+    [[ ${(L)kernel_release} == *microsoft* ]] && is_wsl=true
+  else
+    is_mac=true
+  fi
+
+  if [[ -r "$declarations_root/tools/tool-tiers/src/tool-commands.tsv" ]]; then
+    while IFS=$'\t' read -r map_formula map_commands; do
+      [[ -z $map_formula || $map_formula == \#* ]] && continue
+      command_map[$map_formula]=$map_commands
+    done < "$declarations_root/tools/tool-tiers/src/tool-commands.tsv"
+  fi
+
+  for tier in core ondemand; do
+    file="$declarations_root/Brewfile.$tier"
+    [[ -r $file ]] || continue
+    active=true
+    frames=()
+    while IFS= read -r line; do
+      if [[ $line =~ '^[[:space:]]*if[[:space:]]+(.+)$' ]]; then
+        condition_text=$match[1]
+        condition=true
+        if [[ $condition_text == *microsoft* ]]; then
+          condition=$is_wsl
+        elif [[ $condition_text == *"OS.mac?"* ]]; then
+          condition=$is_mac
+        elif [[ $condition_text == *"OS.linux?"* ]]; then
+          condition=$is_linux
+        fi
+        frames+=("$active|$condition")
+        [[ $active == true && $condition == true ]] && active=true || active=false
+        continue
+      fi
+      if [[ $line =~ '^[[:space:]]*else[[:space:]]*$' ]]; then
+        if (( $#frames )); then
+          frame=$frames[-1]
+          parent=${frame%%|*}
+          condition=${frame#*|}
+          [[ $parent == true && $condition == false ]] && active=true || active=false
+        fi
+        continue
+      fi
+      if [[ $line =~ '^[[:space:]]*end[[:space:]]*$' ]]; then
+        if (( $#frames )); then
+          frame=$frames[-1]
+          active=${frame%%|*}
+          unset 'frames[-1]'
+        fi
+        continue
+      fi
+      [[ $active == true ]] || continue
+      [[ $line =~ '^[[:space:]]*brew[[:space:]]+"([^"]+)"' ]] || continue
+      formula=$match[1]
+      base=${formula:t}
+      if (( ${+command_map[$base]} )); then
+        command_list=${command_map[$base]}
+        [[ $command_list == - ]] && continue
+      else
+        command_list=$base
+      fi
+      for mapped in ${(z)command_list}; do
+        if [[ $mapped == "$requested" ]]; then
+          _DOTFILES_TOOL_TIER=$tier
+          _DOTFILES_TOOL_FORMULA=$formula
+          return 0
+        fi
+      done
+    done < "$file"
+  done
+  return 1
+}
+
+command_not_found_handler() {
+  local cmd="${1:-}"
+  if _dotfiles_tool_lookup "$cmd"; then
+    if [[ $_DOTFILES_TOOL_TIER == ondemand ]]; then
+      print -u2 -- "zsh: $cmd is declared on-demand (formula $_DOTFILES_TOOL_FORMULA) → mise run tool:get $cmd"
+    else
+      print -u2 -- "zsh: $cmd is a core tool but missing → mise run install:tools"
+    fi
+  else
+    print -u2 -- "zsh: command not found: $cmd"
+  fi
+  return 127
+}

@@ -1,0 +1,14 @@
+# formula<TAB>space-separated commands; '-' means the formula has no direct command entrypoint.
+coreutils	-
+git-delta	delta
+ripgrep	rg
+rm-improved	rip
+choose-rust	choose
+bottom	btm
+rustup	rustup cargo
+bun	bun bunx
+uv	uv uvx
+poppler	pdftoppm pdfinfo
+wl-clipboard	wl-copy wl-paste
+bubblewrap	bwrap
+texlive	bibtex chktex kpsewhich latexmk lualatex tlmgr

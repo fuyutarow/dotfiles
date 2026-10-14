@@ -65,6 +65,18 @@ session in one keystroke) · **cross-OS clipboard** (`c`, `pp` = view+copy, `pwd
 over SSH reaches your _local_ terminal) · **bun** · **direnv** · **mise** · a linted LaTeX build
 (`x` / `xx`).
 
+Install tier follows when a tool is needed; OS guards remain in the Brewfiles:
+
+| Tier | Declaration | Use |
+| --- | --- | --- |
+| core | `Brewfile.core` | Installed on every box; missing commands point to `mise run install:tools`. |
+| on-demand | `Brewfile.ondemand` | Install a missing formula on first need with `mise run tool:get <cmd>`; casks use `mise run install:tools`. |
+| repo `mise.toml` | that repo's `mise.toml` | Run `mise install` in that repo. |
+| `uvx` / `bunx` | no Brewfile declaration | Run the one-shot CLI through `uvx` or `bunx`. |
+
+`mise run tool:which <cmd>` reports the declaration tier and formula. The root `Brewfile` is the
+union of core and on-demand entries for full Homebrew Bundle installs.
+
 ## Architecture
 
 Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac` / `*.wsl`.
@@ -99,8 +111,10 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │                #   and shared agent assets (commands/, skills/); repo-retrieve lives in tools/repo-retrieve/ and
 │                #   agent-resource-run and serena-foreground live in tools/
 ├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open) + shared TS modules
-├── scripts/     # plumbing — config-registry.ts (every config surface), link-dots.ts (deploys it), check-tools.sh
-├── Brewfile     # every CLI tool (mac casks gated by OS.mac?)
+├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup
+├── Brewfile.core      # tools needed on every box
+├── Brewfile.ondemand  # tools installed when first needed (OS guards stay here)
+├── Brewfile           # union used for full Homebrew Bundle installs
 └── mise.toml    # the task runner (no justfile)
 ```
 
@@ -112,7 +126,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
   on a config file in no row. The deploy code reads the same tables.
 - **Symlinks** → the registry's `LINKS`, realized by `scripts/link-dots.ts` (OS-aware; a safe mode re-links on every `git pull` via `.githooks/post-merge`).
 - **Rendered `$HOME` files** → `scripts/render-home.ts` (called by link-dots; checked by `mise run doctor`). See invariant 8.
-- **Tools** → `Brewfile` · **Tasks** → `mise.toml` · **Agent + MCP config** → `agents/` and `.mcp.json`.
+- **Tools** → `Brewfile.core` and `Brewfile.ondemand` (`Brewfile` is their install union) · **Tasks** → `mise.toml` · **Agent + MCP config** → `agents/` and `.mcp.json`.
 
 ## Design — the invariants
 
@@ -155,7 +169,7 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    non-standard-prefix dependencies. At a nonstandard Linux prefix, Bun uses its official
    `oven-sh/bun/bun` Homebrew tap release instead of compiling WebKit; Bundle supplies its bunx
    alias. Both providers are Homebrew-managed. Claude Code uses its native self-updating installer.
-   On macOS and ordinary Linux, Codex uses its standalone installer. The Brewfile declares the
+   On macOS and ordinary Linux, Codex uses its standalone installer. Brewfile.core declares the
    Homebrew CLI only on WSL, where plain `codex` stays native while Windows Desktop remains the
    explicit `codex.exe` through a runtime-owned launcher with a separate Windows config home.
    It is not a portable container image, and
@@ -204,7 +218,7 @@ cd ~/dotfiles && brew install mise && mise run wsl:init
 exec zsh
 ```
 
-On WSL, `brew bundle --file=Brewfile` provides plain `codex`. Install the Windows Codex Desktop
+On WSL, `Brewfile.core` declares the Homebrew `codex` formula. Install the Windows Codex Desktop
 app too, then run `mise run install:ai-clis` from the WSL checkout to deploy explicit `codex.exe`.
 The task keeps Claude native to WSL, retains the two distinct config homes, and retires only its
 old managed plain-Codex facade. macOS and ordinary Linux retain the standalone Codex installer.
@@ -277,7 +291,9 @@ mise tasks            # list
 mise run up           # update everything (topgrade)
 mise run link:dots    # (re)create symlinks   — scripts/link-dots.ts
 mise run tools:audit  # audit CLI toolbox     — scripts/check-tools.sh
+mise run tool:which pdftoppm # declaration tier and formula
+mise run tool:get pdftoppm  # install a declared formula on first need
 mise run doctor       # does this machine realize the repo? (read-only) — scripts/doctor.ts
-mise run install:tools  # install toolbox     — Brewfile
+mise run install:tools  # install core + on-demand formulas and casks — Brewfile union
 mise run link:skills  # deploy agents/ (skills → Claude/Codex, commands → +Gemini)
 ```

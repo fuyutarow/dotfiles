@@ -9,12 +9,13 @@ import {
 } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
-// The Windows half of the Brewfile: capture what winget manages on the host into
+// The Windows half of the tool declarations: capture what winget manages on the host into
 // wsl/winget.win.json, or restore the host from it. Consumer: human/agent running
 // `mise run wsl:winget:dump` / `mise run wsl:winget:restore`; output is verdict lines.
 //
-// WHY THIS EXISTS. Brewfile is this repo's single source of truth for tools on macOS and WSL.
-// The Windows host underneath WSL had no such record: 113 winget-managed packages (measured
+// WHY THIS EXISTS. Brewfile.core and Brewfile.ondemand declare Homebrew tiers for macOS and WSL;
+// root Brewfile evaluates their union. The Windows host underneath WSL had no such record:
+// 113 winget-managed packages (measured
 // 2026-09-11) existed only on the machine, and nothing here could rebuild them. `winget export`
 // emits a JSON manifest that `winget import` replays, so the same shape as Brewfile is possible
 // — this task is the plumbing that makes it a tracked file rather than a one-off dump.

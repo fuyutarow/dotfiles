@@ -1,5 +1,5 @@
 // Install declared AI CLI integration. Claude remains on its native self-updating channel;
-// macOS and ordinary Linux retain Codex's standalone installer, while WSL uses Brewfile for
+// macOS and ordinary Linux retain Codex's standalone installer, while WSL uses Brewfile.core for
 // plain `codex` and also deploys its explicit Desktop `codex.exe` launcher.
 //
 // Usage: bun scripts/install-ai-clis.ts [--dry-run] [--dotfiles <path>]

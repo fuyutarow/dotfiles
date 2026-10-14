@@ -121,17 +121,12 @@ if [ -x /usr/bin/dircolors ]; then
   alias egrep='grep -E --color=auto'
 fi
 
-# bat for better file viewing
-if ! command_exists "bat"; then
-  alias bat="cat"
-fi
-
 if type lolcat >/dev/null 2>&1; then
   alias lcat='lolcat'
 fi
 
 # diff with better visualization
-command_exists "delta" && alias diff='delta' || alias diff='diff --color=auto'
+command_exists "delta" && alias diff='delta'
 
 # cocoindex-code (ccc): provided by the PERSISTENT uv tool — installed by
 # `mise run cc:install-mcp` (`uv tool install cocoindex-code[full]`), on PATH at
@@ -142,7 +137,6 @@ command_exists "delta" && alias diff='delta' || alias diff='diff --color=auto'
 
 # vim
 # ===
-command_exists "nvim" || alias nvim="vim"
 alias view='nvim -R'
 alias vd='nvim -d'
 alias sp='nvim -o'
@@ -447,7 +441,6 @@ ff() {
 
 
 # fd for better file finding
-command_exists "fd" || alias fd="find"
 alias f='fd'
 
 
@@ -538,7 +531,6 @@ alias jl='just -l'           # just stays reachable as `just`; jl kept for other
 alias kl='kill -9'
 
 # eza for better directory listing
-command_exists "eza" || alias eza="ls --color=auto"
 alias l='eza -F always'
 alias la='eza -A'
 alias ll='eza -alF'
@@ -577,7 +569,6 @@ alias p='bat'
 # }
 
 # procs for better process viewing
-command_exists "procs" || alias procs="ps aux"
 
 # pp command: view file content and copy to clipboard
 pp() {
@@ -907,8 +898,8 @@ alias mvf='command mv'   # 強制上書き (両OS共通)
 unalias rip 2>/dev/null
 rip() {
   if ! whence -p rip >/dev/null 2>&1; then
-    command rm -i "$@"
-    return $?
+    print -u2 -- "rip missing: mise run install:tools"
+    return 127
   fi
 
   local graveyard="${GRAVEYARD:-${XDG_DATA_HOME:-$HOME/.local/share}/graveyard}"
@@ -1099,12 +1090,11 @@ rm() {
 # alias rr='rm -rf'
 
 # dust for better disk usage visualization
-command_exists "dust" || alias dust="du -ah"
 alias du2='dust -d 2 2>/dev/null || du -ah --max-depth=2'
 
 alias wttr="curl wttr.in/Tokyo"
 
-# Not core (Brewfile.core): defined only where TeX is installed, so a core box reports no dead alias.
+# On-demand (Brewfile.ondemand): defined only where TeX is installed, so a core-only box reports no dead alias.
 if command_exists latexmk; then
   alias x='latexmk'
   alias xp='latexmk -pv'

@@ -1,26 +1,29 @@
-// Brewfile.core owns the formula list; this module owns formula-to-command spelling and prefix checks.
+// Brewfile.core owns the formula list; tools/tool-tiers owns its command map and this module checks prefixes.
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
-import { hostname, homedir } from "node:os";
+import { hostname, homedir, release } from "node:os";
 import { LAND_HOSTS } from "./config-registry.ts";
+import {
+  commandsForFormula,
+  readToolCommandMap,
+} from "../tools/tool-tiers/src/tool-commands.ts";
 
 export const LINUXBREW = "/home/linuxbrew/.linuxbrew";
-const COMMANDS: Readonly<Record<string, readonly string[]>> = {
-  "git-delta": ["delta"],
-  ripgrep: ["rg"],
-  "rm-improved": ["rip"],
-  "choose-rust": ["choose"],
-  bottom: ["btm"],
-  rustup: ["rustup", "cargo"],
-  bun: ["bun", "bunx"],
-  uv: ["uv", "uvx"],
-};
-export async function coreCommands(root: string): Promise<string[]> {
+
+export async function coreCommands(
+  root: string,
+  options: { isWsl?: boolean } = {},
+): Promise<string[]> {
+  const isWsl =
+    options.isWsl ??
+    (process.platform === "linux" && /microsoft/iu.test(release()));
+  const commandMap = readToolCommandMap();
   const names = (await Bun.file(join(root, "Brewfile.core")).text())
     .split("\n")
     .flatMap((line) => {
       const name = /^\s*brew "([^"]+)"/u.exec(line)?.[1]?.split("/").at(-1);
-      return name === undefined ? [] : (COMMANDS[name] ?? [name]);
+      if (name === undefined || (name === "codex" && !isWsl)) return [];
+      return commandsForFormula(name, commandMap);
     });
   return [...new Set(names)];
 }

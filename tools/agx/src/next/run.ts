@@ -68,6 +68,45 @@ const persistInterim = (id: string, path: string, message: string): void => {
   append({ kind: "progress", id, at: now(), path });
 };
 
+const lastLines = (output: string, count: number): string => {
+  const lines = output.split(/\r?\n/u);
+  if (lines.at(-1) === "") lines.pop();
+  const tail = lines.slice(-count);
+  return tail.length === 0 ? "" : `${tail.join("\n")}\n`;
+};
+
+const runVerify = async (
+  commands: string[],
+  cwd: string,
+  runDir: string,
+): Promise<{ cmd: string; exit: number; log_path: string }[]> => {
+  const results: { cmd: string; exit: number; log_path: string }[] = [];
+  for (const [index, cmd] of commands.entries()) {
+    const logPath = join(
+      runDir,
+      `verify-${String(index + 1).padStart(2, "0")}.log`,
+    );
+    const child = Bun.spawn(
+      ["sh", "-c", 'exec 2>&1; sh -c "$1"', "agx-verify", cmd],
+      { cwd, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+    );
+    const stdout =
+      child.stdout === null
+        ? Promise.resolve("")
+        : new Response(child.stdout).text();
+    const stderr =
+      child.stderr === null
+        ? Promise.resolve("")
+        : new Response(child.stderr).text();
+    const exit = await child.exited;
+    const output = `${await stdout}${await stderr}`;
+    writeFileSync(logPath, lastLines(output, 20));
+    process.stderr.write(`VERIFY exit=${exit} ${cmd}\n`);
+    results.push({ cmd, exit, log_path: logPath });
+  }
+  return results;
+};
+
 export function check(flags: Flags): number {
   const path = value(flags, "ticket");
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
@@ -244,6 +283,7 @@ export async function run(flags: Flags): Promise<number> {
   const exit = await child.exited;
   clearInterval(progressWatcher);
   const output = await outputPromise;
+  const verify = await runVerify(ticket.verify, cwd, runDir);
   const receiptLine = output.trim().split("\n").at(-1) ?? "";
   const receipt = jsonOf(
     z.looseObject({
@@ -292,6 +332,7 @@ export async function run(flags: Flags): Promise<number> {
     exit,
     report_path: reportPath,
     vendor_session: vendorSession,
+    verify,
   });
   process.stdout.write(
     `${JSON.stringify({ id, ticket: ticket.name ?? basename(path), row: row.id, exit, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,

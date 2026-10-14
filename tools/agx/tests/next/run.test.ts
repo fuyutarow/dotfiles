@@ -210,6 +210,13 @@ describe("agx-next run", () => {
           .looseObject({ decision: z.string(), note: z.string() })
           .nullable(),
         report_path: z.string().nullable(),
+        verify: z.array(
+          z.strictObject({
+            cmd: z.string(),
+            exit: z.number(),
+            log_path: z.string(),
+          }),
+        ),
         last_progress_path: z.string().nullable(),
         continues: z.string().nullable(),
         vendor_session: z.string().nullable(),
@@ -238,6 +245,7 @@ describe("agx-next run", () => {
     expect(firstRow.dispatcher_session).toBe("dispatcher-session");
     expect(firstRow.continues).toBeNull();
     expect(firstRow.judgment?.decision).toBe("accept");
+    expect(firstRow.verify).toEqual([]);
     expect(secondRow.dispatcher_session).toBe("claude-session");
     expect(secondRow.continues).toBe(started.id);
     expect(secondRow.vendor_session).toBe("continued-vendor-1");
@@ -268,6 +276,7 @@ describe("agx-next run", () => {
         "state",
         "ticket",
         "vendor_session",
+        "verify",
         "workspace",
         "writes",
       ].toSorted(),
@@ -294,6 +303,96 @@ describe("agx-next run", () => {
       "WARN ignored legacy ticket fields:",
     );
   }, 15_000);
+
+  test("runs ticket verification in order and records every exit and log", async () => {
+    const root = mkdtempSync(join(tmpdir(), "agx-next-verify-"));
+    const state = join(root, "state");
+    const ticket = join(root, "ticket.md");
+    const worker = join(root, "fake-worker.ts");
+    const jevFile = join(root, "fake-jev.ts");
+    const portProbe = Bun.serve({ port: 0, fetch: () => new Response() });
+    const jevPort = portProbe.port;
+    await portProbe.stop(true);
+    writeFileSync(
+      jevFile,
+      `Bun.serve({ hostname: "127.0.0.1", port: ${jevPort}, fetch: () => Response.json({ answers: { worker: { choice: "luna-high", confidence: 0.9 } } }) });\n`,
+    );
+    const jev = Bun.spawn([process.execPath, jevFile], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    servers.push(jev);
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const ready = await fetch(`http://127.0.0.1:${jevPort}/health`).catch(
+        () => null,
+      );
+      if (ready !== null) break;
+      await Bun.sleep(25);
+    }
+    writeFileSync(
+      ticket,
+      `+++\nschema = 2\nname = "verify-fixture"\nwrites = []\noutcome = "verify fixture"\nverify = ["true", "sh -c 'exit 3'"]\n[proposition]\nid = "VERIFY-1"\nclaim = "verification runs"\nrefuted_by = "verification does not run"\n+++\nRun the fixture.\n`,
+    );
+    writeFileSync(
+      worker,
+      `process.stdout.write(JSON.stringify({ exit: 0, report: { summary: "worker done", changes: [], checks: [], for_coordinator: [], open: [] } }) + "\\n");\n`,
+    );
+    const env = {
+      ...process.env,
+      AGX_NEXT_STATE_DIR: state,
+      AGX_NEXT_JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
+      AGX_NEXT_WORKER: worker,
+      TYPESAFE_API_KEY: "test-key",
+      DISPATCH_ROSTER_PATH: join(
+        process.cwd(),
+        "agents/models/dispatch-roster.toml",
+      ),
+    };
+    const result = Bun.spawnSync(
+      [
+        process.execPath,
+        "tools/agx/src/next/cli.ts",
+        "run",
+        ticket,
+        "--cd",
+        root,
+      ],
+      { cwd: process.cwd(), env, timeout: 10_000 },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.toString()).toContain("VERIFY exit=0 true");
+    expect(result.stderr.toString()).toContain("VERIFY exit=3 sh -c 'exit 3'");
+    const listed = Bun.spawnSync(
+      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      { cwd: process.cwd(), env },
+    );
+    const rows = jsonOf(
+      z.array(
+        z.looseObject({
+          exit: z.number().nullable(),
+          verify: z.array(
+            z.strictObject({
+              cmd: z.string(),
+              exit: z.number(),
+              log_path: z.string(),
+            }),
+          ),
+        }),
+      ),
+    ).safeParse(listed.stdout.toString());
+    expect(rows.success).toBe(true);
+    if (!rows.success) return;
+    expect(rows.data).toHaveLength(1);
+    const row = rows.data[0];
+    if (row === undefined) return;
+    expect(row.exit).toBe(0);
+    expect(row.verify.map(({ exit }) => exit)).toEqual([0, 3]);
+    expect(row.verify.map(({ cmd }) => cmd)).toEqual([
+      "true",
+      "sh -c 'exit 3'",
+    ]);
+    expect(row.verify.every(({ log_path }) => existsSync(log_path))).toBe(true);
+  });
 
   test("validation refusal exits 2", () => {
     const root = mkdtempSync(join(tmpdir(), "agx-next-invalid-ticket-"));

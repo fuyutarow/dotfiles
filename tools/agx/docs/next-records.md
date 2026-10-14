@@ -27,8 +27,13 @@ Ticket validation and premise refusals exit 2.
 - `progress`: `{ "kind": "progress", "id", "at", "path", "legacy_key?" }`. `path` points to
   the per-run latest interim-return file, outside the checkout.
 - `ended`: `{ "kind": "ended", "id", "at", "exit", "report_path",
-  "vendor_session", "legacy_key?" }`. `report_path` points to the worker's final
-  report file, or is `null` for a legacy run whose report was embedded in the old log.
+  "vendor_session", "verify", "legacy_key?" }`. `exit` is the worker's exit code.
+  `report_path` points to the worker's final report file, or is `null` for a legacy run
+  whose report was embedded in the old log. `verify` is an ordered array of
+  `{ "cmd", "exit", "log_path" }` facts; each command runs through `sh -c` in the
+  `--cd` tree after the worker exits. Its log contains the last 20 lines of combined
+  output and lives next to `report.json`. Older ended events without `verify` fold as
+  an empty array.
 - `judged`: `{ "kind": "judged", "id", "at", "decision", "note" }`.
 
 Imported events may carry `legacy_key`, a deterministic deduplication key.
@@ -62,6 +67,7 @@ The output is an array of objects with these contract fields:
 | `writes` | Ticket write globs. |
 | `judgment` | `null` or `{ "decision": "accept" | "reject", "note" }`. |
 | `report_path` | Final report path, or `null` until ended. |
+| `verify` | Ordered `{ "cmd", "exit", "log_path" }` facts from ticket verification, or `[]` when no commands were declared / for older records. |
 | `last_progress_path` | Most recent interim-return path, or `null`. |
 | `continues` | Previous agx run id supplied via `--continue`, or `null` for a fresh run. |
 | `vendor_session` | Latest worker vendor session identifier, or `null`. |

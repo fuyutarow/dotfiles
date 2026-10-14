@@ -46,6 +46,15 @@ const EventSchema = z.discriminatedUnion("kind", [
     exit: z.number(),
     report_path: z.string().nullable(),
     vendor_session: z.string().nullable(),
+    verify: z
+      .array(
+        z.strictObject({
+          cmd: z.string(),
+          exit: z.number(),
+          log_path: z.string(),
+        }),
+      )
+      .default([]),
     legacy_key: z.string().optional(),
   }),
   z.strictObject({
@@ -217,6 +226,7 @@ function importLegacyRun(
       exit,
       report_path: null,
       vendor_session: stringOf(worker?.session) ?? null,
+      verify: [],
       legacy_key: endedKey,
     });
     knownKeys.add(endedKey);
@@ -381,6 +391,7 @@ export function foldedRuns() {
       writes: string[];
       judgment: { decision: string; note: string } | null;
       report_path: string | null;
+      verify: { cmd: string; exit: number; log_path: string }[];
       last_progress_path: string | null;
       continues: string | null;
       vendor_session: string | null;
@@ -401,6 +412,7 @@ export function foldedRuns() {
         writes: event.writes,
         judgment: null,
         report_path: null,
+        verify: [],
         last_progress_path: null,
         continues: event.continues ?? null,
         vendor_session: event.vendor_session,
@@ -413,6 +425,7 @@ export function foldedRuns() {
       run.state = "ended";
       run.exit = event.exit;
       run.report_path = event.report_path;
+      run.verify = event.verify;
       run.vendor_session = event.vendor_session;
     }
     if (event.kind !== "judged") continue;

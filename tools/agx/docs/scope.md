@@ -6,7 +6,7 @@ agx has four jobs:
 
 - **Route:** Jev picks a roster row for a ticket.
 - **Launch:** start the selected vendor worker in the tree passed with `--cd`.
-- **Record:** append run events to the single event data file, `records.jsonl` (under the agx state directory).
+- **Record:** append run events to the single event data file, `records.jsonl` (under the agx state directory). After the worker exits, this job also executes each declared verify command in order through `sh -c` in the `--cd` tree, captures its exit and output tail beside `report.json`, and stores those facts in the `ended` event. Verification failures do not change the worker's run exit.
 - **Fold:** `ls`, `stats`, and `judge` read or append those events. `judge` appends a judgment; `ls` and `stats` fold existing records.
 
 Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` validates ticket premises in the supplied tree and reports overlapping live write globs; it does not reserve writes. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
@@ -21,7 +21,7 @@ Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` valida
 | Durability or detach beyond the session | `systemd-run --user --unit=agx-<name> --collect -- agx run ...` | The caller chooses a service lifecycle; agx runs the worker in its current invocation. |
 | CPU/GPU/RAM admission | `agent-resource-run` | Resource admission is outside agx's routing and event-recording jobs. |
 | Commits and pushes | `mise run commit` / `mise run land` | agx records worker outcomes; repository publication belongs to the repository tasks. |
-| Acceptance | A human or coordinator | `agx judge` records the accept/reject decision and optional note; it does not decide acceptance. |
+| Acceptance | A human or coordinator | Verify results are recorded facts; a human or coordinator reads them and decides acceptance. `agx judge` records the accept/reject decision and optional note; agx does not decide acceptance. |
 | Notifications and recap demands | Hooks consuming `agx ls --json` | Hooks can derive notifications from folded state; they must run the installed tool, not a checkout's working copy. |
 | Searching code | `rr` | Code retrieval belongs to the repository search tool, not agx. |
 | Routing quality | Jev, corrected through the brief and roster `use_for` | Routing is Jev's choice among roster rows; agx has no routing override. |

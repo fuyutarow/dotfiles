@@ -4,11 +4,15 @@
 (default: `$AGX_STATE_DIR/records.jsonl` when that override is set, otherwise
 `$XDG_STATE_HOME/agx-next/records.jsonl` or `~/.local/state/agx-next/records.jsonl`).
 Each line is one event. Readers ignore an incomplete trailing line and reject malformed
-complete lines. Event `at` values are RFC 3339 timestamps. Ticket paths are positional:
+complete lines. Readers ignore unknown fields; writers may add fields; required fields never
+change type. Event `at` values are RFC 3339 timestamps. Ticket paths are positional:
 `agx check TICKET.md` and `agx run TICKET.md --cd TREE`.
 Judgments use `agx judge RUN_ID accept|reject [--note TEXT]`; every `ls --json`
 `judgment.decision` is `accept`, `reject`, or `null`. A continuation
 uses `agx run TICKET.md --continue PREVIOUS_RUN_ID`.
+
+Human `agx ls` shows runs newest first, limited to the last 30 by default; `agx ls --all` shows
+the full list. `agx ls --json` remains complete and preserves append/fold order.
 
 The next ticket schema requires `proposition.id`, `proposition.claim`, and
 `proposition.refuted_by`; legacy `decides`, `serves`, and `graph_node` are optional

@@ -3,6 +3,7 @@ import { check, judgeRun, list, run, stats, type Flags } from "./run.ts";
 import { COMMAND_NAMES } from "./commands.ts";
 import { cli, command } from "cleye";
 import { exitWithError } from "./exit.ts";
+import packageJson from "../../package.json" with { type: "json" };
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -20,6 +21,10 @@ export const COMMANDS = COMMAND_NAMES.map((name) => ({
 
 async function main(): Promise<void> {
   const rawArgs = process.argv.slice(2);
+  if (rawArgs.length === 1 && rawArgs[0] === "--version") {
+    process.stdout.write(`${packageJson.version}\n`);
+    return;
+  }
   const root = cli(
     {
       name: "agx",
@@ -40,6 +45,10 @@ async function main(): Promise<void> {
     const parsed = cli(
       {
         name: "agx run",
+        help: {
+          description:
+            "To amend a continuation, edit the ticket file, then `agx run TICKET --continue RUN`.",
+        },
         parameters: ["<ticket>"],
         flags: {
           cd: {
@@ -92,8 +101,13 @@ async function main(): Promise<void> {
       {
         name: "agx ls",
         parameters: [],
+        help: {
+          description:
+            "List runs newest first (last 30 by default; use --all for everything).",
+        },
         flags: {
           json: { type: Boolean, description: "emit the ls JSON contract" },
+          all: { type: Boolean, description: "show every run" },
         },
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,

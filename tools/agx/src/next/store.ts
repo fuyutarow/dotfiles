@@ -17,7 +17,7 @@ import { globsOverlap } from "../ticket.ts";
 import { exitWithError } from "./exit.ts";
 
 const EventSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
+  z.looseObject({
     kind: z.literal("started"),
     id: z.string(),
     at: z.string(),
@@ -32,14 +32,14 @@ const EventSchema = z.discriminatedUnion("kind", [
     pid: z.number(),
     legacy_key: z.string().optional(),
   }),
-  z.strictObject({
+  z.looseObject({
     kind: z.literal("progress"),
     id: z.string(),
     at: z.string(),
     path: z.string(),
     legacy_key: z.string().optional(),
   }),
-  z.strictObject({
+  z.looseObject({
     kind: z.literal("ended"),
     id: z.string(),
     at: z.string(),
@@ -48,7 +48,7 @@ const EventSchema = z.discriminatedUnion("kind", [
     vendor_session: z.string().nullable(),
     verify: z
       .array(
-        z.strictObject({
+        z.looseObject({
           cmd: z.string(),
           exit: z.number(),
           log_path: z.string(),
@@ -57,7 +57,7 @@ const EventSchema = z.discriminatedUnion("kind", [
       .default([]),
     legacy_key: z.string().optional(),
   }),
-  z.strictObject({
+  z.looseObject({
     kind: z.literal("judged"),
     id: z.string(),
     at: z.string(),

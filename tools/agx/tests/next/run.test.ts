@@ -556,4 +556,88 @@ describe("agx-next run", () => {
       ),
     ).toEqual([]);
   });
+
+  test("ignores unknown record fields and bounds human ls without changing JSON order", () => {
+    const root = mkdtempSync(join(tmpdir(), "agx-next-forward-fields-"));
+    const state = join(root, "state");
+    mkdirSync(state, { recursive: true });
+    const records: Record<string, unknown>[] = Array.from(
+      { length: 32 },
+      (_, index) => ({
+        kind: "started",
+        id: `run-${index}`,
+        at: `2026-10-14T00:00:${String(index).padStart(2, "0")}Z`,
+        ticket: `ticket-${index}`,
+        writes: [],
+        cwd: root,
+        workspace: root,
+        row: "fixture",
+        dispatcher_session: null,
+        vendor_session: null,
+        pid: 0,
+        ...(index === 0 ? { future_field: "ignored" } : {}),
+      }),
+    );
+    const runIds = Array.from({ length: 32 }, (_, index) => `run-${index}`);
+    records.splice(1, 0, {
+      kind: "ended",
+      id: "run-0",
+      at: "2026-10-14T00:00:00Z",
+      exit: 0,
+      report_path: null,
+      vendor_session: null,
+      verify: [
+        { cmd: "true", exit: 0, log_path: "verify.log", future_fact: true },
+      ],
+      future_field: "also ignored",
+    });
+    writeFileSync(
+      join(state, "records.jsonl"),
+      records.map((event) => JSON.stringify(event)).join("\n") + "\n",
+    );
+    const env = { ...process.env, AGX_NEXT_STATE_DIR: state };
+    const human = Bun.spawnSync(
+      [process.execPath, "tools/agx/src/next/cli.ts", "ls"],
+      { cwd: process.cwd(), env },
+    );
+    expect(human.exitCode).toBe(0);
+    const humanLines = human.stdout.toString().trimEnd().split("\n");
+    expect(humanLines).toHaveLength(31);
+    expect(humanLines[0]).toStartWith("run-31 ");
+    expect(humanLines[29]).toStartWith("run-2 ");
+    expect(humanLines[30]).toBe("… 2 older (agx ls --all)");
+
+    const all = Bun.spawnSync(
+      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--all"],
+      { cwd: process.cwd(), env },
+    );
+    expect(all.exitCode).toBe(0);
+    expect(all.stdout.toString().trimEnd().split("\n")).toHaveLength(32);
+
+    const json = Bun.spawnSync(
+      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      { cwd: process.cwd(), env },
+    );
+    expect(json.exitCode).toBe(0);
+    const rows = jsonOf(z.array(z.looseObject({ id: z.string() }))).safeParse(
+      json.stdout.toString(),
+    );
+    expect(rows.success).toBe(true);
+    if (rows.success) {
+      expect(rows.data.map(({ id }) => id)).toEqual(runIds);
+      expect(rows.data).toHaveLength(32);
+    }
+
+    const malformed = { ...records[0], pid: "not-a-number" };
+    writeFileSync(
+      join(state, "records.jsonl"),
+      `${JSON.stringify(malformed)}\n`,
+    );
+    const refused = Bun.spawnSync(
+      [process.execPath, "tools/agx/src/next/cli.ts", "ls"],
+      { cwd: process.cwd(), env },
+    );
+    expect(refused.exitCode).toBe(1);
+    expect(refused.stderr.toString()).toContain("invalid record log line");
+  });
 });

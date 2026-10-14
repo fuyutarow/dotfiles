@@ -343,14 +343,28 @@ export async function run(flags: Flags): Promise<number> {
 export function list(flags: Flags): number {
   const rows = foldedRuns();
   const asJson = value(flags, "json") === "true" || flags.json === true;
-  let output = rows
+  const all = flags.all === true || value(flags, "all") === "true";
+  const startedAt = new Map(
+    events().flatMap((event) =>
+      event.kind === "started" ? [[event.id, event.at] as const] : [],
+    ),
+  );
+  const newestFirst = rows.toSorted((a, b) =>
+    (startedAt.get(b.id) ?? "").localeCompare(startedAt.get(a.id) ?? ""),
+  );
+  const visible = all || asJson ? newestFirst : newestFirst.slice(0, 30);
+  let output = visible
     .map(
       (entry) =>
         `${entry.id} ${entry.state} ${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"}`,
     )
     .join("\n");
   if (asJson) output = `${JSON.stringify(rows)}\n`;
-  else if (rows.length > 0) output += "\n";
+  else if (visible.length > 0) {
+    output += "\n";
+    const older = newestFirst.length - visible.length;
+    if (older > 0) output += `… ${older} older (agx ls --all)\n`;
+  }
   process.stdout.write(output);
   return 0;
 }

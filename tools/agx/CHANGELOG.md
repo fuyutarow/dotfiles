@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.1.0 — 2026-10-14
+
+- Keep record readers forward-compatible with unknown fields, and document that required fields retain their types. Land the verify facts recorded in commit `19769560`.
+- Add package-backed `agx --version`, newest-first bounded human `agx ls` with `--all`, and continuation amendment guidance in `agx run --help`.
+
 ## 4.0.0 — 2026-10-14
 
 - Switch `agx` to the five-command CLI: `run`, `check`, `ls`, `judge`, and `stats`; retain `agx-next` as a one-release alias.

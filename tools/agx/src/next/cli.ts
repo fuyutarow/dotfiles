@@ -2,11 +2,11 @@
 import { check, judgeRun, list, run, stats, type Flags } from "./run.ts";
 import { COMMAND_NAMES } from "./commands.ts";
 import { cli, command } from "cleye";
+import { exitWithError } from "./exit.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
-    process.stderr.write(`agx: unknown option '--${flag}'\n`);
-    process.exit(2);
+    exitWithError(`agx: unknown option '--${flag}'\n`, 2);
   }
 };
 export const COMMANDS = COMMAND_NAMES.map((name) => ({
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
     );
     exit = await stats(parsed.flags satisfies Flags);
   }
-  process.exit(exit);
+  process.exitCode = exit;
 }
 
 if (import.meta.main) await main();

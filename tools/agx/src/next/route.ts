@@ -8,6 +8,7 @@ import {
   type Choice,
 } from "../../../../agents/models/roster.ts";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
+import { exitWithError } from "./exit.ts";
 
 const Reply = z.looseObject({
   answers: z.record(
@@ -26,10 +27,11 @@ export async function route(
 ): Promise<Choice> {
   const rosterPath = process.env.DISPATCH_ROSTER_PATH;
   const loaded = await loadRoster(rosterPath);
-  if (!loaded.ok) {
-    process.stderr.write(`agx: cannot read dispatch roster: ${loaded.error}\n`);
-    process.exit(1);
-  }
+  if (!loaded.ok)
+    return exitWithError(
+      `agx: cannot read dispatch roster: ${loaded.error}\n`,
+      1,
+    );
   const roster = loaded.value;
   const endpoint = process.env.AGX_NEXT_JEV_URL ?? roster.auto.jev.url;
   const criteria = Object.fromEntries(

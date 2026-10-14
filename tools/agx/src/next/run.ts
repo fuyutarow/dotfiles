@@ -18,12 +18,11 @@ import {
   stateDir,
 } from "./store.ts";
 import { route } from "./route.ts";
+import { exitWithError } from "./exit.ts";
 
 export type Flags = Readonly<Record<string, string | boolean | undefined>>;
-const fatal = (message: string, exitCode = 2): never => {
-  process.stderr.write(`agx: ${message}\n`);
-  process.exit(exitCode);
-};
+const fatal = (message: string, exitCode = 2): never =>
+  exitWithError(`agx: ${message}\n`, exitCode);
 const value = (flags: Flags, key: string): string | undefined =>
   typeof flags[key] === "string" ? flags[key] : undefined;
 const ticketFor = (path: string) => {

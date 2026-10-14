@@ -14,6 +14,7 @@ import { createInterface } from "node:readline";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { globsOverlap } from "../ticket.ts";
+import { exitWithError } from "./exit.ts";
 
 const EventSchema = z.discriminatedUnion("kind", [
   z.strictObject({
@@ -89,12 +90,11 @@ export function events(): NextEvent[] {
     .filter((line) => line !== "")
     .map((line) => jsonOf(EventSchema).safeParse(line));
   const invalid = parsed.find((event) => !event.success);
-  if (invalid !== undefined) {
-    process.stderr.write(
+  if (invalid !== undefined)
+    exitWithError(
       `agx: invalid record log line: ${invalid.error.message}\n`,
+      1,
     );
-    process.exit(1);
-  }
   return parsed.flatMap((event) => (event.success ? [event.data] : []));
 }
 

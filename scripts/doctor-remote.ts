@@ -18,9 +18,11 @@
 // Consumer: a human or agent reading verdict lines. Exit: 0 no FAIL · 1 a FAIL · 2 usage/FATAL.
 
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { managedBlockHasSmartOpenTag } from "./wsl-distro.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 type Finding = { name: string; verdict: Verdict; detail: string; fix?: string };
@@ -362,7 +364,26 @@ async function checkCommands(host: string): Promise<Finding> {
       );
 }
 
+export function managedSmartOpenConfigFinding(
+  host: string,
+  configLocal: string,
+): Finding | undefined {
+  return managedBlockHasSmartOpenTag(configLocal, host) === false
+    ? finding(
+        "smart-open",
+        "FAIL",
+        `${host} is a managed dotfiles WSL block without Tag smart-open`,
+        "mise run wsl:repair",
+      )
+    : undefined;
+}
+
 async function checkSmartOpen(host: string): Promise<Finding> {
+  const configLocal = await Promise.try(() =>
+    readFileSync(join(homedir(), ".ssh", "config.local"), "utf8"),
+  ).catch(() => "");
+  const managedFinding = managedSmartOpenConfigFinding(host, configLocal);
+  if (managedFinding !== undefined) return managedFinding;
   const g = await run(["ssh", "-G", host], null, 10_000);
   const forward = g.out
     .split("\n")

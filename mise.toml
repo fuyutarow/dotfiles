@@ -719,6 +719,10 @@ run = "bun scripts/wsl-keepalive.ts"
 description = "Create a named WSL distro and SSH alias; requires r99-u24 running because its Tailscale daemon owns the shared utility-VM address. --dry-run prints the plan."
 run = 'bun ~/dotfiles/scripts/wsl-distro.ts'
 
+[tasks."wsl:repair"]
+description = "Add Tag smart-open to untagged dotfiles-managed WSL blocks in ~/.ssh/config.local; does not provision WSL."
+run = 'bun ~/dotfiles/scripts/wsl-distro.ts repair-config'
+
 # READ-ONLY resource evidence, both halves at once. It is the second half that carries the
 # signal: every r99 outage this repo debugged was INVISIBLE from inside the guest — C: at 1.08 MB
 # free while the guest read 38% used (the vhdx max, 1007 GB, is larger than C: itself, 931 GB);

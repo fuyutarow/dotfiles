@@ -117,11 +117,58 @@ function replaceMarked(
 
 function markedContents(contents: string, id: string): string | undefined {
   const lines = contents.split("\n");
-  const begin = lines.indexOf(`# BEGIN dotfiles-wsl:${id}`);
-  const end = lines.indexOf(`# END dotfiles-wsl:${id}`, begin + 1);
+  const markers = lines.map((line) => line.replace(/\r$/u, ""));
+  const begin = markers.indexOf(`# BEGIN dotfiles-wsl:${id}`);
+  const end = markers.indexOf(`# END dotfiles-wsl:${id}`, begin + 1);
   return begin === -1 || end === -1
     ? undefined
     : lines.slice(begin, end + 1).join("\n");
+}
+
+/** Whether a dotfiles-managed block opts into smart-open; undefined means unmanaged/missing. */
+export function managedBlockHasSmartOpenTag(
+  contents: string,
+  id: string,
+): boolean | undefined {
+  const block = markedContents(contents, id);
+  return block === undefined
+    ? undefined
+    : /^\s*Tag\s+smart-open\s*$/imu.test(block);
+}
+
+/** Add the current smart-open tag only to valid managed blocks that are missing it. */
+export function repairManagedSmartOpenTags(contents: string): string | Error {
+  const ids = [
+    ...contents.matchAll(
+      /^# BEGIN dotfiles-wsl:([A-Za-z0-9][A-Za-z0-9._-]*)\s*$/gmu,
+    ),
+  ]
+    .map((match) => match[1] ?? "")
+    .filter((id) => managedBlockHasSmartOpenTag(contents, id) === false);
+  let updated = contents;
+  for (const id of ids) {
+    const block = markedContents(updated, id);
+    if (block === undefined)
+      return new Error(`the ${id} config block has no matching END marker`);
+    const hostLine = /^[ \t]*Host[ \t]+[^\r\n]*(\r\n|\n)/mu.exec(block);
+    if (hostLine === null)
+      return new Error(
+        `the ${id} config block needs a Host line ending in a newline`,
+      );
+    const begin = updated.indexOf(`# BEGIN dotfiles-wsl:${id}`);
+    const insertAt = begin + hostLine.index + hostLine[0].length;
+    updated = `${updated.slice(0, insertAt)}    Tag smart-open${hostLine[1]}${updated.slice(insertAt)}`;
+  }
+  return updated;
+}
+
+export async function repairConfigLocal(path: string): Promise<void | Error> {
+  const contents = await Bun.file(path)
+    .text()
+    .catch(() => "");
+  const updated = repairManagedSmartOpenTags(contents);
+  if (updated instanceof Error) return updated;
+  await Bun.write(path, updated);
 }
 
 function blockHostName(block: string): string | undefined {
@@ -452,7 +499,7 @@ async function main(): Promise<number | Error> {
       name: "wsl-distro.ts",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
-      parameters: [],
+      parameters: ["[action]"],
       help: {
         description:
           "Create a named WSL distro and SSH alias. Requires r99-u24 up: its Tailscale daemon owns the shared utility-VM address.",
@@ -482,6 +529,18 @@ async function main(): Promise<number | Error> {
     undefined,
     Bun.argv.slice(2),
   );
+  if (parsed._.length > 0) {
+    if (parsed._.length !== 1 || parsed._[0] !== "repair-config")
+      return new Error(`Unexpected argument '${String(parsed._[0])}'`);
+    const repaired = await repairConfigLocal(
+      join(homedir(), ".ssh", "config.local"),
+    );
+    if (repaired instanceof Error) return repaired;
+    process.stdout.write(
+      "repaired managed WSL smart-open tags in ~/.ssh/config.local\n",
+    );
+    return 0;
+  }
   const options = validateOptions(parsed);
   if (options instanceof Error) return options;
   const plan = generatePlan(options);

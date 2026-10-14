@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   generatePlan,
+  repairManagedSmartOpenTags,
   migratePrimaryConfig,
   updateConfigLocal,
   validateOptions,
@@ -68,6 +69,72 @@ describe("wsl:distro argument contract and dry-run plan", () => {
 });
 
 describe("~/.ssh/config.local writer", () => {
+  test("repairs a stale WSL block by inserting only the tag line", () => {
+    const fixture = [
+      "# BEGIN dotfiles-wsl:r99-u26",
+      "# WSL-Distro: r99-u26",
+      "# WSL-Wake: off",
+      "Host r99-u26",
+      "    HostName localhost",
+      "    Port 2226",
+      "    User fuyu",
+      "    ProxyJump r99",
+      "# END dotfiles-wsl:r99-u26",
+    ].join("\n");
+    const expected = [
+      "# BEGIN dotfiles-wsl:r99-u26",
+      "# WSL-Distro: r99-u26",
+      "# WSL-Wake: off",
+      "Host r99-u26",
+      "    Tag smart-open",
+      "    HostName localhost",
+      "    Port 2226",
+      "    User fuyu",
+      "    ProxyJump r99",
+      "# END dotfiles-wsl:r99-u26",
+    ].join("\n");
+
+    expect(repairManagedSmartOpenTags(fixture)).toBe(expected);
+    expect(repairManagedSmartOpenTags(expected)).toBe(expected);
+  });
+
+  test("repairs only untagged managed blocks and is idempotent", () => {
+    const fixture = [
+      "Host unmanaged",
+      "    HostName unmanaged.invalid",
+      "",
+      "# BEGIN dotfiles-wsl:r99-u26",
+      "# WSL-Distro: Ubuntu-26.04",
+      "Host r99-u26 r99-u26-code",
+      "    HostName 100.110.117.86",
+      "    Port 2226",
+      "    User fuyu",
+      "# END dotfiles-wsl:r99-u26",
+      "",
+      "# BEGIN dotfiles-wsl:r99-u24",
+      "# WSL-Distro: Ubuntu-24.04",
+      "Host r99-u24 r99-u24-code",
+      "    Tag smart-open",
+      "    HostName 100.110.117.86",
+      "    Port 2222",
+      "    User fuyu",
+      "# END dotfiles-wsl:r99-u24",
+    ].join("\n");
+    const repaired = repairManagedSmartOpenTags(fixture);
+    expect(repaired).not.toBeInstanceOf(Error);
+    if (repaired instanceof Error) return;
+    expect(repaired).toContain(
+      "# BEGIN dotfiles-wsl:r99-u26\n# WSL-Distro: Ubuntu-26.04\nHost r99-u26 r99-u26-code\n    Tag smart-open\n    HostName 100.110.117.86\n    Port 2226\n    User fuyu\n# END dotfiles-wsl:r99-u26",
+    );
+    expect(repaired).toContain(
+      "Host unmanaged\n    HostName unmanaged.invalid",
+    );
+    expect(repaired).toContain(
+      "# BEGIN dotfiles-wsl:r99-u24\n# WSL-Distro: Ubuntu-24.04\nHost r99-u24 r99-u24-code\n    Tag smart-open",
+    );
+    expect(repairManagedSmartOpenTags(repaired)).toBe(repaired);
+  });
+
   test("marks the renamed primary and requested alias idempotently without changing other blocks", async () => {
     const previous = ["r99", "wsl"].join("-");
     const previousCode = `${previous}-code`;

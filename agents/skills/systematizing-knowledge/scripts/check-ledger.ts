@@ -3,7 +3,6 @@
  * Contract: check structural provenance and reference integrity only; never judge semantic truth.
  */
 
-import { existsSync } from "node:fs";
 import { cli } from "cleye";
 import { jsonText, z } from "../../../hooks/zod.ts";
 
@@ -432,7 +431,7 @@ const main = async (): Promise<Outcome<void>> => {
     };
   }
   const path = parsed._.claimsJsonl;
-  if (!existsSync(path)) {
+  if (!(await Bun.file(path).exists())) {
     return { ok: false, error: `file not found: ${path}` };
   }
 

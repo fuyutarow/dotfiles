@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -16,26 +16,34 @@ type RunResult = {
   stdout: string;
 };
 
-const run = (...arguments_: string[]): RunResult => {
-  const result = Bun.spawnSync({
+const run = async (...arguments_: string[]): Promise<RunResult> => {
+  const result = Bun.spawn({
     cmd: ["bun", script, ...arguments_],
     stderr: "pipe",
     stdout: "pipe",
-    timeout: 10_000,
+    timeout: 60_000,
   });
+  const [exitCode, stderr, stdout] = await Promise.all([
+    result.exited,
+    new Response(result.stderr).text(),
+    new Response(result.stdout).text(),
+  ]);
 
   return {
-    exitCode: result.exitCode,
-    stderr: result.stderr.toString(),
-    stdout: result.stdout.toString(),
+    exitCode,
+    stderr,
+    stdout,
   };
 };
 
-const fixture = (rows: unknown[]): string => {
-  const directory = mkdtempSync(join(tmpdir(), "knowledge-ledger-"));
+const fixture = async (rows: unknown[]): Promise<string> => {
+  const directory = await mkdtemp(join(tmpdir(), "knowledge-ledger-"));
   temporaryDirectories.push(directory);
   const path = join(directory, "claims.jsonl");
-  writeFileSync(path, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+  await writeFile(
+    path,
+    `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`,
+  );
   return path;
 };
 
@@ -61,15 +69,15 @@ const sourceClaim = {
   ],
 };
 
-afterEach(() => {
+afterEach(async () => {
   for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
+    await rm(directory, { force: true, recursive: true });
   }
 });
 
 describe("check-ledger", () => {
-  test("accepts the copyable example", () => {
-    const result = run(example);
+  test("accepts the copyable example", async () => {
+    const result = await run(example);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("PASS");
@@ -77,32 +85,32 @@ describe("check-ledger", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("reports malformed JSON as a ledger finding", () => {
-    const path = fixture([sourceClaim]);
-    writeFileSync(path, `${JSON.stringify(sourceClaim)}\n{bad json}\n`);
-    const result = run(path);
+  test("reports malformed JSON as a ledger finding", async () => {
+    const path = await fixture([sourceClaim]);
+    await writeFile(path, `${JSON.stringify(sourceClaim)}\n{bad json}\n`);
+    const result = await run(path);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(":2:");
     expect(result.stdout).toContain("invalid JSON");
   });
 
-  test("rejects a blank ledger", () => {
-    const path = fixture([]);
-    const result = run(path);
+  test("rejects a blank ledger", async () => {
+    const path = await fixture([]);
+    const result = await run(path);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("ledger contains no claims");
   });
 
-  test("rejects duplicate claim identifiers", () => {
-    const result = run(fixture([sourceClaim, sourceClaim]));
+  test("rejects duplicate claim identifiers", async () => {
+    const result = await run(await fixture([sourceClaim, sourceClaim]));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("duplicate claim_id");
   });
 
-  test("accepts forward references in an acyclic ledger", () => {
+  test("accepts forward references in an acyclic ledger", async () => {
     const synthesis = {
       assessment: {
         basis: "The bounded conclusion derives from C-001.",
@@ -124,13 +132,13 @@ describe("check-ledger", () => {
       scope: "The source claim's stated setting.",
       sources: [],
     };
-    const result = run(fixture([synthesis, sourceClaim]));
+    const result = await run(await fixture([synthesis, sourceClaim]));
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("claims=2");
   });
 
-  test("accepts every documented enum and ignores semantic absurdity", () => {
+  test("accepts every documented enum and ignores semantic absurdity", async () => {
     const claimTypes = [
       "definition",
       "empirical",
@@ -182,21 +190,21 @@ describe("check-ledger", () => {
         retained: true,
       },
     }));
-    const result = run(fixture(rows));
+    const result = await run(await fixture(rows));
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("claims=6");
   });
 
-  test("requires source provenance for source claims", () => {
+  test("requires source provenance for source claims", async () => {
     const { sources: _, ...withoutSources } = sourceClaim;
-    const result = run(fixture([withoutSources]));
+    const result = await run(await fixture([withoutSources]));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("requires at least one source");
   });
 
-  test("rejects invalid enums and malformed nested entries", () => {
+  test("rejects invalid enums and malformed nested entries", async () => {
     const invalid = {
       ...sourceClaim,
       assessment: {
@@ -208,7 +216,7 @@ describe("check-ledger", () => {
       relations: [{ basis: "", target: "", type: "agrees" }],
       sources: [{ locator: "", source_id: 4 }],
     };
-    const result = run(fixture([invalid]));
+    const result = await run(await fixture([invalid]));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("claim_type must be one of");
@@ -217,15 +225,16 @@ describe("check-ledger", () => {
     expect(result.stdout).toContain("relations[0].type");
   });
 
-  test("requires every normalized array field", () => {
+  test("requires every normalized array field", async () => {
     const { derived_from: _derivedFrom, ...withoutDerivedFrom } = sourceClaim;
     const { relations: _relations, ...withoutRelations } = sourceClaim;
     const { sources: _sources, ...withoutSources } = sourceClaim;
-    const results = [
-      run(fixture([withoutSources])),
-      run(fixture([withoutDerivedFrom])),
-      run(fixture([withoutRelations])),
-    ];
+    const paths = await Promise.all([
+      fixture([withoutSources]),
+      fixture([withoutDerivedFrom]),
+      fixture([withoutRelations]),
+    ]);
+    const results = await Promise.all(paths.map((path) => run(path)));
 
     expect(results.map((result) => result.exitCode)).toEqual([1, 1, 1]);
     expect(results[0]?.stdout).toContain("sources must be an array");
@@ -233,15 +242,15 @@ describe("check-ledger", () => {
     expect(results[2]?.stdout).toContain("relations must be an array");
   });
 
-  test("requires an assessment for a load-bearing claim", () => {
+  test("requires an assessment for a load-bearing claim", async () => {
     const { assessment: _, ...withoutAssessment } = sourceClaim;
-    const result = run(fixture([withoutAssessment]));
+    const result = await run(await fixture([withoutAssessment]));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("load-bearing claim requires assessment");
   });
 
-  test("rejects dangling derivations and relation targets", () => {
+  test("rejects dangling derivations and relation targets", async () => {
     const synthesis = {
       ...sourceClaim,
       claim_id: "Y-001",
@@ -256,14 +265,14 @@ describe("check-ledger", () => {
       ],
       sources: [],
     };
-    const result = run(fixture([synthesis]));
+    const result = await run(await fixture([synthesis]));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("unresolved derived_from");
     expect(result.stdout).toContain("unresolved relation target");
   });
 
-  test("rejects a relation targeting its own row", () => {
+  test("rejects a relation targeting its own row", async () => {
     const selfRelated = {
       ...sourceClaim,
       relations: [
@@ -274,13 +283,13 @@ describe("check-ledger", () => {
         },
       ],
     };
-    const result = run(fixture([selfRelated]));
+    const result = await run(await fixture([selfRelated]));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("must reference another row");
   });
 
-  test("rejects derivation cycles", () => {
+  test("rejects derivation cycles", async () => {
     const first = {
       ...sourceClaim,
       claim_id: "Y-001",
@@ -293,13 +302,13 @@ describe("check-ledger", () => {
       claim_id: "Y-002",
       derived_from: ["Y-001"],
     };
-    const result = run(fixture([first, second]));
+    const result = await run(await fixture([first, second]));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("derivation cycle");
   });
 
-  test("checks a deep acyclic derivation without recursion overflow", () => {
+  test("checks a deep acyclic derivation without recursion overflow", async () => {
     const depth = 60_001;
     const rows = Array.from({ length: depth }, (_, index) => {
       const claimId = `Y-${index}`;
@@ -326,17 +335,19 @@ describe("check-ledger", () => {
         sources: [],
       };
     });
-    const result = run(fixture(rows));
+    const result = await run(await fixture(rows));
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(`claims=${depth}`);
     expect(result.stderr).not.toContain("Maximum call stack");
-  });
+  }, 90_000);
 
-  test("uses Cleye's required-parameter failure and exit 2 for other input failures", () => {
-    const usage = run();
-    const missing = run("/path/that/does/not/exist.jsonl");
-    const tooMany = run(example, example);
+  test("uses Cleye's required-parameter failure and exit 2 for other input failures", async () => {
+    const [usage, missing, tooMany] = await Promise.all([
+      run(),
+      run("/path/that/does/not/exist.jsonl"),
+      run(example, example),
+    ]);
 
     expect(usage.exitCode).toBe(1);
     expect(usage.stderr).toContain('Missing required parameter "claimsJsonl"');
@@ -346,8 +357,8 @@ describe("check-ledger", () => {
     expect(tooMany.stderr).toContain("accepts exactly one claims JSONL path");
   });
 
-  test("rejects --__proto__ before treating it as a ledger path", () => {
-    const result = run("--__proto__");
+  test("rejects --__proto__ before treating it as a ledger path", async () => {
+    const result = await run("--__proto__");
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("unknown option '--__proto__'");

@@ -1276,6 +1276,8 @@ function indexCommand() {
         ...timeoutFlag(),
         detach: Boolean,
         status: Boolean,
+        plan: Boolean,
+        acceptPlan: Boolean,
       },
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -1301,6 +1303,20 @@ function indexCommand() {
         );
         return;
       }
+      if (
+        (parsed.flags.plan === true &&
+          (parsed.flags.detach === true ||
+            parsed.flags.status === true ||
+            parsed.flags.acceptPlan === true)) ||
+        (parsed.flags.status === true && parsed.flags.acceptPlan === true)
+      ) {
+        commandResult = err(
+          new Error(
+            "--plan requires a read-only foreground invocation; --accept-plan cannot be combined with --plan or --status",
+          ),
+        );
+        return;
+      }
       if (parsed.flags.status === true) {
         commandResult = await runIndexStatus();
         return;
@@ -1313,6 +1329,10 @@ function indexCommand() {
       const indexResult = await runIndexWrapper(
         timeout.value ?? 600_000,
         parsed.flags.detach === true ? "detach" : "wait",
+        {
+          plan: parsed.flags.plan === true,
+          acceptPlan: parsed.flags.acceptPlan === true,
+        },
       );
       if (indexResult.isErr()) {
         commandResult = err(indexResult.error);

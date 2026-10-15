@@ -64,6 +64,41 @@ time without observable progress. Use `repo-retrieve index --detach` to leave a 
 running, then `repo-retrieve index --status` to inspect completion. The worker records the
 watermark only after indexing succeeds and HEAD remains unchanged from the request.
 
+Every `rr index` first plans the current file set with ccc's installed matcher and walker,
+including nested `.gitignore`, exclude pruning, and `max_file_size`. Run `rr index --plan`
+to inspect it without starting ccc or contacting the daemon. Stdout contains one JSONL record
+per matched file (`path`, `bytes`, `est_chunks`, `kind`), followed by a `type: "summary"` record.
+Stderr shows the ten largest directory/extension contributors with exclude lines for
+`.cocoindex_code/settings.yml`. Suggestions are checked with ccc's matcher; if a glob would
+prune an included file's parent directory, exact file excludes replace it.
+
+Declare the repo's budget in `.cocoindex_code/rr.toml`:
+
+```toml
+[index]
+max_est_chunks = 50000
+max_data_share = 0.20
+max_seconds = 600
+est_chunks_per_second = 50
+```
+
+These are also the defaults when omitted. Chunks are estimates, `ceil(Unicode characters / 800)`
+per nonblank UTF-8 file; undecodable files remain in the matched file count with zero chunks,
+as ccc skips their content. Directory totals use non-overlapping buckets capped at three levels.
+Data share is the fraction of estimated chunks classified as data. Classification uses machine
+format extensions, notebook outputs, long lines, digit/punctuation density, and minification.
+The assumed chunks/s estimates GPU seconds for a full rebuild, including files an incremental
+index might reuse; it is not a hardware benchmark.
+
+Exceeding any bound exits 4 before ccc starts, including with `--plan`. Invalid configuration or
+an unavailable matcher exits 2. `--accept-plan` permits a normal index despite the preflight
+violations and records the override in `.cocoindex_code/RR_ACCEPTED_PLAN.json`; it cannot be
+combined with `--plan`. The time bound still applies. While indexing, increases in ccc's reported
+persisted chunk count provide a measured chunks/s and remaining ETA. An estimated total duration
+over `max_seconds` exits 125 and repeats the contributor report. If replacement/deletion work
+does not increase the chunk count, no embedding rate is claimed; elapsed time still enforces the
+bound. Only the client stops; the daemon remains running. The existing no-progress guard exits 124.
+
 Lexical NO_MATCH results from `text`, `regex`, and `files` name the repo root they searched and
 state that paths outside it were not searched. For path-like patterns and scratch-looking queries,
 they also point to `/tmp/claude-<uid>/` and `$TMPDIR`. The search hook permits plain `fd`/`rg` with

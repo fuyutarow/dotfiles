@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 — 2026-10-15
+
+- Plan ccc's matcher scope before indexing and refuse over-budget plans with safe exclude suggestions.
+
 ## 1.1.0 — 2026-10-14
 
 - Own hook search classification, project resolution, rewrite generation, and denial guidance through `decideSearchRoute`; reduce the hook to protocol adaptation.

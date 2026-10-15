@@ -15,7 +15,7 @@ import { jsonOf, z } from "../../shared/src/zod.ts";
 
 // The `ccc` entry point is a uv-tool script whose shebang names the interpreter that can import
 // cocoindex_code.
-async function cccPython(ccc: string): Promise<string | null> {
+export async function cccPython(ccc: string): Promise<string | null> {
   const read = await attempt(
     () => readFileSync(realpathSync(ccc), "utf8").split("\n", 1)[0] ?? "",
   );

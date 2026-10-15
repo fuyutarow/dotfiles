@@ -43,6 +43,13 @@ import {
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
+import {
+  computeIndexPlan,
+  measuredEta,
+  planReport,
+  writePlanJsonl,
+  type IndexPlan,
+} from "./index-plan.ts";
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
@@ -280,6 +287,7 @@ export type IndexProgressSource = {
   now: () => number;
   sleep: (milliseconds: number) => Promise<void>;
   sample: () => Promise<string>;
+  overBudget?: () => boolean;
 };
 
 export async function waitForIndexChild(
@@ -289,6 +297,7 @@ export async function waitForIndexChild(
 ): Promise<number> {
   let lastProgress = source.now();
   let lastSample = await source.sample();
+  if (source.overBudget?.() === true) return 125;
   let settled = false;
   let exitCode = 0;
   void childExit.then((code) => {
@@ -300,6 +309,7 @@ export async function waitForIndexChild(
     await source.sleep(INDEX_POLL_MS);
     if (settled) break;
     const sample = await source.sample();
+    if (source.overBudget?.() === true) return 125;
     if (sample !== lastSample) {
       lastSample = sample;
       lastProgress = source.now();
@@ -311,7 +321,7 @@ export async function waitForIndexChild(
 
 async function indexProgressSample(
   project: string,
-): Promise<{ signature: string; indexing: boolean }> {
+): Promise<{ signature: string; indexing: boolean; chunks?: number }> {
   const ccc = requireExecutable("ccc");
   if (ccc.isErr())
     return {
@@ -329,7 +339,10 @@ async function indexProgressSample(
     .split("\n")
     .find((line) => line.trimStart().startsWith(`${project} [`));
   return {
-    signature: `${statusLine ?? status.stdout.trim()}\n${daemonLine ?? daemon.stdout.trim()}`,
+    signature: `${statusLine ?? status.stdout.trim()}\n${/\bChunks:\s*(\d+)/u.exec(status.stdout)?.[0] ?? ""}\n${daemonLine ?? daemon.stdout.trim()}`,
+    ...(/\bChunks:\s*(\d+)/u.exec(status.stdout)?.[1] === undefined
+      ? {}
+      : { chunks: Number(/\bChunks:\s*(\d+)/u.exec(status.stdout)?.[1]) }),
     indexing:
       daemon.exitCode !== 0 ||
       daemonLine === undefined ||
@@ -340,10 +353,21 @@ async function indexProgressSample(
 async function waitForProjectIdle(
   project: string,
   stallMs: number,
-): Promise<boolean> {
+  timeBudget?: { plan: IndexPlan; startedAt: number },
+): Promise<number> {
   let progressAt = Temporal.Now.instant().epochMilliseconds;
   let state = await indexProgressSample(project);
   while (state.indexing) {
+    if (
+      timeBudget !== undefined &&
+      (Temporal.Now.instant().epochMilliseconds - timeBudget.startedAt) / 1000 >
+        timeBudget.plan.budget.max_seconds
+    ) {
+      process.stderr.write(
+        `FATAL: elapsed time exceeds ETA budget while daemon is still indexing; left the daemon running\n${planReport(timeBudget.plan)}`,
+      );
+      return 125;
+    }
     await Bun.sleep(INDEX_POLL_MS);
     const next = await indexProgressSample(project);
     if (next.signature !== state.signature) {
@@ -352,9 +376,9 @@ async function waitForProjectIdle(
       continue;
     }
     if (Temporal.Now.instant().epochMilliseconds - progressAt >= stallMs)
-      return false;
+      return 124;
   }
-  return true;
+  return 0;
 }
 
 // The watermark lives beside the DB it certifies — in ccc's DB dir, which is outside the repo
@@ -508,6 +532,8 @@ async function hasIndexArtifacts(
     if (!entry.isFile()) continue;
     const parent = resolve(entry.parentPath);
     if (parent !== resolve(dir) && !`${parent}/`.startsWith(`${cccStore}/`))
+      continue;
+    if (entry.name === "rr.toml" || entry.name === "RR_ACCEPTED_PLAN.json")
       continue;
     if (entry.name === SETTINGS_BASENAME) continue; // hand-authored by `ccc init`, not indexing
     if (
@@ -806,7 +832,9 @@ async function reindexCertified(
   ccc: string,
   timeoutMs: number,
   expectedHead?: string | null,
+  plan?: IndexPlan,
 ): Promise<Result<{ code: number; head: string | null }, Error>> {
+  const startedAt = Temporal.Now.instant().epochMilliseconds;
   let head: string | null = null;
   let certified = false;
   for (
@@ -826,7 +854,7 @@ async function reindexCertified(
 
     process.stderr.write(`ROUTE: index -> ccc index project=${project}\n`);
     const child = await fromAsyncThrowable(
-      () => runChildToStderr([ccc, "index"], timeoutMs, project),
+      () => runChildToStderr([ccc, "index"], timeoutMs, project, plan),
       asError,
     )();
     if (child.isErr()) return err(child.error);
@@ -861,12 +889,16 @@ async function reindexCertified(
     return ok({ code: 2, head: null });
   }
 
-  const idle = await waitForProjectIdle(project, timeoutMs);
-  if (!idle) {
+  const idle = await waitForProjectIdle(
+    project,
+    timeoutMs,
+    plan === undefined ? undefined : { plan, startedAt },
+  );
+  if (idle !== 0) {
     process.stderr.write(
       `FATAL: ccc daemon kept indexing ${project} without progress for ${timeoutMs}ms; watermark left unwritten\n`,
     );
-    return ok({ code: 124, head: null });
+    return ok({ code: idle, head: null });
   }
 
   // The daemon wrote the index wherever ITS COCOINDEX_CODE_DB_PATH_MAPPING points; this process
@@ -896,6 +928,7 @@ async function runChildToStderr(
   command: string[],
   timeoutMs: number,
   cwd: string,
+  plan?: IndexPlan,
 ): Promise<number> {
   const runtimeDir = process.env.XDG_RUNTIME_DIR;
   if (runtimeDir !== undefined) {
@@ -917,7 +950,11 @@ async function runChildToStderr(
       );
     }
   }
-  // bounded: waitForIndexChild enforces the progress-based stall timeout before terminating this client.
+  const initial = await indexProgressSample(cwd);
+  const startedAt = Temporal.Now.instant().epochMilliseconds;
+  const initialChunks = initial.chunks ?? 0;
+  let overBudget = false;
+  // bounded: waitForIndexChild enforces progress and ETA limits before terminating this client.
   const child = Bun.spawn({
     cmd: command,
     cwd,
@@ -932,14 +969,48 @@ async function runChildToStderr(
       process.stderr.write(chunk);
     }
   })();
-  const sample = async () =>
-    `${(await indexProgressSample(cwd)).signature}\nchild-output-bytes=${outputAdvance}`;
+  const sample = async () => {
+    const state = await indexProgressSample(cwd);
+    if (
+      plan !== undefined &&
+      (Temporal.Now.instant().epochMilliseconds - startedAt) / 1000 >
+        plan.budget.max_seconds
+    )
+      overBudget = true;
+    if (
+      plan !== undefined &&
+      state.chunks !== undefined &&
+      initialChunks !== undefined
+    ) {
+      const eta = measuredEta(
+        plan.total.est_chunks,
+        initialChunks,
+        state.chunks,
+        (Temporal.Now.instant().epochMilliseconds - startedAt) / 1000,
+      );
+      if (eta !== null) {
+        process.stderr.write(
+          `INDEX: measured ${eta.rate.toFixed(2)} chunks/s; ETA ${eta.remaining.toFixed(1)}s remaining\n`,
+        );
+        overBudget = overBudget || eta.totalSeconds > plan.budget.max_seconds;
+      }
+    }
+    return `${state.signature}\nchild-output-bytes=${outputAdvance}`;
+  };
   const exitPromise = Promise.all([child.exited, relay]).then(([code]) => code);
   const exitCode = await waitForIndexChild(exitPromise, timeoutMs, {
     now: () => Temporal.Now.instant().epochMilliseconds,
     sleep: (milliseconds) => Bun.sleep(milliseconds),
     sample,
+    overBudget: () => overBudget,
   });
+  if (exitCode === 125) {
+    child.kill("SIGTERM");
+    process.stderr.write(
+      `FATAL: measured ETA exceeds time budget; stopped the client and left the daemon running\n${plan === undefined ? "" : planReport(plan)}`,
+    );
+    return 125;
+  }
   if (exitCode === 124) {
     child.kill("SIGTERM");
     process.stderr.write(
@@ -960,6 +1031,7 @@ async function runChildToStderr(
 export async function runIndexWrapper(
   timeoutMs = INDEX_STALL_MS,
   mode: "wait" | "detach" = "wait",
+  options: { plan?: boolean; acceptPlan?: boolean } = {},
 ): Promise<Result<number, Error>> {
   const resolution = resolveRegisteredProject(process.cwd());
   if (resolution?.workspace !== null && resolution?.workspace !== undefined) {
@@ -977,6 +1049,30 @@ export async function runIndexWrapper(
   }
   const ccc = requireExecutable("ccc");
   if (ccc.isErr()) return err(ccc.error);
+
+  const planned = await computeIndexPlan(project, ccc.value);
+  if (planned.isErr()) return err(planned.error);
+  const plan = planned.value;
+  process.stderr.write(planReport(plan));
+  if (options.plan === true) {
+    writePlanJsonl(plan);
+    return ok(plan.violations.length === 0 ? 0 : 4);
+  }
+  if (plan.violations.length > 0 && options.acceptPlan !== true) return ok(4);
+  if (options.acceptPlan === true) {
+    const accepted = await fromAsyncThrowable(
+      () =>
+        Bun.write(
+          join(project, ".cocoindex_code", "RR_ACCEPTED_PLAN.json"),
+          `${JSON.stringify({ acceptedAt: Temporal.Now.instant().toString(), budget: plan.budget, total: plan.total, violations: plan.violations })}\n`,
+        ),
+      asError,
+    )();
+    if (accepted.isErr()) return err(accepted.error);
+    process.stderr.write(
+      "PLAN: --accept-plan override recorded in .cocoindex_code/RR_ACCEPTED_PLAN.json; measured time budget still applies\n",
+    );
+  }
 
   const worker = process.env.REPO_RETRIEVE_INDEX_WORKER === "1";
   let expectedHead: string | null | undefined;
@@ -1004,6 +1100,7 @@ export async function runIndexWrapper(
             process.execPath,
             fileURLToPath(new URL("./repo-retrieve.ts", import.meta.url)),
             "index",
+            ...(options.acceptPlan === true ? ["--accept-plan"] : []),
           ],
           {
             cwd: project,
@@ -1062,6 +1159,7 @@ export async function runIndexWrapper(
     ccc.value,
     timeoutMs,
     expectedHead,
+    plan,
   );
   if (certifiedResult.isErr()) {
     if (worker) await markWorkerRequest(project, "failed");

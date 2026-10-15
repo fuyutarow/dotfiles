@@ -187,11 +187,24 @@ function plantIndexArtifact(dir: string): void {
 function fakeTools(): { bin: string; log: string } {
   const bin = tempDir("repo-retrieve-bin-");
   const log = join(tmpdir(), `repo-retrieve-${crypto.randomUUID()}.log`);
+  // Protocol stub for the planner; installed-matcher coverage lives in index-plan.test.ts.
+  const python = join(bin, "python");
+  writeFileSync(
+    python,
+    `#!/bin/sh
+case "$1" in
+  */ccc_plan.py) if [ "\${3:-}" = --validate-excludes ]; then printf '[]'; fi; exit 0 ;;
+  */ccc_scope.py) exit 1 ;;
+esac
+exec /bin/sh "$@"
+`,
+  );
+  chmodSync(python, 0o755);
   for (const name of ["ccc", "rg"]) {
     const path = join(bin, name);
     writeFileSync(
       path,
-      `#!/bin/sh
+      `#!${name === "ccc" ? python : "/bin/sh"}
 printf '%s\\n' '${name} '"$*" >> "$FAKE_SEARCH_LOG"
 if [ -n "\${FAKE_SEARCH_EXPECT_CWD:-}" ] && [ "$(pwd -P)" != "$(cd "$FAKE_SEARCH_EXPECT_CWD" && pwd -P)" ]; then exit 9; fi
 if [ "${name}" = ccc ] && [ "$1" = daemon ] && [ "$2" = status ]; then

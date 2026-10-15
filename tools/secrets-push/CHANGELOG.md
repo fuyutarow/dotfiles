@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-15
+
+- Remove exactly one output newline from fnox get before verification. Account for fnox stdin set trimming surrounding whitespace and disclose that normalization when it changes the source value; retain SHA-256 mismatch failures for stored byte changes.
+
 ## 0.2.0 — 2026-10-15
 
 - Relay selected fnox secrets from local or SSH sources to SSH targets and verify each transfer by SHA-256.

@@ -35,7 +35,8 @@ export interface AgxSnapshotRead {
   reason: string | undefined;
 }
 
-function stateDir(env: NodeJS.ProcessEnv): string {
+/** agx's state directory (records.jsonl, runs/<id>/…); same resolution order as tools/agx. */
+export function stateDir(env: NodeJS.ProcessEnv): string {
   for (const key of ["AGX_NEXT_STATE_DIR", "AGX_STATE_DIR"]) {
     const value = env[key];
     if (value !== undefined && value !== "") return value;

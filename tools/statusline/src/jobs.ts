@@ -131,12 +131,20 @@ export const dur = (s: number) =>
 // a reader could look up): a process reparented to init that still points at a Claude scratchpad.
 // VRAM used to ride this segment (only while a job was admitted); it now lives unconditionally
 // on the Sys row instead, so it is not repeated here.
+export const JOBS_SHOWN = 3;
+/** The one Job entry format, for every session and every source: `<name> <elapsed>`. */
+export const jobEntry = (job: Admitted): string =>
+  `${job.name} ${dur(job.secs)}`;
 export function admittedJobSegment(jobs: Admitted[], orphans: number): string {
-  const first = jobs[0];
-  const more = jobs.length > 1 ? `${DIM}+${jobs.length - 1}${RST}` : "";
-  // Guaranteed by the length check above; only noUncheckedIndexedAccess can't see that.
-  let seg =
-    first !== undefined ? ` ${first.name}${more} ${dur(first.secs)}` : "";
+  // The same host shows the same line in every session: oldest job first, ties by name, so
+  // scan order never decides which job a session names.
+  const ordered = jobs.toSorted((a, b) =>
+    a.secs === b.secs ? a.name.localeCompare(b.name) : b.secs - a.secs,
+  );
+  const shown = ordered.slice(0, JOBS_SHOWN).map((job) => jobEntry(job));
+  const hidden = ordered.length - shown.length;
+  let seg = shown.length > 0 ? ` ${shown.join(" ")}` : "";
+  if (hidden > 0) seg += ` ${DIM}+${hidden}${RST}`;
   if (orphans > 0) seg += ` ${DIM}orphan×${orphans}${RST}`;
   return seg;
 }

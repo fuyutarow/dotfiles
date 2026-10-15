@@ -19,11 +19,14 @@ import {
   dispatchRowPrice,
   formatCostUsd,
 } from "../../shared/src/dispatch-pricing.ts";
-import { readAgxSnapshotAsync } from "./agx-snapshot.ts";
+import {
+  readAgxSnapshotAsync,
+  stateDir as agxStateDir,
+} from "./agx-snapshot.ts";
 
 // Run row source: one marker per worker agx started (tools/agx/src/state.ts).
 // A marker is written at start and removed at exit, so a marker whose process is gone means
-// agx itself was killed — counted as stale, never dropped (EXPLICIT-ABSENCE).
+// agx itself was killed — counted as orphaned (agx's own word), never dropped (EXPLICIT-ABSENCE).
 export interface RouteRun {
   displayId: string | undefined;
   choice: string;
@@ -34,6 +37,8 @@ export interface RouteRun {
   markerCostUsd: number | undefined;
   secs: number | undefined;
   alive: boolean;
+  // agx recorded a judgment (accept/reject) for the run: the owner has seen it
+  acknowledged?: boolean;
   dispatcherSession: string | undefined;
   // what the worker is doing (agx progress file); undefined until its first event lands
   doing:
@@ -46,6 +51,17 @@ export interface RouteRun {
         session?: string; // the vendor's id for the worker (codex thread, claude session)
       }
     | undefined;
+}
+// The `orphaned N` count. State words come from agx's store fold (`agx ls --json` `state`:
+// running | ended | orphaned) — this file never decides a run's state itself. A run is counted
+// iff agx folds it `orphaned` (here: not alive) AND no judgment is recorded on it (not
+// acknowledged) AND it started less than ORPHAN_WINDOW_SECS ago. The window is the cap that makes
+// the count fall back to 0 overnight instead of growing; the judgment makes it fall at once when
+// the owner has dealt with a run. A run with no readable start time cannot age out, so it counts.
+export const ORPHAN_WINDOW_SECS = 3600;
+export function countsAsOrphan(run: RouteRun): boolean {
+  if (run.alive || run.acknowledged === true) return false;
+  return run.secs === undefined || run.secs < ORPHAN_WINDOW_SECS;
 }
 const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
 function doingOf(dir: string, runId: string): RouteRun["doing"] {
@@ -189,12 +205,13 @@ export async function agxRouteRunsAsync(
         ...activity,
         ...(vendorSession === undefined ? {} : { session: vendorSession }),
       };
-    } else if (
-      enrich &&
-      lastProgressPath !== null &&
-      lastProgressPath !== undefined
-    ) {
-      doing = await progressFromReturn(lastProgressPath, cwd);
+    } else if (enrich) {
+      doing = await progressFromRun(
+        agxStateDir(env),
+        row.id,
+        lastProgressPath ?? undefined,
+        cwd,
+      );
     }
     const cost = enrich
       ? await liveCodexCost(
@@ -218,6 +235,7 @@ export async function agxRouteRunsAsync(
       markerCostUsd: optionalNumber(row.cost_usd) ?? cost,
       secs,
       alive: row.state === "running",
+      acknowledged: row.judgment !== null && row.judgment !== undefined,
       dispatcherSession: row.dispatcher_session ?? undefined,
       doing,
     });
@@ -231,6 +249,36 @@ export async function agxRouteRunsAsync(
     ...(snapshot.reason === undefined ? {} : { snapshotWhy: snapshot.reason }),
   };
 }
+// A claude worker's --progress-file (<state>/runs/<id>/worker-progress.jsonl): its newest line is
+// the progress snapshot (last tool/command, counts, cost). undefined until the first event lands.
+async function progressFromWorker(
+  stateRoot: string,
+  runId: string,
+  cwd?: string,
+): Promise<RouteRun["doing"]> {
+  const text = await Bun.file(
+    join(stateRoot, "runs", runId, "worker-progress.jsonl"),
+  )
+    .text()
+    .catch(() => null);
+  const line = text
+    ?.split(/\r?\n/u)
+    .findLast((candidate) => candidate.trim() !== "");
+  if (line === undefined || !jsonOf(ProgressSchema).safeParse(line).success)
+    return undefined;
+  return progressFromText(line, cwd);
+}
+// The worker's own progress file first; the latest interim return when it has not written yet.
+async function progressFromRun(
+  stateRoot: string,
+  runId: string,
+  interimPath: string | undefined,
+  cwd?: string,
+): Promise<RouteRun["doing"]> {
+  const worker = await progressFromWorker(stateRoot, runId, cwd);
+  if (worker !== undefined || interimPath === undefined) return worker;
+  return progressFromReturn(interimPath, cwd);
+}
 async function progressFromReturn(
   path: string,
   cwd?: string,
@@ -239,6 +287,9 @@ async function progressFromReturn(
     .text()
     .catch(() => null);
   if (text === null) return undefined;
+  return progressFromText(text, cwd);
+}
+function progressFromText(text: string, cwd?: string): RouteRun["doing"] {
   const parsed = jsonOf(ProgressSchema).safeParse(text);
   if (parsed.success) {
     return {
@@ -572,7 +623,7 @@ export function routeLines(
   const live = runs
     .filter((r) => r.alive)
     .toSorted((a, b) => (b.secs ?? -1) - (a.secs ?? -1));
-  const stale = runs.length - live.length;
+  const orphaned = runs.filter((run) => countsAsOrphan(run)).length;
   const attributed = live.filter(
     (r) => r.dispatcherSession !== undefined && r.dispatcherSession !== "",
   );
@@ -633,7 +684,7 @@ export function routeLines(
   const summary = [
     ...(other > 0 ? [`${DIM}+${other} in other sessions${RST}`] : []),
     ...(unattributed > 0 ? [`${DIM}unattributed ${unattributed}${RST}`] : []),
-    ...(stale > 0 ? [`${ESC}[38;5;167mstale ${stale}${RST}`] : []),
+    ...(orphaned > 0 ? [`${ESC}[38;5;167morphaned ${orphaned}${RST}`] : []),
     ...(unreadable > 0
       ? [`${ESC}[38;5;178munreadable ${unreadable}${RST}`]
       : []),

@@ -748,7 +748,7 @@ describe("statusline Run row", () => {
         .split("\n")
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
-    ).toEqual(["+1 in other sessions · unattributed 2 · stale 3"]);
+    ).toEqual(["+1 in other sessions · unattributed 2 · orphaned 3"]);
     expect(out).not.toContain("other worker");
     expect(out).not.toContain("unowned worker");
     expect(out).not.toContain("dead own");
@@ -760,7 +760,7 @@ describe("statusline Run row", () => {
     const dir = join(scratch, "no-attribution-summary");
     marker(dir, "own", process.pid, "my worker", 90, SESSION);
     const out = await render(dir);
-    expect(out).not.toMatch(/in other sessions|unattributed|stale/u);
+    expect(out).not.toMatch(/in other sessions|unattributed|orphaned/u);
   });
 
   test("legacy active directories no longer supply Run rows", async () => {
@@ -1270,6 +1270,33 @@ describe("statusline Run row", () => {
     expect(out).not.toContain("agx");
   });
 
+  test("Job entries share one name + elapsed format in every session", async () => {
+    const ps = [
+      "1 00:00:22 agent-resource-run --manifest /tmp/cpu.resource.json",
+      "1 00:00:32 agent-resource-run --manifest /tmp/job2610-modtest-gpu-3g.resource.json",
+    ];
+    const first = await render(
+      join(scratch, "job-fmt-a"),
+      undefined,
+      undefined,
+      "[]",
+      ps.join("\n"),
+      join(scratch, "job-fmt-home-a"),
+    );
+    const reversed = await render(
+      join(scratch, "job-fmt-b"),
+      undefined,
+      "other",
+      "[]",
+      ps.toReversed().join("\n"),
+      join(scratch, "job-fmt-home-b"),
+    );
+    const line = "Job: job2610-modtest-gpu-3g 0m32s cpu 0m22s";
+    expect(first).toContain(line);
+    expect(reversed).toContain(line);
+    expect(first).not.toMatch(/cpu\+1/u);
+  });
+
   test("agx ls rows without started_at show explicit n/a elapsed", async () => {
     const out = await render(
       join(scratch, "missing-start-time"),
@@ -1390,11 +1417,90 @@ describe("statusline Run row", () => {
     console.info(`agx snapshot read warm cache: ${warmMs.toFixed(2)}ms`);
   });
 
-  test("a marker whose process is gone is counted as stale, not hidden", async () => {
+  // The `orphaned N` rule (dispatch-runs.ts countsAsOrphan): agx folds the run `orphaned`, it is
+  // younger than ORPHAN_WINDOW_SECS (1h) and carries no judgment.
+  const orphanRow = (id: string, ageS: number, judgment: unknown = null) => ({
+    id,
+    ticket: `old ${id}`,
+    state: "orphaned",
+    row: "luna-high",
+    exit: null,
+    cwd: scratch,
+    workspace: scratch,
+    writes: [],
+    judgment,
+    report_path: null,
+    dispatcher_session: "other-session-id",
+    vendor_session: null,
+    started_at: Temporal.Now.instant().subtract({ seconds: ageS }).toString(),
+    last_progress_path: null,
+    continues: null,
+    verify: [],
+  });
+
+  test("orphans older than the window render no count; a fresh one renders orphaned 1", async () => {
+    const old = Array.from({ length: 62 }, (_, i) =>
+      orphanRow(`old-${i}`, 3 * 3600 + i),
+    );
+    const none = await render(
+      join(scratch, "orphan-old"),
+      undefined,
+      SESSION,
+      JSON.stringify(old),
+    );
+    expect(none).not.toMatch(/orphaned|stale/u);
+    const one = await render(
+      join(scratch, "orphan-fresh"),
+      undefined,
+      SESSION,
+      JSON.stringify([...old, orphanRow("fresh", 120)]),
+    );
+    expect(one).toMatch(/^orphaned 1$/mu);
+  });
+
+  test("a judged orphan is acknowledged and not counted", async () => {
+    const out = await render(
+      join(scratch, "orphan-judged"),
+      undefined,
+      SESSION,
+      JSON.stringify([
+        orphanRow("seen", 120, { decision: "reject", note: "" }),
+      ]),
+    );
+    expect(out).not.toMatch(/orphaned/u);
+  });
+
+  test("a claude run shows its worker-progress.jsonl, not no event yet", async () => {
+    const dir = join(scratch, "claude-progress");
+    const runDir = join(dir, "runs", "claude-run");
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(
+      join(runDir, "worker-progress.jsonl"),
+      progress("$ bun test tests/x.ts", 5, "claude-session") + "\n",
+    );
+    const out = await render(
+      dir,
+      undefined,
+      SESSION,
+      JSON.stringify([
+        {
+          ...orphanRow("claude-run", 30),
+          state: "running",
+          row: "sonnet-high",
+          ticket: "claude job",
+          dispatcher_session: SESSION,
+        },
+      ]),
+    );
+    expect(out).not.toContain("no event yet");
+    expect(out).toMatch(/\$ bun test tests\/x\.ts .*12 cmd · 3 files/u);
+  });
+
+  test("a marker whose process is gone is counted as orphaned, not hidden", async () => {
     const dir = join(scratch, "stale");
     marker(dir, "b", 2_147_483_000, "killed");
     const out = await render(dir);
-    expect(out).toMatch(/^stale 1$/mu);
+    expect(out).toMatch(/^orphaned 1$/mu);
     expect(out).not.toMatch(/^luna-high .* killed/mu);
   });
 

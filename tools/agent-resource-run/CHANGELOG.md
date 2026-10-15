@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.2 — 2026-10-15
+
+- ccc uses its reserved GPU partition for indexing, waits when unavailable, and keeps embedding batches off CPU.
+
 ## 1.4.1 — 2026-10-12
 
 - Report a live non-runner reservation-lock owner as an admission denial instead of waiting and

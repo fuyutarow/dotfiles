@@ -91,9 +91,13 @@ gpu_vram_sample_interval_ms = 1000
 #     minus a CUDA-context allowance, and a service that finds less than its partition free at
 #     start runs on CPU instead of growing into job memory.
 # Why these sizes (measured 2026-10-01, RTX 3060 12 GiB):
-#   ccc     granite-embedding-311m-multilingual-r2, fp32 weights ~1.25 GB; allocator peak measured
-#           986 MiB (2026-10-01, journal "gpu_partition[ccc]"), so 2048 (cap 1536) leaves headroom
-#           for indexing batches. Was 3072 on an estimate.
+#   ccc     granite-embedding-311m-multilingual-r2, 1.25 GB checkpoint (~1193 MiB). Its
+#           2048 MiB partition reserves 512 MiB for CUDA context, leaving 1536 MiB for model
+#           weights and batches. ccc budgets 32 MiB of workspace per code chunk, so the current
+#           weights estimate leaves floor((2048 - 512 - 1193) / 32) = 10 chunks maximum;
+#           the daemon defaults to 8 and allows CCC_GPU_BATCH_SIZE to select 1..10. This 32 MiB
+#           budget is a conservative workspace estimate for a 512-token chunk from the model's
+#           768-wide, 12-head bf16 config; the coordinator should tune it from live measurements.
 #   rerank  Qwen3-Reranker-0.6B bf16 ~1.2 GB; with last-token logits only, a 30-candidate request
 #           raised device use by ~1.3 GB in total and ran in 0.6-0.9 s inside a 2 GiB cap.
 # 0 disables a partition (and that service then never uses the GPU).

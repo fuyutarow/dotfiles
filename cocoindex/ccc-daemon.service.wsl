@@ -62,16 +62,17 @@ StartLimitBurst=8
 
 [Service]
 Type=simple
-# Reservation-aware launcher: models stay on CPU; CUDA batches share the runner's .lock.
-# VRAM ceiling: gpu_partition_ccc_mib in tools/agent-resource-run/resource-policy.toml
-# (currently 2048 MiB, including a 512 MiB context allowance). No live GPU reservation
-# may overlap a CUDA batch. Busy/invalid ledger, window or duty ceiling -> CPU indexing.
-# Utilization ceiling is averaged CUDA duty time (including transfers), NOT instantaneous
-# nvidia-smi SM utilization. Four-text batches yield the lock between calls. CPUQuota/RAM
-# remain the daemon's supervisor-owned limits; no watcher/restart or second daemon.
+# GPU-only launcher: ccc owns the standing partition in
+# tools/agent-resource-run/resource-policy.toml (currently 2048 MiB, including a 512 MiB
+# context allowance). Research reservations use the remainder and do not defer ccc. If the
+# partition is unavailable, outside the configured window, or at its duty ceiling, ccc waits;
+# it never embeds on CPU. The model stays on CUDA between batches and is evicted only after a
+# CUDA OOM. Utilization is average CUDA duty time, not instantaneous SM utilization.
+# CPUQuota/RAM remain the daemon's supervisor-owned limits; no watcher/restart or second daemon.
 ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/cocoindex/ccc-daemon-launch.py
-Environment="CCC_GPU_UTILIZATION_PERCENT=20"
-Environment="CCC_GPU_BATCH_SIZE=4"
+Environment="CCC_GPU_UTILIZATION_PERCENT=100"
+Environment="CCC_GPU_BATCH_SIZE=8"
+Environment="CCC_GPU_WAIT_SECONDS=1"
 Environment="XDG_RUNTIME_DIR=%t"
 # Optional HH:MM-HH:MM host-local window, end exclusive, wrapping midnight supported.
 # Equal endpoints permit all day; utilization 0 disables GPU indexing entirely.

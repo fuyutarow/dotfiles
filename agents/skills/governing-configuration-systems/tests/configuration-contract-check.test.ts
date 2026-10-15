@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -16,41 +16,46 @@ type RunResult = Readonly<{
   stdout: string;
 }>;
 
-function fixture(content: string): string {
-  const directory = mkdtempSync(join(tmpdir(), "configuration-contract-"));
+async function fixture(content: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "configuration-contract-"));
   temporaryDirectories.push(directory);
   const path = join(directory, "CONFIGURATION-CONTRACT.md");
-  writeFileSync(path, content);
+  await writeFile(path, content);
   return path;
 }
 
-function run(path: string): RunResult {
-  const result = Bun.spawnSync({
+async function run(path: string): Promise<RunResult> {
+  const child = Bun.spawn({
     cmd: ["bun", script, path],
     stderr: "pipe",
     stdout: "pipe",
     timeout: 10_000,
   });
+  const [exitCode, stderr, stdout] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+    new Response(child.stdout).text(),
+  ]);
   return {
-    exitCode: result.exitCode,
-    stderr: result.stderr.toString(),
-    stdout: result.stdout.toString(),
+    exitCode,
+    stderr,
+    stdout,
   };
 }
 
-function validContract(): string {
-  return readFileSync(validFixture, "utf8");
+async function validContract(): Promise<string> {
+  return readFile(validFixture, "utf8");
 }
 
-afterEach(() => {
+afterEach(async () => {
   for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
+    await rm(directory, { force: true, recursive: true });
   }
 });
 
 describe("configuration-contract-check", () => {
-  test("accepts a complete multi-regime contract", () => {
-    const result = run(validFixture);
+  test("accepts a complete multi-regime contract", async () => {
+    const result = await run(validFixture);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("C1  PASS");
@@ -60,10 +65,10 @@ describe("configuration-contract-check", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("rejects signed-canonical without a named profile", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("rejects signed-canonical without a named profile", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "Canonicalization profile: RFC 8785 JCS",
           "Canonicalization profile: n/a",
         ),
@@ -76,10 +81,10 @@ describe("configuration-contract-check", () => {
     );
   });
 
-  test("rejects strict JSON as a canonicalization profile", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("rejects strict JSON as a canonicalization profile", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "Canonicalization profile: RFC 8785 JCS",
           "Canonicalization profile: strict JSON",
         ),
@@ -92,10 +97,10 @@ describe("configuration-contract-check", () => {
     );
   });
 
-  test("accepts a gated decision that explicitly forbids exceptions", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("accepts a gated decision that explicitly forbids exceptions", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "Exception encoding: encoded: signed exception object with owner and expiry",
           "Exception encoding: none: target rejects every exception",
         ),
@@ -106,10 +111,10 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("C3  PASS");
   });
 
-  test("rejects unknown trust regimes", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("rejects unknown trust regimes", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "human-authored, generated, signed-canonical, gated-decision",
           "human-authored, eventual-policy",
         ),
@@ -120,10 +125,10 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("unknown trust regime: eventual-policy");
   });
 
-  test("rejects a negated raw-byte boundary", () => {
-    const result = run(
-      fixture(
-        validContract()
+  test("rejects a negated raw-byte boundary", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract())
           .replace(
             "human-authored, generated, signed-canonical, gated-decision",
             "signed-raw",
@@ -141,10 +146,10 @@ describe("configuration-contract-check", () => {
     );
   });
 
-  test("rejects a negated canonical boundary", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("rejects a negated canonical boundary", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "Signature / digest input: canonical: UTF-8 bytes emitted after JCS",
           "Signature / digest input: not canonical bytes; hash source bytes instead",
         ),
@@ -157,10 +162,10 @@ describe("configuration-contract-check", () => {
     );
   });
 
-  test("rejects a raw-byte boundary with an absent payload", () => {
-    const result = run(
-      fixture(
-        validContract()
+  test("rejects a raw-byte boundary with an absent payload", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract())
           .replace(
             "human-authored, generated, signed-canonical, gated-decision",
             "signed-raw",
@@ -178,10 +183,10 @@ describe("configuration-contract-check", () => {
     );
   });
 
-  test("rejects a canonical boundary with an absent payload", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("rejects a canonical boundary with an absent payload", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "Signature / digest input: canonical: UTF-8 bytes emitted after JCS",
           "Signature / digest input: canonical: n/a",
         ),
@@ -194,10 +199,10 @@ describe("configuration-contract-check", () => {
     );
   });
 
-  test("rejects an embedded template placeholder", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("rejects an embedded template placeholder", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "Consumer: package installer and policy verifier",
           "Consumer: <human editor> (replace this)",
         ),
@@ -208,15 +213,15 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("placeholder value: Consumer");
   });
 
-  test("ignores fields inside a Markdown code fence", () => {
+  test("ignores fields inside a Markdown code fence", async () => {
     const fence = String.fromCodePoint(96).repeat(3);
-    const result = run(
-      fixture(
+    const result = await run(
+      await fixture(
         fence +
           "text\nConsumer: an example only\n" +
           fence +
           "\n\n" +
-          validContract(),
+          (await validContract()),
       ),
     );
 
@@ -224,10 +229,11 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("configuration contract: FAIL=0");
   });
 
-  test("ignores fields inside a tilde Markdown code fence", () => {
-    const result = run(
-      fixture(
-        "~~~~text\nConsumer: an example only\n~~~~\n\n" + validContract(),
+  test("ignores fields inside a tilde Markdown code fence", async () => {
+    const result = await run(
+      await fixture(
+        "~~~~text\nConsumer: an example only\n~~~~\n\n" +
+          (await validContract()),
       ),
     );
 
@@ -235,17 +241,17 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("configuration contract: FAIL=0");
   });
 
-  test("keeps a fence open when a would-be closing fence has trailing code", () => {
+  test("keeps a fence open when a would-be closing fence has trailing code", async () => {
     const fence = String.fromCodePoint(96).repeat(4);
-    const result = run(
-      fixture(
+    const result = await run(
+      await fixture(
         fence +
           "text\n" +
           fence +
           " this remains code\nConsumer: illustrative only\n" +
           fence +
           "\n\n" +
-          validContract(),
+          (await validContract()),
       ),
     );
 
@@ -253,19 +259,21 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("configuration contract: FAIL=0");
   });
 
-  test("ignores fields inside an indented Markdown code block", () => {
-    const result = run(
-      fixture("    Consumer: illustrative only\n\n" + validContract()),
+  test("ignores fields inside an indented Markdown code block", async () => {
+    const result = await run(
+      await fixture(
+        "    Consumer: illustrative only\n\n" + (await validContract()),
+      ),
     );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("configuration contract: FAIL=0");
   });
 
-  test("parses a declaration after an inline HTML comment", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("parses a declaration after an inline HTML comment", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "- Consumer: package installer and policy verifier",
           "<!-- declared below --> - Consumer: package installer and policy verifier",
         ),
@@ -276,10 +284,10 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("configuration contract: FAIL=0");
   });
 
-  test("parses a declaration after a multiline HTML comment closes", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("parses a declaration after a multiline HTML comment closes", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "- Consumer: package installer and policy verifier",
           "<!-- declaration follows\n--> - Consumer: package installer and policy verifier",
         ),
@@ -290,10 +298,10 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("configuration contract: FAIL=0");
   });
 
-  test("rejects an empty trust-regime entry", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("rejects an empty trust-regime entry", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "human-authored, generated, signed-canonical, gated-decision",
           "human-authored,, signed-canonical",
         ),
@@ -306,19 +314,19 @@ describe("configuration-contract-check", () => {
     );
   });
 
-  test("rejects duplicate consumer fields", () => {
-    const result = run(
-      fixture(validContract() + "\n- Consumer: second reader\n"),
+  test("rejects duplicate consumer fields", async () => {
+    const result = await run(
+      await fixture((await validContract()) + "\n- Consumer: second reader\n"),
     );
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("duplicate field: Consumer");
   });
 
-  test("rejects a missing precedence field", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("rejects a missing precedence field", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "- Precedence / merge: project source overrides global defaults; rules arrays replace; conflicting scalar values reject\n",
           "",
         ),
@@ -329,10 +337,10 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("required field: Precedence / merge");
   });
 
-  test("rejects a missing verification command", () => {
-    const result = run(
-      fixture(
-        validContract().replace(
+  test("rejects a missing verification command", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract()).replace(
           "- Verification command: tool verify-policy --config dist/policy.json --signature dist/policy.jws\n",
           "",
         ),
@@ -343,10 +351,10 @@ describe("configuration-contract-check", () => {
     expect(result.stdout).toContain("required field: Verification command");
   });
 
-  test("rejects comment-only decision and exception dispositions", () => {
-    const result = run(
-      fixture(
-        validContract()
+  test("rejects comment-only decision and exception dispositions", async () => {
+    const result = await run(
+      await fixture(
+        (await validContract())
           .replace(
             "Decision record: record: decisions/policy-rulings.jsonl",
             "Decision record: n/a (approval is in a code comment)",

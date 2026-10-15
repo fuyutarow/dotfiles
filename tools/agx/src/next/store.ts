@@ -21,6 +21,7 @@ import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { globsOverlap } from "../ticket.ts";
 import { exitWithError } from "./exit.ts";
+import { Outcome, deriveOutcome } from "./outcome.ts";
 
 const PickAuditSchema = z.object({
   source: z.string(),
@@ -63,6 +64,7 @@ const EventSchema = z.discriminatedUnion("kind", [
     id: z.string(),
     at: z.string(),
     exit: z.number(),
+    outcome: Outcome.optional(),
     report_path: z.string().nullable(),
     vendor_session: z.string().nullable(),
     verify: z
@@ -412,6 +414,7 @@ const RunSchema = z.object({
   ticket: z.string(),
   state: z.enum(["running", "ended", "orphaned"]),
   exit: z.number().nullable(),
+  outcome: Outcome.nullable(),
   row: z.string(),
   dispatcher_session: z.string().nullable(),
   cwd: z.string(),
@@ -453,6 +456,7 @@ function foldInto(runs: Map<string, FoldedRun>, input: NextEvent[]): void {
         ticket: event.ticket,
         state: "orphaned",
         exit: null,
+        outcome: null,
         row: event.row,
         dispatcher_session: event.dispatcher_session,
         cwd: event.cwd,
@@ -476,6 +480,16 @@ function foldInto(runs: Map<string, FoldedRun>, input: NextEvent[]): void {
       run.state = "ended";
       run.ended_at = event.at;
       run.exit = event.exit;
+      // Historical records without workspace/report evidence must never become successes.
+      run.outcome =
+        event.outcome ??
+        deriveOutcome({
+          timedOut: event.exit === 3 || event.exit === 124,
+          refused: event.exit !== 0,
+          verify: event.verify,
+          reportValid: false,
+          changed: event.changed_files ?? 0,
+        });
       run.report_path = event.report_path;
       run.verify = event.verify;
       run.returned = event.returned;

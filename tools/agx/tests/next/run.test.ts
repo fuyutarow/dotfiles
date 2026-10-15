@@ -465,6 +465,7 @@ describe("agx-next run", () => {
         "cwd",
         "dispatcher_session",
         "exit",
+        "outcome",
         "failed_early_quit",
         "id",
         "judgment",

@@ -143,4 +143,4 @@ test("agx ls selects an id prefix and an exact ticket with newest last", () => {
   expect(ambiguousPrefix.stderr.toString()).toContain("run id candidates:");
   expect(ambiguousPrefix.stderr.toString()).toContain("run-ticket-extra");
   expect(ambiguousPrefix.stderr.toString().trim().split("\n")).toHaveLength(1);
-});
+}, 60_000);

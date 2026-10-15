@@ -10,7 +10,7 @@ import {
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { exitWithError } from "./exit.ts";
 import { readRouteUsage } from "./usage.ts";
-import { setPendingPickAudit } from "./store.ts";
+import { foldedRuns, setPendingPickAudit } from "./store.ts";
 
 const Reply = z.looseObject({
   answers: z.record(
@@ -73,6 +73,15 @@ export async function route(
     state: {
       task: brief.slice(0, roster.auto.max_task_chars),
       routes: usage,
+      history: foldedRuns()
+        .filter((run) => run.state === "ended")
+        .slice(-50)
+        .map((run) => ({
+          id: run.id,
+          row: run.row,
+          ticket: run.ticket,
+          outcome: run.outcome,
+        })),
       task_size: {
         timeout_s: timeoutS,
         class: timeoutClass,

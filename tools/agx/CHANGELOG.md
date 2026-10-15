@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.10.2 — 2026-10-16
+
+- Derive run outcomes from workspace changes, verification and validated reports; expose outcomes in run listings and router history.
+
 ## 4.10.1 — 2026-10-16
 
 - Keep stale temp cleanup non-fatal and preserve run records before cleanup.

@@ -23,6 +23,7 @@ import { pinContinuation } from "./continue.ts";
 import { createRunTemp, type RunTemp } from "../temp.ts";
 import { exitWithError } from "./exit.ts";
 import { ownerlessRefLocks } from "../../../shared/src/ref-locks.ts";
+import { changedFiles, deriveOutcome, workspaceSnapshot } from "./outcome.ts";
 
 export type Flags = Readonly<Record<string, string | boolean | undefined>>;
 const fatal = (message: string, exitCode = 2): never =>
@@ -364,6 +365,7 @@ export async function run(flags: Flags): Promise<number> {
       ...(resumeSession === undefined ? [] : ["--resume", resumeSession]),
     ];
   };
+  const before = workspaceSnapshot(cwd, ticket.writes);
   const child = Bun.spawn([process.execPath, ...workerArgs()], {
     cwd,
     stdin: "ignore",
@@ -374,6 +376,7 @@ export async function run(flags: Flags): Promise<number> {
       ...temp.env,
       AGX_INTERIM_REPORTS_FILE: interimPath,
     },
+    timeout: (ticket.timeout_s ?? 600) * 1000,
   });
   process.on("exit", () => {
     child.kill();
@@ -399,6 +402,11 @@ export async function run(flags: Flags): Promise<number> {
   const exit = await child.exited;
   clearInterval(progressWatcher);
   const output = await outputPromise;
+  const after = workspaceSnapshot(cwd, ticket.writes);
+  const changed =
+    before.isOk() && after.isOk()
+      ? changedFiles(before.value, after.value)
+      : undefined;
   const verify = await runVerify(ticket.verify, cwd, runDir, temp);
   const receiptLine = output.trim().split("\n").at(-1) ?? "";
   const receipt = jsonOf(
@@ -409,6 +417,9 @@ export async function run(flags: Flags): Promise<number> {
       vendor_session: z.string().optional(),
       session: z.string().optional(),
       session_id: z.string().optional(),
+      outcome: z.string().optional(),
+      timed_out: z.boolean().optional(),
+      exit_code: z.number().optional(),
     }),
   ).safeParse(receiptLine);
   const workerReceipt = receipt.success ? receipt.data : {};
@@ -416,14 +427,26 @@ export async function run(flags: Flags): Promise<number> {
     workerReceipt.structured_output ?? workerReceipt.report,
     workerReceipt.last_message ?? receiptLine,
   );
+  const outcome = deriveOutcome({
+    timedOut:
+      child.signalCode === "SIGTERM" ||
+      workerReceipt.timed_out === true ||
+      workerReceipt.outcome === "timeout" ||
+      exit === 3 ||
+      exit === 124,
+    refused:
+      exit !== 0 ||
+      workerReceipt.outcome === "refused" ||
+      (workerReceipt.exit_code !== undefined && workerReceipt.exit_code !== 0),
+    verify,
+    reportValid: parsedReport.ok,
+    changed,
+  });
   const report = parsedReport.ok
     ? parsedReport.report
     : {
-        summary: workerReceipt.last_message ?? output.trim(),
-        changes: [],
-        checks: [],
-        for_coordinator: [],
-        open: [],
+        raw: output.trim(),
+        error: parsedReport.error,
       };
   writeFileSync(reportPath, `${JSON.stringify(report)}\n`);
   const vendorSession =
@@ -450,17 +473,18 @@ export async function run(flags: Flags): Promise<number> {
     id,
     at: now(),
     exit,
+    outcome,
     report_path: reportPath,
     vendor_session: vendorSession,
     verify,
     returned: /```agx-return\s*\n/u.test(
       workerReceipt.last_message ?? receiptLine,
     ),
-    changed_files: Array.isArray(report.changes) ? report.changes.length : 0,
+    changed_files: changed,
   });
   temp.remove();
   process.stdout.write(
-    `${JSON.stringify({ id, ticket: ticket.name ?? basename(path), row: row.id, exit, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,
+    `${JSON.stringify({ id, ticket: ticket.name ?? basename(path), row: row.id, exit, outcome, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,
   );
   return exit;
 }
@@ -523,7 +547,7 @@ export function list(flags: Flags): number {
   let output = visible
     .map(
       (entry) =>
-        `${entry.id} ${entry.state} ${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"}`,
+        `${entry.id} ${entry.state} ${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"} outcome=${entry.outcome ?? "-"}`,
     )
     .join("\n");
   if (asJson)

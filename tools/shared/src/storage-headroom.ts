@@ -1,6 +1,7 @@
 // Shared, zero-dependency storage thresholds. The TOML remains the authority for drive policy.
 
 import { mkdirSync, readFileSync, statfsSync, writeFileSync } from "node:fs";
+import { mkdir, readFile, rm, statfs, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromThrowable, jsonOf, z } from "./zod.ts";
@@ -28,6 +29,12 @@ export type Drive = {
   stop_gib?: number;
   rate_red_minutes?: number;
   rate_yellow_minutes?: number;
+  // Guest recovery declarations: only guest-capacity-recover reads them; the gate ignores them.
+  name?: string;
+  recover_gib?: number;
+  recover_pct?: number;
+  tmp_recover_pct?: number;
+  reclaim_cargo_targets?: string[];
 };
 
 export type StorageMeasurement = { free: number; total: number | null };
@@ -95,6 +102,10 @@ function parseDrive(name: string, value: unknown, errors: string[]): Drive {
     "stop_gib",
     "rate_red_minutes",
     "rate_yellow_minutes",
+    "recover_gib",
+    "recover_pct",
+    "tmp_recover_pct",
+    "reclaim_cargo_targets",
   ]);
   for (const key of Object.keys(table))
     if (!allowed.has(key)) errors.push(`${where}: unknown key '${key}'`);
@@ -126,6 +137,30 @@ function parseDrive(name: string, value: unknown, errors: string[]): Drive {
     errors.push(
       `${where}: warn_gib and warn_pct go together (both or neither)`,
     );
+  const recoverGib =
+    table.recover_gib === undefined
+      ? undefined
+      : nonNegative(table.recover_gib, `${where}.recover_gib`, errors);
+  const recoverPct =
+    table.recover_pct === undefined
+      ? undefined
+      : percent(table.recover_pct, `${where}.recover_pct`, errors);
+  if ((recoverGib === undefined) !== (recoverPct === undefined))
+    errors.push(
+      `${where}: recover_gib and recover_pct go together (both or neither)`,
+    );
+  const tmpRecoverPct =
+    table.tmp_recover_pct === undefined
+      ? undefined
+      : percent(table.tmp_recover_pct, `${where}.tmp_recover_pct`, errors);
+  const cargoTargets = z
+    .array(z.string().min(1))
+    .optional()
+    .safeParse(table.reclaim_cargo_targets);
+  if (!cargoTargets.success)
+    errors.push(
+      `${where}.reclaim_cargo_targets: expected an array of non-empty path strings`,
+    );
   const stopGib =
     table.stop_gib === undefined
       ? undefined
@@ -141,7 +176,14 @@ function parseDrive(name: string, value: unknown, errors: string[]): Drive {
   }
   return {
     label,
+    name,
     ...durations,
+    ...(recoverGib === undefined ? {} : { recover_gib: recoverGib }),
+    ...(recoverPct === undefined ? {} : { recover_pct: recoverPct }),
+    ...(tmpRecoverPct === undefined ? {} : { tmp_recover_pct: tmpRecoverPct }),
+    ...(cargoTargets.success && cargoTargets.data !== undefined
+      ? { reclaim_cargo_targets: cargoTargets.data }
+      : {}),
     path,
     deny_gib: denyGib,
     deny_pct: denyPct,
@@ -251,4 +293,192 @@ export function measureStorage(path: string): StorageMeasurement | null {
     writeFileSync(cacheFile, JSON.stringify({ ...measured, at: now }));
   })();
   return measured;
+}
+
+// --- Guest recovery: pressure level and the once-per-episode queue --------------------------------
+// The gate's inode deny line for tmpfs (tools/storage-headroom/src/decision.ts hard-codes 95).
+export const TMP_PATH = "/tmp";
+export const INODE_DENY_PERCENT = 95;
+
+export type PressureLevel = "ok" | "warn" | "deny";
+
+const LEVEL_RANK: Record<PressureLevel, number> = { ok: 0, warn: 1, deny: 2 };
+
+/** tmpfs use of /tmp in percent: the larger of inode and byte use; null when unmeasurable. */
+export async function measureTmpPercent(
+  path = TMP_PATH,
+): Promise<number | null> {
+  return statfs(path).then(
+    ({ files, ffree, blocks, bavail }) => {
+      const inodes = files > 0 ? (1 - ffree / files) * 100 : 0;
+      const bytes = blocks > 0 ? (1 - bavail / blocks) * 100 : 0;
+      return Math.max(inodes, bytes);
+    },
+    () => null,
+  );
+}
+
+/** Guest `/` pressure: `deny` below the deny line, `warn` below the recovery line (else warn line). */
+export function drivePressure(
+  drive: Drive,
+  measured: StorageMeasurement,
+): { level: PressureLevel; reason: string } {
+  const lines = assess(drive, measured);
+  if (lines.state === "deny")
+    return {
+      level: "deny",
+      reason: `${drive.label} free ${measured.free} B, deny line ${lines.deny_line} B`,
+    };
+  // The recovery line is the unit's own: the gate's warn line also refuses launches, so it stays put.
+  const warnLine =
+    drive.recover_gib !== undefined && drive.recover_pct !== undefined
+      ? storageLine(drive.recover_gib, drive.recover_pct, measured.total)
+      : (lines.warn_line ?? lines.deny_line);
+  if (measured.free < warnLine)
+    return {
+      level: "warn",
+      reason: `${drive.label} free ${measured.free} B, recover line ${warnLine} B`,
+    };
+  return { level: "ok", reason: "" };
+}
+
+/** /tmp pressure from its tmpfs use percent against `tmp_recover_pct`. */
+export function tmpPressure(
+  recoverPct: number,
+  usedPct: number,
+): PressureLevel {
+  if (usedPct >= INODE_DENY_PERCENT) return "deny";
+  return usedPct >= recoverPct ? "warn" : "ok";
+}
+
+/**
+ * The episode ledger: queue recovery when pressure starts and once more if it escalates warn→deny;
+ * a quiet drive ends the episode. `previous` is the highest level queued in this episode.
+ */
+export function episodeStep(
+  previous: PressureLevel | null,
+  now: PressureLevel,
+): { queue: boolean; next: PressureLevel | null } {
+  if (now === "ok") return { queue: false, next: null };
+  if (previous === null) return { queue: true, next: now };
+  const next = LEVEL_RANK[now] > LEVEL_RANK[previous] ? now : previous;
+  return { queue: next !== previous, next };
+}
+
+export function guestRecoveryStateDir(): string {
+  return (
+    process.env.GUEST_RECOVERY_STATE_DIR ??
+    join(homedir(), ".local", "state", "guest-capacity-recover")
+  );
+}
+
+function episodeFile(stateDir: string): string {
+  return join(stateDir, "episode.json");
+}
+
+export async function readEpisode(
+  stateDir: string,
+): Promise<PressureLevel | null> {
+  const text = await readFile(episodeFile(stateDir), "utf8").then(
+    (value) => value,
+    () => "",
+  );
+  const parsed = jsonOf(
+    z.object({ level: z.enum(["warn", "deny"]) }),
+  ).safeParse(text);
+  return parsed.success ? parsed.data.level : null;
+}
+
+/** Record the episode level; `null` ends the episode. Failure to write only risks a repeat queue. */
+export async function writeEpisode(
+  stateDir: string,
+  level: PressureLevel | null,
+): Promise<void> {
+  await Promise.try(async () => {
+    if (level === null || level === "ok") {
+      await rm(episodeFile(stateDir), { force: true });
+      return;
+    }
+    await mkdir(stateDir, { recursive: true });
+    await writeFile(
+      episodeFile(stateDir),
+      JSON.stringify({
+        level,
+        at: Temporal.Now.instant().epochMilliseconds,
+      }),
+    );
+  }).then(
+    () => {},
+    () => {},
+  );
+}
+
+export const GUEST_RECOVERY_UNIT = "guest-capacity-recover.service";
+
+/** Queue the oneshot without waiting for it (bounded by GNU timeout). */
+export async function startGuestRecovery(): Promise<boolean> {
+  const proc = Bun.spawn(
+    ["systemctl", "--user", "--no-block", "start", GUEST_RECOVERY_UNIT],
+    {
+      stdout: "ignore",
+      stderr: "ignore",
+      timeout: 3_000,
+      killSignal: "SIGTERM",
+    },
+  );
+  return (await proc.exited) === 0;
+}
+
+export type GuestProbes = {
+  measure?: (
+    path: string,
+  ) => StorageMeasurement | null | Promise<StorageMeasurement | null>;
+  tmpUse?: () => number | null | Promise<number | null>;
+};
+
+/** The declared guest drive, or null when the config is invalid or declares none. */
+export function loadGuestDrive(configPath: string): Drive | null {
+  const loaded = loadStorageHeadroom(configPath);
+  if (loaded.errors.length > 0) return null;
+  return loaded.drives.find((d) => d.name === "guest") ?? null;
+}
+
+/** Worst of guest `/` and the tmpfs use of /tmp, measured now. */
+export async function guestPressure(
+  guest: Drive,
+  options: GuestProbes = {},
+): Promise<PressureLevel> {
+  const [m, used] = await Promise.all([
+    (options.measure ?? measureStorage)(guest.path),
+    guest.tmp_recover_pct === undefined
+      ? null
+      : (options.tmpUse ?? measureTmpPercent)(),
+  ]);
+  let level: PressureLevel = m === null ? "ok" : drivePressure(guest, m).level;
+  if (used !== null && guest.tmp_recover_pct !== undefined) {
+    const next = tmpPressure(guest.tmp_recover_pct, used);
+    if (LEVEL_RANK[next] > LEVEL_RANK[level]) level = next;
+  }
+  return level;
+}
+
+/**
+ * Judge guest `/` and the tmpfs drive declared in `configPath`, advance the episode ledger and
+ * queue the recovery unit when it says so. Returns the worst level seen and whether it queued.
+ */
+export async function requestGuestRecovery(
+  configPath: string,
+  options: GuestProbes & {
+    start?: () => boolean | Promise<boolean>;
+    stateDir?: string;
+  } = {},
+): Promise<{ level: PressureLevel; queued: boolean }> {
+  const guest = loadGuestDrive(configPath);
+  if (guest === null) return { level: "ok", queued: false };
+  const level = await guestPressure(guest, options);
+  const stateDir = options.stateDir ?? guestRecoveryStateDir();
+  const step = episodeStep(await readEpisode(stateDir), level);
+  await writeEpisode(stateDir, step.next);
+  const queued = step.queue && (await (options.start ?? startGuestRecovery)());
+  return { level, queued };
 }

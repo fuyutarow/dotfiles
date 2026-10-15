@@ -1,0 +1,16 @@
+[Unit]
+Description=Recover guest / and /tmp headroom without a human or an agent permission
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/dotfiles
+# disk-reclaim lives in bun's global bin; kondo and cargo helpers in Linuxbrew.
+Environment=PATH=%h/.bun/bin:/home/linuxbrew/.linuxbrew/bin:%h/.cargo/bin:/usr/bin:/bin
+# The shim is deliberately used by this non-interactive service in the repo that declares bun.
+ExecStart=%h/.local/share/mise/shims/bun %h/dotfiles/scripts/guest-capacity-recover.ts
+TimeoutStartSec=30min
+CPUQuota=100%
+MemoryHigh=256M
+MemoryMax=512M
+MemorySwapMax=0
+TasksMax=256

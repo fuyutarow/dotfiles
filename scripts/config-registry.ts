@@ -210,6 +210,16 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ],
   [
     "wsl",
+    "wsl/guest-capacity-recover.service.wsl",
+    ".config/systemd/user/guest-capacity-recover.service",
+  ],
+  [
+    "wsl",
+    "wsl/guest-capacity-recover.timer.wsl",
+    ".config/systemd/user/guest-capacity-recover.timer",
+  ],
+  [
+    "wsl",
     "wsl/environment.d/99-zz-wsl-gpu.conf",
     ".config/environment.d/99-zz-wsl-gpu.conf",
   ],

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check guest / and /tmp headroom every five minutes
+
+[Timer]
+OnStartupSec=3min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Unit=guest-capacity-recover.service
+
+[Install]
+WantedBy=timers.target

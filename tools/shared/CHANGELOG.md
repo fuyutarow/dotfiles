@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0 — 2026-10-16
+
+- storage-headroom: guestPressure, loadGuestDrive and an episode ledger decide when guest / or /tmp queues guest-capacity-recover.service
+
 ## 0.9.0 — 2026-10-15
 
 - Add agent-name: the one format and parser for agent session names, <project-slug>-<role>_<id> (hyphenated project slug, one underscore between role and id)

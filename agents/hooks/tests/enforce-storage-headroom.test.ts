@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodedJson } from "./decode.ts";
@@ -87,9 +93,11 @@ test("warning maps to additionalContext without a permission decision", () => {
   const out = decodedJson(envelope, result.stdout).hookSpecificOutput;
   expect(out.permissionDecision).toBeUndefined();
   expect(out.permissionDecisionReason).toBeUndefined();
-  expect(out.additionalContext).toBe(
-    "[dotfiles:storage-headroom] WARNING fixture drive free 5.0 GiB (< 10.0 GiB); run disk-reclaim plan.",
+  // With TMPDIR set (sandboxed runs) the gate appends a "tmp /tmp free ..." clause.
+  expect(out.additionalContext).toStartWith(
+    "[dotfiles:storage-headroom] WARNING fixture drive free 5.0 GiB (< 10.0 GiB);",
   );
+  expect(out.additionalContext).toEndWith("run disk-reclaim plan.");
 });
 
 test("deny emits one namespaced permission envelope and exits zero", () => {
@@ -137,4 +145,76 @@ test("explicit scratchpad allow maps its reason to the permission envelope", () 
   expect(out.permissionDecisionReason).toContain(
     "[dotfiles:storage-headroom] allowing Write to write 1 bytes",
   );
+});
+
+// GUEST-SELF-HEAL: pressure queues guest-capacity-recover.service through `systemctl --user
+// --no-block start`, once per episode, with no permission prompt in the path.
+function guestFixture(recoverGib: number, tmpPct?: number) {
+  const env = fixture(0, 0);
+  const policy = env.STORAGE_HEADROOM_CONFIG;
+  const home = env.HOME;
+  const bin = join(home, "bin");
+  mkdirSync(bin, { recursive: true });
+  const calls = join(home, "systemctl.calls");
+  writeFileSync(
+    join(bin, "systemctl"),
+    `#!/bin/sh\necho "$@" >> '${calls}'\n`,
+    { mode: 0o755 },
+  );
+  writeFileSync(
+    policy,
+    readFileSync(policy, "utf8").replace(
+      "[deny]",
+      `[drive.guest]
+label = "guest /"
+path = "/"
+deny_gib = 1
+deny_pct = 100
+recover_gib = ${recoverGib}
+recover_pct = 100
+${tmpPct === undefined ? "" : `tmp_recover_pct = ${tmpPct}`}
+
+[deny]`,
+    ),
+  );
+  return {
+    ...env,
+    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    GUEST_RECOVERY_STATE_DIR: join(home, "state"),
+    calls,
+  };
+}
+
+function queuedCalls(file: string): string[] {
+  return existsSync(file)
+    ? readFileSync(file, "utf8").split("\n").filter(Boolean)
+    : [];
+}
+
+test("guest / below its recover line queues the recovery unit exactly once per episode", () => {
+  const { calls, ...env } = guestFixture(10);
+  for (let i = 0; i < 3; i++) runHook(HOOK, payload(), env);
+  expect(queuedCalls(calls)).toEqual([
+    "--user --no-block start guest-capacity-recover.service",
+  ]);
+});
+
+test("guest / above its recover line queues nothing", () => {
+  const { calls, ...env } = guestFixture(2);
+  const result = runHook(HOOK, payload(), env);
+  expect(result.code).toBe(0);
+  expect(queuedCalls(calls)).toEqual([]);
+});
+
+test("a /tmp pressure line crossing queues the unit without any drive pressure", () => {
+  const { calls, ...env } = guestFixture(2, 0);
+  runHook(HOOK, payload(), env);
+  expect(queuedCalls(calls)).toHaveLength(1);
+});
+
+test("the queue never changes the verdict: a failing systemctl still allows", () => {
+  const { calls, PATH: _PATH, ...env } = guestFixture(10);
+  const result = runHook(HOOK, payload(), { ...env, PATH: "/nonexistent" });
+  expect(result.code).toBe(0);
+  expect(queuedCalls(calls)).toEqual([]);
 });

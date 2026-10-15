@@ -30,12 +30,26 @@ stop_gib = 4
 rate_red_minutes = 30
 rate_yellow_minutes = 120
 
+# Below `recover_gib`/`recover_pct` (the same min() rule) the hook queues guest-capacity-recover.service
+# once per pressure episode, and once more below deny; its timer covers pressure that builds between
+# tool calls. The recover line sits above deny so reclaim finishes before the gate refuses work
+# (2026-10-15: guest / sat below deny for 2 h and recovery needed a human). It is not `warn_*`:
+# that line also refuses launches. `reclaim_cargo_targets` are cargo workspaces whose target/
+# the owner declares reclaimable; the service runs `cargo clean` there as its last stage, never
+# while a cargo/rustc process is running.
 [drive.guest]
 label = "guest /"
 path = "/"
 # 2026-10-15, owner ruling on r99: "閾値は 40でハンク 6GiBにして" — guest deny at 6 GiB, as on host.
 deny_gib = 6
 deny_pct = 10
+recover_gib = 48
+recover_pct = 12
+# /tmp is RAM-backed on this guest, so its inodes run out before its bytes. The gate hard-codes the
+# same 85% warn / 95% deny lines (tools/storage-headroom/src/decision.ts); `tmp_recover_pct` is
+# the tmpfs use (the larger of inode and byte use) at which the recovery unit starts.
+tmp_recover_pct = 85
+reclaim_cargo_targets = ["~/Workspace/polysearch-rs"]
 rate_red_minutes = 30
 rate_yellow_minutes = 120
 

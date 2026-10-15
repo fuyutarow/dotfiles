@@ -861,7 +861,7 @@ run = 'bun ~/dotfiles/scripts/wsl-ccc-daemon.ts'
 
 [tasks."wsl:capacity:enable"]
 description = "Enable the session-independent WSL C: recovery timer (link:dots must have run first)"
-run = 'systemctl --user daemon-reload && systemctl --user enable --now wsl-capacity-recover.timer'
+run = 'systemctl --user daemon-reload && systemctl --user enable --now wsl-capacity-recover.timer guest-capacity-recover.timer'
 
 [tasks."wsl:fix-gitexe"]
 description = "Allow Windows git.exe to trust the WSL repo path"

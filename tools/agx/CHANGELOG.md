@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.9.4 — 2026-10-15
+
+- agx run --continue never routes: it reuses the prior run's row and resumes its recorded vendor session, refuses with exit 2 when there is none, and the claude route records vendor_session
+
 ## 4.9.3 — 2026-10-15
 
 - Route using fresh subscription pace and record auditable picks

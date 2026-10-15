@@ -19,6 +19,7 @@ import {
   stateDir,
 } from "./store.ts";
 import { route } from "./route.ts";
+import { pinContinuation } from "./continue.ts";
 import { exitWithError } from "./exit.ts";
 import { ownerlessRefLocks } from "../../../shared/src/ref-locks.ts";
 
@@ -203,23 +204,19 @@ export async function run(flags: Flags): Promise<number> {
     );
   if (premises.status === "timeout") return fatal("premise check timed out", 2);
   const continuationId = value(flags, "continue");
-  const previous =
+  const pinned =
     continuationId === undefined
       ? undefined
-      : foldedRuns().find((entry) => entry.id === continuationId);
-  if (continuationId !== undefined && previous === undefined)
-    return fatal(`cannot continue unknown run ${continuationId}`, 2);
-  if (previous !== undefined && previous.vendor_session === null)
-    return fatal(`run ${previous.id} has no vendor session to continue`, 2);
-  const resumeSession = previous?.vendor_session ?? undefined;
-  const routeTask = `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`;
-  const maskedRows = earlyQuitRows(ticket.name ?? basename(path), cwd);
-  const row = await route(
-    routeTask,
-    ticket.capabilities,
-    ticket.timeout_s ?? 600,
-    maskedRows,
-  );
+      : await pinContinuation(continuationId, path);
+  const resumeSession = pinned?.resumeSession;
+  const row =
+    pinned?.row ??
+    (await route(
+      `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`,
+      ticket.capabilities,
+      ticket.timeout_s ?? 600,
+      earlyQuitRows(ticket.name ?? basename(path), cwd),
+    ));
   const id = randomUUID();
   const runDir = join(stateDir(), "runs", id);
   mkdirSync(runDir, { recursive: true });
@@ -380,6 +377,7 @@ export async function run(flags: Flags): Promise<number> {
       last_message: z.string().optional(),
       vendor_session: z.string().optional(),
       session: z.string().optional(),
+      session_id: z.string().optional(),
     }),
   ).safeParse(receiptLine);
   const workerReceipt = receipt.success ? receipt.data : {};
@@ -398,7 +396,10 @@ export async function run(flags: Flags): Promise<number> {
       };
   writeFileSync(reportPath, `${JSON.stringify(report)}\n`);
   const vendorSession =
-    workerReceipt.vendor_session ?? workerReceipt.session ?? null;
+    workerReceipt.vendor_session ??
+    workerReceipt.session ??
+    workerReceipt.session_id ??
+    null;
   if (existsSync(interimPath)) {
     const finalInterim = readFileSync(interimPath, "utf8")
       .trim()

@@ -118,6 +118,30 @@ function assertHookCommand(command: string): void {
 }
 
 describe("render-home: base only", () => {
+  test("strips the retired dotfiles marketplace and plugin entries", () => {
+    const dotfiles = makeDotfiles({
+      extraKnownMarketplaces: {
+        dotfiles: { source: { source: "directory", path: "/old/dotfiles" } },
+        retained: { source: { source: "github", repo: "example/marketplace" } },
+      },
+      enabledPlugins: {
+        "dotfiles@dotfiles": true,
+        "other@marketplace": false,
+      },
+    });
+    const home = makeHome();
+    const { code } = run({ HOME: home, DOTFILES: dotfiles });
+    expect(code).toBe(0);
+    expect(readDest(home)).toEqual({
+      extraKnownMarketplaces: {
+        retained: { source: { source: "github", repo: "example/marketplace" } },
+      },
+      enabledPlugins: { "other@marketplace": false },
+      hooks: { PreToolUse: [GATE] },
+    });
+    cleanup(dotfiles, home);
+  });
+
   test("every real rendered owned command starts with its namespace and retired hook is absent", () => {
     const home = makeHome();
     const r = run({

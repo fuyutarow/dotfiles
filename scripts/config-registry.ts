@@ -354,18 +354,12 @@ const OTHER: readonly Surface[] = [
   {
     kind: "fan-out",
     when: "all",
-    sources: [
-      ".claude-plugin/marketplace.json",
-      "agents/skills/.claude-plugin/plugin.json",
-      "agents/skills",
-      "agents/commands",
-      "agents/codex/AGENTS.md",
-    ],
+    sources: ["agents/skills", "agents/commands", "agents/codex/AGENTS.md"],
     deployed:
-      "Claude local plugin dotfiles:skill-name; Codex copies under ~/.agents/skills/*; commands and Codex guidance links",
+      "Claude copies under ~/.claude/skills/*; Codex copies under ~/.agents/skills/*; commands and Codex guidance links",
     consumer: "Claude Code, Codex, Antigravity",
     writer:
-      "human, in the repo; skills:sync installs the plugin and Codex copies; agents:link links commands and Codex guidance; skills:add/sync install declared vendors",
+      "human, in the repo; skills:sync copy-installs in-house skills for Claude Code and Codex and uninstalls the retired dotfiles plugin; agents:link links commands and Codex guidance; skills:add/sync install declared vendors",
     verify: `${DOCTOR} (skills)`,
   },
   {

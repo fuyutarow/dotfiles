@@ -17,7 +17,7 @@ import { parseSkillLock } from "../skills-declaration.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "skills-sync.ts");
 const FAKE = join(import.meta.dir, "fake-skills.ts");
-const FAKE_CLAUDE = join(import.meta.dir, "fake-claude-plugin.ts");
+const FAKE_CLAUDE = join(import.meta.dir, "fake-claude.ts");
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
@@ -51,6 +51,7 @@ function run(
   marker: string,
   inHouseOnly = false,
   dryRun = false,
+  failAfterOne = false,
 ) {
   const bin = fakeBin();
   using _bin = {
@@ -70,6 +71,7 @@ function run(
       FAKE_SKILLS_MARKER: marker,
       FAKE_SKILLS_ARGS_MARKER: `${marker}.args`,
       FAKE_CLAUDE_MARKER: `${marker}.claude`,
+      FAKE_SKILLS_FAIL_AFTER_ONE: failAfterOne ? "1" : "0",
     },
   });
   return {
@@ -90,8 +92,6 @@ function makeDotfiles(
     )
     .join("");
   mkdirSync(join(root, "agents"), { recursive: true });
-  mkdirSync(join(root, ".claude-plugin"), { recursive: true });
-  mkdirSync(join(root, "agents/skills/.claude-plugin"), { recursive: true });
   for (const name of inHouseNames) {
     mkdirSync(join(root, "agents/skills", name), { recursive: true });
     writeFileSync(
@@ -99,26 +99,6 @@ function makeDotfiles(
       `---\nname: ${name}\ndescription: Local fixture.\n---\n# ${name}\n`,
     );
   }
-  writeFileSync(
-    join(root, ".claude-plugin/marketplace.json"),
-    JSON.stringify({
-      name: "dotfiles",
-      version: "1.0.0",
-      description: "Fixture marketplace",
-      owner: { name: "Test" },
-      plugins: [{ name: "dotfiles", source: "./agents/skills" }],
-    }),
-  );
-  writeFileSync(
-    join(root, "agents/skills/.claude-plugin/plugin.json"),
-    JSON.stringify({
-      name: "dotfiles",
-      version: "1.0.0",
-      description: "Fixture plugin",
-      author: { name: "Test" },
-      skills: ["./"],
-    }),
-  );
   writeFileSync(
     join(root, "agents/skills.thirdparty.toml"),
     `cli_version = "1.5.22"\n${rows}`,
@@ -194,19 +174,27 @@ describe("skills:sync", () => {
       .trim()
       .split("\n")
       .map((line) => line.split("\t"));
-    expect(calls).toHaveLength(3); // local copy + upstream comparison + vendor install
+    expect(calls).toHaveLength(4); // Claude copy + Codex copy + upstream comparison + vendor install
     const localInstall = calls.find(
       (row) => row[2] === "add" && row[3] === join(dotfiles, "agents/skills"),
     );
-    expect(localInstall?.[0]).toBe(home);
+    expect(
+      localInstall?.[0]?.startsWith(join(tmpdir(), "skills-sync-claude-home-")),
+    ).toBe(true);
     expect(localInstall?.[1]).toBe(dotfiles);
     expect(localInstall?.[4]).toBe("house-skill");
+    expect(
+      calls.some(
+        (row) => row[0] === home && row[3] === join(dotfiles, "agents/skills"),
+      ),
+    ).toBe(true);
     expect(calls.filter((row) => row[3] === "vendor/repo")).toHaveLength(2);
     expect(
       calls.filter((row) => row[1]?.startsWith("/tmp/skills-cli-cwd-") ?? false)
         .length,
     ).toBe(2);
     const args = readFileSync(`${marker}.args`, "utf8");
+    expect(args).toContain("-a\tclaude-code");
     expect(args).toContain("--agent\tcodex");
     expect(args).toContain("--copy");
     expect(args).toContain("-g");
@@ -232,33 +220,46 @@ describe("skills:sync", () => {
       "house-skill",
     ]);
     const calls = readFileSync(marker, "utf8").trim().split("\n");
-    expect(calls).toHaveLength(2); // local copy + one throwaway upstream comparison
+    expect(calls).toHaveLength(3); // Claude copy + Codex copy + upstream comparison
     expect(calls.some((line) => line.startsWith(`${home}\t`))).toBe(true);
     cleanup(dotfiles, home);
   });
 
-  test("removes an old root link into agents/skills before copying", () => {
+  test("refuses an unsafe skill-root link without changing it", () => {
     const dotfiles = makeDotfiles([]);
     const home = mkdtempSync(join(tmpdir(), "skills-sync-linked-home-"));
     mkdirSync(join(home, ".agents"), { recursive: true });
     symlinkSync(join(dotfiles, "agents/skills"), join(home, ".agents/skills"));
     const marker = join(home, "cli-calls.log");
     const { out, code } = run(dotfiles, home, marker);
-    expect(code).toBe(0);
-    expect(out).toContain("removed repo-owned skill symlink:");
-    expect(lstatSync(join(home, ".agents/skills")).isSymbolicLink()).toBe(
-      false,
-    );
-    expect(existsSync(join(home, ".agents/skills/house-skill/SKILL.md"))).toBe(
-      true,
-    );
-    expect(existsSync(marker)).toBe(true);
+    expect(code).toBe(3);
+    expect(out).toContain("resolves into a repository");
+    expect(lstatSync(join(home, ".agents/skills")).isSymbolicLink()).toBe(true);
+    expect(existsSync(marker)).toBe(false);
     cleanup(dotfiles, home);
   });
 
-  test("uses Claude's plugin and Codex's copied skill installs idempotently", () => {
+  test("copies Claude and Codex skills and uninstalls the retired plugin idempotently", () => {
     const dotfiles = makeDotfiles([]);
     const home = makeHome();
+    const personal = mkdtempSync(join(tmpdir(), "skills-sync-personal-"));
+    mkdirSync(join(personal, "personal-skill"));
+    writeFileSync(join(personal, "personal-skill/SKILL.md"), "personal\n");
+    symlinkSync(
+      join(personal, "personal-skill"),
+      join(home, ".claude/skills/personal-skill"),
+    );
+    mkdirSync(join(home, ".claude/plugins"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude/plugins/installed_plugins.json"),
+      JSON.stringify({
+        plugins: {
+          "dotfiles@dotfiles": [
+            { scope: "user", installPath: "/plugin/cache", version: "1.0.0" },
+          ],
+        },
+      }),
+    );
     const marker = join(home, "cli-calls.log");
     const first = run(dotfiles, home, marker);
     expect(first.code).toBe(0);
@@ -271,43 +272,49 @@ describe("skills:sync", () => {
     expect(existsSync(join(home, ".agents/skills/house-skill/SKILL.md"))).toBe(
       true,
     );
+    expect(
+      lstatSync(join(home, ".claude/skills/house-skill")).isSymbolicLink(),
+    ).toBe(false);
+    expect(
+      readFileSync(join(home, ".claude/skills/house-skill/SKILL.md"), "utf8"),
+    ).toContain("name: house-skill");
+    expect(
+      lstatSync(join(home, ".claude/skills/personal-skill")).isSymbolicLink(),
+    ).toBe(true);
 
     const callsAfterFirst = readFileSync(`${marker}.claude`, "utf8")
       .trim()
       .split("\n");
-    expect(
-      callsAfterFirst.some((line) =>
-        line.startsWith("plugin\tmarketplace\tadd\t"),
-      ),
-    ).toBe(true);
     expect(callsAfterFirst).toContain(
-      "plugin\tinstall\tdotfiles@dotfiles\t--scope\tuser\t-y\t--json",
+      "plugin\tuninstall\tdotfiles@dotfiles\t--scope\tuser\t--json",
     );
     const skillsAfterFirst = readFileSync(`${marker}.args`, "utf8")
       .trim()
       .split("\n");
-    expect(skillsAfterFirst).toHaveLength(1);
-    expect(skillsAfterFirst[0]).toContain("add\t");
-    expect(skillsAfterFirst[0]).toContain("--skill\thouse-skill");
-    expect(skillsAfterFirst[0]).toContain("--agent\tcodex");
-    expect(skillsAfterFirst[0]).toContain("--copy");
+    expect(skillsAfterFirst).toHaveLength(2);
+    expect(
+      skillsAfterFirst.some((line) => line.includes("-a\tclaude-code")),
+    ).toBe(true);
+    expect(
+      skillsAfterFirst.some((line) => line.includes("--agent\tcodex")),
+    ).toBe(true);
+    expect(skillsAfterFirst.every((line) => line.includes("--copy"))).toBe(
+      true,
+    );
 
     const second = run(dotfiles, home, marker);
     expect(second.code).toBe(0);
     const callsAfterSecond = readFileSync(`${marker}.claude`, "utf8")
       .trim()
       .split("\n");
-    expect(callsAfterSecond).toHaveLength(callsAfterFirst.length + 3);
+    expect(callsAfterSecond).toHaveLength(callsAfterFirst.length);
     expect(
       callsAfterSecond.slice(callsAfterFirst.length).join("\n"),
-    ).not.toContain("marketplace\tadd");
-    expect(
-      callsAfterSecond.slice(callsAfterFirst.length).join("\n"),
-    ).not.toContain("plugin\tinstall");
+    ).not.toContain("uninstall");
     expect(
       readFileSync(`${marker}.args`, "utf8").trim().split("\n"),
-    ).toHaveLength(1);
-    cleanup(dotfiles, home);
+    ).toHaveLength(2);
+    cleanup(dotfiles, home, personal);
   });
 
   test("removes stale Codex copies only for previously managed in-house names", () => {
@@ -343,6 +350,52 @@ describe("skills:sync", () => {
     cleanup(dotfiles, home);
   });
 
+  test("partial Claude install failure preserves every existing in-house copy", () => {
+    const dotfiles = makeDotfiles([], ["alpha", "beta"]);
+    const home = makeHome({
+      version: 3,
+      skills: { "retired-house": { source: join(dotfiles, "agents/skills") } },
+    });
+    const oldAlpha = "# alpha before sync\n";
+    const oldBeta = "# beta before sync\n";
+    writeInstalled(home, "alpha", oldAlpha);
+    writeInstalled(home, "beta", oldBeta);
+    mkdirSync(join(home, ".claude/skills/retired-house"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude/skills/retired-house/SKILL.md"),
+      "old Claude\n",
+    );
+    mkdirSync(join(home, ".agents/skills/retired-house"), { recursive: true });
+    writeFileSync(
+      join(home, ".agents/skills/retired-house/SKILL.md"),
+      "old Codex\n",
+    );
+    writeFileSync(
+      join(home, ".agents/.dotfiles-skills.json"),
+      JSON.stringify({ version: 1, skills: { "retired-house": "old" } }),
+    );
+
+    const marker = join(home, "cli-calls.log");
+    const result = run(dotfiles, home, marker, false, false, true);
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("skills add for Claude exited 17");
+    expect(
+      readFileSync(join(home, ".claude/skills/alpha/SKILL.md"), "utf8"),
+    ).toBe(oldAlpha);
+    expect(
+      readFileSync(join(home, ".claude/skills/beta/SKILL.md"), "utf8"),
+    ).toBe(oldBeta);
+    expect(
+      readFileSync(join(home, ".agents/skills/alpha/SKILL.md"), "utf8"),
+    ).toBe(oldAlpha);
+    expect(
+      readFileSync(join(home, ".agents/skills/beta/SKILL.md"), "utf8"),
+    ).toBe(oldBeta);
+    expect(existsSync(join(home, ".claude/skills/retired-house"))).toBe(true);
+    expect(existsSync(join(home, ".agents/skills/retired-house"))).toBe(true);
+    cleanup(dotfiles, home);
+  });
+
   test("in-house-only sync skips third-party fetching", () => {
     const dotfiles = makeDotfiles([{ source: "vendor/repo", skill: "alpha" }]);
     const home = makeHome();
@@ -350,7 +403,7 @@ describe("skills:sync", () => {
     const result = run(dotfiles, home, marker, true);
     expect(result.code).toBe(0);
     expect(result.out).toContain(
-      "in-house Claude plugin and Codex copies are in sync",
+      "in-house Claude and Codex copies are in sync",
     );
     expect(readFileSync(marker, "utf8")).not.toContain("vendor/repo");
     cleanup(dotfiles, home);
@@ -372,16 +425,10 @@ describe("skills:sync", () => {
       true,
     );
     expect(result.out).toContain(
-      `[dry-run] would remove repo-owned skill symlink: ${link}`,
+      "[dry-run] would uninstall dotfiles@dotfiles from every installed scope",
     );
     expect(result.out).toContain(
-      `[dry-run] would run claude plugin marketplace add ${dotfiles} --json if marketplace dotfiles is missing`,
-    );
-    expect(result.out).toContain(
-      "[dry-run] would install or enable Claude plugin dotfiles@dotfiles at user scope if needed",
-    );
-    expect(result.out).toContain(
-      `[dry-run] would copy-install Codex skill house-skill: bunx --bun --yes skills@1.5.22 add ${join(dotfiles, "agents/skills")} --skill house-skill -g --agent codex --copy -y`,
+      `[dry-run] would copy-install Claude skill house-skill: bunx --bun --yes skills@1.5.22 add ${join(dotfiles, "agents/skills")} --skill house-skill -g -a claude-code --copy -y`,
     );
     expect(result.out).toContain(
       "[dry-run] would compare and reconcile third-party skills from vendor/repo: alpha",

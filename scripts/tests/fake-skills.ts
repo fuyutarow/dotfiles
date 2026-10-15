@@ -74,10 +74,11 @@ const firstAgentFlag = agentArgs.findIndex((arg) => arg.startsWith("-"));
 const agentEnd = firstAgentFlag >= 0 ? firstAgentFlag : agentArgs.length;
 const agents =
   agentIndex < 0 ? ["claude-code", "codex"] : agentArgs.slice(0, agentEnd);
-const bases =
-  agents.length === 1 && agents[0] === "codex"
-    ? [".agents/skills"]
-    : [".agents/skills", ".claude/skills"];
+let bases: string[];
+if (agents.length === 1 && agents[0] === "codex") bases = [".agents/skills"];
+else if (agents.length === 1 && agents[0] === "claude-code")
+  bases = [".claude/skills"];
+else bases = [".agents/skills", ".claude/skills"];
 
 function install(name: string, base: string): void {
   const dir = resolve(home, base, name);
@@ -93,8 +94,16 @@ function install(name: string, base: string): void {
   writeFileSync(resolve(dir, "SKILL.md"), content ?? `# ${name} (fetched)\n`);
 }
 
-for (const name of all) {
+for (const [index, name] of all.entries()) {
   for (const base of bases) install(name, base);
+  if (
+    isLocal &&
+    process.env.FAKE_SKILLS_FAIL_AFTER_ONE === "1" &&
+    index === 0
+  ) {
+    process.stderr.write("fake skills: forced partial install failure\n");
+    process.exit(17);
+  }
 }
 
 const oldSkills = previous.skills;

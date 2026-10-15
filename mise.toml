@@ -100,12 +100,14 @@ description = "Format Markdown with rumdl (config = .rumdl.toml: structural gate
 run = "rumdl fmt"
 
 [tasks."fmt:sh"]
+dir = "{{config_root}}"
 description = "Format bash scripts in place with shfmt (2-space, -ci -sr -bn -s; bash dialect)"
-run = 'bun ~/dotfiles/scripts/fmt-sh.ts'
+run = "bun scripts/fmt-sh.ts"
 
 [tasks."fmt:sh:check"]
+dir = "{{config_root}}"
 description = "Check bash formatting without writing (CI gate; prints diff + non-zero on drift)"
-run = 'bun ~/dotfiles/scripts/fmt-sh-check.ts'
+run = "bun scripts/fmt-sh-check.ts"
 
 [tasks."fmt:ts"]
 dir = "{{config_root}}"
@@ -162,22 +164,24 @@ description = "Markdown structural gate: rumdl check (render-breaking defects on
 run = "rumdl check"
 
 [tasks."lint:sh"]
+dir = "{{config_root}}"
 description = "ShellCheck static analysis on bash scripts (-x follow sources; file list reused from shfmt -f)"
-run = 'bun ~/dotfiles/scripts/lint-sh.ts'
+run = "bun scripts/lint-sh.ts"
 
 [tasks."lint:zsh"]
+dir = "{{config_root}}"
 description = "zsh syntax gate: `zsh -n` parse-only on boot-critical zsh config (MUST use the zsh binary, never bash -n)"
-run = 'bun ~/dotfiles/scripts/lint-zsh.ts'
+run = "bun scripts/lint-zsh.ts"
 
 [tasks."lint:skills-index"]
 dir = "{{config_root}}"
 env = { SKILLS_LINT_WORKTREE = "1" }
-description = "Require every in-house skill in the catalog and Claude plugin manifest; reject third-party provenance under agents/skills"
+description = "Require every in-house skill in the catalog and reject third-party provenance under agents/skills"
 run = "bun scripts/lint-skills-index.ts"
 
 [tasks."lint:skills-wiring"]
 dir = "{{config_root}}"
-description = "Fail on third-party skills, plugin manifest drift, or tool skill symlinks into agents/skills. Machine checks SKIP on a fresh clone."
+description = "Check in-house skill directories and names, retired plugin manifests, and third-party provenance in the repository"
 run = "bun scripts/skills-doctor.ts"
 
 [tasks."lint:skill-script-paths"]
@@ -838,7 +842,8 @@ run = "bun scripts/link-agent-assets.ts"
 # Third-party skills are declared only in agents/skills.thirdparty.toml. The pinned skills CLI
 # writes into tool-owned global directories; scripts pass -g plus explicit --skill values and
 # remove new unrequested lock entries (including find-skills). skills:sync installs in-house
-# skills through Claude's local plugin and Codex's copy installer.
+# skills into both Claude Code and Codex with copied skill directories; sync then removes only
+# obsolete in-house names and reconciles declared third-party skills.
 [tasks."skills:migrate"]
 dir = "{{config_root}}"
 description = "Copy global skill links that point into repositories into real tool-owned paths; preserves current Codex/Claude skills"
@@ -851,7 +856,7 @@ run = "bun scripts/vendor-skill.ts"
 
 [tasks."skills:sync"]
 dir = "{{config_root}}"
-description = "Install the dotfiles Claude plugin and Codex skill copies; reconcile declared third-party skills from agents/skills.thirdparty.toml"
+description = "Copy in-house skills to Claude Code and Codex, uninstall the retired dotfiles plugin, then reconcile declared third-party skills"
 run = "bun scripts/skills-sync.ts"
 
 [tasks."codex:remote-control"]

@@ -1,8 +1,9 @@
-// Reconcile Claude's local plugin, Codex's in-house copies, and declared third-party skills.
-// Fresh upstream copies land in a throwaway HOME; only missing or changed vendor copies are installed.
+// Copy in-house skills to Claude Code and Codex, retire the local plugin, and reconcile declared vendors.
+// Upstream and Claude copies are staged in throwaway HOMEs; only verified results reach the live HOME.
 
 import {
   existsSync,
+  cpSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -15,7 +16,7 @@ import {
 } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
 import { err, fromThrowable, ok } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
@@ -31,8 +32,7 @@ import {
   runPinnedSkillsCommand,
   targetSkillNames,
 } from "./skills-install.ts";
-import { readDotfilesPlugin } from "./skills-plugin.ts";
-import { removeRepoSkillSymlinks } from "./skills-links.ts";
+import { skillFiles } from "./skills-declaration.ts";
 
 const USAGE =
   "Usage: bun scripts/skills-sync.ts [--dry-run] [--in-house-only] [--dotfiles <path>] [--home <path>]\n";
@@ -56,16 +56,9 @@ const InHouseStateSchema = z.strictObject({
 
 type InHouseState = z.infer<typeof InHouseStateSchema>;
 
-const MarketplaceListSchema = z.array(
-  z.object({
-    name: z.string(),
-    source: z.string(),
-    path: z.string().optional(),
-  }),
-);
-const PluginListSchema = z.array(
-  z.object({ id: z.string(), scope: z.string(), enabled: z.boolean() }),
-);
+const InstalledPluginsSchema = z.looseObject({
+  plugins: z.record(z.string(), z.array(z.looseObject({ scope: z.string() }))),
+});
 const SkillSourceSchema = z.object({ source: z.string() });
 
 type CommandResult = { code: number; out: string; err: string };
@@ -168,118 +161,173 @@ function codexInHouseNamesFromLock(home: string, dotfiles: string): string[] {
     .map(([name]) => name);
 }
 
-function verifyPluginInstallation(
-  pluginId: string,
+function uninstallDotfilesPlugin(
   home: string,
   root: string,
-): string | undefined {
-  const installed = jsonLastLine(
-    runClaude(["plugin", "list", "--json"], home, root),
-    PluginListSchema,
-    "claude plugin list",
-  );
-  if (installed.isErr()) return installed.error;
-  const plugin = installed.value.find(
-    (entry) => entry.id === pluginId && entry.scope === "user" && entry.enabled,
-  );
-  return plugin === undefined
-    ? `Claude Code did not report ${pluginId} enabled at user scope`
-    : undefined;
-}
-
-function syncClaudePlugin(
-  home: string,
-  root: string,
-  marketplaceName: string,
-  pluginName: string,
   dryRun: boolean,
 ): string | undefined {
-  const pluginId = `${pluginName}@${marketplaceName}`;
   if (dryRun) {
     print(
-      `[dry-run] would run claude plugin marketplace add ${root} --json if marketplace ${marketplaceName} is missing`,
-    );
-    print(
-      `[dry-run] would install or enable Claude plugin ${pluginId} at user scope if needed`,
+      "[dry-run] would uninstall dotfiles@dotfiles from every installed scope",
     );
     return undefined;
   }
-
-  const marketplaces = jsonLastLine(
-    runClaude(["plugin", "marketplace", "list", "--json"], home, root),
-    MarketplaceListSchema,
-    "claude plugin marketplace list",
+  const installedPath = resolve(home, ".claude/plugins/installed_plugins.json");
+  if (!existsSync(installedPath)) return undefined;
+  const installed = jsonOf(InstalledPluginsSchema).safeParse(
+    readFileSync(installedPath, "utf8"),
   );
-  if (marketplaces.isErr()) return marketplaces.error;
-  const sameName = marketplaces.value.filter(
-    (entry) => entry.name === marketplaceName,
-  );
-  if (
-    sameName.some(
-      (entry) =>
-        entry.source !== "directory" ||
-        entry.path === undefined ||
-        resolve(entry.path) !== resolve(root),
-    )
-  )
-    return `Claude marketplace ${marketplaceName} is already registered from a different source`;
-  const samePath = marketplaces.value.find(
-    (entry) =>
-      entry.source === "directory" &&
-      entry.path !== undefined &&
-      resolve(entry.path) === resolve(root),
-  );
-  if (samePath !== undefined && samePath.name !== marketplaceName)
-    return `dotfiles marketplace path is already registered as ${samePath.name}`;
-  if (sameName.length === 0) {
-    const added = jsonLastLine(
-      runClaude(["plugin", "marketplace", "add", root, "--json"], home, root),
-      z.object({ outcome: z.string(), message: z.string() }),
-      "claude plugin marketplace add",
-    );
-    if (added.isErr()) return added.error;
-    if (added.value.outcome !== "ok")
-      return `claude plugin marketplace add failed: ${added.value.message}`;
-  }
-
-  const plugins = jsonLastLine(
-    runClaude(["plugin", "list", "--json"], home, root),
-    PluginListSchema,
-    "claude plugin list",
-  );
-  if (plugins.isErr()) return plugins.error;
-  const userPlugin = plugins.value.find(
-    (entry) => entry.id === pluginId && entry.scope === "user",
-  );
-  if (userPlugin === undefined) {
-    const installed = jsonLastLine(
+  if (!installed.success)
+    return `cannot inspect ${installedPath}: ${installed.error.message}`;
+  const scopes = [
+    ...new Set(
+      (installed.data.plugins["dotfiles@dotfiles"] ?? []).map(
+        (plugin) => plugin.scope,
+      ),
+    ),
+  ];
+  for (const scope of scopes) {
+    const removed = jsonLastLine(
       runClaude(
-        ["plugin", "install", pluginId, "--scope", "user", "-y", "--json"],
+        [
+          "plugin",
+          "uninstall",
+          "dotfiles@dotfiles",
+          "--scope",
+          scope,
+          "--json",
+        ],
         home,
         root,
       ),
       z.object({ outcome: z.string(), message: z.string() }),
-      "claude plugin install",
+      "claude plugin uninstall",
     );
-    if (installed.isErr()) return installed.error;
-    if (installed.value.outcome !== "ok")
-      return `claude plugin install failed: ${installed.value.message}`;
-  } else if (!userPlugin.enabled) {
-    const enabled = jsonLastLine(
-      runClaude(
-        ["plugin", "enable", pluginId, "--scope", "user", "--json"],
-        home,
-        root,
-      ),
-      z.object({ outcome: z.string(), message: z.string() }),
-      "claude plugin enable",
+    if (removed.isErr()) return removed.error;
+    if (removed.value.outcome !== "ok")
+      return `claude plugin uninstall failed: ${removed.value.message}`;
+  }
+  return undefined;
+}
+
+async function syncInHouseClaude(
+  home: string,
+  root: string,
+  names: readonly string[],
+  cliVersion: string,
+  dryRun: boolean,
+): Promise<string | undefined> {
+  const source = resolve(root, "agents/skills");
+  const install = names.filter((name) => {
+    const target = resolve(home, ".claude/skills", name);
+    return treeDigest(target) !== treeDigest(resolve(source, name));
+  });
+  if (dryRun) {
+    for (const name of names.toSorted())
+      print(
+        install.includes(name)
+          ? `[dry-run] would copy-install Claude skill ${name}: bunx --bun --yes skills@${cliVersion} add ${source} --skill ${name} -g -a claude-code --copy -y`
+          : `[dry-run] would keep current Claude copy ${name}`,
+      );
+    return undefined;
+  }
+  if (install.length === 0) return undefined;
+
+  const stageHome = mkdtempSync(join(tmpdir(), "skills-sync-claude-home-"));
+  using _stage = {
+    [Symbol.dispose]: () => {
+      rmSync(stageHome, { recursive: true, force: true });
+    },
+  };
+  mkdirSync(join(stageHome, ".agents"), { recursive: true });
+  mkdirSync(join(stageHome, ".claude/skills"), { recursive: true });
+  const result = await runPinnedSkillsCommand(
+    cliVersion,
+    [
+      "add",
+      source,
+      ...install.toSorted().flatMap((name) => ["--skill", name]),
+      "-g",
+      "-a",
+      "claude-code",
+      "--copy",
+      "-y",
+    ],
+    stageHome,
+    root,
+  );
+  if (result.timedOut || result.exitCode !== 0)
+    return `skills add for Claude ${result.timedOut ? "timed out" : `exited ${result.exitCode}`}`;
+
+  const invalid = install.filter((name) => {
+    const target = resolve(stageHome, ".claude/skills", name);
+    const info = fromThrowable((path: string) => lstatSync(path))(target);
+    return (
+      info.isErr() ||
+      info.value.isSymbolicLink() ||
+      !info.value.isDirectory() ||
+      readFileSync(resolve(target, "SKILL.md"), "utf8") !==
+        readFileSync(resolve(source, name, "SKILL.md"), "utf8")
     );
-    if (enabled.isErr()) return enabled.error;
-    if (enabled.value.outcome !== "ok")
-      return `claude plugin enable failed: ${enabled.value.message}`;
+  });
+  if (invalid.length > 0)
+    return `skills CLI did not stage matching Claude copies: ${invalid.join(", ")}`;
+
+  const skillsRoot = resolve(home, ".claude/skills");
+  mkdirSync(skillsRoot, { recursive: true });
+  const transaction = mkdtempSync(join(skillsRoot, ".dotfiles-skills-sync-"));
+  using _transaction = {
+    [Symbol.dispose]: () => {
+      rmSync(transaction, { recursive: true, force: true });
+    },
+  };
+  const replaced: { target: string; backup: string }[] = [];
+  const committed = fromThrowable(() => {
+    for (const name of install) {
+      const staged = resolve(transaction, name);
+      cpSync(resolve(stageHome, ".claude/skills", name), staged, {
+        recursive: true,
+      });
+    }
+    for (const name of install) {
+      const target = resolve(skillsRoot, name);
+      const staged = resolve(transaction, name);
+      const backup = resolve(transaction, `${name}.previous`);
+      const targetInfo = lstatSync(target, { throwIfNoEntry: false });
+      if (targetInfo !== undefined) {
+        renameSync(target, backup);
+        replaced.push({ target, backup });
+      }
+      renameSync(staged, target);
+    }
+  })();
+  if (committed.isErr()) {
+    const rollback = fromThrowable(() => {
+      for (const { target, backup } of replaced.toReversed()) {
+        rmSync(target, { recursive: true, force: true });
+        if (lstatSync(backup, { throwIfNoEntry: false }) !== undefined)
+          renameSync(backup, target);
+      }
+    })();
+    if (rollback.isErr())
+      return `could not install staged Claude copies: ${errorText(committed.error)}; rollback failed: ${errorText(rollback.error)}`;
+    return `could not install staged Claude copies: ${errorText(committed.error)}`;
   }
 
-  return verifyPluginInstallation(pluginId, home, root);
+  const mismatched = install.filter((name) => {
+    const target = resolve(skillsRoot, name);
+    const info = fromThrowable((path: string) => lstatSync(path))(target);
+    return (
+      info.isErr() ||
+      info.value.isSymbolicLink() ||
+      !info.value.isDirectory() ||
+      readFileSync(resolve(target, "SKILL.md"), "utf8") !==
+        readFileSync(resolve(source, name, "SKILL.md"), "utf8")
+    );
+  });
+  return mismatched.length > 0
+    ? `Claude copies do not match the repository: ${mismatched.join(", ")}`
+    : undefined;
 }
 
 async function syncInHouseCodex(
@@ -289,6 +337,7 @@ async function syncInHouseCodex(
   thirdPartyNames: readonly string[],
   cliVersion: string,
   dryRun: boolean,
+  deferRemoval = false,
 ): Promise<string | undefined> {
   const loaded = loadInHouseState(home);
   if (loaded.isErr()) return loaded.error;
@@ -360,14 +409,16 @@ async function syncInHouseCodex(
         state.isErr() ||
         state.value.isSymbolicLink() ||
         !state.value.isDirectory() ||
-        !existsSync(resolve(target, "SKILL.md"))
+        !existsSync(resolve(target, "SKILL.md")) ||
+        readFileSync(resolve(target, "SKILL.md"), "utf8") !==
+          readFileSync(resolve(root, "agents/skills", name, "SKILL.md"), "utf8")
       );
     });
     if (missing.length > 0)
       return `skills CLI returned success without copy-installing: ${missing.join(", ")}`;
   }
 
-  if (stale.length > 0) {
+  if (stale.length > 0 && !deferRemoval) {
     const removed = await runPinnedSkillsCommand(
       cliVersion,
       ["remove", ...stale.toSorted(), "-g", "--agent", "codex", "-y"],
@@ -378,16 +429,60 @@ async function syncInHouseCodex(
       return `skills remove for stale Codex skills ${removed.timedOut ? "timed out" : `exited ${removed.exitCode}`}`;
   }
 
-  const nextState: InHouseState = {
-    version: 1,
-    skills: Object.fromEntries(
-      names.map((name) => [name, digests.get(name) ?? ""]),
-    ),
-  };
-  const writeError = writeInHouseState(home, nextState);
+  if (deferRemoval) return undefined;
+  const writeError = recordInHouseState(home, root, names);
+  return writeError;
+}
+
+function recordInHouseState(
+  home: string,
+  root: string,
+  names: readonly string[],
+): string | undefined {
+  const skills = Object.fromEntries(
+    names.map((name) => [
+      name,
+      treeDigest(resolve(root, "agents/skills", name)) ?? "",
+    ]),
+  );
+  const writeError = writeInHouseState(home, { version: 1, skills });
   return writeError === undefined
     ? undefined
-    : `could not record Codex skill state: ${writeError}`;
+    : `could not record in-house skill state: ${writeError}`;
+}
+
+function previousInHouseNames(home: string, dotfiles: string): Set<string> {
+  const state = loadInHouseState(home).unwrapOr({ version: 1, skills: {} });
+  return new Set([
+    ...Object.keys(state.skills),
+    ...codexInHouseNamesFromLock(home, dotfiles),
+  ]);
+}
+
+async function removeStaleCodex(
+  home: string,
+  root: string,
+  stale: readonly string[],
+  cliVersion: string,
+): Promise<string | undefined> {
+  if (stale.length === 0) return undefined;
+  const removed = await runPinnedSkillsCommand(
+    cliVersion,
+    ["remove", ...stale.toSorted(), "-g", "--agent", "codex", "-y"],
+    home,
+    root,
+  );
+  if (!removed.timedOut && removed.exitCode === 0) return undefined;
+  const reason = removed.timedOut ? "timed out" : `exited ${removed.exitCode}`;
+  return `skills remove for stale Codex skills ${reason}`;
+}
+
+function removeStaleClaude(home: string, stale: readonly string[]): void {
+  for (const name of stale)
+    rmSync(resolve(home, ".claude/skills", name), {
+      recursive: true,
+      force: true,
+    });
 }
 
 function rejectPrototypeFlag(
@@ -440,7 +535,7 @@ function main(): Promise<void> {
       parameters: [],
       help: {
         description:
-          "Install the dotfiles Claude plugin and Codex skill copies, then reconcile declared third-party skills.",
+          "Copy in-house skills to Claude Code and Codex, uninstall the retired dotfiles plugin, and reconcile declared third-party skills.",
       },
       flags: {
         dryRun: { type: Boolean, default: false },
@@ -480,14 +575,11 @@ function main(): Promise<void> {
   }
 
   const names = declaration.value.skills.map((entry) => entry.skill);
-  const plugin = readDotfilesPlugin(dotfiles);
-  if (plugin.isErr()) {
-    fail(`FATAL: ${plugin.error}`);
-    process.exitCode = 1;
-    return Promise.resolve();
-  }
-  const inHouseNames = new Set(plugin.value.skillNames);
-  const overlap = names.filter((name) => inHouseNames.has(name));
+  const inHouseNames = skillFiles(resolve(dotfiles, "agents/skills")).map(
+    (skill) => basename(resolve(skill.path, "..")),
+  );
+  const inHouseSet = new Set(inHouseNames);
+  const overlap = names.filter((name) => inHouseSet.has(name));
   if (overlap.length > 0) {
     fail(
       `FATAL: third-party names overlap in-house skills: ${overlap.join(", ")}`,
@@ -496,22 +588,9 @@ function main(): Promise<void> {
     return Promise.resolve();
   }
 
-  const links = removeRepoSkillSymlinks(home, dotfiles, parsed.flags.dryRun);
-  for (const path of links.removed)
-    print(`removed repo-owned skill symlink: ${path}`);
-  if (parsed.flags.dryRun)
-    for (const path of links.paths)
-      print(`[dry-run] would remove repo-owned skill symlink: ${path}`);
-  if (links.errors.length > 0) {
-    for (const error of links.errors)
-      fail(`FATAL: cannot clean skill symlink: ${error}`);
-    process.exitCode = 1;
-    return Promise.resolve();
-  }
-
   const refusals = parsed.flags.dryRun
     ? []
-    : homePathRefusals(home, dotfiles, [...names, ...plugin.value.skillNames]);
+    : homePathRefusals(home, dotfiles, [...names, ...inHouseNames]);
   for (const refusal of refusals) fail(refusal);
   if (refusals.length > 0) {
     process.exitCode = 3;
@@ -520,22 +599,28 @@ function main(): Promise<void> {
 
   if (parsed.flags.dryRun) {
     const plan = async (): Promise<void> => {
-      const pluginError = syncClaudePlugin(
-        home,
-        dotfiles,
-        plugin.value.marketplaceName,
-        plugin.value.pluginName,
-        true,
-      );
+      const pluginError = uninstallDotfilesPlugin(home, dotfiles, true);
       if (pluginError !== undefined) {
         fail(`FATAL: ${pluginError}`);
+        process.exitCode = 1;
+        return;
+      }
+      const claudeError = await syncInHouseClaude(
+        home,
+        dotfiles,
+        inHouseNames,
+        declaration.value.cli_version,
+        true,
+      );
+      if (claudeError !== undefined) {
+        fail(`FATAL: ${claudeError}`);
         process.exitCode = 1;
         return;
       }
       const codexError = await syncInHouseCodex(
         home,
         dotfiles,
-        plugin.value.skillNames,
+        inHouseNames,
         names,
         declaration.value.cli_version,
         true,
@@ -566,25 +651,29 @@ function main(): Promise<void> {
   }
 
   const run = async (): Promise<void> => {
-    const pluginError = syncClaudePlugin(
+    const stale = [...previousInHouseNames(home, dotfiles)].filter(
+      (name) => !inHouseSet.has(name) && !names.includes(name),
+    );
+    const claudeError = await syncInHouseClaude(
       home,
       dotfiles,
-      plugin.value.marketplaceName,
-      plugin.value.pluginName,
-      parsed.flags.dryRun,
+      inHouseNames,
+      declaration.value.cli_version,
+      false,
     );
-    if (pluginError !== undefined) {
-      fail(`FATAL: ${pluginError}`);
+    if (claudeError !== undefined) {
+      fail(`FATAL: ${claudeError}`);
       process.exitCode = 1;
       return;
     }
     const codexError = await syncInHouseCodex(
       home,
       dotfiles,
-      plugin.value.skillNames,
+      inHouseNames,
       names,
       declaration.value.cli_version,
-      parsed.flags.dryRun,
+      false,
+      true,
     );
     if (codexError !== undefined) {
       fail(`FATAL: ${codexError}`);
@@ -592,8 +681,34 @@ function main(): Promise<void> {
       return;
     }
 
+    const pluginError = uninstallDotfilesPlugin(home, dotfiles, false);
+    if (pluginError !== undefined) {
+      fail(`FATAL: ${pluginError}`);
+      process.exitCode = 1;
+      return;
+    }
     if (parsed.flags.inHouseOnly) {
-      print("in-house Claude plugin and Codex copies are in sync");
+      const cleanupError = await removeStaleCodex(
+        home,
+        dotfiles,
+        stale,
+        declaration.value.cli_version,
+      );
+      if (cleanupError !== undefined) {
+        fail(`FATAL: ${cleanupError}`);
+        process.exitCode = 1;
+        return;
+      }
+      removeStaleClaude(home, stale);
+      const stateError = recordInHouseState(home, dotfiles, inHouseNames);
+      if (stateError !== undefined) {
+        fail(`FATAL: ${stateError}`);
+        process.exitCode = 1;
+        return;
+      }
+      print(
+        "in-house Claude and Codex copies are in sync; dotfiles plugin is uninstalled",
+      );
       return;
     }
 
@@ -629,7 +744,7 @@ function main(): Promise<void> {
         return;
       }
 
-      const stale = entries.filter((entry) => {
+      const outOfDate = entries.filter((entry) => {
         const upstream = treeDigest(
           resolve(stageHome, ".agents/skills", entry.skill),
         );
@@ -640,12 +755,12 @@ function main(): Promise<void> {
           (target) => upstream === undefined || treeDigest(target) !== upstream,
         );
       });
-      if (stale.length === 0) {
+      if (outOfDate.length === 0) {
         print(`up to date: ${source} (${requested.length} skill(s))`);
         continue;
       }
 
-      const staleNames = stale.map((entry) => entry.skill);
+      const staleNames = outOfDate.map((entry) => entry.skill);
       if (parsed.flags.dryRun) {
         print(
           `[dry-run] would run: ${skillCliArgs(declaration.value.cli_version, source, staleNames).join(" ")}`,
@@ -716,6 +831,25 @@ function main(): Promise<void> {
       print(`synced: ${source} (${staleNames.join(", ")})`);
     }
 
+    const cleanupError = await removeStaleCodex(
+      home,
+      dotfiles,
+      stale,
+      declaration.value.cli_version,
+    );
+    if (cleanupError !== undefined) {
+      fail(`FATAL: ${cleanupError}`);
+      process.exitCode = 1;
+      return;
+    }
+    removeStaleClaude(home, stale);
+    const stateError = recordInHouseState(home, dotfiles, inHouseNames);
+    if (stateError !== undefined) {
+      fail(`FATAL: ${stateError}`);
+      process.exitCode = 1;
+      return;
+    }
+
     const finalLock = readInstalledLock(home);
     if (finalLock === undefined) {
       fail("FATAL: global skills lock is unreadable after sync");
@@ -724,7 +858,7 @@ function main(): Promise<void> {
     }
     const declared = new Set(names);
     const extras = Object.keys(finalLock.skills)
-      .filter((name) => !declared.has(name) && !inHouseNames.has(name))
+      .filter((name) => !declared.has(name) && !inHouseSet.has(name))
       .toSorted();
     for (const name of extras)
       print(`UNDECLARED: installed third-party skill ${name} (left untouched)`);

@@ -325,6 +325,24 @@ const { specs } = registry.value;
 
 // ── ~/.claude/settings.json ──────────────────────────────────────────────────────────────────
 const settings: Record<string, unknown> = { ...baseRead.value, ...overlay };
+const marketplaces = obj(settings.extraKnownMarketplaces);
+if (marketplaces !== undefined && Object.hasOwn(marketplaces, "dotfiles")) {
+  const remaining = { ...marketplaces };
+  delete remaining.dotfiles;
+  if (Object.keys(remaining).length === 0)
+    delete settings.extraKnownMarketplaces;
+  else settings.extraKnownMarketplaces = remaining;
+}
+const enabledPlugins = obj(settings.enabledPlugins);
+if (
+  enabledPlugins !== undefined &&
+  Object.hasOwn(enabledPlugins, "dotfiles@dotfiles")
+) {
+  const remaining = { ...enabledPlugins };
+  delete remaining["dotfiles@dotfiles"];
+  if (Object.keys(remaining).length === 0) delete settings.enabledPlugins;
+  else settings.enabledPlugins = remaining;
+}
 const tzPath = `${dotfiles}/zsh/timezone`;
 let tzNote = "";
 if (existsSync(tzPath)) {

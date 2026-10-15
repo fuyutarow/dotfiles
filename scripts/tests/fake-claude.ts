@@ -1,78 +1,49 @@
-#!/usr/bin/env bun
-// Fixture for install-mcp.test.ts — emulates the subset of `claude mcp <verb>` that
-// scripts/install-mcp.ts drives. Never touches real Claude Code state.
-//
-// Every invocation first prints `CALL claude <args...>` to stdout so tests can assert on the
-// exact argv the script under test constructed (add-command shape, remove-before-add ordering).
-//
-// Env controls:
-//   FAKE_CLAUDE_LIST            - literal text printed for `mcp list` (default: "")
-//   FAKE_CLAUDE_FAIL_ADD        - comma-separated server names for which `mcp add` fails
-//   FAKE_CLAUDE_FAIL_ADD_EXITCODE - exit code used for a FAIL_ADD name (default: "1") — set to
-//                             a distinctive value (e.g. "42") to prove the caller propagates the
-//                             REAL exit code rather than a hardcoded 1.
-//   FAKE_CLAUDE_FAIL_REMOVE - comma-separated server names for which `mcp remove` exits 1
-//                             (used to prove the caller ignores remove failures)
-
-// Script-scoped fixture, not a library: this makes it a module so its top-level names
-// (args, verb, name, csv, nameArg) don't collide with fake-codex.ts under tsgo.
-export {};
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { resolve } from "node:path";
+import { jsonOf, z } from "../../agents/hooks/zod.ts";
 
 const args = Bun.argv.slice(2);
-process.stdout.write(`CALL claude ${args.join(" ")}\n`);
+const home = process.env.HOME ?? "";
+const marker = process.env.FAKE_CLAUDE_MARKER;
+if (marker !== undefined) appendFileSync(marker, `${args.join("\t")}\n`);
 
-const verb = args[1]; // args[0] === "mcp"
+const InstalledPluginsSchema = z.looseObject({
+  plugins: z.record(z.string(), z.array(z.looseObject({ scope: z.string() }))),
+});
+const installedPath = resolve(home, ".claude/plugins/installed_plugins.json");
 
-function csv(name: string): string[] {
-  return (process.env[name] ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+function readInstalledPlugins(): z.infer<typeof InstalledPluginsSchema> {
+  if (!existsSync(installedPath)) return { plugins: {} };
+  const parsed = jsonOf(InstalledPluginsSchema).safeParse(
+    readFileSync(installedPath, "utf8"),
+  );
+  return parsed.success ? parsed.data : { plugins: {} };
 }
 
-function nameArg(): string {
-  if (verb === "remove") {
-    // ["mcp","remove","-s","user",NAME]
-    return args.at(-1) ?? "";
-  }
-  if (verb === "add") {
-    if (args.includes("--transport")) {
-      // ["mcp","add","-s","user","--transport",TYPE,NAME,URL]
-      const i = args.indexOf("--transport");
-      return args[i + 2] ?? "";
-    }
-    // ["mcp","add","-s","user",NAME,"--",...tokens]
-    const i = args.indexOf("user");
-    return args[i + 1] ?? "";
-  }
-  return "";
+function output(value: unknown): void {
+  process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
-if (verb === "list") {
-  process.stdout.write(process.env.FAKE_CLAUDE_LIST ?? "");
-  process.exit(0);
+if (args[0] === "plugin" && args[1] === "uninstall") {
+  const id = args[2] ?? "";
+  const scopeIndex = args.indexOf("--scope");
+  const scope = scopeIndex < 0 ? "user" : (args[scopeIndex + 1] ?? "user");
+  const installed = readInstalledPlugins();
+  const records = (installed.plugins[id] ?? []).filter(
+    (plugin) => plugin.scope !== scope,
+  );
+  if (records.length === 0) delete installed.plugins[id];
+  else installed.plugins[id] = records;
+  mkdirSync(resolve(home, ".claude/plugins"), { recursive: true });
+  writeFileSync(installedPath, `${JSON.stringify(installed, null, 2)}\n`);
+  output({ outcome: "ok", message: `uninstalled ${id} (${scope})` });
+} else {
+  process.stderr.write(`unsupported fake Claude command: ${args.join(" ")}\n`);
+  process.exit(2);
 }
-
-const name = nameArg();
-
-if (verb === "remove") {
-  if (csv("FAKE_CLAUDE_FAIL_REMOVE").includes(name)) {
-    process.stderr.write(`fake claude: remove failed: ${name}\n`);
-    process.exit(1);
-  }
-  process.stdout.write(`removed: ${name}\n`);
-  process.exit(0);
-}
-
-if (verb === "add") {
-  if (csv("FAKE_CLAUDE_FAIL_ADD").includes(name)) {
-    const code = Number(process.env.FAKE_CLAUDE_FAIL_ADD_EXITCODE ?? "1");
-    process.stderr.write(`fake claude: add failed: ${name}\n`);
-    process.exit(code);
-  }
-  process.stdout.write(`added: ${name}\n`);
-  process.exit(0);
-}
-
-process.stderr.write(`fake claude: unsupported verb: ${verb}\n`);
-process.exit(1);

@@ -2,9 +2,10 @@
 // (DOCTOR_ONLY narrows to the checks a fixture can drive); the real $HOME is never touched.
 // Each FAIL case is paired with its PASS twin so a check that always passes, or always fails,
 // is caught (writing-bun-scripts BG4: prove the check fires).
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -52,6 +53,17 @@ const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "doctor.ts");
 const BUN_EXEC = join(REPO, "scripts", "bun-exec.sh");
 const RENDER_HOME = join(REPO, "scripts", "render-home.ts");
+const FAKE_CLAUDE = join(import.meta.dir, "fake-claude.ts");
+const FAKE_CLAUDE_BIN = tmp("doctor-claude-bin-");
+writeFileSync(
+  join(FAKE_CLAUDE_BIN, "claude"),
+  `#!/bin/sh\nexec '${process.execPath}' '${FAKE_CLAUDE}' "$@"\n`,
+  { mode: 0o755 },
+);
+chmodSync(join(FAKE_CLAUDE_BIN, "claude"), 0o755);
+afterAll(() => {
+  rmSync(FAKE_CLAUDE_BIN, { recursive: true, force: true });
+});
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -77,6 +89,7 @@ function doctor(
     env: {
       ...process.env,
       ...env,
+      PATH: `${FAKE_CLAUDE_BIN}:${env.PATH ?? process.env.PATH ?? ""}`,
       CODEX_CONFIG_HOME: env.HOME,
       DOCTOR_ONLY: only,
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: tmp("doctor-bun-cache-"),
@@ -104,11 +117,13 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
-  test("skills skips an absent Codex global skill root when no unsafe links exist", () => {
+  test("skills fails when in-house copies are missing", () => {
     const home = tmp("doctor-skills-fresh-");
     const result = doctor("skills", { HOME: home, DOTFILES: REPO });
-    expect(result.code).toBe(0);
-    expect(result.out).toContain("SKIP  skills");
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("FAIL  skills");
+    expect(result.out).toContain("mise run skills:sync");
+    rmSync(home, { recursive: true, force: true });
   });
 
   test("skill helper path doctor fails on a missing registered repo helper and passes when it exists", () => {
@@ -150,7 +165,7 @@ describe("doctor", () => {
     expect(present.out).toContain("PASS  skill-helper-paths");
   });
 
-  test("skills reports all 57 in-house tool links and the sync repair", () => {
+  test("skills fails when in-house copies are symlinks and names the repair", () => {
     const home = tmp("doctor-skills-links-");
     const skillRoot = join(REPO, "agents/skills");
     const skillNames = readdirSync(skillRoot, { withFileTypes: true })
@@ -167,19 +182,90 @@ describe("doctor", () => {
     const result = doctor("skills", { HOME: home, DOTFILES: REPO });
     expect(result.code).toBe(1);
     expect(result.out).toContain("FAIL  skills");
-    expect(result.out).toContain("57 repo-owned tool skill symlink(s) remain");
+    expect(result.out).toContain(".claude/skills/");
+    expect(result.out).toContain("is a symlink");
     expect(result.out).toContain("mise run skills:sync");
     rmSync(home, { recursive: true, force: true });
   });
 
-  test("skills reports missing Codex copies and the sync repair", () => {
+  test("skills passes when all declared Claude and Codex copies match", () => {
     const home = tmp("doctor-skills-codex-missing-");
-    mkdirSync(join(home, ".agents/skills"), { recursive: true });
+    const skillRoot = join(REPO, "agents/skills");
+    const skillNames = readdirSync(skillRoot, { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          existsSync(join(skillRoot, entry.name, "SKILL.md")),
+      )
+      .map((entry) => entry.name);
+    for (const name of skillNames)
+      for (const root of [".agents/skills", ".claude/skills"])
+        cpSync(join(skillRoot, name), join(home, root, name), {
+          recursive: true,
+        });
+    const result = doctor("skills", { HOME: home, DOTFILES: REPO });
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("PASS  skills");
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  test("skills fails when an in-house copy is stale", () => {
+    const home = tmp("doctor-skills-stale-");
+    const skillRoot = join(REPO, "agents/skills");
+    const skillNames = readdirSync(skillRoot, { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          existsSync(join(skillRoot, entry.name, "SKILL.md")),
+      )
+      .map((entry) => entry.name);
+    for (const name of skillNames)
+      for (const root of [".agents/skills", ".claude/skills"])
+        cpSync(join(skillRoot, name), join(home, root, name), {
+          recursive: true,
+        });
+    writeFileSync(
+      join(home, ".agents/skills/refactoring-code/SKILL.md"),
+      "stale copy\n",
+    );
     const result = doctor("skills", { HOME: home, DOTFILES: REPO });
     expect(result.code).toBe(1);
     expect(result.out).toContain(
-      "Codex in-house skill copy/copies are missing",
+      ".agents/skills/refactoring-code/SKILL.md is missing or stale",
     );
+    expect(result.out).toContain("mise run skills:sync");
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  test("skills fails when the retired plugin remains installed", () => {
+    const home = tmp("doctor-skills-plugin-");
+    const skillRoot = join(REPO, "agents/skills");
+    const skillNames = readdirSync(skillRoot, { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          existsSync(join(skillRoot, entry.name, "SKILL.md")),
+      )
+      .map((entry) => entry.name);
+    for (const name of skillNames)
+      for (const root of [".agents/skills", ".claude/skills"])
+        cpSync(join(skillRoot, name), join(home, root, name), {
+          recursive: true,
+        });
+    mkdirSync(join(home, ".claude/plugins"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude/plugins/installed_plugins.json"),
+      JSON.stringify({
+        plugins: {
+          "dotfiles@dotfiles": [
+            { scope: "user", installPath: "/plugin/cache", version: "1.0.0" },
+          ],
+        },
+      }),
+    );
+    const result = doctor("skills", { HOME: home, DOTFILES: REPO });
+    expect(result.code).toBe(1);
+    expect(result.out).toContain("dotfiles@dotfiles is still installed");
     expect(result.out).toContain("mise run skills:sync");
     rmSync(home, { recursive: true, force: true });
   });

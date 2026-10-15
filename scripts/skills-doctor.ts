@@ -1,107 +1,168 @@
-// `mise run lint:skills-wiring` checks repository-owned skill declarations only.
-
-import { resolve } from "node:path";
-import { cli } from "cleye";
+import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, resolve } from "node:path";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   readDeclaration,
   skillFiles,
   thirdPartySkillFiles,
 } from "./skills-declaration.ts";
-import { readDotfilesPlugin } from "./skills-plugin.ts";
 
-const USAGE = "Usage: bun scripts/skills-doctor.ts [--dotfiles <path>]\n";
+const InstalledPluginsSchema = z.looseObject({
+  plugins: z.record(z.string(), z.array(z.looseObject({ scope: z.string() }))),
+});
+const SettingsSchema = z.record(z.string(), z.unknown());
+const SkillName = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 
-type Finding = { level: "FAIL"; line: string };
+function repoFindings(dotfiles: string): { count: number; findings: string[] } {
+  const skillRoot = resolve(dotfiles, "agents/skills");
+  const findings: string[] = [];
+  const entries = readdirSync(skillRoot, { withFileTypes: true }).filter(
+    (entry) => entry.isDirectory() && !entry.name.startsWith("."),
+  );
+  for (const entry of entries) {
+    const skillPath = resolve(skillRoot, entry.name, "SKILL.md");
+    if (!SkillName.test(entry.name))
+      findings.push(`${entry.name}: directory name is invalid`);
+    if (!existsSync(skillPath)) {
+      findings.push(`${entry.name}: SKILL.md is missing`);
+      continue;
+    }
+    const text = readFileSync(skillPath, "utf8");
+    const name = /^name:\s*["']?([^\s"']+)["']?\s*$/mu.exec(text)?.[1];
+    if (name !== entry.name)
+      findings.push(
+        `${entry.name}: frontmatter name does not match the directory`,
+      );
+  }
 
-function print(line: string): void {
-  process.stdout.write(`${line}\n`);
-}
-
-let prototypeFlagSeen = false;
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__") prototypeFlagSeen = true;
-}
-
-function checkPluginManifest(dotfiles: string): Finding[] {
-  const plugin = readDotfilesPlugin(dotfiles);
-  return plugin.isErr()
-    ? [{ level: "FAIL", line: `PLUGIN: ${plugin.error}` }]
-    : [];
-}
-
-function checkRepoProvenance(dotfiles: string): Finding[] {
   const declaration = readDeclaration(dotfiles);
-  if (declaration.isErr())
-    return [{ level: "FAIL", line: `DECLARATION: ${declaration.error}` }];
-  return thirdPartySkillFiles(
-    skillFiles(resolve(dotfiles, "agents/skills")),
-    declaration.value,
-  ).map(({ path, skill }) => ({
-    level: "FAIL",
-    line: `THIRD-PARTY: ${path} has declared vendor provenance for "${skill}"; remove it from agents/skills`,
-  }));
+  if (declaration.isErr()) {
+    findings.push(`DECLARATION: ${declaration.error}`);
+  } else {
+    for (const { path, skill } of thirdPartySkillFiles(
+      skillFiles(skillRoot),
+      declaration.value,
+    ))
+      findings.push(
+        `THIRD-PARTY: ${path} has declared vendor provenance for "${skill}"`,
+      );
+  }
+
+  for (const path of [
+    ".claude-plugin/marketplace.json",
+    "agents/skills/.claude-plugin/plugin.json",
+  ])
+    if (existsSync(resolve(dotfiles, path)))
+      findings.push(`${path}: retired Claude plugin manifest remains`);
+
+  return { count: entries.length, findings };
+}
+
+function copyFinding(
+  home: string,
+  root: string,
+  name: string,
+  expected: string,
+): string | undefined {
+  const target = resolve(home, root, name);
+  const state = lstatSync(target, { throwIfNoEntry: false });
+  if (state === undefined) return `${root}/${name} is missing`;
+  if (state.isSymbolicLink()) return `${root}/${name} is a symlink`;
+  if (!state.isDirectory()) return `${root}/${name} is not a directory`;
+  const installedSkill = resolve(target, "SKILL.md");
+  if (!existsSync(installedSkill))
+    return `${root}/${name}/SKILL.md is missing or stale`;
+  return readFileSync(installedSkill, "utf8") === expected
+    ? undefined
+    : `${root}/${name}/SKILL.md is missing or stale`;
+}
+
+function pluginSettingsFindings(dotfiles: string, home: string): string[] {
+  const paths = [
+    resolve(home, ".claude/settings.json"),
+    resolve(home, ".claude/settings.local.json"),
+    resolve(dotfiles, ".claude/settings.json"),
+    resolve(dotfiles, ".claude/settings.local.json"),
+  ];
+  const findings: string[] = [];
+  for (const path of paths) {
+    if (!existsSync(path)) continue;
+    const settings = jsonOf(SettingsSchema).safeParse(
+      readFileSync(path, "utf8"),
+    );
+    if (!settings.success) {
+      findings.push(`${path}: could not check retired plugin settings`);
+      continue;
+    }
+    const value = settings.data;
+    const enabledPlugins = value.enabledPlugins;
+    const marketplaces = value.extraKnownMarketplaces;
+    if (
+      enabledPlugins !== null &&
+      typeof enabledPlugins === "object" &&
+      Object.hasOwn(enabledPlugins, "dotfiles@dotfiles")
+    )
+      findings.push(`${path}: dotfiles@dotfiles plugin setting remains`);
+    if (
+      marketplaces !== null &&
+      typeof marketplaces === "object" &&
+      Object.hasOwn(marketplaces, "dotfiles")
+    )
+      findings.push(`${path}: dotfiles marketplace setting remains`);
+  }
+  return findings;
+}
+
+function machineFindings(dotfiles: string, home: string): string[] {
+  const files = skillFiles(resolve(dotfiles, "agents/skills"));
+  const findings = files.flatMap((file) => {
+    const name = basename(resolve(file.path, ".."));
+    return [".claude/skills", ".agents/skills"].flatMap((root) => {
+      const finding = copyFinding(home, root, name, file.content);
+      return finding === undefined ? [] : [finding];
+    });
+  });
+  findings.push(...pluginSettingsFindings(dotfiles, home));
+
+  const installedPath = resolve(home, ".claude/plugins/installed_plugins.json");
+  if (existsSync(installedPath)) {
+    const installed = jsonOf(InstalledPluginsSchema).safeParse(
+      readFileSync(installedPath, "utf8"),
+    );
+    if (!installed.success) {
+      findings.push(`${installedPath}: could not inspect installed plugins`);
+    } else if (Object.hasOwn(installed.data.plugins, "dotfiles@dotfiles")) {
+      findings.push("Claude plugin dotfiles@dotfiles is still installed");
+    }
+  }
+  return findings;
 }
 
 function main(): void {
-  const parsed = cli(
-    {
-      name: "skills-doctor.ts",
-      strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
-      parameters: [],
-      help: {
-        description:
-          "Check the Claude plugin manifest and in-house versus third-party skill boundary in this repository.",
-      },
-      flags: {
-        dotfiles: { type: String },
-      },
-    },
-    undefined,
-    Bun.argv.slice(2),
-  );
-  if (prototypeFlagSeen) {
-    process.stderr.write(`unknown flag(s): --__proto__\n${USAGE}`);
-    process.exitCode = 2;
-    return;
-  }
-  if (parsed.flags.dotfiles === "") {
-    process.stderr.write(`--dotfiles requires a non-empty value\n${USAGE}`);
-    process.exitCode = 2;
-    return;
-  }
-  if (parsed._.length > 0) {
-    process.stderr.write(
-      `unexpected positional argument: ${parsed._[0]}\n${USAGE}`,
-    );
-    process.exitCode = 2;
-    return;
-  }
+  const dotfiles = process.env.DOTFILES ?? resolve(import.meta.dir, "..");
+  const machineMode = process.env.SKILLS_DOCTOR_MACHINE === "1";
+  const findings = machineMode
+    ? machineFindings(dotfiles, process.env.HOME ?? homedir())
+    : repoFindings(dotfiles).findings;
 
-  const dotfiles =
-    parsed.flags.dotfiles ??
-    process.env.DOTFILES ??
-    resolve(import.meta.dir, "..");
-  const findings = [
-    ...checkPluginManifest(dotfiles),
-    ...checkRepoProvenance(dotfiles),
-  ];
-  for (const finding of findings) print(`❌ ${finding.line}`);
-
-  const failures = findings.filter(
-    (finding) => finding.level === "FAIL",
-  ).length;
-  if (failures > 0) {
-    print(`SKILLS-WIRING FAIL: ${failures} problem(s)`);
+  for (const finding of findings)
+    process.stdout.write(`❌ ${finding}; run mise run skills:sync\n`);
+  if (findings.length > 0) {
+    process.stdout.write(`SKILLS-WIRING FAIL: ${findings.length} problem(s)\n`);
     process.exitCode = 1;
     return;
   }
-  print(
-    "✅ SKILLS-WIRING PASS: plugin manifest and in-house skill tree are valid",
-  );
+  if (machineMode) {
+    process.stdout.write(
+      "✅ SKILLS-WIRING PASS: in-house Claude and Codex copies match; dotfiles plugin absent\n",
+    );
+  } else {
+    const { count } = repoFindings(dotfiles);
+    process.stdout.write(
+      `✅ SKILLS-WIRING PASS: ${count} in-house skill directories are valid; no plugin manifest or third-party skill is present\n`,
+    );
+  }
 }
 
 process.on("uncaughtException", (error) => {

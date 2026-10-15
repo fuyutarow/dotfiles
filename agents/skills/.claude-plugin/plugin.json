@@ -1,9 +1,0 @@
-{
-  "name": "dotfiles",
-  "version": "1.0.0",
-  "description": "In-house Agent Skills for dotfiles",
-  "author": {
-    "name": "Fuyu"
-  },
-  "skills": ["./"]
-}

@@ -76,12 +76,6 @@ import { danglingRepoBins } from "./deps-prune.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText } from "../agents/hooks/zod.ts";
 import {
-  homeRepoLinkedSkillTargets,
-  readDeclaration,
-} from "./skills-declaration.ts";
-import { findRepoSkillSymlinks } from "./skills-links.ts";
-import { readDotfilesPlugin } from "./skills-plugin.ts";
-import {
   drift,
   readDeclared,
   readLive,
@@ -480,15 +474,14 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkSkills(ctx: Ctx): Promise<Finding> {
-  const r = await run(
-    [
-      "bun",
-      join(ctx.dotfiles, "scripts/skills-doctor.ts"),
-      "--dotfiles",
-      ctx.dotfiles,
-    ],
-    { ms: 30_000 },
-  );
+  const r = await run(["bun", join(ctx.dotfiles, "scripts/skills-doctor.ts")], {
+    ms: 30_000,
+    env: {
+      DOTFILES: ctx.dotfiles,
+      HOME: ctx.home,
+      SKILLS_DOCTOR_MACHINE: "1",
+    },
+  });
   if (r.timedOut) return warn("skills", "skills-doctor.ts timed out after 30s");
   if (r.code !== 0) {
     const bad = (r.out + r.err)
@@ -496,91 +489,14 @@ export async function checkSkills(ctx: Ctx): Promise<Finding> {
       .filter((line) => /FAIL|❌/iu.test(line));
     return fail(
       "skills",
-      "repository skill manifest or provenance is invalid",
-      "mise run lint:skills-wiring",
+      "an in-house skill copy is missing, stale, linked, or the retired plugin remains installed",
+      "mise run skills:sync",
       bad,
     );
   }
-
-  const plugin = readDotfilesPlugin(ctx.dotfiles);
-  if (plugin.isErr())
-    return fail(
-      "skills",
-      "the in-house plugin manifest could not be read",
-      "mise run lint:skills-wiring",
-      [plugin.error],
-    );
-  const declaration = readDeclaration(ctx.dotfiles);
-  if (declaration.isErr())
-    return fail(
-      "skills",
-      "the third-party skill declaration could not be read",
-      "mise run lint:skills-wiring",
-      [declaration.error],
-    );
-
-  const links = findRepoSkillSymlinks(ctx.home, ctx.dotfiles);
-  const linkProblems = [
-    ...links.errors.map(
-      (error) => `could not inspect tool skill paths: ${error}`,
-    ),
-    ...links.paths.map((path) => `${path} points into this repository`),
-  ];
-  if (linkProblems.length > 0)
-    return fail(
-      "skills",
-      `${links.paths.length} repo-owned tool skill symlink(s) remain`,
-      "mise run skills:sync",
-      linkProblems,
-    );
-
-  const skillNames = [
-    ...plugin.value.skillNames,
-    ...declaration.value.skills.map((entry) => entry.skill),
-  ];
-  const unsafeTargets = homeRepoLinkedSkillTargets(
-    ctx.home,
-    ctx.dotfiles,
-    skillNames,
-  );
-  if (unsafeTargets.length > 0)
-    return fail(
-      "skills",
-      `${unsafeTargets.length} global skill target(s) resolve into a repository`,
-      "mise run skills:migrate",
-      unsafeTargets,
-    );
-
-  const codexRoot = join(ctx.home, ".agents/skills");
-  const codexRootInfo = lstatSync(codexRoot, { throwIfNoEntry: false });
-  if (codexRootInfo !== undefined && codexRootInfo.isDirectory()) {
-    const missingCopies = plugin.value.skillNames.filter((name) => {
-      const target = join(codexRoot, name);
-      const state = lstatSync(target, { throwIfNoEntry: false });
-      return (
-        state === undefined ||
-        state.isSymbolicLink() ||
-        !state.isDirectory() ||
-        !existsSync(join(target, "SKILL.md"))
-      );
-    });
-    if (missingCopies.length > 0)
-      return fail(
-        "skills",
-        `${missingCopies.length} Codex in-house skill copy/copies are missing`,
-        "mise run skills:sync",
-        missingCopies,
-      );
-  } else {
-    return skip(
-      "skills",
-      `${codexRoot} absent — run mise run skills:sync to install Codex copies`,
-    );
-  }
-
   return pass(
     "skills",
-    "plugin manifest, Codex copies, and tool skill paths are in sync",
+    "in-house Claude and Codex copies match the repository; dotfiles plugin is absent",
   );
 }
 

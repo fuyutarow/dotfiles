@@ -126,13 +126,13 @@ export function costMultiple(r: Roster, c: Choice): number | undefined {
 export type Graded = Readonly<{ pass: number; partial: number; fail: number }>;
 
 export const ROUTING_OBJECTIVE =
-  "Objective: maximize this ticket's expected accepted-returns-per-hour: expected acceptance rate multiplied by 3600 and divided by expected time to first return, using the comparable-ticket tradeoff line (same capability tags and size class from writes-glob count and brief length). Weigh comparable-ticket median time to first return, timeout rate, accepted rate, and cost per accepted ahead of overall records and benchmark scores. Each row marks the best observed expected throughput; when comparable history is little, treat it as uncertainty and do not silently substitute overall averages. Choose the lowest effort that does not lower that throughput; xhigh/max only when the ticket names a capability lower effort measurably lacks. Among rows within noise of each other, pick the cheaper, and when a codex and a claude row are comparable, pick codex. Cost excludes a row only when its expected cost exceeds the ticket's declared budget.";
+  "Objective: maximize this ticket's expected accepted-returns-per-hour: expected acceptance rate multiplied by 3600 and divided by expected time to first return, using the comparable-ticket tradeoff line (same capability tags and size class from writes-glob count and brief length). Weigh comparable-ticket median time to first return, timeout rate, accepted rate, and cost per accepted ahead of overall records and benchmark scores. Each row marks the best observed expected throughput; when comparable history is little, treat it as uncertainty and do not silently substitute overall averages. Choose the lowest effort that does not lower that throughput; xhigh/max only when the ticket names a capability lower effort measurably lacks. Among rows within noise of each other, pick the cheaper. Cost excludes a row only when its expected cost exceeds the ticket's declared budget.";
 
 /** What Jev reads about one row: what it is for, its measured capability, its price relative to the
  *  cheapest row, and how its graded runs here went. SELECTION (owner 2026-10-06: 「model パフォーマン
  *  ステーブルと task brief によって選択されるべき」): the pick comes from these numbers against the
- *  brief — no hand-set weight or post-hoc route bias corrects Jev afterwards. The codex-over-claude
- *  tie-break is explicit in agx's question, and the route is part of each row's criterion. */
+ *  brief — no hand-set weight or post-hoc route bias corrects Jev afterwards. The route is part
+ *  of each row's criterion. */
 export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
   const measured = [
     c.aa_index === undefined ? undefined : `AA ${c.aa_index}`,
@@ -170,7 +170,7 @@ export function rosterTable(r: Roster): string {
  * the repo's agents/claude/CLAUDE.md holds only the markers — one writer per file. */
 export function rosterPolicy(r: Roster): string {
   return [
-    `- **Every worker starts with \`agx run <ticket>\`. The router chooses from the roster using the ticket and the recorded run history; when codex and claude rows are comparable, choose codex.**`,
+    `- **Every worker starts with \`agx run <ticket>\`. The router chooses from the roster using the ticket and the recorded run history.**`,
     `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; cost = blended price relative to the cheapest priced row; as of ${r.as_of}.`,
     "",
     ...rosterTable(r)

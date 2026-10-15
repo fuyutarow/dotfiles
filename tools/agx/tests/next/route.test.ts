@@ -18,7 +18,10 @@ describe("capability constrained routing", () => {
         task_size: z.looseObject({ timeout_s: z.number(), class: z.string() }),
       }),
       questions: z.looseObject({
-        worker: z.looseObject({ criteria: z.record(z.string(), z.string()) }),
+        worker: z.looseObject({
+          instructions: z.string(),
+          criteria: z.record(z.string(), z.string()),
+        }),
       }),
     });
     let requestBody: z.output<typeof RoutingRequest> | undefined;
@@ -58,6 +61,25 @@ describe("capability constrained routing", () => {
       requestBody?.questions.worker.criteria["luna-medium"],
     ).toBeUndefined();
     expect(requestBody?.questions.worker.criteria["sol-low"]).toContain("TB4");
+    const criteria = Object.values(
+      requestBody?.questions.worker.criteria ?? {},
+    );
+    const routeBias = [
+      ["no", "codex", "row"],
+      ["choose", "codex"],
+      ["when", "codex", "and", "claude", "rows", "are", "comparable"],
+    ].map((words) => words.join(" "));
+    expect(
+      criteria.every((row) =>
+        routeBias.every((phrase) => !row.includes(phrase)),
+      ),
+    ).toBe(true);
+    expect(
+      routeBias.every(
+        (phrase) =>
+          !(requestBody?.questions.worker.instructions ?? "").includes(phrase),
+      ),
+    ).toBe(true);
     const retry = await route(
       "inventory and classify the repo",
       parsed.ticket.capabilities,

@@ -4,6 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadRoster, rosterPolicy, rosterTable } from "../roster.ts";
 
+const routeBias = [
+  ["no", "codex", "row"],
+  ["choose", "codex"],
+  ["when", "codex", "and", "claude", "rows", "are", "comparable"],
+].map((words) => words.join(" "));
+
 describe("dispatch roster", () => {
   test("loads all 40 route and effort rows with optional prices and benchmarks", async () => {
     const loaded = await loadRoster();
@@ -114,9 +120,17 @@ describe("dispatch roster", () => {
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     const policy = rosterPolicy(loaded.value);
-    expect(policy.split("\n")[0]).toContain(
-      "when codex and claude rows are comparable, choose codex",
-    );
+    expect(routeBias.every((phrase) => !policy.includes(phrase))).toBe(true);
+    expect(
+      loaded.value.choice
+        .filter((row) => row.route === "claude")
+        .every(
+          (row) => !/codex|no claude row|when no .* row/iu.test(row.use_for),
+        ),
+    ).toBe(true);
+    expect(
+      loaded.value.choice.find((row) => row.id === "luna-max")?.use_for,
+    ).not.toMatch(/claude/iu);
     for (const command of [
       "agx run",
       "agx check",
@@ -126,7 +140,7 @@ describe("dispatch roster", () => {
     ])
       expect(policy).toContain(command);
     expect(policy).toContain(
-      "systemd-run --user --unit=agx-<name> --collect -- agx run",
+      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run",
     );
     expect(policy).toContain("--continue");
     expect(policy).not.toMatch(/\bagx (?:dispatch|ticket|ps|ledger)\b/u);

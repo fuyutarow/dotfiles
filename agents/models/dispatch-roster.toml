@@ -114,7 +114,7 @@ coding_agent = 41.1
 price_in = 0.10
 price_cached_in = 0.01
 price_out = 0.50
-use_for = "the deepest luna; try before a Claude choice"
+use_for = "the deepest luna for work needing maximum luna capability"
 
 [[choice]]
 id = "terra-low"
@@ -351,7 +351,7 @@ tb4 = 12.6 # AA (2026-10-08): https://artificialanalysis.ai/models/releases/comp
 tb4_source = "https://artificialanalysis.ai/models/releases/comparisons/claude-haiku-5-5-vs-deepseek-v4-pro"
 price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
 price_out = 0.50
-use_for = "short tasks or quick Claude Code hook edits when no codex row has sufficient measured capability"
+use_for = "short tasks and quick Claude Code hook edits"
 
 [[choice]]
 id = "haiku-medium"
@@ -365,7 +365,7 @@ scicode = 49.0 # AA (2026-10-08): https://artificialanalysis.ai/models/compariso
 scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-medium-vs-claude-haiku-5-5-xhigh"
 price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
 price_out = 0.50
-use_for = "short tasks or quick Claude Code hook edits needing more care than haiku-low when no codex row has sufficient measured capability"
+use_for = "short tasks and quick Claude Code hook edits needing more care than haiku-low"
 
 [[choice]]
 id = "haiku-high"
@@ -379,7 +379,7 @@ scicode = 49.0 # AA (2026-10-08): https://artificialanalysis.ai/models/compariso
 scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-high-vs-claude-haiku-5-5-medium"
 price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
 price_out = 0.50
-use_for = "claude Code hook-sensitive edits needing stronger follow-through when no codex row has sufficient measured capability"
+use_for = "Claude Code hook-sensitive edits needing stronger follow-through"
 
 [[choice]]
 id = "haiku-xhigh"
@@ -393,7 +393,7 @@ scicode = 52.0 # AA (2026-10-08): https://artificialanalysis.ai/models/compariso
 scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh"
 price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
 price_out = 0.50
-use_for = "demanding tasks needing high follow-through when no codex row has sufficient measured capability"
+use_for = "demanding tasks needing high follow-through"
 
 [[choice]]
 id = "haiku-max"
@@ -407,7 +407,7 @@ scicode = 55.0 # AA (2026-10-08): https://artificialanalysis.ai/models/compariso
 scicode_source = "https://artificialanalysis.ai/models/comparisons/claude-haiku-5-5-vs-claude-haiku-5-5-xhigh"
 price_in = 0.10 # Anthropic (2026-10-08): https://platform.claude.com/docs/en/about-claude/pricing (prompts up to 100k)
 price_out = 0.50
-use_for = "most demanding Haiku tasks when no codex row has sufficient measured capability"
+use_for = "most demanding Haiku tasks"
 
 [[choice]]
 id = "sonnet-low"
@@ -417,7 +417,7 @@ effort = "low"
 aa_index = 36
 price_in = 2.00
 price_out = 10.00
-use_for = "low-effort reasoning when no codex row has sufficient measured capability"
+use_for = "low-effort reasoning"
 
 [[choice]]
 id = "sonnet-medium"
@@ -430,7 +430,7 @@ scicode = 52.9
 coding_agent = 45.9
 price_in = 2.00
 price_out = 10.00
-use_for = "multi-step terminal/agentic work when no codex row (sol-low/sol-medium at the same price) has sufficient measured capability"
+use_for = "multi-step terminal/agentic work with strong measured capability"
 
 [[choice]]
 id = "sonnet-high"
@@ -443,7 +443,7 @@ scicode = 53.7
 coding_agent = 55.0
 price_in = 2.00
 price_out = 10.00
-use_for = "hard agentic work, long tool loops, live harness edits when no codex row (sol-medium/sol-high) has sufficient measured capability"
+use_for = "hard agentic work, long tool loops, live harness edits"
 
 [[choice]]
 id = "sonnet-xhigh"
@@ -453,7 +453,7 @@ effort = "xhigh"
 aa_index = 52
 price_in = 2.00
 price_out = 10.00
-use_for = "very hard agentic work when no codex row (sol-high/sol-xhigh) has sufficient measured capability"
+use_for = "very hard agentic work"
 
 [[choice]]
 id = "sonnet-max"
@@ -463,7 +463,7 @@ effort = "max"
 aa_index = 56
 price_in = 2.00
 price_out = 10.00
-use_for = "hard long-running agentic work when no codex row (sol-xhigh/sol-max) has sufficient measured capability"
+use_for = "hard long-running agentic work"
 
 [[choice]]
 id = "opus-low"
@@ -473,7 +473,7 @@ effort = "low"
 aa_index = 42
 price_in = 4.00
 price_out = 20.00
-use_for = "low-effort design judgment when no codex row has sufficient measured capability"
+use_for = "low-effort design judgment"
 
 [[choice]]
 id = "opus-medium"
@@ -485,7 +485,7 @@ tb4 = 52.5
 scicode = 59.3
 price_in = 4.00
 price_out = 20.00
-use_for = "ambiguous specs, design judgment, factual accuracy, multi-repo changes when no codex row has sufficient measured capability"
+use_for = "ambiguous specs, design judgment, factual accuracy, multi-repo changes"
 
 [[choice]]
 id = "opus-high"
@@ -495,7 +495,7 @@ effort = "high"
 aa_index = 54
 price_in = 4.00
 price_out = 20.00
-use_for = "hard design and reasoning when no codex row has sufficient measured capability"
+use_for = "hard design and reasoning"
 
 [[choice]]
 id = "opus-xhigh"
@@ -505,7 +505,7 @@ effort = "xhigh"
 aa_index = 56
 price_in = 4.00
 price_out = 20.00
-use_for = "very hard design, accuracy, and multi-repo work when no codex row has sufficient measured capability"
+use_for = "very hard design, accuracy, and multi-repo work"
 
 [[choice]]
 id = "opus-max"
@@ -515,7 +515,7 @@ effort = "max"
 aa_index = 58
 price_in = 4.00
 price_out = 20.00
-use_for = "most demanding judgment tasks when no codex row has sufficient measured capability"
+use_for = "most demanding judgment tasks"
 
 [[choice]]
 id = "fable-low"
@@ -525,7 +525,7 @@ effort = "low"
 aa_index = 47
 price_in = 10.00
 price_out = 50.00
-use_for = "high-capability low-effort reasoning when no codex row has sufficient measured capability"
+use_for = "high-capability low-effort reasoning"
 
 [[choice]]
 id = "fable-medium"
@@ -535,7 +535,7 @@ effort = "medium"
 aa_index = 49
 price_in = 10.00
 price_out = 50.00
-use_for = "difficult tasks needing more capability than sonnet-medium when no codex row has sufficient measured capability"
+use_for = "difficult tasks needing more capability than sonnet-medium"
 
 [[choice]]
 id = "fable-high"
@@ -545,7 +545,7 @@ effort = "high"
 aa_index = 51
 price_in = 10.00
 price_out = 50.00
-use_for = "very difficult tasks when no codex row has sufficient measured capability"
+use_for = "very difficult tasks"
 
 [[choice]]
 id = "fable-xhigh"
@@ -555,7 +555,7 @@ effort = "xhigh"
 aa_index = 53
 price_in = 10.00
 price_out = 50.00
-use_for = "frontier reasoning for long multi-step tasks when no codex row has sufficient measured capability"
+use_for = "frontier reasoning for long multi-step tasks"
 
 [[choice]]
 id = "fable-max"
@@ -565,4 +565,4 @@ effort = "max"
 aa_index = 53
 price_in = 10.00
 price_out = 50.00
-use_for = "hardest reasoning tasks when no codex row has sufficient measured capability"
+use_for = "hardest reasoning tasks"

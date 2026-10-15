@@ -22,6 +22,11 @@ import { brewPrefix } from "../core-tools.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "render-home.ts");
 const ROOT = join(import.meta.dir, "..", "..");
+const ROUTE_BIAS = [
+  ["no", "codex", "row"],
+  ["choose", "codex"],
+  ["when", "codex", "and", "claude", "rows", "are", "comparable"],
+].map((words) => words.join(" "));
 
 function run(env: Record<string, string>): { out: string; code: number } {
   const proc = Bun.spawnSync([process.execPath, SCRIPT], {
@@ -516,6 +521,7 @@ describe("render-home: the rest of the rendered half", () => {
     expect(md).toContain(
       "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |",
     );
+    expect(ROUTE_BIAS.every((phrase) => !md.includes(phrase))).toBe(true);
     for (const command of [
       "agx run <ticket.md>",
       "agx check <ticket.md>",

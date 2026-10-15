@@ -1,6 +1,6 @@
 // tex-oracle lint — teeth and boundary tests. Run: bun test agents/skills/compiling-latex/tests
-import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,7 +9,11 @@ const oracle = join(skill, "scripts/tex-oracle.ts");
 const contract = join(skill, "assets/NOTATION.md");
 const dirty = join(import.meta.dir, "fixtures/lint/dirty/main.tex");
 const clean = join(import.meta.dir, "fixtures/lint/clean/main.tex");
-const scratch = mkdtempSync(join(tmpdir(), "tex-oracle-lint-"));
+const scratch = await mkdtemp(join(tmpdir(), "tex-oracle-lint-"));
+
+afterAll(async () => {
+  await rm(scratch, { recursive: true, force: true });
+});
 
 async function run(
   ...args: string[]
@@ -28,9 +32,9 @@ async function run(
   return { code, out, err };
 }
 
-function contractFile(name: string, text: string): string {
+async function contractFile(name: string, text: string): Promise<string> {
   const path = join(scratch, name);
-  writeFileSync(path, text);
+  await writeFile(path, text);
   return path;
 }
 
@@ -90,7 +94,7 @@ describe("contract grammar errors exit 2", () => {
         "lint",
         clean,
         "--contract",
-        contractFile(`${name.replaceAll(" ", "-")}.md`, text),
+        await contractFile(`${name.replaceAll(" ", "-")}.md`, text),
       );
       expect(code).toBe(2);
       expect(err).toContain(message);
@@ -127,7 +131,7 @@ describe("CLI boundary exits 2", () => {
     ).toBe(2);
   });
   test("\\input target missing", async () => {
-    const main = contractFile("main.tex", "\\input{gone}\n");
+    const main = await contractFile("main.tex", "\\input{gone}\n");
     const { code, err } = await run("lint", main, "--contract", contract);
     expect(code).toBe(2);
     expect(err).toContain("missing input file");

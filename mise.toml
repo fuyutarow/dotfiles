@@ -672,8 +672,8 @@ dir = "{{config_root}}"
 run = 'bun scripts/doctor.ts'
 
 [tasks."secrets:push"]
-description = "Push this machine's fnox secrets (TYPESAFE_API_KEY) to an ssh host, age-encrypted, and prove they open there. Use --rotate to update secrets in an existing config written by this script. Only to a box whose root you trust (a rented box of your own, R99) — not a shared server. Usage: mise run secrets:push -- <host> [--rotate]"
-run = 'bun ~/dotfiles/scripts/secrets-push.ts'
+description = "Relay selected fnox secrets from this machine or --from SSH host to an SSH target over stdin; values are SHA-256 verified. Only to a box whose root you trust. Usage: mise run secrets:push -- [--from HOST] [--secret NAME …] <target>"
+run = 'bun "${MISE_PROJECT_ROOT}/tools/secrets-push/src/secrets-push.ts"'
 
 [tasks."auth:push"]
 dir = "{{config_root}}"

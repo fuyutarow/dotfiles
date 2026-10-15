@@ -24,7 +24,7 @@
     },
     "tools/agx-usehooks": {
       "name": "agx-usehooks",
-      "version": "0.5.0",
+      "version": "0.10.0",
     },
   },
   "packages": {

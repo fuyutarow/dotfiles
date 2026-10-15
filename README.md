@@ -114,7 +114,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent assets (commands/, skills/); other repos call task helpers
 │                #   through package.json bins instead of skill installation paths
-├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open) + shared TS modules
+├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
 ├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup
 ├── Brewfile.core      # tools needed on every box
 ├── Brewfile.ondemand  # tools installed when first needed (OS guards stay here)

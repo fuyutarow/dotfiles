@@ -19,6 +19,7 @@
     "agx": "tools/agx/src/next/cli.ts",
     "agx-next": "tools/agx/src/next/cli.ts",
     "coredev": "tools/coredev/src/coredev.ts",
+    "sui-keystore-merge": "tools/sui-keystore-merge/src/sui-keystore-merge.ts",
     "jj-commit": "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts",
     "jj-push": "agents/skills/wiring-mise-tasks/scripts/jj-push.ts",
     "jj-precommit": "agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts",

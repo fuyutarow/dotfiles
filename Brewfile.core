@@ -21,7 +21,7 @@ brew "topgrade"     # `mise run up` (m up)
 brew "zoxide"       # better cd (,)
 brew "rustup"       # Rust manager and cargo proxies; opt/rustup/bin is exposed, toolchains stay per repo
 brew "sccache"      # cargo's compiler cache — RUSTC_WRAPPER=sccache is set unconditionally in the profiles
-brew "fnox"         # secrets: Keychain (mac), age files elsewhere — scripts/secrets-push.ts fills a box
+brew "fnox"         # secrets: Keychain (mac), age files elsewhere — tools/secrets-push fills a box
 # fnox uses age-encrypted files on WSL; keep its provider available on every host.
 brew "age"
 # WSL alone uses the Homebrew Codex cask for unqualified `codex`; macOS and ordinary Linux

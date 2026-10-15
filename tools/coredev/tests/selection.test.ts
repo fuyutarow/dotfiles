@@ -63,6 +63,10 @@ function fakeRemote(root: string): {
   mkdirSync(bin);
   mkdirSync(join(dotfiles, "scripts"), { recursive: true });
   mkdirSync(home);
+  writeFileSync(
+    join(home, ".profile"),
+    'PATH="' + bin + ':$PATH"; export PATH\n',
+  );
   writeFileSync(join(dotfiles, "mise.toml"), "[tasks]\n");
   writeFileSync(
     join(bin, "bun"),

@@ -47,7 +47,7 @@ semver and `CHANGELOG.md`, `src/`, `tests/`; see README → Architecture → too
 rule; may import only their own dir and `tools/shared/`): `tools/smart-open`, `tools/repo-retrieve`
 (`rr` / `repo-retrieve`), `tools/agx` (`agx`), `tools/agent-resource-run`, and
 `tools/serena-foreground` (both OSes), `tools/storage-headroom` (storage decisions and read-only
-headroom CLI), `tools/shared` (code several tools import, including Bash parsing and hook path
+headroom CLI), `tools/secrets-push`, `tools/sui-keystore-merge`, `tools/shared` (code several tools import, including Bash parsing and hook path
 resolution).
 Plumbing / single sources of truth: `scripts/config-registry.ts` (EVERY config surface — source,
 deploy kind, consumer, writer, verifier; `mise run config:map` prints it, `lint:config-map` fails on

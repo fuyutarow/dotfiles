@@ -1,0 +1,12 @@
+{
+  "name": "@dotfiles/sui-keystore-merge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "sui-keystore-merge": "src/sui-keystore-merge.ts"
+  },
+  "dependencies": {
+    "cleye": "2.6.0"
+  }
+}

@@ -1,0 +1,24 @@
++++
+schema = 2
+name = "rosterfix"
+outcome = "the dispatch roster no longer tells the router to treat claude rows as a last resort: every row's use_for describes capability only, the 'when codex and claude rows are comparable, choose codex' rule is removed, and the rendered ~/.claude/CLAUDE.md roster block follows; route preference is left to usage pace (ticket ratecontext2)"
+writes = ["agents/models/dispatch-roster.toml", "agents/claude/CLAUDE.md", "scripts/render-home.ts", "scripts/tests/render-home.test.ts", "tools/agx/tests/**"]
+verify = ["bun test scripts/tests/render-home.test.ts", "bun test tools/agx", "mise run gate:land"]
+timeout_s = 1200
+premises = ["file:agents/models/dispatch-roster.toml"]
+
+[proposition]
+id = "ROSTER-NEUTRAL"
+claim = "no roster text (use_for, criteria, rendered block) conditions a claude row on the absence of a capable codex row or prefers codex when rows are comparable"
+refuted_by = "`rr regex 'no codex row|choose codex'` finds such text in the roster or its rendered block"
++++
+
+Owner (2026-10-15): Jev must pick, and should use claude more when its quota is underused (claude 7d 7% used with
+95% of the window elapsed; codex 7d 52% used with 29% elapsed). Diagnosis: Jev is consulted (row choices vary), but
+the roster input biases it: every claude row's use_for ends with "when no codex row has sufficient measured
+capability" (and variants such as "when no codex row (sol-low/sol-medium at the same price) has sufficient measured
+capability"), and the roster says "when codex and claude rows are comparable, choose codex".
+Do: rewrite each claude row's use_for to its capability alone (keep the measured numbers, TB4, cost multiple); remove
+the codex-first rule from the roster and from wherever it is rendered into ~/.claude/CLAUDE.md (source: find it with
+rr; agents/claude/CLAUDE.md must not contain rendered roster text, lint:one-writer). Do not add a new preference rule;
+ratecontext2 adds the usage-pace preference in route.ts. Update any test that pins the old text. Do not commit or push.

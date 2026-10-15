@@ -882,6 +882,18 @@ async function main(
       let changed = yield* paths(workerRoot, alpha, "@");
       if (changed.length === 0)
         return reject("workspace change is empty after rebase");
+      const basePaths = new Set(
+        (yield* jj(mainRoot, [
+          "file",
+          "list",
+          "-r",
+          alpha,
+          "-T",
+          'path ++ "\\0"',
+        ]))
+          .split("\0")
+          .filter((path) => path !== ""),
+      );
       const collisions = overlap(changed, dirty);
       if (collisions.length > 0)
         return reject(
@@ -909,7 +921,17 @@ async function main(
           return reject(errorMessage(appliedChangesets.error));
         const landedChangesets = appliedChangesets.value;
         changed = [
-          ...new Set([...changed, ...landedChangesets.paths]),
+          ...new Set([
+            ...changed.filter(
+              (path) =>
+                !landedChangesets.consumedChangesets.includes(path) ||
+                basePaths.has(path),
+            ),
+            ...landedChangesets.releaseFiles,
+            ...landedChangesets.consumedChangesets.filter((path) =>
+              basePaths.has(path),
+            ),
+          ]),
         ].toSorted();
         restoredPaths = changed;
         for (const toolRelease of landedChangesets.releases)

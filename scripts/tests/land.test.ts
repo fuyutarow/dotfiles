@@ -483,6 +483,104 @@ describe("land workspace", () => {
     );
   });
 
+  test("commits release outputs but omits a workspace-added consumed changeset", () => {
+    const f = fixture();
+    writeToolPackage(f.main, "1.0.0");
+    writeToolChangelog(f.main, "1.0.0 — 2026-10-01");
+    f.jj(f.main, ["commit", "-m", "add agx release fixture"]);
+    f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    f.jj(f.main, ["workspace", "forget", "dotfiles-arm-worker"]);
+    rmSync(f.worker, { recursive: true, force: true });
+    f.jj(f.main, [
+      "workspace",
+      "add",
+      "--name",
+      "dotfiles-arm-worker",
+      "-r",
+      "alpha",
+      f.worker,
+    ]);
+    const change = "tools/agx/.changes/workspace-feature.md";
+    mkdirSync(join(f.worker, "tools", "agx", ".changes"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(f.worker, change),
+      "---\nbump: minor\n---\n\nAdd a workspace feature\n",
+    );
+    writeFileSync(join(f.worker, "tools", "agx", "src.ts"), "export {}\n");
+
+    const result = f.land();
+
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    const commit = f.log().find((event) => event[1] === "commit");
+    expect(commit).toBeDefined();
+    const committedPaths = commit?.slice((commit?.lastIndexOf("--") ?? -1) + 1);
+    expect(committedPaths).toContain("tools/agx/src.ts");
+    expect(committedPaths).toContain("tools/agx/package.json");
+    expect(committedPaths).toContain("tools/agx/CHANGELOG.md");
+    expect(committedPaths).not.toContain(change);
+    expect(f.jj(f.main, ["file", "list", "-r", "alpha"])).not.toContain(change);
+    expect(
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/package.json"]),
+    ).toContain('"version": "1.1.0"');
+    expect(
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/CHANGELOG.md"]),
+    ).toContain("- Add a workspace feature");
+  });
+
+  test("commits deletion of a consumed changeset that existed in the base", () => {
+    const f = fixture();
+    writeToolPackage(f.main, "1.0.0");
+    writeToolChangelog(f.main, "1.0.0 — 2026-10-01");
+    const change = "tools/agx/.changes/base-feature.md";
+    mkdirSync(join(f.main, "tools", "agx", ".changes"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(f.main, change),
+      "---\nbump: patch\n---\n\nAdd a base feature\n",
+    );
+    f.jj(f.main, ["commit", "-m", "add base changeset fixture"]);
+    f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    f.jj(f.main, ["workspace", "forget", "dotfiles-arm-worker"]);
+    rmSync(f.worker, { recursive: true, force: true });
+    f.jj(f.main, [
+      "workspace",
+      "add",
+      "--name",
+      "dotfiles-arm-worker",
+      "-r",
+      "alpha",
+      f.worker,
+    ]);
+    writeFileSync(join(f.worker, "tools", "agx", "src.ts"), "export {}\n");
+
+    const result = f.land();
+
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    const commit = f.log().find((event) => event[1] === "commit");
+    expect(commit).toBeDefined();
+    const committedPaths = commit?.slice((commit?.lastIndexOf("--") ?? -1) + 1);
+    expect(committedPaths).toContain("tools/agx/src.ts");
+    expect(committedPaths).toContain("tools/agx/package.json");
+    expect(committedPaths).toContain("tools/agx/CHANGELOG.md");
+    expect(committedPaths).toContain(change);
+    expect(f.jj(f.main, ["file", "list", "-r", "alpha"])).not.toContain(change);
+    expect(
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/package.json"]),
+    ).toContain('"version": "1.0.1"');
+    expect(
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/CHANGELOG.md"]),
+    ).toContain("- Add a base feature");
+  });
+
   test("accepts the workspace directory basename when its jj name differs", () => {
     const f = fixture();
     f.jj(f.main, ["workspace", "forget", "dotfiles-arm-worker"]);

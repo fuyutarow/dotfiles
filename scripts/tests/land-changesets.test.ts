@@ -59,6 +59,14 @@ test("two changesets produce one highest bump and retain both entries", () => {
     "tools/sample/CHANGELOG.md",
     "tools/sample/package.json",
   ]);
+  expect(result.value.consumedChangesets).toEqual([
+    "tools/sample/.changes/one.md",
+    "tools/sample/.changes/two.md",
+  ]);
+  expect(result.value.releaseFiles).toEqual([
+    "tools/sample/CHANGELOG.md",
+    "tools/sample/package.json",
+  ]);
   expect(readFileSync(join(tool, "package.json"), "utf8")).toContain(
     '"version": "1.3.0"',
   );
@@ -104,7 +112,12 @@ test("landing without changesets leaves version and changelog unchanged", () => 
   const result = applyToolChangesets(root, "2026-10-14");
   expect(result.isOk()).toBe(true);
   if (result.isErr()) return;
-  expect(result.value).toEqual({ paths: [], releases: [] });
+  expect(result.value).toEqual({
+    paths: [],
+    consumedChangesets: [],
+    releaseFiles: [],
+    releases: [],
+  });
   expect(readFileSync(join(tool, "package.json"), "utf8")).toBe(packageBefore);
   expect(readFileSync(join(tool, "CHANGELOG.md"), "utf8")).toBe(
     changelogBefore,

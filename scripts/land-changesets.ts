@@ -15,6 +15,8 @@ type Change = { path: string; bump: Bump; entry: string };
 type ToolRelease = { tool: string; version: string; entries: number };
 export type LandChangesetsResult = {
   paths: string[];
+  consumedChangesets: string[];
+  releaseFiles: string[];
   releases: ToolRelease[];
 };
 
@@ -81,7 +83,13 @@ export function applyToolChangesets(
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(date))
     return err(new Error(`invalid release date: ${date}`));
   const toolsRoot = join(root, "tools");
-  if (!existsSync(toolsRoot)) return ok({ paths: [], releases: [] });
+  if (!existsSync(toolsRoot))
+    return ok({
+      paths: [],
+      consumedChangesets: [],
+      releaseFiles: [],
+      releases: [],
+    });
   const pending: { tool: string; change: Change }[] = [];
   for (const toolDir of readdirSync(toolsRoot, { withFileTypes: true }).filter(
     (entry) => entry.isDirectory(),
@@ -146,6 +154,8 @@ export function applyToolChangesets(
     });
   }
   const paths = new Set<string>();
+  const consumedChangesets = new Set<string>();
+  const releaseFiles = new Set<string>();
   const releases: ToolRelease[] = [];
   for (const item of prepared) {
     const packageJson = jsonOf(z.record(z.string(), z.unknown())).safeParse(
@@ -168,11 +178,17 @@ export function applyToolChangesets(
         .filter(Boolean)
         .join("\n\n") + "\n",
     );
-    paths.add(`tools/${item.tool}/package.json`);
-    paths.add(`tools/${item.tool}/CHANGELOG.md`);
+    const packagePath = `tools/${item.tool}/package.json`;
+    const changelogPath = `tools/${item.tool}/CHANGELOG.md`;
+    paths.add(packagePath);
+    paths.add(changelogPath);
+    releaseFiles.add(packagePath);
+    releaseFiles.add(changelogPath);
     for (const { path } of item.changes) {
       unlinkSync(path);
-      paths.add(path.slice(root.length + 1));
+      const relative = path.slice(root.length + 1);
+      paths.add(relative);
+      consumedChangesets.add(relative);
     }
     releases.push({
       tool: item.tool,
@@ -180,5 +196,10 @@ export function applyToolChangesets(
       entries: item.changes.length,
     });
   }
-  return ok({ paths: [...paths].toSorted(), releases });
+  return ok({
+    paths: [...paths].toSorted(),
+    consumedChangesets: [...consumedChangesets].toSorted(),
+    releaseFiles: [...releaseFiles].toSorted(),
+    releases,
+  });
 }

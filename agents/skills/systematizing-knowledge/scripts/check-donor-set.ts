@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { cli } from "cleye";
 
 // Consumer: agent/human verdict lines for target-agnostic DONOR SET artifacts.
@@ -280,10 +279,11 @@ async function input(): Promise<Outcome<string>> {
   if (path === undefined || path === "-") {
     return { ok: true, value: await new Response(Bun.stdin.stream()).text() };
   }
-  if (!existsSync(path)) {
+  const file = Bun.file(path);
+  if (!(await file.exists())) {
     return { ok: false, error: `check-donor-set: file not found: ${path}` };
   }
-  return { ok: true, value: await Bun.file(path).text() };
+  return { ok: true, value: await file.text() };
 }
 
 async function main(): Promise<Outcome<number>> {

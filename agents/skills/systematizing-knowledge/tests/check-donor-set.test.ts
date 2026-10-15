@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -12,8 +12,11 @@ type RunResult = Readonly<{
   stdout: string;
 }>;
 
-const run = (arguments_: readonly string[], stdin?: string): RunResult => {
-  const result = Bun.spawnSync({
+const run = async (
+  arguments_: readonly string[],
+  stdin?: string,
+): Promise<RunResult> => {
+  const process = Bun.spawn({
     cmd: ["bun", script, ...arguments_],
     stderr: "pipe",
     stdin: stdin === undefined ? undefined : new Blob([stdin]),
@@ -21,18 +24,19 @@ const run = (arguments_: readonly string[], stdin?: string): RunResult => {
     timeout: 10_000,
   });
 
-  return {
-    exitCode: result.exitCode,
-    stderr: result.stderr.toString(),
-    stdout: result.stdout.toString(),
-  };
+  const [exitCode, stderr, stdout] = await Promise.all([
+    process.exited,
+    new Response(process.stderr).text(),
+    new Response(process.stdout).text(),
+  ]);
+  return { exitCode, stderr, stdout };
 };
 
-const fixture = (content: string): string => {
-  const directory = mkdtempSync(join(tmpdir(), "donor-set-"));
+const fixture = async (content: string): Promise<string> => {
+  const directory = await mkdtemp(join(tmpdir(), "donor-set-"));
   temporaryDirectories.push(directory);
   const path = join(directory, "donor-set.md");
-  writeFileSync(path, `${content.trim()}\n`);
+  await writeFile(path, `${content.trim()}\n`);
   return path;
 };
 
@@ -69,16 +73,18 @@ const twoDonors = `
 - Handoff: forging-novel-theses — donor IDs D1,D2 plus source relations and boundaries; no target mapping, target prediction, thesis, or test verdict
 `;
 
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
-  }
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
 });
 
 describe("check-donor-set", () => {
-  test("accepts a target-agnostic two-source DONOR SET by path and stdin", () => {
-    const byPath = run([fixture(twoDonors)]);
-    const byStdin = run(["-"], twoDonors);
+  test("accepts a target-agnostic two-source DONOR SET by path and stdin", async () => {
+    const byPath = await run([await fixture(twoDonors)]);
+    const byStdin = await run(["-"], twoDonors);
 
     expect(byPath.exitCode).toBe(0);
     expect(byPath.stdout).toContain("DONOR SET: FAIL=0");
@@ -86,7 +92,7 @@ describe("check-donor-set", () => {
     expect(byStdin.stdout).toContain("donors=2");
   });
 
-  test("accepts one donor only as a non-generalized hypothesis seed", () => {
+  test("accepts one donor only as a non-generalized hypothesis seed", async () => {
     const oneDonor = twoDonors
       .replace(
         "preserving ordered intermediate relations permits recovery that endpoint aggregation destroys",
@@ -98,17 +104,17 @@ describe("check-donor-set", () => {
       )
       .replace(/\| D2 \|.*\n/u, "")
       .replace("donor IDs D1,D2", "donor ID D1");
-    const result = run([fixture(oneDonor)]);
+    const result = await run([await fixture(oneDonor)]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("single-donor limit retained");
   });
 
-  test("rejects one donor promoted to an established schema", () => {
+  test("rejects one donor promoted to an established schema", async () => {
     const invalid = twoDonors
       .replace(/\| D2 \|.*\n/u, "")
       .replace("donor IDs D1,D2", "donor ID D1");
-    const result = run([fixture(invalid)]);
+    const result = await run([await fixture(invalid)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -116,12 +122,12 @@ describe("check-donor-set", () => {
     );
   });
 
-  test("rejects duplicate donor evidence disguised as two donors", () => {
+  test("rejects duplicate donor evidence disguised as two donors", async () => {
     const invalid = twoDonors.replace(
       "sources/control.md:18",
       "doi:10.1000/example-a, p. 4",
     );
-    const result = run([fixture(invalid)]);
+    const result = await run([await fixture(invalid)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -129,14 +135,14 @@ describe("check-donor-set", () => {
     );
   });
 
-  test("requires a file:line or a DOI/URL paired with an exact localizer", () => {
+  test("requires a file:line or a DOI/URL paired with an exact localizer", async () => {
     for (const locator of [
       "a paper somewhere",
       "p. 4",
       "doi:10.1000/example-a",
     ]) {
       const invalid = twoDonors.replace("doi:10.1000/example-a, p. 4", locator);
-      const result = run([fixture(invalid)]);
+      const result = await run([await fixture(invalid)]);
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain(
@@ -145,7 +151,7 @@ describe("check-donor-set", () => {
     }
   });
 
-  test("rejects target mapping or target-side support inside DONOR SET", () => {
+  test("rejects target mapping or target-side support inside DONOR SET", async () => {
     const mapping = twoDonors.replace(
       "- Known: both located sources describe a recoverability relation under explicit preconditions",
       "- Target mapping: source replay maps to the target assay\n- Known: both located sources describe a recoverability relation under explicit preconditions",
@@ -163,10 +169,14 @@ describe("check-donor-set", () => {
       "- Correspondence map: source replay=target assay transition; source log=target history\n- Known: both located sources describe a recoverability relation under explicit preconditions",
     );
 
-    const mappingResult = run([fixture(mapping)]);
-    const supportResult = run([fixture(support)]);
-    const targetSideSupportResult = run([fixture(targetSideSupport)]);
-    const correspondenceMapResult = run([fixture(correspondenceMap)]);
+    const mappingResult = await run([await fixture(mapping)]);
+    const supportResult = await run([await fixture(support)]);
+    const targetSideSupportResult = await run([
+      await fixture(targetSideSupport),
+    ]);
+    const correspondenceMapResult = await run([
+      await fixture(correspondenceMap),
+    ]);
 
     expect(mappingResult.exitCode).toBe(1);
     expect(mappingResult.stdout).toContain(
@@ -186,7 +196,7 @@ describe("check-donor-set", () => {
     );
   });
 
-  test("does not borrow fields or donor tables from a later Notes section", () => {
+  test("does not borrow fields or donor tables from a later Notes section", async () => {
     const misplacedField = `${twoDonors.replace(
       /^- Transfer search question:.*$/mu,
       "",
@@ -195,8 +205,8 @@ describe("check-donor-set", () => {
     expect(donorTable).toBeDefined();
     const misplacedTable = `${twoDonors.replace(donorTable ?? "", "")}\n## Notes\n${donorTable ?? ""}`;
 
-    const fieldResult = run([fixture(misplacedField)]);
-    const tableResult = run([fixture(misplacedTable)]);
+    const fieldResult = await run([await fixture(misplacedField)]);
+    const tableResult = await run([await fixture(misplacedTable)]);
 
     expect(fieldResult.exitCode).toBe(1);
     expect(fieldResult.stdout).toContain(
@@ -206,7 +216,7 @@ describe("check-donor-set", () => {
     expect(tableResult.stdout).toContain("Donor records table is missing");
   });
 
-  test("does not borrow Comparison fields from nested Notes headings", () => {
+  test("does not borrow Comparison fields from nested Notes headings", async () => {
     for (const heading of ["##", "###", "####", "######"]) {
       const invalid = twoDonors
         .replace(/^- Single-donor limit:.*$/mu, "")
@@ -214,7 +224,7 @@ describe("check-donor-set", () => {
           "\n## Knowledge state",
           `\n${heading} Notes\n- Single-donor limit: NONE — borrowed from a nested section\n\n## Knowledge state`,
         );
-      const result = run([fixture(invalid)]);
+      const result = await run([await fixture(invalid)]);
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain(
@@ -223,7 +233,7 @@ describe("check-donor-set", () => {
     }
   });
 
-  test("rejects positive target leakage hidden in Known or donor-record prose", () => {
+  test("rejects positive target leakage hidden in Known or donor-record prose", async () => {
     const knownMapping = twoDonors.replace(
       "- Known: both located sources describe a recoverability relation under explicit preconditions",
       "- Known: source replay maps to the target assay transition and establishes target correspondence",
@@ -238,12 +248,12 @@ describe("check-donor-set", () => {
     );
 
     for (const invalid of [knownMapping, knownSupport, tablePrediction]) {
-      const result = run([fixture(invalid)]);
+      const result = await run([await fixture(invalid)]);
       expect(result.exitCode).toBe(1);
     }
   });
 
-  test("allows Missing and Handoff boundary sentences that prohibit target claims", () => {
+  test("allows Missing and Handoff boundary sentences that prohibit target claims", async () => {
     const bounded = twoDonors
       .replace(
         "- Missing: target-side correspondence and evidence, intentionally not assessed here",
@@ -253,18 +263,18 @@ describe("check-donor-set", () => {
         "no target mapping, target prediction, thesis, or test verdict",
         "no target mapping, target support, target prediction, thesis claim, or test verdict",
       );
-    const result = run([fixture(bounded)]);
+    const result = await run([await fixture(bounded)]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("DONOR SET: FAIL=0");
   });
 
-  test("does not let a negative boundary field hide a positive target claim", () => {
+  test("does not let a negative boundary field hide a positive target claim", async () => {
     const mixed = twoDonors.replace(
       "- Missing: target-side correspondence and evidence, intentionally not assessed here",
       "- Missing: no target mapping is assessed here; target-side support is established because both donors succeeded",
     );
-    const result = run([fixture(mixed)]);
+    const result = await run([await fixture(mixed)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -272,20 +282,20 @@ describe("check-donor-set", () => {
     );
   });
 
-  test("requires stable donor IDs", () => {
+  test("requires stable donor IDs", async () => {
     const invalid = twoDonors.replace("| D1 |", "| D 1 |");
-    const result = run([fixture(invalid)]);
+    const result = await run([await fixture(invalid)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("Donor ID must be a stable identifier");
   });
 
-  test("rejects a surface-similarity selection rule", () => {
+  test("rejects a surface-similarity selection rule", async () => {
     const invalid = twoDonors.replace(
       "select by explicit relation and preconditions, not shared object names, vocabulary, or domain distance",
       "select sources that use similar terminology",
     );
-    const result = run([fixture(invalid)]);
+    const result = await run([await fixture(invalid)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -293,8 +303,8 @@ describe("check-donor-set", () => {
     );
   });
 
-  test("uses Cleye's strict unknown-flag failure", () => {
-    const result = run(["--unexpected"]);
+  test("uses Cleye's strict unknown-flag failure", async () => {
+    const result = await run(["--unexpected"]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Unknown flag: --unexpected");

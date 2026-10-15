@@ -11,7 +11,7 @@
 // any are added later) never fail the process — they are measurement, not a gate (forging-skills
 // architecture.md §5).
 
-import { existsSync, readFileSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 // Bare specifier, not pinned inline: this check is run from the repository source tree, whose
 // package.json + bun.lock govern the dependency. Claude loads the skill from that same in-place
@@ -37,6 +37,13 @@ function fail(msg: string): void {
 }
 function ok(msg: string): void {
   console.log(`ok: ${msg}`);
+}
+
+function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
 }
 
 function reportDescriptionLabel(raw: string, label: string, re: RegExp): void {
@@ -103,7 +110,7 @@ function countTableRows(source: string, headerRe: RegExp): number {
 // third per-entry assertion) must land as a clean `FATAL: <message>` + exit 2, not an uncaught
 // stack trace + exit 1. Before this, every check below ran at module top level, so the same
 // thrown Error was unhandled (measured: `bun check.ts --__proto__` -> stack trace, exit 1).
-function main(): number {
+async function main(): Promise<number> {
   const parsed = cli(
     {
       name: "check.ts",
@@ -126,11 +133,11 @@ function main(): number {
     parsed._[0] ?? join(dirname(new URL(import.meta.url).pathname), "..");
   const skillMdPath = join(dir, "SKILL.md");
 
-  if (!existsSync(skillMdPath)) {
+  if (!(await exists(skillMdPath))) {
     console.error(`FAIL: no SKILL.md at ${skillMdPath}`);
     return 1;
   }
-  const skillMd = readFileSync(skillMdPath, "utf8");
+  const skillMd = await readFile(skillMdPath, "utf8");
 
   // --- frontmatter shape -----------------------------------------------------------------
   checkFrontmatter(skillMd);
@@ -145,7 +152,7 @@ function main(): number {
     "tests/triggers.md",
     "tests/forge-verification-ledger.md",
   ]) {
-    if (existsSync(join(dir, f))) ok(`${f} present`);
+    if (await exists(join(dir, f))) ok(`${f} present`);
     else fail(`missing ${f}`);
   }
 
@@ -156,14 +163,14 @@ function main(): number {
     "INSTALL.md",
     "QUICK_REFERENCE.md",
   ]) {
-    if (existsSync(join(dir, stray)))
+    if (await exists(join(dir, stray)))
       fail(
         `stray ${stray} present — a skill's only readers are the model and the interpreter`,
       );
   }
 
   // --- content counts (greppable, per architecture.md §5) -------------------------------------
-  const checklist = readFileSync(join(dir, "SKILL.md"), "utf8");
+  const checklist = await readFile(join(dir, "SKILL.md"), "utf8");
   const checklistRows = countTableRows(
     checklist,
     /\| # \| Check \| Artifact \|/u,
@@ -180,7 +187,7 @@ function main(): number {
     fail(`operating rules has ${opRulesRows} rows, expected exactly 8`);
   else ok("operating rules has exactly 8 rows");
 
-  const vocabAndLaw = readFileSync(
+  const vocabAndLaw = await readFile(
     join(dir, "references/vocabulary-and-law.md"),
     "utf8",
   );
@@ -220,7 +227,7 @@ function main(): number {
     "auditing-research-processes",
     "forging-skills",
   ]) {
-    if (!existsSync(join(skillsRoot, sib)))
+    if (!(await exists(join(skillsRoot, sib))))
       fail(
         `sibling cut names '${sib}', which does not exist under ${skillsRoot}`,
       );

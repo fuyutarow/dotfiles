@@ -44,6 +44,21 @@ pty_run() {
   print -r -- "$out"
 }
 
+# --- Atuin opens on Ctrl+R only; terminal wheel-up remains zsh history -----------------------
+if (( $+commands[atuin] )); then
+  out=$(pty_run 'stty -echo' \
+    "widget=\$(bindkey '^R'); widget=\${widget##* }; [[ \$widget == *atuin* ]] && print -r -- CTRL_R_ATUIN || print -r -- CTRL_R_OTHER")
+  want "Ctrl+R remains bound to an atuin widget" 'CTRL_R_ATUIN' "$out"
+  out=$(pty_run 'stty -echo' \
+    "widget=\$(bindkey '^[[A'); widget=\${widget##* }; [[ \$widget == *atuin* ]] && print -r -- CSI_UP_ATUIN || print -r -- CSI_UP_NO_ATUIN")
+  want "Up-arrow CSI sequence has no atuin widget" 'CSI_UP_NO_ATUIN' "$out"
+  out=$(pty_run 'stty -echo' \
+    "widget=\$(bindkey '^[OA'); widget=\${widget##* }; [[ \$widget == *atuin* ]] && print -r -- SS3_UP_ATUIN || print -r -- SS3_UP_NO_ATUIN")
+  want "Up-arrow SS3 sequence has no atuin widget" 'SS3_UP_NO_ATUIN' "$out"
+else
+  print -r -- "[SKIP] atuin key bindings not checked — atuin is not installed"
+fi
+
 # Exercise zshenv's missing-command handler against the repository declarations in a real pty.
 tool_home=$(mktemp -d) || exit 1
 mkdir -p "$tool_home/.config/dotfiles" "$tool_home/empty-bin"

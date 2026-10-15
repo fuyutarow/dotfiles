@@ -78,7 +78,7 @@ typeset -A COMMAND_RECOMMENDATIONS=(
 command_exists "zoxide" && eval "$(zoxide init zsh)"
 
 # Initialize atuin (enhanced history management)
-command_exists "atuin" && eval "$(atuin init zsh)"
+command_exists "atuin" && eval "$(atuin init zsh --disable-up-arrow)"
 
 # Function to get installation instructions
 get_install_instructions() {
@@ -289,8 +289,7 @@ lg,() {
 
 # Atuin - Enhanced history management
 # -----------------------------------
-# Note: eval "$(atuin init zsh)" should be in .zshrc
-# Ctrl+R is automatically replaced by atuin
+# Initialized above with Up-arrow binding disabled; Ctrl+R is replaced by atuin.
 alias hs='atuin search'                 # CLI history search
 alias hst='atuin stats'                 # History statistics
 alias hi='atuin import auto'            # Import existing history

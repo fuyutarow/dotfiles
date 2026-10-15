@@ -2,13 +2,13 @@
 // Merge only Sui's keystore and alias data. Transport and secret resolution belong to fnox.
 import { createPrivateKey, createPublicKey, randomUUID } from "node:crypto";
 import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+  access,
+  chmod,
+  copyFile,
+  readFile,
+  rename,
+  writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
@@ -223,18 +223,18 @@ function backupPath(path: string, timestamp: string): string {
   return `${path}.bak-${timestamp}`;
 }
 
-function atomicWrite(path: string, content: string): void {
+async function atomicWrite(path: string, content: string): Promise<void> {
   const temp = `${path}.tmp-${process.pid}-${randomUUID()}`;
-  writeFileSync(temp, content, { mode: 0o600, flag: "wx" });
-  chmodSync(temp, 0o600);
-  renameSync(temp, path);
+  await writeFile(temp, content, { mode: 0o600, flag: "wx" });
+  await chmod(temp, 0o600);
+  await rename(temp, path);
 }
 
 function renderCounts(label: string, counts: Counts): string {
   return `${label} existing ${counts.existing}, added ${counts.added}, total ${counts.total}`;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const parsed = cli(
     SUI_KEYSTORE_MERGE_CLI_OPTIONS,
     undefined,
@@ -280,7 +280,17 @@ function main(): void {
 
   const keystorePath = targetPath(configDir, "sui.keystore");
   const aliasesPath = targetPath(configDir, "sui.aliases");
-  if (!existsSync(keystorePath) || !existsSync(aliasesPath)) {
+  const [keystoreExists, aliasesExist] = await Promise.all([
+    access(keystorePath).then(
+      () => true,
+      () => false,
+    ),
+    access(aliasesPath).then(
+      () => true,
+      () => false,
+    ),
+  ]);
+  if (!keystoreExists || !aliasesExist) {
     process.stderr.write(
       "both target sui.keystore and sui.aliases must already exist\n",
     );
@@ -288,12 +298,12 @@ function main(): void {
     return;
   }
   const oldKeys = jsonArray(
-    readFileSync(keystorePath, "utf8"),
+    await readFile(keystorePath, "utf8"),
     "target keystore",
     z.array(z.string()),
   );
   const oldAliases = jsonArray(
-    readFileSync(aliasesPath, "utf8"),
+    await readFile(aliasesPath, "utf8"),
     "target aliases",
     z.array(AliasSchema),
   );
@@ -337,12 +347,18 @@ function main(): void {
     .replaceAll(".", "-");
   const keystoreBackup = backupPath(keystorePath, timestamp);
   const aliasesBackup = backupPath(aliasesPath, timestamp);
-  copyFileSync(keystorePath, keystoreBackup);
-  copyFileSync(aliasesPath, aliasesBackup);
-  chmodSync(keystoreBackup, 0o600);
-  chmodSync(aliasesBackup, 0o600);
-  atomicWrite(keystorePath, `${JSON.stringify(merged.keystore, null, 2)}\n`);
-  atomicWrite(aliasesPath, `${JSON.stringify(merged.aliases, null, 2)}\n`);
+  await copyFile(keystorePath, keystoreBackup);
+  await copyFile(aliasesPath, aliasesBackup);
+  await chmod(keystoreBackup, 0o600);
+  await chmod(aliasesBackup, 0o600);
+  await atomicWrite(
+    keystorePath,
+    `${JSON.stringify(merged.keystore, null, 2)}\n`,
+  );
+  await atomicWrite(
+    aliasesPath,
+    `${JSON.stringify(merged.aliases, null, 2)}\n`,
+  );
   process.stdout.write(`${counts}\n`);
 }
 

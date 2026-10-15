@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-15
+
+- Use asynchronous filesystem operations
+
 ## 0.2.0 — 2026-10-15
 
 - Merge fnox-provided Sui keys and aliases into existing target files without replacing prior entries.

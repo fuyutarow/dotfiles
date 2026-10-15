@@ -1,6 +1,6 @@
 import { $ } from "bun";
 import { cli } from "cleye";
-import { existsSync, rmSync } from "node:fs";
+import { access, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { err, ok as success, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../agents/hooks/zod.ts";
@@ -53,8 +53,15 @@ const EvaluateReplySchema = z.object({
 });
 const ReadBackSchema = z.record(z.string(), z.unknown());
 
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function vaultIds(): Promise<string[]> {
-  if (!existsSync(REGISTRY)) return [];
+  if (!(await exists(REGISTRY))) return [];
   const reg = jsonOf(RegistrySchema).safeParse(await Bun.file(REGISTRY).text());
   if (!reg.success) return [];
   return Object.keys(reg.data.vaults).filter((id) => /^[0-9a-f]+$/u.test(id));
@@ -63,7 +70,9 @@ async function vaultIds(): Promise<string[]> {
 // Fresh leveldb writes land uncompressed in the *.log journal; a key absent from every file
 // did not persist.
 async function notOnDisk(keys: string[]): Promise<string[]> {
-  const files = [...new Bun.Glob("*.{log,ldb}").scanSync(LEVELDB)];
+  const files: string[] = [];
+  for await (const file of new Bun.Glob("*.{log,ldb}").scan(LEVELDB))
+    files.push(file);
   const blobs = await Promise.all(
     files.map(async (f) =>
       Buffer.from(await Bun.file(join(LEVELDB, f)).bytes()),
@@ -109,7 +118,7 @@ async function quit(): Promise<Result<void, string>> {
 
 async function pageSocket(): Promise<Result<string, string>> {
   const port = await waitFor("DevToolsActivePort", async () => {
-    if (!existsSync(PORT_FILE)) return null;
+    if (!(await exists(PORT_FILE))) return null;
     const first = (await Bun.file(PORT_FILE).text()).split("\n")[0];
     return first === undefined || first === "" ? null : first;
   });
@@ -209,7 +218,7 @@ async function main(): Promise<Result<void, string>> {
 
   const quitBefore = await quit();
   if (quitBefore.isErr()) return err(quitBefore.error);
-  rmSync(PORT_FILE, { force: true });
+  await rm(PORT_FILE, { force: true });
   await $`open -a Obsidian --args --remote-debugging-port=0`.quiet();
   const ws = await pageSocket();
   if (ws.isErr()) return err(ws.error);
@@ -227,7 +236,7 @@ async function main(): Promise<Result<void, string>> {
   await Bun.sleep(COMMIT_MS);
   const quitAfter = await quit();
   if (quitAfter.isErr()) return err(quitAfter.error);
-  rmSync(PORT_FILE, { force: true });
+  await rm(PORT_FILE, { force: true });
   const unsaved = await notOnDisk(ids.map((id) => `enable-plugin-${id}`));
   await $`open -a Obsidian`.quiet();
   if (unsaved.length > 0)

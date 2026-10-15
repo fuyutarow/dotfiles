@@ -1,18 +1,18 @@
 import { cli } from "cleye";
+import type { Dirent } from "node:fs";
 import {
-  cpSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  type Dirent,
-  realpathSync,
-  renameSync,
-  rmSync,
-  unlinkSync,
-} from "node:fs";
+  access,
+  cp,
+  lstat,
+  mkdir,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  unlink,
+} from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 // Bring EVERY registered Obsidian vault in line with this directory (single source):
@@ -100,23 +100,33 @@ async function readJsonObject(
   return ok(record.data);
 }
 
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 // Replace JSON files as one sibling rename so readers never observe a partial write.
 async function atomicWrite(
   path: string,
   contents: string | Uint8Array,
 ): Promise<void> {
-  mkdirSync(dirname(path), { recursive: true });
+  await mkdir(dirname(path), { recursive: true });
   const temp = `${path}.${crypto.randomUUID()}.tmp`;
-  await Bun.write(temp, contents)
-    .then(() => {
-      renameSync(temp, path);
-    })
-    .finally(() => {
-      if (existsSync(temp)) unlinkSync(temp);
-    });
+  await using _cleanup = {
+    async [Symbol.asyncDispose]() {
+      if (await exists(temp)) await unlink(temp);
+    },
+  };
+  await Bun.write(temp, contents);
+  await rename(temp, path);
 }
 
-function asPlugin(id: string, v: unknown): Result<Plugin, string> {
+async function asPlugin(
+  id: string,
+  v: unknown,
+): Promise<Result<Plugin, string>> {
   const plugin = PluginSchema.safeParse(v);
   if (!plugin.success)
     return err(
@@ -124,7 +134,7 @@ function asPlugin(id: string, v: unknown): Result<Plugin, string> {
     );
   const localPlugin = LocalPluginSchema.safeParse(plugin.data);
   if (localPlugin.success) {
-    const base = realpathSync(import.meta.dir);
+    const base = await realpath(import.meta.dir);
     const source = resolve(base, localPlugin.data.local);
     const declaredRel = relative(base, source);
     if (
@@ -133,11 +143,11 @@ function asPlugin(id: string, v: unknown): Result<Plugin, string> {
       declaredRel.startsWith(`..${sep}`)
     )
       return err(`plugins.json: ${id}: local path must stay inside obsidian/`);
-    if (!existsSync(source) || !lstatSync(source).isDirectory())
+    if (!(await exists(source)) || !(await lstat(source)).isDirectory())
       return err(
         `plugins.json: ${id}: local plugin directory not found: ${localPlugin.data.local}`,
       );
-    const actualRel = relative(base, realpathSync(source));
+    const actualRel = relative(base, await realpath(source));
     if (
       isAbsolute(actualRel) ||
       actualRel === ".." ||
@@ -149,7 +159,7 @@ function asPlugin(id: string, v: unknown): Result<Plugin, string> {
 }
 
 async function vaultPaths(): Promise<Result<string[], string>> {
-  if (!existsSync(REGISTRY)) return ok([]);
+  if (!(await exists(REGISTRY))) return ok([]);
   const reg = await readJsonObject(REGISTRY);
   if (reg.isErr()) return err(reg.error);
   const vaultsRecord = RecordSchema.safeParse(reg.value.vaults);
@@ -169,7 +179,7 @@ function sha256(bytes: Uint8Array): string {
 }
 
 async function fileHash(path: string): Promise<string | null> {
-  if (!existsSync(path)) return null;
+  if (!(await exists(path))) return null;
   return sha256(await Bun.file(path).bytes());
 }
 
@@ -204,7 +214,7 @@ async function appFixes(
   want: Record<string, unknown>,
 ): Promise<Result<Fix[], string>> {
   const target = join(dir, "app.json");
-  const haveResult = existsSync(target)
+  const haveResult = (await exists(target))
     ? await readJsonObject(target)
     : ok<Record<string, unknown>>({});
   if (haveResult.isErr()) return err(haveResult.error);
@@ -237,11 +247,11 @@ async function pluginFixes(
   if (localPluginResult.success) {
     const localPlugin = localPluginResult.data;
     const source = resolve(import.meta.dir, localPlugin.local);
-    const filesResult = collectLocalEntries(source);
+    const filesResult = await collectLocalEntries(source);
     if (filesResult.isErr()) return err(filesResult.error);
     const files = filesResult.value;
-    const destinationResult = existsSync(pdir)
-      ? collectLocalEntries(pdir, true)
+    const destinationResult = (await exists(pdir))
+      ? await collectLocalEntries(pdir, true)
       : ok<string[]>([]);
     if (destinationResult.isErr()) return err(destinationResult.error);
     const changed = await changedLocalFiles(source, pdir, files);
@@ -272,7 +282,7 @@ async function pluginFixes(
         // Verify first: a refused asset must leave no plugin dir behind.
         const bytes = await asset(releasePlugin.data, file);
         if (bytes.isErr()) return err(bytes.error);
-        mkdirSync(pdir, { recursive: true });
+        await mkdir(pdir, { recursive: true });
         await atomicWrite(join(pdir, file), bytes.value);
         return ok(undefined);
       },
@@ -281,22 +291,23 @@ async function pluginFixes(
   return ok(fixes);
 }
 
-function collectLocalEntries(
+async function collectLocalEntries(
   current: string,
   includeSpecial = false,
   prefix = "",
   files: string[] = [],
-): Result<string[], string> {
-  const entries = fromThrowable(
-    () => readdirSync(current, { withFileTypes: true }),
-    (error: unknown) =>
-      error instanceof Error ? error.message : String(error),
-  )();
+): Promise<Result<string[], string>> {
+  const entries = await Promise.try(() =>
+    readdir(current, { withFileTypes: true }),
+  ).then(
+    (value) => ok(value),
+    (error: unknown) => err(errorMessage(error)),
+  );
   if (entries.isErr()) return err(entries.error);
   for (const entry of entries.value) {
     const rel = join(prefix, entry.name);
     const path = join(current, entry.name);
-    const collected = collectLocalEntry(
+    const collected = await collectLocalEntry(
       entry,
       path,
       rel,
@@ -308,13 +319,13 @@ function collectLocalEntries(
   return ok(files);
 }
 
-function collectLocalEntry(
+async function collectLocalEntry(
   entry: Dirent,
   path: string,
   relativePath: string,
   includeSpecial: boolean,
   files: string[],
-): Result<string[], string> {
+): Promise<Result<string[], string>> {
   if (entry.isDirectory())
     return collectLocalEntries(path, includeSpecial, relativePath, files);
   if (entry.isFile() || includeSpecial) {
@@ -334,8 +345,8 @@ async function changedLocalFiles(
     const from = join(source, file);
     const to = join(pdir, file);
     if (
-      !existsSync(to) ||
-      !lstatSync(to).isFile() ||
+      !(await exists(to)) ||
+      !(await lstat(to)).isFile() ||
       sha256(await Bun.file(from).bytes()) !==
         sha256(await Bun.file(to).bytes())
     )
@@ -344,47 +355,56 @@ async function changedLocalFiles(
   return changed;
 }
 
-function replaceLocalPlugin(
+async function replaceLocalPlugin(
   source: string,
   pdir: string,
   files: string[],
-): Result<void, string> {
+): Promise<Result<void, string>> {
   const parent = dirname(pdir);
   const stage = `${pdir}.${crypto.randomUUID()}.stage`;
   const backup = `${pdir}.${crypto.randomUUID()}.backup`;
-  mkdirSync(parent, { recursive: true });
-  const prepared = fromThrowable(() => {
-    cpSync(source, stage, { recursive: true, errorOnExist: true });
+  await mkdir(parent, { recursive: true });
+  const prepared = await Promise.try(async () => {
+    await cp(source, stage, { recursive: true, errorOnExist: true });
     const dataFile = join(pdir, "data.json");
     if (
-      existsSync(dataFile) &&
-      lstatSync(dataFile).isFile() &&
+      (await exists(dataFile)) &&
+      (await lstat(dataFile)).isFile() &&
       !files.includes("data.json")
     )
-      cpSync(dataFile, join(stage, "data.json"));
-    if (existsSync(pdir)) renameSync(pdir, backup);
-  }, errorMessage)();
+      await cp(dataFile, join(stage, "data.json"));
+    if (await exists(pdir)) await rename(pdir, backup);
+  }).then(
+    (value) => ok(value),
+    (error: unknown) => err(errorMessage(error)),
+  );
   if (prepared.isErr()) {
-    if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
+    if (await exists(stage)) await rm(stage, { recursive: true, force: true });
     return err(prepared.error);
   }
-  const installed = fromThrowable(() => {
-    renameSync(stage, pdir);
-  }, errorMessage)();
+  const installed = await Promise.try(() => rename(stage, pdir)).then(
+    (value) => ok(value),
+    (error: unknown) => err(errorMessage(error)),
+  );
   if (installed.isErr()) {
-    const restored = existsSync(backup)
-      ? fromThrowable(() => {
-          renameSync(backup, pdir);
-        }, errorMessage)()
+    const restored = (await exists(backup))
+      ? await Promise.try(() => rename(backup, pdir)).then(
+          (value) => ok(value),
+          (error: unknown) => err(errorMessage(error)),
+        )
       : ok(undefined);
-    if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
+    if (await exists(stage)) await rm(stage, { recursive: true, force: true });
     return restored.isErr() ? err(restored.error) : err(installed.error);
   }
-  const removed = fromThrowable(() => {
-    if (existsSync(backup)) rmSync(backup, { recursive: true, force: true });
-  }, errorMessage)();
+  const removed = await Promise.try(async () => {
+    if (await exists(backup))
+      await rm(backup, { recursive: true, force: true });
+  }).then(
+    (value) => ok(value),
+    (error: unknown) => err(errorMessage(error)),
+  );
   if (removed.isErr()) {
-    if (existsSync(stage)) rmSync(stage, { recursive: true, force: true });
+    if (await exists(stage)) await rm(stage, { recursive: true, force: true });
     return err(removed.error);
   }
   return ok(undefined);
@@ -413,7 +433,7 @@ async function pluginSettingsFixes(
 ): Promise<Result<Fix[], string>> {
   if (want === undefined) return ok([]);
   const target = join(dir, "plugins", id, "data.json");
-  const haveResult = existsSync(target)
+  const haveResult = (await exists(target))
     ? await readJsonObject(target)
     : ok<Record<string, unknown>>({});
   if (haveResult.isErr()) return err(haveResult.error);
@@ -439,7 +459,7 @@ async function enableFix(
   ids: string[],
 ): Promise<Result<Fix[], string>> {
   const target = join(dir, "community-plugins.json");
-  const text = existsSync(target) ? await Bun.file(target).text() : "[]";
+  const text = (await exists(target)) ? await Bun.file(target).text() : "[]";
   const list = jsonOf(z.array(z.unknown())).safeParse(text);
   if (!list.success)
     return err(jsonFailure(target, "JSON array", list.error).message);
@@ -506,9 +526,9 @@ async function main(): Promise<Result<void, string>> {
   if (wantAppResult.isErr()) return err(wantAppResult.error);
   const pluginsResult = await readJsonObject(PLUGINS_SOURCE);
   if (pluginsResult.isErr()) return err(pluginsResult.error);
-  const plugins = Object.entries(pluginsResult.value).map(
-    ([id, v]) => [id, asPlugin(id, v)] as const,
-  );
+  const plugins: (readonly [string, Result<Plugin, string>])[] = [];
+  for (const [id, value] of Object.entries(pluginsResult.value))
+    plugins.push([id, await asPlugin(id, value)] as const);
   const invalidPlugin = plugins.find(([, plugin]) => plugin.isErr());
   if (invalidPlugin !== undefined && invalidPlugin[1].isErr())
     return err(invalidPlugin[1].error);
@@ -518,7 +538,7 @@ async function main(): Promise<Result<void, string>> {
   const paths =
     parsed.flags.vault === undefined
       ? await vaultPaths()
-      : ok([realpathSync(parsed.flags.vault)]);
+      : ok([await realpath(parsed.flags.vault)]);
   if (paths.isErr()) return err(paths.error);
   if (paths.value.length === 0) {
     process.stdout.write(`skip: no Obsidian vault registry at ${REGISTRY}\n`);
@@ -529,8 +549,8 @@ async function main(): Promise<Result<void, string>> {
   for (const vault of paths.value) {
     const dir = join(vault, ".obsidian");
     if (parsed.flags.vault !== undefined && !parsed.flags.check)
-      mkdirSync(dir, { recursive: true });
-    if (!existsSync(dir)) {
+      await mkdir(dir, { recursive: true });
+    if (!(await exists(dir))) {
       process.stdout.write(`SKIP  ${vault} (no .obsidian/)\n`);
       continue;
     }

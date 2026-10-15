@@ -1,15 +1,15 @@
 import { cli } from "cleye";
 import {
-  existsSync,
-  mkdirSync,
-  realpathSync,
-  renameSync,
-  rmdirSync,
-  statSync,
-  unlinkSync,
-} from "node:fs";
+  access,
+  mkdir,
+  realpath,
+  rename,
+  rmdir,
+  stat,
+  unlink,
+} from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 // Consumer: human, verdict lines. Register an unregistered directory, then open it on macOS.
@@ -27,13 +27,22 @@ const Vaults = z.record(z.string(), z.unknown());
 const Vault = z.object({ path: z.string() });
 const WAIT_MS = 20_000;
 
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function readRegistry(): Promise<
   Result<
     { data: Record<string, unknown>; vaults: Record<string, unknown> },
     string
   >
 > {
-  const text = existsSync(REGISTRY) ? await Bun.file(REGISTRY).text() : "{}";
+  const text = (await exists(REGISTRY))
+    ? await Bun.file(REGISTRY).text()
+    : "{}";
   const parsed = jsonOf(Registry).safeParse(text);
   if (!parsed.success)
     return err(`${REGISTRY}: invalid JSON object; refusing to replace it`);
@@ -43,16 +52,16 @@ async function readRegistry(): Promise<
   return ok({ data: parsed.data, vaults: vaults.data });
 }
 
-function containing(
+async function containing(
   vaults: Record<string, unknown>,
   target: string,
-): { id: string; root: string } | undefined {
+): Promise<{ id: string; root: string } | undefined> {
   let best: { id: string; root: string } | undefined;
   for (const [id, value] of Object.entries(vaults)) {
     const vault = Vault.safeParse(value);
-    if (!vault.success || !existsSync(vault.data.path)) continue;
-    if (!statSync(vault.data.path).isDirectory()) continue;
-    const root = realpathSync(vault.data.path);
+    if (!vault.success || !(await exists(vault.data.path))) continue;
+    if (!(await stat(vault.data.path)).isDirectory()) continue;
+    const root = await realpath(vault.data.path);
     const prefix = root.endsWith(sep) ? root : `${root}${sep}`;
     if (target !== root && !target.startsWith(prefix)) continue;
     if (best === undefined || root.length > best.root.length)
@@ -110,14 +119,16 @@ async function quit(): Promise<Result<void, string>> {
 
 async function atomicWrite(data: Record<string, unknown>): Promise<void> {
   const temp = `${REGISTRY}.${crypto.randomUUID()}.tmp`;
-  const mode = existsSync(REGISTRY) ? statSync(REGISTRY).mode & 0o777 : 0o600;
-  await Bun.write(temp, `${JSON.stringify(data, null, 2)}\n`, { mode })
-    .then(() => {
-      renameSync(temp, REGISTRY);
-    })
-    .finally(() => {
-      if (existsSync(temp)) unlinkSync(temp);
-    });
+  const mode = (await exists(REGISTRY))
+    ? (await stat(REGISTRY)).mode & 0o777
+    : 0o600;
+  await using _cleanup = {
+    async [Symbol.asyncDispose]() {
+      if (await exists(temp)) await unlink(temp);
+    },
+  };
+  await Bun.write(temp, `${JSON.stringify(data, null, 2)}\n`, { mode });
+  await rename(temp, REGISTRY);
 }
 
 async function openUri(
@@ -139,14 +150,13 @@ async function openUri(
 async function acquireLock(lock: string): Promise<Result<void, string>> {
   const deadline = performance.now() + 120_000;
   while (performance.now() < deadline) {
-    const locked = fromThrowable(
-      () => {
-        mkdirSync(lock);
-      },
-      () => `cannot create registration lock ${lock}`,
-    )();
-    if (locked.isOk()) return ok(undefined);
-    if (!existsSync(lock)) return err(locked.error);
+    const locked = await mkdir(lock).then(
+      () => true,
+      () => false,
+    );
+    if (locked) return ok(undefined);
+    if (!(await exists(lock)))
+      return err(`cannot create registration lock ${lock}`);
     await Bun.sleep(250);
   }
   return err(`timed out waiting for another obs registration: ${lock}`);
@@ -165,7 +175,7 @@ async function register(target: string): Promise<Result<void, string>> {
   const outcome = await Promise.try(async (): Promise<Result<void, string>> => {
     const latest = await readRegistry();
     if (latest.isErr()) return err(latest.error);
-    let match = containing(latest.value.vaults, target);
+    let match = await containing(latest.value.vaults, target);
     if (match === undefined) {
       let id = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
       while (Object.hasOwn(latest.value.vaults, id))
@@ -232,11 +242,12 @@ async function main(): Promise<Result<void, string>> {
     (process.env.SSH_TTY ?? "") !== ""
   )
     return err("run obs in a local macOS shell");
-  const target = realpathSync(parsed._.dir ?? process.cwd());
-  if (!statSync(target).isDirectory()) return err(`${target}: not a directory`);
+  const target = await realpath(parsed._.dir ?? process.cwd());
+  if (!(await stat(target)).isDirectory())
+    return err(`${target}: not a directory`);
   const registry = await readRegistry();
   if (registry.isErr()) return err(registry.error);
-  const match = containing(registry.value.vaults, target);
+  const match = await containing(registry.value.vaults, target);
   if (process.env.OBS_DRY_RUN === "1") {
     if (match === undefined)
       process.stdout.write(
@@ -249,14 +260,17 @@ async function main(): Promise<Result<void, string>> {
     return ok(undefined);
   }
   if (match !== undefined) return openUri(match.id, match.root, target);
-  mkdirSync(dirname(REGISTRY), { recursive: true });
+  await mkdir(dirname(REGISTRY), { recursive: true });
   // Serialize cooperating obs invocations through relaunch, so the next writer sees the vault.
   const lock = `${REGISTRY}.obs-lock`;
   const locked = await acquireLock(lock);
   if (locked.isErr()) return err(locked.error);
-  return register(target).finally(() => {
-    rmdirSync(lock);
-  });
+  await using _unlock = {
+    async [Symbol.asyncDispose]() {
+      await rmdir(lock);
+    },
+  };
+  return await register(target);
 }
 
 if (import.meta.main) {

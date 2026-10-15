@@ -1,29 +1,23 @@
 import { afterEach, expect, test } from "bun:test";
-import {
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 const tempDirs: string[] = [];
 
-function readJson(path: string): unknown {
-  const parsed = jsonOf(z.unknown()).safeParse(readFileSync(path, "utf8"));
+async function readJson(path: string): Promise<unknown> {
+  const parsed = jsonOf(z.unknown()).safeParse(await readFile(path, "utf8"));
   return parsed.success ? parsed.data : undefined;
 }
 
-afterEach(() => {
+afterEach(async () => {
   for (const dir of tempDirs.splice(0))
-    rmSync(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
 });
 
-test("routes txt and YAML to editable markdown without code-view conflicts", () => {
-  const plugins = readJson(join(import.meta.dir, "plugins.json"));
+test("routes txt and YAML to editable markdown without code-view conflicts", async () => {
+  const plugins = await readJson(join(import.meta.dir, "plugins.json"));
   expect(plugins).toMatchObject({
     "obsidian-custom-file-extensions-plugin": {
       repo: "meeptech/obsidian-custom-file-extensions-plugin",
@@ -55,7 +49,7 @@ test("routes txt and YAML to editable markdown without code-view conflicts", () 
 });
 
 test("merges declared settings atomically and keeps check read-only", async () => {
-  const home = mkdtempSync(join(tmpdir(), "obsidian-apply-test-"));
+  const home = await mkdtemp(join(tmpdir(), "obsidian-apply-test-"));
   tempDirs.push(home);
   const vault = join(home, "vault");
   const obsidianDir = join(vault, ".obsidian");
@@ -123,20 +117,22 @@ test("merges declared settings atomically and keeps check read-only", async () =
     return { exitCode, stdout, stderr };
   };
 
-  const before = [appPath, dataPath, enabledPath].map((path) =>
-    readFileSync(path, "utf8"),
+  const before = await Promise.all(
+    [appPath, dataPath, enabledPath].map((path) => readFile(path, "utf8")),
   );
   expect((await run("--check")).exitCode).toBe(1);
   expect(
-    [appPath, dataPath, enabledPath].map((path) => readFileSync(path, "utf8")),
+    await Promise.all(
+      [appPath, dataPath, enabledPath].map((path) => readFile(path, "utf8")),
+    ),
   ).toEqual(before);
 
   expect((await run()).exitCode).toBe(0);
-  expect(readJson(appPath)).toEqual({
+  expect(await readJson(appPath)).toEqual({
     unrelated: "keep",
     readableLineLength: false,
   });
-  expect(readJson(dataPath)).toEqual({
+  expect(await readJson(dataPath)).toEqual({
     showLineNumbers: false,
     extensions: "a,b",
     flag: true,
@@ -144,14 +140,18 @@ test("merges declared settings atomically and keeps check read-only", async () =
   });
   for (const file of ["manifest.json", "main.js"])
     expect(
-      readFileSync(join(obsidianDir, "plugins", "doc-view", file), "utf8"),
+      await readFile(join(obsidianDir, "plugins", "doc-view", file), "utf8"),
     ).toBe(
-      readFileSync(
+      await readFile(
         join(import.meta.dir, "local-plugins", "doc-view", file),
         "utf8",
       ),
     );
-  expect(readJson(enabledPath)).toEqual(["existing", "code-view", "doc-view"]);
+  expect(await readJson(enabledPath)).toEqual([
+    "existing",
+    "code-view",
+    "doc-view",
+  ]);
   expect((await run()).stdout).toContain("OK");
   expect((await run("--check")).exitCode).toBe(0);
 
@@ -174,28 +174,28 @@ test("merges declared settings atomically and keeps check read-only", async () =
     }),
   );
 
-  rmSync(dataPath);
+  await rm(dataPath);
   expect((await run()).exitCode).toBe(0);
-  expect(readJson(dataPath)).toEqual({
+  expect(await readJson(dataPath)).toEqual({
     extensions: "a,b",
     flag: true,
     common: { language: "en" },
   });
 
   const malformed = "{not-json";
-  writeFileSync(dataPath, malformed);
+  await writeFile(dataPath, malformed);
   const failure = await run();
   expect(failure.exitCode).toBe(2);
-  expect(readFileSync(dataPath, "utf8")).toBe(malformed);
+  expect(await readFile(dataPath, "utf8")).toBe(malformed);
 
   const tempFiles: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+  const walk = async (dir: string): Promise<void> => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
-      if (entry.isDirectory()) walk(path);
+      if (entry.isDirectory()) await walk(path);
       else if (entry.name.endsWith(".tmp")) tempFiles.push(path);
     }
   };
-  walk(obsidianDir);
+  await walk(obsidianDir);
   expect(tempFiles).toEqual([]);
 });

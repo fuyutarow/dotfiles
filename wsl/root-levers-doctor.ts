@@ -1,8 +1,14 @@
-import { existsSync, statSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { release } from "node:os";
 import { join } from "node:path";
 
-const main = (): void => {
+const hasMode = async (path: string, mode: number): Promise<boolean> =>
+  stat(path).then(
+    (info) => (info.mode & 0o777) === mode,
+    () => false,
+  );
+
+const main = async (): Promise<void> => {
   if (!/microsoft/iu.test(release())) {
     process.stdout.write("SKIP wsl-root-levers: WSL only\n");
     return;
@@ -11,20 +17,19 @@ const main = (): void => {
     "dotfiles-fstrim.service",
     "dotfiles-dropcache.service",
   ] as const;
-  const installed = units.map((unit) => {
-    const path = join("/etc/systemd/system", unit);
-    return existsSync(path) && (statSync(path).mode & 0o777) === 0o644;
-  });
+  const installed = await Promise.all(
+    units.map((unit) => hasMode(join("/etc/systemd/system", unit), 0o644)),
+  );
   const sudoersPath = "/etc/sudoers.d/dotfiles-root-levers";
-  const sudoersInstalled =
-    existsSync(sudoersPath) && (statSync(sudoersPath).mode & 0o777) === 0o440;
-  const authorized = units.map((unit) => {
-    const result = Bun.spawnSync(
+  const sudoersInstalled = await hasMode(sudoersPath, 0o440);
+  const authorized: boolean[] = [];
+  for (const unit of units) {
+    const proc = Bun.spawn(
       ["sudo", "-n", "-l", "/usr/bin/systemctl", "start", unit],
-      { stdout: "pipe", stderr: "pipe", timeout: 10_000 },
+      { stdout: "ignore", stderr: "ignore", timeout: 10_000 },
     );
-    return result.exitCode === 0;
-  });
+    authorized.push((await proc.exited) === 0);
+  }
   const checks = [
     ...units.map(
       (unit, index) =>
@@ -47,4 +52,4 @@ const main = (): void => {
   }
 };
 
-main();
+await main();

@@ -1,11 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { release, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 
 const username = userInfo().username;
 const source = join(import.meta.dir, "dotfiles-root-levers.sudoers");
-const template = readFileSync(source, "utf8");
 const main = async (): Promise<number> => {
+  const template = await readFile(source, "utf8");
   if (!/microsoft/iu.test(release())) {
     process.stderr.write("FAIL wsl-root-levers: WSL only\n");
     return 2;
@@ -23,9 +23,9 @@ const main = async (): Promise<number> => {
     return 2;
   }
 
-  const tempDir = mkdtempSync(join(tmpdir(), "dotfiles-root-levers-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "dotfiles-root-levers-"));
   const sudoers = join(tempDir, "dotfiles-root-levers.sudoers");
-  writeFileSync(sudoers, template.replace(/^@USER@/mu, username), {
+  await writeFile(sudoers, template.replace(/^@USER@/mu, username), {
     mode: 0o600,
   });
   const commands = [
@@ -95,9 +95,10 @@ const main = async (): Promise<number> => {
     );
     return 0;
   };
-  return install().finally(() => {
-    rmSync(tempDir, { recursive: true, force: true });
-  });
+  await using _cleanup = {
+    [Symbol.asyncDispose]: () => rm(tempDir, { recursive: true, force: true }),
+  };
+  return await install();
 };
 
 const exitCode = await main().catch((error: unknown) => {

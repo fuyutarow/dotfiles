@@ -17,7 +17,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { release, tmpdir, userInfo } from "node:os";
+import { release, tmpdir } from "node:os";
 import { join } from "node:path";
 import { sshSupportsAttachMatch } from "../link-dots.ts";
 import {
@@ -39,19 +39,9 @@ import { REF_LOCK_STALE_MS } from "../../tools/shared/src/ref-locks.ts";
 import { STEPS } from "../post-merge.ts";
 
 // The smart-open fixtures scope the forward with Match sessiontype (OpenSSH >= 9.9; Ubuntu 24.04
-// ships 9.6, which rejects the line). The repo case also needs a machine that attaches to r99-u24
-// (its ~/.ssh/config.local names a HostName) — doctor SKIPs smart-open everywhere else.
+// ships 9.6, which rejects the line).
 const sshV = Bun.spawnSync(["ssh", "-V"], { stderr: "pipe" }).stderr.toString();
 const OLD_SSH = !sshSupportsAttachMatch(sshV);
-const ATTACHES_TO_R99 = !Bun.spawnSync(
-  ["ssh", "-G", "-F", join(import.meta.dir, "../../ssh/config"), "r99-u24"],
-  {
-    stdout: "pipe",
-  },
-)
-  .stdout.toString()
-  .split("\n")
-  .includes("hostname r99-u24");
 
 const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "doctor.ts");
@@ -508,12 +498,15 @@ describe("doctor", () => {
 
   test("rendered reference uses resolved Bun with a temporary HOME", () => {
     const scratch = tmp("doctor-render-home-");
+    const target = tmp("doctor-render-target-");
+    mkdirSync(join(target, ".bun/bin"), { recursive: true });
+    writeFileSync(join(target, ".bun/bin/statusline"), "#!/bin/sh\n");
     const privateOverlay = join(scratch, "missing-settings.private.json");
     const proc = Bun.spawnSync([BUN_EXEC, RENDER_HOME], {
       env: {
         ...process.env,
         HOME: scratch,
-        COMMAND_TARGET_HOME: process.env.HOME ?? userInfo().homedir,
+        COMMAND_TARGET_HOME: target,
         DOTFILES: REPO,
         // This fixture checks Bun resolution against WIP code, explicitly into scratch HOME.
         DOTFILES_RENDER_FROM_WORKING_COPY: "1",
@@ -533,6 +526,7 @@ describe("doctor", () => {
     expect(output).not.toContain("bun-exec: cannot resolve bun");
     expect(output).toContain("rendered");
     rmSync(scratch, { recursive: true, force: true });
+    rmSync(target, { recursive: true, force: true });
   });
 
   test("brew: missing executable gives a named repair rather than a crash", () => {
@@ -1005,20 +999,6 @@ network_access = true
       /^SKIP {2}smart-open {2}no ssh\/config in this checkout/mu,
     );
   });
-
-  test.skipIf(OLD_SSH || !ATTACHES_TO_R99)(
-    "smart-open: the repo's own ssh/config agrees with tools/shared/src/sockets.ts",
-    () => {
-      if (Bun.which("ssh") === null) return; // the check SKIPs without ssh; nothing to assert
-      // ssh expands %d from the passwd entry, so the real account's home is the HOME that must agree.
-      const r = doctor("smart-open", {
-        HOME: userInfo().homedir,
-        DOTFILES: REPO,
-      });
-      expect(r.out).toMatch(/^PASS {2}smart-open /mu);
-      expect(r.code).toBe(0);
-    },
-  );
 
   test("two independent FAILs come back in one run, with a summary line", () => {
     const dotfiles = fixtureDotfiles();

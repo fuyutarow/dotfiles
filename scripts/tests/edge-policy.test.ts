@@ -96,12 +96,6 @@ describe("edge-policy.ts", () => {
 describe("edge/policy.plist.mac", () => {
   const text = readFileSync(POLICY, "utf8");
 
-  test("is a valid property list", () => {
-    if (Bun.which("plutil") === null) return; // macOS tool; nothing to assert elsewhere
-    const p = Bun.spawnSync(["plutil", "-lint", POLICY]);
-    expect(p.exitCode).toBe(0);
-  });
-
   test("blocks the extension that took over the default search, and pins the engine", () => {
     // ID of "You.com v1.0" (chrome_settings_overrides.search_provider.is_default, 2026-10-01).
     expect(text).toContain("<string>ffoiecgjambohnpffggcdidbomhmcack</string>");

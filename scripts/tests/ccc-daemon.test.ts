@@ -107,22 +107,38 @@ test("an old enable edge pointing directly at the repo declaration migrates to t
   expect((await f.doctor()).verdict).toBe("PASS");
 }, 20_000);
 
-test("doctor reports the reservation-yield policy and rejects an old CPU/RAM-only unit", async () => {
+test("doctor reports the GPU-only policy and rejects an old CPU/RAM-only unit", async () => {
   const f = fixture("enabled", "active");
   expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
-  expect((await f.doctor()).detail).toContain(
-    "GPU yields to live reservations",
-  );
+  expect((await f.doctor()).detail).toContain("GPU-only indexing");
   const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
   writeFileSync(
     unit,
-    readFileSync(unit, "utf8").replace(
-      'Environment="CCC_GPU_UTILIZATION_PERCENT=20"',
+    readFileSync(unit, "utf8").replaceAll(
+      /^Environment="(?:CCC_GPU_|COCOINDEX_RUN_GPU_IN_SUBPROCESS).*\n/gmu,
       "",
     ),
   );
   expect((await f.doctor()).verdict).toBe("FAIL");
 }, 20_000);
+
+test.each([
+  "CCC_GPU_UTILIZATION_PERCENT",
+  "CCC_GPU_BATCH_SIZE",
+  "CCC_GPU_WAIT_SECONDS",
+  "CCC_GPU_WINDOW",
+  "COCOINDEX_RUN_GPU_IN_SUBPROCESS",
+])("doctor rejects an installed unit missing %s", async (key) => {
+  const f = fixture("enabled", "active");
+  expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
+  const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
+  const lines = readFileSync(unit, "utf8").split("\n");
+  writeFileSync(
+    unit,
+    lines.filter((line) => !line.startsWith(`Environment="${key}=`)).join("\n"),
+  );
+  expect((await f.doctor()).verdict).toBe("FAIL");
+});
 
 test.each(["disabled", "alias", "enabled-runtime", "masked"])(
   "doctor rejects %s even while active, names deploy repair",

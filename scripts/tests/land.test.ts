@@ -26,8 +26,9 @@ import { tryAcquire } from "../../tools/shared/src/dir-lock.ts";
 const script = join(import.meta.dir, "../land.ts");
 const REPO = join(import.meta.dir, "../..");
 const temporary: string[] = [];
-// These JJ integration fixtures exceed Bun's default 5s under suite load; retain a finite 12s bound.
-const LAND_FORMATTER_TEST_TIMEOUT_MS = 12_000;
+// These JJ integration fixtures spawn multiple repositories and commands under suite load.
+// Match the landing subprocess's finite 60s bound instead of killing it after 12s.
+const LAND_FORMATTER_TEST_TIMEOUT_MS = 60_000;
 // All cases construct real JJ repositories and spawn the landing command; keep their
 // suite-load allowance consistent rather than letting a different case hit 5s each run.
 function test(

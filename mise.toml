@@ -427,6 +427,13 @@ dir = "{{config_root}}"
 description = "Prove shared preset fixture acceptance/rejection and strictness parity"
 run = "bun test presets"
 
+# Explicit invocation admits the live audit; directory discovery stays repository-only.
+# Deliberately outside test/check/gate:land.
+[tasks."test:doctor"]
+dir = "{{config_root}}"
+description = "Doctor-only integration tests against deployed machine state"
+run = "bun test ./scripts/tests/doctor-live.ts"
+
 # The one non-Bun test suite, and deliberately so: it exercises zsh functions whose behaviour is
 # defined by tty-ness, a zle precmd hook and raw DEC escapes, via a real pty from `zsh/zpty`.
 # Bun has no pty, so a Bun test cannot reach those branches at all.

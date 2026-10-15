@@ -70,22 +70,37 @@ function resolveRealBun(): string {
 const REAL_BUN = resolveRealBun();
 
 test("removeDir passes the declared disk graveyard explicitly to rip", async () => {
-  const rip = Bun.which("rip");
-  if (rip === null) return;
   const root = mkdtempSync(join(tmpdir(), "ccc-swap-rip-graveyard-"));
   const target = join(root, "removed");
   const graveyard = join(root, "data/graveyard");
   mkdirSync(target);
   writeFileSync(join(target, "data"), "fixture");
+  writeFileSync(
+    join(root, "rip"),
+    `#!${process.execPath}
+import { mkdirSync, renameSync } from "node:fs";
+import { join } from "node:path";
+const [flag, graveyard, target] = process.argv.slice(2);
+if (flag !== "--graveyard" || !graveyard || !target) process.exit(2);
+mkdirSync(graveyard, { recursive: true });
+renameSync(target, join(graveyard, "removed"));
+`,
+    { mode: 0o755 },
+  );
   const prior = process.env.RIP_GRAVEYARD;
+  const priorPath = process.env.PATH;
   process.env.RIP_GRAVEYARD = graveyard;
+  process.env.PATH = root;
 
-  await removeDir(target);
+  await removeDir(target).finally(() => {
+    if (prior === undefined) delete process.env.RIP_GRAVEYARD;
+    else process.env.RIP_GRAVEYARD = prior;
+    if (priorPath === undefined) delete process.env.PATH;
+    else process.env.PATH = priorPath;
+  });
 
   expect(existsSync(target)).toBe(false);
   expect(readdirSync(graveyard).length).toBeGreaterThan(0);
-  if (prior === undefined) delete process.env.RIP_GRAVEYARD;
-  else process.env.RIP_GRAVEYARD = prior;
   rmSync(root, { recursive: true, force: true });
 });
 

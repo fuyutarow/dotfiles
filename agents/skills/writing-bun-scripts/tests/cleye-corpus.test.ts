@@ -115,7 +115,6 @@ const CORPUS: CorpusEntry[] = [
   { path: "tools/secrets-push/src/secrets-push.ts" },
   { path: "scripts/auth-push.ts" },
   { path: "scripts/link-agent-assets.ts" },
-  { path: "scripts/skills-doctor.ts" },
   { path: "scripts/skills-migrate.ts" },
   { path: "scripts/skills-sync.ts" },
   { path: "scripts/land.ts" },
@@ -132,6 +131,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "tools/smart-open/src/receive.ts" },
   { path: "tools/smart-open/src/smart-open.ts" },
   { path: "tools/statusline/src/statusline.ts" },
+  { path: "tools/sui-keystore-merge/src/sui-keystore-merge.ts" },
   {
     path: "tools/storage-headroom/src/storage-headroom.ts",
     unknownFlag: { exit: 2, message: "Unknown flag" },

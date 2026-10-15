@@ -938,8 +938,16 @@ export async function checkCccDaemon(
     .filter((line) =>
       /^Environment="(?:CCC_GPU_|COCOINDEX_RUN_GPU_IN_SUBPROCESS)/u.test(line),
     );
-  const yieldPolicy =
-    policyLines.length === 4 &&
+  const gpuPolicy =
+    [
+      "CCC_GPU_UTILIZATION_PERCENT",
+      "CCC_GPU_BATCH_SIZE",
+      "CCC_GPU_WAIT_SECONDS",
+      "CCC_GPU_WINDOW",
+      "COCOINDEX_RUN_GPU_IN_SUBPROCESS",
+    ].every((key) =>
+      policyLines.some((line) => line.startsWith(`Environment="${key}=`)),
+    ) &&
     policyLines.every((line) => actual.split("\n").includes(line)) &&
     actual.includes("ccc-daemon-launch.py");
   return r.code === 0 &&
@@ -950,14 +958,14 @@ export async function checkCccDaemon(
     enabled.out.trim() === "enabled" &&
     installed &&
     edge &&
-    yieldPolicy
+    gpuPolicy
     ? pass(
         "ccc-daemon",
-        `ccc-daemon.service enabled and active; GPU yields to live reservations via admission lock; VRAM: gpu_partition_ccc_mib (resource-policy.toml); ${policyLines.join("; ")}. Unit declaration checked; restart is required to activate changed launcher policy in an incumbent daemon`,
+        `ccc-daemon.service enabled and active; GPU-only indexing; elastic VRAM with gpu_partition_ccc_mib as the standing floor (resource-policy.toml); waits when GPU capacity is unavailable; ${policyLines.join("; ")}. Unit declaration checked; restart is required to activate changed launcher policy in an incumbent daemon`,
       )
     : fail(
         "ccc-daemon",
-        `ccc-daemon.service is ${enablementLabel} / ${stateLabel}; real unit: ${installed}; default.target edge: ${edge}; reservation-yield policy: ${yieldPolicy} — supervised searches need an enabled, active daemon with the declared GPU policy`,
+        `ccc-daemon.service is ${enablementLabel} / ${stateLabel}; real unit: ${installed}; default.target edge: ${edge}; GPU-only policy: ${gpuPolicy} — supervised searches need an enabled, active daemon with the declared GPU policy`,
         "mise run link:dots",
       );
 }

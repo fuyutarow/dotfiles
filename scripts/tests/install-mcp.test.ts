@@ -16,7 +16,7 @@ import {
 } from "../install-mcp.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "install-mcp.ts");
-const FAKE_CLAUDE = join(import.meta.dir, "fake-claude.ts");
+const FAKE_CLAUDE = join(import.meta.dir, "fake-claude-mcp.ts");
 const FAKE_CODEX = join(import.meta.dir, "fake-codex.ts");
 const FAKE_UV = join(import.meta.dir, "fake-uv.ts");
 const NO_CODEX = "/nonexistent/codex-bin"; // simulates "codex not installed"

@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
-import { existsSync, realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { access, readFile, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { jsonText, z } from "../../../hooks/zod.ts";
@@ -310,6 +309,12 @@ function declaredTools(source: string): Set<string> {
 // The house value lives in ONE place, the dotfiles mise.toml beside this skill; other tools only
 // warn on a patch pin, since their owners choose the version.
 const HOUSE_TOML = join(import.meta.dir, "..", "..", "..", "..", "mise.toml");
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
 function toolPins(source: string): Map<string, string> {
   const m = /\[tools\]([\s\S]*?)(?=\n\[|$)/u.exec(source);
   const out = new Map<string, string>();
@@ -322,7 +327,7 @@ function toolPins(source: string): Map<string, string> {
 async function checkPins(source: string): Promise<[number, number]> {
   let failures = 0;
   let warnings = 0;
-  const house = existsSync(HOUSE_TOML)
+  const house = (await exists(HOUSE_TOML))
     ? toolPins(await readFile(HOUSE_TOML, "utf8")).get("bun")
     : undefined;
   for (const [tool, pin] of toolPins(source)) {
@@ -441,11 +446,11 @@ async function check(
   // tasks and reads as "contract not adopted".
   // Messages keep the path the caller gave; only the source match uses the real path.
   const root = resolve(rootInput);
-  const realRoot = existsSync(root) ? realpathSync(root) : root;
-  if (!existsSync(root)) {
+  if (!(await exists(root))) {
     process.stdout.write(`ENV cannot cd to ${rootInput}\n`);
     return { failures: 0, environmentFailure: true };
   }
+  const realRoot = await realpath(root);
   const listed = await miseTasks(root);
   if (listed.error !== undefined) {
     process.stdout.write(
@@ -472,7 +477,7 @@ async function check(
     local.flatMap((task) => [task.name, ...task.aliases]),
   );
   const tomlPath = `${root}/mise.toml`;
-  const waiver = existsSync(tomlPath)
+  const waiver = (await exists(tomlPath))
     ? waivers(topLevelToml(await readFile(tomlPath, "utf8")))
     : { active: new Set<string>(), reasonless: [] };
   let failures = 0;
@@ -510,9 +515,9 @@ async function check(
       warnings += 1;
     }
   }
-  if (existsSync(`${root}/.jj`))
+  if (await exists(`${root}/.jj`))
     failures += reportJjTokens(jj, resolved, waiver.active);
-  if (existsSync(tomlPath)) {
+  if (await exists(tomlPath)) {
     const source = await readFile(tomlPath, "utf8");
     const [bodyFailures, bodyWarnings] = checkBodies(source);
     failures += bodyFailures;

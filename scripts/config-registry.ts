@@ -130,6 +130,7 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   // XDG one, which git only reads; ~/.gitconfig is TOOL_OWNED below, so `git config --global`
   // (and gh/lfs, which call it) writes there, not through a link into the repo (INV-8, measured).
   ["all", "git/gitconfig", ".config/git/config"],
+  ["all", "git/ignore", ".config/git/ignore"],
   ["mac", "git/local.mac", ".local-gitconfig"],
   ["wsl", "git/local.wsl", ".local-gitconfig"],
 

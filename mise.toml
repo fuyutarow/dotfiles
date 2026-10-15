@@ -143,6 +143,7 @@ depends = [
   "lint:one-writer",
   "lint:hook-slug",
   "lint:config-map",
+  "lint:ignore",
   "lint:live-refs",
   "typecheck",
   "lint:skills-index",
@@ -256,6 +257,11 @@ run = "bun scripts/config-map.ts"
 dir = "{{config_root}}"
 description = "Fail when a tracked config-shaped file is registered in no scripts/config-registry.ts row, or a row names a missing source"
 run = "bun scripts/config-map.ts --check"
+
+[tasks."lint:ignore"]
+dir = "{{config_root}}"
+description = "Fail when a tracked file is ignored or the global excludes source is undeclared"
+run = "bun scripts/lint-ignore.ts"
 
 [tasks."lint:live-refs"]
 dir = "{{config_root}}"

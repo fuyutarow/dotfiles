@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.4 — 2026-10-15
+
+- Read regenerable repository paths from the root `.gitignore` declaration so disk-reclaim and Git share one cache list.
+
 ## 1.3.3 — 2026-10-15
 
 - Keep user-session dbus and gnupg paths and accept --no-progress for apply

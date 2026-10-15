@@ -1,0 +1,8 @@
+# Owner: operating systems. These are generated metadata at any path depth.
+**/.DS_Store
+**/Thumbs.db
+
+# Owner: editors. These temporary swap and backup names are generated at any path depth.
+**/*.swp
+**/*.swo
+**/*~

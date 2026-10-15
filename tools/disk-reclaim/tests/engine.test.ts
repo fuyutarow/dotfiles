@@ -3,7 +3,13 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { hostname } from "node:os";
 import { tryAcquire } from "../../shared/src/dir-lock.ts";
-import { loadConfig, plan, run, type EngineOptions } from "../src/engine.ts";
+import {
+  loadConfig,
+  plan,
+  regenerableIgnoreEntries,
+  run,
+  type EngineOptions,
+} from "../src/engine.ts";
 import { Plan, ReceiptV2 } from "../src/model.ts";
 import { readReceipts } from "../src/receipt.ts";
 import { createSystemTarget } from "../src/targets/system.ts";
@@ -13,6 +19,28 @@ import { candidate, fakeTarget } from "./fixtures/fake-target.ts";
 import { tempRoot } from "./fixtures/temp.ts";
 
 const dirs: string[] = [];
+test("disk-reclaim cache names come from the .gitignore source block", () => {
+  const loaded = loadConfig();
+  expect(loaded.config?.regenerable_ignored).toEqual([
+    "target",
+    "node_modules",
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__",
+    ".rumdl_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".julia/compiled",
+  ]);
+  expect(
+    regenerableIgnoreEntries(
+      "# BEGIN regenerable-ignored\nnot-a-pattern\n# END regenerable-ignored",
+    ),
+  ).toBeNull();
+});
+
 function options(extra: Partial<EngineOptions> = {}): EngineOptions {
   const state = tempRoot("reclaim-engine-");
   const procDir = join(state, "proc");

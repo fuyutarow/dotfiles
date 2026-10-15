@@ -12,7 +12,7 @@
     defaultBranch = alpha        # one default across every repo, not a master/main split
 
 [core]
-    excludesfile = ~/.gitignore_global
+    excludesfile = ~/.config/git/ignore
     quotepath = false            # show UTF-8 paths, not \343\201\202
     untrackedCache = true        # faster `status` on big trees; the built-in fsmonitor daemon is
                                  # opt-in per repo (`git config set core.fsmonitor true`) — new on Linux

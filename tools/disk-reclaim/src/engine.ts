@@ -47,12 +47,21 @@ export function loadConfig(
   )();
   if (raw.isErr())
     return { config: null, error: `${path}: ${errorMessage(raw.error)}` };
+  const ignoreEntries = regenerableIgnoreEntries(
+    readFileSync(resolve(import.meta.dir, "../../..", ".gitignore"), "utf8"),
+  );
+  if (ignoreEntries === null)
+    return {
+      config: null,
+      error: ".gitignore: missing or malformed regenerable-ignored block",
+    };
   const declared = Config.omit({
     repo_roots: true,
     repos: true,
     scratch_roots: true,
     delete_roots: true,
     protected: true,
+    regenerable_ignored: true,
   })
     .extend({
       repo_roots: Config.shape.regenerable_ignored,
@@ -70,6 +79,7 @@ export function loadConfig(
 
   const config = Config.safeParse({
     ...declared.data,
+    regenerable_ignored: ignoreEntries,
     repo_roots: declared.data.repo_roots.map(expand),
     repos: declared.data.repos.map(expand),
     scratch_roots: declared.data.scratch_roots.map(expand),
@@ -79,6 +89,20 @@ export function loadConfig(
   return config.success
     ? { config: config.data, error: null }
     : { config: null, error: `${path}: ${config.error.message}` };
+}
+
+/** The repository .gitignore block is the single source for disk-reclaim's cache names. */
+export function regenerableIgnoreEntries(source: string): string[] | null {
+  const lines = source.split(/\r?\n/u);
+  const start = lines.indexOf("# BEGIN regenerable-ignored");
+  const end = lines.indexOf("# END regenerable-ignored");
+  if (start < 0 || end <= start) return null;
+  const patterns = lines
+    .slice(start + 1, end)
+    .filter((line) => line.trim() !== "");
+  if (patterns.some((pattern) => !/^\*\*\/[A-Za-z0-9._/-]+\/$/u.test(pattern)))
+    return null;
+  return patterns.map((pattern) => pattern.slice(3, -1));
 }
 export type EngineOptions = {
   context: Context;

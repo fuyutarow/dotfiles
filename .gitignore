@@ -1,50 +1,39 @@
-.serena/
+# Owner: repository maintainers. These are repo-local agent state and tool-owned data.
+/.serena/
 /.agent-state/
-agents/commands/.system/
-
-# Local overrides
-local/
-*.local
-# Claude Code per-machine permission overrides — never commit
-**/settings.local.json
-
-# Backups
-backups/
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Editor files
-*.swp
-*.swo
-*~
-.vscode/
-.idea/
-
-# Temporary files
-*.tmp
-*.bak
-*.log
-
-# Secrets
-*.key
-*.pem
-.env
-
-# Karabiner automatic backups
-karabiner/automatic_backups/
-# CocoIndex Code (ccc) — DBs ignored, settings.yml committed (qoed と同型)
+/agents/commands/.system/
 /.cocoindex_code/*
 !/.cocoindex_code/settings.yml
 
-# Bun graduation project (writing-bun-scripts BG3) — package.json + bun.lock are COMMITTED
-# (they carry the pin); the installed tree is not. `mise run deps` restores it.
-node_modules/
+# Owner: the human using this checkout. Only root-level local overrides and backup trees.
+/local/
+/backups/
 
-# agent-resource-run writes each job's measured peak beside its manifest (<manifest>.peak.json);
-# a runtime receipt, not source.
-*.resource.json.peak.json
+# Owner: each tool that creates its own machine-local permission override.
+**/settings.local.json
 
-# Python bytecode (the ccc-interpreter helpers in agents/)
-__pycache__/
+# Owner: each toolchain. Canonical regenerable-path list consumed by disk-reclaim.
+# `**/` scopes these generated directory names at any depth; disk-reclaim normalizes the
+# prefix back to the matching path/basename.
+# BEGIN regenerable-ignored
+**/target/
+**/node_modules/
+**/.venv/
+**/build/
+**/dist/
+**/__pycache__/
+**/.rumdl_cache/
+**/.ruff_cache/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.julia/compiled/
+# END regenerable-ignored
+
+# Owner: the relevant build/runtime tool; receipts and bytecode are generated beside inputs.
+**/*.resource.json.peak.json
+
+# Owner: the human. Convenience only for common root-level local environment files; secret
+# prevention belongs in the pre-commit scan, not in ignore rules.
+/.env
+/.env.local
+

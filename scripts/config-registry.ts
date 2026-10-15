@@ -467,6 +467,7 @@ const OTHER: readonly Surface[] = [
       "tools/coredev/package.json",
       "tools/secrets-push/package.json",
       "tools/sui-keystore-merge/package.json",
+      "tools/workspace/package.json",
     ],
     deployed: "the checkout",
     consumer:
@@ -651,6 +652,15 @@ const OTHER: readonly Surface[] = [
     consumer: "agent-resource-run (admission)",
     writer: "human, in the repo",
     verify: "mise run test:resource-control",
+  },
+  {
+    kind: "in-place",
+    when: "all",
+    sources: [".ws.toml"],
+    deployed: "the checkout",
+    consumer: "ws add (readiness commands) and ws rm / gc (trunk revset)",
+    writer: "human, in the repo",
+    verify: "bun test tools/workspace",
   },
   {
     kind: "in-place",

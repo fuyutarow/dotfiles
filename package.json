@@ -18,6 +18,7 @@
     "tool": "tools/tool-tiers/src/tool.ts",
     "agx": "tools/agx/src/next/cli.ts",
     "agx-next": "tools/agx/src/next/cli.ts",
+    "ws": "tools/workspace/src/ws.ts",
     "coredev": "tools/coredev/src/coredev.ts",
     "sui-keystore-merge": "tools/sui-keystore-merge/src/sui-keystore-merge.ts",
     "jj-commit": "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts",

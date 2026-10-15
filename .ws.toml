@@ -1,0 +1,4 @@
+# Read by ws (tools/workspace; spec: tools/spec/workspace.md). `ready` runs, in order, inside each
+# new workspace; `trunk` is the revset a change must be reachable from to count as landed.
+ready = ["mise trust -q", "bun install --frozen-lockfile"]
+trunk = "alpha"

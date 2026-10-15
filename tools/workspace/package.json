@@ -1,0 +1,9 @@
+{
+  "version": "0.1.0",
+  "name": "@dotfiles/workspace",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ws": "src/ws.ts"
+  }
+}

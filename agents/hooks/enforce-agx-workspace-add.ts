@@ -1,6 +1,9 @@
 import { decidePre, readStdinJson } from "./lib.ts";
 import { strAt } from "./narrow.ts";
-import { agxWorkspaceAddReason } from "./enforce-storage-headroom.ts";
+import {
+  agxWorkspaceAddReason,
+  agxWorkspaceAddWarning,
+} from "./enforce-storage-headroom.ts";
 
 function main(): void {
   const payload = readStdinJson();
@@ -11,6 +14,8 @@ function main(): void {
   const reason = agxWorkspaceAddReason(command, cwd);
   // SINGLE-AXIS: raw workspace creation must use the declared agx policy.
   if (reason !== null) decidePre("deny", reason);
+  const warning = agxWorkspaceAddWarning(command, cwd);
+  if (warning !== null) decidePre("allow", warning);
 }
 
 main();

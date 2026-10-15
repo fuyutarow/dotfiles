@@ -14,6 +14,8 @@ import { attempt } from "../../shared/src/attempt.ts";
 import {
   cachedCheckoutSizeBytes,
   checkoutCachePath,
+  agxWorkspaceAddReason,
+  agxWorkspaceAddWarning,
   fullCheckoutReason,
   type CheckoutPolicyDeps,
   writeCheckoutCache,
@@ -579,6 +581,24 @@ describe("enforce-storage-headroom", () => {
         ),
       ).toBeNull();
     }
+  });
+
+  test("unparseable case statement is allowed with a warning, not a denial", () => {
+    const { root } = fakeCheckoutProbe("");
+    const command = "case x in x) jj workspace add ../worker ;; esac";
+    expect(agxWorkspaceAddReason(command, root)).toBeNull();
+    expect(agxWorkspaceAddWarning(command, root)).toContain(
+      "allowed without workspace policy validation",
+    );
+  });
+
+  test("a proven policy violation names the runnable sparse add workflow", () => {
+    const { root } = fakeCheckoutProbe("");
+    writeFileSync(join(root, ".agx.toml"), "workspace = true\n");
+    const reason = agxWorkspaceAddReason("jj workspace add ../worker", root);
+    expect(reason).toContain("jj workspace add --sparse-patterns empty <dir>");
+    expect(reason).toContain("jj sparse set --add <paths>");
+    expect(reason).not.toContain("sparse workspace workflow");
   });
 
   test("writer and reader use the same per-repo cache key", async () => {

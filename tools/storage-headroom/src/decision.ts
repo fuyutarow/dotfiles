@@ -813,10 +813,7 @@ export function agxWorkspaceAddReason(
   cwd: string,
 ): string | null {
   const parsed = parseShell(command, cwd);
-  if (parsed === undefined)
-    return /\bjj\s+workspace\s+add\b/u.test(command)
-      ? "cannot resolve this jj workspace add; use the sparse workspace workflow"
-      : null;
+  if (parsed === undefined) return null;
   for (const c of parsed.commands) {
     const add = workspaceAdd(c);
     if (
@@ -829,9 +826,24 @@ export function agxWorkspaceAddReason(
       continue;
     const root = checkoutRoot(add);
     if (root !== null && existsSync(join(root, ".agx.toml")))
-      return "refusing raw jj workspace add in a repo with .agx.toml; use the sparse workspace workflow";
+      return (
+        "refusing raw jj workspace add in a repo with .agx.toml; use " +
+        "`jj workspace add --sparse-patterns empty <dir>`, then " +
+        "`jj sparse set --add <paths>`"
+      );
   }
   return null;
+}
+
+/** Warn without blocking when a likely workspace add is inside shell syntax we cannot parse. */
+export function agxWorkspaceAddWarning(
+  command: string,
+  cwd: string,
+): string | null {
+  if (parseShell(command, cwd) !== undefined) return null;
+  return /\bjj\s+workspace\s+add\b/u.test(command)
+    ? "could not parse shell syntax around jj workspace add; allowed without workspace policy validation"
+    : null;
 }
 
 function isOnlyWorkspaceAddHelp(command: string, cwd: string): boolean {

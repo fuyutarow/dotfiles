@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-15
+
+- Allow unparseable jj workspace adds with a warning and name the sparse command for proven policy denials
+
 ## 0.2.0
 
 - Expose the storage allow/warn/deny decision as a tools entry; the PreToolUse hook only adapts stdin and the vendor envelope.

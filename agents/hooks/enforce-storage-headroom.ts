@@ -4,7 +4,10 @@ import { decide } from "../../tools/storage-headroom/src/decision.ts";
 import { decidePre, hookJson, hookStderr, readStdinJson } from "./lib.ts";
 
 // Compatibility for enforce-agx-workspace-add; this adapter owns no workspace policy.
-export { agxWorkspaceAddReason } from "../../tools/storage-headroom/src/decision.ts";
+export {
+  agxWorkspaceAddReason,
+  agxWorkspaceAddWarning,
+} from "../../tools/storage-headroom/src/decision.ts";
 
 async function main(): Promise<void> {
   const payload = readStdinJson();

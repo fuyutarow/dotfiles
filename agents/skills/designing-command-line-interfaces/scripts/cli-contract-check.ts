@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { cli } from "cleye";
 
 // Consumer: agent/human verdict lines.
@@ -263,7 +262,7 @@ async function main(): Promise<void> {
     process.exitCode = 2;
     return;
   }
-  if (!existsSync(path.value)) {
+  if (!(await Bun.file(path.value).exists())) {
     process.stderr.write(
       "FATAL: contract file not found: " + path.value + "\n",
     );

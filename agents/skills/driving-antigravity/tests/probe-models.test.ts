@@ -20,26 +20,32 @@ const FIXTURE = resolve(import.meta.dir, "fake-agy.ts");
 
 type Run = { stdout: string; stderr: string; code: number };
 
-function runProbe(
+async function runProbe(
   args: string[],
   env: Record<string, string | undefined> = {},
-): Run {
+): Promise<Run> {
   // bounded: fixture replies instantly for every argv shape this suite exercises (no real
   // timeout branch is reachable without waiting out the script's hardcoded 120s model timeout).
-  const proc = Bun.spawnSync(["bun", SCRIPT, ...args], {
+  const proc = Bun.spawn(["bun", SCRIPT, ...args], {
     env: { ...process.env, AGY_BIN: FIXTURE, ...env },
-    maxBuffer: 1024 * 1024,
+    stdout: "pipe",
+    stderr: "pipe",
   });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
   return {
-    stdout: proc.stdout.toString(),
-    stderr: proc.stderr.toString(),
-    code: proc.exitCode ?? -1,
+    stdout,
+    stderr,
+    code,
   };
 }
 
 describe("probe-models.ts CURRENT-behavior bracket", () => {
-  test("rejects --__proto__ before resolving or launching Antigravity", () => {
-    const { stdout, stderr, code } = runProbe(["--__proto__"], {
+  test("rejects --__proto__ before resolving or launching Antigravity", async () => {
+    const { stdout, stderr, code } = await runProbe(["--__proto__"], {
       AGY_BIN: "agy-does-not-exist-xyz",
     });
     expect(stderr).toContain("unknown option '--__proto__'");
@@ -47,8 +53,8 @@ describe("probe-models.ts CURRENT-behavior bracket", () => {
     expect(code).toBe(2);
   });
 
-  test("(a) no models: prints version + roster header verbatim, exits 0 on rc=0 roster", () => {
-    const { stdout, stderr, code } = runProbe([], {
+  test("(a) no models: prints version + roster header verbatim, exits 0 on rc=0 roster", async () => {
+    const { stdout, stderr, code } = await runProbe([], {
       FAKE_AGY_VERSION: "1.1.5",
       FAKE_AGY_MODELS_OUTPUT: "Gemini 3.5 Flash (Medium)\nClaude 4.6 Sonnet\n",
     });
@@ -62,8 +68,8 @@ describe("probe-models.ts CURRENT-behavior bracket", () => {
     expect(code).toBe(0);
   });
 
-  test("(a) no models: roster rc!=0 maps to exit 2", () => {
-    const { code } = runProbe([], {
+  test("(a) no models: roster rc!=0 maps to exit 2", async () => {
+    const { code } = await runProbe([], {
       FAKE_AGY_VERSION: "1.1.5",
       FAKE_AGY_MODELS_EXIT: "1",
     });
@@ -71,8 +77,10 @@ describe("probe-models.ts CURRENT-behavior bracket", () => {
     expect(code).toBe(2);
   });
 
-  test("(b) valid model: RESULT: AVAILABLE, exit 0", () => {
-    const { stdout, code } = runProbe(["avail"], { FAKE_AGY_VERSION: "1.1.5" });
+  test("(b) valid model: RESULT: AVAILABLE, exit 0", async () => {
+    const { stdout, code } = await runProbe(["avail"], {
+      FAKE_AGY_VERSION: "1.1.5",
+    });
 
     expect(stdout).toContain(
       "RESULT: AVAILABLE avail (usage: n/a — agy exposes none)\n",
@@ -80,8 +88,8 @@ describe("probe-models.ts CURRENT-behavior bracket", () => {
     expect(code).toBe(0);
   });
 
-  test("(c) invalid model name: RESULT: INVALID_NAME, exit 1", () => {
-    const { stdout, code } = runProbe(["invalid"], {
+  test("(c) invalid model name: RESULT: INVALID_NAME, exit 1", async () => {
+    const { stdout, code } = await runProbe(["invalid"], {
       FAKE_AGY_VERSION: "1.1.5",
     });
 
@@ -92,8 +100,8 @@ describe("probe-models.ts CURRENT-behavior bracket", () => {
     expect(code).toBe(1);
   });
 
-  test("(d) rc=0 but empty stdout: INCONCLUSIVE with the swallowed-error note, exit 1", () => {
-    const { stdout, code } = runProbe(["rc0-empty"], {
+  test("(d) rc=0 but empty stdout: INCONCLUSIVE with the swallowed-error note, exit 1", async () => {
+    const { stdout, code } = await runProbe(["rc0-empty"], {
       FAKE_AGY_VERSION: "1.1.5",
     });
 
@@ -104,8 +112,8 @@ describe("probe-models.ts CURRENT-behavior bracket", () => {
     expect(code).toBe(1);
   });
 
-  test("(d) rc=0 but non-OK stdout: same INCONCLUSIVE note, exit 1", () => {
-    const { stdout, code } = runProbe(["rc0-other"], {
+  test("(d) rc=0 but non-OK stdout: same INCONCLUSIVE note, exit 1", async () => {
+    const { stdout, code } = await runProbe(["rc0-other"], {
       FAKE_AGY_VERSION: "1.1.5",
     });
 
@@ -116,8 +124,8 @@ describe("probe-models.ts CURRENT-behavior bracket", () => {
     expect(code).toBe(1);
   });
 
-  test("(d) non-zero rc: INCONCLUSIVE with rc=N note, plus first 2 matching error lines only", () => {
-    const { stdout, code } = runProbe(["quota-error"], {
+  test("(d) non-zero rc: INCONCLUSIVE with rc=N note, plus first 2 matching error lines only", async () => {
+    const { stdout, code } = await runProbe(["quota-error"], {
       FAKE_AGY_VERSION: "1.1.5",
     });
 
@@ -130,8 +138,8 @@ describe("probe-models.ts CURRENT-behavior bracket", () => {
     expect(code).toBe(1);
   });
 
-  test("+ version below the 1.1.2 floor: WARNING on stderr, run still proceeds", () => {
-    const { stdout, stderr, code } = runProbe(["avail"], {
+  test("+ version below the 1.1.2 floor: WARNING on stderr, run still proceeds", async () => {
+    const { stdout, stderr, code } = await runProbe(["avail"], {
       FAKE_AGY_VERSION: "1.1.1",
     });
 
@@ -143,8 +151,8 @@ describe("probe-models.ts CURRENT-behavior bracket", () => {
     expect(code).toBe(0);
   });
 
-  test("+ AGY_BIN unresolvable: FATAL on stderr, exit 2, no RESULT line", () => {
-    const { stdout, stderr, code } = runProbe(["avail"], {
+  test("+ AGY_BIN unresolvable: FATAL on stderr, exit 2, no RESULT line", async () => {
+    const { stdout, stderr, code } = await runProbe(["avail"], {
       AGY_BIN: "/nonexistent/definitely-not-agy",
     });
 

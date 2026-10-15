@@ -46,15 +46,17 @@ nestedVirtualization=true
 # week. Two is enough to compare a repeat crash against its predecessor.
 maxCrashDumpCount=2
 
-# Ceiling for the file system of any distro created FROM NOW ON (400 GiB in bytes; this key takes
-# a byte count and is spelled out rather than "400GB" so a suffix-parsing difference can never
+# Ceiling for the file system of any distro created FROM NOW ON (600 GiB in bytes; this key takes
+# a byte count and is spelled out rather than "600GB" so a suffix-parsing difference can never
 # make the whole file malformed - a malformed .wslconfig is silently IGNORED IN FULL by WSL).
 #
 # It does NOT resize the existing Ubuntu-24.04, whose vhdx max is still the 1 TB default. That
 # 1 TB ceiling is larger than C: itself (930 GB), which is precisely how WSL was able to fill the
 # system drive on 2026-09-06. Capping the existing distro needs the distro Stopped:
 #   wsl --manage Ubuntu-24.04 --resize <size>
-defaultVhdSize=429496729600
+# 2026-10-15: raised 400 -> 600 GiB on owner request; 400 GiB capped r99-u26 at 393 GiB with
+# ~300 GiB still free on C:. 600 GiB keeps the ceiling below C: (930 GB).
+defaultVhdSize=644245094400
 
 # WSLg is OFF. It was left on out of caution ("a julia plot window would break silently"), and
 # that caution had no basis and a real cost. On 2026-09-11 weston - WSLg's compositor - crashed

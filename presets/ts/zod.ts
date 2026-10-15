@@ -3,7 +3,7 @@
 // The house lint policy bans JSON.parse outside a zod codec; this file is that codec, so every other
 // file decodes JSON with `jsonOf(Schema).safeParse(text)`: the typed value, or a zod error covering
 // both bad JSON (code invalid_format) and the wrong shape — no throw, no `unknown` round trip.
-// Copied from writing-typescript/assets/consumer-repo/zod.ts; its test there keeps it in step.
+// The consumer zod codec shipped with the shared TypeScript preset.
 import { fromThrowable } from "neverthrow";
 import { z } from "zod";
 

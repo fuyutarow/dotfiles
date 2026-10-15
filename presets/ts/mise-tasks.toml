@@ -5,11 +5,11 @@
 # work must never block this commit. lint:ts:all is the whole tree, for a deliberate sweep.
 
 [tasks."oxlint:render"]
-description = "Render .oxlintrc.json from the owner's one policy (~/dotfiles/oxlint-policy.toml) plus oxlint-policy.local.toml"
+description = "Render .oxlintrc.json from the owner's presets/oxlint/policy.toml and local ignores"
 run = "bun ~/dotfiles/scripts/render-oxlintrc.ts --repo . --write"
 
 [tasks."lint:oxlint-policy"]
-description = "Fail when .oxlintrc.json is not a fresh render of the owner's policy (edit the TOML, then mise run oxlint:render)"
+description = "Fail when .oxlintrc.json is not a fresh render of the owner's policy and local ignores"
 run = "bun ~/dotfiles/scripts/render-oxlintrc.ts --repo . --check"
 
 [tasks."lint:ts"]

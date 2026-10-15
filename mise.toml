@@ -223,13 +223,18 @@ run = "bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts
 # proves each custom ban fires on its bad snippet and is silent on its good one.
 [tasks."oxlint:render"]
 dir = "{{config_root}}"
-description = "Render oxlint-policy.toml (the one home of the TS lint policy) into .oxlintrc.json"
+description = "Render .oxlintrc.json from presets/oxlint/policy.toml (the shared TS lint policy)"
 run = "bun scripts/render-oxlintrc.ts --write"
 
 [tasks."lint:oxlint-policy"]
 dir = "{{config_root}}"
-description = "Fail when .oxlintrc.json is not a fresh render of oxlint-policy.toml"
+description = "Fail when .oxlintrc.json is not a fresh render of presets/oxlint/policy.toml"
 run = "bun scripts/render-oxlintrc.ts --check"
+
+[tasks.preset]
+dir = "{{config_root}}"
+description = "Apply or compare the shared TypeScript/oxlint presets: mise run preset -- apply <ts|oxlint> --to <dir>"
+run = "bun presets/src/cli.ts"
 
 # INV-8 (README → Design): data flows one way — declaration → render → deployed → runtime — and
 # every file has ONE writer. This gate fails when a hand-written declaration carries content a
@@ -361,6 +366,7 @@ depends = [
   "test:scripts",
   "test:codex",
   "test:skills",
+  "test:presets",
   "test:android",
   "test:zsh",
   "test:mise-scope",
@@ -409,6 +415,11 @@ run = "bun test agents/skills"
 dir = "{{config_root}}"
 description = "This repo's own script tests (scripts/tests) and their proof-of-fire fixtures, plus every tools/*/tests suite"
 run = "bun test scripts/tests tools/*/tests"
+
+[tasks."test:presets"]
+dir = "{{config_root}}"
+description = "Prove shared preset fixture acceptance/rejection and strictness parity"
+run = "bun test presets"
 
 # The one non-Bun test suite, and deliberately so: it exercises zsh functions whose behaviour is
 # defined by tty-ness, a zle precmd hook and raw DEC escapes, via a real pty from `zsh/zpty`.

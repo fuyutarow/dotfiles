@@ -18,7 +18,7 @@ import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
 
 const ROOT = join(import.meta.dir, "..");
-export const POLICY_PATH = join(ROOT, "oxlint-policy.toml");
+export const POLICY_PATH = join(ROOT, "presets", "oxlint", "policy.toml");
 export const OXLINTRC_PATH = join(ROOT, ".oxlintrc.json");
 
 const Level = z.enum(["error", "off"]);
@@ -193,7 +193,7 @@ if (import.meta.main) {
       parameters: [],
       help: {
         description:
-          "Render .oxlintrc.json from oxlint-policy.toml (--write / --check).",
+          "Render .oxlintrc.json from presets/oxlint/policy.toml (--write / --check).",
       },
       flags: {
         write: {
@@ -220,7 +220,8 @@ if (import.meta.main) {
     fatal("give --write or --check, not both");
 
   const loaded = await loadPolicy();
-  if (!loaded.ok) fatal(`cannot read oxlint-policy.toml: ${loaded.error}`);
+  if (!loaded.ok)
+    fatal(`cannot read presets/oxlint/policy.toml: ${loaded.error}`);
   const repo = argv.flags.repo;
   if (repo === "") fatal("--repo needs a directory");
   const policy =

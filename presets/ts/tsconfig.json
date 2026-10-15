@@ -1,0 +1,42 @@
+{
+  // Type-check contract for repos using the house TypeScript preset. Bun TRANSPILES and never
+  // type-checks, so tsgo --noEmit is the type gate. These are dotfiles' compilerOptions verbatim.
+  // The two flags that carry most of the strictness burden are `noUncheckedIndexedAccess`
+  // (arr[i] is T | undefined) and `exactOptionalPropertyTypes` ({a?: T} refuses explicit undefined).
+  // Both remain ON; the measured migration paid down the resulting errors rather than weakening them.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["bun"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    // `import "x"` with an unresolvable path is an error; a bad path otherwise fails only at runtime.
+    "noUncheckedSideEffectImports": true,
+    // Kept OFF: ON was 1345 errors, almost all process.env.X -> process.env["X"], for little gain.
+    "noPropertyAccessFromIndexSignature": false,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "useUnknownInCatchVariables": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}

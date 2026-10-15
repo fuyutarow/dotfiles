@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "../../hooks/zod.ts";
 import {
@@ -8,6 +8,20 @@ import {
   nearestRankPercentile,
 } from "../learning-bus.ts";
 import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
+
+const fixtureDirectory = resolve(import.meta.dir, "../fixtures");
+const fixtureNames = await readdir(fixtureDirectory);
+const fixtureTexts = new Map(
+  await Promise.all(
+    fixtureNames.map(
+      async (name) =>
+        [
+          name,
+          await readFile(resolve(fixtureDirectory, name), "utf8"),
+        ] as const,
+    ),
+  ),
+);
 
 const digest = (digit: string) => digit.repeat(64);
 const at = (second: number) =>
@@ -708,13 +722,14 @@ describe("cross-section-learning-bus/v1", () => {
     expect(nearestRankPercentile([30, 10, 20], 0.95)).toBe(30);
   });
   test("all transfer fixtures are loaded", () => {
-    const directory = resolve(import.meta.dir, "../fixtures");
-    const names = readdirSync(directory).filter(
+    const names = fixtureNames.filter(
       (name) => name.startsWith("transfer-") && name.endsWith(".json"),
     );
     expect(names).toEqual(["transfer-without-commit.json"]);
     for (const name of names) {
-      const text = readFileSync(resolve(directory, name), "utf8");
+      const text = fixtureTexts.get(name);
+      expect(text).toBeDefined();
+      if (text === undefined) continue;
       const result = checkLearningBus(decodedJson(z.json(), text));
       expect(result.schema).toBe("cross-section-learning-bus/v1");
       expect(result.findings.map((finding) => finding.code)).toContain(

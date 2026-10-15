@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "../../hooks/zod.ts";
 import { checkProgrammeFlow } from "../programme-flow.ts";
@@ -10,11 +10,23 @@ const TraceFixtureSchema = z.looseObject({
   events: z.array(z.looseObject({})),
   lease: z.looseObject({}),
 });
+const fixtureDirectory = resolve(import.meta.dir, "../fixtures");
+const fixtureNames = await readdir(fixtureDirectory);
+const fixtureTexts = new Map(
+  await Promise.all(
+    fixtureNames.map(
+      async (name) =>
+        [
+          name,
+          await readFile(resolve(fixtureDirectory, name), "utf8"),
+        ] as const,
+    ),
+  ),
+);
 function fixture(name: string): unknown {
-  const text = readFileSync(
-    resolve(import.meta.dir, "../fixtures", name),
-    "utf8",
-  );
+  const text = fixtureTexts.get(name);
+  expect(text).toBeDefined();
+  if (text === undefined) return {};
   return decodedJson(z.json(), text);
 }
 function flow(name: string): ReturnType<typeof checkProgrammeFlow> {
@@ -304,8 +316,7 @@ describe("programme-flow/v2", () => {
     ).toContain("FLOW_INVALID");
   });
   test("all programme fixtures are loaded", () => {
-    const directory = resolve(import.meta.dir, "../fixtures");
-    const names = readdirSync(directory).filter(
+    const names = fixtureNames.filter(
       (name) => name.startsWith("flow-") && name.endsWith(".json"),
     );
     expect(names).toHaveLength(18);

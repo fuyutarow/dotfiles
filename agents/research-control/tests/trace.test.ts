@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { readFileSync } from "node:fs";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "../../hooks/zod.ts";
@@ -395,9 +394,23 @@ if (process.env.WRITE_WIRE_FIXTURES === "1") {
       );
     }),
   };
-  for (const [name, body] of Object.entries(files))
-    writeFileSync(join(directory, name), body);
+  await Promise.all(
+    Object.entries(files).map(([name, body]) =>
+      writeFile(join(directory, name), body),
+    ),
+  );
 }
+
+const fixtureDirectory = resolve(import.meta.dir, "../fixtures");
+const fixtureNames = await readdir(fixtureDirectory);
+const fixtureTexts = new Map(
+  await Promise.all(
+    fixtureNames.map(
+      async (name) =>
+        [name, await readFile(join(fixtureDirectory, name), "utf8")] as const,
+    ),
+  ),
+);
 
 describe("research-section-trace/v2 exact wire", () => {
   test.each([
@@ -412,10 +425,9 @@ describe("research-section-trace/v2 exact wire", () => {
     ["role-authority-violation.json", "ROLE_AUTHORITY_VIOLATION"],
     ["invalid-intent-does-not-release-wip.json", "INTENT_NOT_EXECUTABLE"],
   ])("live fixture %s", (name, code) => {
-    const text = readFileSync(
-      resolve(import.meta.dir, "../fixtures", name),
-      "utf8",
-    );
+    const text = fixtureTexts.get(name);
+    expect(text).toBeDefined();
+    if (text === undefined) return;
     const value: unknown = decodedJson(z.json(), text);
     if (code === undefined) expect(checkTrace(value).ok).toBe(true);
     else expectCode(value, code);
@@ -750,34 +762,43 @@ describe("research-section-trace/v2 exact wire", () => {
     });
     expect(checkTrace(value).ok).toBe(true);
   });
-  test("CLI boundary preserves exit classes and one envelope", () => {
-    const directory = mkdtempSync(join(tmpdir(), "trace-wire-"));
+  test("CLI boundary preserves exit classes and one envelope", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "trace-wire-"));
     const good = join(directory, "good.json"),
       bad = join(directory, "bad.json");
-    writeFileSync(good, `${JSON.stringify(trace())}\n`);
+    await writeFile(good, `${JSON.stringify(trace())}\n`);
     const invalid = trace();
     eventAt(invalid, 1).kind = "HIDDEN";
-    writeFileSync(bad, `${JSON.stringify(invalid)}\n`);
+    await writeFile(bad, `${JSON.stringify(invalid)}\n`);
     const cli = resolve(import.meta.dir, "../cli.ts");
-    const run = (args: string[]) =>
-      Bun.spawnSync({
+    const run = async (args: string[]) => {
+      const process = Bun.spawn({
         cmd: ["bun", cli, ...args],
         stdout: "pipe",
         stderr: "pipe",
       });
-    const pass = run([good]),
-      fail = run([bad]),
-      help = run(["--help"]),
-      missing = run([]),
-      unknown = run(["--wat"]),
-      unreadable = run([join(directory, "none.json")]);
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(process.stdout).text(),
+        new Response(process.stderr).text(),
+        process.exited,
+      ]);
+      return { exitCode, stdout, stderr };
+    };
+    const [pass, fail, help, missing, unknown, unreadable] = await Promise.all([
+      run([good]),
+      run([bad]),
+      run(["--help"]),
+      run([]),
+      run(["--wat"]),
+      run([join(directory, "none.json")]),
+    ]);
     expect(pass.exitCode).toBe(0);
-    expect(pass.stdout.toString().trim().split("\n")).toHaveLength(1);
+    expect(pass.stdout.trim().split("\n")).toHaveLength(1);
     expect(fail.exitCode).toBe(1);
     expect(help.exitCode).toBe(0);
     expect(missing.exitCode).toBe(1);
     expect(unknown.exitCode).toBe(1);
     expect(unreadable.exitCode).toBe(2);
-    expect(unreadable.stderr.toString()).toStartWith("FATAL:");
+    expect(unreadable.stderr).toStartWith("FATAL:");
   });
 });

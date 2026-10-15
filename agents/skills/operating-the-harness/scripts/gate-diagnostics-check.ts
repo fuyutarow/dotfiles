@@ -31,8 +31,7 @@
 //   - Stop-event detectors (`detect-*.ts`), which block through exit 2 + stderr rather than
 //     decidePre. They are single-finding by construction today; if that changes, widen GATE_GLOB.
 
-import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 // Bare specifier, not pinned inline: this check runs from the repository source tree, whose
@@ -59,10 +58,11 @@ const BATCH_TEST = "ONE deny";
 type Kind = "FATAL" | "SINGLE-AXIS" | "BATCHED";
 type Finding = { file: string; line: number; problem: string };
 
-// existsSync never throws for a plain missing-path check (unlike `stat`), so there is no
-// throw to catch here.
-function exists(p: string): Promise<boolean> {
-  return Promise.resolve(existsSync(p));
+async function exists(p: string): Promise<boolean> {
+  return stat(p).then(
+    () => true,
+    () => false,
+  );
 }
 
 // A deny site is `decidePre(` whose FIRST argument is the literal "deny". Both the one-line and

@@ -1176,6 +1176,43 @@ describe("land workspace", () => {
     expect(existsSync(join(state, "land.lock"))).toBe(false);
   });
 
+  test("LAND-OWN-TREE lands repeatedly when the gate installs dependencies", () => {
+    const f = fixture();
+    // The gate's dependency output is ignored by the repo's rules; the symlink land installs
+    // is not matched by the directory-only `node_modules/` rule and must not count as dirt.
+    writeFileSync(join(f.main, ".gitignore"), "node_modules/\n");
+    writeFileSync(join(f.main, "package.json"), "{}\n");
+    f.jj(f.main, ["commit", "-m", "manifest"]);
+    f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    f.jj(f.main, ["git", "push", "--bookmark", "alpha", "--remote", "origin"]);
+    // prepareLander links the running tool's installed packages, so they must exist.
+    expect(existsSync(join(import.meta.dir, "../../node_modules"))).toBe(true);
+    for (const name of ["second", "third"]) {
+      const worker = join(dirname(f.worker), `dotfiles-arm-${name}`);
+      f.jj(f.main, [
+        "workspace",
+        "add",
+        "--name",
+        `dotfiles-arm-${name}`,
+        "-r",
+        "alpha",
+        worker,
+      ]);
+      writeFileSync(join(worker, "keep.txt"), `${name} version\n`);
+      const result = f.land(
+        [],
+        { LAND_EXPECT_WORKSPACE: worker },
+        f.main,
+        `dotfiles-arm-${name}`,
+      );
+      expect(result.stdout.toString()).not.toContain("dirty land tree");
+      expect(result.exitCode).toBe(0);
+      expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
+        `${name} version`,
+      );
+    }
+  });
+
   test("commit refusal preserves hook output and stops before deploy", () => {
     const f = fixture();
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");

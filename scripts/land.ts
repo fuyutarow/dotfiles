@@ -653,7 +653,15 @@ function prepareLander(
       ]);
     }
     yield* jj(root, ["status"]);
-    const dirty = yield* paths(root, "@-", "@");
+    // The ignore rule `**/node_modules/` matches directories only, so the dependency symlink
+    // this function installs below is the one path jj snapshots despite being ignored output.
+    const installed =
+      lstatSync(join(root, "node_modules"), {
+        throwIfNoEntry: false,
+      })?.isSymbolicLink() === true;
+    const dirty = (yield* paths(root, "@-", "@")).filter(
+      (path) => !(installed && path === "node_modules"),
+    );
     if (dirty.length > 0)
       return reject(`dirty land tree: ${JSON.stringify(dirty)}`);
     if ((yield* at(root, "@", "conflict")) !== "false")

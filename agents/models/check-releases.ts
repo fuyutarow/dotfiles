@@ -18,10 +18,10 @@
 // Usage:  bun agents/models/check-releases.ts [--today YYYY-MM-DD] [--quiet]
 // Exit:   0 = clean, 1 = at least one FAIL.
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import { fromAsyncThrowable, fromThrowable } from "neverthrow";
 import { z } from "../hooks/zod.ts";
 import releases from "./releases.toml";
 
@@ -108,40 +108,41 @@ function daysBetween(fromMs: number, toMs: number): number {
 }
 
 // Read one guidance file's body; unreadable is not a finding.
-function readGuidanceFile(p: string): string | undefined {
+async function readGuidanceFile(p: string): Promise<string | undefined> {
   /* unreadable file is not a finding */
-  return fromThrowable(() => readFileSync(p, "utf8"))().unwrapOr(undefined);
+  const read = await fromAsyncThrowable(() => readFile(p, "utf8"))();
+  return read.unwrapOr(undefined);
 }
 
 // Walk the skills tree once, returning [path, text] for every markdown body a reader
 // would treat as guidance (SKILL.md + references/), excluding history files.
-function guidanceFiles(): Array<[string, string]> {
+async function guidanceFiles(): Promise<Array<[string, string]>> {
   const out: Array<[string, string]> = [];
-  const walk = (dir: string): void => {
-    const listed = fromThrowable(() => readdirSync(dir))();
+  const walk = async (dir: string): Promise<void> => {
+    const listed = await fromAsyncThrowable(() => readdir(dir))();
     if (listed.isErr()) return;
     const entries = listed.value;
     for (const name of entries) {
       const p = join(dir, name);
-      const stat = fromThrowable(() => statSync(p))();
-      if (stat.isErr()) continue;
-      const st = stat.value;
+      const statted = await fromAsyncThrowable(() => stat(p))();
+      if (statted.isErr()) continue;
+      const st = statted.value;
       if (st.isDirectory() && (name === "tests" || name === "node_modules"))
         continue;
       if (st.isDirectory()) {
-        walk(p);
+        await walk(p);
         continue;
       }
       if (!name.endsWith(".md") || HISTORY_FILE.test(p)) continue;
-      const text = readGuidanceFile(p);
+      const text = await readGuidanceFile(p);
       if (text !== undefined) out.push([p, text]);
     }
   };
-  walk(SKILLS_DIR);
+  await walk(SKILLS_DIR);
   return out;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const parsed = cli(
     {
       name: "check-releases.ts",
@@ -207,7 +208,7 @@ function main(): void {
   }
 
   // Guidance corpus, read once: F2 escalates on it and F3 scans it.
-  const guidance = guidanceFiles();
+  const guidance = await guidanceFiles();
   const namedIn = (slug: string): string[] => {
     const re = new RegExp(
       `(^|[^a-zA-Z0-9.\\-])${slug.replaceAll(/[.]/gu, "\\.")}(?![a-zA-Z0-9])`,
@@ -287,7 +288,7 @@ function main(): void {
   }
 }
 
-const run = fromThrowable(main)();
+const run = await fromAsyncThrowable(main)();
 if (run.isErr()) {
   const e = run.error;
   fail(`check-releases crashed: ${e instanceof Error ? e.message : String(e)}`);

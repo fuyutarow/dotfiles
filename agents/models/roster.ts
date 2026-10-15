@@ -3,7 +3,7 @@
 // `--choice` (tools/agx/src/workers/codex.ts) and scripts/render-home.ts (which
 // writes rosterPolicy into the deployed ~/.claude/CLAUDE.md).
 // Zero-install like the hooks: zod comes from agents/hooks/zod.ts (the committed bundle).
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { z } from "../hooks/zod.ts";
@@ -95,7 +95,9 @@ export type RosterLoad =
 
 /** The parsed roster, or why not (missing file, bad TOML, or zod's reason) — never a throw. */
 export async function loadRoster(path = ROSTER_PATH): Promise<RosterLoad> {
-  const raw = await attempt(() => Bun.TOML.parse(readFileSync(path, "utf8")));
+  const raw = await attempt(async () =>
+    Bun.TOML.parse(await readFile(path, "utf8")),
+  );
   if (!raw.ok) return { ok: false, error: errorMessage(raw.error) };
   const r = RosterSchema.safeParse(raw.value);
   return r.success

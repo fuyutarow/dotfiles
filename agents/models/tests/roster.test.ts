@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadRoster, rosterPolicy, rosterTable } from "../roster.ts";
@@ -83,28 +83,31 @@ describe("dispatch roster", () => {
   });
 
   test("allows unknown Jev list prices", async () => {
-    const folder = mkdtempSync(join(tmpdir(), "dispatch-roster-price-"));
+    const folder = await mkdtemp(join(tmpdir(), "dispatch-roster-price-"));
     const original = await Bun.file(
       join(import.meta.dir, "..", "dispatch-roster.toml"),
     ).text();
     const path = join(folder, "missing-price.toml");
-    writeFileSync(path, original.replace("price_per_mtok_output = 0.0\n", ""));
+    await writeFile(
+      path,
+      original.replace("price_per_mtok_output = 0.0\n", ""),
+    );
     const loaded = await loadRoster(path);
     expect(loaded.ok).toBe(true);
     if (loaded.ok) {
       expect(loaded.value.auto.jev.price_per_mtok_input).toBe(0.042);
       expect(loaded.value.auto.jev.price_per_mtok_output).toBeUndefined();
     }
-    rmSync(folder, { recursive: true, force: true });
+    await rm(folder, { recursive: true, force: true });
   });
 
   test("default must name a codex-route row", async () => {
-    const folder = mkdtempSync(join(tmpdir(), "dispatch-roster-test-"));
+    const folder = await mkdtemp(join(tmpdir(), "dispatch-roster-test-"));
     const original = await Bun.file(
       join(import.meta.dir, "..", "dispatch-roster.toml"),
     ).text();
     const path = join(folder, "invalid.toml");
-    writeFileSync(
+    await writeFile(
       path,
       original.replace('default = "luna-high"', 'default = "sonnet-medium"'),
     );
@@ -112,7 +115,7 @@ describe("dispatch roster", () => {
     expect(loaded.ok).toBe(false);
     if (!loaded.ok)
       expect(loaded.error).toContain("default must name a codex-route");
-    rmSync(folder, { recursive: true, force: true });
+    await rm(folder, { recursive: true, force: true });
   });
 
   test("rendered roster policy describes the five agx commands", async () => {

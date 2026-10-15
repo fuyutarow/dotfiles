@@ -45,15 +45,16 @@ function fixture(mismatch = false): {
     "  get)",
     '    name="$2"',
     '    if [ "$FNOX_ROLE" = "source" ]; then',
-    "      case \"$name\" in TYPESAFE_API_KEY) printf 'local-secret\\\\n';; RELAY_KEY) printf 'remote-secret\\\\n';; FROM_FILE) printf 'file-secret';; esac",
+    "      case \"$name\" in TYPESAFE_API_KEY) printf 'local-secret\\n';; RELAY_KEY) printf 'remote-secret\\n';; FROM_FILE) printf 'file-secret';; esac",
     "      exit 0",
     "    fi",
     '    if [ ! -f "$TARGET_HOME/$name" ]; then exit 1; fi',
-    '    if [ "$MISMATCH" = "1" ]; then printf "different-secret"; else cat "$TARGET_HOME/$name"; fi',
+    '    if [ "$MISMATCH" = "1" ]; then printf X; tail -c +2 "$TARGET_HOME/$name"; else cat "$TARGET_HOME/$name"; fi',
+    '    printf "\\n"',
     "    ;;",
     "  set)",
     '    name="$2"',
-    '    cat > "$TARGET_HOME/$name"',
+    '    bun -e "process.stdout.write((await Bun.stdin.text()).replace(/^\\p{White_Space}+|\\p{White_Space}+$/gu, \'\'))" > "$TARGET_HOME/$name"',
     "    printf '✓ Set secret\\\\n'",
     "    ;;",
     "  *) exit 2;;",
@@ -160,7 +161,7 @@ describe("secrets:push CLI and config ownership", () => {
     );
     expect(
       readFileSync(join(f.env.TARGET_HOME ?? "", "TYPESAFE_API_KEY"), "utf8"),
-    ).toBe("local-secret\\n");
+    ).toBe("local-secret");
     expect(
       readFileSync(join(f.env.TARGET_HOME ?? "", "EXISTING_KEY"), "utf8"),
     ).toBe("preserve-me");
@@ -184,7 +185,7 @@ describe("secrets:push CLI and config ownership", () => {
     expect(result.code).toBe(0);
     expect(
       readFileSync(join(f.env.TARGET_HOME ?? "", "RELAY_KEY"), "utf8"),
-    ).toBe("remote-secret\\n");
+    ).toBe("remote-secret");
     expect(readFileSync(f.env.SSH_LOG ?? "", "utf8")).not.toContain(
       "remote-secret",
     );
@@ -218,6 +219,41 @@ describe("secrets:push CLI and config ownership", () => {
       readFileSync(join(f.env.TARGET_HOME ?? "", "FROM_FILE"), "utf8"),
     ).toBe("file-secret");
   });
+
+  test.each(["\n", "\n\n", "\r\n"])(
+    "verifies a file ending in %j and discloses fnox trimming",
+    async (ending) => {
+      const f = fixture();
+      const path = join(f.env.SOURCE_HOME ?? "", "secret.bin");
+      writeFileSync(path, "file-secret" + ending);
+      const result = await run(f.root, f.env, [
+        "--secret",
+        "FROM_FILE=@" + path,
+        "target-box",
+      ]);
+      expect(result.code).toBe(0);
+      expect(result.out).toContain("fnox set trimmed surrounding whitespace");
+      expect(
+        readFileSync(join(f.env.TARGET_HOME ?? "", "FROM_FILE"), "utf8"),
+      ).toBe("file-secret");
+    },
+  );
+
+  test.each(["", "\n"])(
+    "rejects a one-byte file mutation with ending %j",
+    async (ending) => {
+      const f = fixture(true);
+      const path = join(f.env.SOURCE_HOME ?? "", "secret.bin");
+      writeFileSync(path, "file-secret" + ending);
+      const result = await run(f.root, f.env, [
+        "--secret",
+        "FROM_FILE=@" + path,
+        "target-box",
+      ]);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain("SHA-256 mismatch for FROM_FILE");
+    },
+  );
 
   test("creates a fresh age config when the target has none", async () => {
     const f = fixture();

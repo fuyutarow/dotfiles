@@ -16,7 +16,7 @@ const HOST_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const DEFAULT_SECRETS = ["TYPESAFE_API_KEY"];
 
 type SecretSpec = { name: string; path?: string };
-type SourceValue = { bytes: Uint8Array; sha256: string };
+type SourceValue = { bytes: Uint8Array; sha256: string; normalized: boolean };
 type RunResult = { code: number; bytes: Uint8Array };
 
 function rejectPrototypeFlag(
@@ -99,6 +99,21 @@ export function parseSecretSpecs(values: string[]): SecretSpec[] | string {
 const sha256 = (bytes: Uint8Array): string =>
   createHash("sha256").update(bytes).digest("hex");
 
+// fnox get prints the stored value followed by exactly one LF.
+function fnoxValue(bytes: Uint8Array): Uint8Array {
+  return bytes.at(-1) === 10 ? bytes.subarray(0, -1) : bytes;
+}
+
+// fnox 1.39 stdin set uses Rust str::trim (Unicode White_Space).
+// Keep this separate from get framing: a stored trailing LF is real value data.
+function storedValue(bytes: Uint8Array): Uint8Array {
+  return new TextEncoder().encode(
+    new TextDecoder()
+      .decode(bytes)
+      .replaceAll(/^\p{White_Space}+|\p{White_Space}+$/gu, ""),
+  );
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
@@ -147,7 +162,7 @@ async function readSource(
     );
     if (result.code !== 0)
       return `${source ?? "this machine"}: fnox has no ${spec.name}`;
-    bytes = result.bytes;
+    bytes = fnoxValue(result.bytes);
   } else if (source === undefined) {
     const file = Bun.file(spec.path.replace(/^~(?=\/)/u, Bun.env.HOME ?? "~"));
     if (!(await file.exists()))
@@ -163,7 +178,8 @@ async function readSource(
       return `${source}: could not read source file for ${spec.name}`;
     bytes = result.bytes;
   }
-  return { bytes, sha256: sha256(bytes) };
+  const digest = sha256(storedValue(bytes));
+  return { bytes, sha256: digest, normalized: digest !== sha256(bytes) };
 }
 
 async function setRemote(
@@ -370,11 +386,14 @@ async function main(): Promise<void> {
       fail(`${host}: fnox get ${spec.name} did not open after set`);
       return;
     }
-    if (sha256(got.bytes) !== value.sha256) {
+    if (sha256(fnoxValue(got.bytes)) !== value.sha256) {
       fail(`${host}: SHA-256 mismatch for ${spec.name}`);
       return;
     }
-    say(`${spec.name} → ${host}: SHA-256 matched (${value.sha256})`);
+    const note = value.normalized
+      ? "; fnox set trimmed surrounding whitespace"
+      : "";
+    say(`${spec.name} → ${host}: SHA-256 matched (${value.sha256})${note}`);
   }
   say(`done: ${results.length} secret(s) verified`);
 }

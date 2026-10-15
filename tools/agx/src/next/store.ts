@@ -1,5 +1,11 @@
 import {
   appendFileSync,
+  closeSync,
+  openSync,
+  fstatSync,
+  readSync,
+  renameSync,
+  unlinkSync,
   createReadStream,
   existsSync,
   mkdirSync,
@@ -378,34 +384,46 @@ export function overlapWarnings(writes: string[]): void {
   }
 }
 
-export function foldedRuns() {
-  const runs = new Map<
-    string,
-    {
-      id: string;
-      started_at: string;
-      ended_at: string | null;
-      ticket: string;
-      state: "running" | "ended" | "orphaned";
-      exit: number | null;
-      row: string;
-      dispatcher_session: string | null;
-      cwd: string;
-      workspace: string;
-      writes: string[];
-      judgment: { decision: string; note: string } | null;
-      report_path: string | null;
-      verify: { cmd: string; exit: number; log_path: string }[];
-      last_progress_path: string | null;
-      continues: string | null;
-      vendor_session: string | null;
-      pid: number;
-      failed_early_quit: boolean;
-      returned: boolean | undefined;
-      changed_files: number | undefined;
-    }
-  >();
-  for (const event of events()) {
+const RunSchema = z.object({
+  id: z.string(),
+  started_at: z.string(),
+  ended_at: z.string().nullable(),
+  ticket: z.string(),
+  state: z.enum(["running", "ended", "orphaned"]),
+  exit: z.number().nullable(),
+  row: z.string(),
+  dispatcher_session: z.string().nullable(),
+  cwd: z.string(),
+  workspace: z.string(),
+  writes: z.array(z.string()),
+  judgment: z.object({ decision: z.string(), note: z.string() }).nullable(),
+  report_path: z.string().nullable(),
+  verify: z.array(
+    z.looseObject({ cmd: z.string(), exit: z.number(), log_path: z.string() }),
+  ),
+  last_progress_path: z.string().nullable(),
+  continues: z.string().nullable(),
+  vendor_session: z.string().nullable(),
+  pid: z.number(),
+  failed_early_quit: z.boolean(),
+  returned: z.boolean().optional(),
+  changed_files: z.number().optional(),
+});
+type FoldedRun = z.output<typeof RunSchema>;
+const SnapshotSchema = z
+  .object({
+    version: z.literal(1),
+    inode: z.number(),
+    device: z.number(),
+    size: z.number().int().nonnegative(),
+    offset: z.number().int().nonnegative(),
+    runs: z.array(RunSchema),
+  })
+  .refine((snapshot) => snapshot.offset <= snapshot.size);
+
+/** Pure event fold, shared by full replay and incremental replay. */
+function foldInto(runs: Map<string, FoldedRun>, input: NextEvent[]): void {
+  for (const event of input) {
     if (event.kind === "started")
       runs.set(event.id, {
         id: event.id,
@@ -448,6 +466,103 @@ export function foldedRuns() {
     if (decision === "accept" || decision === "reject")
       run.judgment = { decision, note: event.note };
   }
+}
+
+/** Full replay oracle; does not read or write the snapshot. */
+export function fullFoldedRuns() {
+  const runs = new Map<string, FoldedRun>();
+  foldInto(runs, events());
+  return liveRuns(runs);
+}
+
+/** Read only bytes after the last complete line folded into the snapshot. */
+export function foldedRuns() {
+  const path = recordPath();
+  if (!existsSync(path)) return [];
+  const fd = openSync(path, "r");
+  const stat = fstatSync(fd);
+  const snapshotPath = join(stateDir(), "records.fold.json");
+  const cached = fromThrowable(() => readFileSync(snapshotPath, "utf8"))();
+  const parsed = cached.isOk()
+    ? jsonOf(SnapshotSchema).safeParse(cached.value)
+    : undefined;
+  const snapshot = parsed?.success === true ? parsed.data : undefined;
+  const valid =
+    snapshot !== undefined &&
+    snapshot.inode === stat.ino &&
+    snapshot.device === stat.dev &&
+    stat.size >= snapshot.size &&
+    stat.size >= snapshot.offset;
+  const offset = valid ? snapshot.offset : 0;
+  const runs = new Map<string, FoldedRun>(
+    valid ? snapshot.runs.map((run) => [run.id, run]) : [],
+  );
+  const read = fromThrowable(() => {
+    const bytes = Buffer.alloc(stat.size - offset);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, {
+        offset: length,
+        length: bytes.length - length,
+        position: offset + length,
+      });
+      if (count === 0) break;
+      length += count;
+    }
+    return bytes.subarray(0, length);
+  })();
+  closeSync(fd);
+  if (read.isErr())
+    return exitWithError(
+      "agx: cannot read record log: " + String(read.error) + "\n",
+      1,
+    );
+  const bytes = read.value;
+  const complete = bytes.lastIndexOf(10) + 1;
+  const input = bytes
+    .subarray(0, complete)
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => jsonOf(EventSchema).safeParse(line));
+  const invalid = input.find((event) => !event.success);
+  if (invalid !== undefined)
+    exitWithError(
+      "agx: invalid record log line: " + invalid.error.message + "\n",
+      1,
+    );
+  foldInto(
+    runs,
+    input.flatMap((event) => (event.success ? [event.data] : [])),
+  );
+  if (!valid || complete > 0 || snapshot.size !== stat.size) {
+    // Concurrent readers publish independent atomic snapshots. An older snapshot is
+    // still a valid prefix and will simply replay more bytes on the next read.
+    const temporary =
+      snapshotPath + "." + process.pid + "." + crypto.randomUUID() + ".tmp";
+    const saved = fromThrowable(() => {
+      writeFileSync(
+        temporary,
+        JSON.stringify({
+          version: 1,
+          inode: stat.ino,
+          device: stat.dev,
+          size: stat.size,
+          offset: offset + complete,
+          runs: [...runs.values()],
+        }),
+      );
+      renameSync(temporary, snapshotPath);
+    })();
+    if (saved.isErr())
+      fromThrowable(() => {
+        unlinkSync(temporary);
+      })();
+  }
+  return liveRuns(runs);
+}
+
+function liveRuns(runs: Map<string, FoldedRun>) {
   for (const run of runs.values()) {
     const endedAt = run.ended_at;
     const elapsedResult =

@@ -444,15 +444,14 @@ const selectedRuns = (
 };
 
 export function list(flags: Flags): number {
-  const rows = foldedRuns();
+  const running = flags.running === true || value(flags, "running") === "true";
+  const rows = foldedRuns().filter(
+    (entry) => !running || entry.state === "running",
+  );
   const asJson = value(flags, "json") === "true" || flags.json === true;
   const all = flags.all === true || value(flags, "all") === "true";
   const selector = value(flags, "selector");
-  const startedAt = new Map(
-    events().flatMap((event) =>
-      event.kind === "started" ? [[event.id, event.at] as const] : [],
-    ),
-  );
+  const startedAt = new Map(rows.map((entry) => [entry.id, entry.started_at]));
   const selection = selectedRuns(rows, selector, startedAt);
   if (selection.error !== undefined) {
     process.stderr.write(`agx: ${selection.error}\n`);

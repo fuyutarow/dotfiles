@@ -113,6 +113,7 @@ async function main(): Promise<void> {
         flags: {
           json: { type: Boolean, description: "emit the ls JSON contract" },
           all: { type: Boolean, description: "show every run" },
+          running: { type: Boolean, description: "show only live runs" },
         },
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,

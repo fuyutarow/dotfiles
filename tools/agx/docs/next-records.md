@@ -105,3 +105,24 @@ a non-jj Git tree.
 Task names come from `mise tasks --json`. All premise commands share a five
 second total budget. A failed premise refuses `check` and `run` with exit 2,
 including the premise and at most the last three trimmed lines of command output.
+
+## Incremental run view
+
+`agx ls` and other `foldedRuns` callers cache the event fold in `records.fold.json`
+next to the log. The versioned snapshot stores the log's inode, device, observed
+size, byte offset after the last complete newline, and folded runs including PIDs.
+Readers open the log, validate the snapshot, and read only bytes after that offset.
+An incomplete last line remains unconsumed, including a split UTF-8 character.
+Missing, malformed, or incompatible snapshots, rotation, and detected truncation
+rebuild from the log. Snapshots publish by atomic rename; concurrent readers can
+publish older valid prefixes, which only increases the next replay. A snapshot
+write failure leaves the log authoritative and does not prevent listing runs.
+The log must remain append-only; rewriting an already consumed prefix in place
+without a detectable size decrease is outside this contract.
+
+Process liveness and early-quit classification are recomputed on every read.
+`agx ls --running` filters to runs whose dispatcher PID is currently live, excluding
+ended and orphaned runs. It combines with selectors, `--json`, and `--all`; the
+human limit and older-run count apply to the filtered runs. Warm reads consume
+only appended log bytes, plus any previously incomplete tail; parsing the snapshot,
+checking liveness, and emitting rows still cost proportionally to the stored runs.

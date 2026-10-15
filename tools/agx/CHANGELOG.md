@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.9.0 — 2026-10-15
+
+- Persist an atomic run-fold snapshot and replay only appended record bytes; add agx ls --running with read-time process liveness.
+
 ## 4.8.0 — 2026-10-15
 
 - Constrain routing by measured task capabilities and timeout, and mask rows after early no-work quits.

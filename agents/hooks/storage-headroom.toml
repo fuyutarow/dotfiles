@@ -33,7 +33,8 @@ rate_yellow_minutes = 120
 [drive.guest]
 label = "guest /"
 path = "/"
-deny_gib = 40
+# 2026-10-15, owner ruling on r99: "閾値は 40でハンク 6GiBにして" — guest deny at 6 GiB, as on host.
+deny_gib = 6
 deny_pct = 10
 rate_red_minutes = 30
 rate_yellow_minutes = 120

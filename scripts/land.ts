@@ -470,6 +470,39 @@ function pushLandCommit(
   });
 }
 
+function followMainCheckout(
+  root: string,
+): ResultAsync<{ conflictPaths: string[]; live: boolean }, Error> {
+  return safeTry(async function* () {
+    // Other workspaces share the jj store and may have advanced its operation while
+    // land was committing or pushing. Refresh this workspace before rebasing it.
+    yield* jj(root, ["workspace", "update-stale"]);
+    yield* jj(root, ["rebase", "-r", "@", "-o", "alpha"]);
+    if ((yield* at(root, "@", "conflict")) !== "false") {
+      const conflicts = yield* jj(root, ["resolve", "--list", "-r", "@"]);
+      const conflictPaths = conflicts
+        .split("\n")
+        .map((line) => line.replace(/\s+\d+-sided conflict$/u, "").trim())
+        .filter((line) => line !== "");
+      return ok({ conflictPaths, live: false });
+    }
+    const [parent, alpha] = yield* ResultAsync.combine([
+      at(root, "@-"),
+      at(root, "alpha"),
+    ]);
+    if (parent !== alpha)
+      return reject(
+        `main checkout parent ${parent} does not follow alpha ${alpha}`,
+      );
+    yield* run(
+      root,
+      [process.env.LAND_MISE ?? "mise", "run", "hook:post-merge"],
+      landEnvironment(root),
+    );
+    return ok({ conflictPaths: [], live: true });
+  });
+}
+
 function parseWorkspaceList(
   output: string,
   root: string,
@@ -1063,12 +1096,21 @@ async function main(
           alpha,
           commit ?? "alpha",
         );
+        stage = "main checkout";
+        const mainFollow = yield* followMainCheckout(mainRoot);
+        if (mainFollow.live) {
+          emit("[land] main checkout: ok follows alpha");
+        } else {
+          emit(
+            `[land] main checkout: NOT LIVE rebase conflicted on ${JSON.stringify(mainFollow.conflictPaths)}`,
+          );
+        }
         const liveness = landLiveness(
           changed,
           deployChanges.changedBinMaps,
           deployChanges.changedEnvironmentDropins,
         );
-        report.live = liveness.live;
+        report.live = mainFollow.live && liveness.live;
         if (!liveness.live)
           emit(
             `[land] NOT LIVE until: mise run deploy (changed: ${liveness.deployPaths.join(", ")})`,

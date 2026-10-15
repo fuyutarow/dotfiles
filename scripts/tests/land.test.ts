@@ -418,7 +418,7 @@ describe("land workspace", () => {
       ]),
     ).toContain("tools/fixture-bin/src/main.ts");
     expect(result.stdout.toString()).not.toContain("[land] NOT LIVE until:");
-    expect(result.stdout.toString()).toContain("[land] summary: ok");
+    expect(result.stdout.toString()).toContain("[land] summary: LIVE");
   });
 
   test("usehooks changes check consumers before commit and refuse hook errors", () => {
@@ -935,7 +935,7 @@ describe("land workspace", () => {
       "worker version",
     );
     expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "keep content\n",
+      "worker version\n",
     );
     expect(existsSync(f.worker)).toBe(false);
   });
@@ -1018,7 +1018,9 @@ describe("land workspace", () => {
       ]);
       expect(f.log().filter((event) => event[0] === "ssh")).toEqual([]);
       expect(result.stdout.toString()).not.toContain("hosts=");
-      expect(result.stdout.toString()).toMatch(/summary: ok commit=[0-9a-f]+/u);
+      expect(result.stdout.toString()).toMatch(
+        /summary: LIVE commit=[0-9a-f]+/u,
+      );
     },
     LAND_FORMATTER_TEST_TIMEOUT_MS,
   );
@@ -1028,11 +1030,14 @@ describe("land workspace", () => {
     rmSync(join(f.worker, "delete.txt"));
     const result = f.land();
     expect(result.exitCode).toBe(0);
-    expect(readFileSync(join(f.main, "delete.txt"), "utf8")).toBe(
-      "delete content\n",
-    );
+    expect(existsSync(join(f.main, "delete.txt"))).toBe(false);
     expect(f.jj(f.main, ["file", "list", "-r", "alpha"])).not.toContain(
       "delete.txt",
+    );
+    expect(
+      f.jj(f.main, ["log", "--no-graph", "-r", "@-", "-T", "commit_id"]),
+    ).toBe(
+      f.jj(f.main, ["log", "--no-graph", "-r", "alpha", "-T", "commit_id"]),
     );
   });
 
@@ -1098,19 +1103,57 @@ describe("land workspace", () => {
     );
   });
 
-  test("dirty main overlap is preserved while the worker lands independently", () => {
+  test("land rebases main onto alpha, keeps its uncommitted edit, and runs post-merge once", () => {
     const f = fixture();
-    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    writeFileSync(join(f.main, "keep.txt"), "main version\n");
+    writeFileSync(join(f.worker, "landed.txt"), "worker version\n");
+    writeFileSync(join(f.main, "keep.txt"), "uncommitted main edit\n");
     const result = f.land();
     expect(result.exitCode).toBe(0);
-    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
+    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "landed.txt"])).toBe(
       "worker version",
     );
     expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "main version\n",
+      "uncommitted main edit\n",
     );
-    expect(result.stdout.toString()).toContain("[land] push: ok");
+    expect(
+      f.jj(f.main, ["log", "--no-graph", "-r", "@-", "-T", "commit_id"]),
+    ).toBe(
+      f.jj(f.main, ["log", "--no-graph", "-r", "alpha", "-T", "commit_id"]),
+    );
+    expect(
+      f.log().filter((event) => event[1] === "hook:post-merge"),
+    ).toHaveLength(1);
+    expect(result.stdout.toString()).toContain("[land] summary: LIVE");
+  });
+
+  test("main rebase conflict reports NOT LIVE with paths while alpha stays landed", () => {
+    const f = fixture();
+    const alphaBefore = f.jj(f.main, [
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha",
+      "-T",
+      "commit_id",
+    ]);
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    writeFileSync(join(f.main, "keep.txt"), "uncommitted main version\n");
+    const result = f.land();
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toContain(
+      '[land] main checkout: NOT LIVE rebase conflicted on ["keep.txt"]',
+    );
+    expect(result.stdout.toString()).toContain("[land] summary: NOT LIVE");
+    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
+      "worker version",
+    );
+    expect(
+      f.jj(f.main, ["log", "--no-graph", "-r", "alpha", "-T", "commit_id"]),
+    ).not.toBe(alphaBefore);
+    expect(
+      f.log().filter((event) => event[1] === "hook:post-merge"),
+    ).toHaveLength(0);
   });
 
   test("LAND-OWN-TREE refuses its dirty tree with exact paths before rebase", () => {

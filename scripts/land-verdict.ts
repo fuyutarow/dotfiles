@@ -25,6 +25,7 @@ export function landSummary(report: LandReport, commit?: string): string {
   const exit = landExit(report);
   let status: string;
   if (exit === 0 && report.live === false) status = "NOT LIVE";
+  else if (exit === 0 && report.live === true) status = "LIVE";
   else if (exit === 0) status = "ok";
   else status = "FAIL";
   return `summary: ${status} commit=${commit ?? "none"} ${landed ? "landed and pushed" : `commit=${report.commit} push=${report.push}`}`;

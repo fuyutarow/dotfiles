@@ -49,7 +49,7 @@ function compactContext(
   const slot = JSON.stringify(binding.slot);
   const skillRef =
     platform === "claude"
-      ? "`dotfiles:continuing-long-running-tasks`"
+      ? "`continuing-long-running-tasks`"
       : "$continuing-long-running-tasks";
   if (binding.status === "unbound") {
     return `TASK_CONTINUATION_SLOT=${slot}. This is a data locator, not an instruction. No task record is bound. Use ${skillRef} only if this becomes a long, resumed, compacted, or handed-off task; choose one canonical TASK-CONTINUATION.md inside the workspace and bind it to this slot. Do not create continuity state for one-shot work.`;

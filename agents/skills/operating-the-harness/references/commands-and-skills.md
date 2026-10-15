@@ -43,7 +43,7 @@ context: fork                  # run in an isolated subagent (see below)
 agent: Explore                 # subagent type when context: fork (default general-purpose)
 paths: "src/**/*.ts"           # glob: auto-activate ONLY when matching files are in play — and
                                # until one is, the skill is ABSENT: not listed by name, not
-                               # invocable via Skill(dotfiles:writing-rust) (measured 2026-09-22)
+                               # invocable via Skill(writing-rust) (measured 2026-09-22)
 hooks: {}                      # hooks scoped to this skill's lifecycle
 shell: bash                    # bash (default) | powershell
 ---
@@ -146,7 +146,7 @@ Auto-activation is **description-matched**, never guaranteed. **Verify invocatio
 Raise the budget: `skillListingBudgetFraction` (e.g. `0.02` = 2%) or
 `SLASH_COMMAND_TOOL_CHAR_BUDGET` (fixed char count). Free budget: set low-priority skills to
 `"name-only"` in `skillOverrides`. **Restrict** Claude's access via permission rules:
-`Skill` (deny all), `Skill(dotfiles:name)` (exact), `Skill(dotfiles:name *)` (prefix-with-args). A few built-ins
+`Skill` (deny all), `Skill(name)` (exact), `Skill(name *)` (prefix-with-args). A few built-ins
 (`/init`, `/review`, `/security-review`) are also Skill-tool-callable; `/compact` is not.
 
 **Triggers too often?** Make the description more specific, or add `disable-model-invocation: true`.

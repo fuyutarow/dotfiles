@@ -875,7 +875,7 @@ run = "bun scripts/vendor-skill.ts"
 
 [tasks."skills:sync"]
 dir = "{{config_root}}"
-description = "Copy in-house skills to Claude Code and Codex, uninstall the retired dotfiles plugin, then reconcile declared third-party skills"
+description = "Install bare-name in-house skill copies into ~/.claude/skills and ~/.agents/skills, then reconcile declared third-party skills"
 run = "bun scripts/skills-sync.ts"
 
 [tasks."codex:remote-control"]

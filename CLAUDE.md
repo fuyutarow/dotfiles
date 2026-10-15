@@ -72,9 +72,9 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
 3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `LINKS` in
    `scripts/config-registry.ts` (realized by `scripts/link-dots.ts`)
    (one source → one destination); agent commands and Codex guidance → `mise.toml`'s
-   `agents:link`. In-house skills are installed through `skills:sync`: Claude Code gets the
-   local `dotfiles` plugin from `.claude-plugin/marketplace.json`, and Codex gets copies via the
-   `skills` CLI. No skill directory is linked into a tool home. Third-party skills remain listed in
+   `agents:link`. In-house skills are installed as bare-name copies by `mise run skills:sync`
+   into `~/.claude/skills` and `~/.agents/skills`. No skill directory is linked into a tool home.
+   Third-party skills remain listed in
    `agents/skills.thirdparty.toml` and are installed into tool-owned global directories by
    `skills:add` / `skills:sync`. Sync removes symlinks into this checkout from skill directories
    before installing. **PATH commands are neither**: a repo CLI that
@@ -129,11 +129,15 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    `agents/claude/CLAUDE.md` — `mise run lint:one-writer` fails on both); never link a path a
    tool writes (`git config --global`, `jj config set --user`) — make it tool-owned and give the
    repo's half a read-only path; declare third-party skills in `agents/skills.thirdparty.toml` and
-   install them with `skills:add` / `skills:sync`. `skills:sync` installs Claude's `dotfiles:<name>`
-   skills and Codex's bare-name copies. Run `skills:migrate` first if a global skill target still
+   install them with `skills:add` / `skills:sync`. `skills:sync` installs bare-name copies into
+   `~/.claude/skills` and `~/.agents/skills`. Run `skills:migrate` first if a global skill target still
    resolves into another repository. A value has one home (the time zone is `zsh/timezone`).
 7. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
-8. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
+8. **Skill naming and invocation** (`agents/skills/<name>/SKILL.md`): invoke in-house skills by
+   their bare name (for example, `practicing-unix-philosophy` or `/practicing-unix-philosophy`);
+   `dotfiles:` is reserved for hook slugs such as `dotfiles:reply-language`. Skills are installed
+   as bare-name copies by `mise run skills:sync` into `~/.claude/skills` and `~/.agents/skills`.
+   Dir name **=** frontmatter `name:`, and
    skills use one consistent shape — the official-recommended **gerund** form
    `<verb-ing>-<object>` describing the activity the skill provides (`writing-julia`,
    `compiling-latex`, `running-python-tools`, `securing-remote-access`, `systematizing-knowledge`,
@@ -141,12 +145,10 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    skills must not contain the reserved words `claude`/`anthropic`. Keep tool names and trigger
    keywords in
    `description:` (3rd person, "what + when") — that field, with the name, is what the model
-   matches on. Keep `name:` bare in the skill file: Claude Code invokes in-house skills as
-   `dotfiles:<name>`; Codex invokes them by the bare name. Shared skill bodies use bare names as
-   IDs, so translate them to `dotfiles:<name>` when invoking a sibling in Claude Code. Don't mix
+   matches on. Keep `name:` bare in the skill file. Don't mix
    naming shapes across the collection (inconsistency is the documented anti-pattern). Ref:
    docs.claude.com Agent Skills → best-practices. The full CRAFT of creating/reforging skills
-   (gates, pipeline, trigger test sets, verification fleet) is the `dotfiles:forging-skills` skill —
+   (gates, pipeline, trigger test sets, verification fleet) is the `forging-skills` skill —
    read it before any skill work.
 
 ## Setup / Tasks
@@ -165,7 +167,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
   executable/mapped-file/PATH use, prints deferred links and never removes mise runtime installs
   or experiment toolchains. Bun/uv come from brew; hooks and SSH commands reach them via the quiet
   prefix PATH rule. Experiment toolchains are each repo's `mise.toml`, never dotfiles.
-  Renting/destroying: `dotfiles:renting-cloud-gpus` skill.
+  Renting/destroying: `renting-cloud-gpus` skill.
 - **Approved remote coredev target**: `coredev deploy <alias>` uses SSH to make the target host
   read its own `$DOTFILES` (or `$HOME/dotfiles`) declaration and run its selected existing `mise`
   tasks. It never falls back to local execution, clones a checkout, or transfers profiles or
@@ -198,7 +200,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 - **Agents do not run git in this repo** (2026-10-01, same as firedancer). The repo is a colocated
   jj repo (`.git` + `.jj`); `.claude/settings.json` denies `Bash(git:*)`. Operate it with jj
-  (`dotfiles:driving-jujutsu` skill). jj runs no Git hooks, so record and sync through mise:
+  (`driving-jujutsu` skill). jj runs no Git hooks, so record and sync through mise:
   `mise run commit -- -m "<msg>" [--push] -- <path>...` (stages exactly those paths, runs
   `hook:pre-commit`, `jj commit`s them, moves `alpha` to `@-`) and `mise run pull` (fetch, rebase
   onto `alpha`, then `hook:post-merge`). mise tasks may still call git internally.
@@ -224,7 +226,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
   and prints the disambiguated replacement instead of running — branches → `git switch
 [<branch>|-c <branch>]`, files → `git restore [-- <path>]`. Never suggest raw `git checkout`;
   use `git switch`/`git restore` directly. Interactive shells only (scripts/CI/hooks get the
-  real binary via `command git`). Git operations follow the `dotfiles:driving-git` skill; `git/gitconfig`
+  real binary via `command git`). Git operations follow the `driving-git` skill; `git/gitconfig`
   carries the modern defaults (rerere, updateRefs, zdiff3, histogram, autoSetupRemote …).
 - **Terminal state is repaired by WRITING a known-good state, never by querying the terminal.**
   A dropped link never delivers the remote TUI's disable sequences, so the terminal keeps

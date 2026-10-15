@@ -5,6 +5,12 @@
 /.cocoindex_code/*
 !/.cocoindex_code/settings.yml
 
+# Owner: Finder. Directory metadata is machine-local at any depth.
+**/.DS_Store
+
+# Owner: ccc MCP. Root-level runtime logs are local diagnostic output.
+/ccc_mcp_*.log
+
 # Owner: the human using this checkout. Only root-level local overrides and backup trees.
 /local/
 /backups/

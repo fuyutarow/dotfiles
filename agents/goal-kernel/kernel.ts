@@ -8,17 +8,17 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+  access,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   err,
@@ -157,6 +157,10 @@ async function caughtAsync<T>(
     error instanceof Error ? error : new Error(String(error)),
   )();
   return result;
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  return (await caughtAsync(() => access(path))).isOk();
 }
 
 // A plain object as a Record, or undefined for anything else (null, arrays, primitives). The
@@ -620,18 +624,20 @@ export async function resolveWorkspaceRoot(start: string): Promise<string> {
   const candidates = ancestors(start);
   for (const candidate of candidates) {
     // Checked in ancestor order; the nearest trusted (or, failing that, git) root wins.
-    if (await Promise.resolve(isTrustedConfig(goalKernelPaths(candidate)))) {
+    if (await isTrustedConfig(goalKernelPaths(candidate))) {
       return candidate;
     }
-    if (existsSync(join(candidate, ".git"))) return candidate;
+    if (await pathExists(join(candidate, ".git"))) return candidate;
   }
   return resolve(start);
 }
 
-function ensurePrivateDirectory(path: string): KernelResult<void> {
-  const stats = caught(() => {
-    mkdirSync(path, { recursive: true, mode: 0o700 });
-    return lstatSync(path);
+async function ensurePrivateDirectory(
+  path: string,
+): Promise<KernelResult<void>> {
+  const stats = await caughtAsync(async () => {
+    await mkdir(path, { recursive: true, mode: 0o700 });
+    return lstat(path);
   });
   if (stats.isErr()) return err(stats.error);
   if (
@@ -649,11 +655,12 @@ function ensurePrivateDirectory(path: string): KernelResult<void> {
   return ok(undefined);
 }
 
-function isTrustedConfig(paths: ReturnType<typeof goalKernelPaths>): boolean {
-  if (!existsSync(paths.state) || !existsSync(paths.config)) return false;
-  const result = caught(() => {
-    const state = lstatSync(paths.state);
-    const config = lstatSync(paths.config);
+async function isTrustedConfig(
+  paths: ReturnType<typeof goalKernelPaths>,
+): Promise<boolean> {
+  const result = await caughtAsync(async () => {
+    const state = await lstat(paths.state);
+    const config = await lstat(paths.config);
     const currentUid = process.getuid?.();
     const owned =
       currentUid === undefined ||
@@ -666,17 +673,20 @@ function isTrustedConfig(paths: ReturnType<typeof goalKernelPaths>): boolean {
       !config.isSymbolicLink() &&
       config.isFile() &&
       (config.mode & 0o077) === 0 &&
-      inside(realpathSync(paths.root), realpathSync(paths.state))
+      inside(await realpath(paths.root), await realpath(paths.state))
     );
   });
   return result.isOk() && result.value;
 }
 
-function writeJsonExclusive(path: string, value: unknown): KernelResult<void> {
-  const directory = ensurePrivateDirectory(dirname(path));
+async function writeJsonExclusive(
+  path: string,
+  value: unknown,
+): Promise<KernelResult<void>> {
+  const directory = await ensurePrivateDirectory(dirname(path));
   if (directory.isErr()) return err(directory.error);
-  const written = caught(() => {
-    writeFileSync(path, `${canonicalJson(value)}\n`, {
+  const written = await caughtAsync(async () => {
+    await writeFile(path, `${canonicalJson(value)}\n`, {
       encoding: "utf8",
       flag: "wx",
       mode: 0o600,
@@ -685,17 +695,20 @@ function writeJsonExclusive(path: string, value: unknown): KernelResult<void> {
   return written.isErr() ? err(written.error) : ok(undefined);
 }
 
-function writeJsonAtomic(path: string, value: unknown): KernelResult<void> {
-  const directory = ensurePrivateDirectory(dirname(path));
+async function writeJsonAtomic(
+  path: string,
+  value: unknown,
+): Promise<KernelResult<void>> {
+  const directory = await ensurePrivateDirectory(dirname(path));
   if (directory.isErr()) return err(directory.error);
   const temporary = join(dirname(path), `.${process.pid}-${randomUUID()}.tmp`);
-  const written = caught(() => {
-    writeFileSync(temporary, `${canonicalJson(value)}\n`, {
+  const written = await caughtAsync(async () => {
+    await writeFile(temporary, `${canonicalJson(value)}\n`, {
       encoding: "utf8",
       flag: "wx",
       mode: 0o600,
     });
-    renameSync(temporary, path);
+    await rename(temporary, path);
   });
   return written.isErr() ? err(written.error) : ok(undefined);
 }
@@ -705,7 +718,7 @@ async function withExclusiveStateLock<T>(
   purpose: string,
   operation: () => Promise<KernelResult<T>>,
 ): Promise<KernelResult<T>> {
-  const written = writeJsonExclusive(path, {
+  const written = await writeJsonExclusive(path, {
     schema_version: STATE_SCHEMA,
     purpose,
     created_at: Temporal.Now.instant().toString({
@@ -714,9 +727,8 @@ async function withExclusiveStateLock<T>(
     pid: process.pid,
   });
   if (written.isErr()) {
-    const exists = caught(() => existsSync(path));
-    if (exists.isErr()) return err(exists.error);
-    if (!exists.value) return err(written.error);
+    const exists = await caughtAsync(() => access(path));
+    if (exists.isErr()) return err(written.error);
     return err(
       new GoalKernelError(
         "GK_BUSY",
@@ -727,16 +739,17 @@ async function withExclusiveStateLock<T>(
   // Cleanup runs on either result, same as the prior try/finally. The atomic 'wx' create above
   // is unchanged.
   const operationResult = await caughtAsync(operation);
-  const removed = caught(() => {
-    unlinkSync(path);
-  });
+  const removed = await caughtAsync(() => unlink(path));
   if (removed.isErr()) return err(removed.error);
   if (operationResult.isErr()) return err(operationResult.error);
   return operationResult.value;
 }
 
-function readJson(path: string, locus: string): KernelResult<unknown> {
-  const text = caught(() => readFileSync(path, "utf8")).mapErr(
+async function readJson(
+  path: string,
+  locus: string,
+): Promise<KernelResult<unknown>> {
+  const text = (await caughtAsync(() => readFile(path, "utf8"))).mapErr(
     (error) =>
       new GoalKernelError(
         "GK_STATE",
@@ -792,15 +805,15 @@ function goalSnapshotPath(
   return join(paths.goals, goalId, `v${goalVersion}-${digest}.json`);
 }
 
-function findVersionSnapshots(
+async function findVersionSnapshots(
   paths: ReturnType<typeof goalKernelPaths>,
   goalId: string,
   goalVersion: number,
-): string[] {
+): Promise<string[]> {
   const directory = join(paths.goals, goalId);
-  if (!existsSync(directory)) return [];
+  if ((await caughtAsync(() => access(directory))).isErr()) return [];
   const prefix = `v${goalVersion}-`;
-  return readdirSync(directory)
+  return (await readdir(directory))
     .filter((name) => name.startsWith(prefix) && name.endsWith(".json"))
     .map((name) => join(directory, name));
 }
@@ -809,7 +822,7 @@ async function readGoalSnapshot(
   path: string,
   expectedDigest?: string,
 ): Promise<KernelResult<GoalContract>> {
-  const stored = readJson(path, "Goal snapshot");
+  const stored = await readJson(path, "Goal snapshot");
   if (stored.isErr()) return err(stored.error);
   const parsed = await parseGoalContract(stored.value);
   if (parsed.isErr()) return err(parsed.error);
@@ -826,10 +839,10 @@ async function readGoalSnapshot(
   return ok(contract);
 }
 
-function readActivePointer(
+async function readActivePointer(
   paths: ReturnType<typeof goalKernelPaths>,
-): KernelResult<ActiveGoal> {
-  const active = readJson(paths.active, "ACTIVE.json");
+): Promise<KernelResult<ActiveGoal>> {
+  const active = await readJson(paths.active, "ACTIVE.json");
   if (active.isErr()) return err(active.error);
   const value = asRecord(active.value);
   if (value === undefined) {
@@ -881,7 +894,7 @@ async function loadActiveGoal(
     Readonly<{ active: ActiveGoal; goal: GoalContract; snapshotPath: string }>
   >
 > {
-  const active = readActivePointer(paths);
+  const active = await readActivePointer(paths);
   if (active.isErr()) return err(active.error);
   const snapshotPath = resolveStateRelative(
     paths.state,
@@ -911,10 +924,10 @@ async function loadActiveGoal(
   });
 }
 
-function ensureConfig(
+async function ensureConfig(
   paths: ReturnType<typeof goalKernelPaths>,
-): KernelResult<void> {
-  const directory = ensurePrivateDirectory(paths.state);
+): Promise<KernelResult<void>> {
+  const directory = await ensurePrivateDirectory(paths.state);
   if (directory.isErr()) return err(directory.error);
   const expected = {
     schema_version: STATE_SCHEMA,
@@ -922,10 +935,10 @@ function ensureConfig(
     policy_version: POLICY_VERSION,
     policy_digest: POLICY_DIGEST,
   };
-  if (!existsSync(paths.config)) {
+  if ((await caughtAsync(() => access(paths.config))).isErr()) {
     return writeJsonExclusive(paths.config, expected);
   }
-  if (!isTrustedConfig(paths)) {
+  if (!(await isTrustedConfig(paths))) {
     return err(
       new GoalKernelError(
         "GK_STATE_PERMISSIONS",
@@ -933,7 +946,7 @@ function ensureConfig(
       ),
     );
   }
-  const actual = readJson(paths.config, "config.json");
+  const actual = await readJson(paths.config, "config.json");
   if (actual.isErr()) return err(actual.error);
   if (canonicalJson(actual.value) !== canonicalJson(expected)) {
     return err(
@@ -965,7 +978,7 @@ export async function activateGoal(
   const parsedContract = await parseGoalContract(input);
   if (parsedContract.isErr()) return err(parsedContract.error);
   const contract = parsedContract.value;
-  const directory = ensurePrivateDirectory(paths.state);
+  const directory = await ensurePrivateDirectory(paths.state);
   if (directory.isErr()) return err(directory.error);
   return withExclusiveStateLock(
     join(paths.state, ".activation.lock"),
@@ -979,7 +992,7 @@ export async function activateGoal(
         digest,
       );
 
-      const sameVersionResult = caught(() =>
+      const sameVersionResult = await caughtAsync(() =>
         findVersionSnapshots(paths, contract.goal_id, contract.goal_version),
       );
       if (sameVersionResult.isErr()) return err(sameVersionResult.error);
@@ -1010,9 +1023,7 @@ export async function activateGoal(
           contract.goal_version - 1,
           priorDigest,
         );
-        const priorExists = caught(() => existsSync(priorPath));
-        if (priorExists.isErr()) return err(priorExists.error);
-        if (!priorExists.value) {
+        if (!(await pathExists(priorPath))) {
           return err(
             new GoalKernelError(
               "GK_GOAL_LINEAGE",
@@ -1024,16 +1035,14 @@ export async function activateGoal(
         if (prior.isErr()) return err(prior.error);
       }
 
-      const snapshotExists = caught(() => existsSync(snapshotPath));
-      if (snapshotExists.isErr()) return err(snapshotExists.error);
-      if (snapshotExists.value) {
+      if (await pathExists(snapshotPath)) {
         const snapshot = await readGoalSnapshot(snapshotPath, digest);
         if (snapshot.isErr()) return err(snapshot.error);
       } else {
-        const written = writeJsonExclusive(snapshotPath, contract);
+        const written = await writeJsonExclusive(snapshotPath, contract);
         if (written.isErr()) return err(written.error);
       }
-      const config = ensureConfig(paths);
+      const config = await ensureConfig(paths);
       if (config.isErr()) return err(config.error);
       const activatedAt = Temporal.Now.instant().toString({
         fractionalSecondDigits: 3,
@@ -1046,7 +1055,7 @@ export async function activateGoal(
         snapshot_rel: relative(paths.state, snapshotPath),
         activated_at: activatedAt,
       };
-      const activeWrite = writeJsonAtomic(paths.active, active);
+      const activeWrite = await writeJsonAtomic(paths.active, active);
       if (activeWrite.isErr()) return err(activeWrite.error);
       return ok({
         workspace_root: paths.root,
@@ -1164,13 +1173,10 @@ export async function readRunBinding(
   const directory = runDirectory(paths, id);
   if (directory.isErr()) return err(directory.error);
   const bindingPath = join(directory.value, "binding.json");
-  const stored = await Promise.resolve(
-    readJson(bindingPath, `binding for ${id}`),
-  );
+  const stored = await readJson(bindingPath, `binding for ${id}`);
   if (stored.isErr()) return err(stored.error);
   const result = parseBinding(stored.value);
-  const outcome = await Promise.resolve(result);
-  return outcome;
+  return result;
 }
 
 export async function readBoundGoal(
@@ -1203,17 +1209,16 @@ async function ensureRunBinding(
 ): Promise<
   KernelResult<Readonly<{ binding: RunBinding; goal: GoalContract }>>
 > {
-  const config = ensureConfig(paths);
+  const config = await ensureConfig(paths);
   if (config.isErr()) return err(config.error);
   const id = runId(provider, sessionId);
   const directory = runDirectory(paths, id);
   if (directory.isErr()) return err(directory.error);
   const bindingPath = join(directory.value, "binding.json");
   const expectedSessionHash = sha256Text(sessionId);
-  const bindingExists = caught(() => existsSync(bindingPath));
-  if (bindingExists.isErr()) return err(bindingExists.error);
-  if (bindingExists.value) {
-    const stored = readJson(bindingPath, `binding for ${id}`);
+  const bindingExists = await pathExists(bindingPath);
+  if (bindingExists) {
+    const stored = await readJson(bindingPath, `binding for ${id}`);
     if (stored.isErr()) return err(stored.error);
     const parsed = parseBinding(stored.value);
     if (parsed.isErr()) return err(parsed.error);
@@ -1256,12 +1261,10 @@ async function ensureRunBinding(
     ...bindingBody,
     binding_sha256: sha256Value(bindingBody),
   };
-  const written = writeJsonExclusive(bindingPath, binding);
+  const written = await writeJsonExclusive(bindingPath, binding);
   if (written.isErr()) {
-    const exists = caught(() => existsSync(bindingPath));
-    if (exists.isErr()) return err(exists.error);
-    if (!exists.value) return err(written.error);
-    const stored = readJson(bindingPath, `binding for ${id}`);
+    if (!(await pathExists(bindingPath))) return err(written.error);
+    const stored = await readJson(bindingPath, `binding for ${id}`);
     if (stored.isErr()) return err(stored.error);
     const raced = parseBinding(stored.value);
     if (raced.isErr()) return err(raced.error);
@@ -1278,11 +1281,11 @@ function eventIdentity(): Readonly<{ id: string; at: string }> {
   return { id, at };
 }
 
-function appendRunEvent(
+async function appendRunEvent(
   workspaceRoot: string,
   binding: RunBinding,
   event: Record<string, unknown>,
-): KernelResult<RunEvent> {
+): Promise<KernelResult<RunEvent>> {
   const paths = goalKernelPaths(workspaceRoot);
   const ids = eventIdentity();
   const base: RunEventBase = {
@@ -1313,7 +1316,7 @@ function appendRunEvent(
   const directory = runDirectory(paths, binding.run_id);
   if (directory.isErr()) return err(directory.error);
   const path = join(directory.value, "events", name);
-  return writeJsonExclusive(path, value).map(() => value);
+  return (await writeJsonExclusive(path, value)).map(() => value);
 }
 
 export async function listRunEvents(
@@ -1324,11 +1327,9 @@ export async function listRunEvents(
   const run = runDirectory(paths, id);
   if (run.isErr()) return err(run.error);
   const directory = join(run.value, "events");
-  const directoryExists = caught(() => existsSync(directory));
-  if (directoryExists.isErr()) return err(directoryExists.error);
-  if (!directoryExists.value) return ok([]);
-  const namesResult = caught(() =>
-    readdirSync(directory)
+  if (!(await pathExists(directory))) return ok([]);
+  const namesResult = await caughtAsync(async () =>
+    (await readdir(directory))
       .filter((entry) => entry.endsWith(".json"))
       .toSorted(),
   );
@@ -1336,9 +1337,7 @@ export async function listRunEvents(
   const events: RunEvent[] = [];
   for (const name of namesResult.value) {
     // Read in filename order (sorted above) so event identity is deterministic.
-    const stored = await Promise.resolve(
-      readJson(join(directory, name), `event ${name}`),
-    );
+    const stored = await readJson(join(directory, name), `event ${name}`);
     if (stored.isErr()) return err(stored.error);
     const value = asRecord(stored.value);
     if (value === undefined) {
@@ -1663,8 +1662,8 @@ export async function processHookEvent(
   const cwd = typeof value.cwd === "string" ? value.cwd : process.cwd();
   const root = await resolveWorkspaceRoot(cwd);
   const paths = goalKernelPaths(root);
-  if (!isTrustedConfig(paths)) {
-    if (!existsSync(paths.config)) {
+  if (!(await isTrustedConfig(paths))) {
+    if (!(await pathExists(paths.config))) {
       return neutralHookResult(provider, providerEvent);
     }
     const reason =
@@ -1700,7 +1699,7 @@ export async function processHookEvent(
   }
   const { binding, goal } = bound.value;
 
-  const appendedAttempt = caught(() => {
+  const appendedAttempt = await caughtAsync(async () => {
     const event = hookEvent(value, providerEvent, root);
     if (event.isErr()) return err(event.error);
     return appendRunEvent(root, binding, event.value);
@@ -1745,7 +1744,14 @@ export async function processHookEvent(
 }
 
 export async function runGoalKernelHook(provider: Provider): Promise<void> {
-  const stdin = caught(() => readFileSync(0, "utf8"));
+  const stdin = await caughtAsync(async () => {
+    const chunks: Buffer[] = [];
+    const source: AsyncIterable<Buffer | string> = process.stdin;
+    for await (const chunk of source) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks).toString("utf8");
+  });
   const failure = stdin.isErr() ? errorMessage(stdin.error) : undefined;
   const parsed = stdin.isOk() ? jsonText.safeParse(stdin.value) : undefined;
   if (failure !== undefined || parsed?.success !== true) {
@@ -1837,7 +1843,7 @@ export async function readGoalStatus(
   workspaceRoot: string,
 ): Promise<KernelResult<GoalStatus>> {
   const paths = goalKernelPaths(workspaceRoot);
-  if (!existsSync(paths.config)) {
+  if (!(await pathExists(paths.config))) {
     return ok({
       workspace_root: paths.root,
       configured: false,
@@ -1846,7 +1852,7 @@ export async function readGoalStatus(
       runs: [],
     });
   }
-  if (!isTrustedConfig(paths)) {
+  if (!(await isTrustedConfig(paths))) {
     return err(
       new GoalKernelError(
         "GK_STATE_PERMISSIONS",
@@ -1854,12 +1860,11 @@ export async function readGoalStatus(
       ),
     );
   }
-  const config = ensureConfig(paths);
+  const config = await ensureConfig(paths);
   if (config.isErr()) return err(config.error);
   const active = await loadActiveGoal(paths);
   if (active.isErr()) return err(active.error);
-  const runsExist = caught(() => existsSync(paths.runs));
-  if (runsExist.isErr()) return err(runsExist.error);
+  const runsExist = await pathExists(paths.runs);
   let runs: readonly Readonly<{
     run_id: string;
     provider: Provider;
@@ -1868,9 +1873,9 @@ export async function readGoalStatus(
     goal_digest: string;
     bound_at: string;
   }>[] = [];
-  if (runsExist.value) {
-    const names = caught(() =>
-      readdirSync(paths.runs).filter((name) => RUN_ID_RE.test(name)),
+  if (runsExist) {
+    const names = await caughtAsync(async () =>
+      (await readdir(paths.runs)).filter((name) => RUN_ID_RE.test(name)),
     );
     if (names.isErr()) return err(names.error);
     const bindingResults = await Promise.all(
@@ -1915,11 +1920,11 @@ export function transcriptLocator(
   return undefined;
 }
 
-export function assertReadableRegularFile(
+export async function assertReadableRegularFile(
   path: string,
   maxBytes: number,
-): KernelResult<void> {
-  const stats = caught(() => statSync(path));
+): Promise<KernelResult<void>> {
+  const stats = await caughtAsync(() => stat(path));
   if (stats.isErr()) return err(stats.error);
   if (!stats.value.isFile()) {
     return err(

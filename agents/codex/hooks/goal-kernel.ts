@@ -1,5 +1,4 @@
 /** codex protocol adapter; semantics remain in agents/goal-kernel. */
-import { readFileSync } from "node:fs";
 import { jsonText } from "../../hooks/zod.ts";
 import { processHookEvent } from "../../goal-kernel/kernel.ts";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
@@ -7,7 +6,14 @@ import { hookJson, hookStderr } from "./lib.ts";
 import { parseJson } from "../../hooks/narrow.ts";
 
 async function main(): Promise<void> {
-  const input = await attempt(() => readFileSync(0, "utf8"));
+  const input = await attempt(async () => {
+    const chunks: Buffer[] = [];
+    const source: AsyncIterable<Buffer | string> = process.stdin;
+    for await (const chunk of source) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks).toString("utf8");
+  });
   const parsed = input.ok ? jsonText.safeParse(input.value) : undefined;
   if (!input.ok || parsed?.success !== true) {
     const reason = input.ok

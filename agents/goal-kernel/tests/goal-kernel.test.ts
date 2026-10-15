@@ -1,14 +1,14 @@
-import { describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import { spawn } from "node:child_process";
 import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Result } from "neverthrow";
@@ -23,6 +23,9 @@ import {
 } from "../kernel.ts";
 import { buildPostmortem } from "../postmortem.ts";
 import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
+
+// Tests that spawn real hook and CLI processes exceed bun's 5s default on a loaded host.
+setDefaultTimeout(60_000);
 
 // Every parsed value enters the test as `unknown` (decoded by the repo's zod codec) and is read
 // through a schema (or compared whole with toEqual / toMatchObject).
@@ -49,10 +52,47 @@ const PostmortemOutputSchema = z.object({
   report: z.object({ decisions: z.array(z.unknown()) }),
 });
 
-function workspace(): string {
-  const root = mkdtempSync(join(tmpdir(), "goal-kernel-"));
-  mkdirSync(join(root, ".git"));
+async function workspace(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "goal-kernel-"));
+  await mkdir(join(root, ".git"));
   return root;
+}
+
+async function runProcess(
+  command: string,
+  args: readonly string[],
+  options: Readonly<{
+    input?: string;
+    encoding?: string;
+    env?: NodeJS.ProcessEnv;
+    cwd?: string;
+  }> = {},
+): Promise<
+  Readonly<{ status: number | null; stdout: string; stderr: string }>
+> {
+  const child = spawn(command, [...args], {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdout.push(chunk);
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr.push(chunk);
+  });
+  if (options.input !== undefined) child.stdin.end(options.input);
+  else child.stdin.end();
+  const status = await new Promise<number | null>((resolve) => {
+    child.once("close", resolve);
+  });
+  return {
+    status,
+    stdout: Buffer.concat(stdout).toString("utf8"),
+    stderr: Buffer.concat(stderr).toString("utf8"),
+  };
 }
 
 function requiredRunId(result: Readonly<{ run_id?: string }>): string {
@@ -124,14 +164,14 @@ function hookPayload(
 
 describe("immutable Goal authority", () => {
   test("activation snapshots an exact version and rejects an ambiguous rewrite", async () => {
-    const root = workspace();
+    const root = await workspace();
     const original = { ...goal() };
     const first = await activateGoal(root, original);
 
     original.north_star = "mutated source object";
     const snapshot = decoded(
       SnapshotSchema,
-      jsonValue(readFileSync(first.snapshot_path, "utf8")),
+      jsonValue(await readFile(first.snapshot_path, "utf8")),
     );
     expect(snapshot.north_star).toContain("run id reconstructs");
     expect(snapshot.north_star).not.toContain("mutated");
@@ -148,7 +188,7 @@ describe("immutable Goal authority", () => {
   });
 
   test("a run keeps its bound version when the active pointer changes", async () => {
-    const root = workspace();
+    const root = await workspace();
     const v1 = await activateGoal(root, goal());
     const v2Contract = goal({
       goal_version: 2,
@@ -184,15 +224,15 @@ describe("immutable Goal authority", () => {
   });
 
   test("an activation lock interlocks concurrent writers instead of racing the version check", async () => {
-    const root = workspace();
+    const root = await workspace();
     const state = goalKernelPaths(root).state;
-    mkdirSync(state, { recursive: true, mode: 0o700 });
+    await mkdir(state, { recursive: true, mode: 0o700 });
     const lock = join(state, ".activation.lock");
-    writeFileSync(lock, "{}\n", { mode: 0o600 });
+    await writeFile(lock, "{}\n", { mode: 0o600 });
     const busy = await activateGoalResult(root, goal());
     expect(busy.isErr()).toBe(true);
     expect(busy._unsafeUnwrapErr().message).toContain("GK_BUSY");
-    unlinkSync(lock);
+    await unlink(lock);
     expect((await activateGoal(root, goal())).goal_version).toBe(1);
   });
 });
@@ -203,7 +243,7 @@ describe("hook enforcement and privacy", () => {
     async (provider) => {
       const result = await processHookEvent(
         provider,
-        hookPayload(workspace(), "unconfigured", "PreToolUse", {
+        hookPayload(await workspace(), "unconfigured", "PreToolUse", {
           tool_name: "Bash",
           tool_use_id: "tool-1",
           tool_input: { command: "touch x" },
@@ -218,11 +258,11 @@ describe("hook enforcement and privacy", () => {
     async (event) => {
       const unconfigured = await processHookEvent(
         "codex",
-        hookPayload(workspace(), "codex-neutral", event),
+        hookPayload(await workspace(), "codex-neutral", event),
       );
       expect(jsonValue(unconfigured.stdout)).toEqual({});
 
-      const root = workspace();
+      const root = await workspace();
       await activateGoal(root, goal());
       const configured = await processHookEvent(
         "codex",
@@ -233,10 +273,10 @@ describe("hook enforcement and privacy", () => {
   );
 
   test("a configured parent does not govern an unconfigured nested git workspace", async () => {
-    const parent = workspace();
+    const parent = await workspace();
     await activateGoal(parent, goal());
     const nested = join(parent, "nested");
-    mkdirSync(join(nested, ".git"), { recursive: true });
+    await mkdir(join(nested, ".git"), { recursive: true });
     const result = await processHookEvent(
       "codex",
       hookPayload(nested, "nested-session", "PreToolUse", {
@@ -249,17 +289,17 @@ describe("hook enforcement and privacy", () => {
   });
 
   test("a checkout-style world-readable config cannot inject Goal context", async () => {
-    const trusted = workspace();
+    const trusted = await workspace();
     await activateGoal(trusted, goal());
-    const target = workspace();
+    const target = await workspace();
     const targetState = goalKernelPaths(target).state;
-    mkdirSync(targetState, { recursive: true });
-    writeFileSync(
+    await mkdir(targetState, { recursive: true });
+    await writeFile(
       goalKernelPaths(target).config,
-      readFileSync(goalKernelPaths(trusted).config, "utf8"),
+      await readFile(goalKernelPaths(trusted).config, "utf8"),
     );
-    chmodSync(targetState, 0o755);
-    chmodSync(goalKernelPaths(target).config, 0o644);
+    await chmod(targetState, 0o755);
+    await chmod(goalKernelPaths(target).config, 0o644);
     const result = await processHookEvent(
       "claude",
       hookPayload(target, "untrusted-config", "SessionStart", {
@@ -288,9 +328,9 @@ describe("hook enforcement and privacy", () => {
   test.each(["claude", "codex"] as const)(
     "%s denies tools when configured authority is missing",
     async (provider) => {
-      const root = workspace();
+      const root = await workspace();
       await activateGoal(root, goal());
-      unlinkSync(goalKernelPaths(root).active);
+      await unlink(goalKernelPaths(root).active);
       const result = await processHookEvent(
         provider,
         hookPayload(root, `${provider}-broken`, "PreToolUse", {
@@ -309,7 +349,7 @@ describe("hook enforcement and privacy", () => {
   );
 
   test("the ledger hashes prompts, tool inputs, and responses without copying them", async () => {
-    const root = workspace();
+    const root = await workspace();
     await activateGoal(root, goal());
     const secret = "super-secret-value";
     const prompt = await processHookEvent(
@@ -359,7 +399,7 @@ describe("hook enforcement and privacy", () => {
   });
 
   test("post-hoc event edits fail content-digest verification", async () => {
-    const root = workspace();
+    const root = await workspace();
     await activateGoal(root, goal());
     const start = await processHookEvent(
       "claude",
@@ -370,15 +410,15 @@ describe("hook enforcement and privacy", () => {
       requiredRunId(start),
       "events",
     );
-    const eventName = readdirSync(eventsDir)[0];
+    const eventName = (await readdir(eventsDir))[0];
     expect(eventName).toBeDefined();
     const eventPath = join(eventsDir, eventName ?? "");
     const event = decoded(
       StoredEventSchema,
-      jsonValue(readFileSync(eventPath, "utf8")),
+      jsonValue(await readFile(eventPath, "utf8")),
     );
     event.event_type = "tampered";
-    writeFileSync(eventPath, `${JSON.stringify(event)}\n`);
+    await writeFile(eventPath, `${JSON.stringify(event)}\n`);
     const tampered = await listRunEventsResult(root, requiredRunId(start));
     expect(tampered.isErr()).toBe(true);
     expect(tampered._unsafeUnwrapErr().message).toContain("digest mismatch");
@@ -387,10 +427,10 @@ describe("hook enforcement and privacy", () => {
 
 describe("decision lineage and postmortem reconstruction", () => {
   test("one run id joins Goal, decisions, tool outcome, and a redacted Claude transcript", async () => {
-    const root = workspace();
+    const root = await workspace();
     await activateGoal(root, goal());
     const transcript = join(root, "claude-transcript.jsonl");
-    writeFileSync(
+    await writeFile(
       transcript,
       `${[
         {
@@ -490,7 +530,7 @@ describe("decision lineage and postmortem reconstruction", () => {
   });
 
   test("decision recording is serialized and a duplicate id cannot be appended", async () => {
-    const root = workspace();
+    const root = await workspace();
     await activateGoal(root, goal());
     const start = await processHookEvent(
       "claude",
@@ -510,11 +550,11 @@ describe("decision lineage and postmortem reconstruction", () => {
       },
     };
     const lock = join(goalKernelPaths(root).runs, runId, ".decision.lock");
-    writeFileSync(lock, "{}\n", { mode: 0o600 });
+    await writeFile(lock, "{}\n", { mode: 0o600 });
     const busy = await recordRunDecisionResult(root, runId, decision);
     expect(busy.isErr()).toBe(true);
     expect(busy._unsafeUnwrapErr().message).toContain("GK_BUSY");
-    unlinkSync(lock);
+    await unlink(lock);
 
     await recordRunDecision(root, runId, decision);
     const duplicate = await recordRunDecisionResult(root, runId, decision);
@@ -528,10 +568,10 @@ describe("decision lineage and postmortem reconstruction", () => {
   });
 
   test("Codex response_item messages are readable without chat copy/paste", async () => {
-    const root = workspace();
+    const root = await workspace();
     await activateGoal(root, goal());
     const transcript = join(root, "codex-transcript.jsonl");
-    writeFileSync(
+    await writeFile(
       transcript,
       `${[
         {
@@ -597,9 +637,9 @@ describe("real protocol adapters", () => {
   ] as const)(
     "%s emits provider-compatible SessionStart JSON",
     async (provider, hook) => {
-      const root = workspace();
+      const root = await workspace();
       await activateGoal(root, goal());
-      const result = spawnSync(process.execPath, [hook], {
+      const result = await runProcess(process.execPath, [hook], {
         input: JSON.stringify(
           hookPayload(root, `${provider}-adapter`, "SessionStart", {
             source: "startup",
@@ -618,11 +658,11 @@ describe("real protocol adapters", () => {
 
   test.each(["Stop", "SubagentStop"])(
     "the Codex adapter emits valid neutral JSON for %s",
-    (event) => {
+    async (event) => {
       const hook = join(import.meta.dir, "../../codex/hooks/goal-kernel.ts");
-      const result = spawnSync(process.execPath, [hook], {
+      const result = await runProcess(process.execPath, [hook], {
         input: JSON.stringify(
-          hookPayload(workspace(), "codex-adapter-neutral", event),
+          hookPayload(await workspace(), "codex-adapter-neutral", event),
         ),
         encoding: "utf8",
       });
@@ -637,7 +677,7 @@ describe("real protocol adapters", () => {
   ] as const)(
     "%s runner blocks enforcement but not observation when Bun is unavailable",
     async (provider, runner) => {
-      const root = workspace();
+      const root = await workspace();
       await activateGoal(root, goal());
       const payload = JSON.stringify(
         hookPayload(root, `${provider}-runner`, "PreToolUse", {
@@ -647,7 +687,7 @@ describe("real protocol adapters", () => {
         }),
       );
       const missingRuntime = join(root, "missing-bun");
-      const enforce = spawnSync("/bin/sh", [runner, "--enforce"], {
+      const enforce = await runProcess("/bin/sh", [runner, "--enforce"], {
         input: payload,
         encoding: "utf8",
         env: { ...process.env, GOAL_KERNEL_BUN: missingRuntime },
@@ -656,7 +696,7 @@ describe("real protocol adapters", () => {
       expect(enforce.status).toBe(2);
       expect(enforce.stderr).toContain("Bun runtime required");
 
-      const observe = spawnSync("/bin/sh", [runner], {
+      const observe = await runProcess("/bin/sh", [runner], {
         input: payload,
         encoding: "utf8",
         env: { ...process.env, GOAL_KERNEL_BUN: missingRuntime },
@@ -666,7 +706,7 @@ describe("real protocol adapters", () => {
       expect(observe.stderr).toContain("event was not observed");
       expect(jsonValue(observe.stdout)).toEqual({});
 
-      const available = spawnSync("/bin/sh", [runner, "--enforce"], {
+      const available = await runProcess("/bin/sh", [runner, "--enforce"], {
         input: payload,
         encoding: "utf8",
         env: { ...process.env, GOAL_KERNEL_BUN: process.execPath },
@@ -683,14 +723,14 @@ describe("real protocol adapters", () => {
   ] as const)(
     "%s no-Bun runner silently passes unconfigured and nested Git workspaces",
     async (provider, runner) => {
-      const parent = workspace();
+      const parent = await workspace();
       await activateGoal(parent, goal());
       const nested = join(parent, "nested");
-      mkdirSync(join(nested, ".git"), { recursive: true });
-      const roots = [workspace(), nested];
+      await mkdir(join(nested, ".git"), { recursive: true });
+      const roots = [await workspace(), nested];
 
       for (const root of roots) {
-        const result = spawnSync("/bin/sh", [runner, "--enforce"], {
+        const result = await runProcess("/bin/sh", [runner, "--enforce"], {
           input: JSON.stringify(
             hookPayload(root, `${provider}-unconfigured`, "PreToolUse", {
               tool_name: "Bash",
@@ -715,10 +755,8 @@ describe("real protocol adapters", () => {
 
 describe("Cleye command boundary", () => {
   const cli = join(import.meta.dir, "..", "cli.ts");
-  const run = (args: string[]) => {
-    const result = spawnSync(process.execPath, [cli, ...args], {
-      encoding: "utf8",
-    });
+  const run = async (args: string[]) => {
+    const result = await runProcess(process.execPath, [cli, ...args]);
     return {
       code: result.status,
       stdout: result.stdout ?? "",
@@ -726,47 +764,53 @@ describe("Cleye command boundary", () => {
     };
   };
 
-  test("framework help, strict flags, and the prototype guard keep distinct exits", () => {
-    expect(run(["--help"]).code).toBe(0);
-    const unknown = run(["status", "--unknown"]);
+  test("framework help, strict flags, and the prototype guard keep distinct exits", async () => {
+    expect((await run(["--help"])).code).toBe(0);
+    const unknown = await run(["status", "--unknown"]);
     expect(unknown.code).toBe(1);
     expect(unknown.stderr).toContain("Unknown flag");
-    const prototype = run(["status", "--__proto__"]);
+    const prototype = await run(["status", "--__proto__"]);
     expect(prototype.code).toBe(2);
     expect(prototype.stderr).toContain("FATAL: unknown option '--__proto__'");
   });
 
-  test("activate is non-interactive, machine-legible, and rejects excess positionals", () => {
-    const root = workspace();
+  test("activate is non-interactive, machine-legible, and rejects excess positionals", async () => {
+    const root = await workspace();
     const contract = join(root, "goal.json");
-    writeFileSync(contract, `${JSON.stringify(goal())}\n`);
-    const activated = run(["activate", contract, "--root", root, "--json"]);
+    await writeFile(contract, `${JSON.stringify(goal())}\n`);
+    const activated = await run([
+      "activate",
+      contract,
+      "--root",
+      root,
+      "--json",
+    ]);
     expect(activated.code).toBe(0);
     expect(jsonValue(activated.stdout)).toMatchObject({
       ok: true,
       command: "activate",
       goal_id: "harness-postmortem",
     });
-    const status = run(["status", "--root", root, "--json"]);
+    const status = await run(["status", "--root", root, "--json"]);
     expect(status.code).toBe(0);
     expect(
       decoded(StatusOutputSchema, jsonValue(status.stdout)).active.goal
         .goal_version,
     ).toBe(1);
 
-    const extra = run([
+    const extra = await run([
       "activate",
       contract,
       "unexpected",
       "--root",
-      workspace(),
+      await workspace(),
     ]);
     expect(extra.code).toBe(2);
     expect(extra.stderr).toContain("unexpected argument 'unexpected'");
   });
 
   test("decide and postmortem join one run through the public CLI", async () => {
-    const root = workspace();
+    const root = await workspace();
     await activateGoal(root, goal());
     const start = await processHookEvent(
       "codex",
@@ -776,7 +820,7 @@ describe("Cleye command boundary", () => {
     );
     const runId = requiredRunId(start);
     const decisionPath = join(root, "decision.json");
-    writeFileSync(
+    await writeFile(
       decisionPath,
       `${JSON.stringify({
         schema_version: 1,
@@ -792,7 +836,7 @@ describe("Cleye command boundary", () => {
       })}\n`,
     );
 
-    const decided = run([
+    const decided = await run([
       "decide",
       runId,
       decisionPath,
@@ -807,7 +851,13 @@ describe("Cleye command boundary", () => {
       event: { decision: { decision_id: "D-002" } },
     });
 
-    const postmortem = run(["postmortem", runId, "--root", root, "--json"]);
+    const postmortem = await run([
+      "postmortem",
+      runId,
+      "--root",
+      root,
+      "--json",
+    ]);
     expect(postmortem.code).toBe(0);
     expect(jsonValue(postmortem.stdout)).toMatchObject({
       ok: true,

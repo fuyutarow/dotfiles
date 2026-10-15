@@ -1,9 +1,9 @@
 /** Read-only postmortem reconstruction from one Goal Kernel run id. */
 
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { access, readFile, realpath } from "node:fs/promises";
 import { errorMessage } from "../hooks/attempt.ts";
 import { jsonText } from "../hooks/zod.ts";
-import { err, fromThrowable, ok, Result } from "neverthrow";
+import { err, fromAsyncThrowable, ok, Result } from "neverthrow";
 import {
   asRecord,
   assertReadableRegularFile,
@@ -315,8 +315,14 @@ function transcriptFormat(
   return "unknown-jsonl";
 }
 
-function parseTranscript(path: string): Result<TranscriptReadout, Error> {
-  if (!existsSync(path)) {
+async function parseTranscript(
+  path: string,
+): Promise<Result<TranscriptReadout, Error>> {
+  const exists = await fromAsyncThrowable(
+    () => access(path),
+    (error) => (error instanceof Error ? error : new Error(String(error))),
+  )();
+  if (exists.isErr()) {
     return ok({
       available: false,
       path,
@@ -328,8 +334,8 @@ function parseTranscript(path: string): Result<TranscriptReadout, Error> {
       finding: "GK_TRANSCRIPT_MISSING",
     });
   }
-  const opened = fromThrowable(
-    () => realpathSync(path),
+  const opened = await fromAsyncThrowable(
+    () => realpath(path),
     (error) => (error instanceof Error ? error : new Error(String(error))),
   )();
   if (opened.isErr()) {
@@ -345,7 +351,10 @@ function parseTranscript(path: string): Result<TranscriptReadout, Error> {
     });
   }
   const realPath = opened.value;
-  const readable = assertReadableRegularFile(realPath, MAX_TRANSCRIPT_BYTES);
+  const readable = await assertReadableRegularFile(
+    realPath,
+    MAX_TRANSCRIPT_BYTES,
+  );
   if (readable.isErr()) {
     return ok({
       available: false,
@@ -359,8 +368,8 @@ function parseTranscript(path: string): Result<TranscriptReadout, Error> {
     });
   }
 
-  const source = fromThrowable(
-    () => readFileSync(realPath, "utf8"),
+  const source = await fromAsyncThrowable(
+    () => readFile(realPath, "utf8"),
     (error) => (error instanceof Error ? error : new Error(String(error))),
   )();
   if (source.isErr()) return err(source.error);
@@ -426,9 +435,9 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-function readTranscript(
+async function readTranscript(
   locator: string | undefined,
-): Result<TranscriptReadout, Error> {
+): Promise<Result<TranscriptReadout, Error>> {
   if (locator !== undefined) return parseTranscript(locator);
   return ok({
     available: false,
@@ -618,7 +627,7 @@ export async function buildPostmortem(
 
   let transcript: TranscriptReadout | undefined;
   if (options.include_transcript === true) {
-    const transcriptResult = readTranscript(transcriptLocator(events));
+    const transcriptResult = await readTranscript(transcriptLocator(events));
     if (transcriptResult.isErr()) return err(transcriptResult.error);
     transcript = transcriptResult.value;
     if (transcript.finding !== undefined) findings.push(transcript.finding);

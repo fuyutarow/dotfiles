@@ -22,6 +22,7 @@ import { jsonOf, z } from "../agents/hooks/zod.ts";
 //                  declared settings merged into each plugin's data.json. Local plugins are
 //                  pinned by this repository commit.
 // Run via `mise run mac:obsidian` (wired into `mise run mac:init`). Consumer: human, verdict lines.
+// `--vault <dir>` applies only to that directory and initializes .obsidian/ when writing.
 //
 // WHY MERGE, NOT SYMLINK. Obsidian rewrites .obsidian/*.json whenever a setting is touched in its
 // UI, and the vaults live on Google Drive — a symlink would be replaced by a real file on the first
@@ -482,6 +483,11 @@ async function main(): Promise<Result<void, string>> {
           "Merge obsidian/app.json and install obsidian/plugins.json into every registered Obsidian vault.",
       },
       flags: {
+        vault: {
+          type: String,
+          description:
+            "apply only to this vault directory (create .obsidian if needed)",
+        },
         check: {
           type: Boolean,
           default: false,
@@ -509,7 +515,10 @@ async function main(): Promise<Result<void, string>> {
   const validPlugins = plugins.flatMap(([id, plugin]) =>
     plugin.isOk() ? [[id, plugin.value] as const] : [],
   );
-  const paths = await vaultPaths();
+  const paths =
+    parsed.flags.vault === undefined
+      ? await vaultPaths()
+      : ok([realpathSync(parsed.flags.vault)]);
   if (paths.isErr()) return err(paths.error);
   if (paths.value.length === 0) {
     process.stdout.write(`skip: no Obsidian vault registry at ${REGISTRY}\n`);
@@ -519,6 +528,8 @@ async function main(): Promise<Result<void, string>> {
   let drift = 0;
   for (const vault of paths.value) {
     const dir = join(vault, ".obsidian");
+    if (parsed.flags.vault !== undefined && !parsed.flags.check)
+      mkdirSync(dir, { recursive: true });
     if (!existsSync(dir)) {
       process.stdout.write(`SKIP  ${vault} (no .obsidian/)\n`);
       continue;

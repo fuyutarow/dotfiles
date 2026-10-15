@@ -5,7 +5,8 @@
 # `o` / `oo` live in zsh/aliases.zsh (smart-open); `open` stays macOS's own.
 alias start='open -a'    # launch a macOS app by name
 
-# Open the registered Obsidian vault containing the requested path. Resolve symlinks first so
+# Open the registered Obsidian vault containing the requested path, or register a new directory.
+# Resolve symlinks first so
 # aliases such as ~/Personal-Drive match the path Obsidian stores in its vault registry.
 obs() {
   emulate -L zsh
@@ -60,8 +61,8 @@ obs() {
   fi
 
   if [[ -z $best_id ]]; then
-    print -u2 -- "obs: $target is not an Obsidian vault — open it once via Obsidian → Open folder as vault"
-    return 1
+    command bun "${DOTFILES:-$HOME/dotfiles}/obsidian/open-vault.ts" -- "$resolved"
+    return $?
   fi
 
   local uri encoded

@@ -1,11 +1,17 @@
 #!/usr/bin/env bun
-import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { cli } from "cleye";
 import { jsonText, z } from "../../../hooks/zod.ts";
 
 const BudgetSchema = z.object({ maxListingChars: z.unknown() });
+
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -154,7 +160,7 @@ function countLongProseSentences(bodyLines: string[]): number {
  */
 async function reportReferenceProse(directory: string): Promise<void> {
   const dir = join(directory, "references");
-  if (!existsSync(dir)) return;
+  if (!(await exists(dir))) return;
   let total = 0;
   let worstFile = "";
   let worstCount = 0;
@@ -235,7 +241,7 @@ function countLongTableCells(bodyLines: string[]): number {
 async function checkDirectory(input: string): Promise<void> {
   const directory = input.replace(/\/$/u, "");
   const skillPath = join(directory, "SKILL.md");
-  if (!existsSync(skillPath)) {
+  if (!(await exists(skillPath))) {
     fail(directory, "SKILL.md missing");
     return;
   }
@@ -296,7 +302,7 @@ async function checkDirectory(input: string): Promise<void> {
 
   const body = lines.slice(metadata.bodyStart).join("\n");
   const referencesDirectory = join(directory, "references");
-  if (existsSync(referencesDirectory)) {
+  if (await exists(referencesDirectory)) {
     (await readdir(referencesDirectory))
       .filter((entry) => entry.endsWith(".md") && !body.includes(entry))
       .forEach((entry) => {
@@ -312,7 +318,10 @@ async function checkDirectory(input: string): Promise<void> {
       join(referencesDirectory, reference),
       join(referencesDirectory, `${reference}.md`),
     ];
-    if (!candidates.some((candidate) => existsSync(candidate)))
+    const existingCandidates = await Promise.all(
+      candidates.map((candidate) => exists(candidate)),
+    );
+    if (!existingCandidates.some(Boolean))
       fail(
         directory,
         `frontmatter references '${reference}' has no file (references/${reference}.md missing)`,
@@ -376,7 +385,7 @@ async function reportListingBudget(
     `LISTING ${listingCost.length} skills, ${total} name+description chars (static proxy)\n`,
   );
   if (budgetPath === undefined) return;
-  if (!existsSync(budgetPath)) {
+  if (!(await exists(budgetPath))) {
     process.stdout.write(`FAIL listing budget: ${budgetPath} does not exist\n`);
     failures += 1;
     return;

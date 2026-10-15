@@ -1,5 +1,7 @@
 # statusline
 
+Part of the [tools/ architecture](../spec/architecture.md) (report: invariant I-R3).
+
 Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.15.1.
 `agents/claude/settings.json` declares `statusLine.command` as `~/.bun/bin/statusline`, this package's `bin`
 (root `package.json` `bin`, installed by `bun link` / `mise run deps`). The former Claude implementation

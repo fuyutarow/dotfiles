@@ -1,5 +1,7 @@
 # detect-japanese
 
+Part of the [tools/ architecture](../spec/architecture.md).
+
 `detect-japanese` reads one reply from standard input and writes one JSON object. Its exit status
 is `0` for `japanese-primary`, `1` for `non-japanese`, and `2` for `insufficient` (including no
 human prose or input above the 64 KiB bound). Evidence reports counts only; input text is never

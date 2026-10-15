@@ -1,5 +1,7 @@
 # tools/repo-retrieve — `rr` (= `repo-retrieve`)
 
+Part of the [tools/ architecture](../spec/architecture.md).
+
 The search router. The caller says WHAT it is looking for; the router picks the engine. In an
 operational ccc repo the `enforce-search-route` hook denies raw search and points here.
 

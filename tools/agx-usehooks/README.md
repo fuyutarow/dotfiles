@@ -1,5 +1,7 @@
 # agx-usehooks
 
+Part of the [tools/ architecture](../spec/architecture.md).
+
 “usehooks” names React-style `useXX` selectors: the IF side of an agent hook.
 Projects own the THEN side and write their actions in TypeScript.
 

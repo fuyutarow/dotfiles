@@ -1,5 +1,7 @@
 # agx scope and ownership
 
+This table is the agx part of the [tools/ architecture](../../spec/architecture.md), which owns the whole pipeline, its invariants and their checks.
+
 ## 1. agx does
 
 agx has four jobs:

@@ -1,5 +1,7 @@
 # storage-headroom
 
+Part of the [tools/ architecture](../spec/architecture.md) (measure and guard: invariants I-R6 to I-R8).
+
 Read-only view of the shared storage thresholds and current filesystem headroom.
 
 ```text

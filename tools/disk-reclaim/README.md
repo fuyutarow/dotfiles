@@ -1,5 +1,7 @@
 # disk-reclaim
 
+Part of the [tools/ architecture](../spec/architecture.md) (the mechanism the capacity recover part composes: invariants I-R1 to I-R5).
+
 Plan configured reclamation as one JSONL record per candidate. `apply` reads those records from
 stdin, revalidates each fingerprint and target safety, then acts only on selected safe records.
 The CLI registers fourteen reclaim targets. The no-argument invocation renders the same plan

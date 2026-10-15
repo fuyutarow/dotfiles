@@ -1,5 +1,7 @@
 # Agent resource control
 
+Part of the [tools/ architecture](../spec/architecture.md) (admit: invariant I15).
+
 `tools/agent-resource-run/` implements the machine floor; it does not own policy. The sole schema and
 GPU-first argument live in
 `agents/skills/orchestrating-agents/references/measurement-and-resources.md` P7.

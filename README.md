@@ -122,6 +122,10 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 └── mise.toml    # the task runner (no justfile)
 ```
 
+The architecture of `tools/` (the dispatch pipeline, the capacity domain, the oracle rule, and for
+every invariant the check that enforces it or the ticket that will add one) lives in
+[`tools/spec/architecture.md`](tools/spec/architecture.md); each tool README links to it.
+
 Each tool change records its release intent in a generated `tools/<name>/.changes/<slug>.md`
 file. Run `mise run changeset -- <tool> <patch|minor|major> "<entry>"`; do not hand-write the file. Tickets do not edit
 `package.json` versions or `CHANGELOG.md`. At land, `scripts/land.ts` applies the highest pending

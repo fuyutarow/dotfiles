@@ -1,0 +1,6 @@
+# Every `bun test` process owns its TMPDIR: tools/shared/src/test-tmp.ts creates it under one
+# per-run parent in the system temp directory and removes it at exit, so a test (or a helper that
+# calls mkdtemp(join(tmpdir(), …)) and never cleans up) leaves nothing in /tmp. lint-tmp-leaks.ts
+# proves it in the gate.
+[test]
+preload = ["./tools/shared/src/test-tmp.ts"]

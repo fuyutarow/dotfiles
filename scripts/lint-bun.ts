@@ -1,13 +1,14 @@
 // Production Bun script floor: selected jj snapshot bytes, or local production-surface scan.
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   jjCandidate,
   jjChanged,
   jjContext,
   jjExport,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
+import { lintTmpLeaks } from "./lint-tmp-leaks.ts";
 
 const PATTERNS = [
   "scripts/*.ts",
@@ -49,7 +50,20 @@ function check(paths: string[]): number {
   );
 }
 
+// TESTS-OWN-TMP rides on this task because `lint` and `gate:land` already run it: the Bun-script
+// floor is where a test-support script's temp-dir discipline is judged (scripts/lint-tmp-leaks.ts).
+function tmpLeaks(): number {
+  const problems = lintTmpLeaks(resolve(import.meta.dir, ".."));
+  for (const problem of problems) process.stderr.write(`FAIL: ${problem}\n`);
+  return problems.length === 0 ? 0 : 1;
+}
+
 async function main(): Promise<number> {
+  const leaks = tmpLeaks();
+  return Math.max(leaks, await floor());
+}
+
+async function floor(): Promise<number> {
   const context = jjContext();
   if (context === undefined) {
     // A local verification run has no pre-commit candidate snapshot. Scan the declared production

@@ -432,6 +432,16 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
+    sources: ["bunfig.toml"],
+    deployed: "the checkout",
+    consumer:
+      "every `bun test` run from the repo root (preload tools/shared/src/test-tmp.ts: per-process TMPDIR)",
+    writer: "human, in the repo",
+    verify: "mise run lint:bun (scripts/lint-tmp-leaks.ts)",
+  },
+  {
+    kind: "in-place",
+    when: "all",
     sources: ["agents/retros/register.toml"],
     deployed: "the checkout",
     consumer: "mise run retros:check · mise run retros:recur",

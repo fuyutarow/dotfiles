@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0 — 2026-10-15
+
+- Add the bun test preload that gives every test process its own TMPDIR under one per-run parent, removed at the end of the run and swept by the next run after a kill.
+
 ## 0.7.0 — 2026-10-14
 
 - Own shared Bash syntax parsing and hook path resolution, including shell-safe quoting.

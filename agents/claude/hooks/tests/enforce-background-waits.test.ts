@@ -87,7 +87,7 @@ describe("as a hook", () => {
 
 describe("small-file viewer history exemption", () => {
   test("compound reads inside a temporary repo remain subject to history from subdirectories", () => {
-    const root = realpathSync(mkdtempSync("/tmp/coordinator-repo-"));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "coordinator-repo-")));
     const sub = join(root, "src");
     mkdirSync(sub);
     mkdirSync(join(root, ".cocoindex_code"));
@@ -102,7 +102,9 @@ describe("small-file viewer history exemption", () => {
   });
 
   test("coordinator variables, home paths and compound reads ignore slow history; other commands retain it", () => {
-    const root = realpathSync(mkdtempSync("/tmp/coordinator-reads-"));
+    const root = realpathSync(
+      mkdtempSync(join(tmpdir(), "coordinator-reads-")),
+    );
     const home = join(root, "home");
     const scratch = join(root, "scratchpad");
     const receipts = join(home, ".local/state/agx/worker-receipts");

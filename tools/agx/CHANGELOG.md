@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.8.0 — 2026-10-15
+
+- Constrain routing by measured task capabilities and timeout, and mask rows after early no-work quits.
+
 ## 4.7.0 — 2026-10-14
 
 - Add run-id/prefix and exact ticket selectors to `agx ls`; ticket selections are ordered oldest first so the newest run is last.

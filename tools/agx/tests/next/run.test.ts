@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { createTempTracker } from "../temp.ts";
+import { earlyQuitRows } from "../../src/next/run.ts";
+import { foldedRuns } from "../../src/next/store.ts";
 
 const tempDirs = createTempTracker();
 const registerTempDir = tempDirs.register;
@@ -18,10 +20,13 @@ afterAll(tempDirs.assertRemoved);
 
 const servers: ReturnType<typeof Bun.spawn>[] = [];
 const roots: string[] = [];
+const priorNextStateDir = process.env.AGX_NEXT_STATE_DIR;
 afterEach(() => {
   for (const server of servers.splice(0)) server.kill();
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
+  if (priorNextStateDir === undefined) delete process.env.AGX_NEXT_STATE_DIR;
+  else process.env.AGX_NEXT_STATE_DIR = priorNextStateDir;
 });
 const scratch = (prefix: string): string => {
   const root = registerTempDir(
@@ -32,6 +37,89 @@ const scratch = (prefix: string): string => {
 };
 
 describe("agx-next run", () => {
+  test("a sub-two-minute zero-change exit without RETURN fails its lineage", () => {
+    const root = scratch("early-quit-");
+    const state = join(root, "state");
+    mkdirSync(state, { recursive: true });
+    process.env.AGX_NEXT_STATE_DIR = state;
+    const started = "2026-10-14T01:00:00.000Z";
+    const records = [
+      {
+        kind: "started",
+        id: "early",
+        at: started,
+        ticket: "th_purge",
+        writes: [],
+        cwd: root,
+        workspace: root,
+        row: "sol-low",
+        dispatcher_session: null,
+        vendor_session: null,
+        pid: 0,
+      },
+      {
+        kind: "ended",
+        id: "early",
+        at: "2026-10-14T01:01:15.000Z",
+        exit: 0,
+        report_path: null,
+        vendor_session: null,
+        verify: [],
+        returned: false,
+        changed_files: 0,
+      },
+    ];
+    writeFileSync(
+      join(state, "records.jsonl"),
+      `${records.map((event) => JSON.stringify(event)).join("\n")}\n`,
+    );
+    expect(foldedRuns()[0]?.failed_early_quit).toBe(true);
+  });
+
+  test("legacy early quits are read only for the matching ticket lineage", () => {
+    const root = scratch("legacy-early-quit-");
+    const state = join(root, "state");
+    mkdirSync(state, { recursive: true });
+    process.env.AGX_NEXT_STATE_DIR = state;
+    const reportPath = join(root, "historical-report.json");
+    writeFileSync(
+      reportPath,
+      JSON.stringify({ summary: "stopped without work", changes: [] }),
+    );
+    const records = [
+      {
+        kind: "started",
+        id: "legacy-early",
+        at: "2026-10-14T01:00:00.000Z",
+        ticket: "th_purge",
+        writes: [],
+        cwd: root,
+        workspace: root,
+        row: "luna-medium",
+        dispatcher_session: null,
+        vendor_session: null,
+        pid: 0,
+      },
+      {
+        kind: "ended",
+        id: "legacy-early",
+        at: "2026-10-14T01:01:15.000Z",
+        exit: 0,
+        report_path: reportPath,
+        vendor_session: null,
+        verify: [],
+      },
+    ];
+    writeFileSync(
+      join(state, "records.jsonl"),
+      `${records.map((event) => JSON.stringify(event)).join("\n")}\n`,
+    );
+
+    expect(foldedRuns()[0]?.failed_early_quit).toBe(false);
+    expect(earlyQuitRows("th_purge", root)).toEqual(["luna-medium"]);
+    expect(earlyQuitRows("other-ticket", root)).toEqual([]);
+  });
+
   test("routes through Jev, starts a worker, and records its report", async () => {
     const root = scratch("next-run-");
     const state = join(root, "state");
@@ -59,7 +147,7 @@ describe("agx-next run", () => {
     }
     writeFileSync(
       ticket,
-      `+++\nschema = 2\nname = "fake"\nwrites = ["src/**"]\noutcome = "run fake worker"\nconsumer = "legacy consumer field"\nfirst_return = "legacy return field"\nread_only_diagnostic = true\ntimeout_reason = "legacy reason"\nverify = []\ncapabilities = ["long-tool-loop"]\n[proposition]\nid = "T1"\nclaim = "fake worker runs"\nrefuted_by = "worker does not run"\ndecides = "infrastructure"\nserves = ["coordination-throughput"]\ngraph_node = "legacy-node"\n+++\nRESOURCE-CLASS(NONCOMPUTE): test fixture\nDo the test.\n`,
+      `+++\nschema = 2\nname = "fake"\nwrites = ["src/**"]\noutcome = "run fake worker"\nconsumer = "legacy consumer field"\nfirst_return = "legacy return field"\nread_only_diagnostic = true\ntimeout_reason = "legacy reason"\nverify = []\ncapabilities = ["routine-check"]\n[proposition]\nid = "T1"\nclaim = "fake worker runs"\nrefuted_by = "worker does not run"\ndecides = "infrastructure"\nserves = ["coordination-throughput"]\ngraph_node = "legacy-node"\n+++\nRESOURCE-CLASS(NONCOMPUTE): test fixture\nDo the test.\n`,
     );
     const interim = JSON.stringify({
       interim: true,
@@ -337,10 +425,13 @@ describe("agx-next run", () => {
         "cwd",
         "dispatcher_session",
         "exit",
+        "failed_early_quit",
         "id",
         "judgment",
         "last_progress_path",
         "report_path",
+        "returned",
+        "changed_files",
         "row",
         "state",
         "ticket",

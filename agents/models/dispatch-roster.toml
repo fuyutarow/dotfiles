@@ -22,6 +22,9 @@ as_of = "2026-10-08"
 default = "luna-high"
 
 # AUTO PICK — Jev sees each row's use, measured numbers, cost multiple and graded record.
+# Hard routing contract: terminal-agentic and long-tool-loop require TB4 >= 30.0; timeout_s is
+# passed as a task-size class. Bulk-classification remains a task descriptor evaluated against
+# each eligible row's use_for, not a lexical row match that can override the long-session floor.
 [auto]
 max_task_chars = 6000
 timeout_ms = 20000

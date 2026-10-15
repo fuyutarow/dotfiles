@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { checkPremises } from "../premises.ts";
 import { verifyLine } from "../ticket.ts";
@@ -67,6 +68,49 @@ const persistInterim = (id: string, path: string, message: string): void => {
   writeFileSync(path, progressText);
   append({ kind: "progress", id, at: now(), path });
 };
+
+const LegacyReport = z.looseObject({
+  summary: z.string().optional(),
+  changes: z.array(z.unknown()).optional(),
+});
+
+export function earlyQuitRows(ticket: string, cwd: string): string[] {
+  return foldedRuns()
+    .filter((priorRun) => priorRun.ticket === ticket && priorRun.cwd === cwd)
+    .flatMap((priorRun) => {
+      if (priorRun.failed_early_quit) return [priorRun.row];
+      const endedAt = priorRun.ended_at;
+      const reportPath = priorRun.report_path;
+      if (
+        priorRun.state !== "ended" ||
+        priorRun.exit !== 0 ||
+        priorRun.returned !== undefined ||
+        priorRun.changed_files !== undefined ||
+        endedAt === null ||
+        reportPath === null
+      )
+        return [];
+      const duration = fromThrowable(
+        () =>
+          Temporal.Instant.from(endedAt)
+            .since(Temporal.Instant.from(priorRun.started_at))
+            .total({ unit: "seconds" }),
+        (error) => error,
+      )();
+      if (!duration.isOk() || duration.value >= 120) return [];
+      const text = fromThrowable(
+        () => readFileSync(reportPath, "utf8"),
+        (error) => error,
+      )();
+      if (!text.isOk()) return [];
+      const report = jsonOf(LegacyReport).safeParse(text.value);
+      if (!report.success) return [];
+      const returned = report.data.summary?.includes("agx-return") ?? false;
+      return !returned && report.data.changes?.length === 0
+        ? [priorRun.row]
+        : [];
+    });
+}
 
 const lastLines = (output: string, count: number): string => {
   const lines = output.split(/\r?\n/u);
@@ -154,7 +198,13 @@ export async function run(flags: Flags): Promise<number> {
     return fatal(`run ${previous.id} has no vendor session to continue`, 2);
   const resumeSession = previous?.vendor_session ?? undefined;
   const routeTask = `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`;
-  const row = await route(routeTask, ticket.capabilities);
+  const maskedRows = earlyQuitRows(ticket.name ?? basename(path), cwd);
+  const row = await route(
+    routeTask,
+    ticket.capabilities,
+    ticket.timeout_s ?? 600,
+    maskedRows,
+  );
   const id = randomUUID();
   const runDir = join(stateDir(), "runs", id);
   mkdirSync(runDir, { recursive: true });
@@ -343,6 +393,10 @@ export async function run(flags: Flags): Promise<number> {
     report_path: reportPath,
     vendor_session: vendorSession,
     verify,
+    returned: /```agx-return\s*\n/u.test(
+      workerReceipt.last_message ?? receiptLine,
+    ),
+    changed_files: Array.isArray(report.changes) ? report.changes.length : 0,
   });
   process.stdout.write(
     `${JSON.stringify({ id, ticket: ticket.name ?? basename(path), row: row.id, exit, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,

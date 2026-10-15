@@ -55,6 +55,8 @@ const EventSchema = z.discriminatedUnion("kind", [
         }),
       )
       .default([]),
+    returned: z.boolean().optional(),
+    changed_files: z.number().int().nonnegative().optional(),
     legacy_key: z.string().optional(),
   }),
   z.looseObject({
@@ -398,6 +400,9 @@ export function foldedRuns() {
       continues: string | null;
       vendor_session: string | null;
       pid: number;
+      failed_early_quit: boolean;
+      returned: boolean | undefined;
+      changed_files: number | undefined;
     }
   >();
   for (const event of events()) {
@@ -421,6 +426,9 @@ export function foldedRuns() {
         continues: event.continues ?? null,
         vendor_session: event.vendor_session,
         pid: event.pid,
+        failed_early_quit: false,
+        returned: undefined,
+        changed_files: undefined,
       });
     const run = runs.get(event.id);
     if (run === undefined) continue;
@@ -431,6 +439,8 @@ export function foldedRuns() {
       run.exit = event.exit;
       run.report_path = event.report_path;
       run.verify = event.verify;
+      run.returned = event.returned;
+      run.changed_files = event.changed_files;
       run.vendor_session = event.vendor_session;
     }
     if (event.kind !== "judged") continue;
@@ -439,6 +449,25 @@ export function foldedRuns() {
       run.judgment = { decision, note: event.note };
   }
   for (const run of runs.values()) {
+    const endedAt = run.ended_at;
+    const elapsedResult =
+      endedAt === null
+        ? undefined
+        : fromThrowable(
+            () =>
+              Temporal.Instant.from(endedAt)
+                .since(Temporal.Instant.from(run.started_at))
+                .total({ unit: "seconds" }),
+            (error) => error,
+          )();
+    const elapsed =
+      elapsedResult?.isOk() === true ? elapsedResult.value : Infinity;
+    run.failed_early_quit =
+      run.state === "ended" &&
+      run.exit === 0 &&
+      elapsed < 120 &&
+      run.returned === false &&
+      run.changed_files === 0;
     if (run.state !== "ended") {
       const alive = fromThrowable(
         () => process.kill(run.pid, 0),

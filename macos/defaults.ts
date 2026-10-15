@@ -97,6 +97,19 @@ const SETTINGS: Setting[] = [
     value: ["-bool", true],
     why: "Maccy paste on select",
   },
+  // Pins stay reachable by their ⇧⌘ shortcuts; Preferences stays on ⌘,.
+  {
+    domain: "org.p0deje.Maccy",
+    key: "pinTo",
+    value: ["-string", "bottom"],
+    why: "Maccy pins below history",
+  },
+  {
+    domain: "org.p0deje.Maccy",
+    key: "showFooter",
+    value: ["-bool", false],
+    why: "Maccy hide footer rows",
+  },
 ];
 
 // Apps that cache these settings at launch.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.0 — 2026-10-16
+
+- usehooks:consumers typechecks each consumer against alpha's agx-usehooks and the workspace's and fails only on diagnostics the workspace adds; a consumer already broken on alpha is PRE-EXISTING with its error count, and an untouched tools/agx-usehooks tree is SKIP
+
 ## 0.10.0 — 2026-10-12
 
 - Export zod-validated `launcherRunsToday(ctx, { project })`, `minutesSinceLastResult(ctx, { project })`, and `gpuUtil(ctx)` facts. Launcher counts and result age read bounded tails of agx's `runs.jsonl` ledger and its dated archives; project attribution uses each receipt's `cwd`. GPU utilization reuses `gpu(ctx)` and yields `null` when unavailable.

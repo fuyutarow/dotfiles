@@ -7,6 +7,7 @@ import type { CodexRate } from "./codex-rate.ts";
 import type { JevUsage } from "./jev-usage.ts";
 import type { Admitted } from "./jobs.ts";
 import type { JobRun, RouteScan } from "./dispatch-runs.ts";
+import type { RecoverHealth } from "./recover-health.ts";
 
 // Every value this file can show, already computed — the sole output of buildDataframe() and
 // sole input to render(). No ANSI codes, no row grouping, no ordering: a value here says
@@ -53,6 +54,7 @@ export interface Dataframe {
   // Current-session runs from agx ls; optional for render-only fixtures using the legacy row source.
   jobRuns?: JobRun[] | undefined;
   dispatchWarning?: string | undefined; // codex-share warning for this host, see dispatch-warning.ts
+  recoverHealth?: RecoverHealth | undefined;
   // Host readings are Results, not optionals: "could not be taken" carries its reason, and
   // render() prints it. See the EXPLICIT-ABSENCE law below.
   // undefined: this host has no discrete VRAM at all (see vramGated) — silence, not n/a.

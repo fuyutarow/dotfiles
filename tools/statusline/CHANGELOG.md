@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.4 — 2026-10-16
+
+- Show failed recover services and flag stalled reclaim runs
+
 ## 0.15.3 — 2026-10-15
 
 - Publish the statusline's existing Claude and Codex quota readings for agx routing

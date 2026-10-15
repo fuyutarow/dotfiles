@@ -27,6 +27,7 @@ import {
   checkGoogleDrive,
   checkGitRefLocks,
   checkRipGraveyard,
+  checkRecoverHealth,
   checkTmpfsCapacity,
   checkWslGpuManagerPath,
   type Ctx,
@@ -180,6 +181,92 @@ describe("doctor", () => {
       (await checkTmpfsCapacity({ ...ctx, isWsl: false }, tmpfsStats(0n)))
         .verdict,
     ).toBe("SKIP");
+  });
+
+  test("recover health names a failed unit and its journal line, while HOLD passes", async () => {
+    const fatalLine =
+      "2026-10-15T15:57:15+09:00 R99 bun[17]: FATAL: Error: TMPFS_RECLAIM_PERCENT must be an integer from 1 to 84";
+    const calls: string[][] = [];
+    const ctx: Ctx = {
+      home: tmp("doctor-recover-health-home-"),
+      dotfiles: REPO,
+      isMac: false,
+      isWsl: true,
+      isCoreBox: false,
+    };
+    const failed = await checkRecoverHealth(ctx, (cmd) => {
+      calls.push(cmd);
+      if (cmd[0] === "systemctl")
+        return Promise.resolve({
+          code: 0,
+          out: "loaded\n",
+          err: "",
+          timedOut: false,
+          missing: false,
+        });
+      return Promise.resolve({
+        code: 0,
+        out: `2026-10-15T15:57:00+09:00 R99 systemd[1]: Starting wsl-capacity-recover.service...\n${fatalLine}`,
+        err: "",
+        timedOut: false,
+        missing: false,
+      });
+    });
+    expect(failed.verdict).toBe("FAIL");
+    expect(failed.detail).toContain("wsl-capacity-recover.service");
+    expect(failed.lines).toContain(fatalLine);
+    expect(calls).toHaveLength(1);
+
+    const healthy = await checkRecoverHealth(ctx, (cmd) => {
+      let out =
+        "2026-10-15T15:58:15+09:00 R99 bun[17]: TMPFS HOLD inodes=799028/1048576 (76.2%) bytes=18.5GiB/27.5GiB (67.3%) threshold=80%";
+      if (cmd[0] === "systemctl") {
+        if (cmd.includes("guest-capacity-recover.service")) out = "not-found\n";
+        else out = "loaded\n";
+      }
+      return Promise.resolve({
+        code: 0,
+        out,
+        err: "",
+        timedOut: false,
+        missing: false,
+      });
+    });
+    expect(healthy.verdict).toBe("PASS");
+  });
+
+  test("recover health checks the optional guest unit after a healthy WSL run", async () => {
+    const guestLine =
+      "2026-10-15T20:37:00+09:00 R99 bun[17]: TMPFS_RECLAIM exit=143 timeout=true reclaimed_inodes=0 reclaimed_bytes=0.0GiB";
+    const queried: string[] = [];
+    const ctx: Ctx = {
+      home: tmp("doctor-guest-recover-health-home-"),
+      dotfiles: REPO,
+      isMac: false,
+      isWsl: true,
+      isCoreBox: false,
+    };
+    const finding = await checkRecoverHealth(ctx, (cmd) => {
+      const unit = cmd.find((arg) => arg.startsWith("--unit="))?.slice(7);
+      if (unit !== undefined) queried.push(unit);
+      return Promise.resolve({
+        code: 0,
+        out:
+          unit === "guest-capacity-recover.service"
+            ? `2026-10-15T20:36:00+09:00 R99 systemd[1]: Starting ${unit}...\n${guestLine}`
+            : `2026-10-15T20:35:00+09:00 R99 systemd[1]: Starting ${unit}...\n2026-10-15T20:35:10+09:00 R99 bun[17]: TMPFS HOLD threshold=80%`,
+        err: "",
+        timedOut: false,
+        missing: false,
+      });
+    });
+    expect(queried).toEqual([
+      "wsl-capacity-recover.service",
+      "guest-capacity-recover.service",
+    ]);
+    expect(finding.verdict).toBe("FAIL");
+    expect(finding.detail).toContain("guest-capacity-recover.service");
+    expect(finding.lines).toContain(guestLine);
   });
 
   test("skills fails when in-house copies are missing", () => {

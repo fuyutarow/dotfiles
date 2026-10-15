@@ -6,6 +6,7 @@ import { rateRow } from "./rate-limits.ts";
 import { admittedJobSegment } from "./jobs.ts";
 import { routeLines } from "./dispatch-runs.ts";
 import { sysRow } from "./host-load.ts";
+import { recoverHealthBadge } from "./recover-health.ts";
 
 const SEP = ` ${DIM}|${RST} `;
 const BR = "⎇";
@@ -155,6 +156,9 @@ export function render(
   }
   if (df.dispatchWarning !== undefined)
     runLines.push(`${ESC}[38;5;178m${df.dispatchWarning}${RST}`);
+  const recoverBadge = recoverHealthBadge(df.recoverHealth);
+  if (recoverBadge !== undefined)
+    runLines.push(`${ESC}[38;5;167m${recoverBadge}${RST}`);
 
   return [
     joinText(line1, repoLine),

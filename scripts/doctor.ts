@@ -98,6 +98,10 @@ import {
   RIP_GRAVEYARD_MAX_BYTES,
 } from "../tools/disk-reclaim/src/lib/graveyards.ts";
 import { TMPFS_RECLAIM_PERCENT, tmpfsUsage } from "./wsl-capacity-recover.ts";
+import {
+  RECOVER_UNITS,
+  recoverJournalFailure,
+} from "../tools/statusline/src/recover-health.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP" | "INFO";
 export type Finding = {
@@ -1031,6 +1035,85 @@ export async function checkTmpfsCapacity(
     : pass("tmpfs-capacity", detail);
 }
 
+export async function checkRecoverHealth(
+  _ctx: Ctx,
+  probe: typeof run = run,
+): Promise<Finding> {
+  const installed: string[] = [];
+  for (const unit of RECOVER_UNITS) {
+    const finding = await checkRecoverUnit(unit, probe);
+    if (finding.verdict === "SKIP") continue;
+    installed.push(unit);
+    if (finding.verdict !== "PASS") return finding;
+  }
+  return installed.length === 0
+    ? skip("recover-health", "no recover service is installed")
+    : pass("recover-health", `last run healthy: ${installed.join(", ")}`);
+}
+
+async function checkRecoverUnit(
+  unit: string,
+  probe: typeof run,
+): Promise<Finding> {
+  const journal = await probe(
+    [
+      "journalctl",
+      "--user",
+      `--unit=${unit}`,
+      "-n",
+      "120",
+      "--no-pager",
+      "--output=short-iso-precise",
+    ],
+    { ms: 5_000 },
+  );
+  if (journal.missing)
+    return warn("recover-health", "journalctl is not on PATH");
+  if (journal.timedOut)
+    return warn("recover-health", `journalctl ${unit} timed out`);
+  if (journal.code !== 0) {
+    const error = journal.err.trim();
+    return warn(
+      "recover-health",
+      error !== "" ? error : `journalctl ${unit} exited ${journal.code}`,
+    );
+  }
+  if (journal.out.trim() === "") return checkEmptyRecoverJournal(unit, probe);
+  const failure = recoverJournalFailure(unit, journal.out, {
+    thresholdPercent: TMPFS_RECLAIM_PERCENT,
+  });
+  if (failure !== undefined)
+    return fail(
+      "recover-health",
+      `${unit}: ${failure.reason}`,
+      `journalctl --user -u ${unit} -n 120 --no-pager`,
+      [failure.line],
+    );
+  return pass("recover-health", `last run healthy: ${unit}`);
+}
+
+async function checkEmptyRecoverJournal(
+  unit: string,
+  probe: typeof run,
+): Promise<Finding> {
+  const loaded = await probe(
+    ["systemctl", "--user", "show", unit, "--property=LoadState", "--value"],
+    { ms: 5_000 },
+  );
+  if (loaded.code === 0 && loaded.out.trim() !== "loaded")
+    return skip("recover-health", `${unit} is not installed`);
+  if (loaded.missing) return warn("recover-health", "systemctl is not on PATH");
+  if (loaded.timedOut)
+    return warn("recover-health", `systemctl show ${unit} timed out`);
+  const error = loaded.err.trim();
+  return warn(
+    "recover-health",
+    error !== ""
+      ? error
+      : `no journal entries and installation state for ${unit} is unknown`,
+  );
+}
+
 export function checkWslGpuManagerPath(path: string | undefined): Finding {
   const name = "wsl-gpu-path";
   if (path?.split(":").includes("/usr/lib/wsl/lib") === true)
@@ -1712,6 +1795,11 @@ export const CHECKS: Check[] = [
   {
     name: "capacity-guard",
     run: checkCapacityGuard,
+    applies: (c) => (c.isWsl ? null : "WSL only"),
+  },
+  {
+    name: "recover-health",
+    run: checkRecoverHealth,
     applies: (c) => (c.isWsl ? null : "WSL only"),
   },
   {

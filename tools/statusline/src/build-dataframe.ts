@@ -26,6 +26,10 @@ import { diskReadingsAsync } from "./storage.ts";
 import type { DiskReading } from "./storage.ts";
 import { readCodexRate } from "./codex-rate.ts";
 import { readJevUsage } from "./jev-usage.ts";
+import {
+  readRecoverHealthAsync,
+  type RecoverHealth,
+} from "./recover-health.ts";
 import { cachedSource } from "./render-cache.ts";
 import { z } from "./zod.ts";
 
@@ -65,6 +69,7 @@ type Sources = {
   ) => Promise<void>;
   codexRate: () => ReturnType<typeof readCodexRate>;
   jevUsage: () => ReturnType<typeof readJevUsage>;
+  recoverHealth: () => Promise<RecoverHealth | undefined>;
 };
 export interface BuildDataframeOptions {
   sources?: Partial<Sources>;
@@ -84,6 +89,7 @@ const BUDGETS_MS: Record<keyof Sources, number> = {
   herdrReport: 200,
   codexRate: 1000,
   jevUsage: 1000,
+  recoverHealth: 1000,
 };
 type Outcome<T> = { ok: true; value: T } | { ok: false; why: string };
 async function runBounded<T>(
@@ -236,6 +242,7 @@ const DEFAULT_SOURCES: Sources = {
   herdrReport: reportToHerdr,
   codexRate: readCodexRate,
   jevUsage: () => readJevUsage(),
+  recoverHealth: readRecoverHealthAsync,
 };
 
 // --- buildDataframe: stdin -> every displayable value, already computed. No ANSI, no rows. ---
@@ -290,6 +297,7 @@ export async function buildDataframe(
     storageResult,
     codexRateResult,
     jevUsageResult,
+    recoverHealthResult,
   ] = await Promise.allSettled([
     runBounded(
       "account",
@@ -323,6 +331,11 @@ export async function buildDataframe(
     runBounded("storage", budget("storage"), sources.storage),
     runBounded("codex rate", budget("codexRate"), sources.codexRate),
     runBounded("Jev usage", budget("jevUsage"), sources.jevUsage),
+    runBounded(
+      "recover health",
+      budget("recoverHealth"),
+      sources.recoverHealth,
+    ),
   ]);
   const identity = settled(
     identityResult,
@@ -368,6 +381,11 @@ export async function buildDataframe(
     jevUsageResult,
     err("Jev usage unavailable"),
     "Jev usage",
+  );
+  const recoverHealth = settled(
+    recoverHealthResult,
+    undefined,
+    "recover health",
   );
   const identityWhy = identity.why;
   const nameResultValue = name.value;
@@ -433,6 +451,7 @@ export async function buildDataframe(
     routes: routes.why === undefined ? routes.value : err(routes.why),
     dispatchWarning:
       warning.why === undefined ? warning.value : "dispatch warning …",
+    recoverHealth: recoverHealth.value,
     vram,
     disks,
     cpuPct: cpu,

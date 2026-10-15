@@ -118,7 +118,7 @@ async function main(): Promise<void> {
           wait: {
             type: Boolean,
             description:
-              "block until a selected run is ended or orphaned, then print its row (read-only)",
+              "wait for the next ticket run to end; run ids return immediately when terminal (read-only)",
           },
         },
         strictFlags: true,

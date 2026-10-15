@@ -94,6 +94,43 @@ test("--wait on an already-ended run returns at once, in ls format", async () =>
   );
 }, 30_000);
 
+test("--wait on a ticket ignores old ended runs and waits for its running run", async () => {
+  const root = fixture([
+    started("run-old", "ticket", 0),
+    ended("run-old"),
+    started("run-old-orphaned", "ticket", deadPid()),
+    started("run-live", "ticket", process.pid),
+  ]);
+  const child = spawnWait(root, "ticket", "--json");
+  await Bun.sleep(400);
+  expect(child.exitCode).toBeNull();
+  appendFileSync(
+    join(root, "state", "records.jsonl"),
+    lines([ended("run-live")]),
+  );
+  expect(await child.exited).toBe(0);
+  const rows = Rows.safeParse(await new Response(child.stdout).text());
+  expect(rows.success && rows.data).toEqual([
+    { id: "run-live", state: "ended" },
+  ]);
+}, 30_000);
+
+test("--wait on a ticket with only old ended runs waits for a new run to end", async () => {
+  const root = fixture([started("run-old", "ticket", 0), ended("run-old")]);
+  const child = spawnWait(root, "ticket", "--json");
+  await Bun.sleep(400);
+  expect(child.exitCode).toBeNull();
+  appendFileSync(
+    join(root, "state", "records.jsonl"),
+    lines([started("run-new", "ticket", process.pid), ended("run-new")]),
+  );
+  expect(await child.exited).toBe(0);
+  const rows = Rows.safeParse(await new Response(child.stdout).text());
+  expect(rows.success && rows.data).toEqual([
+    { id: "run-new", state: "ended" },
+  ]);
+}, 30_000);
+
 test("--wait returns a run whose process died without an ended record as orphaned", async () => {
   const root = fixture([started("run-gone", "gone", deadPid())]);
   const child = spawnWait(root, "run-gone", "--json");

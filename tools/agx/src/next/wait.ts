@@ -16,16 +16,17 @@ const pollMs = (): number => {
 const select = (
   rows: readonly Row[],
   selector: string,
-): { rows: readonly Row[]; error?: string } => {
+): { rows: readonly Row[]; kind: "run" | "ticket"; error?: string } => {
   const exactId = rows.find((entry) => entry.id === selector);
-  if (exactId !== undefined) return { rows: [exactId] };
+  if (exactId !== undefined) return { rows: [exactId], kind: "run" };
   const ticketRuns = rows.filter((entry) => entry.ticket === selector);
-  if (ticketRuns.length > 0) return { rows: ticketRuns };
+  if (ticketRuns.length > 0) return { rows: ticketRuns, kind: "ticket" };
   const idMatches = rows.filter((entry) => entry.id.startsWith(selector));
-  if (idMatches.length === 1) return { rows: idMatches };
+  if (idMatches.length === 1) return { rows: idMatches, kind: "run" };
   if (idMatches.length > 1)
     return {
       rows: [],
+      kind: "run",
       error: `selector '${selector}' is ambiguous; run id candidates: ${idMatches
         .map((entry) => entry.id)
         .toSorted()
@@ -33,6 +34,7 @@ const select = (
     };
   return {
     rows: [],
+    kind: "ticket",
     error: `no run id or exact ticket matches '${selector}'; ticket candidates: ${[
       ...new Set(rows.map((entry) => entry.ticket)),
     ]
@@ -48,8 +50,9 @@ const line = (entry: Row): string =>
 /**
  * `agx ls --wait SELECTOR`: a read-only fold over the record log, re-read on a
  * bounded poll. It uses the full replay so it never writes the fold snapshot.
- * Returns once any selected run is ended or orphaned (a run whose process died
- * without an ended event), printing the terminal rows in `ls` format.
+ * Run-id selectors preserve immediate terminal lookup. Ticket selectors ignore
+ * runs already terminal on the initial read, then return the first eligible run
+ * that ends or becomes orphaned, printing its row in `ls` format.
  */
 export async function waitRun(flags: WaitFlags): Promise<number> {
   const selector = flags.selector;
@@ -57,6 +60,20 @@ export async function waitRun(flags: WaitFlags): Promise<number> {
     process.stderr.write("agx: --wait needs a non-empty run selector\n");
     return 2;
   }
+  const initialRows = fullFoldedRuns();
+  const initialSelection = select(initialRows, selector);
+  if (initialSelection.error !== undefined) {
+    process.stderr.write(`agx: ${initialSelection.error}\n`);
+    return 2;
+  }
+  const initialIds = new Set(initialRows.map((entry) => entry.id));
+  const initiallyRunningIds = new Set(
+    initialSelection.rows
+      .filter((entry) => entry.state === "running")
+      .map((entry) => entry.id),
+  );
+  const kind = initialSelection.kind;
+
   for (;;) {
     const selection = select(fullFoldedRuns(), selector);
     if (selection.error !== undefined) {
@@ -64,15 +81,22 @@ export async function waitRun(flags: WaitFlags): Promise<number> {
       return 2;
     }
     const done = selection.rows
-      .filter((entry) => entry.state !== "running")
+      .filter(
+        (entry) =>
+          entry.state !== "running" &&
+          (kind === "run" ||
+            initiallyRunningIds.has(entry.id) ||
+            !initialIds.has(entry.id)),
+      )
       .toSorted((a, b) =>
         (a.ended_at ?? a.started_at).localeCompare(b.ended_at ?? b.started_at),
       );
-    if (done.length > 0) {
+    const firstDone = done[0];
+    if (firstDone !== undefined) {
       process.stdout.write(
         flags.json
-          ? `${JSON.stringify(done)}\n`
-          : `${done.map((entry) => line(entry)).join("\n")}\n`,
+          ? `${JSON.stringify([firstDone])}\n`
+          : `${line(firstDone)}\n`,
       );
       return 0;
     }

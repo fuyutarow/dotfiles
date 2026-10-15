@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.3 — 2026-10-16
+
+- Wait for the next ticket run to end
+
 ## 4.11.2 — 2026-10-16
 
 - Await acceptance report reads and subprocesses without blocking the event loop.

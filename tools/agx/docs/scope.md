@@ -13,7 +13,7 @@ agx has four jobs:
 
 Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` validates ticket premises in the supplied tree and reports overlapping live write globs; it does not reserve writes. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
 
-`ls` owns fold and selection: `agx ls [SELECTOR] [--json]` accepts a run id, a unique run-id prefix, or an exact ticket name. Ticket selection returns that ticket's runs oldest first, with the newest run last. Ambiguous ID prefixes and unmatched selectors exit 2 with one line naming candidates. The acceptance view is composed outside agx by `scripts/agx-accept.ts`; agx deliberately does not render reports or inspect workspace diffs.
+`ls` owns fold and selection: `agx ls [SELECTOR] [--json]` accepts a run id, a unique run-id prefix, or an exact ticket name. Ticket selection returns that ticket's runs oldest first, with the newest run last. Ambiguous ID prefixes and unmatched selectors exit 2 with one line naming candidates. `agx ls --wait SELECTOR` is the one way to wait, and it is a read-only fold, not state: it re-reads the records file at a bounded poll interval (`AGX_WAIT_POLL_MS`, default 1000) and returns once a selected run is `ended` or `orphaned` (a dead process with no `ended` record, so a missing final report cannot hide a finished run), printing the same row as `ls` (JSON with `--json`). It writes no file, not even the fold snapshot, and an empty, ambiguous, or unmatched selector exits 2 at once. The acceptance view is composed outside agx by `scripts/agx-accept.ts`; agx deliberately does not render reports or inspect workspace diffs.
 
 ## 2. agx does not
 
@@ -27,6 +27,7 @@ Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` valida
 | Commits and pushes | `mise run commit` / `mise run land` | agx records worker outcomes; repository publication belongs to the repository tasks. |
 | Acceptance | A human or coordinator | Verify results are recorded facts; a human or coordinator reads them and decides acceptance. `agx judge` records the accept/reject decision and optional note; agx does not decide acceptance. |
 | Notifications and recap demands | Hooks consuming `agx ls --json` | Hooks can derive notifications from folded state; they must run the installed tool, not a checkout's working copy. |
+| Waiting for a run | `agx ls --wait SELECTOR` (a read-only fold) | A stateful wait/detach command was removed on purpose; `ls --wait` only re-reads `records.jsonl` and writes nothing. |
 | Searching code | `rr` | Code retrieval belongs to the repository search tool, not agx. |
 | Routing quality | Jev, corrected through the brief and roster `use_for` | Routing is Jev's choice among roster rows; agx has no routing override. |
 | Worker continuity records | The worker harness | A dispatched worker receives a bounded environment without coordinator slot or vendor session IDs. It owns its brief and workspace and does not bind a continuation record. |

@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.0 — 2026-10-16
+
+- ls --wait SELECTOR blocks until a selected run is ended or orphaned and prints its row; read-only fold, writes no file
+
 ## 4.10.2 — 2026-10-16
 
 - Derive run outcomes from workspace changes, verification and validated reports; expose outcomes in run listings and router history.

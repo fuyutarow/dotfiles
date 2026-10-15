@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { check, judgeRun, list, run, stats, type Flags } from "./run.ts";
+import { waitRun } from "./wait.ts";
 import { COMMAND_NAMES } from "./commands.ts";
 import { cli, command } from "cleye";
 import { exitWithError } from "./exit.ts";
@@ -114,6 +115,11 @@ async function main(): Promise<void> {
           json: { type: Boolean, description: "emit the ls JSON contract" },
           all: { type: Boolean, description: "show every run" },
           running: { type: Boolean, description: "show only live runs" },
+          wait: {
+            type: Boolean,
+            description:
+              "block until a selected run is ended or orphaned, then print its row (read-only)",
+          },
         },
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
@@ -121,7 +127,13 @@ async function main(): Promise<void> {
       undefined,
       commandArgs,
     );
-    exit = list({ ...parsed.flags, selector: parsed._[0] } satisfies Flags);
+    exit =
+      parsed.flags.wait === true
+        ? await waitRun({
+            selector: parsed._[0],
+            json: parsed.flags.json === true,
+          })
+        : list({ ...parsed.flags, selector: parsed._[0] } satisfies Flags);
   } else if (commandName === "judge") {
     const parsed = cli(
       {

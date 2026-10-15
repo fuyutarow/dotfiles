@@ -20,6 +20,7 @@ import {
 } from "./store.ts";
 import { route } from "./route.ts";
 import { pinContinuation } from "./continue.ts";
+import { createRunTemp, type RunTemp } from "../temp.ts";
 import { exitWithError } from "./exit.ts";
 import { ownerlessRefLocks } from "../../../shared/src/ref-locks.ts";
 
@@ -126,6 +127,7 @@ const runVerify = async (
   commands: string[],
   cwd: string,
   runDir: string,
+  temp: RunTemp,
 ): Promise<{ cmd: string; exit: number; log_path: string }[]> => {
   const results: { cmd: string; exit: number; log_path: string }[] = [];
   for (const [index, cmd] of commands.entries()) {
@@ -135,7 +137,13 @@ const runVerify = async (
     );
     const child = Bun.spawn(
       ["sh", "-c", 'exec 2>&1; sh -c "$1"', "agx-verify", cmd],
-      { cwd, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+      {
+        cwd,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, ...temp.env },
+      },
     );
     const stdout =
       child.stdout === null
@@ -218,6 +226,22 @@ export async function run(flags: Flags): Promise<number> {
       earlyQuitRows(ticket.name ?? basename(path), cwd),
     ));
   const id = randomUUID();
+  // The run owns its temp space: removed on any exit path (process.exit included); a SIGKILL
+  // leaves it for the next run's sweep.
+  const made = createRunTemp(id);
+  if (made.isErr()) {
+    console.error(made.error);
+    process.exit(1);
+  }
+  const temp = made.value;
+  Object.assign(process.env, temp.env);
+  process.on("exit", temp.remove);
+  for (const [signal, code] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const)
+    process.on(signal, () => process.exit(code));
   const runDir = join(stateDir(), "runs", id);
   mkdirSync(runDir, { recursive: true });
   const reportPath = join(runDir, "report.json");
@@ -345,7 +369,14 @@ export async function run(flags: Flags): Promise<number> {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "inherit",
-    env: { ...process.env, AGX_INTERIM_REPORTS_FILE: interimPath },
+    env: {
+      ...process.env,
+      ...temp.env,
+      AGX_INTERIM_REPORTS_FILE: interimPath,
+    },
+  });
+  process.on("exit", () => {
+    child.kill();
   });
   const outputPromise =
     child.stdout === null
@@ -368,7 +399,8 @@ export async function run(flags: Flags): Promise<number> {
   const exit = await child.exited;
   clearInterval(progressWatcher);
   const output = await outputPromise;
-  const verify = await runVerify(ticket.verify, cwd, runDir);
+  const verify = await runVerify(ticket.verify, cwd, runDir, temp);
+  temp.remove();
   const receiptLine = output.trim().split("\n").at(-1) ?? "";
   const receipt = jsonOf(
     z.looseObject({

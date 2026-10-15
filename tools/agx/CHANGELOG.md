@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.10.0 — 2026-10-15
+
+- Each run owns a temp directory under ~/.cache/agx/tmp/<run-id>: the worker and verify commands get TMPDIR, TMP and TEMP pointing at it, agx removes it when the run ends (including SIGINT/SIGTERM), the next run sweeps directories whose recorded pid is dead, and agx refuses a temp root that is /tmp itself.
+
 ## 4.9.4 — 2026-10-15
 
 - agx run --continue never routes: it reuses the prior run's row and resumes its recorded vendor session, refuses with exit 2 when there is none, and the claude route records vendor_session

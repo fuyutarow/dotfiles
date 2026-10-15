@@ -14,6 +14,10 @@ const WORKER_ENV_KEYS = [
   "LOGNAME",
   "SHELL",
   "TERM",
+  // The run-owned temp directory agx removes when the run ends.
+  "TMPDIR",
+  "TMP",
+  "TEMP",
   // mise's active shell and explicit roots keep declared tool config and data discoverable.
   "MISE_ACTIVATE_SHIMS",
   "MISE_SHELL",

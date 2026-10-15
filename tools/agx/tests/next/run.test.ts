@@ -205,6 +205,7 @@ describe("agx-next run", () => {
     const workerEnv = {
       ...process.env,
       AGX_NEXT_STATE_DIR: state,
+      AGX_TMP_ROOT: join(root, "agx-tmp"),
       AGX_NEXT_JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
       AGX_NEXT_WORKER: worker,
       TYPESAFE_API_KEY: "test-key",
@@ -539,6 +540,7 @@ describe("agx-next run", () => {
     const env = {
       ...process.env,
       AGX_NEXT_STATE_DIR: state,
+      AGX_TMP_ROOT: join(root, "agx-tmp"),
       AGX_NEXT_JEV_URL: `http://127.0.0.1:${jevPort}/choice`,
       AGX_NEXT_WORKER: worker,
       TYPESAFE_API_KEY: "test-key",

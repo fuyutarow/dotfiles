@@ -20,7 +20,12 @@ import {
 import { dirname } from "node:path";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
-import { diskReadings, diskSegment, type DiskEntry } from "./storage.ts";
+import {
+  diskReadings,
+  diskSegment,
+  tmpfsReading,
+  type DiskEntry,
+} from "./storage.ts";
 import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
 import { CccIndexSchema, cccBadge, sampleCccIndexing } from "./ccc-indexing.ts";
@@ -582,6 +587,45 @@ export interface HostLoad {
   vram: Result<MemReading, string> | undefined; // undefined: this host has no discrete VRAM
   disks: Result<DiskEntry[], string>;
 }
+
+export interface HostMetrics {
+  cpu: string;
+  ram: string;
+  tmp: string;
+}
+
+/** Plain host metrics shared with integrations that need the Sys row's CPU and RAM samplers. */
+export async function readHostMetrics(): Promise<HostMetrics> {
+  const cpu = cpuPct().match(
+    (value) => `${Math.round(value)}%`,
+    () => "n/a",
+  );
+  const ram = ramFrac().match(
+    (value) => value.frac,
+    () => "n/a",
+  );
+  const tmp = (await tmpfsReading()).match(
+    (value) =>
+      `${formatBytes(value.availableBytes)} free · ${value.freeInodes}i`,
+    () => "n/a",
+  );
+  return { cpu, ram, tmp };
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "n/a";
+  if (bytes < 1024) return `${bytes}B`;
+  const units = ["KiB", "MiB", "GiB", "TiB"];
+  let value = bytes;
+  let unit = "B";
+  for (const next of units) {
+    value /= 1024;
+    unit = next;
+    if (value < 1024) break;
+  }
+  return `${Number(value.toFixed(2))}${unit}`;
+}
+
 // Sync host-load API remains for the standalone `s` command; statusline uses readHostLoadAsync.
 export function readHostLoad(): HostLoad {
   return {
@@ -760,6 +804,13 @@ async function main(): Promise<void> {
   while (existsSync(GPU_LOCK) && performance.now() < deadline)
     await Bun.sleep(100);
   process.stdout.write(`${sysRow(readHostLoad())}\n`);
+}
+
+// JSON sampler mode is the process boundary for other tools: it exposes this file's existing
+// CPU/RAM readers and storage.ts's tmpfs statfs reading without a second measurement path.
+if (process.env.STATUSLINE_HOST_METRICS === "1") {
+  process.stdout.write(`${JSON.stringify(await readHostMetrics())}\n`);
+  process.exit(0);
 }
 
 // Sampler mode (started by ensureSampler with SAMPLE_ENV): one GPU sample, then exit.

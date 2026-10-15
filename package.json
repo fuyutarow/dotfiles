@@ -16,6 +16,7 @@
     "disk-reclaim": "tools/disk-reclaim/src/reclaim.ts",
     "storage-headroom": "tools/storage-headroom/src/storage-headroom.ts",
     "statusline": "tools/statusline/src/statusline.ts",
+    "btmp": "tools/herdr-btm/src/btmp.ts",
     "tool": "tools/tool-tiers/src/tool.ts",
     "agx": "tools/agx/src/next/cli.ts",
     "agx-next": "tools/agx/src/next/cli.ts",

@@ -1,7 +1,13 @@
 import { readFileSync, statfsSync } from "node:fs";
 import { readFile, statfs } from "node:fs/promises";
 import { join } from "node:path";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
 import { z } from "./zod.ts";
 import {
   execError,
@@ -64,6 +70,29 @@ export interface DiskMiss {
   why: string;
 }
 export type DiskEntry = DiskReading | DiskMiss;
+export interface TmpfsReading {
+  availableBytes: number;
+  freeInodes: number;
+}
+
+const TMPFS_MAGIC = 0x01021994;
+
+/** Current free bytes and inodes on /tmp when it is a tmpfs filesystem. */
+export async function tmpfsReading(
+  path = "/tmp",
+): Promise<Result<TmpfsReading, string>> {
+  const stats = await fromAsyncThrowable(
+    () => statfs(path, { bigint: true }),
+    (error): string => execError(error).code ?? "statfs failed",
+  )();
+  if (stats.isErr()) return err(stats.error);
+  if (Number(stats.value.type) !== TMPFS_MAGIC) return err("not tmpfs");
+  return ok({
+    availableBytes: Number(stats.value.bavail * stats.value.bsize),
+    freeInodes: Number(stats.value.ffree),
+  });
+}
+
 // err = the drive list itself could not be read, so WHICH disks to show is unknown.
 // Only the keys this file reads; the gate's own keys (label, stop_gib, ...) are not its business.
 export const StorageConfigSchema = z.object({

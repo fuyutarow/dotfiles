@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/herdr-btm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "btmp": "src/btmp.ts"
+  }
+}

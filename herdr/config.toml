@@ -135,6 +135,14 @@ claude = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
 ]
+btm = [
+  ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }],
+  [
+    { token = "$cpu", fg = "#8ccf7e", bold = false, dim = false },
+    { token = "$ram", fg = "#61afef", bold = false, dim = false },
+    { token = "$tmp", fg = "#e5c07b", bold = false, dim = false },
+  ],
+]
 [session]
 # resume_agents_on_restore = true (default)
 # Replaces tmux-resurrect/continuum; on server restart herdr re-runs

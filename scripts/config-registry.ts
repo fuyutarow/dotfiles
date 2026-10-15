@@ -465,6 +465,7 @@ const OTHER: readonly Surface[] = [
       "tools/tool-tiers/package.json",
       "tools/agx/package.json",
       "tools/coredev/package.json",
+      "tools/herdr-btm/package.json",
       "tools/secrets-push/package.json",
       "tools/sui-keystore-merge/package.json",
       "tools/workspace/package.json",

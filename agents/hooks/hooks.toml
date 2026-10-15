@@ -136,6 +136,11 @@ script = "claude/hooks/log-sys-snapshot.ts"
 commands = ["sh ~/.claude/hooks/run.sh log-sys-snapshot.ts"]
 
 [[vendor_hook]]
+slug = "agx:snapshot"
+script = "claude/hooks/log-agx-snapshot.ts"
+commands = ["sh ~/.claude/hooks/run.sh log-agx-snapshot.ts"]
+
+[[vendor_hook]]
 slug = "existing-definition"
 script = "claude/hooks/suggest-existing-definition.ts"
 commands = ["sh ~/.claude/hooks/run.sh suggest-existing-definition.ts"]

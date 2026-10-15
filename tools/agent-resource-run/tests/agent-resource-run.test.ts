@@ -586,17 +586,17 @@ describe("admission", () => {
       ]),
     );
     expect(result.reason).toContain("VRAM request");
-    // 12 GiB - (10 GiB declared + 6 GiB standing ccc partition) - safety -> clamped to 0.
+    // 12 GiB - (10 GiB declared + 2 GiB standing ccc floor) - safety -> clamped to 0.
     expect(result.reason).toContain("0 available");
     expect(result.reason).toContain(
-      `${6 * GiB} bytes of standing service partitions`,
+      `${2 * GiB} bytes of standing service partitions`,
     );
   });
 
   test("standing service partitions are reserved before any job, used or not", () => {
-    // Shipped policy: ccc 6 GiB always, reranker 2 GiB only while it runs, on GPU 0. The card reads
-    // 1 GiB used, yet a job sees 12 - 6 - 0.5 = 5.5 GiB with the reranker off and
-    // 12 - 8 - 0.5 = 3.5 GiB with it on — never overlapping either standing partition.
+    // Shipped policy: ccc's 2 GiB floor always, reranker 2 GiB only while it runs, on GPU 0. The
+    // card reads 1 GiB used, yet a job sees 12 - 2 - 0.5 = 9.5 GiB with the reranker off and
+    // 12 - 4 - 0.5 = 7.5 GiB with it on — never overlapping either standing partition.
     const card = (rerank_active?: boolean) =>
       hostSnapshot({
         gpus: [
@@ -613,13 +613,13 @@ describe("admission", () => {
       gpuManifest({
         device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: bytes },
       });
-    const off = denied(decideAdmission(want(6 * GiB), card(), []));
-    expect(off.reason).toContain(`${5.5 * GiB} available`);
+    const off = denied(decideAdmission(want(10 * GiB), card(), []));
+    expect(off.reason).toContain(`${9.5 * GiB} available`);
     expect(off.reason).toContain("standing service partitions");
-    expect(decideAdmission(want(5 * GiB), card(), []).ok).toBe(true);
-    const on = denied(decideAdmission(want(4 * GiB), card(true), []));
-    expect(on.reason).toContain(`${3.5 * GiB} available`);
-    expect(decideAdmission(want(3 * GiB), card(true), []).ok).toBe(true);
+    expect(decideAdmission(want(9 * GiB), card(), []).ok).toBe(true);
+    const on = denied(decideAdmission(want(8 * GiB), card(true), []));
+    expect(on.reason).toContain(`${7.5 * GiB} available`);
+    expect(decideAdmission(want(7 * GiB), card(true), []).ok).toBe(true);
     // Another device carries no partition.
     const gpu1 = hostSnapshot({
       gpus: [
@@ -835,7 +835,7 @@ describe("resource policy", () => {
       default_monitor_interval_ms: 200,
       gpu_vram_sample_interval_ms: 1_000,
       gpu_partition_device: 0,
-      gpu_partition_ccc_bytes: 6144 * MiB,
+      gpu_partition_ccc_bytes: 2048 * MiB,
       gpu_partition_rerank_bytes: 2048 * MiB,
     };
     expect(loadResourcePolicy(shippedPolicyPath)).toEqual(expected);

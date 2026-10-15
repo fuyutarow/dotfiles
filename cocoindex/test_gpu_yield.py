@@ -69,13 +69,13 @@ def test_runtime_path_matches_runner(monkeypatch):
 def test_batch_default_and_override_are_bounded_by_partition(monkeypatch):
     monkeypatch.delenv("CCC_GPU_BATCH_SIZE", raising=False)
     monkeypatch.delenv("CCC_GPU_UTILIZATION_PERCENT", raising=False)
-    policy = Policy.from_environment(6144, 512)
+    policy = Policy.from_environment(2048, 512)
     assert policy.batch_size == 8 and policy.utilization_percent == 100
     assert batch_limit_for_partition(2048, 512) == 29
-    larger_partition = Policy.from_environment(6144, 512)
+    larger_partition = Policy.from_environment(4096, 512)
     assert larger_partition.batch_size == 8
-    assert larger_partition.max_batch_size == 157
-    assert batch_limit_for_partition(6144, 512) == 157
+    assert larger_partition.max_batch_size == 93
+    assert batch_limit_for_partition(4096, 512) == 93
 
     monkeypatch.setenv("CCC_GPU_BATCH_SIZE", "29")
     assert Policy.from_environment(2048, 512).batch_size == 29
@@ -122,26 +122,26 @@ def test_elastic_allocator_cap_tracks_free_space_and_reservations():
         free_bytes=10 * gib,
         live_reserved_bytes=0,
         allocator_reserved_bytes=1 * gib,
-        standing_partition_mib=6144,
+        standing_partition_mib=2048,
         safety_margin_mib=512,
     )
     reserved_cap = elastic_allocator_cap_bytes(
         free_bytes=10 * gib,
         live_reserved_bytes=4 * gib,
         allocator_reserved_bytes=1 * gib,
-        standing_partition_mib=6144,
+        standing_partition_mib=2048,
         safety_margin_mib=512,
     )
     assert idle_cap == (10 + 1) * gib - 512 * mib
     assert reserved_cap == (10 + 1 - 4) * gib - 512 * mib
-    assert reserved_cap >= 6144 * mib
+    assert reserved_cap >= 2048 * mib
     assert reserved_cap < idle_cap
     assert (
         elastic_allocator_cap_bytes(
             free_bytes=10 * gib,
-            live_reserved_bytes=5 * gib,
+            live_reserved_bytes=10 * gib,
             allocator_reserved_bytes=1 * gib,
-            standing_partition_mib=6144,
+            standing_partition_mib=2048,
             safety_margin_mib=512,
         )
         is None
@@ -151,10 +151,10 @@ def test_elastic_allocator_cap_tracks_free_space_and_reservations():
             free_bytes=10 * gib,
             live_reserved_bytes=None,
             allocator_reserved_bytes=1 * gib,
-            standing_partition_mib=6144,
+            standing_partition_mib=2048,
             safety_margin_mib=512,
         )
-        == 6144 * mib
+        == 2048 * mib
     )
 
 
@@ -163,7 +163,7 @@ def test_allocator_cap_is_resized_from_mocked_free_vram_and_ledger():
     gib = 1024**3
     fractions = []
     free_samples = iter([10 * gib, 10 * gib, 10 * gib])
-    reservation_samples = iter([0, 4 * gib, 5 * gib])
+    reservation_samples = iter([0, 4 * gib, 10 * gib])
     torch = SimpleNamespace(
         cuda=SimpleNamespace(
             empty_cache=lambda: None,
@@ -182,7 +182,7 @@ def test_allocator_cap_is_resized_from_mocked_free_vram_and_ledger():
         lambda _device: next(free_samples),
         next(reservation_samples),
         0,
-        6144,
+        2048,
         512,
     )
     reserved_cap = resize_allocator_cap(
@@ -190,7 +190,7 @@ def test_allocator_cap_is_resized_from_mocked_free_vram_and_ledger():
         lambda _device: next(free_samples),
         next(reservation_samples),
         0,
-        6144,
+        2048,
         512,
     )
     blocked_cap = resize_allocator_cap(
@@ -198,13 +198,13 @@ def test_allocator_cap_is_resized_from_mocked_free_vram_and_ledger():
         lambda _device: next(free_samples),
         next(reservation_samples),
         0,
-        6144,
+        2048,
         512,
     )
 
     assert idle_cap == 10 * gib + gib - 512 * mib
     assert reserved_cap == 10 * gib + gib - 4 * gib - 512 * mib
-    assert reserved_cap >= 6144 * mib
+    assert reserved_cap >= 2048 * mib
     assert fractions == [idle_cap / (12 * gib), reserved_cap / (12 * gib)]
     assert blocked_cap is None
 
@@ -267,13 +267,13 @@ def test_partition_probe_waits_without_selecting_cpu(monkeypatch):
         apply_calls.append(service)
         return "cuda"
 
-    assert configure_partition("ccc", probe, apply, 6144, 0) == "unavailable"
+    assert configure_partition("ccc", probe, apply, 2048, 0) == "unavailable"
     assert probe_calls == [0] and apply_calls == []
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
 
-    assert not partition_has_room(lambda _device: None, 6144, 0)
-    assert not partition_has_room(lambda _device: 5631 * 1024**2, 6144, 0)
-    assert partition_has_room(lambda _device: 5632 * 1024**2, 6144, 0)
+    assert not partition_has_room(lambda _device: None, 2048, 0)
+    assert not partition_has_room(lambda _device: 1535 * 1024**2, 2048, 0)
+    assert partition_has_room(lambda _device: 1536 * 1024**2, 2048, 0)
 
 
 def test_partition_probe_success_and_apply_race_preserve_cuda_visibility(monkeypatch):
@@ -284,7 +284,7 @@ def test_partition_probe_success_and_apply_race_preserve_cuda_visibility(monkeyp
         return "cpu"
 
     assert (
-        configure_partition("ccc", lambda _device: 6144 * 1024**2, race_to_cpu, 6144, 0)
+        configure_partition("ccc", lambda _device: 2048 * 1024**2, race_to_cpu, 2048, 0)
         == "unavailable"
     )
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
@@ -292,9 +292,9 @@ def test_partition_probe_success_and_apply_race_preserve_cuda_visibility(monkeyp
     assert (
         configure_partition(
             "ccc",
-            lambda _device: 6144 * 1024**2,
+            lambda _device: 2048 * 1024**2,
             lambda _service: "cuda",
-            6144,
+            2048,
             0,
         )
         == "cuda"

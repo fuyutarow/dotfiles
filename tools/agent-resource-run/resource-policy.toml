@@ -81,28 +81,22 @@ gpu_vram_sample_interval_ms = 1000
 # --- Standing GPU partitions for resident services ------------------------------------------------
 #
 # Owner ruling 2026-10-01: 「VRAM は ccc と分けて使うべきです。はじめから隔壁しておけよ」. The
-# resident services each get a FIXED partition; this is the one place the sizes live.
-#   - agent-resource-run subtracts the ccc partition on gpu_partition_device up front, used or not
-#     (the daemon is resident), and the reranker's only while repo-retrieve-rerank.service runs
-#     (it starts on demand and exits after 5 idle minutes).
-#   - Each service caps ITSELF to its partition (tools/agent-resource-run/gpu_partition.py, read by
-#     the ccc daemon launcher cocoindex/ccc-daemon-launch.py and by
-#     tools/repo-retrieve/src/rerank_server.py): the PyTorch allocator is limited to the partition
-#     minus a CUDA-context allowance, and a service that finds less than its partition free at
-#     start runs on CPU instead of growing into job memory.
-# Why these sizes: owner priority (2026-10-15) is that the ccc index must finish on the GPU.
-#   ccc     firedancer's 2026-10-15 re-index stalled at 13:07:53 with "ccc GPU batch still exceeds
-#           its partition after one pressure recovery": the 2048 MiB partition left a 1536 MiB
-#           allocator cap, while the current fp32 model weights take ~1193 MiB. On the 12 GiB GPU,
-#           a 6144 MiB partition leaves a 5632 MiB allocator cap after the 512 MiB context
-#           allowance, enough for the full firedancer index with the current fp32 model and batch
-#           size 8. ccc budgets 32 MiB of workspace per code chunk; the weight estimate therefore
-#           leaves floor((6144 - 512 - 1193) / 32) = 138 chunks maximum. This 32 MiB budget is a
-#           conservative workspace estimate for a 512-token chunk from the model's 768-wide,
-#           12-head bf16 config; the coordinator should tune it from live measurements.
+# agent-resource-run subtracts the ccc floor on gpu_partition_device from research admission even
+# while ccc is idle; the reranker's fixed partition is subtracted only while
+# repo-retrieve-rerank.service runs (it starts on demand and exits after 5 idle minutes).
+# cccoom applies an elastic per-batch allocator cap in cocoindex/ccc_gpu_yield.py: it grows into
+# currently free VRAM and shrinks by live research reservations, but never below the ccc floor.
+# The reranker continues to use its fixed partition via tools/agent-resource-run/gpu_partition.py.
+# Why these sizes: ccc's 2048 MiB standing allocation is the floor, not its maximum. The fp16
+# model weights use ~597 MiB; cccoom's 32 MiB per-code-chunk workspace budget allows 29 chunks at
+# the floor after the 512 MiB CUDA-context allowance: floor((2048 - 512 - 597) / 32) = 29.
+# When VRAM is free, cccoom grows the cap to available headroom after live research reservations
+# and the 512 MiB device safety margin. firedancer's 2026-10-15 re-index needed more than the old
+# fixed 1536 MiB allocator cap, so the elastic cap can use that free capacity without reserving it
+# from research while ccc is idle.
 #   rerank  Qwen3-Reranker-0.6B bf16 ~1.2 GB; with last-token logits only, a 30-candidate request
 #           raised device use by ~1.3 GB in total and ran in 0.6-0.9 s inside a 2 GiB cap.
 # 0 disables a partition (and that service then never uses the GPU).
 gpu_partition_device = 0
-gpu_partition_ccc_mib = 6144
+gpu_partition_ccc_mib = 2048
 gpu_partition_rerank_mib = 2048

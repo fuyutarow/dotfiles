@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.5 — 2026-10-15
+
+- Restore ccc's standing GPU reservation to its 2048 MiB elastic-cap floor.
+
 ## 1.4.4 — 2026-10-15
 
 - Enable elastic ccc allocator caps from free VRAM and live research reservations.

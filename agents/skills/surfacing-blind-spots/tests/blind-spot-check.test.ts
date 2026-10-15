@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -12,26 +12,37 @@ type RunResult = Readonly<{
   stdout: string;
 }>;
 
-function run(arguments_: readonly string[], stdin?: string): RunResult {
-  const result = Bun.spawnSync({
-    cmd: ["bun", script, ...arguments_],
-    stdin: stdin === undefined ? undefined : Bun.file(fixture(stdin)),
+async function run(
+  arguments_: readonly (string | Promise<string>)[],
+  stdin?: string,
+): Promise<RunResult> {
+  const resolvedArguments = await Promise.all(
+    arguments_.map((argument) => Promise.resolve(argument)),
+  );
+  const process = Bun.spawn({
+    cmd: ["bun", script, ...resolvedArguments],
+    stdin: stdin === undefined ? "ignore" : Bun.file(await fixture(stdin)),
     stderr: "pipe",
     stdout: "pipe",
-    timeout: 10_000,
+    signal: AbortSignal.timeout(10_000),
   });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+    process.exited,
+  ]);
   return {
-    exitCode: result.exitCode,
-    stderr: result.stderr.toString(),
-    stdout: result.stdout.toString(),
+    exitCode,
+    stderr,
+    stdout,
   };
 }
 
-function fixture(content: string): string {
-  const directory = mkdtempSync(join(tmpdir(), "blind-spot-packet-"));
+async function fixture(content: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "blind-spot-packet-"));
   temporaryDirectories.push(directory);
   const path = join(directory, "packet.md");
-  writeFileSync(path, `${content.trim()}\n`);
+  await writeFile(path, `${content.trim()}\n`);
   return path;
 }
 
@@ -81,15 +92,17 @@ raising-resolution should inspect A3 using the support and CSV audit locators.
 DECISION-INSENSITIVE — another general question cannot change the frame without inspecting A3.
 `;
 
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
-  }
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
 });
 
 describe("blind-spot-check", () => {
-  test("accepts a complete packet with typed assumptions and human provenance", () => {
-    const result = run([fixture(completePacket)]);
+  test("accepts a complete packet with typed assumptions and human provenance", async () => {
+    const result = await run([fixture(completePacket)]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("B2  PASS");
@@ -98,7 +111,7 @@ describe("blind-spot-check", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("accepts stdin and transparent UNELICITED depth when the human is unavailable", () => {
+  test("accepts stdin and transparent UNELICITED depth when the human is unavailable", async () => {
     const packet = completePacket
       .replace(
         "| P1 | EXPERT-WORKAROUND | If operators bypass onboarding rather than complete it, does scope freeze still follow? | HUMAN:research-lead@conversation:user-turn-7 | Two pilot operators use an undocumented CSV path. | Reopens the object and action assumptions. |",
@@ -120,7 +133,7 @@ describe("blind-spot-check", () => {
         "DECISION-INSENSITIVE — another general question cannot change the frame without inspecting A3.",
         "HUMAN-UNAVAILABLE — the next load-bearing answer belongs to the absent operations owner.",
       );
-    const result = run([], packet);
+    const result = await run([], packet);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("B5  WARN");
@@ -128,8 +141,8 @@ describe("blind-spot-check", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("rejects a shallow checklist that merely mentions the vocabulary", () => {
-    const result = run([
+  test("rejects a shallow checklist that merely mentions the vocabulary", async () => {
+    const result = await run([
       fixture(`
 # Blind-spot checklist
 - Object under review: plan.md
@@ -150,23 +163,23 @@ describe("blind-spot-check", () => {
     expect(result.stdout).toContain("B8  FAIL");
   });
 
-  test("rejects a ledger that omits one typed primary slot", () => {
+  test("rejects a ledger that omits one typed primary slot", async () => {
     const packet = completePacket.replace(
       "| A7 | OPEN | OPEN — institutional incentives may interact with unobserved user workarounds. | NONE | INFERENCE | UNKNOWN | FRAME | INACCESSIBLE | NOT-SELECTED |\n",
       "",
     );
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("typed sweep omitted: OPEN");
   });
 
-  test("rejects multiple values in one Primary slot while allowing cross-tags", () => {
+  test("rejects multiple values in one Primary slot while allowing cross-tags", async () => {
     const packet = completePacket.replace(
       "| A1 | OBJECT |",
       "| A1 | OBJECT, VALUE |",
     );
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -174,7 +187,7 @@ describe("blind-spot-check", () => {
     );
   });
 
-  test("rejects a scalar score even when all four axes remain present", () => {
+  test("rejects a scalar score even when all four axes remain present", async () => {
     const packet = completePacket
       .replace(
         "| ID | Primary slot | Assumption | Cross-tags | Evidence | Uncertainty | Frame damage | Search cost | Selection |",
@@ -186,19 +199,19 @@ describe("blind-spot-check", () => {
       )
       .replaceAll("| LOAD-BEARING |", "| LOAD-BEARING | 9 |")
       .replaceAll("| NOT-SELECTED |", "| NOT-SELECTED | 3 |");
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("B3  FAIL");
     expect(result.stdout).toContain("scalar Score column is forbidden");
   });
 
-  test("rejects model-simulated human provenance", () => {
+  test("rejects model-simulated human provenance", async () => {
     const packet = completePacket.replaceAll(
       "HUMAN:research-lead@conversation:user-turn-7",
       "MODEL:simulated-owner",
     );
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("B5  FAIL");
@@ -207,38 +220,38 @@ describe("blind-spot-check", () => {
     );
   });
 
-  test("rejects a one-level trace", () => {
+  test("rejects a one-level trace", async () => {
     const packet = completePacket.replace(
       "- Level 2: HUMAN:research-lead@conversation:user-turn-7 — operator workarounds hide errors from the ticket metric.\n",
       "",
     );
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("B6  FAIL");
     expect(result.stdout).toContain("Level 2");
   });
 
-  test("does not mistake an ordinary OPEN mention for an open-set residual", () => {
+  test("does not mistake an ordinary OPEN mention for an open-set residual", async () => {
     const packet = completePacket.replace(
       "OPEN — NON-EXHAUSTIVE: the sweep cannot cover tacit practices outside the represented teams.",
       "The word OPEN appears in the source plan.",
     );
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("B7  FAIL");
     expect(result.stdout).toContain("NON-EXHAUSTIVE");
   });
 
-  test("rejects a non-strategic stop and a generated-thesis section", () => {
+  test("rejects a non-strategic stop and a generated-thesis section", async () => {
     const packet = completePacket
       .replace(
         "DECISION-INSENSITIVE — another general question cannot change the frame without inspecting A3.",
         "Continue until every topic has been discussed.",
       )
       .concat("\n## Thesis candidates\nA model-generated answer.\n");
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("B8  FAIL");
@@ -246,20 +259,20 @@ describe("blind-spot-check", () => {
     expect(result.stdout).toContain("forbidden headings: Thesis candidates");
   });
 
-  test("rejects an explicitly simulated answer behind a valid HUMAN locator", () => {
+  test("rejects an explicitly simulated answer behind a valid HUMAN locator", async () => {
     const packet = completePacket.replace(
       "Two pilot operators use an undocumented CSV path.",
       "MODEL-SIMULATED: two pilot operators use an undocumented CSV path.",
     );
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("B5  FAIL");
     expect(result.stdout).toContain("explicitly synthetic");
   });
 
-  test("rejects forbidden headings regardless of case", () => {
-    const result = run([
+  test("rejects forbidden headings regardless of case", async () => {
+    const result = await run([
       fixture(`${completePacket}\n## thesis candidates\nA generated answer.\n`),
     ]);
 
@@ -268,8 +281,8 @@ describe("blind-spot-check", () => {
     expect(result.stdout).toContain("forbidden headings: thesis candidates");
   });
 
-  test("rejects completeness claims but permits an explicit non-coverage claim", () => {
-    const closed = run([
+  test("rejects completeness claims but permits an explicit non-coverage claim", async () => {
+    const closed = await run([
       fixture(
         completePacket.replace(
           "OPEN — NON-EXHAUSTIVE: the sweep cannot cover tacit practices outside the represented teams.",
@@ -277,7 +290,7 @@ describe("blind-spot-check", () => {
         ),
       ),
     ]);
-    const open = run([
+    const open = await run([
       fixture(`${completePacket}\nNot all blind spots were found.\n`),
     ]);
 
@@ -286,7 +299,7 @@ describe("blind-spot-check", () => {
     expect(open.exitCode).toBe(0);
   });
 
-  test("allows transparent UNELICITED depth when a finite budget is binding", () => {
+  test("allows transparent UNELICITED depth when a finite budget is binding", async () => {
     const packet = completePacket
       .replace(
         "| P1 | EXPERT-WORKAROUND | If operators bypass onboarding rather than complete it, does scope freeze still follow? | HUMAN:research-lead@conversation:user-turn-7 | Two pilot operators use an undocumented CSV path. | Reopens the object and action assumptions. |",
@@ -308,14 +321,14 @@ describe("blind-spot-check", () => {
         "DECISION-INSENSITIVE — another general question cannot change the frame without inspecting A3.",
         "BUDGET-SPENT — the declared question budget was exhausted at three questions.",
       );
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("B5  WARN");
     expect(result.stdout).toContain("stop code: BUDGET-SPENT");
   });
 
-  test("rejects a non-contrastive probe, inert decision branch, and shallow depth", () => {
+  test("rejects a non-contrastive probe, inert decision branch, and shallow depth", async () => {
     const packet = completePacket
       .replace(
         "If operators bypass onboarding rather than complete it, does scope freeze still follow?",
@@ -326,7 +339,7 @@ describe("blind-spot-check", () => {
         "operators, not administrators, absorb setup failure.",
         "shallow",
       );
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("B5  FAIL");
@@ -334,14 +347,14 @@ describe("blind-spot-check", () => {
     expect(result.stdout).toContain("B6  FAIL");
   });
 
-  test("rejects an unbounded search budget and a packet-level scalar score", () => {
+  test("rejects an unbounded search budget and a packet-level scalar score", async () => {
     const packet = completePacket
       .replace(
         "Three human questions and one source pass.",
         "Unlimited questions until everything is covered.",
       )
       .concat("\nOverall priority score: 9\n");
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("B1  FAIL");
@@ -350,7 +363,7 @@ describe("blind-spot-check", () => {
     expect(result.stdout).toContain("packet-level scalar score");
   });
 
-  test("rejects questions-before-reading and an ownerless decision handoff", () => {
+  test("rejects questions-before-reading and an ownerless decision handoff", async () => {
     const packet = completePacket
       .replace(
         "Decision memo at plan.md:1-90.",
@@ -360,7 +373,7 @@ describe("blind-spot-check", () => {
         "raising-resolution should inspect A3 using the support and CSV audit locators.",
         "Choose the thesis and implement it.",
       );
-    const result = run([fixture(packet)]);
+    const result = await run([fixture(packet)]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("B10  FAIL");
@@ -369,16 +382,16 @@ describe("blind-spot-check", () => {
     expect(result.stdout).toContain("solution/selection/commit verdict");
   });
 
-  test("uses Cleye's unknown-option exit", () => {
-    const result = run(["--unexpected"]);
+  test("uses Cleye's unknown-option exit", async () => {
+    const result = await run(["--unexpected"]);
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Unknown flag: --unexpected");
     expect(result.stdout).toBe("");
   });
 
-  test("uses exit 2 for a missing input path", () => {
-    const result = run(["/definitely/not/a/blind-spot-packet.md"]);
+  test("uses exit 2 for a missing input path", async () => {
+    const result = await run(["/definitely/not/a/blind-spot-packet.md"]);
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("blind-spot-check: file not found");

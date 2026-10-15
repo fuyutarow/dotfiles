@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { cli } from "cleye";
 
 // Consumer: agent/human verdict lines for a Blind-spot packet.
@@ -783,7 +782,7 @@ async function input(): Promise<string | Error> {
     return new Error("usage: bun blind-spot-check.ts [packet.md|-]");
   if (path === undefined || path === "-")
     return new Response(Bun.stdin.stream()).text();
-  if (!existsSync(path))
+  if (!(await Bun.file(path).exists()))
     return new Error(`blind-spot-check: file not found: ${path}`);
   return Bun.file(path).text();
 }

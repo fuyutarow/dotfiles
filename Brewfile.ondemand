@@ -50,4 +50,7 @@ if OS.mac?
   # Was an orphan ~/.config/mise/tasks/setup-maccy.sh (Apr 2026) outside this repo — folded in
   # 2026-09-11 so install has one home (here) and configuration has one home (defaults.ts).
   cask "maccy"
+  # Text expander; private matches live in Personal-Drive and are linked by that vault's
+  # mise run link:espanso — never put matches in this repo.
+  cask "espanso"
 end

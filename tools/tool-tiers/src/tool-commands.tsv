@@ -1,5 +1,6 @@
 # package<TAB>space-separated commands; '-' means no direct command entrypoint.
 coreutils	-
+espanso	espanso
 git-delta	delta
 git-lfs	git-lfs
 ripgrep	rg

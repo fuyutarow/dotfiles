@@ -495,6 +495,7 @@ show_aliases_help() {
   lgd          Lazygit in dotfiles
   lg, <dir>    Lazygit in specific directory
   e            Editor (VS Code; Remote-WSL on WSL)
+  obs [dir]    Open a registered Obsidian vault (macOS; defaults to cwd)
 
 📂 File Operations:
   l            List files (eza)

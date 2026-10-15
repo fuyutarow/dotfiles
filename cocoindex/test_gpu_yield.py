@@ -63,15 +63,15 @@ def test_runtime_path_matches_runner(monkeypatch):
 def test_batch_default_and_override_are_bounded_by_partition(monkeypatch):
     monkeypatch.delenv("CCC_GPU_BATCH_SIZE", raising=False)
     monkeypatch.delenv("CCC_GPU_UTILIZATION_PERCENT", raising=False)
-    policy = Policy.from_environment(2048, 512)
+    policy = Policy.from_environment(6144, 512)
     assert policy.batch_size == 8 and policy.utilization_percent == 100
-    assert batch_limit_for_partition(2048, 512) == 10
+    assert batch_limit_for_partition(6144, 512) == 138
 
-    monkeypatch.setenv("CCC_GPU_BATCH_SIZE", "10")
-    assert Policy.from_environment(2048, 512).batch_size == 10
-    monkeypatch.setenv("CCC_GPU_BATCH_SIZE", "11")
-    with pytest.raises(ValueError, match="1..10"):
-        Policy.from_environment(2048, 512)
+    monkeypatch.setenv("CCC_GPU_BATCH_SIZE", "138")
+    assert Policy.from_environment(6144, 512).batch_size == 138
+    monkeypatch.setenv("CCC_GPU_BATCH_SIZE", "139")
+    with pytest.raises(ValueError, match="1..138"):
+        Policy.from_environment(6144, 512)
     assert batch_limit_for_partition(1704, 512) == 0
 
 
@@ -133,13 +133,13 @@ def test_partition_probe_waits_without_selecting_cpu(monkeypatch):
         apply_calls.append(service)
         return "cuda"
 
-    assert configure_partition("ccc", probe, apply, 2048, 0) == "unavailable"
+    assert configure_partition("ccc", probe, apply, 6144, 0) == "unavailable"
     assert probe_calls == [0] and apply_calls == []
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
 
-    assert not partition_has_room(lambda _device: None, 2048, 0)
-    assert not partition_has_room(lambda _device: 1535 * 1024**2, 2048, 0)
-    assert partition_has_room(lambda _device: 1536 * 1024**2, 2048, 0)
+    assert not partition_has_room(lambda _device: None, 6144, 0)
+    assert not partition_has_room(lambda _device: 5631 * 1024**2, 6144, 0)
+    assert partition_has_room(lambda _device: 5632 * 1024**2, 6144, 0)
 
 
 def test_partition_probe_success_and_apply_race_preserve_cuda_visibility(monkeypatch):
@@ -150,7 +150,7 @@ def test_partition_probe_success_and_apply_race_preserve_cuda_visibility(monkeyp
         return "cpu"
 
     assert (
-        configure_partition("ccc", lambda _device: 2048 * 1024**2, race_to_cpu, 2048, 0)
+        configure_partition("ccc", lambda _device: 6144 * 1024**2, race_to_cpu, 6144, 0)
         == "unavailable"
     )
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "0"
@@ -158,9 +158,9 @@ def test_partition_probe_success_and_apply_race_preserve_cuda_visibility(monkeyp
     assert (
         configure_partition(
             "ccc",
-            lambda _device: 2048 * 1024**2,
+            lambda _device: 6144 * 1024**2,
             lambda _service: "cuda",
-            2048,
+            6144,
             0,
         )
         == "cuda"

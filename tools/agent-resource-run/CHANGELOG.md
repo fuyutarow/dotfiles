@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.3 — 2026-10-15
+
+- Increase ccc's standing GPU partition to 6144 MiB and reserve it from research GPU admission
+
 ## 1.4.2 — 2026-10-15
 
 - ccc uses its reserved GPU partition for indexing, waits when unavailable, and keeps embedding batches off CPU.

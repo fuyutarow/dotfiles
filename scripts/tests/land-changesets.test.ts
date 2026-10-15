@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { applyToolChangesets } from "../land-changesets.ts";
 
+const repo = join(import.meta.dir, "../..");
+
 const temporary: string[] = [];
 afterEach(() => {
   for (const path of temporary.splice(0))
@@ -37,11 +39,11 @@ test("two changesets produce one highest bump and retain both entries", () => {
   const { root, tool, changes } = fixture();
   writeFileSync(
     join(changes, "one.md"),
-    "---\nbump: patch\n---\nFix first issue\n",
+    "---\nbump: patch\n---\n\nFix first issue\n",
   );
   writeFileSync(
     join(changes, "two.md"),
-    "---\nbump: minor\n---\nAdd second feature\n",
+    "---\nbump: minor\n---\n\nAdd second feature\n",
   );
 
   const result = applyToolChangesets(root, "2026-10-14");
@@ -65,6 +67,33 @@ test("two changesets produce one highest bump and retain both entries", () => {
   );
   expect(existsSync(join(changes, "one.md"))).toBe(false);
   expect(existsSync(join(changes, "two.md"))).toBe(false);
+});
+
+test("the repo Markdown formatter output parses as one changeset entry", () => {
+  const { root, tool, changes } = fixture();
+  const change = join(changes, "formatter-roundtrip.md");
+  writeFileSync(
+    change,
+    "---\nbump: patch\n---\n\nKeep user-session dbus and gnupg paths and accept --no-progress for apply\n",
+  );
+  const formatted = Bun.spawnSync(
+    ["rumdl", "fmt", "--config", join(repo, ".rumdl.toml"), change],
+    { cwd: repo, stdout: "pipe", stderr: "pipe" },
+  );
+  expect(
+    `${formatted.exitCode}: ${formatted.stderr.toString()}${formatted.stdout.toString()}`,
+  ).toStartWith("0:");
+
+  const result = applyToolChangesets(root, "2026-10-14");
+
+  expect(result.isOk()).toBe(true);
+  if (result.isErr()) return;
+  expect(result.value.releases).toEqual([
+    { tool: "sample", version: "1.2.4", entries: 1 },
+  ]);
+  expect(readFileSync(join(tool, "CHANGELOG.md"), "utf8")).toContain(
+    "- Keep user-session dbus and gnupg paths and accept --no-progress for apply",
+  );
 });
 
 test("landing without changesets leaves version and changelog unchanged", () => {

@@ -453,13 +453,13 @@ describe("land workspace", () => {
     mkdirSync(join(f.worker, "tools", "agx", ".changes"), { recursive: true });
     writeFileSync(
       join(f.worker, "tools", "agx", ".changes", "worker-ticket.md"),
-      "---\nbump: minor\n---\nAdd a worker-ticket feature\n",
+      "---\nbump: minor\n---\n\nAdd a worker-ticket feature\n",
     );
     f.jj(f.worker, ["status"]);
     mkdirSync(join(f.main, "tools", "agx", ".changes"), { recursive: true });
     writeFileSync(
       join(f.main, "tools", "agx", ".changes", "prior-ticket.md"),
-      "---\nbump: patch\n---\nFix a prior-ticket issue\n",
+      "---\nbump: patch\n---\n\nFix a prior-ticket issue\n",
     );
     applyToolChangesets(f.main, "2026-10-10");
     f.jj(f.main, ["commit", "-m", "land prior ticket release"]);
@@ -946,6 +946,39 @@ describe("land workspace", () => {
     expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
       "keep content",
     );
+  });
+
+  test("a bad changeset leaves restored paths out of the main checkout", () => {
+    const f = fixture();
+    const change = join(f.worker, "tools", "agx", ".changes", "bad-shape.md");
+    mkdirSync(join(f.worker, "tools", "agx", ".changes"), {
+      recursive: true,
+    });
+    writeFileSync(join(f.worker, "landed.txt"), "worker-only content\n");
+    writeFileSync(
+      change,
+      "---\nbump: patch\n---\nWorker entry missing the formatter blank line\n",
+    );
+    const result = f.land();
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toContain("[land] changesets: FAIL");
+    expect(result.stdout.toString()).toContain(
+      "[land] rollback: restored 2 path(s)",
+    );
+    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
+      "keep content\n",
+    );
+    expect(existsSync(join(f.main, "landed.txt"))).toBe(false);
+    expect(
+      existsSync(join(f.main, "tools", "agx", ".changes", "bad-shape.md")),
+    ).toBe(false);
+    expect(f.jj(f.main, ["status"])).toContain(
+      "The working copy has no changes.",
+    );
+    expect(
+      f.log().some((event) => event[0] === "run" && event[1] === "commit"),
+    ).toBe(false);
   });
 
   test("a failed push retains the successful commit verdict and does not deploy", () => {

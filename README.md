@@ -123,7 +123,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ```
 
 Each tool change records its release intent in a separate `tools/<name>/.changes/<slug>.md`
-file: frontmatter `bump: patch|minor|major`, then one plain-text entry line. Tickets do not edit
+file: frontmatter `bump: patch|minor|major`, a blank line, then one plain-text entry line. Tickets do not edit
 `package.json` versions or `CHANGELOG.md`. At land, `scripts/land.ts` applies the highest pending
 bump per tool, prepends all entries under one new SemVer heading, and removes the changeset files
 in the same landed commit. Landing with no changesets leaves tool versions and changelogs alone.

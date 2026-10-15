@@ -1009,12 +1009,7 @@ async function main(
     if (stage === "commit") report.commit = "failed";
     if (stage === "push") report.push = "failed";
   }
-  if (
-    result.isErr() &&
-    queueLockHeld &&
-    landedRoot !== undefined &&
-    restoredPaths.length > 0
-  ) {
+  if (result.isErr() && landedRoot !== undefined && restoredPaths.length > 0) {
     const cleaned = await jj(landedRoot, [
       "restore",
       "--from",
@@ -1024,8 +1019,8 @@ async function main(
     ]);
     emit(
       cleaned.isOk()
-        ? `[land] queue: restored ${restoredPaths.length} residue path(s)`
-        : `[land] queue: residue restore FAIL ${errorMessage(cleaned.error)}`,
+        ? `[land] rollback: restored ${restoredPaths.length} path(s) to the pre-land checkout`
+        : `[land] rollback: FAIL ${errorMessage(cleaned.error)}`,
     );
   }
   onReport?.(report);

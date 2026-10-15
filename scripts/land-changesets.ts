@@ -21,7 +21,7 @@ export type LandChangesetsResult = {
 const bumpRank: Record<Bump, number> = { patch: 0, minor: 1, major: 2 };
 const parseChange = (path: string): Result<Change, Error> => {
   const text = readFileSync(path, "utf8");
-  const match = /^---\n(bump: [^\n]+)\n---\n([^\n]+)\n?$/u.exec(text);
+  const match = /^---\n(bump: [^\n]+)\n---\n\n([^\n]+)\n?$/u.exec(text);
   if (match === null)
     return err(
       new Error(`${path}: expected frontmatter bump and one entry line`),

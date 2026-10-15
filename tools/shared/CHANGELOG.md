@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0 — 2026-10-15
+
+- Add agent-name: the one format and parser for agent session names, <project-slug>-<role>_<id> (hyphenated project slug, one underscore between role and id)
+
 ## 0.8.0 — 2026-10-15
 
 - Add the bun test preload that gives every test process its own TMPDIR under one per-run parent, removed at the end of the run and swept by the next run after a kill.

@@ -1,6 +1,6 @@
 import { hookJson } from "./lib.ts";
 // UserPromptSubmit hook (no matcher — this event supports none) implementing `/assign <role>`:
-// typed at the start of a prompt, it renames THIS session to "<project>-<role>_<suffix>" (the
+// typed at the start of a prompt, it renames THIS session to "<project-slug>-<role>_<suffix>" (the
 // same effect as `/rename`, via hookSpecificOutput.sessionTitle) and, if configured, delivers
 // that role's charter text as additionalContext — both as a side effect of the SAME turn, no
 // extra model turn spent, no subprocess spawned (assign-lib.ts's functions run in-process).

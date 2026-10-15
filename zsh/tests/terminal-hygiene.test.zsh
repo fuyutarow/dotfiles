@@ -539,6 +539,35 @@ else
   done
 fi
 
+# --- Agent session names: `_agent_name` / claude() match the shared vector table ---------------
+# tools/shared/tests/fixtures/agent-name-vectors.tsv is the same table the TS module is held to
+# (tools/shared/tests/agent-name.test.ts); a row where zsh and TS differ fails one of the two.
+typeset -g VECTORS=$ROOT/tools/shared/tests/fixtures/agent-name-vectors.tsv
+if [[ -f $VECTORS ]]; then
+  typeset -g kind v_cwd v_role v_id v_name got rows=0
+  while IFS=$'\t' read -r kind v_cwd v_role v_id v_name; do
+    [[ $kind == format ]] || continue
+    (( rows++ ))
+    got=$(zsh -fc 'IS_MAC=true IS_WSL=false; source "$1" >/dev/null 2>&1; _agent_name "$2" "$3" "$4"' _ "$ROOT/zsh/aliases.zsh" "$v_cwd" "$v_role" "$v_id")
+    [[ $got == $v_name ]] && ok "agent name: $v_cwd $v_role $v_id -> $v_name" || bad "agent name: $v_cwd $v_role $v_id -> got '$got', want '$v_name'"
+  done < $VECTORS
+  (( rows > 5 )) && ok "agent name: vector table has format rows" || bad "agent name: vector table has only $rows format rows"
+
+  # claude() itself: the wrapper passes `--name <slug>-agt_<id>` through to the real binary.
+  typeset -g stub=$(mktemp -d) proj
+  proj=$stub/Poly_Search-V1
+  mkdir -p $proj
+  print -r -- $'#!/bin/sh\nprintf "%s\\n" "$@"' > $stub/claude
+  chmod +x $stub/claude
+  got=$(cd $proj && PATH=$stub:$PATH zsh -fc 'IS_MAC=true IS_WSL=false; source "$1" >/dev/null 2>&1; claude hello' _ "$ROOT/zsh/aliases.zsh" | tr '\n' ' ')
+  [[ $got == --name\ poly-search-v1-agt_[0-9a-hj-km-np-tv-z](#c4)\ hello\ * ]] \
+    && ok "claude(): names a new session poly-search-v1-agt_<id>" \
+    || bad "claude(): unexpected argv '$got'"
+  command rm -rf "$stub"
+else
+  bad "agent name: vector table missing at $VECTORS"
+fi
+
 print -r -- "---"
 print -r -- "passed=$PASS failed=$FAIL"
 (( FAIL == 0 ))

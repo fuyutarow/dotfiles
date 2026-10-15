@@ -12,19 +12,16 @@
 // skill-shipped default at agents/skills/commanding-research-fleets/fleet_policy.toml applies.
 // There is no third fallback — assign-roles.toml is gone, not layered underneath.
 
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
 import { at, obj, str } from "../../hooks/narrow.ts";
+import {
+  agentNameFor,
+  isValidRole,
+} from "../../../tools/shared/src/agent-name.ts";
 
-// Lowercase letters/digits, starting with a letter, capped at 12: generous enough for every
-// role token seen live so far (obs, dtr, pi, gpu, ...) without accepting something that would
-// make an ugly session name.
-const ROLE_RE = /^[a-z][a-z0-9]{0,11}$/u;
-
-export function isValidRole(role: string): boolean {
-  return ROLE_RE.test(role);
-}
+export { isValidRole };
 
 // Crockford base32, lowercase, no i/l/o/u — the exact alphabet the plain `claude()` wrapper
 // (zsh/aliases.zsh) uses, so an assigned name and a plain-wrapper name read as the same species
@@ -42,14 +39,11 @@ export function randomSuffix(
   return suffix;
 }
 
-// Project segment is snake_case (`-` -> `_`), not just lowercased: a hyphenated dir like
-// "agentic-RnD" would otherwise produce "agentic-rnd-obs_a1b2" — a second hyphen sitting right
-// next to the project/role separator (caught live 2026-09-02 via the plain `claude()` wrapper's
-// own "agentic-rnd-agt_bvxj" — same fix applied there in zsh/aliases.zsh). Keeping the ONE
-// hyphen unambiguous as "where the project ends" is the point, not cosmetic preference.
+// The name FORMAT (`<project-slug>-<role>_<id>`: `-` joins words, `_` binds role to id; the
+// project/role boundary is the last `-<role>_`) lives in tools/shared/src/agent-name.ts, which
+// every producer uses. This module only supplies the random id and the hook's cwd-based entry.
 export function sessionName(cwd: string, role: string, suffix: string): string {
-  const project = basename(cwd).toLowerCase().replaceAll("-", "_");
-  return `${project}-${role}_${suffix}`;
+  return agentNameFor(cwd, role, suffix);
 }
 
 export interface RoleConfig {

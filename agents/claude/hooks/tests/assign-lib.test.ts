@@ -57,10 +57,16 @@ describe("sessionName", () => {
     );
   });
 
-  test("snake_cases a hyphenated project so only one hyphen separates project/role", () => {
+  test("keeps a hyphenated project hyphenated", () => {
     expect(sessionName("/home/fuyu/Workspace/agentic-RnD", "agt", "bvxj")).toBe(
-      "agentic_rnd-agt_bvxj",
+      "agentic-rnd-agt_bvxj",
     );
+  });
+
+  test("normalizes an underscored project to hyphens", () => {
+    expect(
+      sessionName("/home/fuyu/Workspace/polysearch_v1", "agt", "f24v"),
+    ).toBe("polysearch-v1-agt_f24v");
   });
 });
 

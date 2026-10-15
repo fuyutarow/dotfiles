@@ -1019,15 +1019,16 @@ grep() {
   command grep "$@"
 }
 
-# claude wrapper: auto-name new sessions "<project>-agt_<4-char Crockford base32>", keeping
+# claude wrapper: auto-name new sessions "<project-slug>-agt_<4-char Crockford base32>", keeping
 # Claude Code's own "<project>-<suffix>" shape but swapping the 2-hex-char suffix for our own.
 # No settings.json key, env var, or hook output field can change the built-in default (checked
 # settings-reference/env-vars/hooks docs directly, 2026-09-02) — the only lever is `-n/--name`
-# at launch, so this supplies it automatically. <project> is the lowercased cwd basename, same
-# source Claude Code itself uses for the default, with any `-` normalized to `_` (2026-09-02: a
-# hyphenated dir like "agentic-RnD" produced "agentic-rnd-agt_bvxj" — a second hyphen sitting
-# right next to the project/role separator — so the project segment is snake_case, keeping the
-# ONE hyphen unambiguous as "where the project ends"; matches assign-lib.ts's sessionName()).
+# at launch, so this supplies it automatically. The name format is declared once, in
+# tools/shared/src/agent-name.ts (`-` joins words, `_` binds role to id; project/role boundary is
+# the last `-<role>_`); _agent_name below is its pure-zsh twin and zsh/tests/terminal-hygiene.test.zsh
+# feeds it the shared vector table (tools/shared/tests/fixtures/agent-name-vectors.tsv). The project
+# slug is the lowercased cwd basename with every run of characters outside [a-z0-9] (including `_`)
+# turned into one `-`, so polysearch_v1 and polysearch-v1 both give "polysearch-v1-agt_f24v".
 # Skips subcommands (`claude mcp ...`, `claude doctor`, ...) since they don't take --name, and
 # skips an explicit `-n/--name` the caller gave.
 #
@@ -1042,6 +1043,16 @@ typeset -ga _CLAUDE_SUBCOMMANDS=(
   agents attach auth auto-mode doctor gateway import install logs mcp
   plugin plugins project respawn rm setup-token stop kill ultrareview update upgrade
 )
+# _agent_name <cwd> <role> <id> -> "<project-slug>-<role>_<id>" (twin of formatAgentName()).
+_agent_name() {
+  emulate -L zsh
+  setopt extended_glob
+  local slug="${${1:t}:l}"
+  slug="${slug//[^a-z0-9]##/-}"
+  slug="${slug##-#}"
+  slug="${slug%%-#}"
+  print -r -- "${slug:-x}-${2}_${3}"
+}
 claude() {
   local first="${1:-}" has_name=0 is_resume=0 is_fork=0 a
   for a in "$@"; do
@@ -1060,7 +1071,7 @@ claude() {
   for _i in {1..4}; do
     suffix+="${chars[$((RANDOM % 32 + 1))]}"
   done
-  command claude --name "${PWD:t:l:gs/-/_/}-agt_${suffix}" "$@"
+  command claude --name "$(_agent_name "$PWD" agt "$suffix")" "$@"
 }
 
 # ============================================

@@ -87,14 +87,21 @@ describe("assign-command: valid role renames the session", () => {
     expect(out.sessionTitle).toMatch(/^dotfiles-pi_/u);
   });
 
-  test("snake_cases a hyphenated project (only one hyphen in the final name)", async () => {
+  test("keeps a hyphenated project hyphenated and normalizes `_` to `-`", async () => {
     const r = runHook(
       HOOK,
       payload("/assign gpu", "/home/fuyu/Workspace/agentic-RnD"),
     );
     const out = await decisionOf(r.stdout);
     expect(out.sessionTitle).toMatch(
-      /^agentic_rnd-gpu_[0-9a-hj-km-np-tv-z]{4}$/u,
+      /^agentic-rnd-gpu_[0-9a-hj-km-np-tv-z]{4}$/u,
+    );
+    const r2 = runHook(
+      HOOK,
+      payload("/assign agt", "/home/fuyu/Workspace/polysearch_v1"),
+    );
+    expect((await decisionOf(r2.stdout)).sessionTitle).toMatch(
+      /^polysearch-v1-agt_[0-9a-hj-km-np-tv-z]{4}$/u,
     );
   });
 

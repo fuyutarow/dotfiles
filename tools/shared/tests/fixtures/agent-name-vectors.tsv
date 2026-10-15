@@ -1,0 +1,22 @@
+# Shared vectors for the agent session name format `<project-slug>-<role>_<id>`.
+# Checked by tools/shared/tests/agent-name.test.ts (TS module) and zsh/tests/terminal-hygiene.test.zsh (zsh _agent_name).
+# Tab-separated. "format": cwd, role, id, expected name.  "parse": name, project, role, id ("-" x3 = not a name).
+format	/home/fuyu/Workspace/polysearch_v1	agt	f24v	polysearch-v1-agt_f24v
+format	/home/fuyu/Workspace/polysearch-v1	agt	f24v	polysearch-v1-agt_f24v
+format	/home/fuyu/Workspace/firedancer	pi	abcd	firedancer-pi_abcd
+format	/home/fuyu/dotFiles	obs	wxyz	dotfiles-obs_wxyz
+format	/home/fuyu/Workspace/agentic-RnD	agt	bvxj	agentic-rnd-agt_bvxj
+format	/home/fuyu/Workspace/a__b..c  d	ws	k3m9	a-b-c-d-ws_k3m9
+format	/home/fuyu/Workspace/_lead-trail_	dtr	0000	lead-trail-dtr_0000
+format	/home/fuyu/Workspace/dotfiles/	agt	zzzz	dotfiles-agt_zzzz
+format	/home/fuyu/Workspace/___	agt	abcd	x-agt_abcd
+parse	polysearch-v1-agt_f24v	polysearch-v1	agt	f24v
+parse	firedancer-pi_abcd	firedancer	pi	abcd
+parse	agentic_rnd-agt_bvxj	agentic_rnd	agt	bvxj
+parse	polysearch_v1-agt_f24v	polysearch_v1	agt	f24v
+parse	a-b-c-d-ws_k3m9	a-b-c-d	ws	k3m9
+parse	no-underscore-here	-	-	-
+parse	agt_f24v	-	-	-
+parse	proj-agt_f24v_extra	-	-	-
+parse	proj-Agt_f24v	-	-	-
+parse	proj-agt_	-	-	-

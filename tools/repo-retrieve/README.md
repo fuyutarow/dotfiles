@@ -68,9 +68,10 @@ Every `rr index` first plans the current file set with ccc's installed matcher a
 including nested `.gitignore`, exclude pruning, and `max_file_size`. Run `rr index --plan`
 to inspect it without starting ccc or contacting the daemon. Stdout contains one JSONL record
 per matched file (`path`, `bytes`, `est_chunks`, `kind`), followed by a `type: "summary"` record.
-Stderr shows the ten largest directory/extension contributors with exclude lines for
-`.cocoindex_code/settings.yml`. Suggestions are checked with ccc's matcher; if a glob would
-prune an included file's parent directory, exact file excludes replace it.
+Stderr shows the ten largest directory/extension/kind contributors. Source and prose contributors
+are informational only; suggested exclude lines name exact files classified as data, and ccc's
+matcher checks that excluding one will not prune an included descendant. If an over-budget plan has
+no safe data contributor, it says so and points to `[index]` in `.cocoindex_code/rr.toml`.
 
 Declare the repo's budget in `.cocoindex_code/rr.toml`:
 
@@ -87,8 +88,12 @@ per nonblank UTF-8 file; undecodable files remain in the matched file count with
 as ccc skips their content. Directory totals use non-overlapping buckets capped at three levels.
 Data share is the fraction of estimated chunks classified as data. Classification uses machine
 format extensions, notebook outputs, long lines, digit/punctuation density, and minification.
-The assumed chunks/s estimates GPU seconds for a full rebuild, including files an incremental
-index might reuse; it is not a hardware benchmark.
+The configured chunks/s is a fallback estimate for a full rebuild, including files an incremental
+index might reuse. A completed index records ccc's persisted chunk count and elapsed time in the
+per-host `$XDG_STATE_HOME/repo-retrieve/<host>/index-rates.jsonl` file (default
+`~/.local/state/repo-retrieve/<host>/index-rates.jsonl`). Plans use the median of the latest nine
+rates when available and print whether the rate is measured or fallback. The time budget refuses a
+plan only when a measured historical rate is available; the fallback estimate is advisory.
 
 Exceeding any bound exits 4 before ccc starts, including with `--plan`. Invalid configuration or
 an unavailable matcher exits 2. `--accept-plan` permits a normal index despite the preflight

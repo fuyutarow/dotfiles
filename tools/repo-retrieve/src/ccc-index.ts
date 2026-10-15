@@ -41,6 +41,7 @@ import {
   type Result,
 } from "neverthrow";
 import { resolveDbDir } from "./ccc-db-dir.ts";
+import { recordIndexRate } from "./index-rate.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
 import {
@@ -360,6 +361,7 @@ async function waitForProjectIdle(
   while (state.indexing) {
     if (
       timeBudget !== undefined &&
+      timeBudget.plan.rate_source === "measured" &&
       (Temporal.Now.instant().epochMilliseconds - timeBudget.startedAt) / 1000 >
         timeBudget.plan.budget.max_seconds
     ) {
@@ -921,6 +923,24 @@ async function reindexCertified(
 
   const watermarkWrite = await writeWatermark(project, head, "index");
   if (watermarkWrite.isErr()) return err(watermarkWrite.error);
+  const completed = await indexProgressSample(project);
+  const completedChunks = completed.chunks;
+  const elapsedSeconds =
+    (Temporal.Now.instant().epochMilliseconds - startedAt) / 1000;
+  if (
+    completedChunks !== undefined &&
+    completedChunks > 0 &&
+    elapsedSeconds > 0
+  ) {
+    const recorded = await fromAsyncThrowable(
+      () => recordIndexRate(completedChunks / elapsedSeconds, elapsedSeconds),
+      asError,
+    )();
+    if (recorded.isErr())
+      process.stderr.write(
+        `NOTE: completed index rate was not recorded: ${recorded.error.message}\n`,
+      );
+  }
   return ok({ code: 0, head });
 }
 
@@ -973,6 +993,7 @@ async function runChildToStderr(
     const state = await indexProgressSample(cwd);
     if (
       plan !== undefined &&
+      plan.rate_source === "measured" &&
       (Temporal.Now.instant().epochMilliseconds - startedAt) / 1000 >
         plan.budget.max_seconds
     )

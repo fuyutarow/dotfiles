@@ -4,6 +4,7 @@ import { err, ok, type Result } from "neverthrow";
 import { z, jsonOf } from "../../shared/src/zod.ts";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { cccPython } from "./ccc-scope.ts";
+import { readIndexRate } from "./index-rate.ts";
 
 const BudgetSchema = z
   .object({
@@ -33,14 +34,17 @@ export type IndexPlan = {
   total: Totals;
   data_share: number;
   est_seconds: number;
+  rate_source: "measured" | "fallback";
+  chunks_per_second: number;
   violations: string[];
   directories: (Totals & { directory: string })[];
   extensions: (Totals & { extension: string })[];
   contributors: (Totals & {
     directory: string;
     extension: string;
+    kind: PlanFile["kind"];
     pattern: string;
-    exclude: string;
+    exclude: string | null;
   })[];
 };
 
@@ -49,7 +53,11 @@ const extension = (path: string) =>
 const escapeGlob = (path: string) => path.replaceAll(/[\\*?[\]{}]/gu, "\\$&");
 const directory = (file: PlanFile) =>
   posix.dirname(file.path).split("/").slice(0, 3).join("/");
-export function summarize(files: PlanFile[], budget: Budget): IndexPlan {
+export function summarize(
+  files: PlanFile[],
+  budget: Budget,
+  measuredRate: number | null = null,
+): IndexPlan {
   const chunks = files.reduce((sum, file) => sum + file.est_chunks, 0);
   const aggregate = (key: (file: PlanFile) => string) => {
     const groups = new Map<string, Totals>();
@@ -98,27 +106,37 @@ export function summarize(files: PlanFile[], budget: Budget): IndexPlan {
     }),
   );
   const contributors = aggregate(
-    (file) => `${directory(file)}\0${extension(file.path)}`,
+    (file) => `${directory(file)}\0${extension(file.path)}\0${file.kind}`,
   ).map(({ name, ...totals }) => {
-    const [dir = ".", ext = ""] = name.split("\0");
-    // Extensionless files get an exact path suggestion, never a directory prune.
-    const prefix = dir === "." ? "" : `${escapeGlob(dir)}/`;
-    let pattern = `${prefix}**/*${escapeGlob(ext)}`;
-    if (ext === "")
-      pattern = escapeGlob(
-        files.find(
-          (file) => directory(file) === dir && extension(file.path) === ext,
-        )?.path ?? "",
-      );
+    const [dir = ".", ext = "", kindName = "text"] = name.split("\0");
+    const kind: PlanFile["kind"] = kindName === "data" ? "data" : "text";
+    const matchingFiles = files.filter(
+      (file) =>
+        directory(file) === dir &&
+        extension(file.path) === ext &&
+        file.kind === kind,
+    );
+    // Exact paths ensure a data suggestion can never remove adjacent source or prose.
+    const pattern = matchingFiles
+      .map((file) => escapeGlob(file.path))
+      .join("\n");
     return {
       directory: dir,
       extension: ext,
+      kind,
       pattern,
       files: totals.files,
       bytes: totals.bytes,
       est_chunks: totals.est_chunks,
       share: totals.share,
-      exclude: `- '${pattern.replaceAll("'", "''")}'`,
+      exclude:
+        kind === "data"
+          ? matchingFiles
+              .map(
+                (file) => `- '${escapeGlob(file.path).replaceAll("'", "''")}'`,
+              )
+              .join("\n")
+          : null,
     };
   });
   const data_share =
@@ -127,7 +145,9 @@ export function summarize(files: PlanFile[], budget: Budget): IndexPlan {
       : files
           .filter((file) => file.kind === "data")
           .reduce((sum, file) => sum + file.est_chunks, 0) / chunks;
-  const est_seconds = chunks / budget.est_chunks_per_second;
+  const rate_source = measuredRate === null ? "fallback" : "measured";
+  const chunks_per_second = measuredRate ?? budget.est_chunks_per_second;
+  const est_seconds = chunks / chunks_per_second;
   const violations = [];
   if (chunks > budget.max_est_chunks)
     violations.push(`est_chunks ${chunks} > ${budget.max_est_chunks}`);
@@ -135,7 +155,7 @@ export function summarize(files: PlanFile[], budget: Budget): IndexPlan {
     violations.push(
       `data share ${(data_share * 100).toFixed(1)}% > ${budget.max_data_share * 100}%`,
     );
-  if (est_seconds > budget.max_seconds)
+  if (rate_source === "measured" && est_seconds > budget.max_seconds)
     violations.push(
       `estimated GPU seconds ${est_seconds.toFixed(1)} > ${budget.max_seconds}`,
     );
@@ -150,6 +170,8 @@ export function summarize(files: PlanFile[], budget: Budget): IndexPlan {
     },
     data_share,
     est_seconds,
+    rate_source,
+    chunks_per_second,
     violations,
     directories,
     extensions,
@@ -202,9 +224,21 @@ export async function computeIndexPlan(
         return err(new Error(`invalid planner output: ${file.error.message}`));
       files.push(file.data);
     }
-    const plan = summarize(files, budget);
+    const measuredRate = await readIndexRate();
+    const plan = summarize(files, budget, measuredRate);
     // A directory can itself end in '.json'. Ask ccc whether a proposed glob would
     // prune any ancestor of an included file; extension-scoping alone is insufficient.
+    const dataItems = plan.contributors.filter((item) => item.kind === "data");
+    const dataPatterns = dataItems.flatMap((item) =>
+      files
+        .filter(
+          (file) =>
+            directory(file) === item.directory &&
+            extension(file.path) === item.extension &&
+            file.kind === "data",
+        )
+        .map((file) => escapeGlob(file.path)),
+    );
     const validation = Bun.spawn({
       cmd: [
         python,
@@ -216,7 +250,7 @@ export async function computeIndexPlan(
       env: { ...process.env, RUST_LOG: "error", OTEL_SDK_DISABLED: "true" },
       stdin: new Response(
         JSON.stringify({
-          patterns: plan.contributors.map((item) => item.pattern),
+          patterns: dataPatterns,
           paths: files.map((file) => file.path),
         }),
       ),
@@ -233,23 +267,28 @@ export async function computeIndexPlan(
     if (
       validationCode !== 0 ||
       !safe.success ||
-      safe.data.length !== plan.contributors.length
+      safe.data.length !== dataPatterns.length
     )
       return err(
         new Error(`cannot validate exclude suggestions: ${validationErr}`),
       );
-    for (const [index, item] of plan.contributors.entries()) {
-      if (safe.data[index] === true && item.extension !== "") continue;
-      // Exact file paths cannot accidentally match an existing directory. They also
-      // correctly describe every extensionless contributor, rather than only one file.
-      item.exclude = files
+    const safeByPath = new Map(
+      dataPatterns.map((pattern, index) => [
+        pattern,
+        safe.data[index] === true,
+      ]),
+    );
+    for (const item of dataItems) {
+      const excludes = files
         .filter(
           (file) =>
             directory(file) === item.directory &&
-            extension(file.path) === item.extension,
+            extension(file.path) === item.extension &&
+            file.kind === "data" &&
+            safeByPath.get(escapeGlob(file.path)) === true,
         )
-        .map((file) => `- '${escapeGlob(file.path).replaceAll("'", "''")}'`)
-        .join("\n");
+        .map((file) => `- '${escapeGlob(file.path).replaceAll("'", "''")}'`);
+      item.exclude = excludes.length === 0 ? null : excludes.join("\n");
     }
     return ok(plan);
   });
@@ -259,18 +298,35 @@ export async function computeIndexPlan(
 }
 
 export function planReport(plan: IndexPlan): string {
+  const excludes = plan.contributors.filter((item) => item.exclude !== null);
+  const contributors = plan.contributors
+    .slice(0, 10)
+    .map(
+      (item) =>
+        `${item.directory} (${item.extension === "" ? "extensionless" : item.extension}, ${item.kind}): ${item.est_chunks} chunks, ${(item.share * 100).toFixed(1)}%, ${item.files} files\n`,
+    )
+    .join("");
+  const suggestions =
+    excludes.length === 0
+      ? "No data-kind contributor can be safely excluded. Adjust [index] budgets in .cocoindex_code/rr.toml.\n"
+      : "Suggested data-only excludes for .cocoindex_code/settings.yml:\n" +
+        excludes
+          .slice(0, 10)
+          .map((item) => item.exclude ?? "")
+          .join("\n") +
+        "\n";
   return (
-    `PLAN: ${plan.total.files} files, ${plan.total.bytes} bytes, ${plan.total.est_chunks} est_chunks (ceil(chars / 800)); data ${(plan.data_share * 100).toFixed(1)}%; estimated GPU ${plan.est_seconds.toFixed(1)}s at assumed ${plan.budget.est_chunks_per_second} chunks/s\n` +
+    `PLAN: ${plan.total.files} files, ${plan.total.bytes} bytes, ${plan.total.est_chunks} est_chunks (ceil(chars / 800)); data ${(plan.data_share * 100).toFixed(1)}%; estimated GPU ${plan.est_seconds.toFixed(1)}s at ${plan.chunks_per_second.toFixed(2)} chunks/s (${plan.rate_source})\n` +
+    (plan.rate_source === "fallback"
+      ? "PLAN WARNING: time estimate uses the configured fallback rate; the time budget is advisory until a measured host rate exists.\n"
+      : "") +
     `BUDGET: ${JSON.stringify(plan.budget)}\n` +
-    `${plan.violations.length === 0 ? "PLAN: within budget" : `PLAN REFUSED: ${plan.violations.join("; ")}`}\n` +
-    "Top contributors; paste under exclude_patterns in .cocoindex_code/settings.yml:\n" +
-    plan.contributors
-      .slice(0, 10)
-      .map(
-        (item) =>
-          `${item.directory} (${item.extension === "" ? "extensionless" : item.extension}): ${item.est_chunks} chunks, ${(item.share * 100).toFixed(1)}%, ${item.files} files; ${item.exclude}\n`,
-      )
-      .join("")
+    (plan.violations.length === 0
+      ? "PLAN: within budget\n"
+      : "PLAN REFUSED: " + plan.violations.join("; ") + "\n") +
+    "Top contributors (informational):\n" +
+    contributors +
+    (plan.violations.length === 0 ? "" : suggestions)
   );
 }
 

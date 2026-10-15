@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0 — 2026-10-15
+
+- Make index plans actionable with data-only exclude suggestions and measured per-host indexing rates
+
 ## 1.2.0 — 2026-10-15
 
 - Plan ccc's matcher scope before indexing and refuse over-budget plans with safe exclude suggestions.

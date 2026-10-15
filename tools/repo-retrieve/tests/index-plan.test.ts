@@ -14,8 +14,14 @@ import {
   computeIndexPlan,
   measuredEta,
   planReport,
+  summarize,
 } from "../src/index-plan.ts";
 import { waitForIndexChild } from "../src/ccc-index.ts";
+import {
+  indexRateFile,
+  readIndexRate,
+  recordIndexRate,
+} from "../src/index-rate.ts";
 
 const ccc = Bun.which("ccc");
 const roots: string[] = [];
@@ -86,9 +92,12 @@ describe.skipIf(ccc === null)(
       if (planned.isErr()) return;
       expect(planned.value.data_share).toBeGreaterThan(0.8);
       const top = planned.value.contributors[0]!;
+      const suggestion = top.exclude;
       expect(top.directory).toBe("bulk");
-      expect(top.exclude).toBe("- 'bulk/**/*.json'");
-      expect(planReport(planned.value)).toContain(top.exclude);
+      expect(top.kind).toBe("data");
+      expect(suggestion).toBe("- 'bulk/payload.json'");
+      if (suggestion === null) return;
+      expect(planReport(planned.value)).toContain(suggestion);
       // Same interpreter for scope, but every attempt to run ccc itself leaves evidence.
       const bin = join(root, "bin");
       mkdirSync(bin);
@@ -105,7 +114,7 @@ describe.skipIf(ccc === null)(
       const env = { PATH: `${bin}:${process.env.PATH ?? ""}` };
       const refused = await cli(root, [], env);
       expect(refused.code).toBe(4);
-      expect(refused.stderr).toContain(top.exclude);
+      expect(refused.stderr).toContain(suggestion);
       expect(await Bun.file(called).exists()).toBe(false);
       expect(
         await Bun.file(join(root, ".cocoindex_code", "INDEXED_AT")).exists(),
@@ -215,7 +224,7 @@ else:
       expect(result.stderr).toContain("ETA");
       expect(result.stderr).toContain("left the daemon running");
       expect(result.stderr.match(/Top contributors/gu)?.length).toBe(2);
-      expect(result.stderr).toContain("bulk/**/*.json");
+      expect(result.stderr).toContain("bulk/payload.json");
       expect(
         await Bun.file(join(root, ".cocoindex_code", "INDEXED_AT")).exists(),
       ).toBe(false);
@@ -281,4 +290,100 @@ test("measured ETA uses chunk deltas, ignores no advancement, and stops the clie
     },
   );
   expect(result).toBe(125);
+});
+
+test("code-only plans pass and never suggest excluding code or prose", () => {
+  const budget = {
+    max_est_chunks: 50_000,
+    max_data_share: 0.2,
+    max_seconds: 600,
+    est_chunks_per_second: 50,
+  };
+  const codePlan = summarize(
+    [
+      { path: "src/main.ts", bytes: 100, est_chunks: 1_000, kind: "text" },
+      { path: "notes/design.md", bytes: 100, est_chunks: 1_000, kind: "text" },
+    ],
+    budget,
+  );
+  expect(codePlan.violations).toEqual([]);
+  expect(codePlan.contributors.every((item) => item.exclude === null)).toBe(
+    true,
+  );
+
+  const refused = summarize(
+    [{ path: "src/main.ts", bytes: 100, est_chunks: 1_000, kind: "text" }],
+    { ...budget, max_est_chunks: 10 },
+  );
+  const report = planReport(refused);
+  expect(report).toContain("No data-kind contributor can be safely excluded");
+  expect(report).toContain(".cocoindex_code/rr.toml");
+  expect(report).not.toContain("- 'src/main.ts'");
+});
+
+test("only exact data-kind paths receive exclude suggestions", () => {
+  const plan = summarize(
+    [
+      { path: "src/main.ts", bytes: 100, est_chunks: 100, kind: "text" },
+      { path: "docs/notes.md", bytes: 100, est_chunks: 100, kind: "text" },
+      { path: "data/rows.json", bytes: 100, est_chunks: 1_000, kind: "data" },
+    ],
+    {
+      max_est_chunks: 50_000,
+      max_data_share: 0.2,
+      max_seconds: 600,
+      est_chunks_per_second: 50,
+    },
+  );
+  expect(plan.contributors.find((item) => item.kind === "data")?.exclude).toBe(
+    "- 'data/rows.json'",
+  );
+  expect(
+    plan.contributors
+      .filter((item) => item.kind === "text")
+      .every((item) => item.exclude === null),
+  ).toBe(true);
+  expect(planReport(plan)).toContain("Suggested data-only excludes");
+  expect(planReport(plan)).not.toContain("- 'src/main.ts'");
+  expect(planReport(plan)).not.toContain("- 'docs/notes.md'");
+});
+
+test("fallback time estimate warns without refusing; measured rate enforces the time budget", () => {
+  const files = [
+    {
+      path: "src/main.ts",
+      bytes: 100,
+      est_chunks: 1_000,
+      kind: "text" as const,
+    },
+  ];
+  const budget = {
+    max_est_chunks: 50_000,
+    max_data_share: 0.2,
+    max_seconds: 10,
+    est_chunks_per_second: 50,
+  };
+  const fallback = summarize(files, budget);
+  expect(fallback.violations).toEqual([]);
+  expect(fallback.rate_source).toBe("fallback");
+  expect(planReport(fallback)).toContain(
+    "time estimate uses the configured fallback rate",
+  );
+  const measured = summarize(files, budget, 10);
+  expect(measured.violations).toEqual(["estimated GPU seconds 100.0 > 10"]);
+  expect(measured.rate_source).toBe("measured");
+  expect(planReport(measured)).toContain("(measured)");
+});
+
+test("rate history is per host and plans use the median of the latest nine runs", async () => {
+  const stateHome = mkdtempSync(join(tmpdir(), "rr-index-rate-"));
+  roots.push(stateHome);
+  const path = indexRateFile({ XDG_STATE_HOME: stateHome }, "fixture-host");
+  expect(path).toContain("repo-retrieve/fixture-host/index-rates.jsonl");
+  expect(indexRateFile({ XDG_STATE_HOME: stateHome }, "other-host")).not.toBe(
+    path,
+  );
+  for (const rate of [100, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    await recordIndexRate(rate, 100, path);
+  expect(await readIndexRate(path)).toBe(5);
 });

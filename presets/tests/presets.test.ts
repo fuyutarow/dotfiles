@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
@@ -7,9 +7,9 @@ import { loadPolicy, renderOxlintrc } from "../../scripts/render-oxlintrc.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const FIXTURES = join(import.meta.dir, "fixtures");
-const OXLINT_SCRATCH = mkdtempSync(join(tmpdir(), "preset-oxlint-"));
-afterAll(() => {
-  rmSync(OXLINT_SCRATCH, { recursive: true, force: true });
+const OXLINT_SCRATCH = await mkdtemp(join(tmpdir(), "preset-oxlint-"));
+afterAll(async () => {
+  await rm(OXLINT_SCRATCH, { recursive: true, force: true });
 });
 const ShowConfig = z.looseObject({
   compilerOptions: z.record(z.string(), z.unknown()),
@@ -29,29 +29,36 @@ const OxReport = z.looseObject({
   number_of_files: z.number(),
 });
 
-function showConfig(path: string): Record<string, unknown> {
-  const result = Bun.spawnSync(
+async function showConfig(path: string): Promise<Record<string, unknown>> {
+  const result = Bun.spawn(
     ["bunx", "--bun", "tsgo", "--showConfig", "-p", path],
-    { cwd: ROOT, timeout: 60_000 },
+    { cwd: ROOT, timeout: 60_000, stdout: "pipe", stderr: "pipe" },
   );
-  expect(result.exitCode).toBe(0);
-  const parsed = jsonOf(ShowConfig).safeParse(result.stdout.toString());
+  const [stdout, exitCode] = await Promise.all([
+    new Response(result.stdout).text(),
+    result.exited,
+  ]);
+  expect(exitCode).toBe(0);
+  const parsed = jsonOf(ShowConfig).safeParse(stdout);
   if (!parsed.success)
     return expect.unreachable(`tsgo --showConfig: ${parsed.error.message}`);
   return parsed.data.compilerOptions;
 }
 
-function typecheck(path: string): number | null {
-  return Bun.spawnSync(["bunx", "--bun", "tsgo", "--noEmit", "-p", path], {
+async function typecheck(path: string): Promise<number> {
+  const result = Bun.spawn(["bunx", "--bun", "tsgo", "--noEmit", "-p", path], {
     cwd: ROOT,
     timeout: 60_000,
-  }).exitCode;
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return result.exited;
 }
 
 describe("TypeScript preset", () => {
-  test("dotfiles root config cannot weaken any strictness flag from the preset", () => {
-    const preset = showConfig(join(ROOT, "presets/ts/tsconfig.json"));
-    const dotfiles = showConfig(join(ROOT, "tsconfig.json"));
+  test("dotfiles root config cannot weaken any strictness flag from the preset", async () => {
+    const preset = await showConfig(join(ROOT, "presets/ts/tsconfig.json"));
+    const dotfiles = await showConfig(join(ROOT, "tsconfig.json"));
     const strictFlags = [
       "strict",
       "noImplicitAny",
@@ -82,12 +89,12 @@ describe("TypeScript preset", () => {
     expect(dotfiles).toMatchObject(preset);
   });
 
-  test("good fixture passes tsgo", () => {
-    expect(typecheck(join(FIXTURES, "ts/good/tsconfig.json"))).toBe(0);
+  test("good fixture passes tsgo", async () => {
+    expect(await typecheck(join(FIXTURES, "ts/good/tsconfig.json"))).toBe(0);
   });
 
-  test("bad fixture rejects unchecked index access", () => {
-    expect(typecheck(join(FIXTURES, "ts/bad/tsconfig.json"))).not.toBe(0);
+  test("bad fixture rejects unchecked index access", async () => {
+    expect(await typecheck(join(FIXTURES, "ts/bad/tsconfig.json"))).not.toBe(0);
   });
 });
 
@@ -103,7 +110,7 @@ describe("oxlint preset", () => {
       custom: base.value.custom.filter((rule) => rule.scope === "house"),
     };
     const root = jsonOf(OxConfig).safeParse(
-      readFileSync(join(ROOT, ".oxlintrc.json"), "utf8"),
+      await readFile(join(ROOT, ".oxlintrc.json"), "utf8"),
     );
     const rendered = jsonOf(OxConfig).safeParse(renderOxlintrc(house));
     if (!root.success)
@@ -133,12 +140,12 @@ describe("oxlint preset", () => {
     ["no-throwing-parse", "eslint-js/no-restricted-syntax"],
   ] as const;
   for (const [name, rule] of rules) {
-    test(`${name}: bad fails and good passes`, () => {
-      const run = (which: "good" | "bad") => {
+    test(`${name}: bad fails and good passes`, async () => {
+      const run = async (which: "good" | "bad") => {
         const file = join(FIXTURES, `oxlint/${which}/${name}.ts`);
         const scratchFile = join(OXLINT_SCRATCH, `${which}-${name}.ts`);
-        writeFileSync(scratchFile, readFileSync(file, "utf8"));
-        const result = Bun.spawnSync(
+        await writeFile(scratchFile, await readFile(file, "utf8"));
+        const result = Bun.spawn(
           [
             "bunx",
             "--bun",
@@ -149,18 +156,23 @@ describe("oxlint preset", () => {
             "json",
             scratchFile,
           ],
-          { cwd: ROOT, timeout: 60_000 },
+          { cwd: ROOT, timeout: 60_000, stdout: "pipe", stderr: "pipe" },
         );
-        const report = jsonOf(OxReport).safeParse(result.stdout.toString());
+        const [stdout, stderr, exitCode] = await Promise.all([
+          new Response(result.stdout).text(),
+          new Response(result.stderr).text(),
+          result.exited,
+        ]);
+        const report = jsonOf(OxReport).safeParse(stdout);
         if (!report.success)
           return expect.unreachable(
-            `oxlint gave no JSON report (exit ${result.exitCode}): ${result.stderr.toString()}`,
+            `oxlint gave no JSON report (exit ${exitCode}): ${stderr}`,
           );
         expect(report.data.number_of_files).toBe(1);
-        return { exit: result.exitCode, diagnostics: report.data.diagnostics };
+        return { exit: exitCode, diagnostics: report.data.diagnostics };
       };
-      expect(run("good").exit).toBe(0);
-      const bad = run("bad");
+      expect((await run("good")).exit).toBe(0);
+      const bad = await run("bad");
       expect(bad.exit).not.toBe(0);
       if (name === "no-explicit-any")
         expect(

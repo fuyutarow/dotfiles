@@ -1,10 +1,4 @@
-import {
-  readFileSync,
-  writeFileSync,
-  existsSync,
-  mkdtempSync,
-  rmSync,
-} from "node:fs";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { cli } from "cleye";
@@ -16,6 +10,13 @@ import {
 
 const ROOT = resolve(import.meta.dir, "../..");
 const PRESETS = join(ROOT, "presets");
+
+function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
 
 function fatal(message: string): never {
   process.stderr.write(`preset: ${message}\n`);
@@ -62,7 +63,7 @@ if (action === "apply" && targetArg !== undefined)
 if (action === "diff" && argv.flags.to !== undefined)
   fatal("diff accepts a positional directory, not --to");
 const target = resolve(targetText);
-if (!existsSync(target)) fatal(`target does not exist: ${target}`);
+if (!(await exists(target))) fatal(`target does not exist: ${target}`);
 
 const files =
   name === "ts"
@@ -86,8 +87,8 @@ const files =
 
 const expected = new Map<string, string>();
 for (const file of files) {
-  if (file.createOnly === true && existsSync(file.destination)) continue;
-  expected.set(file.destination, readFileSync(file.source, "utf8"));
+  if (file.createOnly === true && (await exists(file.destination))) continue;
+  expected.set(file.destination, await readFile(file.source, "utf8"));
 }
 
 if (name === "oxlint") {
@@ -96,18 +97,21 @@ if (name === "oxlint") {
   const example = files.find((file) => file.createOnly === true);
   if (
     action === "apply" &&
-    !existsSync(join(target, "oxlint-policy.local.toml")) &&
+    !(await exists(join(target, "oxlint-policy.local.toml"))) &&
     !argv.flags["dry-run"] &&
     example !== undefined
   )
-    writeFileSync(example.destination, readFileSync(example.source, "utf8"));
+    await writeFile(
+      example.destination,
+      await readFile(example.source, "utf8"),
+    );
   const repoPolicy = await loadRepoPolicy(target, loaded.value);
   if (repoPolicy.ok)
     expected.set(
       join(target, ".oxlintrc.json"),
       renderOxlintrc(repoPolicy.value),
     );
-  else if (!existsSync(join(target, "oxlint-policy.local.toml"))) {
+  else if (!(await exists(join(target, "oxlint-policy.local.toml")))) {
     const housePolicy = {
       ...loaded.value,
       custom: loaded.value.custom.filter((rule) => rule.scope === "house"),
@@ -116,31 +120,31 @@ if (name === "oxlint") {
   } else fatal(repoPolicy.error);
 }
 
-function applyOne(destination: string, content: string): void {
-  const current = existsSync(destination)
-    ? readFileSync(destination, "utf8")
+async function applyOne(destination: string, content: string): Promise<void> {
+  const current = (await exists(destination))
+    ? await readFile(destination, "utf8")
     : undefined;
   if (current === content) {
     console.log(`preset: current ${relative(target, destination)}`);
   } else if (argv.flags["dry-run"]) {
     console.log(`preset: would write ${relative(target, destination)}`);
   } else {
-    writeFileSync(destination, content);
+    await writeFile(destination, content);
     console.log(`preset: wrote ${relative(target, destination)}`);
   }
 }
 
 if (action === "apply") {
-  for (const [destination, content] of expected) applyOne(destination, content);
+  for (const [destination, content] of expected)
+    await applyOne(destination, content);
   process.exit(0);
 }
 
 let drift = false;
-const scratch = mkdtempSync(join(tmpdir(), `preset-diff-${process.pid}-`));
+const scratch = await mkdtemp(join(tmpdir(), `preset-diff-${process.pid}-`));
 for (const [destination, content] of expected) {
-  const current = existsSync(destination)
-    ? readFileSync(destination, "utf8")
-    : "";
+  const destinationExists = await exists(destination);
+  const current = destinationExists ? await readFile(destination, "utf8") : "";
   if (current === content) continue;
   drift = true;
   const label = relative(target, destination);
@@ -148,9 +152,9 @@ for (const [destination, content] of expected) {
     scratch,
     `${expected.size}-${label.replaceAll("/", "_")}`,
   );
-  writeFileSync(expectedPath, content);
-  const currentPath = existsSync(destination) ? destination : "/dev/null";
-  const diff = Bun.spawnSync(
+  await writeFile(expectedPath, content);
+  const currentPath = destinationExists ? destination : "/dev/null";
+  const diff = Bun.spawn(
     [
       "diff",
       "-u",
@@ -164,11 +168,18 @@ for (const [destination, content] of expected) {
     ],
     { stdout: "pipe", stderr: "pipe" },
   );
-  if (diff.stdout.byteLength > 0) process.stdout.write(diff.stdout);
-  if (diff.stderr.byteLength > 0) process.stderr.write(diff.stderr);
-  if (diff.exitCode > 1)
-    fatal(`diff failed for ${label}: ${diff.stderr.toString()}`);
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(diff.stdout).text(),
+    new Response(diff.stderr).text(),
+    diff.exited,
+  ]);
+  if (stdout.length > 0) process.stdout.write(stdout);
+  if (stderr.length > 0) process.stderr.write(stderr);
+  if (exitCode > 1) {
+    await rm(scratch, { recursive: true, force: true });
+    fatal(`diff failed for ${label}: ${stderr}`);
+  }
 }
-rmSync(scratch, { recursive: true, force: true });
+await rm(scratch, { recursive: true, force: true });
 if (drift) process.exit(1);
 console.log(`preset: ${name} is up to date`);

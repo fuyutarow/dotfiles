@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,10 +8,10 @@ import {
 } from "../src/reclaim-plan-cache.ts";
 
 test("cached plan contains only capped, safe blind candidates and expires", async () => {
-  const home = mkdtempSync(join(tmpdir(), "reclaim-plan-cache-"));
-  using cleanup = new DisposableStack();
-  cleanup.defer(() => {
-    rmSync(home, { recursive: true, force: true });
+  const home = await mkdtemp(join(tmpdir(), "reclaim-plan-cache-"));
+  await using cleanup = new AsyncDisposableStack();
+  cleanup.defer(async () => {
+    await rm(home, { recursive: true, force: true });
   });
   const plan = {
     targets: [
@@ -46,10 +46,10 @@ test("cached plan contains only capped, safe blind candidates and expires", asyn
 });
 
 test("missing or oversized cache is a cheap empty result", async () => {
-  const home = mkdtempSync(join(tmpdir(), "reclaim-plan-cache-"));
-  using cleanup = new DisposableStack();
-  cleanup.defer(() => {
-    rmSync(home, { recursive: true, force: true });
+  const home = await mkdtemp(join(tmpdir(), "reclaim-plan-cache-"));
+  await using cleanup = new AsyncDisposableStack();
+  cleanup.defer(async () => {
+    await rm(home, { recursive: true, force: true });
   });
   expect(await readReclaimPlanCache(home)).toEqual([]);
 });

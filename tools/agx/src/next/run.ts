@@ -400,7 +400,6 @@ export async function run(flags: Flags): Promise<number> {
   clearInterval(progressWatcher);
   const output = await outputPromise;
   const verify = await runVerify(ticket.verify, cwd, runDir, temp);
-  temp.remove();
   const receiptLine = output.trim().split("\n").at(-1) ?? "";
   const receipt = jsonOf(
     z.looseObject({
@@ -459,6 +458,7 @@ export async function run(flags: Flags): Promise<number> {
     ),
     changed_files: Array.isArray(report.changes) ? report.changes.length : 0,
   });
+  temp.remove();
   process.stdout.write(
     `${JSON.stringify({ id, ticket: ticket.name ?? basename(path), row: row.id, exit, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,
   );

@@ -1,6 +1,8 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -10,6 +12,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { err } from "neverthrow";
+import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { createTempTracker } from "../temp.ts";
 import { createRunTemp, sweepStaleTemps } from "../../src/temp.ts";
 
@@ -18,10 +22,17 @@ afterAll(tempDirs.assertRemoved);
 
 const servers: ReturnType<typeof Bun.spawn>[] = [];
 const roots: string[] = [];
+const makeWritable = (path: string) => {
+  if (!existsSync(path) || !lstatSync(path).isDirectory()) return;
+  chmodSync(path, 0o700);
+  for (const name of readdirSync(path)) makeWritable(join(path, name));
+};
 afterEach(() => {
   for (const server of servers.splice(0)) server.kill();
-  for (const root of roots.splice(0))
+  for (const root of roots.splice(0)) {
+    makeWritable(root);
     rmSync(root, { recursive: true, force: true });
+  }
 });
 const scratch = (prefix: string): string => {
   const root = tempDirs.register(
@@ -174,6 +185,30 @@ describe("agx run owns its temp space", () => {
     await child.exited;
     expect(readdirSync(f.tempRoot)).toEqual([]);
   });
+
+  test("a read-only worker subtree is removed after the ended record is written", async () => {
+    const f = await fixture(
+      `import { chmodSync, mkdirSync } from "node:fs";\nconst child = process.env.TMPDIR + "/readonly";\nmkdirSync(child);\nchmodSync(child, 0o555);\n${DONE}`,
+      "true",
+    );
+    const result = Bun.spawnSync(
+      [process.execPath, CLI, "run", f.ticket, "--cd", f.root],
+      { cwd: process.cwd(), env: f.env, timeout: 10_000, stdout: "pipe" },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(readdirSync(f.tempRoot)).toEqual([]);
+    const state = readFileSync(
+      join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl"),
+      "utf8",
+    );
+    const parsed = jsonOf(
+      z.array(z.looseObject({ kind: z.string(), exit: z.number().optional() })),
+    ).safeParse(`[${state.trim().split("\n").join(",")}]`);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.at(-1)?.kind).toBe("ended");
+    expect(parsed.data.at(-1)?.exit).toBe(0);
+  });
 });
 
 describe("createRunTemp", () => {
@@ -204,5 +239,38 @@ describe("createRunTemp", () => {
     expect(existsSync(live.dir)).toBe(true);
     live.remove();
     expect(readdirSync(root)).toEqual([]);
+  });
+
+  test("read-only stale subdirectories are made writable before removal", () => {
+    const root = scratch("sweep-readonly-");
+    const deadPid = 2 ** 22 + 12345;
+    const child = join(root, "dead", "graveyard-fuyu");
+    mkdirSync(child, { recursive: true });
+    chmodSync(child, 0o555);
+    writeFileSync(join(root, "dead.pid"), `${deadPid}\n`);
+    expect(sweepStaleTemps(root, -1)).toEqual(["dead"]);
+    expect(existsSync(join(root, "dead"))).toBe(false);
+  });
+
+  test("a failed stale entry warns once and does not block a new run", () => {
+    const root = scratch("sweep-failure-");
+    const deadPid = 2 ** 22 + 12345;
+    const dead = join(root, "dead");
+    writeFileSync(join(root, "dead.pid"), `${deadPid}\n`);
+    mkdirSync(dead);
+    const write = spyOn(process.stderr, "write").mockImplementation(() => true);
+    const injectedError = Object.assign(new Error("fixture rm failure"), {
+      code: "EACCES",
+    });
+    expect(sweepStaleTemps(root, -1, () => err(injectedError))).toEqual([]);
+    const warningCalls = write.mock.calls;
+    write.mockRestore();
+    expect(warningCalls).toHaveLength(1);
+    expect(String(warningCalls[0]?.[0])).toContain(dead);
+    expect(String(warningCalls[0]?.[0])).toContain("EACCES");
+    const created = createRunTemp("new-run", root)._unsafeUnwrap();
+    expect(existsSync(created.dir)).toBe(true);
+    expect(existsSync(dead)).toBe(false);
+    created.remove();
   });
 });

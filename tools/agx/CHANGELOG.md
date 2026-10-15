@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.10.1 — 2026-10-16
+
+- Keep stale temp cleanup non-fatal and preserve run records before cleanup.
+
 ## 4.10.0 — 2026-10-15
 
 - Each run owns a temp directory under ~/.cache/agx/tmp/<run-id>: the worker and verify commands get TMPDIR, TMP and TEMP pointing at it, agx removes it when the run ends (including SIGINT/SIGTERM), the next run sweeps directories whose recorded pid is dead, and agx refuses a temp root that is /tmp itself.

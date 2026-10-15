@@ -1,11 +1,13 @@
 import {
   existsSync,
+  chmodSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   realpathSync,
   rmSync,
   statSync,
+  lstatSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -39,34 +41,100 @@ const pidAlive = (pid: number): boolean =>
       z.looseObject({ code: z.literal("EPERM") }).safeParse(error).success,
   );
 
-const removeEntry = (root: string, name: string): void => {
-  rmSync(join(root, name), { recursive: true, force: true });
-  rmSync(join(root, `${name}.pid`), { force: true });
+const makeDirectoriesWritable = (path: string): Result<void, unknown> => {
+  const stat = fromThrowable(
+    () => lstatSync(path, { throwIfNoEntry: false }),
+    (error) => error,
+  )();
+  return stat.andThen((entry) => {
+    if (entry === undefined || !entry.isDirectory()) return ok();
+    const chmod = fromThrowable(
+      () => {
+        chmodSync(path, entry.mode | 0o700);
+      },
+      (error) => error,
+    )();
+    if (chmod.isErr()) return chmod;
+    const children = fromThrowable(
+      () => readdirSync(path),
+      (error) => error,
+    )();
+    return children.andThen((names) =>
+      names.reduce<Result<void, unknown>>(
+        (result, child) =>
+          result.andThen(() => makeDirectoriesWritable(join(path, child))),
+        ok(),
+      ),
+    );
+  });
+};
+
+const removeEntry = (root: string, name: string): Result<void, unknown> => {
+  const path = join(root, name);
+  return makeDirectoriesWritable(path).andThen(() =>
+    fromThrowable(
+      () => {
+        rmSync(path, { recursive: true, force: true });
+        rmSync(join(root, `${name}.pid`), { force: true });
+      },
+      (error) => error,
+    )(),
+  );
+};
+
+const entryIsStale = fromThrowable(
+  (root: string, name: string, self: number): boolean => {
+    const pidText = existsSync(join(root, `${name}.pid`))
+      ? readFileSync(join(root, `${name}.pid`), "utf8").trim()
+      : "";
+    const recorded = pidText === "" ? Number.NaN : Number(pidText);
+    return Number.isInteger(recorded) && recorded > 0
+      ? recorded !== self && !pidAlive(recorded)
+      : Temporal.Now.instant().epochMilliseconds -
+          (statSync(join(root, name), { throwIfNoEntry: false })?.mtimeMs ??
+            0) >
+          ORPHAN_GRACE_MS;
+  },
+  (error) => error,
+);
+
+const removalWarning = (path: string, error: unknown): void => {
+  const code = z.looseObject({ code: z.string() }).safeParse(error);
+  process.stderr.write(
+    `WARN agx temp cleanup failed for ${path} (${code.success ? code.data.code : "UNKNOWN"}): ${String(error)}\n`,
+  );
 };
 
 /** Remove run directories whose recorded owner is dead; a directory with no readable pid goes
  *  once it is older than the grace period (the owner may still be writing its pid). */
-export function sweepStaleTemps(root: string, self = process.pid): string[] {
+export function sweepStaleTemps(
+  root: string,
+  self = process.pid,
+  remove: (root: string, name: string) => Result<void, unknown> = removeEntry,
+): string[] {
   if (!existsSync(root)) return [];
   const removed: string[] = [];
   const names = new Set(
     readdirSync(root).map((name) => name.replace(/\.pid$/u, "")),
   );
   for (const name of names) {
-    const pidText = existsSync(join(root, `${name}.pid`))
-      ? readFileSync(join(root, `${name}.pid`), "utf8").trim()
-      : "";
-    const recorded = pidText === "" ? Number.NaN : Number(pidText);
-    const stale =
-      Number.isInteger(recorded) && recorded > 0
-        ? recorded !== self && !pidAlive(recorded)
-        : Temporal.Now.instant().epochMilliseconds -
-            (statSync(join(root, name), { throwIfNoEntry: false })?.mtimeMs ??
-              0) >
-          ORPHAN_GRACE_MS;
-    if (!stale) continue;
-    removeEntry(root, name);
-    removed.push(name);
+    const path = join(root, name);
+    entryIsStale(root, name, self).match(
+      (stale) => {
+        if (!stale) return;
+        remove(root, name).match(
+          () => {
+            removed.push(name);
+          },
+          (error) => {
+            removalWarning(path, error);
+          },
+        );
+      },
+      (error) => {
+        removalWarning(path, error);
+      },
+    );
   }
   return removed;
 }
@@ -89,7 +157,12 @@ const openDir = fromThrowable(
       dir,
       env: { TMPDIR: dir, TMP: dir, TEMP: dir },
       remove: () => {
-        removeEntry(root, id);
+        removeEntry(root, id).match(
+          () => {},
+          (error) => {
+            removalWarning(dir, error);
+          },
+        );
       },
     };
   },

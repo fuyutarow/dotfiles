@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
+import { access, realpath } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { cli } from "cleye";
 
@@ -183,9 +183,25 @@ function located(value: string): boolean {
   return fileLine || (externalSource && externalAnchor);
 }
 
-function sameResolvedFile(first: string, second: string): boolean {
-  if (!existsSync(first) || !existsSync(second)) return false;
-  return realpathSync(first) === realpathSync(second);
+async function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
+async function sameResolvedFile(
+  first: string,
+  second: string,
+): Promise<boolean> {
+  if (!(await pathExists(first)) || !(await pathExists(second))) {
+    return false;
+  }
+  const [resolvedFirst, resolvedSecond] = await Promise.all([
+    realpath(first),
+    realpath(second),
+  ]);
+  return resolvedFirst === resolvedSecond;
 }
 
 function stableId(value: string): boolean {
@@ -1215,11 +1231,11 @@ async function verifyFrozenDonorSet(
     );
     return;
   }
-  if (!existsSync(donorSetPath)) {
+  if (!(await pathExists(donorSetPath))) {
     fatalError = `DONOR SET not found: ${donorSetPath}`;
     return;
   }
-  if (!existsSync(donorCheckPath)) {
+  if (!(await pathExists(donorCheckPath))) {
     fatalError = `DONOR SET validator not found: ${donorCheckPath}`;
     return;
   }
@@ -1227,24 +1243,28 @@ async function verifyFrozenDonorSet(
   const bytes = await Bun.file(donorSetPath).bytes();
   const actualDigest = createHash("sha256").update(bytes).digest("hex");
   const donorText = new TextDecoder().decode(bytes);
-  const upstream = Bun.spawnSync({
+  const upstream = Bun.spawn({
     cmd: ["bun", donorCheckPath, "-"],
     stderr: "pipe",
     stdin: new Blob([bytes]),
     stdout: "pipe",
-    timeout: 10_000,
+    signal: AbortSignal.timeout(10_000),
   });
-  if (upstream.exitCode === 2) {
-    fatalError = `check-donor-set failed: ${upstream.stderr.toString().trim() !== "" ? upstream.stderr.toString().trim() : "fatal upstream validator error"}`;
+  const [upstreamExitCode, upstreamStdout, upstreamStderr] = await Promise.all([
+    upstream.exited,
+    new Response(upstream.stdout).text(),
+    new Response(upstream.stderr).text(),
+  ]);
+  if (upstreamExitCode === 2) {
+    fatalError = `check-donor-set failed: ${upstreamStderr.trim() !== "" ? upstreamStderr.trim() : "fatal upstream validator error"}`;
     return;
   }
-  if (upstream.exitCode !== 0 && upstream.exitCode !== 1) {
-    fatalError = `check-donor-set could not complete (exit ${String(upstream.exitCode)}): ${upstream.stderr.toString().trim() !== "" ? upstream.stderr.toString().trim() : "upstream validator unavailable or timed out"}`;
+  if (upstreamExitCode !== 0 && upstreamExitCode !== 1) {
+    fatalError = `check-donor-set could not complete (exit ${String(upstreamExitCode)}): ${upstreamStderr.trim() !== "" ? upstreamStderr.trim() : "upstream validator unavailable or timed out"}`;
     return;
   }
-  if (upstream.exitCode !== 0) {
-    const findings = upstream.stdout
-      .toString()
+  if (upstreamExitCode !== 0) {
+    const findings = upstreamStdout
       .split(/\r?\n/u)
       .filter((line) => /\s(?:FAIL|MISSING)\s/u.test(line))
       .slice(0, 3)
@@ -1276,7 +1296,7 @@ async function verifyFrozenDonorSet(
     const lines = section.body.split("\n");
     const reference = frozenReference(readField(lines, "Donor set") ?? "");
     if (reference === undefined) continue;
-    if (!sameResolvedFile(reference.path, donorSetPath)) {
+    if (!(await sameResolvedFile(reference.path, donorSetPath))) {
       fail(
         `${section.id}/T15`,
         "declared DONOR SET path does not match --donor-set",
@@ -1361,7 +1381,7 @@ async function input(): Promise<Input> {
       ...(donorSetPath === undefined ? {} : { donorSetPath }),
     };
   }
-  if (!existsSync(path)) {
+  if (!(await pathExists(path))) {
     fatalError = `gate-check: file not found: ${path}`;
     return { legacyV1, text: "" };
   }

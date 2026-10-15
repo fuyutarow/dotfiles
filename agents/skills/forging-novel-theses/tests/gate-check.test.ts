@@ -1,19 +1,21 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { afterEach, describe, expect, test as bunTest } from "bun:test";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const script = resolve(import.meta.dir, "../scripts/gate-check.ts");
 const temporaryDirectories: string[] = [];
+const pendingWrites: Promise<void>[] = [];
 const recoveryRule =
   "ONE targeted regeneration in an unoccupied legitimate cell; then COVERAGE GAP";
+const test = (
+  name: string,
+  callback: () => Promise<void>,
+  timeout = 30_000,
+): void => {
+  bunTest(name, callback, timeout);
+};
 
 type RunResult = Readonly<{
   exitCode: number;
@@ -38,29 +40,42 @@ type CandidateOptions = Readonly<{
   transferDetails?: string;
 }>;
 
-const spawn = (arguments_: readonly string[], stdin?: string): RunResult => {
-  const result = Bun.spawnSync({
+const spawn = async (
+  arguments_: readonly string[],
+  stdin?: string,
+): Promise<RunResult> => {
+  await Promise.all(pendingWrites.splice(0));
+  const result = Bun.spawn({
     cmd: ["bun", script, ...arguments_],
     stderr: "pipe",
     stdin: stdin === undefined ? undefined : new Blob([stdin]),
     stdout: "pipe",
-    timeout: 10_000,
+    signal: AbortSignal.timeout(10_000),
   });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    result.exited,
+    new Response(result.stdout).text(),
+    new Response(result.stderr).text(),
+  ]);
 
   return {
-    exitCode: result.exitCode,
-    stderr: result.stderr.toString(),
-    stdout: result.stdout.toString(),
+    exitCode,
+    stderr,
+    stdout,
   };
 };
 
-const run = (...arguments_: string[]): RunResult => spawn(arguments_);
+const run = (...arguments_: string[]): Promise<RunResult> => spawn(arguments_);
 
 const fixture = (content: string): string => {
-  const directory = mkdtempSync(join(tmpdir(), "novel-thesis-packet-"));
+  const directory = join(tmpdir(), `novel-thesis-packet-${randomUUID()}`);
   temporaryDirectories.push(directory);
   const path = join(directory, "thesis.md");
-  writeFileSync(path, `${content.trim()}\n`);
+  pendingWrites.push(
+    mkdir(directory, { recursive: true }).then(async () => {
+      await Bun.write(path, `${content.trim()}\n`);
+    }),
+  );
   return path;
 };
 
@@ -100,7 +115,7 @@ const donorSet = `
 const frozenDonorSet = (): Readonly<{ digest: string; path: string }> => {
   const path = fixture(donorSet);
   return {
-    digest: createHash("sha256").update(readFileSync(path)).digest("hex"),
+    digest: createHash("sha256").update(`${donorSet.trim()}\n`).digest("hex"),
     path,
   };
 };
@@ -225,31 +240,32 @@ ${candidate({
 })}
 `;
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(pendingWrites.splice(0));
   for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
+    await rm(directory, { force: true, recursive: true });
   }
 });
 
 describe("gate-check", () => {
-  test("accepts a complete coordinate-bearing packet by path", () => {
-    const result = run(fixture(candidate()));
+  test("accepts a complete coordinate-bearing packet by path", async () => {
+    const result = await run(fixture(candidate()));
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("candidate packet: FAIL=0");
     expect(result.stderr).toBe("");
   });
 
-  test("accepts the same packet from stdin", () => {
-    const result = spawn(["-"], candidate());
+  test("accepts the same packet from stdin", async () => {
+    const result = await spawn(["-"], candidate());
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("candidate packet: FAIL=0");
     expect(result.stderr).toBe("");
   });
 
-  test("accepts a covered batch and emits its derived matrix", () => {
-    const result = run(fixture(validBatch()));
+  test("accepts a covered batch and emits its derived matrix", async () => {
+    const result = await run(fixture(validBatch()));
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("candidate batch: FAIL=0");
@@ -258,14 +274,14 @@ describe("gate-check", () => {
     expect(result.stdout).toContain("MATRIX  C3");
   });
 
-  test("rejects a mechanically collapsed batch after checking every candidate", () => {
+  test("rejects a mechanically collapsed batch after checking every candidate", async () => {
     const shared = {
       discriminator:
         "Under matched samples, the trace account predicts transient recovery while the endpoint account predicts no recovery.",
       operation: "SUBSTITUTE",
       target: "REPRESENTATION",
     };
-    const result = run(
+    const result = await run(
       fixture(`
 ## Batch contract
 - Requested candidate count: 3
@@ -292,8 +308,8 @@ ${candidate({ ...shared, id: "C3" })}
     );
   });
 
-  test("rejects the demonstrated vague brainstorming false positive", () => {
-    const result = run(
+  test("rejects the demonstrated vague brainstorming false positive", async () => {
+    const result = await run(
       fixture(
         candidate({
           discriminator: "Results will be different.",
@@ -320,8 +336,8 @@ ${candidate({ ...shared, id: "C3" })}
     );
   });
 
-  test("rejects an unnamed OTHER coordinate", () => {
-    const result = run(fixture(candidate({ seed: "OTHER" })));
+  test("rejects an unnamed OTHER coordinate", async () => {
+    const result = await run(fixture(candidate({ seed: "OTHER" })));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -329,8 +345,8 @@ ${candidate({ ...shared, id: "C3" })}
     );
   });
 
-  test("rejects a bare seed-provenance label without a specific seed", () => {
-    const result = run(fixture(candidate({ seed: "OBSERVATION" })));
+  test("rejects a bare seed-provenance label without a specific seed", async () => {
+    const result = await run(fixture(candidate({ seed: "OBSERVATION" })));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -338,25 +354,25 @@ ${candidate({ ...shared, id: "C3" })}
     );
   });
 
-  test("requires an attested Blind-spot packet row for a TACIT seed", () => {
-    const invalid = run(
+  test("requires an attested Blind-spot packet row for a TACIT seed", async () => {
+    const invalid = await run(
       fixture(candidate({ seed: "TACIT — plausible practitioner intuition" })),
     );
-    const ownerOnly = run(
+    const ownerOnly = await run(
       fixture(
         candidate({
           seed: "TACIT — Blind-spot packet research/blind-spots.md, Probe P1, HUMAN:operator",
         }),
       ),
     );
-    const emptyLocus = run(
+    const emptyLocus = await run(
       fixture(
         candidate({
           seed: "TACIT — Blind-spot packet research/blind-spots.md, Probe P1, HUMAN:operator@",
         }),
       ),
     );
-    const valid = run(
+    const valid = await run(
       fixture(
         candidate({
           seed: "TACIT — Blind-spot packet research/blind-spots.md, Probe P1, HUMAN:operator@conversation:user-turn-7",
@@ -379,8 +395,8 @@ ${candidate({ ...shared, id: "C3" })}
     expect(valid.exitCode).toBe(0);
   });
 
-  test("does not let a one-candidate file bypass its batch contract", () => {
-    const result = run(
+  test("does not let a one-candidate file bypass its batch contract", async () => {
+    const result = await run(
       fixture(`
 ## Batch contract
 - Requested candidate count: 3
@@ -399,8 +415,8 @@ ${candidate({ id: "C1" })}
     expect(result.stdout).toContain("Anti-default candidate C2 not found");
   });
 
-  test("rejects an old kill-and-withdrawal packet", () => {
-    const result = run(
+  test("rejects an old kill-and-withdrawal packet", async () => {
+    const result = await run(
       fixture(`
 制約を装った慣習: Assays must capture stable states.
 転移した構造: Event sourcing → temporal reconstruction.
@@ -417,16 +433,16 @@ Capital fit: One-quarter budget.
     expect(result.stdout).toContain("Status");
   });
 
-  test("rejects a blank novelty delta", () => {
-    const result = run(fixture(candidate({ noveltyDelta: "" })));
+  test("rejects a blank novelty delta", async () => {
+    const result = await run(fixture(candidate({ noveltyDelta: "" })));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("Nearest prior / novelty delta");
     expect(result.stdout).toContain("placeholder");
   });
 
-  test("accepts explicit UNVERIFIED with a warning", () => {
-    const result = run(
+  test("accepts explicit UNVERIFIED with a warning", async () => {
+    const result = await run(
       fixture(
         candidate({
           noveltyDelta: "UNVERIFIED — nearest-prior search is still pending.",
@@ -439,16 +455,16 @@ Capital fit: One-quarter budget.
     expect(result.stdout).toContain("UNVERIFIED");
   });
 
-  test("rejects a non-candidate status", () => {
-    const result = run(fixture(candidate({ status: "VALIDATED" })));
+  test("rejects a non-candidate status", async () => {
+    const result = await run(fixture(candidate({ status: "VALIDATED" })));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("Status must be exactly CANDIDATE");
   });
 
-  test("accepts a relation-level transfer candidate with target evidence still untested", () => {
+  test("accepts a relation-level transfer candidate with target evidence still untested", async () => {
     const donor = frozenDonorSet();
-    const result = run(
+    const result = await run(
       "--donor-set",
       donor.path,
       fixture(validTransferCandidate(donor.path, donor.digest)),
@@ -459,8 +475,8 @@ Capital fit: One-quarter budget.
     expect(result.stdout).toContain("FAIL=0");
   });
 
-  test("rejects a TRANSFER operation that carries only an analogy label", () => {
-    const result = run(
+  test("rejects a TRANSFER operation that carries only an analogy label", async () => {
+    const result = await run(
       fixture(
         candidate({
           operation: "TRANSFER",
@@ -477,8 +493,8 @@ Capital fit: One-quarter budget.
     expect(result.stdout).toContain("Target-side evidence");
   });
 
-  test("rejects transfer-only fields on a non-transfer candidate", () => {
-    const result = run(
+  test("rejects transfer-only fields on a non-transfer candidate", async () => {
+    const result = await run(
       fixture(
         candidate({
           transferDetails: `- Donor set: path=research/donor-set.md; sha256=${"a".repeat(64)}`,
@@ -492,13 +508,13 @@ Capital fit: One-quarter budget.
     );
   });
 
-  test("rejects source-side success laundered as target-side support", () => {
+  test("rejects source-side success laundered as target-side support", async () => {
     const donor = frozenDonorSet();
     const invalid = validTransferCandidate(donor.path, donor.digest).replace(
       "Target-side evidence: UNTESTED",
       "Target-side evidence: SUPPORTED — both donor systems succeeded",
     );
-    const result = run("--donor-set", donor.path, fixture(invalid));
+    const result = await run("--donor-set", donor.path, fixture(invalid));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -506,7 +522,7 @@ Capital fit: One-quarter budget.
     );
   });
 
-  test("requires non-correspondence, a transfer boundary, and precision loss separately", () => {
+  test("requires non-correspondence, a transfer boundary, and precision loss separately", async () => {
     const donor = frozenDonorSet();
     for (const field of [
       "Non-correspondence",
@@ -517,16 +533,16 @@ Capital fit: One-quarter budget.
         new RegExp(`^- ${field}:.*$`, "mu"),
         "",
       );
-      const result = run("--donor-set", donor.path, fixture(invalid));
+      const result = await run("--donor-set", donor.path, fixture(invalid));
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain(field);
     }
   });
 
-  test("accepts a concrete MAPPING-BREAK as a preserved non-candidate result", () => {
+  test("accepts a concrete MAPPING-BREAK as a preserved non-candidate result", async () => {
     const donor = frozenDonorSet();
-    const result = run(
+    const result = await run(
       "--donor-set",
       donor.path,
       fixture(validMappingBreak(donor.path, donor.digest)),
@@ -536,21 +552,21 @@ Capital fit: One-quarter budget.
     expect(result.stdout).toContain("mapping-break packet: FAIL=0");
   });
 
-  test("default mode accepts the current handoff and rejects the legacy v1 handoff", () => {
+  test("default mode accepts the current handoff and rejects the legacy v1 handoff", async () => {
     const donor = frozenDonorSet();
-    const current = run(
+    const current = await run(
       "--donor-set",
       donor.path,
       fixture(validMappingBreak(donor.path, donor.digest)),
     );
-    const legacy = run(
+    const legacy = await run(
       "--donor-set",
       donor.path,
       fixture(
         validMappingBreak(donor.path, donor.digest, "directing-research"),
       ),
     );
-    const caseVariant = run(
+    const caseVariant = await run(
       "--donor-set",
       donor.path,
       fixture(
@@ -568,9 +584,9 @@ Capital fit: One-quarter budget.
     expect(legacy.stdout).toContain("exact directing-research-sections owner");
   });
 
-  test("legacy v1 mode accepts only the exact legacy handoff", () => {
+  test("legacy v1 mode accepts only the exact legacy handoff", async () => {
     const donor = frozenDonorSet();
-    const legacy = run(
+    const legacy = await run(
       "--legacy-v1",
       "--donor-set",
       donor.path,
@@ -578,13 +594,13 @@ Capital fit: One-quarter budget.
         validMappingBreak(donor.path, donor.digest, "directing-research"),
       ),
     );
-    const current = run(
+    const current = await run(
       "--legacy-v1",
       "--donor-set",
       donor.path,
       fixture(validMappingBreak(donor.path, donor.digest)),
     );
-    const caseVariant = run(
+    const caseVariant = await run(
       "--legacy-v1",
       "--donor-set",
       donor.path,
@@ -592,7 +608,7 @@ Capital fit: One-quarter budget.
         validMappingBreak(donor.path, donor.digest, "DIRECTING-RESEARCH"),
       ),
     );
-    const adjacentToCandidate = run(
+    const adjacentToCandidate = await run(
       "--donor-set",
       donor.path,
       "--legacy-v1",
@@ -611,7 +627,7 @@ Capital fit: One-quarter budget.
     expect(current.stdout).toContain("exact directing-research owner");
   });
 
-  test("legacy v1 compatibility accepts only one exact bare flag token", () => {
+  test("legacy v1 compatibility accepts only one exact bare flag token", async () => {
     const donor = frozenDonorSet();
     const legacyFixture = fixture(
       validMappingBreak(donor.path, donor.digest, "directing-research"),
@@ -637,7 +653,7 @@ Capital fit: One-quarter budget.
     ] as const;
 
     for (const arguments_ of invalidArgumentSets) {
-      const result = run(
+      const result = await run(
         ...arguments_,
         "--donor-set",
         donor.path,
@@ -649,11 +665,11 @@ Capital fit: One-quarter budget.
         "legacy v1 compatibility requires exactly one bare --legacy-v1 token",
       );
     }
-  });
+  }, 30_000);
 
-  test("handoff owner matching rejects ambiguous substrings in both modes", () => {
+  test("handoff owner matching rejects ambiguous substrings in both modes", async () => {
     const donor = frozenDonorSet();
-    const currentSubstring = run(
+    const currentSubstring = await run(
       "--donor-set",
       donor.path,
       fixture(
@@ -664,7 +680,7 @@ Capital fit: One-quarter budget.
         ),
       ),
     );
-    const legacySubstring = run(
+    const legacySubstring = await run(
       "--legacy-v1",
       "--donor-set",
       donor.path,
@@ -681,7 +697,7 @@ Capital fit: One-quarter budget.
     expect(legacySubstring.exitCode).toBe(1);
   });
 
-  test("rejects a vague MAPPING-BREAK and candidate leakage in the same attempt", () => {
+  test("rejects a vague MAPPING-BREAK and candidate leakage in the same attempt", async () => {
     const donor = frozenDonorSet();
     const invalid = validMappingBreak(donor.path, donor.digest)
       .replace(
@@ -692,32 +708,32 @@ Capital fit: One-quarter budget.
         "- Status: MAPPING-BREAK",
         "- Thesis claim: Rollback will solve the target problem.\n- Status: MAPPING-BREAK",
       );
-    const result = run("--donor-set", donor.path, fixture(invalid));
+    const result = await run("--donor-set", donor.path, fixture(invalid));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("typed non-correspondence");
     expect(result.stdout).toContain("must not contain Thesis claim");
   });
 
-  test("rejects duplicate transfer attempt IDs across a candidate and MAPPING-BREAK", () => {
+  test("rejects duplicate transfer attempt IDs across a candidate and MAPPING-BREAK", async () => {
     const donor = frozenDonorSet();
     const duplicate = `${validTransferCandidate(donor.path, donor.digest)}\n${validMappingBreak(donor.path, donor.digest).replaceAll("T2", "T1")}`;
-    const result = run("--donor-set", donor.path, fixture(duplicate));
+    const result = await run("--donor-set", donor.path, fixture(duplicate));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("duplicate transfer attempt ID: T1");
   });
 
-  test("requires the exact frozen DONOR SET for every transfer artifact", () => {
+  test("requires the exact frozen DONOR SET for every transfer artifact", async () => {
     const donor = frozenDonorSet();
     const packet = fixture(validTransferCandidate(donor.path, donor.digest));
-    const omitted = run(packet);
-    const wrongDigest = run(
+    const omitted = await run(packet);
+    const wrongDigest = await run(
       "--donor-set",
       donor.path,
       fixture(validTransferCandidate(donor.path, "f".repeat(64))),
     );
-    const wrongPath = run(
+    const wrongPath = await run(
       "--donor-set",
       donor.path,
       fixture(
@@ -735,13 +751,13 @@ Capital fit: One-quarter budget.
     expect(wrongPath.stdout).toContain("DONOR SET path does not match");
   });
 
-  test("rejects donor IDs absent from the frozen DONOR SET", () => {
+  test("rejects donor IDs absent from the frozen DONOR SET", async () => {
     const donor = frozenDonorSet();
     const invalid = validTransferCandidate(donor.path, donor.digest).replace(
       "Donor IDs: D1, D2",
       "Donor IDs: D1, D404",
     );
-    const result = run("--donor-set", donor.path, fixture(invalid));
+    const result = await run("--donor-set", donor.path, fixture(invalid));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -749,7 +765,7 @@ Capital fit: One-quarter budget.
     );
   });
 
-  test("rejects duplicate donor IDs and source-locator substitution", () => {
+  test("rejects duplicate donor IDs and source-locator substitution", async () => {
     const donor = frozenDonorSet();
     const duplicateIds = validTransferCandidate(
       donor.path,
@@ -763,12 +779,12 @@ Capital fit: One-quarter budget.
       "D1:doi:10.9999/unrelated, p. 1",
     );
 
-    const duplicateResult = run(
+    const duplicateResult = await run(
       "--donor-set",
       donor.path,
       fixture(duplicateIds),
     );
-    const substitutionResult = run(
+    const substitutionResult = await run(
       "--donor-set",
       donor.path,
       fixture(substitutedLocator),
@@ -782,14 +798,16 @@ Capital fit: One-quarter budget.
     );
   });
 
-  test("rejects a frozen donor file that never passed the SoK DONOR SET contract", () => {
-    const invalidDonorPath = fixture(
-      donorSet.replace(/^- Transfer search question:.*$/mu, ""),
+  test("rejects a frozen donor file that never passed the SoK DONOR SET contract", async () => {
+    const invalidDonor = donorSet.replace(
+      /^- Transfer search question:.*$/mu,
+      "",
     );
+    const invalidDonorPath = fixture(invalidDonor);
     const digest = createHash("sha256")
-      .update(readFileSync(invalidDonorPath))
+      .update(`${invalidDonor.trim()}\n`)
       .digest("hex");
-    const result = run(
+    const result = await run(
       "--donor-set",
       invalidDonorPath,
       fixture(validTransferCandidate(invalidDonorPath, digest)),
@@ -802,13 +820,13 @@ Capital fit: One-quarter budget.
     expect(result.stdout).toContain("Transfer search question");
   });
 
-  test("rejects a multi-donor MAPPING-BREAK carrying a single-donor limit", () => {
+  test("rejects a multi-donor MAPPING-BREAK carrying a single-donor limit", async () => {
     const donor = frozenDonorSet();
     const invalid = validMappingBreak(donor.path, donor.digest).replace(
       "- Donor IDs: D1\n",
       "- Donor IDs: D1, D2\n",
     );
-    const result = run("--donor-set", donor.path, fixture(invalid));
+    const result = await run("--donor-set", donor.path, fixture(invalid));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
@@ -816,25 +834,29 @@ Capital fit: One-quarter budget.
     );
   });
 
-  test("requires a base source plus an exact anchor for a source relation", () => {
+  test("requires a base source plus an exact anchor for a source relation", async () => {
     const donor = frozenDonorSet();
     const invalid = validTransferCandidate(donor.path, donor.digest).replace(
       /- Source relation \/ locator:.*$/mu,
       "- Source relation / locator: recoverability is described only at p. 4 without a base source identifier",
     );
-    const result = run("--donor-set", donor.path, fixture(invalid));
+    const result = await run("--donor-set", donor.path, fixture(invalid));
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("needs an exact source locus");
   });
 
-  test("does not borrow missing or duplicate fields from a later Markdown section", () => {
+  test("does not borrow missing or duplicate fields from a later Markdown section", async () => {
     const donor = frozenDonorSet();
     const duplicate = validTransferCandidate(donor.path, donor.digest).replace(
       "- Target-side evidence: UNTESTED",
       "- Target-side evidence: UNTESTED\n- Target-side evidence: UNTESTED",
     );
-    const duplicateResult = run("--donor-set", donor.path, fixture(duplicate));
+    const duplicateResult = await run(
+      "--donor-set",
+      donor.path,
+      fixture(duplicate),
+    );
 
     for (const heading of ["##", "###", "####", "######"]) {
       const missing = `${validTransferCandidate(
@@ -844,7 +866,11 @@ Capital fit: One-quarter budget.
         /^- Target-side evidence:.*$/mu,
         "",
       )}\n${heading} Notes\n- Target-side evidence: UNTESTED`;
-      const missingResult = run("--donor-set", donor.path, fixture(missing));
+      const missingResult = await run(
+        "--donor-set",
+        donor.path,
+        fixture(missing),
+      );
 
       expect(missingResult.exitCode).toBe(1);
       expect(missingResult.stdout).toContain(
@@ -855,19 +881,20 @@ Capital fit: One-quarter budget.
     expect(duplicateResult.stdout).toContain(
       "duplicate field in one candidate packet: Target-side evidence",
     );
-  });
+  }, 30_000);
 
-  test("treats a missing donor dependency as fatal and accepts a same-file symlink", () => {
+  test("treats a missing donor dependency as fatal and accepts a same-file symlink", async () => {
     const missingPath = "/definitely/missing/donor-set.md";
-    const missing = run(
+    const missing = await run(
       "--donor-set",
       missingPath,
       fixture(validTransferCandidate(missingPath, "a".repeat(64))),
     );
     const donor = frozenDonorSet();
     const alias = `${donor.path}.link`;
-    symlinkSync(donor.path, alias);
-    const aliasResult = run(
+    await Promise.all(pendingWrites.splice(0));
+    await symlink(donor.path, alias);
+    const aliasResult = await run(
       "--donor-set",
       alias,
       fixture(validTransferCandidate(donor.path, donor.digest)),
@@ -878,15 +905,18 @@ Capital fit: One-quarter budget.
     expect(aliasResult.exitCode).toBe(0);
   });
 
-  test("treats a missing upstream DONOR SET validator as fatal", () => {
+  test("treats a missing upstream DONOR SET validator as fatal", async () => {
     const donor = frozenDonorSet();
-    const directory = mkdtempSync(
-      join(import.meta.dir, ".isolated-gate-check-"),
+    const directory = join(
+      import.meta.dir,
+      `.isolated-gate-check-${randomUUID()}`,
     );
     temporaryDirectories.push(directory);
+    await mkdir(directory);
     const isolatedScript = join(directory, "gate-check.ts");
-    writeFileSync(isolatedScript, readFileSync(script));
-    const result = Bun.spawnSync({
+    await Bun.write(isolatedScript, await Bun.file(script).text());
+    await Promise.all(pendingWrites.splice(0));
+    const result = Bun.spawn({
       cmd: [
         "bun",
         isolatedScript,
@@ -896,15 +926,19 @@ Capital fit: One-quarter budget.
       ],
       stderr: "pipe",
       stdout: "pipe",
-      timeout: 10_000,
+      signal: AbortSignal.timeout(10_000),
     });
+    const [exitCode, stderr] = await Promise.all([
+      result.exited,
+      new Response(result.stderr).text(),
+    ]);
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("DONOR SET validator not found");
+    expect(exitCode).toBe(2);
+    expect(stderr).toContain("DONOR SET validator not found");
   });
 
-  test("uses Cleye's strict unknown-flag failure", () => {
-    const result = run("--unexpected");
+  test("uses Cleye's strict unknown-flag failure", async () => {
+    const result = await run("--unexpected");
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Unknown flag: --unexpected");

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 — 2026-10-15
+
+- Classify timed-out searches against daemon status so indexing reports BUSY progress and unavailable daemons remain FATAL.
+
 ## 1.3.0 — 2026-10-15
 
 - Make index plans actionable with data-only exclude suggestions and measured per-host indexing rates

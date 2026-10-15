@@ -213,11 +213,16 @@ if [ "\${FAKE_CCC_DAEMON_DOWN:-0}" = 1 ]; then
     printf 'daemon unavailable\n' >&2
     exit 1
 fi
-if [ "\${FAKE_CCC_INDEXING:-0}" = 1 ]; then
+if [ "\${FAKE_CCC_INDEXING:-0}" = 1 ] || { [ "\${FAKE_CCC_INDEXING_AFTER_SEARCH:-0}" = 1 ] && [ -f "$FAKE_SEARCH_LOG.search-started" ]; }; then
     printf 'Projects:\\n%s [indexing]\\n' "$PWD"
+    if [ "\${FAKE_CCC_DAEMON_STATUS_PROGRESS:-1}" = 1 ]; then printf 'Indexing in progress: 18 files listed | 7 added, 0 deleted, 0 reprocessed, 0 unchanged\\n'; fi
   else
     printf 'Projects:\\n%s [idle]\\n' "$PWD"
   fi
+  exit 0
+fi
+if [ "${name}" = ccc ] && [ "$1" = status ]; then
+  printf 'Indexing in progress: 18 files listed | 7 added, 0 deleted, 0 reprocessed, 0 unchanged\\n'
   exit 0
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_MUTATE_GIT_DURING_INDEX:-0}" = 1 ]; then
@@ -231,6 +236,7 @@ if [ "${name}" = ccc ] && [ "$1" = index ]; then
   touch "$PWD/.cocoindex_code/fake_target.db" 2>/dev/null || true
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_INDEX_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
+if [ "${name}" = ccc ] && [ "$1" = search ] && [ "\${FAKE_CCC_INDEXING_AFTER_SEARCH:-0}" = 1 ]; then touch "$FAKE_SEARCH_LOG.search-started"; fi
 if [ "${name}" = ccc ] && [ "$1" = search ] && [ -n "\${FAKE_CCC_SEARCH_SLEEP_SECONDS:-}" ]; then exec sleep "$FAKE_CCC_SEARCH_SLEEP_SECONDS"; fi
 if [ "${name}" = ccc ] && [ "\${FAKE_CCC_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
 if [ "${name}" = rg ] && [ "\${FAKE_RG_THREE_LINES:-0}" = 1 ]; then
@@ -371,7 +377,10 @@ describe("repo-retrieve route contract", () => {
     expect(performance.now() - startedAt).toBeLessThan(1_500);
     expect(result.code).toBe(75);
     expect(result.stderr).toContain(
-      "RESULT: BUSY route=concept; reindex running (pid 4242); lexical routes work now: rr text|regex|files",
+      `daemon busy indexing ${dir}: 18 files listed, 7 added`,
+    );
+    expect(result.stderr).toContain(
+      "RESULT: BUSY route=concept; reindex running (pid 4242); retry after the index or use lexical routes rr text|regex|files",
     );
     expect(result.stderr).not.toContain("search child timed out");
     const slowStatus = run(
@@ -381,7 +390,7 @@ describe("repo-retrieve route contract", () => {
     );
     expect(slowStatus.code).toBe(75);
     expect(slowStatus.stderr).toContain(
-      "RESULT: BUSY route=concept; reindex running (pid 4242); lexical routes work now: rr text|regex|files",
+      "RESULT: BUSY route=concept; reindex running (pid 4242); retry after the index or use lexical routes rr text|regex|files",
     );
     expect(slowStatus.stderr).not.toContain("search child timed out");
   });
@@ -405,7 +414,7 @@ describe("repo-retrieve route contract", () => {
     expect(result.code).toBe(75);
     expect(result.stderr).toContain("RESULT: BUSY route=concept;");
     expect(result.stderr).toContain(
-      "lexical routes work now: rr text|regex|files",
+      "retry after the index or use lexical routes rr text|regex|files",
     );
     expect(result.stderr).not.toContain("search child timed out");
   }, 15_000);
@@ -421,6 +430,44 @@ describe("repo-retrieve route contract", () => {
     expect(result.code).toBe(124);
     expect(result.stderr).toContain("search child timed out after 250ms");
     expect(result.stderr).not.toContain("RESULT: BUSY");
+  });
+
+  test("an indexing status observed at timeout classifies the search as BUSY", () => {
+    const { dir } = registerFreshGitProject();
+    const result = run(
+      dir,
+      ["about", "--query", "index starts during search", "--timeout-ms", "250"],
+      {
+        FAKE_CCC_INDEXING_AFTER_SEARCH: "1",
+        FAKE_CCC_DAEMON_STATUS_PROGRESS: "0",
+        FAKE_CCC_SEARCH_SLEEP_SECONDS: "2",
+      },
+    );
+
+    expect(result.code).toBe(75);
+    expect(result.log.match(/ccc daemon status/gu)).toHaveLength(2);
+    expect(result.stderr).toContain(
+      `daemon busy indexing ${dir}: 18 files listed, 7 added`,
+    );
+    expect(result.stderr).toContain("RESULT: BUSY route=concept;");
+    expect(result.stderr).toContain(
+      "retry after the index or use lexical routes rr text|regex|files",
+    );
+    expect(result.stderr).not.toContain("search child timed out");
+  });
+
+  test("an unreachable daemon remains FATAL and never becomes BUSY", () => {
+    const { dir } = registerFreshGitProject();
+    const result = run(dir, ["about", "--query", "daemon unavailable"], {
+      FAKE_CCC_DAEMON_DOWN: "1",
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain(
+      "FATAL: could not read ccc daemon status before concept search",
+    );
+    expect(result.stderr).not.toContain("RESULT: BUSY");
+    expect(result.log).not.toContain("ccc search");
   });
 
   test("concept in a jj workspace uses the backing repo index and identifies its scope", () => {

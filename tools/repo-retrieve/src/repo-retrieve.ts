@@ -279,6 +279,125 @@ function cccResultCount(stdout: string): number {
   return stdout.match(/^--- Result \d+ \(/gmu)?.length ?? 0;
 }
 
+function indexingProgress(stdout: string): {
+  filesListed: string;
+  filesAdded: string;
+} {
+  const match = stdout.match(
+    /Indexing(?: in progress)?:\s*(\d+) files listed\s*\|\s*(\d+) added/iu,
+  );
+  return {
+    filesListed: match?.[1] ?? "unknown",
+    filesAdded: match?.[2] ?? "unknown",
+  };
+}
+
+async function reportBusySearch(
+  ccc: string,
+  route: "concept" | "battery",
+  project: string,
+  statusOutput: string,
+  indexPid: number | null,
+  timeoutMs: number,
+): Promise<void> {
+  let progress = indexingProgress(statusOutput);
+  if (progress.filesListed === "unknown" || progress.filesAdded === "unknown") {
+    const projectStatus = await fromAsyncThrowable(
+      () =>
+        runChildCaptured(
+          [ccc, "status"],
+          Math.min(500, timeoutMs),
+          false,
+          project,
+          false,
+        ),
+      asError,
+    )();
+    if (
+      projectStatus.isOk() &&
+      projectStatus.value.exitCode === 0 &&
+      !projectStatus.value.timedOut
+    ) {
+      const projectProgress = indexingProgress(projectStatus.value.stdout);
+      progress = {
+        filesListed:
+          progress.filesListed === "unknown"
+            ? projectProgress.filesListed
+            : progress.filesListed,
+        filesAdded:
+          progress.filesAdded === "unknown"
+            ? projectProgress.filesAdded
+            : progress.filesAdded,
+      };
+    }
+  }
+  process.stderr.write(
+    `daemon busy indexing ${project}: ${progress.filesListed} files listed, ${progress.filesAdded} added\n`,
+  );
+  process.stderr.write(
+    `RESULT: BUSY route=${route}; reindex running (pid ${indexPid ?? "unknown"}); retry after the index or use lexical routes rr text|regex|files\n`,
+  );
+}
+
+async function classifyTimedOutSearch(
+  ccc: string,
+  route: "concept" | "battery",
+  project: string,
+  timeoutMs: number,
+  indexing: boolean,
+  statusOutput: string,
+  indexPid: number | null,
+): Promise<Result<number, Error>> {
+  if (indexing) {
+    await reportBusySearch(
+      ccc,
+      route,
+      project,
+      statusOutput,
+      indexPid,
+      timeoutMs,
+    );
+    return ok(75);
+  }
+
+  // Indexing may have started after the pre-search status check. Recheck at the timeout boundary
+  // before calling the search child broken; keep this probe bounded and quiet.
+  const timeoutStatus = await fromAsyncThrowable(
+    () =>
+      runChildCaptured(
+        [ccc, "daemon", "status"],
+        Math.min(500, timeoutMs),
+        false,
+        project,
+        false,
+      ),
+    asError,
+  )();
+  if (timeoutStatus.isErr()) return err(timeoutStatus.error);
+  if (timeoutStatus.value.exitCode !== 0) {
+    process.stderr.write(
+      `FATAL: could not read ccc daemon status after ${route} search timed out\n`,
+    );
+    return ok(timeoutStatus.value.exitCode);
+  }
+  if (timeoutStatus.value.stdout.includes(`${project} [indexing]`)) {
+    await reportBusySearch(
+      ccc,
+      route,
+      project,
+      timeoutStatus.value.stdout,
+      null,
+      timeoutMs,
+    );
+    return ok(75);
+  }
+
+  process.stderr.write(
+    `FATAL: search child timed out after ${timeoutMs}ms: ${ccc}\n`,
+  );
+  return ok(124);
+}
+
 function backingIndexNote(project: string): void {
   process.stderr.write(
     `INDEX: backing repo ${project} (workspace changes are not indexed; use rr text / rr regex for them)\n`,
@@ -508,8 +627,13 @@ async function runCccSearch(
   if (statusResult.isErr()) return err(statusResult.error);
   const status = statusResult.value;
   if (status.timedOut && requestedIndexPid !== null) {
-    process.stderr.write(
-      `RESULT: BUSY route=${route}; reindex running (pid ${requestedIndexPid}); lexical routes work now: rr text|regex|files\n`,
+    await reportBusySearch(
+      ccc.value,
+      route,
+      project,
+      status.stdout,
+      requestedIndexPid,
+      timeoutMs,
     );
     return ok(75);
   }
@@ -559,7 +683,7 @@ async function runCccSearch(
           Math.min(timeoutMs, remainingMs),
           false,
           project,
-          !reindexing,
+          false,
         ),
       asError,
     )();
@@ -571,11 +695,16 @@ async function runCccSearch(
       resolution.workspace,
     );
     if (mappedOutput !== "") process.stdout.write(mappedOutput);
-    if (reindexing && result.timedOut) {
-      process.stderr.write(
-        `RESULT: BUSY route=${route}; reindex running (pid ${indexPid ?? "unknown"}); lexical routes work now: rr text|regex|files\n`,
+    if (result.timedOut) {
+      return classifyTimedOutSearch(
+        ccc.value,
+        route,
+        project,
+        Math.min(timeoutMs, remainingMs),
+        reindexing,
+        status.stdout,
+        indexPid,
       );
-      return ok(75);
     }
     if (result.exitCode !== 0) return ok(result.exitCode);
     if (cccResultCount(result.stdout) > 0) matchedQueries += 1;

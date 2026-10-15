@@ -6,3 +6,9 @@
 **/*.swp
 **/*.swo
 **/*~
+
+# Owner: Obsidian. Per-vault application state is generated at any path depth.
+**/.obsidian/
+
+# Owner: Claude Code. These per-machine local permission overrides vary by machine.
+**/.claude/settings.local.json

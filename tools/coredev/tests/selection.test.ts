@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -21,22 +21,23 @@ const roots: string[] = [];
 const DOTFILES = join(import.meta.dir, "../../..");
 const COREDEV = join(DOTFILES, "tools/coredev/src/coredev.ts");
 
-afterEach(() => {
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
+afterEach(async () => {
+  await Promise.all(
+    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
+  );
 });
 
-function fixture(): string {
-  const root = mkdtempSync(join(tmpdir(), "coredev-selection-"));
+async function fixture(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "coredev-selection-"));
   roots.push(root);
   return root;
 }
 
-function fakeMise(root: string): { bin: string; log: string } {
+async function fakeMise(root: string): Promise<{ bin: string; log: string }> {
   const bin = join(root, "bin");
   const log = join(root, "mise.log");
-  mkdirSync(bin);
-  writeFileSync(
+  await mkdir(bin);
+  await writeFile(
     join(bin, "mise"),
     [
       "#!/usr/bin/env bun",
@@ -46,33 +47,33 @@ function fakeMise(root: string): { bin: string; log: string } {
       "",
     ].join("\n"),
   );
-  chmodSync(join(bin, "mise"), 0o755);
+  await chmod(join(bin, "mise"), 0o755);
   return { bin, log };
 }
 
-function fakeRemote(root: string): {
+async function fakeRemote(root: string): Promise<{
   bin: string;
   dotfiles: string;
   home: string;
   log: string;
-} {
+}> {
   const bin = join(root, "remote-bin");
   const dotfiles = join(root, "remote-dotfiles");
   const home = join(root, "remote-home");
   const log = join(root, "remote-mise.log");
-  mkdirSync(bin);
-  mkdirSync(join(dotfiles, "scripts"), { recursive: true });
-  mkdirSync(home);
-  writeFileSync(
+  await mkdir(bin);
+  await mkdir(join(dotfiles, "scripts"), { recursive: true });
+  await mkdir(home);
+  await writeFile(
     join(home, ".profile"),
     'PATH="' + bin + ':$PATH"; export PATH\n',
   );
-  writeFileSync(join(dotfiles, "mise.toml"), "[tasks]\n");
-  writeFileSync(
+  await writeFile(join(dotfiles, "mise.toml"), "[tasks]\n");
+  await writeFile(
     join(bin, "bun"),
     ["#!/bin/sh", 'printf "%s\\n" "$COREDEV_SELECTION"'].join("\n"),
   );
-  writeFileSync(
+  await writeFile(
     join(bin, "mise"),
     [
       "#!/bin/sh",
@@ -80,8 +81,8 @@ function fakeRemote(root: string): {
       "",
     ].join("\n"),
   );
-  chmodSync(join(bin, "bun"), 0o755);
-  chmodSync(join(bin, "mise"), 0o755);
+  await chmod(join(bin, "bun"), 0o755);
+  await chmod(join(bin, "mise"), 0o755);
   return { bin, dotfiles, home, log };
 }
 
@@ -95,10 +96,10 @@ function openSshJoinRunner(remote: {
   return {
     calls,
     runner: {
-      run(command, options) {
+      async run(command, options) {
         calls.push([command.command, ...command.args]);
         const joined = command.args.slice(1).join(" ");
-        const result = Bun.spawnSync(["sh", "-lc", joined], {
+        const proc = Bun.spawn(["sh", "-lc", joined], {
           cwd: options.cwd,
           env: {
             ...process.env,
@@ -113,27 +114,33 @@ function openSshJoinRunner(remote: {
             HOSTNAME: "fixture-remote",
             PATH: `${remote.bin}:${process.env.PATH ?? ""}`,
           },
+          stdin: "ignore",
           stdout: "pipe",
           stderr: "pipe",
         });
-        return Promise.resolve({
-          status: result.exitCode ?? 1,
-          output: `${result.stdout.toString()}${result.stderr.toString()}`,
+        const [stdout, stderr, status] = await Promise.all([
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+          proc.exited,
+        ]);
+        return {
+          status,
+          output: `${stdout}${stderr}`,
           timedOut: false,
           missing: false,
-        });
+        };
       },
     },
   };
 }
 
-function invoke(
+async function invoke(
   args: readonly string[],
   bin: string,
   log: string,
   failTask?: string,
-): { status: number | null; output: string } {
-  const result = Bun.spawnSync([process.execPath, COREDEV, ...args], {
+): Promise<{ status: number | null; output: string }> {
+  const proc = Bun.spawn([process.execPath, COREDEV, ...args], {
     cwd: DOTFILES,
     env: {
       ...process.env,
@@ -142,13 +149,16 @@ function invoke(
       ...(failTask === undefined ? {} : { COREDEV_FAIL_TASK: failTask }),
       PATH: `${bin}:${process.env.PATH ?? ""}`,
     },
+    stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
   });
-  return {
-    status: result.exitCode,
-    output: `${result.stdout.toString()}${result.stderr.toString()}`,
-  };
+  const [stdout, stderr, status] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { status, output: `${stdout}${stderr}` };
 }
 
 describe("coredev selection", () => {
@@ -189,13 +199,13 @@ describe("coredev selection", () => {
     ]);
   });
 
-  test("executes selected mise tasks for local without the full WSL initializer", () => {
-    const root = fixture();
-    const { bin, log } = fakeMise(root);
-    const result = invoke(["deploy", "local"], bin, log);
+  test("executes selected mise tasks for local without the full WSL initializer", async () => {
+    const root = await fixture();
+    const { bin, log } = await fakeMise(root);
+    const result = await invoke(["deploy", "local"], bin, log);
     expect(result.status).toBe(0);
     expect(result.output).toContain("RUN  core:install");
-    const calls = readFileSync(log, "utf8");
+    const calls = await readFile(log, "utf8");
     expect(calls).toContain("run core:install");
     expect(calls).toContain("run codex:runtime");
     expect(calls).not.toContain("run wsl:init");
@@ -257,7 +267,7 @@ describe("coredev selection", () => {
   });
 
   test("keeps the SSH-joined selector script intact in the remote shell", async () => {
-    const remote = fakeRemote(fixture());
+    const remote = await fakeRemote(await fixture());
     const transport = openSshJoinRunner(remote);
     const runner = remoteRunner("fixture-host", transport.runner);
     const selected = await readSelection(DOTFILES, "linux", "deploy", runner);
@@ -284,7 +294,7 @@ describe("coredev selection", () => {
       "fixture-host",
       expect.stringMatching(/^sh -lc /u),
     ]);
-    expect(readFileSync(remote.log, "utf8")).toBe(
+    expect(await readFile(remote.log, "utf8")).toBe(
       `fixture-remote|${remote.dotfiles}|run core:install\n`,
     );
   });
@@ -345,14 +355,19 @@ describe("coredev selection", () => {
     expect(calls).toEqual(["first"]);
   });
 
-  test("doctor fails when the selected runtime check fails", () => {
-    const root = fixture();
-    const { bin, log } = fakeMise(root);
-    const result = invoke(["doctor", "local"], bin, log, "codex:runtime:check");
+  test("doctor fails when the selected runtime check fails", async () => {
+    const root = await fixture();
+    const { bin, log } = await fakeMise(root);
+    const result = await invoke(
+      ["doctor", "local"],
+      bin,
+      log,
+      "codex:runtime:check",
+    );
     expect(result.status).toBe(1);
     expect(result.output).toContain(
       "coredev doctor codex:runtime:check: exited 17",
     );
-    expect(readFileSync(log, "utf8")).toContain("run codex:runtime:check");
+    expect(await readFile(log, "utf8")).toContain("run codex:runtime:check");
   });
 });

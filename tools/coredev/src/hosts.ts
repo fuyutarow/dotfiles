@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fromThrowable, err, ok, type Result } from "neverthrow";
+import { err, ok, type Result } from "neverthrow";
+import { attempt } from "../../shared/src/attempt.ts";
 import { z } from "../../shared/src/zod.ts";
 import type { HostKind } from "./profiles.ts";
 
@@ -13,14 +14,12 @@ export type ApprovedHost = {
 
 const hostKindSchema = z.enum(["linux", "wsl", "mac"]);
 
-export function readApprovedHost(
+export async function readApprovedHost(
   alias: string,
   file = join(homedir(), ".config/coredev/hosts.toml"),
-): Result<ApprovedHost, Error> {
-  const read = fromThrowable((path: string) => readFileSync(path, "utf8"))(
-    file,
-  );
-  if (read.isErr())
+): Promise<Result<ApprovedHost, Error>> {
+  const read = await attempt(() => readFile(file, "utf8"));
+  if (!read.ok)
     return err(
       new Error(
         `approved host '${alias}' unavailable: host registry is missing or unreadable`,

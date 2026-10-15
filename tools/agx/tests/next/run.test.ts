@@ -577,6 +577,7 @@ describe("agx-next run", () => {
               cmd: z.string(),
               exit: z.number(),
               log_path: z.string(),
+              kind: z.enum(["passed", "failed", "unrunnable", "killed"]),
             }),
           ),
         }),

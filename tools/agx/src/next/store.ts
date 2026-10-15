@@ -22,6 +22,7 @@ import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { globsOverlap } from "../ticket.ts";
 import { exitWithError } from "./exit.ts";
 import { Outcome, deriveOutcome } from "./outcome.ts";
+import { VerifyResult } from "./verify.ts";
 
 const PickAuditSchema = z.object({
   source: z.string(),
@@ -67,15 +68,7 @@ const EventSchema = z.discriminatedUnion("kind", [
     outcome: Outcome.optional(),
     report_path: z.string().nullable(),
     vendor_session: z.string().nullable(),
-    verify: z
-      .array(
-        z.looseObject({
-          cmd: z.string(),
-          exit: z.number(),
-          log_path: z.string(),
-        }),
-      )
-      .default([]),
+    verify: z.array(VerifyResult).default([]),
     returned: z.boolean().optional(),
     changed_files: z.number().int().nonnegative().optional(),
     legacy_key: z.string().optional(),
@@ -103,7 +96,7 @@ export const stateDir = (): string =>
 export const recordPath = (): string => join(stateDir(), "records.jsonl");
 export const now = (): string => Temporal.Now.instant().toString();
 
-export function append(event: NextEvent): void {
+export function append(event: z.input<typeof EventSchema>): void {
   const path = recordPath();
   mkdirSync(dirname(path), { recursive: true });
   const pickAudit = event.kind === "started" ? pendingPickAudit : undefined;
@@ -422,9 +415,7 @@ const RunSchema = z.object({
   writes: z.array(z.string()),
   judgment: z.object({ decision: z.string(), note: z.string() }).nullable(),
   report_path: z.string().nullable(),
-  verify: z.array(
-    z.looseObject({ cmd: z.string(), exit: z.number(), log_path: z.string() }),
-  ),
+  verify: z.array(VerifyResult),
   last_progress_path: z.string().nullable(),
   continues: z.string().nullable(),
   vendor_session: z.string().nullable(),
@@ -599,6 +590,20 @@ export function foldedRuns() {
 
 function liveRuns(runs: Map<string, FoldedRun>) {
   for (const run of runs.values()) {
+    // Old event logs and snapshots used verify-failed for every nonzero check.
+    if (
+      run.outcome === "verify-failed" &&
+      run.verify.some(
+        (check) => check.kind === "unrunnable" || check.kind === "killed",
+      )
+    )
+      run.outcome = deriveOutcome({
+        timedOut: false,
+        refused: false,
+        verify: run.verify,
+        reportValid: true,
+        changed: run.changed_files ?? 0,
+      });
     const endedAt = run.ended_at;
     const elapsedResult =
       endedAt === null

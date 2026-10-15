@@ -20,10 +20,15 @@ import {
 } from "./store.ts";
 import { route } from "./route.ts";
 import { pinContinuation } from "./continue.ts";
-import { createRunTemp, type RunTemp } from "../temp.ts";
+import { createRunTemp } from "../temp.ts";
 import { exitWithError } from "./exit.ts";
 import { ownerlessRefLocks } from "../../../shared/src/ref-locks.ts";
 import { changedFiles, deriveOutcome, workspaceSnapshot } from "./outcome.ts";
+import {
+  verificationEnvironment,
+  verifyKind,
+  type VerifyKind,
+} from "./verify.ts";
 
 export type Flags = Readonly<Record<string, string | boolean | undefined>>;
 const fatal = (message: string, exitCode = 2): never =>
@@ -128,9 +133,16 @@ const runVerify = async (
   commands: string[],
   cwd: string,
   runDir: string,
-  temp: RunTemp,
-): Promise<{ cmd: string; exit: number; log_path: string }[]> => {
-  const results: { cmd: string; exit: number; log_path: string }[] = [];
+  env: NodeJS.ProcessEnv,
+): Promise<
+  { cmd: string; exit: number; log_path: string; kind: VerifyKind }[]
+> => {
+  const results: {
+    cmd: string;
+    exit: number;
+    log_path: string;
+    kind: VerifyKind;
+  }[] = [];
   for (const [index, cmd] of commands.entries()) {
     const logPath = join(
       runDir,
@@ -143,7 +155,7 @@ const runVerify = async (
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
-        env: { ...process.env, ...temp.env },
+        env,
       },
     );
     const stdout =
@@ -157,8 +169,9 @@ const runVerify = async (
     const exit = await child.exited;
     const output = `${await stdout}${await stderr}`;
     writeFileSync(logPath, lastLines(output, 20));
-    process.stderr.write(`VERIFY exit=${exit} ${cmd}\n`);
-    results.push({ cmd, exit, log_path: logPath });
+    const kind = verifyKind(exit, child.signalCode);
+    process.stderr.write(`VERIFY exit=${exit} ${cmd} kind=${kind}\n`);
+    results.push({ cmd, exit, log_path: logPath, kind });
   }
   return results;
 };
@@ -366,14 +379,14 @@ export async function run(flags: Flags): Promise<number> {
     ];
   };
   const before = workspaceSnapshot(cwd, ticket.writes);
+  const runEnv = verificationEnvironment(cwd, process.env, temp.env);
   const child = Bun.spawn([process.execPath, ...workerArgs()], {
     cwd,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "inherit",
     env: {
-      ...process.env,
-      ...temp.env,
+      ...runEnv,
       AGX_INTERIM_REPORTS_FILE: interimPath,
     },
     timeout: (ticket.timeout_s ?? 600) * 1000,
@@ -407,7 +420,7 @@ export async function run(flags: Flags): Promise<number> {
     before.isOk() && after.isOk()
       ? changedFiles(before.value, after.value)
       : undefined;
-  const verify = await runVerify(ticket.verify, cwd, runDir, temp);
+  const verify = await runVerify(ticket.verify, cwd, runDir, runEnv);
   const receiptLine = output.trim().split("\n").at(-1) ?? "";
   const receipt = jsonOf(
     z.looseObject({

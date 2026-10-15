@@ -45,7 +45,7 @@ const scratch = (prefix: string): string => {
 const CLI = "tools/agx/src/next/cli.ts";
 
 // A fixture agx project: fake Jev, a ticket, and a worker script that reports its temp variables.
-async function fixture(workerBody: string, verify: string) {
+async function fixture(workerBody: string, verify: string | string[]) {
   const root = scratch("run-temp-");
   const tempRoot = join(root, "agx-tmp");
   const ticket = join(root, "ticket.md");
@@ -74,7 +74,7 @@ async function fixture(workerBody: string, verify: string) {
   }
   writeFileSync(
     ticket,
-    `+++\nschema = 2\nname = "temp-fixture"\nwrites = []\noutcome = "temp fixture"\nverify = [${JSON.stringify(verify)}]\n[proposition]\nid = "TMP-1"\nclaim = "run owns temp"\nrefuted_by = "leftover"\n+++\nRun the fixture.\n`,
+    `+++\nschema = 2\nname = "temp-fixture"\nwrites = []\noutcome = "temp fixture"\nverify = ${JSON.stringify(Array.isArray(verify) ? verify : [verify])}\n[proposition]\nid = "TMP-1"\nclaim = "run owns temp"\nrefuted_by = "leftover"\n+++\nRun the fixture.\n`,
   );
   writeFileSync(worker, workerBody);
   const env = {
@@ -95,6 +95,114 @@ async function fixture(workerBody: string, verify: string) {
 const DONE = `process.stdout.write(JSON.stringify({ exit: 0, report: { summary: "done", changes: [], checks: [], for_coordinator: [], open: [] } }) + "\\n");\n`;
 
 describe("agx run owns its temp space", () => {
+  test("bare service environment shares user tools, mise PATH and temp with verify; records failure kinds", async () => {
+    const f = await fixture(
+      `import { writeFileSync } from "node:fs";
+       const tools = Bun.spawnSync(["sh", "-c", "cargo-only --help && bun-only --help && repo-only --help"]);
+       if (tools.exitCode !== 0) process.exit(1);
+       writeFileSync("worker-env.txt", [process.env.PATH, process.env.TMPDIR, process.env.AGX_MISE_FIXTURE].join("\\n"));
+       ${DONE}`,
+      [
+        'cargo-only --help && bun-only --help && repo-only --help && printf "%s\\n%s\\n%s" "$PATH" "$TMPDIR" "$AGX_MISE_FIXTURE" > verify-env.txt',
+        "agx-command-that-does-not-exist",
+        "./not-executable",
+        "kill -KILL $$",
+        "exit 7",
+      ],
+    );
+    const home = join(f.root, "home");
+    for (const [dir, name] of [
+      [".cargo/bin", "cargo-only"],
+      [".bun/bin", "bun-only"],
+      ["repo-bin", "repo-only"],
+    ]) {
+      const bin = join(home, dir ?? "");
+      mkdirSync(bin, { recursive: true });
+      const path = join(bin, name ?? "");
+      writeFileSync(path, '#!/bin/sh\n[ "$1" = --help ]\n');
+      chmodSync(path, 0o755);
+    }
+    mkdirSync(join(home, ".local/bin"), { recursive: true });
+    const mise = join(home, ".local/bin/mise");
+    writeFileSync(
+      mise,
+      `#!/bin/sh\nprintf '{"PATH":"%s:${join(home, "repo-bin")}","AGX_MISE_FIXTURE":"repo-value"}' "$PATH"\n`,
+    );
+    chmodSync(mise, 0o755);
+    writeFileSync(join(f.root, "not-executable"), "not executable\n");
+    const env = {
+      HOME: home,
+      PATH: "/usr/bin:/bin",
+      AGX_NEXT_STATE_DIR: f.env.AGX_NEXT_STATE_DIR,
+      AGX_NEXT_JEV_URL: f.env.AGX_NEXT_JEV_URL,
+      AGX_NEXT_WORKER: f.env.AGX_NEXT_WORKER,
+      AGX_TMP_ROOT: f.env.AGX_TMP_ROOT,
+      TYPESAFE_API_KEY: f.env.TYPESAFE_API_KEY,
+      DISPATCH_ROSTER_PATH: f.env.DISPATCH_ROSTER_PATH,
+    };
+    const child = Bun.spawn(
+      [process.execPath, CLI, "run", f.ticket, "--cd", f.root],
+      {
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10_000,
+      },
+    );
+    const [stdout, stderr, exit] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(exit, stderr).toBe(0);
+    expect(stdout).toContain('"outcome":"verify-killed"');
+    expect(readFileSync(join(f.root, "worker-env.txt"), "utf8")).toBe(
+      readFileSync(join(f.root, "verify-env.txt"), "utf8"),
+    );
+    const listed = Bun.spawnSync([process.execPath, CLI, "ls", "--json"], {
+      env,
+    });
+    expect(listed.exitCode).toBe(0);
+    const records = readFileSync(
+      join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl"),
+      "utf8",
+    );
+    for (const kind of ["passed", "unrunnable", "killed", "failed"])
+      expect(records).toContain(`"kind":"${kind}"`);
+    const rows = jsonOf(
+      z.array(
+        z.looseObject({
+          outcome: z.string(),
+          verify: z.array(
+            z.looseObject({
+              exit: z.number(),
+              kind: z.string(),
+              log_path: z.string(),
+            }),
+          ),
+        }),
+      ),
+    ).safeParse(listed.stdout.toString());
+    expect(rows.success).toBe(true);
+    if (!rows.success) return;
+    expect(rows.data[0]?.outcome).toBe("verify-killed");
+    expect(
+      rows.data[0]?.verify.map(({ exit: code, kind }) => ({
+        exit: code,
+        kind,
+      })),
+    ).toEqual([
+      { exit: 0, kind: "passed" },
+      { exit: 127, kind: "unrunnable" },
+      { exit: 126, kind: "unrunnable" },
+      { exit: 137, kind: "killed" },
+      { exit: 7, kind: "failed" },
+    ]);
+    expect(
+      rows.data[0]?.verify.every(({ log_path }) => existsSync(log_path)),
+    ).toBe(true);
+  }, 15_000);
+
   test("worker and verify see TMPDIR under the temp root; the run removes it", async () => {
     const root0 = scratch("probe-");
     const seen = join(root0, "seen.txt");

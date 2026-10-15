@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.1 — 2026-10-16
+
+- Run verification with the worker's assembled user-tool and mise environment, and distinguish unrunnable and killed checks from code failures.
+
 ## 4.11.0 — 2026-10-16
 
 - ls --wait SELECTOR blocks until a selected run is ended or orphaned and prints its row; read-only fold, writes no file

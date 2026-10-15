@@ -3,11 +3,14 @@ import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { z } from "../../../shared/src/zod.ts";
+import { verifyKind, type VerifyKind } from "./verify.ts";
 
 export const Outcome = z.enum([
   "ok",
   "no-change",
   "verify-failed",
+  "verify-unrunnable",
+  "verify-killed",
   "timeout",
   "refused",
   "malformed",
@@ -59,13 +62,18 @@ export function changedFiles(
 export function deriveOutcome(input: {
   timedOut: boolean;
   refused: boolean;
-  verify: readonly { exit: number }[];
+  verify: readonly { exit: number; kind?: VerifyKind }[];
   reportValid: boolean;
   changed: number | undefined;
 }): Outcome {
   if (input.timedOut) return "timeout";
   if (input.refused || input.changed === undefined) return "refused";
-  if (input.verify.some((check) => check.exit !== 0)) return "verify-failed";
+  const kinds = new Set(
+    input.verify.map((check) => check.kind ?? verifyKind(check.exit)),
+  );
+  if (kinds.has("killed")) return "verify-killed";
+  if (kinds.has("unrunnable")) return "verify-unrunnable";
+  if (kinds.has("failed")) return "verify-failed";
   if (!input.reportValid) return "malformed";
   if (input.changed === 0) return "no-change";
   return "ok";

@@ -40,6 +40,30 @@ const started = (id: string, pid = 2147483647): NextEvent => ({
   pid,
 });
 
+test.each([127, 137])(
+  "historical verify-failed exit %s is classified in full and cached folds",
+  (exit) => {
+    const root = fixture();
+    append(started("legacy-verify"));
+    append({
+      kind: "ended",
+      id: "legacy-verify",
+      at: "2026-10-15T00:01:00Z",
+      exit: 0,
+      outcome: "verify-failed",
+      report_path: null,
+      vendor_session: null,
+      verify: [{ cmd: "check", exit, log_path: "check.log" }],
+    });
+    const kind = exit === 127 ? "unrunnable" : "killed";
+    expect(fullFoldedRuns()[0]?.verify[0]?.kind).toBe(kind);
+    expect(fullFoldedRuns()[0]?.outcome).toBe(`verify-${kind}`);
+    expect(foldedRuns()).toEqual(fullFoldedRuns());
+    expect(fs.existsSync(join(root, "records.fold.json"))).toBe(true);
+    expect(foldedRuns()).toEqual(fullFoldedRuns());
+  },
+);
+
 test("seeded random append batches equal a full fold after every batch", () => {
   fixture();
   let seed = 42;

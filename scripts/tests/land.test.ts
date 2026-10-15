@@ -1046,37 +1046,36 @@ describe("land workspace", () => {
     );
   });
 
-  test("a bad changeset leaves restored paths out of the main checkout", () => {
+  test("land accepts delimiter and blank-line layout variants", () => {
     const f = fixture();
-    const change = join(f.worker, "tools", "agx", ".changes", "bad-shape.md");
+    writeToolPackage(f.worker, "1.0.0");
+    writeToolChangelog(f.worker, "1.0.0 — 2026-10-01");
     mkdirSync(join(f.worker, "tools", "agx", ".changes"), {
       recursive: true,
     });
-    writeFileSync(join(f.worker, "landed.txt"), "worker-only content\n");
     writeFileSync(
-      change,
-      "---\nbump: patch\n---\nWorker entry missing the formatter blank line\n",
+      join(f.worker, "tools", "agx", ".changes", "no-blank.md"),
+      "---\nbump: patch\n---\nAccept delimiters without a blank line\n",
+    );
+    writeFileSync(
+      join(f.worker, "tools", "agx", ".changes", "no-delimiters.md"),
+      "bump: patch\n\nAccept a delimiter-less changeset\n",
     );
     const result = f.land();
 
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout.toString()).toContain("[land] changesets: FAIL");
-    expect(result.stdout.toString()).toContain(
-      "[land] rollback: restored 2 path(s)",
-    );
-    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "keep content\n",
-    );
-    expect(existsSync(join(f.main, "landed.txt"))).toBe(false);
     expect(
-      existsSync(join(f.main, "tools", "agx", ".changes", "bad-shape.md")),
-    ).toBe(false);
-    expect(f.jj(f.main, ["status"])).toContain(
-      "The working copy has no changes.",
-    );
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
     expect(
-      f.log().some((event) => event[0] === "run" && event[1] === "commit"),
-    ).toBe(false);
+      readFileSync(join(f.main, "tools", "agx", "package.json"), "utf8"),
+    ).toContain('"version": "1.0.1"');
+    expect(
+      readFileSync(join(f.main, "tools", "agx", "CHANGELOG.md"), "utf8"),
+    ).toContain("- Accept delimiters without a blank line");
+    expect(
+      readFileSync(join(f.main, "tools", "agx", "CHANGELOG.md"), "utf8"),
+    ).toContain("- Accept a delimiter-less changeset");
   });
 
   test("a failed push retains the successful commit verdict and does not deploy", () => {

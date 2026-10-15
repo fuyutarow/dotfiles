@@ -8,9 +8,9 @@ import {
 import { join } from "node:path";
 import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { changesetDiagnostic, parseChangeset } from "./changeset.ts";
 
-const bumpSchema = z.enum(["patch", "minor", "major"]);
-type Bump = z.infer<typeof bumpSchema>;
+type Bump = "patch" | "minor" | "major";
 type Change = { path: string; bump: Bump; entry: string };
 type ToolRelease = { tool: string; version: string; entries: number };
 export type LandChangesetsResult = {
@@ -23,22 +23,10 @@ export type LandChangesetsResult = {
 const bumpRank: Record<Bump, number> = { patch: 0, minor: 1, major: 2 };
 const parseChange = (path: string): Result<Change, Error> => {
   const text = readFileSync(path, "utf8");
-  const match = /^---\n(bump: [^\n]+)\n---\n\n([^\n]+)\n?$/u.exec(text);
-  if (match === null)
-    return err(
-      new Error(`${path}: expected frontmatter bump and one entry line`),
-    );
-  const bump = bumpSchema.safeParse(match[1]?.slice("bump: ".length));
-  const entry = match[2]?.trim();
-  if (!bump.success || entry === undefined || entry.length === 0)
-    return err(
-      new Error(`${path}: bump and one non-empty entry line are required`),
-    );
-  if (entry.startsWith("-") || entry.startsWith("#"))
-    return err(
-      new Error(`${path}: entry is plain text; land adds the changelog bullet`),
-    );
-  return ok({ path, bump: bump.data, entry });
+  const parsed = parseChangeset(text);
+  if (parsed.isErr())
+    return err(new Error(changesetDiagnostic(path, parsed.error.message)));
+  return ok({ path, ...parsed.value });
 };
 
 function readToolChanges(

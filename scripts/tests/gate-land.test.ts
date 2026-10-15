@@ -32,7 +32,7 @@ test("pre-commit runs exactly the gate:land checks plus staged formatting", asyn
 
   expect(land).toBeDefined();
   expect(land?.run).toBeUndefined();
-  expect(land?.depends).toEqual(["fmt:check", "lint"]);
+  expect(land?.depends).toEqual(["fmt:check", "lint", "lint:changesets"]);
   expect(hook?.run).toBeUndefined();
   expect(hook?.depends).toEqual(["fmt:staged", "gate:land"]);
   expect(mise.tasks.check?.depends).toEqual([

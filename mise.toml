@@ -446,7 +446,15 @@ depends = ["fmt:check", "lint", "test", "usehooks:consumers"]
 # Single whole-tree, non-mutating check list used by tickets and hook:pre-commit.
 [tasks."gate:land"]
 description = "Whole-tree land gate: non-mutating formatting checks + lint"
-depends = ["fmt:check", "lint"]
+depends = ["fmt:check", "lint", "lint:changesets"]
+
+[tasks.changeset]
+description = "Generate a validated tool changeset"
+run = "bun scripts/changeset.ts"
+
+[tasks."lint:changesets"]
+description = "Validate every pending tool changeset with the shared schema"
+run = "bun scripts/lint-changesets.ts"
 
 [tasks."usehooks:consumers"]
 dir = "{{config_root}}"

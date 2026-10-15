@@ -10,6 +10,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { applyToolChangesets } from "../land-changesets.ts";
+import { lintChangesets } from "../lint-changesets.ts";
 
 const repo = join(import.meta.dir, "../..");
 
@@ -122,4 +123,53 @@ test("landing without changesets leaves version and changelog unchanged", () => 
   expect(readFileSync(join(tool, "CHANGELOG.md"), "utf8")).toBe(
     changelogBefore,
   );
+});
+
+test("gate accepts every supported changeset layout", () => {
+  const { root, changes } = fixture();
+  const layouts = [
+    "---\nbump: patch\n---\n\nCanonical layout\n",
+    "bump: minor\nNo delimiters or blank line\n",
+    "---\nbump: major\n---\nNo blank line\n",
+    "bump: patch\n\nBlank line without delimiters\n",
+  ];
+  layouts.forEach((text, index) => {
+    writeFileSync(join(changes, `valid-${index}.md`), text);
+  });
+
+  expect(lintChangesets(root)).toEqual([]);
+});
+
+test("gate names malformed changesets and gives the generator command", () => {
+  const { root, changes } = fixture();
+  writeFileSync(
+    join(changes, "two-lines.md"),
+    "bump: patch\n\nFirst\nSecond\n",
+  );
+  writeFileSync(join(changes, "unknown-bump.md"), "bump: huge\n\nEntry\n");
+  writeFileSync(join(changes, "empty.md"), "bump: minor\n\n\n");
+
+  const problems = lintChangesets(root);
+  expect(problems).toHaveLength(3);
+  for (const name of ["two-lines.md", "unknown-bump.md", "empty.md"])
+    expect(problems.some((problem) => problem.includes(name))).toBe(true);
+  for (const problem of problems)
+    expect(problem).toContain(
+      "mise run changeset -- <tool> <patch|minor|major>",
+    );
+});
+
+test("land reports a malformed file with its path and generator command", () => {
+  const { root, changes } = fixture();
+  writeFileSync(join(changes, "bad.md"), "bump: huge\n\nEntry\n");
+
+  const result = applyToolChangesets(root, "2026-10-14");
+  expect(result.isErr()).toBe(true);
+  if (result.isErr()) {
+    expect(result.error.message).toContain("bad.md");
+    expect(result.error.message).toContain(
+      "bump must be patch, minor, or major",
+    );
+    expect(result.error.message).toContain("mise run changeset --");
+  }
 });

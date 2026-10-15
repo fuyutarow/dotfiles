@@ -57,6 +57,10 @@ reason = "compatibility pointer to presets/ts/zod.ts while writing-typescript do
 pattern = "agents/hooks/vendor"
 reason = "generated dependency bundle (scripts/vendor-deps.ts)"
 
+[[ignore]]
+pattern = ".obsidian"
+reason = "Obsidian vault state: third-party plugin bundles installed by obsidian/apply.ts, not maintained code"
+
 # --- quality-category rules judged OFF (counts measured 2026-10-05, oxlint 1.82.0) ---------------
 
 [[off]]

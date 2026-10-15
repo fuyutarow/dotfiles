@@ -29,7 +29,8 @@
     "presets/tests/fixtures",
     "presets/ts/zod.ts",
     "agents/skills/writing-typescript/assets/consumer-repo",
-    "agents/hooks/vendor"
+    "agents/hooks/vendor",
+    ".obsidian"
   ],
   "rules": {
     "typescript/prefer-readonly-parameter-types": "off",

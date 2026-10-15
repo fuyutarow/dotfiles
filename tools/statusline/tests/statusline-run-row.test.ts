@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
 import { agxJobRunsAsync, agxRouteRunsAsync } from "../src/dispatch-runs.ts";
@@ -20,6 +20,7 @@ import { ProgressReaderSchema } from "../../shared/src/dispatch-state.ts";
 import { decodedJson } from "./decode.ts";
 import { isolatedStatuslineEnv } from "./helpers.ts";
 import { jsonOf, z } from "../src/zod.ts";
+import { agxSnapshotPath } from "../src/agx-snapshot.ts";
 import {
   deadOwnMarker,
   malformedMarker,
@@ -210,18 +211,29 @@ async function render(
               ];
             }),
     );
+  const renderEnv = isolatedStatuslineEnv({
+    HOME: home,
+    PATH: bin,
+    TZ: "UTC",
+    AGX_STATE_DIR: stateDir,
+    XDG_STATE_HOME: xdgStateHome,
+  });
+  const snapshotPath = agxSnapshotPath(renderEnv);
+  mkdirSync(dirname(snapshotPath), { recursive: true });
+  writeFileSync(
+    snapshotPath,
+    JSON.stringify({
+      output: agxRows,
+      capturedAt: Temporal.Now.instant().epochMilliseconds,
+      exit: 0,
+    }),
+  );
   const p = Bun.spawn([process.execPath, STATUSLINE], {
     stdin: new Blob([PAYLOAD]),
     stdout: "pipe",
     stderr: "pipe",
     env: {
-      ...isolatedStatuslineEnv({
-        HOME: home,
-        PATH: bin,
-        TZ: "UTC",
-        AGX_STATE_DIR: stateDir,
-        XDG_STATE_HOME: xdgStateHome,
-      }),
+      ...renderEnv,
       ...(dispatcherSession === undefined
         ? {}
         : {
@@ -249,15 +261,24 @@ describe("statusline Run row", () => {
     const rows = await Bun.file(
       join(import.meta.dir, "fixtures", "agx-ls-sample.json"),
     ).text();
-    const scan = await agxRouteRunsAsync(
-      isolatedStatuslineEnv({
-        HOME: dir,
-        PATH: bin,
-        XDG_STATE_HOME: join(dir, "xdg"),
-        AGX_STATE_DIR: stateDir,
-        AGX_JSON: rows,
+    const env = isolatedStatuslineEnv({
+      HOME: dir,
+      PATH: bin,
+      XDG_STATE_HOME: join(dir, "xdg"),
+      AGX_STATE_DIR: stateDir,
+      AGX_JSON: rows,
+    });
+    const snapshotPath = agxSnapshotPath(env);
+    mkdirSync(dirname(snapshotPath), { recursive: true });
+    writeFileSync(
+      snapshotPath,
+      JSON.stringify({
+        output: rows,
+        capturedAt: Temporal.Now.instant().epochMilliseconds,
+        exit: 0,
       }),
     );
+    const scan = await agxRouteRunsAsync(env);
     expect(scan.unreadable).toBe(0);
     expect(scan.runs.filter((run) => !run.alive)).toHaveLength(15);
   });
@@ -1314,7 +1335,7 @@ describe("statusline Run row", () => {
     expect(out).not.toContain("stale ");
   });
 
-  test("agx ls output is reused while records path, mtime and size stay fixed", async () => {
+  test("Job and Run readers share the last-good snapshot without spawning agx", async () => {
     const dir = join(scratch, "records-cache-hit");
     const home = join(scratch, "records-cache-home");
     mkdirSync(dir, { recursive: true });
@@ -1349,14 +1370,24 @@ describe("statusline Run row", () => {
         },
       ]),
     };
+    const snapshotPath = agxSnapshotPath(env);
+    mkdirSync(dirname(snapshotPath), { recursive: true });
+    writeFileSync(
+      snapshotPath,
+      JSON.stringify({
+        output: env.AGX_JSON,
+        capturedAt: Temporal.Now.instant().epochMilliseconds,
+        exit: 0,
+      }),
+    );
     const first = await agxJobRunsAsync("dispatcher-short", env);
     const started = performance.now();
     const second = await agxJobRunsAsync("dispatcher-short", env);
     const warmMs = performance.now() - started;
     expect(first.map(({ ticket }) => ticket)).toEqual(["a"]);
     expect(second).toEqual(first);
-    expect(readFileSync(log, "utf8")).toBe("x");
-    console.info(`agx records warm cache: ${warmMs.toFixed(2)}ms`);
+    expect(existsSync(log)).toBe(false);
+    console.info(`agx snapshot read warm cache: ${warmMs.toFixed(2)}ms`);
   });
 
   test("a marker whose process is gone is counted as stale, not hidden", async () => {
@@ -1367,9 +1398,18 @@ describe("statusline Run row", () => {
     expect(out).not.toMatch(/^luna-high .* killed/mu);
   });
 
-  test("no agx state on this machine: no Run row at all", async () => {
-    const out = await render(join(scratch, "never"));
-    expect(out).not.toContain("stale ");
-    expect(out).not.toContain(" │ ");
+  test("no last-good agx snapshot renders an explicit n/a", async () => {
+    const home = join(scratch, "no-snapshot-home");
+    const p = Bun.spawn([process.execPath, STATUSLINE], {
+      stdin: new Blob([PAYLOAD]),
+      stdout: "pipe",
+      stderr: "pipe",
+      env: isolatedStatuslineEnv({ HOME: home, PATH: bin, TZ: "UTC" }),
+      timeout: 30_000,
+    });
+    const out = await new Response(p.stdout).text();
+    const stderr = await new Response(p.stderr).text();
+    expect(await p.exited, stderr).toBe(0);
+    expect(out.replace(ANSI, "")).toContain("agx n/a (snapshot unavailable)");
   });
 });

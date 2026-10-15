@@ -6,10 +6,11 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { decodedJson } from "./decode.ts";
 import { cleanupTempDirs, tempHome } from "./helpers.ts";
 import { z } from "../src/zod.ts";
+import { agxSnapshotPath } from "../src/agx-snapshot.ts";
 
 const GOLDEN = join(import.meta.dir, "golden");
 // One-shot regeneration: GOLDEN_FROM=<entry.ts> bun test ... rewrites golden/ from that entry.
@@ -442,10 +443,29 @@ function expectGolden(
       PWD: "/fixture",
       TZ: "UTC",
       AGX_STATE_DIR: join(home, "state"),
+      AGX_NEXT_STATE_DIR: "",
+      XDG_RUNTIME_DIR: "",
+      XDG_STATE_HOME: "",
       AGX_DISPATCHER_SESSION: "",
       CLAUDE_CODE_SESSION_ID: "",
       CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge",
     };
+    const agxRows = Bun.spawnSync([join(bin, "agx"), "ls", "--json"], {
+      cwd: home,
+      env,
+    });
+    expect(agxRows.exitCode, agxRows.stderr.toString()).toBe(0);
+    const snapshotPath = agxSnapshotPath(env);
+    mkdirSync(dirname(snapshotPath), { recursive: true });
+    writeFileSync(
+      snapshotPath,
+      JSON.stringify({
+        output: agxRows.stdout.toString(),
+        capturedAt: NOW,
+        exit: 0,
+      }),
+    );
+    expect(existsSync(snapshotPath)).toBe(true);
     const run = (entry: string) => {
       seed();
       const r = Bun.spawnSync([process.execPath, "--preload", PRELOAD, entry], {

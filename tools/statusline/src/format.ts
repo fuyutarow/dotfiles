@@ -138,12 +138,21 @@ export function render(
   let runLines: string[] = [];
   if (df.routes !== undefined && df.routes.isErr())
     runLines = [naSegment("agx", df.routes.error)];
-  else if (df.routes !== undefined)
+  else if (df.routes !== undefined) {
     runLines = routeLines(
       df.routes.value.runs,
       df.sid,
       df.routes.value.unreadable,
     );
+    if (df.routes.value.snapshotWhy !== undefined && runLines.length === 0)
+      runLines = [naSegment("agx", df.routes.value.snapshotWhy)];
+    else if (
+      df.routes.value.snapshotAgeSecs !== undefined &&
+      df.routes.value.snapshotAgeSecs > 30 &&
+      df.routes.value.runs.length > 0
+    )
+      runLines.push(`agx ${df.routes.value.snapshotAgeSecs}s old`);
+  }
   if (df.dispatchWarning !== undefined)
     runLines.push(`${ESC}[38;5;178m${df.dispatchWarning}${RST}`);
 

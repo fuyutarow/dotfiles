@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.2 — 2026-10-15
+
+- Read agx rows from one last-good snapshot refreshed by a detached worker; retain prior rows after slow or failed refreshes and mark their age after 30 seconds.
+
 ## 0.15.1 — 2026-10-12
 
 - Recover stale per-session render locks before considering cached output; only reuse a frame younger than five seconds while a live owner renders the same input, and persist its render time and input.

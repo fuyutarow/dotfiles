@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { homedir } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
-import { execAsyncBounded, execError } from "./bounded.ts";
+import { execError } from "./bounded.ts";
 import { activeDirs, ProgressSchema } from "./dispatch-state.ts";
 import { DIM, ESC, RST } from "./ansi.ts";
 import { dur } from "./jobs.ts";
@@ -19,7 +19,7 @@ import {
   dispatchRowPrice,
   formatCostUsd,
 } from "../../shared/src/dispatch-pricing.ts";
-import { cachedSource } from "./render-cache.ts";
+import { readAgxSnapshotAsync } from "./agx-snapshot.ts";
 
 // Run row source: one marker per worker agx started (tools/agx/src/state.ts).
 // A marker is written at start and removed at exit, so a marker whose process is gone means
@@ -66,6 +66,8 @@ function doingOf(dir: string, runId: string): RouteRun["doing"] {
 export interface RouteScan {
   runs: RouteRun[];
   unreadable: number;
+  snapshotAgeSecs?: number | undefined;
+  snapshotWhy?: string | undefined;
 }
 export interface JobRun {
   id: string;
@@ -94,7 +96,6 @@ const AgxLsRowSchema = z.object({
   cost_usd: z.unknown().optional(),
   started_at: z.unknown().optional(),
 });
-const AgxJobRunsSchema = z.array(AgxLsRowSchema);
 function optionalString(value: unknown): string | undefined {
   const parsed = z.string().safeParse(value);
   return parsed.success ? parsed.data : undefined;
@@ -111,75 +112,36 @@ function runPhase(row: z.output<typeof AgxLsRowSchema>): string | undefined {
   if (row.state !== "running") return undefined;
   return "working";
 }
-const recordsPath = (env: NodeJS.ProcessEnv): string => {
-  const nextDir = env.AGX_NEXT_STATE_DIR;
-  if (nextDir !== undefined && nextDir !== "")
-    return join(nextDir, "records.jsonl");
-  const stateDir = env.AGX_STATE_DIR;
-  if (stateDir !== undefined && stateDir !== "")
-    return join(stateDir, "records.jsonl");
-  const xdgStateHome = env.XDG_STATE_HOME;
-  if (xdgStateHome !== undefined && xdgStateHome !== "")
-    return join(xdgStateHome, "agx-next", "records.jsonl");
-  return join(env.HOME ?? homedir(), ".local/state/agx-next/records.jsonl");
-};
-/** Read the Job segment's named runs from agx's folded records, cached by records-file identity. */
+/** Read the Job segment's named runs from the shared last-good agx snapshot. */
 export async function agxJobRunsAsync(
   sessionId: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<JobRun[]> {
-  const path = recordsPath(env);
-  const info = await stat(path).catch(() => null);
-  const signature = info === null ? "missing" : `${info.mtimeMs}:${info.size}`;
-  const rows = await cachedSource({
-    key: `agx-records:${path}:${signature}`,
-    ttlMs: 1_000,
-    schema: AgxJobRunsSchema,
-    root: join(env.HOME ?? homedir(), ".cache/claude/statusline/sources"),
-    load: async () => {
-      const result = await execAsyncBounded(
-        "agx",
-        "agx",
-        ["ls", "--json"],
-        2000,
-        env,
-      );
-      if (result.isErr()) return [];
-      const parsed = jsonOf(AgxJobRunsSchema).safeParse(result.value);
-      return parsed.success ? parsed.data : [];
-    },
-  });
+  const rows = (await readAgxSnapshotAsync(env)).rows ?? [];
   if (sessionId === undefined || sessionId === "") return [];
-  return rows.filter(
-    (run) => run.state === "running" && run.dispatcher_session === sessionId,
-  );
+  return rows.flatMap((value) => {
+    const parsed = AgxLsRowSchema.safeParse(value);
+    if (!parsed.success) return [];
+    const run = parsed.data;
+    return run.state === "running" && run.dispatcher_session === sessionId
+      ? [
+          {
+            id: run.id,
+            ticket: run.ticket,
+            state: run.state,
+            dispatcher_session: run.dispatcher_session,
+          },
+        ]
+      : [];
+  });
 }
 /** Read the cached agx ls rows for Run display and count malformed rows. */
 export async function agxRouteRunsAsync(
   env: NodeJS.ProcessEnv = process.env,
   sessionId?: string,
 ): Promise<RouteScan> {
-  const path = recordsPath(env);
-  const info = await stat(path).catch(() => null);
-  const signature = info === null ? "missing" : `${info.mtimeMs}:${info.size}`;
-  const rows = await cachedSource({
-    key: `agx-records:${path}:${signature}`,
-    ttlMs: 1_000,
-    schema: z.array(z.unknown()),
-    root: join(env.HOME ?? homedir(), ".cache/claude/statusline/sources"),
-    load: async () => {
-      const result = await execAsyncBounded(
-        "agx",
-        "agx",
-        ["ls", "--json"],
-        2000,
-        env,
-      );
-      if (result.isErr()) return [];
-      const parsed = jsonOf(z.array(z.unknown())).safeParse(result.value);
-      return parsed.success ? parsed.data : [];
-    },
-  });
+  const snapshot = await readAgxSnapshotAsync(env);
+  const rows = snapshot.rows ?? [];
   const now = Temporal.Now.instant();
   const dispatcherSession = currentDispatcherSession(sessionId);
   const runs: RouteRun[] = [];
@@ -260,7 +222,14 @@ export async function agxRouteRunsAsync(
       doing,
     });
   }
-  return { runs, unreadable };
+  return {
+    runs,
+    unreadable,
+    ...(snapshot.ageSeconds === undefined
+      ? {}
+      : { snapshotAgeSecs: snapshot.ageSeconds }),
+    ...(snapshot.reason === undefined ? {} : { snapshotWhy: snapshot.reason }),
+  };
 }
 async function progressFromReturn(
   path: string,

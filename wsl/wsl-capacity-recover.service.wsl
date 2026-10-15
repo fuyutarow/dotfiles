@@ -6,8 +6,8 @@ Type=oneshot
 WorkingDirectory=%h/dotfiles
 # kondo and other Brewfile tools used by reclaim:* live in Linuxbrew, not systemd's base PATH.
 Environment=PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
-# Keep tmpfs recovery below storage-headroom's 85% inode warning.
-Environment=TMPFS_INODE_RECLAIM_PERCENT=80
+# Reclaim tmpfs when either bytes or inodes reach 80% use.
+Environment=TMPFS_RECLAIM_PERCENT=80
 # The shim is deliberately used by this non-interactive service in the repo that declares bun.
 ExecStart=%h/.local/share/mise/shims/bun %h/dotfiles/scripts/wsl-capacity-recover.ts
 # HOLD is an expected capacity verdict; only FATAL (2) means the controller itself failed.

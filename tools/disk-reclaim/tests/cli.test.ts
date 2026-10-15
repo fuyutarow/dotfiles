@@ -76,6 +76,12 @@ test("--no-progress suppresses plan progress on stderr", () => {
   expect(r.exit).toBe(0);
   expect(r.stderr).not.toContain("[reclaim]");
 });
+test("apply accepts --no-progress and proceeds to its stdin contract", () => {
+  const r = invoke(["apply", "--no-progress"]);
+  expect(r.exit).toBe(2);
+  expect(r.stderr).toContain("apply requires JSONL records on stdin");
+  expect(r.stderr).not.toContain("unknown option");
+});
 test("registry exposes every production target with its contract tier", () => {
   const r = invoke(["targets", "--json"]);
   expect(r.exit).toBe(0);

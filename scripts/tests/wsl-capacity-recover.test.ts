@@ -16,15 +16,15 @@ import {
   memoryEmergency,
   parseHostMemory,
   recoveryVerdictRecord,
-  recoverTmpfsInodes,
+  recoverTmpfsCapacity,
   recoverMemoryEmergency,
   selectStopTargets,
   shouldDropPageCache,
   shouldReclaim,
   startTicks,
   stopCompute,
-  tmpfsInodeUsage,
-  tmpfsInodeThreshold,
+  tmpfsUsage,
+  tmpfsThreshold,
   writeRecoveryVerdict,
   type ComputeProcess,
 } from "../wsl-capacity-recover.ts";
@@ -288,18 +288,25 @@ describe("WSL capacity recovery decisions", () => {
   });
 
   test("tmpfs inodes HOLD below threshold and reclaim once at or above it", async () => {
-    const threshold = tmpfsInodeThreshold("80");
+    const threshold = tmpfsThreshold("80");
     expect(threshold.isOk()).toBe(true);
     if (threshold.isErr()) return;
     const events: string[] = [];
     let free = 21;
-    const measure = () => tmpfsInodeUsage({ files: 100, ffree: free });
+    const measure = () =>
+      tmpfsUsage({
+        files: 100,
+        ffree: free,
+        blocks: 100n,
+        bavail: 50n,
+        bsize: 1n,
+      });
     const runTarget = () => {
       events.push("target");
       free = 19;
       return Promise.resolve({ code: 0, timedOut: false, output: "ok" });
     };
-    await recoverTmpfsInodes({
+    await recoverTmpfsCapacity({
       thresholdPercent: threshold.value,
       measure,
       runTarget,
@@ -310,11 +317,12 @@ describe("WSL capacity recovery decisions", () => {
         events.push(message);
       },
     });
-    expect(events).toEqual(["TMPFS HOLD used=79/100 (79.0%) threshold=80%\n"]);
+    expect(events[0]).toContain("TMPFS HOLD inodes=79/100 (79.0%)");
+    expect(events[0]).toContain("bytes=0.0GiB/0.0GiB (50.0%)");
 
     events.length = 0;
     free = 15;
-    await recoverTmpfsInodes({
+    await recoverTmpfsCapacity({
       thresholdPercent: threshold.value,
       measure,
       runTarget,
@@ -330,11 +338,51 @@ describe("WSL capacity recovery decisions", () => {
     expect(events[1]).toContain("reclaimed_inodes=4");
   });
 
+  test("100% byte pressure reclaims even with only 65% inode use", async () => {
+    const events: string[] = [];
+    let available = 0n;
+    const measure = () =>
+      tmpfsUsage({
+        files: 100,
+        ffree: 35,
+        blocks: 100n,
+        bavail: available,
+        bsize: 1024n * 1024n,
+      });
+    await recoverTmpfsCapacity({
+      thresholdPercent: 80,
+      measure,
+      runTarget: () => {
+        events.push("target");
+        available = 30n;
+        return Promise.resolve({
+          code: 0,
+          timedOut: false,
+          output: "reclaimed",
+        });
+      },
+      log: (message) => {
+        events.push(message);
+      },
+      warn: (message) => {
+        events.push(message);
+      },
+    });
+    expect(events).toHaveLength(2);
+    expect(events[0]).toBe("target");
+    expect(events[1]).toContain("before_bytes=0.1GiB/0.1GiB");
+    expect(events[1]).toContain("reclaimed_bytes=0.0GiB");
+  });
+
   test("tmpfs target failures are logged without escaping the controller", async () => {
     const events: string[] = [];
-    await recoverTmpfsInodes({
+    await recoverTmpfsCapacity({
       thresholdPercent: 80,
-      measure: () => ok({ used: 85, total: 100, percent: 85 }),
+      measure: () =>
+        ok({
+          inodes: { used: 85, total: 100, percent: 85 },
+          bytes: { used: 50, total: 100, percent: 50 },
+        }),
       runTarget: () =>
         Promise.resolve({
           code: 1,

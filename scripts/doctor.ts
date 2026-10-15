@@ -59,6 +59,7 @@ import {
   readlinkSync,
   realpathSync,
   rmSync,
+  statfsSync,
 } from "node:fs";
 import { homedir, release, tmpdir, userInfo } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
@@ -94,6 +95,7 @@ import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,
 } from "../tools/disk-reclaim/src/lib/graveyards.ts";
+import { TMPFS_RECLAIM_PERCENT, tmpfsUsage } from "./wsl-capacity-recover.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP" | "INFO";
 export type Finding = {
@@ -989,6 +991,36 @@ export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
   );
 }
 
+export async function checkTmpfsCapacity(
+  ctx: Ctx,
+  measure: () => Pick<
+    ReturnType<typeof statfsSync>,
+    "files" | "ffree" | "blocks" | "bavail" | "bsize"
+  > = () => statfsSync("/tmp", { bigint: true }),
+): Promise<Finding> {
+  if (!ctx.isWsl) return skip("tmpfs-capacity", "WSL only");
+  const measured = await attempt(() => tmpfsUsage(measure()));
+  if (!measured.ok)
+    return warn(
+      "tmpfs-capacity",
+      `could not measure /tmp: ${errorMessage(measured.error)}`,
+    );
+  if (measured.value.isErr())
+    return warn(
+      "tmpfs-capacity",
+      `could not measure /tmp: ${errorMessage(measured.value.error)}`,
+    );
+  const usage = measured.value.value;
+  const pressure = Math.max(usage.bytes.percent, usage.inodes.percent);
+  const detail =
+    `/tmp bytes ${usage.bytes.percent.toFixed(1)}% (${usage.bytes.used} of ${usage.bytes.total}); ` +
+    `inodes ${usage.inodes.percent.toFixed(1)}% (${usage.inodes.used} of ${usage.inodes.total}); ` +
+    `reclaim threshold ${TMPFS_RECLAIM_PERCENT}%`;
+  return pressure >= TMPFS_RECLAIM_PERCENT
+    ? fail("tmpfs-capacity", detail, "mise run reclaim:yes")
+    : pass("tmpfs-capacity", detail);
+}
+
 export function checkWslGpuManagerPath(path: string | undefined): Finding {
   const name = "wsl-gpu-path";
   if (path?.split(":").includes("/usr/lib/wsl/lib") === true)
@@ -1548,6 +1580,11 @@ export const CHECKS: Check[] = [
   {
     name: "capacity-guard",
     run: checkCapacityGuard,
+    applies: (c) => (c.isWsl ? null : "WSL only"),
+  },
+  {
+    name: "tmpfs-capacity",
+    run: checkTmpfsCapacity,
     applies: (c) => (c.isWsl ? null : "WSL only"),
   },
   {

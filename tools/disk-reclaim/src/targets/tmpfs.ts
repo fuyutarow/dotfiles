@@ -39,7 +39,8 @@ type TmpfsOptions = {
 
 const TMPFS_MAGIC = 0x01021994n;
 const RAMFS_MAGIC = 0x858458f6n;
-const protectedName = /^(?:claude-|herdr-)|^systemd-private-|scratchpad/iu;
+const protectedName =
+  /^(?:claude-|herdr-)|^systemd-private-|scratchpad|^(?:dbus-1|gnupg)$/iu;
 const tempName = /^.+-[A-Za-z0-9]{6,}$/u;
 const MAX_TREE_SCAN_ENTRIES = 1_048_576;
 const MAX_TREE_SCAN_MS = 4000;

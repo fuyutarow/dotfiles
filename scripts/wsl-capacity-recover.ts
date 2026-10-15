@@ -63,7 +63,7 @@ const MEMORY_AVAILABLE_EMERGENCY_MB = 2048;
 const CACHE_DROP_COOLDOWN_MS = 10 * 60 * 1000;
 const DROP_CACHE_UNIT = "dotfiles-dropcache.service";
 const HARD_PAGE_READS_EMERGENCY_PER_SECOND = 500;
-const TMPFS_INODE_WARN_PERCENT = 85;
+export const TMPFS_RECLAIM_PERCENT = 80;
 let cliError: string | undefined;
 
 type Policy = {
@@ -180,53 +180,67 @@ export function shouldReclaim(
   return nowMs - lastAttemptMs >= cooldown;
 }
 
-export type TmpfsInodeUsage = {
-  used: number;
-  total: number;
-  percent: number;
+export type TmpfsUsage = {
+  inodes: { used: number; total: number; percent: number };
+  bytes: { used: number; total: number; percent: number };
 };
 
-export function tmpfsInodeUsage(
-  statfs: Pick<ReturnType<typeof statfsSync>, "files" | "ffree">,
-): Result<TmpfsInodeUsage, Error> {
+export function tmpfsUsage(
+  statfs: Pick<
+    ReturnType<typeof statfsSync>,
+    "files" | "ffree" | "blocks" | "bavail" | "bsize"
+  >,
+): Result<TmpfsUsage, Error> {
   const total = Number(statfs.files);
   const free = Number(statfs.ffree);
   const used = total - free;
+  const totalBytes = Number(statfs.blocks) * Number(statfs.bsize);
+  const availableBytes = Number(statfs.bavail) * Number(statfs.bsize);
+  const usedBytes = totalBytes - availableBytes;
   if (
     !Number.isSafeInteger(total) ||
     !Number.isSafeInteger(free) ||
     total <= 0 ||
     free < 0 ||
     used < 0 ||
-    used > total
+    used > total ||
+    !Number.isSafeInteger(totalBytes) ||
+    !Number.isSafeInteger(availableBytes) ||
+    totalBytes <= 0 ||
+    availableBytes < 0 ||
+    usedBytes < 0 ||
+    usedBytes > totalBytes
   ) {
-    return err(new Error("/tmp returned an invalid inode count"));
+    return err(new Error("/tmp returned invalid tmpfs capacity counts"));
   }
-  return ok({ used, total, percent: (used / total) * 100 });
+  return ok({
+    inodes: { used, total, percent: (used / total) * 100 },
+    bytes: {
+      used: usedBytes,
+      total: totalBytes,
+      percent: (usedBytes / totalBytes) * 100,
+    },
+  });
 }
 
-export function tmpfsInodeThreshold(
-  raw: string | undefined,
-): Result<number, Error> {
+export function tmpfsThreshold(raw: string | undefined): Result<number, Error> {
   const percent = Number(raw);
   if (
     raw === undefined ||
     !Number.isInteger(percent) ||
     percent <= 0 ||
-    percent >= TMPFS_INODE_WARN_PERCENT
+    percent >= 85
   ) {
     return err(
-      new Error(
-        `TMPFS_INODE_RECLAIM_PERCENT must be an integer from 1 to ${TMPFS_INODE_WARN_PERCENT - 1}`,
-      ),
+      new Error(`TMPFS_RECLAIM_PERCENT must be an integer from 1 to 84`),
     );
   }
   return ok(percent);
 }
 
-export async function recoverTmpfsInodes(options: {
+export async function recoverTmpfsCapacity(options: {
   thresholdPercent: number;
-  measure: () => Result<TmpfsInodeUsage, Error>;
+  measure: () => Result<TmpfsUsage, Error>;
   runTarget: () => Promise<{ code: number; timedOut: boolean; output: string }>;
   log: (message: string) => void;
   warn: (message: string) => void;
@@ -234,20 +248,21 @@ export async function recoverTmpfsInodes(options: {
   const measuredBefore = fromThrowable(options.measure)();
   if (measuredBefore.isErr()) {
     options.warn(
-      `WARN tmpfs inode measurement failed: ${String(measuredBefore.error)}\n`,
+      `WARN tmpfs capacity measurement failed: ${String(measuredBefore.error)}\n`,
     );
     return;
   }
   if (measuredBefore.value.isErr()) {
     options.warn(
-      `WARN tmpfs inode measurement failed: ${String(measuredBefore.value.error)}\n`,
+      `WARN tmpfs capacity measurement failed: ${String(measuredBefore.value.error)}\n`,
     );
     return;
   }
   const before = measuredBefore.value.value;
-  if (before.percent < options.thresholdPercent) {
+  const pressure = Math.max(before.inodes.percent, before.bytes.percent);
+  if (pressure < options.thresholdPercent) {
     options.log(
-      `TMPFS HOLD used=${before.used}/${before.total} (${before.percent.toFixed(1)}%) threshold=${options.thresholdPercent}%\n`,
+      `TMPFS HOLD inodes=${before.inodes.used}/${before.inodes.total} (${before.inodes.percent.toFixed(1)}%) bytes=${gib(before.bytes.used)}/${gib(before.bytes.total)} (${before.bytes.percent.toFixed(1)}%) threshold=${options.thresholdPercent}%\n`,
     );
     return;
   }
@@ -271,17 +286,19 @@ export async function recoverTmpfsInodes(options: {
   }
   const result = action.value;
   const after = measuredAfter.value.value;
-  const reclaimed = before.used - after.used;
+  const reclaimed = before.inodes.used - after.inodes.used;
+  const reclaimedBytes = before.bytes.used - after.bytes.used;
   const line =
     `TMPFS_RECLAIM exit=${result.code} timeout=${result.timedOut} ` +
-    `before=${before.used}/${before.total} after=${after.used}/${after.total} ` +
-    `reclaimed_inodes=${reclaimed} detail=${JSON.stringify(result.output)}\n`;
+    `before_inodes=${before.inodes.used}/${before.inodes.total} after_inodes=${after.inodes.used}/${after.inodes.total} ` +
+    `before_bytes=${gib(before.bytes.used)}/${gib(before.bytes.total)} after_bytes=${gib(after.bytes.used)}/${gib(after.bytes.total)} ` +
+    `reclaimed_inodes=${reclaimed} reclaimed_bytes=${gib(reclaimedBytes)} detail=${JSON.stringify(result.output)}\n`;
   if (result.code !== 0 || result.timedOut) options.warn(line);
   else options.log(line);
 }
 
-function measureTmpfsInodes(): Result<TmpfsInodeUsage, Error> {
-  return tmpfsInodeUsage(statfsSync("/tmp", { bigint: true }));
+function measureTmpfs(): Result<TmpfsUsage, Error> {
+  return tmpfsUsage(statfsSync("/tmp", { bigint: true }));
 }
 
 async function runTmpfsTarget(): Promise<{
@@ -922,16 +939,14 @@ async function main(): Promise<void> {
     process.stderr.write("FATAL: WSL host path required\n");
     process.exit(2);
   }
-  const tmpfsThreshold = tmpfsInodeThreshold(
-    process.env.TMPFS_INODE_RECLAIM_PERCENT,
-  );
-  if (tmpfsThreshold.isErr()) {
-    process.stderr.write(`FATAL: ${String(tmpfsThreshold.error)}\n`);
+  const thresholdResult = tmpfsThreshold(process.env.TMPFS_RECLAIM_PERCENT);
+  if (thresholdResult.isErr()) {
+    process.stderr.write(`FATAL: ${String(thresholdResult.error)}\n`);
     process.exit(2);
   }
-  await recoverTmpfsInodes({
-    thresholdPercent: tmpfsThreshold.value,
-    measure: measureTmpfsInodes,
+  await recoverTmpfsCapacity({
+    thresholdPercent: thresholdResult.value,
+    measure: measureTmpfs,
     runTarget: runTmpfsTarget,
     log: (message) => {
       process.stdout.write(message);

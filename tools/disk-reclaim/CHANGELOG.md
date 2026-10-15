@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.3 — 2026-10-15
+
+- Keep user-session dbus and gnupg paths and accept --no-progress for apply
+
 ## 1.3.2 — 2026-10-14
 
 - Reclaim stale, owned tmpfs directories regardless of naming convention, using one bounded ownership, age and sizing walk; keep protected, open and fresh trees safe and report incomplete scans as ASK.

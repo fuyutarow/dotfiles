@@ -289,4 +289,26 @@ describe("tmpfs target", () => {
       action: { kind: "delete", argv: [nested] },
     });
   });
+
+  test("keeps live user-session dbus and gnupg sockets even when their names look stale", () => {
+    const root = fixtureRoot();
+    const old = Temporal.Now.instant().epochMilliseconds / 1000 - 7200;
+    const paths = ["dbus-1", "gnupg"].map((name) => join(root, name));
+    for (const path of paths) {
+      mkdirSync(path);
+      writeFileSync(join(path, "socket"), "fixture");
+      utimesSync(join(path, "socket"), old, old);
+      utimesSync(path, old, old);
+    }
+    const rows = createTmpfsTarget({
+      mounts: () => [{ path: root, type: "tmpfs" }],
+      statfs: fixtureFs,
+      isOpen: () => false,
+    }).plan(fixtureContext);
+    for (const path of paths)
+      expect(rows.find((row) => row.path === path)).toMatchObject({
+        verdict: "KEEP",
+        reason: "protected session or system directory",
+      });
+  });
 });

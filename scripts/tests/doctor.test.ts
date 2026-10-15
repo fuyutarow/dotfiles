@@ -25,6 +25,7 @@ import {
   checkCodexRuntime,
   checkGoogleDrive,
   checkRipGraveyard,
+  checkTmpfsCapacity,
   checkWslGpuManagerPath,
   type Ctx,
 } from "../doctor.ts";
@@ -53,6 +54,15 @@ const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "doctor.ts");
 const BUN_EXEC = join(REPO, "scripts", "bun-exec.sh");
 const RENDER_HOME = join(REPO, "scripts", "render-home.ts");
+const tmpfsStats =
+  (bavail: bigint, ffree = 35n) =>
+  () => ({
+    files: 100n,
+    ffree,
+    blocks: 100n,
+    bavail,
+    bsize: 1024n * 1024n,
+  });
 const FAKE_CLAUDE = join(import.meta.dir, "fake-claude.ts");
 const FAKE_CLAUDE_BIN = tmp("doctor-claude-bin-");
 writeFileSync(
@@ -117,6 +127,33 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("tmpfs capacity FAILs for byte or inode pressure at the threshold", async () => {
+    const ctx: Ctx = {
+      home: tmp("doctor-tmpfs-home-"),
+      dotfiles: REPO,
+      isMac: false,
+      isWsl: true,
+      isCoreBox: false,
+    };
+    const full = await checkTmpfsCapacity(ctx, tmpfsStats(0n));
+    expect(full.verdict).toBe("FAIL");
+    expect(full.detail).toContain("bytes 100.0%");
+    expect(full.detail).toContain("inodes 65.0%");
+    expect(full.fix).toBe("mise run reclaim:yes");
+    for (const measure of [tmpfsStats(20n), tmpfsStats(50n, 20n)]) {
+      const finding = await checkTmpfsCapacity(ctx, measure);
+      expect(finding.verdict).toBe("FAIL");
+      expect(finding.fix).toBe("mise run reclaim:yes");
+    }
+    expect((await checkTmpfsCapacity(ctx, tmpfsStats(21n))).verdict).toBe(
+      "PASS",
+    );
+    expect(
+      (await checkTmpfsCapacity({ ...ctx, isWsl: false }, tmpfsStats(0n)))
+        .verdict,
+    ).toBe("SKIP");
+  });
+
   test("skills fails when in-house copies are missing", () => {
     const home = tmp("doctor-skills-fresh-");
     const result = doctor("skills", { HOME: home, DOTFILES: REPO });

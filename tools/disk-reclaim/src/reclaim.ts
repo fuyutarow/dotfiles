@@ -179,7 +179,7 @@ const commands = [
     ...common,
     name: "apply",
     parameters: [],
-    flags: { approve: flags.approve },
+    flags: { approve: flags.approve, noProgress: flags.noProgress },
   }),
   command({
     ...common,

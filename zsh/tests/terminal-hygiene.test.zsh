@@ -230,19 +230,19 @@ out=$(pty_run '_term_restore; print -r -- MARK1')
 want "safe repair emits the mouse-mode disable set"      "$MODES_OFF" "$out"
 want "safe repair disables the Kitty keyboard protocol"  "$KEYS_OFF"  "$out"
 want "safe repair emits the render reset"                "$RENDER"    "$out"
+want "safe repair leaves a stranded alternate screen"   "$ALT_OFF"   "$out"
 want "shell stayed alive through it"                     "MARK1"      "$out"
 
-# --- 2. nothing on an automatic path may move the cursor or swap screen buffers ------------
+# --- 2. nothing on an automatic path may move the cursor or clear the screen --------------
 # A cursor-moving sequence here means the next prompt lands on top of existing output.
 out=$(pty_run 'print -r -- MARK2')
 wantnot "automatic path never homes the cursor"      $'\e[H'      "$out"
 wantnot "automatic path never clears the screen"     $'\e[2J'     "$out"
 wantnot "automatic path never resets scroll region"  $'\e[r'      "$out"
 wantnot "automatic path never sends 1049l"           $'\e[?1049l' "$out"
-wantnot "automatic path never leaves alt screen"     "$ALT_OFF"   "$out"
 wantnot "automatic path never issues RIS"            $'\ec'       "$out"   # RIS wipes the screen
 
-# --- 3. ssh: exit status decides the alternate-screen repair, and passes through ------------
+# --- 3. ssh: every exit repairs the terminal, and the exit status passes through ------------
 # Non-interactive shells must keep the executable `ssh`, never install a wrapper whose terminal
 # repair dependency is only meaningful in an interactive shell.
 zsh -f -c "source $ROOT/zsh/aliases.zsh >/dev/null 2>&1; type ssh; [[ \$(whence -w ssh) != 'ssh: function' ]]" \
@@ -256,8 +256,8 @@ want "ssh exit 255 leaves the alternate screen" "$ALT_OFF" "$out"
 want "ssh exit 255 propagates"                  "EC=255"   "$out"
 
 out=$(pty_run 'ssh -V; print -r -- "EC=$?"')
-wantnot "ssh exit 0 does not touch the screen buffer" "$ALT_OFF" "$out"
-want    "ssh exit 0 propagates"                       "EC=0"     "$out"
+want "ssh exit 0 leaves a stranded alternate screen" "$ALT_OFF" "$out"
+want "ssh exit 0 propagates"                          "EC=0"     "$out"
 
 # --- 4. THE HANG GUARD --------------------------------------------------------------------
 # The shipped-and-reverted bug: a DECRQM probe using `read -t 0.3 -k 11`. zsh's `-t` bounds the

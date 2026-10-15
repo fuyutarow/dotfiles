@@ -718,13 +718,17 @@ typeset -g _TERM_RENDER_RESET=$'\e[?25h\e[?7h\e[0m\017\e(B'
 # carries no DECRC cursor restore. So on a healthy terminal it is a no-op, instead of 1049l's
 # restore-to-a-stale-saved-cursor that drops the next prompt over line 1. That is precisely what
 # makes it safe to send blind, which is what lets this whole block avoid querying the terminal.
+# It is part of the per-prompt repair: a shell prompt drawn on the alternate screen only happens
+# when a TUI died there, and herdr then turns the mouse wheel into Up/Down (= history, not
+# scrollback). Observed 2026-10-17 after r99-u26 was stopped under live agent TUIs.
 typeset -g _TERM_LEAVE_ALTSCREEN=$'\e[?1047l'
 
-# Everything safe to assert at any moment: writes only, moves the cursor nowhere, touches no
-# screen buffer, and is a no-op on a healthy terminal. Runs before every prompt and after ssh.
+# Everything safe to assert at any moment: writes only, moves the cursor nowhere, leaves the
+# alternate screen only if stranded on it, and is a no-op on a healthy terminal.
+# Runs before every prompt and after ssh.
 _term_restore() {
   [[ -t 1 ]] || return 0                       # piped/redirected: no terminal to fix
-  print -rn -- "$_TERM_MODES_OFF$_TERM_KEYS_OFF$_TERM_RENDER_RESET"
+  print -rn -- "$_TERM_MODES_OFF$_TERM_KEYS_OFF$_TERM_RENDER_RESET$_TERM_LEAVE_ALTSCREEN"
   return 0
 }
 
@@ -750,10 +754,6 @@ if [[ -o interactive ]]; then
     command ssh "$@"
     local ec=$?
     _term_restore
-    # 255 is ssh's OWN error status — a dropped link included. That is the case where the remote app
-    # never got to leave the alternate screen. Sent blind; see _TERM_LEAVE_ALTSCREEN for why that is
-    # safe even when we were never on it, and the LAW above for why we must not ask instead.
-    (( ec == 255 )) && [[ -t 1 ]] && print -rn -- "$_TERM_LEAVE_ALTSCREEN"
     # ssh restores termios itself on every NORMAL exit, its own 255 included; only a signal kill
     # leaves the tty raw. Running `stty sane` after every ssh would fork each time and silently undo
     # a user's own `stty -ixon` / custom erase / intr, so pay for it only where it is the cure.

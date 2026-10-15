@@ -85,18 +85,20 @@ test.each([
   expect(classifyJapanesePrimary(text).outcome).toBe(outcome);
 });
 
-test("CLI emits structured outcomes with meaningful exit statuses", () => {
+test("CLI emits structured outcomes with meaningful exit statuses", async () => {
   const cli = join(import.meta.dir, "../src/cli.ts");
   for (const [text, code, outcome] of [
     ["結果を日本語で報告します。", 0, "japanese-primary"],
     ["This response is English prose.", 1, "non-japanese"],
     ["確認", 2, "insufficient"],
   ] as const) {
-    const result = Bun.spawnSync([process.execPath, cli], {
-      stdin: Buffer.from(text),
+    const result = Bun.spawn([process.execPath, cli], {
+      stdin: new Blob([text]),
+      stdout: "pipe",
     });
-    expect(result.exitCode).toBe(code);
-    expect(result.stdout.toString()).toContain(`"outcome":"${outcome}"`);
+    const stdout = await new Response(result.stdout).text();
+    expect(await result.exited).toBe(code);
+    expect(stdout).toContain(`"outcome":"${outcome}"`);
   }
 });
 

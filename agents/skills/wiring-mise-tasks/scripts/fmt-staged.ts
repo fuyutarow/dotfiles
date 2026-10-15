@@ -26,13 +26,7 @@
 // or a formatter failed or strayed · 2 usage or environment error.
 
 import { cli } from "cleye";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-} from "node:fs";
+import { access, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -44,6 +38,11 @@ import {
   jjRead,
   type JjPrecommit,
 } from "./jj-precommit.ts";
+
+// jjExport returns void until jj-precommit goes async; widening the result keeps the await valid
+// (and waiting) in both states.
+const exportCandidate: (...args: Parameters<typeof jjExport>) => unknown =
+  jjExport;
 
 type Tool = { exts: string[]; command: string; files: string[] };
 
@@ -125,23 +124,27 @@ async function checkSnapshot(
   tools: Tool[],
   excludes: Bun.Glob[],
 ): Promise<number> {
-  const candidate = jjCandidate(context);
-  const changed = jjChanged(context);
+  const candidate = await Promise.try(() => jjCandidate(context));
+  const changed = await Promise.try(() => jjChanged(context));
   for (const path of changed) {
     if (!candidate.has(path) || excludes.some((glob) => glob.match(path)))
       continue;
-    const kind = jjRead(
-      [
-        "file",
-        "list",
-        "-r",
-        context.rev,
-        "-T",
-        "file_type",
-        "--",
-        `root-file:${JSON.stringify(path)}`,
-      ],
-      context.root,
+    const kind = (
+      await Promise.try(() =>
+        jjRead(
+          [
+            "file",
+            "list",
+            "-r",
+            context.rev,
+            "-T",
+            "file_type",
+            "--",
+            `root-file:${JSON.stringify(path)}`,
+          ],
+          context.root,
+        ),
+      )
     ).toString();
     if (kind !== "file") continue;
     const ext = path.split(".").at(-1)?.toLowerCase() ?? "";
@@ -154,59 +157,68 @@ async function checkSnapshot(
     );
     return 0;
   }
-  const tmp = mkdtempSync(join(tmpdir(), "fmt-jj-"));
-  return Promise.try(async () => {
-    // Format a complete candidate copy, so formatters following module children are confined
-    // to the temporary tree. The checked revision and the user's working copy stay immutable.
-    jjExport(context, tmp, candidate);
-    if (existsSync(join(context.root, "node_modules")))
-      symlinkSync(
-        join(context.root, "node_modules"),
-        join(tmp, "node_modules"),
-      );
-    let failed = false;
-    for (const tool of tools) {
-      if (tool.files.length === 0) continue;
-      // bounded: the formatter has a 300s process timeout below the temporary trust environment.
-      const child = Bun.spawn(
-        ["sh", "-c", `${tool.command} "$@"`, "fmt-staged", ...tool.files],
-        {
-          cwd: tmp,
-          // The candidate copy comes from this already-trusted repository. Trust only this
-          // disposable path in the child; never persist a mise trust entry or change HOME.
-          env: {
-            ...process.env,
-            MISE_TRUSTED_CONFIG_PATHS: [
-              process.env.MISE_TRUSTED_CONFIG_PATHS,
-              tmp,
-            ]
-              .filter((path) => path !== undefined && path !== "")
-              .join(":"),
-          },
-          stdout: "inherit",
-          stderr: "inherit",
-          timeout: 300_000,
-        },
-      );
-      if ((await child.exited) !== 0) failed = true;
-    }
-    for (const path of targets) {
-      const same =
-        existsSync(join(tmp, path)) &&
-        readFileSync(join(tmp, path)).equals(jjContent(context, path));
-      if (same) continue;
-      failed = true;
-      process.stdout.write(
-        `REFUSE: ${path} needs formatting; run mise run fmt on it and retry the commit\n`,
-      );
-    }
-    process.stdout.write(
-      `RESULT: fmt:staged jj snapshot ${failed ? "refused" : "verified"} ${targets.length} selected file(s)\n`,
+  const tmp = await mkdtemp(join(tmpdir(), "fmt-jj-"));
+  await using _cleanupTmp = {
+    [Symbol.asyncDispose]: () => rm(tmp, { recursive: true, force: true }),
+  };
+  // Format a complete candidate copy, so formatters following module children are confined
+  // to the temporary tree. The checked revision and the user's working copy stay immutable.
+  await exportCandidate(context, tmp, candidate);
+  if (
+    await access(join(context.root, "node_modules")).then(
+      () => true,
+      () => false,
+    )
+  )
+    await symlink(
+      join(context.root, "node_modules"),
+      join(tmp, "node_modules"),
     );
-    return failed ? 1 : 0;
-  }).finally(() => {
-    rmSync(tmp, { recursive: true, force: true });
-  });
+  let failed = false;
+  for (const tool of tools) {
+    if (tool.files.length === 0) continue;
+    // bounded: the formatter has a 300s process timeout below the temporary trust environment.
+    const child = Bun.spawn(
+      ["sh", "-c", `${tool.command} "$@"`, "fmt-staged", ...tool.files],
+      {
+        cwd: tmp,
+        // The candidate copy comes from this already-trusted repository. Trust only this
+        // disposable path in the child; never persist a mise trust entry or change HOME.
+        env: {
+          ...process.env,
+          MISE_TRUSTED_CONFIG_PATHS: [
+            process.env.MISE_TRUSTED_CONFIG_PATHS,
+            tmp,
+          ]
+            .filter((path) => path !== undefined && path !== "")
+            .join(":"),
+        },
+        stdout: "inherit",
+        stderr: "inherit",
+        timeout: 300_000,
+      },
+    );
+    if ((await child.exited) !== 0) failed = true;
+  }
+  for (const path of targets) {
+    const same =
+      (await access(join(tmp, path)).then(
+        () => true,
+        () => false,
+      )) &&
+      (await readFile(join(tmp, path))).equals(
+        await Promise.try(() => jjContent(context, path)),
+      );
+    if (same) continue;
+    failed = true;
+    process.stdout.write(
+      `REFUSE: ${path} needs formatting; run mise run fmt on it and retry the commit\n`,
+    );
+  }
+  process.stdout.write(
+    `RESULT: fmt:staged jj snapshot ${failed ? "refused" : "verified"} ${targets.length} selected file(s)\n`,
+  );
+  return failed ? 1 : 0;
 }
 
 async function main(): Promise<number> {
@@ -248,7 +260,7 @@ async function main(): Promise<number> {
   }
   const excludes = parsed.flags.exclude.map((g) => new Bun.Glob(g));
 
-  const context = jjContext();
+  const context = await Promise.try(() => jjContext());
   if (context !== undefined) return checkSnapshot(context, tools, excludes);
 
   // J1 migration fallback; TODO(J1): remove after all consumers use the jj interface.

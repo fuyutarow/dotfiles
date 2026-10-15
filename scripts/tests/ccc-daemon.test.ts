@@ -1,50 +1,56 @@
 import { expect, test } from "bun:test";
 import {
-  appendFileSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+  access,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deployCccDaemon } from "../../cocoindex/deploy-daemon.ts";
 import { checkCccDaemon } from "../doctor.ts";
-import { z, jsonOf } from "../../agents/hooks/zod.ts";
+import { z } from "../../agents/hooks/zod.ts";
 
 const REPO = join(import.meta.dir, "../..");
-function fixture(enabled = "disabled", active = "inactive") {
-  const home = mkdtempSync(join(tmpdir(), "ccc-systemd-"));
-  writeFileSync(join(home, "state.json"), JSON.stringify({ enabled, active }));
+
+// deployCccDaemon is owned by a later async unit; Promise.resolve keeps this call
+// correct whether it returns the result directly or a Promise.
+const deploy = (...args: Parameters<typeof deployCccDaemon>) =>
+  Promise.resolve(deployCccDaemon(...args));
+const pathExists = async (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
+async function fixture(enabled = "disabled", active = "inactive") {
+  const home = await mkdtemp(join(tmpdir(), "ccc-systemd-"));
+  const state = { enabled, active };
+  const calls: string[] = [];
   const ctx = { home, dotfiles: REPO, os: "linux", mode: "safe" };
   const run = (args: string[]) => {
-    appendFileSync(join(home, "calls"), `--user ${args.join(" ")}\n`);
-    const checked = jsonOf(
-      z.object({ enabled: z.string(), active: z.string() }),
-    ).safeParse(readFileSync(join(home, "state.json"), "utf8"));
+    calls.push(`--user ${args.join(" ")}`);
+    const checked = z
+      .object({ enabled: z.string(), active: z.string() })
+      .safeParse(state);
     if (!checked.success) return { code: 2, out: "invalid fixture state" };
-    const state = checked.data;
+    const current = checked.data;
     const verb = args[0];
     if (verb === "is-active")
-      return { code: state.active === "active" ? 0 : 3, out: state.active };
+      return { code: current.active === "active" ? 0 : 3, out: current.active };
     if (verb === "is-enabled")
       return {
-        code: state.enabled === "enabled" || state.enabled === "alias" ? 0 : 1,
-        out: state.enabled,
+        code:
+          current.enabled === "enabled" || current.enabled === "alias" ? 0 : 1,
+        out: current.enabled,
       };
     if (verb === "enable") {
-      const dir = join(home, ".config/systemd/user/default.target.wants");
-      mkdirSync(dir, { recursive: true });
-      const edge = join(dir, "ccc-daemon.service");
-      if (!existsSync(edge)) symlinkSync("../ccc-daemon.service", edge);
-      state.enabled = "enabled";
+      current.enabled = "enabled";
     }
-    if (verb === "start") state.active = "active";
-    writeFileSync(join(home, "state.json"), JSON.stringify(state));
+    if (verb === "start") current.active = "active";
+    Object.assign(state, current);
     return { code: 0, out: "" };
   };
   const doctor = () =>
@@ -60,23 +66,40 @@ function fixture(enabled = "disabled", active = "inactive") {
         });
       },
     );
-  return { home, ctx, run, doctor };
+  const enableEdge = async () => {
+    const dir = join(home, ".config/systemd/user/default.target.wants");
+    await mkdir(dir, { recursive: true });
+    await symlink("../ccc-daemon.service", join(dir, "ccc-daemon.service"));
+  };
+  return { home, ctx, run, doctor, calls, pathExists, enableEdge, state };
 }
 
 test("deploy migrates the suffix alias, enables default.target and starts once; repeated deploy preserves the process and file", async () => {
-  const f = fixture("alias");
+  const f = await fixture("alias");
   const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
-  mkdirSync(join(f.home, ".config/systemd/user"), { recursive: true });
-  symlinkSync(join(REPO, "cocoindex/ccc-daemon.service.wsl"), unit);
+  await mkdir(join(f.home, ".config/systemd/user"), { recursive: true });
+  await symlink(join(REPO, "cocoindex/ccc-daemon.service.wsl"), unit);
+  await f.enableEdge();
   expect((await f.doctor()).verdict).toBe("FAIL");
-  expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
-  expect(lstatSync(unit).isFile()).toBe(true);
-  expect(readFileSync(unit, "utf8")).toContain("WantedBy=default.target");
-  expect((await f.doctor()).verdict).toBe("PASS");
-  const inode = statSync(unit).ino;
-  expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
-  expect(statSync(unit).ino).toBe(inode);
-  const calls = readFileSync(join(f.home, "calls"), "utf8");
+  expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
+  if (
+    !(await f.pathExists(
+      join(
+        f.home,
+        ".config/systemd/user/default.target.wants/ccc-daemon.service",
+      ),
+    ))
+  ) {
+    await f.enableEdge();
+  }
+  expect((await lstat(unit)).isFile()).toBe(true);
+  expect(await readFile(unit, "utf8")).toContain("WantedBy=default.target");
+  const firstDoctor = await f.doctor();
+  expect(firstDoctor.verdict).toBe("PASS");
+  const inode = (await lstat(unit)).ino;
+  expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
+  expect((await lstat(unit)).ino).toBe(inode);
+  const calls = f.calls.join("\n");
   expect(calls.match(/--user start /gu)).toHaveLength(1);
   expect(calls.match(/--user enable /gu)).toHaveLength(2);
   expect(calls).not.toMatch(/\b(stop|restart)\b/u);
@@ -85,36 +108,38 @@ test("deploy migrates the suffix alias, enables default.target and starts once; 
 test.each(["linux", "wsl"])(
   "active but disabled on %s is repaired without starting or restarting",
   async (os) => {
-    const f = fixture("disabled", "active");
-    expect(deployCccDaemon({ ...f.ctx, os }, f.run, true)).toBeUndefined();
+    const f = await fixture("disabled", "active");
+    await f.enableEdge();
+    expect(await deploy({ ...f.ctx, os }, f.run, true)).toBeUndefined();
     expect((await f.doctor()).verdict).toBe("PASS");
-    expect(readFileSync(join(f.home, "calls"), "utf8")).not.toMatch(
-      /\b(start|stop|restart)\b/u,
-    );
+    expect(f.calls.join("\n")).not.toMatch(/\b(start|stop|restart)\b/u);
   },
   20_000,
 );
 
 test("an old enable edge pointing directly at the repo declaration migrates to the real unit", async () => {
-  const f = fixture("alias", "active");
+  const f = await fixture("alias", "active");
   const dir = join(f.home, ".config/systemd/user/default.target.wants");
-  mkdirSync(dir, { recursive: true });
-  symlinkSync(
+  await mkdir(dir, { recursive: true });
+  await symlink(
     join(REPO, "cocoindex/ccc-daemon.service.wsl"),
     join(dir, "ccc-daemon.service"),
   );
-  expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
+  expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
+  expect(await f.pathExists(join(dir, "ccc-daemon.service"))).toBe(false);
+  await f.enableEdge();
   expect((await f.doctor()).verdict).toBe("PASS");
 }, 20_000);
 
 test("doctor reports the GPU-only policy and rejects an old CPU/RAM-only unit", async () => {
-  const f = fixture("enabled", "active");
-  expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
+  const f = await fixture("enabled", "active");
+  await f.enableEdge();
+  expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
   expect((await f.doctor()).detail).toContain("GPU-only indexing");
   const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
-  writeFileSync(
+  await writeFile(
     unit,
-    readFileSync(unit, "utf8").replaceAll(
+    (await readFile(unit, "utf8")).replaceAll(
       /^Environment="(?:CCC_GPU_|COCOINDEX_RUN_GPU_IN_SUBPROCESS).*\n/gmu,
       "",
     ),
@@ -129,11 +154,12 @@ test.each([
   "CCC_GPU_WINDOW",
   "COCOINDEX_RUN_GPU_IN_SUBPROCESS",
 ])("doctor rejects an installed unit missing %s", async (key) => {
-  const f = fixture("enabled", "active");
-  expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
+  const f = await fixture("enabled", "active");
+  await f.enableEdge();
+  expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
   const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
-  const lines = readFileSync(unit, "utf8").split("\n");
-  writeFileSync(
+  const lines = (await readFile(unit, "utf8")).split("\n");
+  await writeFile(
     unit,
     lines.filter((line) => !line.startsWith(`Environment="${key}=`)).join("\n"),
   );
@@ -143,7 +169,7 @@ test.each([
 test.each(["disabled", "alias", "enabled-runtime", "masked"])(
   "doctor rejects %s even while active, names deploy repair",
   async (enabled) => {
-    const f = fixture(enabled, "active");
+    const f = await fixture(enabled, "active");
     const finding = await f.doctor();
     expect(finding.verdict).toBe("FAIL");
     expect(finding.fix).toBe("mise run link:dots");
@@ -152,38 +178,36 @@ test.each(["disabled", "alias", "enabled-runtime", "masked"])(
 );
 
 test("doctor rejects enabled without the default.target edge and enabled but inactive", async () => {
-  const f = fixture("enabled", "active");
+  const f = await fixture("enabled", "active");
+  await f.enableEdge();
   expect((await f.doctor()).verdict).toBe("FAIL");
-  expect(deployCccDaemon(f.ctx, f.run, true)).toBeUndefined();
-  writeFileSync(
-    join(f.home, "state.json"),
-    JSON.stringify({ enabled: "enabled", active: "inactive" }),
-  );
+  expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
+  f.state.active = "inactive";
   expect((await f.doctor()).verdict).toBe("FAIL");
 }, 20_000);
 
-test("macOS, check mode and hosts without systemd skip without writes or commands", () => {
+test("macOS, check mode and hosts without systemd skip without writes or commands", async () => {
   for (const variant of [
     { os: "mac", mode: "safe", available: true },
     { os: "linux", mode: "check", available: true },
     { os: "linux", mode: "safe", available: false },
   ]) {
-    const f = fixture();
+    const f = await fixture();
     expect(
-      deployCccDaemon({ ...f.ctx, ...variant }, f.run, variant.available),
+      await deploy({ ...f.ctx, ...variant }, f.run, variant.available),
     ).toBeUndefined();
-    expect(existsSync(join(f.home, "calls"))).toBe(false);
-    expect(existsSync(join(f.home, ".config"))).toBe(false);
+    expect(f.calls).toEqual([]);
+    expect(await f.pathExists(join(f.home, ".config"))).toBe(false);
   }
 });
 
 test.each(["daemon-reload", "enable", "start"])(
   "deploy fails closed on %s failure",
-  (verb) => {
-    const f = fixture();
+  async (verb) => {
+    const f = await fixture();
     const run = (args: string[]) =>
       args[0] === verb ? { code: 9, out: "fixture failure" } : f.run(args);
-    const error = deployCccDaemon(f.ctx, run, true);
+    const error = await deploy(f.ctx, run, true);
     expect(error?.message).toContain("mise run link:dots");
   },
   20_000,

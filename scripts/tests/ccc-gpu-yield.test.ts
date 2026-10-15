@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-test("ccc GPU policy and embedder adapter yield under the runner's admission lock", () => {
-  const result = Bun.spawnSync(
+test("ccc GPU policy and embedder adapter yield under the runner's admission lock", async () => {
+  const proc = Bun.spawn(
     [
       "uv",
       "run",
@@ -27,8 +27,11 @@ test("ccc GPU policy and embedder adapter yield under the runner's admission loc
       },
     },
   );
-  expect(result.stderr.toString() + result.stdout.toString()).toContain(
-    "passed",
-  );
-  expect(result.exitCode).toBe(0);
+  const [stderr, stdout, exitCode] = await Promise.all([
+    new Response(proc.stderr).text(),
+    new Response(proc.stdout).text(),
+    proc.exited,
+  ]);
+  expect(stderr + stdout).toContain("passed");
+  expect(exitCode).toBe(0);
 }, 65_000);

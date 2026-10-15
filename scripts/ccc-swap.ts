@@ -67,14 +67,19 @@
 // invalid flag input, ccc missing, malformed global_settings.yml, or a live index changed during
 // build — that last one should never happen and is a bug).
 
+import { type Dirent } from "node:fs";
 import {
-  existsSync,
-  readdirSync,
-  realpathSync,
-  statSync,
-  type Dirent,
-} from "node:fs";
-import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+  access,
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
@@ -142,7 +147,9 @@ const DEFAULT_KEEP = 1;
 // Pure / testable helpers
 // ---------------------------------------------------------------------------------------------
 
-export function resolveHome(homeFlag: string | undefined): string | null {
+export async function resolveHome(
+  homeFlag: string | undefined,
+): Promise<string | null> {
   const home = homeFlag ?? process.env.HOME ?? homedir();
   if (home === "") return null;
   // Canonical, symlinks resolved: ccc keys a project's DB by the path the OS reports (os.getcwd()
@@ -151,7 +158,10 @@ export function resolveHome(homeFlag: string | undefined): string | null {
   // FATAL-SAFETY check caught it (ccc-swap tests in macOS tmpdirs, 2026-10-06). Every project root
   // and the shadow dir derive from this, so canonicalizing here covers them all.
   const abs = resolve(home);
-  return existsSync(abs) ? realpathSync(abs) : abs;
+  return (await fromAsyncThrowable(() => realpath(abs))()).match(
+    (path) => path,
+    () => abs,
+  );
 }
 
 export function resolveShadowDir(
@@ -177,10 +187,10 @@ export function resolveLiveSettingsDir(
  * never recurses INTO a matched `.cocoindex_code` (large LMDB/sqlite content, and it cannot
  * nest another project marker ccc itself would recognize).
  */
-export function discoverProjects(
+export async function discoverProjects(
   searchRoot: string,
   opts: { excludeDirNames?: string[]; excludeAbsolutePaths?: string[] } = {},
-): string[] {
+): Promise<string[]> {
   const excludeNames = new Set(
     opts.excludeDirNames ?? DEFAULT_EXCLUDE_DIR_NAMES,
   );
@@ -191,38 +201,44 @@ export function discoverProjects(
     excludeAbs.some((ex) => dir === ex || dir.startsWith(`${ex}/`));
 
   // Records `dir` when `full` (its `.cocoindex_code`) carries ccc's own project marker.
-  const recordIfProjectRoot = (dir: string, full: string): void => {
-    if (existsSync(join(full, PROJECT_SETTINGS_FILE))) found.push(dir);
+  const recordIfProjectRoot = async (
+    dir: string,
+    full: string,
+  ): Promise<void> => {
+    const result = await fromAsyncThrowable(() =>
+      access(join(full, PROJECT_SETTINGS_FILE)),
+    )();
+    if (result.isOk()) found.push(dir);
   };
 
-  const walk = (dir: string): void => {
-    const entriesResult = fromThrowable(() =>
-      readdirSync(dir, { withFileTypes: true }),
+  const walk = async (dir: string): Promise<void> => {
+    const entriesResult = await fromAsyncThrowable(() =>
+      readdir(dir, { withFileTypes: true }),
     )();
     if (entriesResult.isErr()) return; // permission denied / vanished mid-walk — skip, never crash discover
     for (const entry of entriesResult.value) {
       if (entry.isSymbolicLink() || !entry.isDirectory()) continue;
       const full = join(dir, entry.name);
       if (entry.name === SETTINGS_DIR_NAME) {
-        recordIfProjectRoot(dir, full);
+        await recordIfProjectRoot(dir, full);
         continue;
       }
       if (excludeNames.has(entry.name) || isPruned(full)) continue;
-      walk(full);
+      await walk(full);
     }
   };
 
   const root = resolve(searchRoot);
-  if (!isPruned(root)) walk(root);
+  if (!isPruned(root)) await walk(root);
   return found.toSorted();
 }
 
 /** One `readdirSync` entry's contribution to {@link dirSizeBytes}: bytes to add, dirs pushed onto `stack`. */
-function accumulateDirEntry(
+async function accumulateDirEntry(
   current: string,
   entry: Dirent,
   stack: string[],
-): number {
+): Promise<number> {
   if (entry.isSymbolicLink()) return 0;
   const full = join(current, entry.name);
   if (entry.isDirectory()) {
@@ -231,34 +247,49 @@ function accumulateDirEntry(
   }
   if (!entry.isFile()) return 0;
   // vanished mid-walk
-  const sizeResult = fromThrowable(() => statSync(full).size)();
+  const sizeResult = await fromAsyncThrowable(
+    async () => (await stat(full)).size,
+  )();
   return sizeResult.isOk() ? sizeResult.value : 0;
 }
 
-export function dirSizeBytes(dir: string): number {
+export async function dirSizeBytes(dir: string): Promise<number> {
   let total = 0;
   const stack = [dir];
   while (stack.length > 0) {
     const current = stack.pop();
     if (current === undefined) continue;
-    const entriesResult = fromThrowable(() =>
-      readdirSync(current, { withFileTypes: true }),
+    const entriesResult = await fromAsyncThrowable(() =>
+      readdir(current, { withFileTypes: true }),
     )();
     if (entriesResult.isErr()) continue;
     for (const entry of entriesResult.value) {
-      total += accumulateDirEntry(current, entry, stack);
+      total += await accumulateDirEntry(current, entry, stack);
     }
   }
   return total;
 }
 
 /** Size of a file, or the recursive size of a directory (e.g. `cocoindex.db`). Missing -> 0. */
-export function pathSizeBytes(path: string): number {
-  const statResult = fromThrowable(() => statSync(path))();
+export async function pathSizeBytes(path: string): Promise<number> {
+  const statResult = await fromAsyncThrowable(() => stat(path))();
   if (statResult.isErr()) return 0;
-  return statResult.value.isDirectory()
-    ? dirSizeBytes(path)
-    : statResult.value.size;
+  if (statResult.value.isDirectory()) return dirSizeBytes(path);
+  return statResult.value.size;
+}
+
+/** The subset of `names` that exist directly under `dir`, in order. */
+async function presentArtifacts(
+  dir: string,
+  names: readonly string[],
+): Promise<string[]> {
+  const present: string[] = [];
+  for (const name of names) {
+    if ((await fromAsyncThrowable(() => access(join(dir, name)))()).isOk()) {
+      present.push(name);
+    }
+  }
+  return present;
 }
 
 /**
@@ -266,10 +297,10 @@ export function pathSizeBytes(path: string): number {
  * of `dbDir` as a whole. A mapped DB dir can hold a NESTED project's DB dir (worktree hazard, see
  * file header); a whole-directory size would silently fold that project's bytes into this one's.
  */
-export function dbArtifactsSizeBytes(dbDir: string): number {
+export async function dbArtifactsSizeBytes(dbDir: string): Promise<number> {
   let total = 0;
   for (const name of DB_ARTIFACTS) {
-    total += pathSizeBytes(join(dbDir, name));
+    total += await pathSizeBytes(join(dbDir, name));
   }
   return total;
 }
@@ -297,10 +328,11 @@ const CutoverMarkerSchema = z.object({ previousModel: z.string().nullish() });
 const ErrnoSchema = z.object({ code: z.unknown() });
 
 /** Parses the `embedding float[N]` DDL fragment out of `code_chunks_vec`'s sqlite_master row. */
-export function computeIndexDimension(
+export async function computeIndexDimension(
   targetSqliteDbPath: string,
-): number | null {
-  if (!existsSync(targetSqliteDbPath)) return null;
+): Promise<number | null> {
+  if ((await fromAsyncThrowable(() => access(targetSqliteDbPath))()).isErr())
+    return null;
   const dbResult = fromThrowable(
     () => new Database(targetSqliteDbPath, { readonly: true }),
   )();
@@ -336,8 +368,11 @@ export function computeIndexDimension(
 }
 
 /** Row count of `code_chunks_vec_rowids` — a plain table, queryable without the vec0 extension. */
-export function countIndexedRows(targetSqliteDbPath: string): number | null {
-  if (!existsSync(targetSqliteDbPath)) return null;
+export async function countIndexedRows(
+  targetSqliteDbPath: string,
+): Promise<number | null> {
+  if ((await fromAsyncThrowable(() => access(targetSqliteDbPath))()).isErr())
+    return null;
   const dbResult = fromThrowable(
     () => new Database(targetSqliteDbPath, { readonly: true }),
   )();
@@ -472,12 +507,12 @@ export interface FileSnapshot {
   mtimeMs: number;
 }
 
-function snapshotFile(
+async function snapshotFile(
   snap: Map<string, FileSnapshot>,
   dir: string,
   full: string,
-): void {
-  const statResult = fromThrowable(() => statSync(full))();
+): Promise<void> {
+  const statResult = await fromAsyncThrowable(() => stat(full))();
   if (statResult.isOk()) {
     const st = statResult.value;
     snap.set(relative(dir, full), { size: st.size, mtimeMs: st.mtimeMs });
@@ -485,26 +520,28 @@ function snapshotFile(
 }
 
 /** Recursive (relative-path -> size/mtime) snapshot, for the before/after safety diff. */
-export function snapshotDir(dir: string): Map<string, FileSnapshot> {
+export async function snapshotDir(
+  dir: string,
+): Promise<Map<string, FileSnapshot>> {
   const snap = new Map<string, FileSnapshot>();
-  if (!existsSync(dir)) return snap;
-  const walk = (current: string): void => {
-    const entriesResult = fromThrowable(() =>
-      readdirSync(current, { withFileTypes: true }),
+  if ((await fromAsyncThrowable(() => access(dir))()).isErr()) return snap;
+  const walk = async (current: string): Promise<void> => {
+    const entriesResult = await fromAsyncThrowable(() =>
+      readdir(current, { withFileTypes: true }),
     )();
     if (entriesResult.isErr()) return;
     for (const entry of entriesResult.value) {
       if (entry.isSymbolicLink()) continue;
       const full = join(current, entry.name);
       if (entry.isDirectory()) {
-        walk(full);
+        await walk(full);
       } else if (entry.isFile()) {
         // vanished mid-walk
-        snapshotFile(snap, dir, full);
+        await snapshotFile(snap, dir, full);
       }
     }
   };
-  walk(dir);
+  await walk(dir);
   return snap;
 }
 
@@ -533,24 +570,26 @@ export function diffSnapshots(
  * NAME (recursing only inside a matched artifact, e.g. the `cocoindex.db` directory) — never a
  * whole-`dbDir` walk, which would also snapshot a nested project's DB dir underneath it.
  */
-export function snapshotDbArtifacts(dbDir: string): Map<string, FileSnapshot> {
+export async function snapshotDbArtifacts(
+  dbDir: string,
+): Promise<Map<string, FileSnapshot>> {
   const snap = new Map<string, FileSnapshot>();
   for (const name of DB_ARTIFACTS) {
-    snapshotDbArtifact(snap, dbDir, name);
+    await snapshotDbArtifact(snap, dbDir, name);
   }
   return snap;
 }
 
-function snapshotDbArtifact(
+async function snapshotDbArtifact(
   snap: Map<string, FileSnapshot>,
   dbDir: string,
   name: string,
-): void {
+): Promise<void> {
   const full = join(dbDir, name);
-  const statResult = fromThrowable(() => statSync(full))();
+  const statResult = await fromAsyncThrowable(() => stat(full))();
   if (statResult.isErr()) return;
   if (statResult.value.isDirectory()) {
-    for (const [rel, snapshot] of snapshotDir(full)) {
+    for (const [rel, snapshot] of await snapshotDir(full)) {
       snap.set(join(name, rel), snapshot);
     }
     return;
@@ -578,14 +617,16 @@ function escapeRegExp(literal: string): string {
  * outside the project tree. Unmapped, `dbDir` is `<root>/.cocoindex_code` and this reduces to the
  * historical shape (`.cocoindex_code.prev-<ts>` next to the project's own settings dir).
  */
-export function listPrevGenerations(dbDir: string): PrevGeneration[] {
+export async function listPrevGenerations(
+  dbDir: string,
+): Promise<PrevGeneration[]> {
   const parent = dirname(dbDir);
   const re = new RegExp(
     `^${escapeRegExp(basename(dbDir))}\\.prev-(\\d+)$`,
     "u",
   );
-  const entriesResult = fromThrowable(() =>
-    readdirSync(parent, { withFileTypes: true }),
+  const entriesResult = await fromAsyncThrowable(() =>
+    readdir(parent, { withFileTypes: true }),
   )();
   if (entriesResult.isErr()) return [];
   const gens: PrevGeneration[] = [];
@@ -623,11 +664,15 @@ export function daemonSocketPath(
  * installed 0.2.41), so using it to ask "is it running" could itself spawn one. This mirrors
  * client.py's own `is_daemon_running()`, which is exactly this same file check.
  */
-export function isLiveDaemonRunning(
+export async function isLiveDaemonRunning(
   liveSettingsDir: string,
   env: Record<string, string | undefined> = process.env,
-): boolean {
-  return existsSync(daemonSocketPath(liveSettingsDir, env));
+): Promise<boolean> {
+  return (
+    await fromAsyncThrowable(() =>
+      access(daemonSocketPath(liveSettingsDir, env)),
+    )()
+  ).isOk();
 }
 
 function baseEnv(): Record<string, string> {
@@ -685,19 +730,21 @@ export async function stopDaemon(
 /** Use the shell-declared disk graveyard when available; otherwise delete without rip's /tmp default. */
 export async function removeDir(
   path: string,
-  opts: { spawn?: typeof Bun.spawnSync } = {},
+  opts: { spawn?: typeof Bun.spawn } = {},
 ): Promise<void> {
-  const spawn = opts.spawn ?? Bun.spawnSync;
+  const spawn = opts.spawn ?? Bun.spawn;
   let ripOk = false;
   const graveyard = process.env.RIP_GRAVEYARD;
   if (Bun.which("rip") !== null && graveyard !== undefined) {
     // bounded: a single fast filesystem rename into rip's own graveyard, never hangs
-    ripOk = fromThrowable(spawn)(["rip", "--graveyard", graveyard, path], {
-      stdout: "ignore",
-      stderr: "ignore",
-    })
-      .map((proc) => proc.exitCode === 0)
-      .unwrapOr(false);
+    const result = await fromAsyncThrowable(
+      async () =>
+        spawn(["rip", "--graveyard", graveyard, path], {
+          stdout: "ignore",
+          stderr: "ignore",
+        }).exited,
+    )();
+    ripOk = result.map((code) => code === 0).unwrapOr(false);
   }
   if (!ripOk) {
     await rm(path, { recursive: true, force: true });
@@ -731,10 +778,10 @@ export async function moveDbArtifact(
       error: error instanceof Error ? error.message : String(error),
     };
   }
-  const srcBytes = pathSizeBytes(src);
+  const srcBytes = await pathSizeBytes(src);
   const copyResult = await fromAsyncThrowable(async () => {
     await cp(src, dst, { recursive: true, errorOnExist: true });
-    const dstBytes = pathSizeBytes(dst);
+    const dstBytes = await pathSizeBytes(dst);
     if (dstBytes !== srcBytes) {
       return err(
         `byte mismatch after cross-device copy: src=${srcBytes} dst=${dstBytes}`,
@@ -760,7 +807,7 @@ async function moveDbArtifactIfPresent(
   dst: string,
   onFailure: (error: string | undefined) => void,
 ): Promise<void> {
-  if (!existsSync(src)) return;
+  if ((await fromAsyncThrowable(() => access(src))()).isErr()) return;
   const moved = await moveDbArtifact(src, dst);
   if (!moved.ok) onFailure(moved.error);
 }
@@ -798,8 +845,8 @@ function dbDirForCommand(project: string, ctx: Ctx): string | null {
   );
 }
 
-function cmdDiscover(ctx: Ctx): number {
-  const projects = discoverProjects(ctx.home, {
+async function cmdDiscover(ctx: Ctx): Promise<number> {
+  const projects = await discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
@@ -823,9 +870,9 @@ function cmdDiscover(ctx: Ctx): number {
     const dbPath = join(dbDir, TARGET_SQLITE_DB);
     rows.push({
       root,
-      dim: computeIndexDimension(dbPath),
-      chunks: countIndexedRows(dbPath),
-      size: dbArtifactsSizeBytes(dbDir),
+      dim: await computeIndexDimension(dbPath),
+      chunks: await countIndexedRows(dbPath),
+      size: await dbArtifactsSizeBytes(dbDir),
     });
   }
 
@@ -863,7 +910,7 @@ async function cmdBuild(
   ctx: Ctx,
   flags: { model: string; force: boolean; yes: boolean },
 ): Promise<number> {
-  const projects = discoverProjects(ctx.home, {
+  const projects = await discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
@@ -878,7 +925,9 @@ async function cmdBuild(
     ctx.liveSettingsDir,
     GLOBAL_SETTINGS_FILE,
   );
-  if (!existsSync(liveGlobalSettingsPath)) {
+  if (
+    (await fromAsyncThrowable(() => access(liveGlobalSettingsPath))()).isErr()
+  ) {
     process.stderr.write(
       `FATAL: live global settings not found: ${liveGlobalSettingsPath}\n`,
     );
@@ -893,11 +942,13 @@ async function cmdBuild(
   }
   const shadowYaml = shadowYamlResult.value;
 
-  const plans: BuildPlan[] = projects.map((root) => {
-    const shadowDbDir = mirrorShadowDbDir(ctx.shadowDir, root);
-    const rows = countIndexedRows(join(shadowDbDir, TARGET_SQLITE_DB));
-    return { root, shadowDbDir, alreadyBuilt: (rows ?? 0) > 0 };
-  });
+  const plans: BuildPlan[] = await Promise.all(
+    projects.map(async (root) => {
+      const shadowDbDir = mirrorShadowDbDir(ctx.shadowDir, root);
+      const rows = await countIndexedRows(join(shadowDbDir, TARGET_SQLITE_DB));
+      return { root, shadowDbDir, alreadyBuilt: (rows ?? 0) > 0 };
+    }),
+  );
   const toBuild = plans.filter((p) => flags.force || !p.alreadyBuilt);
   const skipped = plans.filter((p) => !flags.force && p.alreadyBuilt);
 
@@ -940,7 +991,7 @@ async function cmdBuild(
   for (const root of projects) {
     const dbDir = dbDirForCommand(root, ctx);
     if (dbDir === null) return 2;
-    liveSnapshots.set(root, snapshotDbArtifacts(dbDir));
+    liveSnapshots.set(root, await snapshotDbArtifacts(dbDir));
   }
 
   await mkdir(ctx.shadowDir, { recursive: true });
@@ -1013,7 +1064,7 @@ async function cmdBuild(
     if (before === undefined) continue;
     const dbDir = dbDirForCommand(root, ctx);
     if (dbDir === null) return 2;
-    const diff = diffSnapshots(before, snapshotDbArtifacts(dbDir));
+    const diff = diffSnapshots(before, await snapshotDbArtifacts(dbDir));
     if (diff.length > 0) liveTouched.push(`${root}: ${diff.join(", ")}`);
   }
   if (liveTouched.length > 0) {
@@ -1032,7 +1083,7 @@ async function cmdBuild(
 }
 
 async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
-  const projects = discoverProjects(ctx.home, {
+  const projects = await discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
@@ -1044,7 +1095,7 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
   }
 
   const shadowYamlPath = join(ctx.shadowDir, GLOBAL_SETTINGS_FILE);
-  if (!existsSync(shadowYamlPath)) {
+  if ((await fromAsyncThrowable(() => access(shadowYamlPath))()).isErr()) {
     process.stderr.write(
       `FATAL: no shadow global settings at ${shadowYamlPath} — run build first\n`,
     );
@@ -1063,7 +1114,9 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     ctx.liveSettingsDir,
     GLOBAL_SETTINGS_FILE,
   );
-  if (!existsSync(liveGlobalSettingsPath)) {
+  if (
+    (await fromAsyncThrowable(() => access(liveGlobalSettingsPath))()).isErr()
+  ) {
     process.stderr.write(
       `FATAL: live global settings not found: ${liveGlobalSettingsPath}\n`,
     );
@@ -1079,16 +1132,18 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     liveDbDir: string;
     dim: number | null;
     rows: number | null;
+    exists: boolean;
     ready: boolean;
   }> = [];
   for (const root of projects) {
     const shadowDbDir = mirrorShadowDbDir(ctx.shadowDir, root);
     const shadowDb = join(shadowDbDir, TARGET_SQLITE_DB);
-    const dim = computeIndexDimension(shadowDb);
-    const rowCount = countIndexedRows(shadowDb);
+    const dim = await computeIndexDimension(shadowDb);
+    const rowCount = await countIndexedRows(shadowDb);
+    const exists = (await fromAsyncThrowable(() => access(shadowDb))()).isOk();
     const liveDbDir = dbDirForCommand(root, ctx);
     if (liveDbDir === null) return 2;
-    const ready = existsSync(shadowDb) && dim !== null && (rowCount ?? 0) > 0;
+    const ready = exists && dim !== null && (rowCount ?? 0) > 0;
     checks.push({
       root,
       shadowDbDir,
@@ -1096,6 +1151,7 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
       liveDbDir,
       dim,
       rows: rowCount,
+      exists,
       ready,
     });
   }
@@ -1105,7 +1161,7 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     if (c.ready) continue;
     const reason = match(c)
       .when(
-        (x) => !existsSync(x.shadowDb),
+        (x) => !x.exists,
         () => "no shadow index (missing)",
       )
       .when(
@@ -1239,7 +1295,7 @@ async function cmdRollback(
   ctx: Ctx,
   flags: { yes: boolean; generation: string | undefined },
 ): Promise<number> {
-  const projects = discoverProjects(ctx.home, {
+  const projects = await discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
@@ -1251,7 +1307,11 @@ async function cmdRollback(
   for (const root of projects) {
     const liveDbDir = dbDirForCommand(root, ctx);
     if (liveDbDir === null) return 2;
-    perProject.push({ root, liveDbDir, gens: listPrevGenerations(liveDbDir) });
+    perProject.push({
+      root,
+      liveDbDir,
+      gens: await listPrevGenerations(liveDbDir),
+    });
   }
   const withGens = perProject.filter((p) => p.gens.length > 0);
   if (withGens.length === 0) {
@@ -1310,7 +1370,7 @@ async function cmdRollback(
   );
   const markerPath = join(ctx.shadowDir, `cutover-${targetTs}.json`);
   let previousModel: string | null = null;
-  if (existsSync(markerPath)) {
+  if ((await fromAsyncThrowable(() => access(markerPath))()).isOk()) {
     // best effort
     const markerResult = await fromAsyncThrowable(async () => {
       const text = await readFile(markerPath, "utf8");
@@ -1364,7 +1424,7 @@ async function cmdRollback(
     // `.prev-*` count stays flat (park one, consume one) the way the old whole-dir rename did.
     // An OLD-FORMAT generation that still holds a leftover settings.yml is left as-is — its
     // settings.yml is never touched, so the dir is never actually empty in that case.
-    const remaining = fromThrowable(() => readdirSync(u.gen.path))();
+    const remaining = await fromAsyncThrowable(() => readdir(u.gen.path))();
     if (remaining.isOk() && remaining.value.length === 0) {
       await removeDir(u.gen.path);
     }
@@ -1382,7 +1442,7 @@ async function cmdRollback(
   if (
     previousModel !== null &&
     previousModel !== "" &&
-    existsSync(liveGlobalSettingsPath)
+    (await fromAsyncThrowable(() => access(liveGlobalSettingsPath))()).isOk()
   ) {
     const liveYaml = await readFile(liveGlobalSettingsPath, "utf8");
     const updatedYaml = replaceEmbeddingModel(liveYaml, previousModel);
@@ -1414,7 +1474,7 @@ async function cmdGc(
   ctx: Ctx,
   flags: { yes: boolean; keep: number },
 ): Promise<number> {
-  const projects = discoverProjects(ctx.home, {
+  const projects = await discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
@@ -1422,7 +1482,7 @@ async function cmdGc(
   for (const root of projects) {
     const dbDir = dbDirForCommand(root, ctx);
     if (dbDir === null) return 2;
-    perProject.push({ root, gens: listPrevGenerations(dbDir) });
+    perProject.push({ root, gens: await listPrevGenerations(dbDir) });
   }
 
   const toDelete: PrevGeneration[] = [];
@@ -1465,7 +1525,7 @@ async function cmdGc(
   );
   // best effort — shadowDir may not exist yet
   await fromAsyncThrowable(async () => {
-    for (const entry of readdirSync(ctx.shadowDir, { withFileTypes: true })) {
+    for (const entry of await readdir(ctx.shadowDir, { withFileTypes: true })) {
       if (!entry.isFile()) continue;
       const markerMatch = entry.name.match(/^cutover-(\d+)\.json$/u);
       if (markerMatch?.[1] === undefined || markerMatch[1] === "") continue;
@@ -1503,7 +1563,7 @@ async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     return 0;
   }
 
-  const projects = discoverProjects(ctx.home, {
+  const projects = await discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
@@ -1535,9 +1595,7 @@ async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
       skipped += 1;
       continue;
     }
-    const present = DB_ARTIFACTS.filter((name) =>
-      existsSync(join(p.from, name)),
-    );
+    const present = await presentArtifacts(p.from, DB_ARTIFACTS);
     if (present.length === 0) {
       process.stdout.write(
         `PLAN ${p.root}: SKIP (no DB artifacts at ${p.from})\n`,
@@ -1545,7 +1603,7 @@ async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
       skipped += 1;
       continue;
     }
-    const conflicting = present.filter((name) => existsSync(join(p.to, name)));
+    const conflicting = await presentArtifacts(p.to, present);
     if (conflicting.length > 0) {
       conflicts.push(
         `${p.root}: ${conflicting.join(", ")} present at BOTH ${p.from} and ${p.to} — refusing to overwrite`,
@@ -1582,7 +1640,7 @@ async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     return 0;
   }
 
-  if (isLiveDaemonRunning(ctx.liveSettingsDir, ctx.env)) {
+  if (await isLiveDaemonRunning(ctx.liveSettingsDir, ctx.env)) {
     process.stdout.write(
       `REFUSE: the live ccc daemon is running (${daemonSocketPath(ctx.liveSettingsDir, ctx.env)}) — stop it first (the host's supervision regime decides how: e.g. \`systemctl --user stop ccc-daemon\`, or \`ccc daemon stop\` unsupervised), then re-run relocate\n`,
     );
@@ -1683,7 +1741,7 @@ async function runVerb(
     return ok(2);
   }
 
-  const home = resolveHome(flags.home);
+  const home = await resolveHome(flags.home);
   if (home === null) {
     process.stderr.write("FATAL: cannot resolve $HOME (pass --home)\n");
     return ok(2);

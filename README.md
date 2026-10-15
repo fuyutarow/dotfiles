@@ -159,6 +159,8 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    graveyards; linked `environment.d` settings cover systemd user services and `systemd-run --user`.
    For durable `agx run` dispatches, carry the caller's session with
    `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run TICKET.md`.
+   Before dispatch, agx refuses a Git ref lock with no open holder that is older than 60 seconds.
+   It prints the lock path and age, then gives the `rip <path>` repair after confirming no holder.
    Bash SSH shells read the same prefix and export both variables. `brew shellenv` belongs in login
    profiles, never zshenv.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
@@ -311,7 +313,7 @@ mise run link:dots    # (re)create symlinks   — scripts/link-dots.ts
 mise run tools:audit  # audit CLI toolbox     — scripts/check-tools.sh
 mise run tool:which pdftoppm # declaration tier and formula
 mise run tool:get pdftoppm  # install a declared formula on first need
-mise run doctor       # does this machine realize the repo? (read-only) — scripts/doctor.ts
+mise run doctor       # does this machine realize the repo? (read-only) — scripts/doctor.ts; reports ownerless ref locks in registered repos too
 mise run install:tools  # install core + on-demand formulas and casks — Brewfile union
 mise run agents:link      # deploy commands + Codex guidance links
 mise run skills:sync       # install Claude plugin + Codex copies + declared vendors

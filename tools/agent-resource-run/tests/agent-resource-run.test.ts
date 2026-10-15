@@ -38,6 +38,7 @@ import {
   probeHostSnapshot as probeHostSnapshotResult,
   manifestSourceFromBytes,
   scopeUnitFor,
+  terminateProcessGroup,
   validateJobId as validateJobIdResult,
   validateManifest as validateManifestResult,
   verifyAdmissionReceipt,
@@ -1899,15 +1900,60 @@ describe("bounded execution", () => {
     },
   );
 
+  test.skipIf(NO_UTIL_LINUX)(
+    "waits through the bounded TERM grace before escalating a live process group",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const ready = join(stateDirectory, "term-ready");
+      const termReceipt = join(stateDirectory, "term-grace-completed");
+      const refLock = join(stateDirectory, "packed-refs.lock");
+      const packedRefs = join(stateDirectory, "packed-refs");
+      const child = Bun.spawn(
+        [
+          "setsid",
+          "--wait",
+          "sh",
+          "-c",
+          `exec 9> ${refLock}; trap 'sleep 1.25; mv ${refLock} ${packedRefs}; exec 9>&-; : > ${termReceipt}; exit 0' TERM; : > ${ready}; while :; do sleep 0.02; done`,
+        ],
+        {
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+          timeout: 5_000,
+          killSignal: "SIGKILL",
+        },
+      );
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (existsSync(ready)) break;
+        await Bun.sleep(10);
+      }
+      expect(existsSync(ready)).toBe(true);
+      const terminated = await terminateProcessGroup(child.pid, 1);
+      const exit = await child.exited;
+      expect(terminated.isOk()).toBe(true);
+      expect(exit).toBe(0);
+      expect(existsSync(termReceipt)).toBe(true);
+      expect(existsSync(refLock)).toBe(false);
+      expect(existsSync(packedRefs)).toBe(true);
+      rmSync(stateDirectory, { recursive: true, force: true });
+    },
+  );
+
   test.skipIf(NO_CGROUP_SCOPES)(
     "terminates the whole process group at the walltime",
     async () => {
       const stateDirectory = temporaryStateDirectory();
       const snapshot = probeHostSnapshot(process.cwd());
+      const termReceipt = join(stateDirectory, "term-grace-completed");
       const started = performance.now();
       const result = await executeJob(
         cpuManifest({ walltime_seconds: 1 }),
-        ["sh", "-c", "sleep 10"],
+        [
+          "sh",
+          "-c",
+          `trap 'sleep 0.25; : > ${termReceipt}; exit 0' TERM; while :; do sleep 0.02; done`,
+        ],
         {
           stateDirectory,
           snapshot,
@@ -1923,6 +1969,8 @@ describe("bounded execution", () => {
         reason: "walltime",
       });
       expect(performance.now() - started).toBeLessThan(4_000);
+      expect(existsSync(termReceipt)).toBe(true);
+      rmSync(termReceipt);
       expect(readdirSync(stateDirectory)).toEqual([]);
     },
   );

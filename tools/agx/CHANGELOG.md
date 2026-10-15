@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.9.1 — 2026-10-15
+
+- Refuse dispatch on ownerless Git ref locks and allow Codex thirty seconds to finish after SIGTERM.
+
 ## 4.9.0 — 2026-10-15
 
 - Persist an atomic run-fold snapshot and replay only appended record bytes; add agx ls --running with read-time process liveness.

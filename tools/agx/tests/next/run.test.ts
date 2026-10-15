@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -37,6 +38,44 @@ const scratch = (prefix: string): string => {
 };
 
 describe("agx-next run", () => {
+  test("refuses dispatch when the target has an ownerless ref lock", () => {
+    const root = scratch("ownerless-ref-lock-");
+    const repo = join(root, "repo");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    const lock = join(repo, ".git", "packed-refs.lock");
+    writeFileSync(lock, "fixture\n");
+    const oldSeconds =
+      (Temporal.Now.instant().epochMilliseconds - 70_000) / 1_000;
+    utimesSync(lock, oldSeconds, oldSeconds);
+    const ticket = join(root, "ticket.md");
+    writeFileSync(
+      ticket,
+      `+++\nschema = 2\nname = "stale-lock"\nwrites = []\noutcome = "must not dispatch"\nverify = []\n[proposition]\nid = "LOCK"\nclaim = "stale lock blocks dispatch"\nrefuted_by = "dispatch starts"\n+++\nProbe the lock guard.\n`,
+    );
+    const state = join(root, "state");
+    const result = Bun.spawnSync(
+      [
+        process.execPath,
+        "tools/agx/src/next/cli.ts",
+        "run",
+        ticket,
+        "--cd",
+        repo,
+      ],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, AGX_NEXT_STATE_DIR: state },
+        timeout: 5_000,
+      },
+    );
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr.toString()).toContain(lock);
+    expect(result.stderr.toString()).toContain("age=");
+    expect(result.stderr.toString()).toContain("rip <path>");
+    expect(existsSync(join(state, "records.jsonl"))).toBe(false);
+  });
+
   test("a sub-two-minute zero-change exit without RETURN fails its lineage", () => {
     const root = scratch("early-quit-");
     const state = join(root, "state");

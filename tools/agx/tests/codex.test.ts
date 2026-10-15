@@ -59,6 +59,10 @@ case "$FAKE_CODEX_MODE" in
   stdin-wait)
     echo 'Reading additional input from stdin...' >&2
     sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
+  term-grace)
+    trap 'sleep 0.25; : > "$fixture_dir/term.marker"; exit 0' TERM
+    : > "$fixture_dir/term.ready"
+    while :; do sleep 0.02; done ;;
   slow) sleep "\${FAKE_CODEX_SLEEP:-5}" ;;
   kill) kill -KILL "$$" ;;
   fail) echo 'ERROR: stream disconnected' >&2; exit 7 ;;
@@ -692,6 +696,52 @@ describe("agx", () => {
     expect(r.receipt.why).toMatch(
       /killed by SIGKILL from outside agx after .* s \(not its bound\)/u,
     );
+  });
+
+  test("external SIGTERM forwards to codex and gives it time to finish", async () => {
+    const { bin } = fakeCodex(scratch());
+    const fixtureDir = dirname(bin);
+    writeFileSync(join(fixtureDir, "fake-mode"), "term-grace");
+    const promptFile = join(fixtureDir, "prompt.md");
+    writeFileSync(promptFile, "stop cleanly");
+    const proc = Bun.spawn(
+      [
+        "bun",
+        script,
+        "--receipt-dir",
+        join(fixtureDir, "receipts"),
+        "--prompt-file",
+        promptFile,
+        ...FULL,
+        "--timeout-s",
+        "10",
+      ],
+      {
+        env: {
+          ...process.env,
+          AGX_CODEX_BIN: bin,
+          AGX_CODEX_HOST_FILE: join(fixtureDir, "no-host.toml"),
+        },
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10_000,
+        killSignal: "SIGKILL",
+      },
+    );
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (existsSync(join(fixtureDir, "term.ready"))) break;
+      await Bun.sleep(10);
+    }
+    expect(existsSync(join(fixtureDir, "term.ready"))).toBe(true);
+    proc.kill("SIGTERM");
+    const exit = await Promise.race([
+      proc.exited,
+      Bun.sleep(5_000).then(() => -1),
+    ]);
+    if (exit === -1) proc.kill("SIGKILL");
+    expect(exit).not.toBe(-1);
+    expect(existsSync(join(fixtureDir, "term.marker"))).toBe(true);
   });
 
   // O1 (Tiger ledger, 2026-10-06): a failed receipt always carries a non-empty cause. codex reports

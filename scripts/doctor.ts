@@ -61,6 +61,8 @@ import {
   rmSync,
   statfsSync,
 } from "node:fs";
+import { fromThrowable } from "neverthrow";
+import { ownerlessRefLocks } from "../tools/shared/src/ref-locks.ts";
 import { homedir, release, tmpdir, userInfo } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { registeredRepos } from "./workspace-repos.ts";
@@ -1114,6 +1116,128 @@ export async function checkCccDbMap(
       );
 }
 
+const PROJECT_SETTINGS = join(".cocoindex_code", "settings.yml");
+const REF_LOCK_SCAN_PRUNED = new Set([
+  ".git",
+  ".jj",
+  ".cache",
+  ".bun",
+  ".claude",
+  ".codex",
+  ".cargo",
+  ".config",
+  ".local",
+  ".julia",
+  ".gradle",
+  ".mypy_cache",
+  ".next",
+  ".npm",
+  ".pytest_cache",
+  ".rustup",
+  ".terraform",
+  ".turbo",
+  ".venv",
+  "build",
+  "coverage",
+  "dist",
+  "Downloads",
+  "Library",
+  "Music",
+  "node_modules",
+  "Pictures",
+  "target",
+  "Videos",
+  "vendor",
+  "venv",
+  ".vscode",
+]);
+const REF_LOCK_SCAN_DIRECTORY_LIMIT = 100_000;
+
+function discoverRegisteredRepos(searchRoot: string): {
+  roots: string[];
+  complete: boolean;
+} {
+  const roots: string[] = [];
+  let complete = true;
+  let visitedDirectories = 0;
+  const walk = (dir: string): void => {
+    if (visitedDirectories >= REF_LOCK_SCAN_DIRECTORY_LIMIT) {
+      complete = false;
+      return;
+    }
+    visitedDirectories += 1;
+    if (existsSync(join(dir, PROJECT_SETTINGS))) {
+      roots.push(dir);
+      const nestedRoots = [
+        join(dir, ".claude", "worktrees"),
+        join(dir, ".worktrees"),
+        join(dir, "worktrees"),
+      ].filter((nested) => existsSync(nested));
+      for (const nested of nestedRoots) walk(nested);
+      return;
+    }
+    const listing = fromThrowable(() =>
+      readdirSync(dir, { withFileTypes: true }),
+    )();
+    if (listing.isErr()) {
+      complete = false;
+      return;
+    }
+    for (const entry of listing.value) {
+      if (entry.isSymbolicLink()) continue;
+      const path = join(dir, entry.name);
+      if (entry.isDirectory() && entry.name === ".cocoindex_code") continue;
+      if (entry.isDirectory() && !REF_LOCK_SCAN_PRUNED.has(entry.name))
+        walk(path);
+      if (visitedDirectories >= REF_LOCK_SCAN_DIRECTORY_LIMIT) {
+        complete = false;
+        break;
+      }
+    }
+  };
+  walk(searchRoot);
+  return { roots: [...new Set(roots)].toSorted(), complete };
+}
+
+export function checkGitRefLocks(
+  ctx: Ctx,
+  registeredRoots?: string[],
+): Promise<Finding> {
+  const discovered =
+    registeredRoots === undefined
+      ? discoverRegisteredRepos(ctx.home)
+      : { roots: registeredRoots, complete: true };
+  const findings = discovered.roots.flatMap((root) =>
+    ownerlessRefLocks(root).map(({ path, ageMs }) => ({ root, path, ageMs })),
+  );
+  if (findings.length > 0) {
+    return Promise.resolve(
+      fail(
+        "git-ref-locks",
+        `${findings.length} ownerless Git ref lock(s) found in registered repositories`,
+        "confirm no holder, then repair each named lock with: rip <path>",
+        findings.map(
+          ({ root, path, ageMs }) =>
+            `${path} · repo=${root} · age=${Math.floor(ageMs / 1_000)}s`,
+        ),
+      ),
+    );
+  }
+  if (!discovered.complete)
+    return Promise.resolve(
+      warn(
+        "git-ref-locks",
+        `repo scan under ${ctx.home} was incomplete; no ownerless ref lock was confirmed across ${discovered.roots.length} registered repo(s)`,
+      ),
+    );
+  return Promise.resolve(
+    pass(
+      "git-ref-locks",
+      `no ownerless Git ref locks across ${discovered.roots.length} registered repo(s)`,
+    ),
+  );
+}
+
 export async function checkIterm2(ctx: Ctx): Promise<Finding> {
   const r = await run(
     ["defaults", "read", "com.googlecode.iterm2", "PrefsCustomFolder"],
@@ -1593,6 +1717,7 @@ export const CHECKS: Check[] = [
     applies: (c) =>
       c.isCoreBox && !c.isWsl ? "ccc is not a core tool (Brewfile.core)" : null,
   },
+  { name: "git-ref-locks", run: checkGitRefLocks, applies: always },
   {
     name: "iterm2",
     run: checkIterm2,

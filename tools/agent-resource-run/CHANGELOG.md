@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.6 — 2026-10-15
+
+- Give resource process groups at least thirty seconds to finish after SIGTERM before SIGKILL.
+
 ## 1.4.5 — 2026-10-15
 
 - Restore ccc's standing GPU reservation to its 2048 MiB elastic-cap floor.

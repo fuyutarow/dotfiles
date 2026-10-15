@@ -52,6 +52,7 @@ const GiB = 1024 ** 3;
 // reason for its value lives in resource-policy.toml one directory up — see loadResourcePolicy.
 const LOCK_WAIT_MS = 6_000;
 const LOCK_STALE_MS = 5_000;
+const REF_TRANSACTION_TERM_GRACE_SECONDS = 30;
 // Linux fcntl.h O_CLOEXEC; Node's fs.constants type omits this Linux-only flag.
 const O_CLOEXEC = 0x80000;
 const MIN_KERNEL_TASKS = 32;
@@ -2321,13 +2322,20 @@ function signalProcessGroup(
   return ok(undefined);
 }
 
-async function terminateProcessGroup(
+export async function terminateProcessGroup(
   pgid: number,
   graceSeconds: number,
 ): Promise<Result<void, Error>> {
   const terminated = signalProcessGroup(pgid, "SIGTERM");
   if (terminated.isErr()) return err(terminated.error);
-  const deadline = performance.now() + graceSeconds * 1_000;
+  // A ref transaction is short but can leave a durable *.lock pathname if its process is
+  // killed mid-update. Keep the manifest's grace when longer, and give every child at least
+  // thirty seconds to handle TERM and close its descriptors before escalating to KILL.
+  const boundedGrace = Math.max(
+    graceSeconds,
+    REF_TRANSACTION_TERM_GRACE_SECONDS,
+  );
+  const deadline = performance.now() + boundedGrace * 1_000;
   while (
     performance.now() < deadline &&
     processGroupUsage(pgid).processes > 0

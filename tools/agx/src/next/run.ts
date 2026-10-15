@@ -20,6 +20,7 @@ import {
 } from "./store.ts";
 import { route } from "./route.ts";
 import { exitWithError } from "./exit.ts";
+import { ownerlessRefLocks } from "../../../shared/src/ref-locks.ts";
 
 export type Flags = Readonly<Record<string, string | boolean | undefined>>;
 const fatal = (message: string, exitCode = 2): never =>
@@ -181,6 +182,19 @@ export async function run(flags: Flags): Promise<number> {
     return fatal("--sandbox must be none, read-only, or workspace-write", 2);
   const { ticket, prose } = ticketFor(path);
   overlapWarnings(ticket.writes);
+  const staleRefLocks = ownerlessRefLocks(cwd);
+  if (staleRefLocks.length > 0) {
+    const details = staleRefLocks
+      .map(
+        ({ path: lockPath, ageMs }) =>
+          `${lockPath} age=${Math.floor(ageMs / 1_000)}s`,
+      )
+      .join("; ");
+    return fatal(
+      `ownerless Git ref lock(s) block dispatch: ${details}. Confirm no holder, then repair with: rip <path>`,
+      2,
+    );
+  }
   const premises = checkPremises(ticket.premises, cwd);
   if (premises.status === "missing")
     return fatal(

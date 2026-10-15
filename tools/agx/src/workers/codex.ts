@@ -479,16 +479,32 @@ let boundFired = false;
 let stdinWaitFired = false;
 let stdinWaitCause: string | undefined;
 let stdinWaitTimer: ReturnType<typeof setTimeout> | undefined;
+let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+const STOP_GRACE_MS = 30_000;
+const requestStop = (): void => {
+  if (deadline.signal.aborted) return;
+  deadline.abort();
+  // bounded: TERM first; force KILL after the cleanup window for a non-cooperative child.
+  forceKillTimer = setTimeout(() => {
+    proc.kill("SIGKILL");
+  }, STOP_GRACE_MS);
+};
 const expire = (): void => {
   boundFired = true;
-  deadline.abort();
+  requestStop();
+};
+const onTerminate = (): void => {
+  requestStop();
 };
 const boundTimer = setTimeout(expire, timeoutS * 1000);
 process.on("SIGUSR1", expire);
+process.on("SIGTERM", onTerminate);
 const clearDeadline = (): void => {
   clearTimeout(boundTimer);
   if (stdinWaitTimer !== undefined) clearTimeout(stdinWaitTimer);
+  if (forceKillTimer !== undefined) clearTimeout(forceKillTimer);
   process.removeListener("SIGUSR1", expire);
+  process.removeListener("SIGTERM", onTerminate);
 };
 const spawned = await attempt(() =>
   // stdin "ignore" is the `</dev/null` of the recipe: codex exec reads stdin and would hang on an
@@ -500,7 +516,7 @@ const spawned = await attempt(() =>
     stderr: "pipe",
     env: workerEnvironment(),
     signal: deadline.signal,
-    killSignal: "SIGKILL",
+    killSignal: "SIGTERM",
   }),
 );
 if (!spawned.ok) {

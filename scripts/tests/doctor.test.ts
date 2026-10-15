@@ -14,6 +14,7 @@ import {
   rmSync,
   symlinkSync,
   truncateSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { release, tmpdir, userInfo } from "node:os";
@@ -24,6 +25,7 @@ import {
   checkCodexRemote,
   checkCodexRuntime,
   checkGoogleDrive,
+  checkGitRefLocks,
   checkRipGraveyard,
   checkTmpfsCapacity,
   checkWslGpuManagerPath,
@@ -33,6 +35,7 @@ import {
   inspectRipGraveyard,
   RIP_GRAVEYARD_MAX_BYTES,
 } from "../../tools/disk-reclaim/src/lib/graveyards.ts";
+import { REF_LOCK_STALE_MS } from "../../tools/shared/src/ref-locks.ts";
 import { STEPS } from "../post-merge.ts";
 
 // The smart-open fixtures scope the forward with Match sessiontype (OpenSSH >= 9.9; Ubuntu 24.04
@@ -127,6 +130,41 @@ function fixtureDotfiles(): string {
 }
 
 describe("doctor", () => {
+  test("git-ref-locks discovers registered repos and names stale ownerless locks", async () => {
+    const home = tmp("doctor-ref-locks-");
+    const repo = join(home, "Workspace", "fixture");
+    mkdirSync(join(repo, ".cocoindex_code"), { recursive: true });
+    writeFileSync(
+      join(repo, ".cocoindex_code", "settings.yml"),
+      "fixture: true\n",
+    );
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    const ctx = {
+      home,
+      dotfiles: REPO,
+      isMac: false,
+      isWsl: true,
+      isCoreBox: false,
+    } satisfies Ctx;
+
+    const clean = await checkGitRefLocks(ctx);
+    expect(clean.verdict).toBe("PASS");
+    expect(clean.detail).toContain("1 registered repo");
+
+    const lock = join(repo, ".git", "packed-refs.lock");
+    writeFileSync(lock, "fixture\n");
+    const oldSeconds =
+      (Temporal.Now.instant().epochMilliseconds - REF_LOCK_STALE_MS - 10_000) /
+      1_000;
+    utimesSync(lock, oldSeconds, oldSeconds);
+    const stale = await checkGitRefLocks(ctx);
+    expect(stale.verdict).toBe("FAIL");
+    expect(stale.lines?.join("\n")).toContain(lock);
+    expect(stale.lines?.join("\n")).toContain("age=");
+    expect(stale.fix).toContain("rip <path>");
+    rmSync(home, { recursive: true, force: true });
+  });
+
   test("tmpfs capacity FAILs for byte or inode pressure at the threshold", async () => {
     const ctx: Ctx = {
       home: tmp("doctor-tmpfs-home-"),

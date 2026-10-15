@@ -1,23 +1,23 @@
 import { expect, test } from "bun:test";
 import {
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { LINKS } from "../config-registry.ts";
 import { RENDER_INPUTS } from "../render-source.ts";
 
 test("candidate render includes imported siblings and refuses an unselected declaration update", async () => {
-  const root = mkdtempSync(join(tmpdir(), "live-refs-commit-fixture-"));
-  using _cleanup = {
-    [Symbol.dispose]: () => {
-      rmSync(root, { recursive: true, force: true });
+  const root = await mkdtemp(join(tmpdir(), "live-refs-commit-fixture-"));
+  await using _cleanup = {
+    [Symbol.asyncDispose]: async () => {
+      await rm(root, { recursive: true, force: true });
     },
   };
   const base = join(root, "base");
@@ -25,11 +25,11 @@ test("candidate render includes imported siblings and refuses an unselected decl
   const bin = join(root, "bin");
   const home = join(root, "home");
   for (const dir of [base, bin, join(home, ".claude")])
-    mkdirSync(dir, { recursive: true });
+    await mkdir(dir, { recursive: true });
   for (const path of RENDER_INPUTS) {
     const dest = join(base, path);
-    mkdirSync(dirname(dest), { recursive: true });
-    cpSync(join(import.meta.dir, "../..", path), dest, { recursive: true });
+    await mkdir(dirname(dest), { recursive: true });
+    await cp(join(import.meta.dir, "../..", path), dest, { recursive: true });
   }
   for (const [, source] of LINKS) {
     if (
@@ -40,11 +40,11 @@ test("candidate render includes imported siblings and refuses an unselected decl
     )
       continue;
     const dest = join(base, source);
-    mkdirSync(dirname(dest), { recursive: true });
-    if (statSync(join(import.meta.dir, "../..", source)).isDirectory()) {
-      mkdirSync(dest, { recursive: true });
-      writeFileSync(join(dest, "fixture"), "fixture\n");
-    } else writeFileSync(dest, "fixture\n");
+    await mkdir(dirname(dest), { recursive: true });
+    if ((await lstat(join(import.meta.dir, "../..", source))).isDirectory()) {
+      await mkdir(dest, { recursive: true });
+      await writeFile(join(dest, "fixture"), "fixture\n");
+    } else await writeFile(dest, "fixture\n");
   }
   const settings = "agents/claude/settings.json";
   const retired = "agents/claude/hooks/retired.ts";
@@ -64,24 +64,24 @@ test("candidate render includes imported siblings and refuses an unselected decl
       ],
     },
   });
-  writeFileSync(join(base, settings), oldSettings);
-  writeFileSync(join(base, "agents/codex/hooks.json"), "{}");
-  writeFileSync(join(base, "package.json"), "{}");
+  await writeFile(join(base, settings), oldSettings);
+  await writeFile(join(base, "agents/codex/hooks.json"), "{}");
+  await writeFile(join(base, "package.json"), "{}");
   for (const path of [
     "agents/commands/fixture.md",
     "agents/skills/fixture/SKILL.md",
     "agents/codex/AGENTS.md",
   ]) {
-    mkdirSync(dirname(join(base, path)), { recursive: true });
-    writeFileSync(join(base, path), "fixture\n");
+    await mkdir(dirname(join(base, path)), { recursive: true });
+    await writeFile(join(base, path), "fixture\n");
   }
-  writeFileSync(join(base, retired), "fixture hook\n");
-  writeFileSync(join(base, "agents/claude/hooks/run.sh"), "fixture runner\n");
-  writeFileSync(join(home, ".claude/settings.json"), oldSettings);
-  cpSync(base, rev, { recursive: true });
-  rmSync(join(rev, retired));
-  writeFileSync(join(rev, settings), "{}");
-  const narrowSource = readFileSync(join(rev, narrow), "utf8");
+  await writeFile(join(base, retired), "fixture hook\n");
+  await writeFile(join(base, "agents/claude/hooks/run.sh"), "fixture runner\n");
+  await writeFile(join(home, ".claude/settings.json"), oldSettings);
+  await cp(base, rev, { recursive: true });
+  await rm(join(rev, retired));
+  await writeFile(join(rev, settings), "{}");
+  const narrowSource = await readFile(join(rev, narrow), "utf8");
   const narrowWithSibling = narrowSource.replace(
     [
       "export function arr(v: unknown): readonly unknown[] | undefined {",
@@ -91,8 +91,8 @@ test("candidate render includes imported siblings and refuses an unselected decl
     'export { arr } from "./shape.ts";',
   );
   expect(narrowWithSibling).not.toBe(narrowSource);
-  writeFileSync(join(rev, narrow), narrowWithSibling);
-  writeFileSync(
+  await writeFile(join(rev, narrow), narrowWithSibling);
+  await writeFile(
     join(rev, shape),
     [
       "export function arr(v: unknown): readonly unknown[] | undefined {",
@@ -101,7 +101,7 @@ test("candidate render includes imported siblings and refuses an unselected decl
     ].join("\n"),
   );
   const fake = join(bin, "jj");
-  writeFileSync(
+  await writeFile(
     fake,
     `#!${process.execPath}\nimport {readFileSync} from "node:fs"; import {join} from "node:path";
 const args=Bun.argv.slice(2); const source=args[args.indexOf("-r")+1] === "${"b".repeat(40)}" ? ${JSON.stringify(base)} : ${JSON.stringify(rev)};
@@ -114,7 +114,7 @@ else process.exit(2);
   );
   const paths = join(root, "paths");
   const run = async (selected: string[]) => {
-    writeFileSync(paths, `${selected.join("\0")}\0`);
+    await writeFile(paths, `${selected.join("\0")}\0`);
     const child = Bun.spawn(
       [process.execPath, join(import.meta.dir, "../live-refs.ts")],
       {
@@ -143,7 +143,7 @@ else process.exit(2);
   const consistent = await run([retired, settings, narrow, shape]);
   expect(consistent.exit, consistent.err).toBe(0);
   expect(consistent.out).toContain("PASS");
-  expect(readFileSync(join(home, ".claude/settings.json"), "utf8")).toBe(
+  expect(await readFile(join(home, ".claude/settings.json"), "utf8")).toBe(
     oldSettings,
   );
   const inconsistent = await run([retired]);

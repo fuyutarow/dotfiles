@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findings } from "../live-refs.ts";
 
-function fixture(): { home: string; repo: string } {
-  const root = mkdtempSync(join(tmpdir(), "live-refs-"));
+async function fixture(): Promise<{ home: string; repo: string }> {
+  const root = await mkdtemp(join(tmpdir(), "live-refs-"));
   const home = join(root, "home");
   const repo = join(root, "repo");
   for (const path of [
@@ -18,9 +18,9 @@ function fixture(): { home: string; repo: string } {
     join(repo, "agents/codex"),
     join(repo, "tools/statusline/src"),
   ]) {
-    mkdirSync(path, { recursive: true });
+    await mkdir(path, { recursive: true });
   }
-  writeFileSync(
+  await writeFile(
     join(repo, "agents/claude/settings.json"),
     JSON.stringify({
       statusLine: { command: "bun ~/.bun/bin/statusline" },
@@ -38,7 +38,7 @@ function fixture(): { home: string; repo: string } {
       },
     }),
   );
-  writeFileSync(
+  await writeFile(
     join(repo, "agents/codex/hooks.json"),
     JSON.stringify({
       hooks: {
@@ -55,29 +55,29 @@ function fixture(): { home: string; repo: string } {
       },
     }),
   );
-  writeFileSync(
+  await writeFile(
     join(repo, "agents/hooks/hooks.toml"),
     '[[hook]]\nscript = "shared.ts"\nevent = "PreToolUse"\nfail_closed = true\nvendors = ["claude", "codex"]\n',
   );
-  writeFileSync(join(repo, "agents/claude/hooks/run.sh"), "#!/bin/sh\n");
-  writeFileSync(join(repo, "agents/codex/hooks/run.sh"), "#!/bin/sh\n");
-  writeFileSync(join(repo, "agents/hooks/shared.ts"), "// shared hook\n");
-  writeFileSync(
+  await writeFile(join(repo, "agents/claude/hooks/run.sh"), "#!/bin/sh\n");
+  await writeFile(join(repo, "agents/codex/hooks/run.sh"), "#!/bin/sh\n");
+  await writeFile(join(repo, "agents/hooks/shared.ts"), "// shared hook\n");
+  await writeFile(
     join(repo, "agents/claude/hooks/declared.ts"),
     "// declared hook\n",
   );
-  writeFileSync(join(repo, "agents/codex/hooks/codex.ts"), "// codex hook\n");
-  writeFileSync(
+  await writeFile(join(repo, "agents/codex/hooks/codex.ts"), "// codex hook\n");
+  await writeFile(
     join(repo, "tools/statusline/src/statusline.ts"),
     "// statusline\n",
   );
-  writeFileSync(
+  await writeFile(
     join(repo, "package.json"),
     JSON.stringify({
       bin: { statusline: "tools/statusline/src/statusline.ts" },
     }),
   );
-  writeFileSync(
+  await writeFile(
     join(home, ".claude/settings.json"),
     JSON.stringify({
       statusLine: { command: "bun ~/.bun/bin/statusline" },
@@ -95,7 +95,7 @@ function fixture(): { home: string; repo: string } {
       },
     }),
   );
-  writeFileSync(
+  await writeFile(
     join(home, ".codex/hooks.json"),
     JSON.stringify({
       hooks: {
@@ -112,30 +112,30 @@ function fixture(): { home: string; repo: string } {
       },
     }),
   );
-  symlinkSync(join(repo, "agents/claude/hooks"), join(home, ".claude/hooks"));
-  symlinkSync(join(repo, "agents/codex/hooks"), join(home, ".codex/hooks"));
-  symlinkSync(join(repo, "agents/hooks"), join(home, ".agents/hooks"));
+  await symlink(join(repo, "agents/claude/hooks"), join(home, ".claude/hooks"));
+  await symlink(join(repo, "agents/codex/hooks"), join(home, ".codex/hooks"));
+  await symlink(join(repo, "agents/hooks"), join(home, ".agents/hooks"));
   return { home, repo };
 }
 
 describe("live repo references", () => {
-  test("passes when links, deployed and declared commands, hook registry, and bin targets exist", () => {
-    const { home, repo } = fixture();
-    expect(findings({ home, repo, os: "linux" })).toEqual([]);
+  test("passes when links, deployed and declared commands, hook registry, and bin targets exist", async () => {
+    const { home, repo } = await fixture();
+    expect(await findings({ home, repo, os: "linux" })).toEqual([]);
   });
 
-  test("reports a removed command target with its surface, dangling path, and repair", () => {
-    const { home, repo } = fixture();
+  test("reports a removed command target with its surface, dangling path, and repair", async () => {
+    const { home, repo } = await fixture();
     const script = join(repo, "agents/claude/statusline-command.ts");
-    symlinkSync(script, join(home, ".claude/statusline-command.ts"));
-    writeFileSync(
+    await symlink(script, join(home, ".claude/statusline-command.ts"));
+    await writeFile(
       join(home, ".claude/settings.json"),
       JSON.stringify({
         statusLine: { command: "bun ~/.claude/statusline-command.ts" },
       }),
     );
 
-    const result = findings({ home, repo, os: "linux" });
+    const result = await findings({ home, repo, os: "linux" });
     expect(result).toHaveLength(1);
     expect(result[0]).toContain("deployed ~/.claude/settings.json");
     expect(result[0]).toContain(script);
@@ -143,19 +143,19 @@ describe("live repo references", () => {
     expect(result[0]).toContain("mise run deps && mise run link:dots");
   });
 
-  test("checks declared and deployed hooks, hook-registry sources, and bin targets", () => {
-    const { home, repo } = fixture();
-    writeFileSync(
+  test("checks declared and deployed hooks, hook-registry sources, and bin targets", async () => {
+    const { home, repo } = await fixture();
+    await writeFile(
       join(repo, "package.json"),
       JSON.stringify({
         bin: { missing: "tools/statusline/src/gone.ts" },
       }),
     );
-    writeFileSync(
+    await writeFile(
       join(repo, "agents/hooks/hooks.toml"),
       '[[hook]]\nscript = "gone.ts"\nevent = "PreToolUse"\nfail_closed = true\nvendors = ["claude"]\n',
     );
-    writeFileSync(
+    await writeFile(
       join(repo, "agents/claude/settings.json"),
       JSON.stringify({
         hooks: {
@@ -172,7 +172,7 @@ describe("live repo references", () => {
         },
       }),
     );
-    writeFileSync(
+    await writeFile(
       join(home, ".codex/hooks.json"),
       JSON.stringify({
         hooks: {
@@ -190,7 +190,7 @@ describe("live repo references", () => {
       }),
     );
 
-    const result = findings({ home, repo, os: "linux" });
+    const result = await findings({ home, repo, os: "linux" });
     expect(
       result.some((line) => line.includes("package.json bin missing")),
     ).toBe(true);
@@ -210,9 +210,9 @@ describe("live repo references", () => {
   });
 
   test("CLI failures retain source lines on piped stderr and unreadable inputs name the file", async () => {
-    const { home, repo } = fixture();
+    const { home, repo } = await fixture();
     const path = join(repo, "agents/claude/settings.json");
-    writeFileSync(
+    await writeFile(
       path,
       '{\n  "hooks": {"PreToolUse": [{"hooks": [{"command": "sh ~/.claude/hooks/run.sh gone.ts"}]}]}\n}\n',
     );
@@ -232,7 +232,7 @@ describe("live repo references", () => {
     expect(await missing.exited).toBe(1);
     expect(diagnostic).toContain("settings.json:2");
     expect(diagnostic).toContain("gone.ts");
-    writeFileSync(path, "{invalid");
+    await writeFile(path, "{invalid");
     const invalid = run();
     expect(await new Response(invalid.stderr).text()).toContain(
       `${path}: cannot read JSON`,

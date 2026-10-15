@@ -1,19 +1,20 @@
 // Static liveness check for deployed $HOME surfaces that execute or link into this checkout.
 // Consumer: humans/CI running `mise run lint:live-refs`; output is verdict lines.
+import { constants } from "node:fs";
 import {
-  existsSync,
-  lstatSync,
-  readFileSync,
-  readlinkSync,
-  realpathSync,
-  readdirSync,
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  writeSync,
-  symlinkSync,
-  rmSync,
-} from "node:fs";
+  access,
+  lstat,
+  readFile,
+  readlink,
+  realpath,
+  readdir,
+  mkdtemp,
+  mkdir,
+  writeFile,
+  symlink,
+  rm,
+  chmod,
+} from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import {
   dirname,
@@ -25,14 +26,12 @@ import {
   sep,
 } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import { fromPromise, fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { LINKS, type When } from "./config-registry.ts";
 import {
   jjContext,
   jjCandidate,
-  jjContent,
-  jjExport,
   selected,
   type JjPrecommit,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
@@ -49,7 +48,7 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    writeSync(2, "unknown flag(s): --__proto__\n");
+    process.stderr.write("unknown flag(s): --__proto__\n");
     process.exit(2);
   }
 }
@@ -64,26 +63,33 @@ function applies(when: When, os: Os): boolean {
   );
 }
 
-function under(path: string, root: string): boolean {
+async function under(path: string, root: string): Promise<boolean> {
   // macOS exposes /var as a symlink to /private/var. Missing targets cannot be passed directly
-  // to realpathSync, so canonicalize through their nearest existing parent before comparing.
+  // to realpath, so canonicalize through their nearest existing parent before comparing.
   const rel = relative(
-    resolveMissingPath(resolve(root)),
-    resolveMissingPath(resolve(path)),
+    await resolveMissingPath(resolve(root)),
+    await resolveMissingPath(resolve(path)),
   );
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`));
 }
 
-function pointsIntoRepo(path: string, repo: string): boolean {
-  if (under(path, repo)) return true;
-  const realpath = fromThrowable(() =>
-    realpathSync(path, { encoding: "utf8" }),
-  )();
-  if (realpath.isOk()) return under(realpath.value, repo);
-  const stat = fromThrowable(lstatSync)(path, { throwIfNoEntry: false });
+async function attempt<T>(operation: () => Promise<T>) {
+  return fromPromise(Promise.resolve().then(operation), (error) => error);
+}
+
+async function lstatMaybe(path: string) {
+  const stat = await attempt(() => lstat(path));
+  return stat.isOk() ? stat.value : undefined;
+}
+
+async function pointsIntoRepo(path: string, repo: string): Promise<boolean> {
+  if (await under(path, repo)) return true;
+  const canonical = await attempt(() => realpath(path, { encoding: "utf8" }));
+  if (canonical.isOk()) return under(canonical.value, repo);
+  const stat = await attempt(() => lstat(path));
   if (stat.isErr()) return false;
-  if (stat.value?.isSymbolicLink() === true) {
-    const raw = readlinkSync(path);
+  if (stat.value.isSymbolicLink()) {
+    const raw = await readlink(path);
     return pointsIntoRepo(
       isAbsolute(raw) ? raw : resolve(dirname(path), raw),
       repo,
@@ -91,29 +97,27 @@ function pointsIntoRepo(path: string, repo: string): boolean {
   }
   const parent = dirname(path);
   if (parent === path) return false;
-  const parentRealpath = fromThrowable(() =>
-    realpathSync(parent, { encoding: "utf8" }),
-  )();
+  const parentRealpath = await attempt(() =>
+    realpath(parent, { encoding: "utf8" }),
+  );
   return parentRealpath.isOk()
     ? under(parentRealpath.value, repo)
     : pointsIntoRepo(parent, repo);
 }
 
-function resolveMissingPath(path: string): string {
-  const stat = lstatSync(path, { throwIfNoEntry: false });
+async function resolveMissingPath(path: string): Promise<string> {
+  const stat = await lstatMaybe(path);
   if (stat?.isSymbolicLink() === true) {
-    const raw = readlinkSync(path);
+    const raw = await readlink(path);
     return resolveMissingPath(
       isAbsolute(raw) ? raw : resolve(dirname(path), raw),
     );
   }
-  const realpath = fromThrowable(() =>
-    realpathSync(path, { encoding: "utf8" }),
-  )();
-  if (realpath.isOk()) return realpath.value;
+  const canonical = await attempt(() => realpath(path, { encoding: "utf8" }));
+  if (canonical.isOk()) return canonical.value;
   const parent = dirname(path);
   if (parent === path) return path;
-  return join(resolveMissingPath(parent), path.slice(parent.length + 1));
+  return join(await resolveMissingPath(parent), path.slice(parent.length + 1));
 }
 
 function expandHome(path: string, home: string): string {
@@ -122,95 +126,100 @@ function expandHome(path: string, home: string): string {
   return path;
 }
 
-function checkRepoPath(
+async function checkRepoPath(
   surface: string,
   path: string,
   roots: Roots,
   out: string[],
-): void {
+): Promise<void> {
   const expanded = expandHome(path, roots.home);
   const absolute = isAbsolute(expanded)
     ? expanded
     : resolve(roots.repo, expanded);
-  const resolved = resolveMissingPath(absolute);
-  if (!pointsIntoRepo(resolved, roots.repo)) return;
-  if (!existsSync(absolute)) {
+  const resolved = await resolveMissingPath(absolute);
+  if (!(await pointsIntoRepo(resolved, roots.repo))) return;
+  const present = await attempt(() => access(absolute, constants.F_OK));
+  if (present.isErr()) {
     out.push(`FAIL ${surface} → missing target ${resolved}; ${REPAIR}`);
   }
 }
 
-function checkLinkedPath(
+async function checkLinkedPath(
   surface: string,
   path: string,
   roots: Roots,
   out: string[],
-): void {
-  const stat = lstatSync(path, { throwIfNoEntry: false });
+): Promise<void> {
+  const stat = await lstatMaybe(path);
   if (stat?.isSymbolicLink() !== true) return;
-  const raw = readlinkSync(path);
+  const raw = await readlink(path);
   const target = isAbsolute(raw) ? raw : resolve(dirname(path), raw);
-  if (pointsIntoRepo(target, roots.repo)) {
-    checkRepoPath(surface, target, roots, out);
+  if (await pointsIntoRepo(target, roots.repo)) {
+    await checkRepoPath(surface, target, roots, out);
   }
 }
 
-function checkCommand(
+async function checkCommand(
   surface: string,
   command: string,
   roots: Roots,
   out: string[],
-): void {
+): Promise<void> {
   const tokens = command.match(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s]+/gu) ?? [];
   const words = tokens.map((token) =>
     token.replace(/^(?:"(.*)"|'(.*)')$/u, "$1$2"),
   );
   let runnerDir: string | undefined;
   for (const word of words) {
-    runnerDir = checkCommandWord(word, runnerDir, surface, roots, out);
+    runnerDir = await checkCommandWord(word, runnerDir, surface, roots, out);
   }
 }
 
-function checkCommandWord(
+async function checkCommandWord(
   word: string,
   runnerDir: string | undefined,
   surface: string,
   roots: Roots,
   out: string[],
-): string | undefined {
+): Promise<string | undefined> {
   if (word.startsWith("~") || isAbsolute(word)) {
     const expanded = expandHome(word, roots.home);
     const absolute = isAbsolute(expanded)
       ? expanded
       : resolve(roots.repo, expanded);
-    if (!pointsIntoRepo(absolute, roots.repo)) return runnerDir;
-    checkRepoPath(surface, absolute, roots, out);
+    if (!(await pointsIntoRepo(absolute, roots.repo))) return runnerDir;
+    await checkRepoPath(surface, absolute, roots, out);
     return absolute.endsWith("/run.sh") ? dirname(absolute) : runnerDir;
   }
   if (runnerDir !== undefined && /^[\w.-]+\.ts$/u.test(word)) {
-    checkRepoPath(surface, join(runnerDir, word), roots, out);
+    await checkRepoPath(surface, join(runnerDir, word), roots, out);
   }
   return runnerDir;
 }
 
-function commandsIn(
+async function commandsIn(
   value: unknown,
   surface: string,
   roots: Roots,
   out: string[],
   source?: { text: string; offset: number },
-): void {
+): Promise<void> {
   if (Array.isArray(value)) {
-    value.forEach((entry, index) => {
-      commandsIn(entry, `${surface}[${index}]`, roots, out, source);
-    });
+    for (const [index, entry] of value.entries())
+      await commandsIn(entry, `${surface}[${index}]`, roots, out, source);
     return;
   }
   if (typeof value !== "object" || value === null) return;
   for (const [key, child] of Object.entries(value)) {
     if (key === "command" && typeof child === "string") {
-      checkCommand(commandReference(surface, child, source), child, roots, out);
+      await checkCommand(
+        commandReference(surface, child, source),
+        child,
+        roots,
+        out,
+      );
     } else {
-      commandsIn(child, `${surface}.${key}`, roots, out, source);
+      await commandsIn(child, `${surface}.${key}`, roots, out, source);
     }
   }
 }
@@ -234,17 +243,19 @@ function referenceLine(source: string | undefined, value: string): number {
   return offset < 0 ? 1 : (source?.slice(0, offset).split("\n").length ?? 1);
 }
 
-function readJson(path: string): unknown {
-  const parsed = jsonOf(z.unknown()).safeParse(readFileSync(path, "utf8"));
+async function readJson(path: string): Promise<unknown> {
+  const parsed = jsonOf(z.unknown()).safeParse(await readFile(path, "utf8"));
   if (parsed.success) return parsed.data;
-  writeSync(2, `FATAL: ${path}: cannot read JSON: ${parsed.error.message}\n`);
+  process.stderr.write(
+    `FATAL: ${path}: cannot read JSON: ${parsed.error.message}\n`,
+  );
   return process.exit(2);
 }
 
-function checkLinks(roots: Roots, out: string[]): void {
+async function checkLinks(roots: Roots, out: string[]): Promise<void> {
   for (const [when, , destination] of LINKS) {
     if (applies(when, roots.os)) {
-      checkLinkedPath(
+      await checkLinkedPath(
         `deployed link ~/${destination}`,
         join(roots.home, destination),
         roots,
@@ -261,7 +272,7 @@ function checkLinks(roots: Roots, out: string[]): void {
     ".gemini/antigravity/global_workflows",
   ];
   for (const destination of skillLinks) {
-    checkLinkedPath(
+    await checkLinkedPath(
       `deployed link ~/${destination}`,
       join(roots.home, destination),
       roots,
@@ -269,11 +280,14 @@ function checkLinks(roots: Roots, out: string[]): void {
     );
   }
   const claudeSkills = join(roots.home, ".claude/skills");
-  if (existsSync(claudeSkills)) {
-    for (const name of readdirSync(claudeSkills, { withFileTypes: true })
+  const skillEntries = await readdir(claudeSkills, {
+    withFileTypes: true,
+  }).catch(() => []);
+  if (skillEntries.length > 0) {
+    for (const name of skillEntries
       .filter((entry) => entry.isSymbolicLink())
       .map((entry) => entry.name)) {
-      checkLinkedPath(
+      await checkLinkedPath(
         `deployed skill ~/${join(".claude/skills", name)}`,
         join(claudeSkills, name),
         roots,
@@ -283,12 +297,14 @@ function checkLinks(roots: Roots, out: string[]): void {
   }
 }
 
-function checkHookRegistry(roots: Roots, out: string[]): void {
-  const raw = readFileSync(join(roots.repo, "agents/hooks/hooks.toml"), "utf8");
+async function checkHookRegistry(roots: Roots, out: string[]): Promise<void> {
+  const raw = await readFile(
+    join(roots.repo, "agents/hooks/hooks.toml"),
+    "utf8",
+  );
   const decoded = fromThrowable(() => Bun.TOML.parse(raw))();
   if (decoded.isErr()) {
-    writeSync(
-      2,
+    process.stderr.write(
       `FATAL: agents/hooks/hooks.toml: cannot parse registry: ${decoded.error instanceof Error ? decoded.error.message : String(decoded.error)}\n`,
     );
     process.exit(2);
@@ -306,8 +322,7 @@ function checkHookRegistry(roots: Roots, out: string[]): void {
     })
     .safeParse(decoded.value);
   if (!parsed.success) {
-    writeSync(
-      2,
+    process.stderr.write(
       `FATAL: agents/hooks/hooks.toml: cannot validate registry: ${parsed.error.message}\n`,
     );
     process.exit(2);
@@ -316,7 +331,7 @@ function checkHookRegistry(roots: Roots, out: string[]): void {
     if (typeof hook.script !== "string") continue;
     const script = join(roots.repo, "agents/hooks", hook.script);
     if (Array.isArray(hook.vendors) && hook.vendors.length > 0) {
-      checkRepoPath(
+      await checkRepoPath(
         `declared agents/hooks/hooks.toml:${referenceLine(raw, hook.script)} hook[${index}]`,
         script,
         roots,
@@ -326,9 +341,9 @@ function checkHookRegistry(roots: Roots, out: string[]): void {
   }
 }
 
-export function findings(roots: Roots): string[] {
+export async function findings(roots: Roots): Promise<string[]> {
   const out: string[] = [];
-  checkLinks(roots, out);
+  await checkLinks(roots, out);
 
   for (const [surface, path] of [
     [
@@ -337,9 +352,10 @@ export function findings(roots: Roots): string[] {
     ],
     ["deployed ~/.codex/hooks.json", join(roots.home, ".codex/hooks.json")],
   ] as const) {
-    if (existsSync(path))
-      commandsIn(readJson(path), surface, roots, out, {
-        text: readFileSync(path, "utf8"),
+    const content = await attempt(() => readFile(path, "utf8"));
+    if (content.isOk())
+      await commandsIn(await readJson(path), surface, roots, out, {
+        text: content.value,
         offset: 0,
       });
   }
@@ -353,22 +369,26 @@ export function findings(roots: Roots): string[] {
       join(roots.repo, "agents/codex/hooks.json"),
     ],
   ] as const) {
-    if (existsSync(path))
-      commandsIn(readJson(path), surface, roots, out, {
-        text: readFileSync(path, "utf8"),
+    const content = await attempt(() => readFile(path, "utf8"));
+    if (content.isOk())
+      await commandsIn(await readJson(path), surface, roots, out, {
+        text: content.value,
         offset: 0,
       });
   }
-  checkHookRegistry(roots, out);
+  await checkHookRegistry(roots, out);
+
+  const packagePath = join(roots.repo, "package.json");
+  const packageText = await readFile(packagePath, "utf8");
 
   const parsedPkg = z
     .object({ bin: z.record(z.string(), z.unknown()).optional() })
-    .safeParse(readJson(join(roots.repo, "package.json")));
+    .safeParse(await readJson(packagePath));
   const pkg = parsedPkg.success ? parsedPkg.data : {};
   for (const [name, target] of Object.entries(pkg.bin ?? {})) {
     if (typeof target === "string") {
-      checkRepoPath(
-        `package.json bin ${name}:${referenceLine(readFileSync(join(roots.repo, "package.json"), "utf8"), target)}`,
+      await checkRepoPath(
+        `package.json bin ${name}:${referenceLine(packageText, target)}`,
         join(roots.repo, target),
         roots,
         out,
@@ -380,20 +400,109 @@ export function findings(roots: Roots): string[] {
 
 // A commit is BASE plus selected REV paths. Render that view in a disposable HOME;
 // deployment is deliberately later, and must never be a prerequisite for retirement.
-export function candidateFindings(
+async function candidateContent(
+  context: JjPrecommit,
+  path: string,
+  revision: string,
+): Promise<Buffer> {
+  const child = Bun.spawn(
+    [
+      "jj",
+      "--ignore-working-copy",
+      "file",
+      "show",
+      "-r",
+      revision,
+      "--",
+      `root-file:${JSON.stringify(path)}`,
+    ],
+    { cwd: context.root, stdout: "pipe", stderr: "pipe", timeout: 120_000 },
+  );
+  const [content, error, code] = await Promise.all([
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code !== 0) {
+    process.stderr.write(`FATAL: precommit: jj show failed: ${error.trim()}\n`);
+    process.exit(2);
+  }
+  return Buffer.from(content);
+}
+
+async function exportCandidate(
+  context: JjPrecommit,
+  destination: string,
+  entries: ReadonlyMap<string, string>,
+): Promise<void> {
+  const executable = new Map(
+    await Promise.all(
+      [...new Set(entries.values())].map(async (revision) => {
+        const child = Bun.spawn(
+          [
+            "jj",
+            "--ignore-working-copy",
+            "file",
+            "list",
+            "-r",
+            revision,
+            "-T",
+            'if(executable, path ++ "\\0")',
+          ],
+          {
+            cwd: context.root,
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 120_000,
+          },
+        );
+        const [output, error, code] = await Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+          child.exited,
+        ]);
+        if (code !== 0) {
+          process.stderr.write(
+            `FATAL: precommit: jj file failed: ${error.trim()}\n`,
+          );
+          process.exit(2);
+        }
+        return [revision, new Set(output.split("\0"))] as const;
+      }),
+    ),
+  );
+  const files = [...entries];
+  const batchSize = 8;
+  for (let start = 0; start < files.length; start += batchSize) {
+    await Promise.all(
+      files.slice(start, start + batchSize).map(async ([path, revision]) => {
+        const target = join(destination, path);
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(
+          target,
+          await candidateContent(context, path, revision),
+        );
+        if (executable.get(revision)?.has(path) === true)
+          await chmod(target, 0o755);
+      }),
+    );
+  }
+}
+
+export async function candidateFindings(
   context: JjPrecommit,
   home: string,
   os: Os,
-): string[] {
-  const scratch = mkdtempSync(join(tmpdir(), "live-refs-candidate-"));
+): Promise<string[]> {
+  const scratch = await mkdtemp(join(tmpdir(), "live-refs-candidate-"));
   const repo = join(scratch, "repo");
   const targetHome = join(scratch, "home");
-  using _cleanup = {
-    [Symbol.dispose]: () => {
-      rmSync(scratch, { recursive: true, force: true });
+  await using _cleanup = {
+    [Symbol.asyncDispose]: async () => {
+      await rm(scratch, { recursive: true, force: true });
     },
   };
-  const entries = jjCandidate(context);
+  const entries = await Promise.resolve(jjCandidate(context));
   const copied = new Map(
     [...entries].filter(
       ([path]) =>
@@ -455,45 +564,53 @@ export function candidateFindings(
       if (/\.(?:[cm]?[jt]sx?)$/u.test(dependency)) pending.push(dependency);
     }
   };
-  for (let index = 0; index < pending.length; index++) {
-    const path = pending[index];
-    if (path === undefined) continue;
-    const revision = entries.get(path);
-    if (revision === undefined) continue;
-    const source = jjContent(context, path, revision);
-    includeImports(path, source.toString());
+  for (let index = 0; index < pending.length;) {
+    const batch = pending.slice(index, index + 8);
+    index += batch.length;
+    const sources = await Promise.all(
+      batch.map(async (path) => {
+        const revision = entries.get(path);
+        return revision === undefined
+          ? undefined
+          : ([path, await candidateContent(context, path, revision)] as const);
+      }),
+    );
+    sources.forEach((source) => {
+      if (source !== undefined) includeImports(source[0], source[1].toString());
+    });
   }
   // Liveness needs existence for the rest; export candidate contents for render inputs and their imports.
   for (const path of entries.keys()) {
     const dest = join(repo, path);
-    mkdirSync(dirname(dest), { recursive: true });
-    writeFileSync(dest, "");
+    await mkdir(dirname(dest), { recursive: true });
+    await writeFile(dest, "");
   }
-  jjExport(context, repo, copied);
-  const link = (source: string, destination: string): void => {
+  await exportCandidate(context, repo, copied);
+  const link = async (source: string, destination: string): Promise<void> => {
     const dest = join(targetHome, destination);
-    if (lstatSync(dest, { throwIfNoEntry: false }) !== undefined) return;
-    mkdirSync(dirname(dest), { recursive: true });
-    symlinkSync(join(repo, source), dest);
+    if ((await lstatMaybe(dest)) !== undefined) return;
+    await mkdir(dirname(dest), { recursive: true });
+    await symlink(join(repo, source), dest);
   };
   for (const [when, source, destination] of LINKS)
     if (applies(when, os) && !source.startsWith("@google-drive/"))
-      link(source, destination);
-  link("agents/skills", ".agents/skills");
-  link("agents/commands", ".claude/commands");
-  link("agents/codex/AGENTS.md", ".codex/AGENTS.md");
-  link("agents/commands", ".codex/prompts");
-  for (const path of entries.keys()) {
-    if (!path.endsWith("package.json")) continue;
+      await link(source, destination);
+  await link("agents/skills", ".agents/skills");
+  await link("agents/commands", ".claude/commands");
+  await link("agents/codex/AGENTS.md", ".codex/AGENTS.md");
+  await link("agents/commands", ".codex/prompts");
+  const linkPackageBins = async (path: string): Promise<void> => {
     const pkg = z
       .object({ bin: z.record(z.string(), z.string()).optional() })
-      .safeParse(readJson(join(repo, path)));
-    if (!pkg.success) continue;
+      .safeParse(await readJson(join(repo, path)));
+    if (!pkg.success) return;
     for (const [name, target] of Object.entries(pkg.data.bin ?? {}))
-      link(join(dirname(path), target), `.bun/bin/${name}`);
-  }
+      await link(join(dirname(path), target), `.bun/bin/${name}`);
+  };
+  for (const path of entries.keys())
+    if (path.endsWith("package.json")) await linkPackageBins(path);
   // bounded: native 60s timeout on the immutable candidate renderer.
-  const rendered = Bun.spawnSync(
+  const rendered = Bun.spawn(
     [process.execPath, join(repo, "scripts/render-home.ts")],
     {
       env: {
@@ -512,28 +629,32 @@ export function candidateFindings(
       timeout: 60_000,
     },
   );
-  const diagnostic = [
-    rendered.stderr.toString().trim(),
-    rendered.stdout.toString().trim(),
-  ]
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(rendered.stdout).text(),
+    new Response(rendered.stderr).text(),
+    rendered.exited,
+  ]);
+  const diagnostic = [stderr.trim(), stdout.trim()]
     .filter((text) => text !== "")
     .join("\n");
-  if (rendered.exitCode !== 0)
+  if (exitCode !== 0)
     return [
-      `FATAL: live-refs candidate render could not run (exit ${rendered.exitCode}, signal ${rendered.signalCode ?? "none"}): ${diagnostic === "" ? "no child diagnostics" : diagnostic}`,
+      `FATAL: live-refs candidate render could not run (exit ${exitCode}, signal ${rendered.signalCode ?? "none"}): ${diagnostic === "" ? "no child diagnostics" : diagnostic}`,
     ];
-  return findings({ repo, home: targetHome, os });
+  return await findings({ repo, home: targetHome, os });
 }
 
-function systemOs(): Os | undefined {
+async function systemOs(): Promise<Os | undefined> {
   if (process.platform === "darwin") return "mac";
   if (process.platform !== "linux") return undefined;
-  return /microsoft/iu.test(readFileSync("/proc/sys/kernel/osrelease", "utf8"))
+  return /microsoft/iu.test(
+    await readFile("/proc/sys/kernel/osrelease", "utf8"),
+  )
     ? "wsl"
     : "linux";
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const parsed = cli(
     {
       name: "live-refs.ts",
@@ -545,26 +666,26 @@ function main(): void {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    writeSync(2, `unexpected positional argument: ${parsed._[0]}\n`);
+    process.stderr.write(`unexpected positional argument: ${parsed._[0]}\n`);
     process.exitCode = 2;
     return;
   }
   const home = process.env.HOME ?? homedir();
   const repo = process.env.DOTFILES ?? resolve(import.meta.dir, "..");
-  const os = systemOs();
+  const os = await systemOs();
   if (os === undefined) {
-    writeSync(2, `FATAL: unsupported platform: ${process.platform}\n`);
+    process.stderr.write(`FATAL: unsupported platform: ${process.platform}\n`);
     process.exitCode = 2;
     return;
   }
-  const context = jjContext();
+  const context = await Promise.resolve(jjContext());
   const result =
     context === undefined
-      ? findings({ home, repo, os })
-      : candidateFindings(context, home, os);
+      ? await findings({ home, repo, os })
+      : await candidateFindings(context, home, os);
   if (result.length > 0) {
     result.forEach((line) => {
-      writeSync(2, `${line}\n`);
+      process.stderr.write(`${line}\n`);
     });
     process.exitCode = 1;
     return;
@@ -573,11 +694,11 @@ function main(): void {
 }
 
 if (import.meta.main) {
-  fromThrowable(main)().match(
+  const result = await attempt(main);
+  result.match(
     () => {},
     (error) => {
-      writeSync(
-        2,
+      process.stderr.write(
         `FATAL: live-refs check could not run: ${error instanceof Error ? error.message : String(error)}\n`,
       );
       process.exitCode = 2;

@@ -22,7 +22,7 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
 });
 
-test("routes txt to markdown without registering it in code-view", () => {
+test("routes txt and YAML to editable markdown without code-view conflicts", () => {
   const plugins = readJson(join(import.meta.dir, "plugins.json"));
   expect(plugins).toMatchObject({
     "obsidian-custom-file-extensions-plugin": {
@@ -34,7 +34,7 @@ test("routes txt to markdown without registering it in code-view", () => {
         "manifest.json":
           "82675c42eca77f5ce39f68d795b14accfc17eb46ce9b765d960931df3a2dc6a0",
       },
-      settings: { types: { markdown: ["txt"] } },
+      settings: { types: { markdown: ["txt", "yml", "yaml"] } },
     },
   });
   const codeView = z
@@ -48,7 +48,8 @@ test("routes txt to markdown without registering it in code-view", () => {
   if (codeView.success) {
     const extensions =
       codeView.data["code-view"].settings.extensions.split(",");
-    expect(extensions).not.toContain("txt");
+    for (const extension of ["txt", "yml", "yaml"])
+      expect(extensions).not.toContain(extension);
     expect(extensions).toContain("log");
   }
 });

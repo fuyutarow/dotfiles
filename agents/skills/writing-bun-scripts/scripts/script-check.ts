@@ -40,7 +40,7 @@
 //   F7  .sh with no shim marker — BG0: a surviving `.sh` carries `# shim: <class>` or is
 //                                 content-detected `vendored` (an external tool's own header)
 
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { realpath, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { jsonOf, z } from "../../../hooks/zod.ts";
@@ -157,12 +157,12 @@ const ManifestSchema = z.object({
 });
 const graduationCache = new Map<string, Graduation | null>();
 
-function graduationData(
+async function graduationData(
   directory: string,
   manifest: string,
-): { deps: Map<string, string>; bins: Set<string> } {
+): Promise<{ deps: Map<string, string>; bins: Set<string> }> {
   const parsed = jsonOf(ManifestSchema).safeParse(
-    readFileSync(manifest, "utf8"),
+    await Bun.file(manifest).text(),
   );
   if (!parsed.success) {
     return { deps: new Map<string, string>(), bins: new Set<string>() };
@@ -176,7 +176,7 @@ function graduationData(
   const bins = new Set<string>();
   for (const target of parsed.data.bin ?? []) {
     const abs = join(directory, target);
-    if (existsSync(abs)) bins.add(realpathSync(abs));
+    if (await Bun.file(abs).exists()) bins.add(await realpath(abs));
   }
   return { deps, bins };
 }
@@ -189,16 +189,19 @@ function cacheSeen<T extends Graduation | null>(seen: string[], value: T): T {
   return value;
 }
 
-function findGraduation(fromFile: string): Graduation | null {
-  let directory = dirname(realpathSync(fromFile));
+async function findGraduation(fromFile: string): Promise<Graduation | null> {
+  let directory = dirname(await realpath(fromFile));
   const seen: string[] = [];
   for (;;) {
     const cached = graduationCache.get(directory);
     if (cached !== undefined) return cacheSeen(seen, cached);
     seen.push(directory);
     const manifest = join(directory, "package.json");
-    if (existsSync(manifest) && existsSync(join(directory, "bun.lock"))) {
-      const { deps, bins } = graduationData(directory, manifest);
+    if (
+      (await Bun.file(manifest).exists()) &&
+      (await Bun.file(join(directory, "bun.lock")).exists())
+    ) {
+      const { deps, bins } = await graduationData(directory, manifest);
       const found: Graduation = { root: directory, deps, bins };
       return cacheSeen(seen, found);
     }
@@ -218,14 +221,14 @@ const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 //      degit-copied into other people's repos, and `templates/` shipped into deliverables.
 // The marker is the escape hatch for (2) because "does this get distributed?" is not something
 // a floor can infer from a path.
-function zeroDepReason(file: string): string | null {
-  const path = realpathSync(file).replaceAll("\\", "/");
+async function zeroDepReason(file: string): Promise<string | null> {
+  const path = (await realpath(file)).replaceAll("\\", "/");
   if (/(^|\/)(hooks|templates)\//u.test(path)) {
     return "it lives under hooks/ or templates/ — that code runs where no install has happened";
   }
   let directory = dirname(path);
   for (;;) {
-    if (existsSync(join(directory, ".zero-dep"))) {
+    if (await Bun.file(join(directory, ".zero-dep")).exists()) {
       return `${directory}/.zero-dep marks this tree as distributed — it runs outside this repo's lockfile`;
     }
     const parent = dirname(directory);
@@ -413,9 +416,9 @@ function executableCode(source: string): string {
   return output.join("");
 }
 
-function checkBareSpecifier(file: string, spec: string): void {
-  const zeroDep = zeroDepReason(file);
-  const graduation = zeroDep === null ? findGraduation(file) : null;
+async function checkBareSpecifier(file: string, spec: string): Promise<void> {
+  const zeroDep = await zeroDepReason(file);
+  const graduation = zeroDep === null ? await findGraduation(file) : null;
   const declared = graduation?.deps.get(spec);
   if (zeroDep !== null) {
     fail(
@@ -479,8 +482,9 @@ async function checkFile(file: string): Promise<void> {
   // `bun link` symlinks it onto PATH, so the kernel needs the shebang and the exec bit to run
   // it. Everywhere else a shebang is a smell: ordinary scripts are invoked `bun <path>`.
   const shebang = lines[0]?.startsWith("#!") === true ? lines[0] : undefined;
-  const realFile = realpathSync(file);
-  const isPackageBin = findGraduation(file)?.bins.has(realFile) ?? false;
+  const realFile = await realpath(file);
+  const isPackageBin =
+    (await findGraduation(file))?.bins.has(realFile) ?? false;
   if (shebang?.includes("node") === true) {
     fail(
       file,
@@ -494,7 +498,7 @@ async function checkFile(file: string): Promise<void> {
         "package.json `bin` entry without a `#!/usr/bin/env bun` shebang — `bun link` symlinks the file itself, so it cannot run (BG1)",
       );
     }
-    if ((statSync(realFile).mode & 0o111) === 0) {
+    if (((await stat(realFile)).mode & 0o111) === 0) {
       fail(
         file,
         "package.json `bin` entry without the exec bit — commit it 100755, or the linked command is not executable (BG1)",
@@ -520,7 +524,7 @@ async function checkFile(file: string): Promise<void> {
     if (spec === undefined) continue;
     const kind = classifySpecifier(spec);
     if (kind === "bare") {
-      checkBareSpecifier(file, spec);
+      await checkBareSpecifier(file, spec);
     } else if (kind === "pinned") {
       warn(
         file,

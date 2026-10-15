@@ -5,7 +5,7 @@
 // test file flags them by design; the floor's targets are scripts, not tests.
 import { describe, expect, test } from "bun:test";
 
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
@@ -13,30 +13,59 @@ import { typeFlag } from "type-flag";
 
 const FLOOR = new URL("../scripts/script-check.ts", import.meta.url).pathname;
 
-function runFloor(
+async function runBounded(args: string[]): Promise<{
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}> {
+  const proc = Bun.spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 10_000,
+    killSignal: "SIGKILL",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { stdout, stderr, exitCode };
+}
+
+async function runFloor(
   content: string,
   filename = "fixture.ts",
   dependencies?: Record<string, string>,
   manifest?: { bin?: Record<string, string>; mode?: number },
-): { out: string; code: number } {
-  const dir = mkdtempSync(join(tmpdir(), "floor-"));
-  const file = join(dir, filename);
-  writeFileSync(file, content);
-  if (manifest?.mode !== undefined) chmodSync(file, manifest.mode);
-  if (dependencies !== undefined || manifest?.bin !== undefined) {
-    writeFileSync(
-      join(dir, "package.json"),
-      JSON.stringify({ dependencies: dependencies ?? {}, bin: manifest?.bin }),
-    );
-    writeFileSync(join(dir, "bun.lock"), "{}\n");
-  }
-  // bounded: one-shot floor run over a tiny fixture; maxBuffer caps runaway output
-  const proc = Bun.spawnSync(["bun", FLOOR, file], { maxBuffer: 1024 * 1024 });
-  rmSync(dir, { recursive: true, force: true });
-  return {
-    out: proc.stdout.toString() + proc.stderr.toString(),
-    code: proc.exitCode ?? -1,
+): Promise<{ out: string; code: number }> {
+  const dir = await mkdtemp(join(tmpdir(), "floor-"));
+  await using _cleanup = {
+    async [Symbol.asyncDispose]() {
+      await rm(dir, { recursive: true, force: true });
+    },
   };
+  const file = join(dir, filename);
+  const run = async () => {
+    await writeFile(file, content);
+    if (manifest?.mode !== undefined) await chmod(file, manifest.mode);
+    if (dependencies !== undefined || manifest?.bin !== undefined) {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({
+          dependencies: dependencies ?? {},
+          bin: manifest?.bin,
+        }),
+      );
+      await writeFile(join(dir, "bun.lock"), "{}\n");
+    }
+    // bounded: one-shot floor run over a tiny fixture; the process timeout caps runaway work
+    const proc = await runBounded(["bun", FLOOR, file]);
+    return {
+      out: proc.stdout + proc.stderr,
+      code: proc.exitCode,
+    };
+  };
+  return await run();
 }
 
 function templateExpression(expression: string): string {
@@ -48,8 +77,8 @@ function interpolatedFixture(expression: string): string {
 }
 
 describe("script-check floor", () => {
-  test("classic bad fixture: every FAIL detector fires, exit 1", () => {
-    const { out, code } = runFloor(
+  test("classic bad fixture: every FAIL detector fires, exit 1", async () => {
+    const { out, code } = await runFloor(
       [
         "#!/usr/bin/env node",
         'import yaml from "js-yaml";',
@@ -66,22 +95,24 @@ describe("script-check floor", () => {
     expect(code).toBe(1);
   });
 
-  test("backtick dynamic import no longer evades F3 (fleet finding)", () => {
-    const { out, code } = runFloor("const m = await import(`left-pad`);\n");
+  test("backtick dynamic import no longer evades F3 (fleet finding)", async () => {
+    const { out, code } = await runFloor(
+      "const m = await import(`left-pad`);\n",
+    );
     expect(out).toContain("unpinned external dependency 'left-pad'");
     expect(code).toBe(1);
   });
 
-  test("computed dynamic import warns for hand review", () => {
-    const { out, code } = runFloor(
+  test("computed dynamic import warns for hand review", async () => {
+    const { out, code } = await runFloor(
       `const name = pick();\nconst m = await import(\`pkg-\${name}\`);\n`,
     );
     expect(out).toContain("computed specifier");
     expect(code).toBe(0);
   });
 
-  test("a regex literal that names bunx is not mistaken for a subprocess call", () => {
-    const { out, code } = runFloor(
+  test("a regex literal that names bunx is not mistaken for a subprocess call", async () => {
+    const { out, code } = await runFloor(
       String.raw`const runtime = /(^|\\s)bunx?\\b/; process.stdout.write(String(runtime));`,
     );
     expect(out).not.toContain("bunx call with no visible");
@@ -89,8 +120,8 @@ describe("script-check floor", () => {
     expect(code).toBe(0);
   });
 
-  test("a bounded call does not silence a hangable one (fleet finding)", () => {
-    const { out } = runFloor(
+  test("a bounded call does not silence a hangable one (fleet finding)", async () => {
+    const { out } = await runFloor(
       [
         'const b = Bun.spawn(["some-llm", "--wait"]);',
         "const pad = `x`;",
@@ -100,8 +131,8 @@ describe("script-check floor", () => {
     expect(out).toContain("1 spawn call(s) without timeout:/signal:");
   });
 
-  test("an unrelated boundedRegion comment does not silence W5 (fleet finding)", () => {
-    const { out } = runFloor(
+  test("an unrelated boundedRegion comment does not silence W5 (fleet finding)", async () => {
+    const { out } = await runFloor(
       ["// boundedRegion = { x: 1 }", "", 'const b = Bun.spawn(["cli"]);'].join(
         "\n",
       ),
@@ -109,8 +140,8 @@ describe("script-check floor", () => {
     expect(out).toContain("spawn call(s) without timeout:/signal:");
   });
 
-  test("shorthand AbortSignal property (`signal,`) counts as W5 evidence", () => {
-    const { out, code } = runFloor(
+  test("shorthand AbortSignal property (`signal,`) counts as W5 evidence", async () => {
+    const { out, code } = await runFloor(
       [
         "const signal = AbortSignal.timeout(1000);",
         'const b = Bun.spawn(["cli"], { stdin: "ignore", signal, killSignal: "SIGTERM" });',
@@ -120,8 +151,8 @@ describe("script-check floor", () => {
     expect(code).toBe(0);
   });
 
-  test("a real `// bounded: <reason>` beside the call silences W5", () => {
-    const { out, code } = runFloor(
+  test("a real `// bounded: <reason>` beside the call silences W5", async () => {
+    const { out, code } = await runFloor(
       [
         "// bounded: version probe, exits fast",
         'const b = Bun.spawn(["cli", "--version"]);',
@@ -131,8 +162,8 @@ describe("script-check floor", () => {
     expect(code).toBe(0);
   });
 
-  test("block-comment interiors are not scanned as code (fleet finding)", () => {
-    const { out, code } = runFloor(
+  test("block-comment interiors are not scanned as code (fleet finding)", async () => {
+    const { out, code } = await runFloor(
       [
         "/*",
         'const cp = require("node:child_process");',
@@ -145,8 +176,8 @@ describe("script-check floor", () => {
     expect(code).toBe(0);
   });
 
-  test("bun shebang on an ordinary script warns (BG1: not a package bin)", () => {
-    const { out, code } = runFloor(
+  test("bun shebang on an ordinary script warns (BG1: not a package bin)", async () => {
+    const { out, code } = await runFloor(
       "#!/usr/bin/env bun\nexport const ok = 1;\n",
     );
     expect(out).toContain("no package.json `bin`");
@@ -156,8 +187,8 @@ describe("script-check floor", () => {
   // F14 — a package.json `bin` entry IS a binary (`bun link` symlinks the file onto PATH), so
   // the shebang and the exec bit flip from smell to requirement. Added 2026-09-13 when the
   // repo's three PATH commands moved from hand-made ~/.local/bin symlinks to `bin` entries.
-  test("a package bin with shebang and exec bit is clean — no shebang WARN", () => {
-    const { out, code } = runFloor(
+  test("a package bin with shebang and exec bit is clean — no shebang WARN", async () => {
+    const { out, code } = await runFloor(
       "#!/usr/bin/env bun\nexport const ok = 1;\n",
       "cli.ts",
       undefined,
@@ -168,8 +199,8 @@ describe("script-check floor", () => {
     expect(code).toBe(0);
   });
 
-  test("a package bin without a shebang FAILs (the symlink could not run)", () => {
-    const { out, code } = runFloor(
+  test("a package bin without a shebang FAILs (the symlink could not run)", async () => {
+    const { out, code } = await runFloor(
       "export const ok = 1;\n",
       "cli.ts",
       undefined,
@@ -182,8 +213,8 @@ describe("script-check floor", () => {
     expect(code).toBe(1);
   });
 
-  test("a package bin without the exec bit FAILs", () => {
-    const { out, code } = runFloor(
+  test("a package bin without the exec bit FAILs", async () => {
+    const { out, code } = await runFloor(
       "#!/usr/bin/env bun\nexport const ok = 1;\n",
       "cli.ts",
       undefined,
@@ -193,65 +224,61 @@ describe("script-check floor", () => {
     expect(code).toBe(1);
   });
 
-  test("string-form bin (one command named after the package) is recognised too", () => {
-    const dir = mkdtempSync(join(tmpdir(), "floor-bin-"));
+  test("string-form bin (one command named after the package) is recognised too", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "floor-bin-"));
+    await using _cleanup = {
+      async [Symbol.asyncDispose]() {
+        await rm(dir, { recursive: true, force: true });
+      },
+    };
     const file = join(dir, "main.ts");
-    writeFileSync(file, "#!/usr/bin/env bun\nexport const ok = 1;\n");
-    chmodSync(file, 0o755);
-    writeFileSync(
-      join(dir, "package.json"),
-      JSON.stringify({ name: "solo", bin: "main.ts" }),
-    );
-    writeFileSync(join(dir, "bun.lock"), "{}\n");
-    // bounded: one-shot floor run over a tiny fixture; maxBuffer caps runaway output
-    const proc = Bun.spawnSync(["bun", FLOOR, file], {
-      maxBuffer: 1024 * 1024,
-    });
-    rmSync(dir, { recursive: true, force: true });
-    const out = proc.stdout.toString() + proc.stderr.toString();
-    expect(out).not.toContain("shebang");
-    expect(proc.exitCode).toBe(0);
+    const run = async () => {
+      await writeFile(file, "#!/usr/bin/env bun\nexport const ok = 1;\n");
+      await chmod(file, 0o755);
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ name: "solo", bin: "main.ts" }),
+      );
+      await writeFile(join(dir, "bun.lock"), "{}\n");
+      // bounded: one-shot floor run over a tiny fixture; the process timeout caps runaway work
+      const proc = await runBounded(["bun", FLOOR, file]);
+      expect(proc.stdout + proc.stderr).not.toContain("shebang");
+      expect(proc.exitCode).toBe(0);
+    };
+    await run();
   });
 
-  test("the floor passes over its own source", () => {
+  test("the floor passes over its own source", async () => {
     // bounded: one-shot self-run
-    const proc = Bun.spawnSync(["bun", FLOOR, FLOOR], {
-      maxBuffer: 1024 * 1024,
-    });
-    expect(proc.stdout.toString()).toContain("FAIL=0 WARN=0");
+    const proc = await runBounded(["bun", FLOOR, FLOOR]);
+    expect(proc.stdout).toContain("FAIL=0 WARN=0");
     expect(proc.exitCode).toBe(0);
   });
 
-  test("the floor exposes Cleye help and a deliberate spread positional schema", () => {
+  test("the floor exposes Cleye help and a deliberate spread positional schema", async () => {
     // bounded: the local CLI's framework-owned help path exits immediately
-    const proc = Bun.spawnSync(["bun", FLOOR, "--help"], {
-      maxBuffer: 1024 * 1024,
-    });
-    const output = proc.stdout.toString();
+    const proc = await runBounded(["bun", FLOOR, "--help"]);
+    const output = proc.stdout;
     expect(output).toContain("script-check [flags...] <file...>");
     expect(output).toContain("Show help");
     expect(proc.exitCode).toBe(0);
   });
 
-  test("the floor rejects ordinary unknown flags and __proto__ before mutation", () => {
+  test("the floor rejects ordinary unknown flags and __proto__ before mutation", async () => {
     // bounded: both one-shot argument-error paths return before the floor walks a file
-    const unknown = Bun.spawnSync(["bun", FLOOR, "--unknown", FLOOR], {
-      maxBuffer: 1024 * 1024,
-    });
-    expect(unknown.stderr.toString()).toContain("Unknown flag: --unknown");
+    const unknown = await runBounded(["bun", FLOOR, "--unknown", FLOOR]);
+    expect(unknown.stderr).toContain("Unknown flag: --unknown");
     expect(unknown.exitCode).toBe(1);
 
-    const prototype = Bun.spawnSync(["bun", FLOOR, "--__proto__", FLOOR], {
-      maxBuffer: 1024 * 1024,
-    });
-    expect(prototype.stderr.toString()).toContain("prototype-mutating option");
+    const prototype = await runBounded(["bun", FLOOR, "--__proto__", FLOOR]);
+    expect(prototype.stderr).toContain("prototype-mutating option");
     expect(prototype.exitCode).toBe(2);
   });
 });
 
 describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
-  test("node:util parseArgs FAILs even when strict", () => {
-    const { out, code } = runFloor(`
+  test("node:util parseArgs FAILs even when strict", async () => {
+    const { out, code } = await runFloor(`
       import { parseArgs } from "node:util";
       parseArgs({ args: Bun.argv.slice(2), strict: true });
     `);
@@ -259,8 +286,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("raw Bun.argv parsing without Cleye FAILs", () => {
-    const { out, code } = runFloor(`
+  test("raw Bun.argv parsing without Cleye FAILs", async () => {
+    const { out, code } = await runFloor(`
       const files = Bun.argv.slice(2);
       process.stdout.write(files.join("\\n"));
     `);
@@ -268,8 +295,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("raw process.argv parsing without Cleye FAILs", () => {
-    const { out, code } = runFloor(`
+  test("raw process.argv parsing without Cleye FAILs", async () => {
+    const { out, code } = await runFloor(`
       const files = process.argv.slice(2);
       process.stdout.write(files.join("\\n"));
     `);
@@ -277,8 +304,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("an unrelated local cli helper with no argv PASSes", () => {
-    const { out, code } = runFloor(`
+  test("an unrelated local cli helper with no argv PASSes", async () => {
+    const { out, code } = await runFloor(`
       function cli(message: string): void {
         process.stdout.write(message);
       }
@@ -288,8 +315,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(0);
   });
 
-  test("an unrelated imported cli helper with no argv PASSes", () => {
-    const { out, code } = runFloor(`
+  test("an unrelated imported cli helper with no argv PASSes", async () => {
+    const { out, code } = await runFloor(`
       import { cli } from "./domain.ts";
       cli("domain operation");
     `);
@@ -297,8 +324,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(0);
   });
 
-  test("an unrelated cli helper does not license raw Bun.argv", () => {
-    const { out, code } = runFloor(`
+  test("an unrelated cli helper does not license raw Bun.argv", async () => {
+    const { out, code } = await runFloor(`
       import { cli } from "./domain.ts";
       cli(Bun.argv.slice(2));
     `);
@@ -306,8 +333,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("an aliased Cleye cli import FAILs the exact-binding policy", () => {
-    const { out, code } = runFloor(
+  test("an aliased Cleye cli import FAILs the exact-binding policy", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli as cleyeCli } from "cleye";
       cleyeCli({ name: "fixture", parameters: ["<file...>"], strictFlags: true });
@@ -319,8 +346,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("ordinary Cleye cli with a post-parse prototype guard and deliberate spread PASSes", () => {
-    const { out, code } = runFloor(
+  test("ordinary Cleye cli with a post-parse prototype guard and deliberate spread PASSes", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli } from "cleye";
       const args = Bun.argv.slice(2);
@@ -339,8 +366,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(0);
   });
 
-  test("Cleye boundary without strictFlags FAILs", () => {
-    const { out, code } = runFloor(
+  test("Cleye boundary without strictFlags FAILs", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli } from "cleye";
       function rejectPrototypeFlag() {}
@@ -353,8 +380,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("Cleye boundary without the prototype guard FAILs", () => {
-    const { out, code } = runFloor(
+  test("Cleye boundary without the prototype guard FAILs", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli } from "cleye";
       cli({ name: "fixture", parameters: ["<file...>"], strictFlags: true }, undefined, Bun.argv.slice(2));
@@ -366,8 +393,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("Cleye requires an explicit parameters schema", () => {
-    const { out, code } = runFloor(
+  test("Cleye requires an explicit parameters schema", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli } from "cleye";
       function rejectPrototypeFlag() {}
@@ -380,8 +407,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("flag-only Cleye CLI makes excess-positional refusal visible", () => {
-    const { out, code } = runFloor(
+  test("flag-only Cleye CLI makes excess-positional refusal visible", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli } from "cleye";
       function rejectPrototypeFlag() {}
@@ -395,8 +422,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(0);
   });
 
-  test("the established rejectUnexpectedArguments excess refusal PASSes", () => {
-    const { out, code } = runFloor(
+  test("the established rejectUnexpectedArguments excess refusal PASSes", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli } from "cleye";
       function rejectPrototypeFlag() {}
@@ -413,8 +440,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(0);
   });
 
-  test("Cleye commands each require strict/prototype guard and a schema", () => {
-    const { out, code } = runFloor(
+  test("Cleye commands each require strict/prototype guard and a schema", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli, command } from "cleye";
       function rejectPrototypeFlag() {}
@@ -440,8 +467,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(0);
   });
 
-  test("an unguarded Cleye command FAILs even when its parent is guarded", () => {
-    const { out, code } = runFloor(
+  test("an unguarded Cleye command FAILs even when its parent is guarded", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli, command } from "cleye";
       function rejectPrototypeFlag() {}
@@ -456,8 +483,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("an unrelated command helper is not counted as a Cleye command boundary", () => {
-    const { out, code } = runFloor(
+  test("an unrelated command helper is not counted as a Cleye command boundary", async () => {
+    const { out, code } = await runFloor(
       `
       import { cli } from "cleye";
       import { command } from "./lib.ts";
@@ -473,8 +500,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(0);
   });
 
-  test("unmarked direct type-flag FAILs", () => {
-    const { out, code } = runFloor(`
+  test("unmarked direct type-flag FAILs", async () => {
+    const { out, code } = await runFloor(`
       const args = Bun.argv.slice(2);
       const parsed = typeFlag({}, args, { ignore: () => true });
       process.stdout.write(parsed._.join("\\n"));
@@ -485,8 +512,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("the exact forwarding marker permits a real type-flag boundary", () => {
-    const { out, code } = runFloor(`
+  test("the exact forwarding marker permits a real type-flag boundary", async () => {
+    const { out, code } = await runFloor(`
       // argv-forwarding: textlint
       const args = Bun.argv.slice(2);
       const parsed = typeFlag({}, [...args], {
@@ -499,8 +526,8 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(0);
   });
 
-  test("comments, strings, and templates that mention parser APIs do not fire", () => {
-    const { out, code } = runFloor(`
+  test("comments, strings, and templates that mention parser APIs do not fire", async () => {
+    const { out, code } = await runFloor(`
       // Bun.argv.slice(2); parseArgs({ strict: true }); cli({}); typeFlag({});
       const example = "process.argv.slice(2); parseArgs({ strict: true }); cli({}); typeFlag({})";
       const template = \`Bun.argv.slice(2); cli({}); typeFlag({})\`;
@@ -510,14 +537,14 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(0);
   });
 
-  test("template interpolation cannot hide raw argv or parser boundaries", () => {
-    const rawArgv = runFloor(
+  test("template interpolation cannot hide raw argv or parser boundaries", async () => {
+    const rawArgv = await runFloor(
       interpolatedFixture("({ value: Bun.argv.slice(2) }).value"),
     );
     expect(rawArgv.out).toContain("without a Cleye boundary");
     expect(rawArgv.code).toBe(1);
 
-    const unguardedCleye = runFloor(
+    const unguardedCleye = await runFloor(
       `import { cli } from "cleye"; ${interpolatedFixture(
         'cli({ name: "fixture" }, undefined, Bun.argv.slice(2))',
       )}`,
@@ -527,7 +554,7 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(unguardedCleye.out).toContain("strictFlags: true");
     expect(unguardedCleye.code).toBe(1);
 
-    const directTypeFlag = runFloor(
+    const directTypeFlag = await runFloor(
       interpolatedFixture("typeFlag({}, Bun.argv.slice(2))"),
     );
     expect(directTypeFlag.out).toContain(
@@ -535,13 +562,13 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     );
     expect(directTypeFlag.code).toBe(1);
 
-    const nestedTemplate = runFloor(
+    const nestedTemplate = await runFloor(
       interpolatedFixture(templateExpression("Bun.argv.slice(2)")),
     );
     expect(nestedTemplate.out).toContain("without a Cleye boundary");
     expect(nestedTemplate.code).toBe(1);
 
-    const benignExpression = runFloor(
+    const benignExpression = await runFloor(
       `${interpolatedFixture(
         JSON.stringify("Bun.argv.slice(2); cli({}); typeFlag({})"),
       )} process.stdout.write(hidden);`,
@@ -601,16 +628,16 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
 
 // BG0 F7 — the `# shim: <class>` marker required on any surviving `.sh` (2026-07-30).
 describe("script-check floor — .sh shim marker (F7, BG0)", () => {
-  test(".sh with no shim marker FAILs, exit 1 (red case)", () => {
-    const { out, code } = runFloor("#!/bin/sh\necho hi\n", "fixture.sh");
+  test(".sh with no shim marker FAILs, exit 1 (red case)", async () => {
+    const { out, code } = await runFloor("#!/bin/sh\necho hi\n", "fixture.sh");
     expect(out).toContain(
       "no `# shim: <bootstrap|hook-entry|exec-wrapper|vendored>` marker",
     );
     expect(code).toBe(1);
   });
 
-  test(".sh with a declared shim class PASSes (green case)", () => {
-    const { out, code } = runFloor(
+  test(".sh with a declared shim class PASSes (green case)", async () => {
+    const { out, code } = await runFloor(
       "#!/bin/sh\n# shim: hook-entry\necho hi\n",
       "fixture.sh",
     );
@@ -618,8 +645,8 @@ describe("script-check floor — .sh shim marker (F7, BG0)", () => {
     expect(code).toBe(0);
   });
 
-  test(".sh with an undeclared shim class FAILs, naming the bad value", () => {
-    const { out, code } = runFloor(
+  test(".sh with an undeclared shim class FAILs, naming the bad value", async () => {
+    const { out, code } = await runFloor(
       "#!/bin/sh\n# shim: made-up-class\necho hi\n",
       "fixture.sh",
     );
@@ -627,8 +654,8 @@ describe("script-check floor — .sh shim marker (F7, BG0)", () => {
     expect(code).toBe(1);
   });
 
-  test(".sh with no marker but a vendor header is exempt — WARN, not FAIL", () => {
-    const { out, code } = runFloor(
+  test(".sh with no marker but a vendor header is exempt — WARN, not FAIL", async () => {
+    const { out, code } = await runFloor(
       "#!/bin/sh\n# managed by some-tool; reinstalling overwrites this file.\necho hi\n",
       "fixture.sh",
     );
@@ -637,8 +664,8 @@ describe("script-check floor — .sh shim marker (F7, BG0)", () => {
     expect(code).toBe(0);
   });
 
-  test("the vendored exemption is read from content, not a path — a random filename still exempts", () => {
-    const { out, code } = runFloor(
+  test("the vendored exemption is read from content, not a path — a random filename still exempts", async () => {
+    const { out, code } = await runFloor(
       "#!/bin/sh\n# auto-generated by some-tool; do not edit.\necho hi\n",
       "unrelated-name.sh",
     );
@@ -646,8 +673,8 @@ describe("script-check floor — .sh shim marker (F7, BG0)", () => {
     expect(code).toBe(0);
   });
 
-  test(".sh skips every TS-only check — no false-positive F2/F4 on shell syntax", () => {
-    const { out, code } = runFloor(
+  test(".sh skips every TS-only check — no false-positive F2/F4 on shell syntax", async () => {
+    const { out, code } = await runFloor(
       "#!/bin/sh\n# shim: exec-wrapper\nrequire('x')\nexec date\n",
       "fixture.sh",
     );

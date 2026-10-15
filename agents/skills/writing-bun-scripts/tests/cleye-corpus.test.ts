@@ -106,6 +106,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/doctor-remote.ts" },
   { path: "scripts/linux-init.ts" },
   { path: "scripts/box-init.ts" },
+  { path: "scripts/changeset.ts" },
   { path: "scripts/agx-accept.ts" },
   { path: "scripts/agx-host.ts" },
   { path: "scripts/config-map.ts" },
@@ -138,9 +139,16 @@ const CORPUS: CorpusEntry[] = [
   },
 ] satisfies readonly CorpusEntry[];
 
-function run(entry: CorpusEntry, argv: string[]) {
+async function run(
+  entry: CorpusEntry,
+  argv: string[],
+): Promise<{
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}> {
   // bounded: these framework-owned help/error paths must finish before domain work begins
-  return Bun.spawnSync(
+  const proc = Bun.spawn(
     [
       "bun",
       join(ROOT, entry.path),
@@ -156,9 +164,14 @@ function run(entry: CorpusEntry, argv: string[]) {
       stderr: "pipe",
       timeout: 5_000,
       killSignal: "SIGKILL",
-      maxBuffer: 1024 * 1024,
     },
   );
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { stdout, stderr, exitCode };
 }
 
 async function productionCleyeImportsIn(base: string): Promise<string[]> {
@@ -193,28 +206,28 @@ describe("production Cleye corpus boundary", () => {
 
   for (const entry of CORPUS) {
     if (entry.cli === false) continue;
-    test(entry.path, () => {
-      const help = run(entry, ["--help"]);
+    test(entry.path, async () => {
+      const help = await run(entry, ["--help"]);
       expect(help.exitCode).toBe(0);
-      expect(help.stdout.toString()).toContain("Show help");
+      expect(help.stdout).toContain("Show help");
 
-      const unknown = run(entry, ["--definitely-unknown-cleye-contract"]);
+      const unknown = await run(entry, ["--definitely-unknown-cleye-contract"]);
       const expected = entry.unknownFlag ?? {
         exit: 1,
         message: "Unknown flag",
       };
       expect(unknown.exitCode).toBe(expected.exit);
-      expect(unknown.stderr.toString()).toContain(expected.message);
+      expect(unknown.stderr).toContain(expected.message);
 
-      const prototype = run(entry, ["--__proto__"]);
+      const prototype = await run(entry, ["--__proto__"]);
       const expectedPrototype = entry.prototypeFlag ?? {
         exit: 2,
         message: "__proto__",
       };
       expect(prototype.exitCode).toBe(expectedPrototype.exit);
-      expect(
-        prototype.stdout.toString() + prototype.stderr.toString(),
-      ).toContain(expectedPrototype.message);
+      expect(prototype.stdout + prototype.stderr).toContain(
+        expectedPrototype.message,
+      );
     });
   }
 });

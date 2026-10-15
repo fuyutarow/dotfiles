@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.2 — 2026-10-16
+
+- Await acceptance report reads and subprocesses without blocking the event loop.
+
 ## 4.11.1 — 2026-10-16
 
 - Run verification with the worker's assembled user-tool and mise environment, and distinguish unrunnable and killed checks from code failures.

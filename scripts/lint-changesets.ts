@@ -1,33 +1,33 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { changesetDiagnostic, parseChangeset } from "./changeset.ts";
 
-export function lintChangesets(root: string): string[] {
+export async function lintChangesets(root: string): Promise<string[]> {
   const problems: string[] = [];
   const toolsRoot = join(root, "tools");
-  for (const path of new Bun.Glob("*/.changes/*.md").scanSync({
+  for await (const path of new Bun.Glob("*/.changes/*.md").scan({
     cwd: toolsRoot,
     onlyFiles: true,
   })) {
-    problems.push(...problemsForFile(root, toolsRoot, path));
+    problems.push(...(await problemsForFile(root, toolsRoot, path)));
   }
   return problems;
 }
 
-function problemsForFile(
+async function problemsForFile(
   root: string,
   toolsRoot: string,
   path: string,
-): string[] {
+): Promise<string[]> {
   const absolute = join(toolsRoot, path);
-  const parsed = parseChangeset(readFileSync(absolute, "utf8"));
+  const parsed = parseChangeset(await readFile(absolute, "utf8"));
   return parsed.isErr()
     ? [changesetDiagnostic(relative(root, absolute), parsed.error.message)]
     : [];
 }
 
 if (import.meta.main) {
-  report(lintChangesets(resolve(import.meta.dir, "..")));
+  report(await lintChangesets(resolve(import.meta.dir, "..")));
 }
 
 function report(problems: string[]): void {

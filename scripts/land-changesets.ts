@@ -1,14 +1,16 @@
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { access as accessPath } from "node:fs/promises";
+
+import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { changesetDiagnostic, parseChangeset } from "./changeset.ts";
+
+const pathExists = (path: Parameters<typeof accessPath>[0]) =>
+  accessPath(path).then(
+    () => true,
+    () => false,
+  );
 
 type Bump = "patch" | "minor" | "major";
 type Change = { path: string; bump: Bump; entry: string };
@@ -21,26 +23,26 @@ export type LandChangesetsResult = {
 };
 
 const bumpRank: Record<Bump, number> = { patch: 0, minor: 1, major: 2 };
-const parseChange = (path: string): Result<Change, Error> => {
-  const text = readFileSync(path, "utf8");
+const parseChange = async (path: string): Promise<Result<Change, Error>> => {
+  const text = await readFile(path, "utf8");
   const parsed = parseChangeset(text);
   if (parsed.isErr())
     return err(new Error(changesetDiagnostic(path, parsed.error.message)));
   return ok({ path, ...parsed.value });
 };
 
-function readToolChanges(
+async function readToolChanges(
   toolsRoot: string,
   tool: string,
-): Result<Change[], Error> {
+): Promise<Result<Change[], Error>> {
   const changesDir = join(toolsRoot, tool, ".changes");
-  if (!existsSync(changesDir)) return ok([]);
-  const changeFiles = readdirSync(changesDir, { withFileTypes: true }).filter(
-    (entry) => entry.isFile() && entry.name.endsWith(".md"),
-  );
+  if (!(await pathExists(changesDir))) return ok([]);
+  const changeFiles = (
+    await readdir(changesDir, { withFileTypes: true })
+  ).filter((entry) => entry.isFile() && entry.name.endsWith(".md"));
   const changes: Change[] = [];
   for (const changeFile of changeFiles) {
-    const parsed = parseChange(join(changesDir, changeFile.name));
+    const parsed = await parseChange(join(changesDir, changeFile.name));
     if (parsed.isErr()) return err(parsed.error);
     changes.push(parsed.value);
   }
@@ -64,14 +66,14 @@ function bumpedVersion(current: string, bump: Bump): Result<string, Error> {
   return ok(`${major}.${minor}.${patch + 1}`);
 }
 
-export function applyToolChangesets(
+export async function applyToolChangesets(
   root: string,
   date = Temporal.Now.plainDateISO().toString(),
-): Result<LandChangesetsResult, Error> {
+): Promise<Result<LandChangesetsResult, Error>> {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(date))
     return err(new Error(`invalid release date: ${date}`));
   const toolsRoot = join(root, "tools");
-  if (!existsSync(toolsRoot))
+  if (!(await pathExists(toolsRoot)))
     return ok({
       paths: [],
       consumedChangesets: [],
@@ -79,10 +81,10 @@ export function applyToolChangesets(
       releases: [],
     });
   const pending: { tool: string; change: Change }[] = [];
-  for (const toolDir of readdirSync(toolsRoot, { withFileTypes: true }).filter(
-    (entry) => entry.isDirectory(),
-  )) {
-    const changes = readToolChanges(toolsRoot, toolDir.name);
+  for (const toolDir of (
+    await readdir(toolsRoot, { withFileTypes: true })
+  ).filter((entry) => entry.isDirectory())) {
+    const changes = await readToolChanges(toolsRoot, toolDir.name);
     if (changes.isErr()) return err(changes.error);
     pending.push(
       ...changes.value.map((change) => ({ tool: toolDir.name, change })),
@@ -114,7 +116,7 @@ export function applyToolChangesets(
     );
     const packagePath = join(toolsRoot, tool, "package.json");
     const changelogPath = join(toolsRoot, tool, "CHANGELOG.md");
-    const packageText = readFileSync(packagePath, "utf8");
+    const packageText = await readFile(packagePath, "utf8");
     const packageJson = jsonOf(
       z.looseObject({ version: z.string() }),
     ).safeParse(packageText);
@@ -126,8 +128,8 @@ export function applyToolChangesets(
       );
     const next = bumpedVersion(packageJson.data.version, bump);
     if (next.isErr()) return err(next.error);
-    const changelogText = existsSync(changelogPath)
-      ? readFileSync(changelogPath, "utf8")
+    const changelogText = (await pathExists(changelogPath))
+      ? await readFile(changelogPath, "utf8")
       : "# Changelog\n";
     if (!changelogText.startsWith("# Changelog\n"))
       return err(new Error(`${changelogPath}: expected # Changelog preamble`));
@@ -156,11 +158,11 @@ export function applyToolChangesets(
     const previousSections = item.changelogText
       .slice("# Changelog\n".length)
       .trim();
-    writeFileSync(
+    await writeFile(
       item.packagePath,
       `${JSON.stringify(packageData, null, 2)}\n`,
     );
-    writeFileSync(
+    await writeFile(
       item.changelogPath,
       [`# Changelog`, newSection, previousSections]
         .filter(Boolean)
@@ -173,7 +175,7 @@ export function applyToolChangesets(
     releaseFiles.add(packagePath);
     releaseFiles.add(changelogPath);
     for (const { path } of item.changes) {
-      unlinkSync(path);
+      await unlink(path);
       const relative = path.slice(root.length + 1);
       paths.add(relative);
       consumedChangesets.add(relative);

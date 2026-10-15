@@ -68,7 +68,7 @@ export function landStateDir(mainRoot: string): string {
 
 export async function landLock(
   mainRoot: string,
-): Promise<(() => void) | Error> {
+): Promise<(() => void | Promise<void>) | Error> {
   const release = await acquire(
     join(landStateDir(mainRoot), "land.lock"),
     owner("land"),
@@ -118,7 +118,11 @@ async function journal<T>(
   );
   if (typeof release !== "function")
     return new Error("queue journal lock wait expired");
-  using _lock = { [Symbol.dispose]: release };
+  await using _lock = {
+    [Symbol.asyncDispose]: async () => {
+      await Promise.try(release);
+    },
+  };
   const result = await attempt(action);
   return result.ok ? result.value : new Error(errorMessage(result.error));
 }
@@ -158,7 +162,7 @@ export async function queueStatus(
   mainRoot: string,
 ): Promise<Error | undefined> {
   const state = landStateDir(mainRoot);
-  const items = await journal(state, () => readQueue(state));
+  const items = await journal(state, async () => readQueue(state));
   if (items instanceof Error) return items;
   const count = (status: string) =>
     items.filter((item) => {
@@ -172,8 +176,10 @@ export async function queueStatus(
       {
         schema: 1,
         state_dir: state,
-        runner: holderOf(join(state, "runner.lock")) ?? null,
-        land: holderOf(join(state, "land.lock")) ?? null,
+        runner:
+          (await Promise.resolve(holderOf(join(state, "runner.lock")))) ?? null,
+        land:
+          (await Promise.resolve(holderOf(join(state, "land.lock")))) ?? null,
         pending: count("pending"),
         running: count("running"),
         OK: count("OK"),
@@ -194,18 +200,21 @@ export async function runQueue(
   ) => Promise<{ exit: number; report?: LandReport }>,
 ): Promise<number | Error> {
   const state = landStateDir(mainRoot);
-  const runner = tryAcquire(
-    join(state, "runner.lock"),
-    owner("land queue runner"),
+  const runner = await Promise.resolve(
+    tryAcquire(join(state, "runner.lock"), owner("land queue runner")),
   );
   if (!runner.ok) {
     emit(`runner already active (pid ${runner.holder?.pid ?? "unknown"})`);
     return 0;
   }
-  using _runner = { [Symbol.dispose]: runner.release };
+  await using _runner = {
+    [Symbol.asyncDispose]: async () => {
+      await Promise.try(runner.release);
+    },
+  };
   let failed = 0;
   for (;;) {
-    const items = await journal(state, () => readQueue(state));
+    const items = await journal(state, async () => readQueue(state));
     if (items instanceof Error) return items;
     const item = items.find((value) => value.result === undefined);
     if (item === undefined) {
@@ -215,11 +224,15 @@ export async function runQueue(
     const release = await landLock(mainRoot);
     if (release instanceof Error) return release;
     const result = await attempt(async () => {
-      using _land = { [Symbol.dispose]: release };
+      await using _land = {
+        [Symbol.asyncDispose]: async () => {
+          await Promise.try(release);
+        },
+      };
       // An interrupted item is never blindly replayed: it may already have committed/pushed.
       if (item.start !== undefined) {
-        const saved = await journal(state, () =>
-          append(state, {
+        const saved = await journal(state, async () => {
+          await append(state, {
             schema: 1,
             kind: "result",
             id: item.id,
@@ -228,30 +241,30 @@ export async function runQueue(
             exit: 1,
             detail:
               "interrupted runner; inspect the landed commit before re-enqueueing",
-          }),
-        );
+          });
+        });
         if (saved instanceof Error) return saved;
         emit(`FAIL ${item.ws}: interrupted runner`);
         return 1;
       }
-      const started = await journal(state, () =>
-        append(state, {
+      const started = await journal(state, async () => {
+        await append(state, {
           schema: 1,
           kind: "start",
           id: item.id,
           at: now(),
           pid: process.pid,
           host: hostname(),
-        }),
-      );
+        });
+      });
       if (started instanceof Error) return started;
       emit(`landing ${item.ws} id=${item.id}`);
       const landed = await attempt(() => land(item));
       const report = landed.ok ? landed.value.report : undefined;
       let code = landed.ok ? landed.value.exit : 2;
       if (report !== undefined) code = landExit(report);
-      const recorded = await journal(state, () =>
-        append(state, {
+      const recorded = await journal(state, async () => {
+        await append(state, {
           schema: 1,
           kind: "result",
           id: item.id,
@@ -262,8 +275,8 @@ export async function runQueue(
           detail: landed.ok
             ? `land exited ${code}`
             : errorMessage(landed.error),
-        }),
-      );
+        });
+      });
       if (recorded instanceof Error) return recorded;
       emit(`${code === 0 ? "OK" : "FAIL"} ${item.ws} id=${item.id}`);
       return code;

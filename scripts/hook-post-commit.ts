@@ -1,7 +1,15 @@
+import { access as accessPath } from "node:fs/promises";
+
 import { $ } from "bun";
-import { existsSync } from "node:fs";
+import {} from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+const pathExists = (path: Parameters<typeof accessPath>[0]) =>
+  accessPath(path).then(
+    () => true,
+    () => false,
+  );
 
 // git post-commit body: warm the cocoindex index incrementally AND record the freshness
 // watermark, so concept/battery never refuse a fresh index. No-op when ccc is absent, when the
@@ -19,7 +27,7 @@ if (Bun.which("ccc") === undefined) {
 
 const toplevel = (await $`git rev-parse --show-toplevel`.text()).trim();
 // 索引していない repo では黙って抜ける
-if (!existsSync(`${toplevel}/.cocoindex_code`)) {
+if (!(await pathExists(`${toplevel}/.cocoindex_code`))) {
   process.exit(0);
 }
 

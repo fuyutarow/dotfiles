@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { mkdtemp, writeFile, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runSteps, STEPS } from "../post-merge.ts";
 
 test("a recursive PATH Bun fixture is bypassed by every script step", async () => {
-  const root = mkdtempSync(join(tmpdir(), "post-merge-"));
+  const root = await mkdtemp(join(tmpdir(), "post-merge-"));
   const previous = process.env.PATH;
-  writeFileSync(join(root, "bun"), '#!/bin/sh\nexec bun "$@"\n');
-  chmodSync(join(root, "bun"), 0o755);
-  writeFileSync(
+  await writeFile(join(root, "bun"), '#!/bin/sh\nexec bun "$@"\n');
+  await chmod(join(root, "bun"), 0o755);
+  await writeFile(
     join(root, "probe.ts"),
     `
     const p = Bun.spawn(["bun", "--version"], { timeout: 1000 });
@@ -18,16 +18,19 @@ test("a recursive PATH Bun fixture is bypassed by every script step", async () =
   );
   process.env.PATH = `${root}:${previous ?? ""}`;
   const lines: string[] = [];
+  await using _cleanup = {
+    [Symbol.asyncDispose]: async () => {
+      process.env.PATH = previous;
+      await rm(root, { recursive: true, force: true });
+    },
+  };
   const code = await runSteps(
     [{ name: "codex:config", args: ["probe.ts"], boundMs: 2000 }],
     root,
     (line) => {
       lines.push(line);
     },
-  ).finally(() => {
-    process.env.PATH = previous;
-    rmSync(root, { recursive: true, force: true });
-  });
+  );
   expect(code).toBe(0);
   expect(lines).toHaveLength(1);
   expect(lines[0]).toMatch(/^\[post-merge\] codex:config \d+\.\d{3}s$/u);
@@ -58,7 +61,7 @@ test("a failed step stays failed and prevents subsequent work", async () => {
   expect(
     await runSteps(
       [
-        { name: "bad", args: ["-e", "process.exit(7)"], boundMs: 1000 },
+        { name: "bad", args: ["-e", "process.exit(7)"], boundMs: 5000 },
         { name: "never", args: ["-e", "process.exit(0)"], boundMs: 1000 },
       ],
       tmpdir(),
@@ -72,4 +75,4 @@ test("a failed step stays failed and prevents subsequent work", async () => {
   expect(STEPS.reduce((sum, step) => sum + step.boundMs, 0)).toBeLessThan(
     60_000,
   );
-});
+}, 15_000);

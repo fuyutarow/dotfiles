@@ -1,25 +1,19 @@
 import { afterEach, expect, test } from "bun:test";
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const roots: string[] = [];
-afterEach(() => {
+afterEach(async () => {
   for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
 });
 
 const shellQuote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
 
-test("composer refuses excess positional arguments", () => {
-  const result = Bun.spawnSync(
+test("composer refuses excess positional arguments", async () => {
+  const result = await runProcess(
     [process.execPath, "scripts/agx-accept.ts", "ticket", "extra"],
     { cwd: process.cwd() },
   );
@@ -29,17 +23,17 @@ test("composer refuses excess positional arguments", () => {
   );
 });
 
-test("composer presents the latest ticket run from fixture records and fake jj", () => {
-  const root = mkdtempSync(join(tmpdir(), "agx-accept-test-"));
+test("composer presents the latest ticket run from fixture records and fake jj", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agx-accept-test-"));
   roots.push(root);
   const state = join(root, "state");
   const runDir = join(state, "runs", "run-latest");
   const workspace = join(root, "workspace");
   const bin = join(root, "bin");
-  mkdirSync(runDir, { recursive: true });
-  mkdirSync(workspace);
-  mkdirSync(bin);
-  writeFileSync(
+  await mkdir(runDir, { recursive: true });
+  await mkdir(workspace);
+  await mkdir(bin);
+  await writeFile(
     join(runDir, "report.json"),
     JSON.stringify({
       summary: "latest report line",
@@ -49,7 +43,7 @@ test("composer presents the latest ticket run from fixture records and fake jj",
       open: [],
     }),
   );
-  writeFileSync(
+  await writeFile(
     join(runDir, "verify.log"),
     "ordinary output\n(fail) assertion failed\n",
   );
@@ -121,24 +115,24 @@ test("composer presents the latest ticket run from fixture records and fake jj",
       pid: process.pid,
     },
   ];
-  writeFileSync(
+  await writeFile(
     join(state, "records.jsonl"),
     `${records.map((event) => JSON.stringify(event)).join("\n")}\n`,
   );
 
   const cli = join(process.cwd(), "tools/agx/src/next/cli.ts");
-  writeFileSync(
+  await writeFile(
     join(bin, "agx"),
     `#!/bin/sh\nif [ "\${AGX_FAKE_LEGACY:-}" = "1" ]; then\n  exec ${shellQuote(process.execPath)} ${shellQuote(cli)} ls --json\nfi\nexec ${shellQuote(process.execPath)} ${shellQuote(cli)} "$@"\n`,
   );
-  writeFileSync(
+  await writeFile(
     join(bin, "jj"),
     "#!/bin/sh\nprintf 'fixture diff for %s\\n' \"$2\"\n",
   );
-  chmodSync(join(bin, "agx"), 0o755);
-  chmodSync(join(bin, "jj"), 0o755);
+  await chmod(join(bin, "agx"), 0o755);
+  await chmod(join(bin, "jj"), 0o755);
 
-  const result = Bun.spawnSync(
+  const result = await runProcess(
     [process.execPath, "scripts/agx-accept.ts", "accept-fold"],
     {
       cwd: process.cwd(),
@@ -162,8 +156,8 @@ test("composer presents the latest ticket run from fixture records and fake jj",
   expect(output).toContain('mise run land -- <workspace-name> -m "<message>"');
   expect(output).not.toContain("agx judge run-earlier");
 
-  rmSync(workspace, { recursive: true, force: true });
-  const removed = Bun.spawnSync(
+  await rm(workspace, { recursive: true, force: true });
+  const removed = await runProcess(
     [process.execPath, "scripts/agx-accept.ts", "accept-fold"],
     {
       cwd: process.cwd(),
@@ -179,7 +173,7 @@ test("composer presents the latest ticket run from fixture records and fake jj",
     `workspace removed after land: ${workspace}; diff unavailable`,
   );
 
-  const active = Bun.spawnSync(
+  const active = await runProcess(
     [process.execPath, "scripts/agx-accept.ts", "hooksearch-active"],
     {
       cwd: process.cwd(),
@@ -196,7 +190,7 @@ test("composer presents the latest ticket run from fixture records and fake jj",
   );
   expect(active.stdout.toString()).toMatch(/elapsed=\d+m\d{2}s/u);
 
-  const oldAgx = Bun.spawnSync(
+  const oldAgx = await runProcess(
     [process.execPath, "scripts/agx-accept.ts", "accept-fold"],
     {
       cwd: process.cwd(),
@@ -210,4 +204,31 @@ test("composer presents the latest ticket run from fixture records and fake jj",
   );
   expect(oldAgx.exitCode).toBe(2);
   expect(oldAgx.stderr.toString()).toContain("returned multiple tickets");
-});
+}, 60_000);
+
+// Drain both pipes while waiting for the bounded subprocess.
+async function runProcess(
+  argv: string[],
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    timeout?: number;
+    stdin?: "ignore";
+    stdout?: "pipe";
+    stderr?: "pipe";
+  } = {},
+) {
+  const child = Bun.spawn(argv, {
+    ...options,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: options.timeout ?? 120_000,
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).arrayBuffer(),
+    child.exited,
+  ]);
+  return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), exitCode };
+}

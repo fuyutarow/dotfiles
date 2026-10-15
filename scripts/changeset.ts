@@ -1,9 +1,18 @@
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { ResultAsync as AsyncResult } from "neverthrow";
+import { access as accessPath } from "node:fs/promises";
+
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { err, ok, type Result } from "neverthrow";
 import { errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
+
+const pathExists = (path: Parameters<typeof accessPath>[0]) =>
+  accessPath(path).then(
+    () => true,
+    () => false,
+  );
 
 const BumpSchema = z.enum(["patch", "minor", "major"]);
 
@@ -79,22 +88,22 @@ function slugOf(entry: string): string {
   return slug.length === 0 ? "change" : slug;
 }
 
-function uniqueSlug(changesDir: string, base: string): string {
+async function uniqueSlug(changesDir: string, base: string): Promise<string> {
   let slug = base;
   let suffix = 2;
-  while (existsSync(join(changesDir, `${slug}.md`))) {
+  while (await pathExists(join(changesDir, `${slug}.md`))) {
     slug = `${base}-${suffix}`;
     suffix++;
   }
   return slug;
 }
 
-export function writeChangeset(
+export async function writeChangeset(
   root: string,
   tool: string,
   bump: string,
   entry: string,
-): Result<string, Error> {
+): Promise<Result<string, Error>> {
   if (!/^[a-z0-9][a-z0-9-]*$/u.test(tool))
     return err(new Error(`invalid tool name: ${tool}`));
   const checked = ChangesetSchema.safeParse({ bump, entry });
@@ -105,10 +114,10 @@ export function writeChangeset(
 
   const toolsRoot = join(root, "tools");
   const toolPath = join(toolsRoot, tool);
-  if (!existsSync(toolPath))
+  if (!(await pathExists(toolPath)))
     return err(new Error(`unknown tool directory: tools/${tool}`));
-  const toolInfo = fromThrowable(
-    () => statSync(toolPath),
+  const toolInfo = await fromAsyncThrowable(
+    async () => stat(toolPath),
     (error) => new Error(errorMessage(error)),
   )();
   if (toolInfo.isErr()) return err(toolInfo.error);
@@ -116,12 +125,12 @@ export function writeChangeset(
     return err(new Error(`unknown tool directory: tools/${tool}`));
 
   const changesDir = join(toolPath, ".changes");
-  const written = fromThrowable(
-    () => {
-      mkdirSync(changesDir, { recursive: true });
-      const slug = uniqueSlug(changesDir, slugOf(checked.data.entry));
+  const written = await fromAsyncThrowable(
+    async () => {
+      await mkdir(changesDir, { recursive: true });
+      const slug = await uniqueSlug(changesDir, slugOf(checked.data.entry));
       const path = join(changesDir, `${slug}.md`);
-      writeFileSync(path, formatChangeset(checked.data), { flag: "wx" });
+      await writeFile(path, formatChangeset(checked.data), { flag: "wx" });
       return `tools/${tool}/.changes/${slug}.md`;
     },
     (error) => new Error(errorMessage(error)),
@@ -144,7 +153,7 @@ if (import.meta.main) {
     process.exitCode = 2;
   } else
     writeResult(
-      writeChangeset(
+      await writeChangeset(
         resolve(import.meta.dir, ".."),
         String(parsed._[0]),
         String(parsed._[1]),
@@ -158,4 +167,15 @@ function writeResult(result: Result<string, Error>): void {
     process.stderr.write(`FATAL: ${result.error.message}\n`);
     process.exitCode = 2;
   } else process.stdout.write(`WROTE ${result.value}\n`);
+}
+
+function fromAsyncThrowable<A extends unknown[], T, E = unknown>(
+  fn: (...args: A) => Promise<T>,
+  mapError: (error: unknown) => E,
+) {
+  return (...args: A) =>
+    AsyncResult.fromPromise(
+      Promise.resolve().then(() => fn(...args)),
+      (error: unknown) => mapError(error),
+    );
 }

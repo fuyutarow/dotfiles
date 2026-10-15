@@ -1,7 +1,15 @@
+import { ResultAsync as AsyncResult } from "neverthrow";
+import { access as accessPath } from "node:fs/promises";
+
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
-import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { jsonOf, z } from "../tools/shared/src/zod.ts";
+
+const pathExists = (path: Parameters<typeof accessPath>[0]) =>
+  accessPath(path).then(
+    () => true,
+    () => false,
+  );
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -48,8 +56,8 @@ const RunSchema = z.object({
   report_path: z.string().nullable(),
   verify: z.array(VerifySchema),
 });
-const safeRead = fromThrowable(
-  (path: string) => readFileSync(path, "utf8"),
+const safeRead = fromAsyncThrowable(
+  async (path: string) => readFile(path, "utf8"),
   (error) => error,
 );
 
@@ -70,11 +78,11 @@ const elapsed = (run: Run): string => {
   return duration(Math.floor(Math.max(0, endMs - startMs) / 1000));
 };
 
-const printVerify = (run: Run): void => {
+const printVerify = async (run: Run): Promise<void> => {
   for (const verify of run.verify) {
     process.stdout.write(`VERIFY exit=${verify.exit} ${verify.cmd}\n`);
     if (verify.exit === 0) continue;
-    const log = safeRead(verify.log_path);
+    const log = await safeRead(verify.log_path);
     if (log.isErr()) continue;
     const failures = log.value
       .split(/\r?\n/u)
@@ -84,13 +92,13 @@ const printVerify = (run: Run): void => {
   }
 };
 
-const printReport = (run: Run): void => {
+const printReport = async (run: Run): Promise<void> => {
   process.stdout.write("REPORT\n");
   if (run.report_path === null) {
     process.stdout.write("  (no report)\n");
     return;
   }
-  const reportText = safeRead(run.report_path);
+  const reportText = await safeRead(run.report_path);
   if (reportText.isErr()) {
     process.stdout.write("  (report unavailable or invalid JSON)\n");
     return;
@@ -104,19 +112,19 @@ const printReport = (run: Run): void => {
   for (const line of lines) process.stdout.write(`  ${line}\n`);
 };
 
-const printDiff = (
+const printDiff = async (
   workspace: string,
   accepted: boolean,
-): number | undefined => {
+): Promise<number | undefined> => {
   process.stdout.write("DIFF\n");
-  if (!existsSync(workspace)) {
+  if (!(await pathExists(workspace))) {
     const message = accepted
       ? `  workspace removed after land: ${workspace}; diff unavailable\n`
       : `  workspace path missing: ${workspace}; diff unavailable\n`;
     process.stdout.write(message);
     return undefined;
   }
-  const diff = Bun.spawnSync(["jj", "-R", workspace, "diff", "--stat"], {
+  const diff = await runProcess(["jj", "-R", workspace, "diff", "--stat"], {
     cwd: process.cwd(),
     env: process.env,
     timeout: 15_000,
@@ -132,14 +140,14 @@ const printDiff = (
   return diff.exitCode ?? 2;
 };
 
-const main = (): void => {
+const main = async (): Promise<void> => {
   const selector = parsed._[0];
   if (selector === undefined) {
     process.stderr.write("agx-accept: SELECTOR is required\n");
     process.exitCode = 2;
     return;
   }
-  const listing = Bun.spawnSync(["agx", "ls", selector, "--json"], {
+  const listing = await runProcess(["agx", "ls", selector, "--json"], {
     cwd: process.cwd(),
     env: process.env,
     timeout: 15_000,
@@ -182,10 +190,13 @@ const main = (): void => {
     `RUN id=${run.id} row=${run.row} state=${run.state} exit=${run.exit ?? "-"} elapsed=${elapsed(run)}\n`,
   );
 
-  printVerify(run);
-  printReport(run);
+  await printVerify(run);
+  await printReport(run);
 
-  const diffExit = printDiff(run.cwd, run.judgment?.decision === "accept");
+  const diffExit = await printDiff(
+    run.cwd,
+    run.judgment?.decision === "accept",
+  );
   if (diffExit !== undefined) {
     process.exitCode = diffExit;
     return;
@@ -196,4 +207,42 @@ const main = (): void => {
   );
 };
 
-main();
+await main();
+
+// Drain both pipes while waiting for the bounded subprocess.
+async function runProcess(
+  argv: string[],
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    timeout?: number;
+    stdin?: "ignore";
+    stdout?: "pipe";
+    stderr?: "pipe";
+  } = {},
+) {
+  const child = Bun.spawn(argv, {
+    ...options,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: options.timeout ?? 120_000,
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).arrayBuffer(),
+    child.exited,
+  ]);
+  return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), exitCode };
+}
+
+function fromAsyncThrowable<A extends unknown[], T, E = unknown>(
+  fn: (...args: A) => Promise<T>,
+  mapError: (error: unknown) => E,
+) {
+  return (...args: A) =>
+    AsyncResult.fromPromise(
+      Promise.resolve().then(() => fn(...args)),
+      (error: unknown) => mapError(error),
+    );
+}

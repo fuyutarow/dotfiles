@@ -1,25 +1,27 @@
+import { ResultAsync as AsyncResult } from "neverthrow";
+import { access as accessPath } from "node:fs/promises";
+
 // Consumer: human/agent. Stage verdicts; stop on the first failure. Test seams are executable
 // paths LAND_MISE and LAND_SSH (argv is never interpreted by a local shell).
 import {
-  appendFileSync,
-  cpSync,
-  existsSync,
-  lstatSync,
-  mkdtempSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
-  writeSync,
-} from "node:fs";
+  appendFile,
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { cli } from "cleye";
 import {
+  type Result,
   errAsync,
   err,
   fromThrowable,
@@ -52,6 +54,12 @@ import {
   type LandReport,
 } from "./land-verdict.ts";
 
+const pathExists = (path: Parameters<typeof accessPath>[0]) =>
+  accessPath(path).then(
+    () => true,
+    () => false,
+  );
+
 type WorkspaceRun = {
   run_id: string;
   ticket: string;
@@ -59,8 +67,8 @@ type WorkspaceRun = {
   judgment?: { decision: "accept" | "reject" } | null;
 };
 
-function nextAgxRuns(): ResultAsync<WorkspaceRun[], Error> {
-  const command = Bun.spawnSync(
+async function nextAgxRuns(): Promise<Result<WorkspaceRun[], Error>> {
+  const command = await runProcess(
     [
       process.execPath,
       join(import.meta.dir, "../tools/agx/src/next/cli.ts"),
@@ -101,9 +109,11 @@ function nextAgxRuns(): ResultAsync<WorkspaceRun[], Error> {
   );
 }
 
-function workspaceRuns(workspace: string): ResultAsync<WorkspaceRun[], Error> {
-  const lines = workspaceLedgerLines();
-  const target = realpathSync(workspace);
+async function workspaceRuns(
+  workspace: string,
+): Promise<Result<WorkspaceRun[], Error>> {
+  const lines = await workspaceLedgerLines();
+  const target = await realpath(workspace);
   const runs = new Map<string, WorkspaceRun>();
   for (const line of lines) {
     const parsed = jsonOf(
@@ -115,44 +125,56 @@ function workspaceRuns(workspace: string): ResultAsync<WorkspaceRun[], Error> {
         ticket: z.looseObject({ name: z.string() }).optional(),
       }),
     ).safeParse(line);
-    const matchesWorkspace = (path: string | undefined): boolean =>
-      path !== undefined && existsSync(path) && realpathSync(path) === target;
+    const matchesWorkspace = async (
+      path: string | undefined,
+    ): Promise<boolean> =>
+      path !== undefined &&
+      (await pathExists(path)) &&
+      (await realpath(path)) === target;
     if (
       parsed.success &&
-      (matchesWorkspace(parsed.data.cwd) ||
-        matchesWorkspace(parsed.data.workspace))
+      ((await matchesWorkspace(parsed.data.cwd)) ||
+        (await matchesWorkspace(parsed.data.workspace)))
     )
       runs.set(parsed.data.run_id, {
         run_id: parsed.data.run_id,
         ticket: parsed.data.ticket?.name ?? parsed.data.run_id,
       });
   }
-  return nextAgxRuns().map((nextRuns) => {
-    const matchingNextRuns = nextRuns.filter((entry) => {
-      const path = entry.workspace;
-      return (
-        path !== undefined && existsSync(path) && realpathSync(path) === target
-      );
-    });
-    return Array.from(runs.values()).concat(matchingNextRuns);
-  });
+  const next = await nextAgxRuns();
+  if (next.isErr()) return next;
+  const matchingNextRuns: WorkspaceRun[] = [];
+  for (const entry of next.value) {
+    const path = entry.workspace;
+    if (
+      path !== undefined &&
+      (await pathExists(path)) &&
+      (await realpath(path)) === target
+    )
+      matchingNextRuns.push(entry);
+  }
+  return ok(Array.from(runs.values()).concat(matchingNextRuns));
 }
 
-function workspaceLedgerLines(): string[] {
+async function workspaceLedgerLines(): Promise<string[]> {
   const state = dispatchStateDir();
-  if (!existsSync(state)) return [];
-  const archives = readdirSync(state)
+  if (!(await pathExists(state))) return [];
+  const archives = (await readdir(state))
     .filter((name) => /^runs-\d{4}-\d{2}-\d{2}\.jsonl$/u.test(name))
     .toSorted()
     .map((name) => join(state, name));
   const live = join(state, "runs.jsonl");
-  const ledgerPaths = existsSync(live) ? [...archives, live] : archives;
-  return ledgerPaths.flatMap((path) => readFileSync(path, "utf8").split("\n"));
+  const ledgerPaths = (await pathExists(live)) ? [...archives, live] : archives;
+  return (
+    await Promise.all(ledgerPaths.map((path) => readFile(path, "utf8")))
+  ).flatMap((text) => text.split("\n"));
 }
 
-function lifecycleLines(): string[] {
+async function lifecycleLines(): Promise<string[]> {
   const path = join(dispatchStateDir(), "lifecycle.jsonl");
-  return existsSync(path) ? readFileSync(path, "utf8").split("\n") : [];
+  return (await pathExists(path))
+    ? (await readFile(path, "utf8")).split("\n")
+    : [];
 }
 
 type WorkspaceJudgment = {
@@ -199,13 +221,13 @@ export function workspacePreflightVerdicts(
   workspace: string,
 ): ResultAsync<WorkspacePreflightVerdict[], Error> {
   return safeTry(async function* () {
-    const runs = yield* workspaceRuns(workspace);
+    const runs = yield* await workspaceRuns(workspace);
     const ticketByRun = new Map(
       runs.map((workspaceRun) => [workspaceRun.run_id, workspaceRun.ticket]),
     );
     const judgments: WorkspaceJudgment[] = [
-      ...ledgerAcceptances(workspaceLedgerLines()),
-      ...lifecycleJudgments(lifecycleLines()),
+      ...ledgerAcceptances(await workspaceLedgerLines()),
+      ...lifecycleJudgments(await lifecycleLines()),
       ...runs.flatMap((entry, order) =>
         entry.judgment === undefined || entry.judgment === null
           ? []
@@ -250,10 +272,10 @@ function recordWorkspaceLanding(
   commit: string,
 ): ResultAsync<number, Error> {
   return safeTry(async function* () {
-    const ids = yield* workspaceRuns(workspace);
+    const ids = yield* await workspaceRuns(workspace);
     const log = join(dispatchStateDir(), "runs.jsonl");
     for (const { run_id } of ids)
-      appendFileSync(
+      await appendFile(
         log,
         `${JSON.stringify({ kind: "landed", run_id, commit, at: Temporal.Now.instant().toString() })}\n`,
         { mode: 0o600 },
@@ -277,8 +299,8 @@ export async function packageBinProblems(root: string): Promise<string[]> {
       )
     )
       continue;
-    const source = fromThrowable(
-      () => readFileSync(join(root, manifest), "utf8"),
+    const source = await fromAsyncThrowable(
+      async () => readFile(join(root, manifest), "utf8"),
       errorMessage,
     )();
     if (source.isErr()) continue;
@@ -293,22 +315,24 @@ export async function packageBinProblems(root: string): Promise<string[]> {
         ? [parsed.data.bin]
         : Object.values(parsed.data.bin);
     for (const target of targets)
-      problems.push(...packageBinTargetProblems(root, manifest, target));
+      problems.push(
+        ...(await packageBinTargetProblems(root, manifest, target)),
+      );
   }
   return problems;
 }
 
-function packageBinTargetProblems(
+async function packageBinTargetProblems(
   root: string,
   manifest: string,
   target: string,
-): string[] {
+): Promise<string[]> {
   const path = resolve(dirname(join(root, manifest)), target);
   const relative = `${manifest.slice(0, -"package.json".length)}${target}`;
-  const info = fromThrowable(() => statSync(path), errorMessage)();
+  const info = await fromAsyncThrowable(async () => stat(path), errorMessage)();
   if (info.isErr()) return [`${relative}: target does not exist`];
-  const source = fromThrowable(
-    () => readFileSync(path, "utf8"),
+  const source = await fromAsyncThrowable(
+    async () => readFile(path, "utf8"),
     errorMessage,
   )();
   if (source.isErr()) return [`${relative}: target cannot be read`];
@@ -320,13 +344,16 @@ function packageBinTargetProblems(
   return problems;
 }
 
-function unresolvedConflictPaths(root: string, pathList: string[]): string[] {
+async function unresolvedConflictPaths(
+  root: string,
+  pathList: string[],
+): Promise<string[]> {
   const conflicts: string[] = [];
   for (const path of pathList) {
     const file = join(root, path);
-    if (!existsSync(file)) continue;
-    const source = fromThrowable(
-      () => readFileSync(file, "utf8"),
+    if (!(await pathExists(file))) continue;
+    const source = await fromAsyncThrowable(
+      async () => readFile(file, "utf8"),
       errorMessage,
     )();
     if (source.isErr()) continue;
@@ -368,7 +395,7 @@ function run(
     );
     if (signal.aborted || code !== 0) {
       // Preserve hook refusal lines and the real process exit status, without a shell pipe.
-      writeSync(2, `${stdout}${stderr}`);
+      process.stderr.write(`${stdout}${stderr}`);
       return reject(
         `${argv[0]} exited ${code}${signal.aborted ? " (timeout)" : ""}`,
       );
@@ -535,13 +562,14 @@ async function resolveWorkspace(
     return { name: requestedName, path: namedRoot, knownNames: names };
 
   const candidatePath = resolve(requested);
-  if (!existsSync(candidatePath)) return { knownNames: names };
+  if (!(await pathExists(candidatePath))) return { knownNames: names };
   const candidateRoot = await read(candidatePath, ["workspace", "root"]);
   if (candidateRoot.isErr()) return { knownNames: names };
-  const candidate = realpathSync(candidateRoot.value.trim());
-  const match = entries.find(({ path }) => realpathSync(path) === candidate);
-  if (match !== undefined)
-    return { name: match.name, path: match.path, knownNames: names };
+  const candidate = await realpath(candidateRoot.value.trim());
+  for (const entry of entries) {
+    if ((await realpath(entry.path)) === candidate)
+      return { name: entry.name, path: entry.path, knownNames: names };
+  }
   return { knownNames: names };
 }
 
@@ -628,37 +656,40 @@ function paths(
 
 const previewFilter = (src: string) => basename(src) !== "node_modules";
 
-function previewCopies(
+async function previewCopies(
   primary: string,
   worker: string,
   lander: string,
   tmp: string,
-): { main: string; worker: string; lander: string } {
+): Promise<{ main: string; worker: string; lander: string }> {
   const copyMain = join(tmp, "main");
   const copyWorker = join(tmp, "worker");
   const copyLander = join(tmp, "lander");
   // Copy repository metadata, never another session's main working tree.
-  mkdirSync(copyMain);
+  await mkdir(copyMain);
   for (const entry of [".jj", ".git"])
-    cpSync(join(primary, entry), join(copyMain, entry), { recursive: true });
-  cpSync(worker, copyWorker, {
+    await cp(join(primary, entry), join(copyMain, entry), { recursive: true });
+  await cp(worker, copyWorker, {
     recursive: true,
     filter: previewFilter,
     verbatimSymlinks: true,
   });
   // Colocated stores may use an absolute Git target. Keep every preview write in the copy.
-  writeFileSync(
+  await writeFile(
     join(copyMain, ".jj", "repo", "store", "git_target"),
     join(copyMain, ".git"),
   );
-  writeFileSync(join(copyWorker, ".jj", "repo"), join(copyMain, ".jj", "repo"));
-  if (existsSync(lander)) {
-    cpSync(lander, copyLander, {
+  await writeFile(
+    join(copyWorker, ".jj", "repo"),
+    join(copyMain, ".jj", "repo"),
+  );
+  if (await pathExists(lander)) {
+    await cp(lander, copyLander, {
       recursive: true,
       filter: previewFilter,
       verbatimSymlinks: true,
     });
-    writeFileSync(
+    await writeFile(
       join(copyLander, ".jj", "repo"),
       join(copyMain, ".jj", "repo"),
     );
@@ -674,7 +705,7 @@ function prepareLander(
   name: string,
 ): ResultAsync<string, Error> {
   return safeTry(async function* () {
-    if (!existsSync(root)) {
+    if (!(await pathExists(root))) {
       yield* jj(source, [
         "workspace",
         "add",
@@ -689,9 +720,9 @@ function prepareLander(
     // The ignore rule `**/node_modules/` matches directories only, so the dependency symlink
     // this function installs below is the one path jj snapshots despite being ignored output.
     const installed =
-      lstatSync(join(root, "node_modules"), {
-        throwIfNoEntry: false,
-      })?.isSymbolicLink() === true;
+      (
+        await lstat(join(root, "node_modules")).catch(() => null)
+      )?.isSymbolicLink() === true;
     const dirty = (yield* paths(root, "@-", "@")).filter(
       (path) => !(installed && path === "node_modules"),
     );
@@ -705,11 +736,11 @@ function prepareLander(
     // installed packages without running deps (which also changes global command links).
     const modules = resolve(import.meta.dir, "../node_modules");
     if (
-      existsSync(join(root, "package.json")) &&
-      existsSync(modules) &&
-      !existsSync(join(root, "node_modules"))
+      (await pathExists(join(root, "package.json"))) &&
+      (await pathExists(modules)) &&
+      !(await pathExists(join(root, "node_modules")))
     )
-      symlinkSync(modules, join(root, "node_modules"), "dir");
+      await symlink(modules, join(root, "node_modules"), "dir");
     return ok(alpha);
   });
 }
@@ -717,10 +748,14 @@ function prepareLander(
 function format(root: string, changed: string[]): ResultAsync<void, Error> {
   return safeTry(async function* () {
     // Skip deletions, directories and symlinks: formatting a symlink could write outside the set.
-    const existing = changed.filter(
-      (path) =>
-        existsSync(join(root, path)) && lstatSync(join(root, path)).isFile(),
-    );
+    const existing: string[] = [];
+    for (const path of changed) {
+      if (
+        (await pathExists(join(root, path))) &&
+        (await lstat(join(root, path))).isFile()
+      )
+        existing.push(path);
+    }
     const groups = [
       { extensions: [".ts"], command: ["bunx", "--bun", "oxfmt"] },
       { extensions: [".md"], command: ["rumdl", "fmt"] },
@@ -757,13 +792,13 @@ function format(root: string, changed: string[]): ResultAsync<void, Error> {
   });
 }
 
-function mainCheckout(root: string): string {
+async function mainCheckout(root: string): Promise<string> {
   const repoEntry = join(root, ".jj", "repo");
-  const repo = lstatSync(repoEntry).isFile()
-    ? realpathSync(
-        resolve(dirname(repoEntry), readFileSync(repoEntry, "utf8").trim()),
+  const repo = (await lstat(repoEntry)).isFile()
+    ? await realpath(
+        resolve(dirname(repoEntry), (await readFile(repoEntry, "utf8")).trim()),
       )
-    : realpathSync(repoEntry);
+    : await realpath(repoEntry);
   return dirname(dirname(repo));
 }
 
@@ -838,7 +873,7 @@ async function main(
       emit(`[land] queue: FAIL ${errorMessage(root.error)}`);
       return 2;
     }
-    const mainRoot = mainCheckout(root.value.trim());
+    const mainRoot = await mainCheckout(root.value.trim());
     const queued = await attempt(async () => {
       if (parsed.flags.queueStatus) return (await queueStatus(mainRoot)) ?? 0;
       if (parsed.flags.enqueue !== undefined) {
@@ -885,20 +920,26 @@ async function main(
   let landedRoot: string | undefined;
   let restoredPaths: string[] = [];
   const report: LandReport = { commit: "pending", push: "pending" };
-  let releaseLand: (() => void) | undefined;
-  using _landLock = {
-    [Symbol.dispose]: () => {
-      releaseLand?.();
+  let releaseLand: (() => void | Promise<void>) | undefined;
+  await using _landLock = {
+    [Symbol.asyncDispose]: async () => {
+      if (releaseLand !== undefined) await Promise.try(releaseLand);
     },
   };
   const captured = await attempt(() =>
     safeTry(async function* () {
+      await using _tmp = {
+        [Symbol.asyncDispose]: async () => {
+          if (tmp !== undefined)
+            await rm(tmp, { recursive: true, force: true });
+        },
+      };
       if (parsed._.length !== 1 || (parsed.flags.message?.trim() ?? "") === "")
         return reject("one workspace and -m <message> are required");
       if (parsed.flags.review?.trim() === "")
         return reject("--review requires a non-empty agx run ID");
       const root = (yield* read(process.cwd(), ["workspace", "root"])).trim();
-      const mainRoot = mainCheckout(root);
+      const mainRoot = await mainCheckout(root);
       const release = queueLockHeld ? () => {} : await landLock(mainRoot);
       if (release instanceof Error) return reject(release.message);
       releaseLand = release;
@@ -921,7 +962,7 @@ async function main(
       if (
         workerRoot === mainRoot ||
         workerRoot === landerRoot ||
-        !existsSync(workerRoot)
+        !(await pathExists(workerRoot))
       )
         return reject(
           "worker workspace must exist and differ from the main checkout",
@@ -930,10 +971,15 @@ async function main(
       if (binProblems.length > 0)
         return reject(`package bin check failed: ${binProblems.join("; ")}`);
       tmp = parsed.flags.dryRun
-        ? mkdtempSync(join(tmpdir(), "land-preview-"))
+        ? await mkdtemp(join(tmpdir(), "land-preview-"))
         : undefined;
       if (tmp !== undefined) {
-        const copies = previewCopies(mainRoot, workerRoot, landerRoot, tmp);
+        const copies = await previewCopies(
+          mainRoot,
+          workerRoot,
+          landerRoot,
+          tmp,
+        );
         workerRoot = copies.worker;
         landerRoot = copies.lander;
       }
@@ -968,7 +1014,10 @@ async function main(
       stage = "rebase";
       yield* jj(workerRoot, ["rebase", "-r", "@", "-o", alpha]);
       if ((yield* at(workerRoot, "@", "conflict")) !== "false") {
-        const conflictPaths = unresolvedConflictPaths(workerRoot, initial);
+        const conflictPaths = await unresolvedConflictPaths(
+          workerRoot,
+          initial,
+        );
         return reject(
           `rebase introduced conflicts: ${JSON.stringify(conflictPaths)}`,
         );
@@ -1009,7 +1058,7 @@ async function main(
       );
       if (!parsed.flags.dryRun) {
         stage = "changesets";
-        const appliedChangesets = applyToolChangesets(landerRoot);
+        const appliedChangesets = await applyToolChangesets(landerRoot);
         if (appliedChangesets.isErr())
           return reject(errorMessage(appliedChangesets.error));
         const landedChangesets = appliedChangesets.value;
@@ -1123,14 +1172,12 @@ async function main(
         emit(`[land] landed: recorded ${recorded} run(s)`);
         stage = "workspace";
         yield* jj(landerRoot, ["workspace", "forget", workspaceName]);
-        rmSync(workerRoot, { recursive: true, force: true });
+        await rm(workerRoot, { recursive: true, force: true });
         emit(`[land] workspace: removed ${workspaceName}`);
       }
       return ok(undefined);
     }),
-  ).finally(() => {
-    if (tmp !== undefined) rmSync(tmp, { recursive: true, force: true });
-  });
+  );
   const result = captured.ok
     ? captured.value
     : reject(errorMessage(captured.error));
@@ -1165,3 +1212,41 @@ if (import.meta.main)
     process.stderr.write(`FATAL: ${errorMessage(error)}\n`);
     return 2;
   });
+
+// Drain both pipes while waiting for the bounded subprocess.
+async function runProcess(
+  argv: string[],
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    timeout?: number;
+    stdin?: "ignore";
+    stdout?: "pipe";
+    stderr?: "pipe";
+  } = {},
+) {
+  const child = Bun.spawn(argv, {
+    ...options,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: options.timeout ?? 120_000,
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).arrayBuffer(),
+    child.exited,
+  ]);
+  return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), exitCode };
+}
+
+function fromAsyncThrowable<A extends unknown[], T, E = unknown>(
+  fn: (...args: A) => Promise<T>,
+  mapError: (error: unknown) => E,
+) {
+  return (...args: A) =>
+    AsyncResult.fromPromise(
+      Promise.resolve().then(() => fn(...args)),
+      (error: unknown) => mapError(error),
+    );
+}

@@ -187,65 +187,6 @@ export async function queueStatus(
   return undefined;
 }
 
-async function mainClean(mainRoot: string): Promise<boolean | Error> {
-  const result = await attempt(async () => {
-    const snapshotSignal = AbortSignal.timeout(30_000);
-    const snap = Bun.spawn(["jj", "--no-pager", "status"], {
-      cwd: mainRoot,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      signal: snapshotSignal,
-    });
-    const [, snapshotError, snapshotCode] = await Promise.all([
-      new Response(snap.stdout).text(),
-      new Response(snap.stderr).text(),
-      snap.exited,
-    ]);
-    if (
-      snapshotSignal.aborted ||
-      snapshotCode !== 0 ||
-      snapshotError.includes("Refused to snapshot")
-    )
-      return new Error(
-        `cannot confirm a clean main checkout: ${snapshotSignal.aborted ? "jj status timed out after 30s" : snapshotError}`,
-      );
-    const diffSignal = AbortSignal.timeout(30_000);
-    const diff = Bun.spawn(
-      [
-        "jj",
-        "--ignore-working-copy",
-        "--no-pager",
-        "diff",
-        "--from",
-        "@-",
-        "--to",
-        "@",
-        "-T",
-        'path ++ "\\0"',
-      ],
-      {
-        cwd: mainRoot,
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        signal: diffSignal,
-      },
-    );
-    const [diffOutput, diffError, diffCode] = await Promise.all([
-      new Response(diff.stdout).text(),
-      new Response(diff.stderr).text(),
-      diff.exited,
-    ]);
-    if (diffSignal.aborted || diffCode !== 0)
-      return new Error(
-        diffSignal.aborted ? "jj diff timed out after 30s" : diffError,
-      );
-    return diffOutput.length === 0;
-  });
-  return result.ok ? result.value : new Error(errorMessage(result.error));
-}
-
 export async function runQueue(
   mainRoot: string,
   land: (
@@ -263,7 +204,6 @@ export async function runQueue(
   }
   using _runner = { [Symbol.dispose]: runner.release };
   let failed = 0;
-  let waiting = false;
   for (;;) {
     const items = await journal(state, () => readQueue(state));
     if (items instanceof Error) return items;
@@ -276,9 +216,6 @@ export async function runQueue(
     if (release instanceof Error) return release;
     const result = await attempt(async () => {
       using _land = { [Symbol.dispose]: release };
-      const clean = await mainClean(mainRoot);
-      if (clean instanceof Error) return clean;
-      if (!clean && item.start === undefined) return "wait";
       // An interrupted item is never blindly replayed: it may already have committed/pushed.
       if (item.start !== undefined) {
         const saved = await journal(state, () =>
@@ -333,14 +270,6 @@ export async function runQueue(
     });
     if (!result.ok) return new Error(errorMessage(result.error));
     if (result.value instanceof Error) return result.value;
-    if (result.value === "wait" && !waiting)
-      emit("waiting for a clean main checkout");
-    if (result.value === "wait") {
-      waiting = true;
-      await Bun.sleep(2_000);
-      continue;
-    }
-    waiting = false;
     if (result.value !== 0) failed++;
   }
 }

@@ -123,8 +123,17 @@ function fixture() {
     '[user]\nname = "Landing Test"\nemail = "land@example.test"\n',
   );
   function jj(cwd: string, argv: string[]) {
+    // Revision assertions must not update a session's untouched (possibly stale) checkout.
+    const readOnly = argv[0] === "log" || argv[0] === "file";
     const result = Bun.spawnSync(
-      ["jj", "--no-pager", "--color", "never", ...argv],
+      [
+        "jj",
+        "--no-pager",
+        "--color",
+        "never",
+        ...(readOnly ? ["--ignore-working-copy"] : []),
+        ...argv,
+      ],
       { cwd, env, stdout: "pipe", stderr: "pipe", timeout: 30_000 },
     );
     expect(`${result.exitCode}: ${result.stderr.toString()}`).toStartWith("0:");
@@ -176,6 +185,12 @@ function fixture() {
     `#!${process.execPath}\nimport { appendFileSync, writeSync } from 'node:fs';
 appendFileSync(process.env.LAND_EVENTS, JSON.stringify(process.argv.slice(2)) + '\\n');
 const argv = process.argv.slice(2);
+if (argv[1] === 'commit' && process.env.LAND_CHECK_IGNORE === '1') {
+ const fs = await import('node:fs');
+ const path = await import('node:path');
+ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['commit-cwd', process.cwd()]) + '\\n');
+ if (fs.existsSync(path.join(process.cwd(), 'git/ignore')) && fs.readFileSync(path.join(process.cwd(), 'git/ignore'), 'utf8').includes('INVALID-LINT')) { process.stderr.write('lint:ignore refused\\n'); process.exit(9); }
+}
 if (argv[1] === 'deps' || argv[1] === 'hook:post-merge') process.exit(0);
 if (argv[1] === 'usehooks:consumers') { process.stdout.write('PASS fixture consumer\\n'); process.exit(process.env.LAND_FAIL_CONSUMERS === '1' ? 1 : 0); }
 if (argv[1] === 'doctor') { process.stdout.write('PASS fixture healthy\\nRESULT: PASS · FAIL 0 · WARN 0 · PASS 1 · SKIP 0\\n'); process.exit(0); }
@@ -306,7 +321,7 @@ appendFileSync(process.env.LAND_EVENTS, JSON.stringify(['format', '${formatter}'
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(LAND_FORMATTER_TEST_TIMEOUT_MS),
     });
   }
   return { main, worker, origin, jj, git, land, command, start, log, env };
@@ -393,9 +408,15 @@ describe("land workspace", () => {
       result.stdout.toString() + result.stderr.toString(),
     ).toBe(0);
     expect(
-      statSync(join(f.main, "tools", "fixture-bin", "src", "main.ts")).mode &
-        0o111,
-    ).not.toBe(0);
+      f.jj(f.main, [
+        "file",
+        "list",
+        "-r",
+        "alpha",
+        "-T",
+        'if(executable, path ++ "\\n")',
+      ]),
+    ).toContain("tools/fixture-bin/src/main.ts");
     expect(result.stdout.toString()).not.toContain("[land] NOT LIVE until:");
     expect(result.stdout.toString()).toContain("[land] summary: ok");
   });
@@ -471,13 +492,13 @@ describe("land workspace", () => {
       result.stdout.toString() + result.stderr.toString(),
     ).toBe(0);
     expect(
-      readFileSync(join(f.main, "tools", "agx", "package.json"), "utf8"),
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/package.json"]),
     ).toContain('"version": "1.1.0"');
     expect(
-      readFileSync(join(f.main, "tools", "agx", "CHANGELOG.md"), "utf8"),
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/CHANGELOG.md"]),
     ).toContain("- Fix a prior-ticket issue");
     expect(
-      readFileSync(join(f.main, "tools", "agx", "CHANGELOG.md"), "utf8"),
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/CHANGELOG.md"]),
     ).toContain("- Add a worker-ticket feature");
     expect(result.stdout.toString()).toContain(
       "agx 1.1.0 (1 changeset entries)",
@@ -910,8 +931,11 @@ describe("land workspace", () => {
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
     const result = f.land([], {}, f.worker);
     expect(result.exitCode).toBe(0);
+    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
+      "worker version",
+    );
     expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "worker version\n",
+      "keep content\n",
     );
     expect(existsSync(f.worker)).toBe(false);
   });
@@ -970,10 +994,12 @@ describe("land workspace", () => {
       expect(result.stdout.toString()).toContain(
         '[land] paths: ok ["new name.txt","old name.txt"]',
       );
-      expect(existsSync(join(f.main, "old name.txt"))).toBe(false);
-      expect(readFileSync(join(f.main, "new name.txt"), "utf8")).toBe(
-        "rename content\n",
+      expect(f.jj(f.main, ["file", "list", "-r", "alpha"])).not.toContain(
+        "old name.txt",
       );
+      expect(
+        f.jj(f.main, ["file", "show", "-r", "alpha", "new name.txt"]),
+      ).toBe("rename content");
       expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
         "unrelated dirty main\n",
       );
@@ -1002,25 +1028,152 @@ describe("land workspace", () => {
     rmSync(join(f.worker, "delete.txt"));
     const result = f.land();
     expect(result.exitCode).toBe(0);
-    expect(existsSync(join(f.main, "delete.txt"))).toBe(false);
+    expect(readFileSync(join(f.main, "delete.txt"), "utf8")).toBe(
+      "delete content\n",
+    );
     expect(f.jj(f.main, ["file", "list", "-r", "alpha"])).not.toContain(
       "delete.txt",
     );
   });
 
-  test("dirty main overlap is refused with its path before rebase or restore", () => {
+  test("LAND-OWN-TREE ignores main lint failures, commits only the worker and pushes alpha", () => {
+    const f = fixture();
+    mkdirSync(join(f.main, "git"));
+    writeFileSync(join(f.main, "git/ignore"), "*.fixture-cache\n");
+    f.jj(f.main, ["commit", "-m", "Tracked ignore fixture"]);
+    f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    f.jj(f.worker, ["rebase", "-r", "@", "-o", "alpha"]);
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    writeFileSync(join(f.main, "git/ignore"), "INVALID-LINT\n");
+    const before = readFileSync(join(f.main, "git/ignore"));
+    const alpha = f.jj(f.main, [
+      "log",
+      "-r",
+      "alpha",
+      "--no-graph",
+      "-T",
+      "commit_id",
+    ]);
+    const result = f.land([], { LAND_CHECK_IGNORE: "1" }, f.worker);
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(readFileSync(join(f.main, "git/ignore"))).toEqual(before);
+    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "git/ignore"])).toBe(
+      "*.fixture-cache",
+    );
+    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
+      "worker version",
+    );
+    const landed = f.jj(f.main, [
+      "log",
+      "-r",
+      "alpha",
+      "--no-graph",
+      "-T",
+      "commit_id",
+    ]);
+    expect(landed).not.toBe(alpha);
+    expect(
+      f.jj(f.main, [
+        "log",
+        "-r",
+        "alpha@origin",
+        "--no-graph",
+        "-T",
+        "commit_id",
+      ]),
+    ).toBe(landed);
+    expect(
+      f.git(dirname(f.main), [
+        "--git-dir",
+        f.origin,
+        "rev-parse",
+        "refs/heads/alpha",
+      ]),
+    ).toBe(landed);
+    expect(f.log().find((event) => event[0] === "commit-cwd")?.[1]).not.toBe(
+      f.main,
+    );
+  });
+
+  test("dirty main overlap is preserved while the worker lands independently", () => {
     const f = fixture();
     writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
     writeFileSync(join(f.main, "keep.txt"), "main version\n");
     const result = f.land();
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout.toString()).toContain(
-      '[land] preflight: FAIL dirty main checkout overlaps: ["keep.txt"]',
+    expect(result.exitCode).toBe(0);
+    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
+      "worker version",
     );
     expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
       "main version\n",
     );
+    expect(result.stdout.toString()).toContain("[land] push: ok");
+  });
+
+  test("LAND-OWN-TREE refuses its dirty tree with exact paths before rebase", () => {
+    const f = fixture();
+    const state = join(
+      f.env.AGX_STATE_DIR,
+      "land",
+      basename(landStateDir(realpathSync(f.main))),
+    );
+    const lander = join(state, "workspace");
+    mkdirSync(state, { recursive: true });
+    f.jj(f.main, [
+      "workspace",
+      "add",
+      "--name",
+      `land-owned-${basename(state)}`,
+      "-r",
+      "alpha",
+      lander,
+    ]);
+    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+    f.jj(f.worker, ["status"]);
+    const workerBefore = f.jj(f.worker, [
+      "log",
+      "--no-graph",
+      "-r",
+      "@",
+      "-T",
+      "commit_id",
+    ]);
+    const alphaBefore = f.jj(f.worker, [
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha",
+      "-T",
+      "commit_id",
+    ]);
+    writeFileSync(join(lander, "keep.txt"), "foreign land-tree edit\n");
+    const oddPath = "foreign\nname.txt";
+    writeFileSync(join(lander, oddPath), "foreign new file\n");
+    rmSync(join(lander, "delete.txt"));
+    const result = f.land();
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toContain(
+      `dirty land tree: ${JSON.stringify(["delete.txt", oddPath, "keep.txt"])}`,
+    );
+    expect(result.stdout.toString()).not.toContain("[land] rebase:");
     expect(f.log()).toEqual([]);
+    expect(
+      f.jj(f.worker, ["log", "--no-graph", "-r", "@", "-T", "commit_id"]),
+    ).toBe(workerBefore);
+    expect(
+      f.jj(f.worker, ["log", "--no-graph", "-r", "alpha", "-T", "commit_id"]),
+    ).toBe(alphaBefore);
+    expect(readFileSync(join(lander, "keep.txt"), "utf8")).toBe(
+      "foreign land-tree edit\n",
+    );
+    expect(readFileSync(join(lander, oddPath), "utf8")).toBe(
+      "foreign new file\n",
+    );
+    expect(existsSync(join(lander, "delete.txt"))).toBe(false);
+    expect(existsSync(join(state, "land.lock"))).toBe(false);
   });
 
   test("commit refusal preserves hook output and stops before deploy", () => {
@@ -1069,13 +1222,13 @@ describe("land workspace", () => {
       result.stdout.toString() + result.stderr.toString(),
     ).toBe(0);
     expect(
-      readFileSync(join(f.main, "tools", "agx", "package.json"), "utf8"),
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/package.json"]),
     ).toContain('"version": "1.0.1"');
     expect(
-      readFileSync(join(f.main, "tools", "agx", "CHANGELOG.md"), "utf8"),
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/CHANGELOG.md"]),
     ).toContain("- Accept delimiters without a blank line");
     expect(
-      readFileSync(join(f.main, "tools", "agx", "CHANGELOG.md"), "utf8"),
+      f.jj(f.main, ["file", "show", "-r", "alpha", "tools/agx/CHANGELOG.md"]),
     ).toContain("- Accept a delimiter-less changeset");
   });
 
@@ -1145,7 +1298,7 @@ describe("land workspace", () => {
     expect(result.stdout.toString()).toContain('conflicted on ["keep.txt"]');
     expect(result.stdout.toString()).toContain("workspace restored");
     expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "worker version\n",
+      "keep content\n",
     );
     expect(readFileSync(join(f.worker, "keep.txt"), "utf8")).toBe(
       "worker version\n",
@@ -1209,158 +1362,155 @@ describe("land workspace", () => {
     expect(status).not.toContain('"hosts"');
   });
 
-  test("the queue lands two items serially, records a failure, and continues", () => {
-    const f = fixture();
-    const second = join(dirname(f.worker), "second-worker");
-    f.jj(f.main, [
-      "workspace",
-      "add",
-      "--name",
-      "second",
-      "-r",
-      "alpha",
-      second,
-    ]);
-    writeFileSync(join(f.worker, "keep.txt"), "failed worker\n");
-    writeFileSync(join(second, "delete.txt"), "successful worker\n");
-    mkdirSync(f.env.AGX_STATE_DIR, { recursive: true });
-    appendFileSync(
-      join(f.env.AGX_STATE_DIR, "runs.jsonl"),
-      `${JSON.stringify({ kind: "run", run_id: "queued-run", cwd: second, ticket: { name: "queued" } })}\n`,
-    );
-    appendAcceptance(f.env.AGX_STATE_DIR, "queued-run");
-    expect(
-      f.command(["--enqueue", f.worker, "-m", "Fail queued"]).exitCode,
-    ).toBe(0);
-    expect(
-      f.command([
-        "--enqueue",
+  test(
+    "the queue lands two items serially, records a failure, and continues",
+    () => {
+      const f = fixture();
+      const second = join(dirname(f.worker), "second-worker");
+      f.jj(f.main, [
+        "workspace",
+        "add",
+        "--name",
         "second",
-        "-m",
-        "Good queued",
-        "--review",
-        "queued-review",
-      ]).exitCode,
+        "-r",
+        "alpha",
+        second,
+      ]);
+      writeFileSync(join(f.worker, "keep.txt"), "failed worker\n");
+      writeFileSync(join(second, "delete.txt"), "successful worker\n");
+      mkdirSync(f.env.AGX_STATE_DIR, { recursive: true });
+      appendFileSync(
+        join(f.env.AGX_STATE_DIR, "runs.jsonl"),
+        `${JSON.stringify({ kind: "run", run_id: "queued-run", cwd: second, ticket: { name: "queued" } })}\n`,
+      );
+      appendAcceptance(f.env.AGX_STATE_DIR, "queued-run");
+      expect(
+        f.command(["--enqueue", f.worker, "-m", "Fail queued"]).exitCode,
+      ).toBe(0);
+      expect(
+        f.command([
+          "--enqueue",
+          "second",
+          "-m",
+          "Good queued",
+          "--review",
+          "queued-review",
+        ]).exitCode,
+      ).toBe(0);
+      const result = f.command(["--run-queue"]);
+      expect(
+        result.exitCode,
+        result.stdout.toString() + result.stderr.toString(),
+      ).toBe(1);
+      expect(result.stdout.toString()).toContain("FAIL " + f.worker);
+      expect(result.stdout.toString()).toContain("OK second");
+      expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
+        "keep content\n",
+      );
+      expect(f.jj(f.main, ["file", "show", "-r", "alpha", "delete.txt"])).toBe(
+        "successful worker",
+      );
+      expect(existsSync(second)).toBe(false);
+      expect(f.log().filter((event) => event[0] === "agx")).toEqual([]);
+      const state = landStateDir(realpathSync(f.main));
+      // State belongs to this isolated fixture, rather than the test runner's own AGX state.
+      const actualState = join(f.env.AGX_STATE_DIR, "land", basename(state));
+      const journal = readFileSync(join(actualState, "queue.jsonl"), "utf8");
+      expect(journal).toContain('"status":"FAIL"');
+      expect(journal).toContain('"status":"OK"');
+      expect(existsSync(join(actualState, "runner.lock"))).toBe(false);
+      expect(existsSync(join(actualState, "land.lock"))).toBe(false);
+      const status = jsonOf(
+        z.looseObject({
+          pending: z.number(),
+          running: z.number(),
+          OK: z.number(),
+          FAIL: z.number(),
+        }),
+      ).safeParse(f.command(["--queue-status"]).stdout.toString());
+      expect(status.success ? status.data : undefined).toMatchObject({
+        pending: 0,
+        running: 0,
+        OK: 1,
+        FAIL: 1,
+      });
+      expect(f.command(["--run-queue"]).exitCode).toBe(0);
+    },
+    LAND_FORMATTER_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "a duplicate runner is idempotent and queued work waits for the land lock",
+    async () => {
+      const f = fixture();
+      writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
+      expect(
+        f.command(["--enqueue", f.worker, "-m", "Queued once"]).exitCode,
+      ).toBe(0);
+      const state = join(
+        f.env.AGX_STATE_DIR,
+        "land",
+        basename(landStateDir(realpathSync(f.main))),
+      );
+      const held = tryAcquire(join(state, "land.lock"), {
+        pid: process.pid,
+        host: hostname(),
+        what: "fixture held land",
+        since: Temporal.Now.instant().toString(),
+      });
+      expect(held.ok).toBe(true);
+      if (!held.ok) return;
+      using _held = { [Symbol.dispose]: held.release };
+      const child = f.start(["--run-queue"]);
+      const stderr = new Response(child.stderr).text();
+      const reader = child.stdout.getReader();
+      const first = await reader.read();
+      expect(new TextDecoder().decode(first.value)).toContain(
+        "waiting for land lock",
+      );
+      const rest = drain(reader).finally(() => {
+        reader.releaseLock();
+      });
+      const duplicate = f.command(["--run-queue"]);
+      expect(duplicate.exitCode).toBe(0);
+      expect(duplicate.stdout.toString()).toContain("runner already active");
+      expect(f.log()).toEqual([]);
+      expect(readFileSync(join(state, "queue.jsonl"), "utf8")).not.toContain(
+        '"kind":"start"',
+      );
+      held.release();
+      const [code, out, err] = await Promise.all([child.exited, rest, stderr]);
+      expect(code, out + err).toBe(0);
+      expect(f.log().filter((event) => event[1] === "commit")).toHaveLength(1);
+      expect(existsSync(join(state, "runner.lock"))).toBe(false);
+    },
+    LAND_FORMATTER_TEST_TIMEOUT_MS,
+  );
+
+  test("queued work lands without waiting for a dirty main checkout", () => {
+    const f = fixture();
+    writeFileSync(join(f.worker, "delete.txt"), "queued change\n");
+    writeFileSync(join(f.main, "keep.txt"), "owner uncommitted work\n");
+    expect(
+      f.command(["--enqueue", f.worker, "-m", "Dirty main is independent"])
+        .exitCode,
     ).toBe(0);
     const result = f.command(["--run-queue"]);
     expect(
       result.exitCode,
       result.stdout.toString() + result.stderr.toString(),
-    ).toBe(1);
-    expect(result.stdout.toString()).toContain("FAIL " + f.worker);
-    expect(result.stdout.toString()).toContain("OK second");
-    expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "keep content\n",
-    );
-    expect(readFileSync(join(f.main, "delete.txt"), "utf8")).toBe(
-      "successful worker\n",
-    );
-    expect(existsSync(second)).toBe(false);
-    expect(f.log().filter((event) => event[0] === "agx")).toEqual([]);
-    const state = landStateDir(realpathSync(f.main));
-    // State belongs to this isolated fixture, rather than the test runner's own AGX state.
-    const actualState = join(f.env.AGX_STATE_DIR, "land", basename(state));
-    const journal = readFileSync(join(actualState, "queue.jsonl"), "utf8");
-    expect(journal).toContain('"status":"FAIL"');
-    expect(journal).toContain('"status":"OK"');
-    expect(existsSync(join(actualState, "runner.lock"))).toBe(false);
-    expect(existsSync(join(actualState, "land.lock"))).toBe(false);
-    const status = jsonOf(
-      z.looseObject({
-        pending: z.number(),
-        running: z.number(),
-        OK: z.number(),
-        FAIL: z.number(),
-      }),
-    ).safeParse(f.command(["--queue-status"]).stdout.toString());
-    expect(status.success ? status.data : undefined).toMatchObject({
-      pending: 0,
-      running: 0,
-      OK: 1,
-      FAIL: 1,
-    });
-    expect(f.command(["--run-queue"]).exitCode).toBe(0);
-  }, 25_000);
-
-  test("a duplicate runner is idempotent and queued work waits for the land lock", async () => {
-    const f = fixture();
-    writeFileSync(join(f.worker, "keep.txt"), "worker version\n");
-    expect(
-      f.command(["--enqueue", f.worker, "-m", "Queued once"]).exitCode,
     ).toBe(0);
-    const state = join(
-      f.env.AGX_STATE_DIR,
-      "land",
-      basename(landStateDir(realpathSync(f.main))),
-    );
-    const held = tryAcquire(join(state, "land.lock"), {
-      pid: process.pid,
-      host: hostname(),
-      what: "fixture held land",
-      since: Temporal.Now.instant().toString(),
-    });
-    expect(held.ok).toBe(true);
-    if (!held.ok) return;
-    using _held = { [Symbol.dispose]: held.release };
-    const child = f.start(["--run-queue"]);
-    const stderr = new Response(child.stderr).text();
-    const reader = child.stdout.getReader();
-    const first = await reader.read();
-    expect(new TextDecoder().decode(first.value)).toContain(
-      "waiting for land lock",
-    );
-    const rest = drain(reader).finally(() => {
-      reader.releaseLock();
-    });
-    const duplicate = f.command(["--run-queue"]);
-    expect(duplicate.exitCode).toBe(0);
-    expect(duplicate.stdout.toString()).toContain("runner already active");
-    expect(f.log()).toEqual([]);
-    expect(readFileSync(join(state, "queue.jsonl"), "utf8")).not.toContain(
-      '"kind":"start"',
-    );
-    held.release();
-    const [code, out, err] = await Promise.all([child.exited, rest, stderr]);
-    expect(code, out + err).toBe(0);
-    expect(f.log().filter((event) => event[1] === "commit")).toHaveLength(1);
-    expect(existsSync(join(state, "runner.lock"))).toBe(false);
-  }, 25_000);
-
-  test("queued work waits for a clean main without consuming the head", async () => {
-    const f = fixture();
-    writeFileSync(join(f.worker, "delete.txt"), "queued change\n");
-    writeFileSync(join(f.main, "keep.txt"), "owner's uncommitted work\n");
-    expect(
-      f.command(["--enqueue", f.worker, "-m", "After main is clean"]).exitCode,
-    ).toBe(0);
-    const child = f.start(["--run-queue"]);
-    const stderr = new Response(child.stderr).text();
-    const reader = child.stdout.getReader();
-    const first = await reader.read();
-    expect(new TextDecoder().decode(first.value)).toContain(
-      "waiting for a clean main checkout",
-    );
-    const rest = drain(reader).finally(() => {
-      reader.releaseLock();
-    });
-    expect(f.log()).toEqual([]);
+    expect(result.stdout.toString()).not.toContain("waiting for a clean main");
     expect(readFileSync(join(f.main, "keep.txt"), "utf8")).toBe(
-      "owner's uncommitted work\n",
+      "owner uncommitted work\n",
     );
-    const status = jsonOf(
-      z.looseObject({ pending: z.number(), running: z.number() }),
-    ).safeParse(f.command(["--queue-status"]).stdout.toString());
-    expect(status.success ? status.data : undefined).toMatchObject({
-      pending: 1,
-      running: 0,
-    });
-    f.jj(f.main, ["restore", "--from", "@-", "--", "keep.txt"]);
-    const [code, out, err] = await Promise.all([child.exited, rest, stderr]);
-    expect(code, out + err).toBe(0);
-    expect(readFileSync(join(f.main, "delete.txt"), "utf8")).toBe(
-      "queued change\n",
+    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "delete.txt"])).toBe(
+      "queued change",
     );
-  }, 25_000);
+    expect(f.jj(f.main, ["file", "show", "-r", "alpha", "keep.txt"])).toBe(
+      "keep content",
+    );
+  });
 });
 
 test("a missing or timed-out doctor cannot report healthy counts", () => {

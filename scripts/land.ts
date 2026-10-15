@@ -6,11 +6,13 @@ import {
   existsSync,
   lstatSync,
   mkdtempSync,
+  mkdirSync,
   readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
@@ -33,9 +35,14 @@ import {
   validPath,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
 import { dispatchStateDir } from "../tools/shared/src/dispatch-state.ts";
-import { enqueue, landLock, queueStatus, runQueue } from "./land-queue.ts";
+import {
+  enqueue,
+  landLock,
+  landStateDir,
+  queueStatus,
+  runQueue,
+} from "./land-queue.ts";
 import { applyToolChangesets } from "./land-changesets.ts";
-import { renderRefusal } from "./render-source.ts";
 import {
   landExit,
   landLiveness,
@@ -375,6 +382,12 @@ const jj = (cwd: string, argv: string[]) =>
   run(cwd, ["jj", "--no-pager", "--color", "never", ...argv]);
 const read = (cwd: string, argv: string[]) =>
   jj(cwd, ["--ignore-working-copy", "--at-operation=@", ...argv]);
+// Land already executes the accepted candidate's tasks. Scope mise trust to that owned
+// workspace for these subprocesses; a fresh state-directory path has no persisted trust.
+const landEnvironment = (root: string): NodeJS.ProcessEnv => ({
+  ...process.env,
+  MISE_TRUSTED_CONFIG_PATHS: root,
+});
 function usehooksConsumerGate(
   root: string,
   changed: string[],
@@ -383,11 +396,11 @@ function usehooksConsumerGate(
   return safeTry(async function* () {
     if (!changed.some((path) => path.startsWith("tools/agx-usehooks/")))
       return ok("");
-    const consumers = await run(root, [
-      process.env.LAND_MISE ?? "mise",
-      "run",
-      "usehooks:consumers",
-    ]);
+    const consumers = await run(
+      root,
+      [process.env.LAND_MISE ?? "mise", "run", "usehooks:consumers"],
+      landEnvironment(root),
+    );
     if (consumers.isErr()) {
       yield* jj(root, ["restore", "--from", alpha, "--", ...filesets(changed)]);
       return consumers;
@@ -580,28 +593,21 @@ function paths(
   });
 }
 
-function overlap(left: string[], right: string[]): string[] {
-  return left.filter((a) =>
-    right.some(
-      (b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`),
-    ),
-  );
-}
-
 const previewFilter = (src: string) => basename(src) !== "node_modules";
 
 function previewCopies(
   primary: string,
   worker: string,
+  lander: string,
   tmp: string,
-): { main: string; worker: string } {
+): { main: string; worker: string; lander: string } {
   const copyMain = join(tmp, "main");
   const copyWorker = join(tmp, "worker");
-  cpSync(primary, copyMain, {
-    recursive: true,
-    filter: previewFilter,
-    verbatimSymlinks: true,
-  });
+  const copyLander = join(tmp, "lander");
+  // Copy repository metadata, never another session's main working tree.
+  mkdirSync(copyMain);
+  for (const entry of [".jj", ".git"])
+    cpSync(join(primary, entry), join(copyMain, entry), { recursive: true });
   cpSync(worker, copyWorker, {
     recursive: true,
     filter: previewFilter,
@@ -613,7 +619,58 @@ function previewCopies(
     join(copyMain, ".git"),
   );
   writeFileSync(join(copyWorker, ".jj", "repo"), join(copyMain, ".jj", "repo"));
-  return { main: copyMain, worker: copyWorker };
+  if (existsSync(lander)) {
+    cpSync(lander, copyLander, {
+      recursive: true,
+      filter: previewFilter,
+      verbatimSymlinks: true,
+    });
+    writeFileSync(
+      join(copyLander, ".jj", "repo"),
+      join(copyMain, ".jj", "repo"),
+    );
+  }
+  return { main: copyMain, worker: copyWorker, lander: copyLander };
+}
+
+// A stable workspace under the same per-repository lock/state namespace. Only land writes it.
+// Refuse foreign edits BEFORE resetting to alpha, rebasing, formatting or committing anything.
+function prepareLander(
+  source: string,
+  root: string,
+  name: string,
+): ResultAsync<string, Error> {
+  return safeTry(async function* () {
+    if (!existsSync(root)) {
+      yield* jj(source, [
+        "workspace",
+        "add",
+        "--name",
+        name,
+        "-r",
+        "alpha",
+        root,
+      ]);
+    }
+    yield* jj(root, ["status"]);
+    const dirty = yield* paths(root, "@-", "@");
+    if (dirty.length > 0)
+      return reject(`dirty land tree: ${JSON.stringify(dirty)}`);
+    if ((yield* at(root, "@", "conflict")) !== "false")
+      return reject("land tree has conflicts");
+    const alpha = yield* at(root, "alpha");
+    yield* jj(root, ["new", alpha]);
+    // Dependencies are installation state, not candidate source. Reuse the running tool's
+    // installed packages without running deps (which also changes global command links).
+    const modules = resolve(import.meta.dir, "../node_modules");
+    if (
+      existsSync(join(root, "package.json")) &&
+      existsSync(modules) &&
+      !existsSync(join(root, "node_modules"))
+    )
+      symlinkSync(modules, join(root, "node_modules"), "dir");
+    return ok(alpha);
+  });
 }
 
 function format(root: string, changed: string[]): ResultAsync<void, Error> {
@@ -649,10 +706,11 @@ function format(root: string, changed: string[]): ResultAsync<void, Error> {
       );
       // ./ forces a leading dash filename to be a path for every formatter.
       if (selected.length > 0)
-        yield* run(root, [
-          ...group.command,
-          ...selected.map((path) => `./${path}`),
-        ]);
+        yield* run(
+          root,
+          [...group.command, ...selected.map((path) => `./${path}`)],
+          landEnvironment(root),
+        );
     }
     return ok(undefined);
   });
@@ -688,8 +746,7 @@ async function main(
         runQueue: {
           type: Boolean,
           default: false,
-          description:
-            "Drain queued work, waiting for the land lock and a clean main checkout.",
+          description: "Drain queued work, waiting for the land lock.",
         },
         queueStatus: {
           type: Boolean,
@@ -787,6 +844,12 @@ async function main(
   let landedRoot: string | undefined;
   let restoredPaths: string[] = [];
   const report: LandReport = { commit: "pending", push: "pending" };
+  let releaseLand: (() => void) | undefined;
+  using _landLock = {
+    [Symbol.dispose]: () => {
+      releaseLand?.();
+    },
+  };
   const captured = await attempt(() =>
     safeTry(async function* () {
       if (parsed._.length !== 1 || (parsed.flags.message?.trim() ?? "") === "")
@@ -794,11 +857,13 @@ async function main(
       if (parsed.flags.review?.trim() === "")
         return reject("--review requires a non-empty agx run ID");
       const root = (yield* read(process.cwd(), ["workspace", "root"])).trim();
-      let mainRoot = mainCheckout(root);
+      const mainRoot = mainCheckout(root);
       const release = queueLockHeld ? () => {} : await landLock(mainRoot);
       if (release instanceof Error) return reject(release.message);
-      using _landLock = { [Symbol.dispose]: release };
-      landedRoot = mainRoot;
+      releaseLand = release;
+      const state = landStateDir(mainRoot);
+      let landerRoot = join(state, "workspace");
+      const landerName = `land-owned-${basename(state)}`;
       const requestedWorkspace = parsed._[0] ?? "";
       const workspace = await resolveWorkspace(root, requestedWorkspace);
       if (workspace.path === undefined || workspace.name === undefined) {
@@ -812,7 +877,11 @@ async function main(
       const workspaceName = workspace.name;
       let workerRoot = workspace.path;
       emit(`[land] workspace: ok ${workspaceName}`);
-      if (workerRoot === mainRoot || !existsSync(workerRoot))
+      if (
+        workerRoot === mainRoot ||
+        workerRoot === landerRoot ||
+        !existsSync(workerRoot)
+      )
         return reject(
           "worker workspace must exist and differ from the main checkout",
         );
@@ -823,10 +892,12 @@ async function main(
         ? mkdtempSync(join(tmpdir(), "land-preview-"))
         : undefined;
       if (tmp !== undefined) {
-        const copies = previewCopies(mainRoot, workerRoot, tmp);
-        mainRoot = copies.main;
+        const copies = previewCopies(mainRoot, workerRoot, landerRoot, tmp);
         workerRoot = copies.worker;
+        landerRoot = copies.lander;
       }
+      const alpha = yield* prepareLander(workerRoot, landerRoot, landerName);
+      landedRoot = parsed.flags.dryRun ? undefined : landerRoot;
       const verdicts = parsed.flags.dryRun
         ? []
         : yield* workspacePreflightVerdicts(workerRoot);
@@ -846,26 +917,12 @@ async function main(
           `[land] judgment: ok ${verdicts.length} accepted ticket lineage(s)`,
         );
       yield* jj(workerRoot, ["status"]);
-      yield* jj(mainRoot, ["status"]);
-      const alpha = yield* at(mainRoot, "alpha");
       if ((yield* at(workerRoot, "@", "conflict")) !== "false")
         return reject("workspace change has conflicts");
       const initial = yield* paths(workerRoot, "@-", "@");
       if (initial.length === 0) return reject("workspace change is empty");
-      const dirty = yield* paths(mainRoot, "@-", "@");
-      const renderDirty = await renderRefusal(mainRoot);
-      if (renderDirty !== undefined) return reject(renderDirty.message);
-      const refused = overlap(initial, dirty);
-      if (refused.length > 0)
-        return reject(
-          `dirty main checkout overlaps: ${JSON.stringify(refused)}`,
-        );
-      if ((yield* at(mainRoot, "@-", "commit_id")) !== alpha)
-        return reject(
-          "main checkout parent must be alpha; run mise run pull first",
-        );
       emit(
-        "[land] preflight: ok workspace is non-empty, conflict-free and disjoint",
+        "[land] preflight: ok land tree is clean; workspace is non-empty and conflict-free",
       );
       stage = "rebase";
       yield* jj(workerRoot, ["rebase", "-r", "@", "-o", alpha]);
@@ -883,7 +940,7 @@ async function main(
       if (changed.length === 0)
         return reject("workspace change is empty after rebase");
       const basePaths = new Set(
-        (yield* jj(mainRoot, [
+        (yield* jj(landerRoot, [
           "file",
           "list",
           "-r",
@@ -894,17 +951,12 @@ async function main(
           .split("\0")
           .filter((path) => path !== ""),
       );
-      const collisions = overlap(changed, dirty);
-      if (collisions.length > 0)
-        return reject(
-          `dirty main checkout overlaps: ${JSON.stringify(collisions)}`,
-        );
       emit(`[land] paths: ok ${JSON.stringify(changed)}`);
       stage = "restore";
       const rev = yield* at(workerRoot, "@");
       if (!parsed.flags.dryRun) restoredPaths = changed;
       if (!parsed.flags.dryRun)
-        yield* jj(mainRoot, [
+        yield* jj(landerRoot, [
           "restore",
           "--from",
           rev,
@@ -916,7 +968,7 @@ async function main(
       );
       if (!parsed.flags.dryRun) {
         stage = "changesets";
-        const appliedChangesets = applyToolChangesets(mainRoot);
+        const appliedChangesets = applyToolChangesets(landerRoot);
         if (appliedChangesets.isErr())
           return reject(errorMessage(appliedChangesets.error));
         const landedChangesets = appliedChangesets.value;
@@ -940,26 +992,34 @@ async function main(
           );
       }
       stage = "format";
-      if (!parsed.flags.dryRun) yield* format(mainRoot, changed);
+      if (!parsed.flags.dryRun) yield* format(landerRoot, changed);
       emit(
         `[land] format: ok ${parsed.flags.dryRun ? "would format existing paths" : "formatted existing paths"}`,
       );
       stage = "commit";
       if (!parsed.flags.dryRun) {
-        const consumers = yield* usehooksConsumerGate(mainRoot, changed, alpha);
+        const consumers = yield* usehooksConsumerGate(
+          landerRoot,
+          changed,
+          alpha,
+        );
         if (consumers !== "") emit(consumers.trimEnd());
-        const before = yield* at(mainRoot, "@-");
-        const committed = await run(mainRoot, [
-          process.env.LAND_MISE ?? "mise",
-          "run",
-          "commit",
-          "--",
-          "-m",
-          parsed.flags.message ?? "",
-          "--",
-          ...changed,
-        ]);
-        const after = await at(mainRoot, "@-");
+        const before = yield* at(landerRoot, "@-");
+        const committed = await run(
+          landerRoot,
+          [
+            process.env.LAND_MISE ?? "mise",
+            "run",
+            "commit",
+            "--",
+            "-m",
+            parsed.flags.message ?? "",
+            "--",
+            ...changed,
+          ],
+          landEnvironment(landerRoot),
+        );
+        const after = await at(landerRoot, "@-");
         if (after.isOk() && after.value !== before) commit = after.value;
         if (commit !== undefined) {
           report.commit = "ok";
@@ -969,7 +1029,7 @@ async function main(
         const failedCommitUnchanged =
           committed.isErr() && after.isOk() && after.value === before;
         if (failedCommitUnchanged)
-          yield* jj(mainRoot, [
+          yield* jj(landerRoot, [
             "restore",
             "--from",
             alpha,
@@ -984,13 +1044,13 @@ async function main(
       if (parsed.flags.dryRun) emit("[land] commit: ok preview gated commit");
       if (!parsed.flags.dryRun) {
         stage = "push";
-        yield* pushLandCommit(mainRoot, commit ?? "@-");
+        yield* pushLandCommit(landerRoot, commit ?? "@-");
       }
       report.push = "ok";
       emit(`[land] push: ok ${parsed.flags.dryRun ? "preview" : commit}`);
       if (!parsed.flags.dryRun) {
         const deployChanges = yield* landDeployChanges(
-          mainRoot,
+          landerRoot,
           changed,
           alpha,
           commit ?? "alpha",
@@ -1012,7 +1072,7 @@ async function main(
         );
         emit(`[land] landed: recorded ${recorded} run(s)`);
         stage = "workspace";
-        yield* jj(root, ["workspace", "forget", workspaceName]);
+        yield* jj(landerRoot, ["workspace", "forget", workspaceName]);
         rmSync(workerRoot, { recursive: true, force: true });
         emit(`[land] workspace: removed ${workspaceName}`);
       }

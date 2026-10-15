@@ -46,10 +46,10 @@
 //        1 for Cleye's native ordinary-unknown-flag refusal, or for a genuinely unexpected
 //        internal error with no shell analogue (FATAL on stderr only for the latter).
 
-import { existsSync, readFileSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import { attempt } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 class UsageError extends Error {}
@@ -192,12 +192,13 @@ export function commOnlyInSecond(a: string[], b: string[]): string[] {
 // `.mcpServers | keys[]` — jq's `keys` (unlike `keys_unsorted`) sorts alphabetically; this is
 // what actually decides registration order, not the file's own key order. Verified live against
 // the repo's real .mcp.json before porting.
-export function loadMcpServers(
+export async function loadMcpServers(
   mcpJsonPath: string,
-): Record<string, ServerEntry> {
-  const parsed = fromThrowable(() => readFileSync(mcpJsonPath, "utf8"))()
-    .map((text) => jsonOf(McpJsonSchema).safeParse(text))
-    .unwrapOr(undefined);
+): Promise<Record<string, ServerEntry>> {
+  const text = await attempt(() => readFile(mcpJsonPath, "utf8"));
+  const parsed = text.ok
+    ? jsonOf(McpJsonSchema).safeParse(text.value)
+    : undefined;
   return parsed?.success === true ? (parsed.data.mcpServers ?? {}) : {};
 }
 
@@ -209,10 +210,13 @@ const RUNTIME_FOR_COMMAND: Readonly<Record<string, string>> = {
 };
 
 /** Split configured stdio servers by runtime availability; the lookup is injected for tests. */
-export function partitionAvailableServers(
+export async function partitionAvailableServers(
   servers: Record<string, ServerEntry>,
-  hasTool: (tool: string) => boolean,
-): { available: Record<string, ServerEntry>; skipped: SkippedServer[] } {
+  hasTool: (tool: string) => boolean | Promise<boolean>,
+): Promise<{
+  available: Record<string, ServerEntry>;
+  skipped: SkippedServer[];
+}> {
   const available: Record<string, ServerEntry> = {};
   const skipped: SkippedServer[] = [];
 
@@ -224,7 +228,7 @@ export function partitionAvailableServers(
     }
 
     const missingTool = RUNTIME_FOR_COMMAND[command] ?? command;
-    if (hasTool(missingTool)) {
+    if (await hasTool(missingTool)) {
       available[name] = entry;
     } else {
       skipped.push({ name, command, missingTool });
@@ -257,18 +261,22 @@ export function buildPlan(name: string, entry: ServerEntry): Plan {
 
 /** `command -v bin`: a fixture path (contains "/") is checked for existence; a bare name is
  * resolved on PATH via Bun.which. */
-function which(bin: string): boolean {
-  if (bin.includes("/")) return existsSync(bin);
+async function which(bin: string): Promise<boolean> {
+  if (bin.includes("/")) return (await attempt(() => access(bin))).ok;
   return Bun.which(bin) !== null;
 }
 
 /** Best-effort subprocess call whose failure is swallowed — mirrors `cmd 2>/dev/null || true`
  * (stdout inherited, stderr discarded, exit code and thrown ENOENT both ignored). */
-function runIgnoringFailure(bin: string, args: string[]): void {
+async function runIgnoringFailure(bin: string, args: string[]): Promise<void> {
   // command-not-found or any other spawn failure: swallowed, matching `|| true`.
-  fromThrowable(Bun.spawnSync)([bin, ...args], {
-    stdout: "inherit",
-    stderr: "ignore",
+  await attempt(async () => {
+    const proc = Bun.spawn([bin, ...args], {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "ignore",
+    });
+    await proc.exited;
   });
 }
 
@@ -291,21 +299,28 @@ export class AbortError extends Error {
  * (stdout+stderr inherited), and a nonzero exit (or a failed spawn, e.g. binary missing) throws
  * an AbortError carrying that exit code, aborting the whole run exactly where the shell would
  * have. */
-function runOrAbort(bin: string, args: string[]): AbortError | undefined {
-  const exitCode = fromThrowable(Bun.spawnSync)([bin, ...args], {
-    stdout: "inherit",
-    stderr: "inherit",
-  }).match(
-    (proc) => proc.exitCode ?? 1,
-    () => {
-      // Disclosed divergence (accepted): real bash prints "bash: line N: <bin>: command not
-      // found" on this path. This message is a port-invented approximation of that diagnostic,
-      // not a byte-for-byte transcript — byte-matching bash's own prefix is neither achievable
-      // nor desirable in a port.
-      process.stderr.write(`${bin}: command not found\n`);
-      return 127;
-    },
-  );
+async function runOrAbort(
+  bin: string,
+  args: string[],
+): Promise<AbortError | undefined> {
+  const result = await attempt(async () => {
+    const proc = Bun.spawn([bin, ...args], {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    return proc.exited;
+  });
+  let exitCode: number;
+  if (result.ok) exitCode = result.value;
+  else {
+    // Disclosed divergence (accepted): real bash prints "bash: line N: <bin>: command not
+    // found" on this path. This message is a port-invented approximation of that diagnostic,
+    // not a byte-for-byte transcript — byte-matching bash's own prefix is neither achievable
+    // nor desirable in a port.
+    process.stderr.write(`${bin}: command not found\n`);
+    exitCode = 127;
+  }
   if (exitCode !== 0) {
     return new AbortError(
       `${bin} ${args.join(" ")} failed (exit ${exitCode})`,
@@ -317,11 +332,11 @@ function runOrAbort(bin: string, args: string[]): AbortError | undefined {
 
 /** `mcp add` (or its dry-run announcement), shared by both the Claude and Codex call sites since
  * each just builds an argv array and branches on --dry-run the same way. */
-function runOrPrintAdd(
+async function runOrPrintAdd(
   bin: string,
   args: string[],
   dryRun: boolean,
-): AbortError | undefined {
+): Promise<AbortError | undefined> {
   if (dryRun) print(`[dry-run] would run: ${bin} ${args.join(" ")}`);
   else return runOrAbort(bin, args);
   return undefined;
@@ -340,31 +355,31 @@ function registerWithCodex(
 }
 
 /** One undeclared-but-live server's removal for MCP_PRUNE=1. Codex owns its managed-name pruning. */
-function pruneServer(
+async function pruneServer(
   name: string,
   claudeBin: string,
   _codexBin: string,
   dryRun: boolean,
-): void {
+): Promise<void> {
   if (dryRun) {
     print(
       `[dry-run] would run: ${claudeBin} mcp remove -s user ${name} (errors ignored)`,
     );
     return;
   }
-  runIgnoringFailure(claudeBin, ["mcp", "remove", "-s", "user", name]);
+  await runIgnoringFailure(claudeBin, ["mcp", "remove", "-s", "user", name]);
 }
 
 /** The DRIFT REPORT's undeclared-name computation and printing (see main()'s comment above its
  * call site for the semantics); split out purely to keep this out of main()'s own nesting. */
-function printDriftReport(
+async function printDriftReport(
   declared: string[],
   liveNames: string[],
   claudeBin: string,
   codexBin: string,
   dryRun: boolean,
   prune: boolean,
-): void {
+): Promise<void> {
   const undeclared = commOnlyInSecond(declared, liveNames);
   if (undeclared.length === 0) return;
   print("--- DRIFT: registered but NOT declared in .mcp.json ---");
@@ -379,12 +394,12 @@ function printDriftReport(
     return;
   }
   for (const name of undeclared) {
-    pruneServer(name, claudeBin, codexBin, dryRun);
+    await pruneServer(name, claudeBin, codexBin, dryRun);
     print(`  pruned: ${name}`);
   }
 }
 
-function main(): AbortError | UsageError | undefined {
+async function main(): Promise<AbortError | UsageError | undefined> {
   const parsed = cli(
     {
       name: "install-mcp.ts",
@@ -450,8 +465,8 @@ function main(): AbortError | UsageError | undefined {
 
   // cocoindex-code is an optional uv tool used by the repository's retrieval skill.
   // A missing uv runtime should skip this optional server, not abort dotfile deployment.
-  const cccAvailable = which(cccBin);
-  const uvAvailable = which(uvBin);
+  const cccAvailable = await which(cccBin);
+  const uvAvailable = await which(uvBin);
   let installFailure: AbortError | undefined;
   if (isUnavailable(cccAvailable) && isUnavailable(uvAvailable)) {
     print(
@@ -461,7 +476,7 @@ function main(): AbortError | UsageError | undefined {
     const uvArgs = ["tool", "install", "--upgrade", "cocoindex-code[full]"];
     print(`[dry-run] would run: ${uvBin} ${uvArgs.join(" ")}`);
   } else if (isUnavailable(cccAvailable)) {
-    installFailure = runOrAbort(uvBin, [
+    installFailure = await runOrAbort(uvBin, [
       "tool",
       "install",
       "--upgrade",
@@ -470,9 +485,9 @@ function main(): AbortError | UsageError | undefined {
   }
   if (installFailure !== undefined) return installFailure;
 
-  const servers = loadMcpServers(mcpJsonPath);
+  const servers = await loadMcpServers(mcpJsonPath);
   const names = Object.keys(servers).toSorted();
-  const partition = partitionAvailableServers(servers, (tool) =>
+  const partition = await partitionAvailableServers(servers, (tool) =>
     which(tool === "uv" ? uvBin : tool),
   );
   for (const skipped of partition.skipped) {
@@ -489,17 +504,23 @@ function main(): AbortError | UsageError | undefined {
         `[dry-run] would run: ${claudeBin} mcp remove -s user ${name} (errors ignored)`,
       );
     } else {
-      runIgnoringFailure(claudeBin, ["mcp", "remove", "-s", "user", name]);
+      await runIgnoringFailure(claudeBin, [
+        "mcp",
+        "remove",
+        "-s",
+        "user",
+        name,
+      ]);
     }
 
     const addArgs =
       plan.url !== ""
         ? ["mcp", "add", "-s", "user", "--transport", plan.type, name, plan.url]
         : ["mcp", "add", "-s", "user", name, "--", ...plan.execTokens];
-    const claudeFailure = runOrPrintAdd(claudeBin, addArgs, dryRun);
+    const claudeFailure = await runOrPrintAdd(claudeBin, addArgs, dryRun);
     if (claudeFailure !== undefined) return claudeFailure;
 
-    const codexFailure = which(codexBin)
+    const codexFailure = (await which(codexBin))
       ? registerWithCodex(codexBin, plan, dryRun)
       : undefined;
     if (codexFailure !== undefined) return codexFailure;
@@ -517,12 +538,19 @@ function main(): AbortError | UsageError | undefined {
   const declared = names; // already alphabetically sorted, matching jq's `keys[] | sort`
   // matches the shell: a failed `claude mcp list` still ends in `| sort`, whose own exit status
   // is what `set -e` sees — never an abort.
-  const liveText = fromThrowable(Bun.spawnSync)([claudeBin, "mcp", "list"], {
-    stdout: "pipe",
-    stderr: "ignore",
-  })
-    .map((proc) => proc.stdout?.toString() ?? "")
-    .unwrapOr("");
+  const live = await attempt(async () => {
+    const proc = Bun.spawn([claudeBin, "mcp", "list"], {
+      stdin: "inherit",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const [text] = await Promise.all([
+      new Response(proc.stdout).text(),
+      proc.exited,
+    ]);
+    return text;
+  });
+  const liveText = live.ok ? live.value : "";
   const liveNames = liveText
     .split("\n")
     .map((line) => /^([a-zA-Z0-9_-]*): /u.exec(line)?.[1])
@@ -533,7 +561,14 @@ function main(): AbortError | UsageError | undefined {
     .flatMap((n) => (n === undefined ? [] : [n]))
     .toSorted();
 
-  printDriftReport(declared, liveNames, claudeBin, codexBin, dryRun, prune);
+  await printDriftReport(
+    declared,
+    liveNames,
+    claudeBin,
+    codexBin,
+    dryRun,
+    prune,
+  );
 
   print(
     "tip: run 'ccc index <repo>' once to warm cocoindex-code's embedding model.",
@@ -548,8 +583,7 @@ function main(): AbortError | UsageError | undefined {
 // argv, not any CLI args), every default would resolve to the REAL $HOME/dotfiles and REAL
 // `claude`/`codex` binaries. Confirmed by direct reproduction during this port's own test
 // development; see behaviorNotes.
-// Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
-// is the sync equivalent of BG1's mandated `main().catch(...)`.
+// Await the entry boundary so all registrations and pruning finish before reporting the exit.
 if (import.meta.main) {
   const result = await Promise.try(main).then(
     (value) => ({ ok: true as const, value }),

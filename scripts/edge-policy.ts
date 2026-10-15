@@ -8,8 +8,7 @@
 //   EDGE_POLICY_DST  destination override, for tests (then the copy is plain, without sudo).
 // Exit: 0 the live policy matches / was deployed · 1 drift under --check, or deployment failed ·
 //       2 usage or FATAL.
-import { existsSync, readFileSync } from "node:fs";
-import { copyFile } from "node:fs/promises";
+import { access, copyFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
@@ -79,9 +78,9 @@ async function run(
 }
 
 async function matches(): Promise<boolean> {
-  const live = await attempt(() => readFileSync(DST));
+  const live = await attempt(() => readFile(DST));
   if (!live.ok) return false;
-  return Buffer.compare(readFileSync(SRC), live.value) === 0;
+  return Buffer.compare(await readFile(SRC), live.value) === 0;
 }
 
 const verdict = (v: "PASS" | "FAIL", detail: string, fix?: string): void => {
@@ -140,7 +139,8 @@ async function main(): Promise<number> {
     verdict("PASS", `${DST} matches edge/policy.plist.mac`);
     return 0;
   }
-  const why = existsSync(DST) ? "differs from" : "is missing, unlike";
+  const destination = await attempt(() => access(DST));
+  const why = destination.ok ? "differs from" : "is missing, unlike";
   if (argv.flags.check) {
     verdict(
       "FAIL",

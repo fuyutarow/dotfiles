@@ -1,36 +1,36 @@
 import { afterEach, expect, test } from "bun:test";
 import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+  chmod,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const wrapper = join(import.meta.dir, "../bun-exec.sh");
 const temporary: string[] = [];
-afterEach(() => {
+afterEach(async () => {
   for (const path of temporary.splice(0))
-    rmSync(path, { recursive: true, force: true });
+    await rm(path, { recursive: true, force: true });
 });
 
 test("bun-exec replaces itself with Bun and clears MISE_CONFIG_FILE", async () => {
-  const temp = mkdtempSync(join(tmpdir(), "bun-exec-test-"));
+  const temp = await mkdtemp(join(tmpdir(), "bun-exec-test-"));
   temporary.push(temp);
   const home = join(temp, "home");
   const fakeBin = join(temp, "bin");
-  mkdirSync(join(home, "dotfiles"), { recursive: true });
-  mkdirSync(fakeBin, { recursive: true });
+  await mkdir(join(home, "dotfiles"), { recursive: true });
+  await mkdir(fakeBin, { recursive: true });
 
   const mise = join(fakeBin, "mise");
-  writeFileSync(
+  await writeFile(
     mise,
     '#!/bin/sh\n[ "$MISE_CONFIG_FILE" = "$TEST_CONFIG" ] || exit 21\n[ "$1" = which ] && [ "$2" = bun ] || exit 22\nprintf \'%s\\n\' "$TEST_BUN_PATH"\n',
   );
-  chmodSync(mise, 0o755);
+  await chmod(mise, 0o755);
 
   const child = Bun.spawn(
     [
@@ -54,9 +54,11 @@ test("bun-exec replaces itself with Bun and clears MISE_CONFIG_FILE", async () =
   );
 
   await Bun.sleep(250);
-  const exitCode = await child.exited;
-  const stdout = await new Response(child.stdout).text();
-  const stderr = await new Response(child.stderr).text();
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
 
   expect(exitCode).toBe(0);
   expect(stdout).toBe(JSON.stringify({ ppid: process.pid, config: null }));
@@ -64,18 +66,18 @@ test("bun-exec replaces itself with Bun and clears MISE_CONFIG_FILE", async () =
 });
 
 test("bun-exec uses DOTFILES with a temporary HOME and preserves cwd", async () => {
-  const temp = mkdtempSync(join(tmpdir(), "bun-exec-render-"));
+  const temp = await mkdtemp(join(tmpdir(), "bun-exec-render-"));
   temporary.push(temp);
   const root = join(temp, "checkout");
   const bin = join(temp, "bin");
-  mkdirSync(root);
-  mkdirSync(bin);
-  writeFileSync(join(root, "mise.toml"), '[tools]\nbun = "1.4"\n');
-  writeFileSync(
+  await mkdir(root);
+  await mkdir(bin);
+  await writeFile(join(root, "mise.toml"), '[tools]\nbun = "1.4"\n');
+  await writeFile(
     join(bin, "mise"),
     '#!/bin/sh\n[ "$MISE_CONFIG_FILE" = "$DOTFILES/mise.toml" ] || exit 21\nprintf \'%s\\n\' "$TEST_BUN_PATH"\n',
   );
-  chmodSync(join(bin, "mise"), 0o755);
+  await chmod(join(bin, "mise"), 0o755);
   const child = Bun.spawn(
     [
       wrapper,
@@ -104,5 +106,5 @@ test("bun-exec uses DOTFILES with a temporary HOME and preserves cwd", async () 
   ]);
   expect(code).toBe(0);
   expect(err).toBe("");
-  expect(out).toBe(JSON.stringify({ cwd: realpathSync(temp), config: null }));
+  expect(out).toBe(JSON.stringify({ cwd: await realpath(temp), config: null }));
 });

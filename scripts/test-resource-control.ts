@@ -19,6 +19,8 @@
 // NO FLAGS: mise is the only caller and passes nothing, so there is no Cleye boundary to owe
 // (writing-bun-scripts BG1).
 
+export {};
+
 const SUITE = [
   "bun",
   "test",
@@ -28,19 +30,23 @@ const SUITE = [
 const ENVELOPE =
   "tools/agent-resource-run/examples/resource-runner-tests.resource.json";
 
-function userSystemdCanAdmit(): boolean {
+async function userSystemdCanAdmit(): Promise<boolean> {
   if (process.platform !== "linux") return false;
   if (Bun.which("systemctl") === null) return false;
-  const probe = Bun.spawnSync(["systemctl", "--user", "is-system-running"], {
+  const probe = Bun.spawn(["systemctl", "--user", "is-system-running"], {
     stdout: "pipe",
     stderr: "ignore",
     timeout: 5_000,
   });
-  const state = probe.stdout.toString().trim();
+  const [output] = await Promise.all([
+    new Response(probe.stdout).text(),
+    probe.exited,
+  ]);
+  const state = output.trim();
   return state === "running" || state === "degraded";
 }
 
-const command = userSystemdCanAdmit()
+const command = (await userSystemdCanAdmit())
   ? [
       "bun",
       "tools/agent-resource-run/src/agent-resource-run.ts",
@@ -55,7 +61,7 @@ const command = userSystemdCanAdmit()
 // itself, which mise's caller (a human or CI) already bounds — a second timer here would only
 // race the test runner's own.
 // bounded: envelope walltime (wrapped) / caller-bounded suite (plain)
-const run = Bun.spawnSync(command, {
+const run = Bun.spawn(command, {
   stdio: ["inherit", "inherit", "inherit"],
 });
-process.exitCode = run.exitCode ?? 1;
+process.exitCode = await run.exited;

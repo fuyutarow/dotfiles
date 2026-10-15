@@ -2,8 +2,8 @@
 // ORIGINAL shell body's behavior (see mise.toml's replaced run body / the behavior oracle this
 // port was built from). Every fixture is a throwaway tmp .mcp.json plus fake claude/codex/uv
 // binaries — the real claude/codex CLIs are NEVER invoked by these tests (Safety rule).
-import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,43 +20,44 @@ const FAKE_CLAUDE = join(import.meta.dir, "fake-claude-mcp.ts");
 const FAKE_CODEX = join(import.meta.dir, "fake-codex.ts");
 const FAKE_UV = join(import.meta.dir, "fake-uv.ts");
 const NO_CODEX = "/nonexistent/codex-bin"; // simulates "codex not installed"
+setDefaultTimeout(20_000);
 
 type ServersFixture = Record<string, Record<string, unknown>>;
 
-function makeDotfiles(servers: ServersFixture): string {
-  const dir = mkdtempSync(join(tmpdir(), "install-mcp-dotfiles-"));
-  writeFileSync(
+async function makeDotfiles(servers: ServersFixture): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "install-mcp-dotfiles-"));
+  await writeFile(
     join(dir, ".mcp.json"),
     JSON.stringify({ mcpServers: servers }, null, 2),
   );
   return dir;
 }
 
-function cleanup(...dirs: string[]): void {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+async function cleanup(...dirs: string[]): Promise<void> {
+  for (const d of dirs) await rm(d, { recursive: true, force: true });
 }
 
 // For the `--home`/`$DOTFILES=""` fallback test: a fixture HOME whose `dotfiles` subdirectory
 // holds .mcp.json, so `${home}/dotfiles` (the fallback shape) resolves to a real fixture path.
-function makeHomeWithDotfiles(servers: ServersFixture): {
+async function makeHomeWithDotfiles(servers: ServersFixture): Promise<{
   home: string;
   dotfiles: string;
-} {
-  const home = mkdtempSync(join(tmpdir(), "install-mcp-home-"));
+}> {
+  const home = await mkdtemp(join(tmpdir(), "install-mcp-home-"));
   const dotfiles = join(home, "dotfiles");
-  mkdirSync(dotfiles);
-  writeFileSync(
+  await mkdir(dotfiles);
+  await writeFile(
     join(dotfiles, ".mcp.json"),
     JSON.stringify({ mcpServers: servers }, null, 2),
   );
   return { home, dotfiles };
 }
 
-function run(
+async function run(
   args: string[],
   env: Record<string, string | undefined> = {},
-): { out: string; code: number } {
-  const proc = Bun.spawnSync(["bun", SCRIPT, ...args], {
+): Promise<{ out: string; code: number }> {
+  const proc = await spawn(["bun", SCRIPT, ...args], {
     env: { ...process.env, ...env },
     maxBuffer: 4 * 1024 * 1024,
   });
@@ -85,23 +86,23 @@ function baseArgs(dotfiles: string, extra: string[] = []): string[] {
 }
 
 describe("install-mcp: argv contract", () => {
-  test("lets Cleye strictFlags reject an ordinary unknown before running any command", () => {
-    const { out, code } = run(["--wat"]);
+  test("lets Cleye strictFlags reject an ordinary unknown before running any command", async () => {
+    const { out, code } = await run(["--wat"]);
 
     expect(code).toBe(1);
     expect(out).toContain("Error: Unknown flag: --wat.");
     expect(out).not.toContain("applied ");
   });
 
-  test("rejects --__proto__ before running any command", () => {
-    const { out, code } = run(["--__proto__"]);
+  test("rejects --__proto__ before running any command", async () => {
+    const { out, code } = await run(["--__proto__"]);
 
     expect(code).toBe(2);
     expect(out).toContain("Unknown option '--__proto__'");
     expect(out).not.toContain("applied ");
   });
 
-  test("rejects every String flag with no value", () => {
+  test("rejects every String flag with no value", async () => {
     for (const flag of [
       "--dotfiles",
       "--home",
@@ -110,13 +111,13 @@ describe("install-mcp: argv contract", () => {
       "--uv-bin",
       "--ccc-bin",
     ]) {
-      const { out, code } = run([flag]);
+      const { out, code } = await run([flag]);
 
       expect(code).toBe(2);
       expect(out).toContain(`${flag} requires a value`);
       expect(out).not.toContain("applied ");
     }
-  });
+  }, 40_000);
 });
 
 describe("install-mcp: pure helpers", () => {
@@ -144,12 +145,12 @@ describe("install-mcp: pure helpers", () => {
     expect(commOnlyInSecond(["a"], ["a", "a"])).toEqual(["a"]); // one match consumes one dup
   });
 
-  test("loadMcpServers returns {} (not a throw) for a missing or malformed .mcp.json", () => {
-    expect(loadMcpServers("/nonexistent/.mcp.json")).toEqual({});
-    const dir = mkdtempSync(join(tmpdir(), "install-mcp-bad-"));
-    writeFileSync(join(dir, ".mcp.json"), "{ not json");
-    expect(loadMcpServers(join(dir, ".mcp.json"))).toEqual({});
-    cleanup(dir);
+  test("loadMcpServers returns {} (not a throw) for a missing or malformed .mcp.json", async () => {
+    expect(await loadMcpServers("/nonexistent/.mcp.json")).toEqual({});
+    const dir = await mkdtemp(join(tmpdir(), "install-mcp-bad-"));
+    await writeFile(join(dir, ".mcp.json"), "{ not json");
+    expect(await loadMcpServers(join(dir, ".mcp.json"))).toEqual({});
+    await cleanup(dir);
   });
 
   test("buildPlan: display is a raw template-literal concatenation, not the exec token list", () => {
@@ -171,15 +172,16 @@ describe("install-mcp: pure helpers", () => {
     expect(plan.display).toBe("https://mcp.exa.ai/mcp");
   });
 
-  test("missing runtime skips only its server with a named reason", () => {
+  test("missing runtime skips only its server with a named reason", async () => {
     const lookup: string[] = [];
-    const result = partitionAvailableServers(
+    const result = await partitionAvailableServers(
       {
         fetch: { command: "uvx", args: ["mcp-server-fetch"] },
         context7: { command: "bunx", args: ["context7"] },
         exa: { type: "http", url: "https://mcp.exa.ai/mcp" },
       },
-      (tool) => {
+      async (tool) => {
+        await Promise.resolve();
         lookup.push(tool);
         return tool !== "uv";
       },
@@ -197,8 +199,8 @@ describe("install-mcp: pure helpers", () => {
 });
 
 describe("install-mcp: happy path registration", () => {
-  test("registers every declared server, alphabetically, with matching add/registered lines", () => {
-    const dotfiles = makeDotfiles({
+  test("registers every declared server, alphabetically, with matching add/registered lines", async () => {
+    const dotfiles = await makeDotfiles({
       exa: { type: "http", url: "https://mcp.exa.ai/mcp" },
       context7: {
         type: "stdio",
@@ -206,7 +208,9 @@ describe("install-mcp: happy path registration", () => {
         args: ["-y", "@upstash/context7-mcp"],
       },
     });
-    const { out, code } = run(baseArgs(dotfiles), { FAKE_CLAUDE_LIST: "" });
+    const { out, code } = await run(baseArgs(dotfiles), {
+      FAKE_CLAUDE_LIST: "",
+    });
     expect(code).toBe(0);
 
     // alphabetical: context7 before exa, regardless of file order
@@ -231,68 +235,72 @@ describe("install-mcp: happy path registration", () => {
     expect(out).toContain(
       "tip: run 'ccc index <repo>' once to warm cocoindex-code's embedding model.",
     );
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("remove always precedes add for a given server", () => {
-    const dotfiles = makeDotfiles({
+  test("remove always precedes add for a given server", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
-    const { out, code } = run(baseArgs(dotfiles), { FAKE_CLAUDE_LIST: "" });
+    const { out, code } = await run(baseArgs(dotfiles), {
+      FAKE_CLAUDE_LIST: "",
+    });
     expect(code).toBe(0);
     const posRemove = out.indexOf("CALL claude mcp remove -s user fetch");
     const posAdd = out.indexOf("CALL claude mcp add -s user fetch");
     expect(posRemove).toBeGreaterThan(-1);
     expect(posAdd).toBeGreaterThan(posRemove);
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("Codex registration is left to codex:config even when codex-bin resolves", () => {
-    const dotfiles = makeDotfiles({
+  test("Codex registration is left to codex:config even when codex-bin resolves", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
-    const { out, code } = run(baseArgs(dotfiles), { FAKE_CLAUDE_LIST: "" });
+    const { out, code } = await run(baseArgs(dotfiles), {
+      FAKE_CLAUDE_LIST: "",
+    });
     expect(code).toBe(0);
     expect(out).not.toContain("CALL codex");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("Codex-bin availability does not affect Claude's declarative installation", () => {
-    const dotfiles = makeDotfiles({
+  test("Codex-bin availability does not affect Claude's declarative installation", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
-    const { out, code } = run(
+    const { out, code } = await run(
       baseArgs(dotfiles).map((a) => (a === FAKE_CODEX ? NO_CODEX : a)),
       { FAKE_CLAUDE_LIST: "" },
     );
     expect(code).toBe(0);
     expect(out).not.toContain("CALL codex");
     expect(out).toContain("registered: fetch");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("a remove failure (claude or codex) is ignored — registration still completes", () => {
-    const dotfiles = makeDotfiles({
+  test("a remove failure (claude or codex) is ignored — registration still completes", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
-    const { out, code } = run(baseArgs(dotfiles), {
+    const { out, code } = await run(baseArgs(dotfiles), {
       FAKE_CLAUDE_LIST: "",
       FAKE_CLAUDE_FAIL_REMOVE: "fetch",
       FAKE_CODEX_FAIL_REMOVE: "fetch",
     });
     expect(code).toBe(0);
     expect(out).toContain("registered: fetch (uvx mcp-server-fetch)");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 });
 
 describe("install-mcp: add failure aborts (set -e parity)", () => {
-  test("a failed claude add stops the run before any later (alphabetical) server registers", () => {
-    const dotfiles = makeDotfiles({
+  test("a failed claude add stops the run before any later (alphabetical) server registers", async () => {
+    const dotfiles = await makeDotfiles({
       alpha: { type: "stdio", command: "uvx", args: ["a"] },
       zeta: { type: "stdio", command: "uvx", args: ["z"] },
     });
-    const { out, code } = run(baseArgs(dotfiles), {
+    const { out, code } = await run(baseArgs(dotfiles), {
       FAKE_CLAUDE_LIST: "",
       FAKE_CLAUDE_FAIL_ADD: "alpha",
     });
@@ -306,14 +314,14 @@ describe("install-mcp: add failure aborts (set -e parity)", () => {
     expect(out).not.toContain("registered: alpha");
     expect(out).not.toContain("registered: zeta"); // never reached: script aborted at "alpha"
     expect(out).not.toContain("applied ");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("the aborting command's OWN exit code propagates verbatim, never collapsed to 1", () => {
-    const dotfiles = makeDotfiles({
+  test("the aborting command's OWN exit code propagates verbatim, never collapsed to 1", async () => {
+    const dotfiles = await makeDotfiles({
       alpha: { type: "stdio", command: "uvx", args: ["a"] },
     });
-    const { out, code } = run(baseArgs(dotfiles), {
+    const { out, code } = await run(baseArgs(dotfiles), {
       FAKE_CLAUDE_LIST: "",
       FAKE_CLAUDE_FAIL_ADD: "alpha",
       FAKE_CLAUDE_FAIL_ADD_EXITCODE: "42",
@@ -321,27 +329,29 @@ describe("install-mcp: add failure aborts (set -e parity)", () => {
     expect(code).toBe(42);
     expect(out).not.toContain("FATAL:");
     expect(out).toContain("fake claude: add failed: alpha");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 });
 
 describe("install-mcp: ccc/uv bootstrap", () => {
-  test("ccc present: uv is never invoked", () => {
-    const dotfiles = makeDotfiles({});
-    const { out, code } = run(baseArgs(dotfiles), { FAKE_CLAUDE_LIST: "" });
+  test("ccc present: uv is never invoked", async () => {
+    const dotfiles = await makeDotfiles({});
+    const { out, code } = await run(baseArgs(dotfiles), {
+      FAKE_CLAUDE_LIST: "",
+    });
     expect(code).toBe(0);
     expect(out).not.toContain("CALL uv");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("ccc absent: uv tool install runs before any server is touched", () => {
-    const dotfiles = makeDotfiles({
+  test("ccc absent: uv tool install runs before any server is touched", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
     const args = baseArgs(dotfiles).map((a, i, arr) =>
       arr[i - 1] === "--ccc-bin" ? "/nonexistent/ccc" : a,
     );
-    const { out, code } = run(args, { FAKE_CLAUDE_LIST: "" });
+    const { out, code } = await run(args, { FAKE_CLAUDE_LIST: "" });
     expect(code).toBe(0);
     expect(out).toContain(
       "CALL uv tool install --upgrade cocoindex-code[full]",
@@ -349,17 +359,17 @@ describe("install-mcp: ccc/uv bootstrap", () => {
     expect(out.indexOf("CALL uv")).toBeLessThan(
       out.indexOf("registered: fetch"),
     );
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("ccc absent + a failing uv install aborts before touching any server", () => {
-    const dotfiles = makeDotfiles({
+  test("ccc absent + a failing uv install aborts before touching any server", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
     const args = baseArgs(dotfiles).map((a, i, arr) =>
       arr[i - 1] === "--ccc-bin" ? "/nonexistent/ccc" : a,
     );
-    const { out, code } = run(args, {
+    const { out, code } = await run(args, {
       FAKE_CLAUDE_LIST: "",
       FAKE_UV_FAIL: "1",
     });
@@ -370,11 +380,11 @@ describe("install-mcp: ccc/uv bootstrap", () => {
     expect(out).toContain("fake uv: install failed");
     expect(out).not.toContain("registered:");
     expect(out).not.toContain("CALL claude");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("missing uv skips its named server and continues registering other servers", () => {
-    const dotfiles = makeDotfiles({
+  test("missing uv skips its named server and continues registering other servers", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
       exa: { type: "http", url: "https://mcp.exa.ai/mcp" },
     });
@@ -383,7 +393,7 @@ describe("install-mcp: ccc/uv bootstrap", () => {
         ? "/nonexistent/runtime"
         : arg,
     );
-    const { out, code } = run(args, { FAKE_CLAUDE_LIST: "" });
+    const { out, code } = await run(args, { FAKE_CLAUDE_LIST: "" });
 
     expect(code).toBe(0);
     expect(out).toContain(
@@ -394,28 +404,28 @@ describe("install-mcp: ccc/uv bootstrap", () => {
     );
     expect(out).not.toContain("registered: fetch");
     expect(out).toContain("registered: exa");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 });
 
 describe("install-mcp: drift report", () => {
-  test("no drift: nothing printed when live registrations exactly match .mcp.json", () => {
-    const dotfiles = makeDotfiles({
+  test("no drift: nothing printed when live registrations exactly match .mcp.json", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
-    const { out, code } = run(baseArgs(dotfiles), {
+    const { out, code } = await run(baseArgs(dotfiles), {
       FAKE_CLAUDE_LIST: "fetch: uvx mcp-server-fetch - Connected\n",
     });
     expect(code).toBe(0);
     expect(out).not.toContain("DRIFT");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("drift: a live registration absent from .mcp.json is reported, not removed, by default", () => {
-    const dotfiles = makeDotfiles({
+  test("drift: a live registration absent from .mcp.json is reported, not removed, by default", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
-    const { out, code } = run(baseArgs(dotfiles), {
+    const { out, code } = await run(baseArgs(dotfiles), {
       FAKE_CLAUDE_LIST:
         "fetch: uvx mcp-server-fetch - Connected\nghost-server: some old thing - Connected\n",
     });
@@ -431,12 +441,12 @@ describe("install-mcp: drift report", () => {
       "NOTE: .mcp.json is documented as the single source of truth",
     );
     expect(out).not.toContain("pruned:");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("junk lines in `claude mcp list` (headers, bracketed sections) are not mistaken for names", () => {
-    const dotfiles = makeDotfiles({});
-    const { out, code } = run(baseArgs(dotfiles), {
+  test("junk lines in `claude mcp list` (headers, bracketed sections) are not mistaken for names", async () => {
+    const dotfiles = await makeDotfiles({});
+    const { out, code } = await run(baseArgs(dotfiles), {
       FAKE_CLAUDE_LIST:
         "Checking MCP server health…\n\nghost: something - Connected\n\n[Conflicting scopes]\nFor help configuring MCP servers, see: https://x\n",
     });
@@ -451,15 +461,15 @@ describe("install-mcp: drift report", () => {
             l.startsWith("  ") && !l.includes("NOTE") && !l.includes("declare"),
         ).length,
     ).toBe(1);
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("a pathological `claude mcp list` line with an empty captured name (sed parity) is not silently dropped", () => {
+  test("a pathological `claude mcp list` line with an empty captured name (sed parity) is not silently dropped", async () => {
     // sed's `s/^\([a-zA-Z0-9_-]*\): .*/\1/p` has no length check on the capture group: a line
     // starting with just ": " captures a ZERO-length name, and sed still emits (and
     // `sort`/`comm` still process) that blank line — no `n.length > 0` filter in the original.
-    const dotfiles = makeDotfiles({});
-    const { out, code } = run(baseArgs(dotfiles), {
+    const dotfiles = await makeDotfiles({});
+    const { out, code } = await run(baseArgs(dotfiles), {
       FAKE_CLAUDE_LIST: ": some headerless entry - Connected\n",
     });
     expect(code).toBe(0);
@@ -473,12 +483,12 @@ describe("install-mcp: drift report", () => {
           l.startsWith("  ") && !l.includes("NOTE") && !l.includes("declare"),
       );
     expect(driftNameLines).toEqual(["  "]); // "  " + empty-string name, not dropped
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("MCP_PRUNE=1 removes undeclared registrations from both claude and codex", () => {
-    const dotfiles = makeDotfiles({});
-    const { out, code } = run(baseArgs(dotfiles), {
+  test("MCP_PRUNE=1 removes undeclared registrations from both claude and codex", async () => {
+    const dotfiles = await makeDotfiles({});
+    const { out, code } = await run(baseArgs(dotfiles), {
       FAKE_CLAUDE_LIST: "ghost-server: some old thing - Connected\n",
       MCP_PRUNE: "1",
     });
@@ -487,20 +497,20 @@ describe("install-mcp: drift report", () => {
     expect(out).not.toContain("CALL codex mcp remove ghost-server");
     expect(out).toContain("  pruned: ghost-server");
     expect(out).not.toContain("declare them in .mcp.json");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 });
 
 describe("install-mcp: --dry-run", () => {
-  test("performs zero mutating calls and prefixes every planned action with [dry-run]", () => {
-    const dotfiles = makeDotfiles({
+  test("performs zero mutating calls and prefixes every planned action with [dry-run]", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
       exa: { type: "http", url: "https://mcp.exa.ai/mcp" },
     });
     const args = baseArgs(dotfiles).map((a, i, arr) =>
       arr[i - 1] === "--ccc-bin" ? "/nonexistent/ccc" : a,
     );
-    const { out, code } = run([...args, "--dry-run"], {
+    const { out, code } = await run([...args, "--dry-run"], {
       FAKE_CLAUDE_LIST: "ghost: x - Connected\n",
       MCP_PRUNE: "1",
     });
@@ -520,16 +530,16 @@ describe("install-mcp: --dry-run", () => {
       "--- DRIFT: registered but NOT declared in .mcp.json ---",
     );
     expect(out).toContain("  ghost");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 });
 
 describe("install-mcp: root argumentization / defaults", () => {
-  test("--dotfiles defaults to $DOTFILES env var when the flag is omitted", () => {
-    const dotfiles = makeDotfiles({
+  test("--dotfiles defaults to $DOTFILES env var when the flag is omitted", async () => {
+    const dotfiles = await makeDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
-    const proc = Bun.spawnSync(
+    const proc = await spawn(
       [
         "bun",
         SCRIPT,
@@ -552,17 +562,17 @@ describe("install-mcp: root argumentization / defaults", () => {
     expect(out).toContain(
       `applied ${dotfiles}/.mcp.json -> Claude(user); codex:config owns Codex MCP entries`,
     );
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 
-  test("an exported-but-empty $DOTFILES falls back to $HOME/dotfiles, not to the literal empty string", () => {
+  test("an exported-but-empty $DOTFILES falls back to $HOME/dotfiles, not to the literal empty string", async () => {
     // Mirrors bash `${DOTFILES:-$HOME/dotfiles}`, which falls back on unset OR empty — a plain
     // `??` against `process.env.DOTFILES` would NOT fall back here, since "" is neither null nor
     // undefined, and would wrongly resolve dotfiles to "/.mcp.json" (repo-root-relative "").
-    const { home, dotfiles } = makeHomeWithDotfiles({
+    const { home, dotfiles } = await makeHomeWithDotfiles({
       fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
     });
-    const proc = Bun.spawnSync(
+    const proc = await spawn(
       [
         "bun",
         SCRIPT,
@@ -588,18 +598,47 @@ describe("install-mcp: root argumentization / defaults", () => {
       `applied ${dotfiles}/.mcp.json -> Claude(user); codex:config owns Codex MCP entries`,
     );
     expect(out).toContain("registered: fetch");
-    cleanup(home);
+    await cleanup(home);
   });
 
-  test("a missing .mcp.json is swallowed: zero registrations, no abort, applied+tip still print", () => {
-    const dotfiles = mkdtempSync(join(tmpdir(), "install-mcp-empty-"));
-    const { out, code } = run(baseArgs(dotfiles), { FAKE_CLAUDE_LIST: "" });
+  test("a missing .mcp.json is swallowed: zero registrations, no abort, applied+tip still print", async () => {
+    const dotfiles = await mkdtemp(join(tmpdir(), "install-mcp-empty-"));
+    const { out, code } = await run(baseArgs(dotfiles), {
+      FAKE_CLAUDE_LIST: "",
+    });
     expect(code).toBe(0);
     expect(out).not.toContain("registered:");
     expect(out).toContain(
       `applied ${dotfiles}/.mcp.json -> Claude(user); codex:config owns Codex MCP entries`,
     );
     expect(out).toContain("tip: run 'ccc index <repo>'");
-    cleanup(dotfiles);
+    await cleanup(dotfiles);
   });
 });
+
+// Drain both pipes while waiting so a child cannot block on a full output buffer.
+async function spawn(
+  command: string[],
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    timeout?: number;
+    maxBuffer?: number;
+    stdin?: Blob;
+    stdout?: "pipe";
+    stderr?: "pipe";
+  } = {},
+) {
+  const proc = Bun.spawn(command, {
+    ...options,
+    stdin: options.stdin ?? "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).arrayBuffer(),
+    new Response(proc.stderr).arrayBuffer(),
+    proc.exited,
+  ]);
+  return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), exitCode };
+}

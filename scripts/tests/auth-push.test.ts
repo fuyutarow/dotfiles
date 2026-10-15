@@ -1,11 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { pushAuth, type AuthPushDependencies } from "../auth-push.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "auth-push.ts");
-const cli = (args: string[]) =>
-  Bun.spawnSync(["bun", SCRIPT, ...args], {
+setDefaultTimeout(20_000);
+const cli = async (args: string[]) =>
+  spawn(["bun", SCRIPT, ...args], {
     stdout: "pipe",
     stderr: "pipe",
     timeout: 5_000,
@@ -63,15 +64,15 @@ function harness(
 }
 
 describe("auth:push transfer core", () => {
-  test("Cleye owns help and rejects invalid CLI selections and prototype flags", () => {
-    const help = cli(["--help"]);
+  test("Cleye owns help and rejects invalid CLI selections and prototype flags", async () => {
+    const help = await cli(["--help"]);
     expect(help.exitCode).toBe(0);
     expect(help.stdout.toString()).toContain("--only");
     expect(help.stdout.toString()).toContain("--force");
-    const invalid = cli(["box", "--only", "codex,invalid"]);
+    const invalid = await cli(["box", "--only", "codex,invalid"]);
     expect(invalid.exitCode).toBe(2);
     expect(invalid.stderr.toString()).toContain("--only accepts");
-    const prototype = cli(["--__proto__"]);
+    const prototype = await cli(["--__proto__"]);
     expect(prototype.exitCode).toBe(2);
     expect(prototype.stderr.toString()).toContain("__proto__");
   });
@@ -200,3 +201,30 @@ describe("auth:push transfer core", () => {
     ).toBe(false);
   });
 });
+
+// Drain both pipes while waiting so a child cannot block on a full output buffer.
+async function spawn(
+  command: string[],
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    timeout?: number;
+    maxBuffer?: number;
+    stdin?: Blob;
+    stdout?: "pipe";
+    stderr?: "pipe";
+  } = {},
+) {
+  const proc = Bun.spawn(command, {
+    ...options,
+    stdin: options.stdin ?? "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).arrayBuffer(),
+    new Response(proc.stderr).arrayBuffer(),
+    proc.exited,
+  ]);
+  return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), exitCode };
+}

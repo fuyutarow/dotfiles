@@ -16,18 +16,19 @@ function rejectPrototypeFlag(type: string, flag: string): void {
   }
 }
 
-const run = (command: string[], cwd: string): Listing => {
-  const result = Bun.spawnSync(command, {
+const run = async (command: string[], cwd: string): Promise<Listing> => {
+  const result = Bun.spawn(command, {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
     timeout: 30_000,
   });
-  return {
-    code: result.exitCode ?? 1,
-    stdout: result.stdout.toString(),
-    stderr: result.stderr.toString().trim(),
-  };
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(result.stdout).text(),
+    new Response(result.stderr).text(),
+    result.exited,
+  ]);
+  return { code, stdout, stderr: stderr.trim() };
 };
 
 function matchesJjPath(path: string, pathspecs: string[]): boolean {
@@ -44,10 +45,13 @@ function matchesJjPath(path: string, pathspecs: string[]): boolean {
   );
 }
 
-export function trackedFiles(options: Options, cwd = process.cwd()): Selection {
-  const gitRoot = run(["git", "rev-parse", "--show-toplevel"], cwd);
+export async function trackedFiles(
+  options: Options,
+  cwd = process.cwd(),
+): Promise<Selection> {
+  const gitRoot = await run(["git", "rev-parse", "--show-toplevel"], cwd);
   if (gitRoot.code === 0) {
-    const listing = run(
+    const listing = await run(
       ["git", "ls-files", "-z", "--", ...options.pathspecs],
       cwd,
     );
@@ -68,7 +72,7 @@ export function trackedFiles(options: Options, cwd = process.cwd()): Selection {
         "no git worktree: run in the main checkout (this check reads the Git index)",
     };
 
-  const listing = run(
+  const listing = await run(
     ["jj", "--ignore-working-copy", "file", "list", "-T", 'path ++ "\\0"'],
     cwd,
   );
@@ -93,7 +97,7 @@ function selection(files: string[], expectNonEmpty: boolean): Selection {
   return { ok: true, files };
 }
 
-function main(): number {
+async function main(): Promise<number> {
   const parsed = cli(
     {
       name: "tracked-files.ts",
@@ -120,7 +124,7 @@ function main(): number {
     undefined,
     Bun.argv.slice(2),
   );
-  const result = trackedFiles({
+  const result = await trackedFiles({
     pathspecs: parsed._,
     gitIndex: parsed.flags.gitIndex,
     expectNonEmpty: parsed.flags.expectNonEmpty,
@@ -133,4 +137,4 @@ function main(): number {
   return 0;
 }
 
-if (import.meta.main) process.exit(main());
+if (import.meta.main) process.exit(await main());

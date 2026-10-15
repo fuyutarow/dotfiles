@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // jj-commit.ts — the gated commit entrypoint of a jj repository. jj does not run Git hooks, so a bare `jj commit`
 // skips every gate. This script:
 //   1. snapshots the working copy and selects the paths to commit (named paths and/or --records),

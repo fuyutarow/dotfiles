@@ -318,12 +318,12 @@ When setting up or auditing a project's Claude Code config, in order:
 
 Then audit the OTHER scope — the one a project-shaped checklist cannot see (P3):
 
-8. **`~/.claude/` carries nothing that names a single repo?** Run `bun scripts/scope-check.ts`; it
+8. **`~/.claude/` carries nothing that names a single repo?** Run `scope-check`; it
    greps user-scope hooks and settings for absolute project paths. Every hit belongs in that repo's
    `.claude/`. Then budget the survivors: each user-scope hook costs a process on **every** matching
    event in **every** project. A hook with no owner and no retirement condition is a permanent
    tax — retire it or move it down.
-9. **Every gate reports all it knows in ONE decision?** Run `bun scripts/gate-diagnostics-check.ts`.
+9. **Every gate reports all it knows in ONE decision?** Run `gate-diagnostics-check`.
    Every `decidePre("deny", …)` in an `enforce-*.ts` gate must declare `FATAL`, `SINGLE-AXIS`, or
    `BATCHED(<axes>)`. A `BATCHED` gate must also carry a test proving two violations return
    together (§3). The floor checks that the judgment was *made*, never that it was *right*.

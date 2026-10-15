@@ -25,7 +25,7 @@ test -f tests/triggers.md || echo MISSING trigger set
 test -f tests/forge-verification-ledger.md || echo MISSING forge ledger
 bun test tests/diagnostic-card-check.test.ts
 bun scripts/diagnostic-card-check.ts tests/fixtures/valid-card.md
-bun ../forging-skills/scripts/skill-check.ts .
+skill-check .
 ```
 
 ## Language

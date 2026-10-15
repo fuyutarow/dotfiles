@@ -22,7 +22,7 @@ for f in references/statement-contract.md references/incremental-updates.md \
   tests/forge-verification-ledger.md; do
 test -f "$f" || exit 1
 done
-bun ../forging-skills/scripts/skill-check.ts .
+skill-check .
 ```
 
 ## LAW — preserve what was claimed and what entitles it

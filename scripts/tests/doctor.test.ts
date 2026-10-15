@@ -111,6 +111,45 @@ describe("doctor", () => {
     expect(result.out).toContain("SKIP  skills");
   });
 
+  test("skill helper path doctor fails on a missing registered repo helper and passes when it exists", () => {
+    const home = tmp("doctor-skill-helper-paths-");
+    const repo = join(home, "Workspace", "fixture-repo");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    const missingHelper = [
+      "~/.claude",
+      "/skills/wiring-mise-tasks/scripts/jj-commit.ts",
+    ].join("");
+    writeFileSync(
+      join(repo, "mise.toml"),
+      `[tasks.commit]\nrun = "bun ${missingHelper}"\n`,
+    );
+
+    const missing = doctor("skill-helper-paths", {
+      HOME: home,
+      DOTFILES: REPO,
+    });
+    expect(missing.code).toBe(1);
+    expect(missing.out).toContain("fixture-repo/mise.toml");
+    expect(missing.out).toContain("use jj-commit");
+
+    const helper = join(
+      home,
+      ".claude",
+      "skills",
+      "wiring-mise-tasks",
+      "scripts",
+      "jj-commit.ts",
+    );
+    mkdirSync(join(helper, ".."), { recursive: true });
+    writeFileSync(helper, "#!/usr/bin/env bun\n");
+    const present = doctor("skill-helper-paths", {
+      HOME: home,
+      DOTFILES: REPO,
+    });
+    expect(present.code).toBe(0);
+    expect(present.out).toContain("PASS  skill-helper-paths");
+  });
+
   test("skills reports all 57 in-house tool links and the sync repair", () => {
     const home = tmp("doctor-skills-links-");
     const skillRoot = join(REPO, "agents/skills");

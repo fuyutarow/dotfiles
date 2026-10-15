@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // wiring-check — the deterministic floor for a repo's WIRING JOINT.
 //
 // **THIS IS NOT A SEMANTIC CHECK.** It cannot tell you whether a layer SHOULD be here — that is

@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // Shared J1 snapshot interface for commit-gate consumers. No Git index is involved.
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, posix } from "node:path";

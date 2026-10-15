@@ -18,7 +18,7 @@ description: >-
 > **Version**: v2610.1.0 (2026-10-01) — house jj repos record via `mise run commit`. Command forms checked against jj 0.45.1.
 > Fast-moving compatibility and source links live only in [version-and-compatibility.md](references/version-and-compatibility.md); recheck them before migration or unsupported-feature claims.
 
-Verify this package: `bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/driving-jujutsu`.
+Verify this package: `skill-check agents/skills/driving-jujutsu`.
 
 ## Language
 

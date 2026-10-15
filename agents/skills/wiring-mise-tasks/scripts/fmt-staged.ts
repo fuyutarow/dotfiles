@@ -1,8 +1,9 @@
+#!/usr/bin/env bun
 // fmt-staged.ts — the body of the `fmt:staged` verb: format the STAGED files in place, then re-stage
 // exactly those files. It never reads, formats, or stages anything else, so another session's
 // unstaged or untracked work in a shared checkout can neither block this commit nor be swept into it.
 //
-//   bun ~/.claude/skills/wiring-mise-tasks/scripts/fmt-staged.ts \
+//   fmt-staged \
 //     --tool 'jl=julia --project=. -m Runic --inplace' --tool 'md=rumdl fmt' [--exclude 'archives/**']
 //
 // --tool '<ext>[,<ext>…]=<command>'  the command receives the matching staged files as trailing

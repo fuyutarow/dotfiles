@@ -17,7 +17,7 @@ description: >-
 > **Scope**: preserve explicit legacy access and name the current owner.
 
 ```bash
-bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/directing-research && \
+skill-check agents/skills/directing-research && \
   bun test agents/skills/directing-research/tests/family-routing.test.ts
 ```
 

@@ -5,7 +5,7 @@
   "workspaces": [
     "tools/agx-usehooks"
   ],
-  "description": "Repo-root graduation project (writing-bun-scripts BG3). Exists so repo .ts scripts may import pinned deps by bare specifier; the pin lives here and in bun.lock, never in the import string. Bun resolves through the ~/.claude/skills symlinks to this realpath, so linked scripts resolve from any cwd. Hooks stay zero-dep: they run before any install. Its `bin` entries are the repo's PATH commands: `bun link` (run by `mise run deps`) installs them into bun's global bin dir (~/.bun/bin), which zsh/zshenv puts on every shell's PATH. Nothing hand-symlinks a .ts into ~/.local/bin.",
+  "description": "Repo-root graduation project (writing-bun-scripts BG3). Exists so repo .ts scripts may import pinned deps by bare specifier; the pin lives here and in bun.lock, never in the import string. Bun resolves dependencies from each script's real path, including skill scripts, so linked bins resolve from any cwd. Hooks stay zero-dep: they run before any install. Its `bin` entries are the repo's PATH commands: `bun link` (run by `mise run deps`) installs them into bun's global bin dir (~/.bun/bin), which zsh/zshenv puts on every shell's PATH. Nothing hand-symlinks a .ts into ~/.local/bin.",
   "bin": {
     "agent-resource-run": "tools/agent-resource-run/src/agent-resource-run.ts",
     "serena-foreground": "tools/serena-foreground/src/serena-foreground.ts",
@@ -18,7 +18,21 @@
     "tool": "tools/tool-tiers/src/tool.ts",
     "agx": "tools/agx/src/next/cli.ts",
     "agx-next": "tools/agx/src/next/cli.ts",
-    "coredev": "tools/coredev/src/coredev.ts"
+    "coredev": "tools/coredev/src/coredev.ts",
+    "jj-commit": "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts",
+    "jj-push": "agents/skills/wiring-mise-tasks/scripts/jj-push.ts",
+    "jj-precommit": "agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts",
+    "fmt-staged": "agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts",
+    "mise-contract": "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts",
+    "wiring-check": "agents/skills/wiring-repositories/scripts/wiring-check.ts",
+    "continuation-check": "agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts",
+    "continuation-checkpoint": "agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts",
+    "research-docs-check": "agents/skills/governing-research-documentation/scripts/research-docs-check.ts",
+    "tex-oracle": "agents/skills/compiling-latex/scripts/tex-oracle.ts",
+    "scope-check": "agents/skills/operating-the-harness/scripts/scope-check.ts",
+    "gate-diagnostics-check": "agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts",
+    "script-check": "agents/skills/writing-bun-scripts/scripts/script-check.ts",
+    "skill-check": "agents/skills/forging-skills/scripts/skill-check.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 /**
  * Single-writer checkpoint transaction for TASK-CONTINUATION.md.
  * A short exclusive lock plus revision/digest CAS prevents accidental stale overwrites.

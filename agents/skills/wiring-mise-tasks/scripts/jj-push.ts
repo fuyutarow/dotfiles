@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // jj-push.ts — show, validate, and push the alpha bookmark without invoking Git directly.
 // Usage: mise run push [-- --dry-run]
 import { cli } from "cleye";

@@ -24,7 +24,7 @@ for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
   tests/operational-rehearsal.md tests/forge-verification-ledger.md \
   tests/postmortem-2026-10-01-target-drift.md; do test -f "$f" || exit 1; done
 test ! -f references/target-benchmark-loop.md || exit 1
-bun ../forging-skills/scripts/skill-check.ts .
+skill-check .
 ```
 
 ## On invocation — do the work

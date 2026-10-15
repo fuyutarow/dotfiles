@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // tex-oracle — evidence for a LaTeX manuscript cleanup (references/manuscript-cleanup.md).
 //
 //   bun tex-oracle.ts census <main.tex> [<input.tex> ...]   macro definitions vs body uses

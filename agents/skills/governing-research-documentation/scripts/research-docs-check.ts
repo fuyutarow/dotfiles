@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 /**
  * Consumer: humans/agents checking an OKF v0.2 R&D knowledge bundle before review or merge.
  * Contract: exit 0 clean, 1 deterministic findings, 2 invocation/environment fatal; never judge truth.

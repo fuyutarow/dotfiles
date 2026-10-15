@@ -144,6 +144,7 @@ depends = [
   "lint:live-refs",
   "typecheck",
   "lint:skills-index",
+  "lint:skill-script-paths",
   "lint:skills-wiring",
   "lint:skills-floor",
   "lint:harness-scope",
@@ -178,6 +179,11 @@ run = "bun scripts/lint-skills-index.ts"
 dir = "{{config_root}}"
 description = "Fail on third-party skills, plugin manifest drift, or tool skill symlinks into agents/skills. Machine checks SKIP on a fresh clone."
 run = "bun scripts/skills-doctor.ts"
+
+[tasks."lint:skill-script-paths"]
+dir = "{{config_root}}"
+description = "Fail when templates or dotfiles scripts call a skill helper by its internal file path instead of PATH bin"
+run = "bun scripts/lint-skill-script-paths.ts"
 
 # forging-skills' own floor, run over the WHOLE collection. It existed since the skill was forged
 # but was only ever invoked by hand on one skill at a time during a forge, so nothing swept the

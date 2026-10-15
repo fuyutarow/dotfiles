@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // script-check.ts — mechanical floor for house Bun TypeScript scripts (writing-bun-scripts).
 // Run: bun script-check.ts <file.ts|file.sh ...>   Consumer: agent (verdict lines).
 // Exit: 0 clean (WARNs allowed — they inform, they do not gate) / 1 any FAIL / 2 fatal.

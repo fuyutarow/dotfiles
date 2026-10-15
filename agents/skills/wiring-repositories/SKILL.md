@@ -171,7 +171,7 @@ exact-patch pin rule are dated facts — `references/layers.md` §2.
    is the scaffold plan, and it goes in the commit message.
 3. **LAY (S2)** — in the order above, calling each layer's owner skill for its contents. This
    skill writes no task body, no hook body, no manifest, no settings block.
-4. **VERIFY (S3)** — `bun scripts/wiring-check.ts` for the joint. Then the owners' own gates:
+4. **VERIFY (S3)** — `wiring-check` for the joint. Then the owners' own gates:
    `mise run check` and `mise-contract.ts`. **Then clone to a temp dir and run them again.** That
    second run is the gate; the first only proves it works where it was built.
 5. **HAND OFF (S4)** — record the owner per layer. Later edits fire the owner skill.

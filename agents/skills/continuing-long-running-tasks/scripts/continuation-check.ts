@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 /**
  * Structural floor for TASK-CONTINUATION.md.
  * Consumer: agent/human verdict lines. Exit 0 valid, 1 findings, 2 CLI/environment fatal.

@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // gate-diagnostics-check.ts — mechanical floor for the batched-diagnostics invariant in
 // operating-the-harness §3.
 // Run: bun gate-diagnostics-check.ts [<hooks-dir>]        default: $HOME/.claude/hooks

@@ -167,5 +167,5 @@ MUST NOT fire (route):
 | File | Covers | Read when |
 |---|---|---|
 | `references/bun-facts.md` | DATED verified Bun facts: auto-install & the cwd trap, Bun.$ semantics + sharp edges, native spawn timeout API, bunx staleness, node-compat gaps, WSL quirks, --compile, perf reality, typecheck wiring, version pinning | before relying on any Bun feature not already encoded in the gates; any "does Bun support X?" |
-| `scripts/script-check.ts` | the mechanical floor — run `bun ${CLAUDE_SKILL_DIR}/scripts/script-check.ts <file.ts …>`, never read into context | after every new/edited script; per-file in corpus audits |
+| `scripts/script-check.ts` | the mechanical floor — run `script-check <file.ts …>`, never read into context | after every new/edited script; per-file in corpus audits |
 | `tests/forge-verification-ledger.md` | F3 artifact: harvest provenance, the corpus KEEP/REFACTOR baseline with receipts, fleet findings, proof-of-fire records | reforging; auditing this skill; starting the corpus refactor |

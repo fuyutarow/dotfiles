@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { existsSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";

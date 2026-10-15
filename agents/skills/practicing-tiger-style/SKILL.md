@@ -193,5 +193,5 @@ Revision evidence lives in [tests/forge-verification-ledger.md](tests/forge-veri
 Package check from the repository root:
 
 ```sh
-bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/practicing-tiger-style
+skill-check agents/skills/practicing-tiger-style
 ```

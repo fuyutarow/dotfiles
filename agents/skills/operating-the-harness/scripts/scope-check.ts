@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // scope-check.ts — mechanical floor for P3 (scope) in operating-the-harness.
 // Run: bun scope-check.ts [<user-scope-root>]      default root: $HOME/.claude
 // Consumer: agent/human (verdict lines). Exit 0 clean / 1 findings / 2 environment-FATAL.

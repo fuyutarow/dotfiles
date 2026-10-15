@@ -31,7 +31,7 @@ description: >-
     test -f tests/forge-verification-ledger.md
     bun test tests/configuration-contract-check.test.ts
     bun scripts/configuration-contract-check.ts tests/fixtures/valid-contract.md
-    bun ../forging-skills/scripts/skill-check.ts .
+    skill-check .
 
 ## Language
 

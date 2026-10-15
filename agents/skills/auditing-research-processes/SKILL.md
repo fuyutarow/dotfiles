@@ -108,7 +108,7 @@ read-only, through `orchestrating-agents`. Only cited, frozen observables cross 
 ## Atomic verify
 
 ```bash
-bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/auditing-research-processes
+skill-check agents/skills/auditing-research-processes
 ```
 
 ## MUST-NOT-FIRE

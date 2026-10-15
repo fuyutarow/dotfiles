@@ -190,7 +190,7 @@ filename grammar, including base-relative sequence allocation. The floor checks 
 evidence, authority uniqueness, review shape, and expiry:
 
 ```bash
-bun ~/.agents/skills/governing-research-documentation/scripts/research-docs-check.ts \
+research-docs-check \
   --root research/knowledge --raw-root research/raw --base origin/main
 ```
 

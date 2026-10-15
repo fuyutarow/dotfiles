@@ -204,15 +204,14 @@ declared under the first rule, moving a body to `scripts/*.ts` costs nothing —
   Copy the nearest one, select runtime versions in `[tools]`, and fill the actual roots and coverage.
   Preserve verbs and aliases; verify the materialized configuration before calling it ready.
 - **Verify — after EVERY mise.toml edit**:
-  `bun ${CLAUDE_SKILL_DIR}/scripts/mise-contract.ts [repo-dir ...]`
+  `mise-contract [repo-dir ...]`
   Exit 0 = contract holds (WARNs allowed) · 1 = HARD violation · 2 = environment error. The gate
   is resolution-based by design — do NOT rewrite it as mise.toml regex parsing (rejected
   precedent; evidence in the ledger).
-- **Wire per repo**: every template carries `[tasks."mise:contract"]`, hardcoding
-  `~/.claude/skills/...` (not `${CLAUDE_SKILL_DIR}`, which exists only inside a live session —
-  `mise run` must work without it). It stays OUT of `check.depends` by default (a machine without
+- **Wire per repo**: every template carries `[tasks."mise:contract"]` and calls the `mise-contract`
+  PATH bin. It stays OUT of `check.depends` by default (a machine without
   the skills deployment would break CI); wire it in where deployment is guaranteed.
-- **`fmt:staged` body**: `bun ~/.claude/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool
+- **`fmt:staged` body**: `fmt-staged --tool
   '<ext>[,<ext>]=<command>' [--exclude '<glob>']`. Give one `--tool` per formatter: the `fmt`
   command without its path. Unlike `mise:contract`, it runs in the commit gate. The repo
   therefore needs the skills deployment, and `bun` in `[tools]`.

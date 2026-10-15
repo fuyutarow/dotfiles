@@ -28,7 +28,7 @@ test -f tests/triggers.md
 test -f tests/forge-verification-ledger.md
 bun test tests/versioning-contract-check.test.ts
 bun scripts/versioning-contract-check.ts tests/fixtures/valid-contract.md
-bun ../forging-skills/scripts/skill-check.ts .
+skill-check .
 ```
 
 ## Language

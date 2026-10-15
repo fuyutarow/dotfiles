@@ -112,8 +112,8 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── wsl/         # /etc/wsl.conf system config (WSL only)
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
-│                #   and shared agent assets (commands/, skills/); repo-retrieve lives in tools/repo-retrieve/ and
-│                #   agent-resource-run and serena-foreground live in tools/
+│                #   and shared agent assets (commands/, skills/); other repos call task helpers
+│                #   through package.json bins instead of skill installation paths
 ├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open) + shared TS modules
 ├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup
 ├── Brewfile.core      # tools needed on every box

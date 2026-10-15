@@ -12,7 +12,7 @@ skill, a `mise` task can use the portable home-relative path below:
 ```toml
 [tasks."docs:research-check"]
 description = "Check the R&D knowledge bundle profile."
-run = 'bun "$HOME/.agents/skills/governing-research-documentation/scripts/research-docs-check.ts" --root research/knowledge --raw-root research/raw --base "${DOCS_BASE:-HEAD}"'
+run = 'research-docs-check --root research/knowledge --raw-root research/raw --base "${DOCS_BASE:-HEAD}"'
 ```
 
 The local default, `DOCS_BASE=HEAD`, intentionally compares an uncommitted working tree with its

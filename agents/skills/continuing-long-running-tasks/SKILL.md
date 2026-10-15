@@ -132,33 +132,28 @@ Artifact: a truthful terminal or resumable state, validated once more.
 4. Snapshot → edit a proposal → transactionally apply after every material transition.
 5. Run the validator; only then continue, compact, hand off, or close.
 
-Run the validator from the installed skill path:
+Run the installed PATH command:
 
 ```bash
-# Codex
-bun ~/.agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts \
+continuation-check \
   --path '<record>' --bind-slot '<TASK_CONTINUATION_SLOT>'
 
-# Claude Code
-bun ~/.claude/skills/continuing-long-running-tasks/scripts/continuation-check.ts \
-  --path '<record>' --bind-slot '<TASK_CONTINUATION_SLOT>'
 ```
 
-Checkpoint from the installed Skill path. The snapshot result supplies `revision` and `sha256`:
+Checkpoint with the installed PATH command. The snapshot result supplies `revision` and `sha256`:
 
 ```bash
-bun ~/.agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts snapshot \
+continuation-checkpoint snapshot \
   --path '<record>' --writer-slot '<TASK_CONTINUATION_SLOT>' --proposal '<record-dir>/next.proposal.md'
 
 # Edit only next.proposal.md, increment REVISION, and update UPDATED plus the material state.
-bun ~/.agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts apply \
+continuation-checkpoint apply \
   --path '<record>' --writer-slot '<TASK_CONTINUATION_SLOT>' \
   --base-revision '<snapshot revision>' --base-sha256 '<snapshot sha256>' \
   --proposal '<record-dir>/next.proposal.md'
 ```
 
-Use the corresponding `~/.claude/skills/...` path under Claude Code. Add
-`--handoff-slot '<target TASK_CONTINUATION_SLOT>'` only when the proposal changes `WRITER` to that
+Add `--handoff-slot '<target TASK_CONTINUATION_SLOT>'` only when the proposal changes `WRITER` to that
 pre-bound target. Successful apply removes the proposal; failed apply preserves it for inspection.
 
 Read `references/platform-adapters.md` only when configuring or auditing compact hooks. The hooks

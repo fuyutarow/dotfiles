@@ -81,7 +81,11 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    should be callable by name (`agent-resource-run`, `serena-foreground`, `repo-retrieve`) is a
    `package.json` `bin` entry, installed into `~/.bun/bin` by `bun link` (`mise run deps`) —
    never a hand-made symlink of a `.ts` into `~/.local/bin`, which holds standalone binaries
-   and shell scripts only. **Four files are RENDERED, not linked** (each is a function of several
+   and shell scripts only. Other repos' tasks use the root-package skill helper bins (`jj-commit`,
+   `fmt-staged`, `mise-contract`, `wiring-check`, and peers), never skill installation paths.
+   Dotfiles' own tasks and gates invoke their local skill scripts by repo-relative `bun` path so
+   they work before `bun link`. `doctor` checks registered repos' installed-skill paths.
+   **Four files are RENDERED, not linked** (each is a function of several
    declarations): `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.claude/CLAUDE.md` and
    `~/.config/dotfiles/brew-prefix`, by
    `scripts/render-home.ts` (called from `link-dots.ts`). Inputs: the committed vendor files, an

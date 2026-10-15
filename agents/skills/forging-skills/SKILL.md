@@ -17,7 +17,7 @@ description: >-
 Verify this package from the repository root:
 
 ```sh
-bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/forging-skills
+skill-check agents/skills/forging-skills
 bun test agents/skills/forging-skills/tests
 ```
 

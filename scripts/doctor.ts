@@ -61,7 +61,8 @@ import {
   rmSync,
 } from "node:fs";
 import { homedir, release, tmpdir, userInfo } from "node:os";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
+import { registeredRepos } from "./workspace-repos.ts";
 import {
   MAPPING_ENV,
   parseMapping,
@@ -735,6 +736,68 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
         "mise run deps",
         problems,
       );
+}
+
+type MissingSkillHelper = {
+  repo: string;
+  rawPath: string;
+  bin: string;
+};
+
+export function missingSkillHelpers(
+  repo: string,
+  source: string,
+  home: string,
+): MissingSkillHelper[] {
+  const runPattern =
+    /^\s*run\s*=\s*(?:"((?:\\.|[^"\\])*)"|'([^']*)'|"""([\s\S]*?)"""|'''([\s\S]*?)''')/gmu;
+  const helperPattern =
+    /[^\s"'`]*?\.(?:claude|agents)\/skills\/([a-z0-9-]+)\/scripts\/([a-z0-9-]+\.ts)/gu;
+  const commands = [...source.matchAll(runPattern)].map(
+    (entry) => entry[1] ?? entry[2] ?? entry[3] ?? entry[4] ?? "",
+  );
+  const paths = commands.flatMap((command) =>
+    Array.from(command.matchAll(helperPattern)),
+  );
+  return paths.flatMap((match) => {
+    const rawPath = match[0];
+    const target = resolve(
+      rawPath
+        .replaceAll("{{env.HOME}}", home)
+        .replaceAll("{{config_root}}", repo)
+        .replace(/^~/u, home),
+    );
+    if (existsSync(target)) return [];
+    const script = match[2] ?? "";
+    return [{ repo, rawPath, bin: script.replace(/\.ts$/u, "") }];
+  });
+}
+
+export function checkSkillHelperPaths(ctx: Ctx): Promise<Finding> {
+  const missing = registeredRepos(
+    ctx.home,
+    process.env.WORKSPACE_ROOT ?? join(ctx.home, "Workspace"),
+  ).flatMap((repo) => {
+    const misePath = join(repo, "mise.toml");
+    if (!existsSync(misePath)) return [];
+    return missingSkillHelpers(repo, readFileSync(misePath, "utf8"), ctx.home);
+  });
+  const finding =
+    missing.length === 0
+      ? pass(
+          "skill-helper-paths",
+          "registered repo mise.toml helper paths resolve",
+        )
+      : fail(
+          "skill-helper-paths",
+          `${missing.length} registered repo mise.toml skill helper path(s) are missing`,
+          "Replace each script path with its PATH bin, then run `mise run deps` in dotfiles",
+          missing.map(
+            ({ repo, rawPath, bin }) =>
+              `${basename(repo)}/mise.toml: ${rawPath} is missing; use ${bin}`,
+          ),
+        );
+  return Promise.resolve(finding);
 }
 
 function resolveExisting(path: string): string | null {
@@ -1528,6 +1591,7 @@ export const CHECKS: Check[] = [
   },
   { name: "deps", run: checkDeps, applies: always },
   { name: "bins", run: checkBins, applies: always },
+  { name: "skill-helper-paths", run: checkSkillHelperPaths, applies: always },
   { name: "git-hooks", run: checkGitHooks, applies: always },
   { name: "login-shell", run: checkLoginShell, applies: always },
   { name: "mise-scope", run: checkMiseScope, applies: always },

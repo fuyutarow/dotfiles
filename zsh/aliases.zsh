@@ -921,11 +921,10 @@ rip() {
     print -u2 -- "rip: cannot create graveyard; refusing removal"
     return 1
   fi
-  if [[ ${IS_MAC:-false} == true ]]; then
+  # Branch on the stat implementation, not the OS: a Mac with Homebrew coreutils' gnubin on
+  # PATH resolves `stat` to GNU, which reads BSD's `-f %T` as "show filesystem of file %T".
+  fs_type=$(command stat -f -c %T -- "$graveyard" 2>/dev/null) ||
     fs_type=$(command stat -f %T "$graveyard" 2>/dev/null) || fs_type=""
-  else
-    fs_type=$(command stat -f -c %T -- "$graveyard" 2>/dev/null) || fs_type=""
-  fi
   if [[ -z "$fs_type" ]]; then
     print -u2 -- "rip: cannot verify graveyard filesystem; refusing removal"
     return 1

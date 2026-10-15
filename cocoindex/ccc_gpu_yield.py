@@ -1,8 +1,9 @@
-"""Run every ccc embedding batch on its standing GPU partition.
+"""Run every ccc embedding batch on an elastic, GPU-only allocator partition.
 
-The partition is reserved in agent-resource-run's ledger, so unrelated live reservations do
-not block ccc. A transiently unavailable partition, window, or duty slot delays the batch;
-there is deliberately no CPU embedding path. The model remains on CUDA between batches.
+The standing partition is the floor; ccc borrows currently free VRAM and shrinks its allocator
+cap when live research reservations appear. A transiently unavailable partition, window, duty
+slot, or headroom budget delays the batch; there is deliberately no CPU embedding path. The model
+remains on CUDA between batches.
 """
 
 import json
@@ -18,7 +19,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-MODEL_WEIGHTS_MIB = 1193  # 1.25 GB safetensors checkpoint, rounded up to MiB.
+MODEL_WEIGHTS_MIB = 597  # fp16 resident weights: half of the 1.25 GB checkpoint.
 CHUNK_WORKSPACE_MIB = 32  # Conservative budget per <=512-token ccc code chunk.
 DEFAULT_PARTITION_MIB = 2048
 DEFAULT_CONTEXT_ALLOWANCE_MIB = 512
@@ -39,6 +40,101 @@ def batch_limit_for_partition(
     """Bound batches by model weights, CUDA context, and per-chunk workspace."""
     remaining_mib = partition_mib - context_allowance_mib - MODEL_WEIGHTS_MIB
     return max(0, remaining_mib // CHUNK_WORKSPACE_MIB)
+
+
+def live_gpu_reservation_bytes(directory: Path, device: int) -> int | None:
+    """Read live agent-resource-run GPU reservations for one physical device.
+
+    Return None when a ledger entry cannot be trusted, so callers can retain only the
+    standing partition instead of expanding the ccc allocator cap on incomplete data.
+    Stale records are ignored but left for the ledger owner to clean up.
+    """
+    try:
+        entries = tuple(directory.glob("*.reservation.json"))
+    except OSError:
+        return None
+
+    reserved_bytes = 0
+    for entry in entries:
+        try:
+            record = json.loads(entry.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(record, dict):
+            return None
+        if record.get("schema") != 1:
+            return None
+        pid = record.get("controller_pid")
+        gpu = record.get("device")
+        if type(pid) is not int or pid < 1 or not isinstance(gpu, dict):
+            return None
+        if gpu.get("kind") != "gpu" or gpu.get("gpu_id") != device:
+            continue
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            pass
+        except OverflowError:
+            return None
+        except OSError:
+            return None
+        vram_peak_bytes = gpu.get("vram_peak_bytes")
+        if type(vram_peak_bytes) is not int or vram_peak_bytes < 0:
+            return None
+        reserved_bytes += vram_peak_bytes
+    return reserved_bytes
+
+
+def elastic_allocator_cap_bytes(
+    free_bytes: int | None,
+    live_reserved_bytes: int | None,
+    allocator_reserved_bytes: int,
+    standing_partition_mib: int,
+    safety_margin_mib: int,
+) -> int | None:
+    """Return a safe allocator cap or None when even the standing floor is unavailable.
+
+    ``free_bytes + allocator_reserved_bytes`` is the ccc process's current allocation plus
+    device headroom. Live reservations and the configured device safety margin are removed
+    before expanding above the standing partition. Unknown ledger data falls back to the
+    standing floor only; unknown device headroom denies the batch.
+    """
+    floor = standing_partition_mib * MIB
+    if free_bytes is None or free_bytes < 0 or allocator_reserved_bytes < 0:
+        return None
+    safe_upper_bound = free_bytes + allocator_reserved_bytes - safety_margin_mib * MIB
+    if live_reserved_bytes is None:
+        return floor if safe_upper_bound >= floor else None
+    cap = safe_upper_bound - live_reserved_bytes
+    return cap if cap >= floor else None
+
+
+def resize_allocator_cap(
+    torch,
+    probe_free_bytes: Callable[[int], int | None],
+    live_reserved_bytes: int | None,
+    device: int,
+    standing_partition_mib: int,
+    safety_margin_mib: int,
+) -> int | None:
+    """Apply the current elastic cap and return it, or None when the standing floor is unsafe."""
+    torch.cuda.empty_cache()
+    free_bytes = probe_free_bytes(device)
+    allocator_reserved_bytes = int(torch.cuda.memory_reserved(0))
+    cap_bytes = elastic_allocator_cap_bytes(
+        free_bytes,
+        live_reserved_bytes,
+        allocator_reserved_bytes,
+        standing_partition_mib,
+        safety_margin_mib,
+    )
+    if cap_bytes is None:
+        return None
+    total_bytes = int(torch.cuda.get_device_properties(0).total_memory)
+    torch.cuda.set_per_process_memory_fraction(cap_bytes / total_bytes, 0)
+    return cap_bytes
 
 
 def configure_partition(
@@ -231,7 +327,11 @@ def prepare_partition(guard: YieldGuard, apply_partition: Callable[[str], str]) 
         guard.wait(guard.policy.wait_seconds)
 
 
-def install(guard: YieldGuard, apply_partition: Callable[[str], str]) -> None:
+def install(
+    guard: YieldGuard,
+    apply_partition: Callable[[str], str],
+    refresh_allocator: Callable[[], bool] | None = None,
+) -> None:
     """Adapt CocoIndex's embedder while preserving its configured memo identity."""
     from cocoindex.ops.sentence_transformers import SentenceTransformerEmbedder
 
@@ -249,41 +349,72 @@ def install(guard: YieldGuard, apply_partition: Callable[[str], str]) -> None:
                 return model
             original_encode = model.encode
             partition_ready = False
+            model_on_gpu = False
 
             def encode(texts, **kwargs):
                 import numpy as np
                 import torch
 
-                outputs = []
-                for offset in range(0, len(texts), guard.policy.batch_size):
-                    batch = texts[offset : offset + guard.policy.batch_size]
-                    pressure_retries = 0
+                def gpu(batch: list[str]) -> object:
+                    nonlocal partition_ready, model_on_gpu
+                    if not partition_ready:
+                        if apply_partition("ccc") != "cuda":
+                            raise GpuUnavailable
+                        partition_ready = True
+                    if refresh_allocator is not None and not refresh_allocator():
+                        raise GpuUnavailable
+                    if not model_on_gpu:
+                        model.to(device="cuda:0", dtype=torch.float16)
+                        model_on_gpu = True
 
-                    def gpu(batch=batch) -> object:
-                        nonlocal partition_ready, pressure_retries
-                        if not partition_ready:
-                            if apply_partition("ccc") != "cuda":
-                                raise GpuUnavailable
-                            partition_ready = True
+                    try:
+                        return original_encode(batch, **(kwargs | {"device": "cuda:0"}))
+                    except torch.cuda.OutOfMemoryError as error:
+                        torch.cuda.empty_cache()
+                        if len(batch) > 1:
+                            midpoint = len(batch) // 2
+                            logger.warning(
+                                "ccc CUDA OOM for %d chunks; retrying GPU halves (%d + %d)",
+                                len(batch),
+                                midpoint,
+                                len(batch) - midpoint,
+                            )
+                            left = gpu(batch[:midpoint])
+                            right = gpu(batch[midpoint:])
+                            return np.concatenate((left, right), axis=0)
+
+                        max_seq_length = getattr(model, "max_seq_length", None)
+                        if not isinstance(max_seq_length, int) or max_seq_length < 1:
+                            raise RuntimeError(
+                                "ccc cannot retry a single GPU chunk because the model "
+                                "has no valid max_seq_length; refusing CPU embedding"
+                            ) from error
+
+                        # SentenceTransformer's Transformer module tokenizes with truncation
+                        # at model.max_seq_length. Re-encode once after clearing cached blocks.
+                        logger.warning(
+                            "ccc single chunk OOM at max_seq_length=%d; "
+                            "retrying once on GPU with SentenceTransformer truncation",
+                            max_seq_length,
+                        )
                         try:
                             return original_encode(
                                 batch, **(kwargs | {"device": "cuda:0"})
                             )
-                        except torch.cuda.OutOfMemoryError as error:
-                            # CUDA OOM is the sole in-process signal that permits eviction.
-                            model.to("cpu")
-                            torch.cuda.synchronize()
-                            torch.cuda.empty_cache()
-                            partition_ready = False
-                            pressure_retries += 1
-                            if pressure_retries > 1:
-                                raise RuntimeError(
-                                    "ccc GPU batch still exceeds its partition after one "
-                                    "pressure recovery; refusing CPU embedding"
-                                ) from error
-                            raise GpuUnavailable
+                        except torch.cuda.OutOfMemoryError:
+                            logger.error(
+                                "ccc GPU cannot embed one chunk after retry at "
+                                "max_seq_length=%d; refusing CPU embedding",
+                                max_seq_length,
+                            )
+                            # Preserve the CUDA OOM type. CocoIndex's batch runner consumes it
+                            # as RetryWithSmallerBatch, isolates this chunk, and keeps siblings.
+                            raise
 
-                    outputs.append(guard.run(gpu))
+                outputs = []
+                for offset in range(0, len(texts), guard.policy.batch_size):
+                    batch = texts[offset : offset + guard.policy.batch_size]
+                    outputs.append(guard.run(lambda batch=batch: gpu(batch)))
                 return np.concatenate(outputs) if outputs else np.empty((0,))
 
             model.encode = encode

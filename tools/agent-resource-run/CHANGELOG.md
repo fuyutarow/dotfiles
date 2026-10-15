@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.4 — 2026-10-15
+
+- Enable elastic ccc allocator caps from free VRAM and live research reservations.
+
 ## 1.4.3 — 2026-10-15
 
 - Increase ccc's standing GPU partition to 6144 MiB and reserve it from research GPU admission

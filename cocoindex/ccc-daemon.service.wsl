@@ -63,11 +63,12 @@ StartLimitBurst=8
 [Service]
 Type=simple
 # GPU-only launcher: ccc owns the standing partition in
-# tools/agent-resource-run/resource-policy.toml (currently 2048 MiB, including a 512 MiB
+# tools/agent-resource-run/resource-policy.toml (currently 6144 MiB, including a 512 MiB
 # context allowance). Research reservations use the remainder and do not defer ccc. If the
 # partition is unavailable, outside the configured window, or at its duty ceiling, ccc waits;
-# it never embeds on CPU. The model stays on CUDA between batches and is evicted only after a
-# CUDA OOM. Utilization is average CUDA duty time, not instantaneous SM utilization.
+# it never embeds on CPU. The model stays in fp16 on CUDA between batches; CUDA OOM splits the
+# batch recursively, and a single-chunk failure remains a visible indexing error. Utilization is
+# average CUDA duty time, not instantaneous SM utilization.
 # CPUQuota/RAM remain the daemon's supervisor-owned limits; no watcher/restart or second daemon.
 ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/cocoindex/ccc-daemon-launch.py
 Environment="CCC_GPU_UTILIZATION_PERCENT=100"

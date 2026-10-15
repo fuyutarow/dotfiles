@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.3 — 2026-10-15
+
+- Publish the statusline's existing Claude and Codex quota readings for agx routing
+
 ## 0.15.2 — 2026-10-15
 
 - Read agx rows from one last-good snapshot refreshed by a detached worker; retain prior rows after slow or failed refreshes and mark their age after 30 seconds.

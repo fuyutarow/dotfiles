@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.9.3 — 2026-10-15
+
+- Route using fresh subscription pace and record auditable picks
+
 ## 4.9.2 — 2026-10-15
 
 - Run Claude workspace-write workers inside a strict auto-approved Bash sandbox.

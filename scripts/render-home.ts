@@ -393,6 +393,8 @@ validateCommandTargets(settings, codex.value);
 // ── ~/.claude/CLAUDE.md ──────────────────────────────────────────────────────────────────────
 const BEGIN = "<!-- roster:begin -->";
 const END = "<!-- roster:end -->";
+const ROUTE_PACE_POLICY =
+  "  Subscription pace: among capability-eligible comparable rows, prefer the route with the most negative fresh-window pace (quota likely to expire unused), and avoid a positive-pace route when the other route has a comparable row. Stale or unknown usage is neutral.";
 const mdPath = `${dotfiles}/agents/claude/CLAUDE.md`;
 const rosterPath = `${dotfiles}/agents/models/dispatch-roster.toml`;
 const md = await attempt(() => readFileSync(mdPath, "utf8"));
@@ -405,8 +407,9 @@ if (b < 0 || e < b)
   fatal(`FATAL: markers ${BEGIN} … ${END} not found in ${mdPath}`);
 outputs.push({
   dest: `${home}/.claude/CLAUDE.md`,
-  // rosterPolicy also supplies the generated agx run-control guidance; its source stays in roster.ts.
-  text: `${md.value.slice(0, b)}${BEGIN}\n<!-- RENDERED from agents/models/dispatch-roster.toml by scripts/render-home.ts — edit the roster, then \`mise run link:dots\`. -->\n${rosterPolicy(roster.value)}\n${END}${md.value.slice(e + END.length)}`,
+  // rosterPolicy supplies the roster and agx run-control guidance; pace routing lives here because
+  // its input comes from the statusline snapshot rather than a static roster declaration.
+  text: `${md.value.slice(0, b)}${BEGIN}\n<!-- RENDERED from agents/models/dispatch-roster.toml by scripts/render-home.ts — edit the roster or renderer, then \`mise run link:dots\`. -->\n${rosterPolicy(roster.value)}\n${ROUTE_PACE_POLICY}\n${END}${md.value.slice(e + END.length)}`,
   from: `${mdPath} + ${rosterPath}`,
 });
 

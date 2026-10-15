@@ -9,6 +9,8 @@ import {
 } from "../../../../agents/models/roster.ts";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { exitWithError } from "./exit.ts";
+import { readRouteUsage } from "./usage.ts";
+import { setPendingPickAudit } from "./store.ts";
 
 const Reply = z.looseObject({
   answers: z.record(
@@ -55,10 +57,13 @@ export async function route(
         ["low", "medium", "high", "xhigh", "max"].indexOf(a.effort) -
         ["low", "medium", "high", "xhigh", "max"].indexOf(b.effort),
     );
-  const candidates = eligible;
+  const usage = readRouteUsage();
+  const candidates = eligible.filter((row) => usage[row.route].available);
   if (candidates.length === 0)
     return exitWithError(
-      "agx: no roster row satisfies required capabilities\n",
+      eligible.length === 0
+        ? "agx: no roster row satisfies required capabilities\n"
+        : "agx: all capability-eligible routes are at their subscription limit\n",
       2,
     );
   const criteria = Object.fromEntries(
@@ -67,7 +72,7 @@ export async function route(
   const request: Record<string, unknown> = {
     state: {
       task: brief.slice(0, roster.auto.max_task_chars),
-      routes: { codex: { available: true }, claude: { available: true } },
+      routes: usage,
       task_size: {
         timeout_s: timeoutS,
         class: timeoutClass,
@@ -79,7 +84,7 @@ export async function route(
     questions: {
       worker: {
         type: "choice",
-        instructions: `${ROUTING_OBJECTIVE} Pick a roster row for this ticket.`,
+        instructions: `${ROUTING_OBJECTIVE} Subscription pace is an additional route criterion: among capability-eligible comparable rows, prefer the route with the most negative fresh-window pace (quota likely to expire unused), and avoid a positive-pace route when the other route has a comparable row. Stale or unknown usage is neutral and must not create a route preference. Never choose a route whose availability is false. Pick a roster row for this ticket.`,
         criteria,
       },
     },
@@ -88,26 +93,48 @@ export async function route(
   const post = await postJev(endpoint, request, roster.auto.timeout_ms);
   const fallback =
     candidates.find((row) => row.id === roster.default) ?? candidates[0]!;
-  if (!post.ok) return fallback;
+  const recordPick = (
+    row: Choice,
+    source: string,
+    probabilities: Record<string, number> | undefined,
+  ): Choice => {
+    setPendingPickAudit({
+      source,
+      probabilities: probabilities ?? null,
+      usage_snapshot: usage,
+    });
+    return row;
+  };
+  if (!post.ok)
+    return recordPick(fallback, "fallback-request-failed", undefined);
   const decoded = jsonOf(Reply).safeParse(post.text);
-  if (post.status !== 200 || !decoded.success) return fallback;
+  if (post.status !== 200)
+    return recordPick(fallback, `fallback-http-${post.status}`, undefined);
+  if (!decoded.success)
+    return recordPick(fallback, "fallback-invalid-response", undefined);
   const answer = decoded.data.answers.worker;
   const selected = answer?.choice;
+  const probabilities = answer?.probabilities;
   const sampled =
-    answer?.probabilities === undefined
+    probabilities === undefined
       ? undefined
-      : sampleRow(
-          answer.probabilities,
-          roster.auto.pick_temperature,
-          randomUUID(),
-        );
-  let rowId = fallback.id;
+      : sampleRow(probabilities, roster.auto.pick_temperature, randomUUID());
   if (sampled !== undefined && candidates.some((row) => row.id === sampled.row))
-    rowId = sampled.row;
-  else if (
-    selected !== undefined &&
-    candidates.some((row) => row.id === selected)
-  )
-    rowId = selected;
-  return candidates.find((row) => row.id === rowId) ?? fallback;
+    return recordPick(
+      candidates.find((row) => row.id === sampled.row) ?? fallback,
+      "jev",
+      probabilities,
+    );
+  if (selected !== undefined) {
+    const selectedRow = candidates.find((row) => row.id === selected);
+    if (selectedRow !== undefined)
+      return recordPick(selectedRow, "jev", probabilities);
+  }
+  return recordPick(
+    fallback,
+    answer === undefined
+      ? "fallback-missing-answer"
+      : "fallback-ineligible-choice",
+    probabilities,
+  );
 }

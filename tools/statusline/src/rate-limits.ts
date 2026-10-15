@@ -11,6 +11,7 @@ import { ESC, RST, naSegment, paceColor, pctFmt, roles } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { codexRateSegment } from "./codex-rate.ts";
 import { jevUsageSegment } from "./jev-usage.ts";
+import { writeUsageSnapshot } from "./usage-snapshot.ts";
 
 const RSET = "⟳";
 // the account's own /usage screen ("Current week (Fable)"). This is NOT in the statusline's own
@@ -216,10 +217,17 @@ function claudeRateSegment(df: RateFacts, now: number): string {
 // One builder for both the statusline and its snapshot. Every provider always owns one slot.
 export const RATE_SOURCES = ["claude", "codex", "Jev"] as const;
 export function rateRow(
-  df: RateFacts,
+  df: RateFacts & Pick<Dataframe, "sid">,
   now = nowEpochSec(),
   sources: readonly (typeof RATE_SOURCES)[number][] = RATE_SOURCES,
 ): string {
+  if (
+    df.sid !== undefined &&
+    df.sid !== "" &&
+    sources.includes("claude") &&
+    sources.includes("codex")
+  )
+    writeUsageSnapshot(df, now);
   const label = `${ESC}[38;5;108mRate:${RST}`;
   // Positive space: exactly one slot per source, in this fixed order. A renderer failure
   // belongs to its own slot; no early return or undefined filter can erase a provider.

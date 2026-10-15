@@ -213,6 +213,12 @@ describe("render-home: base only", () => {
     // A real file, never a symlink — the whole point of the change.
     expect(lstatSync(dest(home)).isSymbolicLink()).toBe(false);
     const policy = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
+    expect(policy).toContain(
+      "Subscription pace: among capability-eligible comparable rows, prefer the route with the most negative fresh-window pace",
+    );
+    expect(policy).not.toContain(
+      "when codex and claude rows are comparable, choose codex",
+    );
     for (const text of [
       "agx run <ticket.md>",
       "agx check <ticket.md>",

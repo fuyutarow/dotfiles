@@ -22,6 +22,18 @@ import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { globsOverlap } from "../ticket.ts";
 import { exitWithError } from "./exit.ts";
 
+const PickAuditSchema = z.object({
+  source: z.string(),
+  probabilities: z.record(z.string(), z.number()).nullable(),
+  usage_snapshot: z.unknown(),
+});
+export type PickAudit = z.output<typeof PickAuditSchema>;
+
+let pendingPickAudit: PickAudit | undefined;
+export function setPendingPickAudit(audit: PickAudit): void {
+  pendingPickAudit = audit;
+}
+
 const EventSchema = z.discriminatedUnion("kind", [
   z.looseObject({
     kind: z.literal("started"),
@@ -36,6 +48,7 @@ const EventSchema = z.discriminatedUnion("kind", [
     vendor_session: z.string().nullable(),
     continues: z.string().nullable().optional(),
     pid: z.number(),
+    pick_audit: PickAuditSchema.optional(),
     legacy_key: z.string().optional(),
   }),
   z.looseObject({
@@ -91,7 +104,15 @@ export const now = (): string => Temporal.Now.instant().toString();
 export function append(event: NextEvent): void {
   const path = recordPath();
   mkdirSync(dirname(path), { recursive: true });
-  appendFileSync(path, `${JSON.stringify(event)}\n`, {
+  const pickAudit = event.kind === "started" ? pendingPickAudit : undefined;
+  if (event.kind === "started") pendingPickAudit = undefined;
+  const recorded =
+    event.kind === "started" &&
+    event.pick_audit === undefined &&
+    pickAudit !== undefined
+      ? { ...event, pick_audit: pickAudit }
+      : event;
+  appendFileSync(path, `${JSON.stringify(recorded)}\n`, {
     encoding: "utf8",
     flag: "a",
   });

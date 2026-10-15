@@ -1,6 +1,6 @@
 import { $ } from "bun";
 import { cli } from "cleye";
-import { existsSync, mkdirSync } from "node:fs";
+import { access, mkdir } from "node:fs/promises";
 
 // macOS system defaults — declarative, idempotent (single source of truth).
 // Run via `mise run mac:defaults` (wired into `mise run mac:init`). Consumer: human, verdict lines.
@@ -143,13 +143,17 @@ async function main(): Promise<void> {
     return;
   }
 
-  mkdirSync(SCREENSHOTS, { recursive: true });
+  await mkdir(SCREENSHOTS, { recursive: true });
   for (const s of SETTINGS) {
     const [type, v] = s.value;
     await $`defaults write ${s.domain} ${s.key} ${type} ${String(v)}`;
   }
 
-  if (existsSync("/Applications/Maccy.app")) {
+  const maccyInstalled = await access("/Applications/Maccy.app").then(
+    () => true,
+    () => false,
+  );
+  if (maccyInstalled) {
     await $`killall Maccy`.quiet().nothrow();
     await $`open -a Maccy`;
   }

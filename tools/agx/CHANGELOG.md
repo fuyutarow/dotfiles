@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.9.2 — 2026-10-15
+
+- Run Claude workspace-write workers inside a strict auto-approved Bash sandbox.
+
 ## 4.9.1 — 2026-10-15
 
 - Refuse dispatch on ownerless Git ref locks and allow Codex thirty seconds to finish after SIGTERM.

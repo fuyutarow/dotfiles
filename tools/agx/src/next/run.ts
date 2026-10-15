@@ -306,6 +306,17 @@ export async function run(flags: Flags): Promise<number> {
     let permissionMode = "acceptEdits";
     if (sandbox === "read-only") permissionMode = "plan";
     if (sandbox === "none") permissionMode = "bypassPermissions";
+    const claudeSettings =
+      sandbox === "workspace-write"
+        ? JSON.stringify({
+            sandbox: {
+              enabled: true,
+              autoAllowBashIfSandboxed: true,
+              allowUnsandboxedCommands: false,
+              failIfUnavailable: true,
+            },
+          })
+        : undefined;
     return [
       workerPath,
       "--target",
@@ -318,6 +329,8 @@ export async function run(flags: Flags): Promise<number> {
       row.effort,
       "--permission-mode",
       permissionMode,
+      ...(sandbox === "workspace-write" ? ["--allowed-tools", "Bash"] : []),
+      ...(claudeSettings === undefined ? [] : ["--settings", claudeSettings]),
       "--max-turns",
       "60",
       "--max-budget-usd",

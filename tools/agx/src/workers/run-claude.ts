@@ -52,6 +52,7 @@ export type RunConfig = Readonly<{
   safeMode: boolean;
   bare: boolean;
   allowedTools?: string | undefined;
+  settings?: string | undefined;
   jsonSchema?: string | undefined;
   // When set, claude runs with stream-json and what it is doing is kept in this file (the
   // statusline Run rows read it; agx passes it); its `result` event is the answer.
@@ -131,6 +132,7 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
   if (config.effort !== undefined) args.push("--effort", config.effort);
   if (config.allowedTools !== undefined)
     args.push("--allowed-tools", config.allowedTools);
+  if (config.settings !== undefined) args.push("--settings", config.settings);
   if (config.jsonSchema !== undefined)
     args.push("--json-schema", config.jsonSchema);
 
@@ -396,6 +398,7 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
         timeoutMs: String,
         maxBudgetUsd: String,
         allowedTools: nonEmptyString("--allowed-tools"),
+        settings: nonEmptyString("--settings"),
         jsonSchemaFile: nonEmptyString("--json-schema-file"),
         claudeBin: nonEmptyString("--claude-bin"),
         progressFile: nonEmptyString("--progress-file"),
@@ -490,6 +493,7 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
     safeMode,
     bare,
     allowedTools: values.allowedTools,
+    ...(values.settings === undefined ? {} : { settings: values.settings }),
     ...(values.effort === undefined ? {} : { effort: values.effort }),
     jsonSchema,
     ...(values.progressFile === undefined

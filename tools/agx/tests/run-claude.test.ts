@@ -123,6 +123,61 @@ describe("tools/agx dispatchner", () => {
     });
   });
 
+  test("passes sandbox settings to Claude for scoped shell execution", async () => {
+    await withTarget(async (target) => {
+      const settings = JSON.stringify({
+        sandbox: {
+          enabled: true,
+          autoAllowBashIfSandboxed: true,
+          allowUnsandboxedCommands: false,
+          failIfUnavailable: true,
+        },
+      });
+      const run = await runClaude({
+        target,
+        prompt: "Reply exactly OK",
+        model: "sonnet",
+        permissionMode: "acceptEdits",
+        maxTurns: 1,
+        timeoutMs: 5_000,
+        safeMode: true,
+        bare: false,
+        claudeBin: fixture,
+        settings,
+        allowedTools: "Bash",
+      });
+      expect(run.exitCode).toBe(0);
+      const argv = decodedJson(
+        z.array(z.string()),
+        readFileSync(join(target, "fake-claude-argv.log"), "utf8").trim(),
+      );
+      const settingIndex = argv.indexOf("--settings");
+      expect(settingIndex).toBeGreaterThan(-1);
+      expect(
+        decodedJson(
+          z.object({
+            sandbox: z.object({
+              enabled: z.boolean(),
+              autoAllowBashIfSandboxed: z.boolean(),
+              allowUnsandboxedCommands: z.boolean(),
+              failIfUnavailable: z.boolean(),
+            }),
+          }),
+          argv[settingIndex + 1]!,
+        ),
+      ).toEqual({
+        sandbox: {
+          enabled: true,
+          autoAllowBashIfSandboxed: true,
+          allowUnsandboxedCommands: false,
+          failIfUnavailable: true,
+        },
+      });
+      expect(argv).toContain("--allowed-tools");
+      expect(argv[argv.indexOf("--allowed-tools") + 1]).toBe("Bash");
+    });
+  });
+
   test("returns a bounded parsed Claude envelope", async () => {
     const run = await withTarget((target) =>
       runClaude({

@@ -468,6 +468,7 @@ const OTHER: readonly Surface[] = [
       "tools/secrets-push/package.json",
       "tools/sui-keystore-merge/package.json",
       "tools/workspace/package.json",
+      "tools/baseline/package.json",
     ],
     deployed: "the checkout",
     consumer:

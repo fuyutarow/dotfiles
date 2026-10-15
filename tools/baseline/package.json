@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/baseline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "baseline": "src/baseline.ts"
+  }
+}

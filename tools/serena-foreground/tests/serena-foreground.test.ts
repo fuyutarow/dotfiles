@@ -81,13 +81,22 @@ describe("explicit Serena lifecycle", () => {
 });
 
 describe("--version", () => {
-  test("prints the version of this package.json", () => {
-    const run = Bun.spawnSync(
+  test("prints the version of this package.json", async () => {
+    const run = Bun.spawn(
       ["bun", `${import.meta.dir}/../src/serena-foreground.ts`, "--version"],
-      { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+        signal: AbortSignal.timeout(30_000),
+      },
     );
-    expect(run.exitCode).toBe(0);
-    expect(run.stdout.toString().trim()).toBe(pkg.version);
+    const [exitCode, stdout] = await Promise.all([
+      run.exited,
+      new Response(run.stdout).text(),
+      new Response(run.stderr).text(),
+    ]);
+    expect(exitCode).toBe(0);
+    expect(stdout.trim()).toBe(pkg.version);
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 });

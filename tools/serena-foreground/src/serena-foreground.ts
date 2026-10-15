@@ -4,10 +4,10 @@
 // which terminates the whole service/LSP process group before releasing its reservation.
 
 import { createHash } from "node:crypto";
-import { realpathSync, statSync } from "node:fs";
+import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import { fromPromise } from "neverthrow";
 import {
   executeJob,
   validateManifest,
@@ -116,27 +116,26 @@ function integerFlag(
   };
 }
 
-function existingProject(path: string): string | UsageError {
-  const resolved = fromThrowable(() => realpathSync(resolve(path)))();
+async function existingProject(path: string): Promise<string | UsageError> {
+  const resolved = await fromPromise(
+    realpath(resolve(path)),
+    (error) =>
+      new UsageError(
+        `cannot resolve project '${path}': ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      ),
+  );
   if (resolved.isErr()) {
-    return new UsageError(
-      `cannot resolve project '${path}': ${
-        resolved.error instanceof Error
-          ? resolved.error.message
-          : String(resolved.error)
-      }`,
-    );
+    return resolved.error;
   }
   const project = resolved.value;
-  const directory = fromThrowable((candidate: string) => statSync(candidate))(
-    project,
+  const directory = await fromPromise(
+    stat(project),
+    (error) =>
+      new UsageError(error instanceof Error ? error.message : String(error)),
   );
-  if (directory.isErr())
-    return new UsageError(
-      directory.error instanceof Error
-        ? directory.error.message
-        : String(directory.error),
-    );
+  if (directory.isErr()) return directory.error;
   if (!directory.value.isDirectory())
     return new UsageError(`project is not a directory: ${project}`);
   return project;
@@ -215,7 +214,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const project = existingProject(parsed.flags.project);
+  const project = await existingProject(parsed.flags.project);
   if (project instanceof UsageError) {
     process.stderr.write(`USAGE: ${project.message}\n`);
     process.exitCode = 2;

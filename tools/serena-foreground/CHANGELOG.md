@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 — 2026-10-15
+
+- Use async filesystem and subprocess APIs.
+
 ## 1.0.0 — 2026-10-07
 
 - Moved from `agents/serena-control/` to `tools/serena-foreground/` (`src/`, `tests/`); behavior unchanged.

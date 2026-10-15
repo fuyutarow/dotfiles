@@ -340,8 +340,24 @@ run = "bun scripts/lint-bun.ts"
 dir = "{{config_root}}"
 description = "oxlint --type-aware the repo's TS against .oxlintrc.json, with no disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
-depends = ["lint:ts-no-disable", "lint:oxlint-policy"]
+depends = ["lint:ts-no-disable", "lint:oxlint-policy", "lint:no-sync"]
 run = "bunx --bun oxlint --type-aware"
+
+# node/no-sync for non-test TS, run through oxlint's own rule (scripts/lint-no-sync.ts). A genuinely
+# required sync call carries `// sync-ok: <reason>` on its line or the comment block above it, so
+# the exemption moves with the code. The rest are the per-file counts in lint/no-sync-baseline.tsv:
+# a new sync call fails, and the baseline only shrinks.
+[tasks."lint:no-sync"]
+dir = "{{config_root}}"
+description = "Fail on a sync fs/child_process call in non-test TS beyond lint/no-sync-baseline.tsv (exempt: // sync-ok: <reason>)"
+run = "bun scripts/lint-no-sync.ts"
+
+# Land refreshes the baseline after conversions: `mise run lint:no-sync-baseline`. It refuses any
+# per-file growth; `-- --init` re-bases deliberately.
+[tasks."lint:no-sync-baseline"]
+dir = "{{config_root}}"
+description = "Regenerate lint/no-sync-baseline.tsv from the working copy (lowers it; refuses growth)"
+run = "bun scripts/lint-no-sync.ts --write"
 
 # oxlint has no rule that forbids its own suppression comments, so this does: any oxlint-disable
 # or eslint-disable in tracked TS fails (audit targets get no exception rules — enforced, not

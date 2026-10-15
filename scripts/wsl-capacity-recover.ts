@@ -301,27 +301,77 @@ function measureTmpfs(): Result<TmpfsUsage, Error> {
   return tmpfsUsage(statfsSync("/tmp", { bigint: true }));
 }
 
+const DISK_RECLAIM = join(
+  import.meta.dir,
+  "../tools/disk-reclaim/src/reclaim.ts",
+);
+
+function miseBinary(): string {
+  return Bun.which("mise") ?? "/home/linuxbrew/.linuxbrew/bin/mise";
+}
+
+// The controller reaches the disk-reclaim CLI directly with an explicit target; no mise task
+// stands between them, so a renamed task cannot silently turn a stage into a failed spawn.
+export function diskReclaimArgv(mise: string, target: string): string[] {
+  return [
+    mise,
+    "exec",
+    "--",
+    "bun",
+    DISK_RECLAIM,
+    "run",
+    target,
+    "--yes",
+    "--no-progress",
+    "--json",
+  ];
+}
+
+export type ReclaimStage = {
+  name: string;
+  argv: string[];
+  timeoutMs: number;
+};
+
+// Order is execution order: the Windows host levers first, then guest build output and caches.
+// `builds` is the one stage with no age filter of its own; disk-reclaim refuses any path a live
+// process holds and reports an unreadable-process path as ASK, which --yes never runs.
+export function reclaimStages(mise: string): ReclaimStage[] {
+  return [
+    { name: "host", timeoutMs: 120_000 },
+    { name: "builds", timeoutMs: 180_000 },
+    { name: "clean", timeoutMs: 120_000 },
+  ].map(({ name, timeoutMs }) => ({
+    name,
+    argv: diskReclaimArgv(mise, name),
+    timeoutMs,
+  }));
+}
+
+// Every command the controller spawns that names a mise task, a disk-reclaim target, or a mise
+// subcommand. The test resolves each one against this checkout.
+export function controllerCalls(mise = "mise"): ReclaimStage[] {
+  return [
+    {
+      name: "tmpfs",
+      argv: diskReclaimArgv(mise, "tmpfs"),
+      timeoutMs: 120_000,
+    },
+    ...reclaimStages(mise),
+    {
+      name: "cargo-clean",
+      argv: [mise, "exec", "--", "cargo", "clean"],
+      timeoutMs: 300_000,
+    },
+  ];
+}
+
 async function runTmpfsTarget(): Promise<{
   code: number;
   timedOut: boolean;
   output: string;
 }> {
-  const mise = Bun.which("mise") ?? "/home/linuxbrew/.linuxbrew/bin/mise";
-  return runBounded(
-    [
-      mise,
-      "exec",
-      "--",
-      "bun",
-      join(import.meta.dir, "../tools/disk-reclaim/src/reclaim.ts"),
-      "run",
-      "tmpfs",
-      "--yes",
-      "--no-progress",
-      "--json",
-    ],
-    120_000,
-  );
+  return runBounded(diskReclaimArgv(miseBinary(), "tmpfs"), 120_000);
 }
 
 function readLastAttemptMs(): number {
@@ -671,48 +721,70 @@ exit $LASTEXITCODE
   return result.value.code === 0 && !result.value.timedOut;
 }
 
-async function reclaim(policy: Policy): Promise<Result<number, Error>> {
-  const mise = Bun.which("mise") ?? "/home/linuxbrew/.linuxbrew/bin/mise";
-  const steps: [string, ...string[]][] = [
-    ["reclaim:host", "--", "--execute"],
-    ["reclaim:builds"],
-    ["reclaim:clean"],
-  ];
-  const initial = freeBytes(policy.path);
-  if (initial.isErr()) return err(initial.error);
-  let free = initial.value;
-  markAttempt();
-  for (const [task, ...args] of steps) {
-    if (free >= policy.denyBytes) break;
+export type StageRun = { code: number; timedOut: boolean; output: string };
+
+// A stage that cannot start, times out, or exits non-zero is a failure the caller must surface:
+// the unit runs every minute and systemd records only the exit status.
+export async function runReclaimStages(options: {
+  stages: ReclaimStage[];
+  free: number;
+  denyBytes: number;
+  run: (stage: ReclaimStage) => Promise<StageRun>;
+  measure: () => Result<number, Error>;
+  log: (message: string) => void;
+  warn: (message: string) => void;
+}): Promise<Result<{ free: number; failures: string[] }, Error>> {
+  let free = options.free;
+  const failures: string[] = [];
+  for (const stage of options.stages) {
+    if (free >= options.denyBytes) break;
     const before = free;
-    // This unattended service may run while compute is active; retain the previous age grace.
-    const env =
-      task === "reclaim:builds"
-        ? { ...process.env, KONDO_OLDER: "30d" }
-        : undefined;
-    const result = await fromAsyncThrowable(() =>
-      runBounded(
-        [mise, "run", task, ...args],
-        task === "reclaim:builds" ? 180_000 : 120_000,
-        undefined,
-        env,
-      ),
-    )();
-    const measured = freeBytes(policy.path);
+    const result = await fromAsyncThrowable(() => options.run(stage))();
+    const measured = options.measure();
     if (measured.isErr()) return err(measured.error);
     free = measured.value;
-    if (result.isOk()) {
-      process.stdout.write(
-        `RECLAIM task=${task} exit=${result.value.code} timeout=${result.value.timedOut} ` +
-          `host_delta=${gib(free - before)} detail=${JSON.stringify(result.value.output)}\n`,
+    if (result.isErr()) {
+      failures.push(`${stage.name}: ${String(result.error)}`);
+      options.warn(
+        `WARN reclaim stage=${stage.name} failed: ${String(result.error)}\n`,
       );
+      continue;
+    }
+    const line =
+      `RECLAIM stage=${stage.name} exit=${result.value.code} timeout=${result.value.timedOut} ` +
+      `host_delta=${gib(free - before)} detail=${JSON.stringify(result.value.output)}\n`;
+    if (result.value.code !== 0 || result.value.timedOut) {
+      failures.push(
+        `${stage.name}: exit=${result.value.code} timeout=${result.value.timedOut}`,
+      );
+      options.warn(line);
     } else {
-      process.stderr.write(
-        `WARN reclaim task=${task} failed: ${String(result.error)}\n`,
-      );
+      options.log(line);
     }
   }
-  return ok(free);
+  return ok({ free, failures });
+}
+
+async function reclaim(
+  policy: Policy,
+): Promise<Result<{ free: number; failures: string[] }, Error>> {
+  const initial = freeBytes(policy.path);
+  if (initial.isErr()) return err(initial.error);
+  markAttempt();
+  return runReclaimStages({
+    stages: reclaimStages(miseBinary()),
+    free: initial.value,
+    denyBytes: policy.denyBytes,
+    // This unattended service may run while compute is active; disk-reclaim judges liveness.
+    run: (stage) => runBounded(stage.argv, stage.timeoutMs),
+    measure: () => freeBytes(policy.path),
+    log: (message) => {
+      process.stdout.write(message);
+    },
+    warn: (message) => {
+      process.stderr.write(message);
+    },
+  });
 }
 
 export function startTicks(stat: string): string | null {
@@ -878,7 +950,7 @@ async function emergencyBuildReclaim(
     process.stderr.write("BUILD_RECLAIM skip=build-still-running\n");
     return freeBytes(policy.path);
   }
-  const mise = Bun.which("mise") ?? "/home/linuxbrew/.linuxbrew/bin/mise";
+  const mise = miseBinary();
   const beforeResult = freeBytes(policy.path);
   if (beforeResult.isErr()) return err(beforeResult.error);
   const before = beforeResult.value;
@@ -888,6 +960,9 @@ async function emergencyBuildReclaim(
   const afterResult = freeBytes(policy.path);
   if (afterResult.isErr()) return err(afterResult.error);
   const after = afterResult.value;
+  if (result.isErr() || result.value.code !== 0 || result.value.timedOut) {
+    process.exitCode = 1;
+  }
   process.stdout.write(
     `BUILD_RECLAIM exit=${result.isOk() ? result.value.code : "error"} ` +
       `host_delta=${gib(after - before)} ` +
@@ -1076,7 +1151,13 @@ async function main(): Promise<void> {
       process.stderr.write(`FATAL: ${String(reclaimed.error)}\n`);
       process.exit(2);
     }
-    free = reclaimed.value;
+    free = reclaimed.value.free;
+    if (reclaimed.value.failures.length > 0) {
+      process.stderr.write(
+        `FAILED_STAGES ${reclaimed.value.failures.join("; ")}\n`,
+      );
+      process.exitCode = 1;
+    }
   }
   if (!diskEmergency && free < policy.stopBytes) {
     await stopCompute(liveTargets());

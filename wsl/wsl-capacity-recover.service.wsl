@@ -4,8 +4,9 @@ Description=Recover WSL host disk and memory headroom before compute exhausts th
 [Service]
 Type=oneshot
 WorkingDirectory=%h/dotfiles
-# kondo and other Brewfile tools used by reclaim:* live in Linuxbrew, not systemd's base PATH.
-Environment=PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
+# kondo, bun and mise live in Linuxbrew, and cargo (for the cargo-clean stage) in its keg-only
+# rustup bin; none is on systemd's base PATH.
+Environment=PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/opt/rustup/bin:/usr/bin:/bin
 # Reclaim tmpfs when either bytes or inodes reach 80% use.
 Environment=TMPFS_RECLAIM_PERCENT=80
 # The shim is deliberately used by this non-interactive service in the repo that declares bun.

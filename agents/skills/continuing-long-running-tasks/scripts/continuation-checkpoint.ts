@@ -5,21 +5,17 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import {
-  closeSync,
-  constants,
-  fstatSync,
-  fsyncSync,
-  lstatSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { constants } from "node:fs";
+import { lstat, open, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { cli } from "cleye";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
 import {
   continuationProjectRoot,
   continuationWorkspaceRootFromSlot,
@@ -62,6 +58,13 @@ const unexpectedFailure = (): TransactionError =>
 const capture = <T>(operation: () => T): TransactionResult<T> =>
   fromThrowable(operation)().mapErr(() => unexpectedFailure());
 
+const captureAsync = async <T>(
+  operation: () => Promise<T> | T,
+): Promise<TransactionResult<T>> =>
+  fromAsyncThrowable(async () => operation())().mapErr(() =>
+    unexpectedFailure(),
+  );
+
 function nonEmpty(value: string): TransactionResult<string> {
   return value === "" ? failure("TCR39", "empty option", 2) : ok(value);
 }
@@ -99,127 +102,121 @@ function digest(text: string): TransactionResult<string> {
   return capture(() => createHash("sha256").update(text).digest("hex"));
 }
 
-function readRegularText(
+async function readRegularText(
   path: string,
   code: string,
-): TransactionResult<string> {
+): Promise<TransactionResult<string>> {
   type ReadOutcome = { safe: true; text: string } | { safe: false };
-  const result = fromThrowable((): ReadOutcome => {
-    const descriptor = openSync(
+  const read = await fromAsyncThrowable(async (): Promise<ReadOutcome> => {
+    const handle = await open(
       path,
       constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
     );
-    using _closeDescriptor = {
-      [Symbol.dispose]: () => {
-        closeSync(descriptor);
+    await using _closeHandle = {
+      [Symbol.asyncDispose]: async () => {
+        await handle.close();
       },
     };
-    const stat = fstatSync(descriptor);
+    const stat = await handle.stat();
     return stat.isFile() && stat.size <= MAX_RECORD_BYTES
-      ? { safe: true, text: readFileSync(descriptor, "utf8") }
+      ? { safe: true, text: await handle.readFile("utf8") }
       : { safe: false };
   })().mapErr(
     () => new TransactionError(code, "file could not be read safely"),
   );
-  return result.andThen((file) =>
-    file.safe
-      ? ok(file.text)
-      : failure(
-          code,
-          `file must be regular and at most ${MAX_RECORD_BYTES} bytes`,
-        ),
-  );
+  if (read.isErr()) return err(read.error);
+  return read.value.safe
+    ? ok(read.value.text)
+    : failure(
+        code,
+        `file must be regular and at most ${MAX_RECORD_BYTES} bytes`,
+      );
 }
 
-function workspaceRoot(
+async function workspaceRoot(
   recordPath: string,
   slot?: string,
-): TransactionResult<string> {
-  return capture(() => {
+): Promise<TransactionResult<string>> {
+  const found = await captureAsync(async () => {
     const fromSlot =
       slot === undefined
         ? undefined
         : continuationWorkspaceRootFromSlot(resolve(slot));
-    return fromSlot ?? continuationProjectRoot(dirname(resolve(recordPath)));
-  }).andThen((root) =>
-    root === undefined
-      ? failure("TCR23", "workspace root is not trustworthy")
-      : ok(root),
-  );
+    return (
+      fromSlot ?? (await continuationProjectRoot(dirname(resolve(recordPath))))
+    );
+  });
+  if (found.isErr()) return err(found.error);
+  return found.value === undefined
+    ? failure("TCR23", "workspace root is not trustworthy")
+    : ok(found.value);
 }
 
-function snapshot(
+async function snapshot(
   recordPath: string,
   root: string,
-): TransactionResult<Snapshot> {
+): Promise<TransactionResult<Snapshot>> {
   const path = resolve(recordPath);
-  return capture(() => inspectContinuationRecord(path, root)).andThen(
-    (inspection) => {
-      if (inspection.status === "absent") {
-        return failure("TCR00", "record does not exist");
-      }
-      if (inspection.status === "invalid") {
-        return failure(
-          inspection.findings[0]?.code ?? "TCR49",
-          inspection.findings.map((finding) => finding.message).join("; "),
-        );
-      }
-      return readRegularText(path, "TCR49").andThen((text) =>
-        capture(() => validateContinuationRecord(text, path, root)).andThen(
-          (findings) => {
-            if (findings.length > 0) {
-              return failure(
-                findings[0]?.code ?? "TCR49",
-                findings.map((finding) => finding.message).join("; "),
-              );
-            }
-            return metadata(text, "REVISION").andThen((revision) =>
-              metadata(text, "WRITER").andThen((writer) =>
-                digest(text).map((sha256) => ({
-                  path,
-                  revision: Number(revision),
-                  sha256,
-                  text,
-                  writer,
-                })),
-              ),
-            );
-          },
-        ),
-      );
-    },
+  const inspected = await captureAsync(() =>
+    inspectContinuationRecord(path, root),
+  );
+  if (inspected.isErr()) return err(inspected.error);
+  const inspection = inspected.value;
+  if (inspection.status === "absent") {
+    return failure("TCR00", "record does not exist");
+  }
+  if (inspection.status === "invalid") {
+    return failure(
+      inspection.findings[0]?.code ?? "TCR49",
+      inspection.findings.map((finding) => finding.message).join("; "),
+    );
+  }
+  const read = await readRegularText(path, "TCR49");
+  if (read.isErr()) return err(read.error);
+  const text = read.value;
+  const validated = await captureAsync(() =>
+    validateContinuationRecord(text, path, root),
+  );
+  if (validated.isErr()) return err(validated.error);
+  const findings = validated.value;
+  if (findings.length > 0) {
+    return failure(
+      findings[0]?.code ?? "TCR49",
+      findings.map((finding) => finding.message).join("; "),
+    );
+  }
+  return metadata(text, "REVISION").andThen((revision) =>
+    metadata(text, "WRITER").andThen((writer) =>
+      digest(text).map((sha256) => ({
+        path,
+        revision: Number(revision),
+        sha256,
+        text,
+        writer,
+      })),
+    ),
   );
 }
 
-function writerForBoundSlot(
+async function writerForBoundSlot(
   slotPath: string,
   recordPath: string,
-): TransactionResult<string> {
-  type SlotBinding = NonNullable<
-    ReturnType<typeof readContinuationBindingAtSlot>
-  >;
-  type BindingOutcome =
-    | { bound: true; binding: SlotBinding }
-    | { bound: false };
-  return fromThrowable((): BindingOutcome => {
-    const binding = readContinuationBindingAtSlot(resolve(slotPath));
-    if (binding?.status === "bound" && binding.record === resolve(recordPath)) {
-      return { bound: true, binding };
-    }
-    return { bound: false };
-  })()
-    .mapErr(() => unexpectedFailure())
-    .andThen((value) =>
-      value.bound
-        ? ok(`session:${basename(dirname(value.binding.slot))}`)
-        : failure("TCR52", "writer slot is not validly bound to this record"),
-    );
+): Promise<TransactionResult<string>> {
+  const read = await captureAsync(() =>
+    readContinuationBindingAtSlot(resolve(slotPath)),
+  );
+  if (read.isErr()) return err(read.error);
+  const binding = read.value;
+  if (binding?.status === "bound" && binding.record === resolve(recordPath)) {
+    return ok(`session:${basename(dirname(binding.slot))}`);
+  }
+  return failure("TCR52", "writer slot is not validly bound to this record");
 }
 
-function proposalText(
+async function proposalText(
   proposalPath: string,
   recordPath: string,
-): TransactionResult<string> {
+): Promise<TransactionResult<string>> {
   const proposal = resolve(proposalPath);
   if (
     proposal === resolve(recordPath) ||
@@ -230,13 +227,12 @@ function proposalText(
       "proposal must be a distinct regular file beside the canonical record",
     );
   }
-  return fromThrowable(() => lstatSync(proposal))()
-    .mapErr(() => new TransactionError("TCR49", "proposal does not exist"))
-    .andThen((stat) =>
-      stat.isSymbolicLink() || !stat.isFile()
-        ? failure("TCR49", "proposal must be a regular file, never a symlink")
-        : readRegularText(proposal, "TCR49"),
-    );
+  const statResult = await fromAsyncThrowable(() => lstat(proposal))();
+  if (statResult.isErr()) return failure("TCR49", "proposal does not exist");
+  const stat = statResult.value;
+  return stat.isSymbolicLink() || !stat.isFile()
+    ? failure("TCR49", "proposal must be a regular file, never a symlink")
+    : readRegularText(proposal, "TCR49");
 }
 
 function requireSameMetadata(
@@ -253,98 +249,94 @@ function requireSameMetadata(
   );
 }
 
-function validateProposal(
+async function validateProposal(
   current: Snapshot,
   proposal: string,
   root: string,
   handoffSlot?: string,
-): TransactionResult<Readonly<{ revision: number; writer: string }>> {
-  return capture(() =>
+): Promise<TransactionResult<Readonly<{ revision: number; writer: string }>>> {
+  const validated = await captureAsync(() =>
     validateContinuationRecord(proposal, current.path, root),
-  ).andThen((findings) => {
-    if (findings.length > 0) {
-      return failure(
-        findings[0]?.code ?? "TCR49",
-        findings.map((finding) => finding.message).join("; "),
-      );
-    }
-    return validateProposalFields(current, proposal, handoffSlot);
-  });
-}
-
-function validateProposalFields(
-  current: Snapshot,
-  proposal: string,
-  handoffSlot?: string,
-): TransactionResult<Readonly<{ revision: number; writer: string }>> {
-  return requireSameMetadata(current, proposal, "SCHEMA").andThen(() =>
-    requireSameMetadata(current, proposal, "TASK_ID").andThen(() =>
-      requireSameMetadata(current, proposal, "PATH").andThen(() =>
-        validateProposalRevision(current, proposal, handoffSlot),
-      ),
-    ),
   );
+  if (validated.isErr()) return err(validated.error);
+  const findings = validated.value;
+  if (findings.length > 0) {
+    return failure(
+      findings[0]?.code ?? "TCR49",
+      findings.map((finding) => finding.message).join("; "),
+    );
+  }
+  return validateProposalFields(current, proposal, handoffSlot);
 }
 
-function validateProposalRevision(
+async function validateProposalFields(
   current: Snapshot,
   proposal: string,
   handoffSlot?: string,
-): TransactionResult<Readonly<{ revision: number; writer: string }>> {
-  return metadata(proposal, "REVISION").andThen((revisionText) => {
-    const revision = Number(revisionText);
-    if (revision !== current.revision + 1) {
-      return failure(
-        "TCR45",
-        `proposal REVISION must be ${current.revision + 1}`,
-      );
-    }
-    return metadata(proposal, "UPDATED").andThen((updated) =>
-      metadata(current.text, "UPDATED").andThen((currentUpdated) =>
-        updated === currentUpdated
-          ? failure("TCR45", "proposal UPDATED must name this checkpoint")
-          : validateProposalWriter(current, revision, proposal, handoffSlot),
-      ),
-    );
-  });
+): Promise<TransactionResult<Readonly<{ revision: number; writer: string }>>> {
+  for (const key of ["SCHEMA", "TASK_ID", "PATH"]) {
+    const same = requireSameMetadata(current, proposal, key);
+    if (same.isErr()) return err(same.error);
+  }
+  return validateProposalRevision(current, proposal, handoffSlot);
 }
 
-function validateProposalWriter(
+async function validateProposalRevision(
+  current: Snapshot,
+  proposal: string,
+  handoffSlot?: string,
+): Promise<TransactionResult<Readonly<{ revision: number; writer: string }>>> {
+  const revisionResult = metadata(proposal, "REVISION");
+  if (revisionResult.isErr()) return err(revisionResult.error);
+  const revision = Number(revisionResult.value);
+  if (revision !== current.revision + 1) {
+    return failure(
+      "TCR45",
+      `proposal REVISION must be ${current.revision + 1}`,
+    );
+  }
+  const updated = metadata(proposal, "UPDATED");
+  if (updated.isErr()) return err(updated.error);
+  const currentUpdated = metadata(current.text, "UPDATED");
+  if (currentUpdated.isErr()) return err(currentUpdated.error);
+  if (updated.value === currentUpdated.value) {
+    return failure("TCR45", "proposal UPDATED must name this checkpoint");
+  }
+  return validateProposalWriter(current, revision, proposal, handoffSlot);
+}
+
+async function validateProposalWriter(
   current: Snapshot,
   revision: number,
   proposal: string,
   handoffSlot?: string,
-): TransactionResult<Readonly<{ revision: number; writer: string }>> {
-  return metadata(proposal, "WRITER").andThen((writer) => {
-    if (writer === current.writer) return ok({ revision, writer });
-    return metadata(proposal, "STATE").andThen((state) => {
-      if (writer === "none" && state === "closed") {
-        return ok({ revision, writer });
-      }
-      if (handoffSlot === undefined || state === "closed") {
-        return failure(
-          "TCR48",
-          "WRITER may change only through a pre-bound handoff or an atomic close",
-        );
-      }
-      return writerForBoundSlot(handoffSlot, current.path).andThen(
-        (targetWriter) =>
-          writer === targetWriter
-            ? ok({ revision, writer })
-            : failure(
-                "TCR48",
-                "WRITER may change only through a pre-bound handoff or an atomic close",
-              ),
-      );
-    });
-  });
+): Promise<TransactionResult<Readonly<{ revision: number; writer: string }>>> {
+  const writerResult = metadata(proposal, "WRITER");
+  if (writerResult.isErr()) return err(writerResult.error);
+  const writer = writerResult.value;
+  if (writer === current.writer) return ok({ revision, writer });
+  const stateResult = metadata(proposal, "STATE");
+  if (stateResult.isErr()) return err(stateResult.error);
+  const state = stateResult.value;
+  if (writer === "none" && state === "closed") {
+    return ok({ revision, writer });
+  }
+  const handoffDenied = () =>
+    failure(
+      "TCR48",
+      "WRITER may change only through a pre-bound handoff or an atomic close",
+    );
+  if (handoffSlot === undefined || state === "closed") return handoffDenied();
+  const target = await writerForBoundSlot(handoffSlot, current.path);
+  if (target.isErr()) return err(target.error);
+  return writer === target.value ? ok({ revision, writer }) : handoffDenied();
 }
 
-function createProposal(
+async function createProposal(
   path: string,
   output: string,
   text: string,
-): TransactionResult<string> {
+): Promise<TransactionResult<string>> {
   const proposal = resolve(output);
   if (
     proposal === resolve(path) ||
@@ -355,17 +347,12 @@ function createProposal(
       "proposal must be a distinct file beside the canonical record",
     );
   }
-  return fromThrowable(() => {
-    writeFileSync(proposal, text, { flag: "wx", mode: 0o600 });
-  })()
-    .mapErr(
-      () =>
-        new TransactionError(
-          "TCR49",
-          "proposal already exists or could not be created",
-        ),
-    )
-    .map(() => proposal);
+  const written = await fromAsyncThrowable(() =>
+    writeFile(proposal, text, { flag: "wx", mode: 0o600 }),
+  )();
+  return written.isErr()
+    ? failure("TCR49", "proposal already exists or could not be created")
+    : ok(proposal);
 }
 
 type CheckpointArgs = {
@@ -377,22 +364,30 @@ type CheckpointArgs = {
   writerSlot: string;
 };
 
-function applyCheckpoint(args: CheckpointArgs): TransactionResult<void> {
-  return fromThrowable(() => applyCheckpointTransaction(args))()
-    .andThen((result) => result)
-    .mapErr((error) =>
-      error instanceof TransactionError ? error : unexpectedFailure(),
+async function applyCheckpoint(
+  args: CheckpointArgs,
+): Promise<TransactionResult<void>> {
+  const outcome = await fromAsyncThrowable(() =>
+    applyCheckpointTransaction(args),
+  )();
+  if (outcome.isErr()) {
+    return err(
+      outcome.error instanceof TransactionError
+        ? outcome.error
+        : unexpectedFailure(),
     );
+  }
+  return outcome.value;
 }
 
-function applyCheckpointTransaction(
+async function applyCheckpointTransaction(
   args: CheckpointArgs,
-): TransactionResult<void> {
+): Promise<TransactionResult<void>> {
   const path = resolve(args.path);
-  const rootResult = workspaceRoot(path, args.writerSlot);
+  const rootResult = await workspaceRoot(path, args.writerSlot);
   if (rootResult.isErr()) return err(rootResult.error);
   const root = rootResult.value;
-  const callerResult = writerForBoundSlot(args.writerSlot, path);
+  const callerResult = await writerForBoundSlot(args.writerSlot, path);
   if (callerResult.isErr()) return err(callerResult.error);
   const caller = callerResult.value;
   const lock = join(dirname(path), ".TASK-CONTINUATION.lock");
@@ -401,33 +396,30 @@ function applyCheckpointTransaction(
 
   // Disposal runs in reverse registration order, so the lock disposer is
   // registered first and fires second — matching the original finally's
-  // temporary-then-lock cleanup order.
-  using _cleanup = new DisposableStack();
-  _cleanup.defer(() => {
+  // temporary-then-lock cleanup order. The async stack is awaited at scope
+  // exit, so the caller never returns before the unlinks finish.
+  await using _cleanup = new AsyncDisposableStack();
+  _cleanup.defer(async () => {
     if (lockHeld) {
       // Fail closed on the next update; stale locks require human inspection.
-      fromThrowable(() => {
-        unlinkSync(lock);
-      })();
+      await fromAsyncThrowable(() => unlink(lock))();
     }
   });
-  _cleanup.defer(() => {
-    if (temporary !== undefined) {
+  _cleanup.defer(async () => {
+    const leftover = temporary;
+    if (leftover !== undefined) {
       // The randomized incomplete file is never a canonical record.
-      const leftover = temporary;
-      fromThrowable(() => {
-        unlinkSync(leftover);
-      })();
+      await fromAsyncThrowable(() => unlink(leftover))();
     }
   });
 
-  const lockWritten = fromThrowable(() => {
-    writeFileSync(
+  const lockWritten = await fromAsyncThrowable(() =>
+    writeFile(
       lock,
       `${JSON.stringify({ pid: process.pid, started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }), transaction: randomUUID() })}\n`,
       { flag: "wx", mode: 0o600 },
-    );
-  })();
+    ),
+  )();
   if (lockWritten.isErr()) {
     return failure(
       "TCR40",
@@ -436,7 +428,7 @@ function applyCheckpointTransaction(
   }
   lockHeld = true;
 
-  const currentResult = snapshot(path, root);
+  const currentResult = await snapshot(path, root);
   if (currentResult.isErr()) return err(currentResult.error);
   const current = currentResult.value;
   if (current.revision !== args.baseRevision) {
@@ -455,10 +447,10 @@ function applyCheckpointTransaction(
     );
   }
 
-  const candidateTextResult = proposalText(args.proposal, path);
+  const candidateTextResult = await proposalText(args.proposal, path);
   if (candidateTextResult.isErr()) return err(candidateTextResult.error);
   const candidateText = candidateTextResult.value;
-  const candidateResult = validateProposal(
+  const candidateResult = await validateProposal(
     current,
     candidateText,
     root,
@@ -467,7 +459,7 @@ function applyCheckpointTransaction(
   if (candidateResult.isErr()) return err(candidateResult.error);
   const candidate = candidateResult.value;
 
-  const recheckedResult = snapshot(path, root);
+  const recheckedResult = await snapshot(path, root);
   if (recheckedResult.isErr()) return err(recheckedResult.error);
   const rechecked = recheckedResult.value;
   if (
@@ -478,21 +470,22 @@ function applyCheckpointTransaction(
   }
 
   temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
-  const mode = lstatSync(path).mode & 0o777;
-  writeFileSync(temporary, candidateText, { flag: "wx", mode });
-  const descriptor = openSync(temporary, constants.O_RDONLY);
-  using _closeDescriptor = {
-    [Symbol.dispose]: () => {
-      closeSync(descriptor);
+  const mode = (await lstat(path)).mode & 0o777;
+  await writeFile(temporary, candidateText, { flag: "wx", mode });
+  const handle = await open(temporary, constants.O_RDONLY);
+  await using _closeHandle = {
+    [Symbol.asyncDispose]: async () => {
+      await handle.close();
     },
   };
-  fsyncSync(descriptor);
-  renameSync(temporary, path);
+  await handle.sync();
+  await rename(temporary, path);
   temporary = undefined;
 
-  const proposalRemoved = fromThrowable(() => {
-    unlinkSync(resolve(args.proposal));
-  })().isOk();
+  const proposalRemoved = await unlink(resolve(args.proposal)).then(
+    () => true,
+    () => false,
+  );
   const sha256Result = digest(candidateText);
   if (sha256Result.isErr()) return err(sha256Result.error);
   process.stdout.write(
@@ -533,7 +526,7 @@ function rejectPrototypeFlag(type: string, flag: string): void {
   }
 }
 
-function main(): TransactionResult<void> {
+async function main(): Promise<TransactionResult<void>> {
   const parsed = cli(
     {
       name: "continuation-checkpoint.ts",
@@ -552,31 +545,31 @@ function main(): TransactionResult<void> {
     undefined,
     Bun.argv.slice(2),
   );
-  return optionalPositiveInteger(parsed.flags.baseRevision).andThen(
+  const options = optionalPositiveInteger(parsed.flags.baseRevision).andThen(
     (baseRevision) =>
       optionalSha256(parsed.flags.baseSha256).andThen((baseSha256) =>
         optionalNonEmpty(parsed.flags.handoffSlot).andThen((handoffSlot) =>
           optionalNonEmpty(parsed.flags.path).andThen((path) =>
             optionalNonEmpty(parsed.flags.proposal).andThen((proposal) =>
-              optionalNonEmpty(parsed.flags.writerSlot).andThen((writerSlot) =>
-                dispatchCheckpoint({
-                  parsed,
-                  baseRevision,
-                  baseSha256,
-                  handoffSlot,
-                  path,
-                  proposal,
-                  writerSlot,
-                }),
-              ),
+              optionalNonEmpty(parsed.flags.writerSlot).map((writerSlot) => ({
+                parsed,
+                baseRevision,
+                baseSha256,
+                handoffSlot,
+                path,
+                proposal,
+                writerSlot,
+              })),
             ),
           ),
         ),
       ),
   );
+  if (options.isErr()) return err(options.error);
+  return dispatchCheckpoint(options.value);
 }
 
-function dispatchCheckpoint(args: {
+async function dispatchCheckpoint(args: {
   parsed: { _: { length: number; action: string } };
   baseRevision: number | undefined;
   baseSha256: string | undefined;
@@ -584,7 +577,7 @@ function dispatchCheckpoint(args: {
   path: string | undefined;
   proposal: string | undefined;
   writerSlot: string | undefined;
-}): TransactionResult<void> {
+}): Promise<TransactionResult<void>> {
   const { parsed } = args;
   if (parsed._.length !== 1) {
     return failure(
@@ -600,27 +593,27 @@ function dispatchCheckpoint(args: {
   }
 
   if (action === "snapshot") {
-    return workspaceRoot(path, args.writerSlot).andThen((root) =>
-      snapshot(path, root).andThen((current) => {
-        const proposalResult: TransactionResult<string | undefined> =
-          args.proposal === undefined
-            ? ok(undefined)
-            : createProposal(path, args.proposal, current.text);
-        return proposalResult.andThen((proposal) => {
-          process.stdout.write(
-            `${JSON.stringify({
-              path: current.path,
-              proposal,
-              revision: current.revision,
-              sha256: current.sha256,
-              status: "snapshot",
-              writer: current.writer,
-            })}\n`,
-          );
-          return ok(undefined);
-        });
-      }),
+    const rootResult = await workspaceRoot(path, args.writerSlot);
+    if (rootResult.isErr()) return err(rootResult.error);
+    const current = await snapshot(path, rootResult.value);
+    if (current.isErr()) return err(current.error);
+    const created: TransactionResult<string | undefined> =
+      args.proposal === undefined
+        ? ok(undefined)
+        : await createProposal(path, args.proposal, current.value.text);
+    if (created.isErr()) return err(created.error);
+    const proposal = created.value;
+    process.stdout.write(
+      `${JSON.stringify({
+        path: current.value.path,
+        proposal,
+        revision: current.value.revision,
+        sha256: current.value.sha256,
+        status: "snapshot",
+        writer: current.value.writer,
+      })}\n`,
     );
+    return ok(undefined);
   }
 
   if (action !== "apply") {
@@ -649,11 +642,9 @@ function dispatchCheckpoint(args: {
   });
 }
 
-const mainResult = fromThrowable(main)()
-  .andThen((result) => result)
-  .mapErr((error) =>
-    error instanceof TransactionError ? error : unexpectedFailure(),
-  );
+const mainResult = await main().catch((error: unknown) =>
+  err(error instanceof TransactionError ? error : unexpectedFailure()),
+);
 mainResult.match(
   () => process.exit(0),
   (error) => {

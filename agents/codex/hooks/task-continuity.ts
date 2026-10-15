@@ -4,8 +4,8 @@ import { attempt } from "../../hooks/attempt.ts";
 import { hookJson, readBoundedStdinJson } from "./lib.ts";
 import { parseJson } from "../../hooks/narrow.ts";
 
-await attempt(() => {
-  const output = handleCompactHook("codex", readBoundedStdinJson());
+await attempt(async () => {
+  const output = await handleCompactHook("codex", await readBoundedStdinJson());
   if (output !== undefined)
     process.stdout.write(`${hookJson(parseJson(output))}\n`);
 });

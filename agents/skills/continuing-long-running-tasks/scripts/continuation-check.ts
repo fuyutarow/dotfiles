@@ -4,10 +4,10 @@
  * Consumer: agent/human verdict lines. Exit 0 valid, 1 findings, 2 CLI/environment fatal.
  */
 
-import { existsSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
-import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import {
   bindContinuationSlot,
   continuationProjectRoot,
@@ -31,7 +31,7 @@ function inside(root: string, candidate: string): boolean {
 
 function printBindingFindings(
   slot: string,
-  findings: ReturnType<typeof bindContinuationSlot>,
+  findings: Awaited<ReturnType<typeof bindContinuationSlot>>,
 ): void {
   for (const finding of findings) {
     process.stdout.write(
@@ -41,8 +41,11 @@ function printBindingFindings(
   process.stdout.write(`FAIL=${findings.length}\n`);
 }
 
-function bindSlotHasFindings(slot: string, path: string): boolean {
-  const findings = bindContinuationSlot(slot, path);
+async function bindSlotHasFindings(
+  slot: string,
+  path: string,
+): Promise<boolean> {
+  const findings = await bindContinuationSlot(slot, path);
   if (findings.length === 0) return false;
   printBindingFindings(slot, findings);
   return true;
@@ -55,7 +58,7 @@ function rejectPrototypeFlag(type: string, flag: string): void {
   }
 }
 
-function main(): CheckResult<number> {
+async function main(): Promise<CheckResult<number>> {
   const parsed = cli(
     {
       name: "continuation-check.ts",
@@ -87,23 +90,35 @@ function main(): CheckResult<number> {
   }
 
   const absolutePath = resolve(path);
-  const cwdRoot = continuationProjectRoot(process.cwd());
-  const recordRoot = continuationProjectRoot(dirname(absolutePath));
-  function inferRoot(): string | undefined {
-    if (recordRoot !== undefined && existsSync(join(recordRoot, ".git"))) {
+  const cwdRoot = await continuationProjectRoot(process.cwd());
+  const recordRoot = await continuationProjectRoot(dirname(absolutePath));
+  async function inferRoot(): Promise<string | undefined> {
+    if (
+      recordRoot !== undefined &&
+      (await stat(join(recordRoot, ".git")).then(
+        () => true,
+        () => false,
+      ))
+    ) {
       return recordRoot;
     }
     if (cwdRoot !== undefined && inside(cwdRoot, absolutePath)) return cwdRoot;
     return recordRoot;
   }
-  const inferredRoot = inferRoot();
+  const inferredRoot = await inferRoot();
   const workspaceRoot =
     bindSlot === undefined
       ? inferredRoot
       : continuationWorkspaceRootFromSlot(resolve(bindSlot));
-  const inspection = inspectContinuationRecord(absolutePath, workspaceRoot);
+  const inspection = await inspectContinuationRecord(
+    absolutePath,
+    workspaceRoot,
+  );
   if (inspection.status === "valid") {
-    if (bindSlot !== undefined && bindSlotHasFindings(bindSlot, absolutePath)) {
+    if (
+      bindSlot !== undefined &&
+      (await bindSlotHasFindings(bindSlot, absolutePath))
+    ) {
       return ok(1);
     }
     if (bindSlot !== undefined) {
@@ -129,7 +144,7 @@ function main(): CheckResult<number> {
   return ok(1);
 }
 
-const mainResult = fromThrowable(main)()
+const mainResult = await fromAsyncThrowable(main)()
   .andThen((result) => result)
   .mapErr(
     (error) =>

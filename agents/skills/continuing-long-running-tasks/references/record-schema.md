@@ -6,16 +6,16 @@ the executor remains responsible for semantic reconciliation.
 
 ## Required metadata
 
-| Field | Contract |
-|---|---|
-| `SCHEMA` | Exactly `1`. |
-| `TASK_ID` | Stable lowercase slug; do not reuse across unrelated work. |
-| `STATE` | `active`, `blocked`, `awaiting-input`, or `closed`. |
-| `REVISION` | Positive integer; increment after each material checkpoint. |
-| `PATH` | The one canonical record locus; it must resolve to the file being validated. |
-| `WRITER` | `session:<platform>-<16-hex-slot-hash>`; `none` only when closed. Binding is not write ownership. |
-| `UPDATED` | ISO-8601 timestamp plus actor/source. |
-| `RECONCILED_AT` | ISO-8601 timestamp plus the workspace/external surfaces checked. |
+| Field           | Contract                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| `SCHEMA`        | Exactly `1`.                                                                                      |
+| `TASK_ID`       | Stable lowercase slug; do not reuse across unrelated work.                                        |
+| `STATE`         | `active`, `blocked`, `awaiting-input`, or `closed`.                                               |
+| `REVISION`      | Positive integer; increment after each material checkpoint.                                       |
+| `PATH`          | The one canonical record locus; it must resolve to the file being validated.                      |
+| `WRITER`        | `session:<platform>-<16-hex-slot-hash>`; `none` only when closed. Binding is not write ownership. |
+| `UPDATED`       | ISO-8601 timestamp plus actor/source.                                                             |
+| `RECONCILED_AT` | ISO-8601 timestamp plus the workspace/external surfaces checked.                                  |
 
 ## Required sections
 

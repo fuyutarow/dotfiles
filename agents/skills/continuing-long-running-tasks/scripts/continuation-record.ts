@@ -6,14 +6,14 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+  access,
+  lstat,
+  mkdir,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -24,7 +24,7 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { fromThrowable } from "neverthrow";
+import { fromAsyncThrowable, fromThrowable } from "neverthrow";
 
 export const MAX_RECORD_BYTES = 65_536;
 
@@ -40,13 +40,19 @@ const parseInstant = fromThrowable((value: string) =>
   Temporal.Instant.from(value),
 );
 
-const statPath = fromThrowable(
-  (path: string) => lstatSync(path),
+const exists = (path: string): Promise<boolean> =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
+
+const statPath = fromAsyncThrowable(
+  (path: string) => lstat(path),
   (error) => errorCode(error),
 );
 
-const readPath = fromThrowable(
-  (path: string) => readFileSync(path, "utf8"),
+const readPath = fromAsyncThrowable(
+  (path: string) => readFile(path, "utf8"),
   (error) => errorCode(error),
 );
 
@@ -378,23 +384,25 @@ export function validateContinuationRecord(
   return findings;
 }
 
-export function continuationProjectRoot(cwd: string): string | undefined {
+export async function continuationProjectRoot(
+  cwd: string,
+): Promise<string | undefined> {
   if (!isAbsolute(cwd) || cwd.includes("\0")) return undefined;
   let current = resolve(cwd);
   const filesystemRoot = parse(current).root;
   while (true) {
-    if (existsSync(join(current, ".git"))) return current;
+    if (await exists(join(current, ".git"))) return current;
     if (current === filesystemRoot) return resolve(cwd);
     current = dirname(current);
   }
 }
 
-export function continuationSlotPath(
+export async function continuationSlotPath(
   platform: Platform,
   cwd: string,
   sessionId: string,
-): string | undefined {
-  const root = continuationProjectRoot(cwd);
+): Promise<string | undefined> {
+  const root = await continuationProjectRoot(cwd);
   if (root === undefined || sessionId === "" || sessionId.includes("\0")) {
     return undefined;
   }
@@ -421,11 +429,11 @@ function pathInside(root: string, candidate: string): boolean {
   );
 }
 
-function unsafeAncestor(
+async function unsafeAncestor(
   root: string,
   candidate: string,
   requireExisting: boolean,
-): Finding | undefined {
+): Promise<Finding | undefined> {
   const parent = dirname(candidate);
   if (parent === root) return undefined;
   if (!pathInside(root, parent)) {
@@ -438,7 +446,7 @@ function unsafeAncestor(
   let current = root;
   for (const component of relative(root, parent).split(sep)) {
     current = join(current, component);
-    const result = statPath(current);
+    const result = await statPath(current);
     if (result.isErr() && result.error === "ENOENT" && !requireExisting)
       return undefined;
     if (result.isErr()) {
@@ -473,13 +481,13 @@ export function continuationWorkspaceRootFromSlot(
   return dirname(stateDirectory);
 }
 
-export function readContinuationBindingAtSlot(
+export async function readContinuationBindingAtSlot(
   slotPath: string,
-): ContinuationBinding | undefined {
+): Promise<ContinuationBinding | undefined> {
   const slot = resolve(slotPath);
   const root = continuationWorkspaceRootFromSlot(slot);
   if (root === undefined) return undefined;
-  const unsafeSlotAncestor = unsafeAncestor(root, slot, false);
+  const unsafeSlotAncestor = await unsafeAncestor(root, slot, false);
   if (unsafeSlotAncestor !== undefined) {
     return {
       status: "invalid",
@@ -502,7 +510,7 @@ export function readContinuationBindingAtSlot(
         };
   }
 
-  const statResult = statPath(slot);
+  const statResult = await statPath(slot);
   if (statResult.isErr()) return fatalBinding(statResult.error);
   const stat = statResult.value;
   if (stat.isSymbolicLink() || !stat.isFile() || stat.size > 4_096) {
@@ -518,7 +526,7 @@ export function readContinuationBindingAtSlot(
       ],
     };
   }
-  const readResult = readPath(slot);
+  const readResult = await readPath(slot);
   if (readResult.isErr()) return fatalBinding(readResult.error);
   const match = readResult.value.match(/^TCR_PATH:\s*(\S+)\s*$/u);
   const relativeRecord = match?.[1];
@@ -552,7 +560,7 @@ export function readContinuationBindingAtSlot(
       ],
     };
   }
-  const unsafeRecordAncestor = unsafeAncestor(root, record, false);
+  const unsafeRecordAncestor = await unsafeAncestor(root, record, false);
   if (unsafeRecordAncestor !== undefined) {
     return {
       status: "invalid",
@@ -563,19 +571,19 @@ export function readContinuationBindingAtSlot(
   return { status: "bound", slot, record };
 }
 
-export function readContinuationBinding(
+export async function readContinuationBinding(
   platform: Platform,
   cwd: string,
   sessionId: string,
-): ContinuationBinding | undefined {
-  const slot = continuationSlotPath(platform, cwd, sessionId);
+): Promise<ContinuationBinding | undefined> {
+  const slot = await continuationSlotPath(platform, cwd, sessionId);
   return slot === undefined ? undefined : readContinuationBindingAtSlot(slot);
 }
 
-export function bindContinuationSlot(
+export async function bindContinuationSlot(
   slotPath: string,
   recordPath: string,
-): readonly Finding[] {
+): Promise<readonly Finding[]> {
   const slot = resolve(slotPath);
   const root = continuationWorkspaceRootFromSlot(slot);
   if (root === undefined) {
@@ -597,11 +605,11 @@ export function bindContinuationSlot(
       },
     ];
   }
-  const unsafeSlotAncestor = unsafeAncestor(root, slot, false);
+  const unsafeSlotAncestor = await unsafeAncestor(root, slot, false);
   if (unsafeSlotAncestor !== undefined) return [unsafeSlotAncestor];
-  const unsafeRecordAncestor = unsafeAncestor(root, record, false);
+  const unsafeRecordAncestor = await unsafeAncestor(root, record, false);
   if (unsafeRecordAncestor !== undefined) return [unsafeRecordAncestor];
-  const recordInspection = inspectContinuationRecord(record, root);
+  const recordInspection = await inspectContinuationRecord(record, root);
   if (recordInspection.status === "absent") {
     return [{ code: "TCR00", message: "record does not exist" }];
   }
@@ -612,8 +620,8 @@ export function bindContinuationSlot(
   // The write closure records its temporary path here; a plain `let` would be narrowed to
   // `undefined` at the cleanup site because the compiler does not track closure assignments.
   const temporary: { path: string | undefined } = { path: undefined };
-  const write = fromThrowable((): readonly Finding[] => {
-    if (existsSync(slot) && lstatSync(slot).isSymbolicLink()) {
+  const write = fromAsyncThrowable(async (): Promise<readonly Finding[]> => {
+    if ((await exists(slot)) && (await lstat(slot)).isSymbolicLink()) {
       return [
         {
           code: "TCR21",
@@ -621,30 +629,29 @@ export function bindContinuationSlot(
         },
       ];
     }
-    mkdirSync(dirname(slot), { recursive: true });
-    const createdAncestorFinding = unsafeAncestor(root, slot, true);
+    await mkdir(dirname(slot), { recursive: true });
+    const createdAncestorFinding = await unsafeAncestor(root, slot, true);
     if (createdAncestorFinding !== undefined) {
       return [createdAncestorFinding];
     }
     const portablePath = relative(root, record).split(sep).join("/");
     const temporaryPath = `${slot}.tmp-${process.pid}-${randomUUID()}`;
     temporary.path = temporaryPath;
-    writeFileSync(temporaryPath, `TCR_PATH: ${portablePath}\n`, {
+    await writeFile(temporaryPath, `TCR_PATH: ${portablePath}\n`, {
       flag: "wx",
       mode: 0o600,
     });
-    renameSync(temporaryPath, slot);
+    await rename(temporaryPath, slot);
     temporary.path = undefined;
     return [];
   });
-  const result = write();
+  const result = await write();
   if (result.isOk()) return result.value;
   // Best effort: the exact randomized temporary path is never a binding.
   const leftover = temporary.path;
-  if (leftover !== undefined)
-    fromThrowable(() => {
-      unlinkSync(leftover);
-    })();
+  if (leftover !== undefined) {
+    await fromAsyncThrowable(() => unlink(leftover))();
+  }
   return [
     {
       code: "TCR26",
@@ -664,20 +671,24 @@ function fatalInspection(code: string | undefined): RecordInspection {
       };
 }
 
-export function inspectContinuationRecord(
+export async function inspectContinuationRecord(
   path: string,
   workspaceRoot?: string,
-): RecordInspection {
+): Promise<RecordInspection> {
   const absolutePath = resolve(path);
   const validationRoot =
-    workspaceRoot ?? continuationProjectRoot(dirname(absolutePath));
+    workspaceRoot ?? (await continuationProjectRoot(dirname(absolutePath)));
   if (validationRoot !== undefined) {
-    const ancestorFinding = unsafeAncestor(validationRoot, absolutePath, false);
+    const ancestorFinding = await unsafeAncestor(
+      validationRoot,
+      absolutePath,
+      false,
+    );
     if (ancestorFinding !== undefined) {
       return { status: "invalid", findings: [ancestorFinding] };
     }
   }
-  const statResult = statPath(path);
+  const statResult = await statPath(path);
   if (statResult.isErr()) return fatalInspection(statResult.error);
   const stat = statResult.value;
   if (stat.isSymbolicLink() || !stat.isFile()) {
@@ -703,7 +714,7 @@ export function inspectContinuationRecord(
       ],
     };
   }
-  const readResult = readPath(path);
+  const readResult = await readPath(path);
   if (readResult.isErr()) return fatalInspection(readResult.error);
   const findings = validateContinuationRecord(
     readResult.value,

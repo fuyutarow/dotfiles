@@ -36,17 +36,17 @@ Ownership void was checked with a four-query JA/EN `repo-search battery`. Neares
 
 ### Verification results
 
-| Gate | Result |
-|---|---|
-| `bun test agents/skills/continuing-long-running-tasks/tests/continuation.test.ts` | PASS: 24 tests / 102 expectations, 0 failures. |
-| `mise run test:hooks` | PASS: 140 pass, 1 skip, 0 fail / 309 expectations. Existing hook behavior remained green. |
-| `skill-check.ts agents/skills/continuing-long-running-tasks` | PASS with no prose-debt warning after all transaction docs. |
-| system `quick_validate.py` through `uv run --with pyyaml` | PASS: `Skill is valid!` on the final tree. |
-| `script-check.ts` on six shared/product TypeScript files | PASS: `FAIL=0 WARN=0`, including `continuation-checkpoint.ts`. |
-| Biome / `jq empty` / `sh -n` | PASS on seven scoped TypeScript files, both hook JSON files, and the Codex shell entry. |
-| `mise run lint:skills-index` | PASS. |
-| `mise run link:skills` and symlink inspection | PASS: the Skill resolves through both `~/.agents/skills` and `~/.claude/skills`. |
-| `mise run link:dots` and live config comparison | PASS: Codex/Claude hook/config links resolve to this repository. |
+| Gate                                                                              | Result                                                                                    |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `bun test agents/skills/continuing-long-running-tasks/tests/continuation.test.ts` | PASS: 24 tests / 102 expectations, 0 failures.                                            |
+| `mise run test:hooks`                                                             | PASS: 140 pass, 1 skip, 0 fail / 309 expectations. Existing hook behavior remained green. |
+| `skill-check.ts agents/skills/continuing-long-running-tasks`                      | PASS with no prose-debt warning after all transaction docs.                               |
+| system `quick_validate.py` through `uv run --with pyyaml`                         | PASS: `Skill is valid!` on the final tree.                                                |
+| `script-check.ts` on six shared/product TypeScript files                          | PASS: `FAIL=0 WARN=0`, including `continuation-checkpoint.ts`.                            |
+| Biome / `jq empty` / `sh -n`                                                      | PASS on seven scoped TypeScript files, both hook JSON files, and the Codex shell entry.   |
+| `mise run lint:skills-index`                                                      | PASS.                                                                                     |
+| `mise run link:skills` and symlink inspection                                     | PASS: the Skill resolves through both `~/.agents/skills` and `~/.claude/skills`.          |
+| `mise run link:dots` and live config comparison                                   | PASS: Codex/Claude hook/config links resolve to this repository.                          |
 
 ### Live lifecycle evidence
 

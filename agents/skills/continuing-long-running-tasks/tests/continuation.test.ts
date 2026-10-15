@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { z } from "../../../hooks/zod.ts";
@@ -64,10 +64,10 @@ const claudeHook = resolve(
   "task-continuity.ts",
 );
 
-const fixtureRoot = (): string => {
-  const directory = mkdtempSync(join(tmpdir(), "task-continuity-"));
+const fixtureRoot = async (): Promise<string> => {
+  const directory = await mkdtemp(join(tmpdir(), "task-continuity-"));
   temporaryDirectories.push(directory);
-  mkdirSync(join(directory, ".git"));
+  await mkdir(join(directory, ".git"));
   return directory;
 };
 
@@ -130,38 +130,41 @@ type RunResult = Readonly<{
   stderr: string;
 }>;
 
-const runRaw = (script: string, stdin: string): RunResult => {
-  const result = Bun.spawnSync({
-    cmd: ["bun", script],
-    stdin: Buffer.from(stdin),
+const spawnCapture = async (
+  cmd: string[],
+  options: { cwd?: string; stdin: "ignore" | Buffer },
+): Promise<RunResult> => {
+  const child = Bun.spawn({
+    cmd,
+    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    stdin: options.stdin,
     stdout: "pipe",
     stderr: "pipe",
     timeout: 10_000,
   });
-  return {
-    code: result.exitCode,
-    stdout: result.stdout.toString(),
-    stderr: result.stderr.toString(),
-  };
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  return { code: child.signalCode === null ? code : null, stdout, stderr };
 };
 
-const run = (script: string, payloadOrArgs: unknown): RunResult => {
+const exists = (path: string): Promise<boolean> =>
+  stat(path).then(
+    () => true,
+    () => false,
+  );
+
+const runRaw = (script: string, stdin: string): Promise<RunResult> =>
+  spawnCapture(["bun", script], { stdin: Buffer.from(stdin) });
+
+const run = (script: string, payloadOrArgs: unknown): Promise<RunResult> => {
   const args = z.array(z.string()).safeParse(payloadOrArgs);
   if (!args.success) {
     return runRaw(script, JSON.stringify(payloadOrArgs));
   }
-  const result = Bun.spawnSync({
-    cmd: ["bun", script, ...args.data],
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: 10_000,
-  });
-  return {
-    code: result.exitCode,
-    stdout: result.stdout.toString(),
-    stderr: result.stderr.toString(),
-  };
+  return spawnCapture(["bun", script, ...args.data], { stdin: "ignore" });
 };
 
 const payload = (
@@ -179,53 +182,55 @@ const payload = (
 const writerForSlot = (slot: string): string =>
   `session:${basename(dirname(slot))}`;
 
-const reviseProposal = (
+const reviseProposal = async (
   path: string,
   revision: number,
   updated: string,
   replacements: Readonly<Record<string, string>> = {},
-): void => {
-  let text = readFileSync(path, "utf8")
+): Promise<void> => {
+  let text = (await readFile(path, "utf8"))
     .replace(/^REVISION:\s*\d+$/mu, `REVISION: ${revision}`)
     .replace(/^UPDATED:.*$/mu, `UPDATED: ${updated}`);
   for (const [before, after] of Object.entries(replacements)) {
     text = text.replace(before, after);
   }
-  writeFileSync(path, text);
+  await writeFile(path, text);
 };
 
-afterEach(() => {
+afterEach(async () => {
   for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
+    await rm(directory, { force: true, recursive: true });
   }
 });
 
 describe("TASK-CONTINUATION structural floor", () => {
-  test("accepts a complete record through library and CLI", () => {
-    const root = fixtureRoot();
+  test("accepts a complete record through library and CLI", async () => {
+    const root = await fixtureRoot();
     const path = join(root, "TASK-CONTINUATION.md");
-    const slot = continuationSlotPath("codex", root, "cli-session");
+    const slot = await continuationSlotPath("codex", root, "cli-session");
     if (slot === undefined) {
       expect(slot).toBeDefined();
       return;
     }
-    writeFileSync(path, validRecord(path));
+    await writeFile(path, validRecord(path));
 
-    expect(inspectContinuationRecord(path)).toEqual({ status: "valid" });
-    const result = run(cli, ["--path", path, "--bind-slot", slot]);
+    expect(await inspectContinuationRecord(path)).toEqual({ status: "valid" });
+    const result = await run(cli, ["--path", path, "--bind-slot", slot]);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("BOUND");
     expect(result.stdout).toContain("FAIL=0");
     expect(result.stderr).toBe("");
-    expect(readContinuationBinding("codex", root, "cli-session")).toEqual({
-      status: "bound",
-      slot,
-      record: path,
-    });
+    expect(await readContinuationBinding("codex", root, "cli-session")).toEqual(
+      {
+        status: "bound",
+        slot,
+        record: path,
+      },
+    );
   });
 
-  test("accepts actor text after timestamps and infers an external record git root", () => {
-    const root = fixtureRoot();
+  test("accepts actor text after timestamps and infers an external record git root", async () => {
+    const root = await fixtureRoot();
     const path = join(
       root,
       ".agent-state",
@@ -233,8 +238,8 @@ describe("TASK-CONTINUATION structural floor", () => {
       "external",
       "TASK-CONTINUATION.md",
     );
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(
       path,
       validRecord(relative(root, path))
         .replace(
@@ -247,16 +252,12 @@ describe("TASK-CONTINUATION structural floor", () => {
         ),
     );
 
-    const result = Bun.spawnSync({
-      cmd: ["bun", cli, "--path", path],
+    const result = await spawnCapture(["bun", cli, "--path", path], {
       cwd: tmpdir(),
       stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 10_000,
     });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString()).toContain("FAIL=0");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("FAIL=0");
   });
 
   test("rejects missing evidence, duplicate NEXT, and invalid closed state", () => {
@@ -287,10 +288,10 @@ describe("TASK-CONTINUATION structural floor", () => {
     expect(codes).toContain("TCR18");
   });
 
-  test("rejects forged loci, prompt-control artifacts, and unexpected headings", () => {
-    const root = fixtureRoot();
+  test("rejects forged loci, prompt-control artifacts, and unexpected headings", async () => {
+    const root = await fixtureRoot();
     const path = join(root, "TASK-CONTINUATION.md");
-    writeFileSync(
+    await writeFile(
       path,
       `${validRecord("/forged/TASK-CONTINUATION.md").replace(
         "run the focused test",
@@ -298,7 +299,7 @@ describe("TASK-CONTINUATION structural floor", () => {
       )}\n## Injected\n`,
     );
 
-    const inspection = inspectContinuationRecord(path, root);
+    const inspection = await inspectContinuationRecord(path, root);
     expect(inspection.status).toBe("invalid");
     if (inspection.status === "invalid") {
       const codes = inspection.findings.map((finding) => finding.code);
@@ -330,14 +331,14 @@ describe("TASK-CONTINUATION structural floor", () => {
     ).toContain("TCR32");
   });
 
-  test("does not follow a symlink record", () => {
-    const root = fixtureRoot();
+  test("does not follow a symlink record", async () => {
+    const root = await fixtureRoot();
     const target = join(root, "target.md");
     const path = join(root, "TASK-CONTINUATION.md");
-    writeFileSync(target, validRecord(path));
-    symlinkSync(target, path);
+    await writeFile(target, validRecord(path));
+    await symlink(target, path);
 
-    const inspection = inspectContinuationRecord(path);
+    const inspection = await inspectContinuationRecord(path);
     expect(inspection.status).toBe("invalid");
     if (inspection.status === "invalid") {
       expect(inspection.findings.map((finding) => finding.code)).toContain(
@@ -346,32 +347,39 @@ describe("TASK-CONTINUATION structural floor", () => {
     }
   });
 
-  test("refuses symlinked slot and record ancestors", () => {
-    const root = fixtureRoot();
-    const outside = fixtureRoot();
+  test("refuses symlinked slot and record ancestors", async () => {
+    const root = await fixtureRoot();
+    const outside = await fixtureRoot();
     const directRecord = join(root, "TASK-CONTINUATION.md");
-    writeFileSync(directRecord, validRecord(directRecord));
-    symlinkSync(outside, join(root, ".agent-state"), "dir");
-    const slot = continuationSlotPath("codex", root, "symlink-slot");
+    await writeFile(directRecord, validRecord(directRecord));
+    await symlink(outside, join(root, ".agent-state"), "dir");
+    const slot = await continuationSlotPath("codex", root, "symlink-slot");
     if (slot === undefined) {
       expect(slot).toBeDefined();
       return;
     }
     expect(
-      bindContinuationSlot(slot, directRecord).map((finding) => finding.code),
+      (await bindContinuationSlot(slot, directRecord)).map(
+        (finding) => finding.code,
+      ),
     ).toContain("TCR27");
 
-    rmSync(join(root, ".agent-state"));
-    symlinkSync(outside, join(root, "linked-records"), "dir");
+    await rm(join(root, ".agent-state"));
+    await symlink(outside, join(root, "linked-records"), "dir");
     const linkedRecord = join(root, "linked-records", "TASK-CONTINUATION.md");
-    writeFileSync(
+    await writeFile(
       join(outside, "TASK-CONTINUATION.md"),
       validRecord(linkedRecord),
     );
     expect(
-      bindContinuationSlot(slot, linkedRecord).map((finding) => finding.code),
+      (await bindContinuationSlot(slot, linkedRecord)).map(
+        (finding) => finding.code,
+      ),
     ).toContain("TCR27");
-    const directInspection = inspectContinuationRecord(linkedRecord, root);
+    const directInspection = await inspectContinuationRecord(
+      linkedRecord,
+      root,
+    );
     expect(directInspection.status).toBe("invalid");
     if (directInspection.status === "invalid") {
       expect(
@@ -380,18 +388,20 @@ describe("TASK-CONTINUATION structural floor", () => {
     }
   });
 
-  test("refuses to create a binding for an invalid record", () => {
-    const root = fixtureRoot();
+  test("refuses to create a binding for an invalid record", async () => {
+    const root = await fixtureRoot();
     const path = join(root, "TASK-CONTINUATION.md");
-    const slot = continuationSlotPath("codex", root, "invalid-at-bind");
+    const slot = await continuationSlotPath("codex", root, "invalid-at-bind");
     if (slot === undefined) {
       expect(slot).toBeDefined();
       return;
     }
-    writeFileSync(path, "# broken\n");
+    await writeFile(path, "# broken\n");
 
-    expect(bindContinuationSlot(slot, path).length).toBeGreaterThan(0);
-    expect(readContinuationBinding("codex", root, "invalid-at-bind")).toEqual({
+    expect((await bindContinuationSlot(slot, path)).length).toBeGreaterThan(0);
+    expect(
+      await readContinuationBinding("codex", root, "invalid-at-bind"),
+    ).toEqual({
       status: "unbound",
       slot,
     });
@@ -399,13 +409,13 @@ describe("TASK-CONTINUATION structural floor", () => {
 });
 
 describe("compact lifecycle adapters", () => {
-  test("namespaces transport slots by platform/session under the git root", () => {
-    const root = fixtureRoot();
+  test("namespaces transport slots by platform/session under the git root", async () => {
+    const root = await fixtureRoot();
     const nested = join(root, "src", "nested");
-    mkdirSync(nested, { recursive: true });
-    const codexA = continuationSlotPath("codex", nested, "session-a");
-    const codexB = continuationSlotPath("codex", nested, "session-b");
-    const claudeA = continuationSlotPath("claude", nested, "session-a");
+    await mkdir(nested, { recursive: true });
+    const codexA = await continuationSlotPath("codex", nested, "session-a");
+    const codexB = await continuationSlotPath("codex", nested, "session-b");
+    const claudeA = await continuationSlotPath("claude", nested, "session-a");
 
     expect(codexA).toStartWith(join(root, ".agent-state", "continuations"));
     expect(codexA).not.toBe(codexB);
@@ -417,10 +427,10 @@ describe("compact lifecycle adapters", () => {
     ["Claude", "claude", claudeHook],
   ] as const)(
     "%s SessionStart injects only a locator, never record content",
-    (_, platform, hook) => {
-      const root = fixtureRoot();
+    async (_, platform, hook) => {
+      const root = await fixtureRoot();
       const session = "session-secret-test";
-      const slot = continuationSlotPath(platform, root, session);
+      const slot = await continuationSlotPath(platform, root, session);
       if (slot === undefined) {
         expect(slot).toBeDefined();
         return;
@@ -432,14 +442,14 @@ describe("compact lifecycle adapters", () => {
         "auth-migration",
         "TASK-CONTINUATION.md",
       );
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(
         path,
         validRecord(path).replace("old login path", "SECRET-SENTINEL"),
       );
-      expect(bindContinuationSlot(slot, path)).toEqual([]);
+      expect(await bindContinuationSlot(slot, path)).toEqual([]);
 
-      const result = run(
+      const result = await run(
         hook,
         payload("SessionStart", root, session, "compact"),
       );
@@ -450,9 +460,7 @@ describe("compact lifecycle adapters", () => {
       expect(result.stdout).not.toContain("SECRET-SENTINEL");
       expect(result.stdout).not.toContain("src/auth.ts:42");
       if (platform === "claude") {
-        expect(result.stdout).toContain(
-          "dotfiles:continuing-long-running-tasks",
-        );
+        expect(result.stdout).toContain("`continuing-long-running-tasks`");
         expect(result.stdout).not.toContain("$continuing-long-running-tasks");
       } else {
         expect(result.stdout).toContain("$continuing-long-running-tasks");
@@ -468,16 +476,20 @@ describe("compact lifecycle adapters", () => {
     ["Claude", "claude", claudeHook],
   ] as const)(
     "%s worker without its own slot owns its brief even when the workspace has another session's record",
-    (_, platform, hook) => {
-      const root = fixtureRoot();
+    async (_, platform, hook) => {
+      const root = await fixtureRoot();
       const coordinatorSession = "coordinator-session";
       const workerSession = "agx-worker-session";
-      const coordinatorSlot = continuationSlotPath(
+      const coordinatorSlot = await continuationSlotPath(
         platform,
         root,
         coordinatorSession,
       );
-      const workerSlot = continuationSlotPath(platform, root, workerSession);
+      const workerSlot = await continuationSlotPath(
+        platform,
+        root,
+        workerSession,
+      );
       if (coordinatorSlot === undefined || workerSlot === undefined) {
         expect(coordinatorSlot).toBeDefined();
         expect(workerSlot).toBeDefined();
@@ -490,14 +502,14 @@ describe("compact lifecycle adapters", () => {
         "coordinator",
         "TASK-CONTINUATION.md",
       );
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, validRecord(path, "closed", "none"));
-      expect(bindContinuationSlot(coordinatorSlot, path)).toEqual([]);
-      expect(existsSync(coordinatorSlot)).toBe(true);
-      expect(existsSync(path)).toBe(true);
-      expect(existsSync(workerSlot)).toBe(false);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, validRecord(path, "closed", "none"));
+      expect(await bindContinuationSlot(coordinatorSlot, path)).toEqual([]);
+      expect(await exists(coordinatorSlot)).toBe(true);
+      expect(await exists(path)).toBe(true);
+      expect(await exists(workerSlot)).toBe(false);
 
-      const result = run(
+      const result = await run(
         hook,
         payload("SessionStart", root, workerSession, "startup"),
       );
@@ -520,10 +532,10 @@ describe("compact lifecycle adapters", () => {
     ["Claude", "claude", claudeHook],
   ] as const)(
     "%s manual compact passes valid records silently",
-    (_, platform, hook) => {
-      const root = fixtureRoot();
+    async (_, platform, hook) => {
+      const root = await fixtureRoot();
       const session = "session-valid";
-      const slot = continuationSlotPath(platform, root, session);
+      const slot = await continuationSlotPath(platform, root, session);
       if (slot === undefined) {
         expect(slot).toBeDefined();
         return;
@@ -535,25 +547,28 @@ describe("compact lifecycle adapters", () => {
         "valid",
         "TASK-CONTINUATION.md",
       );
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, validRecord(path));
-      expect(bindContinuationSlot(slot, path)).toEqual([]);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, validRecord(path));
+      expect(await bindContinuationSlot(slot, path)).toEqual([]);
 
-      const result = run(hook, payload("PreCompact", root, session, "manual"));
+      const result = await run(
+        hook,
+        payload("PreCompact", root, session, "manual"),
+      );
       expect(result.code).toBe(0);
       expect(result.stdout).toBe("");
       expect(result.stderr).toBe("");
     },
   );
 
-  test("Codex and Claude use their documented manual block envelopes", () => {
-    const root = fixtureRoot();
+  test("Codex and Claude use their documented manual block envelopes", async () => {
+    const root = await fixtureRoot();
     for (const [platform, hook] of [
       ["codex", codexHook],
       ["claude", claudeHook],
     ] as const) {
       const session = `session-invalid-${platform}`;
-      const slot = continuationSlotPath(platform, root, session);
+      const slot = await continuationSlotPath(platform, root, session);
       if (slot === undefined) {
         expect(slot).toBeDefined();
         return;
@@ -565,12 +580,15 @@ describe("compact lifecycle adapters", () => {
         platform,
         "TASK-CONTINUATION.md",
       );
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, validRecord(path));
-      expect(bindContinuationSlot(slot, path)).toEqual([]);
-      writeFileSync(path, "# broken\n");
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, validRecord(path));
+      expect(await bindContinuationSlot(slot, path)).toEqual([]);
+      await writeFile(path, "# broken\n");
 
-      const result = run(hook, payload("PreCompact", root, session, "manual"));
+      const result = await run(
+        hook,
+        payload("PreCompact", root, session, "manual"),
+      );
       expect(result.code).toBe(0);
       const decision = decodedJson(HookDecisionSchema, result.stdout);
       if (platform === "codex") {
@@ -588,10 +606,10 @@ describe("compact lifecycle adapters", () => {
     ["Claude", "claude", claudeHook],
   ] as const)(
     "%s automatic compact fails open for an invalid record",
-    (_, platform, hook) => {
-      const root = fixtureRoot();
+    async (_, platform, hook) => {
+      const root = await fixtureRoot();
       const session = "session-auto";
-      const slot = continuationSlotPath(platform, root, session);
+      const slot = await continuationSlotPath(platform, root, session);
       if (slot === undefined) {
         expect(slot).toBeDefined();
         return;
@@ -603,43 +621,46 @@ describe("compact lifecycle adapters", () => {
         `auto-${platform}`,
         "TASK-CONTINUATION.md",
       );
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, validRecord(path));
-      expect(bindContinuationSlot(slot, path)).toEqual([]);
-      writeFileSync(path, "# broken\n");
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, validRecord(path));
+      expect(await bindContinuationSlot(slot, path)).toEqual([]);
+      await writeFile(path, "# broken\n");
 
-      const result = run(hook, payload("PreCompact", root, session, "auto"));
+      const result = await run(
+        hook,
+        payload("PreCompact", root, session, "auto"),
+      );
       expect(result.code).toBe(0);
       expect(result.stdout).toBe("");
       expect(result.stderr).toBe("");
     },
   );
 
-  test("non-target SessionStart source and malformed input are silent", () => {
-    const root = fixtureRoot();
+  test("non-target SessionStart source and malformed input are silent", async () => {
+    const root = await fixtureRoot();
     expect(
-      run(codexHook, payload("SessionStart", root, "s", "auto")).stdout,
+      (await run(codexHook, payload("SessionStart", root, "s", "auto"))).stdout,
     ).toBe("");
-    expect(runRaw(claudeHook, "not-json").stdout).toBe("");
+    expect((await runRaw(claudeHook, "not-json")).stdout).toBe("");
   });
 
   test.each([codexHook, claudeHook])(
     "oversized hook input fails open without producing a decision",
-    (hook) => {
-      const root = fixtureRoot();
+    async (hook) => {
+      const root = await fixtureRoot();
       const oversized = JSON.stringify({
         ...payload("SessionStart", root, "oversized", "startup"),
         padding: "x".repeat(1_048_576),
       });
-      const result = runRaw(hook, oversized);
+      const result = await runRaw(hook, oversized);
       expect(result.code).toBe(0);
       expect(result.stdout).toBe("");
       expect(result.stderr).toBe("");
     },
   );
 
-  test("Codex and Claude slots can bind to the same canonical record", () => {
-    const root = fixtureRoot();
+  test("Codex and Claude slots can bind to the same canonical record", async () => {
+    const root = await fixtureRoot();
     const path = join(
       root,
       ".agent-state",
@@ -647,52 +668,66 @@ describe("compact lifecycle adapters", () => {
       "shared",
       "TASK-CONTINUATION.md",
     );
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, validRecord(path));
-    const codexSlot = continuationSlotPath("codex", root, "codex-session");
-    const claudeSlot = continuationSlotPath("claude", root, "claude-session");
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, validRecord(path));
+    const codexSlot = await continuationSlotPath(
+      "codex",
+      root,
+      "codex-session",
+    );
+    const claudeSlot = await continuationSlotPath(
+      "claude",
+      root,
+      "claude-session",
+    );
     if (codexSlot === undefined || claudeSlot === undefined) {
       expect(codexSlot).toBeDefined();
       expect(claudeSlot).toBeDefined();
       return;
     }
 
-    expect(bindContinuationSlot(codexSlot, path)).toEqual([]);
-    expect(bindContinuationSlot(claudeSlot, path)).toEqual([]);
+    expect(await bindContinuationSlot(codexSlot, path)).toEqual([]);
+    expect(await bindContinuationSlot(claudeSlot, path)).toEqual([]);
     expect(
-      run(codexHook, payload("SessionStart", root, "codex-session", "compact"))
-        .stdout,
+      (
+        await run(
+          codexHook,
+          payload("SessionStart", root, "codex-session", "compact"),
+        )
+      ).stdout,
     ).toContain(path);
     expect(
-      run(
-        claudeHook,
-        payload("SessionStart", root, "claude-session", "compact"),
+      (
+        await run(
+          claudeHook,
+          payload("SessionStart", root, "claude-session", "compact"),
+        )
       ).stdout,
     ).toContain(path);
   });
 });
 
 describe("single-writer checkpoint transaction", () => {
-  test("applies a writer proposal and rejects a stale competing snapshot", () => {
-    const root = fixtureRoot();
+  test("applies a writer proposal and rejects a stale competing snapshot", async () => {
+    const root = await fixtureRoot();
     const path = join(root, "TASK-CONTINUATION.md");
-    const slot = continuationSlotPath("codex", root, "writer-a");
+    const slot = await continuationSlotPath("codex", root, "writer-a");
     if (slot === undefined) {
       expect(slot).toBeDefined();
       return;
     }
-    writeFileSync(
+    await writeFile(
       path,
       validRecord(path).replace(
         "WRITER: session:codex-0123456789abcdef",
         `WRITER: ${writerForSlot(slot)}`,
       ),
     );
-    expect(bindContinuationSlot(slot, path)).toEqual([]);
+    expect(await bindContinuationSlot(slot, path)).toEqual([]);
 
     const proposalA = join(root, "TASK-CONTINUATION.a.proposal.md");
     const proposalB = join(root, "TASK-CONTINUATION.b.proposal.md");
-    const snapshotA = run(checkpoint, [
+    const snapshotA = await run(checkpoint, [
       "snapshot",
       "--path",
       path,
@@ -701,7 +736,7 @@ describe("single-writer checkpoint transaction", () => {
       "--proposal",
       proposalA,
     ]);
-    const snapshotB = run(checkpoint, [
+    const snapshotB = await run(checkpoint, [
       "snapshot",
       "--path",
       path,
@@ -714,14 +749,24 @@ describe("single-writer checkpoint transaction", () => {
     expect(snapshotB.code).toBe(0);
     const base = checkpointOutput(snapshotA.stdout);
     expect(checkpointOutput(snapshotB.stdout).sha256).toBe(base.sha256);
-    reviseProposal(proposalA, 4, "2026-08-01T12:10:00+09:00 by writer-a", {
-      "old login path": "writer-a checkpoint",
-    });
-    reviseProposal(proposalB, 4, "2026-08-01T12:11:00+09:00 by writer-a", {
-      "old login path": "stale writer-b checkpoint",
-    });
+    await reviseProposal(
+      proposalA,
+      4,
+      "2026-08-01T12:10:00+09:00 by writer-a",
+      {
+        "old login path": "writer-a checkpoint",
+      },
+    );
+    await reviseProposal(
+      proposalB,
+      4,
+      "2026-08-01T12:11:00+09:00 by writer-a",
+      {
+        "old login path": "stale writer-b checkpoint",
+      },
+    );
 
-    const applied = run(checkpoint, [
+    const applied = await run(checkpoint, [
       "apply",
       "--path",
       path,
@@ -736,9 +781,10 @@ describe("single-writer checkpoint transaction", () => {
     ]);
     expect(applied.code).toBe(0);
     expect(checkpointOutput(applied.stdout).revision).toBe(4);
-    expect(existsSync(proposalA)).toBe(false);
+    expect(await exists(proposalA)).toBe(false);
+    expect(await exists(join(root, ".TASK-CONTINUATION.lock"))).toBe(false);
 
-    const stale = run(checkpoint, [
+    const stale = await run(checkpoint, [
       "apply",
       "--path",
       path,
@@ -753,48 +799,52 @@ describe("single-writer checkpoint transaction", () => {
     ]);
     expect(stale.code).toBe(1);
     expect(checkpointError(stale.stderr).code).toBe("TCR42");
-    expect(readFileSync(path, "utf8")).toContain("writer-a checkpoint");
-    expect(readFileSync(path, "utf8")).not.toContain(
+    expect(await exists(join(root, ".TASK-CONTINUATION.lock"))).toBe(false);
+    expect(await exists(proposalB)).toBe(true);
+    expect(await readFile(path, "utf8")).toContain("writer-a checkpoint");
+    expect(await readFile(path, "utf8")).not.toContain(
       "stale writer-b checkpoint",
     );
   });
 
-  test("rejects a non-writer and serializes an explicit pre-bound handoff", () => {
-    const root = fixtureRoot();
+  test("rejects a non-writer and serializes an explicit pre-bound handoff", async () => {
+    const root = await fixtureRoot();
     const path = join(root, "TASK-CONTINUATION.md");
-    const slotA = continuationSlotPath("codex", root, "writer-a");
-    const slotB = continuationSlotPath("claude", root, "writer-b");
+    const slotA = await continuationSlotPath("codex", root, "writer-a");
+    const slotB = await continuationSlotPath("claude", root, "writer-b");
     if (slotA === undefined || slotB === undefined) {
       expect(slotA).toBeDefined();
       expect(slotB).toBeDefined();
       return;
     }
-    writeFileSync(
+    await writeFile(
       path,
       validRecord(path).replace(
         "WRITER: session:codex-0123456789abcdef",
         `WRITER: ${writerForSlot(slotA)}`,
       ),
     );
-    expect(bindContinuationSlot(slotA, path)).toEqual([]);
-    expect(bindContinuationSlot(slotB, path)).toEqual([]);
+    expect(await bindContinuationSlot(slotA, path)).toEqual([]);
+    expect(await bindContinuationSlot(slotB, path)).toEqual([]);
     const proposal = join(root, "TASK-CONTINUATION.handoff.proposal.md");
     const base = checkpointOutput(
-      run(checkpoint, [
-        "snapshot",
-        "--path",
-        path,
-        "--writer-slot",
-        slotA,
-        "--proposal",
-        proposal,
-      ]).stdout,
+      (
+        await run(checkpoint, [
+          "snapshot",
+          "--path",
+          path,
+          "--writer-slot",
+          slotA,
+          "--proposal",
+          proposal,
+        ])
+      ).stdout,
     );
-    reviseProposal(proposal, 4, "2026-08-01T12:20:00+09:00 by writer-a", {
+    await reviseProposal(proposal, 4, "2026-08-01T12:20:00+09:00 by writer-a", {
       [writerForSlot(slotA)]: writerForSlot(slotB),
     });
 
-    const wrongWriter = run(checkpoint, [
+    const wrongWriter = await run(checkpoint, [
       "apply",
       "--path",
       path,
@@ -812,7 +862,7 @@ describe("single-writer checkpoint transaction", () => {
     expect(wrongWriter.code).toBe(1);
     expect(checkpointError(wrongWriter.stderr).code).toBe("TCR44");
 
-    const handedOff = run(checkpoint, [
+    const handedOff = await run(checkpoint, [
       "apply",
       "--path",
       path,
@@ -831,43 +881,49 @@ describe("single-writer checkpoint transaction", () => {
     expect(checkpointOutput(handedOff.stdout).writer).toBe(
       writerForSlot(slotB),
     );
-    expect(readFileSync(path, "utf8")).toContain(
+    expect(await readFile(path, "utf8")).toContain(
       `WRITER: ${writerForSlot(slotB)}`,
     );
   });
 
-  test("fails immediately when the checkpoint lock already exists", () => {
-    const root = fixtureRoot();
+  test("fails immediately when the checkpoint lock already exists", async () => {
+    const root = await fixtureRoot();
     const path = join(root, "TASK-CONTINUATION.md");
-    const slot = continuationSlotPath("codex", root, "writer-lock");
+    const slot = await continuationSlotPath("codex", root, "writer-lock");
     if (slot === undefined) {
       expect(slot).toBeDefined();
       return;
     }
-    writeFileSync(
+    await writeFile(
       path,
       validRecord(path).replace(
         "WRITER: session:codex-0123456789abcdef",
         `WRITER: ${writerForSlot(slot)}`,
       ),
     );
-    expect(bindContinuationSlot(slot, path)).toEqual([]);
+    expect(await bindContinuationSlot(slot, path)).toEqual([]);
     const proposal = join(root, "TASK-CONTINUATION.lock.proposal.md");
     const base = checkpointOutput(
-      run(checkpoint, [
-        "snapshot",
-        "--path",
-        path,
-        "--writer-slot",
-        slot,
-        "--proposal",
-        proposal,
-      ]).stdout,
+      (
+        await run(checkpoint, [
+          "snapshot",
+          "--path",
+          path,
+          "--writer-slot",
+          slot,
+          "--proposal",
+          proposal,
+        ])
+      ).stdout,
     );
-    reviseProposal(proposal, 4, "2026-08-01T12:30:00+09:00 by writer-lock");
-    writeFileSync(join(root, ".TASK-CONTINUATION.lock"), "held\n");
+    await reviseProposal(
+      proposal,
+      4,
+      "2026-08-01T12:30:00+09:00 by writer-lock",
+    );
+    await writeFile(join(root, ".TASK-CONTINUATION.lock"), "held\n");
 
-    const locked = run(checkpoint, [
+    const locked = await run(checkpoint, [
       "apply",
       "--path",
       path,
@@ -882,6 +938,9 @@ describe("single-writer checkpoint transaction", () => {
     ]);
     expect(locked.code).toBe(1);
     expect(checkpointError(locked.stderr).code).toBe("TCR40");
-    expect(readFileSync(path, "utf8")).toContain("REVISION: 3");
+    expect(await readFile(join(root, ".TASK-CONTINUATION.lock"), "utf8")).toBe(
+      "held\n",
+    );
+    expect(await readFile(path, "utf8")).toContain("REVISION: 3");
   });
 });

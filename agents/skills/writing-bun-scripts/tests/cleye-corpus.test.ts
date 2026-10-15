@@ -106,6 +106,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/doctor-remote.ts" },
   { path: "scripts/linux-init.ts" },
   { path: "scripts/box-init.ts" },
+  { path: "scripts/agx-accept.ts" },
   { path: "scripts/agx-host.ts" },
   { path: "scripts/config-map.ts" },
   { path: "scripts/tracked-files.ts" },

@@ -2,7 +2,7 @@
 // Relay selected secrets between fnox contexts. Values are held only in process memory and sent
 // through stdin; keys and source paths may appear in argv, secret values never do.
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
@@ -220,8 +220,8 @@ const fail = (line: string): void => {
   process.exitCode = 1;
 };
 
-const cleanupTemp = (dir: string | undefined): void => {
-  if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
+const cleanupTemp = async (dir: string | undefined): Promise<void> => {
+  if (dir !== undefined) await rm(dir, { recursive: true, force: true });
 };
 
 async function targetConfig(host: string): Promise<string> {
@@ -305,19 +305,19 @@ async function main(): Promise<void> {
       fail("age-keygen is not installed here (brew install age)");
       return;
     }
-    dir = mkdtempSync(join(tmpdir(), "secrets-push-"));
+    dir = await mkdtemp(join(tmpdir(), "secrets-push-"));
     identity = join(dir, "age.txt");
     await Bun.$`age-keygen -o ${identity}`.quiet();
     const recipient = /^# public key: (age1\S+)$/mu.exec(
-      readFileSync(identity, "utf8"),
+      await readFile(identity, "utf8"),
     )?.[1];
     if (recipient === undefined) {
-      rmSync(dir, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true });
       fail("age-keygen wrote no public key");
       return;
     }
     localConfig = join(dir, "config.toml");
-    writeFileSync(
+    await writeFile(
       localConfig,
       `# fnox secrets encrypted for ${host}; remove this config and age identity when retiring the box.\n[providers.age]\ntype = "age"\nrecipients = ["${recipient}"]\nkey_file = "${AGE_KEY_FILE}"\n`,
       { mode: 0o600 },
@@ -331,7 +331,7 @@ async function main(): Promise<void> {
       spec,
     );
     if (typeof value === "string") {
-      cleanupTemp(dir);
+      await cleanupTemp(dir);
       fail(value);
       return;
     }
@@ -344,7 +344,7 @@ async function main(): Promise<void> {
       identity,
     );
     if (setError !== null) {
-      cleanupTemp(dir);
+      await cleanupTemp(dir);
       fail(setError);
       return;
     }
@@ -363,7 +363,7 @@ async function main(): Promise<void> {
         host,
         'umask 077 && mkdir -p "$HOME/.config/fnox" && cat > "$HOME/.config/fnox/age.txt"',
       ],
-      new Uint8Array(readFileSync(identity)),
+      new Uint8Array(await readFile(identity)),
     );
     const installConfig = await readProcess(
       [
@@ -371,9 +371,9 @@ async function main(): Promise<void> {
         host,
         'umask 077 && mkdir -p "$HOME/.config/fnox" && cat > "$HOME/.config/fnox/config.toml"',
       ],
-      new Uint8Array(readFileSync(localConfig)),
+      new Uint8Array(await readFile(localConfig)),
     );
-    rmSync(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
     if (installIdentity.code !== 0 || installConfig.code !== 0) {
       fail(`could not install fnox age identity/config on ${host}`);
       return;

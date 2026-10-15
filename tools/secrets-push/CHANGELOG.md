@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-10-15
+
+- Use async fs and child-process APIs throughout so the tool no longer blocks the event loop; behavior is unchanged.
+
 ## 0.2.1 — 2026-10-15
 
 - Remove exactly one output newline from fnox get before verification. Account for fnox stdin set trimming surrounding whitespace and disclose that normalization when it changes the source value; retain SHA-256 mismatch failures for stored byte changes.

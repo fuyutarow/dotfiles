@@ -4,7 +4,7 @@
  * Contract: exit 0 clean, 1 deterministic findings, 2 invocation/environment fatal; never judge truth.
  */
 
-import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
+import { access, lstat, realpath, stat } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -16,6 +16,12 @@ import {
 import { cli } from "cleye";
 import { parseDocument } from "yaml";
 import { jsonText, z } from "../../../hooks/zod.ts";
+
+const pathExists = async (path: string): Promise<boolean> =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
 
 type Layer =
   | "OKF"
@@ -651,13 +657,14 @@ const localReference = async (
     : resolve(dirname(ownerPath), decoded);
   if (
     (decoded.endsWith("/") ||
-      (existsSync(absolutePath) && statSync(absolutePath).isDirectory())) &&
+      ((await pathExists(absolutePath)) &&
+        (await stat(absolutePath)).isDirectory())) &&
     absolutePath !== ownerPath
   ) {
     absolutePath = resolve(absolutePath, "index.md");
   }
-  const realizedPath = existsSync(absolutePath)
-    ? realpathSync(absolutePath)
+  const realizedPath = (await pathExists(absolutePath))
+    ? await realpath(absolutePath)
     : absolutePath;
   if (insideOrEqual(root, absolutePath)) {
     return insideOrEqual(root, realizedPath)
@@ -1054,7 +1061,10 @@ const readRdTypeRegistry = async (
 ): Promise<ReadonlyMap<string, string> | undefined> => {
   const registryName = "rd-types.json";
   const registryPath = resolve(root, registryName);
-  if (!existsSync(registryPath) || !statSync(registryPath).isFile()) {
+  if (
+    !(await pathExists(registryPath)) ||
+    !(await stat(registryPath)).isFile()
+  ) {
     add(
       "RD_NAMING",
       "RDN001",
@@ -1063,7 +1073,7 @@ const readRdTypeRegistry = async (
     );
     return undefined;
   }
-  if (!lstatSync(registryPath).isFile()) {
+  if (!(await lstat(registryPath)).isFile()) {
     add(
       "RD_NAMING",
       "RDN006",
@@ -1106,7 +1116,7 @@ const gitRoot = async (root: string): Promise<string | UsageError> => {
       `--base requires a Git worktree: ${result.stderr.trim() !== "" ? result.stderr.trim() : root}`,
     );
   }
-  return realpathSync(result.stdout.trim());
+  return realpath(result.stdout.trim());
 };
 
 type GitChange = {
@@ -1485,7 +1495,11 @@ const validateGitChange = async (
   }
   const currentPath = resolve(repositoryRoot, change.newPath ?? oldPath);
   let currentDocument: ParsedMarkdown | undefined;
-  if (status === "M" && oldDocument !== undefined && existsSync(currentPath)) {
+  if (
+    status === "M" &&
+    oldDocument !== undefined &&
+    (await pathExists(currentPath))
+  ) {
     currentDocument = await parseMarkdown(
       await Bun.file(currentPath).text(),
       () => {},
@@ -1975,8 +1989,8 @@ const validateEvidenceRawTarget = async (
     return;
   }
   const absolutePath = target.absolutePath;
-  if (!existsSync(absolutePath)) return;
-  if (!statSync(absolutePath).isFile()) {
+  if (!(await pathExists(absolutePath))) return;
+  if (!(await stat(absolutePath)).isFile()) {
     add(
       "RD_REFERENCE",
       "RDR023",
@@ -2469,7 +2483,7 @@ const resolveConceptReferencesForConcept = async (
     } else if (
       resolved.kind !== "external" &&
       (resolved.absolutePath === undefined ||
-        !existsSync(resolved.absolutePath))
+        !(await pathExists(resolved.absolutePath)))
     ) {
       add(
         "RD_REFERENCE",
@@ -2660,7 +2674,7 @@ const validateConceptMarkdownLinks = async (
     if (
       target.kind === "outside" ||
       target.absolutePath === undefined ||
-      !existsSync(target.absolutePath)
+      !(await pathExists(target.absolutePath))
     ) {
       context.add(
         "RD_REFERENCE",
@@ -2844,7 +2858,7 @@ const addIndexLinkTargets = async (
     if (
       target.kind !== "bundle" ||
       target.absolutePath === undefined ||
-      !existsSync(target.absolutePath)
+      !(await pathExists(target.absolutePath))
     ) {
       context.add(
         "RD_REFERENCE",
@@ -2897,13 +2911,16 @@ export async function inspectResearchDocs(
   if (mode !== "okf" && mode !== "profile") {
     return new UsageError("mode must be okf or profile");
   }
-  if (!existsSync(rootInput) || !statSync(rootInput).isDirectory()) {
+  if (
+    !(await pathExists(rootInput)) ||
+    !(await stat(rootInput)).isDirectory()
+  ) {
     return new UsageError(`bundle root is not a directory: ${rootInput}`);
   }
-  const root = realpathSync(rootInput);
+  const root = await realpath(rootInput);
   const rawInput = options.rawRoot ?? resolve(dirname(root), "raw");
-  const rawRoot = existsSync(rawInput)
-    ? realpathSync(rawInput)
+  const rawRoot = (await pathExists(rawInput))
+    ? await realpath(rawInput)
     : resolve(rawInput);
   // UTC calendar day, matching the former new Date().toISOString().slice(0, 10)
   // (toISOString always renders UTC regardless of system time zone).
@@ -2986,7 +3003,7 @@ export async function inspectResearchDocs(
   }
   const typeRegistry = await readRdTypeRegistry(root, add);
 
-  if (!existsSync(rawRoot) || !statSync(rawRoot).isDirectory()) {
+  if (!(await pathExists(rawRoot)) || !(await stat(rawRoot)).isDirectory()) {
     add(
       "RD_SCHEMA",
       "RDS001",

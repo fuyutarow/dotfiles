@@ -23,7 +23,7 @@
 //
 // Exit: 0 clean, 1 findings/refusal, 2 FATAL (not a git repo, git missing, bad args).
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { access, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { $ } from "bun";
 import { cli } from "cleye";
@@ -59,6 +59,13 @@ async function repoRoot(cwd: string): Promise<{ top: string; gitDir: string }> {
   return { top, gitDir: resolve(cwd, gitDirRaw) };
 }
 
+async function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 // ---------------------------------------------------------------- state (G2)
 
 /** The sentinel files git leaves while an operation is paused. Names are git's own. */
@@ -73,9 +80,10 @@ const OPERATIONS: readonly (readonly [string, string])[] = [
 
 async function state(cwd: string, allowDetached: boolean): Promise<number> {
   const { top, gitDir } = await repoRoot(cwd);
-  const ops = OPERATIONS.filter(([f]) => existsSync(join(gitDir, f))).map(
-    ([, n]) => n,
-  );
+  const ops: string[] = [];
+  for (const [file, name] of OPERATIONS) {
+    if (await exists(join(gitDir, file))) ops.push(name);
+  }
   const branch =
     (await git(cwd, "symbolic-ref", "--short", "-q", "HEAD")) ?? "DETACHED";
   const head = (await git(cwd, "rev-parse", "--short", "HEAD")) ?? "unborn";
@@ -316,8 +324,8 @@ function scanLintLine(
   return found;
 }
 
-function lintFile(path: string): number {
-  const src = readFileSync(resolve(path), "utf8");
+async function lintFile(path: string): Promise<number> {
+  const src = await readFile(resolve(path), "utf8");
   let inAlias = false; // gitconfig [alias] bodies omit the `git` prefix: `co = checkout`
   let rc = 0;
   for (const [i, raw] of src.split("\n").entries()) {
@@ -339,14 +347,14 @@ function lintFile(path: string): number {
   return rc;
 }
 
-function lint(paths: string[]): number {
+async function lint(paths: string[]): Promise<number> {
   let rc = 0;
   for (const path of paths) {
     const abs = resolve(path);
-    if (!existsSync(abs)) return fatal(`no such file: ${path}`);
-    if (statSync(abs).isDirectory())
+    if (!(await exists(abs))) return fatal(`no such file: ${path}`);
+    if ((await stat(abs)).isDirectory())
       return fatal(`lint takes files, not directories: ${path}`);
-    if (lintFile(path) !== 0) rc = 1;
+    if ((await lintFile(path)) !== 0) rc = 1;
   }
   process.stdout.write(
     rc === 0

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -10,54 +10,66 @@ const script = resolve(
 const validFixture = resolve(import.meta.dir, "fixtures/valid-contract.md");
 const temporaryDirectories: string[] = [];
 
-function run(content: string): Readonly<{ exitCode: number; stdout: string }> {
-  const directory = mkdtempSync(join(tmpdir(), "versioning-contract-"));
-  temporaryDirectories.push(directory);
-  const fixture = join(directory, "VERSIONING-CONTRACT.md");
-  writeFileSync(fixture, content);
-  const result = Bun.spawnSync({
+async function runScript(
+  fixture: string,
+): Promise<Readonly<{ exitCode: number; stdout: string }>> {
+  const child = Bun.spawn({
     cmd: ["bun", script, fixture],
     stderr: "pipe",
     stdout: "pipe",
     timeout: 10_000,
   });
-  return { exitCode: result.exitCode, stdout: result.stdout.toString() };
+  const [stdout, , exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  return { exitCode, stdout };
 }
 
-function clearTemporaryDirectories(): void {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
-  }
+async function run(
+  content: string,
+): Promise<Readonly<{ exitCode: number; stdout: string }>> {
+  const directory = await mkdtemp(join(tmpdir(), "versioning-contract-"));
+  temporaryDirectories.push(directory);
+  const fixture = join(directory, "VERSIONING-CONTRACT.md");
+  await writeFile(fixture, content);
+  return runScript(fixture);
 }
 
-afterEach(clearTemporaryDirectories);
+async function clearTemporaryDirectories(): Promise<void> {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
+}
 
-function validContract(): string {
-  return readFileSync(validFixture, "utf8");
+afterEach(async () => clearTemporaryDirectories());
+
+async function validContract(): Promise<string> {
+  return readFile(validFixture, "utf8");
 }
 
 describe("versioning-contract-check", () => {
-  test("accepts a complete custom calendar contract", () => {
-    const result = Bun.spawnSync({
-      cmd: ["bun", script, validFixture],
-      stderr: "pipe",
-      stdout: "pipe",
-      timeout: 10_000,
-    });
+  test("accepts a complete custom calendar contract", async () => {
+    const result = await runScript(validFixture);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString()).toContain("V3  PASS");
-    expect(result.stdout.toString()).toContain("versioning contract: FAIL=0");
+    expect(result.stdout).toContain("V3  PASS");
+    expect(result.stdout).toContain("versioning contract: FAIL=0");
   });
 
-  test("rejects an undecided SemVer claim", () => {
-    const result = run(validContract().replace("syntax-only:", "undecided:"));
+  test("rejects an undecided SemVer claim", async () => {
+    const result = await run(
+      (await validContract()).replace("syntax-only:", "undecided:"),
+    );
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("SemVer claim must begin");
   });
 
-  test("rejects an unnamed comparator", () => {
-    const result = run(
-      validContract().replace(
+  test("rejects an unnamed comparator", async () => {
+    const result = await run(
+      (await validContract()).replace(
         "Comparator: target SemVer parser and deployment tag sorter",
         "Comparator: none",
       ),
@@ -66,9 +78,9 @@ describe("versioning-contract-check", () => {
     expect(result.stdout).toContain("a named comparator is required");
   });
 
-  test("rejects missing transition fields", () => {
-    const result = run(
-      validContract().replace(
+  test("rejects missing transition fields", async () => {
+    const result = await run(
+      (await validContract()).replace(
         "- Same-period second release: increment REVISION even when the release contains a feature\n",
         "",
       ),

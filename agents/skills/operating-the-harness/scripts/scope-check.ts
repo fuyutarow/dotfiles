@@ -19,8 +19,7 @@
 // Scope of the walk is deliberately narrow — `settings*.json` plus `hooks/` — so the check
 // never wanders into `~/.claude/skills` (tool-owned plugin/discovery data) and never scans itself.
 
-import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 // Bare specifier, not pinned inline: this check is run from the repository source tree, whose
@@ -38,10 +37,11 @@ const HOME_ABS = /(?:\/Users|\/home)\/[^/\s"']+\/[^\s"'`)\]}]+/gu;
 
 type Finding = { file: string; line: number; path: string };
 
-// existsSync never throws for a plain missing-path check (unlike `stat`), so there is no
-// throw to catch here.
 function exists(p: string): Promise<boolean> {
-  return Promise.resolve(existsSync(p));
+  return access(p).then(
+    () => true,
+    () => false,
+  );
 }
 
 // Files whose realpath lands inside the user-scope root are that root's OWN plumbing —

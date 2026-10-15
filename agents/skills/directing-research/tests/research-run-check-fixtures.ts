@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -32,20 +32,29 @@ function denominatorDigest(runIds: readonly string[]): string {
   return sha256(`${[...new Set(runIds)].toSorted().join("\n")}\n`);
 }
 
-export function temporaryRoot(): string {
-  const path = mkdtempSync(join(realpathSync(tmpdir()), "research-run-check-"));
+export async function temporaryRoot(): Promise<string> {
+  const path = await mkdtemp(
+    join(await realpath(tmpdir()), "research-run-check-"),
+  );
   temporaryDirectories.push(path);
   return path;
 }
 
-export function cleanupTemporaryRoots(): void {
-  for (const directory of temporaryDirectories.splice(0))
-    rmSync(directory, { force: true, recursive: true });
+export async function cleanupTemporaryRoots(): Promise<void> {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
 }
 
-export function write(directory: string, name: string, text: string): string {
+export async function write(
+  directory: string,
+  name: string,
+  text: string,
+): Promise<string> {
   const path = join(directory, name);
-  writeFileSync(path, text);
+  await writeFile(path, text);
   return path;
 }
 
@@ -162,30 +171,37 @@ export function judgment(
   })}${lenses()}`;
 }
 
-export function run(arguments_: readonly string[]): RunResult {
-  const result = Bun.spawnSync({
+export async function run(arguments_: readonly string[]): Promise<RunResult> {
+  const result = Bun.spawn({
     cmd: ["bun", SCRIPT, ...arguments_],
     stderr: "pipe",
     stdout: "pipe",
-    timeout: 10_000,
+    signal: AbortSignal.timeout(10_000),
   });
+  const [exitCode, stderr, stdout] = await Promise.all([
+    result.exited,
+    new Response(result.stderr).text(),
+    new Response(result.stdout).text(),
+  ]);
   return {
-    exitCode: result.exitCode,
-    stderr: result.stderr.toString(),
-    stdout: result.stdout.toString(),
+    exitCode,
+    stderr,
+    stdout,
   };
 }
 
-export function completeScenario(status = "succeeded"): Scenario {
-  const directory = temporaryRoot();
+export async function completeScenario(
+  status = "succeeded",
+): Promise<Scenario> {
+  const directory = await temporaryRoot();
   const intentText = intent("run-a");
-  const intentPath = write(directory, "run-a.intent.md", intentText);
-  const receiptPath = write(
+  const intentPath = await write(directory, "run-a.intent.md", intentText);
+  const receiptPath = await write(
     directory,
     "run-a.receipt.md",
     receipt("run-a", sha256(intentText), status),
   );
-  const judgmentPath = write(
+  const judgmentPath = await write(
     directory,
     "retrospective.md",
     judgment(["run-a"]),

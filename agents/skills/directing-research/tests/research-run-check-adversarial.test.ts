@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-  appendFileSync,
-  readFileSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFile, readFile, symlink, writeFile } from "node:fs/promises";
 import {
   cleanupTemporaryRoots,
   completeScenario,
@@ -19,11 +14,11 @@ import {
 
 afterEach(cleanupTemporaryRoots);
 
-function timedRun(registered: string, started: string, ended: string) {
-  const directory = temporaryRoot();
+async function timedRun(registered: string, started: string, ended: string) {
+  const directory = await temporaryRoot();
   const intentText = intent("run-a", { REGISTERED_AT: registered });
-  const intentPath = write(directory, "timed.intent.md", intentText);
-  const receiptPath = write(
+  const intentPath = await write(directory, "timed.intent.md", intentText);
+  const receiptPath = await write(
     directory,
     "timed.receipt.md",
     receipt("run-a", sha256(intentText), "succeeded", {
@@ -31,7 +26,7 @@ function timedRun(registered: string, started: string, ended: string) {
       STARTED_AT: started,
     }),
   );
-  const judgmentPath = write(directory, "timed.md", judgment(["run-a"]));
+  const judgmentPath = await write(directory, "timed.md", judgment(["run-a"]));
   return run([
     "--intent",
     intentPath,
@@ -43,24 +38,24 @@ function timedRun(registered: string, started: string, ended: string) {
 }
 
 describe("research-run-check adversarial inputs", () => {
-  test("rejects interpretation laundered into a receipt", () => {
-    const scenario = completeScenario();
+  test("rejects interpretation laundered into a receipt", async () => {
+    const scenario = await completeScenario();
     const intentText = intent("run-a");
-    writeFileSync(
+    await writeFile(
       scenario.receiptPath,
       receipt("run-a", sha256(intentText), "succeeded", {
         FAILURE_OR_EXCLUSION_REASON:
           "therefore this proves the thesis despite terminal success",
       }),
     );
-    const result = run(scenario.arguments_);
+    const result = await run(scenario.arguments_);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("bounded interpretation phrase");
   });
 
-  test("accepts target-agnostic technical prose and locator words", () => {
-    const scenario = completeScenario();
-    writeFileSync(
+  test("accepts target-agnostic technical prose and locator words", async () => {
+    const scenario = await completeScenario();
+    await writeFile(
       scenario.judgmentPath,
       judgment(["run-a"], "AUDITABLE", [], {
         ALTERNATIVES_GAINED_OR_LOST:
@@ -72,81 +67,85 @@ describe("research-run-check adversarial inputs", () => {
       }),
     );
     const intentText = intent("run-a");
-    writeFileSync(
+    await writeFile(
       scenario.receiptPath,
       receipt("run-a", sha256(intentText), "succeeded", {
         OBSERVATION_LOCATOR: "research/raw/therefore-case.json:1",
       }),
     );
-    expect(run(scenario.arguments_).exitCode).toBe(0);
+    expect((await run(scenario.arguments_)).exitCode).toBe(0);
   });
 
-  test("rejects fake AUDITABLE judgment-only history", () => {
-    const directory = temporaryRoot();
-    const judgmentPath = write(directory, "judgment.md", judgment(["run-a"]));
-    const result = run(["--judgment", judgmentPath]);
+  test("rejects fake AUDITABLE judgment-only history", async () => {
+    const directory = await temporaryRoot();
+    const judgmentPath = await write(
+      directory,
+      "judgment.md",
+      judgment(["run-a"]),
+    );
+    const result = await run(["--judgment", judgmentPath]);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(
       "AUDITABLE requires intent=receipt=RUN_IDS",
     );
   });
 
-  test("rejects private reasoning and common credential material", () => {
-    const scenario = completeScenario();
-    writeFileSync(
+  test("rejects private reasoning and common credential material", async () => {
+    const scenario = await completeScenario();
+    await writeFile(
       scenario.judgmentPath,
       judgment(["run-a"], "AUDITABLE", [], {
         UNRESOLVED:
           "<thinking>copied private payload with secret sk-live-abcdefghijklmnop</thinking>",
       }),
     );
-    const result = run(scenario.arguments_);
+    const result = await run(scenario.arguments_);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("raw reasoning, transcript, prompt");
     expect(result.stdout).toContain("probable credential material");
   });
 
-  test("rejects a scalar creativity score", () => {
-    const scenario = completeScenario();
-    writeFileSync(
+  test("rejects a scalar creativity score", async () => {
+    const scenario = await completeScenario();
+    await writeFile(
       scenario.judgmentPath,
       `${judgment(["run-a"])}CREATIVITY_SCORE: 0.91\n`,
     );
-    const result = run(scenario.arguments_);
+    const result = await run(scenario.arguments_);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("scalar creativity scores are forbidden");
   });
 
-  test("rejects a duplicated or substituted process lens", () => {
-    const scenario = completeScenario();
-    writeFileSync(
+  test("rejects a duplicated or substituted process lens", async () => {
+    const scenario = await completeScenario();
+    await writeFile(
       scenario.judgmentPath,
       judgment(["run-a"]).replace(
         "| surprise-uptake |",
         "| frame-coevolution |",
       ),
     );
-    const result = run(scenario.arguments_);
+    const result = await run(scenario.arguments_);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("PROCESS LENSES must contain exactly once");
   });
 
-  test("rejects a contradictory second process-lens section", () => {
-    const scenario = completeScenario();
-    appendFileSync(
+  test("rejects a contradictory second process-lens section", async () => {
+    const scenario = await completeScenario();
+    await appendFile(
       scenario.judgmentPath,
       "\n## PROCESS LENSES\n\n| Lens ID | Evidence locus | Verdict | Causal consequence | Repair / reopen |\n|---|---|---|---|---|\n| frame-coevolution | contradictory.md:1 | VIOLATED | opposite | reopen now |\n",
     );
-    const result = run(scenario.arguments_);
+    const result = await run(scenario.arguments_);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("exactly one ## PROCESS LENSES");
   });
 
-  test("accepts escaped and inline-code pipes but rejects an extra separator", () => {
-    const valid = completeScenario();
-    writeFileSync(
+  test("accepts escaped and inline-code pipes but rejects an extra separator", async () => {
+    const valid = await completeScenario();
+    await writeFile(
       valid.judgmentPath,
-      readFileSync(valid.judgmentPath, "utf8")
+      (await readFile(valid.judgmentPath, "utf8"))
         .replace(
           "bounded consequence for frame-coevolution",
           "comparison of A \\| B",
@@ -156,34 +155,34 @@ describe("research-run-check adversarial inputs", () => {
           "comparison of `generator | evaluator` roles",
         ),
     );
-    expect(run(valid.arguments_).exitCode).toBe(0);
+    expect((await run(valid.arguments_)).exitCode).toBe(0);
 
-    const malformed = completeScenario();
-    writeFileSync(
+    const malformed = await completeScenario();
+    await writeFile(
       malformed.judgmentPath,
-      readFileSync(malformed.judgmentPath, "utf8").replace(
+      (await readFile(malformed.judgmentPath, "utf8")).replace(
         "bounded consequence for frame-coevolution",
         "comparison of A | B",
       ),
     );
-    const result = run(malformed.arguments_);
+    const result = await run(malformed.arguments_);
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("each lens row needs five cells");
   });
 
-  test("Cleye owns unknown flags; missing judgment uses domain exit 2", () => {
-    const unknown = run(["--unknown", "x"]);
-    const missing = run([]);
+  test("Cleye owns unknown flags; missing judgment uses domain exit 2", async () => {
+    const unknown = await run(["--unknown", "x"]);
+    const missing = await run([]);
     expect(unknown.exitCode).toBe(1);
     expect(unknown.stderr).toContain("Unknown flag");
     expect(missing.exitCode).toBe(2);
     expect(missing.stderr).toContain("required option: --judgment");
   });
 
-  test("rejects repeated singular judgment flags in either spelling and order", () => {
-    const scenario = completeScenario();
-    const directory = temporaryRoot();
-    const invalid = write(
+  test("rejects repeated singular judgment flags in either spelling and order", async () => {
+    const scenario = await completeScenario();
+    const directory = await temporaryRoot();
+    const invalid = await write(
       directory,
       "invalid-judgment.md",
       judgment(["run-a"], "AUDITABLE", [], { JUDGMENT_ID: "bad id" }),
@@ -198,7 +197,7 @@ describe("research-run-check adversarial inputs", () => {
       ["--judgment", scenario.judgmentPath, "--judgment", invalid],
       [`--judgment=${invalid}`, `--judgment=${scenario.judgmentPath}`],
     ]) {
-      const result = run([...prefix, ...flags]);
+      const result = await run([...prefix, ...flags]);
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain(
         "--judgment must be provided exactly once",
@@ -206,61 +205,69 @@ describe("research-run-check adversarial inputs", () => {
     }
   });
 
-  test("orders one-to-nine-digit fractional timestamps exactly across offsets", () => {
+  test("orders one-to-nine-digit fractional timestamps exactly across offsets", async () => {
     expect(
-      timedRun(
-        "2026-08-02T10:00:00.0009Z",
-        "2026-08-02T10:00:00.0001Z",
-        "2026-08-02T10:00:01Z",
+      (
+        await timedRun(
+          "2026-08-02T10:00:00.0009Z",
+          "2026-08-02T10:00:00.0001Z",
+          "2026-08-02T10:00:01Z",
+        )
       ).exitCode,
     ).toBe(1);
     expect(
-      timedRun(
-        "2026-08-02T10:00:00Z",
-        "2026-08-02T10:00:01.0009Z",
-        "2026-08-02T10:00:01.0001Z",
+      (
+        await timedRun(
+          "2026-08-02T10:00:00Z",
+          "2026-08-02T10:00:01.0009Z",
+          "2026-08-02T10:00:01.0001Z",
+        )
       ).exitCode,
     ).toBe(1);
     expect(
-      timedRun(
-        "2026-08-02T10:00:00.0009+09:00",
-        "2026-08-02T01:00:00.0001Z",
-        "2026-08-02T01:00:01Z",
+      (
+        await timedRun(
+          "2026-08-02T10:00:00.0009+09:00",
+          "2026-08-02T01:00:00.0001Z",
+          "2026-08-02T01:00:01Z",
+        )
       ).exitCode,
     ).toBe(1);
     expect(
-      timedRun(
-        "2026-08-02T10:00:00.0009+09:00",
-        "2026-08-02T01:00:00.001Z",
-        "2026-08-02T00:00:00.0011-01:00",
+      (
+        await timedRun(
+          "2026-08-02T10:00:00.0009+09:00",
+          "2026-08-02T01:00:00.001Z",
+          "2026-08-02T00:00:00.0011-01:00",
+        )
       ).exitCode,
     ).toBe(0);
-  });
+  }, 15_000);
 
-  test("refuses symlink inputs and oversized packets", () => {
-    const directory = temporaryRoot();
-    const judgmentPath = write(
+  test("refuses symlink inputs and oversized packets", async () => {
+    const directory = await temporaryRoot();
+    const judgmentPath = await write(
       directory,
       "judgment.md",
       judgment(["legacy-run"], "UNAUDITABLE", ["legacy-run"]),
     );
     const linkPath = `${judgmentPath}.link`;
-    symlinkSync(judgmentPath, linkPath);
-    const symlink = run(["--judgment", linkPath]);
-    expect(symlink.exitCode).toBe(2);
-    expect(symlink.stderr).toContain("symlink inputs are refused");
+    await symlink(judgmentPath, linkPath);
+    const symlinkResult = await run(["--judgment", linkPath]);
+    expect(symlinkResult.exitCode).toBe(2);
+    expect(symlinkResult.stderr).toContain("symlink inputs are refused");
     const ancestorPath = `${directory}/ancestor`;
-    symlinkSync(directory, ancestorPath);
-    const ancestor = run(["--judgment", `${ancestorPath}/judgment.md`]);
+    await symlink(directory, ancestorPath);
+    const ancestor = await run(["--judgment", `${ancestorPath}/judgment.md`]);
     expect(ancestor.exitCode).toBe(2);
     expect(ancestor.stderr).toContain("symlink inputs are refused");
 
-    const oversizedPath = write(
+    const oversizedPath = await write(
       directory,
       "oversized.md",
       "x".repeat(256 * 1024 + 1),
     );
-    const oversized = run(["--judgment", oversizedPath]);
+    const oversized = await run(["--judgment", oversizedPath]);
     expect(oversized.exitCode).toBe(2);
     expect(oversized.stderr).toContain("packet exceeds 262144 bytes");
   });

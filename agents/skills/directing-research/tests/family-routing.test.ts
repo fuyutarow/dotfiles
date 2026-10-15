@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 // DETERMINISTIC LEXICAL DESCRIPTION CONTRACT.
@@ -40,9 +40,9 @@ const RETIRED_FAMILY = new Set<FamilySkill>([
 type Assertion = readonly [skill: FamilySkill, pattern: RegExp];
 type Contract = readonly [name: string, assertions: readonly Assertion[]];
 
-function description(skill: FamilySkill): string {
+async function description(skill: FamilySkill): Promise<string> {
   const root = RETIRED_FAMILY.has(skill) ? ARCHIVE_ROOT : SKILLS_ROOT;
-  const text = readFileSync(resolve(root, skill, "SKILL.md"), "utf8");
+  const text = await readFile(resolve(root, skill, "SKILL.md"), "utf8");
   const frontmatter = text.match(/^---\n([\s\S]*?)\n---/u)?.[1];
   expect(frontmatter, `${skill}: missing frontmatter`).toBeDefined();
   const lines = (frontmatter ?? "").split("\n");
@@ -170,31 +170,31 @@ const CONTRACTS: readonly Contract[] = [
 ];
 
 describe("DETERMINISTIC LEXICAL DESCRIPTION CONTRACT — not live routing proof", () => {
-  test("generic research no longer fires the legacy shim", () => {
-    expect(description("directing-research")).not.toMatch(
+  test("generic research no longer fires the legacy shim", async () => {
+    expect(await description("directing-research")).not.toMatch(
       /bare 「研究を進めて」|end-to-end 創造的研究/u,
     );
-    expect(description("directing-research")).toMatch(
+    expect(await description("directing-research")).toMatch(
       /Use only for \/directing-research/iu,
     );
-    expect(description("driving-bibifi-cycles")).toMatch(
+    expect(await description("driving-bibifi-cycles")).toMatch(
       /authorized discovery loop/iu,
     );
   });
-  test("theory, proof, explanation and evidence keep distinct direct owners", () => {
-    expect(description("systematizing-theories")).toMatch(
+  test("theory, proof, explanation and evidence keep distinct direct owners", async () => {
+    expect(await description("systematizing-theories")).toMatch(
       /THEORY MAP and THEORY CHANGESET/u,
     );
-    expect(description("proving-theorems")).toMatch(
+    expect(await description("proving-theorems")).toMatch(
       /proof certification stay here/u,
     );
-    expect(description("forming-hypotheses-from-anomalies")).toMatch(
+    expect(await description("forming-hypotheses-from-anomalies")).toMatch(
       /PURPOSE cut vs forging-novel-theses/u,
     );
-    expect(description("validating-experimental-evidence")).toMatch(
+    expect(await description("validating-experimental-evidence")).toMatch(
       /EVIDENCE DISPOSITION/u,
     );
-    const compatibilityBody = readFileSync(
+    const compatibilityBody = await readFile(
       resolve(SKILLS_ROOT, "directing-research/SKILL.md"),
       "utf8",
     );
@@ -204,10 +204,11 @@ describe("DETERMINISTIC LEXICAL DESCRIPTION CONTRACT — not live routing proof"
     expect(compatibilityBody).not.toContain("INPUT CLASS: <legacy-broad");
   });
   for (const [name, assertions] of CONTRACTS)
-    test(name, () => {
+    test(name, async () => {
       for (const [skill, pattern] of assertions)
-        expect(description(skill), `${skill}: lexical contract only`).toMatch(
-          pattern,
-        );
+        expect(
+          await description(skill),
+          `${skill}: lexical contract only`,
+        ).toMatch(pattern);
     });
 });

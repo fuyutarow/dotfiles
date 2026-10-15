@@ -1,12 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -19,19 +13,27 @@ type RunResult = {
   stdout: string;
 };
 
-const run = (arguments_: string[], stdin: string | undefined): RunResult => {
-  const result = Bun.spawnSync({
+const run = async (
+  arguments_: string[],
+  stdin: string | undefined,
+): Promise<RunResult> => {
+  const result = Bun.spawn({
     cmd: ["bun", script, ...arguments_],
     stderr: "pipe",
     stdin: stdin === undefined ? "ignore" : Buffer.from(stdin),
     stdout: "pipe",
-    timeout: 10_000,
+    signal: AbortSignal.timeout(10_000),
   });
+  const [exitCode, stderr, stdout] = await Promise.all([
+    result.exited,
+    new Response(result.stderr).text(),
+    new Response(result.stdout).text(),
+  ]);
 
   return {
-    exitCode: result.exitCode,
-    stderr: result.stderr.toString(),
-    stdout: result.stdout.toString(),
+    exitCode,
+    stderr,
+    stdout,
   };
 };
 
@@ -155,23 +157,29 @@ const mappingBreak = (id: string, path: string, digest: string): string => `
 - Status: MAPPING-BREAK
 `;
 
-const fixture = (contents: string): string => {
-  const directory = mkdtempSync(join(tmpdir(), "research-check-"));
+const fixture = async (contents: string): Promise<string> => {
+  const directory = await mkdtemp(join(tmpdir(), "research-check-"));
   temporaryDirectories.push(directory);
   const path = join(directory, "research-spec.md");
-  writeFileSync(path, contents);
+  await writeFile(path, contents);
   return path;
 };
 
-const sha256 = (path: string): string =>
-  createHash("sha256").update(readFileSync(path)).digest("hex");
+const sha256 = async (path: string): Promise<string> =>
+  createHash("sha256")
+    .update(await readFile(path))
+    .digest("hex");
 
-const frozenTransferFixture = (): Readonly<{
-  donorPath: string;
-  transferPath: string;
-}> => {
-  const donorPath = fixture(donorSet);
-  const transferPath = fixture(transferBundle(donorPath, sha256(donorPath)));
+const frozenTransferFixture = async (): Promise<
+  Readonly<{
+    donorPath: string;
+    transferPath: string;
+  }>
+> => {
+  const donorPath = await fixture(donorSet);
+  const transferPath = await fixture(
+    transferBundle(donorPath, await sha256(donorPath)),
+  );
   return { donorPath, transferPath };
 };
 
@@ -236,15 +244,17 @@ const adoptTransferSpec = (
       "- Integration / retirement action: integrate T1 within the tested target scope and preserve T2",
     );
 
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
-  }
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
 });
 
 describe("research-check", () => {
-  test("accepts a structurally complete RESEARCH JUDGMENT SPEC from a path", () => {
-    const result = run([fixture(validSpec)], undefined);
+  test("accepts a structurally complete RESEARCH JUDGMENT SPEC from a path", async () => {
+    const result = await run([await fixture(validSpec)], undefined);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("FAIL=0");
@@ -252,46 +262,46 @@ describe("research-check", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("accepts the same spec on stdin", () => {
-    const result = run(["-"], validSpec);
+  test("accepts the same spec on stdin", async () => {
+    const result = await run(["-"], validSpec);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("FAIL=0");
     expect(result.stderr).toBe("");
   });
 
-  test("does not mistake a timestamped per-test threshold for registry policy", () => {
+  test("does not mistake a timestamped per-test threshold for registry policy", async () => {
     const invalid = validSpec.replace(
       "write every prediction to research/prediction-ledger.md before observing its result",
       "2026-07-30 09:00; kill when p < 0.05",
     );
-    const result = run([fixture(invalid)], undefined);
+    const result = await run([await fixture(invalid)], undefined);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("registry/ledger locus");
     expect(result.stdout).toContain("before/prior rule");
   });
 
-  test("rejects collapsing the selection axes into one scalar product", () => {
+  test("rejects collapsing the selection axes into one scalar product", async () => {
     const invalid = validSpec.replace(
       "consequence=high; discriminability=one observation separates frames; feasibility=one-day probe; novelty=delta against nearest prior; bounded loss=one day of compute",
       "score = consequence × discriminability × feasibility × novelty × bounded loss",
     );
-    const result = run([fixture(invalid)], undefined);
+    const result = await run([await fixture(invalid)], undefined);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("scalar product");
   });
 
-  test("requires bounded loss as a separate selection axis", () => {
+  test("requires bounded loss as a separate selection axis", async () => {
     const invalid = validSpec.replace("; bounded loss=one day of compute", "");
-    const result = run([fixture(invalid)], undefined);
+    const result = await run([await fixture(invalid)], undefined);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("bounded loss");
   });
 
-  test("makes every other required mechanism fire on a bad value", () => {
+  test("makes every other required mechanism fire on a bad value", async () => {
     const invalidCases = [
       {
         from: "problem-underconstructed",
@@ -351,95 +361,95 @@ describe("research-check", () => {
     ];
 
     for (const invalidCase of invalidCases) {
-      const result = run(
-        [fixture(validSpec.replace(invalidCase.from, invalidCase.to))],
+      const result = await run(
+        [await fixture(validSpec.replace(invalidCase.from, invalidCase.to))],
         undefined,
       );
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain(invalidCase.finding);
     }
-  });
+  }, 30_000);
 
-  test("accepts an explicit handoff when the portfolio has one selected bet", () => {
+  test("accepts an explicit handoff when the portfolio has one selected bet", async () => {
     const handoff = validSpec.replace(
       "Bet A continues; Bet B is shelved pending a new instrument",
       "single-bet handoff: send the expensive load-bearing one selected bet to acting-on-hypotheses",
     );
-    const result = run([fixture(handoff)], undefined);
+    const result = await run([await fixture(handoff)], undefined);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("single-bet handoff");
   });
 
-  test("does not mistake indifferent for an independent auditor", () => {
+  test("does not mistake indifferent for an independent auditor", async () => {
     const invalid = validSpec.replace(
       "generator and auditor passes remain separate; evidence surface=frozen candidate packets; acceptance condition=reject unresolved provenance; actor assignment=orchestrating-agents",
       "generator=Alice; auditor=Alice; indifferent review in the same context",
     );
-    const result = run([fixture(invalid)], undefined);
+    const result = await run([await fixture(invalid)], undefined);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("required separation");
   });
 
-  test("rejects three synonymous robustness frames without functional roles", () => {
+  test("rejects three synonymous robustness frames without functional roles", async () => {
     const invalid = validSpec.replace(
       "Frame A [CONTROL; slot=RELATION; holds premise A1; discriminator=order invariance]; Frame B [PREMISE-BREAK; slot=OBJECT; breaks premise A1; discriminator=unit split]; Frame C [ORTHOGONAL; slot=OBSERVATION; breaks premise A2; discriminator=proxy reversal]",
       "Frame A — improve robustness; Frame B — make the method more robust; Frame C — increase system robustness",
     );
-    const result = run([fixture(invalid)], undefined);
+    const result = await run([await fixture(invalid)], undefined);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("functional roles");
   });
 
-  test("accepts an honest frame coverage gap with an impossibility witness", () => {
+  test("accepts an honest frame coverage gap with an impossibility witness", async () => {
     const constrained = validSpec.replace(
       "Frame C [ORTHOGONAL; slot=OBSERVATION; breaks premise A2; discriminator=proxy reversal]",
       "ORTHOGONAL COVERAGE GAP [attempted transformation=change OBSERVATION; fixed constraint=formal invariant fixes the only admissible observation; illegitimate=an invented third observation would be invalid]",
     );
-    const result = run([fixture(constrained)], undefined);
+    const result = await run([await fixture(constrained)], undefined);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("FAIL=0");
   });
 
-  test("rejects a vague frame coverage-gap escape hatch", () => {
+  test("rejects a vague frame coverage-gap escape hatch", async () => {
     const invalid = validSpec.replace(
       "Frame C [ORTHOGONAL; slot=OBSERVATION; breaks premise A2; discriminator=proxy reversal]",
       "ORTHOGONAL COVERAGE GAP [could not think of one]",
     );
-    const result = run([fixture(invalid)], undefined);
+    const result = await run([await fixture(invalid)], undefined);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain("attempted transformation");
   });
 
-  test("rejects an ungated cheap one-bet handoff to acting-on-hypotheses", () => {
+  test("rejects an ungated cheap one-bet handoff to acting-on-hypotheses", async () => {
     const invalid = validSpec.replace(
       "Bet A continues; Bet B is shelved pending a new instrument",
       "single-bet handoff: send the cheap reversible probe to acting-on-hypotheses",
     );
-    const result = run([fixture(invalid)], undefined);
+    const result = await run([await fixture(invalid)], undefined);
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toContain(">=2 bets");
   });
 
-  test("uses Cleye's strict unknown-flag failure", () => {
-    const result = run(["--unknown"], undefined);
+  test("uses Cleye's strict unknown-flag failure", async () => {
+    const result = await run(["--unknown"], undefined);
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Unknown flag: --unknown");
   });
 
-  test("accepts a transfer TEST disposition while preserving every MAPPING-BREAK", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
-    const specPath = fixture(
-      activeTransferSpec(sha256(transferPath), transferPath),
+  test("accepts a transfer TEST disposition while preserving every MAPPING-BREAK", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
+    const specPath = await fixture(
+      activeTransferSpec(await sha256(transferPath), transferPath),
     );
-    const result = run(
+    const result = await run(
       activeArguments(donorPath, transferPath, specPath),
       undefined,
     );
@@ -450,14 +460,14 @@ describe("research-check", () => {
     expect(result.stdout).toContain("mapping-breaks=1");
   });
 
-  test("rejects an unaccounted MAPPING-BREAK from the frozen bundle", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
-    const spec = activeTransferSpec(sha256(transferPath), transferPath).replace(
-      "T1, T2",
-      "T1",
-    );
-    const result = run(
-      activeArguments(donorPath, transferPath, fixture(spec)),
+  test("rejects an unaccounted MAPPING-BREAK from the frozen bundle", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
+    const spec = activeTransferSpec(
+      await sha256(transferPath),
+      transferPath,
+    ).replace("T1, T2", "T1");
+    const result = await run(
+      activeArguments(donorPath, transferPath, await fixture(spec)),
       undefined,
     );
 
@@ -467,11 +477,11 @@ describe("research-check", () => {
     );
   });
 
-  test("rejects a transfer bundle whose digest differs from the frozen spec", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
+  test("rejects a transfer bundle whose digest differs from the frozen spec", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
     const spec = activeTransferSpec("f".repeat(64), transferPath);
-    const result = run(
-      activeArguments(donorPath, transferPath, fixture(spec)),
+    const result = await run(
+      activeArguments(donorPath, transferPath, await fixture(spec)),
       undefined,
     );
 
@@ -479,14 +489,14 @@ describe("research-check", () => {
     expect(result.stdout).toContain("transfer bundle SHA-256 does not match");
   });
 
-  test("rejects a declared transfer-bundle path that differs from the verified input", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
+  test("rejects a declared transfer-bundle path that differs from the verified input", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
     const spec = activeTransferSpec(
-      sha256(transferPath),
+      await sha256(transferPath),
       "research/a-different-transfer-bundle.md",
     );
-    const result = run(
-      activeArguments(donorPath, transferPath, fixture(spec)),
+    const result = await run(
+      activeArguments(donorPath, transferPath, await fixture(spec)),
       undefined,
     );
 
@@ -496,13 +506,13 @@ describe("research-check", () => {
     );
   });
 
-  test("accepts a transfer-bundle symlink to the declared frozen artifact", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
+  test("accepts a transfer-bundle symlink to the declared frozen artifact", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
     const bundleSymlink = `${transferPath}.symlink`;
-    symlinkSync(transferPath, bundleSymlink);
-    const spec = activeTransferSpec(sha256(transferPath), transferPath);
-    const result = run(
-      activeArguments(donorPath, bundleSymlink, fixture(spec)),
+    await symlink(transferPath, bundleSymlink);
+    const spec = activeTransferSpec(await sha256(transferPath), transferPath);
+    const result = await run(
+      activeArguments(donorPath, bundleSymlink, await fixture(spec)),
       undefined,
     );
 
@@ -510,16 +520,16 @@ describe("research-check", () => {
     expect(result.stdout).toContain("TRANSFER DISPOSITION attempts=2");
   });
 
-  test("rejects ADOPT when the only stated support is donor-side success", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
-    const spec = activeTransferSpec(sha256(transferPath), transferPath)
+  test("rejects ADOPT when the only stated support is donor-side success", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
+    const spec = activeTransferSpec(await sha256(transferPath), transferPath)
       .replace("T1=TEST", "T1=ADOPT")
       .replace(
         "UNTESTED — prediction registry=research/predictions.md; handoff=domain/plain executor",
         "SOURCE RESULT — both donor systems succeeded",
       );
-    const result = run(
-      activeArguments(donorPath, transferPath, fixture(spec)),
+    const result = await run(
+      activeArguments(donorPath, transferPath, await fixture(spec)),
       undefined,
     );
 
@@ -527,23 +537,25 @@ describe("research-check", () => {
     expect(result.stdout).toContain("ADOPT or RETIRE requires TARGET RESULT");
   });
 
-  test("freezes and validates TARGET RESULT before ADOPT", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
-    const transferDigest = sha256(transferPath);
-    const resultPath = fixture(targetResult(transferPath, transferDigest));
-    const specPath = fixture(
+  test("freezes and validates TARGET RESULT before ADOPT", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
+    const transferDigest = await sha256(transferPath);
+    const resultPath = await fixture(
+      targetResult(transferPath, transferDigest),
+    );
+    const specPath = await fixture(
       adoptTransferSpec(
         transferDigest,
         transferPath,
-        sha256(resultPath),
+        await sha256(resultPath),
         resultPath,
       ),
     );
-    const withoutResultFlag = run(
+    const withoutResultFlag = await run(
       activeArguments(donorPath, transferPath, specPath),
       undefined,
     );
-    const valid = run(
+    const valid = await run(
       [
         "--donor-set",
         donorPath,
@@ -555,18 +567,18 @@ describe("research-check", () => {
       ],
       undefined,
     );
-    const wrongCandidatePath = fixture(
+    const wrongCandidatePath = await fixture(
       targetResult(transferPath, transferDigest, "T404"),
     );
-    const wrongCandidateSpec = fixture(
+    const wrongCandidateSpec = await fixture(
       adoptTransferSpec(
-        sha256(transferPath),
+        await sha256(transferPath),
         transferPath,
-        sha256(wrongCandidatePath),
+        await sha256(wrongCandidatePath),
         wrongCandidatePath,
       ),
     );
-    const wrongCandidate = run(
+    const wrongCandidate = await run(
       [
         "--donor-set",
         donorPath,
@@ -578,43 +590,45 @@ describe("research-check", () => {
       ],
       undefined,
     );
-    const missingThresholds = ["##", "###", "####", "######"].map((heading) => {
-      const missingThresholdPath = fixture(
-        `${targetResult(transferPath, transferDigest).replace(
-          /^- Prewritten threshold:.*$/mu,
-          "",
-        )}\n${heading} Notes\n- Prewritten threshold: PASS if this later note is borrowed`,
-      );
-      const missingThresholdSpec = fixture(
-        adoptTransferSpec(
-          transferDigest,
-          transferPath,
-          sha256(missingThresholdPath),
-          missingThresholdPath,
-        ),
-      );
-      return run(
-        [
-          "--donor-set",
-          donorPath,
-          "--transfer-bundle",
-          transferPath,
-          "--target-result",
-          missingThresholdPath,
-          missingThresholdSpec,
-        ],
-        undefined,
-      );
-    });
-    const wrongDigestSpec = fixture(
+    const missingThresholds = await Promise.all(
+      ["##", "###", "####", "######"].map(async (heading) => {
+        const missingThresholdPath = await fixture(
+          `${targetResult(transferPath, transferDigest).replace(
+            /^- Prewritten threshold:.*$/mu,
+            "",
+          )}\n${heading} Notes\n- Prewritten threshold: PASS if this later note is borrowed`,
+        );
+        const missingThresholdSpec = await fixture(
+          adoptTransferSpec(
+            transferDigest,
+            transferPath,
+            await sha256(missingThresholdPath),
+            missingThresholdPath,
+          ),
+        );
+        return run(
+          [
+            "--donor-set",
+            donorPath,
+            "--transfer-bundle",
+            transferPath,
+            "--target-result",
+            missingThresholdPath,
+            missingThresholdSpec,
+          ],
+          undefined,
+        );
+      }),
+    );
+    const wrongDigestSpec = await fixture(
       adoptTransferSpec(
-        sha256(transferPath),
+        await sha256(transferPath),
         transferPath,
         "f".repeat(64),
         resultPath,
       ),
     );
-    const wrongDigest = run(
+    const wrongDigest = await run(
       [
         "--donor-set",
         donorPath,
@@ -647,21 +661,24 @@ describe("research-check", () => {
     expect(wrongDigest.stdout).toContain(
       "TARGET RESULT SHA-256 does not match",
     );
-  });
+  }, 30_000);
 
-  test("rejects rebound, donor-side, vague, destructive, or failed TARGET RESULT evidence before ADOPT", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
-    const transferDigest = sha256(transferPath);
+  test("rejects rebound, donor-side, vague, destructive, or failed TARGET RESULT evidence before ADOPT", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
+    const transferDigest = await sha256(transferPath);
     const base = targetResult(transferPath, transferDigest);
-    const otherTransferPath = fixture(
-      transferBundle(donorPath, sha256(donorPath)).replace(
+    const otherTransferPath = await fixture(
+      transferBundle(donorPath, await sha256(donorPath)).replace(
         "Endpoint aggregation hides order-dependent target histories.",
         "Endpoint aggregation hides a different order-dependent target history.",
       ),
     );
     const cases = [
       {
-        artifact: targetResult(otherTransferPath, sha256(otherTransferPath)),
+        artifact: targetResult(
+          otherTransferPath,
+          await sha256(otherTransferPath),
+        ),
         finding: "TARGET RESULT transfer bundle path does not match",
       },
       {
@@ -750,16 +767,16 @@ describe("research-check", () => {
     ] as const;
 
     for (const invalidCase of cases) {
-      const resultPath = fixture(invalidCase.artifact);
-      const specPath = fixture(
+      const resultPath = await fixture(invalidCase.artifact);
+      const specPath = await fixture(
         adoptTransferSpec(
           transferDigest,
           transferPath,
-          sha256(resultPath),
+          await sha256(resultPath),
           resultPath,
         ),
       );
-      const result = run(
+      const result = await run(
         [
           "--donor-set",
           donorPath,
@@ -775,23 +792,25 @@ describe("research-check", () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain(invalidCase.finding);
     }
-  });
+  }, 90_000);
 
-  test("RETIRE preserves PASS or FAIL evidence while requiring a tested boundary", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
-    const transferDigest = sha256(transferPath);
-    const passResultPath = fixture(targetResult(transferPath, transferDigest));
-    const failResultPath = fixture(
+  test("RETIRE preserves PASS or FAIL evidence while requiring a tested boundary", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
+    const transferDigest = await sha256(transferPath);
+    const passResultPath = await fixture(
+      targetResult(transferPath, transferDigest),
+    );
+    const failResultPath = await fixture(
       targetResult(transferPath, transferDigest).replace(
         "- Threshold result: PASS — 9 of 10 held-out histories were distinguished",
         "- Threshold result: FAIL — 0 of 10 held-out histories were distinguished",
       ),
     );
-    const retireSpec = (resultPath: string): string =>
+    const retireSpec = async (resultPath: string): Promise<string> =>
       adoptTransferSpec(
         transferDigest,
         transferPath,
-        sha256(resultPath),
+        await sha256(resultPath),
         resultPath,
       )
         .replace("T1=ADOPT", "T1=RETIRE")
@@ -799,7 +818,10 @@ describe("research-check", () => {
           "integrate T1 within the tested target scope and preserve T2",
           "retire the tested T1 mapping family outside its bounded target scope and preserve T2",
         );
-    const runRetire = (resultPath: string, spec: string): RunResult =>
+    const runRetire = async (
+      resultPath: string,
+      spec: string,
+    ): Promise<RunResult> =>
       run(
         [
           "--donor-set",
@@ -808,16 +830,22 @@ describe("research-check", () => {
           transferPath,
           "--target-result",
           resultPath,
-          fixture(spec),
+          await fixture(spec),
         ],
         undefined,
       );
 
-    const pass = runRetire(passResultPath, retireSpec(passResultPath));
-    const fail = runRetire(failResultPath, retireSpec(failResultPath));
-    const unbounded = runRetire(
+    const pass = await runRetire(
       passResultPath,
-      retireSpec(passResultPath).replace(
+      await retireSpec(passResultPath),
+    );
+    const fail = await runRetire(
+      failResultPath,
+      await retireSpec(failResultPath),
+    );
+    const unbounded = await runRetire(
+      passResultPath,
+      (await retireSpec(passResultPath)).replace(
         "retire the tested T1 mapping family outside its bounded target scope and preserve T2",
         "retire T1 and preserve T2",
       ),
@@ -829,20 +857,20 @@ describe("research-check", () => {
     expect(unbounded.stdout).toContain(
       "RETIRE must name the tested mapping family or transfer boundary",
     );
-  });
+  }, 30_000);
 
-  test("treats a missing TARGET RESULT dependency as fatal", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
+  test("treats a missing TARGET RESULT dependency as fatal", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
     const missingPath = "/definitely/missing/target-result.md";
-    const specPath = fixture(
+    const specPath = await fixture(
       adoptTransferSpec(
-        sha256(transferPath),
+        await sha256(transferPath),
         transferPath,
         "a".repeat(64),
         missingPath,
       ),
     );
-    const result = run(
+    const result = await run(
       [
         "--donor-set",
         donorPath,
@@ -859,13 +887,13 @@ describe("research-check", () => {
     expect(result.stderr).toContain("FATAL: target result not found");
   });
 
-  test("accepts REOPEN when all transfer attempts end as MAPPING-BREAK", () => {
-    const donorPath = fixture(donorSet);
-    const donorDigest = sha256(donorPath);
-    const transferPath = fixture(
+  test("accepts REOPEN when all transfer attempts end as MAPPING-BREAK", async () => {
+    const donorPath = await fixture(donorSet);
+    const donorDigest = await sha256(donorPath);
+    const transferPath = await fixture(
       `${mappingBreak("T1", donorPath, donorDigest)}\n${mappingBreak("T2", donorPath, donorDigest)}`,
     );
-    const spec = activeTransferSpec(sha256(transferPath), transferPath)
+    const spec = activeTransferSpec(await sha256(transferPath), transferPath)
       .replace("T1=TEST", "NONE — no candidate generated")
       .replace(
         "- Preserved MAPPING-BREAK IDs: T2",
@@ -879,8 +907,8 @@ describe("research-check", () => {
         "keep T1 at CANDIDATE and preserve T2; no adoption before target evidence",
         "REOPEN — preserve both mapping breaks and revise the donor relation or target constraints",
       );
-    const result = run(
-      activeArguments(donorPath, transferPath, fixture(spec)),
+    const result = await run(
+      activeArguments(donorPath, transferPath, await fixture(spec)),
       undefined,
     );
 
@@ -890,9 +918,9 @@ describe("research-check", () => {
     );
   });
 
-  test("rejects an incomplete transfer bundle that prior disposition checks accepted", () => {
-    const donorPath = fixture(donorSet);
-    const transferPath = fixture(`
+  test("rejects an incomplete transfer bundle that prior disposition checks accepted", async () => {
+    const donorPath = await fixture(donorSet);
+    const transferPath = await fixture(`
 ## Candidate C1
 - Operation: TRANSFER
 - Transfer attempt ID: T1
@@ -905,9 +933,9 @@ describe("research-check", () => {
 - Non-correspondence axis: RELATION — no inverse transition.
 - Status: MAPPING-BREAK
 `);
-    const spec = activeTransferSpec(sha256(transferPath), transferPath);
-    const result = run(
-      activeArguments(donorPath, transferPath, fixture(spec)),
+    const spec = activeTransferSpec(await sha256(transferPath), transferPath);
+    const result = await run(
+      activeArguments(donorPath, transferPath, await fixture(spec)),
       undefined,
     );
 
@@ -917,11 +945,11 @@ describe("research-check", () => {
     );
   });
 
-  test("requires --donor-set for an active TRANSFER DISPOSITION", () => {
-    const { transferPath } = frozenTransferFixture();
-    const spec = activeTransferSpec(sha256(transferPath), transferPath);
-    const result = run(
-      ["--transfer-bundle", transferPath, fixture(spec)],
+  test("requires --donor-set for an active TRANSFER DISPOSITION", async () => {
+    const { transferPath } = await frozenTransferFixture();
+    const spec = activeTransferSpec(await sha256(transferPath), transferPath);
+    const result = await run(
+      ["--transfer-bundle", transferPath, await fixture(spec)],
       undefined,
     );
 
@@ -929,12 +957,12 @@ describe("research-check", () => {
     expect(result.stdout).toContain("requires --donor-set");
   });
 
-  test("propagates a missing donor dependency as FATAL", () => {
-    const { transferPath } = frozenTransferFixture();
-    const spec = activeTransferSpec(sha256(transferPath), transferPath);
+  test("propagates a missing donor dependency as FATAL", async () => {
+    const { transferPath } = await frozenTransferFixture();
+    const spec = activeTransferSpec(await sha256(transferPath), transferPath);
     const missingDonor = join(tmpdir(), "research-check-missing-donor-set.md");
-    const result = run(
-      activeArguments(missingDonor, transferPath, fixture(spec)),
+    const result = await run(
+      activeArguments(missingDonor, transferPath, await fixture(spec)),
       undefined,
     );
 
@@ -942,12 +970,12 @@ describe("research-check", () => {
     expect(result.stderr).toContain("DONOR SET not found");
   });
 
-  test("propagates a missing transfer-bundle dependency as FATAL", () => {
-    const donorPath = fixture(donorSet);
-    const missingTransfer = `${fixture("placeholder")}.missing`;
+  test("propagates a missing transfer-bundle dependency as FATAL", async () => {
+    const donorPath = await fixture(donorSet);
+    const missingTransfer = `${await fixture("placeholder")}.missing`;
     const spec = activeTransferSpec("a".repeat(64), missingTransfer);
-    const result = run(
-      activeArguments(donorPath, missingTransfer, fixture(spec)),
+    const result = await run(
+      activeArguments(donorPath, missingTransfer, await fixture(spec)),
       undefined,
     );
 
@@ -955,18 +983,18 @@ describe("research-check", () => {
     expect(result.stderr).toContain("transfer bundle not found");
   });
 
-  test("fails closed on a duplicate transfer field", () => {
-    const donorPath = fixture(donorSet);
-    const donorDigest = sha256(donorPath);
-    const transferPath = fixture(
+  test("fails closed on a duplicate transfer field", async () => {
+    const donorPath = await fixture(donorSet);
+    const donorDigest = await sha256(donorPath);
+    const transferPath = await fixture(
       transferBundle(donorPath, donorDigest).replace(
         "- Operation: transfer — ordered recovery relation",
         "- Operation: transfer — ordered recovery relation\n- Operation: TRANSFER",
       ),
     );
-    const spec = activeTransferSpec(sha256(transferPath), transferPath);
-    const result = run(
-      activeArguments(donorPath, transferPath, fixture(spec)),
+    const spec = activeTransferSpec(await sha256(transferPath), transferPath);
+    const result = await run(
+      activeArguments(donorPath, transferPath, await fixture(spec)),
       undefined,
     );
 
@@ -974,14 +1002,14 @@ describe("research-check", () => {
     expect(result.stdout).toContain("duplicate field Operation");
   });
 
-  test("fails closed on a duplicate TRANSFER DISPOSITION section", () => {
-    const { donorPath, transferPath } = frozenTransferFixture();
-    const spec = `${activeTransferSpec(sha256(transferPath), transferPath)}
+  test("fails closed on a duplicate TRANSFER DISPOSITION section", async () => {
+    const { donorPath, transferPath } = await frozenTransferFixture();
+    const spec = `${activeTransferSpec(await sha256(transferPath), transferPath)}
 ## TRANSFER DISPOSITION
 - Transfer bundle: NONE — duplicate section must not be ignored
 `;
-    const result = run(
-      activeArguments(donorPath, transferPath, fixture(spec)),
+    const result = await run(
+      activeArguments(donorPath, transferPath, await fixture(spec)),
       undefined,
     );
 

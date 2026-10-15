@@ -1,5 +1,6 @@
-import { constants, lstatSync, realpathSync } from "node:fs";
+import { constants } from "node:fs";
 import { open } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   addFinding,
@@ -113,9 +114,12 @@ export async function loadPacket(
   findings: Finding[],
 ): Promise<{ ok: true; value: LoadedPacket } | { ok: false; error: string }> {
   const resolved = resolve(path);
-  const inspected = await Promise.try(() => {
-    const metadata = lstatSync(resolved);
-    return { canonicalPath: realpathSync(resolved), initialMetadata: metadata };
+  const inspected = await Promise.try(async () => {
+    const [initialMetadata, canonicalPath] = await Promise.all([
+      lstat(resolved),
+      realpath(resolved),
+    ]);
+    return { canonicalPath, initialMetadata };
   }).then(
     (value) => ({ ok: true as const, value }),
     (error: unknown) => ({

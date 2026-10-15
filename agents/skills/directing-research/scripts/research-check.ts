@@ -4,7 +4,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { cli } from "cleye";
 
@@ -146,9 +146,25 @@ function duplicateFields(
   });
 }
 
-function sameResolvedFile(first: string, second: string): boolean {
-  if (!existsSync(first) || !existsSync(second)) return false;
-  return realpathSync(first) === realpathSync(second);
+async function sameResolvedFile(
+  first: string,
+  second: string,
+): Promise<boolean> {
+  const [firstPath, secondPath] = await Promise.all([
+    Promise.try(() => realpath(first)).then(
+      (value) => ({ status: "fulfilled" as const, value }),
+      () => ({ status: "rejected" as const }),
+    ),
+    Promise.try(() => realpath(second)).then(
+      (value) => ({ status: "fulfilled" as const, value }),
+      () => ({ status: "rejected" as const }),
+    ),
+  ]);
+  return (
+    firstPath.status === "fulfilled" &&
+    secondPath.status === "fulfilled" &&
+    firstPath.value === secondPath.value
+  );
 }
 
 function normalizedOperation(value: string | undefined): string | undefined {
@@ -543,15 +559,15 @@ function parseTransferBundle(text: string): Readonly<{
   return { attempts, findings };
 }
 
-function validateFrozenTransferBundle(
+async function validateFrozenTransferBundle(
   bytes: Uint8Array,
   donorSetPath: string,
   reportTransferFinding: (message: string) => void,
-): string | undefined {
-  if (!existsSync(thesisGateCheckPath)) {
+): Promise<string | undefined> {
+  if (!(await Bun.file(thesisGateCheckPath).exists())) {
     return `forging-novel-theses gate-check is missing: ${thesisGateCheckPath}`;
   }
-  const upstream = Bun.spawnSync({
+  const upstream = Bun.spawn({
     cmd: [
       "bun",
       thesisGateCheckPath,
@@ -563,17 +579,21 @@ function validateFrozenTransferBundle(
     stderr: "pipe",
     stdin: new Blob([bytes]),
     stdout: "pipe",
-    timeout: 10_000,
+    signal: AbortSignal.timeout(10_000),
   });
-  if (upstream.exitCode === 2) {
-    return `forging-novel-theses gate-check failed: ${upstream.stderr.toString().trim() !== "" ? upstream.stderr.toString().trim() : "fatal upstream validator error"}`;
+  const [exitCode, stdout, stderr] = await Promise.all([
+    upstream.exited,
+    new Response(upstream.stdout).text(),
+    new Response(upstream.stderr).text(),
+  ]);
+  if (exitCode === 2) {
+    return `forging-novel-theses gate-check failed: ${stderr.trim() !== "" ? stderr.trim() : "fatal upstream validator error"}`;
   }
-  if (upstream.exitCode !== 0 && upstream.exitCode !== 1) {
-    return `forging-novel-theses gate-check could not complete (exit ${String(upstream.exitCode)}): ${upstream.stderr.toString().trim() !== "" ? upstream.stderr.toString().trim() : "upstream validator unavailable or timed out"}`;
+  if (exitCode !== 0 && exitCode !== 1) {
+    return `forging-novel-theses gate-check could not complete (exit ${String(exitCode)}): ${stderr.trim() !== "" ? stderr.trim() : "upstream validator unavailable or timed out"}`;
   }
-  if (upstream.exitCode !== 0) {
-    const findings = upstream.stdout
-      .toString()
+  if (exitCode !== 0) {
+    const findings = stdout
       .split(/\r?\n/u)
       .filter((line) => /\s(?:FAIL|MISSING)\s/u.test(line))
       .slice(0, 3)
@@ -991,7 +1011,7 @@ async function validateTransferDisposition(
     );
     return 1;
   }
-  if (!existsSync(transferBundlePath)) {
+  if (!(await Bun.file(transferBundlePath).exists())) {
     return {
       ok: false,
       error: `transfer bundle not found: ${transferBundlePath}`,
@@ -1024,7 +1044,7 @@ async function validateTransferDisposition(
     transferReport(
       "Transfer bundle must use path=<locus>; sha256=<64 lowercase hex>",
     );
-  } else if (!sameResolvedFile(declaredPath, transferBundlePath)) {
+  } else if (!(await sameResolvedFile(declaredPath, transferBundlePath))) {
     transferReport("Transfer bundle path does not match --transfer-bundle");
   }
   const bundleBytes = await Bun.file(transferBundlePath).bytes();
@@ -1034,7 +1054,7 @@ async function validateTransferDisposition(
     transferReport("transfer bundle SHA-256 does not match the frozen spec");
   }
 
-  const bundleError = validateFrozenTransferBundle(
+  const bundleError = await validateFrozenTransferBundle(
     bundleBytes,
     donorSetPath,
     transferReport,
@@ -1162,7 +1182,7 @@ async function validateTransferDisposition(
   }
   const verifyTargetResults = async (): Promise<string | undefined> => {
     if (targetResultPath === undefined) return undefined;
-    if (!existsSync(targetResultPath)) {
+    if (!(await Bun.file(targetResultPath).exists())) {
       return `target result not found: ${targetResultPath}`;
     }
     const beforeTargetResult = failures;
@@ -1170,109 +1190,112 @@ async function validateTransferDisposition(
       transferReport(
         "Target-side test or result locus must bind TARGET RESULT path and SHA-256",
       );
-    } else {
-      const declaredResultPath = targetResultReference[1]?.trim();
-      const declaredResultDigest = targetResultReference[2];
-      if (
-        declaredResultPath === undefined ||
-        !sameResolvedFile(declaredResultPath, targetResultPath)
-      ) {
-        transferReport("TARGET RESULT path does not match --target-result");
-      }
-      const targetResultBytes = await Bun.file(targetResultPath).bytes();
-      const actualResultDigest = createHash("sha256")
-        .update(targetResultBytes)
-        .digest("hex");
-      if (declaredResultDigest !== actualResultDigest) {
+      return undefined;
+    }
+    const declaredResultPath = targetResultReference[1]?.trim();
+    const declaredResultDigest = targetResultReference[2];
+    if (
+      declaredResultPath === undefined ||
+      !(await sameResolvedFile(declaredResultPath, targetResultPath))
+    ) {
+      transferReport("TARGET RESULT path does not match --target-result");
+    }
+    const targetResultBytes = await Bun.file(targetResultPath).bytes();
+    const actualResultDigest = createHash("sha256")
+      .update(targetResultBytes)
+      .digest("hex");
+    if (declaredResultDigest !== actualResultDigest) {
+      transferReport(
+        "TARGET RESULT SHA-256 does not match the frozen artifact",
+      );
+    }
+    const parsedResults = parseTargetResultBundle(
+      new TextDecoder().decode(targetResultBytes),
+    );
+    for (const finding of parsedResults.findings) transferReport(finding);
+    const resultIds = new Set(
+      parsedResults.results.map((result) => result.candidateId),
+    );
+    for (const result of parsedResults.results) {
+      const attempt = actual.get(result.candidateId);
+      if (attempt === undefined || attempt.kind !== "CANDIDATE") {
         transferReport(
-          "TARGET RESULT SHA-256 does not match the frozen artifact",
+          `TARGET RESULT candidate ${result.candidateId} is absent from the frozen transfer bundle`,
         );
       }
-      const parsedResults = parseTargetResultBundle(
-        new TextDecoder().decode(targetResultBytes),
-      );
-      for (const finding of parsedResults.findings) transferReport(finding);
-      const resultIds = new Set(
-        parsedResults.results.map((result) => result.candidateId),
-      );
-      parsedResults.results.forEach((result) => {
-        const attempt = actual.get(result.candidateId);
-        if (attempt === undefined || attempt.kind !== "CANDIDATE") {
+      if (
+        result.transferBundle === undefined ||
+        !(await sameResolvedFile(
+          result.transferBundle.path,
+          transferBundlePath,
+        ))
+      ) {
+        transferReport(
+          `TARGET RESULT transfer bundle path does not match --transfer-bundle for candidate ${result.candidateId}`,
+        );
+      } else if (result.transferBundle.digest !== actualDigest) {
+        transferReport(
+          `TARGET RESULT transfer bundle SHA-256 does not match the frozen bundle for candidate ${result.candidateId}`,
+        );
+      }
+      if (
+        donorReferences.some((reference) =>
+          result.observationLocus
+            .replaceAll(/\s+/gu, " ")
+            .trim()
+            .includes(reference.locator),
+        )
+      ) {
+        transferReport(
+          `TARGET RESULT ${result.candidateId} observation locus reuses a frozen donor source locator`,
+        );
+      }
+      const observationSource = sourceIdentity(result.observationLocus);
+      if (
+        observationSource !== undefined &&
+        donorReferences.some(
+          (reference) => reference.sourceIdentity === observationSource,
+        )
+      ) {
+        transferReport(
+          `TARGET RESULT ${result.candidateId} observation locus reuses frozen donor source identity`,
+        );
+      }
+      donorReferences.forEach((reference) => {
+        if (mentionsStableId(result.targetObservation, reference.id)) {
           transferReport(
-            `TARGET RESULT candidate ${result.candidateId} is absent from the frozen transfer bundle`,
-          );
-        }
-        if (
-          result.transferBundle === undefined ||
-          !sameResolvedFile(result.transferBundle.path, transferBundlePath)
-        ) {
-          transferReport(
-            `TARGET RESULT transfer bundle path does not match --transfer-bundle for candidate ${result.candidateId}`,
-          );
-        } else if (result.transferBundle.digest !== actualDigest) {
-          transferReport(
-            `TARGET RESULT transfer bundle SHA-256 does not match the frozen bundle for candidate ${result.candidateId}`,
-          );
-        }
-        if (
-          donorReferences.some((reference) =>
-            result.observationLocus
-              .replaceAll(/\s+/gu, " ")
-              .trim()
-              .includes(reference.locator),
-          )
-        ) {
-          transferReport(
-            `TARGET RESULT ${result.candidateId} observation locus reuses a frozen donor source locator`,
-          );
-        }
-        const observationSource = sourceIdentity(result.observationLocus);
-        if (
-          observationSource !== undefined &&
-          donorReferences.some(
-            (reference) => reference.sourceIdentity === observationSource,
-          )
-        ) {
-          transferReport(
-            `TARGET RESULT ${result.candidateId} observation locus reuses frozen donor source identity`,
-          );
-        }
-        donorReferences.forEach((reference) => {
-          if (mentionsStableId(result.targetObservation, reference.id)) {
-            transferReport(
-              `Target-side observation mentions frozen donor ID ${reference.id}`,
-            );
-          }
-        });
-        if (
-          decisions?.get(result.candidateId) === "ADOPT" &&
-          result.thresholdVerdict !== "PASS"
-        ) {
-          transferReport(
-            `ADOPT requires a PASS TARGET RESULT for candidate ${result.candidateId}`,
-          );
-        }
-        if (
-          decisions?.get(result.candidateId) === "ADOPT" &&
-          !/^NONE\s*(?:—|–|:|\s-\s)\s*\S.+$/iu.test(
-            result.mappingAssessmentRequest,
-          )
-        ) {
-          transferReport(
-            `ADOPT requires Mapping assessment request: NONE for candidate ${result.candidateId}`,
+            `Target-side observation mentions frozen donor ID ${reference.id}`,
           );
         }
       });
-      targetResultDecisionIds.forEach((id) => {
-        if (!resultIds.has(id)) {
-          transferReport(`candidate ${id} has no frozen TARGET RESULT`);
-        }
-      });
-      if (failures === beforeTargetResult) {
-        report(
-          `R14  PASS     frozen TARGET RESULT verified: sha256=${actualResultDigest} candidates=${resultIds.size}`,
+      if (
+        decisions?.get(result.candidateId) === "ADOPT" &&
+        result.thresholdVerdict !== "PASS"
+      ) {
+        transferReport(
+          `ADOPT requires a PASS TARGET RESULT for candidate ${result.candidateId}`,
         );
       }
+      if (
+        decisions?.get(result.candidateId) === "ADOPT" &&
+        !/^NONE\s*(?:—|–|:|\s-\s)\s*\S.+$/iu.test(
+          result.mappingAssessmentRequest,
+        )
+      ) {
+        transferReport(
+          `ADOPT requires Mapping assessment request: NONE for candidate ${result.candidateId}`,
+        );
+      }
+    }
+    targetResultDecisionIds.forEach((id) => {
+      if (!resultIds.has(id)) {
+        transferReport(`candidate ${id} has no frozen TARGET RESULT`);
+      }
+    });
+    if (failures === beforeTargetResult) {
+      report(
+        `R14  PASS     frozen TARGET RESULT verified: sha256=${actualResultDigest} candidates=${resultIds.size}`,
+      );
     }
     return undefined;
   };

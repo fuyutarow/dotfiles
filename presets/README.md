@@ -1,32 +1,79 @@
-# TypeScript presets
+# Configuration presets per project kind
 
-`presets/` is the home for project configuration dotfiles shares with other repositories.
-The TypeScript preset (`ts/`) and oxlint policy (`oxlint/`) are the consumer-facing source files;
-dotfiles' root `tsconfig.json` and `.oxlintrc.json` are derived from them.
+`presets/` holds configuration presets per project kind: uv, cargo, julia, ts,
+latex, textlint, and others. Each kind lives in `presets/<name>/` with a
+`preset.toml` and its source files. The CLI discovers manifests at runtime;
+adding a kind requires a directory, with no CLI edit. Currently shipped: `ts`
+and `oxlint`.
 
-## Apply and check
+## Apply and compare
 
-From dotfiles, run `mise run preset -- apply ts --to /path/to/repo` or `mise run preset -- apply oxlint --to /path/to/repo`.
-Add `--dry-run` to preview writes. Run `mise run preset -- diff ts /path/to/repo` or
-`mise run preset -- diff oxlint /path/to/repo` to see unified diffs and get exit 1 when files drift.
-The CLI writes only the preset's declared files under the target directory.
+From dotfiles:
 
-The TypeScript preset includes `tsconfig.json`, `package.json`, `zod.ts`, and `mise-tasks.toml`.
-The oxlint preset includes `oxlint-policy.toml`; its generated `.oxlintrc.json` includes the preset's
-house rules and the target's reasoned `oxlint-policy.local.toml` ignores. That local file can add
-ignores only. Consumers may tighten TypeScript compiler options; weakening the preset is drift.
+```sh
+mise run preset -- list
+mise run preset -- apply ts --to /path/to/repo
+mise run preset -- apply oxlint --to /path/to/repo --dry-run
+mise run preset -- diff ts --to /path/to/repo
+```
 
-Dotfiles extends `ts/tsconfig.json` and keeps only its own `include`/`exclude` paths at the root.
-`oxlint/policy.toml` is rendered to the root `.oxlintrc.json` by `mise run oxlint:render`.
+`list` prints names and descriptions in name order. `apply` copies the declared
+files and creates destination parent directories; `--dry-run` previews writes.
+`diff` prints unified diffs and exits 1 on drift, or 0 when current. The previous
+`diff <name> /path/to/repo` form remains supported. Usage or manifest errors exit
+2. The target directory must already exist.
 
-The root `oxlint-policy.toml` is a relative symlink to `presets/oxlint/policy.toml`.
-It remains a compatibility alias for external consumers, including coralbase and firedancer,
-until their tasks and documentation migrate. Edit the canonical file under `presets/oxlint/`;
-the alias contains no second policy copy.
+## Manifest contract
+
+For example, add `presets/demo/preset.toml` and `presets/demo/config.toml`:
+
+```toml
+name = "demo"
+description = "Example project configuration"
+files = [{ source = "config.toml", destination = ".config/demo.toml" }]
+check = ["bun test presets/demo/tests"]
+```
+
+- `name` must match the directory name and contain lowercase letters, digits,
+  and hyphens, starting with a letter or digit.
+- `description` is a nonempty description shown by `list`.
+- `files` is a nonempty array of `{ source, destination }` mappings. Sources are
+  relative to the preset directory; destinations are relative to the target
+  repository. Paths must be nonempty and relative, with no `..` component.
+  Destination paths must be unique. A missing source fails with its path.
+- An optional `createOnly = true` on a file mapping copies it only when its
+  destination is absent. An existing destination is excluded from apply and
+  diff, preserving project customization. The default replaces the file.
+- Optional `check = [commands]` records commands that prove the preset with its
+  fixtures. Run them from the dotfiles root. These are verification metadata;
+  list, apply, and diff do not execute them.
+
+Discovery examines immediate subdirectories containing `preset.toml`; `src/`,
+`tests/`, and other directories without a manifest are ignored. Invalid manifests
+or missing sources fail discovery before any target writes. Registering `presets/`
+as a configuration surface covers new kinds without registry edits.
+
+## Existing presets
+
+`ts` copies `tsconfig.json`, `package.json`, `zod.ts`, and `mise-tasks.toml`.
+Dotfiles extends `ts/tsconfig.json`, keeping its own include/exclude paths at the
+root. Consumers may tighten compiler options; weakening the preset is drift.
+
+`oxlint` copies `policy.toml` as `oxlint-policy.toml` and seeds
+`oxlint-policy.local.toml` from `local.example.toml` only when absent. Its existing
+render step also produces `.oxlintrc.json` from the house policy and the target's
+reasoned local ignores. The local file may add ignores only.
+
+`mise run oxlint:render` renders `oxlint/policy.toml` to dotfiles' root
+`.oxlintrc.json`. The root `oxlint-policy.toml` remains a relative symlink to
+`presets/oxlint/policy.toml` for external consumers. Edit the canonical preset
+policy; the alias contains no second copy.
 
 ## Fixtures
 
-`bun test presets` runs each fixture against the real pinned tools. TypeScript fixtures check
-compiler acceptance, and oxlint fixtures check their declared rule. `good/` cases must pass;
-each `bad/` case names the rule it must trigger. The suite also checks that no strict TypeScript
-flag or oxlint level is weaker in the consumer preset than in dotfiles.
+`bun test presets` checks manifest discovery and CLI apply/diff behavior using
+temporary repositories outside the workspace. It also runs TypeScript and oxlint
+fixtures against the pinned tools: good cases pass and bad cases trigger their
+declared rule. The suite checks that the consumer preset does not weaken
+dotfiles' strict TypeScript flags or oxlint levels. Each kind can add its own
+fixtures and name their verification commands in `check`.

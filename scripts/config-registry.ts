@@ -713,24 +713,13 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: [
-      "presets/README.md",
-      "presets/ts/tsconfig.json",
-      "presets/ts/package.json",
-      "presets/ts/zod.ts",
-      "presets/ts/mise-tasks.toml",
-      "presets/oxlint/policy.toml",
-      "oxlint-policy.toml",
-      "presets/oxlint/local.example.toml",
-      "presets/tests/fixtures/ts/good/tsconfig.json",
-      "presets/tests/fixtures/ts/bad/tsconfig.json",
-      ".oxlintrc.json",
-    ],
+    sources: ["presets", "oxlint-policy.toml", ".oxlintrc.json"],
     deployed: "the checkout (.oxlintrc.json is GENERATED from the policy)",
-    consumer: "oxlint (mise run lint:ts)",
+    consumer:
+      "preset CLI and per-project-kind configuration consumers; oxlint (mise run lint:ts)",
     writer:
       "presets/ is the shared source; mise run oxlint:render writes dotfiles' .oxlintrc.json",
-    verify: "mise run lint:oxlint-policy · test:scripts (oxlint-policy)",
+    verify: "bun test presets · mise run lint:oxlint-policy",
   },
   {
     kind: "in-place",

@@ -1,12 +1,20 @@
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { cli } from "cleye";
 import {
   loadPolicy,
   loadRepoPolicy,
   renderOxlintrc,
 } from "../../scripts/render-oxlintrc.ts";
+import { discoverPresets } from "./manifests.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const PRESETS = join(ROOT, "presets");
@@ -33,10 +41,10 @@ const argv = cli(
     name: "preset",
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
-    parameters: ["<action>", "<name>", "[dir]"],
+    parameters: ["<action>", "[name]", "[dir]"],
     help: { description: "Apply a dotfiles preset or show target drift." },
     flags: {
-      to: { type: String, description: "target repository (apply)" },
+      to: { type: String, description: "target repository" },
       "dry-run": {
         type: Boolean,
         default: false,
@@ -49,41 +57,44 @@ const argv = cli(
 );
 
 const [action, name, targetArg] = argv._;
-if (action !== "apply" && action !== "diff") fatal("use apply or diff");
-if (name !== "ts" && name !== "oxlint")
-  fatal("preset name must be ts or oxlint");
+if (argv._.length > 3) fatal("too many arguments");
+if (action !== "apply" && action !== "diff" && action !== "list")
+  fatal("use list, apply or diff");
+const catalog = await discoverPresets(PRESETS);
+if (!catalog.ok) fatal(catalog.error);
+if (action === "list") {
+  if (
+    name !== undefined ||
+    argv.flags.to !== undefined ||
+    argv.flags["dry-run"]
+  )
+    fatal("list accepts no name, target or --dry-run");
+  for (const preset of catalog.presets)
+    console.log(`${preset.name}\t${preset.description}`);
+  process.exit(0);
+}
+const preset = catalog.presets.find((entry) => entry.name === name);
+if (preset === undefined)
+  fatal(`unknown preset: ${name ?? "(missing name)"}; use preset list`);
 if (argv.flags["dry-run"] && action !== "apply")
   fatal("--dry-run is only valid with apply");
-const targetText = action === "apply" ? argv.flags.to : targetArg;
+const targetText =
+  action === "apply" ? argv.flags.to : (argv.flags.to ?? targetArg);
 if (targetText === undefined || targetText.length === 0) {
   fatal(action === "apply" ? "apply needs --to <dir>" : "diff needs <dir>");
 }
 if (action === "apply" && targetArg !== undefined)
   fatal("apply accepts --to, not a positional directory");
-if (action === "diff" && argv.flags.to !== undefined)
-  fatal("diff accepts a positional directory, not --to");
+if (action === "diff" && argv.flags.to !== undefined && targetArg !== undefined)
+  fatal("diff accepts one target: positional directory or --to");
 const target = resolve(targetText);
 if (!(await exists(target))) fatal(`target does not exist: ${target}`);
 
-const files =
-  name === "ts"
-    ? ["tsconfig.json", "package.json", "zod.ts", "mise-tasks.toml"].map(
-        (file) => ({
-          source: join(PRESETS, "ts", file),
-          destination: join(target, file),
-        }),
-      )
-    : [
-        {
-          source: join(PRESETS, "oxlint", "policy.toml"),
-          destination: join(target, "oxlint-policy.toml"),
-        },
-        {
-          source: join(PRESETS, "oxlint", "local.example.toml"),
-          destination: join(target, "oxlint-policy.local.toml"),
-          createOnly: true,
-        },
-      ];
+const files = preset.files.map((file) => ({
+  createOnly: file.createOnly,
+  source: join(preset.directory, file.source),
+  destination: join(target, file.destination),
+}));
 
 const expected = new Map<string, string>();
 for (const file of files) {
@@ -129,6 +140,7 @@ async function applyOne(destination: string, content: string): Promise<void> {
   } else if (argv.flags["dry-run"]) {
     console.log(`preset: would write ${relative(target, destination)}`);
   } else {
+    await mkdir(dirname(destination), { recursive: true });
     await writeFile(destination, content);
     console.log(`preset: wrote ${relative(target, destination)}`);
   }

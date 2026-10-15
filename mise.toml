@@ -234,7 +234,7 @@ run = "bun scripts/render-oxlintrc.ts --check"
 
 [tasks.preset]
 dir = "{{config_root}}"
-description = "Apply or compare the shared TypeScript/oxlint presets: mise run preset -- apply <ts|oxlint> --to <dir>"
+description = "List, apply or compare project configuration presets: mise run preset -- list|apply|diff <name> --to <dir>"
 run = "bun presets/src/cli.ts"
 
 # INV-8 (README → Design): data flows one way — declaration → render → deployed → runtime — and

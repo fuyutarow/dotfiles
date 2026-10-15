@@ -54,7 +54,7 @@
 // WHAT THIS CANNOT DO: tell you from an agent running as you. A process that spends the bucket or
 // holds the connection slots makes YOUR `o` answer `busy` too (the client says so and suggests
 // --here). The limits protect the screen you sit at, not the availability of `o`.
-import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { cli } from "cleye";
@@ -167,8 +167,8 @@ const SSH_CONFIG = argv.flags.sshConfig;
 const MAX_LINE = 4096;
 const REPORT_MS = 10_000;
 const sock = argv.flags.socket;
-mkdirSync(dirname(sock), { recursive: true, mode: 0o700 });
-if (existsSync(sock)) unlinkSync(sock); // our own path; a previous run's bind
+await mkdir(dirname(sock), { recursive: true, mode: 0o700 });
+if ((await attempt(() => lstat(sock))).ok) await unlink(sock); // our own path; a previous run's bind
 
 // Token bucket on the monotonic clock. Time spent FULL earns nothing, so a long quiet spell
 // cannot be cashed in as more than `burst` opens.
@@ -456,5 +456,5 @@ Bun.listen<Conn>({
     },
   },
 });
-chmodSync(sock, 0o600);
+await chmod(sock, 0o600);
 console.log(`receive: listening on ${sock}`);

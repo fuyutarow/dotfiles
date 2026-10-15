@@ -38,7 +38,7 @@
 //   busy         the receiver's rate or connection limit → NOT opened anywhere, exit 1. The limit
 //                protects the screen you sit at; opening here would route around it. Run it again,
 //                or say --here.
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
@@ -93,10 +93,17 @@ const argv = cli(
   Bun.argv.slice(2),
 );
 
+const pathExists = async (path: string): Promise<boolean> =>
+  (await attempt(() => stat(path))).ok;
+// The sockets.ts helpers are sync until their own unit makes them async; awaiting through this keeps
+// each call correct either way.
+const settled = <T>(value: T | PromiseLike<T>): Promise<T> =>
+  Promise.resolve(value);
+
 // The forward to use, and the client alias its socket name carries (sockets.ts, remoteSocket):
 // SMART_OPEN_SOCKET pins one (tests, a hand-bound forward); otherwise the newest bound in
 // SMART_OPEN_SOCKET_DIR (default /tmp). With none bound, SOCKET names the pattern, for messages.
-function pickForward(): { socket: string; alias: string } {
+async function pickForward(): Promise<{ socket: string; alias: string }> {
   const user = userInfo().username;
   const pinned = process.env.SMART_OPEN_SOCKET;
   if (pinned !== undefined) {
@@ -104,10 +111,12 @@ function pickForward(): { socket: string; alias: string } {
     return { socket: pinned, alias: named?.[1] ?? "" };
   }
   const dir = process.env.SMART_OPEN_SOCKET_DIR ?? "/tmp";
-  const newest = existsSync(dir) ? remoteForwards(user, dir)[0] : undefined;
+  const newest = (await pathExists(dir))
+    ? (await settled(remoteForwards(user, dir)))[0]
+    : undefined;
   return newest ?? { socket: remoteSocket(user, "<alias>", dir), alias: "" };
 }
-const FORWARD = pickForward();
+const FORWARD = await pickForward();
 const SOCKET = FORWARD.socket;
 // What was searched, for the no-forward message: the pinned path, or the pattern a forward is bound
 // at (the alias part unknown on this side — the client chose it).
@@ -139,11 +148,12 @@ const LOCAL_WAIT_MS = 3_000;
 const OVER_SSH = (process.env.SSH_CONNECTION ?? "") !== "";
 const isUrl = (t: string) =>
   /^[a-z][a-z0-9+.-]*:\/\//iu.test(t) || /^mailto:/iu.test(t);
-const isWsl = (): boolean =>
-  process.platform === "linux" &&
-  (process.env.WSL_DISTRO_NAME !== undefined ||
-    (existsSync("/proc/version") &&
-      /microsoft/iu.test(readFileSync("/proc/version", "utf8"))));
+const isWsl = async (): Promise<boolean> => {
+  if (process.platform !== "linux") return false;
+  if (process.env.WSL_DISTRO_NAME !== undefined) return true;
+  if (!(await Bun.file("/proc/version").exists())) return false;
+  return /microsoft/iu.test(await readFile("/proc/version", "utf8"));
+};
 
 type Outcome =
   | "client"
@@ -170,10 +180,10 @@ const classify = (reply: string): Outcome => {
 const ErrorCodeSchema = z.object({ code: z.unknown() });
 
 // One line out, one line back. Resolves to the outcome; never throws.
-function toClient(request: Record<string, string>): Promise<Probe> {
-  const seen = fileKey(SOCKET);
+async function toClient(request: Record<string, string>): Promise<Probe> {
+  const seen = await settled(fileKey(SOCKET));
   if (seen === undefined || !seen.socket)
-    return Promise.resolve({ outcome: "no-socket", reply: "", why: "", seen });
+    return { outcome: "no-socket", reply: "", why: "", seen };
   const { promise, resolve: done } = Promise.withResolvers<Probe>();
   let reply = "";
   const finish = (outcome: Outcome, why = "") => {
@@ -219,18 +229,21 @@ function toClient(request: Record<string, string>): Promise<Probe> {
 
 // SMART_OPEN_LOCAL_OPENER replaces the this-machine opener (same seam as the receiver's
 // SMART_OPEN_OPENER) so tests can drive every fall-through without opening a real browser.
-function localCommand(target: string): string[] {
+async function localCommand(target: string): Promise<string[]> {
   const override = process.env.SMART_OPEN_LOCAL_OPENER;
   if (override !== undefined && override !== "")
     return [...override.split(" "), target];
   if (process.platform === "darwin") return ["open", target];
-  if (isWsl()) {
+  if (await isWsl()) {
     if (isUrl(target)) return ["explorer.exe", target];
-    const win = Bun.spawnSync(["wslpath", "-w", target], {
+    const win = Bun.spawn(["wslpath", "-w", target], {
       stdout: "pipe",
-      timeout: OPEN_MS,
+      stderr: "ignore",
+      signal: AbortSignal.timeout(OPEN_MS),
+      killSignal: "SIGKILL",
     });
-    const windowsPath = win.stdout.toString().trim();
+    const windowsPath = (await new Response(win.stdout).text()).trim();
+    await win.exited;
     return ["explorer.exe", windowsPath !== "" ? windowsPath : target];
   }
   return ["xdg-open", target];
@@ -314,13 +327,13 @@ async function routePath(path: string): Promise<Routed> {
   if (argv.flags.dryRun) {
     const otherwise = OVER_SSH
       ? "not opened (this shell is over ssh)"
-      : `${localCommand(path).join(" ")} only if no client is attached (no socket, or a dead one); otherwise not opened`;
+      : `${(await localCommand(path)).join(" ")} only if no client is attached (no socket, or a dead one); otherwise not opened`;
     console.log(
       `${path} -> the client's VS Code (ssh-remote+${editor}) if ${SOCKET} answers; ${otherwise}`,
     );
     return { to: "client" };
   }
-  const kind = statSync(path).isDirectory() ? "dir" : "file";
+  const kind = (await stat(path)).isDirectory() ? "dir" : "file";
   const { value: probe, took } = await waitSaying(
     `waiting for the client's VS Code (ssh-remote+${editor}) to take ${path}`,
     toClient({ path, kind, host: SSH_HOST }),
@@ -384,7 +397,7 @@ function refusalHint(reply: string): string {
 // This machine, bounded: an opener still running after LOCAL_WAIT_MS is stopped and reported.
 // Returns false on failure.
 async function openHere(target: string): Promise<boolean> {
-  const cmd = localCommand(target);
+  const cmd = await localCommand(target);
   if (argv.flags.dryRun) {
     console.log(`${target} -> ${cmd.join(" ")}`);
     return true;
@@ -415,7 +428,7 @@ async function openHere(target: string): Promise<boolean> {
   );
   if (deadline.aborted) {
     // A locked or logged-out Windows session is the case seen: explorer.exe then never returns.
-    const hint = isWsl()
+    const hint = (await isWsl())
       ? " — is someone logged in, unlocked, at this machine's Windows desktop?"
       : "";
     console.error(
@@ -436,7 +449,7 @@ async function openOne(raw: string): Promise<boolean> {
     return landHere(raw, routed.why);
   }
   const path = resolve(raw);
-  if (!existsSync(path)) {
+  if (!(await pathExists(path))) {
     console.error(`smart-open: no such file or directory: ${raw}`);
     return false;
   }

@@ -12,3 +12,6 @@
 
 # Owner: Claude Code. These per-machine local permission overrides vary by machine.
 **/.claude/settings.local.json
+
+# Owner: Claude Code sandbox. Its per-project write-tracking directory; Claude Code appends this rule itself when sandboxing is enabled.
+**/.claude/.cc-writes/

@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -8,6 +14,7 @@ import {
   newEntries,
   probeProblems,
   staticFindings,
+  SYSTEM_TMP,
 } from "../lint-tmp-leaks.ts";
 
 const REPO = resolve(import.meta.dir, "../..");
@@ -89,30 +96,116 @@ test("leakedBy ignores an entry that disappears within the settle window", () =>
   expect(leaked).toEqual([]);
 });
 
-test("probeProblems fails when the probe command leaves an entry in the system temp dir", () => {
-  const systemTmp = scratch();
-  const leaker = `require("node:fs").mkdirSync(${JSON.stringify(join(systemTmp, "leaky-fixture"))})`;
+test("probeProblems names a descendant's leak and removes its private parent", () => {
+  const ambientTmp = scratch();
+  const leaker = `require("node:fs").mkdirSync(require("node:path").join(require("node:os").tmpdir(), "leaky-fixture"))`;
   const problems = probeProblems(REPO, {
-    command: ["bun", "-e", leaker],
-    systemTmp,
-    ambientTmp: scratch(),
+    command: [
+      "bun",
+      "-e",
+      `process.exitCode = Bun.spawnSync([process.execPath, "-e", ${JSON.stringify(leaker)}]).exitCode`,
+    ],
+    ambientTmp,
   });
   expect(problems).toHaveLength(1);
   expect(problems[0]).toContain("leaky-fixture");
+  expect(problems[0]).toContain("new top-level entry left by the probe");
+  expect(readdirSync(ambientTmp)).toEqual([]);
 });
 
 test("probeProblems fails when the probe exits nonzero", () => {
+  const ambientTmp = scratch();
   const problems = probeProblems(REPO, {
     command: ["bun", "-e", "process.exit(7)"],
-    systemTmp: scratch(),
-    ambientTmp: scratch(),
+    ambientTmp,
   });
   expect(problems).toHaveLength(1);
   expect(problems[0]).toContain("exited 7");
+  expect(readdirSync(ambientTmp)).toEqual([]);
 });
 
 test("probeProblems passes for the real preload probe", () => {
-  expect(
-    probeProblems(REPO, { systemTmp: scratch(), ambientTmp: scratch() }),
-  ).toEqual([]);
+  expect(probeProblems(REPO, { ambientTmp: scratch() })).toEqual([]);
 });
+
+test("an unrelated process writing shared /tmp cannot change clean or leaky verdicts", async () => {
+  const control = scratch();
+  const noise = join(SYSTEM_TMP, `lint-tmp-unrelated-${crypto.randomUUID()}`);
+  using cleanup = new DisposableStack();
+  for (const leak of [false, true]) {
+    const ready = join(control, `ready-${leak}`);
+    const noiseEntry = `${noise}-${leak}`;
+    cleanup.defer(() => {
+      rmSync(noiseEntry, { recursive: true, force: true });
+    });
+    const bystander = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `
+      const fs = require("node:fs");
+      while (!fs.existsSync(${JSON.stringify(ready)})) await Bun.sleep(10);
+      fs.mkdirSync(${JSON.stringify(noiseEntry)});
+    `,
+      ],
+      { timeout: 10_000, stdout: "pipe", stderr: "pipe" },
+    );
+    const problems = probeProblems(REPO, {
+      ambientTmp: control,
+      command: [
+        process.execPath,
+        "-e",
+        `
+        const fs = require("node:fs");
+        fs.writeFileSync(${JSON.stringify(ready)}, "ready");
+        while (!fs.existsSync(${JSON.stringify(noiseEntry)})) await Bun.sleep(10);
+        if (${leak}) fs.mkdirSync(require("node:path").join(require("node:os").tmpdir(), "real-leak"));
+      `,
+      ],
+    });
+    const [exit, stdout, stderr] = await Promise.all([
+      bystander.exited,
+      new Response(bystander.stdout).text(),
+      new Response(bystander.stderr).text(),
+    ]);
+    expect({ exit, stdout, stderr }).toEqual({
+      exit: 0,
+      stdout: "",
+      stderr: "",
+    });
+    expect(problems).toHaveLength(leak ? 1 : 0);
+    if (leak) expect(problems[0]).toContain("real-leak");
+    expect(problems.join("\n")).not.toContain(noiseEntry);
+  }
+});
+
+test("four concurrent lint:bun invocations all pass", async () => {
+  const miseState = scratch();
+  const results = await Promise.all(
+    Array.from({ length: 4 }, async () => {
+      const child = Bun.spawn(["mise", "run", "lint:bun"], {
+        cwd: REPO,
+        env: {
+          ...process.env,
+          MISE_STATE_DIR: miseState,
+          MISE_TRUSTED_CONFIG_PATHS: REPO,
+        },
+        timeout: 120_000,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exit, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      return { exit, stdout, stderr };
+    }),
+  );
+  for (const result of results) {
+    expect(result.stderr).not.toContain(
+      "new top-level entry left by the probe",
+    );
+    expect(result.exit, result.stdout + result.stderr).toBe(0);
+  }
+}, 120_000);

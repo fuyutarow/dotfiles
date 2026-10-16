@@ -1,21 +1,26 @@
-// TESTS-OWN-TMP: no dotfiles test leaves anything in /tmp. Three checks, all read-only on /tmp:
+// TESTS-OWN-TMP: no dotfiles test leaves anything in its temp directory. Three checks:
 //   1. static  — a test file that writes to a literal /tmp, /var/tmp or /dev/shm path (mkdtemp,
 //      mkdir, writeFile … with that base) bypasses the per-process TMPDIR that bunfig.toml's
 //      preload (tools/shared/src/test-tmp.ts) gives every `bun test`;
-//   2. probe   — run the preload's own test under `bun test` and compare the /tmp top-level
-//      listing before and after: a new entry that outlives a short settle window is a leak
-//      (the window keeps another process's transient scratch dir from failing the gate), and
-//      the probe's run parent must be gone from the ambient temp directory;
-//   3. wrapper — the same before/after comparison around any command:
+//   2. probe   — run the preload's own test under `bun test` with a private TMPDIR parent;
+//      entries still inside it after a short settle window are leaks. Shared /tmp entries
+//      belong to other sessions and never affect this verdict;
+//   3. wrapper — a shared /tmp before/after comparison around any command:
 //      `bun scripts/lint-tmp-leaks.ts -- bun test scripts/tests`.
 // `lint:bun` calls (1)+(2), so `lint` and `gate:land` carry them.
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { RUN_DIR_ENV, RUN_PREFIX } from "../tools/shared/src/test-tmp.ts";
+import { RUN_DIR_ENV } from "../tools/shared/src/test-tmp.ts";
 
 export const SYSTEM_TMP = "/tmp";
 const PROBE_TEST = "tools/shared/tests/test-tmp.test.ts";
@@ -81,7 +86,7 @@ export function lintStatic(root: string): string[] {
 }
 
 /**
- * Entries that `run` added to `root` and that are still there after a settle window. Entries not
+ * Entries that `run` added to its private `root` and that remain after a settle window. Entries not
  * owned by this user are ignored (they are another account's, not a test's).
  */
 export function leakedBy(root: string, run: () => void): string[] {
@@ -101,26 +106,27 @@ export function leakedBy(root: string, run: () => void): string[] {
 export type Probe = {
   /** argv run at the repo root; default: `bun test <the preload's own test>`. */
   readonly command?: string[];
-  /** Directory whose top level must not grow; default /tmp. */
-  readonly systemTmp?: string;
-  /** The temp dir the probe inherits; default os.tmpdir() of this process. */
+  /** Directory under which to create the probe's private TMPDIR; default os.tmpdir(). */
   readonly ambientTmp?: string;
 };
 
-/** Run the probe and report every way /tmp or the ambient temp dir ended up larger. */
+/** Run the probe and attribute leftovers only inside its private TMPDIR. */
 export function probeProblems(root: string, options: Probe = {}): string[] {
   const command = options.command ?? ["bun", "test", PROBE_TEST];
-  const systemTmp = options.systemTmp ?? SYSTEM_TMP;
   const ambientTmp = options.ambientTmp ?? tmpdir();
+  const privateTmp = mkdtempSync(join(ambientTmp, "lint-tmp-probe-")); // sync-ok: synchronous probeProblems callers require TMPDIR creation before spawning the probe.
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    rmSync(privateTmp, { recursive: true, force: true }); // sync-ok: synchronous DisposableStack must finish cleanup before probeProblems returns to its callers.
+  });
   const env: Record<string, string | undefined> = {
     ...process.env,
-    TMPDIR: ambientTmp,
+    TMPDIR: privateTmp,
   };
   delete env[RUN_DIR_ENV];
-  let pid = 0;
   let exitCode: number | null = null;
   let stderr = "";
-  const leaked = leakedBy(systemTmp, () => {
+  const leaked = leakedBy(privateTmp, () => {
     const result = Bun.spawnSync(command, {
       cwd: root,
       env,
@@ -128,21 +134,12 @@ export function probeProblems(root: string, options: Probe = {}): string[] {
       stderr: "pipe",
       timeout: 120_000,
     });
-    pid = result.pid;
     exitCode = result.exitCode;
     stderr = result.stderr.toString().trim().split("\n").slice(-5).join("\n");
   });
   const problems = leaked.map(
-    (name) => `${join(systemTmp, name)}: new top-level entry left by the probe`,
-  );
-  const run = topLevel(ambientTmp).filter((name) =>
-    name.startsWith(`${RUN_PREFIX}${pid}-`),
-  );
-  problems.push(
-    ...run.map(
-      (name) =>
-        `${join(ambientTmp, name)}: the probe's run parent outlived its process`,
-    ),
+    (name) =>
+      `${join(privateTmp, name)}: new top-level entry left by the probe`,
   );
   if (exitCode !== 0)
     problems.push(
@@ -196,7 +193,7 @@ if (import.meta.main) {
       ignoreArgv: rejectPrototypeFlag,
       help: {
         description:
-          "Fail when tests leave anything in /tmp. No arguments: static scan + preload probe. After `--`: run that command and fail on any new /tmp top-level entry.",
+          "Fail when tests leak temp entries. No arguments: static scan + private TMPDIR preload probe. After `--`: run that command and fail on any new /tmp top-level entry.",
         usage: "lint-tmp-leaks [-- <command> [args…]]",
       },
       parameters: ["--", "[command...]"],

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { expect, test } from "bun:test";
 import {
   existsSync,
@@ -101,19 +102,22 @@ test("tmp HOME CLI plans all 14 targets and blind run includes bounded rip expir
     registry.map((t) => [t.name, t.tier]),
   );
   expect(preview.targets).toHaveLength(14);
-  const ripExpiry = preview.targets.find((t) => t.name === "rip-expire")!;
+  const ripExpiry = preview.targets.find((t) => t.name === "rip-expire");
+  assert.ok(ripExpiry !== undefined);
   expect(ripExpiry.tier).toBe("blind");
   expect(
     ripExpiry.candidates.every((candidate) => candidate.verdict !== "RECLAIM"),
   ).toBe(true);
-  const workspaces = preview.targets.find((t) => t.name === "workspaces")!;
+  const workspaces = preview.targets.find((t) => t.name === "workspaces");
+  assert.ok(workspaces !== undefined);
   expect(workspaces.candidates.find((c) => c.path === nestedWs)?.verdict).toBe(
     "RECLAIM",
   );
   expect(
     workspaces.candidates.find((c) => c.path === unpushedWs)?.verdict,
   ).toBe("ASK");
-  const scratch = preview.targets.find((t) => t.name === "scratch")!;
+  const scratch = preview.targets.find((t) => t.name === "scratch");
+  assert.ok(scratch !== undefined);
   expect(scratch.candidates.find((c) => c.path === nested)?.reason).toBe(
     "delegated: jj workspace",
   );
@@ -176,7 +180,8 @@ test("tmp HOME CLI plans all 14 targets and blind run includes bounded rip expir
   expect(receipts.map((r) => r.target)).toEqual(
     executed.targets.map((t) => t.name),
   );
-  const workspaceReceipt = receipts.find((r) => r.target === "workspaces")!;
+  const workspaceReceipt = receipts.find((r) => r.target === "workspaces");
+  assert.ok(workspaceReceipt !== undefined);
   expect(workspaceReceipt.actions).toHaveLength(1);
   expect(workspaceReceipt.actions[0]).toMatchObject({
     path: nestedWs,

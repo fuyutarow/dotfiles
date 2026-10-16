@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { existsSync, lstatSync, readdirSync, statfsSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import {
@@ -248,7 +249,12 @@ export async function deleteApproved(paths: string[], options: Options) {
   using _lock = { [Symbol.dispose]: lock.release };
   const actions: ReceiptV2["actions"] = [];
   const refused: RemovalRefusal[] = [];
-  const freeBefore = statfsSync(dirname(rows[0]!.path));
+  const firstRow = rows[0];
+  assert.ok(
+    firstRow !== undefined,
+    new TypeError("Cannot read properties of undefined (reading 'path')"),
+  );
+  const freeBefore = statfsSync(dirname(firstRow.path));
   const before = freeBefore.bavail * freeBefore.bsize;
   let exit = 0;
   const lockedProcesses = collectProcesses(procOptions);
@@ -315,7 +321,7 @@ export async function deleteApproved(paths: string[], options: Options) {
     for (const error of result.errors)
       lines.push(`ERROR\t${error.path}\t${error.error}`);
   }
-  const afterStat = statfsSync(dirname(rows[0]!.path));
+  const afterStat = statfsSync(dirname(firstRow.path));
   const receipt: ReceiptV2 = {
     schema: 2,
     target: "delete",

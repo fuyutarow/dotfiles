@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1 — 2026-10-16
+
+- Replace non-null assertions with checked values in delete, host planning, and regression tests.
+
 ## 1.4.0 — 2026-10-16
 
 - The rip graveyard is a declared delete root: delete graveyard subtrees while retaining uid, live-process, protected-path and filesystem checks, and allow already-deleted repo stores. Process tmpfs and expired graveyard subtrees small-first with --only scoping, candidate-local rechecks, stage-wide liveness snapshots and constant mount measurements. Avoid quadratic cross-target ownership comparisons. Verify cumulative 100k tmpfs candidates and 1M graveyard files in disk-backed batches below 100k entries, with explicit wall-clock bounds and finally cleanup.

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { afterAll, expect, test } from "bun:test";
 import {
   existsSync,
@@ -12,6 +13,11 @@ import { measuredTreeBytes } from "../../src/targets/tree.ts";
 import { tempRoot } from "../fixtures/temp.ts";
 
 const roots: string[] = [];
+function fixtureConfig() {
+  const { config } = loadConfig();
+  assert.ok(config !== null);
+  return config;
+}
 afterAll(() => {
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
@@ -28,7 +34,7 @@ test("unchanged plan roots reuse persisted measurements without a second walk", 
   const counters: number[] = [];
   const ctx = {
     mode: "plan" as const,
-    config: loadConfig().config!,
+    config: fixtureConfig(),
     scanCacheDir: join(root, "state"),
     log: () => {},
     reportActivity: (_unit: string, task: string) => activity.push(task),
@@ -75,7 +81,7 @@ test("worker subtree cache uses XDG storage when no private cache root is suppli
   writeFileSync(join(path, "nested", "entry"), "fixture");
   await measuredTreeBytes(path, {
     mode: "plan",
-    config: loadConfig().config!,
+    config: fixtureConfig(),
     log: () => {},
   });
   expect(

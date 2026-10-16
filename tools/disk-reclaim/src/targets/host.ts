@@ -443,8 +443,9 @@ export function createHostTarget(options: {
     },
     plan: async (ctx) => {
       ctx.reportActivity?.("host", `waiting for SSH ${hostname(ctx)} probe`);
+      const snapshot = options.snapshot;
       const result =
-        options.snapshot === undefined
+        snapshot === undefined
           ? (probes.get(ctx) ??
             (await options.runner(hostname(ctx), "$probe", ctx.signal, (step) =>
               ctx.reportActivity?.("host", `waiting for ${step}`),
@@ -460,8 +461,12 @@ export function createHostTarget(options: {
         );
         return [];
       }
-      const s =
-        result === null ? await options.snapshot!() : parseProbe(result.out);
+      let s: HostSnapshot;
+      if (result !== null) s = parseProbe(result.out);
+      else {
+        if (snapshot === undefined) return [];
+        s = await snapshot();
+      }
       if (
         result !== null &&
         (s.cFree === null ||

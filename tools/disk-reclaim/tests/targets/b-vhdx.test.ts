@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { expect, test } from "bun:test";
 import {
   createVhdxTarget,
@@ -76,8 +77,10 @@ test("vhdx port preserves offline procedures and act never invokes its runner", 
   expect(plan[0]?.verdict).toBe("KEEP");
   expect(plan[0]?.reason).toContain("Optimize-VHD");
   expect(calls).toBe(2);
+  const candidate = plan[0];
+  assert.ok(candidate !== undefined);
   expect(
-    target.act(plan[0]!, {
+    target.act(candidate, {
       mode: "run",
       explicit: false,
       config: {
@@ -181,8 +184,10 @@ test("vhdx missing measurements remain unknown and run refuses", async () => {
   });
   expect(plan[0]?.bytes).toBeNull();
   expect(plan[0]?.reason).toContain("allocated ? logical ? guest-used ?");
+  const candidate = plan[0];
+  assert.ok(candidate !== undefined);
   expect(
-    target.act(plan[0]!, {
+    target.act(candidate, {
       mode: "run",
       config: {
         repo_roots: [],

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { afterEach, expect, test as bunTest } from "bun:test";
 import {
   existsSync,
@@ -189,8 +190,9 @@ test("wrap preserves stdout, stderr, child status, output log, and v1 fields", (
       "-c",
       "echo freed; echo detail >&2; exit 3",
     ]);
-    expect(readFileSync(parsed.data.output!, "utf8")).toContain("freed");
-    expect(readFileSync(parsed.data.output!, "utf8")).toContain("detail");
+    assert.ok(parsed.data.output !== null);
+    expect(readFileSync(parsed.data.output, "utf8")).toContain("freed");
+    expect(readFileSync(parsed.data.output, "utf8")).toContain("detail");
   }
   expect(existsSync(join(state, "lock"))).toBe(false);
   expect(readReceipts(1, state).errors).toEqual([]);
@@ -240,7 +242,8 @@ test("wrap busy lock returns 3 naming the holder without command execution", () 
 test("receipts accepts v1; refuses future schema; last zero is empty", () => {
   const state = fixture();
   invoke(["wrap", "t", "--", "true"], state);
-  const first = readReceipts(1, state).receipts[0]!;
+  const first = readReceipts(1, state).receipts[0];
+  assert.ok(first !== undefined);
   const legacy = ReceiptV1.safeParse(first);
   expect(legacy.success).toBe(true);
   if (legacy.success) writeReceipt(legacy.data, state);

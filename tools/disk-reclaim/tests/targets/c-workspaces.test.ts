@@ -125,7 +125,8 @@ describe("workspaces target", () => {
 
   test("r99-shaped workspaces ignore expected systemd EACCES and show bytes for every verdict", async () => {
     const w = world();
-    const paths = [w.add("dotfiles-arm-ref_u5"), w.add("dotfiles-arm-sw_v1")];
+    const firstPath = w.add("dotfiles-arm-ref_u5");
+    const paths = [firstPath, w.add("dotfiles-arm-sw_v1")];
     const proc = procFixture(w.root, "systemd", ["exe", "fd/3"]);
     const ctx = { ...w.context("plan"), procDir: proc.procRoot };
     let snapshot = collectProcesses(proc);
@@ -154,11 +155,11 @@ describe("workspaces target", () => {
     // Readable positive use still wins over the expected permission exception.
     writeFileSync(join(proc.base, "comm"), "systemd\n");
     unlinkSync(join(proc.base, "cwd"));
-    symlinkSync(paths[0]!, join(proc.base, "cwd"));
+    symlinkSync(firstPath, join(proc.base, "cwd"));
     snapshot = collectProcesses(proc);
-    const busy = only(await checked.plan(ctx), paths[0]!);
+    const busy = only(await checked.plan(ctx), firstPath);
     expect(busy.verdict).toBe("KEEP");
-    expect(busy.bytes).toBe(await treeBytes(paths[0]!));
+    expect(busy.bytes).toBe(await treeBytes(firstPath));
   }, 30_000);
 
   test("a pushed, clean workspace is RECLAIM; run records recovery, forgets, then deletes", async () => {

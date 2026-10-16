@@ -49,8 +49,9 @@ describe("tmpfs target", () => {
   test("all observed holder names qualify, including a tree above 10,000 entries", async () => {
     const root = fixtureRoot();
     const old = Temporal.Now.instant().epochMilliseconds / 1000 - 7200;
+    const firstName = "reclaim-acceptance-complete-state";
     const names = [
-      "reclaim-acceptance-complete-state",
+      firstName,
       "reclaim-host-cache",
       "reclaim-host-cache-v2",
       "agx-leasefold-v352",
@@ -65,7 +66,7 @@ describe("tmpfs target", () => {
       utimesSync(join(dir, "entry"), old, old);
       utimesSync(dir, old, old);
     }
-    const cache = join(root, names[0]!, "scan-cache");
+    const cache = join(root, firstName, "scan-cache");
     mkdirSync(cache);
     for (let index = 0; index < 10_050; index += 1) {
       const file = join(cache, String(index));
@@ -73,7 +74,7 @@ describe("tmpfs target", () => {
       utimesSync(file, old, old);
     }
     utimesSync(cache, old, old);
-    utimesSync(join(root, names[0]!), old, old);
+    utimesSync(join(root, firstName), old, old);
     const target = createTmpfsTarget({
       mounts: () => [{ path: root, type: "tmpfs" }],
       statfs: fixtureFs,
@@ -87,7 +88,7 @@ describe("tmpfs target", () => {
     writeFileSync(join(cache, "0"), "recent content deep in tree");
     expect(
       (await target.plan(fixtureContext)).find(
-        (row) => row.path === join(root, names[0]!),
+        (row) => row.path === join(root, firstName),
       )?.verdict,
     ).toBe("KEEP");
   });

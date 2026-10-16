@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +20,11 @@ import { candidate, fakeTarget } from "./fixtures/fake-target.ts";
 import { tempRoot } from "./fixtures/temp.ts";
 
 const dirs: string[] = [];
+function fixtureConfig() {
+  const { config } = loadConfig();
+  assert.ok(config !== null);
+  return config;
+}
 test("disk-reclaim cache names come from the .gitignore source block", () => {
   const loaded = loadConfig();
   expect(loaded.config?.regenerable_ignored).toEqual([
@@ -41,18 +47,21 @@ test("disk-reclaim cache names come from the .gitignore source block", () => {
   ).toBeNull();
 });
 
-function options(extra: Partial<EngineOptions> = {}): EngineOptions {
+function options(
+  extra: Partial<EngineOptions> = {},
+): EngineOptions & { state: string } {
   const state = tempRoot("reclaim-engine-");
   const procDir = join(state, "proc");
   mkdirSync(procDir);
   dirs.push(state);
   const loaded = loadConfig();
   expect(loaded.config).not.toBeNull();
+  assert.ok(loaded.config !== null);
   return {
     context: {
       mode: "plan",
       explicit: false,
-      config: loaded.config!,
+      config: loaded.config,
       procDir,
       scanCacheDir: join(state, "cache"),
       log: () => {},
@@ -80,8 +89,8 @@ test("plan is read-only, validates reclaim.plan/1, and ASK/KEEP do not fail", as
     keep: 1,
   });
   expect(acted).toEqual([]);
-  expect(existsSync(join(opts.state!, "lock"))).toBe(false);
-  expect(existsSync(join(opts.state!, "log.jsonl"))).toBe(false);
+  expect(existsSync(join(opts.state, "lock"))).toBe(false);
+  expect(existsSync(join(opts.state, "log.jsonl"))).toBe(false);
 });
 test("concurrent scans preserve serial target results and refusals do not block peers", async () => {
   const first = fakeTarget({
@@ -180,7 +189,7 @@ test("plan reports progress while a slow target is discovering candidates", asyn
     context: {
       mode: "plan",
       explicit: false,
-      config: loadConfig().config!,
+      config: fixtureConfig(),
       progressTty: false,
       reportProgress: (name, root) => {
         lines.push(`[reclaim] ${name}: scanning ${root}`);
@@ -248,7 +257,7 @@ test("run acts only on RECLAIM, records before/after free space, and writes v2 w
       bytes_freed: 100,
     });
   }
-  expect(existsSync(join(opts.state!, "lock"))).toBe(false);
+  expect(existsSync(join(opts.state, "lock"))).toBe(false);
 });
 test("under-lock recheck flips RECLAIM to KEEP", async () => {
   const { target, acted } = fakeTarget({ flip: true });
@@ -256,7 +265,7 @@ test("under-lock recheck flips RECLAIM to KEEP", async () => {
   const original = target.plan;
   target.plan = (ctx) => {
     if (ctx.mode === "run")
-      expect(existsSync(join(opts.state!, "lock"))).toBe(true);
+      expect(existsSync(join(opts.state, "lock"))).toBe(true);
     return original(ctx);
   };
   const result = await run([target], opts);
@@ -328,7 +337,7 @@ test("system precondition skips successfully for tier selection and exits 4 when
         context: {
           mode: "plan",
           explicit: false,
-          config: loadConfig().config!,
+          config: fixtureConfig(),
           log: (line) => {
             logs.push(line);
           },
@@ -346,7 +355,7 @@ test("system precondition skips successfully for tier selection and exits 4 when
         context: {
           mode: "plan",
           explicit: false,
-          config: loadConfig().config!,
+          config: fixtureConfig(),
           log: (line) => {
             logs.push(line);
           },
@@ -360,7 +369,7 @@ test("system precondition skips successfully for tier selection and exits 4 when
 test("busy lock waits briefly, returns 3 and never acts", async () => {
   const opts = options();
   const fake = fakeTarget();
-  const held = tryAcquire(join(opts.state!, "lock"), {
+  const held = tryAcquire(join(opts.state, "lock"), {
     pid: process.pid,
     host: hostname(),
     what: "other",
@@ -378,7 +387,9 @@ test("busy lock waits briefly, returns 3 and never acts", async () => {
 });
 test("unknown check cannot masquerade as RECLAIM", async () => {
   const bad = candidate("x");
-  bad.checks[0]!.ok = null;
+  const check = bad.checks[0];
+  assert.ok(check !== undefined);
+  check.ok = null;
   expect(
     (await plan([fakeTarget({ candidates: [bad] }).target], options())).exit,
   ).toBe(1);
@@ -415,7 +426,7 @@ test("a thrown action is a partial failure with a receipt and releases the lock"
   };
   const result = await run([fake.target], opts);
   expect(result.exit).toBe(1);
-  expect(existsSync(join(opts.state!, "lock"))).toBe(false);
+  expect(existsSync(join(opts.state, "lock"))).toBe(false);
   const receipt = ReceiptV2.safeParse(readReceipts(1, opts.state).receipts[0]);
   expect(receipt.success).toBe(true);
   if (receipt.success)

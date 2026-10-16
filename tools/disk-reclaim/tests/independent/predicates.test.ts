@@ -37,7 +37,7 @@ function fixture(procRoot?: string) {
   const config = join(root, "reclaim.toml");
   writeFileSync(
     config,
-    `repo_roots = [${JSON.stringify(allowed)}]\nrepos = []\nscratch_roots = [${JSON.stringify(join(root, "scratch"))}]\ndelete_roots = [${JSON.stringify(allowed)}]\nregenerable_ignored = ["target"]\nsession_grace_hours = 24\nignore_unreadable_procs = ["sshd"]\n`,
+    `repo_roots = [${JSON.stringify(allowed)}]\nrepos = []\nscratch_roots = [${JSON.stringify(join(root, "scratch"))}]\ndelete_roots = [${JSON.stringify(allowed)}]\nsession_grace_hours = 24\nignore_unreadable_procs = ["sshd"]\n`,
   );
   const env = {
     ...process.env,

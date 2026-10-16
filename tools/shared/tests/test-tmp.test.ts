@@ -4,6 +4,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  chmodSync,
+  lstatSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,6 +16,7 @@ import {
   RUN_PREFIX,
   createTestTmp,
   ownerPidOf,
+  removeTree,
   sweepStaleRuns,
 } from "../src/test-tmp.ts";
 
@@ -67,6 +71,25 @@ test("normal exit removes the run parent", () => {
   expect(readdirSync(root)).toEqual([]);
 });
 
+test("normal exit repairs and removes a read-only directory under TMPDIR", () => {
+  const root = scratch();
+  const result = runScript(
+    root,
+    [
+      `const fs = await import('node:fs');`,
+      `const locked = process.env.TMPDIR + "/locked";`,
+      `const nested = locked + "/nested";`,
+      `fs.mkdirSync(nested, { recursive: true });`,
+      `fs.writeFileSync(nested + "/leftover", "fixture");`,
+      `fs.chmodSync(nested, 0o555);`,
+      `fs.chmodSync(locked, 0o500);`,
+      `fs.chmodSync(process.env.TMPDIR, 0o555);`,
+    ].join("\n"),
+  );
+  expect(result.exitCode).toBe(0);
+  expect(readdirSync(root)).toEqual([]);
+});
+
 test("process.exit with a nonzero code still removes the run parent", () => {
   const root = scratch();
   const result = runScript(
@@ -96,17 +119,17 @@ test("SIGTERM removes the run parent where the runtime delivers it", async () =>
   expect(readdirSync(root)).toEqual([]);
 });
 
-test("a nested bun test removes its parent at the end of the run", () => {
+test("a nested bun test removes its parent even when a fixture forgets to restore 0555", () => {
   const root = scratch();
   const spec = join(root, "..", `leaky-${crypto.randomUUID()}.test.ts`);
   writeFileSync(
     spec,
     [
       `import { test } from "bun:test";`,
-      `import { mkdtempSync } from "node:fs";`,
+      `import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";`,
       `import { tmpdir } from "node:os";`,
       `import { join } from "node:path";`,
-      `test("leaks", () => { mkdtempSync(join(tmpdir(), "leak-")); });`,
+      `test("leaks read-only fixture", () => { const dir = mkdtempSync(join(tmpdir(), "leak-")); writeFileSync(join(dir, "data"), "fixture"); chmodSync(dir, 0o555); });`,
     ].join("\n"),
   );
   const env: Record<string, string | undefined> = {
@@ -119,6 +142,42 @@ test("a nested bun test removes its parent at the end of the run", () => {
     timeout: 60_000,
   });
   expect(result.exitCode).toBe(0);
+  expect(readdirSync(root)).toEqual([]);
+});
+
+test("temp cleanup does not follow directory symlinks", () => {
+  const root = scratch();
+  const outside = scratch();
+  writeFileSync(join(outside, "keep"), "fixture");
+  symlinkSync(outside, join(root, "link"));
+  chmodSync(outside, 0o555);
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    chmodSync(outside, 0o700);
+  });
+  expect(removeTree(root)).toBe(true);
+  expect(lstatSync(outside).mode & 0o777).toBe(0o555);
+  expect(readdirSync(outside)).toEqual(["keep"]);
+});
+
+test("failed temp removal prints one warning naming the path", () => {
+  const root = scratch();
+  const result = runScript(
+    root,
+    [
+      `const { removeTree } = await import(${JSON.stringify(MODULE)});`,
+      `const fs = await import('node:fs');`,
+      `const file = process.env.TMPDIR + "/file";`,
+      `fs.writeFileSync(file, "fixture");`,
+      `if (removeTree(file + "/child")) process.exitCode = 1;`,
+    ].join("\n"),
+  );
+  expect(result.exitCode).toBe(0);
+  const warnings = result.stderr.toString().trim().split("\n");
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0]).toMatch(
+    /^WARNING: could not remove test temp path .*\/file\/child$/u,
+  );
   expect(readdirSync(root)).toEqual([]);
 });
 

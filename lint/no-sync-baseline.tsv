@@ -25,7 +25,6 @@
 3	agents/hooks/slugs.ts
 6	agents/skills/wiring-mise-tasks/scripts/jj-commit.ts
 5	agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts
-13	agents/skills/wiring-repositories/scripts/wiring-check.ts
 1	archives/skills/turnstile-spin/scripts/lib.ts
 2	archives/skills/turnstile-spin/scripts/persist-skill.ts
 15	cocoindex/deploy-daemon.ts

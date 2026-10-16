@@ -26,7 +26,6 @@ export function cliEnv(
       "repos = []",
       `scratch_roots = ${JSON.stringify(config.scratchRoots ?? [])}`,
       `delete_roots = ${JSON.stringify([root])}`,
-      'regenerable_ignored = ["target", "node_modules", ".venv", "build", "dist"]',
       'ignore_unreadable_procs = ["sshd"]',
       "session_grace_hours = 24",
     ].join("\n"),

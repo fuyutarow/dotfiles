@@ -18,7 +18,9 @@
 
 import { afterAll } from "bun:test";
 import {
+  chmodSync,
   existsSync,
+  lstatSync,
   mkdtempSync,
   readdirSync,
   rmSync,
@@ -40,18 +42,32 @@ export function ownerPidOf(name: string): number | undefined {
   return match?.[1] === undefined ? undefined : Number(match[1]);
 }
 
+/** Restore owner access on directories without following symlinks. */
+function restoreDirectoryAccess(path: string): void {
+  // sync-ok: process exit handler runs synchronously
+  const stat = lstatSync(path);
+  if (!stat.isDirectory()) return;
+  // sync-ok: process exit handler runs synchronously
+  chmodSync(path, stat.mode | 0o700);
+  for (const name of readdirSync(path)) {
+    // One inaccessible entry must not prevent repairing its siblings.
+    fromThrowable(() => {
+      restoreDirectoryAccess(join(path, name));
+    })();
+  }
+}
+
 /** Remove a tree even when a fixture left it read-only; false when it still exists. */
 export function removeTree(path: string): boolean {
-  const remove = () => {
+  fromThrowable(() => {
+    restoreDirectoryAccess(path);
+  })();
+  const removed = fromThrowable(() => {
     rmSync(path, { recursive: true, force: true });
-  };
-  if (fromThrowable(remove)().isOk()) return true;
-  Bun.spawnSync(["chmod", "-R", "u+rwX", path], {
-    stdout: "ignore",
-    stderr: "ignore",
-    timeout: 30_000,
-  });
-  return fromThrowable(remove)().isOk();
+  })();
+  if (removed.isOk()) return true;
+  process.stderr.write(`WARNING: could not remove test temp path ${path}\n`);
+  return false;
 }
 
 /** Remove run parents of `root` whose owner process is gone; returns the names removed. */

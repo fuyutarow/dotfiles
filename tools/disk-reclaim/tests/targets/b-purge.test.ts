@@ -1,8 +1,10 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import {
-  chmodSync,
   existsSync,
+  chmodSync,
+  lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   utimesSync,
@@ -26,14 +28,23 @@ import type {
 } from "../../src/liveness/facts.ts";
 
 const roots: string[] = [];
+function restoreDirectories(path: string): void {
+  if (!existsSync(path)) return;
+  const stat = lstatSync(path);
+  if (!stat.isDirectory()) return;
+  chmodSync(path, stat.mode | 0o700);
+  for (const name of readdirSync(path)) restoreDirectories(join(path, name));
+}
 const tempRoot = (prefix: string) => {
   const root = allocateTempRoot(prefix);
   roots.push(root);
   return root;
 };
-afterAll(() => {
-  for (const root of roots.splice(0))
+afterEach(() => {
+  for (const root of roots.splice(0)) {
+    restoreDirectories(root);
     rmSync(root, { recursive: true, force: true });
+  }
 });
 
 async function purgeTty(

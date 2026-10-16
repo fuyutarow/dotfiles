@@ -272,7 +272,7 @@ test("minimal reclaim config defaults unreadable process exceptions to sshd", ()
   const path = join(fixture(), "minimal.toml");
   writeFileSync(
     path,
-    `repo_roots = []\nrepos = []\nscratch_roots = []\nregenerable_ignored = []\nsession_grace_hours = 24\n`,
+    `repo_roots = []\nrepos = []\nscratch_roots = []\nsession_grace_hours = 24\n`,
   );
   expect(loadConfig(path).config?.ignore_unreadable_procs).toEqual(["sshd"]);
 });
@@ -351,6 +351,10 @@ test("unreadable same-uid process blocks approved delete", () => {
   mkdirSync(candidate);
   writeFileSync(join(candidate, "data"), "fixture");
   mkdirSync(pidDir);
+  using cleanup = new DisposableStack();
+  cleanup.defer(() => {
+    chmodSync(pidDir, 0o700);
+  });
   chmodSync(pidDir, 0);
   const deleted = invoke(
     ["delete", candidate, "--yes"],

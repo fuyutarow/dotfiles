@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.2 — 2026-10-16
+
+- Restore owner access during read-only fixture teardown and align CLI fixture declarations with the current schema.
+
 ## 1.4.1 — 2026-10-16
 
 - Replace non-null assertions with checked values in delete, host planning, and regression tests.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2 — 2026-10-16
+
+- Repair owner access on test temp directories before teardown; warn with the path if removal fails.
+
 ## 0.10.1 — 2026-10-16
 
 - Replace workspace path non-null assertion with defined string slicing.

@@ -1,9 +1,11 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
   chmodSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   utimesSync,
@@ -14,6 +16,13 @@ import { join } from "node:path";
 import { createTmpfsTarget } from "../../src/targets/tmpfs.ts";
 
 const roots: string[] = [];
+function restoreDirectories(path: string): void {
+  if (!existsSync(path)) return;
+  const stat = lstatSync(path);
+  if (!stat.isDirectory()) return;
+  chmodSync(path, stat.mode | 0o700);
+  for (const name of readdirSync(path)) restoreDirectories(join(path, name));
+}
 const fixtureContext = {
   mode: "plan" as const,
   config: {
@@ -40,9 +49,11 @@ function fixtureRoot() {
   roots.push(root);
   return root;
 }
-afterAll(() => {
-  for (const root of roots.splice(0))
+afterEach(() => {
+  for (const root of roots.splice(0)) {
+    restoreDirectories(root);
     rmSync(root, { recursive: true, force: true });
+  }
 });
 
 describe("tmpfs target", () => {

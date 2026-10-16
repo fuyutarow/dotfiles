@@ -299,8 +299,48 @@ test("workspace ownership lasts through verification after the worker exits", as
   expect(refused.exit).toBe(2);
   expect(refused.stderr).toContain(holder?.id ?? "missing-holder");
   expect(f.workers()).toHaveLength(1);
+  expect((await f.listed()).find((row) => row.id === holder?.id)).toMatchObject(
+    {
+      state: "running",
+      outcome: null,
+    },
+  );
+  // The vendor has exited: verify is gated, but the agx lease must remain live.
+  expect(() => process.kill(f.workers()[0] ?? 0, 0)).toThrow();
+  expect(process.kill(first.child.pid, 0)).toBe(true);
+  const wait = Bun.spawn(
+    [
+      process.execPath,
+      "tools/agx-run/src/next/cli.ts",
+      "ls",
+      "--wait",
+      holder?.id ?? "missing-holder",
+      "--json",
+    ],
+    {
+      env: { ...f.env, AGX_WAIT_POLL_MS: "10" },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 5000,
+    },
+  );
+  cleanups.unshift(async () => {
+    wait.kill();
+    await wait.exited;
+  });
+  const waited = new Response(wait.stdout).text();
+  await Bun.sleep(200);
+  expect(wait.exitCode).toBeNull();
+  expect(
+    f.records().some((row) => row.id === holder?.id && row.kind === "ended"),
+  ).toBe(false);
   writeFileSync(verifyGate, "release");
   expect((await first.result).exit).toBe(0);
+  expect(await wait.exited).toBe(0);
+  expect(
+    f.records().some((row) => row.id === holder?.id && row.kind === "ended"),
+  ).toBe(true);
+  expect(await waited).toContain('"outcome":"no-change"');
 });
 
 test("SIGKILL releases ownership despite a surviving worker and folds the old run as ended lost", async () => {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.1.2 — 2026-10-16
+
+- Recheck ended records after owner loss observation and distinguish legacy history and missing returns in doctor
+
 ## 5.1.1 — 2026-10-16
 
 - Add run lifecycle findings to the fleet doctor

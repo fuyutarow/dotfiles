@@ -5,17 +5,16 @@ const clean = (value: string): string => value.replaceAll(/[\t\r\n]/gu, " ");
 
 export async function doctor(): Promise<number> {
   const allEvents = events();
-  const started = new Set(
-    allEvents.flatMap((event) => (event.kind === "started" ? [event.id] : [])),
-  );
-  const ended = new Set(
-    allEvents.flatMap((event) => (event.kind === "ended" ? [event.id] : [])),
+  const legacy = new Set(
+    allEvents.flatMap((event) =>
+      event.kind === "started" && event.lease === undefined ? [event.id] : [],
+    ),
   );
   const now = Temporal.Now.instant();
   const findings: string[] = [];
 
   for (const run of await foldedRuns()) {
-    const finding = runFinding(run, started, ended, now);
+    const finding = runFinding(run, legacy, now);
     if (finding !== undefined) findings.push(finding);
   }
 
@@ -27,18 +26,17 @@ export async function doctor(): Promise<number> {
 
 function runFinding(
   run: Awaited<ReturnType<typeof foldedRuns>>[number],
-  started: ReadonlySet<string>,
-  ended: ReadonlySet<string>,
+  legacy: ReadonlySet<string>,
   now: Temporal.Instant,
 ): string | undefined {
   let kind: string | undefined;
-  if (started.has(run.id) && !ended.has(run.id) && run.outcome === "lost")
-    kind = "orphaned";
-  else if (
-    ended.has(run.id) &&
-    (run.outcome === "lost" || run.returned !== true)
-  )
-    kind = "lost";
+  if (run.state === "running") return undefined;
+  // Pre-lease history (including imports) cannot establish modern lifecycle or
+  // return guarantees. Missing metadata is not evidence that a run was lost.
+  if (legacy.has(run.id)) kind = "legacy";
+  else if (run.ended_at === null && run.outcome === "lost") kind = "orphaned";
+  else if (run.ended_at !== null && run.returned !== true)
+    kind = "missing-return";
   else if (
     run.state === "ended" &&
     run.judgment === null &&

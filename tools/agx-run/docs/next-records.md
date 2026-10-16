@@ -111,8 +111,24 @@ including the premise and at most the last three trimmed lines of command output
 `agx ls` and other `foldedRuns` callers cache event prefixes only in process memory. Each reader validates inode, device, size, and complete-line offset before reusing its prefix. Rotation and truncation rebuild it; incomplete UTF-8 tails remain unconsumed. Old `records.fold.json` snapshots are ignored. Neither `ls` nor `ls --wait` writes any file.
 
 Process liveness and early-quit classification are recomputed on every read.
+Before returning derived loss, readers check whether the log changed during
+asynchronous process/unit observation and replay it if needed. An `ended` record
+appended before the owner disappeared takes precedence over the earlier read.
 `agx ls --running` filters to runs whose dispatcher PID is currently live, excluding
 ended runs (including lost). It combines with selectors, `--json`, and `--all`; the
 human limit and older-run count apply to the filtered runs. Warm reads consume
 only appended log bytes, plus any previously incomplete tail; validating the memory cache,
 checking liveness, and emitting rows still cost proportionally to the stored runs.
+
+## Doctor findings
+
+`agx doctor` reports `orphaned` only for a leased run whose owner is gone and
+whose `ended` record is absent after the liveness recheck. A recorded completion
+with `returned` false or absent is `missing-return`, independent of its outcome
+and verification results. For current writers, `returned` records the fenced
+`agx-return` marker, not the existence of a final JSON report; this flag does not
+establish process loss. Runs without
+a recorded lease, including legacy imports, are reported as `legacy` when terminal
+because their historical metadata cannot establish the modern lifecycle contract.
+Other completed runs without a judgment become `unjudged` after 24 hours.
+Doctor findings are read-only; none of these classifications rewrites history.

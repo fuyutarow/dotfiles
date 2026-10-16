@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { mkdir, open } from "node:fs/promises";
+import { mkdir, open, stat as recordStat } from "node:fs/promises";
 import { dlopen, FFIType } from "bun:ffi";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -531,9 +531,10 @@ function foldInto(runs: Map<string, FoldedRun>, input: NextEvent[]): void {
 
 /** Full replay oracle; does not read or write the snapshot. */
 export async function fullFoldedRuns() {
+  const before = await recordStat(recordPath()).catch(() => null);
   const runs = new Map<string, FoldedRun>();
   foldInto(runs, events());
-  return liveRuns(runs);
+  return liveRuns(runs, before);
 }
 
 /** Read only bytes after the last complete line folded into the snapshot. */
@@ -600,13 +601,17 @@ export async function foldedRuns() {
     offset: offset + complete,
     runs: [...runs.values()],
   });
-  return liveRuns(runs);
+  return liveRuns(runs, stat);
 }
 
 const foldCache = new Map<string, z.output<typeof SnapshotSchema>>();
 
-async function liveRuns(runs: Map<string, FoldedRun>): Promise<ListedRun[]> {
+async function liveRuns(
+  runs: Map<string, FoldedRun>,
+  before: { size: number; ino: number; dev: number } | null,
+): Promise<ListedRun[]> {
   const listed: ListedRun[] = [];
+  const losses = new Set<string>();
   for (const stored of runs.values()) {
     const run = { ...stored };
     run.worker_name ??= `agt_${run.ticket}`;
@@ -653,7 +658,8 @@ async function liveRuns(runs: Map<string, FoldedRun>): Promise<ListedRun[]> {
     const evidence = await lossEvidence(lease);
     if (evidence === undefined)
       listed.push({ ...fields, state: "running", outcome: null, lease });
-    else
+    else {
+      losses.add(run.id);
       listed.push({
         ...fields,
         state: "ended",
@@ -661,6 +667,27 @@ async function liveRuns(runs: Map<string, FoldedRun>): Promise<ListedRun[]> {
         lease,
         evidence,
       });
+    }
   }
-  return listed;
+  if (losses.size === 0) return listed;
+  const after = await recordStat(recordPath()).catch(() => null);
+  if (
+    before !== null &&
+    after?.size === before.size &&
+    after.ino === before.ino &&
+    after.dev === before.dev
+  )
+    return listed;
+  // Liveness observation awaits /proc or ps and possibly systemd. The owner can
+  // append ended and exit after our initial replay. Only infer loss after reading
+  // the log again *after* observing death; never persist that inference in cache.
+  const latest = new Map<string, FoldedRun>();
+  foldInto(latest, events());
+  const completed = new Map(
+    [...latest].filter(([id, run]) => losses.has(id) && run.state === "ended"),
+  );
+  const recovered = new Map(
+    (await liveRuns(completed, after)).map((run) => [run.id, run]),
+  );
+  return listed.map((run) => recovered.get(run.id) ?? run);
 }

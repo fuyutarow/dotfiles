@@ -368,8 +368,8 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
   expect(result.stdout.trim().split("\n").toSorted()).toEqual(
     [
       `agx-run\t${f.repo}\torphan\torphaned\tagx judge orphan accept|reject`,
-      `agx-run\t${f.repo}\tlost\tlost\tagx judge lost accept|reject`,
-      `agx-run\t${f.repo}\tno-return\tlost\tagx judge no-return accept|reject`,
+      `agx-run\t${f.repo}\tlost\tmissing-return\tagx judge lost accept|reject`,
+      `agx-run\t${f.repo}\tno-return\tmissing-return\tagx judge no-return accept|reject`,
       `agx-run\t${f.repo}\tunjudged\tunjudged\tagx judge unjudged accept|reject`,
       `agx-ws\t${f.repo}\tlegacy\tlegacy-empty\tws gc --legacy --repo ${f.repo}`,
       `agx-ws\t${f.repo}\tws_landed\tcollectable\tws gc --include-unrecorded --repo ${f.repo}`,

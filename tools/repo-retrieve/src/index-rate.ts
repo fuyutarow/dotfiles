@@ -21,9 +21,12 @@ export function median(values: number[]): number | null {
     .toSorted((a, b) => a - b);
   if (sorted.length === 0) return null;
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1]! + sorted[middle]!) / 2
-    : sorted[middle]!;
+  const upper = sorted[middle];
+  if (upper === undefined) return null;
+  if (sorted.length % 2 !== 0) return upper;
+  const lower = sorted[middle - 1];
+  if (lower === undefined) return null;
+  return (lower + upper) / 2;
 }
 
 export async function readIndexRate(

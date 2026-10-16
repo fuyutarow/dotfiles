@@ -19,6 +19,7 @@ import {
 import { waitForIndexChild } from "../src/ccc-index.ts";
 import {
   indexRateFile,
+  median,
   readIndexRate,
   recordIndexRate,
 } from "../src/index-rate.ts";
@@ -86,12 +87,15 @@ describe.skipIf(ccc === null)(
   "CCC-PLAN-GATE with installed ccc matcher",
   () => {
     test("bulk JSON is refused before any ccc command; its suggested exclude fixes the plan and retains text", async () => {
+      if (ccc === null) return;
       const root = fixture(true);
-      const planned = await computeIndexPlan(root, ccc!);
+      const planned = await computeIndexPlan(root, ccc);
       expect(planned.isOk()).toBe(true);
       if (planned.isErr()) return;
       expect(planned.value.data_share).toBeGreaterThan(0.8);
-      const top = planned.value.contributors[0]!;
+      const top = planned.value.contributors[0];
+      expect(top).toBeDefined();
+      if (top === undefined) return;
       const suggestion = top.exclude;
       expect(top.directory).toBe("bulk");
       expect(top.kind).toBe("data");
@@ -101,9 +105,10 @@ describe.skipIf(ccc === null)(
       // Same interpreter for scope, but every attempt to run ccc itself leaves evidence.
       const bin = join(root, "bin");
       mkdirSync(bin);
-      const interpreter = readFileSync(realpathSync(ccc!), "utf8")
-        .split("\n")[0]!
-        .slice(2);
+      const [shebang] = readFileSync(realpathSync(ccc), "utf8").split("\n");
+      expect(shebang).toBeDefined();
+      if (shebang === undefined) return;
+      const interpreter = shebang.slice(2);
       const fake = join(bin, "ccc");
       const called = join(root, "called");
       writeFileSync(
@@ -133,7 +138,7 @@ describe.skipIf(ccc === null)(
       ).toBe(true);
       rmSync(called);
       settings(root, `${top.exclude}\n- '!bulk/**/*.txt'\n`);
-      const fixed = await computeIndexPlan(root, ccc!);
+      const fixed = await computeIndexPlan(root, ccc);
       expect(fixed.isOk()).toBe(true);
       if (fixed.isErr()) return;
       expect(fixed.value.violations).toEqual([]);
@@ -163,21 +168,24 @@ describe.skipIf(ccc === null)(
     }, 30_000);
 
     test("a directory ending in .json is never pruned by an exclude suggestion", async () => {
+      if (ccc === null) return;
       const root = fixture(true);
       mkdirSync(join(root, "bulk", "saved.json"));
       writeFileSync(
         join(root, "bulk", "saved.json", "paper.txt"),
         "Included primary text.",
       );
-      const result = await computeIndexPlan(root, ccc!);
+      const result = await computeIndexPlan(root, ccc);
       expect(result.isOk()).toBe(true);
       if (result.isErr()) return;
       const suggestion = result.value.contributors.find(
         (item) => item.directory === "bulk" && item.extension === ".json",
-      )!;
+      );
+      expect(suggestion).toBeDefined();
+      if (suggestion === undefined) return;
       expect(suggestion.exclude).toBe("- 'bulk/payload.json'");
       settings(root, `${suggestion.exclude}\n- '!bulk/**/*.txt'\n`);
-      const fixed = await computeIndexPlan(root, ccc!);
+      const fixed = await computeIndexPlan(root, ccc);
       expect(fixed.isOk()).toBe(true);
       if (fixed.isErr()) return;
       expect(fixed.value.violations).toEqual([]);
@@ -189,6 +197,7 @@ describe.skipIf(ccc === null)(
     }, 30_000);
 
     test("slow measured progress stops only the fixture client and repeats the contributor report", async () => {
+      if (ccc === null) return;
       const root = fixture(true);
       writeFileSync(
         join(root, ".cocoindex_code", "rr.toml"),
@@ -196,9 +205,10 @@ describe.skipIf(ccc === null)(
       );
       const bin = join(root, "bin");
       mkdirSync(bin);
-      const interpreter = readFileSync(realpathSync(ccc!), "utf8")
-        .split("\n")[0]!
-        .slice(2);
+      const [shebang] = readFileSync(realpathSync(ccc), "utf8").split("\n");
+      expect(shebang).toBeDefined();
+      if (shebang === undefined) return;
+      const interpreter = shebang.slice(2);
       const fake = join(bin, "ccc");
       writeFileSync(
         fake,
@@ -231,6 +241,7 @@ else:
     }, 30_000);
 
     test("nested gitignore, size limit, Unicode characters, and content classification", async () => {
+      if (ccc === null) return;
       const root = fixture();
       writeFileSync(join(root, "bulk", ".gitignore"), "ignored.md\n");
       writeFileSync(join(root, "bulk", "ignored.md"), "ignored");
@@ -245,7 +256,7 @@ else:
         readFileSync(join(root, ".cocoindex_code", "settings.yml"), "utf8") +
           "max_file_size: 20000\n",
       );
-      const result = await computeIndexPlan(root, ccc!);
+      const result = await computeIndexPlan(root, ccc);
       expect(result.isOk()).toBe(true);
       if (result.isErr()) return;
       expect(
@@ -267,7 +278,9 @@ else:
 
 test("measured ETA uses chunk deltas, ignores no advancement, and stops the client wait", async () => {
   expect(measuredEta(1000, 100, 100, 10)).toBeNull();
-  const eta = measuredEta(1000, 100, 200, 10)!;
+  const eta = measuredEta(1000, 100, 200, 10);
+  expect(eta).not.toBeNull();
+  if (eta === null) return;
   expect(eta.rate).toBe(10);
   expect(eta.remaining).toBe(90);
   expect(eta.totalSeconds).toBe(100);
@@ -373,6 +386,15 @@ test("fallback time estimate warns without refusing; measured rate enforces the 
   expect(measured.violations).toEqual(["estimated GPU seconds 100.0 > 10"]);
   expect(measured.rate_source).toBe("measured");
   expect(planReport(measured)).toContain("(measured)");
+});
+
+test("rate medians ignore invalid samples and handle odd and even histories", () => {
+  expect(median([])).toBeNull();
+  expect(median([0, -1, NaN, Infinity])).toBeNull();
+  expect(median([3])).toBe(3);
+  expect(median([9, 1, 5])).toBe(5);
+  expect(median([8, 2])).toBe(5);
+  expect(median([8, 2, 6, 4, 0, -1, NaN, Infinity])).toBe(5);
 });
 
 test("rate history is per host and plans use the median of the latest nine runs", async () => {

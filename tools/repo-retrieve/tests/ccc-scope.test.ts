@@ -98,6 +98,7 @@ describe.skipIf(ccc === null)(
   "inScopeChanges (installed ccc's matcher)",
   () => {
     test("commits touching only excluded or non-included paths are out of scope", async () => {
+      if (ccc === null) return;
       const dir = project();
       const a = commit(dir, { "README.md": "a" });
       const b = commit(dir, {
@@ -105,35 +106,38 @@ describe.skipIf(ccc === null)(
         "rec/runs/r1.md": "x",
         "data.json": "{}",
       });
-      expect(await inScopeChanges(dir, ccc!, a, b)).toEqual({
+      expect(await inScopeChanges(dir, ccc, a, b)).toEqual({
         changed: 3,
         inScope: [],
       });
     });
 
     test("an indexed path makes the drift in scope", async () => {
+      if (ccc === null) return;
       const dir = project();
       const a = commit(dir, { "README.md": "a" });
       const b = commit(dir, { "notes.md": "n", "archive/x.md": "x" });
-      expect(await inScopeChanges(dir, ccc!, a, b)).toEqual({
+      expect(await inScopeChanges(dir, ccc, a, b)).toEqual({
         changed: 2,
         inScope: ["notes.md"],
       });
     });
 
     test("a changed .gitignore or settings.yml changes the scope itself, so it counts", async () => {
+      if (ccc === null) return;
       const dir = project();
       const a = commit(dir, { "README.md": "a" });
       const b = commit(dir, { ".gitignore": "x\n" });
-      expect((await inScopeChanges(dir, ccc!, a, b))?.inScope).toEqual([
+      expect((await inScopeChanges(dir, ccc, a, b))?.inScope).toEqual([
         ".gitignore",
       ]);
     });
 
     test("an unknown commit cannot be decided: null (the caller keeps NO_INDEX)", async () => {
+      if (ccc === null) return;
       const dir = project();
       const a = commit(dir, { "README.md": "a" });
-      expect(await inScopeChanges(dir, ccc!, a, "0".repeat(40))).toBeNull();
+      expect(await inScopeChanges(dir, ccc, a, "0".repeat(40))).toBeNull();
     });
   },
 );

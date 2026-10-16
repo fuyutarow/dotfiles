@@ -1219,7 +1219,8 @@ describe("unlinkIfSame (R6: remove the dead bind we probed, never a live one re-
     await writeFile(path, "dead");
     const seen = await settled(fileKey(path));
     expect(seen).toBeDefined();
-    expect(await unlinkIfSame(path, seen!)).toBe(true);
+    if (seen === undefined) return;
+    expect(await unlinkIfSame(path, seen)).toBe(true);
     expect(await exists(path)).toBe(false);
   });
 
@@ -1227,7 +1228,9 @@ describe("unlinkIfSame (R6: remove the dead bind we probed, never a live one re-
     const dir = await scratch();
     const path = join(dir, "bind");
     await writeFile(path, "dead");
-    const seen = (await settled(fileKey(path)))!;
+    const seen = await settled(fileKey(path));
+    expect(seen).toBeDefined();
+    if (seen === undefined) return;
     // Atomic replacement: the new file exists before the old one is released, so inodes differ.
     await writeFile(join(dir, "newer"), "live");
     await rename(join(dir, "newer"), path);
@@ -1239,7 +1242,9 @@ describe("unlinkIfSame (R6: remove the dead bind we probed, never a live one re-
     const dir = await scratch();
     const path = join(dir, "bind");
     await writeFile(path, "dead");
-    const seen = (await settled(fileKey(path)))!;
+    const seen = await settled(fileKey(path));
+    expect(seen).toBeDefined();
+    if (seen === undefined) return;
     await rm(path);
     expect(await unlinkIfSame(path, seen)).toBe(false);
   });
@@ -1247,7 +1252,9 @@ describe("unlinkIfSame (R6: remove the dead bind we probed, never a live one re-
   test("a path it cannot remove is `did not remove`, never an exception (the URL still has to open)", async () => {
     // Same device+inode as itself, but unlink(2) on a directory fails (EISDIR/EPERM).
     const dir = await scratch();
-    const seen = (await settled(fileKey(dir)))!;
+    const seen = await settled(fileKey(dir));
+    expect(seen).toBeDefined();
+    if (seen === undefined) return;
     expect(await unlinkIfSame(dir, seen)).toBe(false);
     expect(await exists(dir)).toBe(true);
   });

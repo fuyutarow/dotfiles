@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2 — 2026-10-16
+
+- Replace index rate non-null assertions with explicit narrowing
+
 ## 1.3.1 — 2026-10-15
 
 - Classify timed-out searches against daemon status so indexing reports BUSY progress and unavailable daemons remain FATAL.

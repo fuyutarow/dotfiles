@@ -13,11 +13,12 @@ name = "fuyutarow"
 email = "fuyutarow@gmail.com"
 
 [revset-aliases]
-# House default branch is alpha (CLAUDE.md → Git), and jj's built-in trunk() only looks for
-# main/master/trunk. A repo whose trunk differs overrides this one alias with --repo.
-# present() + root(): a repo with no alpha@origin yet (a new project before its first push) gets
-# root() quietly, instead of a 'Failed to resolve trunk()' warning on every command.
-"trunk()" = "latest(present(alpha@origin) | root())"
+# Include alpha@origin first by house convention, then jj's built-in main/master/trunk names so
+# repositories using those defaults resolve their actual trunk. A repository with another trunk
+# name can still override this alias with --repo.
+# present() + root(): a repo without a matching remote bookmark gets root() quietly, instead of
+# a 'Failed to resolve trunk()' warning on every command.
+"trunk()" = "latest(present(alpha@origin) | present(main@origin) | present(master@origin) | present(trunk@origin) | root())"
 
 [snapshot]
 # Default 1MiB silently leaves larger new files untracked (only a stderr warning), and a commit

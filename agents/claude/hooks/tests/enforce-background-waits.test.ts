@@ -28,6 +28,7 @@ const decide = (tool_input: Record<string, unknown>): string => {
     env,
     timeout: 30_000,
   });
+  expect(p.exitCode, p.stderr.toString()).toBe(0);
   return p.stdout.toString();
 };
 
@@ -126,6 +127,7 @@ describe("small-file viewer history exemption", () => {
       HOME: home,
       S: scratch,
       CLAUDE_BASH_DURATIONS_DIR: dir,
+      CLAUDE_SESSION_SCRATCHPAD: scratch,
     };
     delete env[AGX_WORKER_ENV];
     const allowed = [
@@ -272,6 +274,7 @@ function decideWithEnv(command: string, env: NodeJS.ProcessEnv): string {
     env,
     timeout: 30_000,
   });
+  expect(p.exitCode, p.stderr.toString()).toBe(0);
   return p.stdout.toString();
 }
 

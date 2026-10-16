@@ -2,13 +2,7 @@ import { open, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
-import {
-  clockHM,
-  localFromEpochSec,
-  nowEpochSec,
-  pad2,
-  stampMDHM,
-} from "./prompt-stamp.ts";
+import { clockHM, nowEpochSec, pad2, stampMDHM } from "./prompt-stamp.ts";
 import { paceColor, pctFmt, roles } from "./ansi.ts";
 import type { TokenUsage } from "../../shared/src/dispatch-pricing.ts";
 import {
@@ -348,10 +342,11 @@ function rolloutActions(
 export async function readCodexRate(
   root = join(process.env.HOME ?? "", ".codex", "sessions"),
   _session?: string,
+  nowMs = Temporal.Now.instant().epochMilliseconds,
 ): Promise<Result<CodexRate | undefined, string>> {
   const result = await readCodexSubscriptionUsage(
     root,
-    Temporal.Now.instant().epochMilliseconds,
+    nowMs,
     7 * 24 * 60 * 60 * 1000,
   );
   if (
@@ -372,11 +367,12 @@ export function codexRateSegment(
   rate: CodexRate | undefined,
   why?: string,
   now = nowEpochSec(),
+  timeZone = Temporal.Now.timeZoneId(),
 ): string {
   if (rate === undefined) {
     return roles.unavailable("codex", why);
   }
-  const ageMs = Temporal.Now.instant().epochMilliseconds - rate.mtimeMs;
+  const ageMs = now * 1000 - rate.mtimeMs;
   if (ageMs > STALE_MS) return roles.unavailable("codex", "stale source");
   const parts = rate.windows.map((window) => {
     let label = `${window.minutes}m`;
@@ -396,7 +392,9 @@ export function codexRateSegment(
           );
     let item = `${roles.label("codex")} ${roles.window(label)} ${roles.value(`${formatted.text}%`, paceColor(window.percent, elapsed))}`;
     if (window.reset !== undefined) {
-      const local = localFromEpochSec(window.reset);
+      const local = Temporal.Instant.fromEpochMilliseconds(
+        window.reset * 1000,
+      ).toZonedDateTimeISO(timeZone);
       let stamp = stampMDHM(local);
       if (window.minutes === 300) stamp = clockHM(local);
       item += ` ${roles.secondary(`⟳${stamp}(${remaining(window.reset, now)} ${Math.round(elapsed ?? 0)}%)`)}`;

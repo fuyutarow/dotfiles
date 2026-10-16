@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.4 — 2026-10-16
+
+- Make statusline tests independent of user state, wall clocks and host scheduling by isolating homes and injecting deadline clocks.
+
 ## 0.16.3 — 2026-10-16
 
 - Display recent unacknowledged ended lost runs as lost counts

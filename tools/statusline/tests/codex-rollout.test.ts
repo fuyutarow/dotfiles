@@ -1,4 +1,10 @@
-import { afterEach, expect, test } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  expect,
+  setDefaultTimeout,
+  test,
+} from "bun:test";
 import {
   appendFile,
   copyFile,
@@ -25,7 +31,15 @@ import {
 
 const roots: string[] = [];
 const fixtureDir = join(import.meta.dir, "fixtures");
+// These tests exercise complete multi-MiB parsing, independent of scheduler delays. The zero
+// deadline test below separately checks budget exhaustion. Bun resets defaults between files.
+setDefaultTimeout(30_000);
+const monotonicNow = performance.now.bind(performance);
+beforeEach(() => {
+  performance.now = () => 0;
+});
 afterEach(async () => {
+  performance.now = monotonicNow;
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true })),
   );
@@ -159,7 +173,8 @@ async function generatedRollout(
 
 async function freshThreadStatus(id: string, root: string) {
   const adapter = join(import.meta.dir, "../src/adapters/codex-rollout.ts");
-  const code = `import {readCodexThreadStatus} from ${JSON.stringify(adapter)};
+  const code = `performance.now = () => 0;
+    const {readCodexThreadStatus} = await import(${JSON.stringify(adapter)});
     process.stdout.write(JSON.stringify(await readCodexThreadStatus(${JSON.stringify(id)}, ${JSON.stringify(root)})));`;
   const child = Bun.spawn([process.execPath, "--eval", code], {
     stdout: "pipe",

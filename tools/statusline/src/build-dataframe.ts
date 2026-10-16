@@ -75,7 +75,23 @@ export interface BuildDataframeOptions {
   sources?: Partial<Sources>;
   budgets?: Partial<Record<keyof Sources, number>>;
   codex?: boolean;
+  clock?: SourceClock;
 }
+/** Monotonic deadlines, injectable independently of source I/O and host scheduling. */
+export interface SourceClock {
+  now: () => number;
+  timeout: (callback: () => void, ms: number) => () => void;
+}
+const SOURCE_CLOCK: SourceClock = {
+  now: () => performance.now(),
+  timeout: (callback, ms) => {
+    const timer = setTimeout(callback, ms);
+    timer.unref();
+    return () => {
+      clearTimeout(timer);
+    };
+  },
+};
 const BUDGETS_MS: Record<keyof Sources, number> = {
   identity: 1500,
   agentName: 3000,
@@ -96,26 +112,26 @@ async function runBounded<T>(
   name: string,
   budgetMs: number,
   source: () => Promise<T>,
+  clock: SourceClock,
 ): Promise<Outcome<T>> {
-  const started = performance.now();
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const started = clock.now();
+  let cancel: (() => void) | undefined;
   const timedOut = new Promise<Outcome<T>>((resolve) => {
-    timer = setTimeout(() => {
+    cancel = clock.timeout(() => {
       resolve({ ok: false, why: `${name} timeout ${budgetMs}ms` });
     }, budgetMs);
-    timer.unref();
   });
   const pending = Promise.resolve()
     .then(source)
     .then(
       (value): Outcome<T> =>
-        performance.now() - started >= budgetMs
+        clock.now() - started >= budgetMs
           ? { ok: false, why: `${name} timeout ${budgetMs}ms` }
           : { ok: true, value },
       (): Outcome<T> => ({ ok: false, why: `${name} unavailable` }),
     );
   const outcome = await Promise.race([pending, timedOut]);
-  if (timer !== undefined) clearTimeout(timer);
+  cancel?.();
   return outcome;
 }
 function settled<T>(
@@ -263,6 +279,11 @@ export async function buildDataframe(
       ? data.sessionName
       : undefined;
   const sources = { ...DEFAULT_SOURCES, ...options.sources };
+  const bounded = <T>(
+    name: string,
+    budgetMs: number,
+    source: () => Promise<T>,
+  ) => runBounded(name, budgetMs, source, options.clock ?? SOURCE_CLOCK);
 
   const model = modelName(data.model?.name, data.model?.id);
 
@@ -299,7 +320,7 @@ export async function buildDataframe(
     jevUsageResult,
     recoverHealthResult,
   ] = await Promise.allSettled([
-    runBounded(
+    bounded(
       "account",
       budget("identity"),
       options.codex === true
@@ -313,29 +334,25 @@ export async function buildDataframe(
             })
         : sources.identity,
     ),
-    runBounded("name", budget("agentName"), () =>
+    bounded("name", budget("agentName"), () =>
       sid === undefined
         ? Promise.resolve(ok<string | undefined, string>(undefined))
         : sources.agentName(sid, sessionNameHint),
     ),
-    runBounded("rc", budget("rcState"), sources.rcState),
-    runBounded("git", budget("repoState"), () => sources.repoState(cwd)),
-    runBounded("process scan", budget("jobScan"), sources.jobScan),
-    runBounded("host load", budget("hostLoad"), sources.hostLoad),
-    runBounded("dispatch", budget("routes"), () => sources.routes(sid)),
-    runBounded(
+    bounded("rc", budget("rcState"), sources.rcState),
+    bounded("git", budget("repoState"), () => sources.repoState(cwd)),
+    bounded("process scan", budget("jobScan"), sources.jobScan),
+    bounded("host load", budget("hostLoad"), sources.hostLoad),
+    bounded("dispatch", budget("routes"), () => sources.routes(sid)),
+    bounded(
       "dispatch warning",
       budget("dispatchWarning"),
       sources.dispatchWarning,
     ),
-    runBounded("storage", budget("storage"), sources.storage),
-    runBounded("codex rate", budget("codexRate"), sources.codexRate),
-    runBounded("Jev usage", budget("jevUsage"), sources.jevUsage),
-    runBounded(
-      "recover health",
-      budget("recoverHealth"),
-      sources.recoverHealth,
-    ),
+    bounded("storage", budget("storage"), sources.storage),
+    bounded("codex rate", budget("codexRate"), sources.codexRate),
+    bounded("Jev usage", budget("jevUsage"), sources.jevUsage),
+    bounded("recover health", budget("recoverHealth"), sources.recoverHealth),
   ]);
   const identity = settled(
     identityResult,
@@ -457,7 +474,7 @@ export async function buildDataframe(
     cpuPct: cpu,
     ram,
   };
-  void runBounded("herdr", budget("herdrReport"), () =>
+  void bounded("herdr", budget("herdrReport"), () =>
     sources.herdrReport(model, sessionName, effortDisplay, rc.value),
   ).catch(() => null);
   return dataframe;

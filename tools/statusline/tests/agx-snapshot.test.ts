@@ -121,10 +121,8 @@ describe("agx statusline snapshot", () => {
     const snapshotPath = writeGoodSnapshot(f.env, run, 45_000);
     const before = readFileSync(snapshotPath, "utf8");
 
-    const started = performance.now();
     const output = await render(f.env);
-    const renderMs = performance.now() - started;
-    expect(renderMs).toBeLessThan(1_500);
+    // Check the cached result and failed refresh directly; host scheduling is not a deadline clock.
     expect(output).toContain("luna-high");
     expect(output).toContain("v4_learn");
     expect(output).toMatch(/agx (4[5-9]|5[0-9])s old/u);

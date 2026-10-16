@@ -53,7 +53,9 @@ describe("statusline render cache", () => {
     };
     const modulePath = join(import.meta.dir, "../src/render-cache.ts");
     const worker = `
-      import { withSessionRender } from ${JSON.stringify(modulePath)};
+      const fixed = Temporal.Instant.from("2026-10-08T12:34:00Z");
+      Temporal.Now.instant = () => fixed;
+      const { withSessionRender } = await import(${JSON.stringify(modulePath)});
       const output = await withSessionRender("session-1", async () => {
         await Bun.sleep(300);
         return String(process.pid);

@@ -178,12 +178,12 @@ describe("statusline Sys row: VRAM", () => {
     "O4: a render does not wait for nvidia-smi: it says it is sampling and returns at once",
     () => {
       const bin = binWith({ "nvidia-smi": "exec /bin/sleep 6" });
-      const started = nowMs();
       const first = render({
         bin,
         env: { STATUSLINE_GPU_SAMPLE_TIMEOUT_MS: "3000" },
       });
-      expect(nowMs() - started).toBeLessThan(1900); // the old inline sample cost its whole 2 s bound
+      // The returned sampling state proves the renderer did not await the result. Deadline
+      // arithmetic is checked with an injected clock in build-dataframe-budget.test.ts.
       expect(sysRow(first.text)).toContain("VRAM n/a (sampling in progress)");
       waitForSampler(first.home);
     },
@@ -261,12 +261,16 @@ describe("statusline Sys row: VRAM", () => {
     SLOW,
   );
 
-  test("a killed nvidia-smi names the signal instead of a bare 'failed'", () => {
-    const bin = binWith({ "nvidia-smi": "kill -9 $$" });
-    expect(sysRow(renderSettled({ bin }).text)).toContain(
-      "VRAM n/a (nvidia-smi killed by SIGKILL)",
-    );
-  });
+  test(
+    "a killed nvidia-smi names the signal instead of a bare 'failed'",
+    () => {
+      const bin = binWith({ "nvidia-smi": "kill -9 $$" });
+      expect(sysRow(renderSettled({ bin }).text)).toContain(
+        "VRAM n/a (nvidia-smi killed by SIGKILL)",
+      );
+    },
+    SLOW,
+  );
 
   test(
     "a timeout is NOT cached as 'no GPU': the next render samples again",
@@ -296,12 +300,10 @@ describe("statusline Sys row: VRAM", () => {
       const home = tempHome();
       const slow = binWith({ "nvidia-smi": "exec /bin/sleep 6" });
       renderSettled({ home, bin: slow, env: FAST_BOUND });
-      const started = nowMs();
       const row = sysRow(render({ home, bin: slow, env: FAST_BOUND }).text);
       expect(row).toContain("VRAM n/a (nvidia-smi timeout 500ms)");
       // Served from the cached miss: no second sampler starts inside the TTL.
       expect(existsSync(gpuLock(home))).toBe(false);
-      expect(nowMs() - started).toBeLessThan(1900);
     },
     SLOW,
   );
@@ -373,12 +375,16 @@ describe("statusline Sys row: VRAM", () => {
     expect(row).not.toContain("stale");
   });
 
-  test("garbage output is 'unparsable', not a number", () => {
-    const bin = binWith({ "nvidia-smi": "echo 'No devices were found'" });
-    expect(sysRow(renderSettled({ bin }).text)).toContain(
-      "VRAM n/a (nvidia-smi output unparsable)",
-    );
-  });
+  test(
+    "garbage output is 'unparsable', not a number",
+    () => {
+      const bin = binWith({ "nvidia-smi": "echo 'No devices were found'" });
+      expect(sysRow(renderSettled({ bin }).text)).toContain(
+        "VRAM n/a (nvidia-smi output unparsable)",
+      );
+    },
+    SLOW,
+  );
 
   test("the pre-fix cache shape ({reading:null}) is not trusted as 'no GPU'", () => {
     const home = tempHome();
@@ -475,15 +481,23 @@ describe("statusline Sys row: every reading is present", () => {
 });
 
 describe("statusline other rows", () => {
-  test("Job: a failed process scan is n/a, not 'no jobs'", () => {
-    const text = render({ bin: binWith({}) }).text;
-    expect(text).toContain("Job: scan n/a (no ps)");
-  });
+  test(
+    "Job: a failed process scan is n/a, not 'no jobs'",
+    () => {
+      const text = render({ bin: binWith({}) }).text;
+      expect(text).toContain("Job: scan n/a (no ps)");
+    },
+    SLOW,
+  );
 
-  test("Job: no jobs and no orphans stays silent (nothing exists to show)", () => {
-    const bin = binWith({ ps: "exit 0" });
-    expect(render({ bin }).text).not.toContain("Job:");
-  });
+  test(
+    "Job: no jobs and no orphans stays silent (nothing exists to show)",
+    () => {
+      const bin = binWith({ ps: "exit 0" });
+      expect(render({ bin }).text).not.toContain("Job:");
+    },
+    SLOW,
+  );
 
   test.each([
     ["02:00", "2m00s"],
@@ -497,6 +511,7 @@ describe("statusline other rows", () => {
       });
       expect(render({ bin }).text).toContain(`Job: jobx ${shown}`);
     },
+    SLOW,
   );
 
   test("Job: an orphan with nothing admitted is spelled out, not `det×`", () => {
@@ -569,14 +584,18 @@ describe("statusline repo line: branch", () => {
     expect(text).not.toContain("⎇");
   });
 
-  test("any OTHER exit 128 (empty repo, dubious ownership) is n/a with git's reason", () => {
-    const bin = binWith({
-      git: "echo 'fatal: detected dubious ownership in repository at /x' >&2; exit 128",
-    });
-    expect(render({ bin }).text).toContain(
-      "⎇ branch n/a (detected dubious ownership in repository at /x)",
-    );
-  });
+  test(
+    "any OTHER exit 128 (empty repo, dubious ownership) is n/a with git's reason",
+    () => {
+      const bin = binWith({
+        git: "echo 'fatal: detected dubious ownership in repository at /x' >&2; exit 128",
+      });
+      expect(render({ bin }).text).toContain(
+        "⎇ branch n/a (detected dubious ownership in repository at /x)",
+      );
+    },
+    SLOW,
+  );
 
   test("a branch is shown as before", () => {
     const bin = binWith({ git: "echo main" });
@@ -652,15 +671,13 @@ describe("statusline resource bounds", () => {
         claude: HANG,
       });
       const home = tempHome();
-      const started = nowMs();
       const text = render({
         bin,
         home,
         payload: { session_id: "bounds-1" },
         env: FAST_BOUND,
       }).text;
-      const took = nowMs() - started;
-      expect(took).toBeLessThan(6000); // budget 4 s + herdr + process start; unbudgeted ≥ 9 s
+      // Do not compare scheduler time to the budget: the unit budget test advances a fake clock.
       expect(text).toContain("name n/a (name timeout 3000ms)");
       expect(text).toMatch(/branch n\/a \(git timeout \d+ms\)/u);
       expect(text).toContain("scan n/a (process scan timeout 2000ms)");

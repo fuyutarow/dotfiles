@@ -10,12 +10,16 @@ import {
 
 const roots: string[] = [];
 const ESC = String.fromCodePoint(27);
+const NOW = 1791496800;
 async function fixture(): Promise<{ root: string; file: string }> {
   const root = await mkdtemp(join(tmpdir(), "statusline-codex-"));
   roots.push(root);
   const dir = join(root, "2026", "10", "09");
   await mkdir(dir, { recursive: true });
   return { root, file: join(dir, "rollout-1.jsonl") };
+}
+async function setMtime(file: string, epochSec: number): Promise<void> {
+  await utimes(file, epochSec, epochSec);
 }
 afterEach(async () => {
   for (const root of roots.splice(0))
@@ -49,13 +53,15 @@ test("renders a 7d only window and integer credits", async () => {
       }),
     ),
   );
-  const parsed = await readCodexRate(root);
+  await setMtime(file, NOW);
+  const parsed = await readCodexRate(root, undefined, NOW * 1000);
   expect(parsed.isOk()).toBe(true);
   if (parsed.isOk()) {
     const text = codexRateSegment(
       parsed.value,
       undefined,
-      1791496800,
+      NOW,
+      "Asia/Tokyo",
     ).replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");
     expect(text).toContain("codex 7d 11% ⟳10-14 12:28(5d5h 25%)");
     expect(text).not.toContain("cr ");
@@ -74,13 +80,15 @@ test("renders both windows and hides unlimited or absent credits", async () => {
       }),
     ),
   );
-  const parsed = await readCodexRate(root);
+  await setMtime(file, NOW);
+  const parsed = await readCodexRate(root, undefined, NOW * 1000);
   expect(parsed.isOk()).toBe(true);
   if (parsed.isOk()) {
     const text = codexRateSegment(
       parsed.value,
       undefined,
-      1791496800,
+      NOW,
+      "Asia/Tokyo",
     ).replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");
     expect(text).toContain("codex 5h  2%");
     expect(text).toContain("codex 7d 44%");
@@ -91,14 +99,13 @@ test("renders both windows and hides unlimited or absent credits", async () => {
 test("stale and missing sessions render named absence", async () => {
   const { root, file } = await fixture();
   await writeFile(file, event(sample(null, window(10080, 11, 1791948537))));
-  const stale = Temporal.Now.instant().subtract({ hours: 2 }).toString();
-  const staleEpoch = Temporal.Instant.from(stale).epochMilliseconds / 1000;
-  await utimes(file, staleEpoch, staleEpoch);
-  const parsed = await readCodexRate(root);
+  const staleEpoch = NOW - 2 * 60 * 60;
+  await setMtime(file, staleEpoch);
+  const parsed = await readCodexRate(root, undefined, NOW * 1000);
   expect(parsed.isOk()).toBe(true);
   if (parsed.isOk() && parsed.value !== undefined)
     expect(
-      codexRateSegment(parsed.value).replaceAll(
+      codexRateSegment(parsed.value, undefined, NOW, "Asia/Tokyo").replaceAll(
         new RegExp(`${ESC}\\[[0-9;]*m`, "gu"),
         "",
       ),

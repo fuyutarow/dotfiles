@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writeFile, access, mkdir, readdir, utimes } from "node:fs/promises";
 import {
   RUN_DIR_ENV,
   RUN_PREFIX,
@@ -22,6 +23,8 @@ import {
 
 const MODULE = join(import.meta.dir, "../src/test-tmp.ts");
 const BUN = process.execPath;
+const importHome = process.env.HOME;
+let previousHome: string | undefined;
 
 function scratch(): string {
   return mkdtempSync(join(tmpdir(), "test-tmp-"));
@@ -48,6 +51,50 @@ test("this test process runs with its own TMPDIR under a run parent", () => {
   const parent = process.env[RUN_DIR_ENV] ?? "";
   expect(parent).toContain(RUN_PREFIX);
   expect(tmpdir().startsWith(`${parent}/`)).toBe(true);
+  expect(process.env.HOME).toContain("dotfiles-test-");
+  expect(importHome?.startsWith(`${parent}/`)).toBe(true);
+  expect(importHome).not.toBe(process.env.HOME);
+  expect(process.env.CLAUDE_BASH_DURATIONS_DIR).toContain("dotfiles-test-");
+  for (const key of [
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_RUNTIME_DIR",
+    "XDG_STATE_HOME",
+  ])
+    expect(process.env[key]).toContain("dotfiles-test-");
+});
+
+test("a test may persist state only in its own home", async () => {
+  previousHome = process.env.HOME;
+  await writeFile(join(previousHome ?? "", "hidden-state"), "fixture");
+});
+
+test("the next test has a fresh home and child processes inherit its paths", async () => {
+  expect(process.env.HOME).not.toBe(previousHome);
+  expect(
+    await access(join(process.env.HOME ?? "", "hidden-state")).then(
+      () => true,
+      () => false,
+    ),
+  ).toBe(false);
+  const child = Bun.spawn(
+    [
+      BUN,
+      "-e",
+      "console.log(JSON.stringify([process.env.HOME, process.env.XDG_STATE_HOME, process.env.TMPDIR]))",
+    ],
+    { env: process.env, stdout: "pipe" },
+  );
+  const output = await new Response(child.stdout).text();
+  expect(await child.exited).toBe(0);
+  expect(output.trim()).toBe(
+    JSON.stringify([
+      process.env.HOME,
+      process.env.XDG_STATE_HOME,
+      process.env.TMPDIR,
+    ]),
+  );
 });
 
 test("a dir the test forgets to clean is not in the outer temp dir", () => {
@@ -141,7 +188,7 @@ test("a nested bun test removes its parent even when a fixture forgets to restor
     env,
     timeout: 60_000,
   });
-  expect(result.exitCode).toBe(0);
+  expect(result.exitCode, result.stderr.toString()).toBe(0);
   expect(readdirSync(root)).toEqual([]);
 });
 
@@ -225,6 +272,21 @@ test("sweepStaleRuns keeps a live owner's parent and unrelated names", () => {
   expect(readdirSync(root).toSorted()).toEqual(
     [live, "claude-1000", `${RUN_PREFIX}notapid-x`].toSorted(),
   );
+});
+
+test("a foreign PID namespace and legacy run cannot be swept by a local dead-PID probe", async () => {
+  const root = scratch();
+  const names = [
+    "dotfiles-test-run-ns-foreign-2147483646-live",
+    "dotfiles-test-run-2147483646-legacy",
+  ];
+  for (const name of names) await mkdir(join(root, name));
+  expect(sweepStaleRuns(root)).toEqual([]);
+  expect((await readdir(root)).toSorted()).toEqual(names.toSorted());
+  const old =
+    (Temporal.Now.instant().epochMilliseconds - 13 * 60 * 60 * 1000) / 1000;
+  for (const name of names) await utimes(join(root, name), old, old);
+  expect(sweepStaleRuns(root).toSorted()).toEqual(names.toSorted());
 });
 
 test("createTestTmp exports TMPDIR and the run parent into the given env", () => {

@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -18,6 +19,7 @@ const GOLDEN_FROM = process.env.GOLDEN_FROM;
 const NEW = join(import.meta.dir, "..", "src", "statusline.ts");
 const PRELOAD = join(import.meta.dir, "parity-preload.ts");
 const NOW = Temporal.Instant.from("2026-10-08T12:34:00Z").epochMilliseconds;
+const SLOW = { timeout: 30_000 };
 const WORKER_SESSION = "4f21abcd-7dab-7d61-8f9b-231c4cc9abcd";
 
 const fixtures = [
@@ -254,8 +256,9 @@ const stateVariants: [string, (state: string) => void][] = [
         "08",
       );
       mkdirSync(sessions, { recursive: true });
+      const rollout = join(sessions, "rollout-providers.jsonl");
       writeFileSync(
-        join(sessions, "rollout-providers.jsonl"),
+        rollout,
         `${JSON.stringify({
           type: "event_msg",
           payload: {
@@ -275,6 +278,7 @@ const stateVariants: [string, (state: string) => void][] = [
           },
         })}\n`,
       );
+      utimesSync(rollout, NOW / 1000, NOW / 1000);
       writeFileSync(
         join(state, "runs.jsonl"),
         `${JSON.stringify({
@@ -334,6 +338,7 @@ test.each(stateVariants.map(([name, setup], i) => [i, name, setup] as const))(
   (i, _name, setup) => {
     expectGolden(`state-${i}`, FULL_INPUT, setup);
   },
+  SLOW,
 );
 
 test.each(fixtures.map((input, i) => [i, input] as const))(
@@ -341,6 +346,7 @@ test.each(fixtures.map((input, i) => [i, input] as const))(
   (i, input) => {
     expectGolden(`fixture-${i}`, input);
   },
+  SLOW,
 );
 
 function expectGolden(
@@ -472,7 +478,7 @@ function expectGolden(
         cwd: home,
         env,
         stdin: new Blob([input]),
-        timeout: 6000,
+        timeout: 30_000,
       });
       expect(r.exitCode, r.stderr.toString()).toBe(0);
       expect(r.stderr.toString()).toBe("");

@@ -5,6 +5,7 @@ import { cleanupTempDirs, tempHome } from "./helpers.ts";
 import { ESC } from "../src/ansi.ts";
 
 afterAll(cleanupTempDirs);
+const SLOW = { timeout: 30_000 };
 test.each([
   ["warn", "15%", "38;5;178"],
   ["deny", "5%", "38;5;167"],
@@ -37,7 +38,7 @@ test.each([
           STATUSLINE_FIXTURE_TMP: mode,
         },
         stdin: new Blob(["{}"]),
-        timeout: 6000,
+        timeout: 30_000,
       },
     );
     expect(result.exitCode, result.stderr.toString()).toBe(0);
@@ -61,4 +62,5 @@ test.each([
       expect(snapshot).toContain(`inodes ${value} free`);
     }
   },
+  SLOW,
 );

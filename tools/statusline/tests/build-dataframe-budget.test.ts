@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { err, ok } from "neverthrow";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
-import { buildDataframe } from "../src/build-dataframe.ts";
+import { buildDataframe, type SourceClock } from "../src/build-dataframe.ts";
 import { render } from "../src/format.ts";
 
 const ESC = String.fromCodePoint(27);
@@ -11,11 +11,34 @@ describe("buildDataframe source budgets", () => {
     const parsed = ClaudeStatuslineInputSchema.safeParse({ cwd: "/fixture" });
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
-    const started = performance.now();
-    const dataframe = await buildDataframe(parsed.data, {
+    let now = 0;
+    const timers = new Map<() => void, number>();
+    const clock: SourceClock = {
+      now: () => now,
+      timeout: (callback, ms) => {
+        timers.set(callback, ms);
+        return () => {
+          timers.delete(callback);
+        };
+      },
+    };
+    let gitStarted = false;
+    const pending = buildDataframe(parsed.data, {
+      clock,
       sources: {
+        identity: () =>
+          Promise.resolve({
+            email: undefined,
+            accountWhy: undefined,
+            rlModel: [],
+            modelCapsWhy: undefined,
+            wfOn: false,
+          }),
         rcState: () => Promise.resolve("unknown"),
-        repoState: () => new Promise(() => {}),
+        repoState: () => {
+          gitStarted = true;
+          return new Promise(() => {});
+        },
         jobScan: () => Promise.resolve({ jobs: [], orphans: 0 }),
         hostLoad: () =>
           Promise.resolve({
@@ -27,15 +50,25 @@ describe("buildDataframe source budgets", () => {
         dispatchWarning: () => Promise.resolve(undefined),
         storage: () => Promise.resolve(ok([])),
         herdrReport: () => Promise.resolve(),
+        codexRate: () => Promise.resolve(ok(undefined)),
+        jevUsage: () => Promise.resolve(ok(undefined)),
+        recoverHealth: () => Promise.resolve(undefined),
       },
       budgets: { repoState: 40 },
     });
-    const elapsed = performance.now() - started;
+    // Let immediate sources settle, then fire exactly the git deadline without a real wait.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(gitStarted).toBe(true);
+    expect([...timers.values()]).toEqual([40]);
+    now = 40;
+    for (const callback of timers.keys()) callback();
+    const dataframe = await pending;
     const text = render(dataframe).replaceAll(
       new RegExp(`${ESC}\\[[0-9;]*m`, "gu"),
       "",
     );
     expect(text).toContain("branch n/a (git timeout 40ms)");
-    expect(elapsed).toBeLessThan(300);
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(timers.size).toBe(0);
   });
 });

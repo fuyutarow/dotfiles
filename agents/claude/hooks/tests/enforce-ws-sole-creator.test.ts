@@ -39,6 +39,9 @@ async function denied(tool: string, input: unknown, cwd = tmpdir()) {
   ).toContain(REMEDY);
   expect(
     strAt(out, "hookSpecificOutput", "permissionDecisionReason"),
+  ).toContain("workspace creation detected");
+  expect(
+    strAt(out, "hookSpecificOutput", "permissionDecisionReason"),
   ).toContain("[dotfiles:ws-sole-creator]");
   expect(
     strAt(out, "hookSpecificOutput", "permissionDecisionReason"),
@@ -53,6 +56,7 @@ test.each([
   "jj workspace add --sparse-patterns empty ../unsafe",
   "jj status workspace add ../unsafe",
   "case x in x) jj workspace add ../worker ;; esac",
+  "case x in x) echo skip ;; y) jj workspace add ../worker ;; esac",
   "jj workspace add --help",
   "jj workspace add -h",
   "jj -R repo workspace add --name y ../y",
@@ -86,6 +90,13 @@ test.each([
   expect(await run("Bash", { command })).toBe("");
 });
 
+test.each([
+  'P=(agents/claude/hooks/enforce-ws-sole-creator.ts); jj restore --from REV "${P[@]}"; mise run commit -- -m message -- "${P[@]}"',
+  "a=(one two); printf '%s\\n' \"${a[@]}\"",
+])("passes unsupported non-creation syntax: %s", async (command) => {
+  expect(await run("Bash", { command })).toBe("");
+});
+
 test("script writes and edits deny creation, while canonical implementation and prose pass", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ws-sole-creator-"));
   const file_path = join(dir, "coordinator.sh");
@@ -112,6 +123,12 @@ test("script writes and edits deny creation, while canonical implementation and 
   });
   expect(
     await run("Write", { file_path, content: "ws add foo --repo /r\n" }),
+  ).toBe("");
+  expect(
+    await run("Write", {
+      file_path,
+      content: "#!/bin/zsh\nP=(one two)\nprintf '%s\\n' \"${P[@]}\"\n",
+    }),
   ).toBe("");
   expect(
     await run("Write", {

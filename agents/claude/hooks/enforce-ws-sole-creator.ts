@@ -1,7 +1,7 @@
 // PreToolUse Bash|Write|Edit|MultiEdit, shared by Claude and Codex.
-// Fail closed on unreadable edits or unsupported shell syntax; ws child processes
-// do not emit tool events. Only the canonical tools/jj-ws implementation may
-// contain workspace creation in script writes. No exemption for direct Bash calls.
+// Deny parsed workspace-creation commands; ws child processes do not emit tool
+// events. Only the canonical tools/jj-ws implementation may contain creation in
+// script writes. No exemption for direct Bash calls.
 import { realpath } from "node:fs/promises";
 import { resolve, relative, extname, basename } from "node:path";
 import {
@@ -48,27 +48,45 @@ function positionals(args: string[]): string[] {
   return positional;
 }
 
-function createsWorkspace(source: string, cwd: string): boolean | undefined {
+function createsWorkspace(source: string, cwd: string): boolean {
   const parsed = parseShell(source, cwd);
-  if (parsed === undefined) return undefined;
-  return parsed.commands.some((command) => {
-    const exe = effective(command);
-    if (exe === undefined || (exe.name !== "jj" && exe.name !== "git"))
-      return false;
-    // Preserve the former raw-command guard even when extra positionals precede workspace.
-    const workspace = exe.args.indexOf("workspace");
-    if (
-      exe.name === "jj" &&
-      workspace >= 0 &&
-      exe.args[workspace + 1] === "add"
-    )
-      return true;
-    const positional = positionals(exe.args);
-    return (
-      positional[0] === (exe.name === "jj" ? "workspace" : "worktree") &&
-      positional[1] === "add"
-    );
-  });
+  if (parsed === undefined) {
+    // `case` arms are not supported by the shared shell parser yet. Recover only
+    // arm bodies whose command text can itself be parsed, so this established
+    // creation form remains guarded while unrelated unsupported syntax passes.
+    return caseArmsCreateWorkspace(source, cwd);
+  }
+  return parsed.commands.some(isWorkspaceCreationCommand);
+}
+
+function caseArmsCreateWorkspace(source: string, cwd: string): boolean {
+  const caseArm =
+    /(?:\bcase\b[\s\S]*?\bin\b|;;)\s*[^)\n]*\)\s*([\s\S]*?)(?=;;|\besac\b)/gu;
+  return [...source.matchAll(caseArm)].some((match) =>
+    parsedCreatesWorkspace(match[1] ?? "", cwd),
+  );
+}
+
+function parsedCreatesWorkspace(source: string, cwd: string): boolean {
+  const parsed = parseShell(source, cwd);
+  return parsed?.commands.some(isWorkspaceCreationCommand) ?? false;
+}
+
+function isWorkspaceCreationCommand(
+  command: Parameters<typeof effective>[0],
+): boolean {
+  const exe = effective(command);
+  if (exe === undefined || (exe.name !== "jj" && exe.name !== "git"))
+    return false;
+  // Preserve the former raw-command guard even when extra positionals precede workspace.
+  const workspace = exe.args.indexOf("workspace");
+  if (exe.name === "jj" && workspace >= 0 && exe.args[workspace + 1] === "add")
+    return true;
+  const positional = positionals(exe.args);
+  return (
+    positional[0] === (exe.name === "jj" ? "workspace" : "worktree") &&
+    positional[1] === "add"
+  );
 }
 
 async function implementationPath(path: string): Promise<boolean> {
@@ -123,8 +141,10 @@ async function main(): Promise<void> {
   if (tool === "Bash") {
     const command = strAt(input, "command");
     if (command === undefined) return;
-    // SINGLE-AXIS: direct workspace creation must go through ws; unknown syntax cannot establish that.
-    if (createsWorkspace(command, cwd) !== false) decidePre("deny", REMEDY);
+    // Only a parsed workspace-add command is denied; unsupported syntax belongs to other hooks.
+    // SINGLE-AXIS: the parsed command creates a workspace outside the sole creator.
+    if (createsWorkspace(command, cwd))
+      decidePre("deny", `workspace creation detected; ${REMEDY}`);
     return;
   }
   if (!["Write", "Edit", "MultiEdit"].includes(tool ?? "")) return;
@@ -140,8 +160,10 @@ async function main(): Promise<void> {
     content = replay(content, edits);
   }
   if (content === undefined || !shellScript(path, content)) return;
-  // SINGLE-AXIS: script creation cannot bypass the workspace owner.
-  if (createsWorkspace(content, cwd) !== false) decidePre("deny", REMEDY);
+  // Only a parsed workspace-add command is denied; unsupported syntax belongs to other hooks.
+  // SINGLE-AXIS: the script creates a workspace outside the sole creator.
+  if (createsWorkspace(content, cwd))
+    decidePre("deny", `workspace creation detected; ${REMEDY}`);
 }
 
 await main().catch(() => {

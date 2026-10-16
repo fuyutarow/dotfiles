@@ -59,21 +59,6 @@ which Claude Code treats as non-blocking, i.e. silent fail-open unless caught.
 
 Tests spawn each hook end-to-end with synthetic payloads:
 
-`enforce-ws-sole-creator.ts` runs on `Bash|Write|Edit|MultiEdit` for both Claude and
-Codex. Direct `jj workspace add` and `git worktree add`, including nested shell
-commands, are denied with the `ws add` invocation. Shell script writes and edits
-are inspected after replaying the edits; only this checkout's `tools/agx-ws/` may
-contain workspace creation. The shared Bash parser distinguishes execution from
-quoted examples. Unsupported syntax and inspection errors deny the operation.
-`ws add`, workspace listing, and forgetting remain available; ws's child processes
-do not emit tool events. The registry identity is `ws-sole-creator`; both vendor
-configs register its fail-closed launcher explicitly. This is the sole workspace
-creation gate; storage-headroom only judges storage pressure and artifact budgets.
-Run ws in the dispatcher's foreground, outside worker units and deadline wrappers.
-The former agx workspace-add hook and storage checkout-size checks are removed;
-raw adds, including sparse adds and policy-marked repositories, all receive this
-gate's ws guidance.
-
 ```sh
 mise run test:hooks     # = bun test agents/claude/hooks
 ```

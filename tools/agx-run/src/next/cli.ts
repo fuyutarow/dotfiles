@@ -5,6 +5,7 @@ import { COMMAND_NAMES } from "./commands.ts";
 import { cli, command } from "cleye";
 import { exitWithError } from "./exit.ts";
 import { doctor } from "./doctor.ts";
+import { jev, roster } from "./public.ts";
 import packageJson from "../../package.json" with { type: "json" };
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -177,6 +178,45 @@ async function main(): Promise<void> {
     exit = await stats(parsed.flags satisfies Flags);
   } else if (commandName === "doctor") {
     exit = await doctor();
+  } else if (commandName === "jev") {
+    cli(
+      {
+        name: "agx jev",
+        help: {
+          description:
+            "POST one JSON request from stdin to the configured Jev endpoint; print the JSON answer to stdout.",
+        },
+        parameters: [],
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+      },
+      undefined,
+      commandArgs,
+    );
+    exit = await jev();
+  } else if (commandName === "roster") {
+    const parsed = cli(
+      {
+        name: "agx roster",
+        help: {
+          description:
+            "Print the validated dispatch roster as JSON. Use --json for the machine-readable interface.",
+        },
+        parameters: [],
+        flags: {
+          json: { type: Boolean, description: "emit the roster JSON" },
+        },
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+      },
+      undefined,
+      commandArgs,
+    );
+    if (parsed.flags.json === true) exit = await roster();
+    else {
+      process.stderr.write("agx roster: use --json\n");
+      exit = 2;
+    }
   }
   process.exitCode = exit;
 }

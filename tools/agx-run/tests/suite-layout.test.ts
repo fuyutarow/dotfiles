@@ -17,7 +17,7 @@ test("the run package exposes agx-run and keeps the agx-next alias", () => {
   });
 });
 
-test("the CLI exposes the run and doctor contract commands", () => {
+test("the CLI exposes the run, doctor, and process interface commands", () => {
   expect(COMMANDS.map((entry) => entry.name)).toEqual([
     "run",
     "check",
@@ -25,5 +25,7 @@ test("the CLI exposes the run and doctor contract commands", () => {
     "judge",
     "stats",
     "doctor",
+    "jev",
+    "roster",
   ]);
 });

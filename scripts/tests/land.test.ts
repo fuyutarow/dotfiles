@@ -181,6 +181,16 @@ async function fixture() {
   await writeFile(join(main, "keep.txt"), "keep content\n");
   await writeFile(join(main, "untouched.ts"), "const untouched = true;\n");
   await writeFile(join(main, "remove.md"), "# Remove\n");
+  await mkdir(join(main, "tools/agx-run/src/next"), { recursive: true });
+  await writeFile(
+    join(main, "tools/agx-run/package.json"),
+    JSON.stringify({ bin: { "agx-run": "src/next/cli.ts" } }),
+  );
+  await writeFile(
+    join(main, "tools/agx-run/src/next/cli.ts"),
+    '#!/usr/bin/env bun\nprocess.stdout.write("[]\\n");\n',
+  );
+  await chmod(join(main, "tools/agx-run/src/next/cli.ts"), 0o755);
   await jj(main, ["commit", "-m", "base"]);
   await jj(main, ["bookmark", "set", "alpha", "-r", "@-"]);
   const origin = join(temp, "origin.git");
@@ -367,6 +377,93 @@ async function digest(root: string): Promise<string> {
 }
 
 describe("land workspace", () => {
+  test("moved entry uses landed code while the installed bin still points at the old path", async () => {
+    const f = await fixture();
+    const installed = join(dirname(f.main), "agx-run");
+    await mkdir(f.env.AGX_STATE_DIR, { recursive: true });
+    await symlink(join(f.main, "tools/agx-run/src/next/cli.ts"), installed);
+    await rename(
+      join(f.worker, "tools/agx-run/src/next/cli.ts"),
+      join(f.worker, "tools/agx-run/src/next/moved.ts"),
+    );
+    await writeFile(
+      join(f.worker, "tools/agx-run/package.json"),
+      JSON.stringify({ bin: { "agx-run": "src/next/moved.ts" } }),
+    );
+    await writeFile(
+      join(f.worker, "tools/agx-run/src/next/moved.ts"),
+      `#!/usr/bin/env bun
+import { appendFile } from 'node:fs/promises';
+await appendFile(process.env.LAND_EVENTS, JSON.stringify(['landed-ls', import.meta.path, ...process.argv.slice(2)]) + '\\n');
+process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', workspace: process.env.LAND_EXPECT_WORKSPACE, judgment: { decision: 'accept' } }]));
+`,
+    );
+    const result = await f.land();
+    const output = result.stdout.toString();
+    expect(result.exitCode, output + result.stderr.toString()).toBe(0);
+    expect(output).toContain("[land] summary: NOT LIVE");
+    expect(output).toContain("NOT LIVE until: mise run deploy");
+    expect(output).toContain("[land] landed: recorded 1 run(s)");
+    expect(output).not.toContain("FAIL");
+    expect(output).not.toContain("rollback:");
+    const lander = join(
+      f.env.AGX_STATE_DIR,
+      "land",
+      basename(landStateDir(await realpath(f.main))),
+      "workspace",
+    );
+    expect((await f.log()).filter((event) => event[0] === "landed-ls")).toEqual(
+      [
+        [
+          "landed-ls",
+          join(lander, "tools/agx-run/src/next/moved.ts"),
+          "ls",
+          "--json",
+        ],
+      ],
+    );
+    expect(await pathExists(installed)).toBe(false);
+    expect(
+      await readFile(join(lander, "tools/agx-run/src/next/moved.ts"), "utf8"),
+    ).toContain("landed-ls");
+    expect(
+      await f.jj(f.main, [
+        "log",
+        "--no-graph",
+        "-r",
+        "alpha",
+        "-T",
+        "commit_id",
+      ]),
+    ).toBe(
+      await f.git(f.main, [
+        "--git-dir",
+        f.origin,
+        "rev-parse",
+        "refs/heads/alpha",
+      ]),
+    );
+    expect(
+      await readFile(join(f.env.AGX_STATE_DIR, "runs.jsonl"), "utf8"),
+    ).toContain('"run_id":"moved-run"');
+  });
+
+  test("a post-push bookkeeping failure never restores checkout paths", async () => {
+    const f = await fixture();
+    await writeFile(
+      join(f.worker, "tools/agx-run/src/next/cli.ts"),
+      "#!/usr/bin/env bun\nprocess.stderr.write('fixture bookkeeping failure'); process.exit(9);\n",
+    );
+    const result = await f.land();
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toContain("[land] landed: FAIL");
+    expect(result.stdout.toString()).toContain("landed and pushed");
+    expect(result.stdout.toString()).not.toContain("rollback:");
+    expect(
+      await readFile(join(f.main, "tools/agx-run/src/next/cli.ts"), "utf8"),
+    ).toContain("fixture bookkeeping failure");
+  });
+
   test("workspace name and relative path resolve to the same listed workspace", async () => {
     const f = await fixture();
     await writeFile(join(f.worker, "keep.txt"), "workspace change\n");

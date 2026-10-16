@@ -113,15 +113,27 @@ async function runLandConsumerGates(
   );
 }
 
-async function nextAgxRuns(): Promise<Result<WorkspaceRun[], Error>> {
+async function nextAgxRuns(
+  root: string,
+): Promise<Result<WorkspaceRun[], Error>> {
+  // Resolve the declaration in the selected tree, never an installed bin that may
+  // still point at an entry removed by this landing.
+  const packageRoot = join(root, "tools/agx-run");
+  const manifest = jsonOf(
+    z.looseObject({ bin: z.looseObject({ "agx-run": z.string() }) }),
+  ).safeParse(await readFile(join(packageRoot, "package.json"), "utf8"));
+  if (!manifest.success)
+    return err(
+      new Error(`invalid agx-run bin declaration: ${manifest.error.message}`),
+    );
   const command = await runProcess(
     [
       process.execPath,
-      join(import.meta.dir, "../tools/agx-run/src/next/cli.ts"),
+      resolve(packageRoot, manifest.data.bin["agx-run"]),
       "ls",
       "--json",
     ],
-    { cwd: process.cwd(), env: process.env, timeout: 5_000 },
+    { cwd: root, env: process.env, timeout: 5_000 },
   );
   if (command.exitCode !== 0)
     return errAsync(
@@ -157,6 +169,7 @@ async function nextAgxRuns(): Promise<Result<WorkspaceRun[], Error>> {
 
 async function workspaceRuns(
   workspace: string,
+  sourceRoot = resolve(import.meta.dir, ".."),
 ): Promise<Result<WorkspaceRun[], Error>> {
   const lines = await workspaceLedgerLines();
   const target = await realpath(workspace);
@@ -187,7 +200,7 @@ async function workspaceRuns(
         ticket: parsed.data.ticket?.name ?? parsed.data.run_id,
       });
   }
-  const next = await nextAgxRuns();
+  const next = await nextAgxRuns(sourceRoot);
   if (next.isErr()) return next;
   const matchingNextRuns: WorkspaceRun[] = [];
   for (const entry of next.value) {
@@ -316,9 +329,10 @@ export function workspacePreflightVerdicts(
 function recordWorkspaceLanding(
   workspace: string,
   commit: string,
+  sourceRoot: string,
 ): ResultAsync<number, Error> {
   return safeTry(async function* () {
-    const ids = yield* await workspaceRuns(workspace);
+    const ids = yield* await workspaceRuns(workspace, sourceRoot);
     const log = join(dispatchStateDir(), "runs.jsonl");
     for (const { run_id } of ids)
       await appendFile(
@@ -1225,6 +1239,7 @@ async function main(
         const recorded = yield* recordWorkspaceLanding(
           workerRoot,
           commit ?? "alpha",
+          landerRoot,
         );
         emit(`[land] landed: recorded ${recorded} run(s)`);
         stage = "workspace";
@@ -1245,7 +1260,14 @@ async function main(
     if (stage === "commit") report.commit = "failed";
     if (stage === "push") report.push = "failed";
   }
-  if (result.isErr() && landedRoot !== undefined && restoredPaths.length > 0) {
+  // Push is the irreversible boundary: post-push bookkeeping cannot roll back a
+  // commit already published to origin.
+  if (
+    result.isErr() &&
+    report.push !== "ok" &&
+    landedRoot !== undefined &&
+    restoredPaths.length > 0
+  ) {
     const cleaned = await jj(landedRoot, [
       "restore",
       "--from",

@@ -68,7 +68,7 @@
 | Engine change alters text extraction | `ﬁ` vs `fi`, `⟨` extracted as `h`, math order | Cross-engine oracle is prose words and line breaks, never raw `pdftotext` equality (P) |
 | `[H]`→`[htbp]` in revtex twocolumn | "A float is stuck" | Add `floatfix`; confirm every float is placed near its first reference (P, S4#39, S4#41) |
 | A prose fix applied inside a narrow table | "Kind I (triangle)" overflowed Table II by 2.1pt | Scope spacing fixes to prose; re-read the Overfull list after every stage (P) |
-| A hard-wrapping formatter on the authoring source | `tex-fmt` with `wrap = true` broke lines inside inline math and macro arguments | `wrap = false`: one sentence per line is the layout; the formatter only indents. Wrapping belongs to the APS packaging copy (§4) (P) |
+| A hard-wrapping formatter on the authoring source | `tex-fmt` with `wrap = true` broke lines inside inline math and macro arguments | Use the [authoring formatter preset](../../../../presets/latex/tex-fmt.toml): one sentence per line; the formatter only indents. Wrapping belongs to the APS packaging copy (§4) (P) |
 | `chktex` exit status as a CI gate | Warnings exit 2 and errors 3 since 1.7.7, but a lone end-of-file warning 15 exits 0 | Gate on parsed output, not the exit code; project bans go in `UserWarnRegex` or the §6 contract (S5#27, S5#29) |
 | `latexmk -cd sub/main.tex` | Reads the invocation directory's rc, not `sub/latexmkrc`; rc files are read before `-cd` acts | Run from the paper directory (mise `dir =` or `cd`) or pass `-r sub/latexmkrc`; relative `$out_dir` then resolves against `sub/` (S5#5–S5#8) |
 
@@ -108,8 +108,8 @@ Use it to find WHERE `boxes` differs, then crop both renders and look.
 | Floats | class placement; booktabs without vertical rules (P). revtex: no `\centering` inside floats (S4#44); `\caption{... \label{fig:x}}` (S4#45); `figure*`, never `widetext` for a wide figure (S4#43) |
 | Boxes in an APS paper | no `\mbox`, `\parbox`, `\fbox`, `\raisebox`, `\rule`, minipage, `\newfont` (S3#30, S3#31) |
 | Figures | `\graphicspath`, no extensions in `\includegraphics` (P). One format per submission (S3#44): arXiv pdfLaTeX takes pdf/png/jpg only (S4#74); a same-name `.pdf` beats `.png` (S4#71); names are case-sensitive (S4#75). Panels composed by the figure's script, not minipage (S3#30) |
-| Source layout (authoring) | one sentence per line; `tex-fmt` with `wrap = false` (indent only) (P, S5#31) |
-| Source layout (APS at acceptance) | a packaging copy: ASCII only, lines ≤ 80 characters (S3#41). Make it in a separate directory whose own `tex-fmt.toml` sets `wrap = true`; prove it with the §3 packaging row. A wrapped comment tail becomes text, and `boxes` catches it |
+| Source layout (authoring) | one sentence per line; [authoring formatter preset](../../../../presets/latex/tex-fmt.toml) (indent only) (P, S5#31) |
+| Source layout (APS at acceptance) | a packaging copy: ASCII only, lines ≤ 80 characters (S3#41). Make it in a separate directory whose own `tex-fmt.toml` sets `wrap = true` (a venue-specific packaging rule, not the authoring preset); prove it with the §3 packaging row. A wrapped comment tail becomes text, and `boxes` catches it |
 | Bibliography (author's `thebibliography`) | keep it in a format task; moving to `.bib` + the venue style changes rendering and needs missing metadata (content) (P) |
 | Bibliography (already `.bib` + revtex journal option) | no `\bibliographystyle`: the journal option picks apsrev4-2; an explicit one goes in the preamble (S3#16–S3#18). `longbibliography` is the default since 4.2a (S3#19, S3#20) |
 | Bibliography shipping, arXiv | `main.bbl` at the upload root with the main file's base name (S3#64, S5#82), plus the `.bib`; `arxiv_latex_cleaner --keep_bib` (S5#94) |

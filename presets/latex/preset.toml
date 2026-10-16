@@ -1,0 +1,9 @@
+name = "latex"
+description = "LuaLaTeX build, tex-fmt, mise tasks, and generated-artifact ignores"
+files = [
+  { source = "latexmkrc", destination = "papers/2606_001-title_name/latexmkrc" },
+  { source = "tex-fmt.toml", destination = "tex-fmt.toml" },
+  { source = "mise-latex.toml", destination = "mise.toml" },
+  { source = "latex.gitignore", destination = ".gitignore" },
+]
+check = ["bun test presets/tests/latex.test.ts"]

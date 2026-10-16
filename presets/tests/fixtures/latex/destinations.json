@@ -1,0 +1,6 @@
+[
+  ["latexmkrc", "papers/2606_001-title_name/latexmkrc"],
+  ["tex-fmt.toml", "tex-fmt.toml"],
+  ["mise-latex.toml", "mise.toml"],
+  ["latex.gitignore", ".gitignore"]
+]

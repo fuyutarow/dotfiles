@@ -22,7 +22,7 @@ command = ["sh", "-c", "mise run lint:ts && mise run lint:oxlint-policy"]
 timeout_ms = 120000
 
 [[pending]]
-reason = "trunk() resolves to the synthetic root; no committed trunk bookmark is configured."
+reason = "The declared gate cannot run under the consumer sandbox: agent-resource-run cannot reach the user systemd cgroup bus."
 name = "polysearch-v1"
 root = "/home/fuyu/Workspace/polysearch-v1"
 surfaces = ["package-bins"]
@@ -32,8 +32,7 @@ command = ["sh", "-c", "agent-resource-run --manifest .agents/resources/w-integ.
 full_gate_rule = "The owner runs the full gate only when agent-resource-run CLI or manifest schema changes."
 timeout_ms = 120000
 
-[[pending]]
-reason = "setup fails in the land sandbox: a mise task's `sh` hits ELOOP; tracked by consumer-gate-sh-eloop"
+[[consumers]]
 name = "coralbase"
 root = "/home/fuyu/Workspace/coralbase"
 trunk = "alpha"

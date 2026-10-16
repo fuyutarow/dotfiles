@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.2 — 2026-10-16
+
+- Add fail-closed read-only command isolation for bounded VCS inspection.
+
 ## 0.11.1 — 2026-10-16
 
 - Read Codex account usage across sessions and recover events beyond bounded tails

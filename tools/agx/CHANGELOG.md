@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.0.1 — 2026-10-16
+
+- Protect bounded premise VCS reads with OS-enforced filesystem write denial.
+
 ## 5.0.0 — 2026-10-16
 
 - Replace orphaned run state with ended lost lease evidence; trap stop signals and keep ls folds read-only

@@ -32,8 +32,13 @@ and emits a `WARN` line. A durable systemd user unit does not inherit its caller
 forward both supported dispatcher variables explicitly:
 
 ```sh
-systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run TICKET.md
+systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<name> --collect -- agx run TICKET.md
 ```
+
+Harness VCS reads in premise checks, official-execution tracking and repo-retrieve run inside
+OS-enforced write denial before jj/Git starts: Landlock ABI >=3 on Linux x64/arm64 and
+`sandbox-exec` on macOS. An unavailable boundary fails closed. CLI read flags alone do not
+prevent backend metadata writes. See [the call-site and patch inventory](docs/ref-writer-inventory.md).
 
 The dispatcher does not detach, amend, or create ticket stores and does not run a pre-dispatch
 grader. `agx run` records an interim return as progress and continues the worker until completion or

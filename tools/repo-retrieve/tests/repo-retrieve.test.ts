@@ -12,11 +12,18 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { z } from "../../shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
 import { decodedJson } from "../../../agents/hooks/tests/decode.ts";
 import { waitForIndexChild } from "../src/ccc-index.ts";
+
+// Isolation startup belongs to the fixture budget; behavior deadlines keep
+// their own explicit elapsed assertions.
+setDefaultTimeout(20_000);
+afterAll(() => {
+  setDefaultTimeout(5_000);
+});
 
 const ROUTER = join(import.meta.dir, "..", "src", "repo-retrieve.ts");
 const COMPATIBILITY_PATH = join(
@@ -283,7 +290,9 @@ exit "\${FAKE_SEARCH_EXIT:-0}"
     writeFileSync(
       path,
       `#!/bin/sh
-if [ "\${3:-}" = rev-parse ]; then sleep "\${FAKE_GIT_HEAD_SLEEP_SECONDS:-0}"; fi
+for argument in "$@"; do
+  if [ "$argument" = rev-parse ]; then sleep "\${FAKE_GIT_HEAD_SLEEP_SECONDS:-0}"; break; fi
+done
 exec '${git.replaceAll("'", "'\\''")}' "$@"
 `,
     );
@@ -296,7 +305,7 @@ function run(
   cwd: string,
   args: string[],
   env: Record<string, string> = {},
-  timeout = 5_000,
+  timeout = 10_000,
 ): { code: number | null; stdout: string; stderr: string; log: string } {
   const tools = fakeTools();
   const result = spawnSync(process.execPath, [ROUTER, ...args], {
@@ -307,6 +316,8 @@ function run(
       ...process.env,
       PATH: `${tools.bin}:${process.env.PATH ?? ""}`,
       FAKE_SEARCH_LOG: tools.log,
+      // Fixtures own their index data instead of inheriting the host cache map.
+      COCOINDEX_CODE_DB_PATH_MAPPING: "",
       // Most tests pin the freshness gate without depending on a live ccc installation.
       REPO_RETRIEVE_AUTO_INDEX: "0",
       ...env,
@@ -621,7 +632,10 @@ describe("repo-retrieve route contract", () => {
     expect(result.stderr).toContain("reindex is running (pid");
     expect(result.stderr).toContain("NO_INDEX");
     expect(result.log).not.toContain("ccc search known reduction");
-    await Bun.sleep(1_000);
+    const request = join(corpus, ".cocoindex_code", "INDEX_REQUEST.json");
+    const readyBy = performance.now() + 10_000;
+    while (!(await Bun.file(request).exists()) && performance.now() < readyBy)
+      await Bun.sleep(25);
     expect(
       existsSync(join(corpus, ".cocoindex_code", "INDEX_REQUEST.json")),
     ).toBe(true);

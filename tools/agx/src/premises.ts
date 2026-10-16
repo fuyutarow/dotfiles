@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { JJ_READ_ARGS } from "../../shared/src/jj-read.ts";
+import { readonlyCommand } from "../../shared/src/readonly-command.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 export type PremiseCheck =
@@ -19,8 +21,13 @@ const TRACKED_FILES = resolve(REPO_ROOT, "scripts/tracked-files.ts");
 const DEFAULT_BUDGET_MS = 5_000;
 
 const runCommand: CommandRunner = (argv, cwd, timeoutMs) => {
-  const result = Bun.spawnSync(argv, {
+  const invocation =
+    argv[0] === "jj" || argv[0] === "git" || argv.includes(TRACKED_FILES)
+      ? readonlyCommand(argv, cwd)
+      : { cmd: argv, env: process.env };
+  const result = Bun.spawnSync(invocation.cmd, {
     cwd,
+    env: invocation.env,
     stdout: "pipe",
     stderr: "pipe",
     timeout: Math.max(1, Math.floor(timeoutMs)),
@@ -105,7 +112,7 @@ function bookmarkExists(
   if (!jjRepo) {
     const root = commandResult(
       runner,
-      ["jj", "root"],
+      ["jj", ...JJ_READ_ARGS, "root"],
       cwd,
       startedAt,
       budgetMs,
@@ -116,14 +123,14 @@ function bookmarkExists(
   const argv = jjRepo
     ? [
         "jj",
+        ...JJ_READ_ARGS,
         "bookmark",
         "list",
         "--all-remotes",
         "-T",
         'separate("@", name, remote) ++ "\\n"',
-        "--ignore-working-copy",
       ]
-    : ["git", "show-ref"];
+    : ["git", "--no-optional-locks", "show-ref"];
   const result = commandResult(runner, argv, cwd, startedAt, budgetMs);
   if (result === undefined) return { status: "timeout" };
   const lines = result.output.split(/\r?\n/u).map((line) => line.trim());
@@ -156,13 +163,13 @@ function simpleCommandExists(
   else
     argv = [
       "jj",
+      ...JJ_READ_ARGS,
       "log",
       "-r",
       value,
       "--no-graph",
       "-T",
       "commit_id",
-      "--ignore-working-copy",
     ];
   const result = commandResult(runner, argv, cwd, startedAt, budgetMs);
   if (result === undefined) return { status: "timeout" };

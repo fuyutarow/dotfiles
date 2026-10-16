@@ -35,6 +35,7 @@
 // from `$VAR` cannot be checked; inside a firedancer context it is denied, outside it passes.
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
+import { readonlyCommand } from "../../../tools/shared/src/readonly-command.ts";
 import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
@@ -135,10 +136,11 @@ function askVcs(root: string, rel: string): boolean | undefined {
   if (existsSync(join(root, ".jj"))) {
     const jj = findExe("jj", EXE_DIRS);
     if (jj === null) return undefined;
-    const r = spawnSync(
-      jj,
+    const invocation = readonlyCommand(
       [
+        jj,
         "--ignore-working-copy",
+        "--at-operation=@",
         "--no-pager",
         "--color=never",
         "file",
@@ -147,19 +149,30 @@ function askVcs(root: string, rel: string): boolean | undefined {
         "@-",
         `root-file:${JSON.stringify(rel)}`,
       ],
-      { cwd: root, encoding: "utf8", timeout: 5000 },
+      root,
     );
+    const r = spawnSync(invocation.cmd[0], invocation.cmd.slice(1), {
+      cwd: root,
+      env: invocation.env,
+      encoding: "utf8",
+      timeout: 5000,
+    });
     if (r.error !== undefined || r.status !== 0) return undefined;
     return r.stdout.trim() !== "";
   }
   if (existsSync(join(root, ".git"))) {
     const git = findExe("git", EXE_DIRS);
     if (git === null) return undefined;
-    const r = spawnSync(
-      git,
-      ["--no-optional-locks", "cat-file", "-e", `HEAD:${rel}`],
-      { cwd: root, encoding: "utf8", timeout: 5000 },
+    const invocation = readonlyCommand(
+      [git, "--no-optional-locks", "cat-file", "-e", `HEAD:${rel}`],
+      root,
     );
+    const r = spawnSync(invocation.cmd[0], invocation.cmd.slice(1), {
+      cwd: root,
+      env: invocation.env,
+      encoding: "utf8",
+      timeout: 5000,
+    });
     if (r.error !== undefined) return undefined;
     // 0 = in HEAD; 128 = path (or HEAD itself) does not exist; anything else is not an answer
     if (r.status === 0) return true;

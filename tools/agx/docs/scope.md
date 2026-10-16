@@ -22,7 +22,7 @@ Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` valida
 | Ticket storage, history, and amendments | Plain files plus jj | Tickets are inputs; `agx check` validates an input and does not own its history. |
 | Write exclusion between workers | jj workspaces plus rebase at land | agx only prints overlap `WARN` lines; it does not lock or block writes. |
 | Workspace creation, readiness, collection and landing | `ws` (`tools/jj-ws`) / `mise run land` | agx consumes a tree via `--cd`; creating, readying and collecting trees is `ws` (`tools/jj-ws`). Landing belongs to `mise run land`. |
-| Durability or detach beyond the session | `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run ...` | The caller chooses a service lifecycle; `-E NAME` carries the dispatcher's session into the unit. |
+| Durability or detach beyond the session | `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<name> --collect -- agx run ...` | The caller chooses a service lifecycle; `-E NAME` carries the dispatcher's session into the unit. |
 | CPU/GPU/RAM admission | `agent-resource-run` | Resource admission is outside agx's routing and event-recording jobs. |
 | Commits and pushes | `mise run commit` / `mise run land` | agx records worker outcomes; repository publication belongs to the repository tasks. |
 | Acceptance | A human or coordinator | Verify results are recorded facts; a human or coordinator reads them and decides acceptance. `agx judge` records the accept/reject decision and optional note; agx does not decide acceptance. |
@@ -64,3 +64,7 @@ bound continuation record, the worker owns its brief and workspace and does not 
 A Codex `Reading additional input from stdin...` stderr line with no subsequent stdout event for 30
 seconds ends the worker with a `stdin-wait` receipt and the line as its cause. Five identical
 consecutive tool errors end the worker with a `spin` receipt; a wall-clock bound remains `timeout`.
+
+Cancellation sends the vendor SIGTERM and permits the existing 30-second cleanup window before
+SIGKILL. External unit stops can still kill the whole cgroup. The harness VCS read boundary
+protects the recovered read sites independently of this vendor cleanup grace.

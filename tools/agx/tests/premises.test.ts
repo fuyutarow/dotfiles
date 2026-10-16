@@ -47,6 +47,25 @@ const fakeRg = (argv: string[], cwd: string) => {
 };
 
 describe("premise checks", () => {
+  test("every bounded jj premise read disables snapshots and operation reconciliation", () => {
+    const calls: string[][] = [];
+    const runner = (argv: string[]) => {
+      calls.push(argv);
+      return {
+        exitCode: 0,
+        output: argv.includes("bookmark") ? "main\n" : "root-or-revision",
+      };
+    };
+    expect(
+      checkPremises(["bookmark:main", "rev:@"], scratch, { runner }),
+    ).toEqual({ status: "ok" });
+    expect(calls).toHaveLength(3);
+    for (const argv of calls) {
+      expect(argv[0]).toBe("jj");
+      expect(argv).toContain("--ignore-working-copy");
+      expect(argv).toContain("--at-operation=@");
+    }
+  });
   test("present file and symbol premises pass", () => {
     expect(
       checkPremises(["file:src/next/cli.ts", "symbol:routeWorker"], scratch, {
@@ -116,8 +135,11 @@ describe("premise checks", () => {
       },
     };
     run((argv, cwd, timeoutMs) => {
+      const command = argv.filter(
+        (arg) => arg !== "--ignore-working-copy" && arg !== "--at-operation=@",
+      );
       const result = Bun.spawnSync(
-        ["sh", "-c", 'exec "$@"', "agx-test", ...argv],
+        ["sh", "-c", 'exec "$@"', "agx-test", ...command],
         {
           cwd,
           stdout: "pipe",

@@ -499,12 +499,14 @@ const onTerminate = (): void => {
 const boundTimer = setTimeout(expire, timeoutS * 1000);
 process.on("SIGUSR1", expire);
 process.on("SIGTERM", onTerminate);
+process.on("SIGINT", onTerminate);
 const clearDeadline = (): void => {
   clearTimeout(boundTimer);
   if (stdinWaitTimer !== undefined) clearTimeout(stdinWaitTimer);
   if (forceKillTimer !== undefined) clearTimeout(forceKillTimer);
   process.removeListener("SIGUSR1", expire);
   process.removeListener("SIGTERM", onTerminate);
+  process.removeListener("SIGINT", onTerminate);
 };
 const spawned = await attempt(() =>
   // stdin "ignore" is the `</dev/null` of the recipe: codex exec reads stdin and would hang on an

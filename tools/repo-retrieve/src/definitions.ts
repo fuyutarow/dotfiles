@@ -314,7 +314,12 @@ function cccPython(): Result<string, Error> {
 
 async function git(project: string, args: string[]): Promise<string | null> {
   const result = await fromAsyncThrowable(
-    () => runChildCaptured(["git", "-C", project, ...args], 15_000, false),
+    () =>
+      runChildCaptured(
+        ["git", "--no-optional-locks", "-C", project, ...args],
+        15_000,
+        false,
+      ),
     asError,
   )();
   return result.match(

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.3 — 2026-10-16
+
+- Isolate Git inspection from shared ref writes under router deadlines.
+
 ## 1.3.2 — 2026-10-16
 
 - Replace index rate non-null assertions with explicit narrowing

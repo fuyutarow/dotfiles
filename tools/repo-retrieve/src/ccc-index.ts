@@ -580,7 +580,7 @@ async function gitHead(project: string): Promise<Result<string | null, Error>> {
   const child = await fromAsyncThrowable(
     () =>
       runChildCaptured(
-        [git.value, "-C", project, "rev-parse", "HEAD"],
+        [git.value, "--no-optional-locks", "-C", project, "rev-parse", "HEAD"],
         10_000,
         false,
       ),
@@ -599,7 +599,14 @@ async function isWorkingTreeDirty(
   const child = await fromAsyncThrowable(
     () =>
       runChildCaptured(
-        [git.value, "-C", project, "status", "--porcelain"],
+        [
+          git.value,
+          "--no-optional-locks",
+          "-C",
+          project,
+          "status",
+          "--porcelain",
+        ],
         10_000,
         false,
       ),
@@ -715,6 +722,7 @@ export async function checkIndexFreshness(
     const count = await runChildCaptured(
       [
         git.value,
+        "--no-optional-locks",
         "-C",
         project,
         "rev-list",
@@ -730,6 +738,7 @@ export async function checkIndexFreshness(
     const paths = await runChildCaptured(
       [
         git.value,
+        "--no-optional-locks",
         "-C",
         project,
         "diff",
@@ -1246,6 +1255,7 @@ export async function runIndexStatus(): Promise<Result<number, Error>> {
     const count = await runChildCaptured(
       [
         git.value,
+        "--no-optional-locks",
         "-C",
         project,
         "rev-list",

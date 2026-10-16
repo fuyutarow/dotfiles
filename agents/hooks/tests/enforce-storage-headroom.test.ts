@@ -86,6 +86,35 @@ test("silent allow emits no envelope", () => {
   expect(result).toEqual({ code: 0, stdout: "", stderr: "" });
 });
 
+test.each([
+  "jj workspace add ../unsafe",
+  "timeout 2 jj -R . workspace add ../unsafe",
+  "jj workspace add --sparse-patterns empty ../unsafe",
+])(
+  "raw workspace preparation is refused before storage probes: %s",
+  (command) => {
+    // Invalid config proves the refusal precedes policy loading and measurements.
+    const result = runHook(HOOK, payload(command), {
+      STORAGE_HEADROOM_CONFIG: "/nonexistent/jjsafe4-policy.toml",
+    });
+    const out = decodedJson(envelope, result.stdout).hookSpecificOutput;
+    expect(result.code).toBe(0);
+    expect(out.permissionDecision).toBe("deny");
+    expect(out.permissionDecisionReason).toContain("ws add <ticket-name>");
+  },
+);
+
+test.each(["jj workspace add --help", "jj workspace add -h"])(
+  "raw workspace help remains available: %s",
+  (command) => {
+    expect(runHook(HOOK, payload(command), fixture(0, 0))).toEqual({
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+  },
+);
+
 test("warning maps to additionalContext without a permission decision", () => {
   const result = runHook(HOOK, payload(), fixture(0, 10));
   expect(result.code).toBe(0);

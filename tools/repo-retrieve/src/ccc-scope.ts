@@ -10,6 +10,7 @@
 
 import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { readonlyCommand } from "../../shared/src/readonly-command.ts";
 import { attempt } from "../../shared/src/attempt.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
@@ -33,8 +34,11 @@ async function capture(
   cwd: string,
   stdin?: string,
 ): Promise<string | null> {
+  const invocation =
+    cmd[0] === "git" ? readonlyCommand(cmd, cwd) : { cmd, env: process.env };
   const child = Bun.spawn({
-    cmd,
+    cmd: invocation.cmd,
+    env: invocation.env,
     cwd,
     stdin: stdin === undefined ? "ignore" : new Response(stdin),
     stdout: "pipe",
@@ -62,7 +66,17 @@ export async function inScopeChanges(
   to: string,
 ): Promise<ScopeDrift | null> {
   const diff = await capture(
-    ["git", "-C", project, "diff", "--name-only", "-z", from, to],
+    [
+      "git",
+      "--no-optional-locks",
+      "-C",
+      project,
+      "diff",
+      "--name-only",
+      "-z",
+      from,
+      to,
+    ],
     project,
   );
   if (diff === null) return null;

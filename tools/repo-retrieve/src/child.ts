@@ -2,6 +2,8 @@
 // adapter (ccc-index.ts). Moved verbatim out of repo-retrieve.ts on 2026-09-22; the timeout
 // contract (exit 124 on abort) is part of repo-retrieve's documented exit codes.
 import { err, ok, type Result } from "neverthrow";
+import { basename } from "node:path";
+import { readonlyCommand } from "../../shared/src/readonly-command.ts";
 
 export function requireExecutable(name: string): Result<string, Error> {
   const executable = Bun.which(name);
@@ -16,10 +18,14 @@ export async function runChild(
   cwd = process.cwd(),
 ): Promise<number> {
   const signal = AbortSignal.timeout(timeoutMs);
+  const invocation =
+    basename(command[0] ?? "") === "git"
+      ? readonlyCommand(command, cwd)
+      : { cmd: command, env: process.env };
   const child = Bun.spawn({
-    cmd: command,
+    cmd: invocation.cmd,
     cwd,
-    env: process.env,
+    env: invocation.env,
     stdout: "inherit",
     stderr: "inherit",
     signal,
@@ -48,10 +54,14 @@ export async function runChildCaptured(
   timedOut: boolean;
 }> {
   const signal = AbortSignal.timeout(timeoutMs);
+  const invocation =
+    basename(command[0] ?? "") === "git"
+      ? readonlyCommand(command, cwd)
+      : { cmd: command, env: process.env };
   const child = Bun.spawn({
-    cmd: command,
+    cmd: invocation.cmd,
     cwd,
-    env: process.env,
+    env: invocation.env,
     stdout: "pipe",
     stderr: "pipe",
     signal,

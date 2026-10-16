@@ -698,51 +698,54 @@ describe("agx", () => {
     );
   });
 
-  test("external SIGTERM forwards to codex and gives it time to finish", async () => {
-    const { bin } = fakeCodex(scratch());
-    const fixtureDir = dirname(bin);
-    writeFileSync(join(fixtureDir, "fake-mode"), "term-grace");
-    const promptFile = join(fixtureDir, "prompt.md");
-    writeFileSync(promptFile, "stop cleanly");
-    const proc = Bun.spawn(
-      [
-        "bun",
-        script,
-        "--receipt-dir",
-        join(fixtureDir, "receipts"),
-        "--prompt-file",
-        promptFile,
-        ...FULL,
-        "--timeout-s",
-        "10",
-      ],
-      {
-        env: {
-          ...process.env,
-          AGX_CODEX_BIN: bin,
-          AGX_CODEX_HOST_FILE: join(fixtureDir, "no-host.toml"),
+  test.each(["SIGTERM", "SIGINT"] as const)(
+    "external %s forwards to codex and gives it time to finish",
+    async (signal) => {
+      const { bin } = fakeCodex(scratch());
+      const fixtureDir = dirname(bin);
+      writeFileSync(join(fixtureDir, "fake-mode"), "term-grace");
+      const promptFile = join(fixtureDir, "prompt.md");
+      writeFileSync(promptFile, "stop cleanly");
+      const proc = Bun.spawn(
+        [
+          "bun",
+          script,
+          "--receipt-dir",
+          join(fixtureDir, "receipts"),
+          "--prompt-file",
+          promptFile,
+          ...FULL,
+          "--timeout-s",
+          "10",
+        ],
+        {
+          env: {
+            ...process.env,
+            AGX_CODEX_BIN: bin,
+            AGX_CODEX_HOST_FILE: join(fixtureDir, "no-host.toml"),
+          },
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 10_000,
+          killSignal: "SIGKILL",
         },
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: 10_000,
-        killSignal: "SIGKILL",
-      },
-    );
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (existsSync(join(fixtureDir, "term.ready"))) break;
-      await Bun.sleep(10);
-    }
-    expect(existsSync(join(fixtureDir, "term.ready"))).toBe(true);
-    proc.kill("SIGTERM");
-    const exit = await Promise.race([
-      proc.exited,
-      Bun.sleep(5_000).then(() => -1),
-    ]);
-    if (exit === -1) proc.kill("SIGKILL");
-    expect(exit).not.toBe(-1);
-    expect(existsSync(join(fixtureDir, "term.marker"))).toBe(true);
-  });
+      );
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (existsSync(join(fixtureDir, "term.ready"))) break;
+        await Bun.sleep(10);
+      }
+      expect(existsSync(join(fixtureDir, "term.ready"))).toBe(true);
+      proc.kill(signal);
+      const exit = await Promise.race([
+        proc.exited,
+        Bun.sleep(5_000).then(() => -1),
+      ]);
+      if (exit === -1) proc.kill("SIGKILL");
+      expect(exit).not.toBe(-1);
+      expect(existsSync(join(fixtureDir, "term.marker"))).toBe(true);
+    },
+  );
 
   // O1 (Tiger ledger, 2026-10-06): a failed receipt always carries a non-empty cause. codex reports
   // its errors as JSON events on stdout, so the cause comes from there — the stderr tail of a real

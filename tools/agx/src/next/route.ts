@@ -115,7 +115,9 @@ export async function route(
   if (roster.auto.jev.api === "typesafe") request.model = roster.auto.jev.model;
   const post = await postJev(endpoint, request, roster.auto.timeout_ms);
   const fallback =
-    candidates.find((row) => row.id === roster.default) ?? candidates[0]!;
+    candidates.find((row) => row.id === roster.default) ?? candidates[0];
+  if (fallback === undefined)
+    return exitWithError("agx: no routing fallback is available\n", 2);
   const recordPick = (
     row: Choice,
     source: string,

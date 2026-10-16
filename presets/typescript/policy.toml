@@ -156,6 +156,16 @@ reason = "No implicit truthiness: an empty string, 0 and null/undefined are diff
 # --- restriction rules turned ON one by one -------------------------------------------------------
 
 [[on]]
+rule = "typescript/no-non-null-assertion"
+reason = "Prove a value is present with narrowing; a non-null assertion hides an unchecked assumption."
+
+[[option]]
+rule = "typescript/ban-ts-comment"
+level = "error"
+value = { ts-expect-error = true, ts-ignore = true, ts-nocheck = true, ts-check = false }
+reason = "Type errors must be fixed rather than suppressed, including with ts-expect-error."
+
+[[on]]
 rule = "typescript/no-explicit-any"
 reason = "`any` switches type checking off at the trust boundary; parse with zod instead."
 

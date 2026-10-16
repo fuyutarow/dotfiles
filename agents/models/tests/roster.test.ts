@@ -30,7 +30,9 @@ describe("dispatch roster", () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    const criterion = criterionFor(loaded.value, loaded.value.choice[0]!, {
+    const first = loaded.value.choice[0];
+    if (first === undefined) expect.unreachable("roster has no choices");
+    const criterion = criterionFor(loaded.value, first, {
       here: { accepted: 2, partial: 1, rejected: 3 },
       recent: { accepted: 1, partial: 0, rejected: 1 },
     });

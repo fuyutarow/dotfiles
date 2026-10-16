@@ -2,7 +2,7 @@
 // baseline. (The rule was removed in f1f0a2c4 because path-keyed exemptions punished behaviour-
 // preserving moves; nothing here is keyed by path except the generated per-file COUNT baseline.)
 //
-// Rule: oxlint's own `node/no-sync` (allowAtRootLevel) over the repo, ignores taken from
+// Rule: oxlint's own `node/no-sync`, with options and test exclusions taken from
 // .oxlintrc.json, `**/tests/**` and `**/*.test.ts` off. A diagnostic is then
 //   1. EXEMPT when its line, or the contiguous `//` comment block directly above it, carries
 //        // sync-ok: <reason>
@@ -28,7 +28,18 @@ const OXLINT = join(import.meta.dir, "..", "node_modules", ".bin", "oxlint");
 const EXEMPT = /\/\/\s*sync-ok:\s*(\S.{3,})$/u;
 const COMMENT_LINE = /^\s*\/\//u;
 
-const Rc = z.looseObject({ ignorePatterns: z.array(z.string()) });
+const Rc = z.looseObject({
+  ignorePatterns: z.array(z.string()),
+  rules: z.looseObject({
+    "node/no-sync": z.tuple([z.enum(["off", "error"]), z.unknown()]),
+  }),
+  overrides: z.array(
+    z.object({
+      files: z.array(z.string()),
+      rules: z.record(z.string(), z.enum(["off", "error"])),
+    }),
+  ),
+});
 const Output = z.object({
   diagnostics: z.array(
     z.object({
@@ -57,14 +68,10 @@ async function oxlintConfig(root: string): Promise<string> {
   return JSON.stringify({
     plugins: ["node"],
     categories: { correctness: "off" },
-    rules: { "node/no-sync": ["error", { allowAtRootLevel: true }] },
+    // Severity is enabled for this scan; policy options remain in the rendered entry.
+    rules: { "node/no-sync": ["error", rc.data.rules["node/no-sync"][1]] },
     ignorePatterns: rc.data.ignorePatterns,
-    overrides: [
-      {
-        files: ["**/tests/**", "**/*.test.ts"],
-        rules: { "node/no-sync": "off" },
-      },
-    ],
+    overrides: rc.data.overrides,
   });
 }
 

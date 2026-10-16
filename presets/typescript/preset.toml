@@ -1,0 +1,11 @@
+name = "typescript"
+description = "Strict TypeScript compiler, package, codec, mise tasks, and house oxlint policy"
+files = [
+  { source = "tsconfig.json", destination = "tsconfig.json" },
+  { source = "package.json", destination = "package.json" },
+  { source = "zod.ts", destination = "zod.ts" },
+  { source = "mise-tasks.toml", destination = "mise-tasks.toml" },
+  { source = "policy.toml", destination = "oxlint-policy.toml" },
+  { source = "local.example.toml", destination = "oxlint-policy.local.toml", createOnly = true },
+]
+check = ["bun test presets/tests/presets.test.ts", "bun test presets/tests/cli.test.ts"]

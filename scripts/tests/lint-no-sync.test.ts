@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { loadPolicy, renderOxlintrc } from "../render-oxlintrc.ts";
 
 const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "lint-no-sync.ts");
@@ -18,13 +19,17 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
-/** A fixture repo outside the workspace: only the ignore list of .oxlintrc.json matters to the rule. */
+/** A fixture repo outside the workspace, using the rendered house rule and test exclusions. */
 function fixture(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "lint-no-sync-"));
   cleanups.push(() => {
     rmSync(root, { recursive: true, force: true });
   });
-  write(root, ".oxlintrc.json", '{"ignorePatterns":["node_modules"]}\n');
+  write(
+    root,
+    ".oxlintrc.json",
+    readFileSync(join(REPO, ".oxlintrc.json"), "utf8"),
+  );
   write(root, "keep.ts", "export const keep = 1;\n");
   for (const [path, text] of Object.entries(files)) write(root, path, text);
   return root;
@@ -54,6 +59,41 @@ const exempted = (name: string, reason: string): string =>
   `import { readFileSync } from "node:fs";\nexport function ${name}(): string {\n  // sync-ok: ${reason}\n  return readFileSync("x", "utf8");\n}\n`;
 
 describe("lint-no-sync.ts", () => {
+  test("reads root-level options from the rendered policy instead of a scanner default", async () => {
+    const root = fixture({});
+    const source = read("load");
+    write(
+      root,
+      "root.ts",
+      source
+        .replace(
+          "export function load(): string {\n  return ",
+          "export const loaded = ",
+        )
+        .replace(";\n}\n", ";\n"),
+    );
+    expect(run(["--init"], root).code).toBe(0);
+    const loaded = await loadPolicy();
+    if (!loaded.ok) expect.unreachable(loaded.error);
+    const rule = loaded.value.option.find(
+      (option) => option.rule === "node/no-sync",
+    );
+    if (rule === undefined) expect.unreachable("no-sync policy entry missing");
+    rule.value = { allowAtRootLevel: false };
+    write(root, ".oxlintrc.json", renderOxlintrc(loaded.value));
+    const failed = run([], root);
+    expect(failed.code).toBe(1);
+    expect(failed.out).toContain("root.ts: 1 sync call(s)");
+  });
+
+  test("missing rendered rule fails closed", () => {
+    const root = fixture({});
+    write(root, ".oxlintrc.json", '{"ignorePatterns":[]}\n');
+    const failed = run(["--init"], root);
+    expect(failed.code).toBe(2);
+    expect(failed.out).toContain(".oxlintrc.json");
+  });
+
   test("a new sync call in a clean non-test file fails; the same call with a reason passes", () => {
     const root = fixture({ "lib/clean.ts": "export const n = 1;\n" });
     expect(run(["--init"], root).code).toBe(0);

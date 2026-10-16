@@ -1,6 +1,6 @@
 # uv project configuration
 
-Apply with `mise run preset -- apply uv --to <repo>` and compare with
+Apply with `mise run preset -- apply python --to <repo>` and compare with
 `mise run preset -- diff uv --to <repo>`. The target directory must exist.
 
 `pyproject.toml` combines the writing-python skill's uv guard, conservative

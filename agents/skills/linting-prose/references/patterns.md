@@ -180,7 +180,7 @@ project — so C7's "undefined" never fires; the violation is that the DECLARED 
 | `PASS` / `certified`（as insider verdicts） | what was shown, for whom it holds, what remains |
 | internal cell/coordinate taxonomy as headers | the reader's question each cell answers |
 
-**Greppable subset → the external prh dict** ([presets/textlint/prh-external.yml](../../../../presets/textlint/prh-external.yml), loaded by
+**Greppable subset → the external prh dict** (`prh-external.yml`, loaded by
 `textlintrc-external.json`). Any `[A-Z]{1,3}[0-9]{4}_[0-9]{2,3}` ID, any `[A-Z]{3,}_[A-Z_]{3,}`
 verdict enum, `receipt:`, and `PASS`-as-verdict fire deterministically (proven on QOED
 `RESEARCH_STATE.md`) — these are HARD. House dichotomies are NOT greppable — VIBE only.

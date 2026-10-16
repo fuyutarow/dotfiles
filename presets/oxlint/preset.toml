@@ -1,7 +1,0 @@
-name = "oxlint"
-description = "House oxlint policy with preserved local ignores and rendered configuration"
-files = [
-  { source = "policy.toml", destination = "oxlint-policy.toml" },
-  { source = "local.example.toml", destination = "oxlint-policy.local.toml", createOnly = true },
-]
-check = ["bun test presets/tests/presets.test.ts --test-name-pattern 'oxlint preset'"]

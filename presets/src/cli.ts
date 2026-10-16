@@ -69,7 +69,15 @@ if (action === "list") {
     argv.flags["dry-run"]
   )
     fatal("list accepts no name, target or --dry-run");
-  for (const preset of catalog.presets)
+  const languages = ["typescript", "python", "rust", "julia", "latex"];
+  const rank = (language: string): number => {
+    const index = languages.indexOf(language);
+    return index < 0 ? languages.length : index;
+  };
+  for (const preset of catalog.presets.toSorted((a, b) => {
+    const difference = rank(a.name) - rank(b.name);
+    return difference === 0 ? a.name.localeCompare(b.name) : difference;
+  }))
     console.log(`${preset.name}\t${preset.description}`);
   process.exit(0);
 }
@@ -102,9 +110,9 @@ for (const file of files) {
   expected.set(file.destination, await readFile(file.source, "utf8"));
 }
 
-if (name === "oxlint") {
+if (name === "typescript") {
   const loaded = await loadPolicy();
-  if (!loaded.ok) fatal(`cannot load oxlint preset: ${loaded.error}`);
+  if (!loaded.ok) fatal(`cannot load TypeScript policy: ${loaded.error}`);
   const example = files.find((file) => file.createOnly === true);
   if (
     action === "apply" &&

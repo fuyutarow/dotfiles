@@ -24,7 +24,7 @@
 ### Rung 1 — free, no code change (do these first)
 
 - **Release build settings** — use the release and profiling tables in
-  [the Cargo preset](../../../../presets/cargo/Cargo.toml). The trade-offs are explained in
+  [the Cargo preset](../../../../presets/rust/Cargo.toml). The trade-offs are explained in
   `references/project.md`. Always benchmark the release build; debug measurements do not
   describe shipped performance.
 - **Swap the global allocator** — `mimalloc` (small-alloc-heavy) or `tikv-jemallocator` (long-running

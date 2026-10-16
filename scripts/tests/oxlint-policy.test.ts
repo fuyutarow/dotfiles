@@ -10,7 +10,7 @@ import {
   type CustomRule,
 } from "../render-oxlintrc.ts";
 
-// oxlint-policy: every custom ban in presets/oxlint/policy.toml must fire on its `bad` snippet and stay
+// oxlint-policy: every custom ban in presets/typescript/policy.toml must fire on its `bad` snippet and stay
 // silent on its `good` one, linted through the GENERATED .oxlintrc.json. A selector with a typo
 // matches nothing and the repo lint stays green, so only this test can tell a dead rule from a
 // clean repo. Each run also asserts oxlint linted exactly the one file: a config it could not apply
@@ -25,7 +25,7 @@ const Report = z.looseObject({
 
 const loaded = await loadPolicy();
 if (!loaded.ok)
-  expect.unreachable(`presets/oxlint/policy.toml: ${loaded.error}`);
+  expect.unreachable(`presets/typescript/policy.toml: ${loaded.error}`);
 const policy = loaded.value;
 const scratch = mkdtempSync(join(tmpdir(), "oxlint-policy-"));
 afterAll(() => {

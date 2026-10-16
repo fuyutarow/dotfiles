@@ -224,12 +224,12 @@ run = "bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts
 # proves each custom ban fires on its bad snippet and is silent on its good one.
 [tasks."oxlint:render"]
 dir = "{{config_root}}"
-description = "Render .oxlintrc.json from presets/oxlint/policy.toml (the shared TS lint policy)"
+description = "Render .oxlintrc.json from presets/typescript/policy.toml (the shared TS lint policy)"
 run = "bun scripts/render-oxlintrc.ts --write"
 
 [tasks."lint:oxlint-policy"]
 dir = "{{config_root}}"
-description = "Fail when .oxlintrc.json is not a fresh render of presets/oxlint/policy.toml"
+description = "Fail when .oxlintrc.json is not a fresh render of presets/typescript/policy.toml"
 run = "bun scripts/render-oxlintrc.ts --check"
 
 [tasks.preset]
@@ -501,21 +501,6 @@ run = "bun android/line-notifications.ts --apply"
 dir = "{{config_root}}"
 description = "Audit the live Pixel LINE-only vibration and lock-screen privacy policy (read-only)"
 run = "bun android/line-notifications.ts"
-
-# NOTE: deliberately NOT in `[tasks.lint].depends` — dotfiles has no reports/memos/
-# proposals to scan (they live in research repos), so wiring it into the blocking gate
-# would add friction with no target. Portable: run it against real files with `-- <paths>`.
-# Machine floor = textlint presets (agents/skills/linting-prose/references/machine-floor.md); the
-# hand-maintained scripts/check-prose-grounding.sh was RETIRED in the linting-prose reforge (2026-07-04).
-# PREREQ (once, GLOBAL): `bun add -g textlint textlint-rule-preset-ja-technical-writing
-# @textlint-ja/textlint-rule-preset-ai-writing textlint-rule-prh` — verified: after a global install
-# both `bunx textlint` and `textlint` resolve the presets from ANY cwd, so no per-repo `bun add -d`.
-# (CI / fresh machines need their own install; for reproducibility a repo may still `bun add -d` + lock.)
-# External-register docs (外賓/社外/顧客): swap in assets/textlintrc-external.json (adds the C9 set).
-[tasks."lint:prose"]
-dir = "{{config_root}}"
-description = "Prose lint (linting-prose machine floor): bunx textlint with the house config. Pass paths: `mise run lint:prose -- report.md docs/`. External register → textlintrc-external.json."
-run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json"
 
 # ── git hooks ────────────────────────────────────────────────────────────────────────────────
 # 規律: .githooks/<event> は `mise run --jobs 1 hook:<event>` を呼ぶだけの薄い殻。git の各 hook で

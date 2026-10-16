@@ -1,7 +1,0 @@
-.textlintrc.json
-textlintrc-research.json
-textlintrc-external.json
-textlintrc-strict.json
-prh-house.yml
-prh-external.yml
-prh-codemix.yml

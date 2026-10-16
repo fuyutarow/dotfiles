@@ -1,4 +1,4 @@
-// The canonical presets/ts and presets/oxlint files are the house setup another repo adopts
+// The canonical presets/typescript and presets/typescript files are the house setup another repo adopts
 // (firedancer, 2026-10-06). It must not drift from dotfiles itself: the same pins, the same strict
 // compilerOptions, and — rendered through the repo's own render-oxlintrc --repo — the same rules.
 import { describe, expect, test } from "bun:test";
@@ -9,8 +9,8 @@ import { decodedJson } from "../../../hooks/tests/decode.ts";
 import { z } from "../../../hooks/zod.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
-const FIXTURE = join(ROOT, "presets", "ts");
-const LOCAL_EXAMPLE = join(ROOT, "presets", "oxlint", "local.example.toml");
+const FIXTURE = join(ROOT, "presets", "typescript");
+const LOCAL_EXAMPLE = join(ROOT, "presets", "typescript", "local.example.toml");
 const Pkg = z.looseObject({
   dependencies: z.record(z.string(), z.string()),
   devDependencies: z.record(z.string(), z.string()),
@@ -75,7 +75,7 @@ describe("consumer-repo fixture", () => {
       "bun",
       join(ROOT, "presets", "src", "cli.ts"),
       "apply",
-      "ts",
+      "typescript",
       "--to",
       dir,
     ]);
@@ -90,7 +90,7 @@ describe("consumer-repo fixture", () => {
       "bun",
       join(ROOT, "presets", "src", "cli.ts"),
       "apply",
-      "oxlint",
+      "typescript",
       "--to",
       dir,
     ]);
@@ -135,7 +135,7 @@ describe("consumer-repo fixture", () => {
 
 describe("consumer-repo zod.ts", () => {
   test("decodes JSON exactly like dotfiles' agents/hooks/zod.ts", async () => {
-    const theirs = await import("../../../../presets/ts/zod.ts");
+    const theirs = await import("../../../../presets/typescript/zod.ts");
     const ours = await import("../../../hooks/zod.ts");
     for (const text of ['{"a":1}', "[1,2]", "{", "", "null"]) {
       const a = theirs.jsonOf(theirs.z.unknown()).safeParse(text);

@@ -1,5 +1,5 @@
 {
-  "extends": "./presets/ts/tsconfig.json",
+  "extends": "./presets/typescript/tsconfig.json",
   "include": ["**/*.ts"],
   "exclude": [
     "node_modules",

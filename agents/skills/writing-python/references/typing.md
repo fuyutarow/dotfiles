@@ -48,7 +48,7 @@
 
 ## 2. Strict rollout
 
-- Use the strict checker setting in the [canonical pyproject.toml](../../../../presets/uv/pyproject.toml) for new projects.
+- Use the strict checker setting in the [canonical pyproject.toml](../../../../presets/python/pyproject.toml) for new projects.
 - Expect a **~10x jump** in reported errors going standard→strict on an existing codebase —
   the #1 "flip strict mode, diff explodes" trap.
 - Correct move: path-scoped incremental rollout, e.g. `"strict": ["src/new/**"]` — never flip

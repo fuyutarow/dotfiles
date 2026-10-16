@@ -57,7 +57,9 @@ async function typecheck(path: string): Promise<number> {
 
 describe("TypeScript preset", () => {
   test("dotfiles root config cannot weaken any strictness flag from the preset", async () => {
-    const preset = await showConfig(join(ROOT, "presets/ts/tsconfig.json"));
+    const preset = await showConfig(
+      join(ROOT, "presets/typescript/tsconfig.json"),
+    );
     const dotfiles = await showConfig(join(ROOT, "tsconfig.json"));
     const strictFlags = [
       "strict",

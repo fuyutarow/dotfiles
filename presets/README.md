@@ -1,10 +1,10 @@
-# Configuration presets per project kind
+# Configuration presets by language
 
-`presets/` holds configuration presets per project kind: uv, cargo, julia, ts,
-latex, textlint, and others. Each kind lives in `presets/<name>/` with a
+`presets/` holds one configuration preset per language: typescript, python, rust,
+julia, and latex. Each language lives in `presets/<name>/` with a
 `preset.toml` and its source files. The CLI discovers manifests at runtime;
-adding a kind requires a directory, with no CLI edit. Currently shipped: `ts`
-and `oxlint`.
+adding a preset requires a directory, with no CLI edit. Oxlint belongs to the
+TypeScript preset. The textlint preset has been removed.
 
 ## Apply and compare
 
@@ -12,12 +12,13 @@ From dotfiles:
 
 ```sh
 mise run preset -- list
-mise run preset -- apply ts --to /path/to/repo
-mise run preset -- apply oxlint --to /path/to/repo --dry-run
-mise run preset -- diff ts --to /path/to/repo
+mise run preset -- apply typescript --to /path/to/repo
+mise run preset -- apply typescript --to /path/to/repo --dry-run
+mise run preset -- diff typescript --to /path/to/repo
 ```
 
-`list` prints names and descriptions in name order. `apply` copies the declared
+`list` prints names and descriptions in the language order above, followed by
+additional presets in name order. `apply` copies the declared
 files and creates destination parent directories; `--dry-run` previews writes.
 `diff` prints unified diffs and exits 1 on drift, or 0 when current. The previous
 `diff <name> /path/to/repo` form remains supported. Usage or manifest errors exit
@@ -55,19 +56,29 @@ as a configuration surface covers new kinds without registry edits.
 
 ## Existing presets
 
-`ts` copies `tsconfig.json`, `package.json`, `zod.ts`, and `mise-tasks.toml`.
-Dotfiles extends `ts/tsconfig.json`, keeping its own include/exclude paths at the
+`typescript` copies `tsconfig.json`, `package.json`, `zod.ts`, and `mise-tasks.toml`.
+Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
 root. Consumers may tighten compiler options; weakening the preset is drift.
 
-`oxlint` copies `policy.toml` as `oxlint-policy.toml` and seeds
+The same preset copies `policy.toml` as `oxlint-policy.toml` and seeds
 `oxlint-policy.local.toml` from `local.example.toml` only when absent. Its existing
 render step also produces `.oxlintrc.json` from the house policy and the target's
 reasoned local ignores. The local file may add ignores only.
 
-`mise run oxlint:render` renders `oxlint/policy.toml` to dotfiles' root
+`mise run oxlint:render` renders `typescript/policy.toml` to dotfiles' root
 `.oxlintrc.json`. The root `oxlint-policy.toml` remains a relative symlink to
-`presets/oxlint/policy.toml` for external consumers. Edit the canonical preset
+`presets/typescript/policy.toml` for external consumers. Edit the canonical preset
 policy; the alias contains no second copy.
+
+The policy owns `node/no-sync` options and test-file exclusions. Ordinary oxlint
+keeps that rule off; `lint:no-sync` enables the rendered entry for its baseline
+and call-site exemption scan. No rule options are duplicated in the scanner.
+
+`python` supplies uv project metadata, Ruff/Pyright settings, hooks, mise tasks,
+and optional examples. `rust` supplies Cargo workspace lints, build profiles,
+rustfmt/clippy defaults, and mise tasks. `julia` supplies package/test project
+skeletons and Runic tasks. `latex` supplies LuaLaTeX build settings, formatting,
+mise tasks, and generated-artifact ignores.
 
 ## Fixtures
 

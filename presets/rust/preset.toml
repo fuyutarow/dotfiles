@@ -1,4 +1,4 @@
-name = "cargo"
+name = "rust"
 description = "Cargo workspace lints, build profiles, tool defaults, and mise tasks"
 files = [
   { source = "Cargo.toml", destination = "Cargo.toml" },
@@ -7,4 +7,4 @@ files = [
   { source = "clippy.toml", destination = "clippy.toml" },
   { source = "mise.toml", destination = "mise.toml" },
 ]
-check = ["bun test presets/tests/cargo.test.ts"]
+check = ["bun test presets/tests/rust.test.ts"]

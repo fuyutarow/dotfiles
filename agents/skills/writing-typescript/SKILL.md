@@ -44,26 +44,25 @@ Each rule changes what you write. Prefer the `✅` form; flag the `❌` in revie
 
 ## What is enforced, and in other repos
 
-The rules above are style; what a gate enforces is `presets/oxlint/policy.toml` in dotfiles — the one home
+The rules above are style; what a gate enforces is `presets/typescript/policy.toml` in dotfiles — the one home
 of the house lint policy (no `throw`, no `try`, no `as`, zod `safeParse`, …), each rule with its
 reason. `.oxlintrc.json` is rendered from it, never edited. When a rule here and the policy
 disagree, the policy wins and this file is stale.
 
 A repo other than dotfiles adopts the same setup from
-[`presets/ts/`](../../../presets/ts/) and [`presets/oxlint/`](../../../presets/oxlint/).
+[`presets/typescript/`](../../../presets/typescript/).
 From the dotfiles checkout, run:
 
 ```sh
-mise run preset -- apply ts --to /path/to/repo
-mise run preset -- apply oxlint --to /path/to/repo
+mise run preset -- apply typescript --to /path/to/repo
 ```
 
 The TypeScript preset supplies `package.json` (rename it), `tsconfig.json` (adjust only
 `include`/`exclude`), `zod.ts` (the `jsonOf` JSON codec), and `mise-tasks.toml`.
 Paste the supplied tasks into the consumer's `mise.toml` and add `lint:ts` and
 `lint:oxlint-policy` to its `lint` depends, then run `bun install` there.
-The oxlint preset supplies the policy, seeds `oxlint-policy.local.toml` from
-[`presets/oxlint/local.example.toml`](../../../presets/oxlint/local.example.toml)
+The same preset supplies the policy, seeds `oxlint-policy.local.toml` from
+[`presets/typescript/local.example.toml`](../../../presets/typescript/local.example.toml)
 only when absent, and renders `.oxlintrc.json`. Local additions are ignores only, each with
 a reason; after changing them, run `mise run oxlint:render` in the consumer.
 Dotfiles keeps its own codec in `agents/hooks/zod.ts`.

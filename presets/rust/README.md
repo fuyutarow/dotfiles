@@ -1,6 +1,6 @@
 # Cargo project configuration
 
-Apply from dotfiles with `mise run preset -- apply cargo --to /path/to/repo`;
+Apply from dotfiles with `mise run preset -- apply rust --to /path/to/repo`;
 compare with `mise run preset -- diff cargo --to /path/to/repo`.
 The destination must exist. Applying replaces the files listed in `preset.toml`.
 

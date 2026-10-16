@@ -30,12 +30,12 @@ afterEach(() => {
 });
 
 function compatibilityFixture(root: string): void {
-  mkdirSync(join(root, "presets/ts"), { recursive: true });
+  mkdirSync(join(root, "presets/typescript"), { recursive: true });
   mkdirSync(join(root, "presets/empty"), { recursive: true });
-  writeFileSync(join(root, "presets/ts/package.json"), "preset\n");
-  symlinkSync("presets/ts", join(root, "consumer-repo"));
+  writeFileSync(join(root, "presets/typescript/package.json"), "preset\n");
+  symlinkSync("presets/typescript", join(root, "consumer-repo"));
   symlinkSync("presets/empty", join(root, "empty-link"));
-  symlinkSync("presets/ts/package.json", join(root, "file-link"));
+  symlinkSync("presets/typescript/package.json", join(root, "file-link"));
 }
 
 test("tracked directory, empty-directory and file symlinks are checked by their own names", () => {
@@ -81,21 +81,21 @@ test("clone copying preserves relative compatibility links and omits their enume
   copyCloneSources(root, clone, [
     "consumer-repo",
     "consumer-repo/package.json",
-    "presets/ts/package.json",
+    "presets/typescript/package.json",
     "file-link",
   ]);
   expect(lstatSync(join(clone, "consumer-repo")).isSymbolicLink()).toBe(true);
-  expect(readlinkSync(join(clone, "consumer-repo"))).toBe("presets/ts");
+  expect(readlinkSync(join(clone, "consumer-repo"))).toBe("presets/typescript");
   expect(readlinkSync(join(clone, "file-link"))).toBe(
-    "presets/ts/package.json",
+    "presets/typescript/package.json",
   );
   expect(realpathSync(join(clone, "consumer-repo/package.json"))).toBe(
-    join(clone, "presets/ts/package.json"),
+    join(clone, "presets/typescript/package.json"),
   );
   writeFileSync(join(clone, "consumer-repo/package.json"), "clone only\n");
-  expect(readFileSync(join(root, "presets/ts/package.json"), "utf8")).toBe(
-    "preset\n",
-  );
+  expect(
+    readFileSync(join(root, "presets/typescript/package.json"), "utf8"),
+  ).toBe("preset\n");
 });
 
 test("declared ignore rules do not hide tracked files", () => {

@@ -21,7 +21,7 @@
     before a deliberate minor bump — "it's just a minor version" instincts from other tools are
     wrong here.
   - **Guard it in the project itself**:
-    Use the minimum-version guard in the [canonical pyproject.toml](../../../../presets/uv/pyproject.toml).
+    Use the minimum-version guard in the [canonical pyproject.toml](../../../../presets/python/pyproject.toml).
     uv refuses to run against the project if the invoking binary doesn't satisfy this — catches
     a stale global install before it silently mis-resolves.
 
@@ -112,7 +112,7 @@ ranges (a lowest-bounds resolve and a latest resolve), not just the locked snaps
 
 ## Single-file scripts (PEP 723) `[dated:2026-07]`
 
-Use the [PEP 723 metadata example](../../../../presets/uv/examples/script.py) for a standalone script; choose dependencies for its actual job.
+Use the [PEP 723 metadata example](../../../../presets/python/examples/script.py) for a standalone script; choose dependencies for its actual job.
 
 `uv run script.py` reads this block and builds an ephemeral env from just those deps —
 **inside a project directory it still ignores the enclosing project's own dependencies by

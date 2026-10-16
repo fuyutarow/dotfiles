@@ -58,7 +58,7 @@ TOML as first-class).
 **Explicit-index + source-routing is load-bearing**, not optional style (from uv's own docs,
 `docs.astral.sh/uv/guides/integration/pytorch/`):
 
-Merge the [PyTorch configuration fragment](../../../../presets/uv/examples/pyproject-pytorch.toml) only for a torch project. Preserve its platform routing and explicit indexes.
+Merge the [PyTorch configuration fragment](../../../../presets/python/examples/pyproject-pytorch.toml) only for a torch project. Preserve its platform routing and explicit indexes.
 
 - `explicit = true` on `[[tool.uv.index]]` is load-bearing: without it, uv may pull *other*
   packages from the PyTorch index too.

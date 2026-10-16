@@ -70,7 +70,7 @@ uvx --from jupyterlab jupyter lab
 
 ## Notes
 
-- For permanent project configuration, use [presets/uv/](../../../presets/uv/README.md);
+- For permanent project configuration, use [presets/python/](../../../presets/python/README.md);
   `writing-python` owns the rules for choosing and adapting those settings.
 
 - `uv run --with` layers an ephemeral env on the current project (or `--no-project` for a clean one) so the named packages are guaranteed present **without touching system Python**.

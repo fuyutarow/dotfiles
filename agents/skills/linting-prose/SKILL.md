@@ -74,15 +74,12 @@ sentence:
 
 | register | config |
 |---|---|
-| ですます / general (default) | [presets/textlint/textlintrc.json](../../../presets/textlint/textlintrc.json) |
-| である体 internal/research | [presets/textlint/textlintrc-research.json](../../../presets/textlint/textlintrc-research.json) |
-| external deliverable (+C9 insider-register set) | [presets/textlint/textlintrc-external.json](../../../presets/textlint/textlintrc-external.json) |
-| strict code-mixing (latin catch-all + allowlist) | [presets/textlint/textlintrc-strict.json](../../../presets/textlint/textlintrc-strict.json) (opt-in) |
+| ですます / general (default) | `textlintrc.json` |
+| である体 internal/research | `textlintrc-research.json` |
+| external deliverable (+C9 insider-register set) | `textlintrc-external.json` |
+| strict code-mixing (latin catch-all + allowlist) | `textlintrc-strict.json` (opt-in) |
 
-Apply the project configuration with `mise run preset -- apply textlint --to <repo>`.
-The seven configs and dictionaries have one home in
-[presets/textlint/](../../../presets/textlint/); `assets/` is a compatibility link for
-`scripts/lint-floor.ts`. The default destination is `.textlintrc.json`; select a named
+The bundled textlint preset and its compatibility link were removed. The default destination is `.textlintrc.json`; select a named
 profile with `LINT_PROSE_CONFIG` when using the wrapper. Keep prh detect-only and
 maintain the strict allowlist for the project.
 

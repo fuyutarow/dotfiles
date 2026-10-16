@@ -1,4 +1,4 @@
-name = "uv"
+name = "python"
 description = "uv Python project metadata, strict Ruff and Pyright, hooks, and mise tasks"
 files = [
   { source = "pyproject.toml", destination = "pyproject.toml" },
@@ -7,4 +7,4 @@ files = [
   { source = "examples/pyproject-pytorch.toml", destination = "examples/pyproject-pytorch.toml" },
   { source = "examples/script.py", destination = "examples/script.py" },
 ]
-check = ["bun test presets/tests/uv.test.ts"]
+check = ["bun test presets/tests/python.test.ts"]

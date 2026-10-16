@@ -28,14 +28,14 @@ describe("uv preset", () => {
   test("lists, applies every fixture destination to an empty repo, and detects drift", async () => {
     const listed = await run("list");
     expect(listed.exit).toBe(0);
-    expect(listed.stdout).toMatch(/^uv\t/mu);
+    expect(listed.stdout).toMatch(/^python\t/mu);
     const catalog = await discoverPresets(join(ROOT, "presets"));
     if (!catalog.ok) expect.unreachable(catalog.error);
-    const preset = catalog.presets.find((entry) => entry.name === "uv");
+    const preset = catalog.presets.find((entry) => entry.name === "python");
     if (preset === undefined) expect.unreachable("uv manifest missing");
     const destinations = (
       await Bun.file(
-        join(import.meta.dir, "fixtures/uv/destinations.txt"),
+        join(import.meta.dir, "fixtures/python/destinations.txt"),
       ).text()
     )
       .trim()
@@ -43,30 +43,32 @@ describe("uv preset", () => {
     expect(preset.files.map((file) => file.destination)).toEqual(destinations);
     const repo = await mkdtemp(join(scratch, "empty-"));
     expect(await readdir(repo)).toEqual([]);
-    expect((await run("diff", "uv", "--to", repo)).exit).toBe(1);
-    expect((await run("apply", "uv", "--to", repo, "--dry-run")).exit).toBe(0);
+    expect((await run("diff", "python", "--to", repo)).exit).toBe(1);
+    expect((await run("apply", "python", "--to", repo, "--dry-run")).exit).toBe(
+      0,
+    );
     expect(await readdir(repo)).toEqual([]);
-    expect((await run("apply", "uv", "--to", repo)).exit).toBe(0);
+    expect((await run("apply", "python", "--to", repo)).exit).toBe(0);
     for (const file of preset.files) {
       expect(await Bun.file(join(repo, file.destination)).text()).toBe(
         await Bun.file(join(preset.directory, file.source)).text(),
       );
     }
-    expect(await run("diff", "uv", "--to", repo)).toEqual({
-      stdout: "preset: uv is up to date\n",
+    expect(await run("diff", "python", "--to", repo)).toEqual({
+      stdout: "preset: python is up to date\n",
       stderr: "",
       exit: 0,
     });
     await writeFile(join(repo, "pyproject.toml"), "# drift\n");
-    const drift = await run("diff", "uv", "--to", repo);
+    const drift = await run("diff", "python", "--to", repo);
     expect(drift.exit).toBe(1);
     expect(drift.stdout).toContain("--- pyproject.toml (target)");
-    expect((await run("apply", "uv", "--to", repo)).exit).toBe(0);
-    expect((await run("diff", "uv", "--to", repo)).exit).toBe(0);
+    expect((await run("apply", "python", "--to", repo)).exit).toBe(0);
+    expect((await run("diff", "python", "--to", repo)).exit).toBe(0);
   }, 60_000);
 
   test("preserves the prescribed values and keeps optional examples separate", async () => {
-    const directory = join(ROOT, "presets/uv");
+    const directory = join(ROOT, "presets/python");
     expect(
       Bun.TOML.parse(await Bun.file(join(directory, "pyproject.toml")).text()),
     ).toMatchObject({

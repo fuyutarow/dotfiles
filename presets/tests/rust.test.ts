@@ -31,19 +31,17 @@ test("Cargo preset applies to an empty repository, preserves policy, and detects
       profile: z.record(z.string(), z.unknown()),
     }),
   ).safeParse(
-    await Bun.file(
-      join(import.meta.dir, "fixtures/cargo/expected.json"),
-    ).text(),
+    await Bun.file(join(import.meta.dir, "fixtures/rust/expected.json")).text(),
   );
   if (!fixture.success) expect.unreachable(fixture.error.message);
   const listed = await run("list");
   expect(listed.exit).toBe(0);
-  expect(listed.stdout).toContain("cargo\t");
-  expect((await run("diff", "cargo", "--to", scratch)).exit).toBe(1);
-  expect((await run("apply", "cargo", "--to", scratch)).exit).toBe(0);
+  expect(listed.stdout).toContain("rust\t");
+  expect((await run("diff", "rust", "--to", scratch)).exit).toBe(1);
+  expect((await run("apply", "rust", "--to", scratch)).exit).toBe(0);
   for (const file of fixture.data.files)
     expect(await Bun.file(join(scratch, file)).bytes()).toEqual(
-      await Bun.file(join(ROOT, "presets/cargo", file)).bytes(),
+      await Bun.file(join(ROOT, "presets/rust", file)).bytes(),
     );
   const manifest = Bun.TOML.parse(
     await Bun.file(join(scratch, "Cargo.toml")).text(),
@@ -70,15 +68,15 @@ test("Cargo preset applies to an empty repository, preserves policy, and detects
       check: { depends: ["fmt:check", "lint", "test"] },
     },
   });
-  expect(await run("diff", "cargo", "--to", scratch)).toEqual({
+  expect(await run("diff", "rust", "--to", scratch)).toEqual({
     exit: 0,
-    stdout: "preset: cargo is up to date\n",
+    stdout: "preset: rust is up to date\n",
     stderr: "",
   });
   await writeFile(join(scratch, "rustfmt.toml"), "max_width = 80\n");
-  const drift = await run("diff", "cargo", "--to", scratch);
+  const drift = await run("diff", "rust", "--to", scratch);
   expect(drift.exit).toBe(1);
   expect(drift.stdout).toContain("-max_width = 80");
-  expect((await run("apply", "cargo", "--to", scratch)).exit).toBe(0);
-  expect((await run("diff", "cargo", "--to", scratch)).exit).toBe(0);
+  expect((await run("apply", "rust", "--to", scratch)).exit).toBe(0);
+  expect((await run("diff", "rust", "--to", scratch)).exit).toBe(0);
 }, 60_000);

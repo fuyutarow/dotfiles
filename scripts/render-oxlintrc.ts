@@ -18,7 +18,7 @@ import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
 
 const ROOT = join(import.meta.dir, "..");
-export const POLICY_PATH = join(ROOT, "presets", "oxlint", "policy.toml");
+export const POLICY_PATH = join(ROOT, "presets", "typescript", "policy.toml");
 export const OXLINTRC_PATH = join(ROOT, ".oxlintrc.json");
 
 const Level = z.enum(["error", "off"]);
@@ -63,10 +63,17 @@ const PolicySchema = z
       z.strictObject({
         rule: RuleName,
         value: z.unknown(),
+        level: Level.optional(),
         reason: z.string().min(1),
       }),
     ),
     on: z.array(Reasoned),
+    overrides: z.array(
+      z.strictObject({
+        files: z.array(z.string()).min(1),
+        rules: z.record(RuleName, Level),
+      }),
+    ),
     custom: z.array(Custom).min(1),
   })
   .refine(
@@ -138,7 +145,7 @@ const ofKind = (p: Policy, kind: CustomRule["kind"]): CustomRule[] =>
 export function renderOxlintrc(p: Policy): string {
   const rules: Record<string, unknown> = {};
   for (const r of p.off) rules[r.rule] = "off";
-  for (const r of p.option) rules[r.rule] = ["error", r.value];
+  for (const r of p.option) rules[r.rule] = [r.level ?? "error", r.value];
   for (const r of p.on) rules[r.rule] = "error";
   rules["eslint/no-restricted-globals"] = [
     "error",
@@ -171,6 +178,7 @@ export function renderOxlintrc(p: Policy): string {
     categories: p.categories,
     ignorePatterns: p.ignore.map((i) => i.pattern),
     rules,
+    overrides: p.overrides,
   };
   return `${JSON.stringify(config, null, 2)}\n`;
 }
@@ -193,7 +201,7 @@ if (import.meta.main) {
       parameters: [],
       help: {
         description:
-          "Render .oxlintrc.json from presets/oxlint/policy.toml (--write / --check).",
+          "Render .oxlintrc.json from presets/typescript/policy.toml (--write / --check).",
       },
       flags: {
         write: {
@@ -221,7 +229,7 @@ if (import.meta.main) {
 
   const loaded = await loadPolicy();
   if (!loaded.ok)
-    fatal(`cannot read presets/oxlint/policy.toml: ${loaded.error}`);
+    fatal(`cannot read presets/typescript/policy.toml: ${loaded.error}`);
   const repo = argv.flags.repo;
   if (repo === "") fatal("--repo needs a directory");
   const policy =

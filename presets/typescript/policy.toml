@@ -20,6 +20,11 @@ plugins = ["eslint", "typescript", "unicorn", "oxc", "node"]
 # Loads ESLint's core rules into oxlint, for `no-restricted-syntax` (the [[custom]] kind "syntax").
 js_plugins = [{ name = "eslint-js", specifier = "oxlint-plugin-eslint" }]
 
+# The dedicated baseline scanner enables this rule; ordinary lint keeps the backlog ratcheted.
+[[overrides]]
+files = ["**/tests/**", "**/*.test.ts"]
+rules = { "node/no-sync" = "off" }
+
 [categories]
 correctness = "error"
 suspicious = "error"
@@ -46,12 +51,12 @@ pattern = "presets/tests/fixtures"
 reason = "good and intentionally bad samples are executed by the preset fixture tests, not linted as maintained source"
 
 [[ignore]]
-pattern = "presets/ts/zod.ts"
+pattern = "presets/typescript/zod.ts"
 reason = "consumer preset source intentionally imports zod to provide the consumer's shared codec"
 
 [[ignore]]
 pattern = "agents/skills/writing-typescript/assets/consumer-repo"
-reason = "compatibility pointer to presets/ts/zod.ts while writing-typescript documentation links migrate"
+reason = "compatibility pointer to presets/typescript/zod.ts while writing-typescript documentation links migrate"
 
 [[ignore]]
 pattern = "agents/hooks/vendor"
@@ -116,6 +121,12 @@ rule = "unicorn/require-module-specifiers"
 reason = "Flags `export {}`, the idiom that makes a script a module so its top-level names stay file-scoped; its autofix removed it from scripts/tests/fake-codex.ts and two fixtures then redeclared each other (observed 2026-10-05)."
 
 # --- options: a rule on by category, with its setting stated -------------------------------------
+
+[[option]]
+rule = "node/no-sync"
+level = "off"
+value = { allowAtRootLevel = true }
+reason = "scripts/lint-no-sync.ts enables this rendered rule for the call-site exemption and per-file baseline ratchet; ordinary lint must not reject the existing backlog. Test files are excluded by the override above."
 
 [[option]]
 rule = "unicorn/no-useless-undefined"
@@ -267,7 +278,7 @@ scope = "house"
 kind = "syntax"
 target = "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.object.name='z'][callee.property.name='codec'] *)"
 since = "2026-10-04"
-message = "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — jsonOf/jsonText from the repo's zod module (dotfiles: agents/hooks/zod.ts; another repo: its copy from presets/ts/zod.ts). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
+message = "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — jsonOf/jsonText from the repo's zod module (dotfiles: agents/hooks/zod.ts; another repo: its copy from presets/typescript/zod.ts). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
 bad = [
   "export const v: unknown = JSON.parse(\"1\");\n",
   "declare const lib: { codec: (f: () => unknown) => unknown };\nexport const c = lib.codec((): unknown => JSON.parse(\"1\"));\n",
@@ -299,7 +310,7 @@ scope = "house"
 kind = "syntax"
 target = "CallExpression[callee.property.name='json'][arguments.length=0]:not([callee.object.name='z'])"
 since = "2026-10-04"
-message = "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` (the repo's zod module: dotfiles agents/hooks/zod.ts, elsewhere presets/ts/zod.ts), so the body is validated where it enters."
+message = "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` (the repo's zod module: dotfiles agents/hooks/zod.ts, elsewhere presets/typescript/zod.ts), so the body is validated where it enters."
 bad = ["export async function f(r: Response): Promise<unknown> {\n  return await r.json();\n}\n"]
 good = [
   "export async function f(r: Response): Promise<string> {\n  return await r.text();\n}\n",

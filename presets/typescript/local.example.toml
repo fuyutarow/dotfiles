@@ -1,4 +1,4 @@
-# This repo's additions to the house TypeScript lint policy (presets/oxlint/policy.toml).
+# This repo's additions to the house TypeScript lint policy (presets/typescript/policy.toml).
 # It may only ADD ignores, each with its reason; it cannot turn a rule off — the renderer rejects
 # any other key. Render: mise run oxlint:render · drift check: mise run lint:oxlint-policy.
 schema = 1

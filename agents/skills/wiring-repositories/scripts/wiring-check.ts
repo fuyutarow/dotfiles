@@ -14,8 +14,7 @@
 //
 // Exit: 0 clean, 1 findings, 2 FATAL.
 
-import { existsSync, statSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { $ } from "bun";
 import { cli } from "cleye";
@@ -218,16 +217,25 @@ function pathTokens(body: string, root: string): string[] {
 
 /** undefined for a missing path OR a directory — readdir hands back both (proof-of-fire, 2026-08-30). */
 async function readIf(path: string): Promise<string | undefined> {
-  if (!existsSync(path) || !statSync(path).isFile()) return undefined;
+  const info = await Promise.try(() => stat(path)).catch(() => null);
+  if (info === null || !info.isFile()) return undefined;
   return readFile(path, "utf8");
 }
 
-function checkHookTask(
+/** Match `existsSync`: any stat failure means the path is unavailable. */
+async function pathExists(path: string): Promise<boolean> {
+  return Promise.try(() => stat(path)).then(
+    () => true,
+    () => false,
+  );
+}
+
+async function checkHookTask(
   entry: string,
   task: string,
   root: string,
   tasks: Map<string, Task>,
-): void {
+): Promise<void> {
   if (!tasks.has(task)) {
     fail(
       "ORDER-2",
@@ -238,7 +246,7 @@ function checkHookTask(
   }
   const paths = pathTokens(tasks.get(task)?.run ?? "", root);
   for (const path of paths) {
-    if (existsSync(resolve(root, path))) continue;
+    if (await pathExists(resolve(root, path))) continue;
     fail(
       "ORDER-2",
       `.githooks/${entry} -> \`mise run ${task}\` -> missing file \`${path}\`. ` +
@@ -405,15 +413,16 @@ async function auditWiring(
     ".githooks",
   ]) {
     const abs = join(root, dir);
-    for (const file of existsSync(abs) ? await readdir(abs) : [])
+    for (const file of (await pathExists(abs)) ? await readdir(abs) : [])
       sources.push((await readIf(join(abs, file))) ?? "");
   }
   const haystack = [settingsRaw ?? "", mise ?? "", ...sources].join("\n");
   for (const dir of [".claude/hooks", ".claude/tools"]) {
     const abs = join(root, dir);
-    const inert = (existsSync(abs) ? await readdir(abs) : [])
-      .filter((file) => file.endsWith(".ts"))
-      .filter((file) => !haystack.includes(file));
+    const files = (await pathExists(abs)) ? await readdir(abs) : [];
+    const inert = files.filter(
+      (file) => file.endsWith(".ts") && !haystack.includes(file),
+    );
     if (inert.length > 0) {
       fail(
         "INERT",
@@ -457,7 +466,7 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   const root = resolve(argv.flags.repo);
-  if (!existsSync(join(root, ".git"))) {
+  if (!(await pathExists(join(root, ".git")))) {
     process.stderr.write(`FATAL: ${root} is not a git repository\n`);
     process.exit(2);
   }
@@ -557,7 +566,9 @@ async function main(): Promise<void> {
 
   // ORDER-2 — the task AND the script it runs must exist before anything binds to them.
   const hooksDir = join(root, ".githooks");
-  for (const entry of existsSync(hooksDir) ? await readdir(hooksDir) : []) {
+  for (const entry of (await pathExists(hooksDir))
+    ? await readdir(hooksDir)
+    : []) {
     const raw = (await readIf(join(hooksDir, entry))) ?? "";
     // A MENTION IS NOT A CALL. `echo "... run 'mise run f' manually"` names a task without
     // invoking it, and a hook's comment header names several. Reading either as a call site is
@@ -570,7 +581,7 @@ async function main(): Promise<void> {
       .join("\n")
       .replaceAll(/'[^'\n]*'|"[^"\n]*"/gu, " ");
     for (const task of miseRuns(body).flatMap((r) => r.tasks)) {
-      checkHookTask(entry, task, root, tasks);
+      await checkHookTask(entry, task, root, tasks);
     }
   }
 
@@ -578,7 +589,7 @@ async function main(): Promise<void> {
   const hooksPath = (
     await $`git -C ${root} config --get core.hooksPath`.nothrow().quiet().text()
   ).trim();
-  if (existsSync(hooksDir) && hooksPath === "") {
+  if ((await pathExists(hooksDir)) && hooksPath === "") {
     fail(
       "ORDER-3",
       `.githooks/ exists but core.hooksPath is unset — the hooks never run.`,
@@ -593,7 +604,7 @@ async function main(): Promise<void> {
   }
   // resolve(), not join(): an absolute hooksPath must be tested as-is, or the two findings
   // compound into a false "does not exist" (caught by proof-of-fire, 2026-08-30).
-  if (hooksPath !== "" && !existsSync(resolve(root, hooksPath))) {
+  if (hooksPath !== "" && !(await pathExists(resolve(root, hooksPath)))) {
     fail(
       "ORDER-3",
       `core.hooksPath points at ${hooksPath}, which does not exist.`,
@@ -605,7 +616,9 @@ async function main(): Promise<void> {
   // `mise tasks`, cannot be run without git, and cannot be tested. The repos that follow it each
   // wrote the same reason independently; the one that does not is frozen at another repo's
   // superseded shape, having copied it once.
-  for (const entry of existsSync(hooksDir) ? await readdir(hooksDir) : [])
+  for (const entry of (await pathExists(hooksDir))
+    ? await readdir(hooksDir)
+    : [])
     checkThinHook(entry, (await readIf(join(hooksDir, entry))) ?? "");
 
   // HOOK-1 (gate hooks) — pre-commit / pre-push exec `hook:<event>`, which mise.toml declares as
@@ -626,7 +639,7 @@ async function main(): Promise<void> {
     // exactly what broke dotfiles on 2026-09-22 (formatted, re-staged, never linted).
     const gateTask = tasks.get(`hook:${hook}`);
     if (gateTask !== undefined) checkGateTask(hook, gateTask, tasks);
-    const raw = existsSync(hooksDir)
+    const raw = (await pathExists(hooksDir))
       ? await readIf(join(hooksDir, hook))
       : undefined;
     if (raw === undefined) continue;
@@ -693,7 +706,7 @@ async function main(): Promise<void> {
   // noisy in some repos, and prescribing a pre-commit here would be exactly the generous
   // scaffolding S1 exists to prevent. But "we never decided" and "we decided against" are
   // indistinguishable from the outside, and S1 says name which. So it is reported.
-  if (existsSync(hooksDir)) {
+  if (await pathExists(hooksDir)) {
     const bound = (await readdir(hooksDir)).includes("pre-commit");
     const gates = ["check", "lint", "fmt", "test"].filter((t) => tasks.has(t));
     if (!bound && gates.length > 0) {
@@ -749,7 +762,7 @@ async function main(): Promise<void> {
   // JJ-2 — a colocated jj repo denies git to agents. jj runs no git hooks, and the commit gate is
   // `mise run commit` (JJ-1, verbs checked by mise-contract); an agent that can run `git commit`
   // writes history around that gate and around jj's bookmark, and nothing reports it.
-  if (existsSync(join(root, ".jj"))) {
+  if (await pathExists(join(root, ".jj"))) {
     const denied = ["Bash(git:*)", "Bash(command git:*)", "Bash(env git:*)"];
     const noRules: unknown[] = [];
     const parsedRules = jsonOf(DenyRulesSchema).safeParse(settingsRaw ?? "{}");

@@ -9,6 +9,7 @@ import {
   statfsSync,
   writeFileSync,
 } from "node:fs";
+import { readdir, stat as fileStat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -669,23 +670,61 @@ async function startDropCacheLever(): Promise<boolean> {
   return result.isOk() && result.value.code === 0 && !result.value.timedOut;
 }
 
-async function probeHostMemory(): Promise<HostMemory | null> {
-  const result = await fromAsyncThrowable(() =>
-    runBounded(
-      [
-        POWERSHELL,
-        "-NoProfile",
-        "-NonInteractive",
-        "-EncodedCommand",
-        encodedPowerShell(MEMORY_PROBE),
-      ],
-      10_000,
-    ),
-  )();
-  if (result.isErr() || result.value.code !== 0 || result.value.timedOut) {
-    return null;
+export async function probeHostMemory({
+  env = process.env,
+  powershell = POWERSHELL,
+  interopDirectory = "/run/WSL",
+  timeoutMs = 10_000,
+}: {
+  env?: NodeJS.ProcessEnv;
+  powershell?: string;
+  interopDirectory?: string;
+  timeoutMs?: number;
+} = {}): Promise<HostMemory | null> {
+  const measure = async (probeEnv: NodeJS.ProcessEnv) => {
+    const result = await fromAsyncThrowable(() =>
+      runBounded(
+        [
+          powershell,
+          "-NoProfile",
+          "-NonInteractive",
+          "-EncodedCommand",
+          encodedPowerShell(MEMORY_PROBE),
+        ],
+        timeoutMs,
+        undefined,
+        probeEnv,
+      ),
+    )();
+    if (result.isErr() || result.value.code !== 0 || result.value.timedOut) {
+      return null;
+    }
+    return parseHostMemory(result.value.output.replaceAll("\r", ""));
+  };
+  const direct = await measure(env);
+  if (direct !== null || env.WSL_INTEROP !== undefined) return direct;
+
+  // The user manager inherits no WSL_INTEROP: even an absolute Windows executable then
+  // fails with "Invalid argument". Like wsl-audit's local PowerShell transport, borrow a
+  // live session socket. Socket files can outlive their sessions, so try up to four,
+  // newest first. Keep the caller's environment and never override an explicit socket.
+  const names = await readdir(interopDirectory).catch((): string[] => []);
+  const sockets = await Promise.all(
+    names
+      .filter((name) => /^\d+_interop$/u.test(name))
+      .map(async (name) => {
+        const path = join(interopDirectory, name);
+        const info = await fileStat(path).catch(() => null);
+        return { path, mtime: info?.mtimeMs ?? 0 };
+      }),
+  );
+  for (const socket of sockets
+    .toSorted((a, b) => b.mtime - a.mtime)
+    .slice(0, 4)) {
+    const memory = await measure({ ...env, WSL_INTEROP: socket.path });
+    if (memory !== null) return memory;
   }
-  return parseHostMemory(result.value.output.replaceAll("\r", ""));
+  return null;
 }
 
 async function dropPageCache(): Promise<boolean> {
@@ -1039,6 +1078,10 @@ async function main(): Promise<void> {
   const memoryBefore = await probeHostMemory();
   if (memoryBefore === null) {
     process.stderr.write("WARN Windows memory could not be measured\n");
+  } else {
+    process.stdout.write(
+      `MEMORY windows_available_mb=${memoryBefore.availableMb} page_reads_s=${memoryBefore.pageReadsPerSecond}\n`,
+    );
   }
   const memoryLow = memoryEmergency(memoryBefore);
   const memoryAvailableLow =

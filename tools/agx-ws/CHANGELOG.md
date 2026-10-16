@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 — 2026-10-16
+
+- Recognize released workspace content and land-consumed changesets, report differing paths, and safely collect idle land checkouts
+
 ## 0.3.0 — 2026-10-16
 
 - Enumerate all jj workspaces for gc, protect committed keep declarations, resolve repository trunk, and opt legacy cleanup in with --legacy; add --all and TSV classification.

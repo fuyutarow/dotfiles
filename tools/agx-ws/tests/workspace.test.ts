@@ -17,9 +17,9 @@ import {
   chmodSync,
   rmSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
-import { mkdir, chmod } from "node:fs/promises";
+import { mkdir, chmod, unlink } from "node:fs/promises";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 setDefaultTimeout(60_000);
@@ -37,6 +37,7 @@ const baseEnv = (
   PATH: `${bin}:${process.env.PATH}`,
   HOME: home,
   XDG_STATE_HOME: join(home, "state"),
+  AGX_STATE_DIR: join(home, "state/agx"),
   XDG_CONFIG_HOME: join(scratch, "config"),
   XDG_DATA_HOME: join(home, "data"),
   XDG_CACHE_HOME: join(scratch, "cache"),
@@ -687,7 +688,190 @@ const child = Bun.spawn([${JSON.stringify(rip)}, ...process.argv.slice(2)], {std
   });
 });
 
+const recFor = (dir: string) => ({
+  id: dir,
+  state: "ended",
+  cwd: dir,
+  workspace: dir,
+  continues: null,
+});
+
 describe("gc integration branches", () => {
+  test("WS-GC-LANDED-CONTENT: rebased copy is collected; one differing path survives", async () => {
+    const path = await repo('trunk = "main"\n');
+    for (const slug of ["rebased-copy", "partial-copy"])
+      expect((await ws(["add", slug], path)).code).toBe(0);
+    const landed = wsDir(path, "rebased-copy");
+    const partial = wsDir(path, "partial-copy");
+    for (const dir of [landed, partial]) {
+      await Bun.write(join(dir, "a.txt"), "changed\n");
+      await Bun.write(join(dir, "second.txt"), "new\n");
+      await unlink(join(dir, ".ws.toml"));
+    }
+    await Bun.write(join(partial, "second.txt"), "outstanding\n");
+    await Bun.write(join(path, "a.txt"), "changed\n");
+    await Bun.write(join(path, "second.txt"), "new\n");
+    // Keep the committed config so trunk remains explicit, but delete another tracked file below.
+    expect(
+      (await jj(["commit", "-m", "independent landing copy"], path)).code,
+    ).toBe(0);
+    expect((await jj(["bookmark", "set", "main", "-r", "@-"], path)).code).toBe(
+      0,
+    );
+    // The workspace deletion has not landed yet: both must initially survive.
+    setRecords([recFor(landed), recFor(partial)]);
+    const before = await ws(["gc", "--dry-run"], path);
+    expect(before.out).toContain(`${landed}\tws\tunlanded\t`);
+    await unlink(join(path, ".ws.toml"));
+    expect((await jj(["commit", "-m", "land deletion"], path)).code).toBe(0);
+    expect((await jj(["bookmark", "set", "main", "-r", "@-"], path)).code).toBe(
+      0,
+    );
+    // readConfig reads @-; retain the explicit trunk without changing its tree.
+    expect(
+      (
+        await jj(
+          ["config", "set", "--repo", 'revset-aliases."trunk()"', "main"],
+          path,
+        )
+      ).code,
+    ).toBe(0);
+    const env = baseEnv();
+    const dry = await ws(["gc", "--dry-run"], path, env);
+    expect(dry.code, dry.err).toBe(0);
+    expect(dry.out).toContain(`${landed}\tws\tlanded\t`);
+    expect(dry.out).toContain("differs in 1 of 3 paths: second.txt");
+    const collected = await ws(["gc"], path, env);
+    expect(collected.code, collected.err).toBe(0);
+    expect(await Bun.file(join(landed, "a.txt")).exists()).toBe(false);
+    expect(await Bun.file(join(partial, "second.txt")).text()).toBe(
+      "outstanding\n",
+    );
+  });
+
+  test("release consumes notes and version metadata; later trunk edits preserve landing evidence", async () => {
+    const path = await repo('trunk = "main"\n');
+    await Bun.write(
+      join(path, "tools/example/package.json"),
+      '{"name":"example","version":"0.1.0"}\n',
+    );
+    await Bun.write(
+      join(path, "tools/example/CHANGELOG.md"),
+      "# Changelog\n\n## 0.1.0\n\n- Initial\n",
+    );
+    expect((await jj(["commit", "-m", "tool base"], path)).code).toBe(0);
+    expect((await jj(["bookmark", "set", "main", "-r", "@-"], path)).code).toBe(
+      0,
+    );
+    expect((await ws(["add", "release-copy"], path)).code).toBe(0);
+    const dir = wsDir(path, "release-copy");
+    const note = "tools/example/.changes/released.md";
+    await Bun.write(
+      join(dir, note),
+      "---\nbump: patch\n---\n\nReleased feature\n",
+    );
+    await Bun.write(join(dir, "feature.txt"), "released work\n");
+    // Worker edits to release metadata must survive release normalization.
+    await Bun.write(
+      join(dir, "tools/example/package.json"),
+      '{"name":"renamed","version":"0.1.0"}\n',
+    );
+    await Bun.write(
+      join(dir, "tools/example/CHANGELOG.md"),
+      "# Changelog\n\n## 0.1.0\n\n- Initial, corrected\n",
+    );
+    await Bun.write(join(path, "feature.txt"), "released work\n");
+    await Bun.write(
+      join(path, "tools/example/package.json"),
+      '{"name":"renamed","version":"0.1.1"}\n',
+    );
+    await Bun.write(
+      join(path, "tools/example/CHANGELOG.md"),
+      "# Changelog\n\n## 0.1.1\n\n- Released feature\n\n## 0.1.0\n\n- Initial, corrected\n",
+    );
+    expect(
+      (await jj(["commit", "-m", "squashed release copy"], path)).code,
+    ).toBe(0);
+    expect((await jj(["bookmark", "set", "main", "-r", "@-"], path)).code).toBe(
+      0,
+    );
+    await Bun.write(
+      join(path, "feature.txt"),
+      "released work, subsequently improved\n",
+    );
+    expect((await jj(["commit", "-m", "later trunk edit"], path)).code).toBe(0);
+    expect((await jj(["bookmark", "set", "main", "-r", "@-"], path)).code).toBe(
+      0,
+    );
+    setRecords([recFor(dir)]);
+    const dry = await ws(["gc", "--dry-run"], path);
+    expect(dry.code, dry.err).toBe(0);
+    expect(dry.out).toContain(`${dir}\tws\tlanded\t`);
+    expect(dry.out).toContain(`land-consumed changesets: ${note}`);
+    expect(dry.out).toContain("matched release snapshot:");
+    await Bun.write(join(dir, "feature.txt"), "unreleased work\n");
+    const partial = await ws(["gc"], path);
+    expect(partial.code, partial.err).toBe(0);
+    expect(partial.out).toContain("differs in 1 of 4 paths: feature.txt");
+    expect(await Bun.file(join(dir, "feature.txt")).exists()).toBe(true);
+    await Bun.write(join(dir, "feature.txt"), "released work\n");
+    await Bun.write(
+      join(dir, note),
+      "---\nbump: patch\n---\n\nNever released\n",
+    );
+    const missing = await ws(["gc"], path);
+    expect(missing.out).toContain(`${dir}\tws\tunlanded\t`);
+    expect(await Bun.file(join(dir, note)).exists()).toBe(true);
+  });
+
+  test("land-temp is collected only with --legacy and while land's lock is free", async () => {
+    const path = await repo('trunk = "main"\n');
+    const state = join(home, "state/agx/land", `fixture-${counter}`);
+    const dir = join(state, "workspace");
+    await mkdir(state, { recursive: true });
+    expect(
+      (
+        await jj(
+          ["workspace", "add", "--name", "lander", "-r", "main", dir],
+          path,
+        )
+      ).code,
+    ).toBe(0);
+    await Bun.write(join(dir, "temporary.txt"), "land staging residue\n");
+    setRecords([]);
+    const dry = await ws(["gc", "--dry-run", "--legacy"], path);
+    expect(dry.code, dry.err).toBe(0);
+    expect(dry.out).toContain(`${dir}\tlegacy\tland-temp\t`);
+    expect((await ws(["gc"], path)).code).toBe(0);
+    expect(await Bun.file(join(dir, "a.txt")).exists()).toBe(true);
+    await Bun.write(
+      join(state, "land.lock/owner.json"),
+      JSON.stringify({
+        pid: process.pid,
+        host: hostname(),
+        what: "land",
+        since: Temporal.Now.instant().toString(),
+      }),
+    );
+    const held = await ws(["gc", "--legacy"], path);
+    expect(held.code, held.err).toBe(0);
+    expect(held.out).toContain("land lock is held");
+    expect(await Bun.file(join(dir, "a.txt")).exists()).toBe(true);
+    await Bun.write(
+      join(state, "land.lock/owner.json"),
+      JSON.stringify({
+        pid: 2147483647,
+        host: hostname(),
+        what: "land",
+        since: Temporal.Now.instant().toString(),
+      }),
+    );
+    const collected = await ws(["gc", "--legacy"], path);
+    expect(collected.code, collected.err).toBe(0);
+    expect(await Bun.file(join(dir, "a.txt")).exists()).toBe(false);
+    expect((await jj(["workspace", "list"], path)).out).not.toContain("lander");
+  });
+
   test("contains a squash diff even with independent trunk edits in the same file", async () => {
     const path = await repo('trunk = "main"\n');
     await Bun.write(join(path, "a.txt"), "a\nb\nc\nd\ne\nf\ng\n");
@@ -705,8 +889,10 @@ describe("gc integration branches", () => {
       ).code,
     ).toBe(0);
     await Bun.write(join(dir, "a.txt"), "a\nB\nc\nd\ne\nf\ng\n");
+    await Bun.write(join(dir, "shared-new.txt"), "same new file\n");
     expect((await jj(["status"], dir)).code).toBe(0);
     await Bun.write(join(path, "a.txt"), "a\nB\nc\nd\ne\nf\nG\n");
+    await Bun.write(join(path, "shared-new.txt"), "same new file\n");
     await Bun.write(join(path, "unrelated.txt"), "other integrated work\n");
     expect(
       (await jj(["commit", "-m", "integrated plus other work"], path)).code,

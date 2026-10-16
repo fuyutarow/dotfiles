@@ -1,3 +1,4 @@
+import { prepareTicketRepo } from "../ticket-repo.ts";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
@@ -25,11 +26,12 @@ const ticketText = (prose: string): string =>
 
 // Seeds one ended run per prior row; the Jev endpoint is a closed port, so a continue that
 // routed would fall back to the roster default (luna-high) instead of the pinned row.
-const fixture = () => {
+const fixture = async () => {
   const root = tempDirs.register(
     mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-continue-`)),
   );
   roots.push(root);
+  await prepareTicketRepo(root);
   const state = join(root, "state");
   mkdirSync(state, { recursive: true });
   const seed = (id: string, row: string, session: string | null) => [
@@ -132,8 +134,8 @@ const Started = z.looseObject({
 const Receipt = z.looseObject({ id: z.string(), row: z.string() });
 
 describe("agx run --continue pins the prior row", () => {
-  test("a codex run resumes on its codex row even when the router would prefer claude", () => {
-    const f = fixture();
+  test("a codex run resumes on its codex row even when the router would prefer claude", async () => {
+    const f = await fixture();
     const result = f.resume("codex-run");
     expect(result.exitCode).toBe(0);
     const receiptResult = jsonOf(Receipt).safeParse(
@@ -153,8 +155,8 @@ describe("agx run --continue pins the prior row", () => {
     expect(started?.continues).toBe("codex-run");
   });
 
-  test("a claude run resumes its claude session on its claude row", () => {
-    const f = fixture();
+  test("a claude run resumes its claude session on its claude row", async () => {
+    const f = await fixture();
     const result = f.resume("claude-run");
     expect(result.exitCode).toBe(0);
     const receiptResult = jsonOf(Receipt).safeParse(
@@ -170,8 +172,8 @@ describe("agx run --continue pins the prior row", () => {
     expect(ended?.vendor_session).toBe("next-claude-session-1");
   });
 
-  test("a run without a vendor session exits 2 before any worker starts", () => {
-    const f = fixture();
+  test("a run without a vendor session exits 2 before any worker starts", async () => {
+    const f = await fixture();
     const before = f.events().length;
     const result = f.resume("bare-run");
     expect(result.exitCode).toBe(2);
@@ -183,8 +185,8 @@ describe("agx run --continue pins the prior row", () => {
     expect(existsSync(join(f.state, "runs"))).toBe(false);
   });
 
-  test("a run whose row left the roster exits 2 before any worker starts", () => {
-    const f = fixture();
+  test("a run whose row left the roster exits 2 before any worker starts", async () => {
+    const f = await fixture();
     const before = f.events().length;
     const result = f.resume("ghost-run");
     expect(result.exitCode).toBe(2);
@@ -192,8 +194,8 @@ describe("agx run --continue pins the prior row", () => {
     expect(f.events()).toHaveLength(before);
   });
 
-  test("the ticket file is re-read on continue", () => {
-    const f = fixture();
+  test("the ticket file is re-read on continue", async () => {
+    const f = await fixture();
     writeFileSync(f.ticket, ticketText("amended prose"));
     const result = f.resume("codex-run");
     expect(result.exitCode).toBe(0);

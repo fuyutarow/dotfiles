@@ -26,6 +26,14 @@ export const RunSchema = z.object({
   verify: z.array(VerifyResult),
   last_progress_path: z.string().nullable(),
   continues: z.string().nullable(),
+  supersedes: z.string().nullable().optional(),
+  base_rev: z.string().optional(),
+  premise_commits: z
+    .array(z.object({ premise: z.string(), commit: z.string() }))
+    .optional(),
+  ticket_path: z.string().optional(),
+  ticket_orig_path: z.string().optional(),
+  ticket_sha256: z.string().optional(),
   vendor_session: z.string().nullable(),
   pid: z.number(),
   failed_early_quit: z.boolean(),

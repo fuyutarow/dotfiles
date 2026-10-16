@@ -35,7 +35,13 @@ test("legacy ownerless record folds to ended lost; ls and ls --wait write nothin
   await Bun.write(join(root, "records.fold.json"), '{"state":"orphaned"}');
   for (const args of [[], ["--wait", "legacy"]]) {
     const child = Bun.spawn(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json", ...args],
+      [
+        process.execPath,
+        "tools/agx-run/src/next/cli.ts",
+        "ls",
+        "--json",
+        ...args,
+      ],
       {
         env: { ...process.env, AGX_NEXT_STATE_DIR: root },
         stdout: "pipe",
@@ -110,7 +116,7 @@ test("tsc accepts the closed state and rejects constructing orphaned", async () 
     ]);
     return { exit, output: stdout + stderr };
   };
-  const header = `import type { ListedRun } from ${JSON.stringify(resolve("tools/agx/src/next/run-state.ts"))};\ndeclare const base: ListedRun;\n`;
+  const header = `import type { ListedRun } from ${JSON.stringify(resolve("tools/agx-run/src/next/run-state.ts"))};\ndeclare const base: ListedRun;\n`;
   await Bun.write(
     fixture,
     `${header}const run: ListedRun = { ...base, state: "ended", outcome: "lost" };\n`,

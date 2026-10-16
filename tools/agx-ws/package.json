@@ -1,9 +1,10 @@
 {
-  "version": "0.2.0",
-  "name": "@dotfiles/jj-ws",
+  "version": "0.2.1",
+  "name": "@dotfiles/agx-ws",
   "private": true,
   "type": "module",
   "bin": {
+    "agx-ws": "src/ws.ts",
     "ws": "src/ws.ts"
   }
 }

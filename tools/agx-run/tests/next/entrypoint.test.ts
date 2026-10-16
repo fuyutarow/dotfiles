@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import packageJson from "../../package.json" with { type: "json" };
 
-test("agx run resolves to the five-command next CLI", () => {
-  expect(packageJson.bin.agx).toBe("src/next/cli.ts");
+test("agx-run resolves to the five-command CLI", () => {
+  expect(packageJson.bin["agx-run"]).toBe("src/next/cli.ts");
 });
 
-test("agx --version prints the package version", () => {
+test("agx-run --version prints the package version", () => {
   const result = Bun.spawnSync(
-    [process.execPath, "tools/agx/src/next/cli.ts", "--version"],
+    [process.execPath, "tools/agx-run/src/next/cli.ts", "--version"],
     {
       cwd: process.cwd(),
     },
@@ -16,9 +16,9 @@ test("agx --version prints the package version", () => {
   expect(result.stdout.toString()).toBe(`${packageJson.version}\n`);
 });
 
-test("agx run --help explains continuation amendments", () => {
+test("agx-run run --help explains continuation amendments", () => {
   const result = Bun.spawnSync(
-    [process.execPath, "tools/agx/src/next/cli.ts", "run", "--help"],
+    [process.execPath, "tools/agx-run/src/next/cli.ts", "run", "--help"],
     { cwd: process.cwd() },
   );
   expect(result.exitCode).toBe(0);

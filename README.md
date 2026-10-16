@@ -90,12 +90,13 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ~/dotfiles/
 ├── zsh/         # zshenv (tiny, SSH-safe), zshrc, aliases.zsh (+ IS_MAC/IS_WSL), mac.zsh / wsl.zsh
 ├── git/         # gitconfig + local.mac / local.wsl (per-OS include)
-├── tools/       # repo CLIs and libraries, one directory each (release notes in .changes/, generated package.json semver + CHANGELOG.md, src/, tests/); may import its own dir and tools/shared/
+├── tools/       # repo CLIs and libraries, one directory each (release notes in .changes/, generated package.json semver + CHANGELOG.md, src/, tests/); parts import their own dir and tools/shared/
 │   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
-│   ├── agx/ # agx (Jev-selected worker routing; append-only records stay in ~/.local/state/agx-next)
-│   ├── jj-ws/      # ws: repo-agnostic jj workspace creation, readiness, removal and collection
-│   ├── tkt/        # tkt: ticket issuance, derived lifecycle listing and accepted-and-landed collection
+│   ├── agx/        # agx suite entry: process router only, no state or decision logic
+│   ├── agx-run/    # agx run/check/ls/judge/stats; records stay in ~/.local/state/agx-next
+│   ├── agx-ws/     # agx ws / ws: repo-agnostic jj workspace lifecycle
+│   ├── agx-ticket/ # agx ticket / tkt: ticket issuance, derived listing and collection
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
 │   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, sockets, model-orders, worker-env)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
@@ -116,7 +117,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent assets (commands/, skills/); other repos call task helpers
 │                #   through package.json bins instead of skill installation paths
-├── tools/       # repo CLIs (rr, ws from jj-ws, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
+├── tools/       # repo CLIs (rr, agx suite, ws, tkt, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
 ├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup
 ├── Brewfile.core      # tools needed on every box
 ├── Brewfile.ondemand  # tools installed when first needed (OS guards stay here)
@@ -124,14 +125,16 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 └── mise.toml    # the task runner (no justfile)
 ```
 
-The architecture of `tools/` (the dispatch pipeline, the capacity domain, the oracle rule, and for
-every invariant the check that enforces it or the ticket that will add one) lives in
+The `agx` command is the thin suite entry: `agx run` and legacy run commands go to `agx-run`;
+`agx ws` and `agx ticket` start the workspace and ticket CLIs as child processes. The architecture
+of `tools/` (including the suite boundary, dispatch pipeline, capacity domain, oracle rule, and each
+invariant's check or planned ticket) lives in
 [`tools/spec/architecture.md`](tools/spec/architecture.md); each tool README links to it.
 
 
-`tools/tkt/` (`tkt`, [spec](tools/spec/tkt.md)) owns plain ticket issuance and collection across
+`tools/agx-ticket/` (`tkt`, [spec](tools/spec/agx-ticket.md)) owns plain ticket issuance and collection across
 repositories: `tkt new` renders templates without overwriting, `tkt ls` derives run state and
-landing from agx and jj, and `tkt gc --dry-run` previews collection of accepted, landed tickets.
+landing from agx-run and jj, and `tkt gc --dry-run` previews collection of accepted, landed tickets.
 It keeps no state file; tickets default to `.agents/tickets` or `.agx.toml`'s `tickets` directory.
 
 Each tool change records its release intent in a generated `tools/<name>/.changes/<slug>.md`

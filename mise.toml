@@ -415,8 +415,8 @@ run = "bun test tools/repo-retrieve/tests"
 
 [tasks."test:agx"]
 dir = "{{config_root}}"
-description = "agx (the one worker entry point) tests: fake agx, fake Jev, scratch state dir"
-run = "bun test tools/agx/tests"
+description = "agx suite and run-engine tests: fake workers, fake Jev, scratch state dir"
+run = "bun test tools/agx tools/agx-run"
 
 [tasks."test:skills"]
 dir = "{{config_root}}"

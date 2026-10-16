@@ -1,0 +1,10 @@
+{
+  "name": "@dotfiles/agx-ticket",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agx-ticket": "src/tkt.ts",
+    "tkt": "src/tkt.ts"
+  }
+}

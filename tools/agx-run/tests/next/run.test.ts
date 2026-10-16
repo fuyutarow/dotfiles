@@ -67,7 +67,7 @@ describe("agx-next run", () => {
     const result = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         ticket,
         "--cd",
@@ -231,7 +231,7 @@ describe("agx-next run", () => {
     const result = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         ticket,
         "--cd",
@@ -296,7 +296,7 @@ describe("agx-next run", () => {
     const accepted = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "judge",
         started.id,
         "accept",
@@ -310,7 +310,7 @@ describe("agx-next run", () => {
     const continued = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         ticket,
         "--cd",
@@ -331,7 +331,7 @@ describe("agx-next run", () => {
     const codexDispatcher = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         ticket,
         "--cd",
@@ -361,7 +361,7 @@ describe("agx-next run", () => {
     const noDispatcher = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         ticket,
         "--cd",
@@ -396,7 +396,7 @@ describe("agx-next run", () => {
     if (!noDispatcherReceipt.success) return;
 
     const listed = Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--json"],
       {
         cwd: process.cwd(),
         env: { ...process.env, AGX_NEXT_STATE_DIR: state },
@@ -469,7 +469,7 @@ describe("agx-next run", () => {
     const rejected = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "judge",
         secondRow.id,
         "reject",
@@ -509,7 +509,7 @@ describe("agx-next run", () => {
     const checked = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "check",
         ticket,
         "--cd",
@@ -576,7 +576,7 @@ describe("agx-next run", () => {
     const result = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         ticket,
         "--cd",
@@ -588,7 +588,7 @@ describe("agx-next run", () => {
     expect(result.stderr.toString()).toContain("VERIFY exit=0 true");
     expect(result.stderr.toString()).toContain("VERIFY exit=3 sh -c 'exit 3'");
     const listed = Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--json"],
       { cwd: process.cwd(), env },
     );
     const rows = jsonOf(
@@ -630,7 +630,7 @@ describe("agx-next run", () => {
     const result = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "check",
         ticket,
         "--cd",
@@ -660,7 +660,7 @@ describe("agx-next run", () => {
     const first = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "stats",
         "--import-legacy",
       ],
@@ -689,7 +689,7 @@ describe("agx-next run", () => {
     });
 
     const listed = Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--json"],
       { cwd: process.cwd(), env },
     );
     const legacyRows = jsonOf(
@@ -713,7 +713,7 @@ describe("agx-next run", () => {
     const second = Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "stats",
         "--import-legacy",
       ],
@@ -767,7 +767,7 @@ describe("agx-next run", () => {
         .join("\n") + "\n",
     );
     const result = Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--json"],
       {
         cwd: process.cwd(),
         env: { ...process.env, AGX_NEXT_STATE_DIR: state },
@@ -845,7 +845,7 @@ describe("agx-next run", () => {
       records.map((event) => JSON.stringify(event)).join("\n") + "\n",
     );
     const result = Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--json"],
       {
         cwd: process.cwd(),
         env: { ...process.env, AGX_NEXT_STATE_DIR: state },
@@ -920,7 +920,7 @@ describe("agx-next run", () => {
     );
     const env = { ...process.env, AGX_NEXT_STATE_DIR: state };
     const human = Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls"],
       { cwd: process.cwd(), env },
     );
     expect(human.exitCode).toBe(0);
@@ -931,14 +931,14 @@ describe("agx-next run", () => {
     expect(humanLines[30]).toBe("… 2 older (agx ls --all)");
 
     const all = Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--all"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--all"],
       { cwd: process.cwd(), env },
     );
     expect(all.exitCode).toBe(0);
     expect(all.stdout.toString().trimEnd().split("\n")).toHaveLength(32);
 
     const json = Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--json"],
       { cwd: process.cwd(), env },
     );
     expect(json.exitCode).toBe(0);
@@ -957,7 +957,7 @@ describe("agx-next run", () => {
       `${JSON.stringify(malformed)}\n`,
     );
     const refused = Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls"],
       { cwd: process.cwd(), env },
     );
     expect(refused.exitCode).toBe(1);

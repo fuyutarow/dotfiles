@@ -42,7 +42,7 @@ const scratch = (prefix: string): string => {
   return root;
 };
 
-const CLI = "tools/agx/src/next/cli.ts";
+const CLI = "tools/agx-run/src/next/cli.ts";
 
 // A fixture agx project: fake Jev, a ticket, and a worker script that reports its temp variables.
 async function fixture(workerBody: string, verify: string | string[]) {

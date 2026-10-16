@@ -62,7 +62,7 @@ Tests spawn each hook end-to-end with synthetic payloads:
 `enforce-ws-sole-creator.ts` runs on `Bash|Write|Edit|MultiEdit` for both Claude and
 Codex. Direct `jj workspace add` and `git worktree add`, including nested shell
 commands, are denied with the `ws add` invocation. Shell script writes and edits
-are inspected after replaying the edits; only this checkout's `tools/jj-ws/` may
+are inspected after replaying the edits; only this checkout's `tools/agx-ws/` may
 contain workspace creation. The shared Bash parser distinguishes execution from
 quoted examples. Unsupported syntax and inspection errors deny the operation.
 `ws add`, workspace listing, and forgetting remain available; ws's child processes

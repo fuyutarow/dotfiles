@@ -8,7 +8,7 @@
 //
 // Internal CLI contract (designing-command-line-interfaces C0–C5)
 //   C0  consumers   agx main loop; tests invoke the internal file directly.
-//   C1  invocation  `bun tools/agx/src/workers/codex.ts` (--choice ID | --model M --effort E) --sandbox S --cd DIR [--timeout-s N]
+//   C1  invocation  `bun tools/agx-run/src/workers/codex.ts` (--choice ID | --model M --effort E) --sandbox S --cd DIR [--timeout-s N]
 //                   [--receipt-dir D] (--prompt-file F | prompt on stdin)
 //                   model, effort, sandbox and cd are REQUIRED: a bare codex inherits config.toml.
 //                   --resume THREAD continues that codex session in place of a fresh one: same flags,
@@ -138,8 +138,8 @@ const argv = cli(
       description:
         "Run one bounded `codex exec` and print a JSON receipt (exit, tokens, last message, duration).",
       examples: [
-        "bun tools/agx/src/workers/codex.ts --model gpt-6-luna --effort medium --sandbox read-only --cd . --prompt-file brief.md",
-        "echo 'Reply OK' | bun tools/agx/src/workers/codex.ts --model gpt-6-luna --effort low --sandbox read-only --cd /tmp",
+        "bun tools/agx-run/src/workers/codex.ts --model gpt-6-luna --effort medium --sandbox read-only --cd . --prompt-file brief.md",
+        "echo 'Reply OK' | bun tools/agx-run/src/workers/codex.ts --model gpt-6-luna --effort low --sandbox read-only --cd /tmp",
       ],
     },
     flags: {

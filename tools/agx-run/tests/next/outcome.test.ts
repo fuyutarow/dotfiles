@@ -71,7 +71,7 @@ test("ended fixtures retain measured outcomes while routing omits ungraded raw h
     const child = Bun.spawn(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         ticket,
         "--cd",
@@ -101,7 +101,7 @@ test("ended fixtures retain measured outcomes while routing omits ungraded raw h
     expected.push(outcome);
   }
   const listed = Bun.spawnSync(
-    [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+    [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--json"],
     { env },
   );
   expect(listed.exitCode).toBe(0);

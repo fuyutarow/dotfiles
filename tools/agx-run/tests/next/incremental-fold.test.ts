@@ -202,7 +202,7 @@ test("ls --running combines with JSON, all and selector; cached liveness is refr
   });
   const ls = (args: string[]) =>
     Bun.spawnSync(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", ...args],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", ...args],
       { env: { ...process.env, AGX_NEXT_STATE_DIR: root } },
     );
   const json = ls(["--running", "--json", "--all"]);
@@ -232,7 +232,7 @@ test("unwritable snapshot falls back safely and malformed complete tail is rejec
   await foldedRuns();
   fs.appendFileSync(recordPath(), '{"kind":"broken"}\n');
   const result = Bun.spawnSync(
-    [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+    [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--json"],
     { env: { ...process.env, AGX_NEXT_STATE_DIR: root } },
   );
   expect(result.exitCode).toBe(1);

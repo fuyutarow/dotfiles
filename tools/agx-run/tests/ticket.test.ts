@@ -162,8 +162,8 @@ describe("parseTicket", () => {
 
 describe("globsOverlap (segment-exact intersection)", () => {
   test.each([
-    ["tools/agx/**", "agents/models/roster.ts", false],
-    ["tools/agx/**", "tools/agx/tests/a.ts", true],
+    ["tools/agx-run/**", "agents/models/roster.ts", false],
+    ["tools/agx-run/**", "tools/agx-run/tests/a.ts", true],
     ["agents/**", "agents/models/roster.ts", true],
     ["**", "anything/at/all", true],
     ["a/b.ts", "a/b.ts", true],

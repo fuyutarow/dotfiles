@@ -117,7 +117,7 @@ async function nextAgxRuns(): Promise<Result<WorkspaceRun[], Error>> {
   const command = await runProcess(
     [
       process.execPath,
-      join(import.meta.dir, "../tools/agx/src/next/cli.ts"),
+      join(import.meta.dir, "../tools/agx-run/src/next/cli.ts"),
       "ls",
       "--json",
     ],

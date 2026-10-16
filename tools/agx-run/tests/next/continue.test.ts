@@ -77,7 +77,7 @@ const fixture = () => {
     Bun.spawnSync(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         ticket,
         "--cd",

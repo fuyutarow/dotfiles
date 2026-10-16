@@ -44,8 +44,10 @@ The annotated topic tree (every directory + what it holds + how it deploys) is t
 `zsh git jj tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` `edge` (mac), `wsl` (WSL).
 Repo CLIs and libraries live under `tools/<name>/` (release changesets, generated `package.json`
 semver and `CHANGELOG.md`, `src/`, `tests/`; see README → Architecture → tools for the release
-rule; may import only their own dir and `tools/shared/`): `tools/smart-open`, `tools/repo-retrieve`
-(`rr` / `repo-retrieve`), `tools/agx` (`agx`), `tools/agent-resource-run`, and
+rule; parts may import only their own dir and `tools/shared/`): `tools/smart-open`, `tools/repo-retrieve`
+(`rr` / `repo-retrieve`), `tools/agx` (the process-only `agx` suite entry),
+`tools/agx-run` (`agx run` and legacy run commands), `tools/agx-ws` (`agx ws` / `ws`),
+`tools/agx-ticket` (`agx ticket` / `tkt`), `tools/agent-resource-run`, and
 `tools/serena-foreground` (both OSes), `tools/storage-headroom` (storage decisions and read-only
 headroom CLI), `tools/secrets-push`, `tools/sui-keystore-merge`, `tools/shared` (code several tools import, including Bash parsing and hook path
 resolution).

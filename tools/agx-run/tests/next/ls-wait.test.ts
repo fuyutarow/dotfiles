@@ -55,7 +55,13 @@ const fixture = (events: readonly object[]): string => {
 const deadPid = (): number => Bun.spawnSync(["true"]).pid;
 const spawnWait = (root: string, ...args: string[]) =>
   Bun.spawn(
-    [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--wait", ...args],
+    [
+      process.execPath,
+      "tools/agx-run/src/next/cli.ts",
+      "ls",
+      "--wait",
+      ...args,
+    ],
     {
       cwd: process.cwd(),
       stdout: "pipe",

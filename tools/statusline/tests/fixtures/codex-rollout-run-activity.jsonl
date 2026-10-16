@@ -1,2 +1,2 @@
-{"type":"response_item","timestamp":"2026-10-14T04:00:00Z","payload":{"type":"custom_tool_call","name":"exec","input":"const result = await tools.exec_command({cmd:\"bun test tools/agx/src/state.ts\"});"}}
+{"type":"response_item","timestamp":"2026-10-14T04:00:00Z","payload":{"type":"custom_tool_call","name":"exec","input":"const result = await tools.exec_command({cmd:\"bun test tools/agx-run/src/state.ts\"});"}}
 {"type":"response_item","timestamp":"2026-10-14T04:01:00Z","payload":{"type":"custom_tool_call","name":"exec","input":"const result = await tools.exec_command({cmd:\"rg -n 'routeLines' tools/statusline/src/dispatch-runs.ts\"}); /* *** Update File: /home/fuyu/dotfiles-ws-hooksearch/tools/shared/src/shape.ts\\\\n@@\\\\n-// patch body noise */"}}

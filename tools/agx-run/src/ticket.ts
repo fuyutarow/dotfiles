@@ -7,8 +7,8 @@
 //   outcome = "the result this changes"
 //   consumer = "who consumes it"
 //   first_return = "useful interim artifact"
-//   writes = ["tools/agx/**"]   # globs relative to repo root; [] = read-only
-//   verify = ["bun test tools/agx/tests"]    # or read_only_diagnostic = true
+//   writes = ["tools/agx-run/**"]   # globs relative to repo root; [] = read-only
+//   verify = ["bun test tools/agx-run/tests"]    # or read_only_diagnostic = true
 //   verify_timeout_s = 1200                  # optional; bound for all verify commands together
 //   timeout_s = 3600                         # optional; worker wall clock (60..14400)
 //   timeout_reason = "why this exceeds 600 seconds" # required when timeout_s > 600

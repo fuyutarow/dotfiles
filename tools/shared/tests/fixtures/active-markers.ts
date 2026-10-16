@@ -16,7 +16,7 @@ export const ownFreshMarker = {
   dispatcher_session: fixtureSession,
   ticket: {
     writes: [
-      "tools/agx/**",
+      "tools/agx-run/**",
       "agents/models/**",
       "scripts/render-home.ts",
       "scripts/tests/render-home.test.ts",

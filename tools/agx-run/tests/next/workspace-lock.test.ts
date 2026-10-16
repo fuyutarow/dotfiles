@@ -101,7 +101,7 @@ console.log(JSON.stringify({ report: { summary: "done", changes: [], checks: [],
     const child = Bun.spawn(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         ticket,
         "--cd",
@@ -143,7 +143,7 @@ console.log(JSON.stringify({ report: { summary: "done", changes: [], checks: [],
   };
   const listed = async () => {
     const child = Bun.spawn(
-      [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],
+      [process.execPath, "tools/agx-run/src/next/cli.ts", "ls", "--json"],
       { env, stdout: "pipe", stderr: "pipe" },
     );
     const text = await new Response(child.stdout).text();
@@ -353,7 +353,7 @@ for (const [signal, exit] of [
     const child = Bun.spawn(
       [
         process.execPath,
-        "tools/agx/src/next/cli.ts",
+        "tools/agx-run/src/next/cli.ts",
         "run",
         f.ticket,
         "--cd",

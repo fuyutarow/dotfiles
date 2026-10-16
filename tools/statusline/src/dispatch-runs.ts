@@ -24,7 +24,7 @@ import {
   stateDir as agxStateDir,
 } from "./agx-snapshot.ts";
 
-// Run row source: one marker per worker agx started (tools/agx/src/state.ts).
+// Run row source: one marker per worker agx-run started (tools/agx-run/src/state.ts).
 // A marker is written at start and removed at exit, so a marker whose process is gone means
 // agx itself was killed — counted as lost (agx's own word), never dropped (EXPLICIT-ABSENCE).
 export interface RouteRun {

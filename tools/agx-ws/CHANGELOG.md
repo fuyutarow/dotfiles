@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-16
+
+- Move the workspace CLI under the agx-ws part and keep ws
+
 ## 0.2.0 — 2026-10-16
 
 - Refresh stale workspaces before readiness, add ws refresh, create complete sparse workspaces, and report narrowed sparse sets in gc.

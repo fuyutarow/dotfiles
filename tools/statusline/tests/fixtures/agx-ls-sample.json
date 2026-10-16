@@ -33,9 +33,9 @@
     "cwd": "/home/fuyu/dotfiles-ws-agxjudgment",
     "workspace": "/home/fuyu/dotfiles-ws-agxjudgment",
     "writes": [
-      "tools/agx/src/next/*.ts",
-      "tools/agx/tests/**",
-      "tools/agx/docs/next-records.md"
+      "tools/agx-run/src/next/*.ts",
+      "tools/agx-run/tests/**",
+      "tools/agx-run/docs/next-records.md"
     ],
     "judgment": {
       "decision": "accept",
@@ -683,7 +683,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/dotfiles-ws-agxexit",
     "workspace": "/home/fuyu/dotfiles-ws-agxexit",
-    "writes": ["tools/agx/src/next/*.ts", "tools/agx/tests/**"],
+    "writes": ["tools/agx-run/src/next/*.ts", "tools/agx-run/tests/**"],
     "judgment": {
       "decision": "accept",
       "note": "live: slow pipe reader (sleep 0.5 | jq length) gets all 2765 runs three times; unknown command still exits 2; 3 verify pass rerun by coordinator"
@@ -801,7 +801,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/dotfiles-ws-agxscope",
     "workspace": "/home/fuyu/dotfiles-ws-agxscope",
-    "writes": ["tools/agx/docs/scope.md", "tools/agx/README.md"],
+    "writes": ["tools/agx-run/docs/scope.md", "tools/agx-run/README.md"],
     "judgment": {
       "decision": "accept",
       "note": "scope.md: four jobs, eleven non-owned concerns with owners, derived-not-stored folds, triage rule; matches src/next; verify rerun by coordinator"

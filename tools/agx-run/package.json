@@ -1,0 +1,10 @@
+{
+  "version": "5.0.2",
+  "name": "@dotfiles/agx-run",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agx-run": "src/next/cli.ts",
+    "agx-next": "src/next/cli.ts"
+  }
+}

@@ -1,5 +1,5 @@
 // codex-progress — what a running `codex exec --json` is doing, folded from its JSONL events, for the
-// statusline `Run:` row (tools/agx/src/state.ts ProgressSchema). agx feeds every
+// statusline `Run:` row (tools/agx-run/src/state.ts ProgressSchema). agx-run feeds every
 // stdout line through foldEvent and writes the result to AGX_CODEX_PROGRESS_FILE, at most once per
 // WRITE_EVERY_MS and once more at the end. Nothing here calls a model: it reads events codex
 // already prints, so it costs no tokens.

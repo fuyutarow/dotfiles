@@ -149,11 +149,11 @@ scripts/tests/doctor.test.ts:299
 scripts/tests/doctor.test.ts:306
 tools/secrets-push/tests/secrets-push.test.ts:16
 tools/secrets-push/tests/secrets-push.test.ts:108
-tools/agx/src/routes.ts:49
+tools/agx-run/src/routes.ts:49
 agents/skills/driving-cocoindex/tests/forge-verification-ledger.md:530
 agents/skills/driving-cocoindex/tests/forge-verification-ledger.md:532
 agents/claude/hooks/enforce-no-new-bash.ts:21
-tools/agx/tests/admission-routes.test.ts:190
+tools/agx-run/tests/admission-routes.test.ts:190
 scripts/tests/bootstrap-linux.test.ts:13
 scripts/tests/bootstrap-linux.test.ts:26
 scripts/tests/bootstrap-linux.test.ts:31

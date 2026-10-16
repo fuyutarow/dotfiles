@@ -26,7 +26,8 @@ const PATTERNS = [
   "agents/goal-kernel/cli.ts",
   "tools/agent-resource-run/src/*.ts",
   "tools/agx/src/*.ts",
-  "tools/agx/src/workers/*.ts",
+  "tools/agx-run/src/*.ts",
+  "tools/agx-run/src/workers/*.ts",
   "tools/serena-foreground/src/*.ts",
   "tools/smart-open/src/*.ts",
 ];

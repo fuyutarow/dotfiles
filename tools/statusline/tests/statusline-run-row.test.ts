@@ -30,7 +30,7 @@ import {
 } from "../../shared/tests/fixtures/active-markers.ts";
 
 // The statusline Run rows (no "Run:" head; each line starts with its row id): agx's running workers, read from its markers
-// (tools/agx/src/state.ts). One line per live worker (row, elapsed time, label), the
+// (tools/agx-run/src/state.ts). One line per live worker (row, elapsed time, label), the
 // longest-running first; a marker whose process is gone is counted as stale, never hidden; more
 // than RUN_LINES workers say `+N more`; no state dir at all means no row.
 
@@ -491,7 +491,7 @@ describe("statusline Run row", () => {
       worker_session: "thread-new",
       cost_usd: 0.0563,
       worker_usage: { input_tokens: 900_000, output_tokens: 120_000 },
-      ticket: { writes: ["tools/agx/**"] },
+      ticket: { writes: ["tools/agx-run/**"] },
     });
     expect(written.success).toBe(true);
     if (written.success)

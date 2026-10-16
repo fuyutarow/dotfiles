@@ -91,7 +91,13 @@ const fixture = (): string => {
 
 const runLs = (root: string, selector: string) =>
   Bun.spawnSync(
-    [process.execPath, "tools/agx/src/next/cli.ts", "ls", selector, "--json"],
+    [
+      process.execPath,
+      "tools/agx-run/src/next/cli.ts",
+      "ls",
+      selector,
+      "--json",
+    ],
     {
       cwd: process.cwd(),
       env: { ...process.env, AGX_NEXT_STATE_DIR: join(root, "state") },

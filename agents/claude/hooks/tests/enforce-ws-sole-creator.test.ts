@@ -12,7 +12,7 @@ import { at, parseJson, strAt } from "../../../hooks/narrow.ts";
 const ROOT = resolve(import.meta.dir, "../../../..");
 const HOOK = join(ROOT, "agents/claude/hooks/enforce-ws-sole-creator.ts");
 const REMEDY =
-  "use: ws add <slug> --repo <repo>  (creates <repo>.ws/ws_<slug>; tools/spec/jj-ws.md)";
+  "use: ws add <slug> --repo <repo>  (creates <repo>.ws/ws_<slug>; tools/spec/agx-ws.md)";
 
 async function run(tool_name: string, tool_input: unknown, cwd = tmpdir()) {
   const child = Bun.spawn([process.execPath, HOOK], {
@@ -138,15 +138,15 @@ test("script writes and edits deny creation, while canonical implementation and 
   ).toBe("");
   expect(
     await run("Write", {
-      file_path: join(ROOT, "tools/jj-ws/sole-creator-fixture.sh"),
+      file_path: join(ROOT, "tools/agx-ws/sole-creator-fixture.sh"),
       content: "jj workspace add ../x",
     }),
   ).toBe("");
   await mkdir(join(dir, "tools"));
   await mkdir(join(dir, "outside"));
-  await symlink(join(dir, "outside"), join(dir, "tools/jj-ws"));
+  await symlink(join(dir, "outside"), join(dir, "tools/agx-ws"));
   await denied("Write", {
-    file_path: join(dir, "tools/jj-ws/bypass.sh"),
+    file_path: join(dir, "tools/agx-ws/bypass.sh"),
     content: "jj workspace add ../x",
   });
   await rm(dir, { recursive: true, force: true });

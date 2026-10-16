@@ -1,6 +1,6 @@
 // PreToolUse Bash|Write|Edit|MultiEdit, shared by Claude and Codex.
 // Deny parsed workspace-creation commands; ws child processes do not emit tool
-// events. Only the canonical tools/jj-ws implementation may contain creation in
+// events. Only the canonical tools/agx-ws implementation may contain creation in
 // script writes. No exemption for direct Bash calls.
 import { realpath } from "node:fs/promises";
 import { resolve, relative, extname, basename } from "node:path";
@@ -12,8 +12,8 @@ import { arr, at, parseJson, strAt } from "../../hooks/narrow.ts";
 import { decidePre } from "./lib.ts";
 
 const REMEDY =
-  "use: ws add <slug> --repo <repo>  (creates <repo>.ws/ws_<slug>; tools/spec/jj-ws.md); run ws in the dispatcher's foreground, outside worker units and deadline wrappers";
-const IMPLEMENTATION = resolve(import.meta.dir, "../../../tools/jj-ws");
+  "use: ws add <slug> --repo <repo>  (creates <repo>.ws/ws_<slug>; tools/spec/agx-ws.md); run ws in the dispatcher's foreground, outside worker units and deadline wrappers";
+const IMPLEMENTATION = resolve(import.meta.dir, "../../../tools/agx-ws");
 const VALUE_FLAGS = new Set([
   "-R",
   "--repository",

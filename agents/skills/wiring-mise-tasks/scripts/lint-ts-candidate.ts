@@ -3,13 +3,15 @@
 import { cli } from "cleye";
 import { access, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import {
   jjCandidate,
   jjChanged,
   jjContext,
   jjExport,
   jjRead,
+  selected,
+  validPath,
 } from "./jj-precommit.ts";
 
 const exportCandidate: (...args: Parameters<typeof jjExport>) => unknown =
@@ -26,6 +28,14 @@ async function main(): Promise<number> {
   const parsed = cli({
     name: "lint-ts-candidate",
     parameters: [],
+    flags: {
+      dir: {
+        type: String,
+        default: ".",
+        description:
+          "Repo-relative directory holding the toolchain and lint-oxlint.ts",
+      },
+    },
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
   });
@@ -33,6 +43,13 @@ async function main(): Promise<number> {
     process.stderr.write("lint-ts-candidate takes no arguments\n");
     return 2;
   }
+  if (!validPath(parsed.flags.dir)) {
+    process.stderr.write(
+      "lint-ts-candidate: --dir must be a repo-relative directory without .., .git or .jj components\n",
+    );
+    return 2;
+  }
+  const directory = posix.normalize(parsed.flags.dir);
   const context =
     (await Promise.try(() => jjContext())) ??
     (await Promise.try(() => {
@@ -50,7 +67,10 @@ async function main(): Promise<number> {
   const candidate = await Promise.try(() => jjCandidate(context));
   const changed = await Promise.try(() => jjChanged(context));
   const files = changed.filter(
-    (path) => candidate.has(path) && /\.tsx?$/u.test(path),
+    (path) =>
+      candidate.has(path) &&
+      selected([directory], path) &&
+      /\.tsx?$/u.test(path),
   );
   if (files.length === 0) {
     process.stdout.write("lint-ts-candidate: no candidate .ts/.tsx files\n");
@@ -62,26 +82,27 @@ async function main(): Promise<number> {
       rm(temporary, { recursive: true, force: true }),
   };
   await exportCandidate(context, temporary, candidate);
+  const toolchain = join(temporary, directory);
   if (
-    await access(join(context.root, "node_modules")).then(
+    await access(join(context.root, directory, "node_modules")).then(
       () => true,
       () => false,
     )
   )
     await symlink(
-      join(context.root, "node_modules"),
-      join(temporary, "node_modules"),
+      join(context.root, directory, "node_modules"),
+      join(toolchain, "node_modules"),
     );
   const child = Bun.spawn(
     [
       process.execPath,
-      join(temporary, "lint-oxlint.ts"),
+      join(toolchain, "lint-oxlint.ts"),
       "--type-aware",
       "--",
-      ...files.map((path) => `./${path}`),
+      ...files.map((path) => `./${posix.relative(directory, path)}`),
     ],
     {
-      cwd: temporary,
+      cwd: toolchain,
       stdout: "inherit",
       stderr: "inherit",
       timeout: 120_000,

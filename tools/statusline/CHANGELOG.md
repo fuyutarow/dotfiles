@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.1 — 2026-10-16
+
+- Reuse the shared Codex account usage reader so empty sessions cannot erase weekly usage
+
 ## 0.16.0 — 2026-10-16
 
 - Show bounded tmpfs byte and inode headroom on the Sys line using storage-headroom warning and denial thresholds.

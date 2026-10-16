@@ -154,7 +154,8 @@ test.each([...modes])("codex slot: %s", async (mode) => {
       budgets: { codexRate: mode === "timeout" ? 10 : 1000 },
     },
   );
-  expectSlots(text, "codex");
+  if (mode === "no rate info") expect(text).toContain("codex 7d");
+  else expectSlots(text, "codex");
   if (mode === "timeout") expect(text).toContain("codex rate timeout 10ms");
 });
 

@@ -200,3 +200,49 @@ test("live usage tail skips a partial first line", async () => {
     reasoning_output_tokens: 2,
   });
 });
+
+test("account usage survives newer empty sessions, pinned sessions, and null rate events", async () => {
+  const { root, file } = await fixture();
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const timestamp = Temporal.Instant.fromEpochMilliseconds(
+    now - 1000,
+  ).toString();
+  await writeFile(
+    file,
+    JSON.stringify({
+      timestamp,
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        rate_limits: sample(
+          null,
+          window(10080, 37, Math.floor(now / 1000) + 604800),
+        ),
+      },
+    }) +
+      '\n{"type":"event_msg","payload":{"type":"token_count","rate_limits":null}}\n',
+  );
+  const day = Temporal.Now.plainDateISO();
+  const dir = join(
+    root,
+    String(day.year),
+    String(day.month).padStart(2, "0"),
+    String(day.day).padStart(2, "0"),
+  );
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "rollout-new-empty-session.jsonl"),
+    '{"type":"session_meta"}\n',
+  );
+  for (const session of [undefined, "empty-session"]) {
+    for (let i = 0; i < 3; i++) {
+      const result = await readCodexRate(root, session);
+      expect(
+        result.isOk()
+          ? result.value?.windows.find((value) => value.minutes === 10080)
+              ?.percent
+          : result.error,
+      ).toBe(37);
+    }
+  }
+});

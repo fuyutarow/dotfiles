@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1 — 2026-10-16
+
+- Read Codex account usage across sessions and recover events beyond bounded tails
+
 ## 0.11.0 — 2026-10-16
 
 - Expose exact heredoc content and shared shell-write ratchet for hook and commit-gate enforcement.

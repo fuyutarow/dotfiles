@@ -1,7 +1,7 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
-import { jsonOf, maybe, z } from "./zod.ts";
+import { jsonOf, z } from "./zod.ts";
 import {
   clockHM,
   localFromEpochSec,
@@ -11,38 +11,12 @@ import {
 } from "./prompt-stamp.ts";
 import { paceColor, pctFmt, roles } from "./ansi.ts";
 import type { TokenUsage } from "../../shared/src/dispatch-pricing.ts";
+import {
+  readCodexSubscriptionUsage,
+  type CodexAccountRate,
+} from "../../shared/src/codex-subscription-usage.ts";
 
-const WINDOW = z.object({
-  used_percent: maybe(z.number()),
-  window_minutes: maybe(z.number()),
-  resets_at: maybe(z.number()),
-});
-const RATE = z.object({
-  limit_id: maybe(z.string()),
-  primary: maybe(WINDOW),
-  secondary: maybe(WINDOW),
-  credits: maybe(
-    z.object({
-      has_credits: maybe(z.boolean()),
-      unlimited: maybe(z.boolean()),
-      balance: maybe(z.string()),
-    }),
-  ),
-});
-const TOKEN_COUNT_EVENT = z.object({
-  timestamp: maybe(z.string()),
-  type: z.literal("event_msg"),
-  payload: z.object({
-    type: z.literal("token_count"),
-    rate_limits: RATE,
-  }),
-});
-type Window = { minutes: number; percent: number; reset?: number };
-export type CodexRate = {
-  windows: Window[];
-  credits?: string;
-  mtimeMs: number;
-};
+export type CodexRate = CodexAccountRate;
 const TAIL_BYTES = 256 * 1024;
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
 const STALE_MS = 30 * 60 * 1000;
@@ -155,31 +129,6 @@ export async function readCodexUsage(
     const path = join(dir, name);
     const usage = await usageFromRollout(path);
     if (usage !== undefined && usage !== null) return usage;
-  }
-  return undefined;
-}
-
-async function newestRollout(root: string): Promise<string | undefined> {
-  const today = Temporal.Now.plainDateISO();
-  for (let dayOffset = 0; dayOffset <= 366; dayOffset++) {
-    const day = today.subtract({ days: dayOffset });
-    const dir = join(root, String(day.year), pad2(day.month), pad2(day.day));
-    const names = await readdir(dir).catch(() => []);
-    const infos = await Promise.all(
-      names
-        .filter((name) => /^rollout-.*\.jsonl$/u.test(name))
-        .map(async (name) => {
-          const path = join(dir, name);
-          const info = await stat(path).catch(() => null);
-          return info !== null && info.isFile()
-            ? { path, mtimeMs: info.mtimeMs }
-            : undefined;
-        }),
-    );
-    const newest = infos
-      .filter((info) => info !== undefined)
-      .toSorted((a, b) => b.mtimeMs - a.mtimeMs)[0];
-    if (newest !== undefined) return newest.path;
   }
   return undefined;
 }
@@ -395,99 +344,22 @@ function rolloutActions(
   return { actions, files };
 }
 
-function asWindow(
-  value: z.output<typeof WINDOW> | undefined,
-): Window | undefined {
-  if (value?.used_percent === undefined) return undefined;
-  if (value.window_minutes === undefined) return undefined;
-  if (value.resets_at === undefined)
-    return { minutes: value.window_minutes, percent: value.used_percent };
-  return {
-    minutes: value.window_minutes,
-    percent: value.used_percent,
-    reset: value.resets_at,
-  };
-}
-
-// Async file operations let the dataframe's source deadline win even on slow storage.
-async function selectRateAsync(path: string, size: number, length: number) {
-  const fd = await open(path, "r");
-  const buffer = Buffer.alloc(length);
-  const read = await fd.read(buffer, 0, length, size - length).then(
-    (value) => ok(value),
-    (error: unknown) => err(error),
-  );
-  await fd.close();
-  if (read.isErr()) return err("codex rate unavailable");
-  const lines = buffer
-    .subarray(0, read.value.bytesRead)
-    .toString("utf8")
-    .split("\n");
-  if (length < size) lines.shift();
-  for (const line of lines.toReversed()) {
-    const parsed = jsonOf(TOKEN_COUNT_EVENT).safeParse(line);
-    if (parsed.success) return ok(parsed.data);
-  }
-  return ok(undefined);
-}
-
+/** Account limits are shared across sessions, including a newly opened empty session. */
 export async function readCodexRate(
   root = join(process.env.HOME ?? "", ".codex", "sessions"),
-  session?: string,
+  _session?: string,
 ): Promise<Result<CodexRate | undefined, string>> {
-  // A missing sessions root cannot contain a rollout. Avoid 367 failed day reads
-  // competing with the new cache I/O and consuming the source's render deadline.
-  const directory = await stat(root).catch(() => null);
-  if (directory?.isDirectory() !== true) return ok(undefined);
-  const path =
-    session === undefined
-      ? await newestRollout(root)
-      : await rolloutForSession(root, session);
-  if (path === undefined) return ok(undefined);
-  const info = await stat(path).catch(() => null);
-  if (info === null) return err("codex rate unavailable");
-  let selected: z.output<typeof TOKEN_COUNT_EVENT> | undefined;
-  const maxLength = Math.min(info.size, MAX_TAIL_BYTES);
-  const readResult = await (async () => {
-    const lengths = new Set([
-      Math.min(info.size, TAIL_BYTES),
-      Math.min(info.size, 512 * 1024),
-      maxLength,
-    ]);
-    for (const length of lengths) {
-      const result = await selectRateAsync(path, info.size, length);
-      if (result.isErr()) return false;
-      selected = result.value;
-      if (selected !== undefined || length === maxLength) break;
-    }
-    return true;
-  })().catch(() => false);
-  if (!readResult) return err("codex rate unavailable");
-  if (selected === undefined) return ok(undefined);
-  const rate = selected.payload.rate_limits;
-  const timestamp = selected.timestamp;
-  const eventTime =
-    timestamp === undefined
-      ? undefined
-      : fromThrowable(
-          () => Temporal.Instant.from(timestamp).epochMilliseconds,
-        )().unwrapOr(undefined);
-  const mtimeMs =
-    eventTime === undefined ? info.mtimeMs : Math.min(info.mtimeMs, eventTime);
-  const windows = [asWindow(rate.primary), asWindow(rate.secondary)].filter(
-    (item) => item !== undefined,
+  const result = await readCodexSubscriptionUsage(
+    root,
+    Temporal.Now.instant().epochMilliseconds,
+    7 * 24 * 60 * 60 * 1000,
   );
-  const balance = rate.credits?.balance;
-  let credits: string | undefined;
   if (
-    rate.credits?.has_credits === true &&
-    rate.credits.unlimited === false &&
-    balance !== undefined
+    result.rate === undefined &&
+    result.reason === "Codex rollout read failed"
   )
-    credits = String(Math.round(Number(balance)));
-  if (windows.length === 0 && credits === undefined) return ok(undefined);
-  if (credits === undefined) return ok({ windows, mtimeMs });
-  return ok({ windows, credits, mtimeMs });
+    return err("codex rate unavailable");
+  return ok(result.rate);
 }
 
 function remaining(epoch: number, now: number): string {

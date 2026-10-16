@@ -488,6 +488,79 @@ describe("land workspace", () => {
       consumer,
     );
   });
+  test("candidate gate code and its registry key land together", async () => {
+    const f = await fixture();
+    await mkdir(join(f.main, "scripts"), { recursive: true });
+    await writeFile(
+      join(f.main, "scripts/consumer-gate.ts"),
+      `export async function runConsumerGates(root: string) {
+  const registry = Bun.TOML.parse(await Bun.file(root + '/presets/consumers.toml').text());
+  const unknown = Object.keys(registry).filter((key) => key !== 'consumers');
+  return { ok: unknown.length === 0, checked: 1, lines: unknown.map((key) => 'FAIL consumer registry presets/consumers.toml: Unrecognized key: ' + key) };
+}\n`,
+    );
+    await f.jj(f.main, ["commit", "-m", "add base consumer gate"]);
+    await f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    await f.jj(f.worker, ["rebase", "-r", "@", "-o", "alpha"]);
+    await mkdir(join(f.worker, "scripts"), { recursive: true });
+    await writeFile(
+      join(f.worker, "presets/consumers.toml"),
+      'consumers = []\n"trunk/setup" = true\n',
+    );
+    await writeFile(
+      join(f.worker, "scripts/consumer-gate.ts"),
+      `export async function runConsumerGates(root: string) {
+  const registry = Bun.TOML.parse(await Bun.file(root + '/presets/consumers.toml').text());
+  const accepted = registry['trunk/setup'] === true;
+  return { ok: accepted, checked: 1, lines: [accepted ? 'PASS consumer registry trunk/setup' : 'FAIL consumer registry trunk/setup'] };
+}\n`,
+    );
+
+    const result = await f.land();
+
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(result.stdout.toString()).toContain(
+      "[land] consumers: PASS consumer registry trunk/setup",
+    );
+    expect(
+      await f.jj(f.main, [
+        "file",
+        "show",
+        "-r",
+        "alpha",
+        "presets/consumers.toml",
+      ]),
+    ).toContain('"trunk/setup" = true');
+  });
+  test("registry-only candidate is refused and names its unrecognized key", async () => {
+    const f = await fixture();
+    await mkdir(join(f.main, "scripts"), { recursive: true });
+    await writeFile(
+      join(f.main, "scripts/consumer-gate.ts"),
+      `export async function runConsumerGates(root: string) {
+  const registry = Bun.TOML.parse(await Bun.file(root + '/presets/consumers.toml').text());
+  const unknown = Object.keys(registry).filter((key) => key !== 'consumers');
+  return { ok: unknown.length === 0, checked: 1, lines: unknown.map((key) => 'FAIL consumer registry presets/consumers.toml: Unrecognized key: ' + key) };
+}\n`,
+    );
+    await f.jj(f.main, ["commit", "-m", "add base consumer gate"]);
+    await f.jj(f.main, ["bookmark", "set", "alpha", "-r", "@-"]);
+    await f.jj(f.worker, ["rebase", "-r", "@", "-o", "alpha"]);
+    await mkdir(join(f.worker, "scripts"), { recursive: true });
+    await writeFile(
+      join(f.worker, "presets/consumers.toml"),
+      'consumers = []\n"trunk/setup" = true\n',
+    );
+
+    const result = await f.land();
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.toString()).toContain("Unrecognized key: trunk/setup");
+    expect((await f.log()).some((args) => args[1] === "commit")).toBe(false);
+  });
   test("lands disjoint changesets after another ticket released the same tool", async () => {
     const f = await fixture();
     await writeToolPackage(f.main, "1.0.0");

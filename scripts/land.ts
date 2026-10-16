@@ -19,6 +19,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { cli } from "cleye";
 import {
   type Result,
@@ -45,7 +46,10 @@ import {
   runQueue,
 } from "./land-queue.ts";
 import { applyToolChangesets } from "./land-changesets.ts";
-import { runConsumerGates } from "./consumer-gate.ts";
+import {
+  runConsumerGates as runMainConsumerGates,
+  type ConsumerGateReport,
+} from "./consumer-gate.ts";
 import {
   landExit,
   landLiveness,
@@ -67,6 +71,47 @@ type WorkspaceRun = {
   workspace?: string;
   judgment?: { decision: "accept" | "reject" } | null;
 };
+
+const ConsumerGateModule = z.looseObject({
+  runConsumerGates: z.function({
+    input: [z.string(), z.array(z.string())],
+    output: z.promise(
+      z.looseObject({
+        ok: z.boolean(),
+        checked: z.number(),
+        lines: z.array(z.string()),
+      }),
+    ),
+  }),
+});
+
+async function runLandConsumerGates(
+  root: string,
+  changed: readonly string[],
+): Promise<Result<ConsumerGateReport, Error>> {
+  const gatePath = join(root, "scripts/consumer-gate.ts");
+  let runCandidateConsumerGates: (
+    root: string,
+    changed: string[],
+  ) => Promise<ConsumerGateReport> = runMainConsumerGates;
+  if (await pathExists(gatePath)) {
+    const loaded: unknown = await import(pathToFileURL(gatePath).href);
+    const candidateGate = ConsumerGateModule.safeParse(loaded);
+    if (!candidateGate.success)
+      return err(
+        new Error(
+          `invalid candidate consumer gate: ${candidateGate.error.message}`,
+        ),
+      );
+    runCandidateConsumerGates = candidateGate.data.runConsumerGates;
+  } else if (changed.includes("scripts/consumer-gate.ts")) {
+    return err(new Error("candidate consumer gate is missing after restore"));
+  }
+  return ResultAsync.fromPromise(
+    runCandidateConsumerGates(root, [...changed]),
+    (error) => new Error(errorMessage(error)),
+  );
+}
 
 async function nextAgxRuns(): Promise<Result<WorkspaceRun[], Error>> {
   const command = await runProcess(
@@ -1089,7 +1134,13 @@ async function main(
       );
       stage = "commit";
       if (!parsed.flags.dryRun) {
-        const sharedConsumers = await runConsumerGates(landerRoot, changed);
+        const sharedConsumersResult = await runLandConsumerGates(
+          landerRoot,
+          changed,
+        );
+        if (sharedConsumersResult.isErr())
+          return reject(errorMessage(sharedConsumersResult.error));
+        const sharedConsumers = sharedConsumersResult.value;
         for (const line of sharedConsumers.lines)
           emit(`[land] consumers: ${line}`);
         if (!sharedConsumers.ok)

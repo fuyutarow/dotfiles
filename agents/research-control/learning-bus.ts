@@ -249,6 +249,8 @@ function packetBody(body: RecordValue): boolean {
   );
 }
 function subscriptionBody(body: RecordValue): boolean {
+  const effectiveAt = timestamp(body.effectiveAt);
+  const expiresAt = timestamp(body.expiresAt);
   const keys = [
     "subscriptionId",
     "recipientSectionId",
@@ -294,9 +296,9 @@ function subscriptionBody(body: RecordValue): boolean {
       DELTAS.has(delta),
     ) ??
       false) &&
-    timestamp(body.effectiveAt) !== undefined &&
-    timestamp(body.expiresAt) !== undefined &&
-    timestamp(body.expiresAt)! > timestamp(body.effectiveAt)! &&
+    effectiveAt !== undefined &&
+    expiresAt !== undefined &&
+    expiresAt > effectiveAt &&
     body.immutable === true &&
     body.visibility === "SECTION_FEDERATION_CONTROL" &&
     body.programmeVisible === false &&
@@ -304,6 +306,8 @@ function subscriptionBody(body: RecordValue): boolean {
   );
 }
 function deliveryBody(body: RecordValue): boolean {
+  const enqueuedAt = timestamp(body.enqueuedAt);
+  const deliveredAt = timestamp(body.deliveredAt);
   const keys = [
     "deliveryId",
     "transferLocus",
@@ -338,9 +342,9 @@ function deliveryBody(body: RecordValue): boolean {
     strings(body.matchedPremiseIds, true) &&
     strings(body.matchedInterfaceIds, true) &&
     DELTAS.has(String(body.matchedDeltaClass)) &&
-    timestamp(body.enqueuedAt) !== undefined &&
-    timestamp(body.deliveredAt) !== undefined &&
-    timestamp(body.deliveredAt)! >= timestamp(body.enqueuedAt)! &&
+    enqueuedAt !== undefined &&
+    deliveredAt !== undefined &&
+    deliveredAt >= enqueuedAt &&
     body.brokerKind === "DETERMINISTIC_EXACT_MATCH" &&
     body.ackRequired === false &&
     body.semanticAuthority === "NONE" &&
@@ -550,6 +554,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
   });
   const input = record(rawInput);
   const artifacts = record(input?.artifacts);
+  const evaluatedAt = timestamp(input?.evaluatedAt);
   if (
     input === undefined ||
     !exactKeys(input, [
@@ -560,7 +565,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       "artifacts",
     ]) ||
     input.schema !== LEARNING_BUS_SCHEMA ||
-    timestamp(input.evaluatedAt) === undefined ||
+    evaluatedAt === undefined ||
     !text(input.sourceCommitEventId) ||
     artifacts === undefined
   ) {
@@ -600,6 +605,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
   const selectedId = str(selected?.id);
   const selectedSha = digestOf(selected?.artifactSha256);
   const selectedReceipt = digestOf(selected?.receiptSha256);
+  const commitAt = timestamp(selected?.at);
   if (
     selected === undefined ||
     selectedId === undefined ||
@@ -607,6 +613,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     selected.decision !== "COMMIT" ||
     selectedSha === undefined ||
     selectedReceipt === undefined ||
+    commitAt === undefined ||
     !source.summary.receiptDigests.includes(selectedReceipt)
   ) {
     add(
@@ -720,7 +727,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
   const deadline = timestamp(selected.transferPublishDueAt);
   if (
     deadline !== undefined &&
-    timestamp(input.evaluatedAt)! > deadline &&
+    evaluatedAt > deadline &&
     validPackets.length === 0
   )
     add(
@@ -736,6 +743,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     subscriptions.map((item) => [item.sha256, item]),
   );
   const validDeliveries: Envelope[] = [];
+  const commitToDelivery: number[] = [];
   const seenDeliveryKeys = new Set<string>();
   for (const delivery of deliveries) {
     const body = delivery.body,
@@ -753,6 +761,9 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       continue;
     }
     seenDeliveryKeys.add(key);
+    const deliveredAt = timestamp(body.deliveredAt);
+    const effectiveAt = timestamp(subscription?.body.effectiveAt);
+    const expiresAt = timestamp(subscription?.body.expiresAt);
     if (
       packet === undefined ||
       subscription === undefined ||
@@ -761,10 +772,12 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       body.recipientSectionId !== subscription.body.recipientSectionId ||
       body.idempotencyKey !== key ||
       !matches(packet.body, subscription.body) ||
-      timestamp(body.deliveredAt)! < timestamp(selected.at)! ||
-      timestamp(body.deliveredAt)! <
-        timestamp(subscription.body.effectiveAt)! ||
-      timestamp(body.deliveredAt)! >= timestamp(subscription.body.expiresAt)! ||
+      deliveredAt === undefined ||
+      effectiveAt === undefined ||
+      expiresAt === undefined ||
+      deliveredAt < commitAt ||
+      deliveredAt < effectiveAt ||
+      deliveredAt >= expiresAt ||
       !dependencySet(delivery.dependencies, [
         {
           kind: "SECTION_TRANSFER_PACKET",
@@ -787,11 +800,13 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       continue;
     }
     validDeliveries.push(delivery);
+    commitToDelivery.push(deliveredAt - commitAt);
   }
   const deliveryByDigest = new Map(
     validDeliveries.map((item) => [item.sha256, item]),
   );
   const validAdmissions: Envelope[] = [];
+  const deliveryToAdmission: number[] = [];
   const seenAdmissionKeys = new Set<string>();
   for (const admission of admissions) {
     const body = admission.body,
@@ -822,11 +837,15 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       );
       continue;
     }
+    const decidedAt = timestamp(body.decidedAt);
+    const deliveredAt = timestamp(delivery?.body.deliveredAt);
     if (
       delivery === undefined ||
       packet === undefined ||
       subscription === undefined ||
-      timestamp(body.decidedAt)! < timestamp(delivery.body.deliveredAt)! ||
+      decidedAt === undefined ||
+      deliveredAt === undefined ||
+      decidedAt < deliveredAt ||
       body.recipientSectionId !== delivery.body.recipientSectionId ||
       body.recipientDirectorInstanceId !==
         subscription.body.recipientDirectorInstanceId ||
@@ -870,6 +889,7 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     }
     seenAdmissionKeys.add(key);
     validAdmissions.push(admission);
+    deliveryToAdmission.push(decidedAt - deliveredAt);
   }
   const admissionByDigest = new Map(
     validAdmissions.map((item) => [item.sha256, item]),
@@ -939,18 +959,6 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
   const visibility = findings.filter(
     (finding) => finding.code === "RAW_METHOD_LEAK_TO_PROGRAMME",
   ).length;
-  const commitAt = timestamp(selected.at)!;
-  const commitToDelivery = validDeliveries.map(
-    (delivery) => timestamp(delivery.body.deliveredAt)! - commitAt,
-  );
-  const deliveryToAdmission = validAdmissions.map(
-    (admission) =>
-      timestamp(admission.body.decidedAt)! -
-      timestamp(
-        deliveryByDigest.get(String(admission.body.deliverySha256))?.body
-          .deliveredAt,
-      )!,
-  );
   return finish(source.summary, {
     transferPacketsPublished: validPackets.length,
     transferDeliveries: validDeliveries.length,

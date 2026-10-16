@@ -371,7 +371,9 @@ function updateNetworkTable(
 ): boolean {
   let present = false;
   for (let index = start; index < limit; index += 1) {
-    const changed = replaceBoolean(lines[index]!, declared);
+    const line = lines[index];
+    if (line === undefined) continue;
+    const changed = replaceBoolean(line, declared);
     if (changed === null) continue;
     present = true;
     lines[index] = changed;
@@ -407,15 +409,20 @@ function updateMcpServers(lines: string[], declared: Declared): string[] {
   const kept = lines.filter((line) => !line.startsWith(MANAGED_MCP_COMMENT));
   const output: string[] = [];
   for (let index = 0; index < kept.length;) {
-    const name = mcpTableName(kept[index]!);
+    const line = kept[index];
+    if (line === undefined) break;
+    const name = mcpTableName(line);
     if (name === undefined || !owned.has(name)) {
-      output.push(kept[index]!);
+      output.push(line);
       index += 1;
       continue;
     }
     index += 1;
-    while (index < kept.length && !/^\s*\[[^\]]+\]/u.test(kept[index]!))
+    let nextLine = kept[index];
+    while (nextLine !== undefined && !/^\s*\[[^\]]+\]/u.test(nextLine)) {
       index += 1;
+      nextLine = kept[index];
+    }
   }
   const servers = Object.entries(declared.mcpServers).toSorted(
     ([left], [right]) => left.localeCompare(right),
@@ -458,7 +465,7 @@ function updateTuiSettings(lines: string[], declared: Declared): void {
   const limit = next < 0 ? lines.length : next;
   // An empty table commonly ends in a blank separator; insert before that separator.
   let insertionLimit = limit;
-  while (insertionLimit > start + 1 && lines[insertionLimit - 1]!.trim() === "")
+  while (insertionLimit > start + 1 && lines[insertionLimit - 1]?.trim() === "")
     insertionLimit -= 1;
   let key = lines.findIndex(
     (line, index) =>
@@ -480,8 +487,15 @@ function updateTuiSettings(lines: string[], declared: Declared): void {
   if (key >= 0) {
     // A multi-line array runs until the line closing its bracket; replace all of it.
     let end = key;
-    while (end < lines.length - 1 && !/\]\s*(?:#.*)?$/u.test(lines[end]!))
+    let line = lines[end];
+    while (
+      end < lines.length - 1 &&
+      line !== undefined &&
+      !/\]\s*(?:#.*)?$/u.test(line)
+    ) {
       end += 1;
+      line = lines[end];
+    }
     lines.splice(key, end - key + 1, value);
     return;
   }
@@ -491,7 +505,7 @@ function updateTuiSettings(lines: string[], declared: Declared): void {
     return;
   }
   let last = limit - 1;
-  while (last > start && lines[last]!.trim() === "") last -= 1;
+  while (last > start && lines[last]?.trim() === "") last -= 1;
   lines.splice(last + 1, 0, value);
 }
 
@@ -503,7 +517,9 @@ export function edit(contents: string | null, declared: Declared): string {
   if (firstTable < 0) firstTable = lines.length;
   const found = new Set<string>();
   for (let index = 0; index < firstTable; index += 1) {
-    const changed = updateTopLevelLine(lines[index]!, declared);
+    const line = lines[index];
+    if (line === undefined) continue;
+    const changed = updateTopLevelLine(line, declared);
     if (changed === null) continue;
     found.add(changed.key);
     lines[index] = changed.line;

@@ -338,7 +338,7 @@ function envelope(
     locator: `event-log/${id}.json`,
     at: at(10),
     body,
-    sha256: bodySha256(body)!,
+    sha256: decoded(z.string(), bodySha256(body)),
     dependencies,
   };
 }
@@ -649,7 +649,7 @@ describe("cross-section-learning-bus/v1", () => {
     if (mismatchedPacket === undefined) return;
     const packetBody = mismatchedPacket.body;
     packetBody.sourceCommitSha256 = digest("f");
-    mismatchedPacket.sha256 = bodySha256(packetBody)!;
+    mismatchedPacket.sha256 = decoded(z.string(), bodySha256(packetBody));
     expect(codes(mismatched)).toContain("TRANSFER_WITHOUT_COMMIT");
   });
   test("packet receipt lineage rejects an unrelated extra digest", () => {
@@ -663,7 +663,7 @@ describe("cross-section-learning-bus/v1", () => {
       ...decoded(z.array(z.string()), packetBody.sourceReceiptDigests),
       digest("f"),
     ];
-    packetEnvelope.sha256 = bodySha256(packetBody)!;
+    packetEnvelope.sha256 = decoded(z.string(), bodySha256(packetBody));
     artifacts.deliveries = [];
     artifacts.admissions = [];
     artifacts.commits = [];
@@ -700,7 +700,7 @@ describe("cross-section-learning-bus/v1", () => {
     if (visiblePacket === undefined) return;
     const packetBody = visiblePacket.body;
     packetBody.programmeVisible = true;
-    visiblePacket.sha256 = bodySha256(packetBody)!;
+    visiblePacket.sha256 = decoded(z.string(), bodySha256(packetBody));
     expect(codes(visible)).toContain("RAW_METHOD_LEAK_TO_PROGRAMME");
     const mutation = input();
     const mutationAdmission = mutation.artifacts.admissions[0];
@@ -708,7 +708,7 @@ describe("cross-section-learning-bus/v1", () => {
     if (mutationAdmission === undefined) return;
     const body = mutationAdmission.body;
     body.localStateMutation = true;
-    mutationAdmission.sha256 = bodySha256(body)!;
+    mutationAdmission.sha256 = decoded(z.string(), bodySha256(body));
     expect(codes(mutation)).toContain("TRANSFER_AUTO_ENACTED");
   });
   test("caller supplied scientific counters fail closed", () => {

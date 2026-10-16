@@ -30,7 +30,7 @@ const addCommand = command(
     ignoreArgv: rejectPrototypeFlag,
     help: {
       description:
-        "Create <repo>.ws/ws_<slug> as a jj workspace and run the repo's readiness commands (.ws.toml).",
+        "Create <repo>.ws/ws_<slug>, trust its mise.toml or .mise.toml, then run readiness commands (.ws.toml) before handing it to a sandboxed worker.",
     },
     flags: {
       rev: {

@@ -323,6 +323,43 @@ export type AddOptions = {
   repo: string;
 };
 
+/** Runs in the coordinator's environment, before a sandboxed worker receives the path. */
+async function readyWorkspace(
+  dir: string,
+  cfg: Config,
+): Promise<Attempt<void>> {
+  for (const name of ["mise.toml", ".mise.toml"]) {
+    const config = join(dir, name);
+    if (!(await Bun.file(config).exists())) continue;
+    if (Bun.which("mise") === null)
+      return bad("mise is not on PATH: mise run install:tools");
+    const trusted = await exec(["mise", "trust", config], dir);
+    if (!trusted.ok) return bad(`mise trust ${config}: ${msg(trusted)}`);
+    if (trusted.value.code !== 0)
+      return bad(
+        `mise trust ${config} failed (exit ${trusted.value.code}): ${trusted.value.err.trim()}`,
+      );
+    process.stderr.write(`ws: ready: trusted ${config}\n`);
+  }
+  for (const command of cfg.ready) {
+    process.stderr.write(`ws: ready: ${command}\n`);
+    const ran = await attempt(
+      () =>
+        Bun.spawn(["sh", "-c", command], {
+          cwd: dir,
+          stdin: "ignore",
+          stdout: "inherit",
+          stderr: "inherit",
+        }).exited,
+    );
+    if (!ran.ok)
+      return bad(`readiness command failed: ${command}: ${msg(ran)}`);
+    if (ran.value !== 0)
+      return bad(`readiness command failed (exit ${ran.value}): ${command}`);
+  }
+  return good(undefined);
+}
+
 export async function add(options: AddOptions): Promise<Attempt<string>> {
   const name = checkSlug(options.slug);
   if (!name.ok) return name;
@@ -365,15 +402,8 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
       false,
     );
     if (!made.ok) return made;
-    for (const command of cfg.value.ready) {
-      process.stderr.write(`ws: ready: ${command}\n`);
-      const code = await Bun.spawn(["sh", "-c", command], {
-        cwd: dir,
-        stdin: "ignore",
-        stdout: "inherit",
-        stderr: "inherit",
-      }).exited;
-      if (code === 0) continue;
+    const ready = await readyWorkspace(dir, cfg.value);
+    if (!ready.ok) {
       const undone = await forgetAndBury(
         repo.value,
         graveyard.value,
@@ -381,7 +411,7 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
         dir,
       );
       return bad(
-        `readiness command failed (exit ${code}): ${command}; ${
+        `${msg(ready)}; ${
           undone.ok
             ? "the new workspace was removed"
             : `rollback also failed: ${msg(undone)} (remove ${dir} by hand)`

@@ -19,6 +19,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { jsonOf, z } from "../../shared/src/zod.ts";
 
 setDefaultTimeout(60_000);
 const WS = join(import.meta.dir, "../src/ws.ts");
@@ -35,7 +36,14 @@ const baseEnv = (
   PATH: `${bin}:${process.env.PATH}`,
   HOME: home,
   XDG_STATE_HOME: join(home, "state"),
+  XDG_CONFIG_HOME: join(scratch, "config"),
   XDG_DATA_HOME: join(home, "data"),
+  XDG_CACHE_HOME: join(scratch, "cache"),
+  MISE_STATE_DIR: join(scratch, "mise-state"),
+  MISE_CONFIG_DIR: join(scratch, "mise-config"),
+  MISE_CEILING_PATHS: scratch,
+  MISE_TRUSTED_CONFIG_PATHS: "",
+  MISE_PARANOID: "1",
   RIP_GRAVEYARD: graveyard,
   GRAVEYARD: graveyard,
   JJ_USER: "t",
@@ -99,6 +107,102 @@ const listing = (dir: string): string[] =>
   existsSync(dir) ? readdirSync(dir).toSorted() : [];
 
 describe("ws add", () => {
+  test("trusts mise.toml without a readiness declaration", async () => {
+    const path = await repo();
+    await Bun.write(
+      join(path, "mise.toml"),
+      '[env]\nWS_TRUST_FIXTURE = "ready"\n',
+    );
+    expect(
+      (await jj(["commit", "-m", "mise without readiness"], path)).code,
+    ).toBe(0);
+    const r = await ws(["add", "demo"], path);
+    expect(r.code, r.err).toBe(0);
+    const config = join(wsDir(path, "demo"), "mise.toml");
+    const shown = await run(["mise", "trust", "--show"], wsDir(path, "demo"));
+    expect(shown.code).toBe(0);
+    expect(shown.out).toContain(`${config}: trusted`);
+    expect(r.err).toContain(`ws: ready: trusted ${config}`);
+  });
+
+  test.each(["mise.toml", ".mise.toml"])(
+    "trusts %s before readiness with isolated mise state",
+    async (config) => {
+      const path = await repo('ready = ["mise env --json > ready.json"]\n');
+      await Bun.write(
+        join(path, config),
+        '[env]\nWS_TRUST_FIXTURE = "ready"\n',
+      );
+      expect((await jj(["commit", "-m", "mise fixture"], path)).code).toBe(0);
+      const r = await ws(["add", "demo"], path);
+      expect(r.code, r.err).toBe(0);
+      const dir = wsDir(path, "demo");
+      expect(r.err).toContain(`ws: ready: trusted ${join(dir, config)}`);
+      const shown = await run(["mise", "trust", "--show"], dir);
+      expect(shown.code).toBe(0);
+      expect(shown.out).toContain(`${join(dir, config)}: trusted`);
+      const env = jsonOf(
+        z.looseObject({ WS_TRUST_FIXTURE: z.literal("ready") }),
+      ).safeParse(await Bun.file(join(dir, "ready.json")).text());
+      expect(env.success).toBe(true);
+    },
+  );
+
+  test("runs declared trust for an additional config before returning the workspace", async () => {
+    const path = await repo('ready = ["mise trust -q nested/mise.toml"]\n');
+    await Bun.write(
+      join(path, "mise.toml"),
+      '[env]\nWS_TRUST_FIXTURE = "root"\n',
+    );
+    await Bun.write(
+      join(path, "nested/mise.toml"),
+      '[env]\nWS_TRUST_NESTED = "nested"\n',
+    );
+    expect((await jj(["commit", "-m", "nested mise fixture"], path)).code).toBe(
+      0,
+    );
+    const r = await ws(["add", "nested"], path);
+    expect(r.code).toBe(0);
+    const dir = wsDir(path, "nested");
+    expect(r.err).toContain(`ws: ready: trusted ${join(dir, "mise.toml")}`);
+    expect(r.err).toContain("ws: ready: mise trust -q nested/mise.toml");
+    const shown = await run(["mise", "trust", "--show"], join(dir, "nested"));
+    expect(shown.code).toBe(0);
+    expect(shown.out).toContain(`${join(dir, "mise.toml")}: trusted`);
+    expect(shown.out).toContain(`${join(dir, "nested/mise.toml")}: trusted`);
+  });
+
+  test("a failed mise trust is loud and rolls back before readiness", async () => {
+    const path = await repo('ready = ["echo ran > ready.out"]\n');
+    await Bun.write(
+      join(path, "mise.toml"),
+      '[env]\nWS_TRUST_FIXTURE = "ready"\n',
+    );
+    expect(
+      (await jj(["commit", "-m", "mise failure fixture"], path)).code,
+    ).toBe(0);
+    // A regular file cannot hold mise's state directory, even when tests run as root.
+    const blocked = join(scratch, "blocked-state");
+    await Bun.write(blocked, "not a directory\n");
+    const r = await ws(
+      ["add", "blocked"],
+      path,
+      baseEnv({ MISE_STATE_DIR: blocked }),
+    );
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("mise trust");
+    expect(r.err).toContain("the new workspace was removed");
+    expect(r.err).not.toContain("ws: ready: echo ran");
+    expect(
+      await Bun.file(
+        join(wsDir(path, "blocked"), ".jj/working_copy/type"),
+      ).exists(),
+    ).toBe(false);
+    expect((await jj(["workspace", "list"], path)).out).not.toContain(
+      "ws_blocked",
+    );
+  });
+
   test("creates the declared path, names the workspace after it, runs readiness", async () => {
     const path = await repo(
       'trunk = "main"\nready = ["pwd > ready.out", "echo done >> ready.out"]\n',

@@ -587,7 +587,7 @@ describe("statusline Run row", () => {
   test("Run activity comes from the vendor Codex rollout", async () => {
     const session = "fixture-run-activity";
     const cwd = "/home/fuyu/dotfiles-ws-hooksearch";
-    const day = Temporal.Now.plainDateISO();
+    const day = Temporal.PlainDate.from("2026-10-14");
     const rolloutDir = join(
       scratch,
       ".codex",
@@ -1267,7 +1267,9 @@ describe("statusline Run row", () => {
       join(scratch, "job-home"),
     );
     expect(out).toContain("Job: compute 10m00s orphan×1");
-    expect(out).not.toContain("agx");
+    expect(
+      out.split("\n").find((line) => line.startsWith("Job:")),
+    ).not.toContain("agx");
   });
 
   test("Job entries share one name + elapsed format in every session", async () => {

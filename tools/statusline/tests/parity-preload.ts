@@ -14,6 +14,8 @@ performance.now = () => 0;
 Object.defineProperty(process, "platform", { value: "linux" });
 
 const realRead = fs.readFileSync;
+const realReadAsync = fsPromises.readFile;
+const realStatfs = fsPromises.statfs;
 await mock.module("node:fs", () => ({
   ...fs,
   readFileSync: (path: fs.PathOrFileDescriptor, options?: unknown) => {
@@ -45,22 +47,34 @@ await mock.module("node:fs/promises", () => ({
     else if (Buffer.isBuffer(path)) name = path.toString();
     let fixture: string | undefined;
     if (name === "/proc/stat") fixture = "cpu  100 0 100 800 0 0 0 0\n";
+    else if (name === "/proc/version") fixture = "Linux fixture\n";
     else if (name === "/proc/meminfo")
       fixture = "MemTotal: 16777216 kB\nMemAvailable: 8388608 kB\n";
     else if (name.startsWith("/sys/fs/cgroup/")) fixture = "max\n";
     if (fixture !== undefined)
       return options === undefined ? Buffer.from(fixture) : fixture;
     return options === undefined
-      ? fsPromises.readFile(path)
-      : fsPromises.readFile(path, options);
+      ? realReadAsync(path)
+      : realReadAsync(path, options);
   },
-  statfs: () =>
-    Promise.resolve({
+  statfs: (path: string) => {
+    const mode = process.env.STATUSLINE_FIXTURE_TMP;
+    if (path === "/tmp" && mode === "missing")
+      return realStatfs(`${process.env.HOME}/missing-tmp-mount`);
+    if (path === "/tmp" && mode === "hung") return new Promise(() => {});
+    const freeInodes = { warn: 150, deny: 50, exhausted: 0 };
+    const selected = Object.entries(freeInodes).find(
+      ([name]) => name === mode,
+    )?.[1];
+    return Promise.resolve({
       bsize: 4096,
       blocks: 1048576,
       bfree: 524288,
       bavail: 524288,
-    }),
+      files: path === "/tmp" && selected !== undefined ? 1000 : 1048576,
+      ffree: path === "/tmp" && selected !== undefined ? selected : 1038090,
+    });
+  },
 }));
 await mock.module("node:os", () => ({
   ...os,

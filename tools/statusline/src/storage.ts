@@ -21,7 +21,7 @@ import {
   diskRateStatePath,
   updateDiskRates,
 } from "./disk-rate.ts";
-import { diskFreeColor, naSegment, roles } from "./ansi.ts";
+import { diskFreeColor, MID, naSegment, roles, tmpInodeColor } from "./ansi.ts";
 
 // Drive paths come from agents/hooks/storage-headroom.toml. Free-space color thresholds are
 // presentation rules in ansi.ts; the storage gate keeps its own enforcement thresholds. statfs is
@@ -93,6 +93,129 @@ export async function tmpfsReading(
   });
 }
 
+// /tmp, read by statfs. It is not a [drive.*] (no path), so it is not in the Disk list: both bytes
+// and inodes are shown, because /tmp ran out of inodes (1,048,576) on 2026-10-15 while its bytes were
+// 3% used, and a bytes-only line hid the failure.
+export interface TmpReading {
+  kind: "reading";
+  label: string;
+  freeG: number;
+  totalG: number;
+  inodeUsedPct: number | undefined; // undefined: this filesystem reports no inode count
+}
+// A statfs failure, or counts that cannot be a filesystem, is a miss that names itself, never a throw.
+export type TmpEntry = TmpReading | DiskMiss;
+export const TMP_PATH = "/tmp";
+// The fields of node's StatsFs that the tmp reading uses.
+export interface StatFsCounts {
+  type?: number;
+  bsize: number;
+  blocks: number;
+  bavail: number;
+  files: number;
+  ffree: number;
+}
+export function tmpEntry(
+  counts: Result<StatFsCounts, string>,
+  label = "tmp",
+): TmpEntry {
+  if (counts.isErr()) return { kind: "miss", label, why: counts.error };
+  const { bsize, blocks, bavail, files, ffree } = counts.value;
+  if (
+    ![bsize, blocks, bavail].every((value) => Number.isFinite(value)) ||
+    !(bsize > 0 && blocks > 0 && bavail >= 0 && bavail <= blocks)
+  )
+    return { kind: "miss", label, why: "statfs reported no capacity" };
+  const inodesKnown =
+    Number.isFinite(files) &&
+    Number.isFinite(ffree) &&
+    files > 0 &&
+    ffree >= 0 &&
+    ffree <= files;
+  return {
+    kind: "reading",
+    label,
+    freeG: (bavail * bsize) / 1024 ** 3,
+    totalG: (blocks * bsize) / 1024 ** 3,
+    inodeUsedPct: inodesKnown ? (100 * (files - ffree)) / files : undefined,
+  };
+}
+/** Async render-path /tmp read; `read` is the statfs seam (tests pass a fixture or a missing path). */
+export async function tmpEntryAsync(
+  read: (path: string) => Promise<StatFsCounts> = statfs,
+  path = TMP_PATH,
+): Promise<TmpEntry> {
+  const counts = await boundedTmpStatfs(read, path);
+  return tmpEntry(counts);
+}
+// A stalled filesystem must not hold up a render. No subprocess and no sync statfs on this path.
+async function boundedTmpStatfs(
+  read: (path: string) => Promise<StatFsCounts>,
+  path: string,
+): Promise<Result<StatFsCounts, string>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<Result<StatFsCounts, string>>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(err("statfs timeout 150ms"));
+    }, 150);
+  });
+  const pending = Promise.resolve()
+    .then(() => read(path))
+    .then(
+      (value): Result<StatFsCounts, string> => ok(value),
+      (reason: unknown): Result<StatFsCounts, string> =>
+        err(execError(reason).code ?? "statfs failed"),
+    );
+  const counts = await Promise.race([pending, timeout]);
+  clearTimeout(timer);
+  return counts;
+}
+/** /tmp plus any configured drive that statfs identifies as tmpfs. */
+export async function tmpReadingsAsync(
+  configPath = STORAGE_CONFIG,
+  read: (path: string) => Promise<StatFsCounts> = statfs,
+): Promise<TmpEntry[]> {
+  const config = await Bun.file(configPath)
+    .text()
+    .then(
+      (text) =>
+        fromThrowable((): unknown => Bun.TOML.parse(text))().unwrapOr(null),
+      () => null,
+    );
+  const parsed = StorageConfigSchema.safeParse(config);
+  const configured = parsed.success
+    ? Object.values(parsed.data.drive ?? {})
+    : [];
+  const paths = new Set([
+    TMP_PATH,
+    ...configured.flatMap((drive) =>
+      drive.path === undefined ? [] : [drive.path],
+    ),
+  ]);
+  const entries = await Promise.all(
+    [...paths].map(async (path) => {
+      const counts = await boundedTmpStatfs(read, path);
+      if (
+        path !== TMP_PATH &&
+        (counts.isErr() || counts.value.type !== 0x01021994)
+      )
+        return [];
+      return [tmpEntry(counts, path === TMP_PATH ? "tmp" : `tmp ${path}`)];
+    }),
+  );
+  return entries.flat();
+}
+// Bytes and inodes use the hook's use-percent thresholds. Unknown inode counts print n/a.
+export function tmpSegment(t: TmpEntry): string {
+  if (t.kind === "miss") return naSegment(t.label, t.why);
+  const freePercent = t.totalG > 0 ? (t.freeG / t.totalG) * 100 : undefined;
+  const bytes = `${roles.label(t.label)} ${roles.value(`${significant(t.freeG, 3)}GiB`, tmpInodeColor(100 - (freePercent ?? 100)))}${roles.secondary(" free")}`;
+  const inodes =
+    t.inodeUsedPct === undefined
+      ? roles.unavailable("inodes")
+      : `${roles.label("inodes")} ${roles.value(`${Math.round(100 - t.inodeUsedPct)}%`, tmpInodeColor(t.inodeUsedPct))}${roles.secondary(" free")}`;
+  return `${bytes} ${roles.secondary(MID)} ${inodes}`;
+}
 // err = the drive list itself could not be read, so WHICH disks to show is unknown.
 // Only the keys this file reads; the gate's own keys (label, stop_gib, ...) are not its business.
 export const StorageConfigSchema = z.object({

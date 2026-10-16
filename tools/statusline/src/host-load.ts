@@ -24,7 +24,10 @@ import {
   diskReadings,
   diskSegment,
   tmpfsReading,
+  tmpReadingsAsync,
+  tmpSegment,
   type DiskEntry,
+  type TmpEntry,
 } from "./storage.ts";
 import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
@@ -546,11 +549,17 @@ export function memSegment(label: string, m: MemReading): string {
 // Disks: WHICH filesystems and at what free space they turn yellow/red are not decided here —
 // Every reading is a Result: ok renders the value, err renders `<label> n/a (<why>)` — see the
 // EXPLICIT-ABSENCE law at the top. The row therefore always carries CPU, RAM and VRAM.
+// Host-wide snapshot shared by the Sys renderer and transcript snapshot renderer in this process.
+// Updated by the async host read before either renders; never performs I/O during formatting.
+let currentTmp: TmpEntry[] = [
+  { kind: "miss", label: "tmp", why: "not sampled" },
+];
 export function sysSegment(
   cpu: Result<number, string>,
   ram: Result<MemReading, string>,
   vram: Result<MemReading, string> | undefined,
   disks: Result<DiskEntry[], string>,
+  tmp: TmpEntry[] = currentTmp,
 ): string {
   const parts: string[] = [
     cpu.match(
@@ -576,6 +585,7 @@ export function sysSegment(
       (ds) => ds.map((disk) => diskSegment(disk)),
       (why) => [naSegment("Disk", why)],
     ),
+    ...tmp.map((entry) => tmpSegment(entry)),
   ];
   return parts.join(roles.separator());
 }
@@ -637,11 +647,13 @@ export function readHostLoad(): HostLoad {
 }
 /** Async render-path sample; host readings run independently and retain explicit unknowns. */
 export async function readHostLoadAsync(): Promise<Omit<HostLoad, "disks">> {
-  const [cpu, ram, vram] = await Promise.all([
+  const [cpu, ram, vram, tmp] = await Promise.all([
     cpuPctAsync(),
     ramFracAsync(),
     vramGatedAsync(),
+    tmpReadingsAsync(),
   ]);
+  currentTmp = tmp;
   return { cpuPct: cpu, ram, vram };
 }
 async function readCpuSampleAsync(): Promise<Result<CpuSample, string>> {
@@ -793,6 +805,7 @@ export function sysRow(h: HostLoad): string {
 // "now" waits for both, boundedly — never longer than one GPU sample, and whatever is still
 // missing then prints as n/a with its reason.
 async function main(): Promise<void> {
+  currentTmp = await tmpReadingsAsync();
   const first = readHostLoad();
   const cold = first.cpuPct.isErr() || (first.vram?.isErr() ?? false);
   if (!cold) {

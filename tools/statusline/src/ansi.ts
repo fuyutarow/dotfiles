@@ -2,6 +2,12 @@
 // n/a segment, and the usage-percent color thresholds. Split out of the former Claude statusline
 // (2026-10-06) so a reader of host load needs none of the statusline's stdin machinery.
 
+import {
+  TMP_INODE_WARN_PCT,
+  TMP_INODE_DENY_PCT,
+} from "../../storage-headroom/src/decision.ts";
+export { TMP_INODE_WARN_PCT, TMP_INODE_DENY_PCT };
+
 export const ESC = "\u001B";
 export const RST = `${ESC}[0m`;
 export const DIM = `${ESC}[2m`;
@@ -38,6 +44,12 @@ export function diskFreeColor(freePercent: number | undefined): string {
   if (freePercent === undefined) return "38;5;71";
   if (freePercent < 10) return "38;5;167";
   if (freePercent < 20) return "38;5;178";
+  return "38;5;71";
+}
+// Use the hook's thresholds directly, independently of the recoverer's reclaim trigger.
+export function tmpInodeColor(usedPercent: number): string {
+  if (usedPercent >= TMP_INODE_DENY_PCT) return "38;5;167";
+  if (usedPercent >= TMP_INODE_WARN_PCT) return "38;5;178";
   return "38;5;71";
 }
 // Rate and Sys vocabulary: plain names/windows, threshold-colored values, dim supporting

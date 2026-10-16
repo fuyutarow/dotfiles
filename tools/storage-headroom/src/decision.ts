@@ -71,6 +71,9 @@ import {
 } from "../../shared/src/narrow.ts";
 
 const GiB = 1024 ** 3;
+// Shared with statusline; configuration migration belongs to capacity-unify.
+export const TMP_INODE_WARN_PCT = 85;
+export const TMP_INODE_DENY_PCT = 95;
 const MAX_SCRATCHPAD_WRITE_BYTES = 64 * 1024;
 const CONFIG_PATH =
   process.env.STORAGE_HEADROOM_CONFIG ??
@@ -1314,13 +1317,13 @@ export async function decide(payload: unknown): Promise<Verdict> {
       });
   }
   const inodeWarnings = drives
-    .filter((d) => d.inodeUsed !== null && d.inodeUsed >= 85)
+    .filter((d) => d.inodeUsed !== null && d.inodeUsed >= TMP_INODE_WARN_PCT)
     .map(
       (d) =>
-        `${d.label}: ${d.inodeUsed?.toFixed(1)}% inodes used (warn 85%, deny 95%); run disk-reclaim plan.`,
+        `${d.label}: ${d.inodeUsed?.toFixed(1)}% inodes used (warn ${TMP_INODE_WARN_PCT}%, deny ${TMP_INODE_DENY_PCT}%); run disk-reclaim plan.`,
     );
   const inodeDeny = drives.some(
-    (d) => d.inodeUsed !== null && d.inodeUsed >= 95,
+    (d) => d.inodeUsed !== null && d.inodeUsed >= TMP_INODE_DENY_PCT,
   );
   const low = drives.filter((d) => d.free !== null && d.free < d.denyAt);
   const warningLine = drives.filter(

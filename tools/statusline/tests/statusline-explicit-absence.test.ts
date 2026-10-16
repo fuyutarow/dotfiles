@@ -59,17 +59,25 @@ function render(opts: {
   home: string;
 } {
   const home = opts.home ?? tempHome();
-  const r = spawnSync(process.execPath, [STATUSLINE], {
-    input: JSON.stringify(opts.payload ?? {}),
-    encoding: "utf8",
-    env: isolatedStatuslineEnv({
-      HOME: home,
-      PATH: opts.bin,
-      TZ: "UTC",
-      ...opts.env,
-    }), // no inherited HERDR_*, session identity or real tools
-    cwd: tempDir("slcwd-"), // not a repo
-  });
+  const r = spawnSync(
+    process.execPath,
+    [
+      "--preload",
+      join(import.meta.dir, "gpu-isolation-preload.ts"),
+      STATUSLINE,
+    ],
+    {
+      input: JSON.stringify(opts.payload ?? {}),
+      encoding: "utf8",
+      env: isolatedStatuslineEnv({
+        HOME: home,
+        PATH: opts.bin,
+        TZ: "UTC",
+        ...opts.env,
+      }), // no inherited HERDR_*, session identity or real tools
+      cwd: tempDir("slcwd-"), // not a repo
+    },
+  );
   expect(r.status).toBe(0);
   return { text: (r.stdout ?? "").replace(ANSI, ""), home };
 }

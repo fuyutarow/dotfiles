@@ -131,6 +131,7 @@ test.each([
     ok({ pct, frac: "13.1/16.0G" }),
     ok({ pct, frac: "3.5/12.0G" }),
     ok([disk]),
+    [],
   );
   expect(row).toBe(
     `CPU ${color}${text}%${reset} ${dim}·${reset} RAM ${color}${text}%${reset} ${dim}(13.1/16.0G)${reset} ${dim}·${reset} VRAM ${color}${text}%${reset} ${dim}(3.5/12.0G)${reset} ${dim}·${reset} Disk / ${green}123GiB${reset}${dim}/460GiB (27%) free${reset}`,
@@ -154,7 +155,7 @@ test("Sys n/a values and reasons share the Rate roles", () => {
       `${label} ${amber}n/a${reset} ${dim}(${why})${reset}`,
     );
   expect(
-    sysSegment(err("cpu"), err("ram"), undefined, err("storage")),
+    sysSegment(err("cpu"), err("ram"), undefined, err("storage"), []),
   ).toEndWith(`Disk ${amber}n/a${reset} ${dim}(storage)${reset}`);
   expect(diskSegment({ ...disk, freeG: undefined })).toBe(
     `Disk / ${amber}n/a${reset}`,

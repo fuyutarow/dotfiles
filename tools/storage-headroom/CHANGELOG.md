@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-10-16
+
+- Export inode warning and denial thresholds for statusline without changing enforcement values.
+
 ## 0.2.1 — 2026-10-15
 
 - Allow unparseable jj workspace adds with a warning and name the sparse command for proven policy denials

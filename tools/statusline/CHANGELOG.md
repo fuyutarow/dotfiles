@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.0 — 2026-10-16
+
+- Show bounded tmpfs byte and inode headroom on the Sys line using storage-headroom warning and denial thresholds.
+
 ## 0.15.4 — 2026-10-16
 
 - Show failed recover services and flag stalled reclaim runs

@@ -58,28 +58,7 @@ TOML as first-class).
 **Explicit-index + source-routing is load-bearing**, not optional style (from uv's own docs,
 `docs.astral.sh/uv/guides/integration/pytorch/`):
 
-```toml
-[project]
-requires-python = ">=3.13"
-dependencies = ["torch>=2.3.1", "torchvision"]   # torch>=2.3.1: NumPy-2 compatible
-
-[tool.uv.sources]
-# CUDA exists on Linux AND Windows; only macOS is CPU-only — the marker must say so.
-torch       = [{ index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
-               { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }]
-torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
-               { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
-
-[[tool.uv.index]]
-name = "pytorch-cu130"
-url = "https://download.pytorch.org/whl/cu130"
-explicit = true
-```
+Merge the [PyTorch configuration fragment](../../../../presets/uv/examples/pyproject-pytorch.toml) only for a torch project. Preserve its platform routing and explicit indexes.
 
 - `explicit = true` on `[[tool.uv.index]]` is load-bearing: without it, uv may pull *other*
   packages from the PyTorch index too.

@@ -1,0 +1,10 @@
+name = "uv"
+description = "uv Python project metadata, strict Ruff and Pyright, hooks, and mise tasks"
+files = [
+  { source = "pyproject.toml", destination = "pyproject.toml" },
+  { source = ".pre-commit-config.yaml", destination = ".pre-commit-config.yaml" },
+  { source = "mise.toml", destination = "mise.toml" },
+  { source = "examples/pyproject-pytorch.toml", destination = "examples/pyproject-pytorch.toml" },
+  { source = "examples/script.py", destination = "examples/script.py" },
+]
+check = ["bun test presets/tests/uv.test.ts"]

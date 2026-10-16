@@ -20,26 +20,26 @@ description: >-
 
 > **Version**: v2609.1.0 (2026-09-21) — string construction distinguishes source delimiters from output encoding; bounded recordable runs; auto process/test fanout retired.
 > **Scope**: environment/packaging discipline + library selection + typing/validation/quality
->   gates for Python that **lives in a repo** (project, module, kept script); host-agnostic.
+> gates for Python that **lives in a repo** (project, module, kept script); host-agnostic.
 > **Resource seam**: before a recordable numerical run, benchmark, parallel test, resident
 > service, or orchestrated Python subprocess, read
 > `../orchestrating-agents/references/measurement-and-resources.md` P7 and use
 > `agent-resource-run`. P7 is the sole owner of the envelope and GPU-first exception test.
 > **Out of scope**: invoking a Python-based CLI tool ad hoc (`uvx`, one-off `uv run`) →
->   `running-python-tools`; teaching Python syntax to someone who doesn't know it; a deep
->   per-library API reference (`references/selection.md` is a lookup, not a tutorial).
+> `running-python-tools`; teaching Python syntax to someone who doesn't know it; a deep
+> per-library API reference (`references/selection.md` is a lookup, not a tutorial).
 > **Build verify** (atomic — all ship in one commit):
->   `for f in environment selection typing validation quality idioms research; do test -f references/$f.md || echo MISSING $f; done; for t in trigger-set forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
+> `for f in environment selection typing validation quality idioms research; do test -f references/$f.md || echo MISSING $f; done; for t in trigger-set forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
 > **Staleness registry** — `grep -rn '\[dated:' agents/skills/writing-python/` and re-verify
->   anything older than ~2 quarters: the spine versions (uv/ruff/pydantic, §1 below) · the
->   type-checker verdict (`typing.md` — ty's beta status, pyrefly, pyright) · the httpx
->   release-stall caveat · the loguru maintenance-stall caveat · `whenever`'s beta status ·
->   the free-threading phase (`selection.md`) · poetry/pipenv/conda status
->   (`environment.md` — Migration table) · the pandas/pyarrow relationship · the research layer
->   (`research.md`): hydra maintenance/instantiate-blocklist state, Neptune shutdown / Aim
->   stall, marimo-under-CoreWeave, the seaborn release-freeze, the torch CUDA-backend list,
->   the 3.14 forkserver default. Mechanical floor =
->   `forging-skills/scripts/skill-check.ts` (shared; this skill ships no `scripts/`).
+> anything older than ~2 quarters: the spine versions (uv/ruff/pydantic, §1 below) · the
+> type-checker verdict (`typing.md` — ty's beta status, pyrefly, pyright) · the httpx
+> release-stall caveat · the loguru maintenance-stall caveat · `whenever`'s beta status ·
+> the free-threading phase (`selection.md`) · poetry/pipenv/conda status
+> (`environment.md` — Migration table) · the pandas/pyarrow relationship · the research layer
+> (`research.md`): hydra maintenance/instantiate-blocklist state, Neptune shutdown / Aim
+> stall, marimo-under-CoreWeave, the seaborn release-freeze, the torch CUDA-backend list,
+> the 3.14 forkserver default. Mechanical floor =
+> `forging-skills/scripts/skill-check.ts` (shared; this skill ships no `scripts/`).
 
 ## THE LAW
 
@@ -184,6 +184,10 @@ drifts against a repo's pinned rules) auto-kills several rows above — run it b
 ANY row in this table is satisfied.
 
 ## §2 Environment discipline (inline core)
+
+Project configuration lives in [presets/uv/](../../../presets/uv/README.md):
+apply it with `mise run preset -- apply uv --to <repo>` from dotfiles.
+The preset owns the copyable settings; this skill owns their selection and reasoning.
 
 The uv command decision table (argued in full in `references/environment.md`):
 

@@ -23,52 +23,7 @@ pre-commit) — a minor bump can silently change lint or format output out from 
 
 ## 2. THE HOUSE STRICT CONFIG
 
-```toml
-[tool.ruff]
-line-length = 100                 # OPINION: house pick (ruff/Black default is 88) — pin whichever you choose
-target-version = "py312"          # match requires-python's FLOOR; don't rely on CI auto-inference
-
-[tool.ruff.lint]
-select = [
-  "E", "W",   # pycodestyle — OFF by default (ruff ships only E4/E7/E9); full E/W is the strict baseline
-  "F",        # Pyflakes — on by default; undefined names, unused imports, non-negotiable
-  "I",        # isort — replaces isort entirely, zero controversy
-  "UP",       # pyupgrade — modernizes syntax to target-version; low noise
-  "B",        # flake8-bugbear — high-value bug catcher (mutable defaults, etc.); low noise
-  "SIM",      # flake8-simplify — mostly safe; a few rules are stylistic, review per-project
-  "RUF",      # Ruff-specific — noqa hygiene, ambiguous unicode; low noise, high value
-  "C4",       # flake8-comprehensions — safe, high signal
-  "PTH",      # flake8-use-pathlib — os.path → pathlib; opinionated but modern-aligned
-  "PIE",      # flake8-pie — misc anti-patterns, low noise
-  "RET",      # flake8-return — consistent returns, low noise
-  "ARG",      # flake8-unused-arguments — catches dead params
-  "DTZ",      # flake8-datetimez — PG4 GATE: mechanically enforces aware-datetime discipline
-  "BLE",      # flake8-blind-except — PG4 GATE: blind `except Exception` (BLE001)
-  "S",        # flake8-bandit subset — S110 except-pass, S301 pickle; tests scoped below
-  "G",        # flake8-logging-format — enforces lazy %s args in logging calls
-  "TRY400",   # tryceratops (single code): logging.exception, not .error, in handlers
-  "ASYNC",    # flake8-async — blocking calls inside async def (ASYNC1xx)
-  "NPY",      # NumPy-specific — NPY002 kills legacy np.random.seed global state
-  # "T20",    # flake8-print — print ban; commented-optional, scope with per-file-ignores below
-]
-preview = false                    # policy: never gate CI on preview-only rule/style behavior
-
-ignore = [
-  "E501",   # redundant once `ruff format` runs — the formatter already owns line length
-]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "ANN"]        # S101: assert is pytest's idiom (S is selected above);
-                                     # ANN only matters if you enable ANN above. DTZ stays ON:
-                                     # a naive datetime in a fixture/mock is a real bug too
-"scripts/**" = ["T20"]               # only needed if you enabled T20 above
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"                # required to make "D" usable without excess noise, IF enabled
-
-[tool.ruff.format]
-# defaults are Black-compatible (quote-style="double", indent-width=4, line-ending="auto")
-```
+Use the [canonical pyproject.toml](../../../../presets/uv/pyproject.toml) for the house Ruff settings. Keep the target Python floor aligned with the project metadata.
 
 The `DTZ` gate is the *mechanical* enforcement; the argument for why naive datetimes rot lives
 in `idioms.md`'s kill-list row — one pointer, don't restate it here.
@@ -78,9 +33,9 @@ Controversial groups — enable deliberately, not by copy-paste:
 | Group | Why it's controversial | House call |
 |---|---|---|
 | `ANN` | noisy on partially-typed code | enable together WITH a real type checker (`typing.md`), never alone |
-| `D` | noisy without a docstring convention already set | set `convention` first (above), then enable |
+| `D` | noisy without a docstring convention already set | set `convention` first (see the preset), then enable |
 | `PL` (esp. `PLR`) | `PLR` (too-many-args, magic-value-comparison) is the single most-disabled subgroup, community-wide | keep `PLC`/`PLE` on; tune or drop `PLR` per project |
-| `S` | false positives on test code / known-safe patterns | IN the house select above (PG3/PG4 lean on S110/S301); scope via `per-file-ignores` on `tests/**`, never disable repo-wide |
+| `S` | false positives on test code / known-safe patterns | IN the preset's house select (PG3/PG4 lean on S110/S301); scope via `per-file-ignores` on `tests/**`, never disable repo-wide |
 | `C90` / `TD` / `FIX` | complexity threshold and TODO-tracking are genuine team preference | opt in only if the team wants it; `C90`/mccabe is off by default even here |
 
 ## 3. CI vs pre-commit — verify vs mutate, and the right order
@@ -100,15 +55,7 @@ auto-fixing, even though the fix succeeded.
 pre-commit **mutates locally**, and hook order matters (official guidance: lint-fix runs before
 format — a fix can reshape code that the formatter then normalizes; the reverse order can drift):
 
-```yaml
-repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.21
-    hooks:
-      - id: ruff-check
-        args: [--fix]
-      - id: ruff-format
-```
+Use the [canonical hook configuration](../../../../presets/uv/.pre-commit-config.yaml); lint fixes precede formatting.
 
 pre-commit vs prek:
 

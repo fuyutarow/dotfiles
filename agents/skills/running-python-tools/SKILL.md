@@ -70,6 +70,9 @@ uvx --from jupyterlab jupyter lab
 
 ## Notes
 
+- For permanent project configuration, use [presets/uv/](../../../presets/uv/README.md);
+  `writing-python` owns the rules for choosing and adapting those settings.
+
 - `uv run --with` layers an ephemeral env on the current project (or `--no-project` for a clean one) so the named packages are guaranteed present **without touching system Python**.
 - When a dependency is **permanent to a project**, add it to that project's `pyproject.toml` (`uv add`) and use plain `uv run`; use `--with` only for ad-hoc/one-off needs. Project-level work — env setup, dependency SELECTION, typing/lint discipline, authoring kept code — is `writing-python`'s territory (PURPOSE cut; seam note: the two descriptions agree in substance, do not diff for byte-identity).
 - Inside this host's repos that pin Python via uv, prefer `uv run` over `uvx` so the project's locked interpreter/deps apply; reach for `uvx` for project-independent tools.

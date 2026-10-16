@@ -3,6 +3,7 @@
 import { cli, command } from "cleye";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
+import { resolve } from "node:path";
 import { fromAsyncThrowable } from "neverthrow";
 import { z } from "../../shared/src/zod.ts";
 import {
@@ -86,6 +87,11 @@ const flags = {
     description:
       "Allow recent graveyard entries past the 10-minute undo window when the host is below deny",
   },
+  only: {
+    type: String,
+    description:
+      "Limit rip-expire, purge, and tmpfs to one absolute subtree (for example a graveyard subtree)",
+  },
   noProgress: {
     type: Boolean,
     default: false,
@@ -126,6 +132,7 @@ const planFlags = {
   tier: flags.tier,
   all: flags.all,
   fetch: flags.fetch,
+  only: flags.only,
   noProgress: flags.noProgress,
   verbose: flags.verbose,
   yes: flags.yes,
@@ -143,6 +150,7 @@ const parsedFlags = z.object({
   all: z.boolean().default(false),
   yes: z.boolean().default(false),
   underPressure: z.boolean().default(false),
+  only: z.string().min(1).optional(),
   noProgress: z.boolean().default(false),
   verbose: z.boolean().default(false),
   fetch: z.boolean().default(false),
@@ -168,6 +176,7 @@ const commands = [
       tier: flags.tier,
       yes: flags.yes,
       underPressure: flags.underPressure,
+      only: flags.only,
       noProgress: flags.noProgress,
       verbose: flags.verbose,
       interactive: flags.interactive,
@@ -698,6 +707,7 @@ export async function main(
     config: loaded.config,
     procDir: resolveProcRoot(),
     verbose: f.verbose,
+    only: f.only === undefined ? undefined : resolve(f.only),
     reportActivity: (unit, task) => {
       if (/SSH/u.test(task)) activePhase = "SSH probe";
       else if (selectedCommand === "run") activePhase = "deletion";
@@ -794,9 +804,9 @@ export async function main(
     let onKeypress:
       | ((_character: string, key: { name?: string }) => void)
       | undefined;
-    const escape = new Promise<string>((resolve) => {
+    const escape = new Promise<string>((complete) => {
       onKeypress = (_character, key) => {
-        if (key.name === "escape") resolve("\u001B");
+        if (key.name === "escape") complete("\u001B");
       };
       stdin.on("keypress", onKeypress);
     });

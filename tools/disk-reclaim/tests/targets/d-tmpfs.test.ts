@@ -46,7 +46,7 @@ afterAll(() => {
 });
 
 describe("tmpfs target", () => {
-  test("all observed holder names qualify, including a tree above 10,000 entries", () => {
+  test("all observed holder names qualify, including a tree above 10,000 entries", async () => {
     const root = fixtureRoot();
     const old = Temporal.Now.instant().epochMilliseconds / 1000 - 7200;
     const names = [
@@ -79,20 +79,20 @@ describe("tmpfs target", () => {
       statfs: fixtureFs,
       isOpen: () => false,
     });
-    const rows = target.plan(fixtureContext);
+    const rows = await target.plan(fixtureContext);
     for (const name of names)
       expect(rows.find((row) => row.path === join(root, name))?.verdict).toBe(
         "RECLAIM",
       );
     writeFileSync(join(cache, "0"), "recent content deep in tree");
     expect(
-      target
-        .plan(fixtureContext)
-        .find((row) => row.path === join(root, names[0]!))?.verdict,
+      (await target.plan(fixtureContext)).find(
+        (row) => row.path === join(root, names[0]!),
+      )?.verdict,
     ).toBe("KEEP");
   });
 
-  test("entry and time bounds fail closed, and configured protection and foreign ownership stay kept", () => {
+  test("entry and time bounds fail closed, and configured protection and foreign ownership stay kept", async () => {
     const root = fixtureRoot();
     const dir = join(root, "reclaim-host-cache");
     mkdirSync(dir);
@@ -108,7 +108,7 @@ describe("tmpfs target", () => {
       isOpen: () => false,
     };
     for (const limit of [{ scanMaxEntries: 2 }, { scanMaxMs: 0 }]) {
-      const rows = createTmpfsTarget({ ...options, ...limit }).plan(
+      const rows = await createTmpfsTarget({ ...options, ...limit }).plan(
         fixtureContext,
       );
       expect(rows.find((row) => row.path === dir)).toMatchObject({
@@ -117,20 +117,20 @@ describe("tmpfs target", () => {
       });
     }
     expect(
-      createTmpfsTarget(options)
-        .plan({
+      (
+        await createTmpfsTarget(options).plan({
           ...fixtureContext,
           config: { ...fixtureContext.config, protected: [join(dir, "one")] },
         })
-        .find((row) => row.path === dir)?.verdict,
+      ).find((row) => row.path === dir)?.verdict,
     ).toBe("KEEP");
     expect(
-      createTmpfsTarget({
-        ...options,
-        uid: () => (process.getuid?.() ?? 0) + 1,
-      })
-        .plan(fixtureContext)
-        .find((row) => row.path === dir)?.verdict,
+      (
+        await createTmpfsTarget({
+          ...options,
+          uid: () => (process.getuid?.() ?? 0) + 1,
+        }).plan(fixtureContext)
+      ).find((row) => row.path === dir)?.verdict,
     ).toBe("KEEP");
   });
 
@@ -206,7 +206,7 @@ describe("tmpfs target", () => {
       scanCacheDir: join(root, "state"),
       log: () => {},
     };
-    const rows = target.plan(context);
+    const rows = await target.plan(context);
     expect(rows.find((row) => row.path === root)?.reason).toContain(
       "tmpfs use:",
     );
@@ -254,7 +254,9 @@ describe("tmpfs target", () => {
       }),
     });
     expect(
-      ramDestinationTarget.plan(context).find((row) => row.path === graveyard),
+      (await ramDestinationTarget.plan(context)).find(
+        (row) => row.path === graveyard,
+      ),
     ).toMatchObject({
       verdict: "RECLAIM",
     });
@@ -283,14 +285,14 @@ describe("tmpfs target", () => {
       }),
     });
     expect(
-      nestedTarget.plan(context).find((row) => row.path === nested),
+      (await nestedTarget.plan(context)).find((row) => row.path === nested),
     ).toMatchObject({
       verdict: "RECLAIM",
       action: { kind: "delete", argv: [nested] },
     });
   });
 
-  test("keeps live user-session dbus and gnupg sockets even when their names look stale", () => {
+  test("keeps live user-session dbus and gnupg sockets even when their names look stale", async () => {
     const root = fixtureRoot();
     const old = Temporal.Now.instant().epochMilliseconds / 1000 - 7200;
     const paths = ["dbus-1", "gnupg"].map((name) => join(root, name));
@@ -300,7 +302,7 @@ describe("tmpfs target", () => {
       utimesSync(join(path, "socket"), old, old);
       utimesSync(path, old, old);
     }
-    const rows = createTmpfsTarget({
+    const rows = await createTmpfsTarget({
       mounts: () => [{ path: root, type: "tmpfs" }],
       statfs: fixtureFs,
       isOpen: () => false,

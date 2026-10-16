@@ -17,7 +17,8 @@ import { dirname, join, resolve, sep } from "node:path";
 import { dlopen, FFIType, ptr, read } from "bun:ffi";
 import { listWorkspaces, storeOf } from "../jj/discover.ts";
 import { fromThrowable } from "../../../shared/src/zod.ts";
-import { protectedReason } from "./protected.ts";
+import { protectedReason, type ProtectionOptions } from "./protected.ts";
+type ProtectionProcesses = NonNullable<ProtectionOptions["processes"]>;
 import { countEntries } from "./purge-progress.ts";
 const message = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -33,6 +34,8 @@ export type RemovalRefusal = {
 export type RemovalError = { path: string; error: string };
 export type RemoveTreeResult = {
   ok: boolean;
+  /** Files and directories actually removed. */
+  entries_removed: number;
   bytes_freed: number;
   statfs_bytes_freed: number;
   refused: RemovalRefusal[];
@@ -44,7 +47,12 @@ export type RemoveTreeOptions = {
   immutable?: (path: string) => boolean | null;
   dryRun?: boolean;
   allowListedWorkspace?: string;
+  /** Already-deleted data (rip graveyard): repo-store and jj-workspace refusals do not apply. */
+  graveyard?: boolean;
+  /** false skips the parent-mount statfs before and after; a stage measures its mount once instead. */
+  measureFilesystem?: boolean;
   protection?: {
+    processes?: ProtectionProcesses | undefined;
     ownerTarget?: string | undefined;
     repoRoots?: string[] | undefined;
     protectedPaths?: string[] | undefined;
@@ -286,6 +294,7 @@ export async function removeTree(
   if (rootStat === null)
     return {
       ok: false,
+      entries_removed: 0,
       bytes_freed: 0,
       statfs_bytes_freed: 0,
       refused,
@@ -296,6 +305,7 @@ export async function removeTree(
   if (protectedPath !== null)
     return {
       ok: false,
+      entries_removed: 0,
       bytes_freed: 0,
       statfs_bytes_freed: 0,
       refused: [
@@ -311,9 +321,12 @@ export async function removeTree(
     };
   const device = rootStat.dev;
   const parent = dirname(path);
-  const before = fromThrowable(() => statfsSync(parent))()
-    .map((stat) => stat.bavail * stat.bsize)
-    .unwrapOr(null);
+  const measureFilesystem = options.measureFilesystem !== false;
+  const before = measureFilesystem
+    ? fromThrowable(() => statfsSync(parent))()
+        .map((stat) => stat.bavail * stat.bsize)
+        .unwrapOr(null)
+    : null;
   const getOwner =
     options.owner ??
     ((entry: string) => {
@@ -397,12 +410,13 @@ export async function removeTree(
       return false;
     }
     if (stat.isDirectory() && !stat.isSymbolicLink()) {
-      const protection = fromThrowable(() =>
-        directoryProtection(entry),
-      )().match(
-        (reason) => reason,
-        (error) => `cannot inspect repo store: ${message(error)}`,
-      );
+      const protection =
+        options.graveyard === true
+          ? null
+          : fromThrowable(() => directoryProtection(entry))().match(
+              (reason) => reason,
+              (error) => `cannot inspect repo store: ${message(error)}`,
+            );
       if (
         protection !== null &&
         !(
@@ -473,11 +487,14 @@ export async function removeTree(
     }
   }
   writeProgress(true);
-  const after = fromThrowable(() => statfsSync(parent))()
-    .map((stat) => stat.bavail * stat.bsize)
-    .unwrapOr(null);
+  const after = measureFilesystem
+    ? fromThrowable(() => statfsSync(parent))()
+        .map((stat) => stat.bavail * stat.bsize)
+        .unwrapOr(null)
+    : null;
   return {
     ok: refused.length === 0 && errors.length === 0,
+    entries_removed: entriesDone,
     bytes_freed: bytesFreed,
     statfs_bytes_freed:
       before === null || after === null ? 0 : Math.max(0, after - before),

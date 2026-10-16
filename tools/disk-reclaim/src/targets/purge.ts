@@ -1,4 +1,6 @@
 import { chmodSync, lstatSync, readdirSync } from "node:fs";
+import { lstat } from "node:fs/promises";
+import { fromAsyncThrowable } from "neverthrow";
 import { homedir } from "node:os";
 import {
   graveyardCandidates,
@@ -8,7 +10,7 @@ import {
 } from "../lib/graveyards.ts";
 import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import { countEntries } from "../lib/purge-progress.ts";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ActionResult, Candidate, Config, Headroom } from "../model.ts";
 import type { Context, Target } from "./index.ts";
 import { fromThrowable, z } from "../../../shared/src/zod.ts";
@@ -45,7 +47,28 @@ function size(path: string, ctx?: Context): number {
   );
 }
 
-export function purgeCandidates(
+/** Graveyard entries to judge: every top-level entry, or just the one named subtree. */
+async function graveyardScope(
+  root: string,
+  only: string | undefined,
+): Promise<string[]> {
+  if (only === undefined) return graveyardEntries(root);
+  const rel = relative(resolve(root), resolve(only));
+  if (rel === "") return graveyardEntries(root);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return [];
+  // A named descendant must not follow a graveyard symlink into live data.
+  let parent = resolve(root);
+  for (const part of rel.split(sep).slice(0, -1)) {
+    parent = join(parent, part);
+    const entry = parent;
+    const stat = await fromAsyncThrowable(() => lstat(entry))();
+    if (stat.isErr() || stat.value.isSymbolicLink()) return [];
+  }
+  const stat = await fromAsyncThrowable(() => lstat(only))();
+  return stat.isOk() ? [resolve(only)] : [];
+}
+
+export async function purgeCandidates(
   env = process.env,
   home = homedir(),
   options: {
@@ -59,10 +82,11 @@ export function purgeCandidates(
     headroom?: Headroom;
     underPressure?: boolean;
     ripOnly?: boolean;
+    only?: string | undefined;
     now?: number;
     context?: Context;
   } = {},
-): Candidate[] {
+): Promise<Candidate[]> {
   const now = options.now ?? Temporal.Now.instant().epochMilliseconds;
   const minAgeMs =
     (options.config?.graveyard_min_age_hours ?? 24) * 60 * 60 * 1000;
@@ -77,7 +101,7 @@ export function purgeCandidates(
   for (const graveyard of graveyards) {
     const drive = driveForPath(graveyard.path, options.headroom);
     const belowDenyLine = drive?.state === "deny";
-    const entries = graveyardEntries(graveyard.path);
+    const entries = await graveyardScope(graveyard.path, options.only);
     const records = ripRecords(graveyard.path);
     const entryCandidates = entries.map((entry) => {
       checkScanDeadline(options.context);
@@ -196,7 +220,7 @@ function makeDirectoriesOwnerWritable(path: string): void {
     makeDirectoriesOwnerWritable(join(path, name));
 }
 
-function purgePlan(ctx: Context, ripOnly: boolean): Candidate[] {
+function purgePlan(ctx: Context, ripOnly: boolean): Promise<Candidate[]> {
   return purgeCandidates(process.env, homedir(), {
     context: ctx,
     config: ctx.config,
@@ -204,20 +228,43 @@ function purgePlan(ctx: Context, ripOnly: boolean): Candidate[] {
     underPressure: ctx.underPressure === true,
     ...(ctx.liveness === undefined ? {} : { liveness: ctx.liveness }),
     ripOnly,
+    only: ctx.only,
   });
+}
+
+async function recheckPurge(
+  candidate: Candidate,
+  ctx: Context,
+  ripOnly: boolean,
+): Promise<Candidate | null> {
+  if (candidate.path === null) return null;
+  // The restore record depends on KEEP siblings; only payload rows can be judged alone.
+  const only =
+    basename(candidate.path) === ".record" ? ctx.only : candidate.path;
+  const rows = await purgePlan({ ...ctx, only }, ripOnly);
+  return (
+    rows.find(
+      (row) => row.id === candidate.id && row.path === candidate.path,
+    ) ?? null
+  );
 }
 
 export const purge = {
   name: "purge",
   tier: "irreversible",
+  // Small subtrees first, so a huge one cannot delay every cheap recovery behind it.
+  fastFirst: true,
   available: () => ({ available: true, skip_reason: null }),
   plan: (ctx) => purgePlan(ctx, false),
+  recheck: (candidate, ctx) => recheckPurge(candidate, ctx, false),
   act: async (candidate, ctx): Promise<ActionResult> => {
     if (candidate.path === null)
       return { ok: false, bytes_freed: null, error: "missing graveyard path" };
     const plannedEntry = candidate.action.argv[1] === candidate.path;
     const entryCount = countEntries(candidate.path) + (plannedEntry ? 1 : 0);
     let freed = 0;
+    let removedEntries = 0;
+    let removedBytes = 0;
     let failed = false;
     // Planned rows own one top-level entry. Legacy/root rows still delete children independently.
     const entries = plannedEntry
@@ -236,7 +283,10 @@ export const purge = {
       }
       const result = await removeTree(entry, {
         uid: process.getuid?.() ?? 0,
+        // Graveyard entries are already-deleted data: the repo-store refusal does not apply.
+        graveyard: true,
         protection: {
+          processes: ctx.liveness,
           ownerTarget: "purge",
           procDir: ctx.procDir,
           repoRoots: [...ctx.config.repo_roots, ...ctx.config.repos],
@@ -246,6 +296,8 @@ export const purge = {
         progress: removeTreeProgress(entry, null, ctx),
       });
       freed += result.statfs_bytes_freed;
+      removedEntries += result.entries_removed;
+      removedBytes += result.bytes_freed;
       for (const refusal of result.refused) {
         failed = true;
         ctx.log(
@@ -257,7 +309,10 @@ export const purge = {
         ctx.log(`ERROR ${error.path}: ${error.error}`);
       }
     }
-    if (!failed) ctx.log(`${candidate.id}: ${entryCount} entries removed`);
+    if (!failed)
+      ctx.log(
+        `${candidate.id}: ${entryCount} entries removed (${removedEntries} files and directories, ${removedBytes} bytes)`,
+      );
     return {
       ok: !failed,
       bytes_freed: freed,
@@ -275,4 +330,6 @@ export const purgeRip = {
     why: "remove expired rip entries; leave XDG Trash owner-only",
   },
   plan: (ctx: Context) => purgePlan(ctx, true),
+  recheck: (candidate: Candidate, ctx: Context) =>
+    recheckPurge(candidate, ctx, true),
 } satisfies Target;

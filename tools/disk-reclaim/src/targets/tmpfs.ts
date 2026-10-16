@@ -6,6 +6,8 @@ import {
   readdirSync,
   statfsSync,
 } from "node:fs";
+import { lstat } from "node:fs/promises";
+import { fromAsyncThrowable } from "neverthrow";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { removeTree } from "../lib/remove-tree.ts";
@@ -69,6 +71,9 @@ function awaitMountInfo(): Mount[] | null {
     return path === undefined ? [] : [{ path, type: "tmpfs" }];
   });
 }
+
+const within = (path: string, root: string): boolean =>
+  path === root || path.startsWith(`${root}/`);
 
 function inspectTree(path: string, options: PlanOptions, cutoff?: number) {
   const summary = {
@@ -183,46 +188,64 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
     options.ripGraveyard ??
     (() => process.env.RIP_GRAVEYARD ?? process.env.GRAVEYARD);
   const beforeUse = new Map<string, ReturnType<typeof usage>>();
+  const stageOptions = new WeakMap<object, PlanOptions>();
+  const stageTotals = { candidates: 0, entries: 0, bytes: 0 };
+  // One process snapshot and one options record per stage (keyed by the stage's
+  // liveness snapshot), shared by the plan and by every per-candidate recheck.
+  const optionsFor = (ctx: Context): PlanOptions => {
+    const key = ctx;
+    const cached = stageOptions.get(key);
+    if (cached !== undefined) return cached;
+    const built = buildOptions(ctx);
+    stageOptions.set(key, built);
+    return built;
+  };
+  const buildOptions = (ctx: Context): PlanOptions => {
+    const procRoot =
+      process.env.RECLAIM_UNIT_PROC_ROOT ?? process.env.RECLAIM_TEST_PROC_ROOT;
+    const procOptions = procRoot === undefined ? {} : { procRoot };
+    const opened =
+      options.isOpen === undefined
+        ? (ctx.liveness?.openPaths("/") ??
+          collectProcesses({
+            uid: uid(),
+            ...procOptions,
+          }).openPaths("/"))
+        : undefined;
+    return {
+      context: ctx,
+      uid: uid(),
+      now: now(),
+      openPaths: opened?.open.map(({ path }) => resolve(path)).toSorted() ?? [],
+      openPathSet: new Set(opened?.open.map(({ path }) => resolve(path)) ?? []),
+      processStatusKnown: opened?.unknown.length === 0,
+      ...(options.isOpen === undefined ? {} : { isOpen: options.isOpen }),
+      ripGraveyard: ripGraveyard(),
+      graveyardRoots: new Set<string>(),
+      mountRoots: new Set<string>(),
+      diskGraveyard: diskGraveyard(),
+      isDiskPath: options.isDiskPath ?? isDiskBacked,
+      scanMaxEntries: options.scanMaxEntries ?? MAX_TREE_SCAN_ENTRIES,
+      scanMaxMs: options.scanMaxMs ?? MAX_TREE_SCAN_MS,
+    };
+  };
   return {
     name: "tmpfs",
     tier: "blind",
+    fastFirst: true,
     available: () => ({ available: true, skip_reason: null }),
-    plan: (ctx) => {
+    plan: async (ctx) => {
+      beforeUse.clear();
       const mountList = [
         ...new Map(
           mounts().map((mount) => [resolve(mount.path), mount]),
         ).values(),
       ];
-      const procRoot =
-        process.env.RECLAIM_UNIT_PROC_ROOT ??
-        process.env.RECLAIM_TEST_PROC_ROOT;
-      const procOptions = procRoot === undefined ? {} : { procRoot };
-      const opened =
-        options.isOpen === undefined
-          ? (ctx.liveness?.openPaths("/") ??
-            collectProcesses({
-              uid: uid(),
-              ...procOptions,
-            }).openPaths("/"))
-          : undefined;
-      const planOptions: PlanOptions = {
-        context: ctx,
-        uid: uid(),
-        now: now(),
-        openPaths:
-          opened?.open.map(({ path }) => resolve(path)).toSorted() ?? [],
-        openPathSet: new Set(
-          opened?.open.map(({ path }) => resolve(path)) ?? [],
-        ),
-        processStatusKnown: opened?.unknown.length === 0,
-        ...(options.isOpen === undefined ? {} : { isOpen: options.isOpen }),
-        ripGraveyard: ripGraveyard(),
-        diskGraveyard: diskGraveyard(),
-        isDiskPath: options.isDiskPath ?? isDiskBacked,
-        scanMaxEntries: options.scanMaxEntries ?? MAX_TREE_SCAN_ENTRIES,
-        scanMaxMs: options.scanMaxMs ?? MAX_TREE_SCAN_MS,
-      };
+      const planOptions = optionsFor(ctx);
       const roots = new Set(mountList.map((mount) => resolve(mount.path)));
+      planOptions.mountRoots = roots;
+      const refusal = await onlyAncestorRefusal(ctx.only, roots);
+      if (refusal !== null) return [refusal];
       const rows = mountList.flatMap((mount) =>
         planMount(mount, roots, planOptions, beforeUse, options.statfs),
       );
@@ -230,6 +253,7 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
       if (
         declared !== undefined &&
         !rows.some((row) => row.path === declared) &&
+        (ctx.only === undefined || within(declared, ctx.only)) &&
         mountList.some((mount) =>
           declared.startsWith(`${resolve(mount.path)}/`),
         )
@@ -246,7 +270,17 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
       }
       return rows;
     },
-    act: async (item: Candidate, _ctx: Context) => {
+    // One candidate against the stage's single process snapshot: no mount is measured.
+    recheck: async (item: Candidate, ctx: Context) => {
+      if (item.path === null) return null;
+      const planOptions = optionsFor(ctx);
+      const refusal = await onlyAncestorRefusal(
+        ctx.only,
+        planOptions.mountRoots,
+      );
+      return refusal ?? planEntry(item.path, basename(item.path), planOptions);
+    },
+    act: async (item: Candidate, ctx: Context) => {
       const path = item.path;
       if (item.verdict !== "RECLAIM" || path === null)
         return {
@@ -254,25 +288,59 @@ export function createTmpfsTarget(options: TmpfsOptions = {}) {
           bytes_freed: null,
           error: "tmpfs candidate is not reclaimable",
         };
-      const removed = await removeTree(path, { uid: uid(), progress: false });
+      // The stage's mount is measured once in plan and once in finish, never per candidate.
+      const removed = await removeTree(path, {
+        uid: uid(),
+        progress: false,
+        measureFilesystem: false,
+        graveyard: isGraveyardPath(path, optionsFor(ctx)),
+        ...(ctx.liveness === undefined
+          ? {}
+          : { protection: { processes: ctx.liveness } }),
+      });
       if (!removed.ok)
         return {
           ok: false,
           bytes_freed: null,
           error: `direct tmpfs removal failed: ${JSON.stringify([...removed.refused, ...removed.errors])}`,
         };
-      for (const [root, before] of beforeUse) logUsage(root, before, _ctx.log);
-      return { ok: true, bytes_freed: removed.statfs_bytes_freed, error: null };
+      stageTotals.candidates += 1;
+      stageTotals.entries += removed.entries_removed;
+      stageTotals.bytes += removed.bytes_freed;
+      return { ok: true, bytes_freed: removed.bytes_freed, error: null };
+    },
+    // Once per stage: the before/after usage of each tmpfs mount and what was removed.
+    finish: (ctx: Context) => {
+      for (const [root, before] of beforeUse)
+        logUsage(root, before, ctx.log, options.statfs);
+      ctx.log(
+        `[tmpfs] removed ${stageTotals.entries} files and directories (${stageTotals.bytes} bytes) from ${stageTotals.candidates} candidates`,
+      );
+      stageTotals.candidates = 0;
+      stageTotals.entries = 0;
+      stageTotals.bytes = 0;
     },
   } satisfies Target;
 }
+
+const isGraveyardPath = (path: string, options: PlanOptions) => {
+  const name = basename(path);
+  return (
+    (options.ripGraveyard !== undefined &&
+      within(path, resolve(options.ripGraveyard))) ||
+    [...options.graveyardRoots].some((root) => within(path, root)) ||
+    name === "graveyard" ||
+    name.startsWith("graveyard-")
+  );
+};
 
 function logUsage(
   root: string,
   before: ReturnType<typeof usage>,
   log: (message: string) => void,
+  measure?: (path: string) => Filesystem,
 ): void {
-  const result = fromThrowable(() => usage(root))();
+  const result = fromThrowable(() => usage(root, measure))();
   if (result.isErr()) return;
   const after = result.value;
   log(
@@ -289,11 +357,42 @@ type PlanOptions = {
   processStatusKnown: boolean;
   isOpen?: (path: string) => boolean | null;
   ripGraveyard: string | undefined;
+  graveyardRoots: Set<string>;
+  mountRoots: ReadonlySet<string>;
   diskGraveyard: string;
   isDiskPath: (path: string) => boolean;
   scanMaxEntries: number;
   scanMaxMs: number;
 };
+
+async function onlyAncestorRefusal(
+  only: string | undefined,
+  roots: ReadonlySet<string>,
+): Promise<Candidate | null> {
+  if (only === undefined) return null;
+  const root = [...roots]
+    .filter((entry) => within(only, entry))
+    .toSorted((left, right) => right.length - left.length)[0];
+  if (root === undefined) return null;
+  for (
+    let parent = dirname(only);
+    parent !== root && within(parent, root);
+    parent = dirname(parent)
+  ) {
+    const entry = parent;
+    const stat = await fromAsyncThrowable(() => lstat(entry))();
+    if (
+      stat.isErr() ||
+      stat.value.isSymbolicLink() ||
+      protectedName.test(basename(parent))
+    )
+      return candidate(only, "KEEP", "protected or symlinked ancestor", null, {
+        kind: "command",
+        argv: [],
+      });
+  }
+  return null;
+}
 
 function planEntry(
   path: string,
@@ -328,10 +427,7 @@ function planEntry(
       kind: "command",
       argv: [],
     });
-  const isGraveyard =
-    path === options.ripGraveyard ||
-    name === "graveyard" ||
-    name.startsWith("graveyard-");
+  const isGraveyard = isGraveyardPath(path, options);
   const isTempDirectory = st.isDirectory() && !st.isSymbolicLink();
   if (!isGraveyard && !isTempDirectory) return null;
   if (st.isSymbolicLink())
@@ -442,7 +538,8 @@ function planMount(
     accessSync(root, 2);
   })();
   if (writable.isErr()) return [];
-  const measured = fromThrowable(() => usage(root, measure))();
+  // Reuse the type probe's counters: a mount is measured once in each plan stage.
+  const measured = fromThrowable(() => usage(root, () => fs.value))();
   if (measured.isErr()) return [];
   beforeUse.set(root, measured.value);
   const usageRow = candidate(
@@ -455,10 +552,20 @@ function planMount(
   usageRow.id = `tmpfs-usage:${root}`;
   const names = fromThrowable(() => readdirSync(root).toSorted())();
   if (names.isErr()) return [usageRow];
+  const only = options.context.only;
   const entries = names.value.flatMap((name) => {
     const path = join(root, name);
     if (allMountRoots.has(path)) return [];
-    const row = planEntry(path, name, options);
+    if (only !== undefined && !within(path, only) && !within(only, path))
+      return [];
+    // A subtree below this entry is judged as its own candidate.
+    const target = only !== undefined && within(only, path) ? only : path;
+    if (
+      basename(path) === "graveyard" ||
+      basename(path).startsWith("graveyard-")
+    )
+      options.graveyardRoots.add(path);
+    const row = planEntry(target, basename(target), options);
     return row === null ? [] : [row];
   });
   return [usageRow, ...entries];

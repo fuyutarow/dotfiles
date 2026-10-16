@@ -136,7 +136,7 @@ test("purge removes 500/400 tree without following a symlink outside it", async 
     },
   };
   expect(
-    purgeCandidates({ RIP_GRAVEYARD: grave, USER: "x" }, root).find(
+    (await purgeCandidates({ RIP_GRAVEYARD: grave, USER: "x" }, root)).find(
       (item) => item.path === tree,
     )?.action.argv[0],
   ).toBe("removeTree");
@@ -144,7 +144,10 @@ test("purge removes 500/400 tree without following a symlink outside it", async 
   expect(result.ok).toBe(true);
   expect(existsSync(tree)).toBe(false);
   expect(readFileSync(join(outside, "keep"), "utf8")).toBe("untouched");
-  expect(logs).toEqual(["grave: 4 entries removed"]);
+  expect(logs).toHaveLength(1);
+  expect(logs[0]).toMatch(
+    /^grave: 4 entries removed \(\d+ files and directories, \d+ bytes\)$/u,
+  );
 });
 
 test("typed confirmation accepts only an exact yes", async () => {
@@ -158,7 +161,7 @@ test("typed confirmation accepts only an exact yes", async () => {
   expect(typedYes(null)).toBe(false);
 });
 
-test("purge planning selects each configured graveyard root", () => {
+test("purge planning selects each configured graveyard root", async () => {
   const root = tempRoot("disk-reclaim-graves-");
   const env = {
     HOME: join(root, "home"),
@@ -169,7 +172,7 @@ test("purge planning selects each configured graveyard root", () => {
   mkdirSync(env.RIP_GRAVEYARD, { recursive: true });
   mkdirSync(join(env.XDG_DATA_HOME, "Trash/files"), { recursive: true });
   mkdirSync(join(env.XDG_DATA_HOME, "Trash/info"), { recursive: true });
-  expect(purgeCandidates(env, env.HOME)).toEqual([]);
+  expect(await purgeCandidates(env, env.HOME)).toEqual([]);
 });
 
 test("blind rip expiry purges old rip entries only and leaves XDG Trash owner-only", async () => {
@@ -187,7 +190,7 @@ test("blind rip expiry purges old rip entries only and leaves XDG Trash owner-on
   utimesSync(oldRip, old, old);
   utimesSync(oldTrash, old, old);
 
-  const candidates = purgeCandidates(
+  const candidates = await purgeCandidates(
     {
       HOME: join(root, "home"),
       RIP_GRAVEYARD: grave,
@@ -294,36 +297,42 @@ function recentPurgeFixture(ageMinutes: number) {
   };
 }
 
-test("recent graveyard entries use the injected deny state and pressure flag", () => {
+test("recent graveyard entries use the injected deny state and pressure flag", async () => {
   const aboveDeny = recentPurgeFixture(30);
-  const above = purgeCandidates(aboveDeny.env, aboveDeny.root, {
-    config: { graveyard_min_age_hours: 24, scratch_roots: [] },
-    headroom: aboveDeny.headroom("ok"),
-    now: aboveDeny.now,
-  }).find((candidate) => candidate.path === aboveDeny.entry);
+  const above = (
+    await purgeCandidates(aboveDeny.env, aboveDeny.root, {
+      config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+      headroom: aboveDeny.headroom("ok"),
+      now: aboveDeny.now,
+    })
+  ).find((candidate) => candidate.path === aboveDeny.entry);
   expect(above?.verdict).toBe("KEEP");
 
   const belowDeny = recentPurgeFixture(30);
-  const noFlag = purgeCandidates(belowDeny.env, belowDeny.root, {
-    config: { graveyard_min_age_hours: 24, scratch_roots: [] },
-    headroom: belowDeny.headroom("deny"),
-    now: belowDeny.now,
-  }).find((candidate) => candidate.path === belowDeny.entry);
+  const noFlag = (
+    await purgeCandidates(belowDeny.env, belowDeny.root, {
+      config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+      headroom: belowDeny.headroom("deny"),
+      now: belowDeny.now,
+    })
+  ).find((candidate) => candidate.path === belowDeny.entry);
   expect(noFlag?.verdict).toBe("KEEP");
   expect(noFlag?.reason).toBe(
     "recent; host is below the deny line: rerun with --under-pressure to purge",
   );
 
-  const pressured = purgeCandidates(belowDeny.env, belowDeny.root, {
-    config: { graveyard_min_age_hours: 24, scratch_roots: [] },
-    headroom: belowDeny.headroom("deny"),
-    underPressure: true,
-    now: belowDeny.now,
-  }).find((candidate) => candidate.path === belowDeny.entry);
+  const pressured = (
+    await purgeCandidates(belowDeny.env, belowDeny.root, {
+      config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+      headroom: belowDeny.headroom("deny"),
+      underPressure: true,
+      now: belowDeny.now,
+    })
+  ).find((candidate) => candidate.path === belowDeny.entry);
   expect(pressured?.verdict).toBe("RECLAIM");
 });
 
-test("a graveyard entry with an open path stays kept under pressure", () => {
+test("a graveyard entry with an open path stays kept under pressure", async () => {
   const fixture = recentPurgeFixture(30);
   const base = liveFacts("3a2afd34-1111-4111-8111-111111111111");
   const liveness: LivenessSnapshot = {
@@ -334,34 +343,38 @@ test("a graveyard entry with an open path stays kept under pressure", () => {
     }),
     refresh: () => liveness,
   };
-  const candidate = purgeCandidates(fixture.env, fixture.root, {
-    config: { graveyard_min_age_hours: 24, scratch_roots: [] },
-    headroom: fixture.headroom("deny"),
-    underPressure: true,
-    liveness,
-    now: fixture.now,
-  }).find((item) => item.path === fixture.entry);
+  const candidate = (
+    await purgeCandidates(fixture.env, fixture.root, {
+      config: { graveyard_min_age_hours: 24, scratch_roots: [] },
+      headroom: fixture.headroom("deny"),
+      underPressure: true,
+      liveness,
+      now: fixture.now,
+    })
+  ).find((item) => item.path === fixture.entry);
   expect(candidate?.verdict).toBe("KEEP");
   expect(candidate?.reason).toContain("locked or in use");
 });
 
-test("the configured pressure undo window keeps a newly ripped entry", () => {
+test("the configured pressure undo window keeps a newly ripped entry", async () => {
   const fixture = recentPurgeFixture(5);
-  const candidate = purgeCandidates(fixture.env, fixture.root, {
-    config: {
-      graveyard_min_age_hours: 24,
-      graveyard_pressure_undo_minutes: 10,
-      scratch_roots: [],
-    },
-    headroom: fixture.headroom("deny"),
-    underPressure: true,
-    now: fixture.now,
-  }).find((item) => item.path === fixture.entry);
+  const candidate = (
+    await purgeCandidates(fixture.env, fixture.root, {
+      config: {
+        graveyard_min_age_hours: 24,
+        graveyard_pressure_undo_minutes: 10,
+        scratch_roots: [],
+      },
+      headroom: fixture.headroom("deny"),
+      underPressure: true,
+      now: fixture.now,
+    })
+  ).find((item) => item.path === fixture.entry);
   expect(candidate?.verdict).toBe("KEEP");
   expect(candidate?.reason).toContain("undo window");
 });
 
-test("rip graveyard keeps a recent entry from a live Claude session", () => {
+test("rip graveyard keeps a recent entry from a live Claude session", async () => {
   const root = tempRoot("disk-reclaim-live-grave-");
   const grave = join(root, "grave");
   const uuid = "3a2afd34-1111-4111-8111-111111111111";
@@ -383,7 +396,7 @@ test("rip graveyard keeps a recent entry from a live Claude session", () => {
   utimesSync(join(grave, "tmp"), rippedAt / 1000, rippedAt / 1000);
   const liveness = livenessSnapshot(liveFacts(uuid));
 
-  const candidates = purgeCandidates(
+  const candidates = await purgeCandidates(
     { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
     root,
     {
@@ -420,7 +433,7 @@ test("rip graveyard keeps a recent entry from a live Claude session", () => {
   ).toBe(true);
 });
 
-test("old rip graveyard entry from a dead session is reclaimable", () => {
+test("old rip graveyard entry from a dead session is reclaimable", async () => {
   const root = tempRoot("disk-reclaim-old-grave-");
   const grave = join(root, "grave");
   const uuid = "3a2afd34-1111-4111-8111-111111111111";
@@ -452,7 +465,7 @@ test("old rip graveyard entry from a dead session is reclaimable", () => {
     },
     now: Temporal.Now.instant().epochMilliseconds,
   });
-  const candidates = purgeCandidates(
+  const candidates = await purgeCandidates(
     { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
     root,
     {
@@ -467,7 +480,7 @@ test("old rip graveyard entry from a dead session is reclaimable", () => {
   expect(candidate?.verdict).toBe("RECLAIM");
 });
 
-test("graveyard record time is used and missing records fall back to mtime", () => {
+test("graveyard record time is used and missing records fall back to mtime", async () => {
   const root = tempRoot("disk-reclaim-record-grave-");
   const grave = join(root, "grave");
   const recorded = join(grave, "recorded");
@@ -484,7 +497,7 @@ test("graveyard record time is used and missing records fall back to mtime", () 
     join(grave, ".record"),
     `Time\t Original\t Destination\n${Temporal.Now.instant().toString()}\t/recorded\t${recorded}\n`,
   );
-  const candidates = purgeCandidates(
+  const candidates = await purgeCandidates(
     { RIP_GRAVEYARD: grave, USER: "fixture", XDG_DATA_HOME: join(root, "xdg") },
     root,
     { config: { graveyard_min_age_hours: 24, scratch_roots: [] } },

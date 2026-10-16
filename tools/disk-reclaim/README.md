@@ -14,6 +14,8 @@ disk-reclaim apply [--approve <owner-item>...]
 disk-reclaim --yes [--on <host>] [--target <target>...]
 disk-reclaim run TARGET... --yes [--json] [--stop-on-error] [--fetch]
 disk-reclaim run --tier blind --yes
+disk-reclaim run rip-expire --only /absolute/graveyard/subtree --yes
+disk-reclaim run tmpfs --only /absolute/tmpfs/subtree --yes
 disk-reclaim targets [--json]
 disk-reclaim receipts [--last N] [--json]
 disk-reclaim wrap NAME [--interactive] -- CMD...
@@ -55,7 +57,11 @@ for SSH connection establishment). `--no-progress` suppresses progress lines.
 
 Legacy `run` requires named targets or `--tier blind`, plus `--yes`. `delete`
 prints its checks and byte estimate without `--yes`; with `--yes` it repeats every check under
-the shared state lock, then removes only paths beneath configured roots. It refuses `/`, `$HOME`,
+the shared state lock, then removes only paths beneath configured roots. Strict descendants of
+the rip graveyard are also eligible delete paths, using `RIP_GRAVEYARD`, then `GRAVEYARD`, then
+`$XDG_DATA_HOME/graveyard` (default `~/.local/share/graveyard`). Within that already-deleted data,
+repo-store and listed-workspace refusals do not apply. Ownership, live-process, protected-root,
+symlink, immutable-attribute and filesystem-boundary checks remain in force. Outside it, delete refuses `/`, `$HOME`,
 repo store roots, listed jj workspaces, symlink paths, and paths used by same-uid processes.
 Unreadable same-uid process information fails closed. During removal, each same-uid directory is made
 owner-readable, writable, and searchable before its children are visited; the traversal checks
@@ -87,6 +93,13 @@ on tmpfs/ramfs are already-deleted data: the blind tier permanently purges them 
 and process-use checks. Plans report bytes and inode entry counts (including the root directory).
 The action summary reports tmpfs inode and byte use before and
 after.
+Mount counters are read once per planning stage and once at completion, regardless of candidate
+count. Candidate rechecks share the stage's liveness snapshot. `tmpfs`, `rip-expire`, and `purge`
+act on smaller allocated-byte estimates first; ties preserve discovery order. `--only` limits
+these targets to an absolute subtree, retaining symlink and protected-ancestor refusals. Their
+summaries count files and directories actually removed and allocated bytes unlinked; mount free
+space is a separate observation that can be affected by concurrent writers. Cross-target path
+ownership is checked by path components, avoiding pairwise scans of unrelated candidates.
 Within blind-tier targets, a failed candidate does not prevent later candidates from being
 attempted; the run still exits 1 if any candidate fails. `--stop-on-error` stops the target at its
 first failure. A target planning failure is recorded in that target's `skip_reason`, the target
@@ -133,6 +146,17 @@ accept legacy schema-less receipts; delete appends a schema 2 receipt with plann
 Storage thresholds are exposed by the separate read-only `storage-headroom` CLI.
 
 Verify: `bun test tools/disk-reclaim`.
+
+The normal suite keeps fixtures small. Run the opt-in scale checks with
+`RECLAIM_SCALE=1 bun test tools/disk-reclaim/tests/reclaim-at-scale.test.ts`.
+They reclaim 100,000 tmpfs candidate directories in two batches and 1,000,000 graveyard files in
+twenty batches. The tmpfs filesystem counters are injected while deletion runs on disk. Each
+batch holds at most 50,000 payload entries, with room for roots and engine state below the
+100,000-entry ceiling. Fixtures use fresh `mkdtemp` directories only under
+`${XDG_CACHE_HOME:-$HOME/.cache}/reclaim-fix-scale/`, outside the checkout; shared RAM-backed paths
+and filesystems are refused, with no fallback directory. Each batch is removed in `finally`.
+The wall-clock bounds, including setup and cleanup, are 240 seconds for tmpfs and 300 seconds
+for the graveyard workload. Measurements are reported alongside these predeclared bounds.
 
 Terminal progress uses reusable Clack taskLog groups in `tools/shared`. Concurrent scans
 each have a row; host actions name the host and lever; deletion combines path counters into

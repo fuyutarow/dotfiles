@@ -52,7 +52,19 @@ type Options = {
   procFs?: ProcFs;
   owner?: (path: string) => { uid: number; name: string };
   immutable?: (path: string) => boolean | null;
+  /** The rip graveyard root; defaults to RIP_GRAVEYARD, GRAVEYARD, then the XDG data graveyard. */
+  graveyard?: string;
 };
+const graveyardRoot = (options: Options): string =>
+  resolve(
+    options.graveyard ??
+      process.env.RIP_GRAVEYARD ??
+      process.env.GRAVEYARD ??
+      join(
+        process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"),
+        "graveyard",
+      ),
+  );
 const beneath = (root: string, path: string): boolean => {
   const rel = relative(root, path);
   return (
@@ -96,6 +108,7 @@ function evaluate(
   input: string,
   config: Config,
   processes: ProcessSnapshot,
+  graveyard: string,
 ): PlanRow {
   const path = resolve(input);
   const checks: Check[] = [];
@@ -124,14 +137,15 @@ function evaluate(
     ...config.repo_roots,
     ...config.delete_roots,
   ];
-  const inRoot = roots.some((root) => configuredRoot(path, [root]));
-  add(
-    "configured-root",
-    inRoot,
-    inRoot
-      ? "under a configured delete root"
-      : "outside scratch_roots, repo_roots, and delete_roots",
-  );
+  // The rip graveyard is a declared delete root below its own directory: it holds data
+  // that was already deleted, so the live-process and uid checks are the only gates there.
+  const inGraveyard = path !== graveyard && beneath(graveyard, path);
+  const inRoot =
+    inGraveyard || roots.some((root) => configuredRoot(path, [root]));
+  let rootDetail = "outside scratch_roots, repo_roots, and delete_roots";
+  if (inRoot) rootDetail = "under a configured delete root";
+  if (inGraveyard) rootDetail = "under the rip graveyard delete root";
+  add("configured-root", inRoot, rootDetail);
   const protectedPath = path === "/" || path === resolve(homedir());
   add(
     "protected-root",
@@ -142,6 +156,7 @@ function evaluate(
     inRoot &&
     !protectedPath &&
     escaped === null &&
+    !inGraveyard &&
     lstatSync(path).isDirectory()
       ? fromThrowable(() => directoryProtection(path))()
       : null;
@@ -153,13 +168,11 @@ function evaluate(
     );
   }
   const isStore = protectionReason?.includes("repo store holder") === true;
-  add(
-    "repo-store",
-    !isStore,
-    isStore
-      ? `repo root protection: ${protectionReason}`
-      : "store check deferred to traversal for nested directories",
-  );
+  let storeDetail = "store check deferred to traversal for nested directories";
+  if (inGraveyard)
+    storeDetail = "inside the rip graveyard: repo-store refusal does not apply";
+  if (isStore) storeDetail = `repo root protection: ${protectionReason}`;
+  add("repo-store", !isStore, storeDetail);
   const jjReason =
     protectionReason !== null && !isStore ? protectionReason : null;
   add(
@@ -207,10 +220,11 @@ export async function deleteApproved(paths: string[], options: Options) {
     uid: process.getuid?.() ?? 0,
     ignoreUnreadableProcs: options.config.ignore_unreadable_procs ?? [],
   };
+  const graveyard = graveyardRoot(options);
   const planProcesses = collectProcesses(procOptions);
   const rows = paths.map((path) => {
     options.progress?.reportProgress?.("delete", path, 0, 0);
-    const row = evaluate(path, options.config, planProcesses);
+    const row = evaluate(path, options.config, planProcesses, graveyard);
     options.progress?.reportProgress?.("delete", path, 1, row.bytes ?? 0, true);
     return row;
   });
@@ -239,7 +253,12 @@ export async function deleteApproved(paths: string[], options: Options) {
   let exit = 0;
   const lockedProcesses = collectProcesses(procOptions);
   for (const row of rows) {
-    const checked = evaluate(row.path, options.config, lockedProcesses);
+    const checked = evaluate(
+      row.path,
+      options.config,
+      lockedProcesses,
+      graveyard,
+    );
     if (!checked.allowed) {
       exit = 2;
       lines.push(`REFUSE\t${row.path}\tunder-lock recheck failed`);
@@ -261,7 +280,9 @@ export async function deleteApproved(paths: string[], options: Options) {
     const result = await removeTree(row.path, {
       progress: removeTreeProgress(row.path, row.bytes, options.progress),
       uid: process.getuid?.() ?? 0,
+      graveyard: row.path !== graveyard && beneath(graveyard, row.path),
       protection: {
+        processes: lockedProcesses,
         ownerTarget: "delete",
         procDir: options.procRoot,
         ignoreUnreadableProcs: options.config.ignore_unreadable_procs ?? [],

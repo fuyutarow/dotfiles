@@ -13,6 +13,9 @@ export async function treeBytes(
     workerUrl?: URL;
     timeoutMs?: number;
     cacheDir?: string;
+    /** Stop the walk after this many entries; the result is then a lower bound. */
+    maxEntries?: number;
+    onTruncated?: () => void;
     onMetadataProgress?: (probes: number) => void;
   } = {},
 ): Promise<number> {
@@ -82,6 +85,7 @@ export async function treeBytes(
           return;
         }
         report?.(event.data.entries, event.data.bytes);
+        if (event.data.truncated === true) options.onTruncated?.();
         resolve(event.data.bytes);
       },
     );
@@ -93,19 +97,24 @@ export async function treeBytes(
     });
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted === true) abort();
-    else worker.postMessage({ path, cacheDir: options.cacheDir }, []);
+    else
+      worker.postMessage(
+        { path, cacheDir: options.cacheDir, maxEntries: options.maxEntries },
+        [],
+      );
   });
 }
 
 type TreeScanMessage =
   | { kind: "activity"; probes: number }
   | { kind: "progress"; entries: number; bytes: number }
-  | { kind: "done"; entries: number; bytes: number }
+  | { kind: "done"; entries: number; bytes: number; truncated?: boolean }
   | { kind: "error"; message: string };
 
 export async function measuredTreeBytes(
   path: string,
   ctx?: Context,
+  bound?: { maxEntries: number; onTruncated: () => void },
 ): Promise<number> {
   let lastMetadataReport = 0;
   const onMetadataProgress = (probes: number) => {
@@ -136,6 +145,7 @@ export async function measuredTreeBytes(
     return cached.data;
   }
   ctx?.reportActivity?.(ctx.targetName ?? path, `walking ${path}`);
+  let truncated = false;
   const bytes = await treeBytes(
     path,
     ctx?.reportProgress === undefined
@@ -151,21 +161,43 @@ export async function measuredTreeBytes(
     ctx?.signal,
     {
       onMetadataProgress,
+      ...(bound === undefined
+        ? {}
+        : {
+            maxEntries: bound.maxEntries,
+            onTruncated: () => {
+              truncated = true;
+              bound.onTruncated();
+            },
+          }),
       ...(ctx?.mode === "plan"
         ? { cacheDir: ctx.scanCacheDir ?? defaultScanCacheDir() }
         : {}),
     },
   );
-  cache.save(bytes);
+  // A truncated walk is a lower bound: never cached as the tree's size.
+  if (!truncated) cache.save(bytes);
   return bytes;
 }
 
+/** Candidate whose size walk stops after `maxEntries` entries (a lower-bound estimate). */
 export function treeCandidate(
   path: string,
   reason: string,
   ctx?: Context,
+  maxEntries?: number,
 ): Promise<Candidate> {
-  return measuredTreeBytes(path, ctx).then((bytes) => ({
+  let truncated = false;
+  const bound =
+    maxEntries === undefined
+      ? undefined
+      : {
+          maxEntries,
+          onTruncated: () => {
+            truncated = true;
+          },
+        };
+  return measuredTreeBytes(path, ctx, bound).then((bytes) => ({
     id: path,
     path,
     verdict: "RECLAIM",
@@ -174,7 +206,7 @@ export function treeCandidate(
       { name: "target exists and is a directory", ok: true, detail: path },
     ],
     bytes,
-    bytes_kind: "freed_now",
+    bytes_kind: truncated ? "estimate" : "freed_now",
     action: { kind: "delete", argv: [path] },
     result: null,
   }));

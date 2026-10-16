@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempRoot } from "../fixtures/temp.ts";
 import { createBuildsTarget } from "../../src/targets/builds.ts";
+import { treeCandidate } from "../../src/targets/tree.ts";
 
 const cacheRoot = tempRoot("reclaim-builds-cache-");
 afterAll(() => {
@@ -112,5 +113,30 @@ describe("builds target", () => {
       verdict: "KEEP",
       reason: "protected: tool installation root",
     });
+  });
+});
+
+describe("bounded build sizing", () => {
+  test("a build directory over the entry bound is a lower-bound estimate that is not cached", async () => {
+    const home = tempRoot("reclaim-builds-bound-");
+    using cleanup = new DisposableStack();
+    cleanup.defer(() => {
+      rmSync(home, { recursive: true, force: true });
+    });
+    const modules = join(home, "node_modules");
+    mkdirSync(modules);
+    for (let n = 0; n < 400; n += 1) writeFileSync(join(modules, `f${n}`), "x");
+    const small = join(home, "tiny");
+    mkdirSync(small);
+    writeFileSync(join(small, "f"), "x");
+    const ctx = context([], home);
+    const bounded = await treeCandidate(modules, "regenerable", ctx, 100);
+    expect(bounded.bytes_kind).toBe("estimate");
+    const whole = await treeCandidate(small, "regenerable", ctx, 100);
+    expect(whole.bytes_kind).toBe("freed_now");
+    // The partial size was not stored as the tree's size.
+    const unbounded = await treeCandidate(modules, "regenerable", ctx);
+    expect(unbounded.bytes_kind).toBe("freed_now");
+    expect(unbounded.bytes ?? 0).toBeGreaterThan(bounded.bytes ?? 0);
   });
 });

@@ -8,6 +8,9 @@ import type { Context, Target } from "./index.ts";
 import { deleteTree, treeCandidate } from "./tree.ts";
 import { cachedDiscovery, checkScanDeadline } from "../lib/scan-cache.ts";
 
+// Each build directory is sized by a bounded walk: a huge node_modules is a lower-bound
+// estimate instead of the whole stage budget, and fast-first acting frees the small ones first.
+const BUILD_SCAN_MAX_ENTRIES = 20_000;
 const BUILD_NAMES = new Set([
   "target",
   "node_modules",
@@ -48,6 +51,7 @@ export const createBuildsTarget = (
   ({
     name: "builds",
     tier: "blind",
+    fastFirst: true,
     available: () => ({ available: true, skip_reason: null }),
     plan: async (ctx: Context) => {
       const rows: Candidate[] = [];
@@ -75,6 +79,7 @@ export const createBuildsTarget = (
               path,
               `regenerable build output (kondo --all parity)`,
               ctx,
+              BUILD_SCAN_MAX_ENTRIES,
             )),
             verdict:
               reason === "process paths are unknown"
@@ -89,6 +94,7 @@ export const createBuildsTarget = (
               path,
               "regenerable build output (kondo --all parity)",
               ctx,
+              BUILD_SCAN_MAX_ENTRIES,
             ),
           );
       }

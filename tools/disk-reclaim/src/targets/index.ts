@@ -32,6 +32,8 @@ export type Context = {
   /** The exact plan-scoped measurement; purge uses it to judge its own drive. */
   headroom?: Headroom;
   underPressure?: boolean;
+  /** Limit a graveyard or tmpfs target to this one subtree (absolute path). */
+  only?: string | undefined;
   /** Opt-in remote refresh; omitted means off. */
   fetch?: boolean;
   host?: string;
@@ -77,6 +79,19 @@ export interface Target {
     candidate: Candidate,
     ctx: Context,
   ): ActionResult | Promise<ActionResult>;
+  /**
+   * Re-judge one candidate against the stage's single liveness snapshot, without
+   * re-planning the whole target. Omitted means the engine re-plans the target.
+   */
+  recheck?(
+    this: void,
+    candidate: Candidate,
+    ctx: Context,
+  ): Candidate | null | Promise<Candidate | null>;
+  /** Runs once after the stage's last candidate (per-stage measurements and summaries). */
+  finish?(this: void, ctx: Context): void | Promise<void>;
+  /** Act on the cheapest candidates (fewest measured bytes) first; unmeasured ones go last. */
+  fastFirst?: boolean;
 }
 // Registry order is execution order. Workspaces remove nested working copies before scratch.
 export const registry: Target[] = [

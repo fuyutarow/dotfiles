@@ -172,50 +172,73 @@ function aggregate(
     receipt,
   };
 }
-const pathsOverlap = (left: Candidate, right: Candidate): boolean => {
-  if (left.path === null || right.path === null) return false;
-  return (
-    left.path === right.path ||
-    left.path.startsWith(`${right.path}/`) ||
-    right.path.startsWith(`${left.path}/`)
-  );
+type OwnershipNode = {
+  children: Map<string, OwnershipNode>;
+  owners: { target: string; candidate: Candidate }[];
+  subtree: Set<string>;
 };
-function markOwnershipConflicts(targets: TargetPlan[]): void {
-  const owned = targets.flatMap((target) =>
-    target.candidates.flatMap((candidate) =>
-      candidate.path !== null && candidate.verdict === "RECLAIM"
-        ? [{ target: target.name, candidate }]
-        : [],
-    ),
-  );
-  const conflicts = new Map<Candidate, Set<string>>();
-  const markConflict = (
-    left: (typeof owned)[number],
-    right: (typeof owned)[number],
-  ): void => {
-    for (const [owner, other] of [
-      [left, right],
-      [right, left],
-    ] as const) {
-      const names = conflicts.get(owner.candidate) ?? new Set<string>();
-      names.add(owner.target);
-      names.add(other.target);
-      conflicts.set(owner.candidate, names);
+const ownershipNode = (): OwnershipNode => ({
+  children: new Map(),
+  owners: [],
+  subtree: new Set(),
+});
+function insertOwnership(
+  root: OwnershipNode,
+  target: string,
+  candidate: Candidate,
+): void {
+  if (candidate.path === null || candidate.verdict !== "RECLAIM") return;
+  let current = root;
+  current.subtree.add(target);
+  for (const component of candidate.path.split("/")) {
+    let child = current.children.get(component);
+    if (child === undefined) {
+      child = ownershipNode();
+      current.children.set(component, child);
     }
-  };
-  for (const [index, left] of owned.entries()) {
-    const overlapping = owned
-      .slice(index + 1)
-      .filter(
-        (right) =>
-          left.target !== right.target &&
-          pathsOverlap(left.candidate, right.candidate),
-      );
-    for (const right of overlapping) {
-      markConflict(left, right);
+    current = child;
+    current.subtree.add(target);
+  }
+  current.owners.push({ target, candidate });
+}
+function markNodeOwners(
+  current: OwnershipNode,
+  ancestors: Set<string>,
+  conflicts: Map<Candidate, Set<string>>,
+): Set<string> {
+  const overlapping = new Set([...ancestors, ...current.subtree]);
+  for (const owner of current.owners) {
+    if (overlapping.size > 1) conflicts.set(owner.candidate, overlapping);
+  }
+  const nextAncestors = new Set(ancestors);
+  for (const owner of current.owners) nextAncestors.add(owner.target);
+  return nextAncestors;
+}
+/** Path components bound comparison work by path length, rather than candidate pairs. */
+function ownershipConflicts(
+  targets: TargetPlan[],
+): Map<Candidate, Set<string>> {
+  const root = ownershipNode();
+  for (const target of targets) {
+    for (const candidate of target.candidates) {
+      insertOwnership(root, target.name, candidate);
     }
   }
-  for (const [candidate, names] of conflicts) {
+  const conflicts = new Map<Candidate, Set<string>>();
+  const pending = [{ current: root, ancestors: new Set<string>() }];
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    if (entry === undefined) break;
+    const { current, ancestors } = entry;
+    const nextAncestors = markNodeOwners(current, ancestors, conflicts);
+    for (const child of current.children.values()) {
+      pending.push({ current: child, ancestors: nextAncestors });
+    }
+  }
+  return conflicts;
+}
+function markOwnershipConflicts(targets: TargetPlan[]): void {
+  for (const [candidate, names] of ownershipConflicts(targets)) {
     candidate.verdict = "ASK";
     candidate.reason = `ownership conflict: ${[...names].toSorted().join(", ")}`;
     candidate.action = { kind: "delete", argv: [] };
@@ -458,21 +481,19 @@ async function recheckAndAct(
   index: number,
   ctx: Context,
   actions: ReceiptAction[],
-  options: EngineOptions,
 ): Promise<number> {
   if (isAborted(ctx.signal)) return 0;
   const original = row.candidates[index];
   if (original === undefined || original.verdict !== "RECLAIM") return 0;
-  // The target re-evaluates in run mode under the lock immediately before act.
-  const freshContext = {
-    ...ctx,
-    liveness: (
-      options.captureLiveness ?? ((config) => snapshotFor(config, ctx))
-    )(ctx.config),
-  };
-  const fresh = await fromAsyncThrowable(async () =>
-    target.plan(freshContext),
-  )();
+  // The target re-evaluates under the lock immediately before act, against the stage's
+  // one liveness snapshot (ctx.liveness); a target with `recheck` judges only this
+  // candidate instead of re-planning every candidate for each one.
+  const freshContext = ctx;
+  const fresh = await fromAsyncThrowable(async () => {
+    if (target.recheck === undefined) return target.plan(freshContext);
+    const one = await target.recheck(original, freshContext);
+    return one === null ? [] : [one];
+  })();
   if (isAborted(ctx.signal)) return 0;
   const parsed = fresh.isOk() ? Candidate.array().safeParse(fresh.value) : null;
   if (parsed !== null && !parsed.success) {
@@ -508,6 +529,7 @@ async function recheckAndAct(
       ],
       protectedPaths: freshContext.config.protected ?? [],
       ignoreUnreadableProcs: freshContext.config.ignore_unreadable_procs ?? [],
+      processes: freshContext.liveness,
     });
     if (protection !== null) {
       found.verdict =
@@ -625,9 +647,23 @@ async function executeCandidates(
   actions: ReceiptAction[],
   options: EngineOptions,
 ): Promise<void> {
-  for (const index of row.candidates.keys()) {
+  // A fastFirst target acts on the cheapest candidate first: a small subtree frees space and
+  // shows progress before a huge one starts. Unmeasured candidates (null bytes) go last.
+  const indexes = [...row.candidates.keys()];
+  const bytesAt = (index: number): number =>
+    row.candidates[index]?.bytes ?? Number.POSITIVE_INFINITY;
+  // Infinity - Infinity is NaN, which falls through to the stable index tie-break.
+  const order =
+    target.fastFirst === true
+      ? indexes.toSorted((left, right) => {
+          const difference = bytesAt(left) - bytesAt(right);
+          if (Number.isNaN(difference) || difference === 0) return left - right;
+          return difference;
+        })
+      : indexes;
+  for (const index of order) {
     if (ctx.signal?.aborted === true) break;
-    const exit = await recheckAndAct(target, row, index, ctx, actions, options);
+    const exit = await recheckAndAct(target, row, index, ctx, actions);
     if (exit === 0) continue;
     row.exit = exit;
     if (exit === 2 || options.stopOnError === true || target.tier !== "blind")
@@ -712,14 +748,14 @@ async function executeTarget(
     row.skip_reason = plannedFailure;
     // Earlier targets may have removed delegated workspaces. Refresh this target's
     // candidates under the lock, then still recheck each RECLAIM immediately before act.
-    const fresh = await fromAsyncThrowable(async () =>
-      target.plan({
-        ...ctx,
-        liveness: (
-          options.captureLiveness ?? ((config) => snapshotFor(config, ctx))
-        )(ctx.config),
-      }),
-    )();
+    // One liveness snapshot per stage: the under-lock plan and every candidate recheck share it.
+    const stageCtx: Context = {
+      ...ctx,
+      liveness: (
+        options.captureLiveness ?? ((config) => snapshotFor(config, ctx))
+      )(ctx.config),
+    };
+    const fresh = await fromAsyncThrowable(async () => target.plan(stageCtx))();
     const parsed = fresh.isOk()
       ? Candidate.array().safeParse(fresh.value)
       : null;
@@ -743,7 +779,8 @@ async function executeTarget(
       );
     } else {
       row.candidates = parsed.data;
-      await executeCandidates(target, row, ctx, actions, options);
+      await executeCandidates(target, row, stageCtx, actions, options);
+      await target.finish?.(stageCtx);
     }
   }
   if (plannedFailure !== null && row.exit === 0) row.exit = 1;
@@ -784,28 +821,13 @@ async function executeLocked(
     )
   )
     return { exit: 0, plan: lockedPlan, error: null };
-  const owned = lockedPlan.targets.flatMap((target) =>
-    target.candidates.flatMap((candidate) =>
-      candidate.verdict === "RECLAIM" && candidate.path !== null
-        ? [{ target: target.name, candidate }]
-        : [],
-    ),
-  );
-  for (const [index, left] of owned.entries()) {
-    const right = owned
-      .slice(index + 1)
-      .find(
-        (item) =>
-          left.target !== item.target &&
-          pathsOverlap(left.candidate, item.candidate),
-      );
-    if (right !== undefined)
-      return {
-        exit: 2,
-        plan: lockedPlan,
-        error: `overlapping delete paths remain owned by ${left.target} and ${right.target}`,
-      };
-  }
+  const remaining = ownershipConflicts(lockedPlan.targets).values().next();
+  if (remaining.done !== true)
+    return {
+      exit: 2,
+      plan: lockedPlan,
+      error: `overlapping delete paths remain owned by ${[...remaining.value].join(" and ")}`,
+    };
   let receipt: string | null = null;
   for (const [index, target] of targets.entries()) {
     if (options.context.signal?.aborted === true) break;

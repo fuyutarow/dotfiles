@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fromThrowable } from "../../../shared/src/zod.ts";
-import { collectProcesses, resolveProcRoot } from "./procs.ts";
+import { collectProcesses, resolveProcRoot, type OpenPaths } from "./procs.ts";
 
 export type ProtectionOptions = {
   ownerTarget?: string | undefined;
@@ -11,7 +11,23 @@ export type ProtectionOptions = {
   protectedPaths?: string[] | undefined;
   procDir?: string | undefined;
   ignoreUnreadableProcs?: readonly string[] | undefined;
+  /** A stage-wide process snapshot; omitted means a fresh /proc scan per call. */
+  processes?: { openPaths: (path: string) => OpenPaths } | undefined;
 };
+
+let brewPrefix: string | null | undefined;
+function brewPrefixOnce(): string | null {
+  if (brewPrefix !== undefined) return brewPrefix;
+  const brew = fromThrowable(() =>
+    Bun.spawnSync(["brew", "--prefix"], { stdout: "pipe", stderr: "ignore" }),
+  )();
+  const prefix =
+    brew.isOk() && brew.value.exitCode === 0
+      ? brew.value.stdout.toString().trim()
+      : "";
+  brewPrefix = isAbsolute(prefix) ? resolve(prefix) : null;
+  return brewPrefix;
+}
 
 const within = (path: string, root: string): boolean =>
   path === root || path.startsWith(`${root}/`);
@@ -79,6 +95,25 @@ function repoProtection(path: string, roots: string[]): string | null {
   return null;
 }
 
+// Home- and config-derived root lists (symlink targets of the bin dirs, expanded repo roots) are
+// read from disk. Under a stage's one process snapshot they are read once per stage, not once per
+// candidate; without a snapshot every call reads fresh.
+const stageRootLists = new WeakMap<object, Map<string, string[]>>();
+function perStage(
+  snapshot: object | undefined,
+  key: string,
+  compute: () => string[],
+): string[] {
+  if (snapshot === undefined) return compute();
+  const lists = stageRootLists.get(snapshot) ?? new Map<string, string[]>();
+  stageRootLists.set(snapshot, lists);
+  const known = lists.get(key);
+  if (known !== undefined) return known;
+  const fresh = compute();
+  lists.set(key, fresh);
+  return fresh;
+}
+
 export function protectedReason(
   candidate: string,
   options: ProtectionOptions = {},
@@ -136,33 +171,35 @@ export function protectedReason(
   )
     return "contains Rust target owned by rust target";
 
-  const brew = fromThrowable(() =>
-    Bun.spawnSync(["brew", "--prefix"], { stdout: "pipe", stderr: "ignore" }),
-  )();
-  if (brew.isOk() && brew.value.exitCode === 0) {
-    const prefix = brew.value.stdout.toString().trim();
-    if (isAbsolute(prefix)) protectedRoots.push(normalized(prefix));
-  }
+  const prefix = brewPrefixOnce();
+  if (prefix !== null) protectedRoots.push(prefix);
   if (protectedRoots.some((root) => within(path, root) || within(root, path)))
     return "tool installation root";
   if (options.ownerTarget === "toolchains" && path === rustupToolchains)
     return "tool installation root";
   if (
-    linkResolvedRoots(homePath).some(
-      (root) => within(path, root) || within(root, path),
-    )
+    perStage(options.processes, `links:${homePath}`, () =>
+      linkResolvedRoots(homePath),
+    ).some((root) => within(path, root) || within(root, path))
   )
     return "resolves into tool bin symlink";
 
   const repoRule = repoProtection(
     path,
-    repoRoots(options.repoRoots ?? [], homePath),
+    perStage(
+      options.processes,
+      `repos:${homePath}:${JSON.stringify(options.repoRoots ?? [])}`,
+      () => repoRoots(options.repoRoots ?? [], homePath),
+    ),
   );
   if (repoRule !== null) return repoRule;
-  const processes = collectProcesses({
-    procRoot: resolveProcRoot(options.procDir),
-    ignoreUnreadableProcs: options.ignoreUnreadableProcs ?? [],
-  }).openPaths(path);
+  const processes = (
+    options.processes ??
+    collectProcesses({
+      procRoot: resolveProcRoot(options.procDir),
+      ignoreUnreadableProcs: options.ignoreUnreadableProcs ?? [],
+    })
+  ).openPaths(path);
   if (processes.unknown.length > 0) return "process paths are unknown";
   if (
     processes.open.some(

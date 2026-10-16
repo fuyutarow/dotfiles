@@ -25,8 +25,15 @@ const complete = (node: ScanNode): void => {
 
 self.addEventListener(
   "message",
-  (event: MessageEvent<{ path: string; cacheDir?: string }>) => {
+  (
+    event: MessageEvent<{
+      path: string;
+      cacheDir?: string;
+      maxEntries?: number;
+    }>,
+  ) => {
     let entries = 0;
+    let truncated = false;
     let bytes = 0;
     let probes = 0;
     const onProbe = () => {
@@ -68,6 +75,14 @@ self.addEventListener(
           self.postMessage({ kind: "progress", entries, bytes }, []);
       };
       while (pending.length > 0) {
+        // A bounded walk stops with a partial (lower-bound) size instead of walking a huge tree.
+        if (
+          event.data.maxEntries !== undefined &&
+          entries >= event.data.maxEntries
+        ) {
+          truncated = true;
+          return;
+        }
         // Bound outstanding filesystem requests; serial awaits made large changed roots slow.
         const batch = pending.splice(Math.max(0, pending.length - 64));
         const measured = await Promise.all(
@@ -97,7 +112,7 @@ self.addEventListener(
     };
     visit(event.data.path).then(
       () => {
-        self.postMessage({ kind: "done", entries, bytes }, []);
+        self.postMessage({ kind: "done", entries, bytes, truncated }, []);
       },
       (error: unknown) => {
         self.postMessage({ kind: "error", message: String(error) }, []);

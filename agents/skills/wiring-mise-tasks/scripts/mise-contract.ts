@@ -582,6 +582,7 @@ type SourceToken = {
   text: string;
   kind: "word" | "string" | "template" | "punct";
   dynamic: boolean;
+  interpolations?: SourceToken[][];
 };
 class SourceLexer {
   i = 0;
@@ -621,33 +622,51 @@ class SourceLexer {
     this.tokens.push({ text: "REGEX", kind: "word", dynamic: true });
     return true;
   }
-  interpolation(): void {
+  interpolation(): SourceToken[] {
+    // Keep expression tokens separate: they must not become the surrounding call's argv
+    // or displace a shell template's tag. advance() also handles nested templates/regexes.
+    const outer = this.tokens;
+    this.tokens = [];
     let depth = 1;
-    while (this.i < this.source.length && depth > 0) {
-      if (this.skipComment()) continue;
+    while (this.i < this.source.length) {
       const c = this.source[this.i] ?? "";
-      if (["'", '"', "`"].includes(c)) {
-        this.quoted();
-        continue;
-      }
       if (c === "{") depth++;
       if (c === "}") depth--;
-      this.i++;
+      if (depth === 0) {
+        this.i++;
+        break;
+      }
+      this.advance();
     }
+    const tokens = this.tokens;
+    this.tokens = outer;
+    return tokens;
   }
   quoted(): SourceToken {
     const quote = this.source[this.i++];
     let text = "";
     let dynamic = false;
+    const interpolations: SourceToken[][] = [];
     while (this.i < this.source.length && this.source[this.i] !== quote) {
       const part = this.quotedPart(quote);
       text += part.text;
       dynamic ||= part.dynamic;
+      if (part.interpolation !== undefined)
+        interpolations.push(part.interpolation);
     }
     this.i++;
-    return { text, kind: quote === "`" ? "template" : "string", dynamic };
+    return {
+      text,
+      kind: quote === "`" ? "template" : "string",
+      dynamic,
+      interpolations,
+    };
   }
-  quotedPart(quote: string | undefined): { text: string; dynamic: boolean } {
+  quotedPart(quote: string | undefined): {
+    text: string;
+    dynamic: boolean;
+    interpolation?: SourceToken[];
+  } {
     if (this.source[this.i] === "\\") {
       const escaped = this.source[++this.i] ?? "";
       this.i++;
@@ -658,8 +677,11 @@ class SourceLexer {
     }
     if (quote === "`" && this.source.startsWith("${", this.i)) {
       this.i += 2;
-      this.interpolation();
-      return { text: "$DYNAMIC", dynamic: true };
+      return {
+        text: "$DYNAMIC",
+        dynamic: true,
+        interpolation: this.interpolation(),
+      };
     }
     return { text: this.source[this.i++] ?? "", dynamic: false };
   }
@@ -821,18 +843,23 @@ function callFindings(
   return findings;
 }
 export const coverage =
-  "mise-contract: literal command names only; aliases, function arguments and imported/dynamic command expressions are outside coverage. JS/TS is inspected lexically; binding resolution and commands inside template interpolations are not covered.";
+  "mise-contract: literal command names only; aliases, function arguments and imported/dynamic command expressions are outside coverage. JS/TS, including template interpolations, is inspected lexically; binding resolution is not covered.";
+function tokenFindings(tokens: SourceToken[], allowed: Set<string>): string[] {
+  return tokens.flatMap((token, index) => [
+    ...(token.kind === "template" && shellTemplate(tokens, index)
+      ? commandFindings(token.text, allowed)
+      : callFindings(tokens, index, allowed)),
+    ...(token.interpolations ?? []).flatMap((expression) =>
+      tokenFindings(expression, allowed),
+    ),
+  ]);
+}
 export function sourceFindings(
   source: string,
   allowed: Set<string>,
   _filename = "source.ts",
 ): string[] {
-  const tokens = new SourceLexer(source).run();
-  return tokens.flatMap((token, index) =>
-    token.kind === "template" && shellTemplate(tokens, index)
-      ? commandFindings(token.text, allowed)
-      : callFindings(tokens, index, allowed),
-  );
+  return tokenFindings(new SourceLexer(source).run(), allowed);
 }
 
 const toolConfigSchema = z.object({

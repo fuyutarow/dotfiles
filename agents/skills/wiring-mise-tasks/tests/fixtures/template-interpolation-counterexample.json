@@ -1,0 +1,5 @@
+{
+  "source": "const text = `result: ${Bun.spawn([\"rogue\"])}`;",
+  "toolsContract": ["undeclared command rogue"],
+  "miseContract430de4fc": []
+}

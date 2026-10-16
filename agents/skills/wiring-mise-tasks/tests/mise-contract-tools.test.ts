@@ -7,6 +7,7 @@ import {
   commandFindings,
   sourceFindings,
 } from "../scripts/mise-contract.ts";
+import templateCounterexample from "./fixtures/template-interpolation-counterexample.json";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -15,6 +16,57 @@ afterEach(async () => {
   );
 });
 const allowed = new Set(["bun", "bunx", "mise", "sui", "fnox", "oxfmt"]);
+test("coralbase template interpolation counterexample", () => {
+  expect(sourceFindings(templateCounterexample.source, allowed)).toEqual(
+    templateCounterexample.toolsContract,
+  );
+});
+test.each([
+  'tag`result: ${Bun.spawn(["rogue"])}`;',
+  'const text = `result: ${format(nested(Bun.spawn(["rogue"])))}`;',
+  'const text = `outer ${`inner ${Bun.spawn(["rogue"])}`}`;',
+  'const text = `result: ${({ value: Bun.spawn({cmd: ["rogue"]}) }).value}`;',
+  'const text = `result: ${/}/.test(value) ? Bun.spawn(["rogue"]) : ""}`;',
+  'const text = `result: ${/* } */ Bun.spawn(["rogue"]) // }\n}`;',
+  'const text = `result: ${"}" + Bun.spawn(["rogue"])}`;',
+  "const text = `result: ${$`rogue`}`;",
+  'Bun.spawn([`result: ${Bun.spawn(["rogue"])}`]);',
+])("template expression authority: %s", (source) => {
+  expect(sourceFindings(source, allowed)).toEqual(["undeclared command rogue"]);
+});
+test("template boundaries keep data and dynamic argv out of command positions", () => {
+  expect(
+    sourceFindings(
+      [
+        'const text = `Bun.spawn(["rogue"])`;',
+        'const text = `escaped \\${Bun.spawn(["rogue"])}`;',
+        'const text = `value ${"Bun.spawn([\\"rogue\\"])"}`;',
+        'const text = `value ${/Bun.spawn(["rogue"])/}`;',
+        'const text = `value ${/* Bun.spawn(["rogue"]) */ 1}`;',
+        'Bun.spawn([`bun${suffix}`, "rogue"]);',
+        'Bun.spawn([`bun${"rogue"}`]);',
+        'const text = `value ${Bun.spawn}(["rogue"])`;',
+      ].join("\n"),
+      allowed,
+    ),
+  ).toEqual([]);
+});
+test("interpolations preserve outer shell tags, argv and findings after the template", () => {
+  expect(
+    sourceFindings(
+      'Bun.$`rogue ${Bun.spawn(["inner"])} ${`nested ${Bun.spawn(["deep"])}`}`; Bun.spawn(["after"]);',
+      allowed,
+    ),
+  ).toEqual([
+    "undeclared command rogue",
+    "undeclared command inner",
+    "undeclared command deep",
+    "undeclared command after",
+  ]);
+  expect(sourceFindings('Bun.spawn([`sh`, "-c", `rogue`]);', allowed)).toEqual([
+    "undeclared command rogue",
+  ]);
+});
 for (const source of [
   'Bun.spawn(["rogue"]);',
   'Bun.spawn({cmd: ["rogue", "arg"]});',
@@ -203,6 +255,16 @@ test("real mise integration fails on a split task's undeclared command", async (
   expect(result.exit).toBe(1);
   expect(result.out).toContain(
     "mise/tasks/check.toml:probe: undeclared command rogue",
+  );
+});
+test("real mise integration rejects the coralbase template counterexample", async () => {
+  const result = await cli(
+    await fixture({ source: templateCounterexample.source }),
+    "--tools",
+  );
+  expect(result.exit).toBe(1);
+  expect(result.out).toContain(
+    "scripts/tests/probe.test.ts: undeclared command rogue",
   );
 });
 test("default runtime and body rules inspect split files and run arrays", async () => {

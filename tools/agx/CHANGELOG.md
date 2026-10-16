@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.4 — 2026-10-16
+
+- Prevent concurrent runs in the same workspace with a nonblocking kernel lock, including continuations; allow restart after completion or dispatcher death.
+
 ## 4.11.3 — 2026-10-16
 
 - Wait for the next ticket run to end

@@ -14,10 +14,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
+import { mkdir, open } from "node:fs/promises";
+import { dlopen, FFIType } from "bun:ffi";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { fromThrowable } from "neverthrow";
+import { fromPromise, fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { globsOverlap } from "../ticket.ts";
 import { exitWithError } from "./exit.ts";
@@ -95,6 +97,55 @@ export const stateDir = (): string =>
   );
 export const recordPath = (): string => join(stateDir(), "records.jsonl");
 export const now = (): string => Temporal.Now.instant().toString();
+
+/** The file is only a stable inode; ownership lives in the kernel, never in its contents. */
+export async function acquireWorkspaceLock(
+  workspace: string,
+): Promise<
+  { ok: true; release: () => Promise<void> } | { ok: false; error: string }
+> {
+  const library = fromThrowable(() =>
+    dlopen(process.platform === "darwin" ? "libSystem.B.dylib" : "libc.so.6", {
+      flock: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
+    }),
+  )();
+  if (library.isErr())
+    return { ok: false, error: `cannot load flock: ${String(library.error)}` };
+  const directory = join(stateDir(), "locks");
+  const key = createHash("sha256").update(resolve(workspace)).digest("hex");
+  const opened = await fromPromise(
+    mkdir(directory, { recursive: true }).then(() =>
+      open(join(directory, key), "a"),
+    ),
+    String,
+  );
+  if (opened.isErr()) {
+    library.value.close();
+    return { ok: false, error: `cannot open workspace lock: ${opened.error}` };
+  }
+  const file = opened.value;
+  // LOCK_EX | LOCK_NB on both Linux and macOS. Node opens the descriptor close-on-exec,
+  // so workers cannot inherit ownership and keep a dead dispatcher's lock alive.
+  if (library.value.symbols.flock(file.fd, 2 | 4) !== 0) {
+    await file.close();
+    library.value.close();
+    return { ok: false, error: "workspace lock is busy or unavailable" };
+  }
+  return {
+    ok: true,
+    release: async () => {
+      await file.close();
+      library.value.close();
+      // Never unlink: another process may already have opened this same inode.
+    },
+  };
+}
+
+export const runningWorkspaceRun = (workspace: string) =>
+  foldedRuns().find(
+    (run) =>
+      run.state === "running" && resolve(run.workspace) === resolve(workspace),
+  );
 
 export function append(event: z.input<typeof EventSchema>): void {
   const path = recordPath();

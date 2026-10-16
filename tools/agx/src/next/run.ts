@@ -10,12 +10,14 @@ import { parseReport, parseReturn, withReportInstruction } from "../report.ts";
 import { parseNextTicket, type NextTicket } from "./ticket.ts";
 import {
   append,
+  acquireWorkspaceLock,
   events,
   foldedRuns,
   importLegacyRecords,
   now,
   overlapWarnings,
   recordPath,
+  runningWorkspaceRun,
   stateDir,
 } from "./store.ts";
 import { route } from "./route.ts";
@@ -35,6 +37,11 @@ const fatal = (message: string, exitCode = 2): never =>
   exitWithError(`agx: ${message}\n`, exitCode);
 const value = (flags: Flags, key: string): string | undefined =>
   typeof flags[key] === "string" ? flags[key] : undefined;
+const refuseRunningWorkspace = (cwd: string): void => {
+  const holder = runningWorkspaceRun(cwd);
+  if (holder !== undefined)
+    fatal(`workspace ${cwd} already has running run ${holder.id}`, 2);
+};
 const ticketFor = (path: string) => {
   if (!existsSync(path)) fatal(`no such ticket: ${path}`, 2);
   const text = readFileSync(path, "utf8");
@@ -204,6 +211,7 @@ export async function run(flags: Flags): Promise<number> {
   if (!new Set(["none", "read-only", "workspace-write"]).has(sandbox))
     return fatal("--sandbox must be none, read-only, or workspace-write", 2);
   const { ticket, prose } = ticketFor(path);
+  refuseRunningWorkspace(cwd);
   overlapWarnings(ticket.writes);
   const staleRefLocks = ownerlessRefLocks(cwd);
   if (staleRefLocks.length > 0) {
@@ -284,6 +292,21 @@ export async function run(flags: Flags): Promise<number> {
     workerBrief,
     withReportInstruction(renderPromise(ticket, cwd, sandbox, prose)),
   );
+  const workspaceLock = await acquireWorkspaceLock(workspace);
+  if (!workspaceLock.ok) {
+    // The winning process may be between flock and publishing its started event.
+    // Only diagnostics wait (at most 100 ms); acquisition itself never waits or retries.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      refuseRunningWorkspace(cwd);
+      await Bun.sleep(10);
+    }
+    return fatal(
+      `cannot start in workspace ${workspace}: ${workspaceLock.error}`,
+      2,
+    );
+  }
+  // Also covers runs started by an older binary while this invocation was routing.
+  refuseRunningWorkspace(cwd);
   append({
     kind: "started",
     id,
@@ -496,6 +519,7 @@ export async function run(flags: Flags): Promise<number> {
     changed_files: changed,
   });
   temp.remove();
+  await workspaceLock.release();
   process.stdout.write(
     `${JSON.stringify({ id, ticket: ticket.name ?? basename(path), row: row.id, exit, outcome, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,
   );

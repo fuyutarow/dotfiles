@@ -28,6 +28,9 @@ const EntrySchema = z.object({
   pid: z.number().int().positive(),
   token: z.string(),
   created_at: z.number(),
+  job_id: z.string().optional(),
+  unit: z.string().optional(),
+  acquired_at: z.number().optional(),
 });
 type Entry = z.output<typeof EntrySchema>;
 
@@ -41,6 +44,14 @@ export const defaultJuliaCompileSlots = (): number =>
 export async function juliaCompileSlotCapacity(): Promise<
   Result<number, Error>
 > {
+  return (await juliaCompileSlotDeclaration()).map(
+    (declaration) => declaration.capacity,
+  );
+}
+
+export async function juliaCompileSlotDeclaration(): Promise<
+  Result<{ capacity: number; source: string }, Error>
+> {
   const override = process.env.AGENT_RESOURCE_SLOTS;
   const path =
     override === undefined || override === ""
@@ -52,7 +63,10 @@ export async function juliaCompileSlotCapacity(): Promise<
   if (contents.isErr()) {
     const code = z.object({ code: z.string() }).safeParse(contents.error);
     if (code.success && code.data.code === "ENOENT")
-      return ok(defaultJuliaCompileSlots());
+      return ok({
+        capacity: defaultJuliaCompileSlots(),
+        source: `derived default: max(1, floor(host CPU count / 6)); host CPU count=${cpus().length}; missing ${path}`,
+      });
     return err(asError(contents.error));
   }
   const parsedToml = fromThrowable(() => Bun.TOML.parse(contents.value))();
@@ -71,7 +85,91 @@ export async function juliaCompileSlotCapacity(): Promise<
         `slot declaration '${path}' must contain schema=1 and a positive julia_compile count`,
       ),
     );
-  return ok(parsed.data.julia_compile);
+  return ok({
+    capacity: parsed.data.julia_compile,
+    source: `${path}:julia_compile`,
+  });
+}
+
+/** Best-effort identity of the controller's enclosing systemd unit, before launching its child. */
+async function controllerUnit(): Promise<string | undefined> {
+  const contents = await fromAsyncThrowable(() =>
+    readFile("/proc/self/cgroup", "utf8"),
+  )();
+  if (contents.isErr()) return undefined;
+  return contents.value
+    .trim()
+    .split("/")
+    .findLast((part) => /\.(service|scope)$/u.test(part));
+}
+
+const since = (milliseconds: number): string =>
+  Temporal.Instant.fromEpochMilliseconds(Math.floor(milliseconds)).toString({
+    fractionalSecondDigits: 3,
+  });
+
+/** Read a point-in-time view without locks, directory creation, or stale-entry reclamation. */
+async function statusEntries(
+  directory: string,
+): Promise<Result<Entry[], Error>> {
+  const names = await fromAsyncThrowable(() => readdir(directory))();
+  if (names.isErr())
+    return errorCode(names.error) === "ENOENT"
+      ? ok([])
+      : err(asError(names.error));
+  const entries: Entry[] = [];
+  for (const name of names.value) {
+    if (!name.endsWith(".json")) continue;
+    const path = join(directory, name);
+    const text = await fromAsyncThrowable(() => readFile(path, "utf8"))();
+    // Admission/release may remove a ticket between listing and reading it.
+    if (text.isErr() && errorCode(text.error) === "ENOENT") continue;
+    if (text.isErr()) return err(asError(text.error));
+    const parsed = jsonOf(EntrySchema).safeParse(text.value);
+    if (!parsed.success) return err(new Error(`invalid slot entry '${path}'`));
+    if (pidAlive(parsed.data.pid)) entries.push(parsed.data);
+  }
+  return ok(
+    entries.toSorted((left, right) => {
+      if (left.created_at !== right.created_at)
+        return left.created_at - right.created_at;
+      return left.token.localeCompare(right.token);
+    }),
+  );
+}
+
+function identity(entry: Entry): string {
+  return `pid=${entry.pid} unit=${JSON.stringify(entry.unit ?? "unknown")} job=${JSON.stringify(entry.job_id ?? "unknown")} token=${entry.token}`;
+}
+
+export async function compileSlotStatus(
+  stateDirectory: string,
+): Promise<Result<string, Error>> {
+  const declaration = await juliaCompileSlotDeclaration();
+  if (declaration.isErr()) return err(declaration.error);
+  // Queue first: if admission moves a ticket during the read, prefer its holder row.
+  const queue = await statusEntries(
+    join(stateDirectory, "julia-compile", "queue"),
+  );
+  if (queue.isErr()) return err(queue.error);
+  const holders = await statusEntries(
+    join(stateDirectory, "julia-compile", "holders"),
+  );
+  if (holders.isErr()) return err(holders.error);
+  const heldTokens = new Set(holders.value.map((entry) => entry.token));
+  const waiters = queue.value.filter((entry) => !heldTokens.has(entry.token));
+  const lines = [
+    `SLOT slot=julia-compile capacity=${declaration.value.capacity} source=${JSON.stringify(declaration.value.source)} holders=${holders.value.length} queued=${waiters.length}`,
+    ...holders.value.map(
+      (entry) =>
+        `HOLDER slot=julia-compile ${identity(entry)} since=${since(entry.acquired_at ?? entry.created_at)}`,
+    ),
+    ...waiters.map(
+      (entry, index) =>
+        `QUEUE slot=julia-compile position=${index + 1} ${identity(entry)} since=${since(entry.created_at)}`,
+    ),
+  ];
+  return ok(`${lines.join("\n")}\n`);
 }
 
 function pidAlive(pid: number): boolean {
@@ -176,6 +274,8 @@ export type CompileSlotOptions = {
   capacity: number;
   pollMs?: number;
   report?: (line: string) => void;
+  jobId?: string;
+  unit?: string;
 };
 
 export type CompileSlotLease = { release: () => void };
@@ -200,17 +300,23 @@ export async function acquireJuliaCompileSlot(
   if (setup.isErr()) return err(asError(setup.error));
   const token = randomUUID();
   const createdAt = performance.timeOrigin + performance.now();
+  const ticketEntry = {
+    pid: process.pid,
+    token,
+    created_at: createdAt,
+    job_id: options.jobId,
+    unit: options.unit ?? (await controllerUnit()),
+  };
   const ticketPath = join(
     queue,
     `${createdAt.toString().padStart(20, "0")}-${token}.json`,
   );
   const pendingTicketPath = join(queue, `.${token}.tmp`);
   const ticketWrite = await fromAsyncThrowable(async () => {
-    await writeFile(
-      pendingTicketPath,
-      `${JSON.stringify({ pid: process.pid, token, created_at: createdAt })}\n`,
-      { flag: "wx", mode: 0o600 },
-    );
+    await writeFile(pendingTicketPath, `${JSON.stringify(ticketEntry)}\n`, {
+      flag: "wx",
+      mode: 0o600,
+    });
     await rename(pendingTicketPath, ticketPath);
   })();
   if (ticketWrite.isErr()) return err(asError(ticketWrite.error));
@@ -222,6 +328,7 @@ export async function acquireJuliaCompileSlot(
       path: string | null;
       holders: number;
       ahead: number;
+      acquiredAt?: number;
     }>(lock, async () => {
       const queueEntries = await liveEntries(queue);
       if (queueEntries.isErr()) return err(asError(queueEntries.error));
@@ -237,17 +344,23 @@ export async function acquireJuliaCompileSlot(
         position < capacity - holderEntries.value.length
       ) {
         const path = join(holders, `${token}.json`);
+        const acquiredAt = Temporal.Now.instant().epochMilliseconds;
         const holder = await fromAsyncThrowable(() =>
           writeFile(
             path,
-            `${JSON.stringify({ pid: process.pid, token, created_at: createdAt })}\n`,
+            `${JSON.stringify({ ...ticketEntry, acquired_at: acquiredAt })}\n`,
             { flag: "wx", mode: 0o600 },
           ),
         )();
         if (holder.isErr()) return err(asError(holder.error));
         const removed = await fromAsyncThrowable(() => unlink(ticketPath))();
         if (removed.isErr()) return err(asError(removed.error));
-        return ok({ path, holders: holderEntries.value.length + 1, ahead: 0 });
+        return ok({
+          path,
+          holders: holderEntries.value.length + 1,
+          ahead: 0,
+          acquiredAt,
+        });
       }
       return ok({
         path: null,
@@ -262,9 +375,14 @@ export async function acquireJuliaCompileSlot(
     acquiredPath = state.value.path;
     if (acquiredPath === null && !waitingReported) {
       options.report?.(
-        `WAIT slot=julia-compile holders=${state.value.holders}/${capacity} ahead=${state.value.ahead}`,
+        `WAIT slot=julia-compile holders=${state.value.holders}/${capacity} ahead=${state.value.ahead} job=${JSON.stringify(options.jobId ?? "unknown")} waiting-since=${since(createdAt)}`,
       );
       waitingReported = true;
+    }
+    if (acquiredPath !== null && state.value.acquiredAt !== undefined) {
+      options.report?.(
+        `ACQUIRED slot=julia-compile job=${JSON.stringify(options.jobId ?? "unknown")} waiting-since=${since(createdAt)} acquired-at=${since(state.value.acquiredAt)}`,
+      );
     }
     if (acquiredPath === null) await Bun.sleep(options.pollMs ?? POLL_MS);
   }

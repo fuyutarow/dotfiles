@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0 — 2026-10-16
+
+- Add read-only slot status with capacity provenance, holder and FIFO queue identities, and timestamped wait/acquisition events.
+
 ## 1.4.6 — 2026-10-15
 
 - Give resource process groups at least thirty seconds to finish after SIGTERM before SIGKILL.

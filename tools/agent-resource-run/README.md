@@ -67,6 +67,54 @@ capacity is `max(1, floor(available host CPUs / 6))`. Julia test workers should 
 canonical `JULIA_DEPOT_PATH` and project path so package precompile caches are reused across runs
 and workspace checkouts.
 
+### Inspecting slots and wait times
+
+Run `agent-resource-run status` to answer whether a job is waiting without reading its logs.
+This command needs no manifest, resource policy, or admission probe. It reads the same host-wide
+state directory as admission (see "Shared admission lock" below), and never creates state,
+takes a lock, acquires/releases a slot, or removes dead entries. It prints every supported slot
+pool, including an unused pool; currently the sole pool is `julia-compile`.
+
+```text
+SLOT slot=julia-compile capacity=2 source="/path/to/slots.toml:julia_compile" holders=2 queued=3
+HOLDER slot=julia-compile pid=123 unit="integration.service" job="build-1" token=... since=2026-10-16T01:00:00.000Z
+QUEUE slot=julia-compile position=1 pid=456 unit="integration.service" job="build-3" token=... since=2026-10-16T01:01:00.000Z
+```
+
+Each capacity line names its source: the resolved declaration path plus `:julia_compile`, or
+`derived default: max(1, floor(host CPU count / 6))` with the measured CPU count and missing
+declaration path. The count comes from `node:os.cpus().length`, the same input admission uses.
+`holders` and `queued` count live tickets, and queue positions start at one in FIFO order
+(creation time, then token). Holder `since` is acquisition time; queue `since` is waiting time.
+`unit` is the controller's enclosing systemd service/scope, rather than the child scope that has
+yet to launch. Jobs started before this metadata was introduced show `job="unknown"` and
+`unit="unknown"`; their holder `since` falls back to the original ticket creation time.
+No read-only command can recover identity or acquisition timestamps absent from those old tickets.
+
+Admission emits these flat text events through its existing report stream:
+
+```text
+WAIT slot=julia-compile holders=2/2 ahead=3 job="build-6" waiting-since=2026-10-16T01:01:00.000Z
+ACQUIRED slot=julia-compile job="build-6" waiting-since=2026-10-16T01:01:00.000Z acquired-at=2026-10-16T01:04:00.000Z
+```
+
+`WAIT` is emitted once if the job blocks; `ACQUIRED` is emitted on acquisition, including an
+immediate acquisition. Both use the same waiting timestamp, retained in the holder ticket
+alongside `acquired_at`. Subtract the UTC ISO timestamps to calculate elapsed wait time. String
+identities and capacity sources are JSON-quoted; the existing WAIT prefix and `ahead` count
+(zero-based number of tickets ahead) are preserved.
+
+The status interface serves humans, agents, and shell callers with identical plain line output
+on stdout in a TTY or pipe; stdin is unused. `status --help` describes the command. Extra operands
+and unknown flags are rejected by the CLI. A successful snapshot exits 0; invalid operands exit 2
+(parser-level unknown flags exit 1); unreadable or malformed declarations/state exit 70 with a
+diagnostic on stderr. A missing declaration explicitly uses the derived default, and missing
+state means an unused pool. Status bypasses admission health/policy checks so it remains usable
+when launches are refused. It does not poll or wait for a lock. The view is a best-effort snapshot:
+admission/release can race reads, and dead tickets are filtered without reclamation. A malformed
+entry fails visibly rather than silently omitting a waiter. New output fields may be appended;
+existing admission invocation syntax is preserved.
+
 ## Operator policy: `resource-policy.toml`
 
 CONFIG vs MECHANISM, as in `agents/hooks/storage-headroom.toml`. Every operator-tunable threshold

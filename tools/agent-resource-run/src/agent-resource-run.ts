@@ -35,7 +35,13 @@ import { missingGpuToolDenial } from "../../shared/src/gpu-visibility.ts";
 import pkg from "../package.json" with { type: "json" };
 import { cgroupMemory } from "./lib/cgroup-memory.ts";
 import {
+  rejectPrototypeFlag,
+  statusCommand,
+  statusHasOperands,
+} from "./lib/status-command.ts";
+import {
   acquireJuliaCompileSlot,
+  compileSlotStatus,
   juliaCompileSlotCapacity,
   type CompileSlotLease,
 } from "./lib/compile-slot.ts";
@@ -2876,6 +2882,7 @@ async function executeJobResult(
       stateDirectory:
         options.compileSlotDirectory ?? join(defaultStateDirectory(), "slots"),
       capacity: capacityResult.value,
+      jobId: manifest.job_id,
       report: options.slotReport ?? report,
     });
     if (slotResult.isErr()) return err(slotResult.error);
@@ -3251,13 +3258,6 @@ export function executeJob(
     .mapErr(asError);
 }
 
-function rejectPrototypeFlag(type: string, flag: string): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
-    process.exit(2);
-  }
-}
-
 async function main(): Promise<Result<number, Error>> {
   const parsed = cli(
     {
@@ -3266,6 +3266,7 @@ async function main(): Promise<Result<number, Error>> {
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       parameters: ["[command...]"],
+      commands: [statusCommand],
       help: {
         description:
           "Admit and run one bounded Linux job from a JSON resource envelope.",
@@ -3291,6 +3292,18 @@ async function main(): Promise<Result<number, Error>> {
     undefined,
     Bun.argv.slice(2),
   );
+  if (parsed.command === "status") {
+    if (statusHasOperands(parsed))
+      return err(
+        new UsageError("status does not accept arguments or admission flags"),
+      );
+    const status = await compileSlotStatus(
+      join(defaultStateDirectory(), "slots"),
+    );
+    if (status.isErr()) return err(status.error);
+    process.stdout.write(status.value);
+    return ok(0);
+  }
   // Fail closed before any manifest work: an invalid policy refuses every admission (after
   // cli() so --help still answers).
   const policy = resourcePolicy();

@@ -67,7 +67,11 @@ describe("Julia compile slots", () => {
       },
     });
     await Bun.sleep(30);
-    expect(events).toContain("WAIT slot=julia-compile holders=1/1 ahead=0");
+    expect(
+      events.some((line) =>
+        line.startsWith("WAIT slot=julia-compile holders=1/1 ahead=0 "),
+      ),
+    ).toBe(true);
     first.release();
     const second = await secondPromise;
     second.release();

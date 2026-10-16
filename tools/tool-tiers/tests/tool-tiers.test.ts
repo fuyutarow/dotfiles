@@ -1,9 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   brewEntries,
+  findToolCommandShadows,
   getTool,
   toolDeclaration,
   type ToolHost,
@@ -75,6 +82,30 @@ test("tool declarations resolve tier and formula while honoring OS guards", asyn
     ["formula", "git-lfs"],
     ["cask", "maccy"],
   ]);
+});
+
+test("declared command shadows name the duplicate and Homebrew copy", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tool-shadows-"));
+  roots.push(root);
+  const shadowBin = join(root, ".local/bin");
+  const brewBin = join(root, "brew/bin");
+  mkdirSync(shadowBin, { recursive: true });
+  mkdirSync(brewBin, { recursive: true });
+  writeFileSync(join(shadowBin, "mise"), "shadow");
+  writeFileSync(join(brewBin, "mise"), "homebrew");
+  writeFileSync(join(brewBin, "brew"), "brew");
+  chmodSync(join(brewBin, "brew"), 0o755);
+
+  expect(
+    await findToolCommandShadows(["mise"], `${shadowBin}:${brewBin}`, brewBin),
+  ).toEqual([
+    {
+      command: "mise",
+      shadow: join(shadowBin, "mise"),
+      homebrew: join(brewBin, "mise"),
+    },
+  ]);
+  expect(await findToolCommandShadows(["mise"], brewBin, brewBin)).toEqual([]);
 });
 
 test("tool:get only installs a declared missing formula", async () => {

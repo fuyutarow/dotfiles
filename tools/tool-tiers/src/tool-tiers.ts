@@ -1,5 +1,6 @@
-import { release } from "node:os";
-import { join } from "node:path";
+import { homedir, release } from "node:os";
+import { join, resolve } from "node:path";
+import { lstat, realpath, stat } from "node:fs/promises";
 import { commandsForFormula, readToolCommandMap } from "./tool-commands.ts";
 
 export type ToolTier = "core" | "ondemand";
@@ -25,6 +26,77 @@ export type ToolGetResult =
   | { status: "present"; declaration: ToolDeclaration }
   | { status: "installed"; declaration: ToolDeclaration }
   | { status: "failed"; declaration: ToolDeclaration; exitCode: number };
+
+export type ToolCommandShadow = {
+  command: string;
+  shadow: string;
+  homebrew: string;
+};
+
+async function regularFile(path: string): Promise<boolean> {
+  return stat(path).then(
+    (result) => result.isFile(),
+    () => false,
+  );
+}
+
+async function sameDirectory(left: string, right: string): Promise<boolean> {
+  return Promise.all([realpath(left), realpath(right)]).then(
+    ([leftPath, rightPath]) => leftPath === rightPath,
+    () => resolve(left) === resolve(right),
+  );
+}
+
+/** Count command/path pairs that precede Homebrew or live in a user bin directory. */
+export async function findToolCommandShadows(
+  commands: readonly string[],
+  path: string,
+  homebrewBin: string,
+  home: string = homedir(),
+): Promise<ToolCommandShadow[]> {
+  // An empty PATH component denotes cwd, just as it does during command lookup.
+  const pathDirs = [...new Set(path.split(":").map((entry) => resolve(entry)))];
+  const brewIndex = (
+    await Promise.all(
+      pathDirs.map((directory) => sameDirectory(directory, homebrewBin)),
+    )
+  ).indexOf(true);
+  const userBins = [".local/bin", ".cargo/bin", ".bun/bin", "go/bin"].map(
+    (directory) => join(home, directory),
+  );
+  const candidates = (
+    await Promise.all(
+      pathDirs.map(async (directory, index) => {
+        if (await sameDirectory(directory, homebrewBin)) return null;
+        const userBin = (
+          await Promise.all(
+            userBins.map((bin) => sameDirectory(directory, bin)),
+          )
+        ).some(Boolean);
+        return (brewIndex !== -1 && index < brewIndex) || userBin
+          ? directory
+          : null;
+      }),
+    )
+  ).filter((directory) => directory !== null);
+  const grouped = await Promise.all(
+    commands.map(async (command) => {
+      const homebrew = join(homebrewBin, command);
+      if (!(await regularFile(homebrew))) return [];
+      return Promise.all(
+        candidates.map(async (directory) => {
+          const shadow = join(directory, command);
+          const regular = await lstat(shadow).then(
+            (entry) => entry.isFile(),
+            () => false,
+          );
+          return regular ? { command, shadow, homebrew } : null;
+        }),
+      );
+    }),
+  );
+  return grouped.flat().filter((shadow) => shadow !== null);
+}
 
 type ConditionalFrame = {
   parentActive: boolean;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 — 2026-10-16
+
+- Detect duplicate PATH copies of declared Homebrew commands
+- Detect Homebrew command shadows before brew on PATH or in user bin directories, ignoring later system copies.
+
 ## 0.1.2 — 2026-10-15
 
 - Map the macOS espanso cask to its espanso command for tier lookup and audits.

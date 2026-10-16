@@ -64,7 +64,7 @@ import {
 import { fromThrowable } from "neverthrow";
 import { ownerlessRefLocks } from "../tools/shared/src/ref-locks.ts";
 import { homedir, release, tmpdir, userInfo } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { registeredRepos } from "./workspace-repos.ts";
 import {
   MAPPING_ENV,
@@ -74,6 +74,10 @@ import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
 import { RENDERED } from "./config-registry.ts";
 import { googleDriveTargets } from "./link-dots.ts";
 import { brewPrefix, coreCommands, corePathProblems } from "./core-tools.ts";
+import {
+  declaredToolCommands,
+  findToolCommandShadows,
+} from "../tools/tool-tiers/src/tool-tiers.ts";
 import { configHome, declaredProvider } from "../agents/codex/runtime.ts";
 import { danglingRepoBins } from "./deps-prune.ts";
 import { obj } from "../agents/hooks/narrow.ts";
@@ -1728,6 +1732,38 @@ export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
       );
 }
 
+/** Flag earlier PATH copies and duplicates in user bin directories. */
+export async function checkBrewShadows(ctx: Ctx): Promise<Finding> {
+  const path = process.env.PATH ?? "";
+  const brew = Bun.which("brew", { PATH: path });
+  if (brew === null)
+    return warn(
+      "brew-shadows",
+      "cannot locate brew on PATH; command shadow scan could not be completed",
+    );
+  const declarations = await declaredToolCommands(ctx.dotfiles);
+  const shadows = await findToolCommandShadows(
+    declarations.map(({ command }) => command),
+    path,
+    dirname(brew),
+    ctx.home,
+  );
+  return shadows.length === 0
+    ? pass(
+        "brew-shadows",
+        `no declared Homebrew command shadows (Homebrew: ${dirname(brew)})`,
+      )
+    : fail(
+        "brew-shadows",
+        `${shadows.length} declared Homebrew command shadow(s) in PATH`,
+        "rip <shadow>",
+        shadows.map(
+          ({ command, shadow, homebrew }) =>
+            `${command}: ${shadow} (Homebrew: ${homebrew})`,
+        ),
+      );
+}
+
 type Check = {
   name: string;
   run: (ctx: Ctx) => Promise<Finding>;
@@ -1752,6 +1788,7 @@ export const CHECKS: Check[] = [
     run: checkCoreTools,
     applies: always,
   },
+  { name: "brew-shadows", run: checkBrewShadows, applies: always },
   { name: "deps", run: checkDeps, applies: always },
   { name: "bins", run: checkBins, applies: always },
   { name: "skill-helper-paths", run: checkSkillHelperPaths, applies: always },

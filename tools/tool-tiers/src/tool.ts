@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 import { cli } from "cleye";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   declaredToolCommands,
+  findToolCommandShadows,
   getTool,
   toolDeclaration,
   type ToolDeclaration,
@@ -50,17 +51,33 @@ async function main(): Promise<void> {
   }
   const [action, command] = parsed._;
   if (action === "audit" && command === undefined) {
-    const missing = (await declaredToolCommands(ROOT))
+    const declarations = await declaredToolCommands(ROOT);
+    const missing = declarations
       .filter((declaration) => auditCommand(declaration))
       .map(({ command: name }) => name);
+    const brew = Bun.which("brew");
+    const shadows =
+      brew === null
+        ? []
+        : await findToolCommandShadows(
+            declarations.map(({ command: name }) => name),
+            process.env.PATH ?? "",
+            dirname(brew),
+          );
+    for (const shadow of shadows)
+      process.stdout.write(
+        `❌ ${shadow.command} shadow: ${shadow.shadow} (Homebrew: ${shadow.homebrew}) — rip ${shadow.shadow}\n`,
+      );
     process.stdout.write("---\n");
-    if (missing.length === 0)
-      process.stdout.write("All declared Homebrew commands installed.\n");
+    if (missing.length === 0 && shadows.length === 0)
+      process.stdout.write(
+        "All declared Homebrew commands installed without PATH shadows.\n",
+      );
     else
       process.stdout.write(
-        `${missing.length} missing; use mise run tool:get <cmd>.\n`,
+        `${missing.length} missing; ${shadows.length} PATH shadow(s); use mise run tool:get <cmd> for missing commands and rip <shadow> for shadows.\n`,
       );
-    process.exitCode = missing.length === 0 ? 0 : 1;
+    process.exitCode = missing.length === 0 && shadows.length === 0 ? 0 : 1;
     return;
   }
   if (command === undefined || (action !== "which" && action !== "get")) {

@@ -1138,4 +1138,34 @@ network_access = true
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/^PASS {2}bun-floor {2}no bun < 1\.4/mu);
   });
+
+  test("brew-shadows: a PATH copy before Homebrew FAILs with both paths and rip; no shadow PASSes", () => {
+    const home = tmp("doctor-brew-shadow-home-");
+    const shadowBin = join(home, ".local/bin");
+    const brewBin = join(home, "brew/bin");
+    mkdirSync(shadowBin, { recursive: true });
+    mkdirSync(brewBin, { recursive: true });
+    writeFileSync(join(shadowBin, "mise"), "old mise");
+    writeFileSync(join(brewBin, "mise"), "Homebrew mise");
+    writeFileSync(join(brewBin, "brew"), "fake brew");
+    chmodSync(join(brewBin, "brew"), 0o755);
+
+    const shadow = doctor("brew-shadows", {
+      HOME: home,
+      DOTFILES: REPO,
+      PATH: `${shadowBin}:${brewBin}:/usr/bin:/bin`,
+    });
+    expect(shadow.code).toBe(1);
+    expect(shadow.out).toContain(join(shadowBin, "mise"));
+    expect(shadow.out).toContain(join(brewBin, "mise"));
+    expect(shadow.out).toContain("fix: rip <shadow>");
+
+    const clean = doctor("brew-shadows", {
+      HOME: home,
+      DOTFILES: REPO,
+      PATH: `${brewBin}:/usr/bin:/bin`,
+    });
+    expect(clean.code).toBe(0);
+    expect(clean.out).toMatch(/^PASS {2}brew-shadows/mu);
+  });
 });

@@ -570,7 +570,7 @@ run = 'bun ~/dotfiles/scripts/wsl-reap.ts'
 
 [tasks."install:tools"]
 description = "Install core and on-demand Homebrew formulas and casks (Brewfile is their union)"
-run = 'brew bundle --file=~/dotfiles/Brewfile'
+run = 'brew bundle --file=~/dotfiles/Brewfile && mise run tools:audit'
 
 [tasks."tool:which"]
 description = "Show whether a command is declared core, on-demand, or undeclared, and its formula when applicable"

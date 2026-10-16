@@ -7,14 +7,12 @@ import {
   constants,
   existsSync,
   mkdirSync,
-  readFileSync,
   readdirSync,
   readlinkSync,
   realpathSync,
-  statSync,
 } from "node:fs";
 import { homedir, hostname } from "node:os";
-import { basename, dirname, join, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import {
   attempt,
   errorMessage,
@@ -37,12 +35,13 @@ export type Repo = {
   parent: string;
   wsRoot: string;
 };
-export type Config = { ready: string[]; trunk: string };
+export type Config = { ready: string[]; trunk: string; keep: string[] };
 
 export const CONFIG_FILE = ".ws.toml";
 const ConfigSchema = z.strictObject({
   ready: z.array(z.string().min(1)).default([]),
   trunk: z.string().min(1).default("trunk()"),
+  keep: z.array(z.string().min(1)).default([]),
 });
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 const TERMINAL_STATES = new Set(["ended", "orphaned"]);
@@ -112,12 +111,34 @@ export function resolveRepo(path: string): Attempt<Repo> {
   return good({ backing, name, parent, wsRoot: join(parent, `${name}.ws`) });
 }
 
-export async function readConfig(repo: Repo): Promise<Attempt<Config>> {
+export async function readConfig(
+  repo: Repo,
+  committed = false,
+): Promise<Attempt<Config>> {
   const file = join(repo.backing, CONFIG_FILE);
-  if (!existsSync(file)) return good({ ready: [], trunk: "trunk()" });
-  const parsed = await attempt(() =>
-    Bun.TOML.parse(readFileSync(file, "utf8")),
-  );
+  let text: string;
+  if (committed) {
+    const files = await jjOut(
+      ["file", "list", "-r", "@-", CONFIG_FILE],
+      repo.backing,
+      true,
+    );
+    if (!files.ok) return files;
+    if (files.value.trim() === "")
+      return good({ ready: [], trunk: "trunk()", keep: [] });
+    const content = await jjOut(
+      ["file", "show", "-r", "@-", CONFIG_FILE],
+      repo.backing,
+      true,
+    );
+    if (!content.ok) return content;
+    text = content.value;
+  } else {
+    if (!existsSync(file))
+      return good({ ready: [], trunk: "trunk()", keep: [] });
+    text = await Bun.file(file).text();
+  }
+  const parsed = await attempt(() => Bun.TOML.parse(text));
   if (!parsed.ok) return bad(`${file}: ${msg(parsed)}`);
   const checked = ConfigSchema.safeParse(parsed.value);
   return checked.success
@@ -482,13 +503,15 @@ export async function remove(options: {
   if (!name.ok) return name;
   const repo = resolveRepo(options.repo);
   if (!repo.ok) return repo;
-  const cfg = await readConfig(repo.value);
+  const cfg = await readConfig(repo.value, true);
   if (!cfg.ok) return cfg;
   const pre = common(repo.value);
   if (!pre.ok) return pre;
   const graveyard = await checkGraveyard();
   if (!graveyard.ok) return graveyard;
   const dir = join(repo.value.wsRoot, name.value);
+  if (protectedWorkspace(repo.value, cfg.value, { name: name.value, dir }))
+    return bad(`${dir} is kept by .ws.toml`);
   if (!existsSync(dir)) return bad(`${dir} does not exist`);
   return withLock(repo.value, `ws rm ${options.slug}`, async () => {
     const names = await workspaceNames(repo.value);
@@ -579,163 +602,408 @@ export function lineageOf(records: RunRecord[], dir: string): RunRecord[] {
   return records.filter((r) => seen.has(r.id));
 }
 
-export type Verdict = { action: "collect" | "keep"; reason: string };
-export type Candidate = { dir: string; name: string | null; verdict: Verdict };
-
-/** A legacy directory's workspace name: the one registered name jj reports for its @ and its checkout file holds. */
-async function legacyName(repo: Repo, dir: string): Promise<string | null> {
-  const heads = await jjOut(
-    ["log", "--no-graph", "-r", "@", "-T", 'working_copies ++ "\\n"'],
-    dir,
-    false,
-  );
-  const registered = await workspaceNames(repo);
-  if (!heads.ok || !registered.ok) return null;
-  const store = fromThrowable(() =>
-    readFileSync(join(dir, ".jj", "working_copy", "checkout")).toString(
-      "latin1",
-    ),
-  )();
-  if (store.isErr()) return null;
-  const named = heads.value
-    .trim()
-    .split(/\s+/u)
-    .map((t) => t.replace(/@$/u, ""))
-    .filter((n) => registered.value.includes(n) && store.value.includes(n));
-  return named.length === 1 ? (named[0] ?? null) : null;
-}
-
-function subdirs(path: string, match: (name: string) => boolean): string[] {
-  const names = fromThrowable(() => readdirSync(path))();
-  if (names.isErr()) return [];
-  return names.value
-    .filter(match)
-    .map((n) => join(path, n))
-    .filter((p) =>
-      fromThrowable(() => statSync(p).isDirectory())().unwrapOr(false),
-    );
-}
-
 export type GcOptions = {
   repo: string;
   dryRun: boolean;
   includeUnrecorded: boolean;
+  legacy?: boolean;
 };
 
-async function judge(
-  repo: Repo,
-  cfg: Config,
-  records: RunRecord[],
-  dir: string,
-  options: GcOptions,
-): Promise<Candidate> {
-  const owner = jjWorkspace(dir);
-  if (!owner.ok || owner.value.backingRoot !== repo.backing)
-    return {
-      dir,
-      name: null,
-      verdict: {
-        action: "keep",
-        reason: "not a jj workspace of this repository",
-      },
-    };
-  const name =
-    dirname(dir) === repo.wsRoot ? basename(dir) : await legacyName(repo, dir);
-  const keep = (reason: string): Candidate => ({
-    dir,
-    name,
-    verdict: { action: "keep", reason },
-  });
-  const sparse = await jjOut(["sparse", "list"], dir, true);
-  if (!sparse.ok) return keep(`cannot inspect sparse patterns: ${msg(sparse)}`);
-  if (sparse.value.trim() !== ".")
-    return keep(
-      `sparse patterns are not '.': ${JSON.stringify(sparse.value.trim())}`,
-    );
-  if (name === null) return keep("workspace name cannot be determined");
-  const real = realOr(dir);
-  const lineage = lineageOf(records, real);
-  const live = lineage.find((r) => !TERMINAL_STATES.has(r.state));
-  if (live !== undefined)
-    return keep(`live or continuing run ${live.id} (${live.state})`);
-  const occupied = busy(real);
-  if (occupied !== undefined) return keep(occupied);
-  const recorded = lineage.length > 0;
-  if (!recorded && !options.includeUnrecorded)
-    return keep(
-      "unrecorded (no agx run); collect with --include-unrecorded when it has no diff",
-    );
-  const ends = lineage.flatMap((r) =>
-    r.end_commit === undefined || r.end_commit === null || r.end_commit === ""
-      ? []
-      : [r.end_commit],
+type Workspace = { name: string; dir: string; change?: string; age?: string };
+type Classification = {
+  verdict: string;
+  change: string;
+  age: string;
+  reason: string;
+  collect: boolean;
+};
+
+/** Enumeration and path resolution both come from this repository's jj record. */
+async function workspaces(repo: Repo): Promise<Attempt<Workspace[]>> {
+  const listed = await jjOut(
+    [
+      "-R",
+      repo.backing,
+      "workspace",
+      "list",
+      "-T",
+      'json(name) ++ "\\t" ++ target.change_id().short(12) ++ "\\t" ++ target.committer().timestamp().ago() ++ "\\n"',
+    ],
+    repo.backing,
+    true,
   );
-  const work = await unlanded(repo, cfg, dir, name, ends);
-  if (!work.ok) return keep(`cannot judge: ${msg(work)}`);
-  if (work.value.length > 0)
-    return keep(
-      `unlanded: ${work.value[0]}${work.value.length > 1 ? ` (+${work.value.length - 1})` : ""}`,
+  if (!listed.ok) return listed;
+  const found: Workspace[] = [];
+  for (const line of listed.value.trim().split("\n").filter(Boolean)) {
+    const [encoded, change, age] = line.split("\t");
+    const parsed = jsonOf(z.string().min(1)).safeParse(encoded);
+    if (!parsed.success)
+      return bad("invalid workspace name from jj workspace list");
+    const name = parsed.data;
+    const root = await jjOut(
+      ["-R", repo.backing, "workspace", "root", "--name", name],
+      repo.backing,
+      true,
     );
-  return {
-    dir,
-    name,
-    verdict: {
-      action: "collect",
-      reason: recorded
-        ? "terminal lineage, nothing unlanded"
-        : "unrecorded, no diff",
-    },
-  };
+    if (!root.ok) return bad(`cannot resolve workspace ${name}: ${msg(root)}`);
+    const dir = root.value.trim();
+    if (dir === "")
+      return bad(
+        `no recorded path for workspace ${name}; refusing incomplete enumeration`,
+      );
+    if (realOr(dir) !== realOr(repo.backing))
+      found.push({ name, dir, change: change ?? "?", age: age ?? "?" });
+  }
+  return good(found);
 }
 
-/** Judge every candidate under the store lock and, unless dry-run, collect those judged collectable. */
+function protectedWorkspace(repo: Repo, cfg: Config, ws: Workspace): boolean {
+  return cfg.keep.some((entry) => {
+    if (entry === ws.name) return true;
+    const path = entry.startsWith("~/")
+      ? join(homedir(), entry.slice(2))
+      : resolve(repo.backing, entry);
+    return realOr(path) === realOr(ws.dir);
+  });
+}
+
+/** Freeze one real trunk commit for the whole repo; root is not a usable integration branch. */
+async function trunkCommit(
+  repo: Repo,
+  cfg: Config,
+): Promise<Attempt<string | null>> {
+  const out = await jjOut(
+    ["log", "--no-graph", "-r", cfg.trunk, "-T", 'commit_id ++ "\\n"'],
+    repo.backing,
+    true,
+  );
+  if (!out.ok) return out;
+  const ids = out.value.trim().split("\n").filter(Boolean);
+  if (ids.length !== 1)
+    return bad(`trunk ${cfg.trunk} must resolve to exactly one commit`);
+  return good(/^0+$/u.test(ids[0] ?? "") ? null : (ids[0] ?? null));
+}
+
+/** Zero-context edits anchored to the same base. Unsupported formats fail closed.
+ * New-line offsets are deliberately excluded: unrelated earlier trunk edits shift them.
+ */
+function patchBlockEdits(block: string): Set<string> | null {
+  const edits = new Set<string>();
+  const lines = block.split("\n");
+  const file = lines[0];
+  if (
+    file === undefined ||
+    lines.some((line) =>
+      /^(?:old mode|new mode|new file|deleted file|rename |copy |Binary|GIT binary)/u.test(
+        line,
+      ),
+    )
+  )
+    return null;
+  let key: string | undefined;
+  let body: string[] = [];
+  const flush = (): void => {
+    if (key !== undefined) edits.add(JSON.stringify([file, key, body]));
+  };
+  for (const line of lines.slice(1)) {
+    const header = /^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/u.exec(line);
+    if (header !== null) {
+      flush();
+      key = `${header[1]},${header[2] ?? "1"}`;
+      body = [];
+    } else if (key !== undefined && line !== "") body.push(line);
+  }
+  flush();
+  if (key === undefined) return null;
+  return edits;
+}
+
+function patchEdits(diff: string): Set<string> | null {
+  const blocks = diff
+    .split(/^diff --git /mu)
+    .filter(Boolean)
+    .map((block) => patchBlockEdits(block));
+  if (blocks.some((block) => block === null)) return null;
+  return new Set(
+    blocks.flatMap((block) => (block === null ? [] : Array.from(block))),
+  );
+}
+
+/** Ancestry handles ordinary landings; matching changed file trees also handles squash landings.
+ * Compare only paths changed by the outstanding stack, so unrelated trunk additions do not matter.
+ * Conflicts and uncertain comparisons retain the workspace.
+ */
+async function outstanding(
+  repo: Repo,
+  tip: string,
+  trunk: string,
+): Promise<Attempt<boolean>> {
+  const conflicted = await jjOut(
+    ["log", "--no-graph", "-r", tip, "-T", "conflict"],
+    repo.backing,
+    true,
+  );
+  if (!conflicted.ok) return conflicted;
+  if (conflicted.value.trim() === "true") return good(true);
+  const pending = await unlandedFrom(repo.backing, tip, trunk, true);
+  if (!pending.ok) return pending;
+  if (pending.value.length === 0) return good(false);
+  const base = `heads(::(${tip}) & ::(${trunk}))`;
+  const paths = await jjOut(
+    ["diff", "--from", base, "--to", tip, "--name-only"],
+    repo.backing,
+    true,
+  );
+  if (!paths.ok) return paths;
+  const changed = paths.value.trim().split("\n").filter(Boolean);
+  if (changed.length === 0) return good(false);
+  const diff = await jjOut(
+    [
+      "diff",
+      "--from",
+      tip,
+      "--to",
+      trunk,
+      "--summary",
+      "--",
+      ...changed.map((p) => `root-file:${p}`),
+    ],
+    repo.backing,
+    true,
+  );
+  if (!diff.ok) return diff;
+  if (diff.value.trim() === "") return good(false);
+  const patches = await Promise.all(
+    [tip, trunk].map((revision) =>
+      jjOut(
+        [
+          "diff",
+          "--from",
+          base,
+          "--to",
+          revision,
+          "--git",
+          "--context",
+          "0",
+          "--",
+          ...changed.map((path) => `root-file:${path}`),
+        ],
+        repo.backing,
+        true,
+      ),
+    ),
+  );
+  const [work, integrated] = patches;
+  if (work === undefined || integrated === undefined)
+    return bad("missing diff comparison");
+  if (!work.ok) return work;
+  if (!integrated.ok) return integrated;
+  const wanted = patchEdits(work.value);
+  const present = patchEdits(integrated.value);
+  return good(
+    wanted === null ||
+      present === null ||
+      ![...wanted].every((edit) => present.has(edit)),
+  );
+}
+
+async function classify(
+  repo: Repo,
+  cfg: Config,
+  ws: Workspace,
+  records: RunRecord[],
+  trunk: string | null,
+): Promise<Classification> {
+  let change = ws.change ?? "?";
+  let age = ws.age ?? "?";
+  const verdict = (
+    label: string,
+    reason: string,
+    collect = false,
+  ): Classification => ({ verdict: label, change, age, reason, collect });
+  if (protectedWorkspace(repo, cfg, ws))
+    return verdict("kept", "declared in .ws.toml keep");
+  const owner = jjWorkspace(ws.dir);
+  if (
+    !owner.ok ||
+    owner.value.root !== realOr(ws.dir) ||
+    owner.value.backingRoot !== repo.backing
+  )
+    return verdict(
+      "keep",
+      "missing or foreign workspace; never forget without a verified checkout",
+    );
+  const occupied = busy(realOr(ws.dir));
+  if (occupied !== undefined) return verdict("keep", occupied);
+  const lineage = lineageOf(records, realOr(ws.dir));
+  const live = lineage.find((r) => !TERMINAL_STATES.has(r.state));
+  if (live !== undefined)
+    return verdict("keep", `live or continuing run ${live.id} (${live.state})`);
+  const fresh = await updateStale(ws.dir);
+  if (!fresh.ok) return verdict("keep", msg(fresh));
+  const info = await jjOut(
+    [
+      "log",
+      "--no-graph",
+      "-r",
+      "@",
+      "-T",
+      'change_id.short(12) ++ "\\t" ++ committer.timestamp().ago() ++ "\\t" ++ empty',
+    ],
+    ws.dir,
+    true,
+  );
+  if (!info.ok) return verdict("keep", msg(info));
+  const [id, since, empty] = info.value.split("\t");
+  change = id ?? "?";
+  age = since ?? "?";
+  const sparse = await jjOut(["sparse", "list"], ws.dir, true);
+  if (!sparse.ok) return verdict("keep", msg(sparse));
+  if (sparse.value.trim() !== ".")
+    return verdict(
+      "keep",
+      `sparse patterns are not '.': ${JSON.stringify(sparse.value.trim())}`,
+    );
+  if (trunk === null)
+    return verdict(
+      "no trunk",
+      "trunk resolves to root; no landed/unlanded classification",
+    );
+  const tip = await jjOut(
+    ["log", "--no-graph", "-r", "@", "-T", "commit_id"],
+    ws.dir,
+    true,
+  );
+  if (!tip.ok) return verdict("keep", msg(tip));
+  const tips = [
+    tip.value.trim(),
+    ...lineage.flatMap((r) =>
+      r.end_commit === undefined || r.end_commit === null || r.end_commit === ""
+        ? []
+        : [r.end_commit],
+    ),
+  ];
+  for (const candidate of tips) {
+    const work = await outstanding(repo, candidate, trunk);
+    if (!work.ok) return verdict("keep", `cannot judge: ${msg(work)}`);
+    if (work.value)
+      return verdict("unlanded", "unlanded changes; never removed");
+  }
+  return verdict(
+    empty === "true" ? "empty" : "landed",
+    "nothing unlanded",
+    true,
+  );
+}
+
+/** TSV columns: path, kind, verdict, change id, age, reason. Legacy deletion is opt-in. */
 export async function gc(
   options: GcOptions,
 ): Promise<Attempt<{ lines: string[]; failed: string[] }>> {
-  const repo = resolveRepo(options.repo);
-  if (!repo.ok) return repo;
-  const cfg = await readConfig(repo.value);
-  if (!cfg.ok) return cfg;
-  const pre = common(repo.value);
+  const resolved = resolveRepo(options.repo);
+  if (!resolved.ok) return resolved;
+  const repo = resolved.value;
+  const pre = common(repo);
   if (!pre.ok) return pre;
   const graveyard = await checkGraveyard();
   if (!graveyard.ok) return graveyard;
-  const dirs = [
-    ...subdirs(repo.value.wsRoot, (n) => n.startsWith("ws_")),
-    ...subdirs(
-      repo.value.parent,
-      (n) =>
-        n.startsWith(`${repo.value.name}-ws-`) ||
-        n.startsWith(`${repo.value.name}-arm-`),
-    ),
-  ];
-  return withLock(repo.value, "ws gc", async () => {
-    const records = await agxRecords(repo.value.backing);
+  return withLock(repo, "ws gc", async () => {
+    const cfg = await readConfig(repo, true);
+    if (!cfg.ok) return cfg;
+    const trunk = await trunkCommit(repo, cfg.value);
+    if (!trunk.ok) return trunk;
+    const candidates = await workspaces(repo);
+    if (!candidates.ok) return candidates;
+    const records = await agxRecords(repo.backing);
     if (!records.ok) return records;
     const lines: string[] = [];
     const failed: string[] = [];
-    for (const dir of dirs) {
-      const c = await judge(repo.value, cfg.value, records.value, dir, options);
-      if (c.verdict.action === "keep" || options.dryRun || c.name === null) {
-        const label =
-          options.dryRun && c.verdict.action === "collect"
-            ? "would-collect"
-            : c.verdict.action;
-        lines.push(`${label}\t${dir}\t${c.verdict.reason}`);
-        continue;
+    for (const ws of candidates.value) {
+      const kind =
+        dirname(ws.dir) === repo.wsRoot && ws.name.startsWith("ws_")
+          ? "ws"
+          : "legacy";
+      const c = await classify(repo, cfg.value, ws, records.value, trunk.value);
+      let label = c.verdict;
+      let reason = c.reason;
+      const recorded = lineageOf(records.value, realOr(ws.dir)).length > 0;
+      const allowed =
+        kind === "legacy"
+          ? options.legacy === true
+          : recorded || options.includeUnrecorded;
+      if (c.collect && !allowed)
+        reason +=
+          kind === "legacy"
+            ? "; report only; pass --legacy to collect"
+            : "; unrecorded; pass --include-unrecorded to collect";
+      if (c.collect && allowed && !options.dryRun) {
+        const done = await forgetAndBury(
+          repo,
+          graveyard.value,
+          ws.name,
+          ws.dir,
+        );
+        label = done.ok ? "collected" : "FAILED";
+        reason = done.ok ? reason : msg(done);
+        failed.push(...(done.ok ? [] : [ws.dir]));
       }
-      const done = await forgetAndBury(
-        repo.value,
-        graveyard.value,
-        c.name,
-        dir,
+      // Escape control characters without breaking the column contract.
+      lines.push(
+        [ws.dir, kind, label, c.change, c.age, reason]
+          .map((field) => field.replaceAll("\t", "\\t").replaceAll("\n", "\\n"))
+          .join("\t"),
       );
-      if (done.ok) lines.push(`collected\t${dir}\t${c.verdict.reason}`);
-      else {
-        failed.push(dir);
-        lines.push(`FAILED\t${dir}\t${msg(done)}`);
-      }
     }
     return good({ lines, failed });
   });
+}
+
+/** Consumer registry is data, never executable configuration. Include pending consumers too. */
+export async function gcAll(
+  options: Omit<GcOptions, "repo">,
+  root = resolve(import.meta.dir, "../../.."),
+): Promise<Attempt<{ lines: string[]; failed: string[] }>> {
+  const read = await attempt(async () =>
+    Bun.TOML.parse(await Bun.file(join(root, "presets/consumers.toml")).text()),
+  );
+  if (!read.ok) return read;
+  const row = z.looseObject({ root: z.string() });
+  const registry = z
+    .looseObject({
+      consumers: z.array(row).default([]),
+      pending: z.array(row).default([]),
+    })
+    .safeParse(read.value);
+  if (!registry.success)
+    return bad(`consumer registry: ${registry.error.message}`);
+  const roots = new Set([
+    root,
+    ...registry.data.consumers.map((r) => r.root),
+    ...registry.data.pending.map((r) => r.root),
+  ]);
+  const lines: string[] = [];
+  const failed: string[] = [];
+  const seen = new Set<string>();
+  for (const path of roots) {
+    const expanded = path.startsWith("~/")
+      ? join(homedir(), path.slice(2))
+      : path;
+    const repo = resolveRepo(expanded);
+    if (!repo.ok) {
+      failed.push(path);
+      lines.push(`${path}\trepo\tFAILED\t?\t?\t${msg(repo)}`);
+      continue;
+    }
+    if (seen.has(repo.value.backing)) continue;
+    seen.add(repo.value.backing);
+    const done = await gc({ ...options, repo: repo.value.backing });
+    if (!done.ok) {
+      failed.push(path);
+      lines.push(`${path}\trepo\tFAILED\t?\t?\t${msg(done)}`);
+      continue;
+    }
+    lines.push(...done.value.lines);
+    failed.push(...done.value.failed);
+  }
+  return good({ lines, failed });
 }

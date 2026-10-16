@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 — 2026-10-16
+
+- Enumerate all jj workspaces for gc, protect committed keep declarations, resolve repository trunk, and opt legacy cleanup in with --legacy; add --all and TSV classification.
+
 ## 0.2.1 — 2026-10-16
 
 - Move the workspace CLI under the agx-ws part and keep ws

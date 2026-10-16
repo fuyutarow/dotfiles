@@ -2,7 +2,7 @@
 import { cli, command } from "cleye";
 import { errorMessage } from "../../shared/src/attempt.ts";
 import packageJson from "../package.json" with { type: "json" };
-import { add, gc, refresh, remove } from "./workspace.ts";
+import { add, gc, gcAll, refresh, remove } from "./workspace.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -30,7 +30,7 @@ const addCommand = command(
     ignoreArgv: rejectPrototypeFlag,
     help: {
       description:
-        "Create <repo>.ws/ws_<slug>, trust its mise.toml or .mise.toml, then run readiness commands (.ws.toml) before handing it to a sandboxed worker.",
+        "The only workspace creator: create <repo>.ws/ws_<slug>, trust its mise.toml or .mise.toml, then run readiness commands (.ws.toml).",
     },
     flags: {
       rev: {
@@ -107,14 +107,23 @@ const refreshCommand = command(
 const gcCommand = command(
   {
     name: "gc",
+    parameters: [],
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
     help: {
       description:
-        "Collect terminal agx lineages with no live pid and no unlanded change; report everything else.",
+        "Enumerate jj workspaces. Print TSV: path, kind, verdict, change id, age, reason. Legacy workspaces are report-only until --legacy. .ws.toml keep is always protected; ws add is the only creator.",
     },
     flags: {
       dryRun: { type: Boolean, description: "report only; remove nothing" },
+      legacy: {
+        type: Boolean,
+        description: "also forget and rip empty or landed legacy workspaces",
+      },
+      all: {
+        type: Boolean,
+        description: "visit every consumer registry repo plus dotfiles",
+      },
       includeUnrecorded: {
         type: Boolean,
         description:
@@ -124,11 +133,18 @@ const gcCommand = command(
     },
   },
   async (argv) => {
-    const done = await gc({
-      repo: argv.flags.repo ?? process.cwd(),
+    if (argv.flags.all === true && argv.flags.repo !== undefined) {
+      fail("--all and --repo cannot be combined");
+      return;
+    }
+    const options = {
       dryRun: argv.flags.dryRun === true,
       includeUnrecorded: argv.flags.includeUnrecorded === true,
-    });
+      legacy: argv.flags.legacy === true,
+    };
+    const done = await (argv.flags.all === true
+      ? gcAll(options)
+      : gc({ ...options, repo: argv.flags.repo ?? process.cwd() }));
     if (!done.ok) {
       fail(done.error);
       return;

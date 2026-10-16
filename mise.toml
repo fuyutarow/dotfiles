@@ -139,7 +139,6 @@ depends = [
   "lint:zsh",
   "lint:bun",
   "lint:ts",
-  "lint:oxlint-policy",
   "vendor:deps:check",
   "lint:one-writer",
   "lint:hook-slug",
@@ -235,7 +234,7 @@ run = "bun scripts/render-oxlintrc.ts --check"
 
 [tasks.preset]
 dir = "{{config_root}}"
-description = "List, apply or compare project configuration presets: mise run preset -- list|apply|diff <name> --to <dir>"
+description = "List, apply, sync or compare project configuration presets: mise run preset -- list|apply|sync|diff <name> --to <dir>"
 run = "bun presets/src/cli.ts"
 
 # INV-8 (README → Design): data flows one way — declaration → render → deployed → runtime — and
@@ -331,7 +330,7 @@ run = "bun scripts/lint-bun.ts"
 dir = "{{config_root}}"
 description = "oxlint --type-aware the repo's TS against .oxlintrc.json, with no disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
-depends = ["lint:ts-no-disable", "lint:oxlint-policy", "lint:no-sync"]
+depends = ["lint:ts-no-disable", "lint:no-sync"]
 run = "bunx --bun oxlint --type-aware"
 
 # node/no-sync for non-test TS, run through oxlint's own rule (scripts/lint-no-sync.ts). A genuinely
@@ -461,7 +460,7 @@ run = 'bun ~/dotfiles/scripts/test-mise-scope.ts'
 [tasks.check]
 alias = "c"
 description = "全gate集約 (CI): fmt:check + lint + test"
-depends = ["fmt:check", "lint", "test", "usehooks:consumers"]
+depends = ["fmt:check", "lint", "test", "usehooks:consumers", "lint:oxlint-policy"]
 
 # Single whole-tree, non-mutating check list used by tickets and hook:pre-commit.
 [tasks."gate:land"]

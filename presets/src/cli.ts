@@ -42,7 +42,10 @@ const argv = cli(
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
     parameters: ["<action>", "[name]", "[dir]"],
-    help: { description: "Apply a dotfiles preset or show target drift." },
+    help: {
+      description:
+        "Apply a dotfiles preset, sync its policy render, or show target drift.",
+    },
     flags: {
       to: { type: String, description: "target repository" },
       "dry-run": {
@@ -58,8 +61,8 @@ const argv = cli(
 
 const [action, name, targetArg] = argv._;
 if (argv._.length > 3) fatal("too many arguments");
-if (action !== "apply" && action !== "diff" && action !== "list")
-  fatal("use list, apply or diff");
+if (!["apply", "sync", "diff", "list"].includes(action ?? ""))
+  fatal("use list, apply, sync or diff");
 const catalog = await discoverPresets(PRESETS);
 if (!catalog.ok) fatal(catalog.error);
 if (action === "list") {
@@ -84,15 +87,17 @@ if (action === "list") {
 const preset = catalog.presets.find((entry) => entry.name === name);
 if (preset === undefined)
   fatal(`unknown preset: ${name ?? "(missing name)"}; use preset list`);
-if (argv.flags["dry-run"] && action !== "apply")
-  fatal("--dry-run is only valid with apply");
-const targetText =
-  action === "apply" ? argv.flags.to : (argv.flags.to ?? targetArg);
+const writes = action === "apply" || action === "sync";
+if (action === "sync" && name !== "typescript")
+  fatal("sync currently supports typescript only");
+if (argv.flags["dry-run"] && !writes)
+  fatal("--dry-run is only valid with apply or sync");
+const targetText = writes ? argv.flags.to : (argv.flags.to ?? targetArg);
 if (targetText === undefined || targetText.length === 0) {
-  fatal(action === "apply" ? "apply needs --to <dir>" : "diff needs <dir>");
+  fatal(writes ? `${action} needs --to <dir>` : "diff needs <dir>");
 }
-if (action === "apply" && targetArg !== undefined)
-  fatal("apply accepts --to, not a positional directory");
+if (writes && targetArg !== undefined)
+  fatal(`${action} accepts --to, not a positional directory`);
 if (action === "diff" && argv.flags.to !== undefined && targetArg !== undefined)
   fatal("diff accepts one target: positional directory or --to");
 const target = resolve(targetText);
@@ -106,6 +111,7 @@ const files = preset.files.map((file) => ({
 
 const expected = new Map<string, string>();
 for (const file of files) {
+  if (action === "sync") continue;
   if (file.createOnly === true && (await exists(file.destination))) continue;
   expected.set(file.destination, await readFile(file.source, "utf8"));
 }
@@ -117,7 +123,8 @@ if (name === "typescript") {
     console.log(
       "preset: stale oxlint-policy.toml exists; renderer uses dotfiles' presets/typescript/policy.toml; review and remove the unused copy manually",
     );
-  const repoPolicy = await loadRepoPolicy(target, loaded.value);
+  const repoPolicy =
+    target === ROOT ? loaded : await loadRepoPolicy(target, loaded.value);
   if (repoPolicy.ok)
     expected.set(
       join(target, ".oxlintrc.json"),
@@ -141,7 +148,7 @@ async function applyOne(destination: string, content: string): Promise<void> {
   }
 }
 
-if (action === "apply") {
+if (writes) {
   for (const [destination, content] of expected)
     await applyOne(destination, content);
   process.exit(0);

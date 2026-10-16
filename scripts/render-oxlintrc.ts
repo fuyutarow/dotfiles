@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
-import { z } from "../agents/hooks/zod.ts";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 const ROOT = join(import.meta.dir, "..");
 export const POLICY_PATH = join(ROOT, "presets", "typescript", "policy.toml");
@@ -90,7 +90,14 @@ const PolicySchema = z
   .refine((p) => new Set(p.custom.map((c) => c.id)).size === p.custom.length, {
     message: "custom ids must be unique",
   });
-export type Policy = z.output<typeof PolicySchema>;
+export type Policy = z.output<typeof PolicySchema> & {
+  presetRevision?: string;
+};
+
+/** Content revision of the canonical policy, independent of unrelated owner commits. */
+export function presetRevision(policy: Policy): string {
+  return `sha256:${Bun.CryptoHasher.hash("sha256", JSON.stringify(policy), "hex")}`;
+}
 
 const LocalSchema = z.strictObject({
   schema: z.literal(1),
@@ -138,6 +145,7 @@ export async function loadRepoPolicy(
     ok: true,
     value: {
       ...base,
+      presetRevision: presetRevision(base),
       js_plugins: base.js_plugins,
       ignore: [...base.ignore, ...local.data.ignore],
       overrides: [
@@ -207,6 +215,9 @@ export function renderOxlintrc(p: Policy): string {
   ];
   const config = {
     $schema: "./node_modules/oxlint/configuration_schema.json",
+    ...(p.presetRevision === undefined
+      ? {}
+      : { settings: { dotfiles: { presetRevision: p.presetRevision } } }),
     plugins: p.plugins,
     jsPlugins: p.js_plugins,
     categories: p.categories,
@@ -284,8 +295,25 @@ if (import.meta.main) {
     process.exit(0);
   }
   if (argv.flags.check) {
+    const metadata = current.ok
+      ? jsonOf(
+          z.looseObject({
+            settings: z.looseObject({
+              dotfiles: z.looseObject({ presetRevision: z.string() }),
+            }),
+          }),
+        ).safeParse(current.value)
+      : undefined;
+    const previous =
+      metadata?.success === true
+        ? metadata.data.settings.dotfiles.presetRevision
+        : "unknown (unversioned render)";
+    const revision =
+      policy.value.presetRevision ?? presetRevision(loaded.value);
     console.log(
-      `render-oxlintrc: DRIFT — ${target} is not a fresh render of the policy; edit the TOML, then rerun with --write${repo === undefined ? " (mise run oxlint:render)" : ` --repo ${repo}`}`,
+      previous === revision
+        ? `render-oxlintrc: ${target} differs from preset ${revision}; run preset sync (mise run preset -- sync typescript --to ${repo ?? ROOT})`
+        : `render-oxlintrc: preset moved from ${previous} to ${revision}; run preset sync (mise run preset -- sync typescript --to ${repo ?? ROOT})`,
     );
     process.exit(1);
   }

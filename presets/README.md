@@ -15,6 +15,7 @@ mise run preset -- list
 mise run preset -- apply typescript --to /path/to/repo
 mise run preset -- apply typescript --to /path/to/repo --dry-run
 mise run preset -- diff typescript --to /path/to/repo
+mise run preset -- sync typescript --to /path/to/repo
 ```
 
 `list` prints names and descriptions in the language order above, followed by

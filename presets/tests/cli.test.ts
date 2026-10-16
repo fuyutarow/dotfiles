@@ -10,7 +10,11 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { loadPolicy, renderOxlintrc } from "../../scripts/render-oxlintrc.ts";
+import {
+  loadPolicy,
+  presetRevision,
+  renderOxlintrc,
+} from "../../scripts/render-oxlintrc.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "preset-manifests-"));
@@ -199,6 +203,7 @@ describe("manifest preset CLI", () => {
     expect(await readFile(join(repo, ".oxlintrc.json"), "utf8")).toBe(
       renderOxlintrc({
         ...base.value,
+        presetRevision: presetRevision(base.value),
         ignore: [
           ...base.value.ignore,
           { pattern: "generated/**", reason: "Generated fixture" },

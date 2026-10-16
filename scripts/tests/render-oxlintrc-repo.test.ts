@@ -100,5 +100,8 @@ test("a hand edit of the rendered file is drift", () => {
   writeFileSync(join(dir, ".oxlintrc.json"), "{}\n");
   const r = render("--repo", dir, "--check");
   expect(r.code).toBe(1);
-  expect(r.text).toContain("DRIFT");
+  expect(r.text).toContain(
+    "preset moved from unknown (unversioned render) to sha256:",
+  );
+  expect(r.text).toContain("run preset sync");
 });

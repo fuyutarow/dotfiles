@@ -5,6 +5,19 @@ pinned dependencies with `bun install`, and paste `mise-tasks.toml` into the
 consumer's mise configuration. Include `lint:ts`, `lint:oxlint-policy`, and
 `typecheck` in its check gate. `lint:ts:all` checks the whole tree deliberately.
 
+Keep `lint:oxlint-policy` directly under `check`, outside `lint` and the
+`hook:pre-commit` dependency tree. The template supplies these aggregates; merge
+their dependencies with existing tasks, including the repo's `fmt:staged` task.
+An owner policy update must never block a consumer commit.
+
+Rendered consumer configs record `settings.dotfiles.presetRevision`, a SHA-256
+revision of the canonical policy. When the preset moves, `mise run check` reports
+both revisions and the repair command. From dotfiles, run
+`mise run preset -- sync typescript --to /path/to/repo` to re-render an existing
+consumer while preserving its package, compiler settings, tasks, and local policy.
+`sync --dry-run` previews the render. An unversioned render reports its old revision
+as unknown; sync upgrades it. Local edits at the same revision also fail check.
+
 To enable React checks, create `oxlint-policy.local.toml` in the consumer root:
 
 ```toml

@@ -1,8 +1,18 @@
 # The house TypeScript gates for a repo other than dotfiles. Paste these into the repo's mise.toml
-# and add "lint:ts" and "lint:oxlint-policy" to its `lint` task's depends.
+# Merge these lint/check dependencies with the repo's existing gates.
+# Policy drift belongs only in check: an owner preset update must never block a commit.
 #
 # lint:ts checks only STAGED .ts/.tsx files (wiring-repositories HOOK-1c): another session's uncommitted
 # work must never block this commit. lint:ts:all is the whole tree, for a deliberate sweep.
+
+[tasks.lint]
+depends = ["lint:ts"]
+
+[tasks.check]
+depends = ["lint", "typecheck", "lint:oxlint-policy"]
+
+[tasks."hook:pre-commit"]
+depends = ["fmt:staged", "lint"]
 
 [tasks."oxlint:render"]
 description = "Render .oxlintrc.json from the owner's policy, local ignores and React package globs"

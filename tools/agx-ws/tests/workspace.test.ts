@@ -697,6 +697,92 @@ const recFor = (dir: string) => ({
 });
 
 describe("gc integration branches", () => {
+  test("WS-GC-IMMUTABLE: collects without abandoning an immutable workspace commit", async () => {
+    const path = await repo('trunk = "main"\n');
+    expect((await ws(["add", "immutable-abandoned"], path)).code).toBe(0);
+    const dir = wsDir(path, "immutable-abandoned");
+    expect((await jj(["edit", "main"], dir)).code).toBe(0);
+    const tip = (
+      await jj(["log", "--no-graph", "-r", "@", "-T", "commit_id"], dir)
+    ).out.trim();
+    expect(
+      (
+        await jj(
+          [
+            "config",
+            "set",
+            "--repo",
+            'revset-aliases."immutable_heads()"',
+            `builtin_immutable_heads() | ${tip}`,
+          ],
+          path,
+        )
+      ).code,
+    ).toBe(0);
+    const state = join(scratch, "immutable-state");
+    const realBin = join(scratch, "immutable-bin");
+    await mkdir(state);
+    await mkdir(realBin);
+    const wrapper = join(realBin, "agx");
+    await Bun.write(
+      wrapper,
+      `#!/usr/bin/env bun\nconst p=Bun.spawn([process.execPath,${JSON.stringify(join(import.meta.dir, "../../agx/src/agx.ts"))},...process.argv.slice(2)],{stdin:"ignore",stdout:"inherit",stderr:"inherit"});process.exitCode=await p.exited;\n`,
+    );
+    await chmod(wrapper, 0o755);
+    const env = baseEnv({
+      AGX_NEXT_STATE_DIR: state,
+      PATH: `${realBin}:${bin}:${process.env.PATH}`,
+    });
+    const old = Temporal.Now.instant().subtract({ hours: 48 }).toString();
+    const id = "immutable-abandoned-first";
+    await Bun.write(
+      join(state, "records.jsonl"),
+      `${[
+        {
+          kind: "started",
+          id,
+          at: old,
+          ticket: id,
+          writes: [],
+          cwd: path,
+          workspace: dir,
+          row: "fixture",
+          dispatcher_session: null,
+          vendor_session: null,
+          pid: process.pid,
+        },
+        {
+          kind: "ended",
+          id,
+          at: old,
+          exit: 1,
+          outcome: "verify-failed",
+          report_path: null,
+          vendor_session: null,
+          verify: [],
+        },
+      ]
+        .map((event) => JSON.stringify(event))
+        .join("\n")}\n`,
+    );
+    const collected = await ws(["gc", "--abandoned"], path, env);
+    expect(collected.code, collected.err).toBe(0);
+    expect(collected.out).toContain(`${dir}\tws\tcollected\t`);
+    expect(collected.out).toContain("immutable commit retained");
+    expect(await Bun.file(join(dir, "a.txt")).exists()).toBe(false);
+    expect((await jj(["workspace", "list"], path)).out).not.toContain(
+      "ws_immutable-abandoned",
+    );
+    expect(
+      (
+        await jj(
+          ["log", "--no-graph", "-r", "all()", "-T", 'commit_id ++ "\\n"'],
+          path,
+        )
+      ).out,
+    ).toContain(tip);
+  });
+
   test("WS-GC-UNACCEPTED: only opts old unaccepted work into abandonment", async () => {
     const path = await repo('trunk = "main"\nkeep = ["ws_kept"]\n');
     const slugs = [

@@ -30,6 +30,13 @@ const bad = (message: string): Attempt<never> => ({
 });
 const good = <T>(value: T): Attempt<T> => ({ ok: true, value });
 const msg = (failed: { error: unknown }): string => errorMessage(failed.error);
+const gcCollectionReason = (
+  reason: string,
+  result: Attempt<boolean>,
+): string => {
+  if (!result.ok) return msg(result);
+  return result.value ? `${reason}; immutable commit retained` : reason;
+};
 
 export type Repo = {
   backing: string;
@@ -341,30 +348,44 @@ async function forgetAndBury(
   name: string,
   dir: string,
   abandon = false,
-): Promise<Attempt<void>> {
+): Promise<Attempt<boolean>> {
   const tip = abandon
     ? await jjOut(
-        ["log", "--no-graph", "-r", `${name}@`, "-T", "commit_id"],
+        [
+          "log",
+          "--no-graph",
+          "-r",
+          `${name}@`,
+          "-T",
+          'commit_id ++ "\\t" ++ immutable',
+        ],
         repo.backing,
         true,
       )
     : good("");
   if (!tip.ok) return tip;
+  const [tipId, immutableValue] = tip.value.trim().split("\t");
+  if (
+    abandon &&
+    (tipId === undefined ||
+      (immutableValue !== "true" && immutableValue !== "false"))
+  )
+    return bad(`cannot determine whether ${name}@ is immutable`);
+  let immutable = immutableValue === "true";
   const forgot = await jjOut(
     ["workspace", "forget", name],
     repo.backing,
     false,
   );
   if (!forgot.ok) return forgot;
-  if (abandon) {
-    const abandoned = await jjOut(
-      ["abandon", tip.value.trim()],
-      repo.backing,
-      false,
-    );
-    if (!abandoned.ok) return abandoned;
+  if (abandon && !immutable && tipId !== undefined) {
+    const abandoned = await jjOut(["abandon", tipId], repo.backing, false);
+    if (!abandoned.ok && !msg(abandoned).includes("immutable"))
+      return abandoned;
+    immutable = !abandoned.ok;
   }
-  return bury(graveyard, dir);
+  const buried = await bury(graveyard, dir);
+  return buried.ok ? good(immutable) : buried;
 }
 
 /** Hold land's own lock through removal, closing the gap after classification. */
@@ -373,7 +394,7 @@ async function collectWorkspace(
   graveyard: Graveyard,
   ws: Workspace,
   abandon = false,
-): Promise<Attempt<void>> {
+): Promise<Attempt<boolean>> {
   const state = landState(ws);
   if (state === undefined)
     return forgetAndBury(repo, graveyard, ws.name, ws.dir, abandon);
@@ -1272,7 +1293,7 @@ export async function gc(
           c.verdict === "abandoned",
         );
         label = done.ok ? "collected" : "FAILED";
-        reason = done.ok ? reason : msg(done);
+        reason = gcCollectionReason(reason, done);
         failed.push(...(done.ok ? [] : [ws.dir]));
       }
       // Escape control characters without breaking the column contract.

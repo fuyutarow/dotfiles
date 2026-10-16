@@ -20,6 +20,8 @@ import { join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { brewPrefix } from "../core-tools.ts";
 
+import { ROUTING_OBJECTIVE } from "../../agents/models/roster.ts";
+
 const SCRIPT = join(import.meta.dir, "..", "render-home.ts");
 const ROOT = join(import.meta.dir, "..", "..");
 const ROUTE_BIAS = [
@@ -213,9 +215,9 @@ describe("render-home: base only", () => {
     // A real file, never a symlink — the whole point of the change.
     expect(lstatSync(dest(home)).isSymbolicLink()).toBe(false);
     const policy = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
-    expect(policy).toContain(
-      "Subscription pace: among capability-eligible comparable rows, prefer the route with the most negative fresh-window pace",
-    );
+    expect(policy).toContain(ROUTING_OBJECTIVE);
+    expect(policy.split(ROUTING_OBJECTIVE)).toHaveLength(2);
+    expect(policy).not.toContain("comparable-ticket tradeoff line");
     expect(policy).not.toContain(
       "when codex and claude rows are comparable, choose codex",
     );

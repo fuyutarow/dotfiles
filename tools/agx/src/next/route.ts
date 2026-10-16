@@ -10,6 +10,7 @@ import {
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { exitWithError } from "./exit.ts";
 import { readRouteUsage } from "./usage.ts";
+import { gradedHistory } from "./history.ts";
 import { foldedRuns, setPendingPickAudit } from "./store.ts";
 
 const Reply = z.looseObject({
@@ -57,7 +58,7 @@ export async function route(
         ["low", "medium", "high", "xhigh", "max"].indexOf(a.effort) -
         ["low", "medium", "high", "xhigh", "max"].indexOf(b.effort),
     );
-  const usage = readRouteUsage();
+  const usage = await readRouteUsage();
   const candidates = eligible.filter((row) => usage[row.route].available);
   if (candidates.length === 0)
     return exitWithError(
@@ -66,22 +67,35 @@ export async function route(
         : "agx: all capability-eligible routes are at their subscription limit\n",
       2,
     );
+  const history = await gradedHistory(foldedRuns(), brief);
   const criteria = Object.fromEntries(
-    candidates.map((row) => [row.id, criterionFor(roster, row)]),
+    candidates.map((row) => [
+      row.id,
+      criterionFor(roster, row, history(row.id)),
+    ]),
   );
   const request: Record<string, unknown> = {
     state: {
-      task: brief.slice(0, roster.auto.max_task_chars),
-      routes: usage,
-      history: foldedRuns()
-        .filter((run) => run.state === "ended")
-        .slice(-50)
-        .map((run) => ({
-          id: run.id,
-          row: run.row,
-          ticket: run.ticket,
-          outcome: run.outcome,
-        })),
+      task: brief.slice(0, Math.min(roster.auto.max_task_chars, 2400)),
+      routes: Object.fromEntries(
+        Object.entries(usage).map(([name, value]) => [
+          name,
+          {
+            available: value.available,
+            windows: Object.fromEntries(
+              Object.entries(value.windows).map(([windowName, window]) => [
+                windowName,
+                {
+                  used_percent: window.used_percent,
+                  elapsed_fraction: window.elapsed_fraction,
+                  pace: window.pace,
+                  status: window.status,
+                },
+              ]),
+            ),
+          },
+        ]),
+      ),
       task_size: {
         timeout_s: timeoutS,
         class: timeoutClass,
@@ -93,7 +107,7 @@ export async function route(
     questions: {
       worker: {
         type: "choice",
-        instructions: `${ROUTING_OBJECTIVE} Subscription pace is an additional route criterion: among capability-eligible comparable rows, prefer the route with the most negative fresh-window pace (quota likely to expire unused), and avoid a positive-pace route when the other route has a comparable row. Stale or unknown usage is neutral and must not create a route preference. Never choose a route whose availability is false. Pick a roster row for this ticket.`,
+        instructions: `${ROUTING_OBJECTIVE} Pick a roster row for this ticket.`,
         criteria,
       },
     },

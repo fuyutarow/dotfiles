@@ -18,24 +18,21 @@ const scratch = () => {
   return root;
 };
 
-test("ended fixtures and router history use measured outcomes even when workers exit zero", async () => {
+test("ended fixtures retain measured outcomes while routing omits ungraded raw history", async () => {
   const root = scratch();
   const state = join(root, "state");
-  const History = z.array(
-    z.strictObject({
-      id: z.string(),
-      row: z.string(),
-      ticket: z.string(),
-      outcome: z.string(),
+  const Request = z.looseObject({
+    state: z.looseObject({}),
+    questions: z.object({
+      worker: z.looseObject({ criteria: z.record(z.string(), z.string()) }),
     }),
-  );
-  const Request = z.looseObject({ state: z.looseObject({ history: History }) });
-  let history: z.output<typeof History> = [];
+  });
+  let captured: z.output<typeof Request> | undefined;
   const server = Bun.serve({
     port: 0,
     fetch: async (request) => {
       const parsed = jsonOf(Request).safeParse(await request.text());
-      if (parsed.success) history = parsed.data.state.history;
+      if (parsed.success) captured = parsed.data;
       return Response.json({ answers: { worker: { choice: "luna-high" } } });
     },
   });
@@ -97,7 +94,10 @@ test("ended fixtures and router history use measured outcomes even when workers 
     );
     expect(receipt.success).toBe(true);
     if (receipt.success) expect(receipt.data.outcome).toBe(outcome);
-    expect(history.map((run) => run.outcome)).toEqual(expected);
+    expect(captured?.state.history).toBeUndefined();
+    expect(captured?.questions.worker.criteria["luna-high"]).toContain(
+      "graded here 0/0/0",
+    );
     expected.push(outcome);
   }
   const listed = Bun.spawnSync(

@@ -4,23 +4,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { writeUsageSnapshot } from "../../../statusline/src/usage-snapshot.ts";
+import { ROUTING_OBJECTIVE } from "../../../../agents/models/roster.ts";
+import { readRouteUsage } from "../../src/next/usage.ts";
 import { route } from "../../src/next/route.ts";
 import { append, events, now } from "../../src/next/store.ts";
 import { parseNextTicket } from "../../src/next/ticket.ts";
 
 const RoutingRequest = z.looseObject({
   state: z.looseObject({
+    task: z.string(),
     routes: z.looseObject({
       claude: z.looseObject({
         available: z.boolean(),
-        usage_status: z.string(),
-        preference: z.string(),
         windows: z.record(
           z.string(),
           z.looseObject({
             used_percent: z.number().nullable(),
-            resets_at: z.number().nullable(),
-            window_seconds: z.number(),
             elapsed_fraction: z.number().nullable(),
             pace: z.number().nullable(),
             status: z.string(),
@@ -29,14 +28,10 @@ const RoutingRequest = z.looseObject({
       }),
       codex: z.looseObject({
         available: z.boolean(),
-        usage_status: z.string(),
-        preference: z.string(),
         windows: z.record(
           z.string(),
           z.looseObject({
             used_percent: z.number().nullable(),
-            resets_at: z.number().nullable(),
-            window_seconds: z.number(),
             elapsed_fraction: z.number().nullable(),
             pace: z.number().nullable(),
             status: z.string(),
@@ -159,6 +154,158 @@ afterEach(async () => {
 });
 
 describe("capability constrained routing", () => {
+  test("graded aggregate is passed to criterionFor without raw history", async () => {
+    isolateState();
+    const started = appendStarted("luna-high");
+    expect(started?.kind).toBe("started");
+    if (started?.kind !== "started") return;
+    append({
+      kind: "ended",
+      id: started.id,
+      at: now(),
+      exit: 0,
+      outcome: "ok",
+      report_path: null,
+      vendor_session: null,
+    });
+    append({
+      kind: "judged",
+      id: started.id,
+      at: now(),
+      decision: "accept",
+      note: "accepted by coordinator",
+    });
+    const server = startServer("sonnet-high");
+    expect((await route("aggregate replay")).id).toBe("sonnet-high");
+    expect(server.request()?.questions.worker.criteria["luna-high"]).toContain(
+      "graded here 1/0/0; recent 1/0/0; comparable unknown",
+    );
+    expect(server.request()?.state.history).toBeUndefined();
+  });
+  test("ROUTER-PROMPT-TREE: 7d is primary, 5h is secondary, and Jev chooses Codex", async () => {
+    const { home } = isolateState();
+    const nowMs = Temporal.Now.instant().epochMilliseconds;
+    // Claude 5h = .12 - .84 = -.72; Claude 7d = .20 - .12 = +.08.
+    installUsage(home, nowMs, 20, 0.12, 34, 0.11);
+    expect(
+      writeUsageSnapshot(
+        {
+          rl5: 12,
+          rl5Reset: nowMs / 1000 + 18000 * 0.16,
+          rl7: 20,
+          rl7Reset: nowMs / 1000 + 604800 * 0.88,
+          codexRate: {
+            windows: [
+              {
+                minutes: 10080,
+                percent: 34,
+                reset: nowMs / 1000 + 604800 * 0.89,
+              },
+            ],
+            mtimeMs: nowMs,
+          },
+        },
+        nowMs / 1000,
+        { HOME: home },
+      ),
+    ).toBe(true);
+    const server = startServer("luna-high", { "luna-high": 1 });
+    expect((await route("owner ruling replay")).route).toBe("codex");
+    const request = server.request();
+    expect(request?.state.history).toBeUndefined();
+    expect(request?.state.task.length).toBeLessThanOrEqual(2400);
+    expect(request?.questions.worker.instructions).toBe(
+      `${ROUTING_OBJECTIVE} Pick a roster row for this ticket.`,
+    );
+    expect(request?.questions.worker.criteria["luna-high"]).toContain(
+      "graded here 0/0/0",
+    );
+    expect(
+      Object.keys(request?.state.routes.claude.windows["7d"] ?? {}),
+    ).toEqual(["used_percent", "elapsed_fraction", "pace", "status"]);
+    expect(Object.keys(request?.state.routes.claude.windows ?? {})).toEqual([
+      "7d",
+      "5h",
+    ]);
+    expect(request?.state.routes.claude.windows["7d"]?.pace).toBeCloseTo(
+      0.08,
+      5,
+    );
+    expect(request?.state.routes.codex.windows["7d"]?.pace).toBeCloseTo(
+      0.23,
+      5,
+    );
+    expect(request?.questions.worker.criteria["luna-high"]).toBeDefined();
+    expect(request?.questions.worker.criteria["sonnet-high"]).toBeDefined();
+    expect(request?.questions.worker.instructions).toContain(ROUTING_OBJECTIVE);
+    expect(request?.questions.worker.instructions).toContain(
+      "5-hour windows are secondary",
+    );
+    expect(ROUTING_OBJECTIVE).toContain(
+      "Keep the intended bias toward the codex route",
+    );
+    expect(ROUTING_OBJECTIVE).toContain("7-day windows most");
+  });
+
+  test("fresh Codex source survives consecutive picks and empty statusline publication", async () => {
+    const { home } = isolateState();
+    const nowMs = Temporal.Now.instant().epochMilliseconds;
+    const dir = join(home, ".codex", "sessions", "2026", "01", "01");
+    mkdirSync(dir, { recursive: true });
+    const source = join(dir, "rollout-account.jsonl");
+    await Bun.write(
+      source,
+      `${JSON.stringify({
+        timestamp: Temporal.Instant.fromEpochMilliseconds(nowMs).toString(),
+        type: "event_msg",
+        payload: {
+          type: "token_count",
+          rate_limits: {
+            secondary: {
+              used_percent: 34,
+              window_minutes: 10080,
+              resets_at: nowMs / 1000 + 604800 * 0.89,
+            },
+          },
+        },
+      })}\n`,
+    );
+    // A newer session with no rate event must not hide the fresh account source.
+    await Bun.write(
+      join(dir, "rollout-empty.jsonl"),
+      '{"type":"session_meta"}\n',
+    );
+    installUsage(home, nowMs, 20, 0.12, 34, 0.11);
+    expect((await readRouteUsage(nowMs + 1000)).codex.usage_status).toBe(
+      "fresh",
+    );
+    expect(writeUsageSnapshot({}, nowMs / 1000 + 120, { HOME: home })).toBe(
+      true,
+    );
+    const second = await readRouteUsage(nowMs + 120000);
+    expect(second.codex.usage_status).toBe("fresh");
+    expect(second.codex.source_reason).toBe(
+      "fresh Codex 7d rollout rate event",
+    );
+    expect(second.codex.windows["7d"]?.used_percent).toBe(34);
+    const third = await readRouteUsage(nowMs + 180000);
+    expect(third.codex.usage_status).toBe("fresh");
+    const stale = await readRouteUsage(nowMs + 16 * 60000);
+    expect(stale.codex.usage_status).toBe("unknown");
+    expect(stale.codex.source_reason).toBe("no fresh Codex rollout source");
+  });
+
+  test("missing Codex source is explained in the pick audit", async () => {
+    isolateState();
+    startServer("luna-high", { "luna-high": 1 });
+    const selected = await route("missing source audit");
+    const started = appendStarted(selected.id);
+    if (started?.kind === "started")
+      expect(started.pick_audit?.usage_snapshot).toMatchObject({
+        codex: { source_reason: "no fresh Codex rollout source" },
+      });
+  });
+
   test("th_purge replay rejects luna-medium and sends timeout as task size", async () => {
     isolateState();
     const server = startServer("luna-medium", {
@@ -176,8 +323,9 @@ describe("capability constrained routing", () => {
       parsed.ticket.timeout_s,
     );
     expect(selected.id).toBe("sol-low");
-    expect(server.request()?.state.routes.claude.usage_status).toBe("unknown");
-    expect(server.request()?.state.routes.claude.preference).toBe("neutral");
+    expect(server.request()?.state.routes.claude.windows["7d"]?.status).toBe(
+      "unknown",
+    );
     expect(server.request()?.state.task_size).toEqual({
       timeout_s: 14_400,
       class: "multi-hour",
@@ -236,21 +384,17 @@ describe("capability constrained routing", () => {
     const codexWeek = request?.state.routes.codex.windows["7d"];
     expect(claudeWeek).toMatchObject({
       used_percent: 3,
-      window_seconds: 604800,
       status: "fresh",
     });
     expect(claudeWeek?.elapsed_fraction).toBeCloseTo(0.94, 5);
     expect(claudeWeek?.pace).toBeCloseTo(-0.91, 5);
     expect(codexWeek).toMatchObject({
       used_percent: 45,
-      window_seconds: 604800,
       status: "fresh",
     });
     expect(codexWeek?.elapsed_fraction).toBeCloseTo(0.28, 5);
     expect(codexWeek?.pace).toBeCloseTo(0.17, 5);
-    expect(request?.questions.worker.instructions).toContain(
-      "prefer the route with the most negative fresh-window pace",
-    );
+    expect(request?.questions.worker.instructions).toContain(ROUTING_OBJECTIVE);
     expect(request?.questions.worker.instructions).toContain(
       "Stale or unknown usage is neutral",
     );
@@ -260,10 +404,9 @@ describe("capability constrained routing", () => {
     const started = appendStarted(selected.id);
     expect(started?.kind).toBe("started");
     if (started?.kind === "started")
-      expect(started.pick_audit).toEqual({
+      expect(started.pick_audit).toMatchObject({
         source: "jev",
         probabilities: { "sonnet-high": 1, "luna-high": 0 },
-        usage_snapshot: request?.state.routes,
       });
   });
 
@@ -300,12 +443,10 @@ describe("capability constrained routing", () => {
     expect(routes).toBeDefined();
     if (routes === undefined) return;
     expect(routes.claude.available).toBe(true);
-    expect(routes.claude.usage_status).toBe("stale");
-    expect(routes.claude.preference).toBe("neutral");
+
     expect(routes.claude.windows["7d"]?.status).toBe("stale");
     expect(routes.claude.windows["7d"]?.pace).toBeNull();
     expect(routes.codex.available).toBe(true);
-    expect(routes.codex.preference).toBe("neutral");
     appendStarted(selected.id);
   });
 
@@ -324,8 +465,8 @@ describe("capability constrained routing", () => {
       expect(started.pick_audit?.probabilities).toEqual({
         "not-a-roster-row": 1,
       });
-      expect(started.pick_audit?.usage_snapshot).toEqual(
-        server.request()?.state.routes,
+      expect(started.pick_audit?.usage_snapshot).toMatchObject(
+        server.request()?.state.routes ?? {},
       );
     }
   });

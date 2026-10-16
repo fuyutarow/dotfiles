@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.6 — 2026-10-16
+
+- Route from one four-branch objective with compact graded history and usage inputs; retain fresh Codex usage across consecutive picks.
+
 ## 4.11.5 — 2026-10-16
 
 - Narrow the Claude sandbox settings argument in the runner test.

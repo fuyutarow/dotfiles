@@ -2,6 +2,9 @@ import {
   readSubscriptionUsageSnapshot,
   type SubscriptionUsageWindow,
 } from "../../../shared/src/subscription-usage.ts";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import { readCodexSubscriptionUsage } from "../../../shared/src/codex-subscription-usage.ts";
 
 const MAX_AGE_MS = 15 * 60 * 1000;
 
@@ -18,6 +21,7 @@ export type RouteUsageState = {
   usage_status: "fresh" | "stale" | "unknown";
   preference: "pace" | "neutral";
   windows: Record<string, WindowUsageState>;
+  source_reason?: string;
 };
 export type RouteUsage = Readonly<{
   claude: RouteUsageState;
@@ -25,7 +29,7 @@ export type RouteUsage = Readonly<{
 }>;
 
 const EMPTY_WINDOWS = {
-  claude: { "5h": 5 * 60 * 60, "7d": 7 * 24 * 60 * 60 },
+  claude: { "7d": 7 * 24 * 60 * 60, "5h": 5 * 60 * 60 },
   codex: { "7d": 7 * 24 * 60 * 60 },
 } satisfies Record<"claude" | "codex", Record<string, number>>;
 
@@ -113,18 +117,34 @@ function routeState(
 }
 
 /** Convert the statusline-owned snapshot into the fresh, stale, or unknown route state Jev sees. */
-export function readRouteUsage(
+export async function readRouteUsage(
   nowMs = Temporal.Now.instant().epochMilliseconds,
-): RouteUsage {
+): Promise<RouteUsage> {
   const snapshot = readSubscriptionUsageSnapshot();
   const claude = snapshot?.routes.claude;
   const codex = snapshot?.routes.codex;
+  const recovered =
+    assessWindow(codex?.["7d"], EMPTY_WINDOWS.codex["7d"], nowMs).status ===
+    "fresh"
+      ? { window: codex?.["7d"], reason: "fresh statusline snapshot" }
+      : await readCodexSubscriptionUsage(
+          join(process.env.HOME ?? homedir(), ".codex", "sessions"),
+          nowMs,
+          MAX_AGE_MS,
+        );
   return {
     claude: routeState(
-      { "5h": claude?.["5h"], "7d": claude?.["7d"] },
+      { "7d": claude?.["7d"], "5h": claude?.["5h"] },
       EMPTY_WINDOWS.claude,
       nowMs,
     ),
-    codex: routeState({ "7d": codex?.["7d"] }, EMPTY_WINDOWS.codex, nowMs),
+    codex: {
+      ...routeState(
+        { "7d": recovered.window ?? codex?.["7d"] },
+        EMPTY_WINDOWS.codex,
+        nowMs,
+      ),
+      source_reason: recovered.reason,
+    },
   };
 }

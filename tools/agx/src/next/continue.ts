@@ -31,7 +31,7 @@ export async function pinContinuation(
   const row = loaded.value.choice.find((entry) => entry.id === previous.row);
   if (row === undefined)
     return refuse(`its row ${previous.row} is not in the roster`);
-  if (!readRouteUsage()[row.route].available)
+  if (!(await readRouteUsage())[row.route].available)
     return refuse(`its ${row.route} route is at its subscription limit`);
   return {
     previousId: previous.id,

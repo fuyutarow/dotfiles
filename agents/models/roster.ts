@@ -125,10 +125,22 @@ export function costMultiple(r: Roster, c: Choice): number | undefined {
   return Math.round((own / cheapest) * 10) / 10;
 }
 
-export type Graded = Readonly<{ pass: number; partial: number; fail: number }>;
+export type GradeCounts = Readonly<{
+  accepted: number;
+  partial: number;
+  rejected: number;
+}>;
+export type Graded = Readonly<{
+  here: GradeCounts;
+  recent: GradeCounts;
+  comparable?: GradeCounts;
+}>;
 
 export const ROUTING_OBJECTIVE =
-  "Objective: maximize this ticket's expected accepted-returns-per-hour: expected acceptance rate multiplied by 3600 and divided by expected time to first return, using the comparable-ticket tradeoff line (same capability tags and size class from writes-glob count and brief length). Weigh comparable-ticket median time to first return, timeout rate, accepted rate, and cost per accepted ahead of overall records and benchmark scores. Each row marks the best observed expected throughput; when comparable history is little, treat it as uncertainty and do not silently substitute overall averages. Choose the lowest effort that does not lower that throughput; xhigh/max only when the ticket names a capability lower effort measurably lacks. Among rows within noise of each other, pick the cheaper. Cost excludes a row only when its expected cost exceeds the ticket's declared budget.";
+  "Objective: get an accepted, useful result for this ticket fast and cheaply within subscription limits. Logic tree: A. Capability sufficiency (hard): satisfy required capability tags, task size, and long terminal/agentic work; use the brief and measured capabilities to assess sufficiency. B. Expected time to an accepted return: weigh likely success, latency, and rework; choose sufficient effort. C. Cost and subscription health: weigh 7-day windows most; 5-hour windows are secondary information. Keep the intended bias toward the codex route. Pace = used fraction minus elapsed fraction; negative means quota may expire unused. Stale or unknown usage is neutral. D. History is a weak prior for reference only, never the main criterion; little history means uncertainty, not a reason to avoid a row. Counts are accepted/partial/rejected, recent means 7 days, comparable means the same proposition when recorded. agx supplies the objective and evidence; Jev decides.";
+
+const counts = (value: GradeCounts) =>
+  `${value.accepted}/${value.partial}/${value.rejected}`;
 
 /** What Jev reads about one row: what it is for, its measured capability, its price relative to the
  *  cheapest row, and how its graded runs here went. SELECTION (owner 2026-10-06: 「model パフォーマン
@@ -138,17 +150,15 @@ export const ROUTING_OBJECTIVE =
 export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
   const measured = [
     c.aa_index === undefined ? undefined : `AA ${c.aa_index}`,
-    c.tb4 === undefined
-      ? undefined
-      : `TB4 ${c.tb4}% (long terminal/agentic sessions; source: ${c.tb4_source ?? r.sources.aa_releases})`,
-    c.scicode === undefined
-      ? undefined
-      : `SciCode ${c.scicode}% (source: ${c.scicode_source ?? r.sources.aa_releases})`,
+    c.tb4 === undefined ? undefined : `TB4 ${c.tb4}% (long terminal/agentic)`,
+    c.scicode === undefined ? undefined : `SciCode ${c.scicode}%`,
   ].filter((x) => x !== undefined);
+  const comparable =
+    graded?.comparable === undefined ? "unknown" : counts(graded.comparable);
   const record =
     graded === undefined
       ? "no graded runs here yet"
-      : `graded runs here: ${graded.pass} pass, ${graded.partial} partial, ${graded.fail} fail`;
+      : `graded here ${counts(graded.here)}; recent ${counts(graded.recent)}; comparable ${comparable}`;
   return (
     `Route ${c.route}. ${c.use_for}. Measured (Artificial Analysis, ${r.as_of}): ${measured.join(", ")}. ` +
     `Price ${price(c.price_in)}/${price(c.price_out)} per 1M tokens in/out = ${costMultiple(r, c) ?? "unknown"}x the cheapest row. ${record}.`

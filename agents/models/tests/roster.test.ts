@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadRoster, rosterPolicy, rosterTable } from "../roster.ts";
+import {
+  criterionFor,
+  loadRoster,
+  rosterPolicy,
+  rosterTable,
+  ROUTING_OBJECTIVE,
+} from "../roster.ts";
 
 const routeBias = [
   ["no", "codex", "row"],
@@ -11,6 +17,28 @@ const routeBias = [
 ].map((words) => words.join(" "));
 
 describe("dispatch roster", () => {
+  test("objective has four branches and row evidence reports graded counts", async () => {
+    for (const branch of [
+      "A. Capability sufficiency (hard)",
+      "B. Expected time to an accepted return",
+      "C. Cost and subscription health",
+      "D. History is a weak prior",
+    ])
+      expect(ROUTING_OBJECTIVE).toContain(branch);
+    expect(ROUTING_OBJECTIVE).toContain("never the main criterion");
+    expect(ROUTING_OBJECTIVE).toContain("7-day windows most");
+    const loaded = await loadRoster();
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const criterion = criterionFor(loaded.value, loaded.value.choice[0]!, {
+      here: { accepted: 2, partial: 1, rejected: 3 },
+      recent: { accepted: 1, partial: 0, rejected: 1 },
+    });
+    expect(criterion).toContain(
+      "graded here 2/1/3; recent 1/0/1; comparable unknown",
+    );
+    expect(criterion).not.toContain("no graded runs here yet");
+  });
   test("loads all 40 route and effort rows with optional prices and benchmarks", async () => {
     const loaded = await loadRoster();
     expect(loaded.ok).toBe(true);

@@ -1,9 +1,5 @@
 # Changelog
 
-## 5.2.0 — 2026-10-16
-
-- Refuse out-of-home tickets and record original bytes, SHA-256, base and premise revisions, replacement links, and typed dispatch declarations.
-
 ## 5.1.2 — 2026-10-16
 
 - Recheck ended records after owner loss observation and distinguish legacy history and missing returns in doctor

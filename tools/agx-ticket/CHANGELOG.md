@@ -1,9 +1,5 @@
 # Changelog
 
-## 0.1.3 — 2026-10-16
-
-- Resolve ticket homes from committed .agx.toml so ticket creation agrees with dispatch validation.
-
 ## 0.1.2 — 2026-10-16
 
 - Add read-only ticket placement findings

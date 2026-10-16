@@ -1,4 +1,3 @@
-import { prepareTicketRepo } from "../ticket-repo.ts";
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
   chmodSync,
@@ -48,7 +47,6 @@ const CLI = "tools/agx-run/src/next/cli.ts";
 // A fixture agx project: fake Jev, a ticket, and a worker script that reports its temp variables.
 async function fixture(workerBody: string, verify: string | string[]) {
   const root = scratch("run-temp-");
-  await prepareTicketRepo(root);
   const tempRoot = join(root, "agx-tmp");
   const ticket = join(root, "ticket.md");
   const worker = join(root, "fake-worker.ts");

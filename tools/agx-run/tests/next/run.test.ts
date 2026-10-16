@@ -1,4 +1,3 @@
-import { prepareTicketRepo } from "../ticket-repo.ts";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
@@ -30,12 +29,11 @@ afterEach(() => {
   if (priorNextStateDir === undefined) delete process.env.AGX_NEXT_STATE_DIR;
   else process.env.AGX_NEXT_STATE_DIR = priorNextStateDir;
 });
-const scratch = async (prefix: string): Promise<string> => {
+const scratch = (prefix: string): string => {
   const root = registerTempDir(
     mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-${prefix}`)),
   );
   roots.push(root);
-  await prepareTicketRepo(root);
   return root;
 };
 
@@ -51,8 +49,8 @@ describe("agx-next run", () => {
     ).toBeUndefined();
   });
 
-  test("refuses dispatch when the target has an ownerless ref lock", async () => {
-    const root = await scratch("ownerless-ref-lock-");
+  test("refuses dispatch when the target has an ownerless ref lock", () => {
+    const root = scratch("ownerless-ref-lock-");
     const repo = join(root, "repo");
     mkdirSync(join(repo, ".git"), { recursive: true });
     const lock = join(repo, ".git", "packed-refs.lock");
@@ -90,7 +88,7 @@ describe("agx-next run", () => {
   });
 
   test("a sub-two-minute zero-change exit without RETURN fails its lineage", async () => {
-    const root = await scratch("early-quit-");
+    const root = scratch("early-quit-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
     process.env.AGX_NEXT_STATE_DIR = state;
@@ -129,7 +127,7 @@ describe("agx-next run", () => {
   });
 
   test("legacy early quits are read only for the matching ticket lineage", async () => {
-    const root = await scratch("legacy-early-quit-");
+    const root = scratch("legacy-early-quit-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
     process.env.AGX_NEXT_STATE_DIR = state;
@@ -173,7 +171,7 @@ describe("agx-next run", () => {
   });
 
   test("routes through Jev, starts a worker, and records its report", async () => {
-    const root = await scratch("next-run-");
+    const root = scratch("next-run-");
     const state = join(root, "state");
     const ticket = join(root, "ticket.md");
     const worker = join(root, "fake-worker.ts");
@@ -484,12 +482,6 @@ describe("agx-next run", () => {
         "ended_at",
         "started_at",
         "continues",
-        "supersedes",
-        "base_rev",
-        "premise_commits",
-        "ticket_path",
-        "ticket_orig_path",
-        "ticket_sha256",
         "cwd",
         "dispatcher_session",
         "exit",
@@ -537,7 +529,7 @@ describe("agx-next run", () => {
   }, 15_000);
 
   test("runs ticket verification in order and records every exit and log", async () => {
-    const root = await scratch("next-verify-");
+    const root = scratch("next-verify-");
     const state = join(root, "state");
     const ticket = join(root, "ticket.md");
     const worker = join(root, "fake-worker.ts");
@@ -628,8 +620,8 @@ describe("agx-next run", () => {
     expect(row.verify.every(({ log_path }) => existsSync(log_path))).toBe(true);
   });
 
-  test("validation refusal exits 2", async () => {
-    const root = await scratch("next-invalid-ticket-");
+  test("validation refusal exits 2", () => {
+    const root = scratch("next-invalid-ticket-");
     const ticket = join(root, "invalid.md");
     writeFileSync(
       ticket,
@@ -653,8 +645,8 @@ describe("agx-next run", () => {
     expect(result.stderr.toString()).toContain("invalid ticket:");
   });
 
-  test("imports sampled real legacy line shapes once", async () => {
-    const root = await scratch("next-import-");
+  test("imports sampled real legacy line shapes once", () => {
+    const root = scratch("next-import-");
     const source = join(root, "legacy");
     const destination = join(root, "next");
     const fixture = join(import.meta.dir, "fixtures/legacy-real-shapes.jsonl");
@@ -733,8 +725,8 @@ describe("agx-next run", () => {
     if (repeat.success) expect(repeat.data.runs).toBe(1);
   });
 
-  test("folds only accept and reject judgments from legacy decisions", async () => {
-    const root = await scratch("next-judgment-fold-");
+  test("folds only accept and reject judgments from legacy decisions", () => {
+    const root = scratch("next-judgment-fold-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
     const at = "2026-10-14T00:00:00Z";
@@ -888,8 +880,8 @@ describe("agx-next run", () => {
     });
   });
 
-  test("ignores unknown record fields and bounds human ls without changing JSON order", async () => {
-    const root = await scratch("next-forward-fields-");
+  test("ignores unknown record fields and bounds human ls without changing JSON order", () => {
+    const root = scratch("next-forward-fields-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
     const records: Record<string, unknown>[] = Array.from(

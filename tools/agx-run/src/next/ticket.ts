@@ -17,49 +17,17 @@ const writeGlob = z
   .string()
   .min(1)
   .refine((glob) => !glob.startsWith("/") && !glob.split("/").includes(".."));
-const Ticket = z
-  .looseObject({
-    schema: z.literal(2),
-    name: z.string().min(1).optional(),
-    writes: z.array(writeGlob).default([]),
-    outcome: z.string().trim().min(1),
-    verify: z.array(z.string().trim().min(1)).default([]),
-    timeout_s: z.number().int().min(60).max(14_400).optional(),
-    premises: z
-      .array(z.string().regex(/^(?:file|symbol|bookmark|task|rev):.+$/u))
-      .optional(),
-    base_rev: z
-      .string()
-      .regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u)
-      .optional(),
-    supersedes: oneLine.optional(),
-    first_return_s: z.number().int().positive().max(14_400).optional(),
-    external_reads: z.array(oneLine).optional(),
-    network: z.enum(["none", "allowed"]).optional(),
-    sandbox: z.enum(["none", "read-only", "workspace-write"]).optional(),
-    resources: z
-      .strictObject({
-        cpu: z.number().positive(),
-        ram_gb: z.number().nonnegative(),
-        gpu: z.number().int().nonnegative().optional(),
-        vram_gb: z.number().nonnegative().optional(),
-      })
-      .optional(),
-    capabilities: z
-      .array(CapabilitySchema)
-      .default([])
-      .transform(capabilityTags),
-    proposition: Proposition,
-  })
-  .refine(
-    (ticket) =>
-      ticket.first_return_s === undefined ||
-      ticket.first_return_s <= (ticket.timeout_s ?? 600),
-    {
-      path: ["first_return_s"],
-      message: "must not exceed timeout_s (default 600)",
-    },
-  );
+const Ticket = z.looseObject({
+  schema: z.literal(2),
+  name: z.string().min(1).optional(),
+  writes: z.array(writeGlob).default([]),
+  outcome: z.string().trim().min(1),
+  verify: z.array(z.string().trim().min(1)).default([]),
+  timeout_s: z.number().int().min(60).max(14_400).optional(),
+  premises: z.array(z.string()).optional(),
+  capabilities: z.array(CapabilitySchema).default([]).transform(capabilityTags),
+  proposition: Proposition,
+});
 
 export type NextTicket = z.output<typeof Ticket>;
 export type ParsedNextTicket =
@@ -98,29 +66,12 @@ export function parseNextTicket(text: string): ParsedNextTicket {
   if (!checked.success) {
     const issue = checked.error.issues[0];
     const path = issue?.path.map(String).join(".");
-    const examples: Record<string, string> = {
-      schema: "schema = 2",
-      outcome: 'outcome = "Deliver the result"',
-      proposition:
-        '[proposition]\\nid = "P1"\\nclaim = "Expected result"\\nrefuted_by = "Counterexample"',
-      "proposition.id": 'id = "P1"',
-      "proposition.claim": 'claim = "Expected result"',
-      "proposition.refuted_by": 'refuted_by = "Counterexample"',
-      "resources.cpu": "cpu = 1",
-      "resources.ram_gb": "ram_gb = 1",
-    };
-    const example = examples[path ?? ""];
-    const table =
-      path?.includes(".") === true
-        ? `[${path.split(".")[0]}]`
-        : "ticket front matter";
-    const suffix = example === undefined ? "" : `; example: ${example}`;
     return {
       success: false,
       reason:
         path === undefined || path === ""
           ? (issue?.message ?? "invalid ticket")
-          : `${table} ${path}: ${issue?.message ?? "invalid value"}${suffix}`,
+          : `${path}: ${issue?.message ?? "invalid value"}`,
     };
   }
 
@@ -135,13 +86,6 @@ export function parseNextTicket(text: string): ParsedNextTicket {
     "premises",
     "capabilities",
     "proposition",
-    "base_rev",
-    "supersedes",
-    "first_return_s",
-    "external_reads",
-    "network",
-    "sandbox",
-    "resources",
   ]);
   for (const key of Object.keys(fields.data))
     if (!supported.has(key)) warnings.add(key);

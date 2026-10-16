@@ -28,33 +28,11 @@ and ignored. Legacy-only fields such as `consumer`, `first_return`,
 one `WARN` line per invocation. `capabilities` are sent to Jev for routing only.
 Ticket validation and premise refusals exit 2.
 
-Optional typed declarations supplement schema 2 tickets. A malformed declaration refuses both
-`check` and `run`; missing required fields name the table, key and an example. These fields are
-included in the worker brief. Resource admission remains the caller's job; `network` declares
-the worker's task constraint and does not configure a host firewall.
-
-```toml
-base_rev = "0123456789012345678901234567890123456789" # exact --cd commit id
-external_reads = ["/path/to/reference"]
-first_return_s = 120 # positive integer, no greater than timeout_s (default 600)
-network = "none" # none | allowed
-sandbox = "workspace-write" # none | read-only | workspace-write
-resources = { cpu = 2, ram_gb = 4, gpu = 0, vram_gb = 0 }
-```
-
-Resource `cpu` is positive; `ram_gb` and optional `vram_gb` are nonnegative numbers; optional
-`gpu` is a nonnegative integer. If `resources` is supplied, `cpu` and `ram_gb` are required.
-External reads are nonempty single-line strings. The sandbox declaration selects launch mode;
-a conflicting `--sandbox` flag is refused. `first_return_s` is an interim-report deadline passed
-to the worker, rather than a second process timeout. `supersedes = "RUN_ID"` (or
-`--supersedes RUN_ID`) records replacement by a fresh dispatch; it cannot accompany `--continue`.
-
 ## Event lines
 
 - `started`: `{ "kind": "started", "id", "at", "ticket", "writes",
   "cwd", "workspace", "row", "dispatcher_session", "vendor_session", "pid",
-  "continues?", "supersedes?", "base_rev?", "premise_commits?", "ticket_path?",
-  "ticket_orig_path?", "ticket_sha256?", "legacy_key?" }`.
+  "continues?", "legacy_key?" }`.
   Session identifiers are nullable; `writes` is the ticket's relative path-glob list.
   `pid` is the dispatch process id. New runs include `lease: { pid, start, unit }`: start identifies the process (Linux boot id plus start ticks); unit is the owning systemd service when present.
 - `progress`: `{ "kind": "progress", "id", "at", "path", "legacy_key?" }`. `path` points to
@@ -105,12 +83,6 @@ The output is an array of objects with these contract fields:
 | `verify` | Ordered `{ "cmd", "exit", "log_path" }` facts from ticket verification, or `[]` when no commands were declared / for older records. |
 | `last_progress_path` | Most recent interim-return path, or `null`. |
 | `continues` | Previous agx run id supplied via `--continue`, or `null` for a fresh run. |
-| `supersedes` | Run replaced by this fresh dispatch, or `null`; absent in historical runs. |
-| `base_rev` | Full commit id observed in the `--cd` tree before routing; absent in historical runs. |
-| `premise_commits` | `{ premise, commit }` entries: revision/bookmark premises resolve their referenced commit; file, symbol and task checks are observed in the tree at `base_rev`. |
-| `ticket_path` | Absolute source ticket path. |
-| `ticket_orig_path` | Per-run provenance copy, preserved byte-for-byte. |
-| `ticket_sha256` | SHA-256 of those original bytes; also written to `ticket.orig.md.sha256`. |
 | `vendor_session` | Latest worker vendor session identifier, or `null`. |
 
 ## Behavior notes

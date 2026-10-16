@@ -109,15 +109,6 @@
         ]
       },
       {
-        "matcher": "Bash|Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "HOOK_SLUG=dotfiles:agx:ticket-home sh ~/.claude/hooks/run.sh --fail-closed enforce-ticket-home.ts"
-          }
-        ]
-      },
-      {
         "matcher": "Agent",
         "hooks": [
           {

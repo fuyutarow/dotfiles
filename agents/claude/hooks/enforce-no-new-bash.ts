@@ -1,5 +1,5 @@
 import { hookJson, hookStderr } from "./lib.ts";
-// PreToolUse gate (matcher: Write|Edit|MultiEdit) — NO-NEW-BASH, made deterministic.
+// PreToolUse gate (matcher: Write|Edit|MultiEdit|Bash) — NO-NEW-BASH, made deterministic.
 //
 // The rule lives in dotfiles:writing-bun-scripts (THE LAW, gate BG0): local automation is Bun
 // TypeScript; bash survives only as a declared thin shim. Prose alone did not hold it, so:
@@ -24,13 +24,12 @@ import { hookJson, hookStderr } from "./lib.ts";
 //     exists and must stay POSIX. The marker is honoured only when the file ON DISK already
 //     carries it, so a new file cannot exempt itself by declaring it.
 //
-// Not covered: shell written through Bash (`cat > x.sh <<EOF`, `tee`) — the command text
-// does not reliably yield the final file. Edit/Write are the channel this gate owns.
+// Bash redirects and tee are parsed by tools/shared: unknown output size is denied.
 //
 // Fail direction: registered with run.sh --fail-closed (no bun → deny). An internal error
 // exits non-zero, which Claude Code treats as a non-blocking error — the edit proceeds.
 
-import { existsSync, readFileSync } from "node:fs";
+import { bashShellViolation } from "../../../tools/shared/src/no-new-bash.ts";
 import { basename, extname, normalize } from "node:path";
 import { arr, at, str, strAt } from "../../hooks/narrow.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
@@ -90,7 +89,12 @@ function applyEdits(text: string, edits: readonly unknown[]): string | null {
   return out;
 }
 
-function main(): void {
+async function read(path: string): Promise<string | null> {
+  const file = Bun.file(path);
+  return (await file.exists()) ? file.text() : null;
+}
+
+async function main(): Promise<void> {
   const payload = readStdinJson();
   if (payload === undefined) {
     hookStderr("enforce-no-new-bash: invalid JSON payload\n");
@@ -99,11 +103,31 @@ function main(): void {
   }
   const tool = strAt(payload, "tool_name");
   const input = at(payload, "tool_input");
+  if (tool === "Bash") {
+    const command = strAt(input, "command");
+    if (command === undefined) return;
+    const reason = await bashShellViolation(
+      command,
+      strAt(payload, "cwd") ?? process.cwd(),
+      read,
+      MAX_LINES,
+    ).then(
+      (violation) => violation,
+      () => "cannot inspect shell write size before execution",
+    );
+    // SINGLE-AXIS: deny only when the final shell write cannot be proven within the ratchet.
+    if (reason !== undefined)
+      decidePre(
+        "deny",
+        `no-new-bash: ${reason}. Write the logic as Bun TypeScript: bun <path>.ts; keep shell shims at most ${MAX_LINES} lines.`,
+      );
+    return;
+  }
   const path = strAt(input, "file_path");
   if (path === undefined || path === "") return;
 
-  const onDisk = existsSync(path);
-  const before = onDisk ? readFileSync(path, "utf8") : null;
+  const file = Bun.file(path);
+  const before = (await file.exists()) ? await file.text() : null;
 
   let after: string | null;
   if (tool === "Write") {
@@ -160,4 +184,4 @@ function main(): void {
   );
 }
 
-main();
+await main();

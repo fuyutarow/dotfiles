@@ -38,6 +38,10 @@ export type ShellCommand = {
   redirects: Redirect[];
   /** Heredoc bodies attached to this command — DATA, not commands. */
   heredocs: string[];
+  /** Exact literal bodies including terminating newlines (empty differs from one blank line). */
+  heredocContents?: string[];
+  /** Quoted delimiters disable body expansion. Aligned with heredocs. */
+  heredocQuoted?: boolean[];
   /** Reserved words before the command: while until if then do else elif ! { … */
   leading: string[];
   /** The operator that ended the previous command: "" | ";" | "&&" | "||" | "|" | "&" | "\n" | "(" | ")". */
@@ -154,6 +158,8 @@ class Parser {
       assignments: [],
       redirects: [],
       heredocs: [],
+      heredocContents: [],
+      heredocQuoted: [],
       leading,
       sep,
       dynamic: false,
@@ -592,6 +598,10 @@ class Parser {
       this.i = Math.min(nl + 1, this.src.length);
       const line = p.strip ? raw.replace(/^\t+/u, "") : raw;
       if (line === p.delim) {
+        cmd.heredocContents?.push(
+          lines.length === 0 ? "" : lines.join("\n") + "\n",
+        );
+        cmd.heredocQuoted?.push(p.quoted);
         this.attachHeredoc(lines.join("\n"), p, cmd);
         return;
       }

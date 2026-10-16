@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.0 — 2026-10-16
+
+- Expose exact heredoc content and shared shell-write ratchet for hook and commit-gate enforcement.
+
 ## 0.10.2 — 2026-10-16
 
 - Repair owner access on test temp directories before teardown; warn with the path if removal fails.

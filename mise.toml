@@ -135,6 +135,7 @@ description = "Lint the repo: Markdown + shell/zsh + Bun script contract + TS (o
 depends = [
   "lint:md",
   "lint:sh",
+  "lint:bash",
   "lint:zsh",
   "lint:bun",
   "lint:ts",
@@ -914,3 +915,7 @@ run = "bun agents/codex/codex-runtime.ts --check"
 description = "Print the canonical coredev selected task set. Usage: mise run coredev:selection -- --kind <linux|wsl|mac> --phase <deploy|doctor> [--json]"
 dir = "{{config_root}}"
 run = "bun scripts/deployment-selection.ts"
+
+[tasks."lint:bash"]
+description = "Reject added or grown shell scripts over 12 physical lines"
+run = "bun scripts/lint-no-new-bash.ts"

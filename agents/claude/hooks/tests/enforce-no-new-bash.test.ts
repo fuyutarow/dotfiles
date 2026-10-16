@@ -207,3 +207,116 @@ describe("enforce-no-new-bash", () => {
     );
   });
 });
+
+describe("Bash shell write routes", () => {
+  const bash = (command: string, cwd = tempDir("bash-write-")) =>
+    runHook(HOOK, {
+      tool_name: "Bash",
+      cwd,
+      tool_input: { command },
+    });
+  const heredoc = (n: number, target = "x.sh", producer = "cat") =>
+    `${producer} > '${target}' <<'EOF'\n${lines(n)}EOF\n`;
+
+  test("denies printf brace expansion, 13-line heredoc and tee writes", async () => {
+    for (const command of [
+      "printf '%s\\n' {1..13} > x.sh",
+      heredoc(13),
+      `tee x.sh <<'EOF'\n${lines(13)}EOF\n`,
+      `cat <<'EOF' | tee x.sh\n${lines(13)}EOF\n`,
+      "cat source > x.bash",
+      "printf '%s\\n' {1..13} | command tee -- x.sh",
+      `sh -c ${JSON.stringify("printf '%s\\n' {1..13} > x.sh")}`,
+    ]) {
+      const result = bash(command);
+      expect(result.code).toBe(0);
+      const decision = await decisionOf(result.stdout);
+      expect(decision.permissionDecision).toBe("deny");
+      expect(decision.permissionDecisionReason).toContain("bun");
+    }
+  });
+
+  test("allows 5 and 12-line literal heredocs and non-shell writes", () => {
+    for (const command of [
+      heredoc(5),
+      heredoc(12),
+      heredoc(13, "notes.txt"),
+      "printf '%s\\n' {1..13} > notes.md",
+      "tee notes.txt",
+      "echo 'tee x.sh > x.sh'",
+    ]) {
+      const result = bash(command);
+      expect(result.code).toBe(0);
+      expect(result.stdout).toBe("");
+    }
+  });
+
+  test("append and successive writes use the resulting physical line count", async () => {
+    const cwd = tempDir("bash-write-");
+    writeFileSync(join(cwd, "x.sh"), lines(12));
+    const result = bash("cat >> x.sh <<'EOF'\necho more\nEOF\n", cwd);
+    expect((await decisionOf(result.stdout)).permissionDecision).toBe("deny");
+    const multi = `${heredoc(5)}${heredoc(5).replace(">", ">>")}${heredoc(5).replace(">", ">>")}`;
+    expect((await decisionOf(bash(multi).stdout)).permissionDecision).toBe(
+      "deny",
+    );
+  });
+
+  test("unknown expansion, loops, dynamic targets and unsupported syntax fail closed", async () => {
+    for (const command of [
+      "cat > x.sh <<EOF\n$BODY\nEOF\n",
+      "tee x.sh",
+      'cat > "$OUT"',
+      "for i in {1..13}; do cat >> x.sh <<'EOF'\nx\nEOF\ndone",
+      "case x in x) cat > x.sh;; esac",
+    ]) {
+      expect((await decisionOf(bash(command).stdout)).permissionDecision).toBe(
+        "deny",
+      );
+    }
+  });
+
+  test("preserves legacy no-growth and existing bootstrap/herdr exemptions", () => {
+    const cwd = tempDir("bash-write-");
+    writeFileSync(join(cwd, "legacy.sh"), lines(40));
+    writeFileSync(join(cwd, "boot.sh"), "# shim: bootstrap\n");
+    writeFileSync(join(cwd, "herdr.sh"), "# installed by herdr\n");
+    for (const command of [
+      heredoc(40, "legacy.sh"),
+      "tee boot.sh",
+      "tee herdr.sh",
+    ]) {
+      expect(bash(command, cwd).stdout).toBe("");
+    }
+  });
+});
+
+test("blank heredoc append counts physical blank lines; tee -- preserves dash filenames", async () => {
+  const cwd = tempDir("bash-blank-");
+  const command = "cat >> x.sh <<'EOF'\n\nEOF\n".repeat(13);
+  const result = runHook(HOOK, {
+    tool_name: "Bash",
+    cwd,
+    tool_input: { command },
+  });
+  expect((await decisionOf(result.stdout)).permissionDecision).toBe("deny");
+  const tee = runHook(HOOK, {
+    tool_name: "Bash",
+    cwd,
+    tool_input: { command: "tee -- -x.sh" },
+  });
+  expect((await decisionOf(tee.stdout)).permissionDecision).toBe("deny");
+});
+
+test("quoted small heredoc preserves literal shell variables", () => {
+  const result = runHook(HOOK, {
+    tool_name: "Bash",
+    cwd: tempDir("bash-literal-"),
+    tool_input: {
+      command:
+        "cat > x.sh <<'EOF'\n#!/bin/sh\necho \"$HOME\"\necho ok\necho more\necho done\nEOF\n",
+    },
+  });
+  expect(result.code).toBe(0);
+  expect(result.stdout).toBe("");
+});

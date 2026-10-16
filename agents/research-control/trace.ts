@@ -7,6 +7,7 @@ type R = Record<string, unknown>;
 type E = R & {
   id: string;
   at: string;
+  atMs: number;
   kind: string;
   actorInstanceId: string;
   grantId: string;
@@ -431,6 +432,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
     const eventActor = str(raw?.actorInstanceId);
     const eventGrant = str(raw?.grantId);
     const eventAt = str(raw?.at);
+    const eventAtMs = time(eventAt);
     if (
       raw === undefined ||
       eventId === undefined ||
@@ -438,7 +440,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
       eventActor === undefined ||
       eventGrant === undefined ||
       eventAt === undefined ||
-      time(eventAt) === undefined ||
+      eventAtMs === undefined ||
       ids.has(eventId)
     ) {
       add(
@@ -453,6 +455,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
       ...raw,
       id: eventId,
       at: eventAt,
+      atMs: eventAtMs,
       kind: eventKind,
       actorInstanceId: eventActor,
       grantId: eventGrant,
@@ -471,7 +474,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
         `${event.kind} has wrong role`,
         event.id,
       );
-    if (evaluated !== undefined && time(event.at)! > evaluated)
+    if (evaluated !== undefined && event.atMs > evaluated)
       add(
         findings,
         "TRACE_INVALID",
@@ -485,7 +488,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
     if (
       previous !== undefined &&
       current !== undefined &&
-      time(previous.at)! >= time(current.at)!
+      previous.atMs >= current.atMs
     )
       add(
         findings,
@@ -503,8 +506,8 @@ export function checkTrace(rawInput: unknown): TraceResult {
     grants.get(firstMandate.grantId)?.role === "programme-supervisor" &&
     start !== undefined &&
     due !== undefined &&
-    time(firstMandate.at)! >= start &&
-    time(firstMandate.at)! <= due
+    firstMandate.atMs >= start &&
+    firstMandate.atMs <= due
       ? firstMandate
       : undefined;
   if (mandate === undefined)
@@ -553,7 +556,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
   const candidateValid = (event: E): boolean =>
     grants.get(event.grantId)?.role === "searcher" &&
     mandate !== undefined &&
-    time(event.at)! > time(mandate.at)! &&
+    event.atMs > mandate.atMs &&
     nonempty(event.candidateId) &&
     sha(event.artifactSha256) &&
     candidateAuthorityJoin(event) &&
@@ -628,7 +631,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
       grants.get(event.grantId)?.role === "section-director" &&
       candidate?.kind === "CANDIDATE_PACKET" &&
       candidateValid(candidate) &&
-      time(candidate.at)! < time(event.at)! &&
+      candidate.atMs < event.atMs &&
       candidate.candidateId === event.candidateId &&
       candidate.artifactSha256 === event.candidateSha256 &&
       sha(event.artifactSha256) &&
@@ -661,7 +664,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
       grants.get(event.grantId)?.role === "builder" &&
       admission?.kind === "ADMISSION" &&
       admissionOk.has(admission.id) &&
-      time(admission.at)! < time(event.at)! &&
+      admission.atMs < event.atMs &&
       admission.artifactSha256 === event.admissionSha256 &&
       admission.candidateId === event.candidateId &&
       sha(event.artifactSha256) &&
@@ -707,12 +710,12 @@ export function checkTrace(rawInput: unknown): TraceResult {
     const good =
       grants.get(event.grantId)?.role === "section-director" &&
       mandate !== undefined &&
-      time(event.at)! > time(mandate.at)! &&
+      event.atMs > mandate.atMs &&
       admission?.kind === "ADMISSION" &&
       admissionOk.has(admission.id) &&
       spec?.kind === "EXECUTABLE_SPEC" &&
       specOk.has(spec.id) &&
-      time(spec.at)! < time(event.at)! &&
+      spec.atMs < event.atMs &&
       admission.artifactSha256 === event.admissionSha256 &&
       spec.artifactSha256 === event.executableSpecificationSha256 &&
       admission.candidateId === event.candidateId &&
@@ -726,7 +729,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
       fields(event, ["falsifierOutcomeMap", "executorSink"]) &&
       deadline !== undefined &&
       expires !== undefined &&
-      deadline > time(event.at)! &&
+      deadline > event.atMs &&
       deadline <= expires;
     if (
       admission !== undefined &&
@@ -766,9 +769,8 @@ export function checkTrace(rawInput: unknown): TraceResult {
       ? []
       : events.filter(
           (event) =>
-            time(event.at)! > time(mandate.at)! &&
-            (firstIntent === undefined ||
-              time(event.at)! < time(firstIntent.at)!),
+            event.atMs > mandate.atMs &&
+            (firstIntent === undefined || event.atMs < firstIntent.atMs),
         );
   if (
     typeof lease.maxControlEventsBeforeIntent === "number" &&
@@ -857,7 +859,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
       grants.get(event.grantId)?.role === "executor" &&
       intent !== undefined &&
       validIntentIds.has(intent.id) &&
-      time(event.at)! > time(intent.at)! &&
+      event.atMs > intent.atMs &&
       event.intentSha256 === intent.artifactSha256;
     if (!joined) {
       add(
@@ -909,7 +911,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
   for (const blocker of blockers)
     for (const later of events.filter(
       (event) =>
-        time(event.at)! > time(blocker.at)! &&
+        event.atMs > blocker.atMs &&
         ["CANDIDATE_PACKET", "ADMISSION", "EXECUTABLE_SPEC", "INTENT"].includes(
           event.kind,
         ),
@@ -939,7 +941,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
     const good =
       receipt !== undefined &&
       receiptId !== undefined &&
-      time(item.at)! > time(receipt.at)! &&
+      item.atMs > receipt.atMs &&
       item.receiptSha256 === receipt.artifactSha256 &&
       !usedReceipts.has(receiptId) &&
       sha(item.artifactSha256) &&
@@ -982,7 +984,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
     const good =
       item !== undefined &&
       receipt !== undefined &&
-      time(commit.at)! > time(item.at)! &&
+      commit.atMs > item.atMs &&
       commit.actorInstanceId !== item.actorInstanceId &&
       commit.learningSha256 === item.artifactSha256 &&
       commit.receiptSha256 === receipt.artifactSha256 &&
@@ -1032,7 +1034,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
     const receipt = [...scientificReceipts.values()].find(
       (item) =>
         item.artifactSha256 === spec.priorPassReceiptSha256 &&
-        time(item.at)! < time(spec.at)!,
+        item.atMs < spec.atMs,
     );
     const release = nonempty(spec.scaleReleaseCommitId)
       ? events.find((event) => event.id === spec.scaleReleaseCommitId)
@@ -1051,7 +1053,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
       release.artifactSha256 === spec.scaleReleaseCommitSha256 &&
       receipt !== undefined &&
       release.receiptSha256 === receipt.artifactSha256 &&
-      time(release.at)! < time(spec.at)! &&
+      release.atMs < spec.atMs &&
       [...scientificCommits.values()].some((item) => item.id === release.id);
     if (!learned || !committedReceipt) {
       unreleasedEscalatedSpecs.add(spec.id);
@@ -1114,16 +1116,18 @@ export function checkTrace(rawInput: unknown): TraceResult {
   for (const receipt of validReceipts.values()) {
     const next = events.find(
       (event) =>
-        time(event.at)! > time(receipt.at)! &&
+        event.atMs > receipt.atMs &&
         (event.kind === "CANDIDATE_PACKET" ||
           (event.kind === "INTENT" && validIntentIds.has(event.id))),
     );
-    const complete = [...validLearning.values()].some(
-      (item) =>
+    const complete = [...validLearning.values()].some((item) => {
+      const commit = committed.get(item.id);
+      return (
         item.receiptId === receipt.id &&
-        committed.get(item.id) !== undefined &&
-        time(committed.get(item.id)?.at)! < time(next?.at ?? item.at)!,
-    );
+        commit !== undefined &&
+        commit.atMs < (next?.atMs ?? item.atMs)
+      );
+    });
     if (next !== undefined && !complete)
       add(
         findings,
@@ -1132,11 +1136,12 @@ export function checkTrace(rawInput: unknown): TraceResult {
         next.id,
       );
   }
-  for (const intent of validIntents)
+  for (const intent of validIntents) {
+    const deadline = time(intent.terminalDueAt);
     if (
       !terminalsByIntent.has(intent.id) &&
       evaluated !== undefined &&
-      (evaluated >= time(intent.terminalDueAt)! ||
+      ((deadline !== undefined && evaluated >= deadline) ||
         evaluated >= (expires ?? Infinity))
     )
       add(
@@ -1145,17 +1150,14 @@ export function checkTrace(rawInput: unknown): TraceResult {
         "expired intent lacks terminal",
         intent.id,
       );
+  }
   const promotions = events.filter((event) => event.kind === "PROMOTION");
   for (const verification of events.filter(
     (event) =>
       event.kind === "MODEL_VERIFICATION" ||
       event.kind === "VERIFICATION_ATTEMPT",
   ))
-    if (
-      !promotions.some(
-        (promotion) => time(promotion.at)! < time(verification.at)!,
-      )
-    )
+    if (!promotions.some((promotion) => promotion.atMs < verification.atMs))
       add(
         findings,
         "PREMATURE_MODEL_VERIFICATION",

@@ -42,5 +42,13 @@ The supplied `lint-oxlint.ts` runs the installed oxlint through `bun x --bun
 --no-install`, avoiding its Node shebang. It requires a valid JSON report with a
 positive checked file count and prints that count. Empty output, malformed output,
 or zero files checked fail loudly with exit 2, even if oxlint exits 0. A count
-means the report's `number_of_files`, not the number of diagnostics. The staged
-task explicitly reports when no TypeScript or TSX files are staged and skips lint.
+means the report's `number_of_files`, not the number of diagnostics.
+
+The `lint:ts` task calls the package bin `lint-ts-candidate` (installed with the
+dotfiles helper bins by `mise run deps`). Under `mise run commit`, it exports
+the J1 candidate: selected snapshot paths over the parent revision. Only changed
+selected `.ts`/`.tsx` files are passed to `lint-oxlint.ts`; dependencies and config
+come from that candidate, with the consumer's installed `node_modules` available.
+It reports and skips lint when there are no matching files, including deletions.
+Direct invocation checks changed TypeScript files in the current jj snapshot.
+Malformed J1 context fails closed; there is no Git fallback.

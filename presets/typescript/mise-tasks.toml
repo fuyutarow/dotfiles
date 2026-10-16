@@ -2,8 +2,8 @@
 # Merge these lint/check dependencies with the repo's existing gates.
 # Policy drift belongs only in check: an owner preset update must never block a commit.
 #
-# lint:ts checks only STAGED .ts/.tsx files (wiring-repositories HOOK-1c): another session's uncommitted
-# work must never block this commit. lint:ts:all is the whole tree, for a deliberate sweep.
+# lint:ts checks changed candidate .ts/.tsx files from an immutable jj snapshot.
+# lint:ts:all is the whole tree, for a deliberate sweep.
 
 [tasks.lint]
 depends = ["lint:ts"]
@@ -23,12 +23,8 @@ description = "Fail when .oxlintrc.json is not a fresh render of the owner's pol
 run = "bun ~/dotfiles/scripts/render-oxlintrc.ts --repo . --check"
 
 [tasks."lint:ts"]
-description = "oxlint --type-aware on the STAGED .ts/.tsx files only (HOOK-1c: another session's WIP never blocks a commit)"
-run = '''
-files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts' '*.tsx') || { echo "lint:ts: cannot read the Git index here (not a Git checkout, e.g. a jj secondary workspace) — run it where the commit is staged" >&2; exit 2; }
-if [ -z "$files" ]; then echo "lint:ts: no staged .ts/.tsx files"; exit 0; fi
-bun lint-oxlint.ts --type-aware $files
-'''
+description = "oxlint --type-aware on the selected jj commit candidate files"
+run = "lint-ts-candidate"
 
 [tasks."lint:ts:all"]
 description = "oxlint --type-aware on every TypeScript/TSX file the policy does not ignore"

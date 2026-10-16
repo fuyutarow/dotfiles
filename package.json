@@ -37,7 +37,8 @@
     "gate-diagnostics-check": "agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts",
     "script-check": "agents/skills/writing-bun-scripts/scripts/script-check.ts",
     "skill-check": "agents/skills/forging-skills/scripts/skill-check.ts",
-    "tkt": "tools/tkt/src/tkt.ts"
+    "tkt": "tools/tkt/src/tkt.ts",
+    "lint-ts-candidate": "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

@@ -626,6 +626,8 @@ alias sze='vi $HOME/.zshrc'
 
 # herdr
 # -----
+# btmp resolves the real executable itself; outside herdr it execs btm unchanged.
+alias btm='btmp'
 # `t` = launch-or-attach the herdr persistent session; hosts without herdr keep the old tmux attach
 if command -v herdr >/dev/null 2>&1; then
   alias t='herdr'

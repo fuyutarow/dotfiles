@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 import { jsonOf, z } from "../../shared/src/zod.ts";
+import { ensureBtm } from "./ensure.ts";
+import { btmpArgs } from "./args.ts";
 
 const REPORT_INTERVAL_MS = 3_000;
 const METRICS_TIMEOUT_MS = 2_000;
@@ -125,16 +127,23 @@ async function monitorBtm(
   return state.code;
 }
 
-async function runBtm(): Promise<number> {
-  const bin = Bun.which("btm") ?? "btm";
+async function runBtm(args: string[]): Promise<number> {
+  const bin = Bun.which("btm");
+  if (bin === null) {
+    process.stderr.write("btmp: btm is not on PATH\n");
+    return 127;
+  }
+  const paneId = herdrPane();
+  // execve uses the resolved executable, never the interactive zsh alias.
+  if (paneId === undefined && process.execve !== undefined)
+    process.execve(bin, [bin, ...args], process.env);
   // bounded: interactive btm owns its lifetime; user exit/signals end monitoring.
-  const app = Bun.spawn([bin], {
+  const app = Bun.spawn([bin, ...args], {
     stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
   });
   const appExit = app.exited;
-  const paneId = herdrPane();
   if (paneId === undefined) return appExit;
 
   process.on("SIGINT", () => {
@@ -159,6 +168,7 @@ async function runBtm(): Promise<number> {
     "idle",
     "--",
     "btmp",
+    ...args,
   ]);
   if (!registered) return appExit;
 
@@ -192,7 +202,22 @@ async function runBtm(): Promise<number> {
 }
 
 if (import.meta.main) {
-  const status = await Promise.try(runBtm).catch((error: unknown) => {
+  const status = await Promise.try(async () => {
+    const args = btmpArgs();
+    if (args[0] === "ensure") {
+      if (args.length !== 1) {
+        process.stderr.write("usage: btmp ensure\n");
+        return 2;
+      }
+      const result = await ensureBtm();
+      if (result.isErr()) {
+        process.stderr.write(`btmp: ${result.error.message}\n`);
+        return 1;
+      }
+      return 0;
+    }
+    return runBtm(args);
+  }).catch((error: unknown) => {
     process.stderr.write(`btmp: ${String(error)}\n`);
     return 1;
   });

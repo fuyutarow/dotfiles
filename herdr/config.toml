@@ -71,6 +71,10 @@ type = "pane"
 command = "btop 2>/dev/null || top"
 
 [ui]
+# Server-side scheduler: immediate at startup, then every 5s, also headless.
+# https://herdr.dev/docs/configuration/#ui-and-sidebar documents command entries.
+# Explicit installed bin avoids login-shell PATH changes. Silent output hides the entry.
+tab_bar_right = [{ type = "command", command = '"$HOME/.bun/bin/btmp" ensure', interval_seconds = 5, timeout_seconds = 20 }]
 prompt_new_tab_name = false # tmux c created windows instantly - no name prompt
 
 # mouse_scroll_lines=3 default already equals tmux WheelUp 3-line scroll.

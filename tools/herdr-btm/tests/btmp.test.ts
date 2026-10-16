@@ -79,8 +79,12 @@ function fakeHerdrSocket(path: string) {
   });
 }
 
-async function runEntry(root: string, env: NodeJS.ProcessEnv): Promise<number> {
-  const processEntry = Bun.spawn([process.execPath, SCRIPT], {
+async function runEntry(
+  root: string,
+  env: NodeJS.ProcessEnv,
+  args: string[] = [],
+): Promise<number> {
+  const processEntry = Bun.spawn([process.execPath, SCRIPT, ...args], {
     cwd: root,
     env,
     stdin: "ignore",
@@ -134,7 +138,7 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
     HERDR_PANE_ID: "w1:p9",
   };
 
-  expect(await runEntry(root, env)).toBe(0);
+  expect(await runEntry(root, env, ["--basic", "value with spaces"])).toBe(0);
   expect(requests.map((request) => request.method)).toContain(
     "pane.report_agent",
   );
@@ -155,7 +159,7 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
       source: "btm",
       agent: "btm",
       state: "idle",
-      resume_argv: ["btmp"],
+      resume_argv: ["btmp", "--basic", "value with spaces"],
     });
   const metadata = requests.find(
     (request) => request.method === "pane.report_metadata",
@@ -195,7 +199,10 @@ test("runs btm without any Herdr reports outside a Herdr pane", async () => {
   await mkdir(binDir);
   const marker = join(root, "btm-ran");
   const fakeBtm = join(binDir, "btm");
-  await writeFile(fakeBtm, `#!/bin/sh\nprintf ran > '${marker}'\n`);
+  await writeFile(
+    fakeBtm,
+    `#!/bin/sh\nprintf '%s\\n' "$@" > '${marker}'\nexit 37\n`,
+  );
   await chmod(fakeBtm, 0o755);
   const socketPath = join(root, "herdr.sock");
   const requests = await fakeHerdrSocket(socketPath);
@@ -208,6 +215,11 @@ test("runs btm without any Herdr reports outside a Herdr pane", async () => {
   delete env.HERDR_SOCKET_PATH;
   delete env.HERDR_PANE_ID;
 
-  expect(await runEntry(root, env)).toBe(0);
+  expect(
+    await runEntry(root, env, ["--basic", "value with spaces", "--", "-x"]),
+  ).toBe(37);
+  expect(await Bun.file(marker).text()).toBe(
+    "--basic\nvalue with spaces\n--\n-x\n",
+  );
   expect(requests).toHaveLength(0);
 });

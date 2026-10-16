@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 — 2026-10-16
+
+- Refresh stale workspaces before readiness, add ws refresh, create complete sparse workspaces, and report narrowed sparse sets in gc.
+
 ## 0.1.3 — 2026-10-16
 
 - Rename the workspace tool directory and package to jj-ws; keep the ws command unchanged.

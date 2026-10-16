@@ -94,6 +94,15 @@ async function jjOut(
       );
 }
 
+/** Let jj diagnose staleness; unrelated status failures must never trigger a repair. */
+async function updateStale(dir: string): Promise<Attempt<void>> {
+  const status = await jjOut(["status"], dir, false);
+  if (status.ok) return good(undefined);
+  if (!msg(status).includes("working copy is stale")) return status;
+  const updated = await jjOut(["workspace", "update-stale"], dir, false);
+  return updated.ok ? good(undefined) : updated;
+}
+
 export function resolveRepo(path: string): Attempt<Repo> {
   const found = jjWorkspace(path);
   if (!found.ok) return bad(msg(found));
@@ -328,6 +337,14 @@ async function readyWorkspace(
   dir: string,
   cfg: Config,
 ): Promise<Attempt<void>> {
+  const current = await updateStale(dir);
+  if (!current.ok) return current;
+  const sparse = await jjOut(
+    ["sparse", "set", "--clear", "--add", "."],
+    dir,
+    false,
+  );
+  if (!sparse.ok) return sparse;
   for (const name of ["mise.toml", ".mise.toml"]) {
     const config = join(dir, name);
     if (!(await Bun.file(config).exists())) continue;
@@ -388,6 +405,12 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
     if (!names.ok) return names;
     if (names.value.includes(name.value))
       return bad(`jj workspace ${name.value} is already registered`);
+    const source = jjWorkspace(options.repo);
+    if (!source.ok) return source;
+    for (const root of new Set([source.value.root, repo.value.backing])) {
+      const current = await updateStale(root);
+      if (!current.ok) return current;
+    }
     mkdirSync(repo.value.wsRoot, { recursive: true });
     const made = await jjOut(
       [
@@ -419,6 +442,35 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
       );
     }
     return good(dir);
+  });
+}
+
+/** Repair only the named workspace: no readiness commands or sparse changes. */
+export async function refresh(options: {
+  slug: string;
+  repo: string;
+}): Promise<Attempt<string>> {
+  const name = checkSlug(options.slug);
+  if (!name.ok) return name;
+  const repo = resolveRepo(options.repo);
+  if (!repo.ok) return repo;
+  const pre = common(repo.value);
+  if (!pre.ok) return pre;
+  const dir = join(repo.value.wsRoot, name.value);
+  return withLock(repo.value, `ws refresh ${options.slug}`, async () => {
+    const owner = jjWorkspace(dir);
+    if (!owner.ok) return owner;
+    if (
+      owner.value.root !== dir ||
+      owner.value.backingRoot !== repo.value.backing
+    )
+      return bad(`${dir} is not a jj workspace of ${repo.value.backing}`);
+    const names = await workspaceNames(repo.value);
+    if (!names.ok) return names;
+    if (!names.value.includes(name.value))
+      return bad(`${name.value} is not a registered jj workspace`);
+    const current = await updateStale(dir);
+    return current.ok ? good(dir) : current;
   });
 }
 
@@ -594,6 +646,12 @@ async function judge(
     name,
     verdict: { action: "keep", reason },
   });
+  const sparse = await jjOut(["sparse", "list"], dir, true);
+  if (!sparse.ok) return keep(`cannot inspect sparse patterns: ${msg(sparse)}`);
+  if (sparse.value.trim() !== ".")
+    return keep(
+      `sparse patterns are not '.': ${JSON.stringify(sparse.value.trim())}`,
+    );
   if (name === null) return keep("workspace name cannot be determined");
   const real = realOr(dir);
   const lineage = lineageOf(records, real);

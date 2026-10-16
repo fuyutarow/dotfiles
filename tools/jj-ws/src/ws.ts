@@ -2,7 +2,7 @@
 import { cli, command } from "cleye";
 import { errorMessage } from "../../shared/src/attempt.ts";
 import packageJson from "../package.json" with { type: "json" };
-import { add, gc, remove } from "./workspace.ts";
+import { add, gc, refresh, remove } from "./workspace.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -79,6 +79,31 @@ const rmCommand = command(
   },
 );
 
+const refreshCommand = command(
+  {
+    name: "refresh",
+    parameters: ["<slug>"],
+    strictFlags: true,
+    ignoreArgv: rejectPrototypeFlag,
+    help: {
+      description:
+        "Update ws_<slug> if jj reports it stale; do not run readiness commands or change sparse patterns.",
+    },
+    flags: { repo: repoFlag },
+  },
+  async (argv) => {
+    const done = await refresh({
+      slug: argv._.slug,
+      repo: argv.flags.repo ?? process.cwd(),
+    });
+    if (!done.ok) {
+      fail(done.error);
+      return;
+    }
+    process.stdout.write(`refreshed\t${done.value}\n`);
+  },
+);
+
 const gcCommand = command(
   {
     name: "gc",
@@ -123,5 +148,5 @@ else
     version: packageJson.version,
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
-    commands: [addCommand, rmCommand, gcCommand],
+    commands: [addCommand, refreshCommand, rmCommand, gcCommand],
   });

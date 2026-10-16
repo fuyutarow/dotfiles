@@ -11,6 +11,13 @@ the tool writes no state file; every verb fails before work when its preconditio
 Refuted by a fixture where `gc` collects a live, continuing or unlanded workspace, `rm` loses an
 unlanded change, or the tool writes a state file. The fixtures are `tools/jj-ws/tests/`.
 
+**Proposition (WS-STALE-SPARSE).** After a parent rebase, `refresh` updates the named stale
+workspace; `add` updates its source and backing workspace when jj reports them stale, and makes
+the new workspace current with sparse patterns `.` before readiness. `gc --dry-run` reports
+workspaces whose sparse patterns are not exactly `.`. Refuted by a stale workspace after refresh
+or add, a newly added workspace with narrowed sparse patterns, or a narrowed fixture omitted
+from the gc report. Fixtures use temporary jj repositories outside the checkout.
+
 ## Layout and naming
 
 For a repo whose backing store is `<parent>/<repo>`:
@@ -31,14 +38,22 @@ ws and agx compose by data and by names, never by a shared ledger: agx consumes 
 
 ```text
 ws add <slug> [--rev R] [--repo P]
+ws refresh <slug> [--repo P]
 ws rm  <slug> [--repo P]
 ws gc  [--dry-run] [--include-unrecorded] [--repo P]
 ```
 
-- **add** — resolves `--rev` (exactly one commit), runs `jj workspace add --name ws_<slug> [-r R]`, then each
+- **add** — resolves `--rev` (exactly one commit), updates stale source/backing workspaces with
+  `jj workspace update-stale`, runs `jj workspace add --name ws_<slug> [-r R]`, then checks the new
+  workspace for staleness and sets `jj sparse set --clear --add .` before trust and each
   readiness command in order inside the new directory, in the foreground with inherited stdio. A
   failing readiness command exits non-zero and the new workspace is removed again (add is all or
   nothing; a failed rollback is reported with the path).
+- **refresh** — checks the named registered workspace with `jj status` and runs
+  `jj workspace update-stale` only when jj reports `working copy is stale`. Other failures are
+  returned without attempting repair. It does not run readiness, trust mise, or change sparse
+  patterns. Repeating refresh on a current workspace succeeds. It needs neither repo readiness
+  configuration nor a graveyard, and uses the same store lock as the other verbs.
 - **rm** — judges the workspace, then `jj workspace forget ws_<slug>` and `rip <dir>`. It refuses if
   any change reachable from the workspace's `@` is not reachable from trunk and is non-empty.
   The working copy is snapshotted first, so an uncommitted edit counts. Land or abandon the change
@@ -66,6 +81,10 @@ only if all hold:
 A candidate with no agx record is **unrecorded**: `gc --dry-run` reports it as `keep … unrecorded`,
 and only `--include-unrecorded` collects it, and then only if conditions 2 and 3 hold (no diff).
 A directory under `<repo>.ws/` that is not a workspace of this store is reported and left alone.
+Before judging collection, gc reads sparse patterns without snapshotting. Any set other than
+exactly `.` (including an empty set) is reported as `keep` with its patterns, even for live or
+unrecorded workspaces; an unreadable sparse set also keeps the workspace. gc never widens sparse
+patterns. Each candidate still produces one report line.
 
 ## Repo configuration: `.ws.toml`
 
@@ -93,6 +112,7 @@ Unknown keys are an error. dotfiles declares the example above.
 - Preconditions (`jj` and `rip` on PATH, valid slug and config, repo resolves, `agx` works for gc,
   graveyard disk-backed, target absent for add / present and registered for rm) are all checked
   before the first mutation.
+  Refresh uses only the applicable subset described above.
 
 ## Interface with agx
 

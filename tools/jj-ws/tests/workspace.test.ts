@@ -107,6 +107,54 @@ const listing = (dir: string): string[] =>
   existsSync(dir) ? readdirSync(dir).toSorted() : [];
 
 describe("ws add", () => {
+  test("uses sparse . even when the source workspace is narrowed", async () => {
+    const path = await repo('ready = ["jj sparse list > sparse.out"]\n');
+    await Bun.write(join(path, "artifact.txt"), "tracked artifact\n");
+    expect((await jj(["commit", "-m", "artifact"], path)).code).toBe(0);
+    expect(
+      (
+        await jj(
+          ["sparse", "set", "--clear", "--add", "a.txt", "--add", ".ws.toml"],
+          path,
+        )
+      ).code,
+    ).toBe(0);
+    const r = await ws(["add", "complete"], path);
+    expect(r.code, r.err).toBe(0);
+    expect(
+      (await jj(["sparse", "list"], wsDir(path, "complete"))).out.trim(),
+    ).toBe(".");
+    expect(
+      await Bun.file(join(wsDir(path, "complete"), "artifact.txt")).text(),
+    ).toBe("tracked artifact\n");
+    expect(
+      await Bun.file(join(wsDir(path, "complete"), "sparse.out")).text(),
+    ).toBe(".\n");
+  });
+
+  test("refreshes a stale source before adding another slug and running readiness", async () => {
+    const path = await repo('ready = ["jj status > ready.out"]\n');
+    expect((await ws(["add", "source"], path)).code).toBe(0);
+    const dir = wsDir(path, "source");
+    expect((await jj(["new", "root()"], path)).code).toBe(0);
+    await Bun.write(join(path, "destination.txt"), "destination\n");
+    await Bun.write(
+      join(path, ".ws.toml"),
+      'ready = ["jj status > ready.out"]\n',
+    );
+    expect((await jj(["rebase", "-s", "main", "-d", "@"], path)).code).toBe(0);
+    const stale = await jj(["status"], dir);
+    expect(stale.code).toBe(1);
+    expect(stale.err).toContain("working copy is stale");
+    const r = await ws(["add", "next"], dir);
+    expect(r.code, r.err).toBe(0);
+    expect((await jj(["status"], dir)).code).toBe(0);
+    expect((await jj(["status"], wsDir(path, "next"))).code).toBe(0);
+    expect(
+      await Bun.file(join(wsDir(path, "next"), "ready.out")).exists(),
+    ).toBe(true);
+  });
+
   test("trusts mise.toml without a readiness declaration", async () => {
     const path = await repo();
     await Bun.write(
@@ -259,6 +307,40 @@ describe("ws add", () => {
   });
 });
 
+describe("ws refresh", () => {
+  test("updates a rebased workspace without rerunning readiness or widening sparse", async () => {
+    const path = await repo('ready = ["echo ready >> ready.out"]\n');
+    expect((await ws(["add", "stale"], path)).code).toBe(0);
+    const dir = wsDir(path, "stale");
+    expect(
+      (
+        await jj(
+          ["sparse", "set", "--clear", "--add", "a.txt", "--add", "ready.out"],
+          dir,
+        )
+      ).code,
+    ).toBe(0);
+    expect((await jj(["new", "root()"], path)).code).toBe(0);
+    await Bun.write(join(path, "destination.txt"), "destination\n");
+    expect((await jj(["rebase", "-s", "main", "-d", "@"], path)).code).toBe(0);
+    expect((await jj(["status"], dir)).err).toContain("working copy is stale");
+    const r = await ws(["refresh", "stale"], path);
+    expect(r.code, r.err).toBe(0);
+    expect((await jj(["status"], dir)).code).toBe(0);
+    expect((await jj(["sparse", "list"], dir)).out.trim()).toBe(
+      "a.txt\nready.out",
+    );
+    expect(await Bun.file(join(dir, "ready.out")).text()).toBe("ready\n");
+    expect((await ws(["refresh", "stale"], path)).code).toBe(0);
+  });
+
+  test("refuses missing and invalid slugs", async () => {
+    const path = await repo();
+    expect((await ws(["refresh", "missing"], path)).code).toBe(1);
+    expect((await ws(["refresh", "bad/slug"], path)).code).toBe(1);
+  });
+});
+
 describe("ws rm", () => {
   test("removes a landed workspace: forgotten and ripped", async () => {
     const path = await repo('trunk = "main"\n');
@@ -297,6 +379,22 @@ describe("ws rm", () => {
 });
 
 describe("ws gc", () => {
+  test("reports narrowed sparse patterns even for an unrecorded workspace", async () => {
+    const path = await repo('trunk = "main"\n');
+    expect((await ws(["add", "narrow"], path)).code).toBe(0);
+    const dir = wsDir(path, "narrow");
+    expect(
+      (await jj(["sparse", "set", "--clear", "--add", "a.txt"], dir)).code,
+    ).toBe(0);
+    setRecords([]);
+    const r = await ws(["gc", "--dry-run"], path);
+    expect(r.code, r.err).toBe(0);
+    expect(r.out).toContain(`keep\t${dir}\t`);
+    expect(r.out).toContain("sparse");
+    expect(r.out).toContain("a.txt");
+    expect((await jj(["sparse", "list"], dir)).out.trim()).toBe("a.txt");
+  });
+
   const rec = (path: string, slug: string, over: object) => ({
     id: `run-${slug}`,
     state: "ended",

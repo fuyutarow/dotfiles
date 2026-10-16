@@ -1,8 +1,11 @@
 # This repo's additions to the house TypeScript lint policy (presets/typescript/policy.toml).
-# It may only ADD ignores, each with its reason; it cannot turn a rule off — the renderer rejects
-# any other key. Render: mise run oxlint:render · drift check: mise run lint:oxlint-policy.
+# It may ADD ignores with reasons and opt into React checks for package globs; it cannot
+# turn a rule off. Render: mise run oxlint:render · drift check: mise run lint:oxlint-policy.
 schema = 1
 ignore = []
+
+# Optional: enable the house React rules only in these packages.
+# react = ["ts/heritage-react/**"]
 
 # Example (firedancer): code kept as a record of what a run executed is not maintained code.
 # [[ignore]]

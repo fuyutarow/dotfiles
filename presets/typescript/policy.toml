@@ -34,6 +34,16 @@ restriction = "off" # opt-in rules only: see [[on]]
 style = "off"       # formatting is oxfmt's; naming style is not a failure
 nursery = "off"     # unstable rules
 
+# Opt-in only: loadRepoPolicy puts these in a react-plugin override for the consumer's
+# declared package globs. Never enable React globally. Compiler rules remain deferred.
+# https://oxc.rs/docs/guide/usage/linter/rules/react/rules-of-hooks
+# https://oxc.rs/docs/guide/usage/linter/rules/react/exhaustive-deps
+[react.rules]
+"react/rules-of-hooks" = "error"
+"react/exhaustive-deps" = "error"
+"react/hooks" = "off"
+"react/exhaustive-effect-dependencies" = "off"
+
 [[ignore]]
 pattern = "node_modules"
 reason = "third-party code"

@@ -154,13 +154,14 @@ describe("manifest preset CLI", () => {
       exit: 0,
       stderr: "",
       stdout:
-        "preset: wrote tsconfig.json\npreset: wrote package.json\npreset: wrote zod.ts\npreset: wrote mise-tasks.toml\npreset: wrote .oxlintrc.json\n",
+        "preset: wrote tsconfig.json\npreset: wrote package.json\npreset: wrote zod.ts\npreset: wrote mise-tasks.toml\npreset: wrote lint-oxlint.ts\npreset: wrote .oxlintrc.json\n",
     });
     for (const file of [
       "tsconfig.json",
       "package.json",
       "zod.ts",
       "mise-tasks.toml",
+      "lint-oxlint.ts",
     ])
       expect(await Bun.file(join(repo, file)).bytes()).toEqual(
         await Bun.file(join(ROOT, "presets/typescript", file)).bytes(),

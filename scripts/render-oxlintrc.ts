@@ -8,7 +8,7 @@
 //
 // Modes: --write rewrites .oxlintrc.json · --check exits 1 on drift · neither prints the JSON.
 // --repo DIR renders ANOTHER repo's .oxlintrc.json from this same policy plus that repo's own
-// oxlint-policy.local.toml, which may only ADD ignores (each with its reason): one policy for every
+// oxlint-policy.local.toml, which may ADD reasoned ignores and opt into React package globs: one policy for every
 // repo of the owner (firedancer, 2026-10-06), and a consumer cannot quietly weaken a rule.
 // Exit: 0 ok / up to date · 1 drift (--check) · 2 FATAL (usage, unreadable or invalid policy).
 import { readFileSync, writeFileSync } from "node:fs";
@@ -43,6 +43,9 @@ const PolicySchema = z
   .strictObject({
     schema: z.literal(1),
     plugins: z.array(z.string()).min(1),
+    react: z.strictObject({
+      rules: z.record(RuleName, Level),
+    }),
     js_plugins: z.array(
       z.strictObject({ name: z.string(), specifier: z.string() }),
     ),
@@ -71,6 +74,7 @@ const PolicySchema = z
     overrides: z.array(
       z.strictObject({
         files: z.array(z.string()).min(1),
+        plugins: z.array(z.string()).optional(),
         rules: z.record(RuleName, Level),
       }),
     ),
@@ -90,13 +94,21 @@ export type Policy = z.output<typeof PolicySchema>;
 
 const LocalSchema = z.strictObject({
   schema: z.literal(1),
+  react: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .refine((glob) => glob.trim().length > 0, "glob must not be blank"),
+    )
+    .optional(),
   ignore: z.array(
     z.strictObject({ pattern: z.string().min(1), reason: z.string().min(1) }),
   ),
 });
 export const LOCAL_POLICY = "oxlint-policy.local.toml";
 
-/** The policy for a consumer repo: house rules plus optional local ignores. */
+/** The policy for a consumer repo: house rules, optional ignores and React package globs. */
 export async function loadRepoPolicy(
   repo: string,
   base: Policy,
@@ -120,6 +132,7 @@ export async function loadRepoPolicy(
   const local = LocalSchema.safeParse(raw.value);
   if (!local.success)
     return { ok: false, error: `${path}: ${local.error.message}` };
+  const react = local.data.react ?? [];
   // A consumer repo gets the house rules only (Custom.scope); dotfiles-scoped rules stay here.
   return {
     ok: true,
@@ -127,6 +140,18 @@ export async function loadRepoPolicy(
       ...base,
       js_plugins: base.js_plugins,
       ignore: [...base.ignore, ...local.data.ignore],
+      overrides: [
+        ...base.overrides,
+        ...(react.length > 0
+          ? [
+              {
+                files: react,
+                plugins: [...base.plugins, "react"],
+                rules: base.react.rules,
+              },
+            ]
+          : []),
+      ],
       custom: base.custom.filter((c) => c.scope === "house"),
     },
   };

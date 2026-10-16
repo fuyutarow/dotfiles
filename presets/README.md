@@ -56,7 +56,9 @@ as a configuration surface covers new kinds without registry edits.
 
 ## Existing presets
 
-`typescript` copies `tsconfig.json`, `package.json`, `zod.ts`, and `mise-tasks.toml`.
+`typescript` copies `tsconfig.json`, `package.json`, `zod.ts`, `mise-tasks.toml`, and
+`lint-oxlint.ts`. See [the TypeScript README](typescript/README.md) for React opt-in
+and the checked oxlint runner.
 Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
 root. Consumers may tighten compiler options; weakening the preset is drift.
 
@@ -64,7 +66,8 @@ The preset renders `.oxlintrc.json` from dotfiles' canonical
 `typescript/policy.toml` and the target's optional `oxlint-policy.local.toml`.
 It creates neither a policy copy nor an empty local file. When local ignores are
 needed, use `typescript/local.example.toml` as a template and add reasoned entries;
-the local file may add ignores only. A missing local file means no additions.
+the local file may add ignores and opt into React rules with `react = [package globs]`.
+A missing local file means no additions.
 `apply` reports an existing unused `oxlint-policy.toml` copy for manual review
 and removal, preserving its bytes.
 

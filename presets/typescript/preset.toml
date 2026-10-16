@@ -5,5 +5,6 @@ files = [
   { source = "package.json", destination = "package.json" },
   { source = "zod.ts", destination = "zod.ts" },
   { source = "mise-tasks.toml", destination = "mise-tasks.toml" },
+  { source = "lint-oxlint.ts", destination = "lint-oxlint.ts" },
 ]
 check = ["bun test presets/tests/presets.test.ts", "bun test presets/tests/cli.test.ts"]

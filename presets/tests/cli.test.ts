@@ -148,13 +148,13 @@ describe("manifest preset CLI", () => {
     });
   });
 
-  test("typescript copies compiler and policy bytes, preserves local ignores, and renders oxlint", async () => {
+  test("typescript copies compiler files without policy copies, preserves local ignores, and renders oxlint", async () => {
     const repo = await target();
     expect(await run("apply", "typescript", "--to", repo)).toEqual({
       exit: 0,
       stderr: "",
       stdout:
-        "preset: wrote tsconfig.json\npreset: wrote package.json\npreset: wrote zod.ts\npreset: wrote mise-tasks.toml\npreset: wrote oxlint-policy.toml\npreset: current oxlint-policy.local.toml\npreset: wrote .oxlintrc.json\n",
+        "preset: wrote tsconfig.json\npreset: wrote package.json\npreset: wrote zod.ts\npreset: wrote mise-tasks.toml\npreset: wrote .oxlintrc.json\n",
     });
     for (const file of [
       "tsconfig.json",
@@ -165,18 +165,27 @@ describe("manifest preset CLI", () => {
       expect(await Bun.file(join(repo, file)).bytes()).toEqual(
         await Bun.file(join(ROOT, "presets/typescript", file)).bytes(),
       );
-    for (const [source, destination] of [
-      ["policy.toml", "oxlint-policy.toml"],
-      ["local.example.toml", "oxlint-policy.local.toml"],
-    ] as const)
-      expect(await Bun.file(join(repo, destination)).bytes()).toEqual(
-        await Bun.file(join(ROOT, "presets/typescript", source)).bytes(),
-      );
+    expect(await Bun.file(join(repo, "oxlint-policy.toml")).exists()).toBe(
+      false,
+    );
+    expect(
+      await Bun.file(join(repo, "oxlint-policy.local.toml")).exists(),
+    ).toBe(false);
     expect(await run("diff", "typescript", repo)).toEqual({
       exit: 0,
       stderr: "",
       stdout: "preset: typescript is up to date\n",
     });
+    const rendered = await readFile(join(repo, ".oxlintrc.json"), "utf8");
+    await writeFile(
+      join(repo, "oxlint-policy.local.toml"),
+      "schema = 1\nignore = []\n",
+    );
+    expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
+    expect(await readFile(join(repo, ".oxlintrc.json"), "utf8")).toBe(rendered);
+    await rm(join(repo, "oxlint-policy.local.toml"));
+    expect((await run("apply", "typescript", "--to", repo)).exit).toBe(0);
+    expect(await readFile(join(repo, ".oxlintrc.json"), "utf8")).toBe(rendered);
     const local =
       'schema = 1\n[[ignore]]\npattern = "generated/**"\nreason = "Generated fixture"\n';
     await writeFile(join(repo, "oxlint-policy.local.toml"), local);
@@ -199,6 +208,23 @@ describe("manifest preset CLI", () => {
     expect((await run("diff", "typescript", "--to", repo)).exit).toBe(0);
   });
 
+  test("typescript reports a stale copy without overwriting or reading it", async () => {
+    const repo = await target();
+    const stale = join(repo, "oxlint-policy.toml");
+    const content = "stale unused policy, deliberately invalid TOML\n";
+    await writeFile(stale, content);
+    for (const flags of [["--dry-run"], []]) {
+      const result = await run("apply", "typescript", "--to", repo, ...flags);
+      expect(result.exit).toBe(0);
+      expect(result.stdout).toContain("stale oxlint-policy.toml exists");
+      expect(await readFile(stale, "utf8")).toBe(content);
+    }
+    expect((await run("diff", "typescript", repo)).exit).toBe(0);
+    expect(
+      await Bun.file(join(repo, "oxlint-policy.local.toml")).exists(),
+    ).toBe(false);
+  });
+
   test("typescript dry-run seeds nothing and invalid local policy prevents rendering", async () => {
     const repo = await target();
     expect(
@@ -208,6 +234,9 @@ describe("manifest preset CLI", () => {
       await Bun.file(join(repo, "oxlint-policy.local.toml")).exists(),
     ).toBe(false);
     expect(await Bun.file(join(repo, ".oxlintrc.json")).exists()).toBe(false);
+    expect(await Bun.file(join(repo, "oxlint-policy.toml")).exists()).toBe(
+      false,
+    );
     await writeFile(
       join(repo, "oxlint-policy.local.toml"),
       "schema = 1\nrules = {}\n",

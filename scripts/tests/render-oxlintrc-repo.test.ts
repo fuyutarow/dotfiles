@@ -2,6 +2,7 @@
 // oxlint-policy.local.toml, which may only add ignores. Real child processes, temp repos only.
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdir, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "../../agents/hooks/zod.ts";
@@ -51,10 +52,34 @@ test("ignores are appended; the rules are this repo's, unchanged; --check then p
   expect(render("--repo", dir, "--check").text).toContain("up to date");
 });
 
-test("a missing local file is refused with how to create it", () => {
-  const r = render("--repo", repo(), "--check");
-  expect(r.code).toBe(2);
-  expect(r.text).toContain("create it: schema = 1");
+test("missing and empty local policies render identical bytes", async () => {
+  const dir = repo();
+  expect(render("--repo", dir, "--write").code).toBe(0);
+  const path = join(dir, ".oxlintrc.json");
+  const absent = await Bun.file(path).text();
+  await Bun.write(
+    join(dir, "oxlint-policy.local.toml"),
+    "schema = 1\nignore = []\n",
+  );
+  expect(render("--repo", dir, "--check").code).toBe(0);
+  expect(render("--repo", dir, "--write").code).toBe(0);
+  expect(await Bun.file(path).text()).toBe(absent);
+  await unlink(join(dir, "oxlint-policy.local.toml"));
+  expect(render("--repo", dir, "--check").code).toBe(0);
+});
+
+test("dotfiles' rendered config remains current", () => {
+  expect(render("--check").code).toBe(0);
+});
+
+test("an unreadable local path or malformed TOML is refused", async () => {
+  const dir = repo();
+  await mkdir(join(dir, "oxlint-policy.local.toml"));
+  expect(render("--repo", dir, "--check").code).toBe(2);
+  const malformed = repo("schema = [");
+  const result = render("--repo", malformed, "--write");
+  expect(result.code).toBe(2);
+  expect(result.text).toContain("oxlint-policy.local.toml");
 });
 
 test("a local file that tries to turn a rule off is refused, not merged", () => {

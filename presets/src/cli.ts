@@ -113,16 +113,9 @@ for (const file of files) {
 if (name === "typescript") {
   const loaded = await loadPolicy();
   if (!loaded.ok) fatal(`cannot load TypeScript policy: ${loaded.error}`);
-  const example = files.find((file) => file.createOnly === true);
-  if (
-    action === "apply" &&
-    !(await exists(join(target, "oxlint-policy.local.toml"))) &&
-    !argv.flags["dry-run"] &&
-    example !== undefined
-  )
-    await writeFile(
-      example.destination,
-      await readFile(example.source, "utf8"),
+  if (action === "apply" && (await exists(join(target, "oxlint-policy.toml"))))
+    console.log(
+      "preset: stale oxlint-policy.toml exists; renderer uses dotfiles' presets/typescript/policy.toml; review and remove the unused copy manually",
     );
   const repoPolicy = await loadRepoPolicy(target, loaded.value);
   if (repoPolicy.ok)
@@ -130,13 +123,7 @@ if (name === "typescript") {
       join(target, ".oxlintrc.json"),
       renderOxlintrc(repoPolicy.value),
     );
-  else if (!(await exists(join(target, "oxlint-policy.local.toml")))) {
-    const housePolicy = {
-      ...loaded.value,
-      custom: loaded.value.custom.filter((rule) => rule.scope === "house"),
-    };
-    expected.set(join(target, ".oxlintrc.json"), renderOxlintrc(housePolicy));
-  } else fatal(repoPolicy.error);
+  else fatal(repoPolicy.error);
 }
 
 async function applyOne(destination: string, content: string): Promise<void> {

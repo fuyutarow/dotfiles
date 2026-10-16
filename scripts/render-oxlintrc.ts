@@ -1,4 +1,4 @@
-// render-oxlintrc — generate .oxlintrc.json from oxlint-policy.toml, the one home of the repo's
+// render-oxlintrc — generate .oxlintrc.json from presets/typescript/policy.toml, the one home of the repo's
 // TypeScript lint policy (rules, reasons, custom bans and their bad/good snippets).
 // Consumers: `mise run oxlint:render` (--write), `mise run lint:oxlint-policy` (--check) and
 // tests/oxlint-policy.test.ts (policyPath, loadPolicy).
@@ -96,18 +96,27 @@ const LocalSchema = z.strictObject({
 });
 export const LOCAL_POLICY = "oxlint-policy.local.toml";
 
-/** The policy for a consumer repo: this policy with the repo's own ignores appended. */
+/** The policy for a consumer repo: house rules plus optional local ignores. */
 export async function loadRepoPolicy(
   repo: string,
   base: Policy,
 ): Promise<PolicyLoad> {
   const path = join(repo, LOCAL_POLICY);
-  const raw = await attempt(() => Bun.TOML.parse(readFileSync(path, "utf8")));
-  if (!raw.ok)
+  const content = await attempt(() => Bun.file(path).text());
+  const missing =
+    !content.ok &&
+    z.looseObject({ code: z.literal("ENOENT") }).safeParse(content.error)
+      .success;
+  if (!content.ok && !missing)
     return {
       ok: false,
-      error: `${path}: ${errorMessage(raw.error)} (create it: schema = 1 and [[ignore]] pattern/reason entries, possibly none)`,
+      error: `${path}: ${errorMessage(content.error)}`,
     };
+  const raw = await attempt(() =>
+    content.ok ? Bun.TOML.parse(content.value) : { schema: 1, ignore: [] },
+  );
+  if (!raw.ok)
+    return { ok: false, error: `${path}: ${errorMessage(raw.error)}` };
   const local = LocalSchema.safeParse(raw.value);
   if (!local.success)
     return { ok: false, error: `${path}: ${local.error.message}` };

@@ -60,10 +60,13 @@ as a configuration surface covers new kinds without registry edits.
 Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
 root. Consumers may tighten compiler options; weakening the preset is drift.
 
-The same preset copies `policy.toml` as `oxlint-policy.toml` and seeds
-`oxlint-policy.local.toml` from `local.example.toml` only when absent. Its existing
-render step also produces `.oxlintrc.json` from the house policy and the target's
-reasoned local ignores. The local file may add ignores only.
+The preset renders `.oxlintrc.json` from dotfiles' canonical
+`typescript/policy.toml` and the target's optional `oxlint-policy.local.toml`.
+It creates neither a policy copy nor an empty local file. When local ignores are
+needed, use `typescript/local.example.toml` as a template and add reasoned entries;
+the local file may add ignores only. A missing local file means no additions.
+`apply` reports an existing unused `oxlint-policy.toml` copy for manual review
+and removal, preserving its bytes.
 
 `mise run oxlint:render` renders `typescript/policy.toml` to dotfiles' root
 `.oxlintrc.json`. The root `oxlint-policy.toml` remains a relative symlink to

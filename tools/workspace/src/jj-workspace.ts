@@ -69,7 +69,8 @@ export function refLocks(workspace: JjWorkspace): Attempt<string[]> {
     const pending = [join(common, "refs")];
     let visited = 0;
     while (pending.length > 0) {
-      const path = pending.pop()!;
+      const path = pending.pop();
+      if (path === undefined) break;
       if (!existsSync(path)) continue;
       if (++visited > 20_000) return null;
       const info = lstatSync(path);

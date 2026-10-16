@@ -1088,9 +1088,9 @@ async function main(): Promise<void> {
   let memoryStillLow = memoryAvailableLow;
   let memoryLatest = memoryBefore;
   let memoryStopPerformed = false;
-  if (memoryLow) {
+  if (memoryLow && memoryBefore !== null) {
     const memoryResult = await recoverMemoryEmergency({
-      before: memoryBefore!,
+      before: memoryBefore,
       beforeBuffCacheMb: guestBuffCacheMb(),
       thresholdMb: MEMORY_AVAILABLE_EMERGENCY_MB,
       isLeverAvailable: dropCacheLeverAvailable,

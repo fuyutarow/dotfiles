@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 — 2026-10-16
+
+- Narrow workspace names and pending ref paths before use.
+
 ## 0.1.1 — 2026-10-16
 
 - Trust workspace mise configs before readiness so sandboxed workers can use them without writing mise trust state.

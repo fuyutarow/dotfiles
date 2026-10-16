@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.5 — 2026-10-16
+
+- Narrow the Claude sandbox settings argument in the runner test.
+
 ## 4.11.4 — 2026-10-16
 
 - Prevent concurrent runs in the same workspace with a nonblocking kernel lock, including continuations; allow restart after completion or dispatcher death.

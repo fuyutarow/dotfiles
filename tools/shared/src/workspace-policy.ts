@@ -126,7 +126,10 @@ export async function workspacePolicy(
         .trim()
         .split("\n")
         .filter(Boolean)
-        .map((p) => p.split("/")[0]!),
+        .map((p) => {
+          const slash = p.indexOf("/");
+          return slash < 0 ? p : p.slice(0, slash);
+        }),
     ),
   ].toSorted();
   const measured: { path: string; bytes: number }[] = [];

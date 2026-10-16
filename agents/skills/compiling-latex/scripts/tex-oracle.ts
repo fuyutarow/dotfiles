@@ -97,9 +97,10 @@ async function census(files: string[]): Promise<number> {
       a.n - b.n !== 0 ? a.n - b.n : a.name.localeCompare(b.name),
     );
   for (const r of rows) {
+    const last = r.ds.at(-1);
     const re =
-      r.ds.length > 1
-        ? `  REDEFINED x${r.ds.length} (last wins: ${r.ds.at(-1)!.at})`
+      r.ds.length > 1 && last !== undefined
+        ? `  REDEFINED x${r.ds.length} (last wins: ${last.at})`
         : "";
     console.log(
       `${String(r.n).padStart(4)}  \\${r.name}  ${r.ds.map((d) => `${d.kind}@${d.at}`).join(", ")}${re}`,
@@ -314,11 +315,12 @@ async function texClosure(main: string): Promise<TexFile[] | string> {
 // Non-ASCII and control characters print as <U+XXXX>, so an invisible hit (NBSP, a stray tab) is legible.
 const visible = (text: string): string =>
   Array.from(text)
-    .map((c) =>
-      /[\u0020-\u007E]/u.test(c)
+    .map((c) => {
+      const codePoint = c.codePointAt(0);
+      return /[\u0020-\u007E]/u.test(c) || codePoint === undefined
         ? c
-        : `<U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}>`,
-    )
+        : `<U+${codePoint.toString(16).toUpperCase().padStart(4, "0")}>`;
+    })
     .join("");
 
 function lintHits(file: TexFile, rules: Rule[]): string[] {

@@ -550,7 +550,7 @@ async function legacyName(repo: Repo, dir: string): Promise<string | null> {
     .split(/\s+/u)
     .map((t) => t.replace(/@$/u, ""))
     .filter((n) => registered.value.includes(n) && store.value.includes(n));
-  return named.length === 1 ? named[0]! : null;
+  return named.length === 1 ? (named[0] ?? null) : null;
 }
 
 function subdirs(path: string, match: (name: string) => boolean): string[] {
@@ -658,7 +658,7 @@ export async function gc(
     const failed: string[] = [];
     for (const dir of dirs) {
       const c = await judge(repo.value, cfg.value, records.value, dir, options);
-      if (c.verdict.action === "keep" || options.dryRun) {
+      if (c.verdict.action === "keep" || options.dryRun || c.name === null) {
         const label =
           options.dryRun && c.verdict.action === "collect"
             ? "would-collect"
@@ -669,7 +669,7 @@ export async function gc(
       const done = await forgetAndBury(
         repo.value,
         graveyard.value,
-        c.name!,
+        c.name,
         dir,
       );
       if (done.ok) lines.push(`collected\t${dir}\t${c.verdict.reason}`);

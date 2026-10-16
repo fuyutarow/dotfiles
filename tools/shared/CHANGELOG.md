@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1 — 2026-10-16
+
+- Replace workspace path non-null assertion with defined string slicing.
+
 ## 0.10.0 — 2026-10-16
 
 - storage-headroom: guestPressure, loadGuestDrive and an episode ledger decide when guest / or /tmp queues guest-capacity-recover.service

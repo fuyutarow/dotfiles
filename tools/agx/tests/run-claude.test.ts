@@ -153,6 +153,9 @@ describe("tools/agx dispatchner", () => {
       );
       const settingIndex = argv.indexOf("--settings");
       expect(settingIndex).toBeGreaterThan(-1);
+      const setting = argv[settingIndex + 1];
+      if (setting === undefined)
+        expect.unreachable("--settings requires a value");
       expect(
         decodedJson(
           z.object({
@@ -163,7 +166,7 @@ describe("tools/agx dispatchner", () => {
               failIfUnavailable: z.boolean(),
             }),
           }),
-          argv[settingIndex + 1]!,
+          setting,
         ),
       ).toEqual({
         sandbox: {

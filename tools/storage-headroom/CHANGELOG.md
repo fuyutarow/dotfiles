@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 — 2026-10-16
+
+- Leave workspace creation enforcement to ws-sole-creator and remove duplicate checkout policy gates
+
 ## 0.2.2 — 2026-10-16
 
 - Export inode warning and denial thresholds for statusline without changing enforcement values.

@@ -2,7 +2,12 @@ import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, symlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseJson, strAt } from "../../../hooks/narrow.ts";
+import {
+  loadRegistry,
+  wire,
+  HooksConfigSchema,
+} from "../../../../scripts/hook-registry.ts";
+import { at, parseJson, strAt } from "../../../hooks/narrow.ts";
 
 const ROOT = resolve(import.meta.dir, "../../../..");
 const HOOK = join(ROOT, "agents/claude/hooks/enforce-ws-sole-creator.ts");
@@ -26,8 +31,8 @@ async function run(tool_name: string, tool_input: unknown, cwd = tmpdir()) {
   return stdout;
 }
 
-async function denied(tool: string, input: unknown) {
-  const out = parseJson(await run(tool, input));
+async function denied(tool: string, input: unknown, cwd = tmpdir()) {
+  const out = parseJson(await run(tool, input, cwd));
   expect(strAt(out, "hookSpecificOutput", "permissionDecision")).toBe("deny");
   expect(
     strAt(out, "hookSpecificOutput", "permissionDecisionReason"),
@@ -35,10 +40,21 @@ async function denied(tool: string, input: unknown) {
   expect(
     strAt(out, "hookSpecificOutput", "permissionDecisionReason"),
   ).toContain("[dotfiles:ws-sole-creator]");
+  expect(
+    strAt(out, "hookSpecificOutput", "permissionDecisionReason"),
+  ).toContain(
+    "run ws in the dispatcher's foreground, outside worker units and deadline wrappers",
+  );
 }
 
 test.each([
   "jj workspace add ../x",
+  "timeout 2 jj -R . workspace add ../unsafe",
+  "jj workspace add --sparse-patterns empty ../unsafe",
+  "jj status workspace add ../unsafe",
+  "case x in x) jj workspace add ../worker ;; esac",
+  "jj workspace add --help",
+  "jj workspace add -h",
   "jj -R repo workspace add --name y ../y",
   "git worktree add ../z",
   "git -C repo worktree add ../z",
@@ -128,6 +144,85 @@ test("both vendor configs register the gate on the required events", async () =>
     expect(config).toContain("Bash|Write|Edit|MultiEdit");
     expect(config).toContain(
       "HOOK_SLUG=dotfiles:ws-sole-creator sh ~/.claude/hooks/run.sh --fail-closed enforce-ws-sole-creator.ts",
+    );
+  }
+});
+
+// Repository size, probe failures and agx markers formerly selected different gates.
+// Creation is now refused before any repository policy or size probe is needed.
+test.each(["plain", "agx", "nested", "unknown"])(
+  "former policy-dependent denial is owned by ws: %s",
+  async (kind) => {
+    const dir = await mkdtemp(join(tmpdir(), "ws-former-policy-"));
+    const root = join(dir, "repo");
+    await mkdir(root);
+    if (kind !== "unknown") await mkdir(join(root, ".jj"));
+    if (kind === "agx" || kind === "nested")
+      await Bun.write(join(root, ".agx.toml"), "workspace = true\n");
+    const nested = join(root, "nested");
+    await mkdir(nested);
+    await denied(
+      "Bash",
+      { command: "jj workspace add ../worker" },
+      kind === "nested" ? nested : root,
+    );
+    await denied(
+      "Bash",
+      { command: "jj workspace add -R " + root + " ../worker" },
+      dir,
+    );
+    await rm(dir, { recursive: true, force: true });
+  },
+);
+
+test("rendered vendor hooks retain one workspace owner and no retired registration", async () => {
+  const { specs, errors } = loadRegistry(join(ROOT, "agents/hooks"));
+  expect(errors).toEqual([]);
+  expect(
+    specs.some((spec) => spec.script === "enforce-agx-workspace-add.ts"),
+  ).toBe(false);
+  for (const vendor of ["claude", "codex"] satisfies ("claude" | "codex")[]) {
+    const path =
+      vendor === "claude"
+        ? "agents/claude/settings.json"
+        : "agents/codex/hooks.json";
+    const config = parseJson(await Bun.file(join(ROOT, path)).text());
+    const parsed = HooksConfigSchema.safeParse(at(config, "hooks"));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    const rendered = wire(parsed.data, specs, vendor);
+    const commands = Object.values(rendered)
+      .flat()
+      .flatMap((group) => group.hooks)
+      .map((hook) => hook.command);
+    expect(
+      commands.filter(
+        (command) =>
+          typeof command === "string" &&
+          command.includes("enforce-ws-sole-creator.ts"),
+      ),
+    ).toHaveLength(1);
+    expect(JSON.stringify(rendered)).not.toContain(
+      "enforce-agx-workspace-add.ts",
+    );
+    // The renderer must remove an obsolete owned command from an older deployed config.
+    const stale = {
+      ...rendered,
+      PreToolUse: [
+        ...(rendered.PreToolUse ?? []),
+        {
+          hooks: [
+            {
+              type: "command",
+              command:
+                "sh ~/.agents/hooks/run.sh --fail-closed enforce-agx-workspace-add.ts",
+            },
+          ],
+        },
+      ],
+    };
+    expect(JSON.stringify(wire(stale, specs, vendor))).not.toContain(
+      "enforce-agx-workspace-add.ts",
     );
   }
 });

@@ -91,27 +91,19 @@ test.each([
   "timeout 2 jj -R . workspace add ../unsafe",
   "jj workspace add --sparse-patterns empty ../unsafe",
 ])(
-  "raw workspace preparation is refused before storage probes: %s",
-  (command) => {
-    // Invalid config proves the refusal precedes policy loading and measurements.
-    const result = runHook(HOOK, payload(command), {
-      STORAGE_HEADROOM_CONFIG: "/nonexistent/jjsafe4-policy.toml",
-    });
-    const out = decodedJson(envelope, result.stdout).hookSpecificOutput;
-    expect(result.code).toBe(0);
-    expect(out.permissionDecision).toBe("deny");
-    expect(out.permissionDecisionReason).toContain("ws add <ticket-name>");
-  },
-);
-
-test.each(["jj workspace add --help", "jj workspace add -h"])(
-  "raw workspace help remains available: %s",
+  "storage applies only disk pressure to commands owned by ws: %s",
   (command) => {
     expect(runHook(HOOK, payload(command), fixture(0, 0))).toEqual({
       code: 0,
       stdout: "",
       stderr: "",
     });
+    const result = runHook(HOOK, payload(command), fixture(10, 20));
+    const out = decodedJson(envelope, result.stdout).hookSpecificOutput;
+    expect(out.permissionDecision).toBe("deny");
+    expect(out.permissionDecisionReason).toContain("fixture drive free");
+    expect(out.permissionDecisionReason).not.toContain("workspace add");
+    expect(out.permissionDecisionReason).not.toContain("ws add");
   },
 );
 

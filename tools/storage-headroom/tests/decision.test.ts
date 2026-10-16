@@ -2,7 +2,6 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   existsSync,
-  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -11,15 +10,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { attempt } from "../../shared/src/attempt.ts";
-import {
-  cachedCheckoutSizeBytes,
-  checkoutCachePath,
-  agxWorkspaceAddReason,
-  agxWorkspaceAddWarning,
-  fullCheckoutReason,
-  type CheckoutPolicyDeps,
-  writeCheckoutCache,
-} from "../src/decision.ts";
 import {
   assess,
   loadStorageHeadroom,
@@ -283,35 +273,6 @@ function config(edit: (c: Doc) => void): Record<string, string> {
   return { STORAGE_HEADROOM_CONFIG: path };
 }
 
-function fakeCheckoutProbe(output: string): {
-  root: string;
-  env: Record<string, string>;
-} {
-  const root = mkdtempSync(join(tmpdir(), "jj-checkout-"));
-  mkdirSync(join(root, ".jj"));
-  const home = mkdtempSync(join(tmpdir(), "jj-checkout-home-"));
-  const bin = join(home, "bin");
-  mkdirSync(bin);
-  const calls = join(home, "du-calls");
-  const du = join(bin, "du");
-  writeFileSync(du, `#!/bin/sh\nprintf x >> '${calls}'\n${output}\n`);
-  chmodSync(du, 0o755);
-  return {
-    root,
-    env: {
-      ...config((c) => {
-        c.sparse_required_above_mb = 500;
-      }),
-      HOME: home,
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
-      DU_CALLS: calls,
-    },
-  };
-}
-
-function workspaceAdd(root: string, command = "jj workspace add ../worker") {
-  return { ...bash(command), cwd: root };
-}
 // A line is min(GiB, pct% of the drive): to force a line at a size, the share must not undercut it,
 // so a non-zero size gets 100% and a zero size 0%.
 const pct = (gibLine: number): number => (gibLine > 0 ? 100 : 0);
@@ -561,171 +522,6 @@ describe("enforce-storage-headroom", () => {
       decisionOf(runHook(HOOK, bash("agx stats && cp x y"), env).stdout)
         ?.permissionDecision,
     ).toBe("deny");
-  });
-
-  test("jj workspace add help is allowed", () => {
-    const { root, env } = fakeCheckoutProbe("printf '600000\\t.\\n'");
-    const { env: lowDisk } = cachedConfig(
-      (c) => {
-        drives(10, 10, 20)(c);
-      },
-      5 * GiB,
-      100 * GiB,
-    );
-    const merged = { ...env, ...lowDisk };
-    for (const flag of ["--help", "-h"]) {
-      expect(
-        decisionOf(
-          runHook(HOOK, workspaceAdd(root, `jj workspace add ${flag}`), merged)
-            .stdout,
-        ),
-      ).toBeNull();
-    }
-  });
-
-  test("unparseable case statement is allowed with a warning, not a denial", () => {
-    const { root } = fakeCheckoutProbe("");
-    const command = "case x in x) jj workspace add ../worker ;; esac";
-    expect(agxWorkspaceAddReason(command, root)).toBeNull();
-    expect(agxWorkspaceAddWarning(command, root)).toContain(
-      "allowed without workspace policy validation",
-    );
-  });
-
-  test("a proven policy violation names the runnable sparse add workflow", () => {
-    const { root } = fakeCheckoutProbe("");
-    writeFileSync(join(root, ".agx.toml"), "workspace = true\n");
-    const reason = agxWorkspaceAddReason("jj workspace add ../worker", root);
-    expect(reason).toContain("jj workspace add --sparse-patterns empty <dir>");
-    expect(reason).toContain("jj sparse set --add <paths>");
-    expect(reason).not.toContain("sparse workspace workflow");
-  });
-
-  test("writer and reader use the same per-repo cache key", async () => {
-    const { root } = fakeCheckoutProbe("");
-    const home = mkdtempSync(join(tmpdir(), "checkout-cache-home-"));
-    const at = 1_800_000_000_000;
-    writeCheckoutCache(root, { trackedFileCount: 37, at }, home);
-    expect(existsSync(checkoutCachePath(root, home))).toBe(true);
-    expect(await cachedCheckoutSizeBytes(root, () => at + 1, home)).toEqual({
-      trackedFileCount: 37,
-      at,
-    });
-  });
-
-  test("small full checkout add is allowed on its first call and the second call hits cache", async () => {
-    const { root } = fakeCheckoutProbe("");
-    const home = mkdtempSync(join(tmpdir(), "checkout-cache-home-"));
-    const now = 1_800_000_000_000;
-    let countProbes = 0;
-    let sizeProbes = 0;
-    const deps: CheckoutPolicyDeps = {
-      now: () => now,
-      cachedSize: (repo, clock) => cachedCheckoutSizeBytes(repo, clock, home),
-      saveCache: (repo, entry) => {
-        writeCheckoutCache(repo, entry, home);
-      },
-      probeSize: () => {
-        sizeProbes++;
-        return { bytes: null, elapsedMs: 5_001 };
-      },
-      trackedFileCount: (_root, budgetMs) => {
-        expect(budgetMs).toBe(2_000);
-        countProbes++;
-        return { count: 7, elapsedMs: 170 };
-      },
-    };
-    expect(
-      await fullCheckoutReason("jj workspace add ../worker", root, 500, deps),
-    ).toBeNull();
-    expect(
-      await fullCheckoutReason("jj workspace add ../worker", root, 500, deps),
-    ).toBeNull();
-    expect(countProbes).toBe(1);
-    expect(sizeProbes).toBe(0);
-  });
-
-  test("large full checkout add measures bytes and applies the configured threshold", async () => {
-    const { root } = fakeCheckoutProbe("");
-    const cached: { trackedFileCount?: number; bytes?: number; at: number }[] =
-      [];
-    const reason = await fullCheckoutReason(
-      "jj workspace add ../worker",
-      root,
-      500,
-      {
-        now: () => 1_800_000_000_000,
-        cachedSize: () => Promise.resolve(cached.at(-1) ?? null),
-        saveCache: (_root, entry) => {
-          cached.push(entry);
-        },
-        probeSize: (_root, budgetMs) => {
-          expect(budgetMs).toBe(5_000);
-          return { bytes: 600_000 * 1024, elapsedMs: 300 };
-        },
-        trackedFileCount: (_root, budgetMs) => {
-          expect(budgetMs).toBe(2_000);
-          return { count: 10_001, elapsedMs: 200 };
-        },
-      },
-    );
-    expect(reason).toContain("this repo is 614.4 MB (> 500 MB threshold)");
-    expect(reason).toContain("jj workspace add --sparse-patterns empty <dir>");
-    expect(cached.at(-1)).toEqual({
-      trackedFileCount: 10_001,
-      bytes: 600_000 * 1024,
-      at: 1_800_000_000_000,
-    });
-  });
-
-  test("when both bounded probes time out, denial names both probes", async () => {
-    const { root } = fakeCheckoutProbe("");
-    const reason = await fullCheckoutReason(
-      "jj workspace add ../worker",
-      root,
-      500,
-      {
-        now: () => 1_800_000_000_000,
-        cachedSize: () => Promise.resolve(null),
-        saveCache: () => {},
-        probeSize: (_root, budgetMs) => {
-          expect(budgetMs).toBe(5_000);
-          return { bytes: null, elapsedMs: 5_001 };
-        },
-        trackedFileCount: (_root, budgetMs) => {
-          expect(budgetMs).toBe(2_000);
-          return { count: null, elapsedMs: 2_001 };
-        },
-      },
-    );
-    expect(reason).toContain("refusing a full-checkout jj workspace");
-    expect(reason).toContain("tracked-file count (2 s)");
-    expect(reason).toContain("checkout byte size (5 s)");
-  });
-
-  test("sparse jj workspace add follows the storage gate", () => {
-    const { env } = cachedConfig(
-      (c) => {
-        drives(10, 10, 20)(c);
-      },
-      5 * GiB,
-      100 * GiB,
-    );
-    const sparse = runHook(
-      HOOK,
-      bash("jj workspace add --sparse-patterns empty ../worker"),
-      EMPTY,
-    );
-    expect(decisionOf(sparse.stdout)).toBeNull();
-
-    const lowSparse = decisionOf(
-      runHook(
-        HOOK,
-        bash("jj workspace add --sparse-patterns empty ../worker"),
-        env,
-      ).stdout,
-    );
-    expect(lowSparse?.permissionDecision).toBe("deny");
   });
 
   test("denies every non-allowlisted tool call under the deny line", () => {

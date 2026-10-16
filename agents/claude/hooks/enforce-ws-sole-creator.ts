@@ -12,7 +12,7 @@ import { arr, at, parseJson, strAt } from "../../hooks/narrow.ts";
 import { decidePre } from "./lib.ts";
 
 const REMEDY =
-  "use: ws add <slug> --repo <repo>  (creates <repo>.ws/ws_<slug>; tools/spec/jj-ws.md)";
+  "use: ws add <slug> --repo <repo>  (creates <repo>.ws/ws_<slug>; tools/spec/jj-ws.md); run ws in the dispatcher's foreground, outside worker units and deadline wrappers";
 const IMPLEMENTATION = resolve(import.meta.dir, "../../../tools/jj-ws");
 const VALUE_FLAGS = new Set([
   "-R",
@@ -55,6 +55,14 @@ function createsWorkspace(source: string, cwd: string): boolean | undefined {
     const exe = effective(command);
     if (exe === undefined || (exe.name !== "jj" && exe.name !== "git"))
       return false;
+    // Preserve the former raw-command guard even when extra positionals precede workspace.
+    const workspace = exe.args.indexOf("workspace");
+    if (
+      exe.name === "jj" &&
+      workspace >= 0 &&
+      exe.args[workspace + 1] === "add"
+    )
+      return true;
     const positional = positionals(exe.args);
     return (
       positional[0] === (exe.name === "jj" ? "workspace" : "worktree") &&

@@ -5,6 +5,15 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_SLUG=dotfiles:ws-sole-creator sh ~/.claude/hooks/run.sh --fail-closed enforce-ws-sole-creator.ts"
+          }
+        ]
+      },
+      {
         "matcher": "Agent|Task|Workflow",
         "hooks": [
           {

@@ -73,6 +73,11 @@ vendors = ["claude"]
 
 
 [[vendor_hook]]
+slug = "ws-sole-creator"
+script = "claude/hooks/enforce-ws-sole-creator.ts"
+commands = ["sh ~/.claude/hooks/run.sh --fail-closed enforce-ws-sole-creator.ts"]
+
+[[vendor_hook]]
 slug = "dispatch-contract"
 script = "claude/hooks/enforce-dispatch-contract.ts"
 commands = ["sh ~/.claude/hooks/run.sh --fail-closed enforce-dispatch-contract.ts"]

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.6 — 2026-10-16
+
+- Expire rip payloads incrementally within a two-minute work budget, retaining partial progress and avoiding a full graveyard census before deletion.
+
 ## 1.4.5 — 2026-10-16
 
 - Allow deleted graveyard payloads to expire regardless of process-use evidence while retaining other deletion guards.

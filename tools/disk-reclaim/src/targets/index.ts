@@ -71,6 +71,8 @@ export type Availability = { available: boolean; skip_reason: string | null };
 export interface Target {
   name: string;
   tier: Tier;
+  /** Run previews enumerate ownership only; measurement is deferred until each recheck. */
+  incremental?: boolean;
   description?: { what: string; why: string };
   available(this: void, ctx: Context): Availability | Promise<Availability>;
   plan(this: void, ctx: Context): Candidate[] | Promise<Candidate[]>;

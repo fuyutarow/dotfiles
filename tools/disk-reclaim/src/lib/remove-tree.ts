@@ -43,12 +43,15 @@ export type RemoveTreeResult = {
 };
 export type RemoveTreeOptions = {
   uid: number;
+  signal?: AbortSignal;
   owner?: (path: string) => { uid: number; name: string };
   immutable?: (path: string) => boolean | null;
   dryRun?: boolean;
   allowListedWorkspace?: string;
   /** Already-deleted data: process-use, repo-store and jj-workspace refusals do not apply. */
   graveyard?: boolean;
+  /** Already-deleted payloads may make partial progress before cancellation. */
+  incrementalGraveyard?: boolean;
   /** false skips the parent-mount statfs before and after; a stage measures its mount once instead. */
   measureFilesystem?: boolean;
   protection?: {
@@ -369,7 +372,46 @@ export async function removeTree(
       (error) => `cannot add owner rwx: ${message(error)}`,
     );
   };
+  const removeEntry = async (entry: {
+    path: string;
+    stat: Stats;
+  }): Promise<boolean> => {
+    if (options.signal?.aborted === true) return false;
+    const removed = await fromAsyncThrowable(async () => {
+      if (entry.stat.isDirectory()) await removeDir(entry.path);
+      else await unlinkFile(entry.path);
+    })();
+    if (removed.isErr()) {
+      errors.push({ path: entry.path, error: message(removed.error) });
+      return false;
+    }
+    bytesFreed += entry.stat.blocks * 512;
+    entriesDone += 1;
+    writeProgress();
+    return true;
+  };
+  const queueOrRemove = async (entry: {
+    path: string;
+    stat: Stats;
+  }): Promise<boolean> => {
+    if (options.incrementalGraveyard === true && options.graveyard === true)
+      return removeEntry(entry);
+    pending.push(entry);
+    return true;
+  };
+  const visitChildren = async (
+    entry: string,
+    children: string[],
+  ): Promise<boolean> => {
+    let complete = true;
+    for (const child of children) {
+      if (options.signal?.aborted === true) return false;
+      complete = (await visit(join(entry, child))) && complete;
+    }
+    return complete;
+  };
   const visit = async (entry: string): Promise<boolean> => {
+    if (options.signal?.aborted === true) return false;
     inspected++;
     if (inspected % 128 === 0) await Bun.sleep(0);
     const statResult = fromThrowable(() => lstatSync(entry))();
@@ -442,18 +484,13 @@ export async function removeTree(
         errors.push({ path: entry, error: message(children.error) });
         return false;
       }
-      let complete = true;
-      for (const child of children.value) {
-        complete = (await visit(join(entry, child))) && complete;
-      }
+      const complete = await visitChildren(entry, children.value);
       if (!complete) return false;
       if (options.dryRun === true) return true;
-      pending.push({ path: entry, stat });
-      return true;
+      return queueOrRemove({ path: entry, stat });
     }
     if (options.dryRun === true) return true;
-    pending.push({ path: entry, stat });
-    return true;
+    return queueOrRemove({ path: entry, stat });
   };
   await visit(path);
   if (options.dryRun !== true && refused.length === 0 && errors.length === 0) {
@@ -466,21 +503,11 @@ export async function removeTree(
       const workers = Math.min(24, entries.length);
       await Promise.all(
         Array.from({ length: workers }, async () => {
-          while (cursor < entries.length) {
+          while (cursor < entries.length && options.signal?.aborted !== true) {
             const entry = entries[cursor];
             cursor += 1;
             if (entry === undefined) continue;
-            const removed = await fromAsyncThrowable(async () => {
-              if (entry.stat.isDirectory()) await removeDir(entry.path);
-              else await unlinkFile(entry.path);
-            })();
-            if (removed.isErr())
-              errors.push({ path: entry.path, error: message(removed.error) });
-            else {
-              bytesFreed += entry.stat.blocks * 512;
-              entriesDone += 1;
-              writeProgress();
-            }
+            await removeEntry(entry);
           }
         }),
       );
@@ -497,6 +524,11 @@ export async function removeTree(
     }
   }
   writeProgress(true);
+  if (options.signal?.aborted === true)
+    errors.push({
+      path,
+      error: "graveyard expiry budget exhausted or cancelled",
+    });
   const after = measureFilesystem
     ? fromThrowable(() => statfsSync(parent))()
         .map((stat) => stat.bavail * stat.bsize)

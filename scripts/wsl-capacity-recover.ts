@@ -345,9 +345,9 @@ export async function expireGraveyard(
     argv[argv.indexOf("run")] = "plan";
     argv.splice(argv.indexOf("--yes"), 1);
   }
-  // A large graveyard needs a complete byte census before capacity expiry; leave
-  // three minutes of the service's 15-minute budget for the other capacity probes.
-  return run({ name: "rip-expire", argv, timeoutMs: 12 * 60_000 });
+  // Expiry spends at most two minutes on incremental work; allow time to flush
+  // its partial receipt before the controller's outer deadline.
+  return run({ name: "rip-expire", argv, timeoutMs: 3 * 60_000 });
 }
 
 // Order is execution order: the Windows host levers first, then guest build output and caches.

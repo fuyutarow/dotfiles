@@ -362,7 +362,8 @@ export async function plan(
                   phase,
                 );
               },
-        mode: "plan",
+        mode:
+          options.yes === true && target.incremental === true ? "run" : "plan",
         headroom,
         underPressure: options.underPressure === true,
         liveness,
@@ -521,7 +522,7 @@ async function recheckAndAct(
   if (found.verdict !== "RECLAIM") return 0;
   if (found.path !== null) {
     const protection = protectedReason(found.path, {
-      ownerTarget: target.name,
+      ownerTarget: target.name === "rip-expire" ? "delete" : target.name,
       procDir: freshContext.procDir,
       repoRoots: [
         ...freshContext.config.repo_roots,
@@ -529,7 +530,10 @@ async function recheckAndAct(
       ],
       protectedPaths: freshContext.config.protected ?? [],
       ignoreUnreadableProcs: freshContext.config.ignore_unreadable_procs ?? [],
-      processes: freshContext.liveness,
+      processes:
+        target.name === "rip-expire"
+          ? { openPaths: () => ({ open: [], unknown: [] }) }
+          : freshContext.liveness,
     });
     if (protection !== null) {
       found.verdict =

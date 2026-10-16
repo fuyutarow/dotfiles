@@ -20,7 +20,7 @@ description: >-
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2610.4.0 (2026-10-13) — J1 `--push` rebases and retries when a concurrent writer moves alpha.
+> **Version**: v2610.5.0 (2026-10-16) — split task bodies and configurable literal tool authority checks.
 > Owns the task graph, naming, template fragments and resolution gate.
 > Dated tool facts, provenance and rulings live in `references/recipes.md`.
 
@@ -179,7 +179,7 @@ Additional workspaces and supported feature combinations need named leaf tasks, 
 
 | Rule | Artifact | Origin |
 |---|---|---|
-| **RUNTIME-DECLARED** — every runtime a task body invokes (`bun`/`node`/`uv`/`julia`/`cargo`/`deno`) is declared and pinned in `[tools]`. | `mise-contract.ts` prints `OK tools: <x> declared`; an invoked-but-undeclared runtime FAILs. | Census 2026-07-25, 3 repos: two had no `[tools]` section at all, the third declared one runtime of four. Every one of them invoked runtimes from task bodies regardless. |
+| **RUNTIME-DECLARED** — every recognized runtime a task body invokes (including Go, Python, Ruby and Java) is declared and pinned in `[tools]`. | `mise-contract.ts` prints `OK tools: <x> declared`; an invoked-but-undeclared runtime FAILs. | Census 2026-07-25, 3 repos: two had no `[tools]` section at all, the third declared one runtime of four. Every one of them invoked runtimes from task bodies regardless. |
 | **BODY-IS-DECLARATION** — a task body is a launcher, not a program. Over 10 non-blank lines, **or any branching/parsing logic**, moves to a script file. | `mise-contract.ts` FAILs on BOTH halves (2026-08-30). Control flow = `if`/`for`/`while`/`until`/`case`/`[` test/`test` at command position. Comments and quoted spans are stripped first. `&&`/`||` are not tells. | `cc:install-mcp` was a 52-line body that pruned nothing for weeks, invisibly. A body in TOML **cannot be imported or tested**. |
 
 > `実測` 2026-08-30. Two defects, one cause. Only the LENGTH half was ever enforced. And the
@@ -208,6 +208,7 @@ declared under the first rule, moving a body to `scripts/*.ts` costs nothing —
   Exit 0 = contract holds (WARNs allowed) · 1 = HARD violation · 2 = environment error. The gate
   is resolution-based by design — do NOT rewrite it as mise.toml regex parsing (rejected
   precedent; evidence in the ledger).
+- **Split tasks and tool authority**: root tasks, `mise/tasks/**/*.toml`, and TOML files selected by `task_config.includes` receive body/runtime checks. Use `mise-contract --tools` to audit literal commands in tasks, package scripts, and JS/TS scripts/tests against `[tools]`, exact Bun lock entries and OS base commands. Optional policy flags and coverage limits: [references/tool-authority.md](references/tool-authority.md).
 - **Wire per repo**: every template carries `[tasks."mise:contract"]` and calls the `mise-contract`
   PATH bin. It stays OUT of `check.depends` by default (a machine without
   the skills deployment would break CI); wire it in where deployment is guaranteed.

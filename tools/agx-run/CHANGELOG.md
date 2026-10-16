@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.1.1 — 2026-10-16
+
+- Add run lifecycle findings to the fleet doctor
+
 ## 5.1.0 — 2026-10-16
 
 - Add auto.routes allowlist for router eligibility and report the active filter in checks and capability errors.

@@ -21,6 +21,8 @@ import { release, tmpdir } from "node:os";
 import { join } from "node:path";
 import { sshSupportsAttachMatch } from "../link-dots.ts";
 import {
+  checkAgx,
+  CHECKS,
   checkCccDbMap,
   checkCodexRemote,
   checkCodexRuntime,
@@ -72,6 +74,47 @@ afterAll(() => {
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
+
+test("mise doctor has an agx fleet row and reports its findings", async () => {
+  expect(CHECKS.some((check) => check.name === "agx")).toBe(true);
+  const ctx: Ctx = {
+    home: "/fixture/home",
+    dotfiles: "/fixture/dotfiles",
+    isMac: false,
+    isWsl: false,
+    isCoreBox: false,
+  };
+  const finding =
+    "agx-ws\trepo\tws_old\tunlanded-72h\tcd repo.ws/ws_old && mise run land";
+  const failed = await checkAgx(ctx, async (cmd, opts) => {
+    await Promise.resolve();
+    expect(cmd).toEqual(["agx", "doctor"]);
+    expect(opts.cwd).toBe(ctx.dotfiles);
+    return {
+      code: 1,
+      out: `${finding}\n`,
+      err: "summary\n",
+      timedOut: false,
+      missing: false,
+    };
+  });
+  expect(failed).toMatchObject({
+    name: "agx",
+    verdict: "FAIL",
+    lines: [finding],
+  });
+  const clean = await checkAgx(ctx, async () => {
+    await Promise.resolve();
+    return {
+      code: 0,
+      out: "",
+      err: "agx doctor: 0 finding(s)\n",
+      timedOut: false,
+      missing: false,
+    };
+  });
+  expect(clean.verdict).toBe("PASS");
+});
 
 function doctor(
   only: string,

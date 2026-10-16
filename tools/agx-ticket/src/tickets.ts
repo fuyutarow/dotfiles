@@ -199,8 +199,13 @@ export type TicketRow = {
   volatile: boolean;
 };
 
-async function command(args: string[], cwd: string): Promise<Attempt<string>> {
-  process.stderr.write(`tkt: reading ${args[0]} ${args[1]}\n`);
+async function command(
+  args: string[],
+  cwd: string,
+  quiet = false,
+): Promise<Attempt<string>> {
+  if (!quiet && process.env.AGX_DOCTOR_QUIET !== "1")
+    process.stderr.write(`tkt: reading ${args[0]} ${args[1]}\n`);
   const ran = await attempt(async () => {
     const child = Bun.spawn(args, {
       cwd,
@@ -245,6 +250,7 @@ const stateOf = (run: Run): TicketRow["state"] => {
 async function landing(
   run: Run,
   ctx: Context,
+  quiet = false,
 ): Promise<{ landed: boolean | null; reason: string }> {
   if (ctx.store === null)
     return { landed: null, reason: "not a jj repository" };
@@ -275,6 +281,7 @@ async function landing(
       'commit_id ++ "\\n"',
     ],
     ctx.root,
+    quiet,
   );
   if (!out.ok) return { landed: null, reason: errorMessage(out.error) };
   return {
@@ -295,11 +302,18 @@ async function ticketName(path: string): Promise<string> {
     ? (name.data.name ?? basename(path, ".md"))
     : basename(path, ".md");
 }
-export async function list(repo: string): Promise<Attempt<TicketRow[]>> {
+export async function list(
+  repo: string,
+  options: { quiet?: boolean } = {},
+): Promise<Attempt<TicketRow[]>> {
   const contextResult = await context(repo);
   if (!contextResult.ok) return contextResult;
   const ctx = contextResult.value;
-  const records = await command(["agx", "ls", "--json", "--all"], ctx.root);
+  const records = await command(
+    ["agx", "ls", "--json", "--all"],
+    ctx.root,
+    options.quiet,
+  );
   if (!records.ok) return records;
   const runs = jsonOf(z.array(Run)).safeParse(records.value);
   if (!runs.success) return bad(`invalid agx ls --json: ${runs.error.message}`);
@@ -330,7 +344,7 @@ export async function list(repo: string): Promise<Attempt<TicketRow[]>> {
     const landed =
       chosen === undefined
         ? { landed: null, reason: "no run" }
-        : await landing(chosen, ctx);
+        : await landing(chosen, ctx, options.quiet);
     const physical = await realpath(path);
     const volatile = [
       "/tmp",
@@ -372,6 +386,104 @@ export async function collect(
     );
   }
   return good(lines);
+}
+
+const doctorClean = (value: string) => value.replaceAll(/[\t\r\n]/gu, " ");
+const isTicketFile = async (path: string): Promise<boolean> => {
+  const text = await readFile(path, "utf8").catch(() => "");
+  const front = /^\+\+\+\r?\n([\s\S]*?)\r?\n\+\+\+/u.exec(text);
+  if (front === null) return false;
+  const parsed = await attempt(() => Bun.TOML.parse(front[1]!));
+  if (!parsed.ok) return false;
+  return z
+    .object({
+      schema: z.literal(2),
+      proposition: z.record(z.string(), z.unknown()),
+    })
+    .safeParse(parsed.value).success;
+};
+
+/** Read-only fleet check for ticket placement and accepted, landed tickets. */
+export async function doctor(): Promise<Attempt<string[]>> {
+  const home = process.env.AGX_DOCTOR_HOME ?? homedir();
+  const workspaceHome =
+    process.env.AGX_DOCTOR_WORKSPACE ?? join(home, "Workspace");
+  const repos = [join(home, "dotfiles")];
+  const workspaceEntries = await readdir(workspaceHome, {
+    withFileTypes: true,
+  }).catch(() => []);
+  repos.push(
+    ...workspaceEntries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(workspaceHome, entry.name)),
+  );
+  const findings: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of repos) {
+    const git = await exists(join(candidate, ".git"));
+    if (!git.ok || !git.value) continue;
+    const ctx = await context(candidate);
+    if (!ctx.ok) return ctx;
+    const backing =
+      ctx.value.store === null
+        ? ctx.value.root
+        : resolve(dirname(dirname(ctx.value.store)));
+    if (resolve(ctx.value.root) !== backing || seen.has(backing)) continue;
+    seen.add(backing);
+    const rows = await list(backing, { quiet: true });
+    if (!rows.ok) return rows;
+    findings.push(
+      ...acceptedLandedFindings(backing, rows.value),
+      ...(await outOfHomeFindings(backing, ctx.value.directory)),
+    );
+  }
+  return good(findings);
+}
+
+function acceptedLandedFindings(backing: string, rows: TicketRow[]): string[] {
+  return rows
+    .filter((row) => row.state === "accepted" && row.landed === true)
+    .map((row) =>
+      [
+        "agx-ticket",
+        backing,
+        row.ticket,
+        "accepted-landed-present",
+        `tkt gc --repo ${backing}`,
+      ]
+        .map((value) => doctorClean(value))
+        .join("\t"),
+    );
+}
+
+async function outOfHomeFindings(
+  backing: string,
+  directory: string,
+): Promise<string[]> {
+  const findings: string[] = [];
+  const ignored = new Set([".git", ".jj", "node_modules", ".ws"]);
+  for await (const relativePath of new Bun.Glob("**/*.md").scan({
+    cwd: backing,
+    dot: true,
+    onlyFiles: true,
+  })) {
+    if (relativePath.split("/").some((part) => ignored.has(part))) continue;
+    const path = resolve(backing, relativePath);
+    if (path === directory || path.startsWith(`${directory}/`)) continue;
+    if (!(await isTicketFile(path))) continue;
+    findings.push(
+      [
+        "agx-ticket",
+        backing,
+        basename(path, ".md"),
+        "outside-home",
+        `mv ${path} ${directory}/`,
+      ]
+        .map((value) => doctorClean(value))
+        .join("\t"),
+    );
+  }
+  return findings;
 }
 
 async function deleteEligible(

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 — 2026-10-16
+
+- Add read-only workspace fleet findings
+
 ## 0.3.1 — 2026-10-16
 
 - Recognize released workspace content and land-consumed changesets, report differing paths, and safely collect idle land checkouts

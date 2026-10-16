@@ -11,8 +11,8 @@ import {
   readlinkSync,
   realpathSync,
 } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
-import { stat } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import {
   attempt,
@@ -706,11 +706,12 @@ async function workspaces(repo: Repo): Promise<Attempt<Workspace[]>> {
       true,
     );
     if (!root.ok) return bad(`cannot resolve workspace ${name}: ${msg(root)}`);
-    const dir = root.value.trim();
-    if (dir === "")
+    const resolvedRoot = root.value.trim();
+    if (resolvedRoot === "")
       return bad(
         `no recorded path for workspace ${name}; refusing incomplete enumeration`,
       );
+    const dir = resolve(repo.backing, resolvedRoot);
     if (realOr(dir) !== realOr(repo.backing))
       found.push({ name, dir, change: change ?? "?", age: age ?? "?" });
   }
@@ -1050,6 +1051,7 @@ async function classify(
   ws: Workspace,
   records: RunRecord[],
   trunk: string | null,
+  readOnly = false,
 ): Promise<Classification> {
   let change = ws.change ?? "?";
   let age = ws.age ?? "?";
@@ -1085,8 +1087,16 @@ async function classify(
           "temporary land checkout; no live land lock",
           true,
         );
-  const fresh = await updateStale(ws.dir);
-  if (!fresh.ok) return verdict("keep", msg(fresh));
+  const fresh = readOnly
+    ? await jjOut(["status"], ws.dir, true)
+    : await updateStale(ws.dir);
+  if (!fresh.ok)
+    return verdict(
+      readOnly && msg(fresh).includes("working copy is stale")
+        ? "stale"
+        : "keep",
+      msg(fresh),
+    );
   const info = await jjOut(
     [
       "log",
@@ -1179,7 +1189,8 @@ export async function gc(
     const failed: string[] = [];
     for (const ws of candidates.value) {
       const kind =
-        dirname(ws.dir) === repo.wsRoot && ws.name.startsWith("ws_")
+        dirname(resolve(ws.dir)) === resolve(repo.wsRoot) &&
+        basename(resolve(ws.dir)).startsWith("ws_")
           ? "ws"
           : "legacy";
       const c = await classify(repo, cfg.value, ws, records.value, trunk.value);
@@ -1212,11 +1223,7 @@ export async function gc(
   });
 }
 
-/** Consumer registry is data, never executable configuration. Include pending consumers too. */
-export async function gcAll(
-  options: Omit<GcOptions, "repo">,
-  root = resolve(import.meta.dir, "../../.."),
-): Promise<Attempt<{ lines: string[]; failed: string[] }>> {
+async function registeredRepoPaths(root: string): Promise<Attempt<string[]>> {
   const read = await attempt(async () =>
     Bun.TOML.parse(await Bun.file(join(root, "presets/consumers.toml")).text()),
   );
@@ -1230,15 +1237,154 @@ export async function gcAll(
     .safeParse(read.value);
   if (!registry.success)
     return bad(`consumer registry: ${registry.error.message}`);
-  const roots = new Set([
-    root,
-    ...registry.data.consumers.map((r) => r.root),
-    ...registry.data.pending.map((r) => r.root),
+  return good([
+    ...new Set([
+      root,
+      ...registry.data.consumers.map((entry) => entry.root),
+      ...registry.data.pending.map((entry) => entry.root),
+    ]),
   ]);
+}
+
+async function doctorRepoPaths(root: string): Promise<Attempt<string[]>> {
+  const home = process.env.AGX_DOCTOR_HOME;
+  if (home === undefined) return registeredRepoPaths(root);
+  const workspaceHome =
+    process.env.AGX_DOCTOR_WORKSPACE ?? join(home, "Workspace");
+  const entries = await readdir(workspaceHome, { withFileTypes: true }).catch(
+    () => [],
+  );
+  return good([
+    join(home, "dotfiles"),
+    ...entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(workspaceHome, entry.name)),
+  ]);
+}
+
+export type DoctorWorkspaceRow = {
+  repo: string;
+  dir: string;
+  name: string;
+  kind: "ws" | "legacy";
+  classification: Classification;
+  ageMs: number | undefined;
+};
+
+/** Read-only inventory built from the same workspaces and classifier as `ws gc --dry-run`. */
+export async function doctorInventory(
+  root = resolve(import.meta.dir, "../../.."),
+): Promise<Attempt<DoctorWorkspaceRow[]>> {
+  const paths = await doctorRepoPaths(root);
+  if (!paths.ok) return paths;
+  const seen = new Set<string>();
+  const rows: DoctorWorkspaceRow[] = [];
+  for (const path of paths.value) {
+    const expanded = path.startsWith("~/")
+      ? join(homedir(), path.slice(2))
+      : path;
+    if (!(await Bun.file(join(expanded, ".git")).exists())) continue;
+    const resolved = resolveRepo(expanded);
+    if (!resolved.ok) return bad(`${path}: ${msg(resolved)}`);
+    const repo = resolved.value;
+    if (seen.has(repo.backing)) continue;
+    seen.add(repo.backing);
+    const cfg = await readConfig(repo, true);
+    if (!cfg.ok) return cfg;
+    const trunk = await trunkCommit(repo, cfg.value);
+    if (!trunk.ok) return trunk;
+    const candidates = await workspaces(repo);
+    if (!candidates.ok) return candidates;
+    const records = await agxRecords(repo.backing);
+    if (!records.ok) return records;
+    for (const ws of candidates.value) {
+      const kind =
+        dirname(resolve(ws.dir)) === resolve(repo.wsRoot) &&
+        basename(resolve(ws.dir)).startsWith("ws_")
+          ? "ws"
+          : "legacy";
+      const classification = await classify(
+        repo,
+        cfg.value,
+        ws,
+        records.value,
+        trunk.value,
+        true,
+      );
+      const info = await attempt(() => stat(ws.dir));
+      rows.push({
+        repo: repo.backing,
+        dir: ws.dir,
+        name: ws.name,
+        kind,
+        classification,
+        ageMs: info.ok
+          ? Temporal.Now.instant().epochMilliseconds - info.value.mtimeMs
+          : undefined,
+      });
+    }
+  }
+  return good(rows);
+}
+
+const doctorClean = (value: string) => value.replaceAll(/[\t\r\n]/gu, " ");
+
+/** Map gc classifier outcomes to doctor findings; kept rows remain deliberately silent. */
+export async function doctor(): Promise<Attempt<string[]>> {
+  const inventory = await doctorInventory();
+  if (!inventory.ok) return inventory;
+  const findings: string[] = [];
+  for (const row of inventory.value) {
+    const c = row.classification;
+    if (
+      c.verdict === "kept" ||
+      c.verdict === "keep" ||
+      c.verdict === "land-temp"
+    )
+      continue;
+    const emit = (finding: string, fix: string) => {
+      findings.push(
+        ["agx-ws", row.repo, row.name, finding, fix]
+          .map((value) => doctorClean(value))
+          .join("\t"),
+      );
+    };
+    if (c.verdict === "stale") {
+      const slug = row.name.startsWith("ws_") ? row.name.slice(3) : row.name;
+      emit("stale", `ws refresh ${slug} --repo ${row.repo}`);
+      continue;
+    }
+    if (row.kind === "legacy") {
+      emit(
+        c.verdict === "empty" ? "legacy-empty" : "legacy-layout",
+        `ws gc --legacy --repo ${row.repo}`,
+      );
+    } else if (c.verdict === "empty") {
+      emit("empty", `ws gc --include-unrecorded --repo ${row.repo}`);
+    } else if (c.verdict === "landed") {
+      emit("collectable", `ws gc --include-unrecorded --repo ${row.repo}`);
+    }
+    if (
+      c.verdict === "unlanded" &&
+      row.ageMs !== undefined &&
+      row.ageMs > 72 * 60 * 60 * 1000
+    )
+      emit("unlanded-72h", `cd ${row.dir} && mise run land`);
+  }
+  return good(findings);
+}
+
+/** Fleet-wide gc; the consumer registry is data, never executable configuration. */
+export async function gcAll(
+  options: Omit<GcOptions, "repo">,
+  root = resolve(import.meta.dir, "../../.."),
+): Promise<Attempt<{ lines: string[]; failed: string[] }>> {
+  const roots = await registeredRepoPaths(root);
+  if (!roots.ok) return roots;
   const lines: string[] = [];
   const failed: string[] = [];
   const seen = new Set<string>();
-  for (const path of roots) {
+  for (const path of roots.value) {
     const expanded = path.startsWith("~/")
       ? join(homedir(), path.slice(2))
       : path;

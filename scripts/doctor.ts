@@ -1764,6 +1764,30 @@ export async function checkBrewShadows(ctx: Ctx): Promise<Finding> {
       );
 }
 
+export async function checkAgx(
+  ctx: Ctx,
+  probe: typeof run = run,
+): Promise<Finding> {
+  const result = await probe(["agx", "doctor"], {
+    ms: 30_000,
+    cwd: ctx.dotfiles,
+  });
+  if (result.missing) return fail("agx", "agx is not on PATH", "mise run deps");
+  if (result.timedOut) return warn("agx", "agx doctor timed out after 30s");
+  const lines = result.out.split(/\r?\n/u).filter(Boolean);
+  if (result.code === 0) {
+    const summary = result.err.trim();
+    return pass("agx", summary !== "" ? summary : "fleet clean");
+  }
+  if (result.code === 1)
+    return fail("agx", `${lines.length} fleet finding(s)`, "agx doctor", lines);
+  const detail = result.err.trim();
+  return warn(
+    "agx",
+    detail !== "" ? detail : `agx doctor exited ${result.code}`,
+  );
+}
+
 type Check = {
   name: string;
   run: (ctx: Ctx) => Promise<Finding>;
@@ -1851,6 +1875,7 @@ export const CHECKS: Check[] = [
       c.isCoreBox && !c.isWsl ? "ccc is not a core tool (Brewfile.core)" : null,
   },
   { name: "git-ref-locks", run: checkGitRefLocks, applies: always },
+  { name: "agx", run: checkAgx, applies: always },
   {
     name: "iterm2",
     run: checkIterm2,

@@ -2,7 +2,14 @@
 import { cli, command } from "cleye";
 import { errorMessage } from "../../shared/src/attempt.ts";
 import packageJson from "../package.json" with { type: "json" };
-import { add, gc, gcAll, refresh, remove } from "./workspace.ts";
+import {
+  add,
+  doctor as doctorWorkspaces,
+  gc,
+  gcAll,
+  refresh,
+  remove,
+} from "./workspace.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -155,6 +162,28 @@ const gcCommand = command(
   },
 );
 
+const doctorCommand = command(
+  {
+    name: "doctor",
+    strictFlags: true,
+    ignoreArgv: rejectPrototypeFlag,
+    help: { description: "Read-only registered workspace inventory." },
+  },
+  async () => {
+    const done = await doctorWorkspaces();
+    if (!done.ok) {
+      fail(done.error);
+      if (process.env.AGX_DOCTOR_QUIET !== "1")
+        process.stderr.write("agx-ws doctor: error\n");
+      return;
+    }
+    for (const line of done.value) process.stdout.write(`${line}\n`);
+    if (process.env.AGX_DOCTOR_QUIET !== "1")
+      process.stderr.write(`agx-ws doctor: ${done.value.length} finding(s)\n`);
+    process.exitCode = done.value.length === 0 ? 0 : 1;
+  },
+);
+
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === "--version")
   process.stdout.write(`${packageJson.version}\n`);
@@ -164,5 +193,5 @@ else
     version: packageJson.version,
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
-    commands: [addCommand, refreshCommand, rmCommand, gcCommand],
+    commands: [addCommand, refreshCommand, rmCommand, gcCommand, doctorCommand],
   });

@@ -5,7 +5,7 @@ import {
   errorMessage,
   type Attempt,
 } from "../../shared/src/attempt.ts";
-import { collect, create, list } from "./tickets.ts";
+import { collect, create, doctor as doctorTickets, list } from "./tickets.ts";
 import pkg from "../package.json" with { type: "json" };
 
 const fail = (error: unknown): void => {
@@ -124,6 +124,25 @@ const gcCommand = command(
       lines,
     ),
 );
+const doctorCommand = command(
+  {
+    ...common,
+    name: "doctor",
+    help: { description: "Read-only registered ticket inventory." },
+  },
+  async () =>
+    show(
+      () => doctorTickets(),
+      (items) => {
+        lines(items);
+        if (process.env.AGX_DOCTOR_QUIET !== "1")
+          process.stderr.write(
+            `agx-ticket doctor: ${items.length} finding(s)\n`,
+          );
+        process.exitCode = items.length === 0 ? 0 : 1;
+      },
+    ),
+);
 if (process.argv.length === 3 && process.argv[2] === "--version")
   process.stdout.write(`${pkg.version}\n`);
 else
@@ -131,5 +150,5 @@ else
     ...common,
     name: "tkt",
     version: pkg.version,
-    commands: [newCommand, lsCommand, gcCommand],
+    commands: [newCommand, lsCommand, gcCommand, doctorCommand],
   });

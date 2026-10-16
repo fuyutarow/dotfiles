@@ -4,6 +4,7 @@ import { waitRun } from "./wait.ts";
 import { COMMAND_NAMES } from "./commands.ts";
 import { cli, command } from "cleye";
 import { exitWithError } from "./exit.ts";
+import { doctor } from "./doctor.ts";
 import packageJson from "../../package.json" with { type: "json" };
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -174,6 +175,8 @@ async function main(): Promise<void> {
       commandArgs,
     );
     exit = await stats(parsed.flags satisfies Flags);
+  } else if (commandName === "doctor") {
+    exit = await doctor();
   }
   process.exitCode = exit;
 }

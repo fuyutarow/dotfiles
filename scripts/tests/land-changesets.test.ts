@@ -81,14 +81,39 @@ test("two changesets produce one highest bump and retain both entries", async ()
 
 test("the repo Markdown formatter output parses as one changeset entry", async () => {
   const { root, tool, changes } = await fixture();
+  const bin = join(root, "bin");
+  await mkdir(bin);
+  // A PATH-only lookup must fail; the formatter must come from the repo declaration.
+  await writeFile(join(bin, "rumdl"), "#!/bin/sh\nexit 77\n", { mode: 0o755 });
   const change = join(changes, "formatter-roundtrip.md");
   await writeFile(
     change,
     "---\nbump: patch\n---\n\nKeep user-session dbus and gnupg paths and accept --no-progress for apply\n",
   );
   const formatted = await runProcess(
-    [await rumdlBinary(), "fmt", "--config", join(repo, ".rumdl.toml"), change],
-    { cwd: repo, stdout: "pipe", stderr: "pipe" },
+    [
+      "mise",
+      "exec",
+      "--",
+      "rumdl",
+      "fmt",
+      "--config",
+      join(repo, ".rumdl.toml"),
+      change,
+    ],
+    {
+      cwd: repo,
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        MISE_STATE_DIR: join(root, "mise-state"),
+        MISE_CACHE_DIR: join(root, "mise-cache"),
+        MISE_CONFIG_DIR: join(root, "mise-config"),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 30_000,
+    },
   );
   expect(
     `${formatted.exitCode}: ${formatted.stderr.toString()}${formatted.stdout.toString()}`,
@@ -176,15 +201,6 @@ test("land reports a malformed file with its path and generator command", async 
     expect(result.error.message).toContain("mise run changeset --");
   }
 });
-
-// mise.toml pins rumdl, but a bare `bun test` has no mise PATH: ask mise where the pinned binary is.
-async function rumdlBinary(): Promise<string> {
-  const onPath = Bun.which("rumdl");
-  if (onPath !== null) return onPath;
-  const located = await runProcess(["mise", "which", "rumdl"], { cwd: repo });
-  const path = located.stdout.toString().trim();
-  return located.exitCode === 0 && path !== "" ? path : "rumdl";
-}
 
 // Drain both pipes while waiting for the bounded subprocess.
 async function runProcess(

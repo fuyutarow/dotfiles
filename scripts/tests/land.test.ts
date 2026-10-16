@@ -1903,6 +1903,9 @@ test("shared preset refuses a red consumer before commit; compliant consumer lan
     join(consumer, "gate.ts"),
     `const rule = await Bun.file('rule').text(); const code = await Bun.file('code').text(); await Bun.write('gate-ran', 'scratch'); if (rule === 'strict' && code === 'legacy') { process.stderr.write('lint:fixture: consumer code is incompatible\\n'); process.exit(7); }`,
   );
+  await f.jj(consumer, ["git", "init", "--colocate"]);
+  await f.jj(consumer, ["commit", "-m", "consumer fixture"]);
+  await f.jj(consumer, ["bookmark", "create", "alpha", "-r", "@-"]);
   await mkdir(join(f.worker, "presets/demo"), { recursive: true });
   await mkdir(join(f.worker, "presets/src"), { recursive: true });
   await writeFile(join(f.worker, "presets/demo/rule"), "strict");
@@ -1916,7 +1919,7 @@ test("shared preset refuses a red consumer before commit; compliant consumer lan
   );
   await writeFile(
     join(f.worker, "presets/consumers.toml"),
-    `[[consumers]]\nname = "fixture-consumer"\nroot = ${JSON.stringify(consumer)}\nsurfaces = ["presets/demo"]\ncommand = [${JSON.stringify(process.execPath)}, "gate.ts"]\ntimeout_ms = 10000\n`,
+    `[[consumers]]\nname = "fixture-consumer"\nroot = ${JSON.stringify(consumer)}\ntrunk = "alpha"\nsetup = ["true"]\nsurfaces = ["presets/demo"]\ncommand = [${JSON.stringify(process.execPath)}, "gate.ts"]\ntimeout_ms = 10000\n`,
   );
   const refused = await f.land();
   expect(refused.exitCode).toBe(1);
@@ -1938,6 +1941,8 @@ test("shared preset refuses a red consumer before commit; compliant consumer lan
     "commit_id",
   ]);
   await writeFile(join(consumer, "code"), "compliant");
+  await f.jj(consumer, ["commit", "-m", "compliant consumer fixture"]);
+  await f.jj(consumer, ["bookmark", "set", "alpha", "-r", "@-"]);
   const landed = await f.land();
   expect(landed.exitCode).toBe(0);
   expect(landed.stdout.toString()).toContain("PASS fixture-consumer");

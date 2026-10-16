@@ -4,8 +4,10 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  readdir,
   realpath,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -22,23 +24,29 @@ import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 const Surface = z.string().regex(/^(presets\/[a-z0-9-]+|hooks|package-bins)$/u);
-const Registry = z.strictObject({
-  consumers: z
-    .array(
-      z.strictObject({
-        name: z.string().min(1),
-        root: z.string().min(1),
-        surfaces: z.array(Surface).min(1),
-        command: z.array(z.string().min(1)).min(1),
-        timeout_ms: z.number().int().positive().max(600_000),
-      }),
-    )
-    .refine(
-      (rows) => new Set(rows.map((row) => row.name)).size === rows.length,
-      "duplicate consumer name",
-    ),
+const ConsumerDeclaration = z.strictObject({
+  name: z.string().min(1),
+  root: z.string().min(1),
+  trunk: z.string().min(1).optional(),
+  setup: z.array(z.string().min(1)).min(1),
+  bins: z.array(z.string().min(1)).optional(),
+  full_gate_rule: z.string().optional(),
+  surfaces: z.array(Surface).min(1),
+  command: z.array(z.string().min(1)).min(1),
+  timeout_ms: z.number().int().positive().max(600_000),
 });
-export type Consumer = z.output<typeof Registry>["consumers"][number];
+export const ConsumerRegistry = z
+  .strictObject({
+    consumers: z.array(ConsumerDeclaration),
+    pending: z
+      .array(ConsumerDeclaration.extend({ reason: z.string().min(1) }))
+      .default([]),
+  })
+  .refine((registry) => {
+    const rows = [...registry.consumers, ...registry.pending];
+    return new Set(rows.map((row) => row.name)).size === rows.length;
+  }, "duplicate consumer name");
+export type Consumer = z.output<typeof ConsumerRegistry>["consumers"][number];
 export type ConsumerGateReport = {
   ok: boolean;
   checked: number;
@@ -108,36 +116,85 @@ async function command(
   ]);
   return {
     ok: exit === 0 && !signal.aborted,
+    stdout: out,
     reason: signal.aborted ? `timeout after ${timeout}ms` : `exit ${exit}`,
-    output: `${out}${err}`.trim().split("\n").slice(-15).join("\n"),
+    output: `${out}${err}`.trim().split("\n").slice(-20).join("\n"),
   };
 }
 
-// Do not preserve links back into live checkouts (including node_modules workspace links).
+function diagnosticOutput(output: string): string {
+  const lines =
+    output.trim() === ""
+      ? ["(command emitted no stdout or stderr)"]
+      : output.split("\n").slice(-20);
+  return lines.map((line) => `  ${line}`).join("\n");
+}
+
+// Preserve link text, including dangling links. The sandbox protects external targets.
 // Exclude VCS metadata rather than copying .git files pointing at a shared worktree store.
 async function copyTree(source: string, target: string): Promise<void> {
-  const origin = await realpath(source);
-  await cp(origin, target, {
+  await cp(source, target, {
     recursive: true,
     verbatimSymlinks: true,
-    filter: async (path, destination) => {
-      if ([".git", ".jj", ".cocoindex_code"].includes(basename(path)))
-        return false;
-      if (!(await lstat(path)).isSymbolicLink()) return true;
-      const actual = await realpath(path);
-      const local = relative(origin, actual);
-      await mkdir(dirname(destination), { recursive: true });
-      if (!local.startsWith("..") && !isAbsolute(local)) {
-        await symlink(
-          relative(dirname(destination), join(target, local)),
-          destination,
-        );
-      } else {
-        await copyTree(actual, destination);
-      }
-      return false;
-    },
+    filter: (path) =>
+      ![".git", ".jj", ".cocoindex_code"].includes(basename(path)),
   });
+}
+
+// Resolve the consumer's own revset without snapshotting its working copy.
+async function resolveTrunk(source: string, trunk: string) {
+  return command(
+    [
+      "jj",
+      "--ignore-working-copy",
+      "-R",
+      source,
+      "log",
+      "-r",
+      trunk,
+      "--no-graph",
+      "-T",
+      "commit_id",
+    ],
+    source,
+    process.env,
+    30_000,
+  );
+}
+
+async function exportTrunk(
+  source: string,
+  target: string,
+  commit: string,
+  scratch: string,
+) {
+  const archive = join(scratch, "consumer.tar");
+  const archived = await command(
+    [
+      "git",
+      "-C",
+      source,
+      "archive",
+      "--format=tar",
+      `--output=${archive}`,
+      commit,
+    ],
+    source,
+    process.env,
+    30_000,
+  );
+  if (!archived.ok)
+    return `archive ${commit}: ${archived.reason} ${archived.output}`;
+  await mkdir(target);
+  const extracted = await command(
+    ["tar", "-xf", archive, "-C", target],
+    scratch,
+    process.env,
+    30_000,
+  );
+  return extracted.ok
+    ? undefined
+    : `extract ${commit}: ${extracted.reason} ${extracted.output}`;
 }
 
 function expandRoot(path: string): string {
@@ -152,6 +209,7 @@ function sandbox(
   source: string,
   copy: string,
   liveDotfiles: string | undefined,
+  executableDirectories: readonly string[],
 ): string[] | undefined {
   if (process.platform === "linux" && Bun.which("bwrap") !== null)
     return [
@@ -161,6 +219,7 @@ function sandbox(
       "--ro-bind",
       "/",
       "/",
+      ...executableDirectories.flatMap((path) => ["--ro-bind", path, path]),
       "--dev",
       "/dev",
       "--proc",
@@ -281,6 +340,17 @@ const Mappings = z.looseObject({
     }),
   ),
 });
+async function containsSymlink(root: string, path: string): Promise<boolean> {
+  let current = root;
+  for (const part of path.split("/")) {
+    current = join(current, part);
+    const entryPath = current;
+    const entry = await attempt(() => lstat(entryPath));
+    if (entry.ok && entry.value.isSymbolicLink()) return true;
+  }
+  return false;
+}
+
 async function applySurface(
   candidate: string,
   copy: string,
@@ -295,6 +365,15 @@ async function applySurface(
   const parsed = raw.ok ? Mappings.safeParse(raw.value) : undefined;
   if (parsed?.success !== true)
     return `apply ${surface}: invalid or missing manifest`;
+  // Parent-process writes must not traverse consumer links outside the isolated export.
+  for (const path of [
+    ...parsed.data.files.map((file) => file.destination),
+    "package.json",
+    "tsconfig.json",
+  ]) {
+    if (await containsSymlink(copy, path))
+      return `apply ${surface}: refusing write through consumer symlink ${path}`;
+  }
   const all = changed.includes(`${surface}/preset.toml`);
   const savedPackage =
     all || changed.includes(`${surface}/package.json`)
@@ -325,7 +404,7 @@ async function applySurface(
       "--ignore-scripts",
     ]);
     if (!installed.ok)
-      return `install ${surface} ${installed.reason}\n${installed.output}`;
+      return `install ${surface} ${installed.reason}\n${diagnosticOutput(installed.output)}`;
   }
   const rendered = await run([
     process.execPath,
@@ -336,7 +415,174 @@ async function applySurface(
   ]);
   return rendered.ok
     ? undefined
-    : `render ${surface} ${rendered.reason}\n${rendered.output}`;
+    : `render ${surface} ${rendered.reason}\n${diagnosticOutput(rendered.output)}`;
+}
+
+async function registerWorkspaceLinks(
+  candidate: string,
+  home: string,
+): Promise<string | undefined> {
+  if (!(await Bun.file(join(candidate, "package.json")).exists()))
+    return undefined;
+  const manifest = jsonOf(
+    z.looseObject({ workspaces: z.array(RelativePath).optional() }),
+  ).safeParse(await Bun.file(join(candidate, "package.json")).text());
+  if (!manifest.success) return "invalid candidate workspace manifest";
+  const paths: string[] = [];
+  for (const pattern of manifest.data.workspaces ?? []) {
+    const glob = new Bun.Glob(`${pattern}/package.json`);
+    paths.push(
+      ...(await Array.fromAsync(
+        glob.scan({ cwd: candidate, onlyFiles: true }),
+      )),
+    );
+  }
+  for (const path of paths) {
+    const workspace = jsonOf(
+      z.looseObject({
+        name: z.string().regex(/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/u),
+      }),
+    ).safeParse(await Bun.file(join(candidate, path)).text());
+    if (!workspace.success) return `invalid candidate workspace ${path}`;
+    const destination = join(
+      home,
+      ".bun/install/global/node_modules",
+      workspace.data.name,
+    );
+    await mkdir(dirname(destination), { recursive: true });
+    await symlink(dirname(join(candidate, path)), destination);
+  }
+  return undefined;
+}
+
+// Reuse installed versions read-only; mise still selects only versions declared by the consumer.
+// New installs and metadata stay in scratch, avoiding a cold multi-GB SDK download per gate.
+async function seedMiseInstalls(home: string): Promise<void> {
+  const source = join(
+    process.env.MISE_DATA_DIR ?? join(homedir(), ".local/share/mise"),
+    "installs",
+  );
+  const tools = await attempt(() => readdir(source));
+  if (!tools.ok) return;
+  for (const tool of tools.value) {
+    const directory = join(source, tool);
+    const versions = await attempt(() =>
+      readdir(directory, { withFileTypes: true }),
+    );
+    if (!versions.ok) continue;
+    const target = join(home, ".local/share/mise/installs", tool);
+    await mkdir(target, { recursive: true });
+    for (const version of versions.value.filter((entry) => entry.isDirectory()))
+      await symlink(join(directory, version.name), join(target, version.name));
+  }
+}
+
+// Resolve tools before any mount can shadow their symlink chain. Copies keep both
+// execvp and nested /usr/bin/env lookups independent of the consumer's live paths.
+async function captureExecutables(scratch: string, consumer: Consumer) {
+  const directory = join(scratch, "runtime-bin");
+  await mkdir(directory);
+  const paths = new Map<string, string>();
+  const captured = new Map<string, string>();
+  for (const name of new Set([
+    "mise",
+    "bun",
+    "git",
+    "jj",
+    "tar",
+    consumer.setup[0],
+    consumer.command[0],
+  ])) {
+    if (name === undefined) continue;
+    const found = Bun.which(name);
+    if (found === null) continue;
+    const executable = await realpath(found);
+    const known = captured.get(executable);
+    const target = known ?? join(directory, basename(name));
+    if (known === undefined) await cp(executable, target);
+    captured.set(executable, target);
+    paths.set(name, target);
+  }
+  const bun = paths.get("bun");
+  if (bun !== undefined) paths.set(process.execPath, bun);
+  return { directory, paths };
+}
+
+function inside(root: string, path: string): boolean {
+  const local = relative(root, path);
+  return local === "" || (!local.startsWith("..") && !isAbsolute(local));
+}
+
+async function capturePathExecutable(
+  path: string,
+  target: string,
+  shadowed: readonly string[],
+) {
+  const entry = await attempt(async () => {
+    const executable = await realpath(path);
+    const info = await stat(executable);
+    return { executable, info };
+  });
+  if (
+    !entry.ok ||
+    !entry.value.info.isFile() ||
+    (entry.value.info.mode & 0o111) === 0
+  )
+    return null;
+  if (shadowed.some((root) => inside(root, entry.value.executable))) {
+    await cp(entry.value.executable, target);
+    return null;
+  }
+  await symlink(entry.value.executable, target);
+  return dirname(entry.value.executable);
+}
+
+// Keep PATH order and argv[0] aliases (including mise shims), but remove every
+// symlink chain from name lookup. Protect canonical target directories read-only.
+async function capturePath(scratch: string, shadowed: readonly string[]) {
+  const directories: string[] = [];
+  const bindings = new Set<string>();
+  for (const path of new Set((process.env.PATH ?? "").split(":"))) {
+    const origin = await attempt(() => realpath(resolve(path)));
+    if (!origin.ok) continue;
+    const entries = await attempt(() => readdir(origin.value));
+    if (!entries.ok) continue;
+    const directory = join(
+      scratch,
+      "resolved-path",
+      String(directories.length),
+    );
+    await mkdir(directory, { recursive: true });
+    directories.push(directory);
+    const captured = await capturePathDirectory(
+      origin.value,
+      directory,
+      entries.value,
+      shadowed,
+    );
+    captured.forEach((binding) => {
+      bindings.add(binding);
+    });
+  }
+  return { directories, bindings: [...bindings] };
+}
+
+async function capturePathDirectory(
+  origin: string,
+  directory: string,
+  names: readonly string[],
+  shadowed: readonly string[],
+) {
+  const bindings: string[] = [];
+  for (const name of names) {
+    const binding = await capturePathExecutable(
+      join(origin, name),
+      join(directory, name),
+      shadowed,
+    );
+    if (binding !== null) bindings.push(binding);
+  }
+  return bindings;
 }
 
 async function checkConsumer(
@@ -356,14 +602,52 @@ async function checkConsumer(
   const liveDotfiles = (await attempt(() => lstat(dotfiles))).ok
     ? dotfiles
     : undefined;
-  const prefix = sandbox(scratch, home, candidate, source, copy, liveDotfiles);
+  const executables = await captureExecutables(scratch, consumer);
+  const roots = await Promise.all(
+    [source, root, dotfiles].map((path) => attempt(() => realpath(path))),
+  );
+  const shadowed = roots.flatMap((entry) => (entry.ok ? [entry.value] : []));
+  const resolvedPath = await capturePath(scratch, shadowed);
+  const prefix = sandbox(
+    scratch,
+    home,
+    candidate,
+    source,
+    copy,
+    liveDotfiles,
+    resolvedPath.bindings,
+  );
   if (prefix === undefined)
     return [
       `FAIL ${consumer.name}: isolation unavailable (requires bwrap on Linux or sandbox-exec on macOS)`,
     ];
-  await copyTree(source, copy);
-  await mkdir(home, { recursive: true });
-  await copyTree(root, candidate);
+  const trunk = consumer.trunk ?? "trunk()";
+  const revision = await attempt(() => resolveTrunk(source, trunk));
+  if (!revision.ok)
+    return [
+      `FAIL ${consumer.name}: no trunk (${trunk}): ${errorMessage(revision.error)}`,
+    ];
+  const commit = revision.value.stdout.trim();
+  if (
+    !revision.value.ok ||
+    !/^[a-f0-9]{40,64}$/u.test(commit) ||
+    /^0+$/u.test(commit)
+  )
+    return [
+      `FAIL ${consumer.name}: no trunk (${trunk}): ${revision.value.reason} ${revision.value.output}`,
+    ];
+  const copied = await attempt(async () => {
+    const failure = await exportTrunk(source, copy, commit, scratch);
+    if (failure !== undefined) return failure;
+    await mkdir(home, { recursive: true });
+    await copyTree(root, candidate);
+    return null;
+  });
+  const copyFailure = copied.ok ? copied.value : errorMessage(copied.error);
+  if (copyFailure !== null && copyFailure !== undefined)
+    return [
+      `FAIL ${consumer.name}: consumer copy failed: ${source}: ${copyFailure}`,
+    ];
   const temporary = join(scratch, "tmp");
   await mkdir(temporary);
   const env = {
@@ -373,6 +657,7 @@ async function checkConsumer(
     TMPDIR: temporary,
     TMP: temporary,
     TEMP: temporary,
+    BUN_INSTALL: join(home, ".bun"),
     BUN_INSTALL_CACHE_DIR: join(home, ".bun/install/cache"),
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: join(home, ".bun/transpiler"),
     MISE_CACHE_DIR: join(home, ".cache/mise"),
@@ -388,25 +673,69 @@ async function checkConsumer(
     GIT_DIR: join(copy, ".git"),
     GIT_WORK_TREE: copy,
     GIT_INDEX_FILE: join(copy, ".git/index"),
-    PATH: `${join(copy, "node_modules/.bin")}:${join(candidate, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
+    PATH: [
+      executables.directory,
+      join(copy, "node_modules/.bin"),
+      join(candidate, "node_modules/.bin"),
+      ...resolvedPath.directories,
+    ].join(":"),
   };
-  const run = (argv: string[]) =>
-    command([...prefix, ...argv], copy, env, consumer.timeout_ms);
+  const run = (argv: string[]) => {
+    const executable = argv[0];
+    const resolved =
+      executable === undefined
+        ? argv
+        : [executables.paths.get(executable) ?? executable, ...argv.slice(1)];
+    return command([...prefix, ...resolved], copy, env, consumer.timeout_ms);
+  };
+  await seedMiseInstalls(home);
+  const linked = await registerWorkspaceLinks(candidate, home);
+  if (linked !== undefined) return [`FAIL ${consumer.name}: ${linked}`];
+  const setup = await run(consumer.setup);
+  const lines = [
+    `${setup.ok ? "PASS" : "FAIL"} ${consumer.name}: setup ${consumer.setup.join(" ")} ${setup.reason}\n${diagnosticOutput(setup.output)}`,
+  ];
+  if (!setup.ok) return lines;
+  // Consumer linters may read jj revisions. Give them a private committed baseline,
+  // then overlay the candidate so their diff contains only the shared-surface change.
+  for (const argv of [
+    ["git", "-c", "core.hooksPath=/dev/null", "init", "--quiet"],
+    ["git", "add", "--all", "--", "."],
+    [
+      "git",
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "user.name=Consumer Gate",
+      "-c",
+      "user.email=consumer-gate@example.invalid",
+      "commit",
+      "--quiet",
+      "--allow-empty",
+      "-m",
+      "consumer trunk export",
+    ],
+    ["jj", "git", "init", "--colocate"],
+  ]) {
+    const result = await run(argv);
+    if (!result.ok)
+      return [
+        ...lines,
+        `FAIL ${consumer.name}: independent VCS ${result.reason}\n${diagnosticOutput(result.output)}`,
+      ];
+  }
   const steps: { label: string; argv: string[] }[] = [];
   for (const surface of consumer.surfaces) {
     if (!surface.startsWith("presets/")) continue;
     const applied = await applySurface(candidate, copy, surface, changed, run);
-    if (applied !== undefined) return [`FAIL ${consumer.name}: ${applied}`];
+    if (applied !== undefined)
+      return [...lines, `FAIL ${consumer.name}: ${applied}`];
   }
   // Package bin names must resolve to the candidate, never to globally linked live files.
   const bins = await candidateBins(candidate, scratch);
   if (bins !== undefined) return [`FAIL ${consumer.name}: ${bins}`];
   env.PATH = `${join(scratch, "bin")}:${env.PATH}`;
   steps.push(
-    {
-      label: "independent Git index",
-      argv: ["git", "-c", "core.hooksPath=/dev/null", "init", "--quiet"],
-    },
     { label: "stage copied tree", argv: ["git", "add", "--all", "--", "."] },
     { label: consumer.command.join(" "), argv: consumer.command },
   );
@@ -414,10 +743,14 @@ async function checkConsumer(
     const result = await run(step.argv);
     if (!result.ok)
       return [
-        `FAIL ${consumer.name}: ${step.label} ${result.reason}\n${result.output}`,
+        ...lines,
+        `FAIL ${consumer.name}: ${step.label} ${result.reason}\n${diagnosticOutput(result.output)}`,
       ];
   }
-  return [`PASS ${consumer.name}: ${consumer.command.join(" ")}`];
+  return [
+    ...lines,
+    `PASS ${consumer.name}: ${consumer.command.join(" ")} exit 0`,
+  ];
 }
 
 export async function runConsumerGates(
@@ -434,7 +767,9 @@ export async function runConsumerGates(
   const loaded = await attempt(async () =>
     Bun.TOML.parse(await Bun.file(join(root, REGISTRY)).text()),
   );
-  const parsed = loaded.ok ? Registry.safeParse(loaded.value) : undefined;
+  const parsed = loaded.ok
+    ? ConsumerRegistry.safeParse(loaded.value)
+    : undefined;
   if (parsed?.success !== true)
     return {
       ok: false,
@@ -448,7 +783,9 @@ export async function runConsumerGates(
       surfaces.includes("*") ||
       consumer.surfaces.some((surface) => surfaces.includes(surface)),
   );
-  const lines: string[] = [];
+  const lines: string[] = parsed.data.pending.map(
+    (consumer) => `pending ${consumer.name}: ${consumer.reason}`,
+  );
   for (const consumer of selected) {
     const result = await attempt(() => checkConsumer(root, consumer, changed));
     lines.push(

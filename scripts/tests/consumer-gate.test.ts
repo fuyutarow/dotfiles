@@ -8,9 +8,49 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runConsumerGates, sharedSurfaces } from "../consumer-gate.ts";
+import {
+  ConsumerRegistry,
+  runConsumerGates,
+  sharedSurfaces,
+} from "../consumer-gate.ts";
+
+async function snapshot(cwd: string) {
+  for (const argv of [
+    ["git", "init", "-q", "-b", "alpha"],
+    ["git", "add", "--all"],
+    [
+      "git",
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "-c",
+      "core.hooksPath=/dev/null",
+      "commit",
+      "-qm",
+      "fixture",
+    ],
+    existsSync(join(cwd, ".jj"))
+      ? ["jj", "--ignore-working-copy", "git", "import"]
+      : ["jj", "git", "init", "--colocate"],
+  ]) {
+    const p = Bun.spawn(argv, {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: AbortSignal.timeout(10000),
+    });
+    const [out, err, exit] = await Promise.all([
+      new Response(p.stdout).text(),
+      new Response(p.stderr).text(),
+      p.exited,
+    ]);
+    expect(exit, out + err).toBe(0);
+  }
+}
 
 const temporary: string[] = [];
 afterEach(async () => {
@@ -56,12 +96,13 @@ const rule = await Bun.file('rule').text();
 const code = await Bun.file('code.ts').text();
 const proc = Bun.spawn(['git', 'diff', '--cached', '--name-only'], { stdout: 'pipe' });
 const staged = await new Response(proc.stdout).text();
-if (await proc.exited !== 0 || !staged.includes('code.ts')) process.exit(8);
+if (await proc.exited !== 0 || !staged.includes('rule')) process.exit(8);
 await Bun.write('gate-ran', 'only scratch');
 if (rule === 'strict' && code === 'legacy') { process.stderr.write('lint:fixture: strict rule rejected code.ts\\n'); process.exit(7); }
 `,
   );
-  const registry = `[[consumers]]\nname = "fixture-consumer"\nroot = ${JSON.stringify(consumer)}\nsurfaces = [${JSON.stringify(options.surface ?? "presets/demo")}]\ncommand = [${JSON.stringify(process.execPath)}, "gate.ts"]\ntimeout_ms = ${options.timeout ?? 10000}\n`;
+  await snapshot(consumer);
+  const registry = `[[consumers]]\nname = "fixture-consumer"\nroot = ${JSON.stringify(consumer)}\ntrunk = "alpha"\nsetup = ["true"]\nsurfaces = [${JSON.stringify(options.surface ?? "presets/demo")}]\ncommand = [${JSON.stringify(process.execPath)}, "gate.ts"]\ntimeout_ms = ${options.timeout ?? 10000}\n`;
   await writeFile(join(root, "presets/consumers.toml"), registry);
   return { root, consumer, temp };
 }
@@ -69,6 +110,7 @@ if (rule === 'strict' && code === 'legacy') { process.stderr.write('lint:fixture
 test("strict preset refuses the named consumer with task diagnostics and never changes the source", async () => {
   const f = await fixture();
   const before = await readFile(join(f.consumer, "code.ts"), "utf8");
+  const index = await readFile(join(f.consumer, ".git/index"));
   const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
   expect(result.ok).toBe(false);
   expect(result.checked).toBe(1);
@@ -78,7 +120,7 @@ test("strict preset refuses the named consumer with task diagnostics and never c
   );
   expect(await readFile(join(f.consumer, "code.ts"), "utf8")).toBe(before);
   expect(await Bun.file(join(f.consumer, "gate-ran")).exists()).toBe(false);
-  expect(await Bun.file(join(f.consumer, ".git/index")).exists()).toBe(false);
+  expect(await readFile(join(f.consumer, ".git/index"))).toEqual(index);
 });
 
 test("the same preset passes when consumer code is compliant", async () => {
@@ -124,6 +166,7 @@ test("absolute paths cannot write the real consumer or an external symlink targe
     join(f.consumer, "gate.ts"),
     `await Bun.write(${JSON.stringify(outside)}, 'corrupted');`,
   );
+  await snapshot(f.consumer);
   const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
   expect(result.ok).toBe(false);
   expect(await readFile(outside, "utf8")).toBe("unchanged");
@@ -159,4 +202,379 @@ test("invalid or missing registry cannot approve shared changes", async () => {
   expect((await runConsumerGates(f.root, ["presets/demo/rule"])).ok).toBe(
     false,
   );
+});
+
+test("committed trunk wins over working copy and setup precedes the gate", async () => {
+  const f = await fixture({
+    compliant: true,
+    gate: `if (await Bun.file('setup-ran').text() !== 'ready') process.exit(9);`,
+  });
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace(
+      'setup = ["true"]',
+      `setup = [${JSON.stringify(process.execPath)}, "-e", ${JSON.stringify("await Bun.write('setup-ran', 'ready')")}]`,
+    ),
+  );
+  await writeFile(join(f.consumer, "gate.ts"), "process.exit(99);");
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok).toBe(true);
+  expect(result.lines.join("\n")).toContain("exit 0");
+  expect(await Bun.file(join(f.consumer, "setup-ran")).exists()).toBe(false);
+});
+
+test("committed relative, dangling and external symlinks keep their text", async () => {
+  const f = await fixture({
+    gate: `import {readlink} from 'node:fs/promises';
+if (await readlink('relative') !== 'code.ts' || await readlink('dangling') !== 'absent' || await readlink('external') !== '/unavailable/consumer-link') process.exit(9);`,
+  });
+  await symlink("code.ts", join(f.consumer, "relative"));
+  await symlink("absent", join(f.consumer, "dangling"));
+  await symlink("/unavailable/consumer-link", join(f.consumer, "external"));
+  await snapshot(f.consumer);
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok).toBe(true);
+});
+
+test("missing trunk is distinct from copy and gate failures", async () => {
+  const f = await fixture();
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace(
+      'trunk = "alpha"',
+      'trunk = "absent"',
+    ),
+  );
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.lines.join("\n")).toContain(
+    "FAIL fixture-consumer: no trunk (absent)",
+  );
+  expect(result.lines.join("\n")).not.toContain("consumer copy failed");
+});
+
+test("owner declarations select only the declared shared surfaces", async () => {
+  const parsed = ConsumerRegistry.safeParse(
+    Bun.TOML.parse(
+      await Bun.file(
+        new URL("../../presets/consumers.toml", import.meta.url),
+      ).text(),
+    ),
+  );
+  expect(parsed.success).toBe(true);
+  if (!parsed.success) return;
+  const declarations = [
+    ...parsed.data.consumers,
+    ...parsed.data.pending,
+  ].toSorted(
+    (a, b) =>
+      ["retrospectives", "firedancer", "polysearch-v1", "coralbase"].indexOf(
+        a.name,
+      ) -
+      ["retrospectives", "firedancer", "polysearch-v1", "coralbase"].indexOf(
+        b.name,
+      ),
+  );
+  expect(declarations).toHaveLength(4);
+  expect(declarations.map((row: { name: string }) => row.name)).toEqual([
+    "retrospectives",
+    "firedancer",
+    "polysearch-v1",
+    "coralbase",
+  ]);
+  expect(declarations[0]).toMatchObject({
+    trunk: "alpha",
+    setup: ["mise", "run", "setup"],
+    command: ["mise", "run", "lint"],
+    surfaces: ["presets/typescript"],
+  });
+  expect(declarations[1]?.command).toEqual([
+    "sh",
+    "-c",
+    "mise run lint:ts && mise run lint:oxlint-policy",
+  ]);
+  expect(
+    declarations.slice(2).map((row: { surfaces: string[] }) => row.surfaces),
+  ).toEqual([["package-bins"], ["package-bins"]]);
+  expect(declarations[2]?.full_gate_rule).toContain("CLI or manifest schema");
+  expect(declarations[2]?.trunk).toBeUndefined();
+});
+
+test("omitted trunk uses the consumer repository's trunk() revset", async () => {
+  const f = await fixture({ compliant: true });
+  await writeFile(
+    join(f.consumer, ".jj/repo/config.toml"),
+    '[revset-aliases]\n"trunk()" = "alpha"\n',
+  );
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace('trunk = "alpha"\n', ""),
+  );
+  await writeFile(join(f.consumer, "gate.ts"), "process.exit(99);");
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result).toMatchObject({ ok: true, checked: 1 });
+});
+
+test("a trunk revset resolving to the synthetic root reports no trunk", async () => {
+  const f = await fixture();
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace(
+      'trunk = "alpha"',
+      'trunk = "root()"',
+    ),
+  );
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok).toBe(false);
+  expect(result.lines.join("\n")).toContain(
+    "FAIL fixture-consumer: no trunk (root())",
+  );
+  expect(result.lines.join("\n")).not.toContain("consumer copy failed");
+});
+
+test("pending entries are reported without executing setup or gate", async () => {
+  const f = await fixture({ gate: "process.exit(99);" });
+  const registry = join(f.root, "presets/consumers.toml");
+  const declaration = await readFile(registry, "utf8");
+  await writeFile(
+    registry,
+    "consumers = []\n" +
+      declaration.replace(
+        "[[consumers]]",
+        '[[pending]]\nreason = "owner must declare trunk"',
+      ),
+  );
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result).toMatchObject({ ok: true, checked: 0 });
+  expect(result.lines).toContain(
+    "pending fixture-consumer: owner must declare trunk",
+  );
+  expect(result.lines.join("\n")).not.toContain("setup true");
+});
+
+test("Bun link dependencies resolve to isolated candidate workspaces during setup", async () => {
+  const f = await fixture({
+    gate: "import {value} from 'fixture-link'; if(value !== 'candidate') process.exit(4);",
+  });
+  await mkdir(join(f.root, "tools/pkg"), { recursive: true });
+  await writeFile(
+    join(f.root, "package.json"),
+    JSON.stringify({ workspaces: ["tools/pkg"] }),
+  );
+  await writeFile(
+    join(f.root, "tools/pkg/package.json"),
+    JSON.stringify({
+      name: "fixture-link",
+      version: "1.0.0",
+      exports: "./index.ts",
+    }),
+  );
+  await writeFile(
+    join(f.root, "tools/pkg/index.ts"),
+    "export const value = 'candidate';",
+  );
+  await writeFile(
+    join(f.consumer, "package.json"),
+    JSON.stringify({ dependencies: { "fixture-link": "link:fixture-link" } }),
+  );
+  await snapshot(f.consumer);
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace(
+      'setup = ["true"]',
+      `setup = [${JSON.stringify(process.execPath)}, "install", "--ignore-scripts"]`,
+    ),
+  );
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok, result.lines.join("\n")).toBe(true);
+  expect(await Bun.file(join(f.consumer, "bun.lock")).exists()).toBe(false);
+});
+
+test("jj consumer linters compare the candidate overlay with a private trunk baseline", async () => {
+  const f = await fixture({
+    gate: `
+const snapshot = Bun.spawn(['jj', 'log', '-r', '@', '--no-graph', '-T', 'commit_id'], {stdout:'pipe', stderr:'pipe'});
+const [id, diagnostic, status] = await Promise.all([new Response(snapshot.stdout).text(), new Response(snapshot.stderr).text(), snapshot.exited]);
+if (status !== 0) { process.stderr.write(diagnostic); process.exit(4); }
+const diff = Bun.spawn(['jj', '--ignore-working-copy', 'diff', '--from', id.trim()+'-', '--to', id.trim(), '--name-only'], {stdout:'pipe', stderr:'pipe'});
+const [paths, errors, exit] = await Promise.all([new Response(diff.stdout).text(), new Response(diff.stderr).text(), diff.exited]);
+if (exit !== 0 || !paths.includes('rule') || paths.includes('code.ts')) {process.stderr.write(errors+paths); process.exit(5);}
+`,
+  });
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok, result.lines.join("\n")).toBe(true);
+  expect(await Bun.file(join(f.consumer, "rule")).exists()).toBe(false);
+});
+
+test("land-style outer sandbox preserves setup executable reached through a shadowed symlink chain", async () => {
+  if (process.platform !== "linux") return;
+  const f = await fixture({ compliant: true });
+  await mkdir(join(f.consumer, "bin"));
+  const executable = join(f.consumer, "bin/mise");
+  await symlink("mise", executable);
+  await snapshot(f.consumer);
+  await rm(executable);
+  const chain = join(f.temp, "toolchain-link");
+  await symlink("/usr/bin/true", chain);
+  await symlink(chain, executable);
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace(
+      'setup = ["true"]',
+      'setup = ["mise"]',
+    ),
+  );
+  const runner = join(f.temp, "land-consumer-probe.ts");
+  await writeFile(
+    runner,
+    `import {runConsumerGates} from ${JSON.stringify(join(import.meta.dir, "../consumer-gate.ts"))}; const r=await runConsumerGates(${JSON.stringify(f.root)}, ['presets/demo/rule']); process.stdout.write(JSON.stringify(r)); process.exitCode=r.ok?0:1;`,
+  );
+  const child = Bun.spawn(
+    [
+      "bwrap",
+      "--die-with-parent",
+      "--ro-bind",
+      "/",
+      "/",
+      "--dev",
+      "/dev",
+      "--proc",
+      "/proc",
+      "--bind",
+      f.temp,
+      f.temp,
+      "--",
+      process.execPath,
+      runner,
+    ],
+    {
+      env: {
+        ...process.env,
+        TMPDIR: f.temp,
+        PATH: `${join(f.consumer, "bin")}:${process.env.PATH ?? ""}`,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: AbortSignal.timeout(15000),
+    },
+  );
+  const [out, err, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect(exit, out + err).toBe(0);
+  expect(out).toContain("PASS fixture-consumer: setup mise exit 0");
+});
+
+test("setup failures carry the last twenty combined output lines indented", async () => {
+  const f = await fixture();
+  const registry = join(f.root, "presets/consumers.toml");
+  const setup =
+    "for(let i=0;i<25;i++)process.stdout.write('out'+i+'\\n'); for(let i=0;i<10;i++)process.stderr.write('err'+i+'\\n'); process.exit(6);";
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace(
+      'setup = ["true"]',
+      `setup = [${JSON.stringify(process.execPath)}, "-e", ${JSON.stringify(setup)}]`,
+    ),
+  );
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok).toBe(false);
+  const report = result.lines.join("\n");
+  expect(report).toContain("exit 6\n  out15\n");
+  expect(report).toContain("\n  err9");
+  expect(report).not.toContain("\n  out14\n");
+  expect(result.lines[0]?.split("\n")).toHaveLength(21);
+});
+
+test("gate stderr is retained and indented under the failure", async () => {
+  const f = await fixture({
+    gate: "for(let i=0;i<25;i++)process.stderr.write('failure'+i+'\\n'); process.exit(7);",
+  });
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  const failure = result.lines.find((line) => line.startsWith("FAIL"));
+  expect(failure).toContain("exit 7\n  failure5\n");
+  expect(failure?.split("\n")).toHaveLength(21);
+  expect(failure).toContain("\n  failure24");
+});
+
+test("silent failures explicitly report that no command output was captured", async () => {
+  const f = await fixture({ gate: "process.exit(3);" });
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.lines.join("\n")).toContain(
+    "exit 3\n  (command emitted no stdout or stderr)",
+  );
+});
+
+test("tasks can spawn sh by name through a symlinked bin in nested sandboxes", async () => {
+  if (process.platform !== "linux") return;
+  const f = await fixture({ compliant: true });
+  await mkdir(join(f.consumer, "shell-tools"));
+  await symlink("shell-tools", join(f.consumer, "bin"));
+  const shell = join(f.consumer, "shell-tools/sh");
+  await symlink("sh", shell);
+  await writeFile(
+    join(f.consumer, "mise.toml"),
+    '[tasks.setup]\nrun = "printf child-shell-ok"\n',
+  );
+  await snapshot(f.consumer);
+  await rm(shell);
+  const chain = join(f.temp, "shell-link");
+  await symlink("/bin/sh", chain);
+  await symlink(chain, shell);
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace(
+      'setup = ["true"]',
+      'setup = ["mise", "run", "setup"]',
+    ),
+  );
+  const runner = join(f.temp, "land-child-shell-probe.ts");
+  await writeFile(
+    runner,
+    `import {runConsumerGates} from ${JSON.stringify(join(import.meta.dir, "../consumer-gate.ts"))}; const r=await runConsumerGates(${JSON.stringify(f.root)}, ['presets/demo/rule']); process.stdout.write(JSON.stringify(r)); process.exitCode=r.ok?0:1;`,
+  );
+  const p = Bun.spawn(
+    [
+      "bwrap",
+      "--die-with-parent",
+      "--ro-bind",
+      "/",
+      "/",
+      "--dev",
+      "/dev",
+      "--proc",
+      "/proc",
+      "--bind",
+      f.temp,
+      f.temp,
+      "--",
+      process.execPath,
+      runner,
+    ],
+    {
+      env: {
+        ...process.env,
+        TMPDIR: f.temp,
+        PATH: `${join(f.consumer, "bin")}:${process.env.PATH ?? ""}`,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: AbortSignal.timeout(20000),
+    },
+  );
+  const [out, err, exit] = await Promise.all([
+    new Response(p.stdout).text(),
+    new Response(p.stderr).text(),
+    p.exited,
+  ]);
+  expect(exit, out + err).toBe(0);
+  expect(out).toContain("child-shell-ok");
 });

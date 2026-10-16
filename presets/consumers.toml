@@ -1,16 +1,46 @@
-# Landing compatibility registry. Missing consumers and unavailable isolation fail closed.
-# Commands are the consumers' commit gates; the copied tree is staged in an independent index.
+# Owner declarations received 2026-10-16. Gates run only in an export of committed trunk.
+# checked counts consumers selected by changed surface, including copy/setup failures.
+# Omitted trunk uses the consumer repository's own trunk() revset.
 [[consumers]]
 name = "retrospectives"
-root = "~/Workspace/retrospectives"
-surfaces = ["presets/typescript", "hooks", "package-bins"]
-# This repository's commit checks are collected under lint (it has no hook:pre-commit task).
+root = "/home/fuyu/Workspace/retrospectives"
+trunk = "alpha"
+surfaces = ["presets/typescript"]
+setup = ["mise", "run", "setup"]
+# Coordinator: hook:pre-commit depends only on lint = lint:records + lint:ts.
 command = ["mise", "run", "lint"]
 timeout_ms = 120000
 
 [[consumers]]
 name = "firedancer"
-root = "~/Workspace/firedancer"
-surfaces = ["presets/typescript", "hooks", "package-bins"]
-command = ["mise", "run", "hook:pre-commit"]
+root = "/home/fuyu/Workspace/firedancer"
+trunk = "alpha"
+surfaces = ["presets/typescript"]
+setup = ["bun", "install", "--frozen-lockfile"]
+# Coordinator: retain the policy drift check here even when it moves to check.
+command = ["sh", "-c", "mise run lint:ts && mise run lint:oxlint-policy"]
+timeout_ms = 120000
+
+[[pending]]
+reason = "trunk() resolves to the synthetic root; no committed trunk bookmark is configured."
+name = "polysearch-v1"
+root = "/home/fuyu/Workspace/polysearch-v1"
+surfaces = ["package-bins"]
+bins = ["agent-resource-run", "jj-commit"]
+setup = ["sh", "-c", "mise trust && cargo fetch --locked"]
+command = ["sh", "-c", "agent-resource-run --manifest .agents/resources/w-integ.resource.json --job-id consumer-check -- true && jj-commit --help >/dev/null"]
+full_gate_rule = "The owner runs the full gate only when agent-resource-run CLI or manifest schema changes."
+timeout_ms = 120000
+
+[[pending]]
+reason = "setup fails in the land sandbox: a mise task's `sh` hits ELOOP; tracked by consumer-gate-sh-eloop"
+name = "coralbase"
+root = "/home/fuyu/Workspace/coralbase"
+trunk = "alpha"
+surfaces = ["package-bins"]
+bins = ["fmt-staged", "mise-contract", "jj-commit", "jj-push"]
+setup = ["mise", "run", "setup"]
+# Coordinator: cheap gate; full hook:pre-commit = fmt:staged + lint needs a path argument.
+# Add presets/typescript only after coralbase runs preset sync.
+command = ["mise", "run", "lint"]
 timeout_ms = 120000

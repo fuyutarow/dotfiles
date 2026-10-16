@@ -138,7 +138,7 @@ test("a graveyard entry holding .git and .jj is purged; outside a graveyard it i
   expect(existsSync(grave)).toBe(false);
 });
 
-test("rip-expire handles a small subtree before a huge one and can be limited to one subtree", async () => {
+test("rip-expire handles equally old subtrees in path order and can be limited to one subtree", async () => {
   const base = root("reclaim-expire-order-");
   const graveyard = join(base, "graveyard");
   for (const [name, files] of [
@@ -188,7 +188,7 @@ test("rip-expire handles a small subtree before a huge one and can be limited to
     else process.env.RIP_GRAVEYARD = previous;
   });
   expect(result.exit).toBe(0);
-  expect(acted.map((id) => id.split(": ")[1])).toEqual(["tmp", "home"]);
+  expect(acted.map((id) => id.split(": ")[1])).toEqual(["home", "tmp"]);
   expect(existsSync(join(graveyard, "home"))).toBe(false);
 });
 

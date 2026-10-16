@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.4 — 2026-10-16
+
+- Bound unattended rip expiry by the doctor 10 GiB ceiling, expiring oldest entries first even before 24 hours.
+
 ## 1.4.3 — 2026-10-16
 
 - Update CLI test config fixtures to use the regenerable cache policy derived from .gitignore.

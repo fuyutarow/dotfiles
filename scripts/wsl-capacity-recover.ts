@@ -334,6 +334,20 @@ export type ReclaimStage = {
   timeoutMs: number;
 };
 
+/** Timer maintenance is independent of host pressure and the recovery cooldown. */
+export async function expireGraveyard(
+  dryRun: boolean,
+  run: (stage: ReclaimStage) => Promise<StageRun>,
+  mise = miseBinary(),
+): Promise<StageRun> {
+  const argv = diskReclaimArgv(mise, "rip-expire");
+  if (dryRun) {
+    argv[argv.indexOf("run")] = "plan";
+    argv.splice(argv.indexOf("--yes"), 1);
+  }
+  return run({ name: "rip-expire", argv, timeoutMs: 120_000 });
+}
+
 // Order is execution order: the Windows host levers first, then guest build output and caches.
 // `builds` is the one stage with no age filter of its own; disk-reclaim refuses any path a live
 // process holds and reports an unreadable-process path as ASK, which --yes never runs.
@@ -356,6 +370,11 @@ export function controllerCalls(mise = "mise"): ReclaimStage[] {
     {
       name: "tmpfs",
       argv: diskReclaimArgv(mise, "tmpfs"),
+      timeoutMs: 120_000,
+    },
+    {
+      name: "rip-expire",
+      argv: diskReclaimArgv(mise, "rip-expire"),
       timeoutMs: 120_000,
     },
     ...reclaimStages(mise),
@@ -440,6 +459,7 @@ async function runBounded(
   timeoutMs: number,
   cwd = join(import.meta.dir, ".."),
   env?: NodeJS.ProcessEnv,
+  outputLimit = 1200,
 ): Promise<{
   code: number;
   timedOut: boolean;
@@ -461,7 +481,7 @@ async function runBounded(
   return {
     code,
     timedOut: signal.aborted,
-    output: `${stdout}\n${stderr}`.trim().slice(-1200),
+    output: `${stdout}\n${stderr}`.trim().slice(-outputLimit),
   };
 }
 
@@ -1058,6 +1078,28 @@ async function main(): Promise<void> {
     process.stderr.write(`FATAL: ${String(thresholdResult.error)}\n`);
     process.exit(2);
   }
+  const expiry = await fromAsyncThrowable(() =>
+    expireGraveyard(parsed.flags.dryRun === true, (stage) =>
+      runBounded(
+        stage.argv,
+        stage.timeoutMs,
+        undefined,
+        undefined,
+        parsed.flags.dryRun === true ? Number.POSITIVE_INFINITY : 1200,
+      ),
+    ),
+  )();
+  if (expiry.isErr()) {
+    process.stderr.write(`GRAVEYARD failed: ${String(expiry.error)}\n`);
+    process.exitCode = 1;
+  } else {
+    process.stdout.write(
+      `GRAVEYARD ${parsed.flags.dryRun === true ? "PLAN" : "EXPIRE"} exit=${expiry.value.code} timeout=${expiry.value.timedOut} detail=${JSON.stringify(expiry.value.output)}\n`,
+    );
+    if (expiry.value.code !== 0 || expiry.value.timedOut) process.exitCode = 1;
+  }
+  // A dry run previews only: no recovery verdict, tmpfs action, or cache-drop stamp.
+  if (parsed.flags.dryRun === true) return;
   await recoverTmpfsCapacity({
     thresholdPercent: thresholdResult.value,
     measure: measureTmpfs,
@@ -1115,18 +1157,6 @@ async function main(): Promise<void> {
     readLastAttemptMs(),
     Temporal.Now.instant().epochMilliseconds,
   );
-  const targets = free < policy.stopBytes || memoryLow ? liveTargets() : [];
-  if (parsed.flags.dryRun === true) {
-    process.stdout.write(
-      `DRY_RUN host_free=${gib(free)} reclaim=${runReclaim} ` +
-        `memory=${JSON.stringify(memoryBefore)} memory_emergency=${memoryLow} ` +
-        `stop=${free < policy.stopBytes || memoryLow} ` +
-        `build_reclaim=${free < policy.stopBytes && existsSync(join(homedir(), "Workspace/polysearch-rs/Cargo.toml"))} ` +
-        `targets=${JSON.stringify(targets)}\n`,
-    );
-    process.exitCode = 1;
-    return;
-  }
   const diskEmergency = free < policy.stopBytes;
   let memoryStillLow = memoryAvailableLow;
   let memoryLatest = memoryBefore;

@@ -1,5 +1,5 @@
 import { chmodSync, lstatSync, readdirSync } from "node:fs";
-import { lstat } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import { fromAsyncThrowable } from "neverthrow";
 import { homedir } from "node:os";
 import {
@@ -7,6 +7,7 @@ import {
   existingGraveyards,
   graveyardEntries,
   ripRecords,
+  RIP_GRAVEYARD_MAX_BYTES,
 } from "../lib/graveyards.ts";
 import { removeTree, removeTreeProgress } from "../lib/remove-tree.ts";
 import { countEntries } from "../lib/purge-progress.ts";
@@ -20,6 +21,87 @@ import { scratchRef, type LivenessSnapshot } from "../liveness/facts.ts";
 
 export const typedYes = (answer: string | null): boolean =>
   answer?.trim() === "yes";
+
+function appendPaths(pending: string[], children: string[]): void {
+  for (const child of children) pending.push(child);
+}
+
+// Match doctor's logical-byte ceiling, including sparse files; allocated bytes are only
+// the reclaim estimate. A subtree already over the ceiling cannot be retained, so stop
+// at that lower bound instead of scanning millions of descendants just to reject it.
+// Never follow symlinks while measuring deleted payloads.
+async function graveyardSize(
+  path: string,
+  ctx?: Context,
+): Promise<{ logical: number; allocated: number }> {
+  const pending = [path];
+  let total = 0;
+  let allocated = 0;
+  while (pending.length > 0) {
+    checkScanDeadline(ctx);
+    const next = pending.splice(-64);
+    const batch = await Promise.all(
+      next.map(async (entry) => {
+        const stat = await lstat(entry);
+        if (!stat.isDirectory() || stat.isSymbolicLink())
+          return {
+            bytes: stat.size,
+            allocated: stat.blocks * 512,
+            children: [],
+          };
+        const names = await readdir(entry);
+        return {
+          bytes: 0,
+          allocated: 0,
+          children: names.map((name) => join(entry, name)),
+        };
+      }),
+    );
+    total += batch.reduce((bytes, row) => bytes + row.bytes, 0);
+    allocated += batch.reduce((bytes, row) => bytes + row.allocated, 0);
+    if (total > RIP_GRAVEYARD_MAX_BYTES) return { logical: total, allocated };
+    for (const row of batch) appendPaths(pending, row.children);
+  }
+  return { logical: total, allocated };
+}
+
+const candidatePath = (row: Candidate): string => row.path ?? "";
+
+function applyCapacityExpiry(
+  rows: Candidate[],
+  times: Map<string, number>,
+  logical: Map<string, number>,
+  record: Candidate | undefined,
+): void {
+  rows.sort((left, right) => {
+    const difference =
+      (times.get(candidatePath(left)) ?? 0) -
+      (times.get(candidatePath(right)) ?? 0);
+    return difference === 0
+      ? candidatePath(left).localeCompare(candidatePath(right))
+      : difference;
+  });
+  let retained = rows.reduce(
+    (total, row) =>
+      total +
+      (row.verdict === "KEEP" || row === record
+        ? (logical.get(candidatePath(row)) ?? 0)
+        : 0),
+    0,
+  );
+  for (const row of rows) {
+    if (retained <= RIP_GRAVEYARD_MAX_BYTES) break;
+    if (row === record || row.verdict !== "KEEP") continue;
+    if (
+      !row.reason.startsWith("recent") &&
+      !row.reason.startsWith("undo window:")
+    )
+      continue;
+    row.verdict = "RECLAIM";
+    row.reason = `graveyard exceeds ${RIP_GRAVEYARD_MAX_BYTES} bytes; oldest-first capacity expiry`;
+    retained -= logical.get(candidatePath(row)) ?? 0;
+  }
+}
 
 function driveForPath(path: string, headroom: Headroom | undefined) {
   return headroom?.drives
@@ -103,6 +185,14 @@ export async function purgeCandidates(
     const belowDenyLine = drive?.state === "deny";
     const entries = await graveyardScope(graveyard.path, options.only);
     const records = ripRecords(graveyard.path);
+    const times = new Map<string, number>();
+    const logical = new Map<string, number>();
+    const allocated = new Map<string, number>();
+    for (const entry of options.ripOnly === true ? entries : []) {
+      const measured = await graveyardSize(entry, options.context);
+      logical.set(entry, measured.logical);
+      allocated.set(entry, measured.allocated);
+    }
     const entryCandidates = entries.map((entry) => {
       checkScanDeadline(options.context);
       const entryRecords = records.filter(
@@ -116,6 +206,7 @@ export async function purgeCandidates(
         mtime,
         ...entryRecords.map((record) => record.time),
       );
+      times.set(entry, newestTime);
       const relativeEntry = relative(resolve(graveyard.path), resolve(entry));
       const mirroredPath = `/${relativeEntry}`;
       const sourcePaths =
@@ -176,7 +267,9 @@ export async function purgeCandidates(
         reason = `older than ${options.config?.graveyard_min_age_hours ?? 24}h; origin is not live`;
       const cache = scanCache(entry, "purge-allocated-v1", options.context);
       const cached = z.number().nonnegative().safeParse(cache.value);
-      const bytes = cached.success ? cached.data : size(entry, options.context);
+      const bytes =
+        allocated.get(entry) ??
+        (cached.success ? cached.data : size(entry, options.context));
       if (!cached.success) cache.save(bytes);
       return {
         id: `${graveyard.label}: ${entry.slice(graveyard.path.length + 1)}`,
@@ -200,6 +293,11 @@ export async function purgeCandidates(
     const recordCandidate = entryCandidates.find(
       (candidate) => candidate.path === recordPath,
     );
+    if (options.ripOnly === true) {
+      // Expire by age first, then oldest-first until retained logical bytes fit the
+      // same limit doctor declares. Capacity overrides age, never liveness or locks.
+      applyCapacityExpiry(entryCandidates, times, logical, recordCandidate);
+    }
     if (
       recordCandidate !== undefined &&
       entryCandidates.some((candidate) => candidate.verdict === "KEEP")
@@ -240,7 +338,9 @@ async function recheckPurge(
   if (candidate.path === null) return null;
   // The restore record depends on KEEP siblings; only payload rows can be judged alone.
   const only =
-    basename(candidate.path) === ".record" ? ctx.only : candidate.path;
+    ripOnly || basename(candidate.path) === ".record"
+      ? ctx.only
+      : candidate.path;
   const rows = await purgePlan({ ...ctx, only }, ripOnly);
   return (
     rows.find(
@@ -325,6 +425,7 @@ export const purgeRip = {
   ...purge,
   name: "rip-expire",
   tier: "blind",
+  fastFirst: false,
   description: {
     what: "expired rip graveyard entries",
     why: "remove expired rip entries; leave XDG Trash owner-only",

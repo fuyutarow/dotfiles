@@ -127,6 +127,11 @@ const gcCommand = command(
         type: Boolean,
         description: "also forget and rip empty or landed legacy workspaces",
       },
+      abandoned: {
+        type: Boolean,
+        description:
+          "also collect workspaces whose runs all ended without acceptance over 24h ago; legacy layouts also need --legacy",
+      },
       all: {
         type: Boolean,
         description: "visit every consumer registry repo plus dotfiles",
@@ -148,6 +153,7 @@ const gcCommand = command(
       dryRun: argv.flags.dryRun === true,
       includeUnrecorded: argv.flags.includeUnrecorded === true,
       legacy: argv.flags.legacy === true,
+      abandoned: argv.flags.abandoned === true,
     };
     const done = await (argv.flags.all === true
       ? gcAll(options)

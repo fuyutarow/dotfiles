@@ -340,13 +340,31 @@ async function forgetAndBury(
   graveyard: Graveyard,
   name: string,
   dir: string,
+  abandon = false,
 ): Promise<Attempt<void>> {
+  const tip = abandon
+    ? await jjOut(
+        ["log", "--no-graph", "-r", `${name}@`, "-T", "commit_id"],
+        repo.backing,
+        true,
+      )
+    : good("");
+  if (!tip.ok) return tip;
   const forgot = await jjOut(
     ["workspace", "forget", name],
     repo.backing,
     false,
   );
-  return forgot.ok ? bury(graveyard, dir) : forgot;
+  if (!forgot.ok) return forgot;
+  if (abandon) {
+    const abandoned = await jjOut(
+      ["abandon", tip.value.trim()],
+      repo.backing,
+      false,
+    );
+    if (!abandoned.ok) return abandoned;
+  }
+  return bury(graveyard, dir);
 }
 
 /** Hold land's own lock through removal, closing the gap after classification. */
@@ -354,10 +372,11 @@ async function collectWorkspace(
   repo: Repo,
   graveyard: Graveyard,
   ws: Workspace,
+  abandon = false,
 ): Promise<Attempt<void>> {
   const state = landState(ws);
   if (state === undefined)
-    return forgetAndBury(repo, graveyard, ws.name, ws.dir);
+    return forgetAndBury(repo, graveyard, ws.name, ws.dir, abandon);
   const release = await acquire(
     join(state, "land.lock"),
     {
@@ -575,6 +594,9 @@ const RunRecord = z.looseObject({
   workspace: z.string().nullable().optional(),
   continues: z.string().nullable().optional(),
   end_commit: z.string().nullable().optional(),
+  ended_at: z.string().nullable().optional(),
+  outcome: z.string().nullable().optional(),
+  judgment: z.looseObject({ decision: z.string() }).nullable().optional(),
 });
 export type RunRecord = z.output<typeof RunRecord>;
 
@@ -637,6 +659,7 @@ export type GcOptions = {
   dryRun: boolean;
   includeUnrecorded: boolean;
   legacy?: boolean;
+  abandoned?: boolean;
 };
 
 type Workspace = { name: string; dir: string; change?: string; age?: string };
@@ -1120,6 +1143,36 @@ async function classify(
       "keep",
       `sparse patterns are not '.': ${JSON.stringify(sparse.value.trim())}`,
     );
+  // Abandonment is based on runs at this workspace path, not a ticket redone elsewhere.
+  const local = records.filter(
+    (r) =>
+      r.workspace !== null &&
+      r.workspace !== undefined &&
+      realOr(r.workspace) === realOr(ws.dir),
+  );
+  const cutoff = Temporal.Now.instant().epochMilliseconds - 24 * 60 * 60 * 1000;
+  if (
+    local.length > 0 &&
+    !lineage.some((r) => r.judgment?.decision === "accept") &&
+    local.every((r) => {
+      const endedAt = r.ended_at;
+      if (
+        r.state !== "ended" ||
+        endedAt === null ||
+        endedAt === undefined ||
+        r.outcome === null ||
+        r.outcome === undefined
+      )
+        return false;
+      const ended = fromThrowable(() => Temporal.Instant.from(endedAt))();
+      return ended.isOk() && ended.value.epochMilliseconds < cutoff;
+    })
+  )
+    return verdict(
+      "abandoned",
+      `all runs ended without acceptance over 24h ago: ${local.map((r) => `${r.id} (${r.outcome})`).join(", ")}`,
+      true,
+    );
   if (trunk === null)
     return verdict(
       "no trunk",
@@ -1197,17 +1250,27 @@ export async function gc(
       let label = c.verdict;
       let reason = c.reason;
       const recorded = lineageOf(records.value, realOr(ws.dir)).length > 0;
-      const allowed =
+      const layoutAllowed =
         kind === "legacy"
           ? options.legacy === true
           : recorded || options.includeUnrecorded;
-      if (c.collect && !allowed)
+      const allowed =
+        layoutAllowed &&
+        (c.verdict !== "abandoned" || options.abandoned === true);
+      if (c.collect && !layoutAllowed)
         reason +=
           kind === "legacy"
             ? "; report only; pass --legacy to collect"
             : "; unrecorded; pass --include-unrecorded to collect";
+      if (c.verdict === "abandoned" && options.abandoned !== true)
+        reason += "; report only; pass --abandoned to collect";
       if (c.collect && allowed && !options.dryRun) {
-        const done = await collectWorkspace(repo, graveyard.value, ws);
+        const done = await collectWorkspace(
+          repo,
+          graveyard.value,
+          ws,
+          c.verdict === "abandoned",
+        );
         label = done.ok ? "collected" : "FAILED";
         reason = done.ok ? reason : msg(done);
         failed.push(...(done.ok ? [] : [ws.dir]));
@@ -1354,7 +1417,12 @@ export async function doctor(): Promise<Attempt<string[]>> {
       emit("stale", `ws refresh ${slug} --repo ${row.repo}`);
       continue;
     }
-    if (row.kind === "legacy") {
+    if (c.verdict === "abandoned") {
+      emit(
+        "abandoned",
+        `ws gc --abandoned${row.kind === "legacy" ? " --legacy" : ""} --repo ${row.repo}`,
+      );
+    } else if (row.kind === "legacy") {
       emit(
         c.verdict === "empty" ? "legacy-empty" : "legacy-layout",
         `ws gc --legacy --repo ${row.repo}`,

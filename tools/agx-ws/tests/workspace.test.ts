@@ -697,6 +697,148 @@ const recFor = (dir: string) => ({
 });
 
 describe("gc integration branches", () => {
+  test("WS-GC-UNACCEPTED: only opts old unaccepted work into abandonment", async () => {
+    const path = await repo('trunk = "main"\nkeep = ["ws_kept"]\n');
+    const slugs = [
+      "abandoned",
+      "accepted",
+      "running",
+      "unknown",
+      "kept",
+      "recent",
+      "undated",
+    ];
+    for (const slug of slugs) {
+      expect((await ws(["add", slug], path)).code).toBe(0);
+      await Bun.write(join(wsDir(path, slug), "attempt.txt"), `${slug}\n`);
+      expect((await jj(["status"], wsDir(path, slug))).code).toBe(0);
+    }
+    const state = join(scratch, "unaccepted-state");
+    const realBin = join(scratch, "unaccepted-bin");
+    await mkdir(state);
+    await mkdir(realBin);
+    const wrapper = join(realBin, "agx");
+    await Bun.write(
+      wrapper,
+      `#!/usr/bin/env bun\nconst p=Bun.spawn([process.execPath,${JSON.stringify(join(import.meta.dir, "../../agx/src/agx.ts"))},...process.argv.slice(2)],{stdin:"ignore",stdout:"inherit",stderr:"inherit"});process.exitCode=await p.exited;\n`,
+    );
+    await chmod(wrapper, 0o755);
+    const env = baseEnv({
+      AGX_NEXT_STATE_DIR: state,
+      PATH: `${realBin}:${bin}:${process.env.PATH}`,
+    });
+    const old = Temporal.Now.instant().subtract({ hours: 48 }).toString();
+    const recent = Temporal.Now.instant().subtract({ hours: 1 }).toString();
+    const events: object[] = [];
+    const record = (
+      slug: string,
+      suffix: string,
+      outcome?: string,
+      endedAt = old,
+      accept = false,
+    ) => {
+      const id = `${slug}-${suffix}`;
+      events.push({
+        kind: "started",
+        id,
+        at: old,
+        ticket: id,
+        writes: [],
+        cwd: path,
+        workspace: wsDir(path, slug),
+        row: "fixture",
+        dispatcher_session: null,
+        vendor_session: null,
+        pid: process.pid,
+      });
+      if (outcome !== undefined)
+        events.push({
+          kind: "ended",
+          id,
+          at: endedAt,
+          exit: 1,
+          outcome,
+          report_path: null,
+          vendor_session: null,
+          verify: [],
+        });
+      if (accept)
+        events.push({
+          kind: "judged",
+          id,
+          at: old,
+          decision: "accept",
+          note: "fixture",
+        });
+    };
+    record("abandoned", "first", "verify-failed");
+    record("abandoned", "second", "malformed");
+    record("accepted", "first", "ok", old, true);
+    record("accepted", "second", "refused");
+    record("running", "first", "timeout");
+    record("running", "second");
+    record("kept", "first", "lost");
+    record("recent", "first", "refused");
+    record("recent", "second", "timeout", recent);
+    // A dead pid yields derived loss with no ended timestamp, which cannot prove age.
+    events.push({
+      kind: "started",
+      id: "undated-first",
+      at: old,
+      ticket: "undated",
+      writes: [],
+      cwd: path,
+      workspace: wsDir(path, "undated"),
+      row: "fixture",
+      dispatcher_session: null,
+      vendor_session: null,
+      pid: 2147483647,
+    });
+    await Bun.write(
+      join(state, "records.jsonl"),
+      `${events.map((event) => JSON.stringify(event)).join("\n")}\n`,
+    );
+    const abandoned = wsDir(path, "abandoned");
+    const tip = (
+      await jj(["log", "--no-graph", "-r", "@", "-T", "commit_id"], abandoned)
+    ).out.trim();
+    const dry = await ws(["gc", "--dry-run", "--abandoned"], path, env);
+    expect(dry.code, dry.err).toBe(0);
+    expect(dry.out).toContain(`${abandoned}\tws\tabandoned\t`);
+    expect(dry.out).toContain(
+      "abandoned-first (verify-failed), abandoned-second (malformed)",
+    );
+    const plain = await ws(
+      ["gc", "--legacy", "--include-unrecorded"],
+      path,
+      env,
+    );
+    expect(plain.code, plain.err).toBe(0);
+    expect(plain.out).toContain("pass --abandoned");
+    expect(await Bun.file(join(abandoned, "attempt.txt")).exists()).toBe(true);
+    const collected = await ws(["gc", "--abandoned"], path, env);
+    expect(collected.code, collected.err).toBe(0);
+    expect(collected.out).toContain(`${abandoned}\tws\tcollected\t`);
+    expect(await Bun.file(join(abandoned, "attempt.txt")).exists()).toBe(false);
+    const registered = (await jj(["workspace", "list"], path)).out;
+    expect(registered).not.toContain("ws_abandoned");
+    expect(
+      (
+        await jj(
+          ["log", "--no-graph", "-r", "all()", "-T", 'commit_id ++ "\\n"'],
+          path,
+        )
+      ).out,
+    ).not.toContain(tip);
+    for (const slug of slugs.filter((candidate) => candidate !== "abandoned")) {
+      expect(
+        await Bun.file(join(wsDir(path, slug), "attempt.txt")).exists(),
+      ).toBe(true);
+      expect(registered).toContain(`ws_${slug}`);
+    }
+    expect(collected.out).toContain(`${wsDir(path, "kept")}\tws\tkept\t`);
+  });
+
   test("WS-GC-LANDED-CONTENT: rebased copy is collected; one differing path survives", async () => {
     const path = await repo('trunk = "main"\n');
     for (const slug of ["rebased-copy", "partial-copy"])

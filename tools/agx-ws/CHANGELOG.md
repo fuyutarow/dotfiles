@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 — 2026-10-16
+
+- Add opt-in collection of workspaces whose runs ended unaccepted over 24 hours ago
+
 ## 0.3.2 — 2026-10-16
 
 - Add read-only workspace fleet findings

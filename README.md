@@ -42,7 +42,7 @@ Most dotfiles configure a shell. Two things here are less usual:
 
 ## Feedback register
 
-Owner feedback and retrospectives are indexed in [`agents/retros/register.toml`](agents/retros/register.toml). Before acting on new owner feedback, search the register first with `rr about '<feedback text>'` and validate or filter it with `mise run retros:check -- --json`. If it matches an existing lesson, append a recurrence with `mise run retros:recur -- <id>` instead of adding another row. `mise run retros:check` validates the register and prints lessons needing enforcement; JSONL consumers can select them with `jq 'select(.needs_enforcement)'`.
+Retrospectives live in [`~/Workspace/retrospectives/register.toml`](~/Workspace/retrospectives/register.toml). Write new retrospectives there and search the register before acting on new owner feedback.
 
 ## Toolbox
 

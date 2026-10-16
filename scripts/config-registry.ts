@@ -452,15 +452,6 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["agents/retros/register.toml"],
-    deployed: "the checkout",
-    consumer: "mise run retros:check · mise run retros:recur",
-    writer: "human, in the repo; retros:recur appends recurrence dates",
-    verify: "mise run retros:check",
-  },
-  {
-    kind: "in-place",
-    when: "all",
     sources: [
       "tools/shared/package.json",
       "tools/agx-usehooks/package.json",

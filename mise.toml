@@ -269,16 +269,6 @@ dir = "{{config_root}}"
 description = "Fail when a deployed or declared agent command, repo link, or package bin points at a missing checkout file"
 run = "bun scripts/live-refs.ts"
 
-[tasks."retros:check"]
-dir = "{{config_root}}"
-description = "Validate the feedback register and print lesson IDs; -- --json emits JSONL for filtering"
-run = "bun scripts/retros-check.ts"
-
-[tasks."retros:recur"]
-dir = "{{config_root}}"
-description = "Append a recurrence date to one existing feedback lesson"
-run = "bun scripts/retros-recur.ts"
-
 [tasks."vendor:deps"]
 dir = "{{config_root}}"
 description = "Regenerate agents/hooks/vendor/deps.{js,d.ts}: the one zod (+ neverthrow fromThrowable) every file imports via agents/hooks/zod.ts — hooks run before bun install, so it is a committed bundle built from the pinned packages"

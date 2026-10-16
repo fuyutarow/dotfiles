@@ -22,17 +22,15 @@ const CORPUS: CorpusEntry[] = [
   { path: "tools/agx/src/workers/codex.ts" },
   { path: "scripts/render-oxlintrc.ts" },
   { path: "scripts/deployment-selection.ts" },
+  { path: "scripts/guest-capacity-recover.ts" },
+  { path: "scripts/lint-no-sync.ts" },
+  { path: "scripts/lint-tmp-leaks.ts" },
   { path: "scripts/install-ai-clis.ts" },
-  { path: "scripts/retros-check.ts" },
-  {
-    path: "scripts/retros-recur.ts",
-    // The required <id> parameter is checked before the prototype flag.
-    prototypeFlag: { exit: 1, message: "Missing required parameter" },
-  },
   { path: "scripts/vendor-deps.ts" },
   { path: "agents/models/check-releases.ts" },
   { path: "agents/research-control/cli.ts" },
   { path: "tools/agent-resource-run/src/agent-resource-run.ts" },
+  { path: "tools/baseline/src/baseline.ts" },
   {
     path: "tools/coredev/src/coredev.ts",
     // The CLI's local prototype guard rejects the flag before required-command validation.
@@ -137,6 +135,7 @@ const CORPUS: CorpusEntry[] = [
     path: "tools/storage-headroom/src/storage-headroom.ts",
     unknownFlag: { exit: 2, message: "Unknown flag" },
   },
+  { path: "tools/workspace/src/ws.ts" },
 ] satisfies readonly CorpusEntry[];
 
 async function run(

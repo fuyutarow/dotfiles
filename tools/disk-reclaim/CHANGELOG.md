@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.5 — 2026-10-16
+
+- Allow deleted graveyard payloads to expire regardless of process-use evidence while retaining other deletion guards.
+- Expire rip payloads by record time above the graveyard size cap, including fresh nested entries and native rip timestamps.
+
 ## 1.4.4 — 2026-10-16
 
 - Bound unattended rip expiry by the doctor 10 GiB ceiling, expiring oldest entries first even before 24 hours.

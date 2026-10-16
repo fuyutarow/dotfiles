@@ -115,6 +115,49 @@ export function graveyardEntries(path: string): string[] {
     .unwrapOr([]);
 }
 
+// rm-improved writes local ctime text; newer writers may use ISO instants.
+// Interpret the former in the machine's zone, just as rip does when restoring.
+function ripTime(timestamp: string): number | undefined {
+  const iso = fromThrowable(
+    () => Temporal.Instant.from(timestamp.trim()).epochMilliseconds,
+  )();
+  if (iso.isOk()) return iso.value;
+  const fields = timestamp
+    .trim()
+    .match(
+      /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}) (\d{2}):(\d{2}):(\d{2}) (\d{4})$/u,
+    );
+  if (fields === null) return undefined;
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  return fromThrowable(
+    () =>
+      Temporal.PlainDateTime.from(
+        {
+          year: Number(fields[6]),
+          month: months.indexOf(fields[1] ?? "") + 1,
+          day: Number(fields[2]),
+          hour: Number(fields[3]),
+          minute: Number(fields[4]),
+          second: Number(fields[5]),
+        },
+        { overflow: "reject" },
+      ).toZonedDateTime(Temporal.Now.timeZoneId()).epochMilliseconds,
+  )().unwrapOr(undefined);
+}
+
 export function ripRecords(path: string): RipRecord[] {
   const contents = fromThrowable(() =>
     readFileSync(join(path, ".record"), "utf8"),
@@ -128,9 +171,7 @@ export function ripRecords(path: string): RipRecord[] {
       destination === undefined
     )
       return [];
-    const time = fromThrowable(
-      () => Temporal.Instant.from(timestamp.trim()).epochMilliseconds,
-    )();
-    return time.isOk() ? [{ time: time.value, original, destination }] : [];
+    const time = ripTime(timestamp);
+    return time === undefined ? [] : [{ time, original, destination }];
   });
 }

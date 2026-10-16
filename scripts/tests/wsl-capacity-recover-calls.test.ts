@@ -99,6 +99,7 @@ describe("WSL capacity recovery names only commands that exist", () => {
     const calls = controllerCalls(MISE);
     expect(calls.map((call) => call.name)).toEqual([
       "tmpfs",
+      "rip-expire",
       "host",
       "builds",
       "clean",

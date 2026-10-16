@@ -47,7 +47,7 @@ export type RemoveTreeOptions = {
   immutable?: (path: string) => boolean | null;
   dryRun?: boolean;
   allowListedWorkspace?: string;
-  /** Already-deleted data (rip graveyard): repo-store and jj-workspace refusals do not apply. */
+  /** Already-deleted data: process-use, repo-store and jj-workspace refusals do not apply. */
   graveyard?: boolean;
   /** false skips the parent-mount statfs before and after; a stage measures its mount once instead. */
   measureFilesystem?: boolean;
@@ -301,7 +301,17 @@ export async function removeTree(
       errors,
     };
   writeProgress();
-  const protectedPath = protectedReason(path, options.protection);
+  const protectedPath = protectedReason(
+    path,
+    options.graveyard === true
+      ? {
+          ...options.protection,
+          // Deleted payloads can be unlinked even with open fds. Preserve static
+          // path protection while bypassing process probes and their unknowns.
+          processes: { openPaths: () => ({ open: [], unknown: [] }) },
+        }
+      : options.protection,
+  );
   if (protectedPath !== null)
     return {
       ok: false,

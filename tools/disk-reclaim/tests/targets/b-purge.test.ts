@@ -343,7 +343,7 @@ test("recent graveyard entries use the injected deny state and pressure flag", a
   expect(pressured?.verdict).toBe("RECLAIM");
 });
 
-test("a graveyard entry with an open path stays kept under pressure", async () => {
+test("a deleted graveyard entry with an open path expires under pressure", async () => {
   const fixture = recentPurgeFixture(30);
   const base = liveFacts("3a2afd34-1111-4111-8111-111111111111");
   const liveness: LivenessSnapshot = {
@@ -363,8 +363,7 @@ test("a graveyard entry with an open path stays kept under pressure", async () =
       now: fixture.now,
     })
   ).find((item) => item.path === fixture.entry);
-  expect(candidate?.verdict).toBe("KEEP");
-  expect(candidate?.reason).toContain("locked or in use");
+  expect(candidate?.verdict).toBe("RECLAIM");
 });
 
 test("the configured pressure undo window keeps a newly ripped entry", async () => {
@@ -385,7 +384,7 @@ test("the configured pressure undo window keeps a newly ripped entry", async () 
   expect(candidate?.reason).toContain("undo window");
 });
 
-test("rip graveyard keeps a recent entry from a live Claude session", async () => {
+test("rip graveyard expires a deleted entry even from a live Claude session", async () => {
   const root = tempRoot("disk-reclaim-live-grave-");
   const grave = join(root, "grave");
   const uuid = "3a2afd34-1111-4111-8111-111111111111";
@@ -437,8 +436,7 @@ test("rip graveyard keeps a recent entry from a live Claude session", async () =
   const entry = candidates.find(
     (candidate) => candidate.path === join(grave, "tmp"),
   );
-  expect(entry?.verdict).toBe("KEEP");
-  expect(entry?.reason).toBe(`from live session ${uuid}`);
+  expect(entry?.verdict).toBe("RECLAIM");
   expect(
     candidates.every((candidate) => !candidate.reason.startsWith("empty ")),
   ).toBe(true);

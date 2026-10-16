@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { homedir } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
@@ -31,6 +31,8 @@ export interface RouteRun {
   displayId: string | undefined;
   choice: string;
   label: string;
+  workerName?: string | undefined;
+  workspaceName?: string | undefined;
   pickSource: string;
   phase: string | undefined;
   workerSession: string | undefined;
@@ -100,6 +102,8 @@ const AgxLsRowSchema = z.object({
   exit: z.unknown().optional(),
   cwd: z.unknown().optional(),
   workspace: z.unknown().optional(),
+  worker_name: z.unknown().optional(),
+  workspace_name: z.unknown().optional(),
   writes: z.unknown().optional(),
   judgment: z.unknown().optional(),
   report_path: z.unknown().optional(),
@@ -170,6 +174,9 @@ export async function agxRouteRunsAsync(
     }
     const row = parsed.data;
     if (row.state !== "running" && row.state !== "orphaned") continue;
+    const recordedWorkspace = optionalString(row.workspace_name);
+    const workspacePath =
+      optionalString(row.workspace) ?? optionalString(row.cwd);
     const startedAt = optionalString(row.started_at);
     const secs =
       startedAt === undefined
@@ -227,6 +234,10 @@ export async function agxRouteRunsAsync(
       displayId: undefined,
       choice: row.row,
       label: row.ticket,
+      workerName: optionalString(row.worker_name),
+      workspaceName:
+        recordedWorkspace ??
+        (workspacePath === undefined ? undefined : basename(workspacePath)),
       pickSource:
         optionalString(row.pick_source) ??
         (continues === null || continues === undefined ? "agx" : "resume"),
@@ -664,6 +675,15 @@ export function routeLines(
       RUN_LABEL_WIDTH,
     ),
   );
+  const identities = shown.map((run) =>
+    run.workerName === undefined || run.workspaceName === undefined
+      ? ""
+      : `${run.workerName}@${run.workspaceName}`,
+  );
+  const identityWidth = Math.max(
+    0,
+    ...identities.map((value) => Bun.stringWidth(value)),
+  );
   const choiceWidth = Math.max(
     0,
     ...choices.map((value) => Bun.stringWidth(value)),
@@ -679,7 +699,7 @@ export function routeLines(
   const reserveSession = sessionWidth > 0;
   const lines = shown.map(
     (r, i) =>
-      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase)}`,
+      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(identities[i] ?? "", identityWidth)}${identities[i] === "" ? "" : " "}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase)}`,
   );
   const summary = [
     ...(other > 0 ? [`${DIM}+${other} in other sessions${RST}`] : []),

@@ -47,6 +47,8 @@ const EventSchema = z.discriminatedUnion("kind", [
     writes: z.array(z.string()),
     cwd: z.string(),
     workspace: z.string(),
+    worker_name: z.string().optional(),
+    workspace_name: z.string().optional(),
     row: z.string(),
     dispatcher_session: z.string().nullable(),
     vendor_session: z.string().nullable(),
@@ -460,6 +462,8 @@ const RunSchema = z.object({
   exit: z.number().nullable(),
   outcome: Outcome.nullable(),
   row: z.string(),
+  worker_name: z.string().optional(),
+  workspace_name: z.string().optional(),
   dispatcher_session: z.string().nullable(),
   cwd: z.string(),
   workspace: z.string(),
@@ -500,6 +504,8 @@ function foldInto(runs: Map<string, FoldedRun>, input: NextEvent[]): void {
         exit: null,
         outcome: null,
         row: event.row,
+        worker_name: event.worker_name ?? `agt_${event.ticket}`,
+        workspace_name: event.workspace_name ?? basename(event.workspace),
         dispatcher_session: event.dispatcher_session,
         cwd: event.cwd,
         workspace: event.workspace,
@@ -641,6 +647,8 @@ export function foldedRuns() {
 
 function liveRuns(runs: Map<string, FoldedRun>) {
   for (const run of runs.values()) {
+    run.worker_name ??= `agt_${run.ticket}`;
+    run.workspace_name ??= basename(run.workspace);
     // Old event logs and snapshots used verify-failed for every nonzero check.
     if (
       run.outcome === "verify-failed" &&

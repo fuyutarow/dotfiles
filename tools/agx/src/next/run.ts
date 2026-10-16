@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -37,6 +38,24 @@ const fatal = (message: string, exitCode = 2): never =>
   exitWithError(`agx: ${message}\n`, exitCode);
 const value = (flags: Flags, key: string): string | undefined =>
   typeof flags[key] === "string" ? flags[key] : undefined;
+export function systemdUnitName(cgroup: string): string | undefined {
+  const unit = cgroup
+    .split(/\r?\n/u)
+    .flatMap((line) => line.split("/"))
+    .findLast((part) => part.endsWith(".service"));
+  return unit?.slice(0, -".service".length);
+}
+const workerNameFor = async (ticket: string): Promise<string> => {
+  if (
+    process.env.INVOCATION_ID === undefined ||
+    process.env.INVOCATION_ID === ""
+  )
+    return `agt_${ticket}`;
+  const cgroup = await readFile("/proc/self/cgroup", "utf8").catch(() => null);
+  return cgroup === null
+    ? `agt_${ticket}`
+    : (systemdUnitName(cgroup) ?? `agt_${ticket}`);
+};
 const refuseRunningWorkspace = (cwd: string): void => {
   const holder = runningWorkspaceRun(cwd);
   if (holder !== undefined)
@@ -288,6 +307,7 @@ export async function run(flags: Flags): Promise<number> {
       "WARN dispatcher session is unavailable; pass --session ID or preserve CLAUDE_CODE_SESSION_ID/CODEX_SESSION_ID (systemd-run: use -E NAME).\n",
     );
   const workspace = resolve(cwd);
+  const ticketName = ticket.name ?? basename(path);
   writeFileSync(
     workerBrief,
     withReportInstruction(renderPromise(ticket, cwd, sandbox, prose)),
@@ -307,14 +327,17 @@ export async function run(flags: Flags): Promise<number> {
   }
   // Also covers runs started by an older binary while this invocation was routing.
   refuseRunningWorkspace(cwd);
+  const workerName = await workerNameFor(ticketName);
   append({
     kind: "started",
     id,
     at: now(),
-    ticket: ticket.name ?? basename(path),
+    ticket: ticketName,
     writes: ticket.writes,
     cwd,
     workspace,
+    worker_name: workerName,
+    workspace_name: basename(workspace),
     row: row.id,
     dispatcher_session: dispatcher,
     vendor_session: resumeSession ?? null,
@@ -521,7 +544,7 @@ export async function run(flags: Flags): Promise<number> {
   temp.remove();
   await workspaceLock.release();
   process.stdout.write(
-    `${JSON.stringify({ id, ticket: ticket.name ?? basename(path), row: row.id, exit, outcome, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,
+    `${JSON.stringify({ id, ticket: ticketName, row: row.id, exit, outcome, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,
   );
   return exit;
 }

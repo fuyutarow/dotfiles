@@ -283,6 +283,26 @@ describe("statusline Run row", () => {
     expect(scan.runs.filter((run) => !run.alive)).toHaveLength(15);
   });
 
+  test("renders worker and workspace names from an agx run record", async () => {
+    const row = {
+      id: "named-run",
+      ticket: "fixture-ticket",
+      state: "running",
+      row: "luna-high",
+      dispatcher_session: SESSION,
+      started_at: Temporal.Now.instant().subtract({ seconds: 5 }).toString(),
+      worker_name: "agt_systemd-unit",
+      workspace_name: "ws_fixture",
+    };
+    const out = await render(
+      undefined,
+      undefined,
+      SESSION,
+      JSON.stringify([row]),
+    );
+    expect(out).toContain("agt_systemd-unit@ws_fixture fixture-ticket");
+  });
+
   test.each([false, true])(
     "renders real sidecar turns and rollout cost (future field: %s)",
     async (future) => {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.7 — 2026-10-16
+
+- Record worker and workspace names on agx runs
+
 ## 4.11.6 — 2026-10-16
 
 - Route from one four-branch objective with compact graded history and usage inputs; retain fresh Codex usage across consecutive picks.

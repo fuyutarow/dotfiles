@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.2 — 2026-10-16
+
+- Display worker and workspace names in run rows
+
 ## 0.16.1 — 2026-10-16
 
 - Reuse the shared Codex account usage reader so empty sessions cannot erase weekly usage

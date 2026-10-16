@@ -9,10 +9,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { createTempTracker } from "../temp.ts";
-import { earlyQuitRows } from "../../src/next/run.ts";
+import { earlyQuitRows, systemdUnitName } from "../../src/next/run.ts";
 import { foldedRuns } from "../../src/next/store.ts";
 
 const tempDirs = createTempTracker();
@@ -38,6 +38,17 @@ const scratch = (prefix: string): string => {
 };
 
 describe("agx-next run", () => {
+  test("reads a systemd service unit from the process cgroup", () => {
+    expect(
+      systemdUnitName(
+        "0::/user.slice/user-1000.slice/user@1000.service/app.slice/agt_example.service\n",
+      ),
+    ).toBe("agt_example");
+    expect(
+      systemdUnitName("0::/user.slice/user-1000.slice/session.scope\n"),
+    ).toBeUndefined();
+  });
+
   test("refuses dispatch when the target has an ownerless ref lock", () => {
     const root = scratch("ownerless-ref-lock-");
     const repo = join(root, "repo");
@@ -247,6 +258,8 @@ describe("agx-next run", () => {
       id: z.string().optional(),
       at: z.string().optional(),
       row: z.string().optional(),
+      worker_name: z.string().optional(),
+      workspace_name: z.string().optional(),
       exit: z.number().optional(),
       dispatcher_session: z.string().nullable().optional(),
       vendor_session: z.string().nullable().optional(),
@@ -268,6 +281,13 @@ describe("agx-next run", () => {
       "ended",
     ]);
     expect(started.row).toBe("luna-high");
+    const unit =
+      process.env.INVOCATION_ID === undefined ||
+      process.env.INVOCATION_ID === ""
+        ? undefined
+        : systemdUnitName(readFileSync("/proc/self/cgroup", "utf8"));
+    expect(started.worker_name).toBe(unit ?? "agt_fake");
+    expect(started.workspace_name).toBe(basename(root));
     expect(ended.exit).toBe(0);
     expect(started.dispatcher_session).toBe("flag-session");
     expect(started.continues).toBeNull();
@@ -477,8 +497,10 @@ describe("agx-next run", () => {
         "state",
         "ticket",
         "vendor_session",
+        "worker_name",
         "verify",
         "workspace",
+        "workspace_name",
         "writes",
       ].toSorted(),
     );
@@ -797,6 +819,8 @@ describe("agx-next run", () => {
       writes: [],
       cwd: root,
       workspace: root,
+      worker_name: id === "running" ? "agt_systemd-unit" : "agt_ended",
+      workspace_name: "ws_fixture",
       row: "fixture",
       dispatcher_session: null,
       vendor_session: null,
@@ -833,6 +857,8 @@ describe("agx-next run", () => {
           state: z.enum(["running", "ended", "orphaned"]),
           started_at: z.string(),
           ended_at: z.string().nullable(),
+          worker_name: z.string(),
+          workspace_name: z.string(),
         }),
       ),
     ).safeParse(result.stdout.toString());
@@ -843,6 +869,8 @@ describe("agx-next run", () => {
       state: "running",
       started_at: runningAt,
       ended_at: null,
+      worker_name: "agt_systemd-unit",
+      workspace_name: "ws_fixture",
     });
     expect(rows.data.find(({ id }) => id === "ended")).toMatchObject({
       state: "ended",

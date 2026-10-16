@@ -132,11 +132,8 @@ export async function create(options: {
   const values = new Map<string, string>();
   for (const pair of options.set) {
     const match = /^([A-Za-z_]\w*)=(.*)$/su.exec(pair);
-    const key = match?.[1];
-    const value = match?.[2];
-    if (key === undefined || value === undefined)
-      return bad(`invalid --set '${pair}': expected k=v`);
-    values.set(key, value);
+    if (match === null) return bad(`invalid --set '${pair}': expected k=v`);
+    values.set(match[1]!, match[2]!);
   }
   const template =
     options.from === undefined
@@ -288,9 +285,8 @@ async function landing(
 async function ticketName(path: string): Promise<string> {
   const text = await readFile(path, "utf8");
   const front = /^\+\+\+\r?\n([\s\S]*?)\r?\n\+\+\+/u.exec(text);
-  const header = front?.[1];
-  if (header === undefined) return basename(path, ".md");
-  const raw = await attempt(() => Bun.TOML.parse(header));
+  if (front === null) return basename(path, ".md");
+  const raw = await attempt(() => Bun.TOML.parse(front[1]!));
   if (!raw.ok) return basename(path, ".md");
   const name = z
     .object({ name: z.string().min(1).optional() })

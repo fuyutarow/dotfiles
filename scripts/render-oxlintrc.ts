@@ -8,7 +8,7 @@
 //
 // Modes: --write rewrites .oxlintrc.json · --check exits 1 on drift · neither prints the JSON.
 // --repo DIR renders ANOTHER repo's .oxlintrc.json from this same policy plus that repo's own
-// oxlint-policy.local.toml, which may ADD reasoned ignores, strengthen rules and opt into React package globs: one policy for every
+// oxlint-policy.local.toml, which may ADD reasoned ignores and opt into React package globs: one policy for every
 // repo of the owner (firedancer, 2026-10-06), and a consumer cannot quietly weaken a rule.
 // Exit: 0 ok / up to date · 1 drift (--check) · 2 FATAL (usage, unreadable or invalid policy).
 import { readFileSync, writeFileSync } from "node:fs";
@@ -90,13 +90,10 @@ const PolicySchema = z
   .refine((p) => new Set(p.custom.map((c) => c.id)).size === p.custom.length, {
     message: "custom ids must be unique",
   });
-export type Policy = z.output<typeof PolicySchema> & {
-  localRules?: Record<string, z.output<typeof Level>>;
-};
+export type Policy = z.output<typeof PolicySchema>;
 
 const LocalSchema = z.strictObject({
   schema: z.literal(1),
-  rules: z.record(RuleName, Level).optional(),
   react: z
     .array(
       z
@@ -111,7 +108,7 @@ const LocalSchema = z.strictObject({
 });
 export const LOCAL_POLICY = "oxlint-policy.local.toml";
 
-/** Consumer house policy with optional ignores, stronger rules and React package globs. */
+/** The policy for a consumer repo: house rules, optional ignores and React package globs. */
 export async function loadRepoPolicy(
   repo: string,
   base: Policy,
@@ -136,30 +133,11 @@ export async function loadRepoPolicy(
   if (!local.success)
     return { ok: false, error: `${path}: ${local.error.message}` };
   const react = local.data.react ?? [];
-  const localRules = local.data.rules ?? {};
-  const baseRules = policyRules(base);
-  for (const [rule, level] of Object.entries(localRules)) {
-    // Unlisted rules may be enabled by a quality category. Only an explicit off
-    // across every applicable layer proves that keeping a rule off is safe.
-    const current = baseRules[rule];
-    const offEverywhere =
-      current === "off" || (Array.isArray(current) && current[0] === "off");
-    const scopedError = [
-      ...base.overrides.map((entry) => entry.rules),
-      ...(react.length > 0 ? [base.react.rules] : []),
-    ].some((rules) => rules[rule] === "error");
-    if (level === "off" && (!offEverywhere || scopedError))
-      return {
-        ok: false,
-        error: `${path}: local rule ${rule} cannot lower the preset severity to off`,
-      };
-  }
   // A consumer repo gets the house rules only (Custom.scope); dotfiles-scoped rules stay here.
   return {
     ok: true,
     value: {
       ...base,
-      localRules,
       js_plugins: base.js_plugins,
       ignore: [...base.ignore, ...local.data.ignore],
       overrides: [
@@ -197,8 +175,8 @@ export async function loadPolicy(path = POLICY_PATH): Promise<PolicyLoad> {
 const ofKind = (p: Policy, kind: CustomRule["kind"]): CustomRule[] =>
   p.custom.filter((c) => c.kind === kind);
 
-/** Explicit preset rules, including the custom bans generated from their declarations. */
-function policyRules(p: Policy): Record<string, unknown> {
+/** The .oxlintrc.json text for a policy (stable key order, trailing newline). */
+export function renderOxlintrc(p: Policy): string {
   const rules: Record<string, unknown> = {};
   for (const r of p.off) rules[r.rule] = "off";
   for (const r of p.option) rules[r.rule] = [r.level ?? "error", r.value];
@@ -227,28 +205,6 @@ function policyRules(p: Policy): Record<string, unknown> {
       })),
     },
   ];
-  return rules;
-}
-
-function strengthenRules(
-  rules: Record<string, unknown>,
-  localRules: Record<string, z.output<typeof Level>>,
-): Record<string, unknown> {
-  const strengthened = { ...rules };
-  for (const [rule, level] of Object.entries(localRules)) {
-    const current = rules[rule];
-    const options = z.array(z.unknown()).safeParse(current);
-    strengthened[rule] = options.success
-      ? [level, ...options.data.slice(1)]
-      : level;
-  }
-  return strengthened;
-}
-
-/** The .oxlintrc.json text for a policy (stable key order, trailing newline). */
-export function renderOxlintrc(p: Policy): string {
-  const localRules = p.localRules ?? {};
-  const rules = strengthenRules(policyRules(p), localRules);
   const config = {
     $schema: "./node_modules/oxlint/configuration_schema.json",
     plugins: p.plugins,
@@ -256,10 +212,7 @@ export function renderOxlintrc(p: Policy): string {
     categories: p.categories,
     ignorePatterns: p.ignore.map((i) => i.pattern),
     rules,
-    overrides: p.overrides.map((entry) => ({
-      ...entry,
-      rules: strengthenRules(entry.rules, localRules),
-    })),
+    overrides: p.overrides,
   };
   return `${JSON.stringify(config, null, 2)}\n`;
 }

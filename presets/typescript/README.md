@@ -20,20 +20,6 @@ Outside those packages React rules stay disabled. Missing or empty `react`
 leaves the rendered config unchanged. Applying the preset never creates an
 empty local policy or copies the canonical policy into the consumer.
 
-Local policies may also add or strengthen rules for all files:
-
-```toml
-[rules]
-"node/no-sync" = "error"
-```
-
-Local levels are `error` or `off`, matching the preset's no-warning policy.
-The renderer preserves rule options and applies local levels across test and React
-overrides. It refuses `off` unless the preset explicitly disables the rule in every
-applicable layer, naming the offending rule. Unlisted category rules cannot be
-disabled locally. The preset requires narrowing instead of non-null assertions and
-bans TypeScript suppression comments, including `ts-expect-error`.
-
 React Compiler checks, including `react/hooks` and
 `react/exhaustive-effect-dependencies`, are deferred and explicitly off in the
 React override. Other experimental nursery rules stay off under the base policy.

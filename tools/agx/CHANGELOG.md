@@ -1,9 +1,5 @@
 # Changelog
 
-## 5.0.2 — 2026-10-16
-
-- Narrow the routing fallback instead of asserting candidate presence
-
 ## 5.0.1 — 2026-10-16
 
 - Protect bounded premise VCS reads with OS-enforced filesystem write denial.

@@ -1,6 +1,6 @@
 # This repo's additions to the house TypeScript lint policy (presets/typescript/policy.toml).
-# It may ADD ignores with reasons, opt into React checks, and add or strengthen rules.
-# Render: mise run oxlint:render · drift check: mise run lint:oxlint-policy.
+# It may ADD ignores with reasons and opt into React checks for package globs; it cannot
+# turn a rule off. Render: mise run oxlint:render · drift check: mise run lint:oxlint-policy.
 schema = 1
 ignore = []
 
@@ -11,7 +11,3 @@ ignore = []
 # [[ignore]]
 # pattern = "research_record"
 # reason = "frozen copies of apparatus code: a run's provenance; rewriting them breaks what the record reproduces"
-
-# Optional: strengthen a rule for ALL files, including test and React overrides.
-# [rules]
-# "node/no-sync" = "error"

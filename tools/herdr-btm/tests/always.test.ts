@@ -102,8 +102,7 @@ test("isolated headless startup, repeated/concurrent ensure, and pane loss conve
       }
       const rows = await agents();
       expect(rows.length).toBeLessThanOrEqual(1);
-      const row = rows[0];
-      if (row !== undefined) return row;
+      if (rows.length === 1) return rows[0]!;
       await Bun.sleep(100);
     }
     return expect.unreachable("BTM-ALWAYS: no btm row within 20s");

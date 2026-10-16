@@ -240,7 +240,7 @@ describe("manifest preset CLI", () => {
     );
     await writeFile(
       join(repo, "oxlint-policy.local.toml"),
-      'schema = 1\nignore = []\n[rules]\n"typescript/no-non-null-assertion" = "off"\n',
+      "schema = 1\nrules = {}\n",
     );
     expect((await run("apply", "typescript", "--to", repo)).exit).toBe(2);
     expect(await Bun.file(join(repo, ".oxlintrc.json")).exists()).toBe(false);

@@ -210,6 +210,7 @@ function sandbox(
   copy: string,
   liveDotfiles: string | undefined,
   executableDirectories: readonly string[],
+  linkedDotfiles: { source: string; target: string } | undefined,
 ): string[] | undefined {
   if (process.platform === "linux" && Bun.which("bwrap") !== null)
     return [
@@ -227,6 +228,9 @@ function sandbox(
       "--bind",
       scratch,
       scratch,
+      ...(linkedDotfiles === undefined
+        ? []
+        : ["--ro-bind", linkedDotfiles.source, linkedDotfiles.target]),
       "--ro-bind",
       candidate,
       candidate,
@@ -513,6 +517,51 @@ function inside(root: string, path: string): boolean {
   return local === "" || (!local.startsWith("..") && !isAbsolute(local));
 }
 
+async function linkedDotfilesNodeModules(
+  root: string,
+  scratch: string,
+  liveDotfiles: string | undefined,
+): Promise<{ source: string; target: string; link: string } | undefined> {
+  if (
+    process.platform !== "linux" ||
+    Bun.which("bwrap") === null ||
+    liveDotfiles === undefined
+  )
+    return undefined;
+  const nodeModules = join(root, "node_modules");
+  const link = await attempt(() => lstat(nodeModules));
+  if (!link.ok || !link.value.isSymbolicLink()) return undefined;
+  const [liveRoot, nodeModulesRoot] = await Promise.all([
+    attempt(() => realpath(liveDotfiles)),
+    attempt(() => realpath(nodeModules)),
+  ]);
+  if (
+    !liveRoot.ok ||
+    !nodeModulesRoot.ok ||
+    !inside(liveRoot.value, nodeModulesRoot.value)
+  )
+    return undefined;
+  const target = join(scratch, "live-dotfiles");
+  await mkdir(target);
+  return {
+    source: liveRoot.value,
+    target,
+    link: join(target, relative(liveRoot.value, nodeModulesRoot.value)),
+  };
+}
+
+async function redirectCandidateNodeModules(
+  candidate: string,
+  linkedDotfiles: Awaited<ReturnType<typeof linkedDotfilesNodeModules>>,
+): Promise<void> {
+  if (linkedDotfiles === undefined) return;
+  const nodeModules = join(candidate, "node_modules");
+  const link = await attempt(() => lstat(nodeModules));
+  if (!link.ok || !link.value.isSymbolicLink()) return;
+  await rm(nodeModules);
+  await symlink(linkedDotfiles.link, nodeModules);
+}
+
 async function capturePathExecutable(
   path: string,
   target: string,
@@ -602,6 +651,11 @@ async function checkConsumer(
   const liveDotfiles = (await attempt(() => lstat(dotfiles))).ok
     ? dotfiles
     : undefined;
+  const linkedDotfiles = await linkedDotfilesNodeModules(
+    root,
+    scratch,
+    liveDotfiles,
+  );
   const executables = await captureExecutables(scratch, consumer);
   const roots = await Promise.all(
     [source, root, dotfiles].map((path) => attempt(() => realpath(path))),
@@ -616,6 +670,7 @@ async function checkConsumer(
     copy,
     liveDotfiles,
     resolvedPath.bindings,
+    linkedDotfiles,
   );
   if (prefix === undefined)
     return [
@@ -641,6 +696,7 @@ async function checkConsumer(
     if (failure !== undefined) return failure;
     await mkdir(home, { recursive: true });
     await copyTree(root, candidate);
+    await redirectCandidateNodeModules(candidate, linkedDotfiles);
     return null;
   });
   const copyFailure = copied.ok ? copied.value : errorMessage(copied.error);

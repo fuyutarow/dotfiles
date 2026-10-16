@@ -632,6 +632,57 @@ process.stdout.write(JSON.stringify([{ id: 'moved-run', ticket: 'moved-entry', w
       ]),
     ).toContain('"trunk/setup" = true');
   });
+  test("queued land isolates node_modules linked to the live dotfiles mount", async () => {
+    if (process.platform !== "linux" || Bun.which("bwrap") === null) return;
+    const f = await fixture();
+    const consumer = join(dirname(f.main), "consumer-gate-source");
+    const dotfiles = join(dirname(f.main), "dotfiles");
+    await mkdir(join(consumer, "node_modules"), { recursive: true });
+    await writeFile(
+      join(consumer, "mise.toml"),
+      '[tasks.setup]\nrun = "printf setup-ok"\n',
+    );
+    await f.jj(consumer, ["git", "init", "--colocate"]);
+    await f.jj(consumer, ["commit", "-m", "consumer trunk"]);
+    await f.jj(consumer, ["bookmark", "set", "alpha", "-r", "@-"]);
+    await mkdir(join(dotfiles, "node_modules"), { recursive: true });
+    await symlink(
+      join(dotfiles, "node_modules"),
+      join(f.worker, "node_modules"),
+    );
+    const mise = Bun.which("mise");
+    expect(mise).not.toBeNull();
+    if (mise === null) return;
+    await mkdir(join(f.worker, "scripts"), { recursive: true });
+    await writeFile(
+      join(f.worker, "scripts/consumer-gate.ts"),
+      `export { runConsumerGates } from ${JSON.stringify(join(REPO, "scripts/consumer-gate.ts"))};\n`,
+    );
+    await writeFile(
+      join(f.worker, "presets/consumers.toml"),
+      `[[consumers]]\nname = "land-path-consumer"\nroot = ${JSON.stringify(consumer)}\ntrunk = "alpha"\nsetup = [${JSON.stringify(mise)}, "run", "setup"]\nsurfaces = ["package-bins"]\ncommand = ["true"]\ntimeout_ms = 30000\n`,
+    );
+    await mkdir(join(f.worker, "tools/fixture"), { recursive: true });
+    await writeFile(join(f.worker, "tools/fixture/main.ts"), "export {};\n");
+
+    const enqueued = await f.command([
+      "--enqueue",
+      f.worker,
+      "-m",
+      "Queue node_modules symlink regression",
+    ]);
+    expect(enqueued.exitCode, enqueued.stdout.toString()).toBe(0);
+    const result = await f.command(["--run-queue"]);
+
+    expect(
+      result.exitCode,
+      result.stdout.toString() + result.stderr.toString(),
+    ).toBe(0);
+    expect(result.stdout.toString()).toContain(
+      "[land] consumers: PASS land-path-consumer: true exit 0",
+    );
+    expect(result.stdout.toString()).toContain("setup-ok");
+  });
   test("registry-only candidate is refused and names its unrecognized key", async () => {
     const f = await fixture();
     await mkdir(join(f.main, "scripts"), { recursive: true });

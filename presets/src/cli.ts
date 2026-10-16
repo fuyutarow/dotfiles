@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { cli } from "cleye";
 import {
-  loadPolicy,
+  loadCommittedPolicy,
   loadRepoPolicy,
   renderOxlintrc,
 } from "../../scripts/render-oxlintrc.ts";
@@ -117,7 +117,7 @@ for (const file of files) {
 }
 
 if (name === "typescript") {
-  const loaded = await loadPolicy();
+  const loaded = await loadCommittedPolicy();
   if (!loaded.ok) fatal(`cannot load TypeScript policy: ${loaded.error}`);
   if (action === "apply" && (await exists(join(target, "oxlint-policy.toml"))))
     console.log(

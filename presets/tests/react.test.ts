@@ -69,15 +69,10 @@ async function render(repo: string) {
 
 test("React declaration scopes real hook diagnostics and absence preserves the base render", async () => {
   const repo = await mkdtemp(join(scratch, "consumer-"));
-  const applied = await run(
-    repo,
-    join(ROOT, "presets/src/cli.ts"),
-    "apply",
-    "typescript",
-    "--to",
-    repo,
-  );
-  expect(applied.exit).toBe(0);
+  // CLI apply/sync coverage lives in cli.test.ts and drift-gate.test.ts. This
+  // fixture only needs the installed runner and codec to test React diagnostics.
+  for (const file of ["package.json", "zod.ts", "lint-oxlint.ts"])
+    await cp(join(ROOT, "presets/typescript", file), join(repo, file));
   await symlink(join(ROOT, "node_modules"), join(repo, "node_modules"));
   const original = await render(repo);
   const localPath = join(repo, "oxlint-policy.local.toml");

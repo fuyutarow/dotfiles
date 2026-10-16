@@ -48,7 +48,7 @@ async function revision(repo: string) {
   return parsed.data.settings.dotfiles.presetRevision;
 }
 
-test("PRESET-DRIFT-GATE: A to B preserves commit gate, check diagnoses revisions, sync repairs", async () => {
+test("PRESET-RENDER-REV: dirty owner and alpha moves preserve recorded checks; sync uses committed alpha", async () => {
   const owner = join(scratch, "owner");
   const consumer = join(scratch, "consumer");
   await mkdir(join(owner, "scripts"), { recursive: true });
@@ -60,6 +60,19 @@ test("PRESET-DRIFT-GATE: A to B preserves commit gate, check diagnoses revisions
   );
   for (const dir of ["node_modules", "agents"])
     await symlink(join(ROOT, dir), join(owner, dir));
+  const jj = (...args: string[]) =>
+    run(
+      owner,
+      "jj",
+      "--config",
+      'user.name="Fixture"',
+      "--config",
+      'user.email="fixture@example.invalid"',
+      ...args,
+    );
+  expect((await jj("git", "init")).exit).toBe(0);
+  expect((await jj("commit", "-m", "Policy A")).exit).toBe(0);
+  expect((await jj("bookmark", "create", "alpha", "-r", "@-")).exit).toBe(0);
   const cli = join(owner, "presets/src/cli.ts");
   const preset = (...args: string[]) =>
     run(owner, process.execPath, cli, ...args);
@@ -95,12 +108,21 @@ test("PRESET-DRIFT-GATE: A to B preserves commit gate, check diagnoses revisions
       '\n[[on]]\nrule = "eslint/no-alert"\nreason = "Revision B fixture"\n',
   );
   expect((await mise("hook:pre-commit")).exit).toBe(0);
-  const drift = await mise("check");
-  expect(drift.exit).not.toBe(0);
-  expect(drift.stdout + drift.stderr).toContain(
-    `preset moved from ${revA} to sha256:`,
+  expect((await mise("check")).exit).toBe(0);
+  const previousDirty = await readFile(
+    join(consumer, ".oxlintrc.json"),
+    "utf8",
   );
-  expect(drift.stdout + drift.stderr).toContain("run preset sync");
+  expect((await preset("sync", "typescript", "--to", consumer)).exit).toBe(0);
+  expect(await readFile(join(consumer, ".oxlintrc.json"), "utf8")).toBe(
+    previousDirty,
+  );
+  expect((await jj("commit", "-m", "Policy B")).exit).toBe(0);
+  expect((await jj("bookmark", "set", "alpha", "-r", "@-")).exit).toBe(0);
+  expect((await mise("check")).exit).toBe(0);
+  // An invalid working-copy policy cannot affect either committed read path.
+  await writeFile(policyPath, "invalid TOML [");
+  expect((await mise("check")).exit).toBe(0);
   const packagePath = join(consumer, "package.json");
   await writeFile(packagePath, '{"name":"consumer-customized"}\n');
   const previous = await readFile(join(consumer, ".oxlintrc.json"), "utf8");
@@ -113,11 +135,67 @@ test("PRESET-DRIFT-GATE: A to B preserves commit gate, check diagnoses revisions
   expect((await preset("sync", "typescript", "--to", consumer)).exit).toBe(0);
   const revB = await revision(consumer);
   expect(revB).not.toBe(revA);
-  expect(drift.stdout + drift.stderr).toContain(`to ${revB}`);
+  expect(await readFile(join(consumer, ".oxlintrc.json"), "utf8")).toContain(
+    "eslint/no-alert",
+  );
   expect(await readFile(packagePath, "utf8")).toBe(
     '{"name":"consumer-customized"}\n',
   );
   expect((await mise("check")).exit).toBe(0);
+  const renderedB = await readFile(join(consumer, ".oxlintrc.json"), "utf8");
+  expect(renderedB).toMatch(/"presetCommit": "[a-f0-9]{40}"/u);
+  await writeFile(
+    join(consumer, ".oxlintrc.json"),
+    renderedB.replace(/,\n\s*"presetCommit": "[a-f0-9]+"/u, ""),
+  );
+  const legacy = await mise("check");
+  expect(legacy.exit).toBe(0);
+  expect(legacy.stdout + legacy.stderr).toContain(
+    "rendered from an unrecorded revision; run preset sync",
+  );
+  const legacyBytes = await readFile(join(consumer, ".oxlintrc.json"), "utf8");
+  for (const flags of [[], ["--write"], ["--check"]]) {
+    const result = await run(
+      owner,
+      process.execPath,
+      join(owner, "scripts/render-oxlintrc.ts"),
+      "--repo",
+      consumer,
+      ...flags,
+    );
+    expect(result.exit).toBe(0);
+    expect(result.stdout).toContain(
+      "rendered from an unrecorded revision; run preset sync",
+    );
+    expect(await readFile(join(consumer, ".oxlintrc.json"), "utf8")).toBe(
+      legacyBytes,
+    );
+  }
+  expect((await preset("sync", "typescript", "--to", consumer)).exit).toBe(0);
+  expect(await readFile(join(consumer, ".oxlintrc.json"), "utf8")).toBe(
+    renderedB,
+  );
+  const edited = renderedB.replace(
+    '"eslint/no-alert": "error"',
+    '"eslint/no-alert": "off"',
+  );
+  expect(edited).not.toBe(renderedB);
+  await writeFile(join(consumer, ".oxlintrc.json"), edited);
+  expect((await mise("check")).exit).not.toBe(0);
+  await writeFile(join(consumer, ".oxlintrc.json"), renderedB);
+  await writeFile(
+    join(consumer, ".oxlintrc.json"),
+    renderedB.replace(
+      /"presetCommit": "[a-f0-9]+"/u,
+      '"presetCommit": "' + "f".repeat(40) + '"',
+    ),
+  );
+  const unavailable = await mise("check");
+  expect(unavailable.exit).not.toBe(0);
+  expect(unavailable.stdout + unavailable.stderr).toContain(
+    "cannot read presets/typescript/policy.toml",
+  );
+  await writeFile(join(consumer, ".oxlintrc.json"), renderedB);
   // Oxlint itself accepts the provenance settings and actually checks a clean file.
   await symlink(join(ROOT, "node_modules"), join(consumer, "node_modules"));
   await writeFile(join(consumer, "clean.ts"), "export const value = 1;\n");

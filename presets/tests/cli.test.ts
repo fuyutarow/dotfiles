@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  loadPolicy,
+  loadCommittedPolicy,
   presetRevision,
   renderOxlintrc,
 } from "../../scripts/render-oxlintrc.ts";
@@ -198,7 +198,7 @@ describe("manifest preset CLI", () => {
     expect(await readFile(join(repo, "oxlint-policy.local.toml"), "utf8")).toBe(
       local,
     );
-    const base = await loadPolicy();
+    const base = await loadCommittedPolicy();
     if (!base.ok) expect.unreachable(base.error);
     expect(await readFile(join(repo, ".oxlintrc.json"), "utf8")).toBe(
       renderOxlintrc({

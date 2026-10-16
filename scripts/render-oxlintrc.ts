@@ -92,11 +92,12 @@ const PolicySchema = z
   });
 export type Policy = z.output<typeof PolicySchema> & {
   presetRevision?: string;
+  presetCommit?: string;
 };
 
 /** Content revision of the canonical policy, independent of unrelated owner commits. */
 export function presetRevision(policy: Policy): string {
-  return `sha256:${Bun.CryptoHasher.hash("sha256", JSON.stringify(policy), "hex")}`;
+  return `sha256:${Bun.CryptoHasher.hash("sha256", JSON.stringify(Object.fromEntries(Object.entries(policy).filter(([key]) => key !== "presetRevision" && key !== "presetCommit"))), "hex")}`;
 }
 
 const LocalSchema = z.strictObject({
@@ -174,10 +175,105 @@ export type PolicyLoad =
 export async function loadPolicy(path = POLICY_PATH): Promise<PolicyLoad> {
   const raw = await attempt(() => Bun.TOML.parse(readFileSync(path, "utf8")));
   if (!raw.ok) return { ok: false, error: errorMessage(raw.error) };
-  const r = PolicySchema.safeParse(raw.value);
+  return parsePolicy(raw.value);
+}
+
+function parsePolicy(raw: unknown): PolicyLoad {
+  const r = PolicySchema.safeParse(raw);
   return r.success
     ? { ok: true, value: r.data }
     : { ok: false, error: r.error.message };
+}
+
+/** Read committed policy bytes without snapshotting or consulting working-copy files. */
+export async function loadCommittedPolicy(
+  revision = "alpha",
+  root = ROOT,
+): Promise<PolicyLoad> {
+  const run = async (
+    command: string[],
+  ): Promise<{ ok: true; value: string } | { ok: false; error: string }> => {
+    const result = await attempt(async () => {
+      const child = Bun.spawn(command, {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      });
+      const [stdout, stderr, exit] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { stdout, stderr, exit };
+    });
+    if (!result.ok) return { ok: false, error: errorMessage(result.error) };
+    if (result.value.exit !== 0)
+      return { ok: false, error: result.value.stderr.trim() };
+    return { ok: true, value: result.value.stdout };
+  };
+  // Pin the operation as well as skipping snapshots: even read commands may
+  // otherwise reconcile operation heads in a read-only owner repository.
+  const jj = (args: string[]) =>
+    run([
+      "jj",
+      "--ignore-working-copy",
+      "--at-operation",
+      "@",
+      "-R",
+      root,
+      ...args,
+    ]);
+  let commit = await jj([
+    "log",
+    "-r",
+    revision,
+    "--no-graph",
+    "-T",
+    "commit_id",
+  ]);
+  // Some jj versions also write while determining secure config. Colocated
+  // Git can read the same committed objects without touching jj's metadata.
+  if (
+    !commit.ok &&
+    (revision === "alpha" || /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(revision))
+  )
+    commit = await run([
+      "git",
+      "--no-optional-locks",
+      "-C",
+      root,
+      "rev-parse",
+      "--verify",
+      `${revision === "alpha" ? "refs/heads/alpha" : revision}^{commit}`,
+    ]);
+  if (!commit.ok) return commit;
+  commit = { ok: true, value: commit.value.trim() };
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(commit.value))
+    return { ok: false, error: "preset revision must resolve to one commit" };
+  let content = await jj([
+    "file",
+    "show",
+    "-r",
+    commit.value,
+    "root:presets/typescript/policy.toml",
+  ]);
+  if (!content.ok)
+    content = await run([
+      "git",
+      "--no-optional-locks",
+      "-C",
+      root,
+      "show",
+      `${commit.value}:presets/typescript/policy.toml`,
+    ]);
+  if (!content.ok) return content;
+  const raw = await attempt(() => Bun.TOML.parse(content.value));
+  if (!raw.ok) return { ok: false, error: errorMessage(raw.error) };
+  const policy = parsePolicy(raw.value);
+  return policy.ok
+    ? { ok: true, value: { ...policy.value, presetCommit: commit.value } }
+    : policy;
 }
 
 const ofKind = (p: Policy, kind: CustomRule["kind"]): CustomRule[] =>
@@ -217,7 +313,14 @@ export function renderOxlintrc(p: Policy): string {
     $schema: "./node_modules/oxlint/configuration_schema.json",
     ...(p.presetRevision === undefined
       ? {}
-      : { settings: { dotfiles: { presetRevision: p.presetRevision } } }),
+      : {
+          settings: {
+            dotfiles: {
+              presetRevision: p.presetRevision,
+              presetCommit: p.presetCommit,
+            },
+          },
+        }),
     plugins: p.plugins,
     jsPlugins: p.js_plugins,
     categories: p.categories,
@@ -226,6 +329,21 @@ export function renderOxlintrc(p: Policy): string {
     overrides: p.overrides,
   };
   return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+function recordedPresetCommit(text: string): string | undefined {
+  const metadata = jsonOf(
+    z.looseObject({
+      settings: z.looseObject({
+        dotfiles: z.looseObject({
+          presetCommit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u),
+        }),
+      }),
+    }),
+  ).safeParse(text);
+  return metadata.success
+    ? metadata.data.settings.dotfiles.presetCommit
+    : undefined;
 }
 
 function fatal(message: string): never {
@@ -272,23 +390,48 @@ if (import.meta.main) {
   if (argv.flags.write && argv.flags.check)
     fatal("give --write or --check, not both");
 
-  const loaded = await loadPolicy();
-  if (!loaded.ok)
-    fatal(`cannot read presets/typescript/policy.toml: ${loaded.error}`);
   const repo = argv.flags.repo;
   if (repo === "") fatal("--repo needs a directory");
+  const target =
+    repo === undefined ? OXLINTRC_PATH : join(repo, ".oxlintrc.json");
+  const current = await attempt(() => readFileSync(target, "utf8"));
+  const missing =
+    !current.ok &&
+    z.looseObject({ code: z.literal("ENOENT") }).safeParse(current.error)
+      .success;
+  if (repo !== undefined && !current.ok && !missing)
+    fatal(`cannot read ${target}: ${errorMessage(current.error)}`);
+  const commit = current.ok ? recordedPresetCommit(current.value) : undefined;
+  // Legacy consumers cannot be compared to an identified source. Preserve their
+  // bytes until an explicit preset sync adopts alpha and records its commit.
+  if (repo !== undefined && current.ok && commit === undefined) {
+    console.log(
+      "render-oxlintrc: rendered from an unrecorded revision; run preset sync",
+    );
+    process.exit(0);
+  }
+  const sourceCommit = argv.flags.check ? commit : undefined;
+  // First adoption also works in exported copies without repository metadata.
+  // It retains the historical local render; only preset sync adopts a commit.
+  if (repo !== undefined && missing)
+    console.error(
+      "render-oxlintrc: no revision recorded; rendering local preset files; run preset sync",
+    );
+  const loaded =
+    repo === undefined || missing
+      ? await loadPolicy()
+      : await loadCommittedPolicy(sourceCommit);
+  if (!loaded.ok)
+    fatal(`cannot read presets/typescript/policy.toml: ${loaded.error}`);
   const policy =
     repo === undefined ? loaded : await loadRepoPolicy(repo, loaded.value);
   if (!policy.ok) fatal(policy.error);
-  const target =
-    repo === undefined ? OXLINTRC_PATH : join(repo, ".oxlintrc.json");
   const next = renderOxlintrc(policy.value);
 
   if (!argv.flags.write && !argv.flags.check) {
     process.stdout.write(next);
     process.exit(0);
   }
-  const current = await attempt(() => readFileSync(target, "utf8"));
   const same = current.ok && current.value === next;
   if (argv.flags.check && same) {
     console.log("render-oxlintrc: up to date");

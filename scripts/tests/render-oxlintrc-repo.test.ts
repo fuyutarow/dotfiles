@@ -7,6 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "../../agents/hooks/zod.ts";
 import { decodedJson } from "../../agents/hooks/tests/decode.ts";
+import {
+  loadCommittedPolicy,
+  loadRepoPolicy,
+  renderOxlintrc,
+} from "../render-oxlintrc.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "render-oxlintrc.ts");
 const render = (...args: string[]): { code: number; text: string } => {
@@ -49,7 +54,9 @@ test("ignores are appended; the rules are this repo's, unchanged; --check then p
   expect(JSON.stringify(ourImports)).toContain('"name":"zod"');
   expect(JSON.stringify(theirImports)).not.toContain('"name":"zod"');
   expect(theirs.ignorePatterns).toContain("research_record");
-  expect(render("--repo", dir, "--check").text).toContain("up to date");
+  expect(render("--repo", dir, "--check").text).toContain(
+    "rendered from an unrecorded revision",
+  );
 });
 
 test("missing and empty local policies render identical bytes", async () => {
@@ -70,6 +77,32 @@ test("missing and empty local policies render identical bytes", async () => {
 
 test("dotfiles' rendered config remains current", () => {
   expect(render("--check").code).toBe(0);
+});
+
+test("a consumer cwd without .jj reads the renderer owner's committed policy", async () => {
+  const dir = repo();
+  expect(await Bun.file(join(dir, ".jj")).exists()).toBe(false);
+  for (const flags of [[], ["--write"], ["--check"]]) {
+    const child = Bun.spawn(
+      [process.execPath, SCRIPT, "--repo", dir, ...flags],
+      {
+        cwd: dir,
+        env: { ...process.env, PWD: dir },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 30_000,
+      },
+    );
+    const [stdout, stderr, exit] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(exit, stdout + stderr).toBe(0);
+    if (flags.includes("--check"))
+      expect(stdout).toContain("rendered from an unrecorded revision");
+    if (flags.length === 0) expect(stdout).toContain('"presetRevision":');
+  }
 });
 
 test("an unreadable local path or malformed TOML is refused", async () => {
@@ -94,14 +127,23 @@ test("a local file that tries to turn a rule off is refused, not merged", () => 
   expect(r.text).toContain('Unrecognized key: \\"off\\"');
 });
 
-test("a hand edit of the rendered file is drift", () => {
+test("a hand edit of the rendered file is drift", async () => {
   const dir = repo("schema = 1\nignore = []\n");
-  render("--repo", dir, "--write");
-  writeFileSync(join(dir, ".oxlintrc.json"), "{}\n");
+  const base = await loadCommittedPolicy();
+  if (!base.ok) expect.unreachable(base.error);
+  const policy = await loadRepoPolicy(dir, base.value);
+  if (!policy.ok) expect.unreachable(policy.error);
+  await Bun.write(join(dir, ".oxlintrc.json"), renderOxlintrc(policy.value));
+  const path = join(dir, ".oxlintrc.json");
+  writeFileSync(
+    path,
+    readFileSync(path, "utf8").replace(
+      '"correctness": "error"',
+      '"correctness": "off"',
+    ),
+  );
   const r = render("--repo", dir, "--check");
   expect(r.code).toBe(1);
-  expect(r.text).toContain(
-    "preset moved from unknown (unversioned render) to sha256:",
-  );
+  expect(r.text).toContain("differs from preset sha256:");
   expect(r.text).toContain("run preset sync");
 });

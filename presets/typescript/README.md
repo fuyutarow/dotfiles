@@ -11,12 +11,25 @@ their dependencies with existing tasks, including the repo's `fmt:staged` task.
 An owner policy update must never block a consumer commit.
 
 Rendered consumer configs record `settings.dotfiles.presetRevision`, a SHA-256
-revision of the canonical policy. When the preset moves, `mise run check` reports
-both revisions and the repair command. From dotfiles, run
-`mise run preset -- sync typescript --to /path/to/repo` to re-render an existing
-consumer while preserving its package, compiler settings, tasks, and local policy.
-`sync --dry-run` previews the render. An unversioned render reports its old revision
-as unknown; sync upgrades it. Local edits at the same revision also fail check.
+hash of the canonical policy, and `settings.dotfiles.presetCommit`, its dotfiles
+commit ID. Checks read the committed policy at that recorded commit; owner
+working-copy edits and subsequent alpha updates do not change an existing check.
+The renderer locates dotfiles from its own installation path, independently of
+the consumer's current directory. It reads with jj snapshots and operation-head
+updates disabled; if jj cannot read the owner repository, it uses the colocated
+Git commit objects. Neither path requires a writable dotfiles repository.
+From dotfiles, run `mise run preset -- sync typescript --to /path/to/repo` to
+adopt alpha's committed policy while preserving the consumer's package, compiler
+settings, tasks, and local policy. Apply and writes of an already commit-recorded render also read alpha.
+When the target has no rendered file, the renderer uses the policy beside its
+own script and emits a one-line notice on stderr that no revision is recorded.
+This first-adoption path works in exports without `.git` or `.jj`, produces a
+hash-only legacy record, and preserves the historical rendering behavior.
+`sync --dry-run` previews the render. A legacy hash-only or unversioned render
+reports "rendered from an unrecorded revision; run preset sync"; no history search
+is performed. Check and render exit 0 and preserve that legacy file until an
+explicit `preset sync` records alpha's commit. Local edits at the recorded revision still fail check. Missing
+commits or invalid committed policies fail explicitly without a checkout fallback.
 
 To enable React checks, create `oxlint-policy.local.toml` in the consumer root:
 

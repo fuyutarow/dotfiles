@@ -1,0 +1,7 @@
+destinations = ["Project.toml", "test/Project.toml", "mise.toml"]
+package = "MyPackage"
+uuid = "<the parent's uuid>"
+julia = "1.12"
+projects = ["test"]
+test_uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+source_path = ".."

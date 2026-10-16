@@ -1,0 +1,7 @@
+# Replace MyPackage and its UUID together with the parent package identity.
+[deps]
+MyPackage = "<the parent's uuid>"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+MyPackage = { path = ".." }

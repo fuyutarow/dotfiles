@@ -30,7 +30,7 @@ In a notebook, this topology is fixed before any manifest is written:
 |---|---|
 | workspace root | `packages/Project.toml` with no `name`/`uuid`, plus the one `packages/Manifest.toml` (commit it, PK4) |
 | member package | `packages/<Name>.jl/` with its own `Project.toml`, `src/`, `test/`; listed in the root's `[workspace] projects` |
-| member test project | `packages/<Name>.jl/test/Project.toml`, the member's own `[workspace] projects = ["test"]` (PK5) |
+| member test project | `packages/<Name>.jl/test/Project.toml`; include it in the member's workspace using the [package skeleton](../../../../presets/julia/Project.toml) (PK5) |
 | separately locked env | `envs/<slug>/Project.toml` + its own `Manifest.toml`, outside the workspace; members via `[sources]` paths; `--project=envs/<slug>` |
 | interactive or task command | `--project=packages`, or `--project=packages/<Name>.jl` for one member |
 | recorded run (launcher argv) | `--project=packages` only: `polysearch run --reproduce` restores a workspace root only from the repo root or the named dir |
@@ -71,13 +71,18 @@ Those checks include identifier shape, collision distance, and repository URL ru
 |---|---|
 | New maintained package | use `PkgTemplates.jl` for repeatable tests, CI, docs, and license setup |
 | Minimal or throwaway package | `Pkg.generate("MyPackage")` is the two-file floor |
-| New package inside a notebook repo (PK0 notebook row) | `Pkg.generate` at `packages/<Name>.jl/`; it writes only `Project.toml` and `src/`. Add by hand `[compat]`, `test/runtests.jl`, `test/Project.toml` (PK5), and the member's `[workspace] projects = ["test"]`; then list `"<Name>.jl"` in `packages/Project.toml` |
+| New package inside a notebook repo (PK0 notebook row) | `Pkg.generate` at `packages/<Name>.jl/`; it writes only `Project.toml` and `src/`. Reconcile the [package](../../../../presets/julia/Project.toml) and [test](../../../../presets/julia/test/Project.toml) skeletons with that identity, add `test/runtests.jl`, then list the member in `packages/Project.toml` |
 | Existing package | reconcile its contract; do not scaffold over it |
 
 PkgTemplates takes the bare package name. Its Git plugin adds `.jl` to the remote URL by default
 and does not commit a manifest by default.
 
 Pkg's minimum package tree is `Project.toml` plus `src/<name>.jl`.
+Copyable configuration lives in [presets/julia/](../../../../presets/julia/README.md):
+the [package skeleton](../../../../presets/julia/Project.toml),
+[test project](../../../../presets/julia/test/Project.toml), and
+[mise tasks](../../../../presets/julia/mise-tasks.toml).
+Reconcile names, generated UUIDs, compatibility, and tool pins before running the package.
 For a package intended for collaboration or distribution, use this scaffold:
 
 ```text
@@ -170,24 +175,15 @@ Choose test dependency layout from the minimum Julia version `[dated:2026-09]`:
 | 1.11+ and isolated test resolution desired | `test/Project.toml` with `[sources]` path |
 | older | version-appropriate `test/Project.toml` merge or `[extras]`/`[targets]` |
 
-The modern joint-workspace form is:
-
-```toml
-[workspace]
-projects = ["test", "docs", "benchmark"]
-```
+The modern joint-workspace form lives in the
+[package skeleton](../../../../presets/julia/Project.toml). Include only child projects
+that exist; its comment shows the expanded test/docs/benchmark form.
 
 Each child owns its direct dependencies. It does not inherit the root package's `[deps]`.
 Reference the parent package from the child explicitly; `[sources]` alone is refused by Pkg:
 
-```toml
-[deps]
-MyPackage = "<the parent's uuid>"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[sources]
-MyPackage = { path = ".." }
-```
+Use the [child project skeleton](../../../../presets/julia/test/Project.toml),
+replacing its package name and UUID together with the parent's generated identity.
 
 Use a legacy form only when the declared minimum Julia version requires it.
 The strict namespace gate adds `Test`, `TOML`, and `ExplicitImports` to the test project.

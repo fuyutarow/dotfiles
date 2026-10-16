@@ -1,0 +1,13 @@
+# Package skeleton: obtain the real UUID with Pkg.generate; do not invent UUIDs.
+name = "MyPackage"
+uuid = "<the parent's uuid>"
+
+[compat]
+# Workspace metadata requires 1.12+. Choose the lowest line actually tested in CI.
+# Applications/research instead match the runtime line pinned in mise.toml.
+julia = "1.12"
+
+[workspace]
+projects = ["test"]
+# When those child projects exist, the joint-workspace form is:
+# projects = ["test", "docs", "benchmark"]

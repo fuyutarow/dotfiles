@@ -1,0 +1,8 @@
+name = "julia"
+description = "Julia package Project.toml and test workspace skeletons with Runic mise tasks"
+files = [
+  { source = "Project.toml", destination = "Project.toml" },
+  { source = "test/Project.toml", destination = "test/Project.toml" },
+  { source = "mise-tasks.toml", destination = "mise.toml" },
+]
+check = ["bun test presets/tests/julia.test.ts"]

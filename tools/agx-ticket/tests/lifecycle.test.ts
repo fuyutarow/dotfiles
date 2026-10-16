@@ -91,22 +91,6 @@ const Rows = z.array(
   }),
 );
 
-test("an uncommitted .agx.toml edit does not move the ticket home", async () => {
-  const f = await fixture('tickets = "committed-tickets"\n');
-  await writeFile(
-    join(f.repo, ".agx.toml"),
-    'tickets = "uncommitted-tickets"\n',
-  );
-  const result = await f.tkt(["new", "committed"]);
-  expect(result.code, result.err).toBe(0);
-  expect(result.out.trim()).toBe(
-    join(f.repo, "committed-tickets/committed.md"),
-  );
-  expect(
-    await Bun.file(join(f.repo, "uncommitted-tickets/committed.md")).exists(),
-  ).toBe(false);
-});
-
 test("new defaults, template escaping, overwrite refusal and three input lines; no state", async () => {
   const f = await fixture();
   const before = await readdir(f.repo);
@@ -281,9 +265,6 @@ test("absolute ticket directory; batch conflict preflight; symlinks never overwr
     join(f.repo, ".agx.toml"),
     `tickets = ${JSON.stringify(directory)}\n`,
   );
-  expect(
-    (await f.run(["jj", "commit", "-m", "Declare absolute ticket home"])).code,
-  ).toBe(0);
   expect((await f.tkt(["new", "batch-2"])).code).toBe(0);
   const input = join(f.root, "inputs");
   await writeFile(input, "one\ntwo\nthree\n");

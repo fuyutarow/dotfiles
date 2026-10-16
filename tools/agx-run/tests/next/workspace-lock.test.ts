@@ -1,4 +1,3 @@
-import { prepareTicketRepo } from "../ticket-repo.ts";
 import { afterAll, afterEach, expect, test } from "bun:test";
 import {
   appendFileSync,
@@ -35,11 +34,10 @@ const Row = z.looseObject({
   pid: z.number().optional(),
 });
 
-async function fixture(delayRoute = false) {
+function fixture(delayRoute = false) {
   const root = temps.register(
     mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-workspace-lock-`)),
   );
-  await prepareTicketRepo(root);
   const state = join(root, "state");
   mkdirSync(state);
   const log = join(state, "records.jsonl");
@@ -190,7 +188,7 @@ console.log(JSON.stringify({ report: { summary: "done", changes: [], checks: [],
 }
 
 test("a recorded live workspace refuses fresh and continued runs before worker spawn", async () => {
-  const f = await fixture();
+  const f = fixture();
   f.seed("live-holder", process.pid);
   const before = f.records();
   for (const resume of [false, true]) {
@@ -204,7 +202,7 @@ test("a recorded live workspace refuses fresh and continued runs before worker s
 });
 
 test("a live worker blocks both modes; another workspace and a run after completion start", async () => {
-  const f = await fixture();
+  const f = fixture();
   const first = f.launch(false);
   await until(() => f.workers().length === 1);
   const holder = f
@@ -228,7 +226,7 @@ test("a live worker blocks both modes; another workspace and a run after complet
 }, 15_000);
 
 test("simultaneous continuations admit exactly one worker and one started record", async () => {
-  const f = await fixture();
+  const f = fixture();
   const runs = Array.from({ length: 4 }, () => f.launch());
   await until(() => f.workers().length === 1);
   await until(
@@ -253,7 +251,7 @@ test("simultaneous continuations admit exactly one worker and one started record
 });
 
 test("a dispatch delayed in routing refuses the run that acquired its workspace meanwhile", async () => {
-  const f = await fixture(true);
+  const f = fixture(true);
   const delayed = f.launch(false);
   await until(f.routing);
   const winner = f.launch();
@@ -271,7 +269,7 @@ test("a dispatch delayed in routing refuses the run that acquired its workspace 
 });
 
 test("workspace ownership lasts through verification after the worker exits", async () => {
-  const f = await fixture();
+  const f = fixture();
   const verifying = join(f.root, "verifying");
   const verifyGate = join(f.root, "release-verify");
   const verifier = join(f.root, "verify.ts");
@@ -346,7 +344,7 @@ test("workspace ownership lasts through verification after the worker exits", as
 });
 
 test("SIGKILL releases ownership despite a surviving worker and folds the old run as ended lost", async () => {
-  const f = await fixture();
+  const f = fixture();
   const first = f.launch();
   await until(() => f.workers().length === 1);
   const old = f
@@ -384,7 +382,7 @@ for (const [signal, exit] of [
   ["SIGHUP", 129],
 ] as const) {
   test(`${signal} records ended stopped and continuation without a session explains fresh start`, async () => {
-    const f = await fixture();
+    const f = fixture();
     const first = f.launch(false);
     await until(() => f.workers().length === 1);
     first.child.kill(signal);

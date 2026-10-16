@@ -1,15 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { checkPremises } from "../premises.ts";
 import { verifyLine } from "../ticket.ts";
 import { parseReport, parseReturn, withReportInstruction } from "../report.ts";
 import { parseNextTicket, type NextTicket } from "./ticket.ts";
-import { ticketContext, ticketPlacement } from "./ticket-home.ts";
 import {
   append,
   acquireWorkspaceLock,
@@ -67,11 +66,10 @@ const refuseRunningWorkspace = async (cwd: string): Promise<void> => {
   if (holder !== undefined)
     fatal(`workspace ${cwd} already has running run ${holder.id}`, 2);
 };
-const ticketFor = async (path: string) => {
-  const bytes = await readFile(path).catch(() =>
-    fatal(`no such ticket: ${path}`, 2),
-  );
-  const parsed = parseNextTicket(bytes.toString("utf8"));
+const ticketFor = (path: string) => {
+  if (!existsSync(path)) fatal(`no such ticket: ${path}`, 2);
+  const text = readFileSync(path, "utf8");
+  const parsed = parseNextTicket(text);
   const accepted = parsed.success
     ? parsed
     : fatal(`invalid ticket: ${parsed.reason}`, 2);
@@ -79,56 +77,8 @@ const ticketFor = async (path: string) => {
     process.stderr.write(
       `WARN ignored legacy ticket fields: ${accepted.warnings.join(", ")}\n`,
     );
-  return { ticket: accepted.ticket, prose: accepted.prose, bytes };
+  return { ticket: accepted.ticket, prose: accepted.prose };
 };
-const contextFor = async (path: string, cwd: string, ticket: NextTicket) => {
-  const ctx = await ticketContext(cwd);
-  if (!ctx.ok) return fatal(ctx.error);
-  const placement = await ticketPlacement(path, ctx);
-  if (placement !== null) return fatal(placement);
-  if (ticket.base_rev !== undefined && ticket.base_rev !== ctx.base_rev)
-    return fatal(
-      `base_rev mismatch: declared ${ticket.base_rev}, --cd commit ${ctx.base_rev ?? "unavailable"}`,
-    );
-  return ctx;
-};
-const premiseCommits = async (
-  ticket: NextTicket,
-  ctx: Awaited<ReturnType<typeof contextFor>>,
-) => {
-  const commits: { premise: string; commit: string }[] = [];
-  for (const premise of ticket.premises ?? []) {
-    let reference = /^(?:rev|bookmark):(.+)$/u.exec(premise)?.[1];
-    if (
-      ctx.vcs === "git" &&
-      premise.startsWith("bookmark:") &&
-      reference !== undefined
-    ) {
-      const at = reference.lastIndexOf("@");
-      reference =
-        at < 0
-          ? `refs/heads/${reference}`
-          : `refs/remotes/${reference.slice(at + 1)}/${reference.slice(0, at)}`;
-    }
-    const commit =
-      reference === undefined ? ctx.base_rev : await ctx.revision(reference);
-    if (commit === null)
-      return fatal(`cannot resolve premise commit: ${premise}`);
-    commits.push({ premise, commit });
-  }
-  return commits;
-};
-const checkedPremises = (
-  ticket: NextTicket,
-  cwd: string,
-  vcs: string | undefined,
-) =>
-  checkPremises(
-    ticket.premises?.filter(
-      (premise) => vcs !== "git" || !premise.startsWith("rev:"),
-    ),
-    cwd,
-  );
 const renderPromise = (
   ticket: NextTicket,
   cwd: string,
@@ -146,19 +96,6 @@ const renderPromise = (
       `writes: ${JSON.stringify(ticket.writes.map((glob) => resolve(cwd, glob)))}`,
       ...(ticket.verify.length === 0 ? [] : [verifyLine(ticket.verify)]),
       `Sandbox mode: ${sandbox}${sandbox === "none" ? " (unsandboxed)" : ""}.`,
-      ...(
-        [
-          "resources",
-          "base_rev",
-          "external_reads",
-          "first_return_s",
-          "network",
-        ] as const
-      ).flatMap((key) =>
-        ticket[key] === undefined
-          ? []
-          : [`${key}: ${JSON.stringify(ticket[key])}`],
-      ),
       'If this work needs a tool release changeset, create it with `mise run changeset -- <tool> <patch|minor|major> "<entry>"`; do not hand-write a `.changes` file.',
       "",
       prose.trim(),
@@ -277,10 +214,9 @@ export async function check(flags: Flags): Promise<number> {
   const path = value(flags, "ticket");
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
   if (path === undefined) return fatal("check requires positional TICKET", 2);
-  const { ticket } = await ticketFor(path);
-  const ctx = await contextFor(path, cwd, ticket);
+  const { ticket } = ticketFor(path);
   overlapWarnings(ticket.writes);
-  const premises = checkedPremises(ticket, cwd, ctx.vcs);
+  const premises = checkPremises(ticket.premises, cwd);
   if (premises.status === "missing") {
     return fatal(
       `missing premises in --cd tree: ${premises.details.join("; ")}`,
@@ -288,7 +224,6 @@ export async function check(flags: Flags): Promise<number> {
     );
   }
   if (premises.status === "timeout") fatal("premise check timed out", 2);
-  await premiseCommits(ticket, ctx);
   const loaded = await loadRoster(process.env.DISPATCH_ROSTER_PATH);
   if (!loaded.ok)
     return fatal(`cannot read dispatch roster: ${loaded.error}`, 1);
@@ -301,16 +236,11 @@ export async function check(flags: Flags): Promise<number> {
 export async function run(flags: Flags): Promise<number> {
   const path = value(flags, "ticket");
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
+  const sandbox = value(flags, "sandbox") ?? "workspace-write";
   if (path === undefined) return fatal("run requires positional TICKET", 2);
-  const { ticket, prose, bytes } = await ticketFor(path);
-  const sandbox =
-    value(flags, "sandbox") ?? ticket.sandbox ?? "workspace-write";
   if (!new Set(["none", "read-only", "workspace-write"]).has(sandbox))
     return fatal("--sandbox must be none, read-only, or workspace-write", 2);
-  if (ticket.sandbox !== undefined && ticket.sandbox !== sandbox)
-    return fatal(
-      `--sandbox ${sandbox} differs from ticket sandbox ${ticket.sandbox}`,
-    );
+  const { ticket, prose } = ticketFor(path);
   await refuseRunningWorkspace(cwd);
   overlapWarnings(ticket.writes);
   const staleRefLocks = ownerlessRefLocks(cwd);
@@ -326,10 +256,7 @@ export async function run(flags: Flags): Promise<number> {
       2,
     );
   }
-  const ctx = await contextFor(path, cwd, ticket);
-  if (ctx.base_rev === null)
-    return fatal("cannot resolve --cd commit for base_rev");
-  const premises = checkedPremises(ticket, cwd, ctx.vcs);
+  const premises = checkPremises(ticket.premises, cwd);
   if (premises.status === "missing")
     return fatal(
       `missing premises in --cd tree: ${premises.details.join("; ")}`,
@@ -337,15 +264,6 @@ export async function run(flags: Flags): Promise<number> {
     );
   if (premises.status === "timeout") return fatal("premise check timed out", 2);
   const continuationId = value(flags, "continue");
-  const supersedes = value(flags, "supersedes") ?? ticket.supersedes;
-  if (continuationId !== undefined && supersedes !== undefined)
-    return fatal("supersedes and --continue are mutually exclusive");
-  if (
-    supersedes !== undefined &&
-    !(await foldedRuns()).some((prior) => prior.id === supersedes)
-  )
-    return fatal(`cannot supersede unknown run ${supersedes}`);
-  const premise_commits = await premiseCommits(ticket, ctx);
   const pinned =
     continuationId === undefined
       ? undefined
@@ -397,14 +315,6 @@ export async function run(flags: Flags): Promise<number> {
     process.on(signal, stop.bind(undefined, signal, code));
   const runDir = join(stateDir(), "runs", id);
   mkdirSync(runDir, { recursive: true });
-  const ticketPath = join(runDir, "ticket.orig.md");
-  const ticket_sha256 = createHash("sha256").update(bytes).digest("hex");
-  await writeFile(ticketPath, bytes, { flag: "wx" });
-  await writeFile(
-    join(runDir, "ticket.orig.md.sha256"),
-    `${ticket_sha256}  ticket.orig.md\n`,
-    { flag: "wx" },
-  );
   const reportPath = join(runDir, "report.json");
   const workerBrief = join(runDir, "brief.md");
   const progressPath = join(runDir, "last-progress.json");
@@ -432,11 +342,6 @@ export async function run(flags: Flags): Promise<number> {
     workerBrief,
     withReportInstruction(renderPromise(ticket, cwd, sandbox, prose)),
   );
-  const launchContext = await contextFor(path, cwd, ticket);
-  if (launchContext.base_rev !== ctx.base_rev)
-    return fatal(
-      `--cd commit changed before launch: checked ${ctx.base_rev}, now ${launchContext.base_rev ?? "unavailable"}`,
-    );
   const workspaceLock = await acquireWorkspaceLock(workspace);
   if (!workspaceLock.ok) {
     // The winning process may be between flock and publishing its started event.
@@ -467,12 +372,6 @@ export async function run(flags: Flags): Promise<number> {
     dispatcher_session: dispatcher,
     vendor_session: resumeSession ?? null,
     continues: continuationId ?? null,
-    supersedes: supersedes ?? null,
-    base_rev: ctx.base_rev,
-    premise_commits,
-    ticket_path: resolve(path),
-    ticket_orig_path: ticketPath,
-    ticket_sha256,
     pid: process.pid,
     lease: await leaseFor(
       process.pid,

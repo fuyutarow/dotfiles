@@ -23,8 +23,6 @@ import {
   type Attempt,
 } from "../../shared/src/attempt.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
-import { JJ_READ_ARGS } from "../../shared/src/jj-read.ts";
-import { readonlyCommand } from "../../shared/src/readonly-command.ts";
 
 const bad = (error: string): Attempt<never> => ({ ok: false, error });
 const good = <T>(value: T): Attempt<T> => ({ ok: true, value });
@@ -57,8 +55,11 @@ async function repository(
         : resolve(dirname(marker), (await readFile(marker, "utf8")).trim());
       return { root, store: await realpath(store) };
     }
-    const git = await exists(join(root, ".git"));
-    if (git.ok && git.value) return { root, store: null };
+    if (
+      (await exists(join(root, ".git"))).ok &&
+      (await Bun.file(join(root, ".git", "HEAD")).exists())
+    )
+      return { root, store: null };
     const parent = dirname(root);
     if (parent === root) return { root: await realpath(path), store: null };
     root = parent;
@@ -81,7 +82,7 @@ const Config = z.object({
 const WsConfig = z.object({ trunk: z.string().min(1).default("trunk()") });
 export async function context(path: string) {
   const repo = await repository(path);
-  const raw = await committedConfig(repo.root, repo.store !== null);
+  const raw = await configFile(repo.root, ".agx.toml");
   if (!raw.ok) return raw;
   const config = Config.safeParse(raw.value);
   if (!config.success) return bad(`.agx.toml: ${config.error.message}`);
@@ -91,68 +92,6 @@ export async function context(path: string) {
     declared.startsWith("~/") ? join(homedir(), declared.slice(2)) : declared,
   );
   return good({ ...repo, directory });
-}
-async function committedConfig(
-  root: string,
-  jj: boolean,
-): Promise<Attempt<unknown>> {
-  const read = async (args: string[]) => {
-    const invocation = readonlyCommand(args, root);
-    const child = Bun.spawn(invocation.cmd, {
-      cwd: root,
-      env: invocation.env,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 5000,
-    });
-    const [exit, out, err] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    return { exit, out, err };
-  };
-  const result = await attempt(async () => {
-    if (!jj) {
-      const head = await read([
-        "git",
-        "--no-optional-locks",
-        "rev-parse",
-        "--verify",
-        "--quiet",
-        "HEAD^{commit}",
-      ]);
-      if (head.exit !== 0) return good({});
-    }
-    const names = await read(
-      jj
-        ? ["jj", ...JJ_READ_ARGS, "file", "list", "-r", "@", ".agx.toml"]
-        : [
-            "git",
-            "--no-optional-locks",
-            "ls-tree",
-            "--name-only",
-            "HEAD",
-            "--",
-            ".agx.toml",
-          ],
-    );
-    if (names.exit !== 0)
-      return bad(
-        `${root}: cannot read committed .agx.toml: ${names.err.trim()}`,
-      );
-    if (names.out.trim() === "") return good({});
-    const file = await read(
-      jj
-        ? ["jj", ...JJ_READ_ARGS, "file", "show", "-r", "@", ".agx.toml"]
-        : ["git", "--no-optional-locks", "show", "HEAD:.agx.toml"],
-    );
-    if (file.exit !== 0)
-      return bad(`cannot read committed .agx.toml: ${file.err.trim()}`);
-    return attempt((): unknown => Bun.TOML.parse(file.out));
-  });
-  return result.ok ? result.value : result;
 }
 type Context = Extract<
   Awaited<ReturnType<typeof context>>,
@@ -530,11 +469,7 @@ async function outOfHomeFindings(
   })) {
     if (relativePath.split("/").some((part) => ignored.has(part))) continue;
     const path = resolve(backing, relativePath);
-    if (
-      inside(path, directory) ||
-      inside(path, join(backing, ".agents/tickets"))
-    )
-      continue;
+    if (path === directory || path.startsWith(`${directory}/`)) continue;
     if (!(await isTicketFile(path))) continue;
     findings.push(
       [

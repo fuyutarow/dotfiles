@@ -61,14 +61,11 @@ async function main(): Promise<void> {
           sandbox: {
             type: String,
             description: "none | read-only | workspace-write",
+            default: "workspace-write",
           },
           continue: {
             type: String,
             description: "previous agx run id to continue",
-          },
-          supersedes: {
-            type: String,
-            description: "previous run replaced by this fresh dispatch",
           },
           session: {
             type: String,
@@ -86,7 +83,6 @@ async function main(): Promise<void> {
       cd: parsed.flags.cd,
       sandbox: parsed.flags.sandbox,
       continue: parsed.flags["continue"],
-      supersedes: parsed.flags.supersedes,
       session: parsed.flags.session,
     } satisfies Flags;
     exit = await run(flags);

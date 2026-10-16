@@ -13,7 +13,6 @@ import {
 export type CodexRate = CodexAccountRate;
 const TAIL_BYTES = 256 * 1024;
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
-const STALE_MS = 30 * 60 * 1000;
 const TOKEN_USAGE = z.object({
   input_tokens: z.number().nonnegative(),
   cached_input_tokens: z.number().nonnegative().optional(),
@@ -372,8 +371,6 @@ export function codexRateSegment(
   if (rate === undefined) {
     return roles.unavailable("codex", why);
   }
-  const ageMs = now * 1000 - rate.mtimeMs;
-  if (ageMs > STALE_MS) return roles.unavailable("codex", "stale source");
   const parts = rate.windows.map((window) => {
     let label = `${window.minutes}m`;
     if (window.minutes === 300) label = "5h";

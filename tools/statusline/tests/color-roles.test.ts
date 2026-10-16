@@ -134,7 +134,7 @@ test.each([
     [],
   );
   expect(row).toBe(
-    `CPU ${color}${text}%${reset} ${dim}·${reset} RAM ${color}${text}%${reset} ${dim}(13.1/16.0G)${reset} ${dim}·${reset} VRAM ${color}${text}%${reset} ${dim}(3.5/12.0G)${reset} ${dim}·${reset} Disk / ${green}123GiB${reset}${dim}/460GiB (27%) free${reset}`,
+    `CPU ${color}${text}%${reset} ${dim}·${reset} RAM ${color}${text}%${reset} ${dim}(13.1/16.0G)${reset} ${dim}·${reset} VRAM ${color}${text}%${reset} ${dim}(3.5/12.0G)${reset} ${dim}·${reset} GPU ${amber}n/a${reset} ${dim}(no GPU sample)${reset} ${dim}·${reset} Disk / ${green}123GiB${reset}${dim}/460GiB (27%) free${reset}`,
   );
 });
 

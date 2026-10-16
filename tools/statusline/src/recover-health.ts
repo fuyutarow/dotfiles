@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { mkdir, rm, stat } from "node:fs/promises";
-import { fromThrowable } from "neverthrow";
+import { err, ok, fromThrowable, type Result } from "neverthrow";
 import { execAsyncWithin, readJsonAsync, writeCacheAsync } from "./bounded.ts";
 import { z } from "./zod.ts";
 
@@ -83,17 +83,15 @@ async function ensureRefresh(): Promise<void> {
 
 /** Read the short-lived health snapshot and refresh it out of the renderer process. */
 export async function readRecoverHealthAsync(): Promise<
-  RecoverHealth | undefined
+  Result<RecoverHealth | undefined, string>
 > {
   const snapshot = await readJsonAsync(
     RECOVER_HEALTH_CACHE,
     RecoverSnapshotSchema,
   );
   await ensureRefresh();
-  if (snapshot === undefined) return undefined;
-  const age = now() - snapshot.capturedAt;
-  if (age < 0 || age > RECOVER_HEALTH_STALE_MS) return undefined;
-  return snapshot.health ?? undefined;
+  if (snapshot === undefined) return err("recover health unavailable");
+  return ok(snapshot.health ?? undefined);
 }
 
 /** Called only by the detached worker; neither the statusline nor its caller waits for systemd. */

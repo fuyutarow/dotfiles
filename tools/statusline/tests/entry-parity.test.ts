@@ -8,12 +8,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { setDefaultTimeout } from "bun:test";
 import { decodedJson } from "./decode.ts";
 import { cleanupTempDirs, tempHome } from "./helpers.ts";
 import { z } from "../src/zod.ts";
 import { agxSnapshotPath } from "../src/agx-snapshot.ts";
 
 const GOLDEN = join(import.meta.dir, "golden");
+setDefaultTimeout(30000);
 // One-shot regeneration: GOLDEN_FROM=<entry.ts> bun test ... rewrites golden/ from that entry.
 const GOLDEN_FROM = process.env.GOLDEN_FROM;
 const NEW = join(import.meta.dir, "..", "src", "statusline.ts");
@@ -336,7 +339,7 @@ const stateVariants: [string, (state: string) => void][] = [
 test.each(stateVariants.map(([name, setup], i) => [i, name, setup] as const))(
   "NEW matches the golden bytes with dispatch state %d: %s",
   (i, _name, setup) => {
-    expectGolden(`state-${i}`, FULL_INPUT, setup);
+    return expectGolden(`state-${i}`, FULL_INPUT, setup);
   },
   SLOW,
 );
@@ -344,16 +347,16 @@ test.each(stateVariants.map(([name, setup], i) => [i, name, setup] as const))(
 test.each(fixtures.map((input, i) => [i, input] as const))(
   "NEW matches the golden bytes for fixture %d: %s",
   (i, input) => {
-    expectGolden(`fixture-${i}`, input);
+    return expectGolden(`fixture-${i}`, input);
   },
   SLOW,
 );
 
-function expectGolden(
+async function expectGolden(
   name: string,
   input: string,
   extraState?: (state: string) => void,
-): void {
+): Promise<void> {
   {
     const home = tempHome();
     const bin = join(home, "bin");
@@ -423,16 +426,16 @@ function expectGolden(
       }),
     );
     extraState?.(join(home, "state"));
-    const seed = () => {
-      writeFileSync(
+    const seed = async () => {
+      await writeFile(
         join(cache, "statusline-cpu.json"),
         JSON.stringify({ total: 500, idle: 400, at: NOW - 5000 }),
       );
-      writeFileSync(
+      await writeFile(
         join(cache, "statusline-gpu.json"),
         JSON.stringify({ at: NOW, reading: { frac: " 3.5/12.0G", pct: 29.2 } }),
       );
-      writeFileSync(
+      await writeFile(
         join(cache, "statusline-agent-names.json"),
         JSON.stringify({
           "parity-session": {
@@ -441,6 +444,11 @@ function expectGolden(
             hint: "fixture-title",
           },
         }),
+      );
+      await mkdir(join(cache, "statusline"), { recursive: true });
+      await writeFile(
+        join(cache, "statusline/recover-health.json"),
+        JSON.stringify({ capturedAt: NOW, health: null }),
       );
     };
     const env = {
@@ -472,8 +480,8 @@ function expectGolden(
       }),
     );
     expect(existsSync(snapshotPath)).toBe(true);
-    const run = (entry: string) => {
-      seed();
+    const run = async (entry: string) => {
+      await seed();
       const r = Bun.spawnSync([process.execPath, "--preload", PRELOAD, entry], {
         cwd: home,
         env,
@@ -498,7 +506,10 @@ function expectGolden(
     const golden = join(GOLDEN, `${name}.json`);
     if (GOLDEN_FROM !== undefined) {
       mkdirSync(GOLDEN, { recursive: true });
-      writeFileSync(golden, `${JSON.stringify(run(GOLDEN_FROM), null, 2)}\n`);
+      writeFileSync(
+        golden,
+        `${JSON.stringify(await run(GOLDEN_FROM), null, 2)}\n`,
+      );
     }
     expect(existsSync(golden), `missing ${golden}`).toBe(true);
     // JSON round-trip: undefined snapshots drop out on both sides.
@@ -506,7 +517,7 @@ function expectGolden(
       "5ab1a046da60",
       HOST,
     );
-    expect(decodedJson(z.json(), JSON.stringify(run(NEW)) ?? "")).toEqual(
+    expect(decodedJson(z.json(), JSON.stringify(await run(NEW)) ?? "")).toEqual(
       decodedJson(z.json(), expected),
     );
   }

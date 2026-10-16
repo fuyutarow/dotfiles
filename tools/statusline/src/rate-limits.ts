@@ -7,11 +7,12 @@ import {
   pad2,
   stampMDHM,
 } from "./prompt-stamp.ts";
-import { ESC, RST, naSegment, paceColor, pctFmt, roles } from "./ansi.ts";
+import { ESC, RST, paceColor, pctFmt, roles } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { codexRateSegment } from "./codex-rate.ts";
 import { jevUsageSegment } from "./jev-usage.ts";
 import { writeUsageSnapshot } from "./usage-snapshot.ts";
+import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
 
 const RSET = "⟳";
 // the account's own /usage screen ("Current week (Fable)"). This is NOT in the statusline's own
@@ -173,53 +174,92 @@ type RateFacts = Pick<
   | "modelCapsWhy"
   | "codexRate"
   | "codexRateWhy"
+  | "codexWindowMinutes"
   | "jevUsage"
   | "jevUsageWhy"
 >;
 
-function claudeRateSegment(df: RateFacts, now: number): string {
-  const rl5 =
-    df.rl5Reset !== undefined && df.rl5Reset <= now ? undefined : df.rl5;
-  const rl7 =
-    df.rl7Reset !== undefined && df.rl7Reset <= now ? undefined : df.rl7;
-  const hasClaudeRates = rl5 !== undefined || rl7 !== undefined;
-  const parts: string[] = [];
-  if (hasClaudeRates) {
-    const claude: string[] = [
-      rl5 !== undefined
-        ? rl5Segment(rl5, df.rl5Reset, now)
-        : roles.unavailable(roles.window("5h")),
-      rl7 !== undefined
-        ? rl7Segment(rl7, df.rl7Reset, now)
-        : roles.unavailable(roles.window("7d")),
-    ];
-    parts.push(`${roles.label("claude")} ${claude.join(roles.separator())}`);
-  } else {
-    parts.push(
-      [
-        roles.unavailable("claude"),
-        roles.unavailable(roles.window("5h")),
-        roles.unavailable(roles.window("7d")),
-      ].join(roles.separator()),
-    );
-  }
-  for (const m of df.rlModel)
-    parts.push(
+function claudeRateSegment(
+  df: RateFacts & Pick<Dataframe, "fields">,
+  now: number,
+  field: FieldDisplay,
+): string {
+  const rl5 = df.rl5;
+  const rl7 = df.rl7;
+  const capsAge = Math.max(
+    0,
+    ...df.rlModel.map((m) =>
       m.resetEpoch !== undefined && m.resetEpoch <= now
-        ? naSegment(m.name, "stale source")
-        : rlModelSegment(m, now),
-    );
-  if (df.modelCapsWhy !== undefined && df.modelCapsWhy !== "")
-    parts.push(naSegment("model caps", df.modelCapsWhy));
-  return parts.join(roles.separator());
+        ? (now - m.resetEpoch + 1) * 1000
+        : 0,
+    ),
+  );
+  const parts: string[] = [];
+  const claude: string[] = [
+    field(
+      "claude-5h",
+      "5h",
+      observed(
+        rl5 === undefined ? undefined : rl5Segment(rl5, df.rl5Reset, now),
+        undefined,
+        df.rl5Reset !== undefined && df.rl5Reset <= now
+          ? (now - df.rl5Reset + 1) * 1000
+          : 0,
+      ),
+    ),
+    field(
+      "claude-7d",
+      "7d",
+      observed(
+        rl7 === undefined ? undefined : rl7Segment(rl7, df.rl7Reset, now),
+        undefined,
+        df.rl7Reset !== undefined && df.rl7Reset <= now
+          ? (now - df.rl7Reset + 1) * 1000
+          : 0,
+      ),
+    ),
+  ];
+  const claudeLabel = field(
+    "claude-label",
+    "claude",
+    observed(
+      rl5 !== undefined || rl7 !== undefined
+        ? roles.label("claude")
+        : undefined,
+    ),
+  );
+  const claudeSeparator =
+    rl5 === undefined &&
+    rl7 === undefined &&
+    df.fields?.["claude-label"]?.kind !== "stale"
+      ? roles.separator()
+      : " ";
+  parts.push(
+    `${claudeLabel}${claudeSeparator}${claude.join(roles.separator())}`,
+    field(
+      "model-caps",
+      "model caps",
+      observed(
+        df.modelCapsWhy === undefined
+          ? df.rlModel
+              .map((m) => rlModelSegment(m, now))
+              .join(roles.separator())
+          : undefined,
+        df.modelCapsWhy,
+        capsAge,
+      ),
+    ),
+  );
+  return parts.filter((part) => part !== "").join(roles.separator());
 }
 
 // One builder for both the statusline and its snapshot. Every provider always owns one slot.
 export const RATE_SOURCES = ["claude", "codex", "Jev"] as const;
 export function rateRow(
-  df: RateFacts & Pick<Dataframe, "sid">,
+  df: RateFacts & Pick<Dataframe, "sid" | "fields">,
   now = nowEpochSec(),
   sources: readonly (typeof RATE_SOURCES)[number][] = RATE_SOURCES,
+  field: FieldDisplay = fieldDisplay(df.fields),
 ): string {
   if (
     df.sid !== undefined &&
@@ -233,14 +273,78 @@ export function rateRow(
   // belongs to its own slot; no early return or undefined filter can erase a provider.
   const slots = sources.map((source) => {
     const rendered = fromThrowable(() => {
-      if (source === "claude") return claudeRateSegment(df, now);
-      if (source === "codex")
-        return codexRateSegment(df.codexRate, df.codexRateWhy, now);
-      return jevUsageSegment(df.jevUsage, df.jevUsageWhy);
+      if (source === "claude") return claudeRateSegment(df, now, field);
+      if (source === "codex") {
+        const windows = new Set([
+          ...(df.codexWindowMinutes ?? [10080]),
+          ...(df.codexRate?.windows.map((w) => w.minutes) ?? []),
+        ]);
+        return [...windows]
+          .toSorted((a, b) => a - b)
+          .map((minutes) => {
+            const window = df.codexRate?.windows.find(
+              (w) => w.minutes === minutes,
+            );
+            const rate = df.codexRate;
+            const age =
+              rate === undefined
+                ? 0
+                : Math.max(
+                    0,
+                    Temporal.Now.instant().epochMilliseconds - rate.mtimeMs,
+                  );
+            return field(
+              `codex:${minutes}`,
+              "codex",
+              observed(
+                window === undefined || rate === undefined
+                  ? undefined
+                  : codexRateSegment(
+                      { ...rate, windows: [window] },
+                      undefined,
+                      now,
+                    ),
+                df.codexRateWhy,
+                age > 30_000 ? age : 0,
+              ),
+            );
+          })
+          .join(roles.separator());
+      }
+      return field(
+        "jev",
+        "Jev",
+        observed(
+          df.jevUsage?.costUsd === undefined
+            ? undefined
+            : jevUsageSegment(df.jevUsage),
+          df.jevUsageWhy,
+        ),
+      );
     })().unwrapOr(undefined);
-    return rendered === undefined || rendered.trim() === ""
-      ? naSegment(source, "unavailable")
-      : rendered;
+    if (rendered !== undefined && rendered.trim() !== "") return rendered;
+    // A formatting failure has the same keys as a read failure, so it retains prior values.
+    if (source === "claude")
+      return `${field("claude-label", "claude", observed(undefined))}${roles.separator()}${[
+        field("claude-5h", "5h", observed(undefined, "renderer unavailable")),
+        field("claude-7d", "7d", observed(undefined, "renderer unavailable")),
+        field(
+          "model-caps",
+          "model caps",
+          observed(undefined, "renderer unavailable"),
+        ),
+      ].join(roles.separator())}`;
+    if (source === "codex")
+      return (df.codexWindowMinutes ?? [10080])
+        .map((minutes) =>
+          field(
+            `codex:${minutes}`,
+            "codex",
+            observed(undefined, "renderer unavailable"),
+          ),
+        )
+        .join(roles.separator());
+    return field("jev", "Jev", observed(undefined, "renderer unavailable"));
   });
   // Provider boundaries use pipes; windows within each provider keep middots.
   return `${label} ${slots.join(roles.separator("|"))}`;

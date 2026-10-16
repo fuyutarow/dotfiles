@@ -71,11 +71,12 @@ export function ultracodeConfigured(): boolean {
     true
   );
 }
-export async function ultracodeConfiguredAsync(): Promise<boolean> {
-  return (
-    (await readJsonAsync(`${HOME}/.claude/settings.json`, SettingsSchema))
-      ?.ultracode === true
+export async function ultracodeConfiguredAsync(): Promise<boolean | undefined> {
+  const settings = await readJsonAsync(
+    `${HOME}/.claude/settings.json`,
+    SettingsSchema,
   );
+  return settings === undefined ? undefined : settings.ultracode === true;
 }
 
 // `name` — the actual field `claude agents --json` returns per session (confirmed live

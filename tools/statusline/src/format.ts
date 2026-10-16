@@ -1,4 +1,4 @@
-import { DIM, ESC, RST, naSegment } from "./ansi.ts";
+import { DIM, ESC, RST } from "./ansi.ts";
 import { promptParts, type PromptParts } from "./prompt-stamp.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { ctxSegment } from "./model-context.ts";
@@ -7,6 +7,9 @@ import { admittedJobSegment } from "./jobs.ts";
 import { routeLines } from "./dispatch-runs.ts";
 import { sysRow } from "./host-load.ts";
 import { recoverHealthBadge } from "./recover-health.ts";
+import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
+import { fromThrowable } from "neverthrow";
+import { renderRows, type DisplayRows } from "./row-state.ts";
 
 const SEP = ` ${DIM}|${RST} `;
 const BR = "⎇";
@@ -38,8 +41,8 @@ const BR = "⎇";
 // where the two values ARE independent siblings (the 5h window vs the 7d window), so they keep
 // the middot between them — same role MID plays between Sys's CPU/RAM/VRAM readings below (each
 // an independent host-resource sibling, unlike Ctx's count+percent pair). Line 5 (always present)
-// is Sys — host CPU/RAM/VRAM, distinct from Rate's API budget — and Line 6 (conditional: only
-// when a job is admitted, an orphan lives, or the scan failed) is Job; each is always its own row
+// is Sys — host CPU/RAM/VRAM, distinct from Rate's API budget — and Line 6 is Job, including
+// an explicit idle value after a successful empty scan; each is always its own row
 // so neither can ever be silently dropped by a missing sibling value.
 // Rate row, 5h window: "5h NN% [⟳reset]". The three window segments carry no separator of their
 // The PS1 head in PS1's own colors (%F{magenta}%n@%F{yellow}%m:%F{cyan}date|%F{green}%~). The
@@ -48,85 +51,163 @@ const BR = "⎇";
 // statusLine.refreshInterval (5s) re-renders an idle pane, so a stamp more than a minute
 // behind the clock means a stuck render. Minutes only, like PS1 — seconds were tried and
 // rejected as noise (2026-09-27).
-export function coloredHead(p: PromptParts): string {
+export function coloredHead(
+  p: PromptParts | undefined,
+  field: FieldDisplay = fieldDisplay(),
+): string {
   return (
-    `${ESC}[35m${p.user}${RST}@${ESC}[33m${p.host}${RST}:` +
-    `${ESC}[36m${p.when}${ESC}[38;5;240m${p.zone}${RST}|${ESC}[32m${p.cwd}${RST}`
+    `${field("prompt-user", "user", observed(p === undefined ? undefined : `${ESC}[35m${p.user}${RST}`, "prompt unavailable"))}@${field("prompt-host", "host", observed(p === undefined ? undefined : `${ESC}[33m${p.host}${RST}`, "prompt unavailable"))}:` +
+    `${field("prompt-time", "time", observed(p === undefined ? undefined : `${ESC}[36m${p.when}${RST}`, "prompt unavailable"))}${field("prompt-zone", "zone", observed(p === undefined ? undefined : `${ESC}[38;5;240m${p.zone}${RST}`, "prompt unavailable"))}|${field("prompt-cwd", "cwd", observed(p === undefined ? undefined : `${ESC}[32m${p.cwd}${RST}`, "prompt unavailable"))}`
   );
 }
 export function render(
   df: Dataframe,
-  options: { codex?: boolean } = {},
+  options: { codex?: boolean; collect?: FieldDisplay } = {},
 ): string {
   const codex = options.codex === true;
+  const field = fieldDisplay(df.fields, options.collect);
   const joinText = (t: string, seg: string) => (t !== "" ? t + SEP : "") + seg;
 
-  const line1 = coloredHead(promptParts(df.cwd));
+  const line1 = coloredHead(
+    fromThrowable(() => promptParts(df.cwd))().unwrapOr(undefined),
+    field,
+  );
 
   let identityLine = "";
-  if (!codex && df.email !== null && df.email !== undefined)
-    identityLine = joinText(identityLine, `${ESC}[38;5;103m${df.email}${RST}`);
-  else if (!codex && df.accountWhy !== undefined && df.accountWhy !== "")
-    identityLine = joinText(identityLine, naSegment("account", df.accountWhy));
+  if (!codex)
+    identityLine = joinText(
+      identityLine,
+      field(
+        "account",
+        "account",
+        observed(
+          df.email === undefined
+            ? undefined
+            : `${ESC}[38;5;103m${df.email}${RST}`,
+          df.accountWhy,
+        ),
+      ),
+    );
   if (df.sid !== null && df.sid !== undefined)
     identityLine = joinText(
       identityLine,
-      `${ESC}[38;5;103mSession:${RST} ${DIM}${df.sid}${RST}`,
+      field(
+        "session",
+        "Session",
+        observed(`${ESC}[38;5;103mSession:${RST} ${DIM}${df.sid}${RST}`),
+      ),
     );
 
   let agentLine = "";
-  if (!codex && df.sessionName !== null && df.sessionName !== undefined)
-    agentLine = joinText(agentLine, `${ESC}[38;5;214m${df.sessionName}${RST}`);
-  else if (
-    !codex &&
-    df.sessionNameWhy !== undefined &&
-    df.sessionNameWhy !== ""
-  )
-    agentLine = joinText(agentLine, naSegment("name", df.sessionNameWhy));
-  agentLine = joinText(agentLine, `${ESC}[38;5;30m${df.model}${RST}`);
-  if (df.effort !== undefined && df.effort !== "") {
-    agentLine += `${SEP}${ESC}[38;5;209m${df.effort}${RST}`;
+  if (!codex)
+    agentLine = joinText(
+      agentLine,
+      field(
+        "name",
+        "name",
+        observed(
+          df.sessionName === undefined
+            ? undefined
+            : `${ESC}[38;5;214m${df.sessionName}${RST}`,
+          df.sessionNameWhy ?? "not listed yet",
+        ),
+      ),
+    );
+  agentLine = joinText(
+    agentLine,
+    field(
+      "model",
+      "Model",
+      observed(
+        df.model === "?" ? undefined : `${ESC}[38;5;30m${df.model}${RST}`,
+        "payload has no model",
+      ),
+    ),
+  );
+  {
+    const effort =
+      df.effort === undefined || df.effort === ""
+        ? undefined
+        : `${ESC}[38;5;209m${df.effort}${RST}`;
     // Tailwind violet-500 (#8b5cf6), matched 2026-09-11 against Claude Code's own /effort
     // slider "ultracode" label. truecolor (38;2;r;g;b), not the 256-palette used elsewhere in
     // this file: the palette's nearest steps (ANSI 93/129/135/141) were all visibly off.
-    if (df.wfOn) agentLine += `${ESC}[38;2;139;92;246m+WF${RST}`;
+    agentLine = joinText(
+      agentLine,
+      field("effort", "effort", observed(effort, "payload has no effort")),
+    );
+    let workflow: string | undefined = df.wfOn
+      ? `${ESC}[38;2;139;92;246m+WF${RST}`
+      : "";
+    const workflowWhy =
+      df.effort === undefined ? "payload has no effort" : df.workflowWhy;
+    if (workflowWhy !== undefined) workflow = undefined;
+    if (!codex) {
+      const workflowText = field(
+        "workflow",
+        "workflow",
+        observed(workflow, workflowWhy),
+      );
+      if (workflowText !== "")
+        agentLine = workflowText.includes("+WF")
+          ? agentLine + workflowText
+          : joinText(agentLine, workflowText);
+    }
   }
   // Always rendered, one distinct form per state (see rcState()): an absent segment would make
   // "disconnected" and "probe broken" look identical, which is the ambiguity this exists to
   // remove. 🔗 stays unstyled — an emoji does not reliably repaint under an fg override.
   if (!codex) {
-    if (df.rc === "on") agentLine += `${SEP}🔗`;
-    else if (df.rc === "off") agentLine += `${SEP}${DIM}rc:off${RST}`;
-    else agentLine += `${SEP}${ESC}[38;5;178mrc:?${RST}`;
+    let rc: string | undefined = df.rc === "on" ? "🔗" : `${DIM}rc:off${RST}`;
+    if (df.rc === "unknown") rc = undefined;
+    agentLine = joinText(agentLine, field("rc", "rc", observed(rc)));
   }
 
-  agentLine = joinText(agentLine, ctxSegment(df));
+  agentLine = joinText(agentLine, ctxSegment(df, field));
 
-  const rateLine = codex ? rateRow(df, undefined, ["codex"]) : rateRow(df);
+  const rateLine = codex
+    ? rateRow(df, undefined, ["codex"], field)
+    : rateRow(df, undefined, undefined, field);
 
   let repoLine = "";
-  if (df.branch !== undefined && df.branch !== "")
-    repoLine = joinText(repoLine, `${ESC}[38;5;96m${BR} ${df.branch}${RST}`);
-  else if (df.branchWhy !== undefined && df.branchWhy !== "")
-    repoLine = joinText(repoLine, `${BR} ${naSegment("branch", df.branchWhy)}`);
+  let branch: string | undefined =
+    df.branch === undefined ? "" : `${ESC}[38;5;96m${BR} ${df.branch}${RST}`;
+  if (df.branchWhy !== undefined) branch = undefined;
+  repoLine = joinText(
+    repoLine,
+    field("branch", "branch", observed(branch, df.branchWhy)),
+  );
   if (!codex)
     repoLine = joinText(
       repoLine,
-      df.add === undefined || df.del === undefined
-        ? naSegment("diff", "payload has no cost block")
-        : `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`,
+      field(
+        "diff",
+        "diff",
+        observed(
+          df.add === undefined || df.del === undefined
+            ? undefined
+            : `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`,
+          "payload has no cost block",
+        ),
+      ),
     );
-  if (df.wt !== undefined && df.wt !== "")
-    repoLine = joinText(repoLine, `${ESC}[38;5;140mwt: ${df.wt}${RST}`);
+  repoLine = joinText(
+    repoLine,
+    field(
+      "worktree",
+      "wt",
+      observed(
+        df.wt === undefined ? undefined : `${ESC}[38;5;140mwt: ${df.wt}${RST}`,
+        "payload has no worktree",
+      ),
+    ),
+  );
 
   // Always present: every reading in it is either a value or an explicit n/a.
-  const sysLine = sysRow(df); // the Dataframe carries the HostLoad fields under the same names
+  const sysLine = sysRow(df, field);
 
   let jobLine: string | undefined;
-  if (df.jobScanWhy !== undefined) {
-    // The process scan failed, so "no jobs" would be a guess; say the scan failed instead.
-    jobLine = `${ESC}[38;5;173mJob:${RST} ${naSegment("scan", df.jobScanWhy)}`;
-  } else if (df.jobs.length > 0 || df.orphans > 0) {
+  if (df.jobs.length > 0 || df.orphans > 0) {
     jobLine = `${ESC}[38;5;173mJob:${RST}`;
     if (df.jobs.length > 0) {
       jobLine += admittedJobSegment(df.jobs, df.orphans);
@@ -135,40 +216,77 @@ export function render(
     }
   }
 
-  // Run rows: present while agx has workers (or orphaned runs); n/a when unreadable.
-  let runLines: string[] = [];
-  if (df.routes !== undefined && df.routes.isErr())
-    runLines = [naSegment("agx", df.routes.error)];
-  else if (df.routes !== undefined) {
-    runLines = routeLines(
-      df.routes.value.runs,
-      df.sid,
-      df.routes.value.unreadable,
-    );
-    if (df.routes.value.snapshotWhy !== undefined && runLines.length === 0)
-      runLines = [naSegment("agx", df.routes.value.snapshotWhy)];
-    else if (
-      df.routes.value.snapshotAgeSecs !== undefined &&
-      df.routes.value.snapshotAgeSecs > 30 &&
-      df.routes.value.runs.length > 0
-    )
-      runLines.push(`agx ${df.routes.value.snapshotAgeSecs}s old`);
-  }
-  if (df.dispatchWarning !== undefined)
-    runLines.push(`${ESC}[38;5;178m${df.dispatchWarning}${RST}`);
-  const recoverBadge = recoverHealthBadge(df.recoverHealth);
-  if (recoverBadge !== undefined)
-    runLines.push(`${ESC}[38;5;167m${recoverBadge}${RST}`);
+  const jobValue = jobLine ?? "Job: idle";
+  jobLine = field(
+    "jobs",
+    "Job: scan",
+    observed(df.jobScanWhy === undefined ? jobValue : undefined, df.jobScanWhy),
+  );
+  const scan = df.routes?.isOk() === true ? df.routes.value : undefined;
+  const routeText =
+    scan === undefined || scan.snapshotWhy !== undefined
+      ? undefined
+      : routeLines(scan.runs, df.sid, scan.unreadable).join("\n");
+  const routeWhy =
+    df.routes?.isErr() === true
+      ? df.routes.error
+      : (scan?.snapshotWhy ?? "snapshot unavailable");
+  let dispatchWarning: string | undefined =
+    df.dispatchWarning === undefined
+      ? ""
+      : `${ESC}[38;5;178m${df.dispatchWarning}${RST}`;
+  if (df.dispatchWarningWhy !== undefined) dispatchWarning = undefined;
+  let recover = recoverHealthBadge(df.recoverHealth, df.recoverHealth?.at);
+  if (recover !== undefined) recover = `${ESC}[38;5;167m${recover}${RST}`;
+  const recoverValue = recover ?? "";
+  const runLines = [
+    field(
+      "agx",
+      "agx",
+      observed(
+        routeText === "" ? "agx 0 workers" : routeText,
+        routeWhy,
+        (scan?.snapshotAgeSecs ?? 0) * 1000,
+      ),
+    ),
+    field(
+      "dispatch-warning",
+      "dispatch warning",
+      observed(dispatchWarning, df.dispatchWarningWhy),
+    ),
+    field(
+      "recover",
+      "recover",
+      observed(
+        df.recoverHealthWhy === undefined ? recoverValue : undefined,
+        df.recoverHealthWhy,
+        df.recoverHealth === undefined
+          ? 0
+          : Math.max(
+              0,
+              Temporal.Now.instant().epochMilliseconds -
+                df.recoverHealth.at -
+                30000,
+            ),
+      ),
+    ),
+  ];
 
-  return [
-    joinText(line1, repoLine),
-    identityLine,
-    agentLine,
-    rateLine,
-    sysLine,
-    jobLine,
-    ...runLines,
-  ]
-    .flatMap((r) => (r !== undefined && r !== "" ? [r] : [])) // drops undefined and "" without an `r is string` guard
-    .join("\n");
+  const rows = {
+    prompt: observed(joinText(line1, repoLine)),
+    identity: observed(
+      identityLine === "" ? undefined : identityLine,
+      "payload has no session",
+    ),
+    agent: observed(agentLine),
+    rate: observed(rateLine),
+    sys: observed(sysLine),
+    job: observed(jobLine),
+    agx: observed(runLines[0]),
+    "dispatch-warning": observed(
+      runLines[1] === "" ? "dispatch warning: none" : runLines[1],
+    ),
+    recover: observed(runLines[2] === "" ? "recover: none" : runLines[2]),
+  } satisfies DisplayRows;
+  return renderRows(rows);
 }

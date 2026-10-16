@@ -96,7 +96,7 @@ test("renders both windows and hides unlimited or absent credits", async () => {
   }
 });
 
-test("stale and missing sessions render named absence", async () => {
+test("stale sessions retain values and missing sessions remain unknown", async () => {
   const { root, file } = await fixture();
   await writeFile(file, event(sample(null, window(10080, 11, 1791948537))));
   const staleEpoch = NOW - 2 * 60 * 60;
@@ -109,7 +109,7 @@ test("stale and missing sessions render named absence", async () => {
         new RegExp(`${ESC}\\[[0-9;]*m`, "gu"),
         "",
       ),
-    ).toContain("codex n/a (stale source)");
+    ).toContain("codex 7d 11%");
   const absent = await readCodexRate(join(root, "missing"));
   expect(absent.isOk()).toBe(true);
   if (absent.isOk()) expect(absent.value).toBeUndefined();

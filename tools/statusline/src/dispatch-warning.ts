@@ -2,7 +2,7 @@
 // half of the old buildDataframe. Read-only: reads legacy runs.jsonl and route-capability.json records.
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { fromThrowable } from "neverthrow";
+import { err, ok, fromThrowable, type Result } from "neverthrow";
 import { readJson, readJsonAsync } from "./bounded.ts";
 import { stateDir } from "./dispatch-state.ts";
 import {
@@ -86,21 +86,26 @@ export function readDispatchWarning(): string | undefined {
     : undefined;
 }
 // The sync reader stays for compatibility; buildDataframe uses this async counterpart.
-export async function readDispatchWarningAsync(): Promise<string | undefined> {
+export async function readDispatchWarningAsync(): Promise<
+  Result<string | undefined, string>
+> {
   const state = stateDir();
   const cachePath = join(state, "route-capability.json");
   const cache = await readJsonAsync(cachePath, CacheSchema);
-  if (cache?.host !== hostname()) return undefined;
+  if (cache === undefined) return err("dispatch warning unavailable");
+  if (cache.host !== hostname()) return ok(undefined);
   const log = await readJsonlTail(
     join(state, "runs.jsonl"),
     DEFAULT_JSONL_TAIL_BYTES,
   ).catch(() => null);
   return log === null
-    ? undefined
-    : dispatchWarning(
-        log.text,
-        JSON.stringify(cache),
-        hostname(),
-        nowEpochSec() * 1000,
+    ? err("dispatch warning unavailable")
+    : ok(
+        dispatchWarning(
+          log.text,
+          JSON.stringify(cache),
+          hostname(),
+          nowEpochSec() * 1000,
+        ),
       );
 }

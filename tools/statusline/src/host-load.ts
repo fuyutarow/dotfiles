@@ -28,6 +28,7 @@ import {
   tmpSegment,
   type DiskEntry,
   type TmpEntry,
+  type TmpfsReading,
 } from "./storage.ts";
 import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
@@ -37,7 +38,13 @@ import {
   findGpuExecutableAsync,
   sampleGpu,
 } from "../../shared/src/gpu-samples.ts";
-import { ESC, RST, naSegment, pctFmt, roles } from "./ansi.ts";
+import { ESC, RST, pctFmt, roles } from "./ansi.ts";
+import {
+  fieldDisplay,
+  observed,
+  type DisplayFields,
+  type FieldDisplay,
+} from "./field-state.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
   execAsyncBounded,
@@ -527,10 +534,14 @@ export function cpuPct(): Result<number, string> {
 // percentages share the same green/yellow/red pctFmt threshold as every other percentage in
 // this file; the fraction rides alongside each, dimmed, as supporting detail — same
 // percent-then-dim-detail shape rl5Segment/rl7Segment already use for their reset countdowns.
-export function memSegment(label: string, m: MemReading): string {
+export function memSegment(
+  label: string,
+  m: MemReading,
+  includeGpu = true,
+): string {
   const { text: pct, col } = pctFmt(m.pct);
   let seg = `${roles.label(label)} ${roles.value(`${pct}%`, col)} ${roles.secondary(`(${m.frac})`)}`;
-  if (m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
+  if (includeGpu && m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
     seg += ` ${roles.secondary(`GPU≈${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}`)}`;
   const badge = cccBadge(
     m.cccIndexing,
@@ -560,32 +571,106 @@ export function sysSegment(
   vram: Result<MemReading, string> | undefined,
   disks: Result<DiskEntry[], string>,
   tmp: TmpEntry[] = currentTmp,
+  field: FieldDisplay = fieldDisplay(),
+  tmpfs?: Result<TmpfsReading, string>,
 ): string {
+  let gpu: string | undefined;
+  let gpuWhy = "no GPU sample";
+  let gpuAge = 0;
+  if (vram?.isErr() === true) gpuWhy = vram.error;
+  if (vram?.isOk() === true) {
+    const m = vram.value;
+    if (m.gpuAvg15 !== undefined && m.gpuAvg15 !== null)
+      gpu = roles.secondary(
+        `GPU≈${Math.round(m.gpuAvg15)}%/15m n=${m.gpuSamples15 ?? 0}`,
+      );
+    gpuAge = (m.stale?.secs ?? 0) * 1000;
+  }
   const parts: string[] = [
     cpu.match(
       (v) => {
         const { text: pct, col } = pctFmt(v);
-        return `${roles.label("CPU")} ${roles.value(`${pct}%`, col)}`;
+        return field(
+          "cpu",
+          "CPU",
+          observed(`${roles.label("CPU")} ${roles.value(`${pct}%`, col)}`),
+        );
       },
-      (why) => naSegment("CPU", why),
+      (why) => field("cpu", "CPU", observed(undefined, why)),
     ),
     ram.match(
-      (m) => memSegment("RAM", m),
-      (why) => naSegment("RAM", why),
+      (m) =>
+        field(
+          "ram",
+          "RAM",
+          observed(
+            memSegment("RAM", m),
+            undefined,
+            (m.stale?.secs ?? 0) * 1000,
+          ),
+        ),
+      (why) => field("ram", "RAM", observed(undefined, why)),
     ),
     ...(vram === undefined
       ? []
       : [
           vram.match(
-            (m) => memSegment("VRAM", m),
-            (why) => naSegment("VRAM", why),
+            (m) =>
+              field(
+                "vram",
+                "VRAM",
+                observed(
+                  memSegment("VRAM", m, false),
+                  undefined,
+                  (m.stale?.secs ?? 0) * 1000,
+                ),
+              ),
+            (why) => field("vram", "VRAM", observed(undefined, why)),
+          ),
+        ]),
+    ...(vram === undefined
+      ? []
+      : [field("gpu", "GPU", observed(gpu, gpuWhy, gpuAge))]),
+    ...(tmpfs === undefined
+      ? []
+      : [
+          field(
+            "tmpfs",
+            "tmpfs",
+            tmpfs.match(
+              (reading) =>
+                observed(
+                  `tmpfs ${formatBytes(reading.availableBytes)} free · ${reading.freeInodes}i`,
+                ),
+              (why) => observed(undefined, why),
+            ),
           ),
         ]),
     ...disks.match(
-      (ds) => ds.map((disk) => diskSegment(disk)),
-      (why) => [naSegment("Disk", why)],
+      (ds) =>
+        ds.map((disk) => {
+          let value: string | undefined;
+          let why = "invalid free space reading";
+          if (disk.kind === "miss") why = disk.why;
+          else if (
+            disk.freeG !== undefined &&
+            Number.isFinite(disk.freeG) &&
+            disk.freeG >= 0
+          )
+            value = diskSegment(disk);
+          return field(`disk:${disk.label}`, disk.label, observed(value, why));
+        }),
+      (why) => [field("disks", "Disk", observed(undefined, why))],
     ),
-    ...tmp.map((entry) => tmpSegment(entry)),
+    ...tmp.map((entry) =>
+      field(
+        `tmp:${entry.label}`,
+        entry.label,
+        entry.kind === "miss"
+          ? observed(undefined, entry.why)
+          : observed(tmpSegment(entry)),
+      ),
+    ),
   ];
   return parts.join(roles.separator());
 }
@@ -596,6 +681,8 @@ export interface HostLoad {
   ram: Result<MemReading, string>;
   vram: Result<MemReading, string> | undefined; // undefined: this host has no discrete VRAM
   disks: Result<DiskEntry[], string>;
+  tmpfs?: Result<TmpfsReading, string> | undefined;
+  tmp?: TmpEntry[] | undefined;
 }
 
 export interface HostMetrics {
@@ -653,8 +740,7 @@ export async function readHostLoadAsync(): Promise<Omit<HostLoad, "disks">> {
     vramGatedAsync(),
     tmpReadingsAsync(),
   ]);
-  currentTmp = tmp;
-  return { cpuPct: cpu, ram, vram };
+  return { cpuPct: cpu, ram, vram, tmp };
 }
 async function readCpuSampleAsync(): Promise<Result<CpuSample, string>> {
   if (process.platform === "darwin") return macCpuSample();
@@ -779,7 +865,7 @@ async function vramFracAsync(): Promise<Result<MemReading, string>> {
   const started = fresh ? ok(undefined) : await ensureSamplerAsync();
   const why = started.isErr() ? started.error : (cached.why ?? SAMPLING_WHY);
   const good = cached.good;
-  if (good !== undefined && within(good.at, now, GPU_STALE_MAX_MS)) {
+  if (good !== undefined) {
     const secs = Math.round((now - good.at) / 1000);
     return ok({ ...good.reading, stale: { secs, why } });
   }
@@ -796,8 +882,11 @@ async function vramGatedAsync(): Promise<
     : vram;
 }
 /** The Sys row exactly as the statusline prints it. */
-export function sysRow(h: HostLoad): string {
-  return `${ESC}[38;5;74mSys:${RST} ${sysSegment(h.cpuPct, h.ram, h.vram, h.disks)}`;
+export function sysRow(
+  h: HostLoad & { fields?: DisplayFields },
+  field: FieldDisplay = fieldDisplay(h.fields),
+): string {
+  return `${ESC}[38;5;74mSys:${RST} ${sysSegment(h.cpuPct, h.ram, h.vram, h.disks, h.tmp, field, h.tmpfs)}`;
 }
 
 // Standalone (`s`): one row, now. A render reads what the last render left (CPU needs a baseline,

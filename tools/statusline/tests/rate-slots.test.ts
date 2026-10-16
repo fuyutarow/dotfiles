@@ -74,6 +74,8 @@ const quietSources = {
 } satisfies NonNullable<BuildDataframeOptions["sources"]>;
 
 async function row(payload: unknown = {}, options: BuildDataframeOptions = {}) {
+  const fieldStoreRoot = await mkdtemp(join(tmpdir(), "rate-slot-fields-"));
+  roots.push(fieldStoreRoot);
   const parsed = ClaudeStatuslineInputSchema.safeParse(payload);
   expect(parsed.success).toBe(true);
   if (!parsed.success) return "";
@@ -81,6 +83,7 @@ async function row(payload: unknown = {}, options: BuildDataframeOptions = {}) {
     rateRow(
       await buildDataframe(parsed.data, {
         ...options,
+        fieldStoreRoot,
         sources: { ...quietSources, ...options.sources },
       }),
     ),
@@ -154,8 +157,15 @@ test.each([...modes])("codex slot: %s", async (mode) => {
       budgets: { codexRate: mode === "timeout" ? 10 : 1000 },
     },
   );
-  if (mode === "no rate info") expect(text).toContain("codex 7d");
-  else expectSlots(text, "codex");
+  if (mode === "no rate info") {
+    // Account usage belongs to the account, even when the newest session is empty.
+    expect(text).toContain("codex 7d  3%");
+    expect(text).toContain("1m old");
+    expect(text).not.toContain("codex n/a");
+  } else if (mode === "stale") {
+    expect(text).toContain("codex 7d");
+    expect(text).toContain("60m old");
+  } else expectSlots(text, "codex");
   if (mode === "timeout") expect(text).toContain("codex rate timeout 10ms");
 });
 
@@ -224,7 +234,10 @@ test.each([...modes])("claude slot: %s", async (mode) => {
     sources: { identity: identitySource },
     budgets: { identity: 10 },
   });
-  expectSlots(text, "claude");
+  if (mode === "stale") {
+    expect(text).toContain("5h 20%");
+    expect(text).toContain("old");
+  } else expectSlots(text, "claude");
   if (mode === "timeout") expect(text).toContain("account timeout 10ms");
 });
 
@@ -284,10 +297,12 @@ test("unrelated writes cannot freshen an old Codex rate event", async () => {
       `"timestamp":"${Temporal.Now.instant().subtract({ hours: 2 }).toString()}","type":"event_msg"`,
     ) + '\n{"type":"response_item"}\n',
   );
-  expectSlots(
-    await row({}, { sources: { codexRate: () => readCodexRate(root) } }),
-    "codex",
+  const text = await row(
+    {},
+    { sources: { codexRate: () => readCodexRate(root) } },
   );
+  expect(text).toContain("codex 7d");
+  expect(text).toContain("120m old");
 });
 
 test("completed sources cannot bypass an exhausted budget", async () => {

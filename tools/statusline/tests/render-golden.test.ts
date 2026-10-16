@@ -3,6 +3,9 @@ import { err, ok } from "neverthrow";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
 import { render } from "../src/format.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const ANSI = new RegExp(`${String.fromCodePoint(27)}\\[[0-9;]*m`, "gu");
 
@@ -20,7 +23,11 @@ describe("statusline render golden", () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
 
+    const fieldStoreRoot = await mkdtemp(
+      join(tmpdir(), "render-golden-fields-"),
+    );
     const dataframe = await buildDataframe(parsed.data, {
+      fieldStoreRoot,
       sources: {
         identity: () =>
           Promise.resolve({
@@ -41,12 +48,13 @@ describe("statusline render golden", () => {
             ram: ok({ frac: "2.0/8.0G", pct: 25 }),
             vram: undefined,
           }),
-        routes: () => Promise.resolve(undefined),
+        routes: () => Promise.resolve(ok({ runs: [], unreadable: 0 })),
         dispatchWarning: () => Promise.resolve(undefined),
         storage: () => Promise.resolve(ok([])),
         herdrReport: () => Promise.resolve(),
         codexRate: () => Promise.resolve(ok(undefined)),
         jevUsage: () => Promise.resolve(err("fixture unavailable")),
+        recoverHealth: () => Promise.resolve(undefined),
       },
     });
 
@@ -60,5 +68,6 @@ describe("statusline render golden", () => {
     expect(codexLines).not.toContain("Jev");
     expect(codexLines).not.toContain("diff");
     expect(codexLines).not.toContain("payload has no cost block");
+    await rm(fieldStoreRoot, { recursive: true, force: true });
   });
 });

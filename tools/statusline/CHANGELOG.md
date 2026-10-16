@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.5 — 2026-10-16
+
+- Retain every statusline field across read failures and timeouts with persisted last-good values and visible ages.
+
 ## 0.16.4 — 2026-10-16
 
 - Make statusline tests independent of user state, wall clocks and host scheduling by isolating homes and injecting deadline clocks.

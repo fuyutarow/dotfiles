@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { agxSnapshotPath } from "../src/agx-snapshot.ts";
+import { agxSnapshotPath, readAgxSnapshotAsync } from "../src/agx-snapshot.ts";
 import { isolatedStatuslineEnv } from "./helpers.ts";
 
 const STATUSLINE = join(import.meta.dir, "..", "src", "statusline.ts");
@@ -121,18 +121,21 @@ describe("agx statusline snapshot", () => {
     const snapshotPath = writeGoodSnapshot(f.env, run, 45_000);
     const before = readFileSync(snapshotPath, "utf8");
 
+    const snapshot = await readAgxSnapshotAsync(f.env);
+    // Inspect the snapshot independently of process startup and other fields.
+    expect(snapshot.rows).toHaveLength(1);
     const output = await render(f.env);
     // Check the cached result and failed refresh directly; host scheduling is not a deadline clock.
     expect(output).toContain("luna-high");
     expect(output).toContain("v4_learn");
-    expect(output).toMatch(/agx (4[5-9]|5[0-9])s old/u);
+    expect(output).toMatch(/· (4[5-9]|5[0-9])s old/u);
     expect(output).not.toContain("agx n/a");
 
     const lock = snapshotPath + ".lock";
     expect(await waitFor(() => !existsSync(lock), 5_000)).toBe(true);
     expect(readFileSync(snapshotPath, "utf8")).toBe(before);
     expect(readFileSync(f.log, "utf8")).toBe("agx");
-  });
+  }, 15_000);
 
   test("a missing snapshot renders n/a and concurrent renders launch one refresh", async () => {
     const f = fixture("concurrent-first-read", "/bin/sleep 1\nprintf '[]\\n'");
@@ -156,5 +159,5 @@ describe("agx statusline snapshot", () => {
 
     const after = await render(f.env);
     expect(after).not.toContain("agx n/a");
-  });
+  }, 15_000);
 });

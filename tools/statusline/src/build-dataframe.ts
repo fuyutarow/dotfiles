@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "neverthrow";
+import { err, ok, Err, Ok, type Result } from "neverthrow";
 import type { SessionStatus } from "./session-status.ts";
 import type { Dataframe } from "./dataframe.ts";
 import type { HostLoad } from "./host-load.ts";
@@ -32,6 +32,7 @@ import {
 } from "./recover-health.ts";
 import { cachedSource } from "./render-cache.ts";
 import { z } from "./zod.ts";
+import { prepareDisplayFields } from "./display-fields.ts";
 
 type IdentityFacts = {
   email: string | undefined;
@@ -39,7 +40,33 @@ type IdentityFacts = {
   rlModel: ModelLimit[];
   modelCapsWhy: string | undefined;
   wfOn: boolean;
+  workflowWhy?: string | undefined;
 };
+type WarningRead = Result<string | undefined, string> | string | undefined;
+type HealthRead =
+  | Result<RecoverHealth | undefined, string>
+  | RecoverHealth
+  | undefined;
+function warningPatch(
+  value: WarningRead,
+): Pick<Dataframe, "dispatchWarning" | "dispatchWarningWhy"> {
+  if (value === undefined || typeof value === "string")
+    return { dispatchWarning: value, dispatchWarningWhy: undefined };
+  return {
+    dispatchWarning: value.unwrapOr(undefined),
+    dispatchWarningWhy: value.isErr() ? value.error : undefined,
+  };
+}
+function healthPatch(
+  value: HealthRead,
+): Pick<Dataframe, "recoverHealth" | "recoverHealthWhy"> {
+  if (value instanceof Ok || value instanceof Err)
+    return {
+      recoverHealth: value.unwrapOr(undefined),
+      recoverHealthWhy: value.isErr() ? value.error : undefined,
+    };
+  return { recoverHealth: value, recoverHealthWhy: undefined };
+}
 type Sources = {
   identity: () => Promise<IdentityFacts>;
   agentName: (
@@ -59,7 +86,7 @@ type Sources = {
   routes: (
     sessionId?: string,
   ) => Promise<Result<RouteScan, string> | undefined>;
-  dispatchWarning: () => Promise<string | undefined>;
+  dispatchWarning: () => Promise<WarningRead>;
   storage: () => Promise<Result<DiskEntry[], string>>;
   herdrReport: (
     model: string,
@@ -69,9 +96,10 @@ type Sources = {
   ) => Promise<void>;
   codexRate: () => ReturnType<typeof readCodexRate>;
   jevUsage: () => ReturnType<typeof readJevUsage>;
-  recoverHealth: () => Promise<RecoverHealth | undefined>;
+  recoverHealth: () => Promise<HealthRead>;
 };
 export interface BuildDataframeOptions {
+  fieldStoreRoot?: string;
   sources?: Partial<Sources>;
   budgets?: Partial<Record<keyof Sources, number>>;
   codex?: boolean;
@@ -113,21 +141,27 @@ async function runBounded<T>(
   budgetMs: number,
   source: () => Promise<T>,
   clock: SourceClock,
+  onLate?: (value: T) => Promise<void>,
 ): Promise<Outcome<T>> {
   const started = clock.now();
   let cancel: (() => void) | undefined;
+  let missedBudget = false;
   const timedOut = new Promise<Outcome<T>>((resolve) => {
     cancel = clock.timeout(() => {
+      missedBudget = true;
       resolve({ ok: false, why: `${name} timeout ${budgetMs}ms` });
     }, budgetMs);
   });
   const pending = Promise.resolve()
     .then(source)
     .then(
-      (value): Outcome<T> =>
-        clock.now() - started >= budgetMs
-          ? { ok: false, why: `${name} timeout ${budgetMs}ms` }
-          : { ok: true, value },
+      (value): Outcome<T> => {
+        if (missedBudget || clock.now() - started >= budgetMs) {
+          void onLate?.(value).catch(() => null);
+          return { ok: false, why: `${name} timeout ${budgetMs}ms` };
+        }
+        return { ok: true, value };
+      },
       (): Outcome<T> => ({ ok: false, why: `${name} unavailable` }),
     );
   const outcome = await Promise.race([pending, timedOut]);
@@ -149,12 +183,15 @@ async function identityFacts(): Promise<IdentityFacts> {
   const cjResult = await readClaudeJsonAsync();
   const accountResult = cjResult.andThen(account);
   const capsResult = cjResult.andThen(modelWeeklyLimits);
+  const workflow = await ultracodeConfiguredAsync();
   return {
     email: accountResult.unwrapOr(undefined),
     accountWhy: accountResult.isErr() ? accountResult.error : undefined,
     rlModel: capsResult.unwrapOr([]),
     modelCapsWhy: capsResult.isErr() ? capsResult.error : undefined,
-    wfOn: await ultracodeConfiguredAsync(),
+    wfOn: workflow ?? false,
+    workflowWhy:
+      workflow === undefined ? "workflow settings unavailable" : undefined,
   };
 }
 const RepoStateCacheSchema = z.object({
@@ -261,7 +298,7 @@ const DEFAULT_SOURCES: Sources = {
   recoverHealth: readRecoverHealthAsync,
 };
 
-// --- buildDataframe: stdin -> every displayable value, already computed. No ANSI, no rows. ---
+// Build facts within source budgets, then resolve each display field against its last-good store.
 export async function buildDataframe(
   data: SessionStatus,
   options: BuildDataframeOptions = {},
@@ -283,7 +320,9 @@ export async function buildDataframe(
     name: string,
     budgetMs: number,
     source: () => Promise<T>,
-  ) => runBounded(name, budgetMs, source, options.clock ?? SOURCE_CLOCK);
+    onLate?: (value: T) => Promise<void>,
+  ) =>
+    runBounded(name, budgetMs, source, options.clock ?? SOURCE_CLOCK, onLate);
 
   const model = modelName(data.model?.name, data.model?.id);
 
@@ -306,6 +345,23 @@ export async function buildDataframe(
 
   const budget = (key: keyof Sources): number =>
     options.budgets?.[key] ?? BUDGETS_MS[key];
+  const ready = Promise.withResolvers<Dataframe>();
+  // A late result publishes only its own fields, without changing the frame already returned.
+  const publish = async (
+    patch: Partial<Dataframe>,
+    keys: readonly string[],
+    prefix?: string,
+  ) => {
+    const frame = { ...(await ready.promise), ...patch };
+    delete frame.fields;
+    await prepareDisplayFields(
+      frame,
+      options.fieldStoreRoot,
+      (key) =>
+        keys.includes(key) || (prefix !== undefined && key.startsWith(prefix)),
+      options.codex,
+    );
+  };
   const [
     identityResult,
     nameResult,
@@ -333,26 +389,96 @@ export async function buildDataframe(
               wfOn: false,
             })
         : sources.identity,
+      (value) =>
+        publish(
+          {
+            email: value.email,
+            accountWhy: value.accountWhy,
+            rlModel: value.rlModel,
+            modelCapsWhy: value.modelCapsWhy,
+            wfOn: value.wfOn && effort === "xhigh",
+            workflowWhy: value.workflowWhy,
+          },
+          ["account", "model-caps", "workflow"],
+        ),
     ),
-    bounded("name", budget("agentName"), () =>
-      sid === undefined
-        ? Promise.resolve(ok<string | undefined, string>(undefined))
-        : sources.agentName(sid, sessionNameHint),
+    bounded(
+      "name",
+      budget("agentName"),
+      () =>
+        sid === undefined
+          ? Promise.resolve(ok<string | undefined, string>(undefined))
+          : sources.agentName(sid, sessionNameHint),
+      (value) =>
+        publish(
+          {
+            sessionName: value.unwrapOr(undefined),
+            sessionNameWhy: value.isErr() ? value.error : undefined,
+          },
+          ["name"],
+        ),
     ),
-    bounded("rc", budget("rcState"), sources.rcState),
-    bounded("git", budget("repoState"), () => sources.repoState(cwd)),
-    bounded("process scan", budget("jobScan"), sources.jobScan),
-    bounded("host load", budget("hostLoad"), sources.hostLoad),
-    bounded("dispatch", budget("routes"), () => sources.routes(sid)),
+    bounded("rc", budget("rcState"), sources.rcState, (rc) =>
+      publish({ rc }, ["rc"]),
+    ),
+    bounded(
+      "git",
+      budget("repoState"),
+      () => sources.repoState(cwd),
+      (value) => publish(value, ["branch"]),
+    ),
+    bounded("process scan", budget("jobScan"), sources.jobScan, (value) =>
+      publish(
+        { jobs: value.jobs, orphans: value.orphans, jobScanWhy: value.failed },
+        ["jobs"],
+      ),
+    ),
+    bounded("host load", budget("hostLoad"), sources.hostLoad, (value) =>
+      publish(value, ["cpu", "ram", "vram", "gpu", "tmpfs"], "tmp:"),
+    ),
+    bounded(
+      "dispatch",
+      budget("routes"),
+      () =>
+        process.env.STATUSLINE_AGX_FORCE_TIMEOUT === "1"
+          ? new Promise<Result<RouteScan, string> | undefined>(() => {})
+          : sources.routes(sid),
+      (routes) => publish({ routes }, ["agx"]),
+    ),
     bounded(
       "dispatch warning",
       budget("dispatchWarning"),
       sources.dispatchWarning,
+      (value) => publish(warningPatch(value), ["dispatch-warning"]),
     ),
-    bounded("storage", budget("storage"), sources.storage),
-    bounded("codex rate", budget("codexRate"), sources.codexRate),
-    bounded("Jev usage", budget("jevUsage"), sources.jevUsage),
-    bounded("recover health", budget("recoverHealth"), sources.recoverHealth),
+    bounded("storage", budget("storage"), sources.storage, (disks) =>
+      publish({ disks }, ["disks"], "disk:"),
+    ),
+    bounded("codex rate", budget("codexRate"), sources.codexRate, (value) =>
+      publish(
+        {
+          codexRate: value.unwrapOr(undefined),
+          codexRateWhy: value.isErr() ? value.error : undefined,
+        },
+        [],
+        "codex:",
+      ),
+    ),
+    bounded("Jev usage", budget("jevUsage"), sources.jevUsage, (value) =>
+      publish(
+        {
+          jevUsage: value.unwrapOr(undefined),
+          jevUsageWhy: value.isErr() ? value.error : undefined,
+        },
+        ["jev"],
+      ),
+    ),
+    bounded(
+      "recover health",
+      budget("recoverHealth"),
+      sources.recoverHealth,
+      (value) => publish(healthPatch(value), ["recover"]),
+    ),
   ]);
   const identity = settled(
     identityResult,
@@ -383,10 +509,27 @@ export async function buildDataframe(
       cpuPct: err("host load unavailable"),
       ram: err("host load unavailable"),
       vram: err("host load unavailable"),
+      tmpfs: err("host load unavailable"),
     },
     "host load",
   );
   const routes = settled(routesResult, undefined, "dispatch");
+  // Read the snapshot without vendor-session/progress enrichment after a live timeout.
+  // This path also works on the first render, before the per-field store has been populated.
+  if (
+    routes.why !== undefined ||
+    routes.value === undefined ||
+    routes.value.isErr()
+  ) {
+    const snapshot = await agxRouteRunsAsync(process.env, sid, false);
+    if (snapshot.snapshotWhy === undefined) {
+      routes.value = ok({
+        ...snapshot,
+        snapshotAgeSecs: Math.max(1, snapshot.snapshotAgeSecs ?? 0),
+      });
+      routes.why = undefined;
+    }
+  }
   const warning = settled(warningResult, undefined, "dispatch warning");
   const storage = settled(storageResult, err("storage unavailable"), "storage");
   const codexRate = settled(
@@ -404,6 +547,8 @@ export async function buildDataframe(
     undefined,
     "recover health",
   );
+  const warningFacts = warningPatch(warning.value);
+  const healthFacts = healthPatch(recoverHealth.value);
   const identityWhy = identity.why;
   const nameResultValue = name.value;
   const sessionName = nameResultValue.isOk()
@@ -433,6 +578,7 @@ export async function buildDataframe(
     model,
     effort,
     wfOn,
+    workflowWhy: identity.why ?? identity.value.workflowWhy,
     rc: rc.value,
     ctx,
     ctxPct: data.context?.usedPercent,
@@ -466,16 +612,26 @@ export async function buildDataframe(
     orphans,
     jobScanWhy: scan.why ?? scan.value.failed,
     routes: routes.why === undefined ? routes.value : err(routes.why),
-    dispatchWarning:
-      warning.why === undefined ? warning.value : "dispatch warning …",
-    recoverHealth: recoverHealth.value,
+    dispatchWarning: warningFacts.dispatchWarning,
+    dispatchWarningWhy: warning.why ?? warningFacts.dispatchWarningWhy,
+    recoverHealth: healthFacts.recoverHealth,
+    recoverHealthWhy: recoverHealth.why ?? healthFacts.recoverHealthWhy,
     vram,
     disks,
     cpuPct: cpu,
     ram,
+    tmpfs: host.value.tmpfs,
+    tmp: host.value.tmp,
   };
   void bounded("herdr", budget("herdrReport"), () =>
     sources.herdrReport(model, sessionName, effortDisplay, rc.value),
   ).catch(() => null);
+  await prepareDisplayFields(
+    dataframe,
+    options.fieldStoreRoot,
+    undefined,
+    options.codex,
+  );
+  ready.resolve(dataframe);
   return dataframe;
 }

@@ -3,6 +3,9 @@ import { err, ok } from "neverthrow";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { buildDataframe, type SourceClock } from "../src/build-dataframe.ts";
 import { render } from "../src/format.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const ESC = String.fromCodePoint(27);
 
@@ -11,6 +14,7 @@ describe("buildDataframe source budgets", () => {
     const parsed = ClaudeStatuslineInputSchema.safeParse({ cwd: "/fixture" });
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;
+    const fieldStoreRoot = await mkdtemp(join(tmpdir(), "budget-fields-"));
     let now = 0;
     const timers = new Map<() => void, number>();
     const clock: SourceClock = {
@@ -25,6 +29,7 @@ describe("buildDataframe source budgets", () => {
     let gitStarted = false;
     const pending = buildDataframe(parsed.data, {
       clock,
+      fieldStoreRoot,
       sources: {
         identity: () =>
           Promise.resolve({
@@ -34,6 +39,7 @@ describe("buildDataframe source budgets", () => {
             modelCapsWhy: undefined,
             wfOn: false,
           }),
+        agentName: () => Promise.resolve(ok(undefined)),
         rcState: () => Promise.resolve("unknown"),
         repoState: () => {
           gitStarted = true;
@@ -46,7 +52,7 @@ describe("buildDataframe source budgets", () => {
             ram: err("host unavailable"),
             vram: err("host unavailable"),
           }),
-        routes: () => Promise.resolve(undefined),
+        routes: () => Promise.resolve(ok({ runs: [], unreadable: 0 })),
         dispatchWarning: () => Promise.resolve(undefined),
         storage: () => Promise.resolve(ok([])),
         herdrReport: () => Promise.resolve(),
@@ -70,5 +76,6 @@ describe("buildDataframe source budgets", () => {
     expect(text).toContain("branch n/a (git timeout 40ms)");
     for (let i = 0; i < 10; i++) await Promise.resolve();
     expect(timers.size).toBe(0);
+    await rm(fieldStoreRoot, { recursive: true, force: true });
   });
 });

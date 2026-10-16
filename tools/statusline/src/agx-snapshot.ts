@@ -14,7 +14,6 @@ import { execAsyncBounded, writeCacheAsync } from "./bounded.ts";
 import { jsonOf, z } from "./zod.ts";
 
 const REFRESH_MS = 5_000;
-const OLD_AFTER_MS = 30_000;
 const STALE_AFTER_MS = 10 * 60_000;
 const LOCK_STALE_MS = 30_000;
 const REFRESH_TIMEOUT_MS = 2_000;
@@ -161,18 +160,6 @@ export async function readAgxSnapshotAsync(
     };
 
   const ageMs = now() - snapshot.capturedAt;
-  if (ageMs < 0)
-    return {
-      rows: undefined,
-      ageSeconds: undefined,
-      reason: "snapshot clock changed",
-    };
-  if (ageMs >= STALE_AFTER_MS)
-    return {
-      rows: undefined,
-      ageSeconds: Math.floor(ageMs / 1000),
-      reason: "snapshot expired " + Math.floor(ageMs / 1000) + "s",
-    };
 
   const parsed = jsonOf(z.array(z.unknown())).safeParse(snapshot.output);
   if (!parsed.success)
@@ -183,7 +170,7 @@ export async function readAgxSnapshotAsync(
     };
   return {
     rows: parsed.data,
-    ageSeconds: ageMs > OLD_AFTER_MS ? Math.floor(ageMs / 1000) : undefined,
+    ageSeconds: Math.max(0, Math.floor(ageMs / 1000)),
     reason: undefined,
   };
 }

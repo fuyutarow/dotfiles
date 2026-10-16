@@ -1295,6 +1295,7 @@ describe("statusline Run row", () => {
     expect(
       out.split("\n").find((line) => line.startsWith("Job:")),
     ).not.toContain("agx");
+    expect(out).toContain("agx 0 workers");
   });
 
   test("Job entries share one name + elapsed format in every session", async () => {

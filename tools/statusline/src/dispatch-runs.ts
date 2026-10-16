@@ -160,6 +160,7 @@ export async function agxJobRunsAsync(
 export async function agxRouteRunsAsync(
   env: NodeJS.ProcessEnv = process.env,
   sessionId?: string,
+  enrichRows = true,
 ): Promise<RouteScan> {
   const snapshot = await readAgxSnapshotAsync(env);
   const rows = snapshot.rows ?? [];
@@ -192,7 +193,9 @@ export async function agxRouteRunsAsync(
           )().unwrapOr(undefined);
     const phase = runPhase(row);
     const enrich =
-      row.state === "running" && row.dispatcher_session === dispatcherSession;
+      enrichRows &&
+      row.state === "running" &&
+      row.dispatcher_session === dispatcherSession;
     const rolloutRoot = join(env.HOME ?? homedir(), ".codex", "sessions");
     let vendorSession = optionalNullableString(row.vendor_session) ?? undefined;
     const cwd = optionalString(row.cwd);

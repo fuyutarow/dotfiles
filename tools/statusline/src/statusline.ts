@@ -21,6 +21,7 @@ import { coloredHead, render } from "./format.ts";
 import { buildDataframe } from "./build-dataframe.ts";
 import { readCodexRate } from "./codex-rate.ts";
 import { sysSegment } from "./host-load.ts";
+import { fieldDisplay } from "./field-state.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
 import { runLive, type LiveFrame } from "./live.ts";
@@ -31,7 +32,15 @@ const HOME = process.env.HOME ?? "";
 const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
 async function writeSysSnapshot(df: Dataframe): Promise<void> {
-  const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
+  const sysColored = sysSegment(
+    df.cpuPct,
+    df.ram,
+    df.vram,
+    df.disks,
+    df.tmp,
+    fieldDisplay(df.fields),
+    df.tmpfs,
+  );
   const sysPlain = sysColored.replaceAll(ANSI, "");
   await writeCacheAsync(SYS_CACHE, {
     at: Temporal.Now.instant().epochMilliseconds,

@@ -1,6 +1,6 @@
 {
-  "version": "0.1.2",
-  "name": "@dotfiles/workspace",
+  "version": "0.1.3",
+  "name": "@dotfiles/jj-ws",
   "private": true,
   "type": "module",
   "bin": {

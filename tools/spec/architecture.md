@@ -49,7 +49,7 @@ not in them; this file does not invent it. Section 7 records the one layer rule 
 | `agx ls` | fold, select | none (reads records) | selector to rows or JSON |
 | `agx judge` | record a judgment | append to `records.jsonl` | run and verdict to a judgment row |
 | `agx stats` | fold statistics | none | records to numbers |
-| `ws` (`tools/workspace`, queued as workspace-tool) | the life of a run's working tree | none (reads jj, per-repo config, agx records) | slug, rev to `<repo>.ws/ws_<slug>`; reclaim |
+| `ws` (`tools/jj-ws`, queued as workspace-tool) | the life of a run's working tree | none (reads jj, per-repo config, agx records) | slug, rev to `<repo>.ws/ws_<slug>`; reclaim |
 | systemd | process lifetime, durability | unit state | command to unit, exit |
 | integrator (not started; today `mise run land`) | the only writer of trunk | trunk, an integrator-only tree, a lock | accepted diffs to trunk (pushed) |
 | guard (hook, jj wrapper) | enforce the worker boundary | none | worker command to allow or deny |

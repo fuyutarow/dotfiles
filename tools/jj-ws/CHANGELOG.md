@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — 2026-10-16
+
+- Rename the workspace tool directory and package to jj-ws; keep the ws command unchanged.
+
 ## 0.1.2 — 2026-10-16
 
 - Narrow workspace names and pending ref paths before use.

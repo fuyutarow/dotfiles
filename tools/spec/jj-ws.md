@@ -1,6 +1,6 @@
-# workspace — `ws`
+# jj-ws — `ws`
 
-`tools/workspace/` is the sole owner of the run-workspace lifecycle: where a workspace lives, how it
+`tools/jj-ws/` is the sole owner of the run-workspace lifecycle: where a workspace lives, how it
 is made ready, when it may be removed. Package `bin` `ws`, installed by `bun link` (`mise run deps`)
 like `rr` and `agx`. It is repo-agnostic: it knows jj, not dotfiles.
 
@@ -9,7 +9,7 @@ command; `rm` refuses with an unlanded change; `gc` collects exactly the termina
 live pid and no unlanded change and nothing else, and refuses when `RIP_GRAVEYARD` is RAM-backed;
 the tool writes no state file; every verb fails before work when its precondition is unmet.
 Refuted by a fixture where `gc` collects a live, continuing or unlanded workspace, `rm` loses an
-unlanded change, or the tool writes a state file. The fixtures are `tools/workspace/tests/`.
+unlanded change, or the tool writes a state file. The fixtures are `tools/jj-ws/tests/`.
 
 ## Layout and naming
 
@@ -100,4 +100,4 @@ Unknown keys are an error. dotfiles declares the example above.
 optionally `end_commit` (the commit id of the run's working copy when the run ended). agx does not
 record `end_commit` yet; until it does, the live `@` check alone judges landing. The agx scope row for
 workspaces should read: "agx consumes a tree via `--cd`; creating, readying and collecting trees is
-`ws` (`tools/workspace`)".
+`ws` (`tools/jj-ws`)".

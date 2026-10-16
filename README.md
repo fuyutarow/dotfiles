@@ -94,6 +94,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │   ├── rr/          # rr (= repo-retrieve): declared query-shape router over ccc / rg / Serena; src/ (CLI, ccc adapters, python helpers), retrieval.toml, tests/
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   ├── agx/ # agx (Jev-selected worker routing; append-only records stay in ~/.local/state/agx-next)
+│   ├── jj-ws/      # ws: repo-agnostic jj workspace creation, readiness, removal and collection
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
 │   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, sockets, model-orders, worker-env)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
@@ -114,7 +115,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent assets (commands/, skills/); other repos call task helpers
 │                #   through package.json bins instead of skill installation paths
-├── tools/       # repo CLIs (rr, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
+├── tools/       # repo CLIs (rr, ws from jj-ws, agent-resource-run, serena-foreground, smart-open, secrets-push, sui-keystore-merge) + shared TS modules
 ├── scripts/     # plumbing — config-registry.ts, link-dots.ts, check-tools.sh, shared tool lookup
 ├── Brewfile.core      # tools needed on every box
 ├── Brewfile.ondemand  # tools installed when first needed (OS guards stay here)

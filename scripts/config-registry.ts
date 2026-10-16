@@ -469,7 +469,7 @@ const OTHER: readonly Surface[] = [
       "tools/herdr-btm/package.json",
       "tools/secrets-push/package.json",
       "tools/sui-keystore-merge/package.json",
-      "tools/workspace/package.json",
+      "tools/jj-ws/package.json",
       "tools/baseline/package.json",
     ],
     deployed: "the checkout",
@@ -663,7 +663,7 @@ const OTHER: readonly Surface[] = [
     deployed: "the checkout",
     consumer: "ws add (readiness commands) and ws rm / gc (trunk revset)",
     writer: "human, in the repo",
-    verify: "bun test tools/workspace",
+    verify: "bun test tools/jj-ws",
   },
   {
     kind: "in-place",

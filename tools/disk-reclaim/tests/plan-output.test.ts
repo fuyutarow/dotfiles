@@ -6,6 +6,7 @@ import { Plan } from "../src/model.ts";
 import { cliEnv } from "./fixtures/cli-env.ts";
 import { tempRoot } from "./fixtures/temp.ts";
 
+// Include fixture setup and cleanup around the child's existing 10-second deadline.
 test("native plan CLI drains a large JSON document before exiting", async () => {
   const root = tempRoot("reclaim-large-plan-");
   using cleanup = new DisposableStack();
@@ -50,4 +51,4 @@ test("native plan CLI drains a large JSON document before exiting", async () => 
         candidate.id.startsWith("cache:item-"),
       ),
     ).toHaveLength(5000);
-});
+}, 30_000);

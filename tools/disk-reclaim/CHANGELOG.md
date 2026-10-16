@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.3 — 2026-10-16
+
+- Update CLI test config fixtures to use the regenerable cache policy derived from .gitignore.
+
 ## 1.4.2 — 2026-10-16
 
 - Restore owner access during read-only fixture teardown and align CLI fixture declarations with the current schema.

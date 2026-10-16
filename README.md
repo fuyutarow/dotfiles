@@ -95,6 +95,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   ├── agx/ # agx (Jev-selected worker routing; append-only records stay in ~/.local/state/agx-next)
 │   ├── jj-ws/      # ws: repo-agnostic jj workspace creation, readiness, removal and collection
+│   ├── tkt/        # tkt: ticket issuance, derived lifecycle listing and accepted-and-landed collection
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
 │   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, sockets, model-orders, worker-env)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
@@ -126,6 +127,12 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 The architecture of `tools/` (the dispatch pipeline, the capacity domain, the oracle rule, and for
 every invariant the check that enforces it or the ticket that will add one) lives in
 [`tools/spec/architecture.md`](tools/spec/architecture.md); each tool README links to it.
+
+
+`tools/tkt/` (`tkt`, [spec](tools/spec/tkt.md)) owns plain ticket issuance and collection across
+repositories: `tkt new` renders templates without overwriting, `tkt ls` derives run state and
+landing from agx and jj, and `tkt gc --dry-run` previews collection of accepted, landed tickets.
+It keeps no state file; tickets default to `.agents/tickets` or `.agx.toml`'s `tickets` directory.
 
 Each tool change records its release intent in a generated `tools/<name>/.changes/<slug>.md`
 file. Run `mise run changeset -- <tool> <patch|minor|major> "<entry>"`; do not hand-write the file. Tickets do not edit

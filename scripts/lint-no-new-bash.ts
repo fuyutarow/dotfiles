@@ -7,7 +7,13 @@ import {
   selected,
   validPath,
 } from "../agents/skills/wiring-mise-tasks/scripts/jj-precommit.ts";
-import { physicalLines, shellGrowth } from "../tools/shared/src/no-new-bash.ts";
+import {
+  physicalLines,
+  shellExempt,
+  shellFile,
+  shellGrowth,
+  shellRemedy,
+} from "../tools/shared/src/no-new-bash.ts";
 
 async function command(
   args: string[],
@@ -117,15 +123,34 @@ export async function lintShell(root = process.cwd()): Promise<number> {
     };
   }
   let findings = 0;
+  const newShellFiles: Array<{ path: string; lines: number }> = [];
   for (const path of files) {
     const content = await after(path);
-    if (content === null || physicalLines(content) <= 12) continue;
-    if (shellGrowth(path, await before(path), content)) {
+    if (content === null) continue;
+    const previous = await before(path);
+    if (
+      previous === null &&
+      shellFile(path, content) &&
+      !shellExempt(previous, content)
+    ) {
+      newShellFiles.push({ path, lines: physicalLines(content) });
+    }
+    if (physicalLines(content) > 12 && shellGrowth(path, previous, content)) {
       process.stdout.write(
-        `${path}: shell script exceeds 12 lines and was added or grew; use bun <path>.ts\n`,
+        `${path}: shell script exceeds 12 lines and was added or grew. ${shellRemedy()}\n`,
       );
       findings++;
     }
+  }
+  const splitLines = newShellFiles.reduce(
+    (total, file) => total + file.lines,
+    0,
+  );
+  if (newShellFiles.length >= 2 && splitLines > 12) {
+    process.stdout.write(
+      `new shell files add ${splitLines} lines across ${newShellFiles.length} files. ${shellRemedy()}\n`,
+    );
+    findings++;
   }
   process.stdout.write(`lint:no-new-bash: ${findings} finding(s)\n`);
   return findings === 0 ? 0 : 1;

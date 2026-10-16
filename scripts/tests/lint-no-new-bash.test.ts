@@ -72,6 +72,28 @@ test("new 13-line script fails; 12-line shell and long non-shell pass", () => {
   expect(lint(root).code).toBe(0);
 });
 
+test("multiple new shell files fail as a split; a thin shim plus TypeScript passes", () => {
+  const root = fixture();
+  writeFileSync(join(root, "one.sh"), lines(8));
+  writeFileSync(join(root, "two.sh"), lines(8));
+  expect(run(root, ["git", "add", "."]).code).toBe(0);
+  const split = lint(root);
+  expect(split.code).toBe(1);
+  expect(split.out).toContain("16 lines across 2 files");
+  expect(split.out).toContain(
+    "Splitting a script into several shell files is not a fix.",
+  );
+
+  const shimRoot = fixture();
+  writeFileSync(
+    join(shimRoot, "tool.sh"),
+    '#!/bin/sh\n# shim: exec-wrapper\nexec bun tool.ts "$@"\n# thin shim\n# end\n',
+  );
+  writeFileSync(join(shimRoot, "tool.ts"), "const answer = 42;\n".repeat(30));
+  expect(run(shimRoot, ["git", "add", "."]).code).toBe(0);
+  expect(lint(shimRoot).code).toBe(0);
+});
+
 test("exempts existing bootstrap and vendored header; new bootstrap cannot exempt itself", () => {
   const root = fixture();
   writeFileSync(join(root, "boot.sh"), "# shim: bootstrap\n");

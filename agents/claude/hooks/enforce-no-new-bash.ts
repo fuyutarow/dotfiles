@@ -29,7 +29,10 @@ import { hookJson, hookStderr } from "./lib.ts";
 // Fail direction: registered with run.sh --fail-closed (no bun → deny). An internal error
 // exits non-zero, which Claude Code treats as a non-blocking error — the edit proceeds.
 
-import { bashShellViolation } from "../../../tools/shared/src/no-new-bash.ts";
+import {
+  bashShellViolation,
+  shellRemedy,
+} from "../../../tools/shared/src/no-new-bash.ts";
 import { basename, extname, normalize } from "node:path";
 import { arr, at, str, strAt } from "../../hooks/narrow.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
@@ -116,11 +119,7 @@ async function main(): Promise<void> {
       () => "cannot inspect shell write size before execution",
     );
     // SINGLE-AXIS: deny only when the final shell write cannot be proven within the ratchet.
-    if (reason !== undefined)
-      decidePre(
-        "deny",
-        `no-new-bash: ${reason}. Write the logic as Bun TypeScript: bun <path>.ts; keep shell shims at most ${MAX_LINES} lines.`,
-      );
+    if (reason !== undefined) decidePre("deny", `no-new-bash: ${reason}`);
     return;
   }
   const path = strAt(input, "file_path");
@@ -159,17 +158,13 @@ async function main(): Promise<void> {
       "deny",
       `no-new-bash: refusing this ${tool} — ${path} would be ${lines} lines ` +
         `(${prev === null ? "new file" : `was ${prev}`}; limit ${MAX_LINES}). NO-NEW-BASH ` +
-        `(dotfiles:writing-bun-scripts BG0): local automation is a Bun TypeScript file run as ` +
-        `\`bun <path>.ts\`; bash survives only as a thin shim marked \`# shim: <bootstrap|` +
-        `hook-entry|exec-wrapper|vendored>\`. Write the logic as .ts (Bun.$ for shell-outs, ` +
-        `Bun.spawn with a native timeout for anything that can hang) and keep at most a ` +
-        `${MAX_LINES}-line shim. A legacy script over the limit may be edited only without growing.`,
+        `${shellRemedy(MAX_LINES)} A legacy script over the limit may be edited only without growing.`,
     );
   }
 
   const marker = /^#\s*shim:\s*\S+/mu.test(after)
     ? ""
-    : " It also carries no `# shim: <bootstrap|hook-entry|exec-wrapper|vendored>` line.";
+    : " If this is a shell shim, mark its role with `# shim: <bootstrap|hook-entry|exec-wrapper|vendored>`; it must only exec the .ts file.";
   process.stdout.write(
     hookJson({
       hookSpecificOutput: {
@@ -177,8 +172,8 @@ async function main(): Promise<void> {
         additionalContext:
           `no-new-bash: ${path} is a shell script (${lines} lines after this ${tool}; ` +
           `hard stop above ${MAX_LINES} when a file is created or grows). NO-NEW-BASH ` +
-          `(dotfiles:writing-bun-scripts): prefer a .ts run by bun — the first conditional, loop, or ` +
-          `JSON access in a .sh is the signal it should have been .ts.${marker}`,
+          `(dotfiles:writing-bun-scripts). ${shellRemedy(MAX_LINES)} ` +
+          `The first conditional, loop, or JSON access in a .sh is the signal it should have been .ts.${marker}`,
       },
     }) + "\n",
   );

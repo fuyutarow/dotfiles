@@ -3,6 +3,14 @@ import { basename, extname, normalize, resolve } from "node:path";
 import { effective, parseShell, type ShellCommand } from "./shell-syntax.ts";
 
 export const SHELL_LIMIT = 12;
+export function shellRemedy(limit = SHELL_LIMIT): string {
+  return (
+    `Write the logic as one .ts file run by bun. A shell file is allowed only as a thin shim ` +
+    `that execs it (at most ${limit} physical lines). Splitting a script into several shell ` +
+    `files is not a fix.`
+  );
+}
+
 const VENDORED = /^#\s*(?:installed|managed) by herdr\b/mu;
 const BOOTSTRAP = /^#\s*shim:\s*bootstrap\b/mu;
 
@@ -118,10 +126,13 @@ export async function bashShellViolation(
   read: (path: string) => Promise<string | null>,
   limit = SHELL_LIMIT,
 ): Promise<string | undefined> {
+  const deny = (reason: string) => `${reason}. ${shellRemedy(limit)}`;
   const parsed = parseShell(command, cwd);
   if (parsed === undefined) {
     return /[<>]|\btee\b/u.test(command)
-      ? "cannot determine shell write targets from unsupported Bash syntax"
+      ? deny(
+          "cannot determine shell write targets from unsupported Bash syntax",
+        )
       : undefined;
   }
   const state = new Map<string, string>();
@@ -130,15 +141,17 @@ export async function bashShellViolation(
   );
   for (const w of parsed.commands.flatMap((c) => writes(c))) {
     if (/[$`*?{}~]|\(…\)/u.test(w.path))
-      return `cannot determine write target ${w.path}`;
+      return deny(`cannot determine write target ${w.path}`);
     const before = state.get(w.path) ?? (await read(w.path));
     if (!shellFile(w.path, before ?? "")) continue;
     if (shellExempt(before)) continue;
     if (controlled || w.content === undefined)
-      return `cannot determine final size of ${w.path}`;
+      return deny(`cannot determine final size of ${w.path}`);
     const after = (w.append ? (before ?? "") : "") + w.content;
     if (shellGrowth(w.path, before, after, limit))
-      return `${w.path} would be ${physicalLines(after)} lines (limit ${limit})`;
+      return deny(
+        `${w.path} would be ${physicalLines(after)} lines (limit ${limit})`,
+      );
     state.set(w.path, after);
   }
   return undefined;

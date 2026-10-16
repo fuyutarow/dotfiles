@@ -74,6 +74,10 @@ describe("enforce-no-new-bash", () => {
       expect(d.permissionDecision).toBe("deny");
       expect(d.permissionDecisionReason).toContain("[dotfiles:no-new-bash]");
       expect(d.permissionDecisionReason).toContain("40 lines");
+      expect(d.permissionDecisionReason).toContain("one .ts file run by bun");
+      expect(d.permissionDecisionReason).toContain(
+        "Splitting a script into several shell files is not a fix.",
+      );
     }
   });
 
@@ -88,6 +92,10 @@ describe("enforce-no-new-bash", () => {
     expect(d.additionalContext).toContain("no-new-bash");
     expect(d.additionalContext).toContain("bun");
     expect(d.additionalContext).toContain("# shim:");
+    expect(d.additionalContext).toContain("one .ts file run by bun");
+    expect(d.additionalContext).toContain(
+      "Splitting a script into several shell files is not a fix.",
+    );
   });
 
   test("12 lines passes, 13 lines is denied for a new file", async () => {
@@ -233,6 +241,12 @@ describe("Bash shell write routes", () => {
       const decision = await decisionOf(result.stdout);
       expect(decision.permissionDecision).toBe("deny");
       expect(decision.permissionDecisionReason).toContain("bun");
+      expect(decision.permissionDecisionReason).toContain(
+        "A shell file is allowed only as a thin shim that execs it",
+      );
+      expect(decision.permissionDecisionReason).toContain(
+        "Splitting a script into several shell files is not a fix.",
+      );
     }
   });
 
@@ -270,8 +284,16 @@ describe("Bash shell write routes", () => {
       "for i in {1..13}; do cat >> x.sh <<'EOF'\nx\nEOF\ndone",
       "case x in x) cat > x.sh;; esac",
     ]) {
-      expect((await decisionOf(bash(command).stdout)).permissionDecision).toBe(
-        "deny",
+      const decision = await decisionOf(bash(command).stdout);
+      expect(decision.permissionDecision).toBe("deny");
+      expect(decision.permissionDecisionReason).toContain(
+        "one .ts file run by bun",
+      );
+      expect(decision.permissionDecisionReason).toContain(
+        "A shell file is allowed only as a thin shim that execs it",
+      );
+      expect(decision.permissionDecisionReason).toContain(
+        "Splitting a script into several shell files is not a fix.",
       );
     }
   });

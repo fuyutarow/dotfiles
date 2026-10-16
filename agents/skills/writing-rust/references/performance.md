@@ -23,10 +23,10 @@
 
 ### Rung 1 — free, no code change (do these first)
 
-- **`[profile.release]` build settings** — `lto`, `codegen-units = 1`, `strip`, optional `panic =
-  "abort"`. One-time Cargo.toml edit, can be a large win. **Owned by `references/project.md`** — set
-  it there. And always benchmark the *release* build; a debug build is 10–100× slower and tells you
-  nothing.
+- **Release build settings** — use the release and profiling tables in
+  [the Cargo preset](../../../../presets/cargo/Cargo.toml). The trade-offs are explained in
+  `references/project.md`. Always benchmark the release build; debug measurements do not
+  describe shipped performance.
 - **Swap the global allocator** — `mimalloc` (small-alloc-heavy) or `tikv-jemallocator` (long-running
   services, fragmentation) via one `#[global_allocator]` static (below). Measurable win on
   allocation-heavy multithreaded workloads, zero code change. *After profiling.*

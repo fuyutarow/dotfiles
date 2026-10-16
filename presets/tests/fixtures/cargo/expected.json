@@ -1,0 +1,5 @@
+{
+  "files": ["Cargo.toml", "member-lints.toml", "rustfmt.toml", "clippy.toml", "mise.toml"],
+  "workspace": { "resolver": "3", "package": { "edition": "2024" }, "lints": { "clippy": { "all": { "level": "deny", "priority": -1 }, "unwrap_used": "warn", "expect_used": "warn" } } },
+  "profile": { "release": { "lto": "thin", "codegen-units": 1, "strip": true }, "profiling": { "inherits": "release", "debug": "line-tables-only" } }
+}

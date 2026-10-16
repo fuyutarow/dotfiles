@@ -1,0 +1,3 @@
+# Merge into each member Cargo.toml; this is a fragment, not a package manifest.
+[lints]
+workspace = true

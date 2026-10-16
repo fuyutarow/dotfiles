@@ -1,0 +1,43 @@
+# Add a verified Rust runtime under [tools] before running in a new environment.
+# One Cargo workspace, default features; review other scopes through writing-rust RG5.
+# mise-contract: waive setup -- cargo resolves deps at build
+
+[tasks.fmt]
+alias = "f"
+run = "cargo fmt --all"
+
+[tasks."fmt:staged"]
+run = "fmt-staged --tool 'rs=rustfmt --edition 2024'"
+
+[tasks."fmt:check"]
+run = "cargo fmt --all -- --check"
+
+# Lint levels are declared in Cargo.toml rather than passed through RUSTFLAGS.
+[tasks.lint]
+alias = "l"
+run = "cargo clippy --workspace --all-targets"
+
+[tasks.test]
+alias = "t"
+run = "cargo test --workspace"
+
+[tasks.up]
+alias = "u"
+run = '''
+command -v cargo-upgrade >/dev/null 2>&1 || cargo install cargo-edit
+cargo upgrade --incompatible allow
+cargo update
+'''
+
+[tasks."up:check"]
+run = '''
+command -v cargo-upgrade >/dev/null 2>&1 || cargo install cargo-edit
+cargo upgrade --incompatible allow --dry-run
+'''
+
+[tasks.check]
+alias = "c"
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."mise:contract"]
+run = "mise-contract"

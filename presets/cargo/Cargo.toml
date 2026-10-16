@@ -1,0 +1,22 @@
+# Virtual workspace baseline; add the project's actual members.
+[workspace]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }   # priority -1 so specific lines can override the group
+unwrap_used = "warn"                        # RG3: forbid unwrap on fallible library paths
+expect_used = "warn"
+# cherry-pick a few pedantic lints you actually want — do NOT blanket-enable pedantic/nursery
+
+[profile.release]
+lto = "thin"          # "thin" = most of the win, fast; lto = true (fat) for max, slower build
+codegen-units = 1     # slower compile, faster/smaller binary — for shipped release artifacts
+strip = true          # strip symbols (since Rust 1.59) — smaller binary
+# panic = "abort"     # ONLY if you own the whole binary and never rely on unwinding/catch_unwind
+
+[profile.profiling]   # a release build that keeps debuginfo, for samply/flamegraph
+inherits = "release"
+debug = "line-tables-only"

@@ -687,6 +687,16 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
+    sources: ["presets/consumers.toml"],
+    deployed: "the checkout",
+    consumer: "scripts/land.ts shared-surface consumer commit gates",
+    writer: "human, in the repo",
+    verify:
+      "bun test scripts/tests/consumer-gate.test.ts scripts/tests/land.test.ts",
+  },
+  {
+    kind: "in-place",
+    when: "all",
     sources: ["tools/agx-usehooks/consumers.toml"],
     deployed: "the checkout",
     consumer: "agx-usehooks consumer typechecks and land's pre-commit gate",

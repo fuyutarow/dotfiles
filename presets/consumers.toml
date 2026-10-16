@@ -1,0 +1,16 @@
+# Landing compatibility registry. Missing consumers and unavailable isolation fail closed.
+# Commands are the consumers' commit gates; the copied tree is staged in an independent index.
+[[consumers]]
+name = "retrospectives"
+root = "~/Workspace/retrospectives"
+surfaces = ["presets/typescript", "hooks", "package-bins"]
+# This repository's commit checks are collected under lint (it has no hook:pre-commit task).
+command = ["mise", "run", "lint"]
+timeout_ms = 120000
+
+[[consumers]]
+name = "firedancer"
+root = "~/Workspace/firedancer"
+surfaces = ["presets/typescript", "hooks", "package-bins"]
+command = ["mise", "run", "hook:pre-commit"]
+timeout_ms = 120000

@@ -45,6 +45,7 @@ import {
   runQueue,
 } from "./land-queue.ts";
 import { applyToolChangesets } from "./land-changesets.ts";
+import { runConsumerGates } from "./consumer-gate.ts";
 import {
   landExit,
   landLiveness,
@@ -1088,6 +1089,11 @@ async function main(
       );
       stage = "commit";
       if (!parsed.flags.dryRun) {
+        const sharedConsumers = await runConsumerGates(landerRoot, changed);
+        for (const line of sharedConsumers.lines)
+          emit(`[land] consumers: ${line}`);
+        if (!sharedConsumers.ok)
+          return reject("consumer commit gate refused landing");
         const consumers = yield* usehooksConsumerGate(
           landerRoot,
           changed,

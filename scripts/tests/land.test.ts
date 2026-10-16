@@ -174,6 +174,8 @@ async function fixture() {
     return result.stdout.toString().trim();
   }
   await jj(temp, ["git", "init", "--colocate", main]);
+  await mkdir(join(main, "presets"), { recursive: true });
+  await writeFile(join(main, "presets/consumers.toml"), "consumers = []\n");
   await writeFile(join(main, "old name.txt"), "rename content\n");
   await writeFile(join(main, "delete.txt"), "delete content\n");
   await writeFile(join(main, "keep.txt"), "keep content\n");
@@ -1818,3 +1820,66 @@ async function runProcess(
   ]);
   return { stdout: Buffer.from(stdout), stderr: Buffer.from(stderr), exitCode };
 }
+
+test("shared preset refuses a red consumer before commit; compliant consumer lands the same candidate", async () => {
+  const f = await fixture();
+  const consumer = join(f.env.HOME, "consumer");
+  await mkdir(consumer);
+  await writeFile(join(consumer, "code"), "legacy");
+  await writeFile(
+    join(consumer, "gate.ts"),
+    `const rule = await Bun.file('rule').text(); const code = await Bun.file('code').text(); await Bun.write('gate-ran', 'scratch'); if (rule === 'strict' && code === 'legacy') { process.stderr.write('lint:fixture: consumer code is incompatible\\n'); process.exit(7); }`,
+  );
+  await mkdir(join(f.worker, "presets/demo"), { recursive: true });
+  await mkdir(join(f.worker, "presets/src"), { recursive: true });
+  await writeFile(join(f.worker, "presets/demo/rule"), "strict");
+  await writeFile(
+    join(f.worker, "presets/demo/preset.toml"),
+    'files = [{source = "rule", destination = "rule"}]',
+  );
+  await writeFile(
+    join(f.worker, "presets/src/cli.ts"),
+    `await Bun.write(Bun.argv.at(-1) + '/rule', 'strict');`,
+  );
+  await writeFile(
+    join(f.worker, "presets/consumers.toml"),
+    `[[consumers]]\nname = "fixture-consumer"\nroot = ${JSON.stringify(consumer)}\nsurfaces = ["presets/demo"]\ncommand = [${JSON.stringify(process.execPath)}, "gate.ts"]\ntimeout_ms = 10000\n`,
+  );
+  const refused = await f.land();
+  expect(refused.exitCode).toBe(1);
+  expect(refused.stdout.toString()).toContain("FAIL fixture-consumer");
+  expect(refused.stdout.toString()).toContain(
+    "lint:fixture: consumer code is incompatible",
+  );
+  expect((await f.log()).some((args) => args[1] === "commit")).toBe(false);
+  expect(await Bun.file(join(consumer, "gate-ran")).exists()).toBe(false);
+  expect(await Bun.file(join(f.main, "presets/demo/rule")).exists()).toBe(
+    false,
+  );
+  const before = await f.jj(f.main, [
+    "log",
+    "-r",
+    "alpha",
+    "--no-graph",
+    "-T",
+    "commit_id",
+  ]);
+  await writeFile(join(consumer, "code"), "compliant");
+  const landed = await f.land();
+  expect(landed.exitCode).toBe(0);
+  expect(landed.stdout.toString()).toContain("PASS fixture-consumer");
+  expect(
+    await f.jj(f.main, ["log", "-r", "alpha", "--no-graph", "-T", "commit_id"]),
+  ).not.toBe(before);
+  expect(await Bun.file(join(consumer, "gate-ran")).exists()).toBe(false);
+});
+
+test("land skips general consumer checks for changes outside shared surfaces", async () => {
+  const f = await fixture();
+  await writeFile(join(f.worker, "keep.txt"), "unrelated edit\n");
+  const landed = await f.land();
+  expect(landed.exitCode).toBe(0);
+  expect(landed.stdout.toString()).toContain(
+    "SKIP consumer gates: no shared surface changed",
+  );
+});

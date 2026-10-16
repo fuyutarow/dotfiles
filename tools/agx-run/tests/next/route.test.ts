@@ -10,6 +10,7 @@ import { readRouteUsage } from "../../src/next/usage.ts";
 import { route } from "../../src/next/route.ts";
 import { append, events, now } from "../../src/next/store.ts";
 import { parseNextTicket } from "../../src/next/ticket.ts";
+import { prepareTicketRepo } from "../ticket-repo.ts";
 
 const RoutingRequest = z.looseObject({
   state: z.looseObject({
@@ -229,6 +230,7 @@ describe("capability constrained routing", () => {
 
   test("check reports the active route filter including omission", async () => {
     const { root } = await isolateState();
+    await prepareTicketRepo(root);
     const ticket = join(root, "ticket.md");
     await writeFile(
       ticket,

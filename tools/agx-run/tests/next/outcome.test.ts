@@ -1,3 +1,4 @@
+import { prepareTicketRepo } from "../ticket-repo.ts";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,6 +21,7 @@ const scratch = () => {
 
 test("ended fixtures retain measured outcomes while routing omits ungraded raw history", async () => {
   const root = scratch();
+  await prepareTicketRepo(root);
   const state = join(root, "state");
   const Request = z.looseObject({
     state: z.looseObject({}),

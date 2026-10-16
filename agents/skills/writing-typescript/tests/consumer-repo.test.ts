@@ -1,15 +1,16 @@
-// The consumer-repo fixture (assets/consumer-repo) is the house TypeScript setup another repo copies
+// The canonical presets/ts and presets/oxlint files are the house setup another repo adopts
 // (firedancer, 2026-10-06). It must not drift from dotfiles itself: the same pins, the same strict
 // compilerOptions, and — rendered through the repo's own render-oxlintrc --repo — the same rules.
 import { describe, expect, test } from "bun:test";
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodedJson } from "../../../hooks/tests/decode.ts";
 import { z } from "../../../hooks/zod.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
-const FIXTURE = join(import.meta.dir, "..", "assets", "consumer-repo");
+const FIXTURE = join(ROOT, "presets", "ts");
+const LOCAL_EXAMPLE = join(ROOT, "presets", "oxlint", "local.example.toml");
 const Pkg = z.looseObject({
   dependencies: z.record(z.string(), z.string()),
   devDependencies: z.record(z.string(), z.string()),
@@ -18,7 +19,22 @@ const ShowConfig = z.looseObject({
   compilerOptions: z.record(z.string(), z.unknown()),
 });
 const Rc = z.looseObject({ rules: z.record(z.string(), z.unknown()) });
-const read = (path: string): string => readFileSync(path, "utf8");
+const read = (path: string): Promise<string> => Bun.file(path).text();
+
+async function run(cmd: string[], cwd = ROOT) {
+  const proc = Bun.spawn(cmd, {
+    cwd,
+    timeout: 60_000,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { stdout, stderr, exitCode };
+}
 
 /** dotfiles' version of exactly the packages the fixture pins (a package dotfiles lacks reads undefined). */
 const houseVersions = (
@@ -28,21 +44,23 @@ const houseVersions = (
   Object.fromEntries(Object.keys(fixture).map((name) => [name, house[name]]));
 
 /** The compilerOptions tsgo actually applies for `dir/tsconfig.json` (comments and defaults resolved). */
-function effective(dir: string): Record<string, unknown> {
-  const r = Bun.spawnSync(
-    ["bunx", "--bun", "tsgo", "--showConfig", "-p", join(dir, "tsconfig.json")],
-    {
-      cwd: ROOT,
-      timeout: 60_000,
-    },
-  );
-  return decodedJson(ShowConfig, r.stdout.toString()).compilerOptions;
+async function effective(dir: string): Promise<Record<string, unknown>> {
+  const r = await run([
+    "bunx",
+    "--bun",
+    "tsgo",
+    "--showConfig",
+    "-p",
+    join(dir, "tsconfig.json"),
+  ]);
+  expect(r.exitCode).toBe(0);
+  return decodedJson(ShowConfig, r.stdout).compilerOptions;
 }
 
 describe("consumer-repo fixture", () => {
-  test("every pinned package has exactly the dotfiles version", () => {
-    const ours = decodedJson(Pkg, read(join(ROOT, "package.json")));
-    const theirs = decodedJson(Pkg, read(join(FIXTURE, "package.json")));
+  test("every pinned package has exactly the dotfiles version", async () => {
+    const ours = decodedJson(Pkg, await read(join(ROOT, "package.json")));
+    const theirs = decodedJson(Pkg, await read(join(FIXTURE, "package.json")));
     expect(houseVersions(theirs.dependencies, ours.dependencies)).toEqual(
       theirs.dependencies,
     );
@@ -51,34 +69,37 @@ describe("consumer-repo fixture", () => {
     );
   });
 
-  test("tsconfig applies the same compilerOptions as dotfiles", () => {
-    const dir = mkdtempSync(join(tmpdir(), "consumer-tsconfig-"));
-    cpSync(join(FIXTURE, "tsconfig.json"), join(dir, "tsconfig.json"));
-    writeFileSync(join(dir, "x.ts"), "export const x = 1;\n"); // tsgo wants one input
-    expect(effective(dir)).toEqual(effective(ROOT));
+  test("tsconfig applies the same compilerOptions as dotfiles", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "consumer-tsconfig-"));
+    const applied = await run([
+      "bun",
+      join(ROOT, "presets", "src", "cli.ts"),
+      "apply",
+      "ts",
+      "--to",
+      dir,
+    ]);
+    expect(applied.exitCode).toBe(0);
+    await Bun.write(join(dir, "x.ts"), "export const x = 1;\n"); // tsgo wants one input
+    expect(await effective(dir)).toEqual(await effective(ROOT));
   });
 
-  test("rendered through render-oxlintrc --repo, the rules are dotfiles' rules", () => {
-    const dir = mkdtempSync(join(tmpdir(), "consumer-oxlint-"));
-    cpSync(
-      join(FIXTURE, "oxlint-policy.local.toml"),
-      join(dir, "oxlint-policy.local.toml"),
-    );
-    const r = Bun.spawnSync(
-      [
-        "bun",
-        join(ROOT, "scripts", "render-oxlintrc.ts"),
-        "--repo",
-        dir,
-        "--write",
-      ],
-      {
-        timeout: 30_000,
-      },
-    );
+  test("the oxlint preset renders dotfiles' house rules and seeds local ignores", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "consumer-oxlint-"));
+    const r = await run([
+      "bun",
+      join(ROOT, "presets", "src", "cli.ts"),
+      "apply",
+      "oxlint",
+      "--to",
+      dir,
+    ]);
     expect(r.exitCode).toBe(0);
-    const ours = decodedJson(Rc, read(join(ROOT, ".oxlintrc.json")));
-    const theirs = decodedJson(Rc, read(join(dir, ".oxlintrc.json")));
+    expect(await read(join(dir, "oxlint-policy.local.toml"))).toBe(
+      await read(LOCAL_EXAMPLE),
+    );
+    const ours = decodedJson(Rc, await read(join(ROOT, ".oxlintrc.json")));
+    const theirs = decodedJson(Rc, await read(join(dir, ".oxlintrc.json")));
     // The house rules are dotfiles' own; only the dotfiles-scoped ones (the zod import
     // restriction: oxlint-policy.toml scope = "dotfiles") stay behind in dotfiles.
     const { "eslint/no-restricted-imports": ourImports, ...ourRest } =
@@ -90,12 +111,12 @@ describe("consumer-repo fixture", () => {
     expect(JSON.stringify(theirImports)).not.toContain('"name":"zod"');
   });
 
-  test("the mise tasks parse and name the gates the SKILL.md section promises", () => {
+  test("the mise tasks parse and name the gates the SKILL.md section promises", async () => {
     const Tasks = z.looseObject({
       tasks: z.record(z.string(), z.looseObject({ run: z.string() })),
     });
     const parsed = Tasks.safeParse(
-      Bun.TOML.parse(read(join(FIXTURE, "mise-tasks.toml"))),
+      Bun.TOML.parse(await read(join(FIXTURE, "mise-tasks.toml"))),
     );
     expect(parsed.success).toBe(true);
     const tasks = parsed.success ? parsed.data.tasks : {};
@@ -114,7 +135,7 @@ describe("consumer-repo fixture", () => {
 
 describe("consumer-repo zod.ts", () => {
   test("decodes JSON exactly like dotfiles' agents/hooks/zod.ts", async () => {
-    const theirs = await import("../assets/consumer-repo/zod.ts");
+    const theirs = await import("../../../../presets/ts/zod.ts");
     const ours = await import("../../../hooks/zod.ts");
     for (const text of ['{"a":1}', "[1,2]", "{", "", "null"]) {
       const a = theirs.jsonOf(theirs.z.unknown()).safeParse(text);
@@ -135,28 +156,29 @@ describe("consumer-repo lint:ts", () => {
   const Tasks = z.looseObject({
     tasks: z.record(z.string(), z.looseObject({ run: z.string() })),
   });
-  const body = (): string => {
+  const body = async (): Promise<string> => {
     const tasks = decodedJson(
       Tasks,
-      JSON.stringify(Bun.TOML.parse(read(join(FIXTURE, "mise-tasks.toml")))),
+      JSON.stringify(
+        Bun.TOML.parse(await read(join(FIXTURE, "mise-tasks.toml"))),
+      ),
     ).tasks;
     return tasks["lint:ts"]?.run ?? "";
   };
-  const runIn = (dir: string) =>
-    Bun.spawnSync(["sh", "-c", body()], { cwd: dir, timeout: 30_000 });
+  const runIn = async (dir: string) => run(["sh", "-c", await body()], dir);
 
-  test("outside a Git checkout it refuses and says why, never 'no staged files'", () => {
-    const r = runIn(mkdtempSync(join(tmpdir(), "lint-ts-nogit-")));
+  test("outside a Git checkout it refuses and says why, never 'no staged files'", async () => {
+    const r = await runIn(await mkdtemp(join(tmpdir(), "lint-ts-nogit-")));
     expect(r.exitCode).not.toBe(0);
-    expect(r.stderr.toString()).toContain("cannot read the Git index");
-    expect(r.stdout.toString()).not.toContain("no staged .ts files");
+    expect(r.stderr).toContain("cannot read the Git index");
+    expect(r.stdout).not.toContain("no staged .ts files");
   });
 
-  test("in a Git checkout with nothing staged it passes, saying so", () => {
-    const dir = mkdtempSync(join(tmpdir(), "lint-ts-git-"));
-    Bun.spawnSync(["git", "init", "-q"], { cwd: dir });
-    const r = runIn(dir);
+  test("in a Git checkout with nothing staged it passes, saying so", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "lint-ts-git-"));
+    expect((await run(["git", "init", "-q"], dir)).exitCode).toBe(0);
+    const r = await runIn(dir);
     expect(r.exitCode).toBe(0);
-    expect(r.stdout.toString()).toContain("no staged .ts files");
+    expect(r.stdout).toContain("no staged .ts files");
   });
 });

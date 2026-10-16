@@ -17,6 +17,48 @@ const routeBias = [
 ].map((words) => words.join(" "));
 
 describe("dispatch roster", () => {
+  test("committed policy restricts auto-pick but retains every rendered row", async () => {
+    const loaded = await loadRoster();
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    expect(loaded.value.auto.routes).toEqual(["codex"]);
+    for (const row of loaded.value.choice)
+      expect(rosterTable(loaded.value)).toContain(`\`${row.id}\``);
+  });
+
+  test("route allowlist is optional and rejects empty or unknown routes naming known routes", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "dispatch-roster-routes-"));
+    const original = await Bun.file(
+      join(import.meta.dir, "..", "dispatch-roster.toml"),
+    ).text();
+    const path = join(folder, "routes.toml");
+    for (const routes of [
+      undefined,
+      "[]",
+      '["nope"]',
+      '["codex", "nope"]',
+      '["claude"]',
+      '["codex", "claude"]',
+    ]) {
+      await writeFile(
+        path,
+        original.replace(
+          /^routes = .*\n/mu,
+          routes === undefined ? "" : `routes = ${routes}\n`,
+        ),
+      );
+      const loaded = await loadRoster(path);
+      const invalid = routes === "[]" || routes?.includes("nope") === true;
+      expect(loaded.ok).toBe(!invalid);
+      if (!loaded.ok) {
+        expect(loaded.error).toContain("codex");
+        expect(loaded.error).toContain("claude");
+      } else if (routes === undefined)
+        expect(loaded.value.auto.routes).toBeUndefined();
+    }
+    await rm(folder, { recursive: true, force: true });
+  });
+
   test("objective has four branches and row evidence reports graded counts", async () => {
     for (const branch of [
       "A. Capability sufficiency (hard)",

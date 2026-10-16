@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
@@ -49,17 +50,27 @@ const RoutingRequest = z.looseObject({
   }),
 });
 
+const priorRoster = process.env.DISPATCH_ROSTER_PATH;
 const priorUrl = process.env.AGX_NEXT_JEV_URL;
 const priorHome = process.env.HOME;
 const priorStateDir = process.env.AGX_NEXT_STATE_DIR;
 const servers: ReturnType<typeof Bun.serve>[] = [];
 const roots: string[] = [];
 
-function isolateState() {
-  const root = mkdtempSync(join(tmpdir(), "agx-route-"));
+async function isolateState() {
+  const root = await mkdtemp(join(tmpdir(), "agx-route-"));
   roots.push(root);
   const home = join(root, "home");
-  mkdirSync(home, { recursive: true });
+  await mkdir(home, { recursive: true });
+  const roster = await readFile(
+    new URL("../../../../agents/models/dispatch-roster.toml", import.meta.url),
+    "utf8",
+  );
+  process.env.DISPATCH_ROSTER_PATH = join(root, "roster.toml");
+  await writeFile(
+    process.env.DISPATCH_ROSTER_PATH,
+    roster.replace(/^routes = .*\n/mu, ""),
+  );
   process.env.HOME = home;
   process.env.AGX_NEXT_STATE_DIR = join(root, "state");
   return { root, home };
@@ -142,6 +153,8 @@ function appendStarted(row: string) {
 }
 
 afterEach(async () => {
+  if (priorRoster === undefined) delete process.env.DISPATCH_ROSTER_PATH;
+  else process.env.DISPATCH_ROSTER_PATH = priorRoster;
   for (const server of servers.splice(0)) await server.stop(true);
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
@@ -154,8 +167,106 @@ afterEach(async () => {
 });
 
 describe("capability constrained routing", () => {
+  for (const capabilities of [[], ["terminal-agentic", "long-tool-loop"]]) {
+    for (const probabilities of [undefined, { "sonnet-high": 1 }]) {
+      test(`codex allowlist excludes Claude offers and picks: ${JSON.stringify({ capabilities, probabilities })}`, async () => {
+        const { root } = await isolateState();
+        const path = join(root, "roster.toml");
+        await writeFile(
+          path,
+          (await readFile(path, "utf8")).replace(
+            "[auto]",
+            '[auto]\nroutes = ["codex"]',
+          ),
+        );
+        const server = startServer("sonnet-high", probabilities);
+        const selected = await route(
+          "Claude hook edit requiring strong capability",
+          capabilities,
+        );
+        expect(selected.route).toBe("codex");
+        const criteria = Object.values(
+          server.request()?.questions.worker.criteria ?? {},
+        );
+        expect(criteria.length).toBeGreaterThan(0);
+        expect(
+          criteria.every((criterion) => criterion.startsWith("Route codex.")),
+        ).toBe(true);
+        expect(
+          server.request()?.questions.worker.criteria["sonnet-high"],
+        ).toBeUndefined();
+      });
+    }
+  }
+
+  test("no eligible capability rows names the route filter", async () => {
+    const { root } = await isolateState();
+    const path = join(root, "roster.toml");
+    const original = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      original
+        .replace("[auto]", '[auto]\nroutes = ["codex"]')
+        .replaceAll(/^tb4 = .*$/gmu, "tb4 = 0"),
+    );
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--eval",
+        `import { route } from ${JSON.stringify(new URL("../../src/next/route.ts", import.meta.url).pathname)}; await route("capability probe", ["long-tool-loop"]);`,
+      ],
+      { env: process.env, stdout: "pipe", stderr: "pipe", timeout: 5000 },
+    );
+    const [exit, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+    ]);
+    expect(exit).toBe(2);
+    expect(stderr).toContain(
+      'no roster row satisfies required capabilities (routes=["codex"])',
+    );
+  });
+
+  test("check reports the active route filter including omission", async () => {
+    const { root } = await isolateState();
+    const ticket = join(root, "ticket.md");
+    await writeFile(
+      ticket,
+      '+++\nschema = 2\noutcome = "check routes"\n[proposition]\nid = "ROUTES"\nclaim = "filter is visible"\nrefuted_by = "filter missing"\n+++\nCheck routes.\n',
+    );
+    const path = join(root, "roster.toml");
+    const original = await readFile(path, "utf8");
+    for (const routes of [undefined, '["codex"]']) {
+      await writeFile(
+        path,
+        routes === undefined
+          ? original
+          : original.replace("[auto]", `[auto]\nroutes = ${routes}`),
+      );
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "tools/agx-run/src/next/cli.ts",
+          "check",
+          ticket,
+          "--cd",
+          root,
+        ],
+        { env: process.env, stdout: "pipe", stderr: "pipe", timeout: 5000 },
+      );
+      const [exit, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(stderr).toBe("");
+      expect(exit).toBe(0);
+      expect(stdout).toContain(`routes=${routes ?? "all (codex, claude)"}`);
+    }
+  });
+
   test("graded aggregate is passed to criterionFor without raw history", async () => {
-    isolateState();
+    await isolateState();
     const started = appendStarted("luna-high");
     expect(started?.kind).toBe("started");
     if (started?.kind !== "started") return;
@@ -183,7 +294,7 @@ describe("capability constrained routing", () => {
     expect(server.request()?.state.history).toBeUndefined();
   });
   test("ROUTER-PROMPT-TREE: 7d is primary, 5h is secondary, and Jev chooses Codex", async () => {
-    const { home } = isolateState();
+    const { home } = await isolateState();
     const nowMs = Temporal.Now.instant().epochMilliseconds;
     // Claude 5h = .12 - .84 = -.72; Claude 7d = .20 - .12 = +.08.
     installUsage(home, nowMs, 20, 0.12, 34, 0.11);
@@ -248,7 +359,7 @@ describe("capability constrained routing", () => {
   });
 
   test("fresh Codex source survives consecutive picks and empty statusline publication", async () => {
-    const { home } = isolateState();
+    const { home } = await isolateState();
     const nowMs = Temporal.Now.instant().epochMilliseconds;
     const dir = join(home, ".codex", "sessions", "2026", "01", "01");
     mkdirSync(dir, { recursive: true });
@@ -296,7 +407,7 @@ describe("capability constrained routing", () => {
   });
 
   test("missing Codex source is explained in the pick audit", async () => {
-    isolateState();
+    await isolateState();
     startServer("luna-high", { "luna-high": 1 });
     const selected = await route("missing source audit");
     const started = appendStarted(selected.id);
@@ -307,7 +418,7 @@ describe("capability constrained routing", () => {
   });
 
   test("th_purge replay rejects luna-medium and sends timeout as task size", async () => {
-    isolateState();
+    await isolateState();
     const server = startServer("luna-medium", {
       "luna-medium": 0.99,
       "sol-low": 0.01,
@@ -369,7 +480,7 @@ describe("capability constrained routing", () => {
   });
 
   test("the replayed subscription pace sends its numbers and selects Claude", async () => {
-    const { home } = isolateState();
+    const { home } = await isolateState();
     const nowMs = Temporal.Now.instant().epochMilliseconds;
     installUsage(home, nowMs, 3, 0.94, 45, 0.28);
     const server = startServer("sonnet-high", {
@@ -411,7 +522,7 @@ describe("capability constrained routing", () => {
   });
 
   test("a route above its weekly limit is unavailable and its rows are excluded", async () => {
-    const { home } = isolateState();
+    const { home } = await isolateState();
     const nowMs = Temporal.Now.instant().epochMilliseconds;
     installUsage(home, nowMs, 101, 0.94, 45, 0.28, false);
     const server = startServer("luna-high", { "luna-high": 1 });
@@ -432,7 +543,7 @@ describe("capability constrained routing", () => {
   });
 
   test("stale usage is neutral and does not exclude either route", async () => {
-    const { home } = isolateState();
+    const { home } = await isolateState();
     const nowMs = Temporal.Now.instant().epochMilliseconds;
     installUsage(home, nowMs - 16 * 60 * 1000, 100, 0.94, 45, 0.28);
     const server = startServer("sonnet-high", { "sonnet-high": 1 });
@@ -451,7 +562,7 @@ describe("capability constrained routing", () => {
   });
 
   test("an invalid Jev choice records the fallback reason and probabilities", async () => {
-    isolateState();
+    await isolateState();
     const server = startServer("not-a-roster-row", {
       "not-a-roster-row": 1,
     });

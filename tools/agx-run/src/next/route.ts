@@ -4,6 +4,7 @@ import { sampleRow } from "../selection.ts";
 import {
   criterionFor,
   loadRoster,
+  routeFilterLabel,
   ROUTING_OBJECTIVE,
   type Choice,
 } from "../../../../agents/models/roster.ts";
@@ -50,6 +51,8 @@ export async function route(
   const eligible = roster.choice
     .filter(
       (row) =>
+        (roster.auto.routes === undefined ||
+          roster.auto.routes.includes(row.route)) &&
         !maskedRows.includes(row.id) &&
         (minimumTb4 === undefined || (row.tb4 ?? 0) >= minimumTb4),
     )
@@ -63,7 +66,7 @@ export async function route(
   if (candidates.length === 0)
     return exitWithError(
       eligible.length === 0
-        ? "agx: no roster row satisfies required capabilities\n"
+        ? `agx: no roster row satisfies required capabilities (${routeFilterLabel(roster.auto)})\n`
         : "agx: all capability-eligible routes are at their subscription limit\n",
       2,
     );

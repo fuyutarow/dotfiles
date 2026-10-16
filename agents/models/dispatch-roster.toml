@@ -26,6 +26,7 @@ default = "luna-high"
 # passed as a task-size class. Bulk-classification remains a task descriptor evaluated against
 # each eligible row's use_for, not a lexical row match that can override the long-session floor.
 [auto]
+routes = ["codex"]
 max_task_chars = 6000
 timeout_ms = 20000
 no_egress = []

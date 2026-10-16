@@ -101,7 +101,7 @@ async function main(): Promise<void> {
       undefined,
       commandArgs,
     );
-    exit = check({ ticket: parsed._[0], cd: parsed.flags.cd });
+    exit = await check({ ticket: parsed._[0], cd: parsed.flags.cd });
   } else if (commandName === "ls") {
     const parsed = cli(
       {

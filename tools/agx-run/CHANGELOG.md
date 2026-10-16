@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.1.0 — 2026-10-16
+
+- Add auto.routes allowlist for router eligibility and report the active filter in checks and capability errors.
+
 ## 5.0.2 — 2026-10-16
 
 - Keep the run CLI available through the agx suite and agx-run bin

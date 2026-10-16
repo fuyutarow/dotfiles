@@ -23,6 +23,10 @@ import {
 } from "./store.ts";
 import { leaseFor, type StopSignal } from "./lease.ts";
 import { route } from "./route.ts";
+import {
+  loadRoster,
+  routeFilterLabel,
+} from "../../../../agents/models/roster.ts";
 import { pinContinuation } from "./continue.ts";
 import { createRunTemp } from "../temp.ts";
 import { exitWithError } from "./exit.ts";
@@ -206,7 +210,7 @@ const runVerify = async (
   return results;
 };
 
-export function check(flags: Flags): number {
+export async function check(flags: Flags): Promise<number> {
   const path = value(flags, "ticket");
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
   if (path === undefined) return fatal("check requires positional TICKET", 2);
@@ -220,8 +224,11 @@ export function check(flags: Flags): number {
     );
   }
   if (premises.status === "timeout") fatal("premise check timed out", 2);
+  const loaded = await loadRoster(process.env.DISPATCH_ROSTER_PATH);
+  if (!loaded.ok)
+    return fatal(`cannot read dispatch roster: ${loaded.error}`, 1);
   process.stdout.write(
-    `OK ticket=${ticket.name ?? basename(path)} cwd=${cwd}\n`,
+    `OK ticket=${ticket.name ?? basename(path)} cwd=${cwd} ${routeFilterLabel(loaded.value.auto)}\n`,
   );
   return 0;
 }

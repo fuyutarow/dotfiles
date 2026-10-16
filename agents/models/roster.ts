@@ -13,9 +13,10 @@ export const ROSTER_PATH = join(import.meta.dir, "dispatch-roster.toml");
 // STRICT objects: an unknown key (a typo such as `enabeld`, or a switch this code does not read,
 // such as `allow_claude`) rejects the load instead of being silently dropped — the editor would
 // otherwise believe it took effect. Optional numbers mean "not on a primary page", not a default.
+const RouteSchema = z.enum(["codex", "claude"]);
 const ChoiceSchema = z.strictObject({
   id: z.string().regex(/^[a-z]+-[a-z]+$/u),
-  route: z.enum(["codex", "claude"]),
+  route: RouteSchema,
   model: z.string(),
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
   aa_index: z.number().optional(),
@@ -50,6 +51,10 @@ const JevEndpointSchema = z.discriminatedUnion("api", [
 export type JevEndpoint = z.output<typeof JevEndpointSchema>;
 
 const AutoSchema = z.strictObject({
+  routes: z
+    .array(RouteSchema)
+    .min(1, "auto.routes must not be empty; known routes: codex, claude")
+    .optional(),
   max_task_chars: z.number().int().positive(),
   timeout_ms: z.number().int().positive(),
   max_codex_workers: z.number().int().positive().optional(),
@@ -58,6 +63,10 @@ const AutoSchema = z.strictObject({
   jev: JevEndpointSchema,
 });
 export type AutoPolicy = z.output<typeof AutoSchema>;
+
+/** The active eligibility filter; omission preserves eligibility for every route. */
+export const routeFilterLabel = (auto: AutoPolicy): string =>
+  `routes=${auto.routes === undefined ? "all (codex, claude)" : JSON.stringify(auto.routes)}`;
 
 // Bounds on a claude worker (run through tools/agx-run/src/workers/run-claude.ts): a run has a budget and a
 // turn limit, both stated, never the CLI's defaults.
@@ -165,7 +174,7 @@ export function criterionFor(r: Roster, c: Choice, graded?: Graded): string {
   );
 }
 
-/** The roster as a table: every row is a candidate Jev may pick, the default marked ●. */
+/** The full roster, including routes excluded from auto-pick; the default is marked ●. */
 export function rosterTable(r: Roster): string {
   const head =
     "| default | id | route | AA | TB4 | SciCode | $in/cache/out | cost | use for |\n" +

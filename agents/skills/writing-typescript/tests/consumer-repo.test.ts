@@ -2,7 +2,7 @@
 // (firedancer, 2026-10-06). It must not drift from dotfiles itself: the same pins, the same strict
 // compilerOptions, and — rendered through the repo's own render-oxlintrc --repo — the same rules.
 import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodedJson } from "../../../hooks/tests/decode.ts";
@@ -19,7 +19,7 @@ const ShowConfig = z.looseObject({
   compilerOptions: z.record(z.string(), z.unknown()),
 });
 const Rc = z.looseObject({ rules: z.record(z.string(), z.unknown()) });
-const read = (path: string): Promise<string> => Bun.file(path).text();
+const read = (path: string): Promise<string> => readFile(path, "utf8");
 
 async function run(cmd: string[], cwd = ROOT) {
   const proc = Bun.spawn(cmd, {
@@ -59,8 +59,12 @@ async function effective(dir: string): Promise<Record<string, unknown>> {
 
 describe("consumer-repo fixture", () => {
   test("every pinned package has exactly the dotfiles version", async () => {
-    const ours = decodedJson(Pkg, await read(join(ROOT, "package.json")));
-    const theirs = decodedJson(Pkg, await read(join(FIXTURE, "package.json")));
+    const [oursText, theirsText] = await Promise.all([
+      read(join(ROOT, "package.json")),
+      read(join(FIXTURE, "package.json")),
+    ]);
+    const ours = decodedJson(Pkg, oursText);
+    const theirs = decodedJson(Pkg, theirsText);
     expect(houseVersions(theirs.dependencies, ours.dependencies)).toEqual(
       theirs.dependencies,
     );
@@ -80,7 +84,7 @@ describe("consumer-repo fixture", () => {
       dir,
     ]);
     expect(applied.exitCode).toBe(0);
-    await Bun.write(join(dir, "x.ts"), "export const x = 1;\n"); // tsgo wants one input
+    await writeFile(join(dir, "x.ts"), "export const x = 1;\n"); // tsgo wants one input
     expect(await effective(dir)).toEqual(await effective(ROOT));
   });
 
@@ -98,8 +102,12 @@ describe("consumer-repo fixture", () => {
     expect(await read(join(dir, "oxlint-policy.local.toml"))).toBe(
       await read(LOCAL_EXAMPLE),
     );
-    const ours = decodedJson(Rc, await read(join(ROOT, ".oxlintrc.json")));
-    const theirs = decodedJson(Rc, await read(join(dir, ".oxlintrc.json")));
+    const [oursText, theirsText] = await Promise.all([
+      read(join(ROOT, ".oxlintrc.json")),
+      read(join(dir, ".oxlintrc.json")),
+    ]);
+    const ours = decodedJson(Rc, oursText);
+    const theirs = decodedJson(Rc, theirsText);
     // The house rules are dotfiles' own; only the dotfiles-scoped ones (the zod import
     // restriction: oxlint-policy.toml scope = "dotfiles") stay behind in dotfiles.
     const { "eslint/no-restricted-imports": ourImports, ...ourRest } =

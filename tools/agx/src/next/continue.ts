@@ -22,10 +22,16 @@ export async function pinContinuation(
       `agx: cannot continue run ${continuationId}: ${reason}; start a fresh run with: agx run ${ticketPath}\n`,
       2,
     );
-  const previous = foldedRuns().find((entry) => entry.id === continuationId);
+  const previous = (await foldedRuns()).find(
+    (entry) => entry.id === continuationId,
+  );
   if (previous === undefined) return refuse("unknown run");
   if (previous.vendor_session === null)
-    return refuse("it has no vendor session to continue");
+    return refuse(
+      previous.outcome === "stopped"
+        ? "it ended stopped and has no vendor session to continue"
+        : "it has no vendor session to continue",
+    );
   const loaded = await loadRoster(process.env.DISPATCH_ROSTER_PATH);
   if (!loaded.ok) return refuse(`cannot read dispatch roster: ${loaded.error}`);
   const row = loaded.value.choice.find((entry) => entry.id === previous.row);

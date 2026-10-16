@@ -34,7 +34,7 @@ Ticket validation and premise refusals exit 2.
   "cwd", "workspace", "row", "dispatcher_session", "vendor_session", "pid",
   "continues?", "legacy_key?" }`.
   Session identifiers are nullable; `writes` is the ticket's relative path-glob list.
-  `pid` is the dispatch process id used to distinguish running from orphaned records.
+  `pid` is the dispatch process id. New runs include `lease: { pid, start, unit }`: start identifies the process (Linux boot id plus start ticks); unit is the owning systemd service when present.
 - `progress`: `{ "kind": "progress", "id", "at", "path", "legacy_key?" }`. `path` points to
   the per-run latest interim-return file, outside the checkout.
 - `ended`: `{ "kind": "ended", "id", "at", "exit", "report_path",
@@ -59,7 +59,7 @@ events.
 
 Events are append-only. The current run view folds events by `id`: the latest
 progress and judgment win; a `started` with no `ended` is `running` while its
-dispatcher process exists and `orphaned` otherwise; a run with `ended` is `ended`.
+owner lease matches and `ended` with outcome `lost` otherwise; a run with `ended` is `ended`. Legacy starts without a lease use their PID for liveness and migrate to the same closed view on read. Signal traps write outcome `stopped` with `signal` (SIGTERM, SIGINT, or SIGHUP). Derived loss includes `evidence` with expected/observed process identity and the systemd unit Result when available. A collected or unavailable unit has a null Result; loss still follows process evidence.
 
 ## `agx ls --json`
 
@@ -69,10 +69,10 @@ The output is an array of objects with these contract fields:
 | --- | --- |
 | `id` | Run identifier. |
 | `started_at` | RFC 3339 timestamp from the run's `started` event. |
-| `ended_at` | RFC 3339 timestamp from the run's `ended` event, or `null` while running or orphaned. |
+| `ended_at` | RFC 3339 timestamp from the run's `ended` event, or `null` while running or for derived loss. |
 | `ticket` | Ticket name, or the prompt filename when unnamed. |
-| `state` | `running`, `ended`, or `orphaned`. |
-| `exit` | Worker exit code, or `null` while not ended. |
+| `state` | `running` or `ended`; `outcome` is null while running and typed for ended runs. |
+| `exit` | Worker exit code, or `null` while running or for derived loss. |
 | `row` | Selected roster row. |
 | `dispatcher_session` | Session identifier of the dispatching coordinator. |
 | `cwd` | Working directory passed to the worker. |
@@ -108,21 +108,11 @@ including the premise and at most the last three trimmed lines of command output
 
 ## Incremental run view
 
-`agx ls` and other `foldedRuns` callers cache the event fold in `records.fold.json`
-next to the log. The versioned snapshot stores the log's inode, device, observed
-size, byte offset after the last complete newline, and folded runs including PIDs.
-Readers open the log, validate the snapshot, and read only bytes after that offset.
-An incomplete last line remains unconsumed, including a split UTF-8 character.
-Missing, malformed, or incompatible snapshots, rotation, and detected truncation
-rebuild from the log. Snapshots publish by atomic rename; concurrent readers can
-publish older valid prefixes, which only increases the next replay. A snapshot
-write failure leaves the log authoritative and does not prevent listing runs.
-The log must remain append-only; rewriting an already consumed prefix in place
-without a detectable size decrease is outside this contract.
+`agx ls` and other `foldedRuns` callers cache event prefixes only in process memory. Each reader validates inode, device, size, and complete-line offset before reusing its prefix. Rotation and truncation rebuild it; incomplete UTF-8 tails remain unconsumed. Old `records.fold.json` snapshots are ignored. Neither `ls` nor `ls --wait` writes any file.
 
 Process liveness and early-quit classification are recomputed on every read.
 `agx ls --running` filters to runs whose dispatcher PID is currently live, excluding
-ended and orphaned runs. It combines with selectors, `--json`, and `--all`; the
+ended runs (including lost). It combines with selectors, `--json`, and `--all`; the
 human limit and older-run count apply to the filtered runs. Warm reads consume
-only appended log bytes, plus any previously incomplete tail; parsing the snapshot,
+only appended log bytes, plus any previously incomplete tail; validating the memory cache,
 checking liveness, and emitting rows still cost proportionally to the stored runs.

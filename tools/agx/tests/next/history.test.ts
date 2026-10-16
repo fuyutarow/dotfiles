@@ -65,7 +65,7 @@ test("judgments reach per-row criteria; unjudged exits do not imply acceptance",
     `${input.map((event) => JSON.stringify(event)).join("\n")}\n`,
   );
   const history = await gradedHistory(
-    fullFoldedRuns(),
+    await fullFoldedRuns(),
     "Proposition SAME: revised claim",
     Temporal.Instant.from(at).epochMilliseconds,
   );

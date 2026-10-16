@@ -6,6 +6,8 @@ import { z } from "../../../shared/src/zod.ts";
 import { verifyKind, type VerifyKind } from "./verify.ts";
 
 export const Outcome = z.enum([
+  "stopped",
+  "lost",
   "ok",
   "no-change",
   "verify-failed",

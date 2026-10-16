@@ -172,8 +172,12 @@ async function render(
               const progressPath = join(active, `${id}.progress.json`);
               let vendorSession = source.worker_session ?? null;
               let lastProgressPath: string | null = null;
-              let state = "orphaned";
-              if (alive) state = "running";
+              let state = "ended";
+              let outcome: string | null = "lost";
+              if (alive) {
+                state = "running";
+                outcome = null;
+              }
               let continues: string | null = null;
               if (source.pick_source === "resume") continues = "previous";
               if (existsSync(progressPath)) {
@@ -191,6 +195,7 @@ async function render(
                   id,
                   ticket: source.label,
                   state,
+                  outcome,
                   row: source.choice,
                   exit: null,
                   cwd: source.cwd ?? scratch,
@@ -768,7 +773,7 @@ describe("statusline Run row", () => {
         .split("\n")
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
-    ).toEqual(["+1 in other sessions · unattributed 2 · orphaned 3"]);
+    ).toEqual(["+1 in other sessions · unattributed 2 · lost 3"]);
     expect(out).not.toContain("other worker");
     expect(out).not.toContain("unowned worker");
     expect(out).not.toContain("dead own");
@@ -780,7 +785,7 @@ describe("statusline Run row", () => {
     const dir = join(scratch, "no-attribution-summary");
     marker(dir, "own", process.pid, "my worker", 90, SESSION);
     const out = await render(dir);
-    expect(out).not.toMatch(/in other sessions|unattributed|orphaned/u);
+    expect(out).not.toMatch(/in other sessions|unattributed|lost/u);
   });
 
   test("legacy active directories no longer supply Run rows", async () => {
@@ -1439,12 +1444,13 @@ describe("statusline Run row", () => {
     console.info(`agx snapshot read warm cache: ${warmMs.toFixed(2)}ms`);
   });
 
-  // The `orphaned N` rule (dispatch-runs.ts countsAsOrphan): agx folds the run `orphaned`, it is
+  // The `lost N` rule (dispatch-runs.ts countsAsOrphan): agx folds the run `lost`, it is
   // younger than ORPHAN_WINDOW_SECS (1h) and carries no judgment.
   const orphanRow = (id: string, ageS: number, judgment: unknown = null) => ({
     id,
     ticket: `old ${id}`,
-    state: "orphaned",
+    state: "ended",
+    outcome: "lost",
     row: "luna-high",
     exit: null,
     cwd: scratch,
@@ -1460,7 +1466,7 @@ describe("statusline Run row", () => {
     verify: [],
   });
 
-  test("orphans older than the window render no count; a fresh one renders orphaned 1", async () => {
+  test("orphans older than the window render no count; a fresh one renders lost 1", async () => {
     const old = Array.from({ length: 62 }, (_, i) =>
       orphanRow(`old-${i}`, 3 * 3600 + i),
     );
@@ -1470,14 +1476,14 @@ describe("statusline Run row", () => {
       SESSION,
       JSON.stringify(old),
     );
-    expect(none).not.toMatch(/orphaned|stale/u);
+    expect(none).not.toMatch(/lost|stale/u);
     const one = await render(
       join(scratch, "orphan-fresh"),
       undefined,
       SESSION,
       JSON.stringify([...old, orphanRow("fresh", 120)]),
     );
-    expect(one).toMatch(/^orphaned 1$/mu);
+    expect(one).toMatch(/^lost 1$/mu);
   });
 
   test("a judged orphan is acknowledged and not counted", async () => {
@@ -1489,7 +1495,7 @@ describe("statusline Run row", () => {
         orphanRow("seen", 120, { decision: "reject", note: "" }),
       ]),
     );
-    expect(out).not.toMatch(/orphaned/u);
+    expect(out).not.toMatch(/lost/u);
   });
 
   test("a claude run shows its worker-progress.jsonl, not no event yet", async () => {
@@ -1518,11 +1524,11 @@ describe("statusline Run row", () => {
     expect(out).toMatch(/\$ bun test tests\/x\.ts .*12 cmd · 3 files/u);
   });
 
-  test("a marker whose process is gone is counted as orphaned, not hidden", async () => {
+  test("a marker whose process is gone is counted as lost, not hidden", async () => {
     const dir = join(scratch, "stale");
     marker(dir, "b", 2_147_483_000, "killed");
     const out = await render(dir);
-    expect(out).toMatch(/^orphaned 1$/mu);
+    expect(out).toMatch(/^lost 1$/mu);
     expect(out).not.toMatch(/^luna-high .* killed/mu);
   });
 

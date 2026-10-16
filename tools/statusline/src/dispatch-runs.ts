@@ -26,7 +26,7 @@ import {
 
 // Run row source: one marker per worker agx started (tools/agx/src/state.ts).
 // A marker is written at start and removed at exit, so a marker whose process is gone means
-// agx itself was killed — counted as orphaned (agx's own word), never dropped (EXPLICIT-ABSENCE).
+// agx itself was killed — counted as lost (agx's own word), never dropped (EXPLICIT-ABSENCE).
 export interface RouteRun {
   displayId: string | undefined;
   choice: string;
@@ -54,9 +54,9 @@ export interface RouteRun {
       }
     | undefined;
 }
-// The `orphaned N` count. State words come from agx's store fold (`agx ls --json` `state`:
-// running | ended | orphaned) — this file never decides a run's state itself. A run is counted
-// iff agx folds it `orphaned` (here: not alive) AND no judgment is recorded on it (not
+// The `lost N` count. State words come from agx's store fold (`agx ls --json` `state`:
+// running | ended) — this file never decides a run's state itself. A run is counted
+// iff agx folds it as ended with outcome `lost` (here: not alive) AND no judgment is recorded on it (not
 // acknowledged) AND it started less than ORPHAN_WINDOW_SECS ago. The window is the cap that makes
 // the count fall back to 0 overnight instead of growing; the judgment makes it fall at once when
 // the owner has dealt with a run. A run with no readable start time cannot age out, so it counts.
@@ -90,13 +90,14 @@ export interface RouteScan {
 export interface JobRun {
   id: string;
   ticket: string;
-  state: "running" | "ended" | "orphaned";
+  state: "running" | "ended";
   dispatcher_session: string | null;
 }
 const AgxLsRowSchema = z.object({
   id: z.string(),
   ticket: z.string(),
-  state: z.enum(["running", "ended", "orphaned"]),
+  state: z.enum(["running", "ended"]),
+  outcome: z.string().nullable().optional(),
   row: z.string(),
   dispatcher_session: z.string().nullable(),
   exit: z.unknown().optional(),
@@ -173,7 +174,7 @@ export async function agxRouteRunsAsync(
       continue;
     }
     const row = parsed.data;
-    if (row.state !== "running" && row.state !== "orphaned") continue;
+    if (row.state !== "running" && row.outcome !== "lost") continue;
     const recordedWorkspace = optionalString(row.workspace_name);
     const workspacePath =
       optionalString(row.workspace) ?? optionalString(row.cwd);
@@ -634,7 +635,7 @@ export function routeLines(
   const live = runs
     .filter((r) => r.alive)
     .toSorted((a, b) => (b.secs ?? -1) - (a.secs ?? -1));
-  const orphaned = runs.filter((run) => countsAsOrphan(run)).length;
+  const lost = runs.filter((run) => countsAsOrphan(run)).length;
   const attributed = live.filter(
     (r) => r.dispatcherSession !== undefined && r.dispatcherSession !== "",
   );
@@ -704,7 +705,7 @@ export function routeLines(
   const summary = [
     ...(other > 0 ? [`${DIM}+${other} in other sessions${RST}`] : []),
     ...(unattributed > 0 ? [`${DIM}unattributed ${unattributed}${RST}`] : []),
-    ...(orphaned > 0 ? [`${ESC}[38;5;167morphaned ${orphaned}${RST}`] : []),
+    ...(lost > 0 ? [`${ESC}[38;5;167mlost ${lost}${RST}`] : []),
     ...(unreadable > 0
       ? [`${ESC}[38;5;178munreadable ${unreadable}${RST}`]
       : []),

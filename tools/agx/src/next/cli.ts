@@ -133,7 +133,10 @@ async function main(): Promise<void> {
             selector: parsed._[0],
             json: parsed.flags.json === true,
           })
-        : list({ ...parsed.flags, selector: parsed._[0] } satisfies Flags);
+        : await list({
+            ...parsed.flags,
+            selector: parsed._[0],
+          } satisfies Flags);
   } else if (commandName === "judge") {
     const parsed = cli(
       {
@@ -148,7 +151,7 @@ async function main(): Promise<void> {
       undefined,
       commandArgs,
     );
-    exit = judgeRun({
+    exit = await judgeRun({
       id: parsed._[0],
       decision: parsed._[1],
       note: parsed.flags.note,

@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { fullFoldedRuns } from "./store.ts";
 
-type Row = ReturnType<typeof fullFoldedRuns>[number];
+type Row = Awaited<ReturnType<typeof fullFoldedRuns>>[number];
 export type WaitFlags = Readonly<{
   selector: string | undefined;
   json: boolean;
@@ -52,7 +52,7 @@ const line = (entry: Row): string =>
  * bounded poll. It uses the full replay so it never writes the fold snapshot.
  * Run-id selectors preserve immediate terminal lookup. Ticket selectors ignore
  * runs already terminal on the initial read, then return the first eligible run
- * that ends or becomes orphaned, printing its row in `ls` format.
+ * that ends or becomes ended lost, printing its row in `ls` format.
  */
 export async function waitRun(flags: WaitFlags): Promise<number> {
   const selector = flags.selector;
@@ -60,7 +60,7 @@ export async function waitRun(flags: WaitFlags): Promise<number> {
     process.stderr.write("agx: --wait needs a non-empty run selector\n");
     return 2;
   }
-  const initialRows = fullFoldedRuns();
+  const initialRows = await fullFoldedRuns();
   const initialSelection = select(initialRows, selector);
   if (initialSelection.error !== undefined) {
     process.stderr.write(`agx: ${initialSelection.error}\n`);
@@ -75,7 +75,7 @@ export async function waitRun(flags: WaitFlags): Promise<number> {
   const kind = initialSelection.kind;
 
   for (;;) {
-    const selection = select(fullFoldedRuns(), selector);
+    const selection = select(await fullFoldedRuns(), selector);
     if (selection.error !== undefined) {
       process.stderr.write(`agx: ${selection.error}\n`);
       return 2;

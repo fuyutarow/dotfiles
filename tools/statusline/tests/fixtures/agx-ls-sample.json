@@ -10,9 +10,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/Workspace/firedancer-arm-retr_mgdl",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-retr_mgdl",
-    "writes": [
-      "packages/FireOps.jl/docs/retr_mgdl/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/retr_mgdl/**"],
     "judgment": {
       "decision": "reject",
       "note": "sandbox workspace-write: shared jj store read-only; rerun with --sandbox none"
@@ -54,7 +52,8 @@
     "started_at": "2026-10-14T05:17:07.887805255Z",
     "ended_at": null,
     "ticket": "skillsns",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-xhigh",
     "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
@@ -81,15 +80,14 @@
     "started_at": "2026-10-14T05:17:15.344671309Z",
     "ended_at": null,
     "ticket": "th_integrate",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": "60ad3756-4710-4def-8abb-796471131612",
     "cwd": "/home/fuyu/Workspace/firedancer-arm-th_integrate",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-th_integrate",
-    "writes": [
-      "packages/FireOps.jl/docs/th_integrate/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/th_integrate/**"],
     "judgment": null,
     "report_path": null,
     "verify": [],
@@ -102,7 +100,8 @@
     "started_at": "2026-10-14T04:55:23.44722701Z",
     "ended_at": null,
     "ticket": "graphsel",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": "20c933cd-8c9d-4702-84ff-b306d19f9c6c",
@@ -130,7 +129,8 @@
     "started_at": "2026-10-14T02:12:20.97070053Z",
     "ended_at": null,
     "ticket": "e1_cells",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": null,
@@ -161,7 +161,8 @@
     "started_at": "2026-10-14T00:50:06.499227538Z",
     "ended_at": null,
     "ticket": "cleanup_rr4",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": null,
@@ -195,9 +196,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/Workspace/firedancer-arm-retr_mgdl",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-retr_mgdl",
-    "writes": [
-      "packages/FireOps.jl/docs/retr_mgdl/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/retr_mgdl/**"],
     "judgment": {
       "decision": "reject",
       "note": "worker typo in its own workspace path"
@@ -213,18 +212,14 @@
     "started_at": "2026-10-14T04:53:52.669599592Z",
     "ended_at": null,
     "ticket": "s1a-survey-sui-dynamic-field-limits",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-medium",
     "dispatcher_session": "031371ff-5e98-48fc-91af-a4536d89d45d",
     "cwd": "/home/fuyu/Workspace/soks",
     "workspace": "/home/fuyu/Workspace/soks",
-    "writes": [
-      "knowledge/**",
-      ".agent-state/**",
-      ".jj/**",
-      "bundles/s1a/**"
-    ],
+    "writes": ["knowledge/**", ".agent-state/**", ".jj/**", "bundles/s1a/**"],
     "judgment": {
       "decision": "reject",
       "note": "wrong owner: surveys belong to soks-agt session; stopped before any write; handed off"
@@ -246,9 +241,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/Workspace/polysearch-v1-ws/verify",
     "workspace": "/home/fuyu/Workspace/polysearch-v1-ws/verify",
-    "writes": [
-      "target/ship/**"
-    ],
+    "writes": ["target/ship/**"],
     "judgment": {
       "decision": "accept",
       "note": "machine evidence: suite 197 passed 0 failed, hook SPEC-LINT PASS, installed sha256 == release build (992d9068…)"
@@ -332,10 +325,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/dotfiles-ws-landbin",
     "workspace": "/home/fuyu/dotfiles-ws-landbin",
-    "writes": [
-      "scripts/land.ts",
-      "scripts/tests/land.test.ts"
-    ],
+    "writes": ["scripts/land.ts", "scripts/tests/land.test.ts"],
     "judgment": {
       "decision": "accept",
       "note": "bin preflight now runs on workerRoot after workspace resolution; new test covers exec workspace vs 0644 main; 3 verify pass rerun by coordinator"
@@ -446,9 +436,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/Workspace/firedancer-arm-th_credit",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-th_credit",
-    "writes": [
-      "packages/FireOps.jl/docs/th_credit/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/th_credit/**"],
     "judgment": {
       "decision": "reject",
       "note": "sandbox workspace-write: shared jj store read-only; rerun with --sandbox none"
@@ -464,15 +452,14 @@
     "started_at": "2026-10-14T05:14:54.593419083Z",
     "ended_at": null,
     "ticket": "i11a-core-rework",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "sol-high",
     "dispatcher_session": "031371ff-5e98-48fc-91af-a4536d89d45d",
     "cwd": "/home/fuyu/Workspace/coralbase.ws/i11a-core",
     "workspace": "/home/fuyu/Workspace/coralbase.ws/i11a-core",
-    "writes": [
-      "move/core/**"
-    ],
+    "writes": ["move/core/**"],
     "judgment": null,
     "report_path": null,
     "verify": [],
@@ -485,15 +472,14 @@
     "started_at": "2026-10-14T01:55:42.222454017Z",
     "ended_at": null,
     "ticket": "statusjob",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": null,
     "cwd": "/home/fuyu/dotfiles-ws-statusjob",
     "workspace": "/home/fuyu/dotfiles-ws-statusjob",
-    "writes": [
-      "tools/statusline/**"
-    ],
+    "writes": ["tools/statusline/**"],
     "judgment": null,
     "report_path": null,
     "verify": [],
@@ -532,7 +518,8 @@
     "started_at": "2026-10-14T01:13:22.016582822Z",
     "ended_at": null,
     "ticket": "pdftools",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": null,
@@ -559,15 +546,14 @@
     "started_at": "2026-10-14T05:17:15.190266316Z",
     "ended_at": null,
     "ticket": "th_consol",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": "60ad3756-4710-4def-8abb-796471131612",
     "cwd": "/home/fuyu/Workspace/firedancer-arm-th_consol",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-th_consol",
-    "writes": [
-      "packages/FireOps.jl/docs/th_consol/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/th_consol/**"],
     "judgment": null,
     "report_path": null,
     "verify": [],
@@ -605,15 +591,14 @@
     "started_at": "2026-10-14T00:46:51.159662646Z",
     "ended_at": null,
     "ticket": "cleanup_rr4",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-medium",
     "dispatcher_session": null,
     "cwd": "/home/fuyu/Workspace/firedancer-arm-cleanup_rr4",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-cleanup_rr4",
-    "writes": [
-      "packages/FireOps.jl/docs/cleanup_rr4/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/cleanup_rr4/**"],
     "judgment": null,
     "report_path": null,
     "verify": [],
@@ -632,9 +617,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/Workspace/firedancer-arm-inc_order",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-inc_order",
-    "writes": [
-      "packages/FireOps.jl/docs/inc_order/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/inc_order/**"],
     "judgment": {
       "decision": "reject",
       "note": "sandbox workspace-write: shared jj store read-only; rerun with --sandbox none"
@@ -656,9 +639,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/Workspace/firedancer-arm-inc_order",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-inc_order",
-    "writes": [
-      "packages/FireOps.jl/docs/inc_order/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/inc_order/**"],
     "judgment": {
       "decision": "accept",
       "note": "stopped on an empty graph read from polysearch-v1-preview"
@@ -680,9 +661,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/Workspace/firedancer-arm-th_credit",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-th_credit",
-    "writes": [
-      "packages/FireOps.jl/docs/th_credit/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/th_credit/**"],
     "judgment": {
       "decision": "reject",
       "note": "timeout at 3600 s; continuing"
@@ -704,10 +683,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/dotfiles-ws-agxexit",
     "workspace": "/home/fuyu/dotfiles-ws-agxexit",
-    "writes": [
-      "tools/agx/src/next/*.ts",
-      "tools/agx/tests/**"
-    ],
+    "writes": ["tools/agx/src/next/*.ts", "tools/agx/tests/**"],
     "judgment": {
       "decision": "accept",
       "note": "live: slow pipe reader (sleep 0.5 | jq length) gets all 2765 runs three times; unknown command still exits 2; 3 verify pass rerun by coordinator"
@@ -754,15 +730,14 @@
     "started_at": "2026-10-14T05:23:31.236617109Z",
     "ended_at": null,
     "ticket": "th_integrate",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": "60ad3756-4710-4def-8abb-796471131612",
     "cwd": "/home/fuyu/Workspace/firedancer-arm-th_integrate",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-th_integrate",
-    "writes": [
-      "admission/**"
-    ],
+    "writes": ["admission/**"],
     "judgment": null,
     "report_path": null,
     "verify": [],
@@ -800,15 +775,14 @@
     "started_at": "2026-10-14T04:35:40.968165692Z",
     "ended_at": null,
     "ticket": "statusother",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": "81396f27-cce9-4ced-9068-0597bb7251af",
     "cwd": "/home/fuyu/dotfiles-ws-statusother",
     "workspace": "/home/fuyu/dotfiles-ws-statusother",
-    "writes": [
-      "tools/statusline/**"
-    ],
+    "writes": ["tools/statusline/**"],
     "judgment": null,
     "report_path": null,
     "verify": [],
@@ -827,10 +801,7 @@
     "dispatcher_session": null,
     "cwd": "/home/fuyu/dotfiles-ws-agxscope",
     "workspace": "/home/fuyu/dotfiles-ws-agxscope",
-    "writes": [
-      "tools/agx/docs/scope.md",
-      "tools/agx/README.md"
-    ],
+    "writes": ["tools/agx/docs/scope.md", "tools/agx/README.md"],
     "judgment": {
       "decision": "accept",
       "note": "scope.md: four jobs, eleven non-owned concerns with owners, derived-not-stored folds, triage rule; matches src/next; verify rerun by coordinator"
@@ -846,15 +817,14 @@
     "started_at": "2026-10-14T00:36:23.871777966Z",
     "ended_at": null,
     "ticket": "inc_order",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-high",
     "dispatcher_session": null,
     "cwd": "/home/fuyu/Workspace/firedancer-arm-inc_order",
     "workspace": "/home/fuyu/Workspace/firedancer-arm-inc_order",
-    "writes": [
-      "packages/FireOps.jl/docs/inc_order/**"
-    ],
+    "writes": ["packages/FireOps.jl/docs/inc_order/**"],
     "judgment": null,
     "report_path": null,
     "verify": [],
@@ -867,7 +837,8 @@
     "started_at": "2026-10-14T04:28:55.783231985Z",
     "ended_at": null,
     "ticket": "hosen",
-    "state": "orphaned",
+    "state": "ended",
+    "outcome": "lost",
     "exit": null,
     "row": "luna-max",
     "dispatcher_session": "60ad3756-4710-4def-8abb-796471131612",

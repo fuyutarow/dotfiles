@@ -13,7 +13,7 @@ agx has four jobs:
 
 Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` validates ticket premises in the supplied tree and reports overlapping live write globs; it does not reserve writes. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
 
-`ls` owns fold and selection: `agx ls [SELECTOR] [--json]` accepts a run id, a unique run-id prefix, or an exact ticket name. Ticket selection returns that ticket's runs oldest first, with the newest run last. Ambiguous ID prefixes and unmatched selectors exit 2 with one line naming candidates. `agx ls --wait SELECTOR` is the one way to wait, and it is a read-only fold, not state: it takes an initial read, then re-reads the records file at a bounded poll interval (`AGX_WAIT_POLL_MS`, default 1000). A run-id selector preserves immediate lookup and returns at once if that run is already `ended` or `orphaned`. An exact ticket selector ignores runs already terminal on the initial read; it waits until a run that was running on that read, or a run first recorded later, becomes `ended` or `orphaned` (a dead process with no `ended` record, so a missing final report cannot hide a finished run), then prints that run's row in `ls` format (JSON with `--json`). It writes no file, not even the fold snapshot, and an empty, ambiguous, or unmatched selector exits 2 at once. The acceptance view is composed outside agx by `scripts/agx-accept.ts`; agx deliberately does not render reports or inspect workspace diffs.
+`ls` owns fold and selection: `agx ls [SELECTOR] [--json]` accepts a run id, a unique run-id prefix, or an exact ticket name. Ticket selection returns that ticket's runs oldest first, with the newest run last. Ambiguous ID prefixes and unmatched selectors exit 2 with one line naming candidates. `agx ls --wait SELECTOR` is the one way to wait, and it is a read-only fold, not state: it takes an initial read, then re-reads the records file at a bounded poll interval (`AGX_WAIT_POLL_MS`, default 1000). A run-id selector preserves immediate lookup and returns at once if that run is already `ended`. An exact ticket selector ignores runs already terminal on the initial read; it waits until a run that was running on that read, or a run first recorded later, becomes `ended` (including derived `lost`, so a missing final report cannot hide a finished run), then prints that run's row in `ls` format (JSON with `--json`). It writes no file, not even the fold snapshot, and an empty, ambiguous, or unmatched selector exits 2 at once. The acceptance view is composed outside agx by `scripts/agx-accept.ts`; agx deliberately does not render reports or inspect workspace diffs.
 
 ## 2. agx does not
 
@@ -33,6 +33,8 @@ Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` valida
 | Worker continuity records | The worker harness | A dispatched worker receives a bounded environment without coordinator slot or vendor session IDs. It owns its brief and workspace and does not bind a continuation record. |
 
 ## 3. Derived, not stored
+
+Listed runs form the closed union `running{lease} | ended{outcome}`; `lost` is derived from owner lease evidence on every read without writing events or snapshots, while `agx run` traps SIGTERM/SIGINT/SIGHUP and records `ended{outcome: stopped, signal}`.
 
 - A superseded run is a run that a later run names in `continues`.
 - The ticket's latest run is the last run in that continuation chain.

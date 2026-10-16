@@ -4,7 +4,7 @@ import type { GradeCounts, Graded } from "../../../../agents/models/roster.ts";
 import { stateDir, type foldedRuns } from "./store.ts";
 
 type HistoryItem = {
-  run: ReturnType<typeof foldedRuns>[number];
+  run: Awaited<ReturnType<typeof foldedRuns>>[number];
   comparable: boolean;
 };
 const count = (items: HistoryItem[]): GradeCounts => ({
@@ -22,7 +22,7 @@ const proposition = (brief: string) =>
  * Comparable is deliberately narrow: an identical recorded proposition.
  */
 export async function gradedHistory(
-  runs: ReturnType<typeof foldedRuns>,
+  runs: Awaited<ReturnType<typeof foldedRuns>>,
   brief: string,
   nowMs = Temporal.Now.instant().epochMilliseconds,
 ): Promise<(row: string) => Graded> {

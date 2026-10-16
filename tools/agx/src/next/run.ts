@@ -21,6 +21,7 @@ import {
   runningWorkspaceRun,
   stateDir,
 } from "./store.ts";
+import { leaseFor, type StopSignal } from "./lease.ts";
 import { route } from "./route.ts";
 import { pinContinuation } from "./continue.ts";
 import { createRunTemp } from "../temp.ts";
@@ -56,8 +57,8 @@ const workerNameFor = async (ticket: string): Promise<string> => {
     ? `agt_${ticket}`
     : (systemdUnitName(cgroup) ?? `agt_${ticket}`);
 };
-const refuseRunningWorkspace = (cwd: string): void => {
-  const holder = runningWorkspaceRun(cwd);
+const refuseRunningWorkspace = async (cwd: string): Promise<void> => {
+  const holder = await runningWorkspaceRun(cwd);
   if (holder !== undefined)
     fatal(`workspace ${cwd} already has running run ${holder.id}`, 2);
 };
@@ -110,8 +111,11 @@ const LegacyReport = z.looseObject({
   changes: z.array(z.unknown()).optional(),
 });
 
-export function earlyQuitRows(ticket: string, cwd: string): string[] {
-  return foldedRuns()
+export async function earlyQuitRows(
+  ticket: string,
+  cwd: string,
+): Promise<string[]> {
+  return (await foldedRuns())
     .filter((priorRun) => priorRun.ticket === ticket && priorRun.cwd === cwd)
     .flatMap((priorRun) => {
       if (priorRun.failed_early_quit) return [priorRun.row];
@@ -230,7 +234,7 @@ export async function run(flags: Flags): Promise<number> {
   if (!new Set(["none", "read-only", "workspace-write"]).has(sandbox))
     return fatal("--sandbox must be none, read-only, or workspace-write", 2);
   const { ticket, prose } = ticketFor(path);
-  refuseRunningWorkspace(cwd);
+  await refuseRunningWorkspace(cwd);
   overlapWarnings(ticket.writes);
   const staleRefLocks = ownerlessRefLocks(cwd);
   if (staleRefLocks.length > 0) {
@@ -264,7 +268,7 @@ export async function run(flags: Flags): Promise<number> {
       `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`,
       ticket.capabilities,
       ticket.timeout_s ?? 600,
-      earlyQuitRows(ticket.name ?? basename(path), cwd),
+      await earlyQuitRows(ticket.name ?? basename(path), cwd),
     ));
   const id = randomUUID();
   // The run owns its temp space: removed on any exit path (process.exit included); a SIGKILL
@@ -277,12 +281,31 @@ export async function run(flags: Flags): Promise<number> {
   const temp = made.value;
   Object.assign(process.env, temp.env);
   process.on("exit", temp.remove);
+  let started = false;
+  let ended = false;
+  const stop = (signal: StopSignal, code: number): never => {
+    if (started && !ended) {
+      ended = true;
+      append({
+        kind: "ended",
+        id,
+        at: now(),
+        exit: code,
+        outcome: "stopped",
+        signal,
+        report_path: null,
+        vendor_session: resumeSession ?? null,
+        verify: [],
+      });
+    }
+    process.exit(code);
+  };
   for (const [signal, code] of [
     ["SIGINT", 130],
     ["SIGTERM", 143],
     ["SIGHUP", 129],
   ] as const)
-    process.on(signal, () => process.exit(code));
+    process.on(signal, stop.bind(undefined, signal, code));
   const runDir = join(stateDir(), "runs", id);
   mkdirSync(runDir, { recursive: true });
   const reportPath = join(runDir, "report.json");
@@ -317,7 +340,7 @@ export async function run(flags: Flags): Promise<number> {
     // The winning process may be between flock and publishing its started event.
     // Only diagnostics wait (at most 100 ms); acquisition itself never waits or retries.
     for (let attempt = 0; attempt < 10; attempt += 1) {
-      refuseRunningWorkspace(cwd);
+      await refuseRunningWorkspace(cwd);
       await Bun.sleep(10);
     }
     return fatal(
@@ -326,7 +349,7 @@ export async function run(flags: Flags): Promise<number> {
     );
   }
   // Also covers runs started by an older binary while this invocation was routing.
-  refuseRunningWorkspace(cwd);
+  await refuseRunningWorkspace(cwd);
   const workerName = await workerNameFor(ticketName);
   append({
     kind: "started",
@@ -343,7 +366,16 @@ export async function run(flags: Flags): Promise<number> {
     vendor_session: resumeSession ?? null,
     continues: continuationId ?? null,
     pid: process.pid,
+    lease: await leaseFor(
+      process.pid,
+      process.env.INVOCATION_ID !== undefined &&
+        process.env.INVOCATION_ID !== ""
+        ? `${workerName}.service`
+        : null,
+    ),
   });
+
+  started = true;
 
   const workerPath =
     process.env.AGX_NEXT_WORKER ??
@@ -541,6 +573,7 @@ export async function run(flags: Flags): Promise<number> {
     ),
     changed_files: changed,
   });
+  ended = true;
   temp.remove();
   await workspaceLock.release();
   process.stdout.write(
@@ -550,10 +583,10 @@ export async function run(flags: Flags): Promise<number> {
 }
 
 const selectedRuns = (
-  rows: ReturnType<typeof foldedRuns>,
+  rows: Awaited<ReturnType<typeof foldedRuns>>,
   selector: string | undefined,
   startedAt: Map<string, string>,
-): { rows: ReturnType<typeof foldedRuns>; error?: string } => {
+): { rows: Awaited<ReturnType<typeof foldedRuns>>; error?: string } => {
   const newestFirst = rows.toSorted((a, b) =>
     (startedAt.get(b.id) ?? "").localeCompare(startedAt.get(a.id) ?? ""),
   );
@@ -588,9 +621,9 @@ const selectedRuns = (
   };
 };
 
-export function list(flags: Flags): number {
+export async function list(flags: Flags): Promise<number> {
   const running = flags.running === true || value(flags, "running") === "true";
-  const rows = foldedRuns().filter(
+  const rows = (await foldedRuns()).filter(
     (entry) => !running || entry.state === "running",
   );
   const asJson = value(flags, "json") === "true" || flags.json === true;
@@ -621,14 +654,14 @@ export function list(flags: Flags): number {
   return 0;
 }
 
-export function judgeRun(flags: Flags): number {
+export async function judgeRun(flags: Flags): Promise<number> {
   const id = value(flags, "id");
   const decision = value(flags, "decision");
   if (id === undefined || decision === undefined)
     return fatal("judge requires RUN_ID and accept|reject", 2);
   if (decision !== "accept" && decision !== "reject")
     return fatal("judge decision must be accept or reject", 2);
-  if (!foldedRuns().some((entry) => entry.id === id))
+  if (!(await foldedRuns()).some((entry) => entry.id === id))
     return fatal(`unknown run ${id}`, 2);
   append({
     kind: "judged",
@@ -645,12 +678,12 @@ export async function stats(flags: Flags): Promise<number> {
     flags.importLegacy === true || value(flags, "import-legacy") === "true";
   const legacyImport = importFlag ? await importLegacyRecords() : undefined;
   const all = events();
-  const runs = foldedRuns();
+  const runs = await foldedRuns();
   const report = {
     runs: runs.length,
     running: runs.filter((entry) => entry.state === "running").length,
     ended: runs.filter((entry) => entry.state === "ended").length,
-    orphaned: runs.filter((entry) => entry.state === "orphaned").length,
+    lost: runs.filter((entry) => entry.outcome === "lost").length,
     judgments: all.filter((event) => event.kind === "judged").length,
     ...(legacyImport === undefined ? {} : { legacy_import: legacyImport }),
     by_row: Object.fromEntries(

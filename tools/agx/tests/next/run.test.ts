@@ -87,7 +87,7 @@ describe("agx-next run", () => {
     expect(existsSync(join(state, "records.jsonl"))).toBe(false);
   });
 
-  test("a sub-two-minute zero-change exit without RETURN fails its lineage", () => {
+  test("a sub-two-minute zero-change exit without RETURN fails its lineage", async () => {
     const root = scratch("early-quit-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
@@ -123,10 +123,10 @@ describe("agx-next run", () => {
       join(state, "records.jsonl"),
       `${records.map((event) => JSON.stringify(event)).join("\n")}\n`,
     );
-    expect(foldedRuns()[0]?.failed_early_quit).toBe(true);
+    expect((await foldedRuns())[0]?.failed_early_quit).toBe(true);
   });
 
-  test("legacy early quits are read only for the matching ticket lineage", () => {
+  test("legacy early quits are read only for the matching ticket lineage", async () => {
     const root = scratch("legacy-early-quit-");
     const state = join(root, "state");
     mkdirSync(state, { recursive: true });
@@ -165,9 +165,9 @@ describe("agx-next run", () => {
       `${records.map((event) => JSON.stringify(event)).join("\n")}\n`,
     );
 
-    expect(foldedRuns()[0]?.failed_early_quit).toBe(false);
-    expect(earlyQuitRows("th_purge", root)).toEqual(["luna-medium"]);
-    expect(earlyQuitRows("other-ticket", root)).toEqual([]);
+    expect((await foldedRuns())[0]?.failed_early_quit).toBe(false);
+    expect(await earlyQuitRows("th_purge", root)).toEqual(["luna-medium"]);
+    expect(await earlyQuitRows("other-ticket", root)).toEqual([]);
   });
 
   test("routes through Jev, starts a worker, and records its report", async () => {
@@ -408,7 +408,7 @@ describe("agx-next run", () => {
         started_at: z.string(),
         ended_at: z.string().nullable(),
         ticket: z.string(),
-        state: z.enum(["running", "ended", "orphaned"]),
+        state: z.enum(["running", "ended"]),
         exit: z.number().nullable(),
         row: z.string(),
         dispatcher_session: z.string().nullable(),
@@ -490,6 +490,7 @@ describe("agx-next run", () => {
         "id",
         "judgment",
         "last_progress_path",
+        "lease",
         "report_path",
         "returned",
         "changed_files",
@@ -854,7 +855,7 @@ describe("agx-next run", () => {
       z.array(
         z.looseObject({
           id: z.string(),
-          state: z.enum(["running", "ended", "orphaned"]),
+          state: z.enum(["running", "ended"]),
           started_at: z.string(),
           ended_at: z.string().nullable(),
           worker_name: z.string(),

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.3 — 2026-10-16
+
+- Display recent unacknowledged ended lost runs as lost counts
+
 ## 0.16.2 — 2026-10-16
 
 - Display worker and workspace names in run rows

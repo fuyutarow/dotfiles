@@ -67,7 +67,7 @@ export async function route(
         : "agx: all capability-eligible routes are at their subscription limit\n",
       2,
     );
-  const history = await gradedHistory(foldedRuns(), brief);
+  const history = await gradedHistory(await foldedRuns(), brief);
   const criteria = Object.fromEntries(
     candidates.map((row) => [
       row.id,

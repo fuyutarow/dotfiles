@@ -4,8 +4,6 @@ import {
   openSync,
   fstatSync,
   readSync,
-  renameSync,
-  unlinkSync,
   createReadStream,
   existsSync,
   mkdirSync,
@@ -24,6 +22,9 @@ import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { globsOverlap } from "../ticket.ts";
 import { exitWithError } from "./exit.ts";
 import { Outcome, deriveOutcome } from "./outcome.ts";
+import { lossEvidence, Lease, StopSignal } from "./lease.ts";
+import { RunSchema, type FoldedRun, type ListedRun } from "./run-state.ts";
+export type { ListedRun } from "./run-state.ts";
 import { VerifyResult } from "./verify.ts";
 
 const PickAuditSchema = z.object({
@@ -54,6 +55,7 @@ const EventSchema = z.discriminatedUnion("kind", [
     vendor_session: z.string().nullable(),
     continues: z.string().nullable().optional(),
     pid: z.number(),
+    lease: Lease.optional(),
     pick_audit: PickAuditSchema.optional(),
     legacy_key: z.string().optional(),
   }),
@@ -70,6 +72,7 @@ const EventSchema = z.discriminatedUnion("kind", [
     at: z.string(),
     exit: z.number(),
     outcome: Outcome.optional(),
+    signal: StopSignal.optional(),
     report_path: z.string().nullable(),
     vendor_session: z.string().nullable(),
     verify: z.array(VerifyResult).default([]),
@@ -143,8 +146,8 @@ export async function acquireWorkspaceLock(
   };
 }
 
-export const runningWorkspaceRun = (workspace: string) =>
-  foldedRuns().find(
+export const runningWorkspaceRun = async (workspace: string) =>
+  (await foldedRuns()).find(
     (run) =>
       run.state === "running" && resolve(run.workspace) === resolve(workspace),
   );
@@ -453,33 +456,6 @@ export function overlapWarnings(writes: string[]): void {
   }
 }
 
-const RunSchema = z.object({
-  id: z.string(),
-  started_at: z.string(),
-  ended_at: z.string().nullable(),
-  ticket: z.string(),
-  state: z.enum(["running", "ended", "orphaned"]),
-  exit: z.number().nullable(),
-  outcome: Outcome.nullable(),
-  row: z.string(),
-  worker_name: z.string().optional(),
-  workspace_name: z.string().optional(),
-  dispatcher_session: z.string().nullable(),
-  cwd: z.string(),
-  workspace: z.string(),
-  writes: z.array(z.string()),
-  judgment: z.object({ decision: z.string(), note: z.string() }).nullable(),
-  report_path: z.string().nullable(),
-  verify: z.array(VerifyResult),
-  last_progress_path: z.string().nullable(),
-  continues: z.string().nullable(),
-  vendor_session: z.string().nullable(),
-  pid: z.number(),
-  failed_early_quit: z.boolean(),
-  returned: z.boolean().optional(),
-  changed_files: z.number().optional(),
-});
-type FoldedRun = z.output<typeof RunSchema>;
 const SnapshotSchema = z
   .object({
     version: z.literal(1),
@@ -500,7 +476,8 @@ function foldInto(runs: Map<string, FoldedRun>, input: NextEvent[]): void {
         started_at: event.at,
         ended_at: null,
         ticket: event.ticket,
-        state: "orphaned",
+        state: "running",
+        lease: event.lease,
         exit: null,
         outcome: null,
         row: event.row,
@@ -526,6 +503,7 @@ function foldInto(runs: Map<string, FoldedRun>, input: NextEvent[]): void {
     if (event.kind === "progress") run.last_progress_path = event.path;
     if (event.kind === "ended") {
       run.state = "ended";
+      run.signal = event.signal;
       run.ended_at = event.at;
       run.exit = event.exit;
       // Historical records without workspace/report evidence must never become successes.
@@ -552,24 +530,20 @@ function foldInto(runs: Map<string, FoldedRun>, input: NextEvent[]): void {
 }
 
 /** Full replay oracle; does not read or write the snapshot. */
-export function fullFoldedRuns() {
+export async function fullFoldedRuns() {
   const runs = new Map<string, FoldedRun>();
   foldInto(runs, events());
   return liveRuns(runs);
 }
 
 /** Read only bytes after the last complete line folded into the snapshot. */
-export function foldedRuns() {
+export async function foldedRuns() {
   const path = recordPath();
   if (!existsSync(path)) return [];
   const fd = openSync(path, "r");
   const stat = fstatSync(fd);
-  const snapshotPath = join(stateDir(), "records.fold.json");
-  const cached = fromThrowable(() => readFileSync(snapshotPath, "utf8"))();
-  const parsed = cached.isOk()
-    ? jsonOf(SnapshotSchema).safeParse(cached.value)
-    : undefined;
-  const snapshot = parsed?.success === true ? parsed.data : undefined;
+  const parsed = SnapshotSchema.safeParse(foldCache.get(path));
+  const snapshot = parsed.success ? parsed.data : undefined;
   const valid =
     snapshot !== undefined &&
     snapshot.inode === stat.ino &&
@@ -618,35 +592,23 @@ export function foldedRuns() {
     runs,
     input.flatMap((event) => (event.success ? [event.data] : [])),
   );
-  if (!valid || complete > 0 || snapshot.size !== stat.size) {
-    // Concurrent readers publish independent atomic snapshots. An older snapshot is
-    // still a valid prefix and will simply replay more bytes on the next read.
-    const temporary =
-      snapshotPath + "." + process.pid + "." + crypto.randomUUID() + ".tmp";
-    const saved = fromThrowable(() => {
-      writeFileSync(
-        temporary,
-        JSON.stringify({
-          version: 1,
-          inode: stat.ino,
-          device: stat.dev,
-          size: stat.size,
-          offset: offset + complete,
-          runs: [...runs.values()],
-        }),
-      );
-      renameSync(temporary, snapshotPath);
-    })();
-    if (saved.isErr())
-      fromThrowable(() => {
-        unlinkSync(temporary);
-      })();
-  }
+  foldCache.set(path, {
+    version: 1,
+    inode: stat.ino,
+    device: stat.dev,
+    size: stat.size,
+    offset: offset + complete,
+    runs: [...runs.values()],
+  });
   return liveRuns(runs);
 }
 
-function liveRuns(runs: Map<string, FoldedRun>) {
-  for (const run of runs.values()) {
+const foldCache = new Map<string, z.output<typeof SnapshotSchema>>();
+
+async function liveRuns(runs: Map<string, FoldedRun>): Promise<ListedRun[]> {
+  const listed: ListedRun[] = [];
+  for (const stored of runs.values()) {
+    const run = { ...stored };
     run.worker_name ??= `agt_${run.ticket}`;
     run.workspace_name ??= basename(run.workspace);
     // Old event logs and snapshots used verify-failed for every nonzero check.
@@ -682,13 +644,23 @@ function liveRuns(runs: Map<string, FoldedRun>) {
       elapsed < 120 &&
       run.returned === false &&
       run.changed_files === 0;
-    if (run.state !== "ended") {
-      const alive = fromThrowable(
-        () => process.kill(run.pid, 0),
-        (error) => error,
-      )();
-      run.state = alive.isOk() ? "running" : "orphaned";
+    const { pid, state, outcome, lease: storedLease, ...fields } = run;
+    const lease = storedLease ?? { pid, start: null, unit: null };
+    if (state === "ended") {
+      listed.push({ ...fields, state, outcome: outcome ?? "refused", lease });
+      continue;
     }
+    const evidence = await lossEvidence(lease);
+    if (evidence === undefined)
+      listed.push({ ...fields, state: "running", outcome: null, lease });
+    else
+      listed.push({
+        ...fields,
+        state: "ended",
+        outcome: "lost",
+        lease,
+        evidence,
+      });
   }
-  return [...runs.values()].map(({ pid: _pid, ...run }) => run);
+  return listed;
 }

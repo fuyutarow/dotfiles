@@ -149,7 +149,14 @@ console.log(JSON.stringify({ report: { summary: "done", changes: [], checks: [],
     const text = await new Response(child.stdout).text();
     expect(await child.exited).toBe(0);
     const parsed = jsonOf(
-      z.array(z.looseObject({ id: z.string(), state: z.string() })),
+      z.array(
+        z.looseObject({
+          id: z.string(),
+          state: z.string(),
+          outcome: z.string().nullable(),
+          signal: z.string().optional(),
+        }),
+      ),
     ).safeParse(text);
     expect(parsed.success).toBe(true);
     return parsed.success ? parsed.data : [];
@@ -175,6 +182,8 @@ console.log(JSON.stringify({ report: { summary: "done", changes: [], checks: [],
     workers,
     listed,
     workerPids,
+    env,
+    log,
   };
 }
 
@@ -294,7 +303,7 @@ test("workspace ownership lasts through verification after the worker exits", as
   expect((await first.result).exit).toBe(0);
 });
 
-test("SIGKILL releases ownership despite a surviving worker and folds the old run as orphaned", async () => {
+test("SIGKILL releases ownership despite a surviving worker and folds the old run as ended lost", async () => {
   const f = fixture();
   const first = f.launch();
   await until(() => f.workers().length === 1);
@@ -308,9 +317,15 @@ test("SIGKILL releases ownership despite a surviving worker and folds the old ru
   f.workerPids.push(pid);
   first.child.kill("SIGKILL");
   await first.child.exited;
-  expect((await f.listed()).find((row) => row.id === old?.id)?.state).toBe(
-    "orphaned",
-  );
+  const before = await Bun.file(f.log).text();
+  expect((await f.listed()).find((row) => row.id === old?.id)).toMatchObject({
+    state: "ended",
+    outcome: "lost",
+  });
+  expect(await Bun.file(f.log).text()).toBe(before);
+  expect(
+    f.records().some((row) => row.id === old?.id && row.kind === "ended"),
+  ).toBe(false);
   const next = f.launch();
   await until(() => f.workers().length === 2);
   expect(process.kill(pid, 0)).toBe(true);
@@ -320,3 +335,48 @@ test("SIGKILL releases ownership despite a surviving worker and folds the old ru
   await first.result;
   f.workerPids.splice(0);
 });
+
+for (const [signal, exit] of [
+  ["SIGTERM", 143],
+  ["SIGINT", 130],
+  ["SIGHUP", 129],
+] as const) {
+  test(`${signal} records ended stopped and continuation without a session explains fresh start`, async () => {
+    const f = fixture();
+    const first = f.launch(false);
+    await until(() => f.workers().length === 1);
+    first.child.kill(signal);
+    expect((await first.result).exit).toBe(exit);
+    const row = (await f.listed()).find((entry) => entry.id !== "prior");
+    expect(row).toMatchObject({ state: "ended", outcome: "stopped", signal });
+    const before = await Bun.file(f.log).text();
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "tools/agx/src/next/cli.ts",
+        "run",
+        f.ticket,
+        "--cd",
+        f.root,
+        "--continue",
+        row?.id ?? "missing",
+      ],
+      {
+        env: f.env,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 5000,
+      },
+    );
+    const [code, , stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code).toBe(2);
+    expect(stderr).toContain("no vendor session");
+    expect(stderr).toContain("ended stopped");
+    expect(stderr).toContain(`agx run ${f.ticket}`);
+    expect(await Bun.file(f.log).text()).toBe(before);
+  });
+}

@@ -131,13 +131,13 @@ test("--wait on a ticket with only old ended runs waits for a new run to end", a
   ]);
 }, 30_000);
 
-test("--wait returns a run whose process died without an ended record as orphaned", async () => {
+test("--wait returns a run whose process died without an ended record as ended lost", async () => {
   const root = fixture([started("run-gone", "gone", deadPid())]);
   const child = spawnWait(root, "run-gone", "--json");
   expect(await child.exited).toBe(0);
   const rows = Rows.safeParse(await new Response(child.stdout).text());
   expect(rows.success && rows.data).toEqual([
-    { id: "run-gone", state: "orphaned" },
+    { id: "run-gone", state: "ended" },
   ]);
 }, 30_000);
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.0.0 — 2026-10-16
+
+- Replace orphaned run state with ended lost lease evidence; trap stop signals and keep ls folds read-only
+
 ## 4.11.7 — 2026-10-16
 
 - Record worker and workspace names on agx runs

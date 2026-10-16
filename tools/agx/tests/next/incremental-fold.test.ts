@@ -42,7 +42,7 @@ const started = (id: string, pid = 2147483647): NextEvent => ({
 
 test.each([127, 137])(
   "historical verify-failed exit %s is classified in full and cached folds",
-  (exit) => {
+  async (exit) => {
     const root = fixture();
     append(started("legacy-verify"));
     append({
@@ -56,15 +56,15 @@ test.each([127, 137])(
       verify: [{ cmd: "check", exit, log_path: "check.log" }],
     });
     const kind = exit === 127 ? "unrunnable" : "killed";
-    expect(fullFoldedRuns()[0]?.verify[0]?.kind).toBe(kind);
-    expect(fullFoldedRuns()[0]?.outcome).toBe(`verify-${kind}`);
-    expect(foldedRuns()).toEqual(fullFoldedRuns());
-    expect(fs.existsSync(join(root, "records.fold.json"))).toBe(true);
-    expect(foldedRuns()).toEqual(fullFoldedRuns());
+    expect((await fullFoldedRuns())[0]?.verify[0]?.kind).toBe(kind);
+    expect((await fullFoldedRuns())[0]?.outcome).toBe(`verify-${kind}`);
+    expect(await foldedRuns()).toEqual(await fullFoldedRuns());
+    expect(fs.existsSync(join(root, "records.fold.json"))).toBe(false);
+    expect(await foldedRuns()).toEqual(await fullFoldedRuns());
   },
 );
 
-test("seeded random append batches equal a full fold after every batch", () => {
+test("seeded random append batches equal a full fold after every batch", async () => {
   fixture();
   let seed = 42;
   const random = (n: number) => {
@@ -115,16 +115,16 @@ test("seeded random append batches equal a full fold after every batch", () => {
     for (let i = 0, n = random(9) + 1; i < n; i++) {
       appendRandom(batch);
     }
-    expect(foldedRuns()).toEqual(fullFoldedRuns());
+    expect(await foldedRuns()).toEqual(await fullFoldedRuns());
   }
 });
 
-test("warm fold reads exactly appended record bytes and zero for unchanged history", () => {
+test("warm fold reads exactly appended record bytes and zero for unchanged history", async () => {
   fixture();
   append(started("run"));
   for (let i = 0; i < 1000; i++)
     append({ kind: "progress", id: "run", at: "now", path: `${i}` });
-  foldedRuns();
+  await foldedRuns();
   const before = fs.statSync(recordPath()).size;
   append({
     kind: "judged",
@@ -137,24 +137,24 @@ test("warm fold reads exactly appended record bytes and zero for unchanged histo
   const read = spyOn(fs, "readSync");
   const whole = spyOn(fs, "readFileSync");
   const output = spyOn(process.stdout, "write").mockImplementation(() => true);
-  expect(list({ json: true })).toBe(0);
+  expect(await list({ json: true })).toBe(0);
   expect(read.mock.calls).toHaveLength(1);
   expect(read.mock.calls[0]?.[2]?.length).toBe(appended);
   expect(read.mock.calls[0]?.[2]?.position).toBe(before);
   read.mockClear();
-  foldedRuns();
+  await foldedRuns();
   expect(read.mock.calls).toHaveLength(0);
   expect(whole.mock.calls.some(([path]) => path === recordPath())).toBe(false);
   output.mockRestore();
   whole.mockRestore();
   read.mockRestore();
-  expect(foldedRuns()).toEqual(fullFoldedRuns());
+  expect(await foldedRuns()).toEqual(await fullFoldedRuns());
 });
 
-test("partial UTF-8 tail is reread, and rotation, truncation, corrupt cache and version changes rebuild", () => {
+test("partial UTF-8 tail is reread, and rotation, truncation, corrupt cache and version changes rebuild", async () => {
   const root = fixture();
   append(started("first"));
-  foldedRuns();
+  await foldedRuns();
   const tail = Buffer.from(
     JSON.stringify({
       kind: "progress",
@@ -164,33 +164,28 @@ test("partial UTF-8 tail is reread, and rotation, truncation, corrupt cache and 
     }) + "\n",
   );
   const split = tail.indexOf(Buffer.from("本")) + 1;
-  const offset = fs.statSync(recordPath()).size;
   fs.appendFileSync(recordPath(), tail.subarray(0, split));
-  expect(foldedRuns()).toEqual(fullFoldedRuns());
-  const snapshot = fs.readFileSync(join(root, "records.fold.json"), "utf8");
-  expect(snapshot).toContain(`"offset":${offset}`);
+  expect(await foldedRuns()).toEqual(await fullFoldedRuns());
+  expect(fs.existsSync(join(root, "records.fold.json"))).toBe(false);
   fs.appendFileSync(recordPath(), tail.subarray(split));
-  expect(foldedRuns()).toEqual(fullFoldedRuns());
+  expect(await foldedRuns()).toEqual(await fullFoldedRuns());
   fs.renameSync(recordPath(), join(root, "rotated.jsonl"));
   append(started("rotated"));
-  expect(foldedRuns()).toEqual(fullFoldedRuns());
+  expect(await foldedRuns()).toEqual(await fullFoldedRuns());
   fs.writeFileSync(recordPath(), "");
-  expect(foldedRuns()).toEqual([]);
+  expect(await foldedRuns()).toEqual([]);
   append(started("new"));
-  expect(foldedRuns()).toEqual(fullFoldedRuns());
-  fs.writeFileSync(
-    join(root, "records.fold.json"),
-    snapshot.replace('"version":1', '"version":999'),
-  );
-  expect(foldedRuns()).toEqual(fullFoldedRuns());
+  expect(await foldedRuns()).toEqual(await fullFoldedRuns());
+  fs.writeFileSync(join(root, "records.fold.json"), '{"version":999}');
+  expect(await foldedRuns()).toEqual(await fullFoldedRuns());
   fs.writeFileSync(join(root, "records.fold.json"), "broken");
-  expect(foldedRuns()).toEqual(fullFoldedRuns());
+  expect(await foldedRuns()).toEqual(await fullFoldedRuns());
 });
 
 test("ls --running combines with JSON, all and selector; cached liveness is refreshed", async () => {
   const root = fixture();
   const child = Bun.spawn(
-    [process.execPath, "-e", "setInterval(() => {}, 1000)"],
+    [process.execPath, "-e", "setInterval(async () => {}, 1000)"],
     { stdout: "ignore", stderr: "ignore" },
   );
   append(started("live", child.pid));
@@ -222,19 +217,19 @@ test("ls --running combines with JSON, all and selector; cached liveness is refr
   child.kill();
   await child.exited;
   expect(ls(["--running", "--json"]).stdout.toString()).toBe("[]\n");
-  expect(foldedRuns()).toEqual(fullFoldedRuns());
+  expect(await foldedRuns()).toEqual(await fullFoldedRuns());
 });
 
-test("unwritable snapshot falls back safely and malformed complete tail is rejected", () => {
+test("unwritable snapshot falls back safely and malformed complete tail is rejected", async () => {
   const root = fixture();
   append(started("run"));
   fs.mkdirSync(join(root, "records.fold.json"));
-  expect(foldedRuns()).toEqual(fullFoldedRuns());
+  expect(await foldedRuns()).toEqual(await fullFoldedRuns());
   expect(fs.readdirSync(root).some((name) => name.endsWith(".tmp"))).toBe(
     false,
   );
   fs.rmSync(join(root, "records.fold.json"), { recursive: true });
-  foldedRuns();
+  await foldedRuns();
   fs.appendFileSync(recordPath(), '{"kind":"broken"}\n');
   const result = Bun.spawnSync(
     [process.execPath, "tools/agx/src/next/cli.ts", "ls", "--json"],

@@ -23,7 +23,7 @@ bun add -g textlint textlint-rule-preset-ja-technical-writing \
   @textlint-ja/textlint-rule-preset-ai-writing textlint-rule-prh
 
 # lint a file / tree with the house config
-bunx textlint --config assets/textlintrc.json path/to/doc.md
+bunx textlint --config .textlintrc.json path/to/doc.md
 bunx textlint --format json path/to/doc.md   # structured findings for an agent loop
 ```
 
@@ -37,9 +37,9 @@ QOED, on its internal research records).
 
 | Config | Body register | Use for |
 |---|---|---|
-| `assets/textlintrc.json` | **ですます** (default) | external-ish / customer / general docs written in ですます |
-| `assets/textlintrc-research.json` | **である体** (`preferInBody:である`, `strict:false`) | internal / research / academic records (paper-style である体). Pure である → clean; ですます-dominant → flagged; minor mixing tolerated |
-| `assets/textlintrc-external.json` | ですます + C9 register set | field-facing deliverables — also HARD-detects insider register (ledger IDs, verdict enums, `PASS`, `receipt:`) |
+| [presets/textlint/textlintrc.json](../../../../presets/textlint/textlintrc.json) | **ですます** (default) | external-ish / customer / general docs written in ですます |
+| [presets/textlint/textlintrc-research.json](../../../../presets/textlint/textlintrc-research.json) | **である体** (`preferInBody:である`, `strict:false`) | internal / research / academic records (paper-style である体). Pure である → clean; ですます-dominant → flagged; minor mixing tolerated |
+| [presets/textlint/textlintrc-external.json](../../../../presets/textlint/textlintrc-external.json) | ですます + C9 register set | field-facing deliverables — also HARD-detects insider register (ledger IDs, verdict enums, `PASS`, `receipt:`) |
 
 A consuming repo whose records are である体 (research logs, design docs) MUST point its lint task at
 `textlintrc-research.json`, never the base — otherwise the floor is all-noise and gets `|| true`-ignored.
@@ -95,11 +95,11 @@ one owner.
 as a SUGGESTION, not a blocker. It does not judge topic-sentence presence; that stays VIBE.
 
 **Two prh dicts, so the noisy register set never fires on internal docs.**
-- `assets/prh-house.yml` (always on, via `textlintrc.json`): (1) 表記ゆれ / terminology normalization
+- [presets/textlint/prh-house.yml](../../../../presets/textlint/prh-house.yml) (always on, via `textlintrc.json`): (1) 表記ゆれ / terminology normalization
   — the portable part; (2) the coined-label graveyard — a repo's KNOWN bad coinage, seeded per repo
   (the shipped entries are QOED examples, fenced and meant to be replaced; the QOED
   `check_banned_labels.jl` generalization). Detect-only for coinage.
-- `assets/prh-external.yml` (added by `textlintrc-external.json`, ONLY for external-register docs):
+- [presets/textlint/prh-external.yml](../../../../presets/textlint/prh-external.yml) (added by `textlintrc-external.json`, ONLY for external-register docs):
   the C9 register set the presets do NOT carry — ledger IDs `[A-Z]{1,3}[0-9]{4}_[0-9]{2,3}`, verdict
   enums `[A-Z]{3,}_[A-Z_]{3,}`, `receipt:`, `PASS`-as-verdict. These legitimately appear in internal
   working docs, so they are gated behind the external config, never the base one. Proven to fire on
@@ -264,6 +264,8 @@ deliverable/framing/moat/verb-する, no allowlist) → `codemix-flag.py` (MIX d
 allowlist) → `textlintrc-strict.json` (HARD catch-all + allowlist, needs a maintained vocabulary).
 Strict is register-orthogonal — it defaults ですます; a である体 repo copies the research profile's
 `no-mix-dearu-desumasu` override into it (do not ship a strict×dearu combinatorial config).
+The strict catch-all dictionary lives in
+[presets/textlint/prh-codemix.yml](../../../../presets/textlint/prh-codemix.yml).
 
 ## Sources (tooling)
 

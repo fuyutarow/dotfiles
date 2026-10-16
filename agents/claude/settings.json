@@ -234,6 +234,15 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_SLUG=dotfiles:agx:snapshot sh ~/.claude/hooks/run.sh log-agx-snapshot.ts",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -253,6 +262,16 @@
           {
             "type": "command",
             "command": "HOOK_SLUG=dotfiles:sys-snapshot sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK_SLUG=dotfiles:agx:snapshot sh ~/.claude/hooks/run.sh log-agx-snapshot.ts",
             "timeout": 5
           }
         ]

@@ -84,6 +84,9 @@ describe("log-agx-snapshot", () => {
   test("Stop emits one line: counts, then one entry per running run of this session", () => {
     const r = fire(homeWithSnapshot(fleet), "Stop");
     expect(r.code).toBe(0);
+    expect(Object.keys(decoded(Message, parseJson(r.stdout)))).toEqual([
+      "systemMessage",
+    ]);
     const msg = messageOf(r.stdout);
     expect(msg).not.toContain("\n");
     expect(msg).toBe(

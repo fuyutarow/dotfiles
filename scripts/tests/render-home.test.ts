@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
 import { brewPrefix } from "../core-tools.ts";
+import { HooksConfigSchema } from "../hook-registry.ts";
 
 import { ROUTING_OBJECTIVE } from "../../agents/models/roster.ts";
 
@@ -125,6 +126,43 @@ function assertHookCommand(command: string): void {
 }
 
 describe("render-home: base only", () => {
+  test("real Claude settings render agx:snapshot on the same events as sys-snapshot", async () => {
+    const base = jsonOf(JsonObject).safeParse(
+      await Bun.file(join(ROOT, "agents/claude/settings.json")).text(),
+    );
+    expect(base.success).toBe(true);
+    if (!base.success) return;
+    const dotfiles = makeDotfiles(base.data);
+    const home = makeHome();
+    const result = run({ HOME: home, DOTFILES: dotfiles });
+    expect(result.code, result.out).toBe(0);
+    const hooks = HooksConfigSchema.safeParse(readDest(home).hooks);
+    expect(hooks.success).toBe(true);
+    if (!hooks.success) return;
+    for (const event of ["Stop", "PostToolUse"]) {
+      const groups = hooks.data[event] ?? [];
+      const agx = groups.filter((group) =>
+        group.hooks.some(
+          (hook) =>
+            hook.command ===
+            "HOOK_SLUG=dotfiles:agx:snapshot sh ~/.claude/hooks/run.sh log-agx-snapshot.ts",
+        ),
+      );
+      const sys = groups.filter((group) =>
+        group.hooks.some(
+          (hook) =>
+            hook.command ===
+            "HOOK_SLUG=dotfiles:sys-snapshot sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
+        ),
+      );
+      expect(agx).toHaveLength(1);
+      expect(sys).toHaveLength(1);
+      expect(agx[0]?.matcher).toBe(sys[0]?.matcher);
+      expect(agx[0]?.hooks[0]?.timeout).toBe(5);
+    }
+    cleanup(dotfiles, home);
+  });
+
   test("strips the retired dotfiles marketplace and plugin entries", () => {
     const dotfiles = makeDotfiles({
       extraKnownMarketplaces: {

@@ -120,6 +120,9 @@ agent_panel_sort = "spaces"
 rows = [
   ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
+  # Custom reported agents use these default rows, not rows_by_agent overrides.
+  # Unreported tokens disappear. See https://herdr.dev/docs/configuration/#sidebar-row-layouts.
+  ["$btm_summary"],
 ]
 
 [ui.sidebar.agents.rows_by_agent]
@@ -134,14 +137,6 @@ rows = [
 claude = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
-]
-btm = [
-  ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }],
-  [
-    { token = "$cpu", fg = "#8ccf7e", bold = false, dim = false },
-    { token = "$ram", fg = "#61afef", bold = false, dim = false },
-    { token = "$tmp", fg = "#e5c07b", bold = false, dim = false },
-  ],
 ]
 [session]
 # resume_agents_on_restore = true (default)

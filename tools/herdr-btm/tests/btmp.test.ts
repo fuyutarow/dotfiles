@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const tempDirs: string[] = [];
@@ -15,7 +15,7 @@ const AgentRequestSchema = z.object({
     source: z.string(),
     agent: z.string(),
     state: z.string(),
-    resume_args: z.array(z.string()),
+    resume_argv: z.array(z.string()),
   }),
 });
 const MetadataRequestSchema = z.object({
@@ -23,7 +23,10 @@ const MetadataRequestSchema = z.object({
     pane_id: z.string(),
     source: z.string(),
     agent: z.string(),
+    title: z.string(),
+    ttl_ms: z.number(),
     tokens: z.object({
+      btm_summary: z.string(),
       cpu: z.string(),
       ram: z.string(),
       tmp: z.string(),
@@ -52,17 +55,27 @@ function fakeHerdrSocket(path: string) {
         if (parsed.success) {
           const request = parsed.data;
           requests.push(request);
-          socket.write(`${JSON.stringify({ id: request.id, result: {} })}\n`);
+          const result =
+            request.method === "ping"
+              ? { type: "pong", version: "0.9.3", protocol: 22 }
+              : { type: "ok" };
+          socket.write(`${JSON.stringify({ id: request.id, result })}\n`);
         }
       }
     });
   });
   servers.push(server);
-  return new Promise<typeof requests>((resolve, reject) => {
+  // Bind a relative socket name: the runner's absolute TMPDIR can exceed sun_path.
+  const cwd = process.cwd();
+  process.chdir(dirname(path));
+  const listening = new Promise<typeof requests>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(path, () => {
+    server.listen(basename(path), () => {
       resolve(requests);
     });
+  });
+  return listening.finally(() => {
+    process.chdir(cwd);
   });
 }
 
@@ -73,6 +86,8 @@ async function runEntry(root: string, env: NodeJS.ProcessEnv): Promise<number> {
     stdin: "ignore",
     stdout: "ignore",
     stderr: "pipe",
+    timeout: 12000,
+    killSignal: "SIGKILL",
   });
   const [status, stderr] = await Promise.all([
     processEntry.exited,
@@ -115,7 +130,7 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
     PATH: `${binDir}:${process.env.PATH ?? ""}`,
     HOME: join(root, "home"),
     HERDR_ENV: "1",
-    HERDR_SOCKET_PATH: socketPath,
+    HERDR_SOCKET_PATH: basename(socketPath),
     HERDR_PANE_ID: "w1:p9",
   };
 
@@ -140,26 +155,39 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
       source: "btm",
       agent: "btm",
       state: "idle",
-      resume_args: ["btm"],
+      resume_argv: ["btmp"],
     });
   const metadata = requests.find(
     (request) => request.method === "pane.report_metadata",
   );
   const parsedMetadata = MetadataRequestSchema.safeParse(metadata);
   expect(parsedMetadata.success).toBe(true);
-  if (parsedMetadata.success)
+  if (parsedMetadata.success) {
     expect(parsedMetadata.data.params).toMatchObject({
       pane_id: "w1:p9",
       source: "btm",
       agent: "btm",
+      ttl_ms: 10000,
     });
+    const { cpu, ram, tmp, btm_summary } = parsedMetadata.data.params.tokens;
+    expect(btm_summary).toBe(`CPU ${cpu} · RAM ${ram} · tmpfs ${tmp}`);
+    expect(parsedMetadata.data.params.title).toBe(`btm · ${btm_summary}`);
+  }
+  const metadataRequests = requests.filter(
+    (request) => request.method === "pane.report_metadata",
+  );
+  expect(metadataRequests.at(-1)?.params).toMatchObject({
+    pane_id: "w1:p9",
+    clear_title: true,
+    tokens: { btm_summary: null },
+  });
   expect(
     requests.filter((request) => request.method === "pane.report_agent"),
   ).toHaveLength(1);
   expect(
     requests.filter((request) => request.method === "pane.release_agent"),
   ).toHaveLength(1);
-});
+}, 15000);
 
 test("runs btm without any Herdr reports outside a Herdr pane", async () => {
   const root = await tempRoot();

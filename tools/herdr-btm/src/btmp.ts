@@ -63,14 +63,21 @@ async function reportMetadata(
 ): Promise<void> {
   const sample = await metrics();
   if (sample === undefined || !stillRunning()) return;
+  const summary = `CPU ${sample.cpu} · RAM ${sample.ram} · tmpfs ${sample.tmp}`;
   await herdr([
     "pane",
     "report-metadata",
+    paneId,
     "--source",
     "btm",
     "--agent",
     "btm",
-    paneId,
+    "--title",
+    `btm · ${summary}`,
+    "--ttl-ms",
+    "10000",
+    "--token",
+    `btm_summary=${summary}`,
     "--token",
     `cpu=${sample.cpu}`,
     "--token",
@@ -120,6 +127,7 @@ async function monitorBtm(
 
 async function runBtm(): Promise<number> {
   const bin = Bun.which("btm") ?? "btm";
+  // bounded: interactive btm owns its lifetime; user exit/signals end monitoring.
   const app = Bun.spawn([bin], {
     stdin: "inherit",
     stdout: "inherit",
@@ -142,15 +150,15 @@ async function runBtm(): Promise<number> {
   const registered = await herdr([
     "pane",
     "report-agent",
+    paneId,
     "--source",
     "btm",
     "--agent",
     "btm",
     "--state",
     "idle",
-    paneId,
     "--",
-    "btm",
+    "btmp",
   ]);
   if (!registered) return appExit;
 
@@ -159,15 +167,27 @@ async function runBtm(): Promise<number> {
       await herdr([
         "pane",
         "release-agent",
+        paneId,
         "--source",
         "btm",
         "--agent",
         "btm",
-        paneId,
       ]);
     },
   };
   const status = await monitorBtm(paneId, appExit);
+  await herdr([
+    "pane",
+    "report-metadata",
+    paneId,
+    "--source",
+    "btm",
+    "--agent",
+    "btm",
+    "--clear-title",
+    "--clear-token",
+    "btm_summary",
+  ]);
   return status;
 }
 

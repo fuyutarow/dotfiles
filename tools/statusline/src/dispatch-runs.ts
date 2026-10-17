@@ -39,8 +39,6 @@ export interface RouteRun {
   markerCostUsd: number | undefined;
   secs: number | undefined;
   alive: boolean;
-  // agx recorded a judgment (accept/reject) for the run: the owner has seen it
-  acknowledged?: boolean;
   dispatcherSession: string | undefined;
   // what the worker is doing (agx progress file); undefined until its first event lands
   doing:
@@ -54,17 +52,8 @@ export interface RouteRun {
       }
     | undefined;
 }
-// The `lost N` count. State words come from agx's store fold (`agx ls --json` `state`:
-// running | ended) — this file never decides a run's state itself. A run is counted
-// iff agx folds it as ended with outcome `lost` (here: not alive) AND no judgment is recorded on it (not
-// acknowledged) AND it started less than ORPHAN_WINDOW_SECS ago. The window is the cap that makes
-// the count fall back to 0 overnight instead of growing; the judgment makes it fall at once when
-// the owner has dealt with a run. A run with no readable start time cannot age out, so it counts.
-export const ORPHAN_WINDOW_SECS = 3600;
-export function countsAsOrphan(run: RouteRun): boolean {
-  if (run.alive || run.acknowledged === true) return false;
-  return run.secs === undefined || run.secs < ORPHAN_WINDOW_SECS;
-}
+// The lost count is the agx store fold: route runs include running rows and every
+// ended/lost row, so counting the latter matches `agx stats --json`'s `lost` field.
 const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
 function doingOf(dir: string, runId: string): RouteRun["doing"] {
   const text = readText(join(dir, `${runId}.progress.json`));
@@ -250,7 +239,6 @@ export async function agxRouteRunsAsync(
       markerCostUsd: optionalNumber(row.cost_usd) ?? cost,
       secs,
       alive: row.state === "running",
-      acknowledged: row.judgment !== null && row.judgment !== undefined,
       dispatcherSession: row.dispatcher_session ?? undefined,
       doing,
     });
@@ -638,7 +626,7 @@ export function routeLines(
   const live = runs
     .filter((r) => r.alive)
     .toSorted((a, b) => (b.secs ?? -1) - (a.secs ?? -1));
-  const lost = runs.filter((run) => countsAsOrphan(run)).length;
+  const lost = runs.filter((run) => !run.alive).length;
   const attributed = live.filter(
     (r) => r.dispatcherSession !== undefined && r.dispatcherSession !== "",
   );
@@ -706,14 +694,14 @@ export function routeLines(
       `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(identities[i] ?? "", identityWidth)}${identities[i] === "" ? "" : " "}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase)}`,
   );
   const summary = [
+    `${ESC}[38;5;167mlost ${lost}${RST}`,
     ...(other > 0 ? [`${DIM}+${other} in other sessions${RST}`] : []),
     ...(unattributed > 0 ? [`${DIM}unattributed ${unattributed}${RST}`] : []),
-    ...(lost > 0 ? [`${ESC}[38;5;167mlost ${lost}${RST}`] : []),
     ...(unreadable > 0
       ? [`${ESC}[38;5;178munreadable ${unreadable}${RST}`]
       : []),
   ];
-  if (summary.length > 0) lines.push(summary.join(` ${DIM}·${RST} `));
+  if (summary.length > 0) lines.unshift(summary.join(` ${DIM}·${RST} `));
   return lines;
 }
 

@@ -130,7 +130,7 @@ test("R3: every row kind renders when every reader times out before any good obs
   const errors = await new Response(child.stderr).text();
   expect(await child.exited, errors).toBe(0);
   const lines = output.trim().split("\n");
-  expect(lines).toHaveLength(ROW_KINDS.length);
+  expect(lines).toHaveLength(ROW_KINDS.length - 2);
   const labels = [
     "|",
     "account n/a",
@@ -139,11 +139,11 @@ test("R3: every row kind renders when every reader times out before any good obs
     "Sys:",
     "Job: scan n/a",
     "agx n/a",
-    "dispatch warning n/a",
-    "recover n/a",
   ];
   for (const [index, label] of labels.entries())
     expect(lines[index]).toContain(label);
+  expect(lines[6]).toContain("dispatch warning n/a");
+  expect(lines.at(-1)).toContain("recover n/a");
   expect(output).toContain("dispatch timeout 5ms");
 });
 
@@ -159,7 +159,7 @@ test("R3: the closed row record cannot silently omit or empty any row", () => {
     "dispatch-warning": observed("dispatch warning"),
     recover: observed("recover"),
   } satisfies DisplayRows;
-  expect(renderRows(rows).split("\n")).toHaveLength(ROW_KINDS.length);
+  expect(renderRows(rows).split("\n")).toHaveLength(ROW_KINDS.length - 2);
   expect(plain(renderRows({ ...rows, job: observed("") }))).toContain(
     "Job: n/a",
   );
@@ -372,7 +372,7 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
   const text = plain(await new Response(child.stdout).text());
   expect(await child.exited).toBe(0);
   for (const n of [1, 2, 3]) expect(text).toContain(`terra-${n}`);
-  expect(text).toMatch(/· 1[01]m old/u);
+  expect(text).toMatch(/agx 1[01]m old/u);
   expect(text).not.toContain("agx n/a");
   // A reader that reports its failure as a Result must use the same disk fallback,
   // even before this session has populated the individual field store.

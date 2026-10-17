@@ -128,7 +128,9 @@ describe("agx statusline snapshot", () => {
     // Check the cached result and failed refresh directly; host scheduling is not a deadline clock.
     expect(output).toContain("luna-high");
     expect(output).toContain("v4_learn");
-    expect(output).toMatch(/· (4[5-9]|5[0-9])s old/u);
+    expect(output).toMatch(
+      /agx (4[5-9]|5[0-9])s old · lost 0 · dispatch warning n\/a \(dispatch warning unavailable\) · recover n\/a \(recover health unavailable\)/u,
+    );
     expect(output).not.toContain("agx n/a");
 
     const lock = snapshotPath + ".lock";
@@ -144,7 +146,11 @@ describe("agx statusline snapshot", () => {
       render(f.env),
       render(f.env),
     ]);
-    expect(first).toContain("agx n/a (snapshot unavailable)");
+    const expectedBlock =
+      "agx n/a (snapshot unavailable) · dispatch warning n/a (dispatch warning unavailable) · recover n/a (recover health unavailable)";
+    expect(first.split("\n").filter((line) => line.startsWith("agx "))).toEqual(
+      [expectedBlock],
+    );
     expect(second).toContain("agx n/a (snapshot unavailable)");
     expect(third).toContain("agx n/a (snapshot unavailable)");
 

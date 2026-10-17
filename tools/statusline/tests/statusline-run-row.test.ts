@@ -734,7 +734,9 @@ describe("statusline Run row", () => {
         .split("\n")
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
-    ).toEqual(["+1 in other sessions"]);
+    ).toEqual([
+      "agx fresh · lost 0 · +1 in other sessions · dispatch warning n/a (dispatch warning unavailable) · recover: none",
+    ]);
     expect(out).not.toContain("private worker");
     expect(out).not.toContain("luna-high");
   });
@@ -773,7 +775,9 @@ describe("statusline Run row", () => {
         .split("\n")
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
-    ).toEqual(["+1 in other sessions · unattributed 2 · lost 3"]);
+    ).toEqual([
+      "agx fresh · lost 3 · +1 in other sessions · unattributed 2 · dispatch warning n/a (dispatch warning unavailable) · recover: none",
+    ]);
     expect(out).not.toContain("other worker");
     expect(out).not.toContain("unowned worker");
     expect(out).not.toContain("dead own");
@@ -785,7 +789,8 @@ describe("statusline Run row", () => {
     const dir = join(scratch, "no-attribution-summary");
     marker(dir, "own", process.pid, "my worker", 90, SESSION);
     const out = await render(dir);
-    expect(out).not.toMatch(/in other sessions|unattributed|lost/u);
+    expect(out).not.toMatch(/in other sessions|unattributed/u);
+    expect(out).toContain("lost 0");
   });
 
   test("legacy active directories no longer supply Run rows", async () => {
@@ -1295,7 +1300,7 @@ describe("statusline Run row", () => {
     expect(
       out.split("\n").find((line) => line.startsWith("Job:")),
     ).not.toContain("agx");
-    expect(out).toContain("agx 0 workers");
+    expect(out).toContain("lost 0");
   });
 
   test("Job entries share one name + elapsed format in every session", async () => {
@@ -1445,8 +1450,8 @@ describe("statusline Run row", () => {
     console.info(`agx snapshot read warm cache: ${warmMs.toFixed(2)}ms`);
   });
 
-  // The `lost N` rule (dispatch-runs.ts countsAsOrphan): agx folds the run `lost`, it is
-  // younger than ORPHAN_WINDOW_SECS (1h) and carries no judgment.
+  // These fixtures are already agx-folded rows. Every ended/lost row contributes to the
+  // statusline count, matching `agx stats --json` regardless of age or judgment.
   const orphanRow = (id: string, ageS: number, judgment: unknown = null) => ({
     id,
     ticket: `old ${id}`,
@@ -1467,36 +1472,31 @@ describe("statusline Run row", () => {
     verify: [],
   });
 
-  test("orphans older than the window render no count; a fresh one renders lost 1", async () => {
+  test("lost count matches the agx fold regardless of age or judgment", async () => {
     const old = Array.from({ length: 62 }, (_, i) =>
       orphanRow(`old-${i}`, 3 * 3600 + i),
     );
-    const none = await render(
+    const foldedRows = [
+      ...old,
+      orphanRow("judged", 120, { decision: "reject", note: "" }),
+    ];
+    const agxFoldLost = foldedRows.filter(
+      (row) => row.state === "ended" && row.outcome === "lost",
+    ).length;
+    const out = await render(
       join(scratch, "orphan-old"),
       undefined,
       SESSION,
-      JSON.stringify(old),
+      JSON.stringify(foldedRows),
     );
-    expect(none).not.toMatch(/lost|stale/u);
-    const one = await render(
-      join(scratch, "orphan-fresh"),
-      undefined,
-      SESSION,
-      JSON.stringify([...old, orphanRow("fresh", 120)]),
+    expect(out).toContain(`lost ${agxFoldLost}`);
+    const agxLine = out.split("\n").find((line) => line.startsWith("agx "));
+    expect(agxLine).toContain(
+      `agx fresh · lost ${agxFoldLost} · dispatch warning n/a (dispatch warning unavailable) · recover: none`,
     );
-    expect(one).toMatch(/^lost 1$/mu);
-  });
-
-  test("a judged orphan is acknowledged and not counted", async () => {
-    const out = await render(
-      join(scratch, "orphan-judged"),
-      undefined,
-      SESSION,
-      JSON.stringify([
-        orphanRow("seen", 120, { decision: "reject", note: "" }),
-      ]),
-    );
-    expect(out).not.toMatch(/lost/u);
+    expect(
+      out.split("\n").filter((line) => line.startsWith("agx ")),
+    ).toHaveLength(1);
   });
 
   test("a claude run shows its worker-progress.jsonl, not no event yet", async () => {
@@ -1529,7 +1529,10 @@ describe("statusline Run row", () => {
     const dir = join(scratch, "stale");
     marker(dir, "b", 2_147_483_000, "killed");
     const out = await render(dir);
-    expect(out).toMatch(/^lost 1$/mu);
+    expect(out).toContain("lost 1");
+    expect(
+      out.split("\n").filter((line) => line.startsWith("agx ")),
+    ).toHaveLength(1);
     expect(out).not.toMatch(/^luna-high .* killed/mu);
   });
 

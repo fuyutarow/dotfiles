@@ -26,13 +26,16 @@ export function observed(
 }
 
 export function renderField(label: string, state: FieldState<string>): string {
-  if (state.kind === "fresh") return state.value;
+  if (state.kind === "fresh")
+    return label === "agx"
+      ? `agx fresh ${DIM}·${RST} ${state.value}`
+      : state.value;
   if (state.kind === "stale") {
     const seconds = Math.max(0, Math.floor(state.age / 1000));
     const age = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m`;
-    const separator = label === "agx" ? "\nagx " : " ";
     const value = state.value === "" ? `${label} none` : state.value;
-    return `${value}${separator}${DIM}· ${age} old${RST}`;
+    if (label === "agx") return `agx ${age} old ${DIM}·${RST} ${value}`;
+    return `${value} ${DIM}· ${age} old${RST}`;
   }
   if (state.kind === "unknown")
     return roles

@@ -28,15 +28,22 @@ const LABELS = {
 
 /** Row membership is fixed even when every source fails. Empty rows are never filtered. */
 export function renderRows(rows: DisplayRows): string {
-  return ROW_KINDS.map((kind) => {
+  return ROW_KINDS.flatMap((kind) => {
     const state = rows[kind];
     assert.ok(state !== undefined, `missing statusline row: ${kind}`);
+    if (kind === "dispatch-warning" || kind === "recover") return [];
+    if (kind === "agx") {
+      const text =
+        state.kind === "fresh" ? state.value : renderField("agx", state);
+      assert.ok(text.trim() !== "", "empty statusline row: agx");
+      return [text];
+    }
     const nonempty =
       state.kind !== "unknown" && state.value.trim() === ""
         ? observed(undefined, "no observation")
         : state;
     const text = renderField(LABELS[kind], nonempty);
     assert.ok(text.trim() !== "", `empty statusline row: ${kind}`);
-    return text;
+    return [text];
   }).join("\n");
 }

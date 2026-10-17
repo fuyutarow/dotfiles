@@ -238,7 +238,7 @@ export function render(
   if (df.dispatchWarningWhy !== undefined) dispatchWarning = undefined;
   let recover = recoverHealthBadge(df.recoverHealth, df.recoverHealth?.at);
   if (recover !== undefined) recover = `${ESC}[38;5;167m${recover}${RST}`;
-  const recoverValue = recover ?? "";
+  const recoverValue = recover ?? "recover: none";
   const runLines = [
     field(
       "agx",
@@ -271,6 +271,13 @@ export function render(
       ),
     ),
   ];
+  const [agxSummary = "", ...agxDetails] = (runLines[0] ?? "").split("\n");
+  const agxBlock = [
+    ...agxDetails,
+    [agxSummary, runLines[1] ?? "", runLines[2] ?? ""].join(` ${DIM}·${RST} `),
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
 
   const rows = {
     prompt: observed(joinText(line1, repoLine)),
@@ -282,7 +289,7 @@ export function render(
     rate: observed(rateLine),
     sys: observed(sysLine),
     job: observed(jobLine),
-    agx: observed(runLines[0]),
+    agx: observed(agxBlock),
     "dispatch-warning": observed(
       runLines[1] === "" ? "dispatch warning: none" : runLines[1],
     ),

@@ -15,6 +15,22 @@ agx-run has four jobs:
 
 Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` validates ticket premises in the supplied tree and reports overlapping live write globs; it does not reserve writes. The event log is the single durable run-event data file. A run also creates per-run brief, report, and progress artifacts alongside that log.
 
+Tickets live in `<repo>/.agents/tickets/`, or in the home declared by `tickets = "<path>"`
+in the `--cd` repository's `.agx.toml` at `trunk()` (Git: `HEAD`). For jj, the repository root
+is its `default` workspace, even when `--cd` selects a secondary workspace. Relative homes
+resolve from that repository root; absolute homes are allowed. Revision and premise checks
+still use the dispatch workspace. A declared home is honoured even under `/tmp`. Both `check`
+and `run` refuse tickets outside the default and declared homes with exit 2 and a `WARN` naming
+the declared home and `tkt new`. Symlinks cannot make an outside file appear to belong to a home.
+Uncommitted changes to `.agx.toml` do not change the accepted home.
+
+Before launching a worker, `run` writes the input bytes to `runs/<id>/ticket.orig.md`, writes
+`ticket.orig.md.sha256`, and records `ticket_sha256`, the original and copied paths, `base_rev`
+and `premise_commits` in its started event. This copy is provenance, not storage: users still
+create, amend and version tickets in their repository's home. It preserves the exact dispatched
+input after the source is edited or removed. A declared `base_rev` must equal the resolved
+`--cd` commit; a mismatch refuses dispatch before routing or launch and names both ids.
+
 `agx-run` owns fold and selection for `agx ls [SELECTOR] [--json]`, which accepts a run id, a unique run-id prefix, or an exact ticket name. Ticket selection returns that ticket's runs oldest first, with the newest run last. Ambiguous ID prefixes and unmatched selectors exit 2 with one line naming candidates. `agx ls --wait SELECTOR` is the one way to wait, and it is a read-only fold, not state: it takes an initial read, then re-reads the records file at a bounded poll interval (`AGX_WAIT_POLL_MS`, default 1000). A run-id selector preserves immediate lookup and returns at once if that run is already `ended`. An exact ticket selector ignores runs already terminal on the initial read; it waits until a run that was running on that read, or a run first recorded later, becomes `ended` (including derived `lost`, so a missing final report cannot hide a finished run), then prints that run's row in `ls` format (JSON with `--json`). It writes no file, not even the fold snapshot, and an empty, ambiguous, or unmatched selector exits 2 at once. The acceptance view is composed outside agx-run by `scripts/agx-accept.ts`; agx-run deliberately does not render reports or inspect workspace diffs.
 
 ## 2. agx-run does not
@@ -38,8 +54,10 @@ Its five commands are `run`, `check`, `ls`, `judge`, and `stats`. `check` valida
 
 Listed runs form the closed union `running{lease} | ended{outcome}`; `lost` is derived from owner lease evidence on every read without writing events or snapshots, while the `agx run` part traps SIGTERM/SIGINT/SIGHUP and records `ended{outcome: stopped, signal}`.
 
-- A superseded run is a run that a later run names in `continues`.
-- The ticket's latest run is the last run in that continuation chain.
+- A replaced run is named in a later fresh dispatch's `supersedes`, supplied by `--supersedes RUN`
+  or the ticket's `supersedes` field. A resumed vendor session uses `--continue RUN` and records
+  `continues`. These relationships are mutually exclusive.
+- The ticket's latest run is the last recorded run for that ticket.
 - Per-ticket judgment is the judgment on that latest run.
 - `--continue` takes its timeout from the ticket supplied to that invocation: `ticket.timeout_s ?? 600` in [`src/next/run.ts`](../src/next/run.ts#L189-L213). The resumed vendor session does not carry a separate timeout field.
 

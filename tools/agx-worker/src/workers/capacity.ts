@@ -15,6 +15,7 @@ export function modelWaitMs(): number {
 const ErrorEnvelope = z.looseObject({
   type: z.string().optional(),
   subtype: z.string().optional(),
+  error_status: z.number().nullable().optional(),
   message: z.string().optional(),
   error: z
     .union([
@@ -45,6 +46,13 @@ export function capacityMessage(
       event.subtype === "api_retry" ||
       (vendor === "claude" && event.error !== undefined);
     if (!vendorError) return undefined;
+    if (
+      vendor === "claude" &&
+      event.type === "system" &&
+      event.subtype === "api_retry" &&
+      event.error_status === 529
+    )
+      return JSON.stringify(event);
     message = JSON.stringify(event);
   } else if (line.trimStart().startsWith("{")) {
     return undefined;

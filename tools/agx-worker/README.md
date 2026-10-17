@@ -8,6 +8,9 @@ The append-only records and their format remain at `$XDG_STATE_HOME/agx-next/rec
 
 [Scope and ownership](docs/scope.md) · [Suite architecture](../spec/architecture.md) · [Caller inventory](docs/suite-callers.md)
 
+[acpx replacement decision](docs/acpx-boundary.md) records the executed hook, sandbox and
+capacity comparison, including the code that could be replaced and the integration that remains.
+
 ## Dispatch roster
 
 `agx-worker roster TICKET.md` prints the one selected roster row as JSON using the same routing

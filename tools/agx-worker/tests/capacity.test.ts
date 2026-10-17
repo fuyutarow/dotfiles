@@ -73,6 +73,25 @@ test("vendor capacity errors are distinct from auth, rate limits, and quoted wor
       "claude",
     ),
   ).toBeDefined();
+  // Native Claude Code 2.1.306 emits this before retrying an HTTP 529 response.
+  expect(
+    capacityMessage(
+      '{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"error_status":529,"error":"overloaded"}',
+      "claude",
+    ),
+  ).toBeDefined();
+  expect(
+    capacityMessage(
+      '{"type":"system","subtype":"api_retry","error_status":429,"error":"rate_limited"}',
+      "claude",
+    ),
+  ).toBeUndefined();
+  expect(
+    capacityMessage(
+      '{"type":"assistant","error_status":529,"message":"overloaded_error is quoted text"}',
+      "claude",
+    ),
+  ).toBeUndefined();
   expect(
     capacityMessage(
       '{"type":"turn.failed","error":{"message":"401 Unauthorized"}}',

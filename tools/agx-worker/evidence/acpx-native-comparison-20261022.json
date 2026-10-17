@@ -1,0 +1,1351 @@
+{
+  "date": "2026-10-22",
+  "decision": "Do not migrate the existing Codex/Claude production routes to stock acpx 0.20.0. Claude loses the original overload identity even with AIR negotiation. Codex capacity can be repaired by a custom negotiation proxy plus terminal metadata interpretation, but that is a separate, vendor-extension-dependent integration; it is not the tested 99-line stock bridge and does not justify deleting mixed policy/transport files wholesale. No production wrapper is removed.",
+  "scope": "Real Codex and Claude native executables, real ACP adapters and published acpx runtime. Only model HTTP responses are deterministic local fixtures; no real vendor inference or billing. User configuration and live workers are not changed.",
+  "versions": {
+    "acpx": "0.20.0",
+    "node": "24.22.1",
+    "bun": "1.4.3",
+    "codex_native": "0.163.0",
+    "claude_native": "2.1.306",
+    "codex_acp": {
+      "minimum_declared": "1.1.5",
+      "latest_in_declared_range": "1.13.1",
+      "latest_tested": "2.2.2"
+    },
+    "claude_acp": {
+      "declared_range": "^0.81.2",
+      "latest_in_declared_range": "0.81.2",
+      "latest_tested": "0.94.0"
+    }
+  },
+  "commands": {
+    "acceptance": "AGX_AUDIT_CODEX_ADAPTER=codex-latest AGX_AUDIT_CLAUDE_ADAPTER=claude-latest bun test /tmp/agx-native-o49jN4/native-acceptance.test.ts",
+    "acceptance_result": "12 pass, 2 fail (both capacity replacement contracts); exit 1 is expected evidence against adoption.",
+    "node_runtime_crosscheck": "AGX_AUDIT_ADAPTER_DIR=<codex-latest|claude-latest> AGX_AUDIT_TRANSPORT=nodebridge AGX_AUDIT_VENDOR=<codex|claude> AGX_AUDIT_SCENARIO=<capacity|tool|quote> bun /tmp/agx-native-o49jN4/probe.ts",
+    "current_domain_suite": "mise run test:agx: 497 pass, 0 fail, 7401 assertions across 62 files",
+    "focused_capacity": "bun test tools/agx-worker/tests/capacity.test.ts: 11 pass, 0 fail",
+    "lint": "mise run lint:ts -- tools/agx-worker/src/workers/capacity.ts tools/agx-worker/tests/capacity.test.ts: passed",
+    "formatting": "bunx --bun oxfmt --check tools/agx-worker/src/workers/capacity.ts tools/agx-worker/tests/capacity.test.ts: passed",
+    "landing_gate": "mise run gate:land: passed (existing lint warnings are nonfatal)",
+    "evidence_inventory": "bun test scripts/tests/config-map.test.ts: 10 pass, 0 fail; the frozen receipt is explicitly excluded from executable configuration inventory"
+  },
+  "acceptance": [
+    {
+      "transport": "bridge",
+      "vendor": "codex",
+      "scenario": "tool",
+      "root": "/tmp/agx-native-a3hxVu",
+      "present": true,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop"
+      ],
+      "elapsedMs": 2437,
+      "modelCalls": 2,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "01a1616b-538f-77e1-a87e-93d2b4c999cb"
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "codex",
+      "scenario": "hook-deny",
+      "root": "/tmp/agx-native-LKigFR",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "Stop"
+      ],
+      "elapsedMs": 2222,
+      "modelCalls": 2,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "01a1616b-5efb-7561-9e34-634ecdad442d"
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "codex",
+      "scenario": "sandbox",
+      "root": "/tmp/agx-native-eTGrbK",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop"
+      ],
+      "elapsedMs": 4057,
+      "modelCalls": 2,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "01a1616b-6b6d-7dd0-afc4-bf560714c20c"
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "codex",
+      "scenario": "read-only",
+      "root": "/tmp/agx-native-HkvE6E",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop"
+      ],
+      "elapsedMs": 2592,
+      "modelCalls": 2,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "01a1616b-7aaa-7832-96b0-ddc4aa2f9e0a"
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "codex",
+      "scenario": "quote",
+      "root": "/tmp/agx-native-UEPoij",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "Stop"
+      ],
+      "elapsedMs": 2595,
+      "modelCalls": 1,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "Selected model is at capacity. overloaded_error is quoted fixture text.",
+        "vendor_session": "01a1616b-8842-77d1-af24-8700f6ae5503"
+      }
+    },
+    {
+      "transport": "agx",
+      "vendor": "codex",
+      "scenario": "capacity",
+      "root": "/tmp/agx-native-HyKFSP",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit"
+      ],
+      "elapsedMs": 651,
+      "modelCalls": 1,
+      "receipt": {
+        "schema": 1,
+        "run_id": "2026-10-22T02-23-22-081721893Z-3442667",
+        "outcome": "capacity",
+        "model": "gpt-6.1-sol",
+        "row": null,
+        "effort": "high",
+        "sandbox": "workspace-write",
+        "sandbox_effective": "workspace-write",
+        "unsandboxed_reason": null,
+        "cwd": "/tmp/agx-native-HyKFSP/workspace",
+        "started_at": "2026-10-22T02:23:22.081721893Z",
+        "elapsed_s": 0.5,
+        "session": "01a1616b-92d8-7951-980f-bee54a8627db",
+        "codex_exit": 143,
+        "turns": 0,
+        "usage": {
+          "input_tokens": 0,
+          "cached_input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_output_tokens": 0
+        },
+        "progress": {
+          "last": "starting",
+          "commands": 0,
+          "files": 0
+        },
+        "last_message": "",
+        "stderr_tail": "Reading additional input from stdin...",
+        "why": "{\"type\":\"error\",\"message\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:37257/v1/responses\"}",
+        "cause": "{\"type\":\"error\",\"message\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:37257/v1/responses\"}",
+        "transient": true,
+        "worker_fault": false,
+        "receipt_file": "/tmp/agx-native-HyKFSP/receipts/2026-10-22T02-23-22-081721893Z-3442667.json",
+        "agx_process_exit": 75
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "codex",
+      "scenario": "capacity",
+      "root": "/tmp/agx-native-w0N0dG",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit"
+      ],
+      "elapsedMs": 2413,
+      "modelCalls": 1,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:40365/v1/responses\n\n",
+        "vendor_session": "01a1616b-9809-79c1-aff2-3c69d6e86be4"
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "claude",
+      "scenario": "tool",
+      "root": "/tmp/agx-native-y9Lx0O",
+      "present": true,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop"
+      ],
+      "elapsedMs": 3748,
+      "modelCalls": 4,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "dddbc971-c3e7-46f5-80da-a916c394ac50"
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "claude",
+      "scenario": "hook-deny",
+      "root": "/tmp/agx-native-1YHxam",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "Stop"
+      ],
+      "elapsedMs": 3176,
+      "modelCalls": 4,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "5b465b5f-1c17-41f0-bfa7-1f6decdf5833"
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "claude",
+      "scenario": "sandbox",
+      "root": "/tmp/agx-native-Z3FTTj",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "Stop"
+      ],
+      "elapsedMs": 3544,
+      "modelCalls": 4,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "a688f62f-3b1c-4176-aceb-dddffa10cbb1"
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "claude",
+      "scenario": "read-only",
+      "root": "/tmp/agx-native-WBbqHR",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "Stop"
+      ],
+      "elapsedMs": 3350,
+      "modelCalls": 3,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "**Warning:** We're changing auto mode to no longer charge for classifier requests in Claude Code. However, this session isn't eligible because your requests go through 127.0.0.1:39459, which isn't compatible with this update. Nothing breaks: auto mode keeps working, and its classifier requests are billed as before. To fix it and access the new version of auto mode, ask your gateway to implement: https://code.claude.com/docs/en/auto-mode-classifier-billingAUDIT_COMPLETED",
+        "vendor_session": "92f6504e-3113-41cc-90ba-6ccc252064b9"
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "claude",
+      "scenario": "quote",
+      "root": "/tmp/agx-native-J5p3QF",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "Stop"
+      ],
+      "elapsedMs": 3073,
+      "modelCalls": 2,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "Selected model is at capacity. overloaded_error is quoted fixture text.",
+        "vendor_session": "75bb4804-9f27-4636-bb08-0b705846f341"
+      }
+    },
+    {
+      "transport": "agx",
+      "vendor": "claude",
+      "scenario": "capacity",
+      "root": "/tmp/agx-native-pxsTiO",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit"
+      ],
+      "elapsedMs": 823,
+      "modelCalls": 1,
+      "receipt": {
+        "type": "agx_receipt",
+        "exit": 75,
+        "capacityCause": "{\"type\":\"system\",\"subtype\":\"api_retry\",\"error_status\":529,\"error\":\"overloaded\",\"attempt\":1,\"max_retries\":10,\"retry_delay_ms\":624,\"session_id\":\"649ae528-f25c-4421-bc5a-9a65e401bc05\",\"uuid\":\"e9144be0-a127-4296-8eb2-824faebd4fbd\"}",
+        "timedOut": false
+      }
+    },
+    {
+      "transport": "bridge",
+      "vendor": "claude",
+      "scenario": "capacity",
+      "root": "/tmp/agx-native-gi7dCp",
+      "present": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit"
+      ],
+      "elapsedMs": 19074,
+      "modelCalls": 5,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 3,
+        "outcome": "timeout",
+        "cause": "Timed out after 15000ms",
+        "timed_out": true,
+        "last_message": "",
+        "vendor_session": "97344a2c-e639-4767-8a05-6942f8ed2f5b"
+      }
+    }
+  ],
+  "supported_node_runtime_crosschecks": [
+    {
+      "name": "node-codex-capacity.log",
+      "root": "/tmp/agx-native-iSG1TM",
+      "elapsed_ms": 3237,
+      "model_attempts": 2,
+      "marker_written": false,
+      "hooks": [],
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:40667/v1/responses\n\n",
+        "vendor_session": "01a1616e-326f-7fd2-98df-7f2a6ab1cc7d"
+      }
+    },
+    {
+      "name": "node-claude-capacity.log",
+      "root": "/tmp/agx-native-AQzJRh",
+      "elapsed_ms": 20653,
+      "model_attempts": 5,
+      "marker_written": false,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit"
+      ],
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 3,
+        "outcome": "timeout",
+        "cause": "Timed out after 15000ms",
+        "timed_out": true,
+        "last_message": "",
+        "vendor_session": "82a55323-8f04-4658-9113-4f46bc9e74d6"
+      }
+    },
+    {
+      "name": "node-claude-tool.log",
+      "root": "/tmp/agx-native-v7OodL",
+      "elapsed_ms": 4840,
+      "model_attempts": 4,
+      "marker_written": true,
+      "hooks": [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop"
+      ],
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "7e96fd51-aab5-46bd-9b35-29c992dedde1"
+      }
+    },
+    {
+      "name": "node-codex-quote.log",
+      "root": "/tmp/agx-native-oZXfpZ",
+      "elapsed_ms": 3504,
+      "model_attempts": 2,
+      "marker_written": false,
+      "hooks": [],
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "Selected model is at capacity. overloaded_error is quoted fixture text.",
+        "vendor_session": "01a1616e-37b2-7f73-9583-71d87cd33a6d"
+      }
+    }
+  ],
+  "compatible_range_and_readonly_crosschecks": [
+    {
+      "name": "agx-codex-compatible-read-only-isolation.log",
+      "root": "/tmp/agx-native-Obe7uc",
+      "marker_written": false,
+      "elapsed_ms": 1838,
+      "model_attempts": 2
+    },
+    {
+      "name": "bridge-codex-compatible-read-only-isolation.log",
+      "root": "/tmp/agx-native-dXry8w",
+      "marker_written": true,
+      "elapsed_ms": 2505,
+      "model_attempts": 3,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "01a16169-4f5a-7c12-90c6-d3c775f483ee"
+      }
+    },
+    {
+      "name": "bridge-codex-latest-read-only-isolation.log",
+      "root": "/tmp/agx-native-6MiPgd",
+      "marker_written": false,
+      "elapsed_ms": 2657,
+      "model_attempts": 3,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "AUDIT_COMPLETED",
+        "vendor_session": "01a16169-52e6-7321-a19d-56568a5b70f5"
+      }
+    },
+    {
+      "name": "codex-compatible-capacity.log",
+      "root": "/tmp/agx-native-ay0off",
+      "marker_written": false,
+      "elapsed_ms": 2384,
+      "model_attempts": 2,
+      "receipt": {
+        "type": "bridge_receipt",
+        "exit_code": 0,
+        "outcome": "returned",
+        "timed_out": false,
+        "last_message": "unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:44745/v1/responses\n\n",
+        "vendor_session": "01a16166-a304-7431-88b2-93a7f604e040"
+      }
+    }
+  ],
+  "findings": [
+    "Trusted native SessionStart, UserPromptSubmit, PreToolUse, PostToolUse and Stop hooks run through both adapters. PreToolUse denial prevents the attempted write. The Codex app-server ignores the CLI bypass-hook-trust switch; explicit fixture trust hashes resolve this configuration difference. It is not lack of native-hook support.",
+    "Both latest adapters pass a real positive write control, a native-hook deny control, a workspace-outside write denial and a read-only write denial. Test directories and TMPDIR were shortened to avoid a native Claude Unix socket path initialization failure; no sandbox initialization error was accepted as proof of confinement.",
+    "The Codex adapter turns the injected terminal HTTP 503 capacity failure into assistant text and a successful end_turn. The receipt bridge therefore returns exit 0/returned; the same marker words in ordinary assistant output must not trigger capacity. Existing agx returns capacity/75 on the native structured error. The defect also reproduces in the latest compatible 1.x adapter and latest 2.2.2.",
+    "Claude's native HTTP 529 produces typed api_retry error_status=529/error=overloaded. The adapter's retry information is negotiated through an AIR sessionFailure extension, which the tested public acpx runtime does not expose to this consumer. The bridge retries five times and ends as timeout rather than capacity/75. The latest adapter 0.94.0 reproduces the failure under supported Node 24 as well.",
+    "A real baseline bug was found: agx only recognized overloaded_error/API Error: 529 strings, missing the native 2.1.306 api_retry error_status field. A failing regression was added first; capacity.ts now recognizes exactly the typed system/api_retry/529 shape. The native baseline then stops with exit 75 after one API attempt; rate-limit 429 and quoted assistant text remain noncapacity.",
+    "With codex-acp 1.13.1 (the latest version within acpx's declared ^1.1.5 range), the tested read-only mode allowed the inside-marker write. Native agx denied it, and codex-acp 2.2.2 denied it. This is a preserved local compatibility counterexample, not a claim about all deployments of 1.13.1. The final rejection does not rely on this older adapter mismatch: the latest adapters still fail capacity.",
+    "A wire-proxy recheck advertised AIR sessionFailure without modifying the released adapters. Codex then retained the 503 error in wire metadata, but the stock runtime bridge still returned success. Claude HTTP 529 overload and HTTP 500 api_error emitted identical first failure category/severity/title/actions (service/warning/Retrying Claude, attempt 1 of 10./[]), omitting original HTTP status and error kind. Both retried five model calls before timeout. Extension negotiation alone does not restore typed overload identity."
+  ],
+  "code_comparison": {
+    "files": [
+      {
+        "path": "tools/agx-worker/src/workers/codex.ts",
+        "lines": 811,
+        "sha256": "9f1135318debf9bae3c0ef285aaa133179ef2207162b0acf8e5a68b1883a9aab"
+      },
+      {
+        "path": "tools/agx-worker/src/workers/codex-progress.ts",
+        "lines": 343,
+        "sha256": "049d966c8feb23fe41aae65b9a4c931691201e197e56220b02ff133856acadcf"
+      },
+      {
+        "path": "tools/agx-worker/src/workers/run-claude.ts",
+        "lines": 607,
+        "sha256": "b10b8e970d04d7b0600713f6d7cb8bfdda4df0103737a3b004f1630c53bd934f"
+      },
+      {
+        "path": "tools/agx-worker/src/workers/claude-progress.ts",
+        "lines": 157,
+        "sha256": "b8116d95a3b075e54af52d9cc0041b4a47fc8029d4dd29f79343a0eb5d75df34"
+      },
+      {
+        "path": "tools/agx-worker/src/workers/capacity.ts",
+        "lines": 86,
+        "sha256": "665039c382f82156283d5ce4456b5df7a831e26eef5d22927f6f52bb02e41804"
+      },
+      {
+        "path": "tools/agx-worker/src/workers/environment.ts",
+        "lines": 65,
+        "sha256": "8ccb7361f66d77b5a6c33f70236bab33c74b96cc3bf342bf1687a858eed4fb10"
+      },
+      {
+        "path": "tools/agx-worker/src/workers/codex-host.ts",
+        "lines": 79,
+        "sha256": "cc11bd923d96be8f048fda8286f3ff3d39772eb55cd377e1b1a2fbabf387beaa"
+      },
+      {
+        "path": "tools/agx-worker/src/workers/codex-resource-probe.ts",
+        "lines": 77,
+        "sha256": "8578dda0eeb887e764bdcbc5ab67307870a3c40429b07843644ebb8c6128c897"
+      }
+    ],
+    "upper_bound_transport_and_parsers": {
+      "codex": 1154,
+      "claude": 764,
+      "total": 1918,
+      "caveat": "Whole-file upper bounds include CLI policy, receipts and lifecycle logic; not a claim that all lines become safely removable."
+    },
+    "candidate_receipt_bridge_lines": 99,
+    "candidate_receipt_bridge_source": "import type {\n  AcpxRuntime,\n  AcpRuntimeEnsureInput,\n} from \"/tmp/agx-decision-0E6raB/acpx-package/dist/runtime.js\";\nimport {\n  capacityMessage,\n  modelWaitMs,\n} from \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/capacity.ts\";\n\n// Concrete replacement boundary for the receipt consumed by agx-worker/src/next/run.ts.\n// Vendor configuration/host declarations, routing, acceptance and run-state ownership remain outside it.\nexport async function runAcpxWorker(options: {\n  runtime: AcpxRuntime;\n  input: AcpRuntimeEnsureInput;\n  vendor: \"codex\" | \"claude\";\n  prompt: string;\n  sandbox: \"read-only\" | \"workspace-write\" | \"none\";\n  timeoutMs: number;\n  onEvent?: (event: unknown) => void;\n}) {\n  let lastMessage = \"\";\n  let cause: string | undefined;\n  let outcome: \"returned\" | \"capacity\" | \"timeout\" | \"refused\" = \"refused\";\n  let exitCode = 2;\n  let vendorSession: string | null = null;\n  const handle = await options.runtime.ensureSession(options.input);\n  vendorSession = handle.agentSessionId ?? handle.backendSessionId ?? null;\n  const mode =\n    options.vendor === \"codex\"\n      ? {\n          \"read-only\": \"read-only\",\n          \"workspace-write\": \"agent\",\n          none: \"agent-full-access\",\n        }[options.sandbox]\n      : {\n          \"read-only\": \"plan\",\n          \"workspace-write\": \"acceptEdits\",\n          none: \"bypassPermissions\",\n        }[options.sandbox];\n  await options.runtime.setMode({ handle, mode });\n  const turn = options.runtime.startTurn({\n    handle,\n    text: options.prompt,\n    mode: \"prompt\",\n    requestId: crypto.randomUUID(),\n    timeoutMs: options.timeoutMs,\n  });\n  let modelWaitExpired = false;\n  const initialModelWait = setTimeout(() => {\n    modelWaitExpired = true;\n    void turn.cancel();\n  }, modelWaitMs());\n  for await (const event of turn.events) {\n    options.onEvent?.(event);\n    if (event.type === \"text_delta\" || event.type === \"tool_call\")\n      clearTimeout(initialModelWait);\n    if (event.type === \"text_delta\" && event.stream !== \"thought\")\n      lastMessage += event.text;\n  }\n  clearTimeout(initialModelWait);\n  const result = await turn.result;\n  if (result.status === \"failed\") {\n    cause = result.error.message;\n    // Only a structured error may establish capacity. Quoted assistant prose never does.\n    const capacity = capacityMessage(\n      JSON.stringify({ type: \"error\", message: result.error.message }),\n      options.vendor,\n    );\n    if (capacity !== undefined) {\n      outcome = \"capacity\";\n      exitCode = 75;\n      cause = capacity;\n    } else if (result.error.code === \"TIMEOUT\") {\n      outcome = \"timeout\";\n      exitCode = 3;\n    }\n  }\n  if (modelWaitExpired) {\n    outcome = \"capacity\";\n    exitCode = 75;\n    cause = \"no model response within initial model wait\";\n  }\n  if (\n    outcome !== \"capacity\" &&\n    outcome !== \"timeout\" &&\n    result.status === \"completed\"\n  ) {\n    outcome = \"returned\";\n    exitCode = 0;\n  }\n  return {\n    exit_code: exitCode,\n    outcome,\n    cause,\n    timed_out: outcome === \"timeout\",\n    last_message: lastMessage,\n    vendor_session: vendorSession,\n  };\n}\n",
+    "required_retained_concerns": [
+      "roster/model-floor policy",
+      "worker environment and host isolation declaration",
+      "resource admission and initial-model-wait policy",
+      "capacity provenance, model cooldown and continuation rules",
+      "progress/usage projection",
+      "run ledger, ticket provenance, verification, acceptance and jj workspace lifecycle"
+    ],
+    "required_upstream_changes_for_a_viable_replacement": [
+      "Expose supported capability negotiation in the client (rather than requiring an independently maintained protocol proxy). Codex terminal failure metadata is already preserved in public result._meta and needs correct consumption, not invented text provenance.",
+      "Preserve Claude native error_status and error kind before the SDK retries. Tested AIR warning fields alone cannot distinguish HTTP 529 overload from HTTP 500 api_error."
+    ],
+    "safe_production_deletions_in_this_change": 0,
+    "reason": "The 99-line bridge is executable and satisfies normal execution/hooks/latest sandbox cases, but fails two mandatory capacity contracts. Deleting native wrappers would remove working capacity behavior or require preserving them beside acpx, which does not constitute the proposed replacement."
+  },
+  "corrections_during_testing": [
+    "An initial bridge assertion expected an iterator to reject; acpx startTurn reports terminal failures through turn.result. The bridge now consumes the documented result.",
+    "An initial Codex positive test expected top-level tools, but native 0.163 exposes code-mode tools through additional_tools. The model fixture now emits the correct custom tool call and text deltas; actual filesystem writes prove the control.",
+    "Early long fixture paths caused Claude sandbox bridge socket initialization failure. Final accepted positive/negative sandbox controls use short, run-owned TMPDIR paths.",
+    "The first adapter versions were range minima. Latest compatible and latest released adapters were subsequently tested; final adoption rejection uses current released versions, not only old minima.",
+    "Rechecking the AIR proxy exposed public terminal result._meta for Codex. Interpreting its typed failure restored capacity/75 and preserved the quoted-text control. Therefore the earlier stock-bridge failure must not be described as fundamental Codex/ACP incompatibility or loss of all terminal metadata. With provider HTTP retries=3, both the native control and repaired bridge made four API calls; the one-call claim applies only to the zero-provider-retry controls."
+  ],
+  "artifacts": {
+    "fixtures": [
+      {
+        "name": "acpx-worker-candidate.ts",
+        "lines": 99,
+        "sha256": "715a0b6ac96107cbbe9add3e8e057a5eb29dffed1ed5c2a017d3dd28e6160281",
+        "path": "/tmp/agx-native-o49jN4/acpx-worker-candidate.ts"
+      },
+      {
+        "name": "probe.ts",
+        "lines": 404,
+        "sha256": "1320d8708d4aca78a1ac08ba836b1fd465ef6260740dc433a222af4fef2a7961",
+        "path": "/tmp/agx-native-o49jN4/probe.ts"
+      },
+      {
+        "name": "model-server.ts",
+        "lines": 342,
+        "sha256": "2ce30269976a5a8f4ec73be5527c82714123769d5cb665c871f87aea0a7d7c48",
+        "path": "/tmp/agx-native-o49jN4/model-server.ts"
+      },
+      {
+        "name": "hook.ts",
+        "lines": 20,
+        "sha256": "7193b8d845e72474d07cce89fb3bd9c893c8799df79866aa995071ceb00ebb2e",
+        "path": "/tmp/agx-native-o49jN4/hook.ts"
+      },
+      {
+        "name": "vendor-launcher.ts",
+        "lines": 38,
+        "sha256": "bfd166be4e768a8282de2d8547534ad1b2dff1a18d9b243b3d11f67f19d9f38a",
+        "path": "/tmp/agx-native-o49jN4/vendor-launcher.ts"
+      },
+      {
+        "name": "codex-appserver-shim.ts",
+        "lines": 121,
+        "sha256": "998326a3509f20839171cbd44fd37b8536642f553d1f164dc9b2129451013290",
+        "path": "/tmp/agx-native-o49jN4/codex-appserver-shim.ts"
+      },
+      {
+        "name": "node-client.ts",
+        "lines": 25,
+        "sha256": "178e68a7753add82a36a6280f26fd47645c2c6c916a7f38275a54c8a95700e9f",
+        "path": "/tmp/agx-native-o49jN4/node-client.ts"
+      },
+      {
+        "name": "native-acceptance.test.ts",
+        "lines": 113,
+        "sha256": "6a349da0821c7bbd53cfb8bcad60cb7ae14894ae600b7a733900196846630f71",
+        "path": "/tmp/agx-native-o49jN4/native-acceptance.test.ts"
+      }
+    ],
+    "acceptance_log": "/tmp/agx-native-o49jN4/native-acceptance-latest.log",
+    "regression_before": "/tmp/agx-native-o49jN4/capacity-regression-before.log",
+    "regression_after": "/tmp/agx-native-o49jN4/capacity-regression-after.log",
+    "domain_suite": "/tmp/agx-native-o49jN4/agx-suite.log",
+    "landing_gate": "/tmp/agx-native-o49jN4/gate-land-final-fixed.log",
+    "cleanup_log": "/tmp/agx-native-o49jN4/cleanup.log",
+    "workspace_probe_directories_recoverably_removed_in_this_pass": 1
+  },
+  "recheck": {
+    "at": "2026-10-22T06:28:33.588Z",
+    "command": "AGX_AUDIT_CODEX_ADAPTER=codex-latest AGX_AUDIT_CLAUDE_ADAPTER=claude-latest bun test /tmp/agx-native-o49jN4/native-acceptance.test.ts",
+    "exit": 1,
+    "passed": 12,
+    "failed": 2,
+    "log": "bun test v1.4.3 (26aa4e1a9)\n\n../../../tmp/agx-native-o49jN4/native-acceptance.test.ts:\n(pass) codex: native hooks run and allowed commands execute through the replacement [3212.83ms]\n(pass) codex: native PreToolUse denial prevents the actual write [2557.98ms]\n(pass) codex: workspace sandbox prevents writes outside the working tree [2711.17ms]\n(pass) codex: read-only mode prevents writes inside the working tree [2926.44ms]\n(pass) codex: quoted capacity words remain ordinary assistant output [2592.13ms]\n(pass) codex: current agx stops a real native capacity response with exit 75 [912.53ms]\n104 |     expect(r.receipt.exit ?? r.receipt.agx_process_exit).toBe(75);\n105 |     expect(r.modelCalls).toBe(1);\n106 |   }, 30000);\n107 |   test(`${vendor}: replacement preserves typed capacity and stops before a second model attempt`, async () => {\n108 |     const r = await run(\"bridge\", vendor, \"capacity\");\n109 |     expect(r.receipt.outcome).toBe(\"capacity\");\n                                    ^\nerror: expect(received).toBe(expected)\n\nExpected: \"capacity\"\nReceived: \"returned\"\n\n      at <anonymous> (/tmp/agx-native-o49jN4/native-acceptance.test.ts:109:31)\n(fail) codex: replacement preserves typed capacity and stops before a second model attempt [2537.29ms]\n(pass) claude: native hooks run and allowed commands execute through the replacement [4873.02ms]\n(pass) claude: native PreToolUse denial prevents the actual write [4101.95ms]\n(pass) claude: workspace sandbox prevents writes outside the working tree [4392.18ms]\n(pass) claude: read-only mode prevents writes inside the working tree [4091.03ms]\n(pass) claude: quoted capacity words remain ordinary assistant output [3920.23ms]\n(pass) claude: current agx stops a real native capacity response with exit 75 [2376.63ms]\n104 |     expect(r.receipt.exit ?? r.receipt.agx_process_exit).toBe(75);\n105 |     expect(r.modelCalls).toBe(1);\n106 |   }, 30000);\n107 |   test(`${vendor}: replacement preserves typed capacity and stops before a second model attempt`, async () => {\n108 |     const r = await run(\"bridge\", vendor, \"capacity\");\n109 |     expect(r.receipt.outcome).toBe(\"capacity\");\n                                    ^\nerror: expect(received).toBe(expected)\n\nExpected: \"capacity\"\nReceived: \"timeout\"\n\n      at <anonymous> (/tmp/agx-native-o49jN4/native-acceptance.test.ts:109:31)\n(fail) claude: replacement preserves typed capacity and stops before a second model attempt [20066.94ms]\n\n 12 pass\n 2 fail\n 44 expect() calls\nRan 14 tests across 1 file. [61.32s]\n",
+    "acceptance": [
+      {
+        "transport": "bridge",
+        "vendor": "codex",
+        "scenario": "tool",
+        "root": "/tmp/agx-native-d6CdV5",
+        "present": true,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PostToolUse",
+          "Stop"
+        ],
+        "elapsedMs": 2930,
+        "modelCalls": 2,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "AUDIT_COMPLETED",
+          "vendor_session": "01a16247-4207-7ce1-a5bb-d15b5995304d"
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "codex",
+        "scenario": "hook-deny",
+        "root": "/tmp/agx-native-aGlN8i",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "Stop"
+        ],
+        "elapsedMs": 2196,
+        "modelCalls": 2,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "AUDIT_COMPLETED",
+          "vendor_session": "01a16247-4d0f-75e3-b773-b784faf38830"
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "codex",
+        "scenario": "sandbox",
+        "root": "/tmp/agx-native-OpJhge",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PostToolUse",
+          "Stop"
+        ],
+        "elapsedMs": 2354,
+        "modelCalls": 2,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "AUDIT_COMPLETED",
+          "vendor_session": "01a16247-5738-7851-b94d-0436f9e376a5"
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "codex",
+        "scenario": "read-only",
+        "root": "/tmp/agx-native-se00DV",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PostToolUse",
+          "Stop"
+        ],
+        "elapsedMs": 2575,
+        "modelCalls": 2,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "AUDIT_COMPLETED",
+          "vendor_session": "01a16247-61da-7521-97ab-659d637fef48"
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "codex",
+        "scenario": "quote",
+        "root": "/tmp/agx-native-4IZ0jF",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "Stop"
+        ],
+        "elapsedMs": 2301,
+        "modelCalls": 1,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "Selected model is at capacity. overloaded_error is quoted fixture text.",
+          "vendor_session": "01a16247-6ceb-7882-b353-a55e26a529a3"
+        }
+      },
+      {
+        "transport": "agx",
+        "vendor": "codex",
+        "scenario": "capacity",
+        "root": "/tmp/agx-native-OZvMU6",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit"
+        ],
+        "elapsedMs": 554,
+        "modelCalls": 1,
+        "receipt": {
+          "schema": 1,
+          "run_id": "2026-10-22T06-23-32-755253996Z-1734605",
+          "outcome": "capacity",
+          "model": "gpt-6.1-sol",
+          "row": null,
+          "effort": "high",
+          "sandbox": "workspace-write",
+          "sandbox_effective": "workspace-write",
+          "unsandboxed_reason": null,
+          "cwd": "/tmp/agx-native-OZvMU6/workspace",
+          "started_at": "2026-10-22T06:23:32.755253996Z",
+          "elapsed_s": 0.5,
+          "session": "01a16247-7679-7613-b31e-9e4fe3f54d2d",
+          "codex_exit": 143,
+          "turns": 0,
+          "usage": {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0
+          },
+          "progress": {
+            "last": "starting",
+            "commands": 0,
+            "files": 0
+          },
+          "last_message": "",
+          "stderr_tail": "Reading additional input from stdin...",
+          "why": "{\"type\":\"error\",\"message\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:41905/v1/responses\"}",
+          "cause": "{\"type\":\"error\",\"message\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:41905/v1/responses\"}",
+          "transient": true,
+          "worker_fault": false,
+          "receipt_file": "/tmp/agx-native-OZvMU6/receipts/2026-10-22T06-23-32-755253996Z-1734605.json",
+          "agx_process_exit": 75
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "codex",
+        "scenario": "capacity",
+        "root": "/tmp/agx-native-7wtvSd",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit"
+        ],
+        "elapsedMs": 2180,
+        "modelCalls": 1,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:45791/v1/responses\n\n",
+          "vendor_session": "01a16247-7afa-7782-b427-02b0c3dfd65c"
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "claude",
+        "scenario": "tool",
+        "root": "/tmp/agx-native-JDCwGu",
+        "present": true,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PostToolUse",
+          "Stop"
+        ],
+        "elapsedMs": 4433,
+        "modelCalls": 4,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "AUDIT_COMPLETED",
+          "vendor_session": "f2b80998-fa7e-4b8f-a821-82ae3683c7e2"
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "claude",
+        "scenario": "hook-deny",
+        "root": "/tmp/agx-native-yec9z6",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "Stop"
+        ],
+        "elapsedMs": 3634,
+        "modelCalls": 4,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "AUDIT_COMPLETED",
+          "vendor_session": "4a5947df-8da2-43e6-a2a3-acc672b1f974"
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "claude",
+        "scenario": "sandbox",
+        "root": "/tmp/agx-native-LUiiZ0",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "Stop"
+        ],
+        "elapsedMs": 4028,
+        "modelCalls": 4,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "AUDIT_COMPLETED",
+          "vendor_session": "f9651299-c043-476c-a729-56c179e4dd4b"
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "claude",
+        "scenario": "read-only",
+        "root": "/tmp/agx-native-HoUUNM",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "Stop"
+        ],
+        "elapsedMs": 3808,
+        "modelCalls": 3,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "**Warning:** We're changing auto mode to no longer charge for classifier requests in Claude Code. However, this session isn't eligible because your requests go through 127.0.0.1:45533, which isn't compatible with this update. Nothing breaks: auto mode keeps working, and its classifier requests are billed as before. To fix it and access the new version of auto mode, ask your gateway to implement: https://code.claude.com/docs/en/auto-mode-classifier-billingAUDIT_COMPLETED",
+          "vendor_session": "ee315b54-1490-40f5-8f4e-a1f0c48f451b"
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "claude",
+        "scenario": "quote",
+        "root": "/tmp/agx-native-G3b8MD",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "Stop"
+        ],
+        "elapsedMs": 3579,
+        "modelCalls": 2,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "Selected model is at capacity. overloaded_error is quoted fixture text.",
+          "vendor_session": "d6f21677-d573-44f0-932c-2a9f867511cc"
+        }
+      },
+      {
+        "transport": "agx",
+        "vendor": "claude",
+        "scenario": "capacity",
+        "root": "/tmp/agx-native-wXBc93",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit"
+        ],
+        "elapsedMs": 1072,
+        "modelCalls": 1,
+        "receipt": {
+          "type": "agx_receipt",
+          "exit": 75,
+          "capacityCause": "{\"type\":\"system\",\"subtype\":\"api_retry\",\"error_status\":529,\"error\":\"overloaded\",\"attempt\":1,\"max_retries\":10,\"retry_delay_ms\":523,\"session_id\":\"09f89603-c1eb-49ae-871d-afd28be11f22\",\"uuid\":\"e37aa9bf-b5e0-45f2-a765-548881335635\"}",
+          "timedOut": false
+        }
+      },
+      {
+        "transport": "bridge",
+        "vendor": "claude",
+        "scenario": "capacity",
+        "root": "/tmp/agx-native-ss3IY1",
+        "present": false,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit"
+        ],
+        "elapsedMs": 19725,
+        "modelCalls": 5,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 3,
+          "outcome": "timeout",
+          "cause": "Timed out after 15000ms",
+          "timed_out": true,
+          "last_message": "",
+          "vendor_session": "7bb6e600-0c56-41f7-9bac-d4d34d1f58ec"
+        }
+      }
+    ],
+    "implementation_hashes_match": true,
+    "registry_versions": {
+      "acpx": "0.20.0",
+      "codex_acp": "2.2.2",
+      "claude_agent_acp": "0.94.0"
+    },
+    "extension_probe": [
+      {
+        "name": "codex-capacity",
+        "root": "/tmp/agx-native-C0y183",
+        "outsideRoot": "/home/fuyu/dotfiles/.agx-native-audit-vaz0t5",
+        "modelCalls": 1,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "",
+          "vendor_session": "01a16249-b612-7ba0-86ea-3e1573c4956d"
+        },
+        "wireFailures": [
+          {
+            "id": "01a16249-b6fd-7cb2-8600-77c8a3fd5c81:error",
+            "revision": 1,
+            "category": "connection",
+            "severity": "error",
+            "title": "unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:38889/v1/responses",
+            "actions": [
+              "retry",
+              "new_session"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "claude-capacity",
+        "root": "/tmp/agx-native-BCIqDB",
+        "outsideRoot": "/home/fuyu/dotfiles/.agx-native-audit-zJB4UU",
+        "modelCalls": 5,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 3,
+          "outcome": "timeout",
+          "cause": "Timed out after 15000ms",
+          "timed_out": true,
+          "last_message": "",
+          "vendor_session": "5562c705-b531-4664-932c-a8c4923d21da"
+        },
+        "wireFailures": [
+          {
+            "id": "5562c705-b531-4664-932c-a8c4923d21da:session-error:ed218e12-230f-483f-9d20-897e5df67104:1",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 1 of 10.",
+            "actions": []
+          },
+          {
+            "id": "5562c705-b531-4664-932c-a8c4923d21da:session-error:ed218e12-230f-483f-9d20-897e5df67104:2",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 2 of 10.",
+            "actions": []
+          },
+          {
+            "id": "5562c705-b531-4664-932c-a8c4923d21da:session-error:ed218e12-230f-483f-9d20-897e5df67104:3",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 3 of 10.",
+            "actions": []
+          },
+          {
+            "id": "5562c705-b531-4664-932c-a8c4923d21da:session-error:ed218e12-230f-483f-9d20-897e5df67104:4",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 4 of 10.",
+            "actions": []
+          },
+          {
+            "id": "5562c705-b531-4664-932c-a8c4923d21da:session-error:ed218e12-230f-483f-9d20-897e5df67104:5",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 5 of 10.",
+            "actions": []
+          }
+        ]
+      },
+      {
+        "name": "claude-server-error",
+        "root": "/tmp/agx-native-zBMACI",
+        "outsideRoot": "/home/fuyu/dotfiles/.agx-native-audit-pjIvvi",
+        "modelCalls": 5,
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 3,
+          "outcome": "timeout",
+          "cause": "Timed out after 15000ms",
+          "timed_out": true,
+          "last_message": "",
+          "vendor_session": "fad35b4a-2a8a-4818-9e12-2449910faeb3"
+        },
+        "wireFailures": [
+          {
+            "id": "fad35b4a-2a8a-4818-9e12-2449910faeb3:session-error:b9ca1a62-56f3-48e8-aebc-32f189d52478:1",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 1 of 10.",
+            "actions": []
+          },
+          {
+            "id": "fad35b4a-2a8a-4818-9e12-2449910faeb3:session-error:b9ca1a62-56f3-48e8-aebc-32f189d52478:2",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 2 of 10.",
+            "actions": []
+          },
+          {
+            "id": "fad35b4a-2a8a-4818-9e12-2449910faeb3:session-error:b9ca1a62-56f3-48e8-aebc-32f189d52478:3",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 3 of 10.",
+            "actions": []
+          },
+          {
+            "id": "fad35b4a-2a8a-4818-9e12-2449910faeb3:session-error:b9ca1a62-56f3-48e8-aebc-32f189d52478:4",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 4 of 10.",
+            "actions": []
+          },
+          {
+            "id": "fad35b4a-2a8a-4818-9e12-2449910faeb3:session-error:b9ca1a62-56f3-48e8-aebc-32f189d52478:5",
+            "revision": 1,
+            "category": "service",
+            "severity": "warning",
+            "title": "Retrying Claude, attempt 5 of 10.",
+            "actions": []
+          }
+        ]
+      }
+    ],
+    "claude_529_and_500_first_wire_failure_fields_equal": {
+      "category": "service",
+      "severity": "warning",
+      "title": "Retrying Claude, attempt 1 of 10.",
+      "actions": []
+    },
+    "fixture_sources": {
+      "acpx-worker-candidate.ts": {
+        "path": "/tmp/agx-native-o49jN4/acpx-worker-candidate.ts",
+        "source": "import type {\n  AcpxRuntime,\n  AcpRuntimeEnsureInput,\n} from \"/tmp/agx-decision-0E6raB/acpx-package/dist/runtime.js\";\nimport {\n  capacityMessage,\n  modelWaitMs,\n} from \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/capacity.ts\";\n\n// Concrete replacement boundary for the receipt consumed by agx-worker/src/next/run.ts.\n// Vendor configuration/host declarations, routing, acceptance and run-state ownership remain outside it.\nexport async function runAcpxWorker(options: {\n  runtime: AcpxRuntime;\n  input: AcpRuntimeEnsureInput;\n  vendor: \"codex\" | \"claude\";\n  prompt: string;\n  sandbox: \"read-only\" | \"workspace-write\" | \"none\";\n  timeoutMs: number;\n  onEvent?: (event: unknown) => void;\n}) {\n  let lastMessage = \"\";\n  let cause: string | undefined;\n  let outcome: \"returned\" | \"capacity\" | \"timeout\" | \"refused\" = \"refused\";\n  let exitCode = 2;\n  let vendorSession: string | null = null;\n  const handle = await options.runtime.ensureSession(options.input);\n  vendorSession = handle.agentSessionId ?? handle.backendSessionId ?? null;\n  const mode =\n    options.vendor === \"codex\"\n      ? {\n          \"read-only\": \"read-only\",\n          \"workspace-write\": \"agent\",\n          none: \"agent-full-access\",\n        }[options.sandbox]\n      : {\n          \"read-only\": \"plan\",\n          \"workspace-write\": \"acceptEdits\",\n          none: \"bypassPermissions\",\n        }[options.sandbox];\n  await options.runtime.setMode({ handle, mode });\n  const turn = options.runtime.startTurn({\n    handle,\n    text: options.prompt,\n    mode: \"prompt\",\n    requestId: crypto.randomUUID(),\n    timeoutMs: options.timeoutMs,\n  });\n  let modelWaitExpired = false;\n  const initialModelWait = setTimeout(() => {\n    modelWaitExpired = true;\n    void turn.cancel();\n  }, modelWaitMs());\n  for await (const event of turn.events) {\n    options.onEvent?.(event);\n    if (event.type === \"text_delta\" || event.type === \"tool_call\")\n      clearTimeout(initialModelWait);\n    if (event.type === \"text_delta\" && event.stream !== \"thought\")\n      lastMessage += event.text;\n  }\n  clearTimeout(initialModelWait);\n  const result = await turn.result;\n  if (result.status === \"failed\") {\n    cause = result.error.message;\n    // Only a structured error may establish capacity. Quoted assistant prose never does.\n    const capacity = capacityMessage(\n      JSON.stringify({ type: \"error\", message: result.error.message }),\n      options.vendor,\n    );\n    if (capacity !== undefined) {\n      outcome = \"capacity\";\n      exitCode = 75;\n      cause = capacity;\n    } else if (result.error.code === \"TIMEOUT\") {\n      outcome = \"timeout\";\n      exitCode = 3;\n    }\n  }\n  if (modelWaitExpired) {\n    outcome = \"capacity\";\n    exitCode = 75;\n    cause = \"no model response within initial model wait\";\n  }\n  if (\n    outcome !== \"capacity\" &&\n    outcome !== \"timeout\" &&\n    result.status === \"completed\"\n  ) {\n    outcome = \"returned\";\n    exitCode = 0;\n  }\n  return {\n    exit_code: exitCode,\n    outcome,\n    cause,\n    timed_out: outcome === \"timeout\",\n    last_message: lastMessage,\n    vendor_session: vendorSession,\n  };\n}\n"
+      },
+      "probe.ts": {
+        "path": "/tmp/agx-native-o49jN4/probe.ts",
+        "source": "import {\n  mkdir,\n  mkdtemp,\n  readFile,\n  writeFile,\n  access,\n  chmod,\n} from \"node:fs/promises\";\nimport { join } from \"node:path\";\nimport {\n  createAcpRuntime,\n  createAgentRegistry,\n  createFileSessionStore,\n} from \"/tmp/agx-decision-0E6raB/acpx-package/dist/runtime.js\";\nimport { modelServer } from \"./model-server.ts\";\nimport { runClaude } from \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/run-claude.ts\";\nimport { runAcpxWorker } from \"./acpx-worker-candidate.ts\";\n\nasync function main() {\n  const vendor = process.env.AGX_AUDIT_VENDOR === \"claude\" ? \"claude\" : \"codex\";\n  const transport = process.env.AGX_AUDIT_TRANSPORT ?? \"acpx\";\n  const scenario = process.env.AGX_AUDIT_SCENARIO ?? \"normal\";\n  // Native Claude sandbox bridge sockets must fit the Unix-domain path limit.\n  const root = await mkdtemp(\"/tmp/agx-native-\");\n  const cwd = join(root, \"workspace\");\n  const vendorHome = join(root, \"vendor-home\");\n  const temp = join(root, \"tmp\");\n  await mkdir(cwd, { recursive: true });\n  await mkdir(vendorHome, { recursive: true });\n  await mkdir(temp, { recursive: true });\n  const outsideRoot = await mkdtemp(\"/home/fuyu/dotfiles/.agx-native-audit-\");\n  const marker =\n    scenario === \"sandbox\"\n      ? join(outsideRoot, \"outside-marker\")\n      : join(cwd, \"inside-marker\");\n  const command = `${scenario === \"hook-deny\" ? \"# audit-hook-denied\\n\" : \"\"}printf audit > '${marker}'`;\n  const api = modelServer({\n    vendor,\n    scenario,\n    command,\n    logPath: join(root, \"http.jsonl\"),\n  });\n  const hookLog = join(root, \"hooks.jsonl\");\n  const hook = {\n    type: \"command\",\n    command: `${process.execPath} ${join(import.meta.dir, \"hook.ts\")}`,\n    timeout: 5,\n  };\n  const hooks = Object.fromEntries(\n    [\n      \"SessionStart\",\n      \"UserPromptSubmit\",\n      \"PreToolUse\",\n      \"PostToolUse\",\n      \"Stop\",\n    ].map((event) => [event, [{ hooks: [hook] }]]),\n  );\n  const provider = {\n    name: \"audit\",\n    base_url: `${api.url}/v1`,\n    wire_api: \"responses\",\n    requires_openai_auth: false,\n    supports_websockets: false,\n    request_max_retries: 0,\n    stream_max_retries: 0,\n    stream_idle_timeout_ms: 1000,\n  };\n  const codexConfig = {\n    model: \"gpt-6.1-sol\",\n    model_provider: \"audit\",\n    model_providers: { audit: provider },\n    features: { hooks: true },\n    approval_policy: \"never\",\n    sandbox_mode: scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n    \"sandbox_workspace_write.exclude_slash_tmp\": true,\n    \"sandbox_workspace_write.exclude_tmpdir_env_var\": true,\n  };\n  const codexShim = join(root, \"codex-audit\");\n  await writeFile(\n    codexShim,\n    '#!/bin/sh\\n# shim: exec-wrapper — vetted audit hooks only; all other argv is forwarded.\\nexec /home/linuxbrew/.linuxbrew/bin/codex --dangerously-bypass-hook-trust \"$@\"\\n',\n  );\n  await chmod(codexShim, 0o755);\n  if (vendor === \"codex\") {\n    await writeFile(join(vendorHome, \"hooks.json\"), JSON.stringify({ hooks }));\n    await writeFile(\n      join(vendorHome, \"config.toml\"),\n      `model = \"gpt-6.1-sol\"\\nmodel_provider = \"audit\"\\napproval_policy = \"never\"\\n[model_providers.audit]\\nname = \"audit\"\\nbase_url = \"${api.url}/v1\"\\nwire_api = \"responses\"\\nrequires_openai_auth = false\\nsupports_websockets = false\\nrequest_max_retries = 0\\nstream_max_retries = 0\\nstream_idle_timeout_ms = 1000\\n[features]\\nhooks = true\\n`,\n    );\n  } else {\n    await writeFile(\n      join(vendorHome, \"settings.json\"),\n      JSON.stringify({\n        hooks,\n        sandbox: {\n          enabled: true,\n          autoAllowBashIfSandboxed: true,\n          allowUnsandboxedCommands: false,\n          failIfUnavailable: true,\n        },\n        permissions: {\n          defaultMode: scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n        },\n      }),\n    );\n  }\n  const env = {\n    TMPDIR: temp,\n    TMP: temp,\n    TEMP: temp,\n    AGX_AUDIT_HOOK_LOG: hookLog,\n    CODEX_PATH:\n      process.env.AGX_AUDIT_PATCH_HOOK_SOURCE === undefined\n        ? codexShim\n        : join(import.meta.dir, \"codex-appserver-shim.ts\"),\n    CODEX_HOME: vendorHome,\n    CODEX_CONFIG: JSON.stringify(codexConfig),\n    MODEL_PROVIDER: \"audit\",\n    ...(process.env.AGX_AUDIT_PATCH_HOOK_SOURCE === undefined\n      ? {}\n      : {\n          AGX_AUDIT_PATCH_HOOK_SOURCE: process.env.AGX_AUDIT_PATCH_HOOK_SOURCE,\n        }),\n    ...(process.env.AGX_AUDIT_TRUST_HOOKS === undefined\n      ? {}\n      : { AGX_AUDIT_TRUST_HOOKS: process.env.AGX_AUDIT_TRUST_HOOKS }),\n    CLAUDE_CONFIG_DIR: vendorHome,\n    CLAUDE_CODE_EXECUTABLE: \"/home/fuyu/.local/bin/claude\",\n    ACPX_CLAUDE_INCLUDE_USER_SETTINGS: \"1\",\n    ANTHROPIC_BASE_URL: api.url,\n    ANTHROPIC_API_KEY: \"audit-not-a-real-key\",\n    ANTHROPIC_AUTH_TOKEN: \"\",\n    CLAUDE_CODE_OAUTH_TOKEN: \"\",\n    OPENAI_API_KEY: \"audit-not-a-real-key\",\n    CODEX_API_KEY: \"audit-not-a-real-key\",\n    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: \"1\",\n    DISABLE_TELEMETRY: \"1\",\n    DISABLE_AUTOUPDATER: \"1\",\n    MAX_RETRIES: \"0\",\n  };\n  const adapter = process.env.AGX_AUDIT_ADAPTER_DIR ?? vendor;\n  const runtime = createAcpRuntime({\n    cwd,\n    sessionStore: createFileSessionStore({ stateDir: join(root, \"state\") }),\n    agentRegistry: createAgentRegistry({\n      overrides: {\n        [vendor]: [\n          join(import.meta.dir, \"node/bin/node\"),\n          join(import.meta.dir, adapter, \"dist/index.js\"),\n        ],\n      },\n    }),\n    agentProcessEnv: env,\n    permissionMode: \"deny-all\",\n    fs: false,\n    terminal: false,\n    timeoutMs: 15000,\n    verbose: false,\n  });\n  const events: unknown[] = [];\n  const start = performance.now();\n  let failure: string | undefined;\n  try {\n    if (transport === \"agx\") {\n      const envFile = join(root, \"native-env.json\");\n      await writeFile(envFile, JSON.stringify(env));\n      const launcher = join(import.meta.dir, \"vendor-launcher.ts\");\n      if (vendor === \"claude\") {\n        process.env.AGX_AUDIT_NATIVE_ENV_FILE = envFile;\n        const receipt = await runClaude({\n          target: cwd,\n          prompt: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n          model: \"claude-sonnet-4-6\",\n          permissionMode: scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n          maxTurns: 3,\n          timeoutMs: 15000,\n          maxBudgetUsd: 2,\n          safeMode: false,\n          bare: false,\n          progressFile: join(root, \"progress.jsonl\"),\n          persistSession: true,\n          claudeBin: launcher,\n        });\n        await writeFile(join(root, \"native.stdout\"), receipt.stdout);\n        await writeFile(join(root, \"native.stderr\"), receipt.stderr);\n        events.push({\n          type: \"agx_receipt\",\n          exit: receipt.exitCode,\n          capacityCause: receipt.capacityCause,\n          timedOut: receipt.timedOut,\n        });\n      } else {\n        const prompt = join(root, \"prompt.txt\");\n        await writeFile(\n          prompt,\n          \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        );\n        const args = [\n          process.execPath,\n          \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/codex.ts\",\n          \"--model\",\n          \"gpt-6.1-sol\",\n          \"--effort\",\n          \"high\",\n          \"--sandbox\",\n          scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n          \"--cd\",\n          cwd,\n          \"--prompt-file\",\n          prompt,\n          \"--receipt-dir\",\n          join(root, \"receipts\"),\n          \"--timeout-s\",\n          \"15\",\n        ];\n        const proc = Bun.spawn(args, {\n          env: {\n            ...process.env,\n            AGX_CODEX_BIN: launcher,\n            AGX_CODEX_HOST_FILE: join(root, \"absent-host.toml\"),\n            AGX_AUDIT_NATIVE_ENV_FILE: envFile,\n          },\n          stdin: \"ignore\",\n          stdout: \"pipe\",\n          stderr: \"pipe\",\n          timeout: 20000,\n        });\n        const [out, err, exit] = await Promise.all([\n          proc.stdout.text(),\n          proc.stderr.text(),\n          proc.exited,\n        ]);\n        await writeFile(join(root, \"native.stdout\"), out);\n        await writeFile(join(root, \"native.stderr\"), err);\n        events.push(\n          ...out\n            .trim()\n            .split(\"\\n\")\n            .filter(Boolean)\n            .map((line) => {\n              try {\n                return { ...JSON.parse(line), agx_process_exit: exit };\n              } catch {\n                return { raw: line, agx_process_exit: exit };\n              }\n            }),\n        );\n        if (exit !== 0 && !out.includes('\"capacity\"'))\n          failure = `agx exit=${exit}: ${err.slice(-1000)}`;\n      }\n    } else if (transport === \"native\") {\n      const cmd =\n        vendor === \"codex\"\n          ? [\n              codexShim,\n              \"exec\",\n              \"--json\",\n              \"--skip-git-repo-check\",\n              \"--sandbox\",\n              scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n              \"-C\",\n              cwd,\n              \"-m\",\n              \"gpt-6.1-sol\",\n              \"-c\",\n              'approval_policy=\"never\"',\n              \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n            ]\n          : [\n              \"/home/fuyu/.local/bin/claude\",\n              \"-p\",\n              \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n              \"--model\",\n              \"claude-sonnet-4-6\",\n              \"--permission-mode\",\n              scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n              \"--output-format\",\n              \"stream-json\",\n              \"--verbose\",\n              \"--max-turns\",\n              \"3\",\n            ];\n      const proc = Bun.spawn(cmd, {\n        cwd,\n        env: { ...process.env, ...env },\n        stdin: \"ignore\",\n        stdout: \"pipe\",\n        stderr: \"pipe\",\n        timeout: 15000,\n      });\n      const [out, err, exit] = await Promise.all([\n        proc.stdout.text(),\n        proc.stderr.text(),\n        proc.exited,\n      ]);\n      await writeFile(join(root, \"native.stdout\"), out);\n      await writeFile(join(root, \"native.stderr\"), err);\n      events.push(\n        ...out\n          .trim()\n          .split(\"\\n\")\n          .filter(Boolean)\n          .map((line) => {\n            try {\n              return JSON.parse(line);\n            } catch {\n              return { raw: line };\n            }\n          }),\n      );\n      if (exit !== 0)\n        failure = `native exit=${exit} signal=${proc.signalCode}: ${err.slice(-1500)}`;\n    } else if (transport === \"nodebridge\") {\n      const inputFile = join(root, \"node-input.json\");\n      await writeFile(inputFile, JSON.stringify({ root, cwd, vendor, adapter, scenario, env }));\n      const proc = Bun.spawn([join(import.meta.dir, \"node/bin/node\"), join(import.meta.dir, \"node-client.ts\")], { cwd, env: { ...process.env, AGX_AUDIT_NODE_INPUT: inputFile }, stdin: \"ignore\", stdout: \"pipe\", stderr: \"pipe\", timeout: 25000 });\n      const [out, err, exit] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);\n      await writeFile(join(root, \"node.stderr\"), err);\n      if (exit !== 0) throw Error(`native Node bridge ${exit}: ${err.slice(-2000)}`);\n      const parsed = JSON.parse(out.trim().split(\"\\n\").at(-1)!);\n      events.push(...parsed.events);\n    } else if (transport === \"bridge\") {\n      const receipt = await runAcpxWorker({\n        runtime,\n        input: {\n          sessionKey: `audit-${vendor}-${scenario}`,\n          agent: vendor,\n          mode: \"persistent\",\n          sessionOptions: {\n            model: vendor === \"codex\" ? \"gpt-6.1-sol\" : \"claude-sonnet-4-6\",\n            maxTurns: 3,\n          },\n        },\n        vendor,\n        prompt: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        sandbox: scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n        timeoutMs: 15000,\n        onEvent: (event) => events.push(event),\n      });\n      events.push({ type: \"bridge_receipt\", ...receipt });\n    } else {\n      const handle = await runtime.ensureSession({\n        sessionKey: `audit-${vendor}-${scenario}`,\n        agent: vendor,\n        mode: \"persistent\",\n        sessionOptions: {\n          model: vendor === \"codex\" ? \"gpt-6.1-sol\" : \"claude-sonnet-4-6\",\n          maxTurns: 3,\n        },\n      });\n      await writeFile(\n        join(root, \"handle.json\"),\n        JSON.stringify(handle, null, 2),\n      );\n      if (vendor === \"codex\" && scenario === \"read-only\")\n        await runtime.setMode({ handle, mode: \"read-only\" });\n      for await (const event of runtime.runTurn({\n        handle,\n        text: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        mode: \"prompt\",\n        requestId: crypto.randomUUID(),\n        timeoutMs: 15000,\n      }))\n        events.push(event);\n    }\n  } catch (error) {\n    failure = String(error);\n  } finally {\n    await runtime.shutdown();\n    await api.server.stop(true);\n  }\n  const present = await access(marker).then(\n    () => true,\n    () => false,\n  );\n  const hookText = await readFile(hookLog, \"utf8\").catch(() => \"\");\n  const result = {\n    transport,\n    vendor,\n    adapter,\n    scenario,\n    root,\n    outsideRoot,\n    marker,\n    present,\n    elapsedMs: Math.round(performance.now() - start),\n    ...api.counts(),\n    failure,\n    hooks: hookText\n      .trim()\n      .split(\"\\n\")\n      .filter(Boolean)\n      .map((line) => JSON.parse(line).hook_event_name),\n    events,\n  };\n  await writeFile(join(root, \"result.json\"), JSON.stringify(result, null, 2));\n  process.stdout.write(\n    `${JSON.stringify({ ...result, events: events.slice(-4) })}\\n`,\n  );\n}\nmain().catch((error) => {\n  process.stderr.write(`FATAL: ${String(error)}\\n`);\n  process.exitCode = 2;\n});\n"
+      },
+      "model-server.ts": {
+        "path": "/tmp/agx-native-o49jN4/model-server.ts",
+        "source": "import { appendFileSync } from \"node:fs\";\n\nexport function modelServer(options: {\n  vendor: \"codex\" | \"claude\";\n  scenario: string;\n  command: string;\n  logPath: string;\n}) {\n  let requests = 0;\n  let modelCalls = 0;\n  const sse = (events: { event: string; data: unknown }[]) =>\n    new Response(\n      events\n        .map((e) => `event: ${e.event}\\ndata: ${JSON.stringify(e.data)}\\n\\n`)\n        .join(\"\"),\n      {\n        headers: {\n          \"content-type\": \"text/event-stream\",\n          \"cache-control\": \"no-cache\",\n        },\n      },\n    );\n  const server = Bun.serve({\n    hostname: \"127.0.0.1\",\n    port: 0,\n    async fetch(req) {\n      const url = new URL(req.url);\n      const raw = await req.text();\n      const body = raw === \"\" ? {} : JSON.parse(raw);\n      requests++;\n      appendFileSync(\n        options.logPath,\n        `${JSON.stringify({ path: url.pathname, body })}\\n`,\n      );\n      if (url.pathname.includes(\"count_tokens\"))\n        return Response.json({ input_tokens: 20 });\n      if (req.method === \"GET\")\n        return Response.json({\n          data: [\n            {\n              id:\n                options.vendor === \"codex\"\n                  ? \"gpt-6.1-sol\"\n                  : \"claude-sonnet-4-6\",\n              type: \"model\",\n              display_name: \"audit\",\n            },\n          ],\n          has_more: false,\n        });\n      if (\n        !url.pathname.includes(\"responses\") &&\n        !url.pathname.includes(\"messages\")\n      )\n        return Response.json({ ok: true });\n      if (options.vendor === \"claude\" && body.stream !== true)\n        return Response.json({\n          id: \"msg_validation\",\n          type: \"message\",\n          role: \"assistant\",\n          content: [{ type: \"text\", text: \"ok\" }],\n          model: body.model,\n          stop_reason: \"end_turn\",\n          stop_sequence: null,\n          usage: { input_tokens: 1, output_tokens: 1 },\n        });\n      const count = modelCalls++;\n      if (options.scenario === \"capacity\")\n        return Response.json(\n          options.vendor === \"claude\"\n            ? {\n                type: \"error\",\n                error: {\n                  type: \"overloaded_error\",\n                  message: \"audit injected overload\",\n                },\n              }\n            : {\n                error: {\n                  type: \"server_error\",\n                  code: \"model_capacity_exceeded\",\n                  message:\n                    \"Selected model is at capacity. Please try a different model.\",\n                },\n              },\n          {\n            status: options.vendor === \"claude\" ? 529 : 503,\n            headers: { \"retry-after\": \"0\", \"request-id\": \"audit-capacity\" },\n          },\n        );\n      if (options.scenario === \"auth\")\n        return Response.json(\n          {\n            type: \"error\",\n            error: {\n              type: \"authentication_error\",\n              message: \"audit invalid credential\",\n            },\n          },\n          { status: 401 },\n        );\n      if (options.scenario === \"stall\")\n        return new Response(\n          new ReadableStream({\n            start(controller) {\n              controller.enqueue(\n                new TextEncoder().encode(\": audit keepalive\\n\\n\"),\n              );\n            },\n          }),\n          { headers: { \"content-type\": \"text/event-stream\" } },\n        );\n      const tool =\n        count === 0 &&\n        [\"tool\", \"sandbox\", \"hook-deny\", \"read-only\"].includes(\n          options.scenario,\n        );\n      if (options.vendor === \"claude\") {\n        const available = body.tools ?? [];\n        const selected =\n          available.find((t) => t.name === \"Bash\") ??\n          available.find((t) => /bash|terminal/i.test(t.name));\n        const wantsTool = tool && selected !== undefined;\n        const content = wantsTool\n          ? {\n              type: \"tool_use\",\n              id: \"toolu_audit_1\",\n              name: selected.name,\n              input: {},\n            }\n          : { type: \"text\", text: \"\" };\n        return sse([\n          {\n            event: \"message_start\",\n            data: {\n              type: \"message_start\",\n              message: {\n                id: `msg_audit_${count}`,\n                type: \"message\",\n                role: \"assistant\",\n                content: [],\n                model: body.model,\n                stop_reason: null,\n                stop_sequence: null,\n                usage: { input_tokens: 20, output_tokens: 0 },\n              },\n            },\n          },\n          {\n            event: \"content_block_start\",\n            data: {\n              type: \"content_block_start\",\n              index: 0,\n              content_block: content,\n            },\n          },\n          {\n            event: \"content_block_delta\",\n            data: {\n              type: \"content_block_delta\",\n              index: 0,\n              delta: wantsTool\n                ? {\n                    type: \"input_json_delta\",\n                    partial_json: JSON.stringify({\n                      command: options.command,\n                      timeout: 5000,\n                      description: \"audit scoped filesystem check\",\n                    }),\n                  }\n                : {\n                    type: \"text_delta\",\n                    text:\n                      options.scenario === \"quote\"\n                        ? \"Selected model is at capacity. overloaded_error is quoted fixture text.\"\n                        : \"AUDIT_COMPLETED\",\n                  },\n            },\n          },\n          {\n            event: \"content_block_stop\",\n            data: { type: \"content_block_stop\", index: 0 },\n          },\n          {\n            event: \"message_delta\",\n            data: {\n              type: \"message_delta\",\n              delta: {\n                stop_reason: wantsTool ? \"tool_use\" : \"end_turn\",\n                stop_sequence: null,\n              },\n              usage: { output_tokens: 5 },\n            },\n          },\n          { event: \"message_stop\", data: { type: \"message_stop\" } },\n        ]);\n      }\n      const tools =\n        body.tools ??\n        (body.input ?? [])\n          .filter((x) => x.type === \"additional_tools\")\n          .flatMap((x) => x.tools ?? []);\n      const namespace = tools.find(\n        (t) =>\n          t.type === \"namespace\" && t.tools?.some((q) => q.name === \"exec\"),\n      );\n      const selected =\n        tools.find((t) => t.name === \"exec_command\") ??\n        tools.find((t) => t.name === \"shell_command\") ??\n        tools.find((t) => t.name === \"shell\");\n      const wantsTool =\n        tool && (selected !== undefined || namespace !== undefined);\n      let args: unknown = { command: options.command, timeout_ms: 5000 };\n      if (selected?.name === \"exec_command\")\n        args = {\n          cmd: options.command,\n          yield_time_ms: 1000,\n          max_output_tokens: 1000,\n        };\n      if (selected?.name === \"shell\")\n        args = {\n          command: [\"/bin/sh\", \"-c\", options.command],\n          timeout_ms: 5000,\n        };\n      const customItem = {\n        type: \"custom_tool_call\",\n        id: `ct_audit_${count}`,\n        call_id: `call_audit_${count}`,\n        name: \"exec\",\n        namespace: namespace?.name,\n        input: `const result = await tools.exec_command(${JSON.stringify({ cmd: options.command, shell: \"/bin/sh\", login: false, max_output_tokens: 1000 })}); text(result);`,\n        status: \"completed\",\n      };\n      const item = wantsTool\n        ? namespace !== undefined\n          ? customItem\n          : {\n              type: \"function_call\",\n              id: `fc_audit_${count}`,\n              call_id: `call_audit_${count}`,\n              name: selected.name,\n              arguments: JSON.stringify(args),\n              status: \"completed\",\n            }\n        : {\n            type: \"message\",\n            id: `msg_audit_${count}`,\n            role: \"assistant\",\n            status: \"completed\",\n            content: [\n              {\n                type: \"output_text\",\n                text:\n                  options.scenario === \"quote\"\n                    ? \"Selected model is at capacity. overloaded_error is quoted fixture text.\"\n                    : \"AUDIT_COMPLETED\",\n                annotations: [],\n              },\n            ],\n          };\n      const response = {\n        id: `resp_audit_${count}`,\n        object: \"response\",\n        created_at: 1770000000,\n        model: body.model,\n        status: \"completed\",\n        output: [item],\n        usage: {\n          input_tokens: 20,\n          output_tokens: 5,\n          total_tokens: 25,\n          input_tokens_details: { cached_tokens: 0 },\n          output_tokens_details: { reasoning_tokens: 0 },\n        },\n      };\n      return sse([\n        {\n          event: \"response.created\",\n          data: {\n            type: \"response.created\",\n            response: { ...response, status: \"in_progress\", output: [] },\n          },\n        },\n        {\n          event: \"response.output_item.added\",\n          data: {\n            type: \"response.output_item.added\",\n            output_index: 0,\n            item: wantsTool ? item : { ...item, content: [] },\n          },\n        },\n        ...(!wantsTool\n          ? [\n              {\n                event: \"response.content_part.added\",\n                data: {\n                  type: \"response.content_part.added\",\n                  item_id: item.id,\n                  output_index: 0,\n                  content_index: 0,\n                  part: { type: \"output_text\", text: \"\", annotations: [] },\n                },\n              },\n              {\n                event: \"response.output_text.delta\",\n                data: {\n                  type: \"response.output_text.delta\",\n                  item_id: item.id,\n                  output_index: 0,\n                  content_index: 0,\n                  delta: item.content[0].text,\n                },\n              },\n              {\n                event: \"response.output_text.done\",\n                data: {\n                  type: \"response.output_text.done\",\n                  item_id: item.id,\n                  output_index: 0,\n                  content_index: 0,\n                  text: item.content[0].text,\n                },\n              },\n            ]\n          : []),\n        {\n          event: \"response.output_item.done\",\n          data: { type: \"response.output_item.done\", output_index: 0, item },\n        },\n        {\n          event: \"response.completed\",\n          data: { type: \"response.completed\", response },\n        },\n      ]);\n    },\n  });\n  return {\n    server,\n    url: `http://127.0.0.1:${server.port}`,\n    counts: () => ({ requests, modelCalls }),\n  };\n}\n"
+      },
+      "hook.ts": {
+        "path": "/tmp/agx-native-o49jN4/hook.ts",
+        "source": "import { appendFileSync } from \"node:fs\";\n\nconst log = process.env.AGX_AUDIT_HOOK_LOG;\nif (log === undefined || !log.startsWith(\"/tmp/agx-native-\"))\n  throw Error(\"invalid audit hook log\");\nconst text = await Bun.stdin.text();\nconst payload: unknown = JSON.parse(text);\nappendFileSync(log, `${JSON.stringify(payload)}\\n`);\nif (text.includes(\"audit-hook-denied\") && text.includes(\"PreToolUse\")) {\n  process.stdout.write(\n    `${JSON.stringify({ hookSpecificOutput: { hookEventName: \"PreToolUse\", permissionDecision: \"deny\", permissionDecisionReason: \"audit native hook denied this command\" } })}\\n`,\n  );\n} else if (text.includes(\"SessionStart\") || text.includes(\"UserPromptSubmit\")) {\n  const event = text.includes(\"UserPromptSubmit\")\n    ? \"UserPromptSubmit\"\n    : \"SessionStart\";\n  process.stdout.write(\n    `${JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: \"AUDIT_NATIVE_HOOK_CONTEXT\" } })}\\n`,\n  );\n}\n"
+      },
+      "vendor-launcher.ts": {
+        "path": "/tmp/agx-native-o49jN4/vendor-launcher.ts",
+        "source": "#!/usr/bin/env bun\n// Test fixture: launch the real vendor binary with this run's isolated provider/configuration.\n// argv-forwarding: native-vendor-cli\nimport { typeFlag } from \"type-flag\";\nconst argv = process.argv.slice(2);\nconst boundary = typeFlag({}, argv.slice(), {\n  ignore: (type, flag) => {\n    if (type === \"unknown-flag\" && flag === \"__proto__\")\n      throw Error(\"invalid prototype flag\");\n  },\n});\nif (Object.hasOwn(boundary.unknownFlags, \"__proto__\"))\n  throw Error(\"invalid prototype flag\");\nconst path = process.env.AGX_AUDIT_NATIVE_ENV_FILE;\nif (path === undefined || !path.startsWith(\"/tmp/agx-native-\"))\n  throw Error(\"missing fixture environment\");\nconst env = await Bun.file(path).json();\nconst isCodex = process.env.AGX_AUDIT_VENDOR !== \"claude\";\nconst executable = isCodex\n  ? \"/home/linuxbrew/.linuxbrew/bin/codex\"\n  : \"/home/fuyu/.local/bin/claude\";\nconst child = Bun.spawn(\n  [\n    executable,\n    ...(isCodex ? [\"--dangerously-bypass-hook-trust\"] : []),\n    ...argv,\n  ],\n  {\n    env: { ...process.env, ...env },\n    stdin: \"ignore\",\n    stdout: \"inherit\",\n    stderr: \"inherit\",\n    timeout: 25000,\n  },\n);\nprocess.on(\"SIGTERM\", () => child.kill(\"SIGTERM\"));\nprocess.on(\"SIGINT\", () => child.kill(\"SIGINT\"));\nprocess.exitCode = await child.exited;\n"
+      },
+      "codex-appserver-shim.ts": {
+        "path": "/tmp/agx-native-o49jN4/codex-appserver-shim.ts",
+        "source": "#!/usr/bin/env bun\n// Test fixture: forward the installed Codex app-server and observe its native hook configuration.\nimport { createInterface } from \"node:readline\";\nimport { appendFileSync } from \"node:fs\";\nimport { join } from \"node:path\";\nconst child = Bun.spawn(\n  [\n    \"/home/linuxbrew/.linuxbrew/bin/codex\",\n    \"--dangerously-bypass-hook-trust\",\n    \"app-server\",\n  ],\n  { stdin: \"pipe\", stdout: \"pipe\", stderr: \"inherit\", timeout: 25000 },\n);\nconst log = process.env.AGX_AUDIT_HOOK_LOG;\nconst object = (value: unknown): value is Record<string, unknown> =>\n  typeof value === \"object\" && value !== null;\nlet pendingStart: Record<string, unknown> | undefined;\nprocess.on(\"SIGTERM\", () => child.kill(\"SIGTERM\"));\nprocess.on(\"SIGINT\", () => child.kill(\"SIGINT\"));\nconst input = createInterface({ input: process.stdin });\ninput.on(\"line\", (line) => {\n  let value: unknown;\n  try {\n    value = JSON.parse(line);\n  } catch {\n    child.stdin.write(`${line}\\n`);\n    return;\n  }\n  if (log !== undefined && object(value))\n    appendFileSync(\n      `${log}.wire`,\n      `${JSON.stringify({ method: value.method, keys: object(value.params) ? Object.keys(value.params) : [] })}\\n`,\n    );\n  if (\n    object(value) &&\n    value.method === \"thread/start\" &&\n    object(value.params) &&\n    process.env.AGX_AUDIT_PATCH_HOOK_SOURCE === \"1\"\n  )\n    value.params.sessionStartSource = \"startup\";\n  if (\n    object(value) &&\n    value.method === \"thread/start\" &&\n    process.env.AGX_AUDIT_TRUST_HOOKS === \"1\"\n  ) {\n    pendingStart = value;\n    child.stdin.write(\n      `${JSON.stringify({ id: \"audit-hooks-trust\", method: \"hooks/list\", params: { cwds: [process.cwd()] } })}\\n`,\n    );\n    return;\n  }\n  child.stdin.write(`${JSON.stringify(value)}\\n`);\n  if (object(value) && value.method === \"thread/start\")\n    child.stdin.write(\n      `${JSON.stringify({ id: \"audit-hooks-list\", method: \"hooks/list\", params: { cwds: [process.cwd()] } })}\\n`,\n    );\n  if (object(value) && value.method === \"initialized\")\n    child.stdin.write(\n      `${JSON.stringify({ id: \"audit-hooks-list\", method: \"hooks/list\", params: { cwds: [process.cwd()] } })}\\n`,\n    );\n});\ninput.on(\"close\", () => child.stdin.end());\nconst reader = (async () => {\n  let pending = \"\";\n  for await (const chunk of child.stdout) {\n    pending += new TextDecoder().decode(chunk);\n    let end = pending.indexOf(\"\\n\");\n    while (end >= 0) {\n      const line = pending.slice(0, end);\n      pending = pending.slice(end + 1);\n      let value: unknown;\n      try {\n        value = JSON.parse(line);\n      } catch {\n        process.stdout.write(`${line}\\n`);\n        end = pending.indexOf(\"\\n\");\n        continue;\n      }\n      if (\n        object(value) &&\n        value.id === \"audit-hooks-trust\" &&\n        object(value.result) &&\n        Array.isArray(value.result.data)\n      ) {\n        const home = process.env.CODEX_HOME;\n        if (home === undefined || !home.startsWith(\"/tmp/agx-native-\"))\n          throw Error(\"fixture trust requires isolated config home\");\n        for (const row of value.result.data.filter(object)) {\n          if (!Array.isArray(row.hooks)) continue;\n          for (const hook of row.hooks.filter(object)) {\n            if (\n              typeof hook.key !== \"string\" ||\n              typeof hook.currentHash !== \"string\" ||\n              hook.sourcePath !== join(home, \"hooks.json\")\n            )\n              continue;\n            appendFileSync(\n              join(home, \"config.toml\"),\n              `\\n[hooks.state.${JSON.stringify(hook.key)}]\\nenabled = true\\ntrusted_hash = ${JSON.stringify(hook.currentHash)}\\n`,\n            );\n          }\n        }\n        if (pendingStart === undefined) throw Error(\"missing pending start\");\n        child.stdin.write(`${JSON.stringify(pendingStart)}\\n`);\n        pendingStart = undefined;\n        child.stdin.write(\n          `${JSON.stringify({ id: \"audit-hooks-list\", method: \"hooks/list\", params: { cwds: [process.cwd()] } })}\\n`,\n        );\n      } else if (object(value) && value.id === \"audit-hooks-list\") {\n        if (log !== undefined)\n          appendFileSync(`${log}.configuration`, `${JSON.stringify(value)}\\n`);\n      } else process.stdout.write(`${line}\\n`);\n      end = pending.indexOf(\"\\n\");\n    }\n  }\n  if (pending !== \"\") process.stdout.write(pending);\n})();\nconst code = await child.exited;\ninput.close();\nawait reader;\nprocess.exitCode = code;\n"
+      },
+      "node-client.ts": {
+        "path": "/tmp/agx-native-o49jN4/node-client.ts",
+        "source": "import { readFile, writeFile } from \"node:fs/promises\";\nimport { join } from \"node:path\";\nimport { createAcpRuntime, createAgentRegistry, createFileSessionStore } from \"/tmp/agx-decision-0E6raB/acpx-package/dist/runtime.js\";\nimport { runAcpxWorker } from \"./acpx-worker-candidate.ts\";\n\n// Native Node fixture for the published package's supported runtime; Bun owns the HTTP test server.\nasync function main() {\n  const path = process.env.AGX_AUDIT_NODE_INPUT;\n  if (path === undefined || !path.startsWith(\"/tmp/agx-native-\")) throw Error(\"missing native fixture input\");\n  const input = JSON.parse(await readFile(path, \"utf8\"));\n  const runtime = createAcpRuntime({\n    cwd: input.cwd,\n    sessionStore: createFileSessionStore({ stateDir: join(input.root, \"node-state\") }),\n    agentRegistry: createAgentRegistry({ overrides: { [input.vendor]: [process.execPath, join(import.meta.dirname, input.adapter, \"dist/index.js\")] } }),\n    agentProcessEnv: input.env,\n    permissionMode: \"deny-all\", fs: false, terminal: false, timeoutMs: 15000,\n  });\n  const events: unknown[] = [];\n  try {\n    const receipt = await runAcpxWorker({ runtime, input: { sessionKey: `node-${input.vendor}-${input.scenario}`, agent: input.vendor, mode: \"persistent\", sessionOptions: { model: input.vendor === \"codex\" ? \"gpt-6.1-sol\" : \"claude-sonnet-4-6\", maxTurns: 3 } }, vendor: input.vendor, prompt: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\", sandbox: \"workspace-write\", timeoutMs: 15000, onEvent: event => events.push(event) });\n    events.push({ type: \"bridge_receipt\", ...receipt });\n    process.stdout.write(`${JSON.stringify({ node: process.version, events })}\\n`);\n  } finally { await runtime.shutdown(); }\n}\nmain().catch(error => { process.stderr.write(`FATAL: ${String(error)}\\n`); process.exitCode = 2; });\n"
+      },
+      "native-acceptance.test.ts": {
+        "path": "/tmp/agx-native-o49jN4/native-acceptance.test.ts",
+        "source": "import { test, expect } from \"bun:test\";\nimport { readFile, writeFile } from \"node:fs/promises\";\nimport { join } from \"node:path\";\n\nconst root = import.meta.dir;\nconst evidence: unknown[] = [];\nasync function run(transport: string, vendor: string, scenario: string) {\n  const signal = AbortSignal.timeout(26000);\n  // bounded: each native probe is aborted by its 26-second signal.\n  const child = Bun.spawn([process.execPath, join(root, \"probe.ts\")], {\n    env: {\n      ...process.env,\n      AGX_AUDIT_TRANSPORT: transport,\n      AGX_AUDIT_VENDOR: vendor,\n      AGX_AUDIT_SCENARIO: scenario,\n      AGX_AUDIT_ADAPTER_DIR:\n        vendor === \"codex\"\n          ? (process.env.AGX_AUDIT_CODEX_ADAPTER ?? \"codex-compatible\")\n          : (process.env.AGX_AUDIT_CLAUDE_ADAPTER ?? \"claude\"),\n      ...(vendor === \"codex\" && transport === \"bridge\"\n        ? { AGX_AUDIT_TRUST_HOOKS: \"1\", AGX_AUDIT_PATCH_HOOK_SOURCE: \"0\" }\n        : {}),\n    },\n    stdin: \"ignore\",\n    stdout: \"pipe\",\n    stderr: \"pipe\",\n    signal: signal,\n  });\n  const [out, err, exit] = await Promise.all([\n    child.stdout.text(),\n    child.stderr.text(),\n    child.exited,\n  ]);\n  if (exit !== 0 || signal.aborted)\n    throw Error(`probe failed ${exit}: ${err.slice(-1500)} ${out.slice(-500)}`);\n  const locator = JSON.parse(out.trim().split(\"\\n\").at(-1)!);\n  const result = JSON.parse(\n    await readFile(join(locator.root, \"result.json\"), \"utf8\"),\n  );\n  const receipt =\n    result.events.find(\n      (e) => e.type === \"bridge_receipt\" || e.type === \"agx_receipt\",\n    ) ?? result.events.at(-1);\n  evidence.push({\n    transport,\n    vendor,\n    scenario,\n    root: result.root,\n    present: result.present,\n    hooks: result.hooks,\n    elapsedMs: result.elapsedMs,\n    modelCalls: result.modelCalls,\n    failure: result.failure,\n    receipt,\n  });\n  await writeFile(\n    join(root, \"acceptance-results.json\"),\n    JSON.stringify(evidence, null, 2),\n  );\n  return { ...result, receipt };\n}\nfor (const vendor of [\"codex\", \"claude\"]) {\n  test(`${vendor}: native hooks run and allowed commands execute through the replacement`, async () => {\n    const r = await run(\"bridge\", vendor, \"tool\");\n    expect(r.failure).toBeUndefined();\n    expect(r.present).toBe(true);\n    for (const hook of [\n      \"SessionStart\",\n      \"UserPromptSubmit\",\n      \"PreToolUse\",\n      \"PostToolUse\",\n      \"Stop\",\n    ])\n      expect(r.hooks).toContain(hook);\n    expect(r.receipt.exit_code).toBe(0);\n  }, 30000);\n  test(`${vendor}: native PreToolUse denial prevents the actual write`, async () => {\n    const r = await run(\"bridge\", vendor, \"hook-deny\");\n    expect(r.hooks).toContain(\"PreToolUse\");\n    expect(r.present).toBe(false);\n  }, 30000);\n  test(`${vendor}: workspace sandbox prevents writes outside the working tree`, async () => {\n    const r = await run(\"bridge\", vendor, \"sandbox\");\n    expect(r.failure).toBeUndefined();\n    expect(r.modelCalls).toBeGreaterThanOrEqual(2);\n    expect(r.present).toBe(false);\n  }, 30000);\n  test(`${vendor}: read-only mode prevents writes inside the working tree`, async () => {\n    const r = await run(\"bridge\", vendor, \"read-only\");\n    expect(r.failure).toBeUndefined();\n    expect(r.modelCalls).toBeGreaterThanOrEqual(2);\n    expect(r.present).toBe(false);\n  }, 30000);\n  test(`${vendor}: quoted capacity words remain ordinary assistant output`, async () => {\n    const r = await run(\"bridge\", vendor, \"quote\");\n    expect(r.receipt.exit_code).toBe(0);\n    expect(r.receipt.outcome).toBe(\"returned\");\n    expect(r.receipt.last_message).toContain(\n      \"overloaded_error is quoted fixture text\",\n    );\n  }, 30000);\n  test(`${vendor}: current agx stops a real native capacity response with exit 75`, async () => {\n    const r = await run(\"agx\", vendor, \"capacity\");\n    expect(r.receipt.exit ?? r.receipt.agx_process_exit).toBe(75);\n    expect(r.modelCalls).toBe(1);\n  }, 30000);\n  test(`${vendor}: replacement preserves typed capacity and stops before a second model attempt`, async () => {\n    const r = await run(\"bridge\", vendor, \"capacity\");\n    expect(r.receipt.outcome).toBe(\"capacity\");\n    expect(r.receipt.exit_code).toBe(75);\n    expect(r.modelCalls).toBe(1);\n  }, 30000);\n}\n"
+      },
+      "air-proxy.ts": {
+        "path": "/tmp/agx-air-qKPyvS/proxy.ts",
+        "source": "import { createInterface } from \"node:readline\";\nimport { appendFileSync } from \"node:fs\";\nconst child=Bun.spawn(process.argv.slice(2), {stdin:\"pipe\",stdout:\"pipe\",stderr:\"inherit\",timeout:25000});\nconst input=createInterface({input:process.stdin});\ninput.on(\"line\",line=>{const v=JSON.parse(line);if(v.method===\"initialize\"){v.params.clientCapabilities??={};v.params.clientCapabilities._meta={jetbrains:{air:{version:1,capabilities:[\"sessionFailure\"]}}};}child.stdin.write(JSON.stringify(v)+\"\\n\");});\ninput.on(\"close\",()=>child.stdin.end());\nprocess.on(\"SIGTERM\",()=>child.kill(\"SIGTERM\"));process.on(\"SIGINT\",()=>child.kill(\"SIGINT\"));\nconst reading=(async()=>{let pending=\"\";for await(const chunk of child.stdout){pending+=new TextDecoder().decode(chunk);let end;while((end=pending.indexOf(\"\\n\"))>=0){const line=pending.slice(0,end);pending=pending.slice(end+1);const v=JSON.parse(line);const failure=v.params?.update?._meta?.jetbrains?.air?.sessionFailure ?? v.result?._meta?.jetbrains?.air?.sessionFailure;if(failure)appendFileSync(process.env.AGX_AUDIT_HOOK_LOG+\".air\",JSON.stringify(failure)+\"\\n\");process.stdout.write(line+\"\\n\");}}})();\nconst exit=await child.exited;input.close();await reading;process.exitCode=exit;"
+      },
+      "air-probe.ts": {
+        "path": "/tmp/agx-air-qKPyvS/probe.ts",
+        "source": "import {\n  mkdir,\n  mkdtemp,\n  readFile,\n  writeFile,\n  access,\n  chmod,\n} from \"node:fs/promises\";\nimport { join } from \"node:path\";\nimport {\n  createAcpRuntime,\n  createAgentRegistry,\n  createFileSessionStore,\n} from \"/tmp/agx-decision-0E6raB/acpx-package/dist/runtime.js\";\nimport { modelServer } from \"./model-server.ts\";\nimport { runClaude } from \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/run-claude.ts\";\nimport { runAcpxWorker } from \"/tmp/agx-native-o49jN4/acpx-worker-candidate.ts\";\n\nasync function main() {\n  const vendor = process.env.AGX_AUDIT_VENDOR === \"claude\" ? \"claude\" : \"codex\";\n  const transport = process.env.AGX_AUDIT_TRANSPORT ?? \"acpx\";\n  const scenario = process.env.AGX_AUDIT_SCENARIO ?? \"normal\";\n  // Native Claude sandbox bridge sockets must fit the Unix-domain path limit.\n  const root = await mkdtemp(\"/tmp/agx-native-\");\n  const cwd = join(root, \"workspace\");\n  const vendorHome = join(root, \"vendor-home\");\n  const temp = join(root, \"tmp\");\n  await mkdir(cwd, { recursive: true });\n  await mkdir(vendorHome, { recursive: true });\n  await mkdir(temp, { recursive: true });\n  const outsideRoot = await mkdtemp(\"/home/fuyu/dotfiles/.agx-native-audit-\");\n  const marker =\n    scenario === \"sandbox\"\n      ? join(outsideRoot, \"outside-marker\")\n      : join(cwd, \"inside-marker\");\n  const command = `${scenario === \"hook-deny\" ? \"# audit-hook-denied\\n\" : \"\"}printf audit > '${marker}'`;\n  const api = modelServer({\n    vendor,\n    scenario,\n    command,\n    logPath: join(root, \"http.jsonl\"),\n  });\n  const hookLog = join(root, \"hooks.jsonl\");\n  const hook = {\n    type: \"command\",\n    command: `${process.execPath} ${join(\"/tmp/agx-native-o49jN4\", \"hook.ts\")}`,\n    timeout: 5,\n  };\n  const hooks = Object.fromEntries(\n    [\n      \"SessionStart\",\n      \"UserPromptSubmit\",\n      \"PreToolUse\",\n      \"PostToolUse\",\n      \"Stop\",\n    ].map((event) => [event, [{ hooks: [hook] }]]),\n  );\n  const provider = {\n    name: \"audit\",\n    base_url: `${api.url}/v1`,\n    wire_api: \"responses\",\n    requires_openai_auth: false,\n    supports_websockets: false,\n    request_max_retries: 0,\n    stream_max_retries: 0,\n    stream_idle_timeout_ms: 1000,\n  };\n  const codexConfig = {\n    model: \"gpt-6.1-sol\",\n    model_provider: \"audit\",\n    model_providers: { audit: provider },\n    features: { hooks: true },\n    approval_policy: \"never\",\n    sandbox_mode: scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n    \"sandbox_workspace_write.exclude_slash_tmp\": true,\n    \"sandbox_workspace_write.exclude_tmpdir_env_var\": true,\n  };\n  const codexShim = join(root, \"codex-audit\");\n  await writeFile(\n    codexShim,\n    '#!/bin/sh\\n# shim: exec-wrapper — vetted audit hooks only; all other argv is forwarded.\\nexec /home/linuxbrew/.linuxbrew/bin/codex --dangerously-bypass-hook-trust \"$@\"\\n',\n  );\n  await chmod(codexShim, 0o755);\n  if (vendor === \"codex\") {\n    await writeFile(join(vendorHome, \"hooks.json\"), JSON.stringify({ hooks }));\n    await writeFile(\n      join(vendorHome, \"config.toml\"),\n      `model = \"gpt-6.1-sol\"\\nmodel_provider = \"audit\"\\napproval_policy = \"never\"\\n[model_providers.audit]\\nname = \"audit\"\\nbase_url = \"${api.url}/v1\"\\nwire_api = \"responses\"\\nrequires_openai_auth = false\\nsupports_websockets = false\\nrequest_max_retries = 0\\nstream_max_retries = 0\\nstream_idle_timeout_ms = 1000\\n[features]\\nhooks = true\\n`,\n    );\n  } else {\n    await writeFile(\n      join(vendorHome, \"settings.json\"),\n      JSON.stringify({\n        hooks,\n        sandbox: {\n          enabled: true,\n          autoAllowBashIfSandboxed: true,\n          allowUnsandboxedCommands: false,\n          failIfUnavailable: true,\n        },\n        permissions: {\n          defaultMode: scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n        },\n      }),\n    );\n  }\n  const env = {\n    TMPDIR: temp,\n    TMP: temp,\n    TEMP: temp,\n    AGX_AUDIT_HOOK_LOG: hookLog,\n    CODEX_PATH:\n      process.env.AGX_AUDIT_PATCH_HOOK_SOURCE === undefined\n        ? codexShim\n        : join(\"/tmp/agx-native-o49jN4\", \"codex-appserver-shim.ts\"),\n    CODEX_HOME: vendorHome,\n    CODEX_CONFIG: JSON.stringify(codexConfig),\n    MODEL_PROVIDER: \"audit\",\n    ...(process.env.AGX_AUDIT_PATCH_HOOK_SOURCE === undefined\n      ? {}\n      : {\n          AGX_AUDIT_PATCH_HOOK_SOURCE: process.env.AGX_AUDIT_PATCH_HOOK_SOURCE,\n        }),\n    ...(process.env.AGX_AUDIT_TRUST_HOOKS === undefined\n      ? {}\n      : { AGX_AUDIT_TRUST_HOOKS: process.env.AGX_AUDIT_TRUST_HOOKS }),\n    CLAUDE_CONFIG_DIR: vendorHome,\n    CLAUDE_CODE_EXECUTABLE: \"/home/fuyu/.local/bin/claude\",\n    ACPX_CLAUDE_INCLUDE_USER_SETTINGS: \"1\",\n    ANTHROPIC_BASE_URL: api.url,\n    ANTHROPIC_API_KEY: \"audit-not-a-real-key\",\n    ANTHROPIC_AUTH_TOKEN: \"\",\n    CLAUDE_CODE_OAUTH_TOKEN: \"\",\n    OPENAI_API_KEY: \"audit-not-a-real-key\",\n    CODEX_API_KEY: \"audit-not-a-real-key\",\n    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: \"1\",\n    DISABLE_TELEMETRY: \"1\",\n    DISABLE_AUTOUPDATER: \"1\",\n    MAX_RETRIES: \"0\",\n  };\n  const adapter = process.env.AGX_AUDIT_ADAPTER_DIR ?? vendor;\n  const runtime = createAcpRuntime({\n    cwd,\n    sessionStore: createFileSessionStore({ stateDir: join(root, \"state\") }),\n    agentRegistry: createAgentRegistry({\n      overrides: {\n        [vendor]: [process.execPath, \"/tmp/agx-air-qKPyvS/proxy.ts\",\n          join(\"/tmp/agx-native-o49jN4\", \"node/bin/node\"),\n          join(\"/tmp/agx-native-o49jN4\", adapter, \"dist/index.js\"),\n        ],\n      },\n    }),\n    agentProcessEnv: env,\n    permissionMode: \"deny-all\",\n    fs: false,\n    terminal: false,\n    timeoutMs: 15000,\n    verbose: false,\n  });\n  const events: unknown[] = [];\n  const start = performance.now();\n  let failure: string | undefined;\n  try {\n    if (transport === \"agx\") {\n      const envFile = join(root, \"native-env.json\");\n      await writeFile(envFile, JSON.stringify(env));\n      const launcher = join(\"/tmp/agx-native-o49jN4\", \"vendor-launcher.ts\");\n      if (vendor === \"claude\") {\n        process.env.AGX_AUDIT_NATIVE_ENV_FILE = envFile;\n        const receipt = await runClaude({\n          target: cwd,\n          prompt: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n          model: \"claude-sonnet-4-6\",\n          permissionMode: scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n          maxTurns: 3,\n          timeoutMs: 15000,\n          maxBudgetUsd: 2,\n          safeMode: false,\n          bare: false,\n          progressFile: join(root, \"progress.jsonl\"),\n          persistSession: true,\n          claudeBin: launcher,\n        });\n        await writeFile(join(root, \"native.stdout\"), receipt.stdout);\n        await writeFile(join(root, \"native.stderr\"), receipt.stderr);\n        events.push({\n          type: \"agx_receipt\",\n          exit: receipt.exitCode,\n          capacityCause: receipt.capacityCause,\n          timedOut: receipt.timedOut,\n        });\n      } else {\n        const prompt = join(root, \"prompt.txt\");\n        await writeFile(\n          prompt,\n          \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        );\n        const args = [\n          process.execPath,\n          \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/codex.ts\",\n          \"--model\",\n          \"gpt-6.1-sol\",\n          \"--effort\",\n          \"high\",\n          \"--sandbox\",\n          scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n          \"--cd\",\n          cwd,\n          \"--prompt-file\",\n          prompt,\n          \"--receipt-dir\",\n          join(root, \"receipts\"),\n          \"--timeout-s\",\n          \"15\",\n        ];\n        const proc = Bun.spawn(args, {\n          env: {\n            ...process.env,\n            AGX_CODEX_BIN: launcher,\n            AGX_CODEX_HOST_FILE: join(root, \"absent-host.toml\"),\n            AGX_AUDIT_NATIVE_ENV_FILE: envFile,\n          },\n          stdin: \"ignore\",\n          stdout: \"pipe\",\n          stderr: \"pipe\",\n          timeout: 20000,\n        });\n        const [out, err, exit] = await Promise.all([\n          proc.stdout.text(),\n          proc.stderr.text(),\n          proc.exited,\n        ]);\n        await writeFile(join(root, \"native.stdout\"), out);\n        await writeFile(join(root, \"native.stderr\"), err);\n        events.push(\n          ...out\n            .trim()\n            .split(\"\\n\")\n            .filter(Boolean)\n            .map((line) => {\n              try {\n                return { ...JSON.parse(line), agx_process_exit: exit };\n              } catch {\n                return { raw: line, agx_process_exit: exit };\n              }\n            }),\n        );\n        if (exit !== 0 && !out.includes('\"capacity\"'))\n          failure = `agx exit=${exit}: ${err.slice(-1000)}`;\n      }\n    } else if (transport === \"native\") {\n      const cmd =\n        vendor === \"codex\"\n          ? [\n              codexShim,\n              \"exec\",\n              \"--json\",\n              \"--skip-git-repo-check\",\n              \"--sandbox\",\n              scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n              \"-C\",\n              cwd,\n              \"-m\",\n              \"gpt-6.1-sol\",\n              \"-c\",\n              'approval_policy=\"never\"',\n              \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n            ]\n          : [\n              \"/home/fuyu/.local/bin/claude\",\n              \"-p\",\n              \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n              \"--model\",\n              \"claude-sonnet-4-6\",\n              \"--permission-mode\",\n              scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n              \"--output-format\",\n              \"stream-json\",\n              \"--verbose\",\n              \"--max-turns\",\n              \"3\",\n            ];\n      const proc = Bun.spawn(cmd, {\n        cwd,\n        env: { ...process.env, ...env },\n        stdin: \"ignore\",\n        stdout: \"pipe\",\n        stderr: \"pipe\",\n        timeout: 15000,\n      });\n      const [out, err, exit] = await Promise.all([\n        proc.stdout.text(),\n        proc.stderr.text(),\n        proc.exited,\n      ]);\n      await writeFile(join(root, \"native.stdout\"), out);\n      await writeFile(join(root, \"native.stderr\"), err);\n      events.push(\n        ...out\n          .trim()\n          .split(\"\\n\")\n          .filter(Boolean)\n          .map((line) => {\n            try {\n              return JSON.parse(line);\n            } catch {\n              return { raw: line };\n            }\n          }),\n      );\n      if (exit !== 0)\n        failure = `native exit=${exit} signal=${proc.signalCode}: ${err.slice(-1500)}`;\n    } else if (transport === \"nodebridge\") {\n      const inputFile = join(root, \"node-input.json\");\n      await writeFile(inputFile, JSON.stringify({ root, cwd, vendor, adapter, scenario, env }));\n      const proc = Bun.spawn([join(\"/tmp/agx-native-o49jN4\", \"node/bin/node\"), join(\"/tmp/agx-native-o49jN4\", \"node-client.ts\")], { cwd, env: { ...process.env, AGX_AUDIT_NODE_INPUT: inputFile }, stdin: \"ignore\", stdout: \"pipe\", stderr: \"pipe\", timeout: 25000 });\n      const [out, err, exit] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);\n      await writeFile(join(root, \"node.stderr\"), err);\n      if (exit !== 0) throw Error(`native Node bridge ${exit}: ${err.slice(-2000)}`);\n      const parsed = JSON.parse(out.trim().split(\"\\n\").at(-1)!);\n      events.push(...parsed.events);\n    } else if (transport === \"bridge\") {\n      const receipt = await runAcpxWorker({\n        runtime,\n        input: {\n          sessionKey: `audit-${vendor}-${scenario}`,\n          agent: vendor,\n          mode: \"persistent\",\n          sessionOptions: {\n            model: vendor === \"codex\" ? \"gpt-6.1-sol\" : \"claude-sonnet-4-6\",\n            maxTurns: 3,\n          },\n        },\n        vendor,\n        prompt: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        sandbox: scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n        timeoutMs: 15000,\n        onEvent: (event) => events.push(event),\n      });\n      events.push({ type: \"bridge_receipt\", ...receipt });\n    } else {\n      const handle = await runtime.ensureSession({\n        sessionKey: `audit-${vendor}-${scenario}`,\n        agent: vendor,\n        mode: \"persistent\",\n        sessionOptions: {\n          model: vendor === \"codex\" ? \"gpt-6.1-sol\" : \"claude-sonnet-4-6\",\n          maxTurns: 3,\n        },\n      });\n      await writeFile(\n        join(root, \"handle.json\"),\n        JSON.stringify(handle, null, 2),\n      );\n      if (vendor === \"codex\" && scenario === \"read-only\")\n        await runtime.setMode({ handle, mode: \"read-only\" });\n      for await (const event of runtime.runTurn({\n        handle,\n        text: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        mode: \"prompt\",\n        requestId: crypto.randomUUID(),\n        timeoutMs: 15000,\n      }))\n        events.push(event);\n    }\n  } catch (error) {\n    failure = String(error);\n  } finally {\n    await runtime.shutdown();\n    await api.server.stop(true);\n  }\n  const present = await access(marker).then(\n    () => true,\n    () => false,\n  );\n  const hookText = await readFile(hookLog, \"utf8\").catch(() => \"\");\n  const result = {\n    transport,\n    vendor,\n    adapter,\n    scenario,\n    root,\n    outsideRoot,\n    marker,\n    present,\n    elapsedMs: Math.round(performance.now() - start),\n    ...api.counts(),\n    failure,\n    hooks: hookText\n      .trim()\n      .split(\"\\n\")\n      .filter(Boolean)\n      .map((line) => JSON.parse(line).hook_event_name),\n    events,\n  };\n  await writeFile(join(root, \"result.json\"), JSON.stringify(result, null, 2));\n  process.stdout.write(\n    `${JSON.stringify({ ...result, events: events.slice(-4) })}\\n`,\n  );\n}\nmain().catch((error) => {\n  process.stderr.write(`FATAL: ${String(error)}\\n`);\n  process.exitCode = 2;\n});\n"
+      },
+      "air-model-server.ts": {
+        "path": "/tmp/agx-air-qKPyvS/model-server.ts",
+        "source": "import { appendFileSync } from \"node:fs\";\n\nexport function modelServer(options: {\n  vendor: \"codex\" | \"claude\";\n  scenario: string;\n  command: string;\n  logPath: string;\n}) {\n  let requests = 0;\n  let modelCalls = 0;\n  const sse = (events: { event: string; data: unknown }[]) =>\n    new Response(\n      events\n        .map((e) => `event: ${e.event}\\ndata: ${JSON.stringify(e.data)}\\n\\n`)\n        .join(\"\"),\n      {\n        headers: {\n          \"content-type\": \"text/event-stream\",\n          \"cache-control\": \"no-cache\",\n        },\n      },\n    );\n  const server = Bun.serve({\n    hostname: \"127.0.0.1\",\n    port: 0,\n    async fetch(req) {\n      const url = new URL(req.url);\n      const raw = await req.text();\n      const body = raw === \"\" ? {} : JSON.parse(raw);\n      requests++;\n      appendFileSync(\n        options.logPath,\n        `${JSON.stringify({ path: url.pathname, body })}\\n`,\n      );\n      if (url.pathname.includes(\"count_tokens\"))\n        return Response.json({ input_tokens: 20 });\n      if (req.method === \"GET\")\n        return Response.json({\n          data: [\n            {\n              id:\n                options.vendor === \"codex\"\n                  ? \"gpt-6.1-sol\"\n                  : \"claude-sonnet-4-6\",\n              type: \"model\",\n              display_name: \"audit\",\n            },\n          ],\n          has_more: false,\n        });\n      if (\n        !url.pathname.includes(\"responses\") &&\n        !url.pathname.includes(\"messages\")\n      )\n        return Response.json({ ok: true });\n      if (options.vendor === \"claude\" && body.stream !== true)\n        return Response.json({\n          id: \"msg_validation\",\n          type: \"message\",\n          role: \"assistant\",\n          content: [{ type: \"text\", text: \"ok\" }],\n          model: body.model,\n          stop_reason: \"end_turn\",\n          stop_sequence: null,\n          usage: { input_tokens: 1, output_tokens: 1 },\n        });\n      const count = modelCalls++;\n      if (options.scenario === \"server-error\") return Response.json({type:\"error\",error:{type:\"api_error\",message:\"audit injected internal error\"}},{status:500});\n      if (options.scenario === \"capacity\")\n        return Response.json(\n          options.vendor === \"claude\"\n            ? {\n                type: \"error\",\n                error: {\n                  type: \"overloaded_error\",\n                  message: \"audit injected overload\",\n                },\n              }\n            : {\n                error: {\n                  type: \"server_error\",\n                  code: \"model_capacity_exceeded\",\n                  message:\n                    \"Selected model is at capacity. Please try a different model.\",\n                },\n              },\n          {\n            status: options.vendor === \"claude\" ? 529 : 503,\n            headers: { \"retry-after\": \"0\", \"request-id\": \"audit-capacity\" },\n          },\n        );\n      if (options.scenario === \"auth\")\n        return Response.json(\n          {\n            type: \"error\",\n            error: {\n              type: \"authentication_error\",\n              message: \"audit invalid credential\",\n            },\n          },\n          { status: 401 },\n        );\n      if (options.scenario === \"stall\")\n        return new Response(\n          new ReadableStream({\n            start(controller) {\n              controller.enqueue(\n                new TextEncoder().encode(\": audit keepalive\\n\\n\"),\n              );\n            },\n          }),\n          { headers: { \"content-type\": \"text/event-stream\" } },\n        );\n      const tool =\n        count === 0 &&\n        [\"tool\", \"sandbox\", \"hook-deny\", \"read-only\"].includes(\n          options.scenario,\n        );\n      if (options.vendor === \"claude\") {\n        const available = body.tools ?? [];\n        const selected =\n          available.find((t) => t.name === \"Bash\") ??\n          available.find((t) => /bash|terminal/i.test(t.name));\n        const wantsTool = tool && selected !== undefined;\n        const content = wantsTool\n          ? {\n              type: \"tool_use\",\n              id: \"toolu_audit_1\",\n              name: selected.name,\n              input: {},\n            }\n          : { type: \"text\", text: \"\" };\n        return sse([\n          {\n            event: \"message_start\",\n            data: {\n              type: \"message_start\",\n              message: {\n                id: `msg_audit_${count}`,\n                type: \"message\",\n                role: \"assistant\",\n                content: [],\n                model: body.model,\n                stop_reason: null,\n                stop_sequence: null,\n                usage: { input_tokens: 20, output_tokens: 0 },\n              },\n            },\n          },\n          {\n            event: \"content_block_start\",\n            data: {\n              type: \"content_block_start\",\n              index: 0,\n              content_block: content,\n            },\n          },\n          {\n            event: \"content_block_delta\",\n            data: {\n              type: \"content_block_delta\",\n              index: 0,\n              delta: wantsTool\n                ? {\n                    type: \"input_json_delta\",\n                    partial_json: JSON.stringify({\n                      command: options.command,\n                      timeout: 5000,\n                      description: \"audit scoped filesystem check\",\n                    }),\n                  }\n                : {\n                    type: \"text_delta\",\n                    text:\n                      options.scenario === \"quote\"\n                        ? \"Selected model is at capacity. overloaded_error is quoted fixture text.\"\n                        : \"AUDIT_COMPLETED\",\n                  },\n            },\n          },\n          {\n            event: \"content_block_stop\",\n            data: { type: \"content_block_stop\", index: 0 },\n          },\n          {\n            event: \"message_delta\",\n            data: {\n              type: \"message_delta\",\n              delta: {\n                stop_reason: wantsTool ? \"tool_use\" : \"end_turn\",\n                stop_sequence: null,\n              },\n              usage: { output_tokens: 5 },\n            },\n          },\n          { event: \"message_stop\", data: { type: \"message_stop\" } },\n        ]);\n      }\n      const tools =\n        body.tools ??\n        (body.input ?? [])\n          .filter((x) => x.type === \"additional_tools\")\n          .flatMap((x) => x.tools ?? []);\n      const namespace = tools.find(\n        (t) =>\n          t.type === \"namespace\" && t.tools?.some((q) => q.name === \"exec\"),\n      );\n      const selected =\n        tools.find((t) => t.name === \"exec_command\") ??\n        tools.find((t) => t.name === \"shell_command\") ??\n        tools.find((t) => t.name === \"shell\");\n      const wantsTool =\n        tool && (selected !== undefined || namespace !== undefined);\n      let args: unknown = { command: options.command, timeout_ms: 5000 };\n      if (selected?.name === \"exec_command\")\n        args = {\n          cmd: options.command,\n          yield_time_ms: 1000,\n          max_output_tokens: 1000,\n        };\n      if (selected?.name === \"shell\")\n        args = {\n          command: [\"/bin/sh\", \"-c\", options.command],\n          timeout_ms: 5000,\n        };\n      const customItem = {\n        type: \"custom_tool_call\",\n        id: `ct_audit_${count}`,\n        call_id: `call_audit_${count}`,\n        name: \"exec\",\n        namespace: namespace?.name,\n        input: `const result = await tools.exec_command(${JSON.stringify({ cmd: options.command, shell: \"/bin/sh\", login: false, max_output_tokens: 1000 })}); text(result);`,\n        status: \"completed\",\n      };\n      const item = wantsTool\n        ? namespace !== undefined\n          ? customItem\n          : {\n              type: \"function_call\",\n              id: `fc_audit_${count}`,\n              call_id: `call_audit_${count}`,\n              name: selected.name,\n              arguments: JSON.stringify(args),\n              status: \"completed\",\n            }\n        : {\n            type: \"message\",\n            id: `msg_audit_${count}`,\n            role: \"assistant\",\n            status: \"completed\",\n            content: [\n              {\n                type: \"output_text\",\n                text:\n                  options.scenario === \"quote\"\n                    ? \"Selected model is at capacity. overloaded_error is quoted fixture text.\"\n                    : \"AUDIT_COMPLETED\",\n                annotations: [],\n              },\n            ],\n          };\n      const response = {\n        id: `resp_audit_${count}`,\n        object: \"response\",\n        created_at: 1770000000,\n        model: body.model,\n        status: \"completed\",\n        output: [item],\n        usage: {\n          input_tokens: 20,\n          output_tokens: 5,\n          total_tokens: 25,\n          input_tokens_details: { cached_tokens: 0 },\n          output_tokens_details: { reasoning_tokens: 0 },\n        },\n      };\n      return sse([\n        {\n          event: \"response.created\",\n          data: {\n            type: \"response.created\",\n            response: { ...response, status: \"in_progress\", output: [] },\n          },\n        },\n        {\n          event: \"response.output_item.added\",\n          data: {\n            type: \"response.output_item.added\",\n            output_index: 0,\n            item: wantsTool ? item : { ...item, content: [] },\n          },\n        },\n        ...(!wantsTool\n          ? [\n              {\n                event: \"response.content_part.added\",\n                data: {\n                  type: \"response.content_part.added\",\n                  item_id: item.id,\n                  output_index: 0,\n                  content_index: 0,\n                  part: { type: \"output_text\", text: \"\", annotations: [] },\n                },\n              },\n              {\n                event: \"response.output_text.delta\",\n                data: {\n                  type: \"response.output_text.delta\",\n                  item_id: item.id,\n                  output_index: 0,\n                  content_index: 0,\n                  delta: item.content[0].text,\n                },\n              },\n              {\n                event: \"response.output_text.done\",\n                data: {\n                  type: \"response.output_text.done\",\n                  item_id: item.id,\n                  output_index: 0,\n                  content_index: 0,\n                  text: item.content[0].text,\n                },\n              },\n            ]\n          : []),\n        {\n          event: \"response.output_item.done\",\n          data: { type: \"response.output_item.done\", output_index: 0, item },\n        },\n        {\n          event: \"response.completed\",\n          data: { type: \"response.completed\", response },\n        },\n      ]);\n    },\n  });\n  return {\n    server,\n    url: `http://127.0.0.1:${server.port}`,\n    counts: () => ({ requests, modelCalls }),\n  };\n}\n"
+      },
+      "candidate-result.ts": {
+        "path": "/tmp/agx-air-qKPyvS/candidate-result.ts",
+        "source": "import type {\n  AcpxRuntime,\n  AcpRuntimeEnsureInput,\n} from \"/tmp/agx-decision-0E6raB/acpx-package/dist/runtime.js\";\nimport {\n  capacityMessage,\n  modelWaitMs,\n} from \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/capacity.ts\";\n\n// Concrete replacement boundary for the receipt consumed by agx-worker/src/next/run.ts.\n// Vendor configuration/host declarations, routing, acceptance and run-state ownership remain outside it.\nexport async function runAcpxWorker(options: {\n  runtime: AcpxRuntime;\n  input: AcpRuntimeEnsureInput;\n  vendor: \"codex\" | \"claude\";\n  prompt: string;\n  sandbox: \"read-only\" | \"workspace-write\" | \"none\";\n  timeoutMs: number;\n  onEvent?: (event: unknown) => void;\n}) {\n  let lastMessage = \"\";\n  let cause: string | undefined;\n  let outcome: \"returned\" | \"capacity\" | \"timeout\" | \"refused\" = \"refused\";\n  let exitCode = 2;\n  let vendorSession: string | null = null;\n  const handle = await options.runtime.ensureSession(options.input);\n  vendorSession = handle.agentSessionId ?? handle.backendSessionId ?? null;\n  const mode =\n    options.vendor === \"codex\"\n      ? {\n          \"read-only\": \"read-only\",\n          \"workspace-write\": \"agent\",\n          none: \"agent-full-access\",\n        }[options.sandbox]\n      : {\n          \"read-only\": \"plan\",\n          \"workspace-write\": \"acceptEdits\",\n          none: \"bypassPermissions\",\n        }[options.sandbox];\n  await options.runtime.setMode({ handle, mode });\n  const turn = options.runtime.startTurn({\n    handle,\n    text: options.prompt,\n    mode: \"prompt\",\n    requestId: crypto.randomUUID(),\n    timeoutMs: options.timeoutMs,\n  });\n  let modelWaitExpired = false;\n  const initialModelWait = setTimeout(() => {\n    modelWaitExpired = true;\n    void turn.cancel();\n  }, modelWaitMs());\n  for await (const event of turn.events) {\n    options.onEvent?.(event);\n    if (event.type === \"text_delta\" || event.type === \"tool_call\")\n      clearTimeout(initialModelWait);\n    if (event.type === \"text_delta\" && event.stream !== \"thought\")\n      lastMessage += event.text;\n  }\n  clearTimeout(initialModelWait);\n  const result = await turn.result;\n  process.stderr.write(\"AUDIT_TURN_RESULT \"+JSON.stringify(result)+\"\\n\");\n  if (result.status === \"failed\") {\n    cause = result.error.message;\n    // Only a structured error may establish capacity. Quoted assistant prose never does.\n    const capacity = capacityMessage(\n      JSON.stringify({ type: \"error\", message: result.error.message }),\n      options.vendor,\n    );\n    if (capacity !== undefined) {\n      outcome = \"capacity\";\n      exitCode = 75;\n      cause = capacity;\n    } else if (result.error.code === \"TIMEOUT\") {\n      outcome = \"timeout\";\n      exitCode = 3;\n    }\n  }\n  if (modelWaitExpired) {\n    outcome = \"capacity\";\n    exitCode = 75;\n    cause = \"no model response within initial model wait\";\n  }\n  if (\n    outcome !== \"capacity\" &&\n    outcome !== \"timeout\" &&\n    result.status === \"completed\"\n  ) {\n    outcome = \"returned\";\n    exitCode = 0;\n  }\n  return {\n    exit_code: exitCode,\n    outcome,\n    cause,\n    timed_out: outcome === \"timeout\",\n    last_message: lastMessage,\n    vendor_session: vendorSession,\n  };\n}\n"
+      },
+      "candidate-terminal.ts": {
+        "path": "/tmp/agx-air-qKPyvS/candidate-terminal.ts",
+        "source": "import type {\n  AcpxRuntime,\n  AcpRuntimeEnsureInput,\n} from \"/tmp/agx-decision-0E6raB/acpx-package/dist/runtime.js\";\nimport {\n  capacityMessage,\n  modelWaitMs,\n} from \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/capacity.ts\";\n\n// Concrete replacement boundary for the receipt consumed by agx-worker/src/next/run.ts.\n// Vendor configuration/host declarations, routing, acceptance and run-state ownership remain outside it.\nexport async function runAcpxWorker(options: {\n  runtime: AcpxRuntime;\n  input: AcpRuntimeEnsureInput;\n  vendor: \"codex\" | \"claude\";\n  prompt: string;\n  sandbox: \"read-only\" | \"workspace-write\" | \"none\";\n  timeoutMs: number;\n  onEvent?: (event: unknown) => void;\n}) {\n  let lastMessage = \"\";\n  let cause: string | undefined;\n  let outcome: \"returned\" | \"capacity\" | \"timeout\" | \"refused\" = \"refused\";\n  let exitCode = 2;\n  let vendorSession: string | null = null;\n  const handle = await options.runtime.ensureSession(options.input);\n  vendorSession = handle.agentSessionId ?? handle.backendSessionId ?? null;\n  const mode =\n    options.vendor === \"codex\"\n      ? {\n          \"read-only\": \"read-only\",\n          \"workspace-write\": \"agent\",\n          none: \"agent-full-access\",\n        }[options.sandbox]\n      : {\n          \"read-only\": \"plan\",\n          \"workspace-write\": \"acceptEdits\",\n          none: \"bypassPermissions\",\n        }[options.sandbox];\n  await options.runtime.setMode({ handle, mode });\n  const turn = options.runtime.startTurn({\n    handle,\n    text: options.prompt,\n    mode: \"prompt\",\n    requestId: crypto.randomUUID(),\n    timeoutMs: options.timeoutMs,\n  });\n  let modelWaitExpired = false;\n  const initialModelWait = setTimeout(() => {\n    modelWaitExpired = true;\n    void turn.cancel();\n  }, modelWaitMs());\n  for await (const event of turn.events) {\n    options.onEvent?.(event);\n    if (event.type === \"text_delta\" || event.type === \"tool_call\")\n      clearTimeout(initialModelWait);\n    if (event.type === \"text_delta\" && event.stream !== \"thought\")\n      lastMessage += event.text;\n  }\n  clearTimeout(initialModelWait);\n  const result = await turn.result;\n  process.stderr.write(\"AUDIT_TURN_RESULT \"+JSON.stringify(result)+\"\\n\");\n  const incident = result._meta?.jetbrains?.air?.sessionFailure;\n  const terminalCapacity = incident?.severity === \"error\" && typeof incident.title === \"string\" ? capacityMessage(JSON.stringify({type:\"error\",message:incident.title}), options.vendor) : undefined;\n  if (terminalCapacity !== undefined && terminalCapacity !== false) { outcome=\"capacity\";exitCode=75;cause=terminalCapacity; }\n  if (result.status === \"failed\") {\n    cause = result.error.message;\n    // Only a structured error may establish capacity. Quoted assistant prose never does.\n    const capacity = capacityMessage(\n      JSON.stringify({ type: \"error\", message: result.error.message }),\n      options.vendor,\n    );\n    if (capacity !== undefined) {\n      outcome = \"capacity\";\n      exitCode = 75;\n      cause = capacity;\n    } else if (result.error.code === \"TIMEOUT\") {\n      outcome = \"timeout\";\n      exitCode = 3;\n    }\n  }\n  if (modelWaitExpired) {\n    outcome = \"capacity\";\n    exitCode = 75;\n    cause = \"no model response within initial model wait\";\n  }\n  if (\n    outcome !== \"capacity\" &&\n    outcome !== \"timeout\" &&\n    result.status === \"completed\"\n  ) {\n    outcome = \"returned\";\n    exitCode = 0;\n  }\n  return {\n    exit_code: exitCode,\n    outcome,\n    cause,\n    timed_out: outcome === \"timeout\",\n    last_message: lastMessage,\n    vendor_session: vendorSession,\n  };\n}\n"
+      },
+      "probe-result.ts": {
+        "path": "/tmp/agx-air-qKPyvS/probe-result.ts",
+        "source": "import {\n  mkdir,\n  mkdtemp,\n  readFile,\n  writeFile,\n  access,\n  chmod,\n} from \"node:fs/promises\";\nimport { join } from \"node:path\";\nimport {\n  createAcpRuntime,\n  createAgentRegistry,\n  createFileSessionStore,\n} from \"/tmp/agx-decision-0E6raB/acpx-package/dist/runtime.js\";\nimport { modelServer } from \"./model-server.ts\";\nimport { runClaude } from \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/run-claude.ts\";\nimport { runAcpxWorker } from \"./candidate-result.ts\";\n\nasync function main() {\n  const vendor = process.env.AGX_AUDIT_VENDOR === \"claude\" ? \"claude\" : \"codex\";\n  const transport = process.env.AGX_AUDIT_TRANSPORT ?? \"acpx\";\n  const scenario = process.env.AGX_AUDIT_SCENARIO ?? \"normal\";\n  // Native Claude sandbox bridge sockets must fit the Unix-domain path limit.\n  const root = await mkdtemp(\"/tmp/agx-native-\");\n  const cwd = join(root, \"workspace\");\n  const vendorHome = join(root, \"vendor-home\");\n  const temp = join(root, \"tmp\");\n  await mkdir(cwd, { recursive: true });\n  await mkdir(vendorHome, { recursive: true });\n  await mkdir(temp, { recursive: true });\n  const outsideRoot = await mkdtemp(\"/home/fuyu/dotfiles/.agx-native-audit-\");\n  const marker =\n    scenario === \"sandbox\"\n      ? join(outsideRoot, \"outside-marker\")\n      : join(cwd, \"inside-marker\");\n  const command = `${scenario === \"hook-deny\" ? \"# audit-hook-denied\\n\" : \"\"}printf audit > '${marker}'`;\n  const api = modelServer({\n    vendor,\n    scenario,\n    command,\n    logPath: join(root, \"http.jsonl\"),\n  });\n  const hookLog = join(root, \"hooks.jsonl\");\n  const hook = {\n    type: \"command\",\n    command: `${process.execPath} ${join(\"/tmp/agx-native-o49jN4\", \"hook.ts\")}`,\n    timeout: 5,\n  };\n  const hooks = Object.fromEntries(\n    [\n      \"SessionStart\",\n      \"UserPromptSubmit\",\n      \"PreToolUse\",\n      \"PostToolUse\",\n      \"Stop\",\n    ].map((event) => [event, [{ hooks: [hook] }]]),\n  );\n  const provider = {\n    name: \"audit\",\n    base_url: `${api.url}/v1`,\n    wire_api: \"responses\",\n    requires_openai_auth: false,\n    supports_websockets: false,\n    request_max_retries: 0,\n    stream_max_retries: 0,\n    stream_idle_timeout_ms: 1000,\n  };\n  const codexConfig = {\n    model: \"gpt-6.1-sol\",\n    model_provider: \"audit\",\n    model_providers: { audit: provider },\n    features: { hooks: true },\n    approval_policy: \"never\",\n    sandbox_mode: scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n    \"sandbox_workspace_write.exclude_slash_tmp\": true,\n    \"sandbox_workspace_write.exclude_tmpdir_env_var\": true,\n  };\n  const codexShim = join(root, \"codex-audit\");\n  await writeFile(\n    codexShim,\n    '#!/bin/sh\\n# shim: exec-wrapper — vetted audit hooks only; all other argv is forwarded.\\nexec /home/linuxbrew/.linuxbrew/bin/codex --dangerously-bypass-hook-trust \"$@\"\\n',\n  );\n  await chmod(codexShim, 0o755);\n  if (vendor === \"codex\") {\n    await writeFile(join(vendorHome, \"hooks.json\"), JSON.stringify({ hooks }));\n    await writeFile(\n      join(vendorHome, \"config.toml\"),\n      `model = \"gpt-6.1-sol\"\\nmodel_provider = \"audit\"\\napproval_policy = \"never\"\\n[model_providers.audit]\\nname = \"audit\"\\nbase_url = \"${api.url}/v1\"\\nwire_api = \"responses\"\\nrequires_openai_auth = false\\nsupports_websockets = false\\nrequest_max_retries = 0\\nstream_max_retries = 0\\nstream_idle_timeout_ms = 1000\\n[features]\\nhooks = true\\n`,\n    );\n  } else {\n    await writeFile(\n      join(vendorHome, \"settings.json\"),\n      JSON.stringify({\n        hooks,\n        sandbox: {\n          enabled: true,\n          autoAllowBashIfSandboxed: true,\n          allowUnsandboxedCommands: false,\n          failIfUnavailable: true,\n        },\n        permissions: {\n          defaultMode: scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n        },\n      }),\n    );\n  }\n  const env = {\n    TMPDIR: temp,\n    TMP: temp,\n    TEMP: temp,\n    AGX_AUDIT_HOOK_LOG: hookLog,\n    CODEX_PATH:\n      process.env.AGX_AUDIT_PATCH_HOOK_SOURCE === undefined\n        ? codexShim\n        : join(\"/tmp/agx-native-o49jN4\", \"codex-appserver-shim.ts\"),\n    CODEX_HOME: vendorHome,\n    CODEX_CONFIG: JSON.stringify(codexConfig),\n    MODEL_PROVIDER: \"audit\",\n    ...(process.env.AGX_AUDIT_PATCH_HOOK_SOURCE === undefined\n      ? {}\n      : {\n          AGX_AUDIT_PATCH_HOOK_SOURCE: process.env.AGX_AUDIT_PATCH_HOOK_SOURCE,\n        }),\n    ...(process.env.AGX_AUDIT_TRUST_HOOKS === undefined\n      ? {}\n      : { AGX_AUDIT_TRUST_HOOKS: process.env.AGX_AUDIT_TRUST_HOOKS }),\n    CLAUDE_CONFIG_DIR: vendorHome,\n    CLAUDE_CODE_EXECUTABLE: \"/home/fuyu/.local/bin/claude\",\n    ACPX_CLAUDE_INCLUDE_USER_SETTINGS: \"1\",\n    ANTHROPIC_BASE_URL: api.url,\n    ANTHROPIC_API_KEY: \"audit-not-a-real-key\",\n    ANTHROPIC_AUTH_TOKEN: \"\",\n    CLAUDE_CODE_OAUTH_TOKEN: \"\",\n    OPENAI_API_KEY: \"audit-not-a-real-key\",\n    CODEX_API_KEY: \"audit-not-a-real-key\",\n    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: \"1\",\n    DISABLE_TELEMETRY: \"1\",\n    DISABLE_AUTOUPDATER: \"1\",\n    MAX_RETRIES: \"0\",\n  };\n  const adapter = process.env.AGX_AUDIT_ADAPTER_DIR ?? vendor;\n  const runtime = createAcpRuntime({\n    cwd,\n    sessionStore: createFileSessionStore({ stateDir: join(root, \"state\") }),\n    agentRegistry: createAgentRegistry({\n      overrides: {\n        [vendor]: [process.execPath, \"/tmp/agx-air-qKPyvS/proxy.ts\",\n          join(\"/tmp/agx-native-o49jN4\", \"node/bin/node\"),\n          join(\"/tmp/agx-native-o49jN4\", adapter, \"dist/index.js\"),\n        ],\n      },\n    }),\n    agentProcessEnv: env,\n    permissionMode: \"deny-all\",\n    fs: false,\n    terminal: false,\n    timeoutMs: 15000,\n    verbose: false,\n  });\n  const events: unknown[] = [];\n  const start = performance.now();\n  let failure: string | undefined;\n  try {\n    if (transport === \"agx\") {\n      const envFile = join(root, \"native-env.json\");\n      await writeFile(envFile, JSON.stringify(env));\n      const launcher = join(\"/tmp/agx-native-o49jN4\", \"vendor-launcher.ts\");\n      if (vendor === \"claude\") {\n        process.env.AGX_AUDIT_NATIVE_ENV_FILE = envFile;\n        const receipt = await runClaude({\n          target: cwd,\n          prompt: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n          model: \"claude-sonnet-4-6\",\n          permissionMode: scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n          maxTurns: 3,\n          timeoutMs: 15000,\n          maxBudgetUsd: 2,\n          safeMode: false,\n          bare: false,\n          progressFile: join(root, \"progress.jsonl\"),\n          persistSession: true,\n          claudeBin: launcher,\n        });\n        await writeFile(join(root, \"native.stdout\"), receipt.stdout);\n        await writeFile(join(root, \"native.stderr\"), receipt.stderr);\n        events.push({\n          type: \"agx_receipt\",\n          exit: receipt.exitCode,\n          capacityCause: receipt.capacityCause,\n          timedOut: receipt.timedOut,\n        });\n      } else {\n        const prompt = join(root, \"prompt.txt\");\n        await writeFile(\n          prompt,\n          \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        );\n        const args = [\n          process.execPath,\n          \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/codex.ts\",\n          \"--model\",\n          \"gpt-6.1-sol\",\n          \"--effort\",\n          \"high\",\n          \"--sandbox\",\n          scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n          \"--cd\",\n          cwd,\n          \"--prompt-file\",\n          prompt,\n          \"--receipt-dir\",\n          join(root, \"receipts\"),\n          \"--timeout-s\",\n          \"15\",\n        ];\n        const proc = Bun.spawn(args, {\n          env: {\n            ...process.env,\n            AGX_CODEX_BIN: launcher,\n            AGX_CODEX_HOST_FILE: join(root, \"absent-host.toml\"),\n            AGX_AUDIT_NATIVE_ENV_FILE: envFile,\n          },\n          stdin: \"ignore\",\n          stdout: \"pipe\",\n          stderr: \"pipe\",\n          timeout: 20000,\n        });\n        const [out, err, exit] = await Promise.all([\n          proc.stdout.text(),\n          proc.stderr.text(),\n          proc.exited,\n        ]);\n        await writeFile(join(root, \"native.stdout\"), out);\n        await writeFile(join(root, \"native.stderr\"), err);\n        events.push(\n          ...out\n            .trim()\n            .split(\"\\n\")\n            .filter(Boolean)\n            .map((line) => {\n              try {\n                return { ...JSON.parse(line), agx_process_exit: exit };\n              } catch {\n                return { raw: line, agx_process_exit: exit };\n              }\n            }),\n        );\n        if (exit !== 0 && !out.includes('\"capacity\"'))\n          failure = `agx exit=${exit}: ${err.slice(-1000)}`;\n      }\n    } else if (transport === \"native\") {\n      const cmd =\n        vendor === \"codex\"\n          ? [\n              codexShim,\n              \"exec\",\n              \"--json\",\n              \"--skip-git-repo-check\",\n              \"--sandbox\",\n              scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n              \"-C\",\n              cwd,\n              \"-m\",\n              \"gpt-6.1-sol\",\n              \"-c\",\n              'approval_policy=\"never\"',\n              \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n            ]\n          : [\n              \"/home/fuyu/.local/bin/claude\",\n              \"-p\",\n              \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n              \"--model\",\n              \"claude-sonnet-4-6\",\n              \"--permission-mode\",\n              scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n              \"--output-format\",\n              \"stream-json\",\n              \"--verbose\",\n              \"--max-turns\",\n              \"3\",\n            ];\n      const proc = Bun.spawn(cmd, {\n        cwd,\n        env: { ...process.env, ...env },\n        stdin: \"ignore\",\n        stdout: \"pipe\",\n        stderr: \"pipe\",\n        timeout: 15000,\n      });\n      const [out, err, exit] = await Promise.all([\n        proc.stdout.text(),\n        proc.stderr.text(),\n        proc.exited,\n      ]);\n      await writeFile(join(root, \"native.stdout\"), out);\n      await writeFile(join(root, \"native.stderr\"), err);\n      events.push(\n        ...out\n          .trim()\n          .split(\"\\n\")\n          .filter(Boolean)\n          .map((line) => {\n            try {\n              return JSON.parse(line);\n            } catch {\n              return { raw: line };\n            }\n          }),\n      );\n      if (exit !== 0)\n        failure = `native exit=${exit} signal=${proc.signalCode}: ${err.slice(-1500)}`;\n    } else if (transport === \"nodebridge\") {\n      const inputFile = join(root, \"node-input.json\");\n      await writeFile(inputFile, JSON.stringify({ root, cwd, vendor, adapter, scenario, env }));\n      const proc = Bun.spawn([join(\"/tmp/agx-native-o49jN4\", \"node/bin/node\"), join(\"/tmp/agx-native-o49jN4\", \"node-client.ts\")], { cwd, env: { ...process.env, AGX_AUDIT_NODE_INPUT: inputFile }, stdin: \"ignore\", stdout: \"pipe\", stderr: \"pipe\", timeout: 25000 });\n      const [out, err, exit] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);\n      await writeFile(join(root, \"node.stderr\"), err);\n      if (exit !== 0) throw Error(`native Node bridge ${exit}: ${err.slice(-2000)}`);\n      const parsed = JSON.parse(out.trim().split(\"\\n\").at(-1)!);\n      events.push(...parsed.events);\n    } else if (transport === \"bridge\") {\n      const receipt = await runAcpxWorker({\n        runtime,\n        input: {\n          sessionKey: `audit-${vendor}-${scenario}`,\n          agent: vendor,\n          mode: \"persistent\",\n          sessionOptions: {\n            model: vendor === \"codex\" ? \"gpt-6.1-sol\" : \"claude-sonnet-4-6\",\n            maxTurns: 3,\n          },\n        },\n        vendor,\n        prompt: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        sandbox: scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n        timeoutMs: 15000,\n        onEvent: (event) => events.push(event),\n      });\n      events.push({ type: \"bridge_receipt\", ...receipt });\n    } else {\n      const handle = await runtime.ensureSession({\n        sessionKey: `audit-${vendor}-${scenario}`,\n        agent: vendor,\n        mode: \"persistent\",\n        sessionOptions: {\n          model: vendor === \"codex\" ? \"gpt-6.1-sol\" : \"claude-sonnet-4-6\",\n          maxTurns: 3,\n        },\n      });\n      await writeFile(\n        join(root, \"handle.json\"),\n        JSON.stringify(handle, null, 2),\n      );\n      if (vendor === \"codex\" && scenario === \"read-only\")\n        await runtime.setMode({ handle, mode: \"read-only\" });\n      for await (const event of runtime.runTurn({\n        handle,\n        text: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        mode: \"prompt\",\n        requestId: crypto.randomUUID(),\n        timeoutMs: 15000,\n      }))\n        events.push(event);\n    }\n  } catch (error) {\n    failure = String(error);\n  } finally {\n    await runtime.shutdown();\n    await api.server.stop(true);\n  }\n  const present = await access(marker).then(\n    () => true,\n    () => false,\n  );\n  const hookText = await readFile(hookLog, \"utf8\").catch(() => \"\");\n  const result = {\n    transport,\n    vendor,\n    adapter,\n    scenario,\n    root,\n    outsideRoot,\n    marker,\n    present,\n    elapsedMs: Math.round(performance.now() - start),\n    ...api.counts(),\n    failure,\n    hooks: hookText\n      .trim()\n      .split(\"\\n\")\n      .filter(Boolean)\n      .map((line) => JSON.parse(line).hook_event_name),\n    events,\n  };\n  await writeFile(join(root, \"result.json\"), JSON.stringify(result, null, 2));\n  process.stdout.write(\n    `${JSON.stringify({ ...result, events: events.slice(-4) })}\\n`,\n  );\n}\nmain().catch((error) => {\n  process.stderr.write(`FATAL: ${String(error)}\\n`);\n  process.exitCode = 2;\n});\n"
+      },
+      "probe-terminal.ts": {
+        "path": "/tmp/agx-air-qKPyvS/probe-terminal.ts",
+        "source": "import {\n  mkdir,\n  mkdtemp,\n  readFile,\n  writeFile,\n  access,\n  chmod,\n} from \"node:fs/promises\";\nimport { join } from \"node:path\";\nimport {\n  createAcpRuntime,\n  createAgentRegistry,\n  createFileSessionStore,\n} from \"/tmp/agx-decision-0E6raB/acpx-package/dist/runtime.js\";\nimport { modelServer } from \"./model-server.ts\";\nimport { runClaude } from \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/run-claude.ts\";\nimport { runAcpxWorker } from \"./candidate-terminal.ts\";\n\nasync function main() {\n  const vendor = process.env.AGX_AUDIT_VENDOR === \"claude\" ? \"claude\" : \"codex\";\n  const transport = process.env.AGX_AUDIT_TRANSPORT ?? \"acpx\";\n  const scenario = process.env.AGX_AUDIT_SCENARIO ?? \"normal\";\n  // Native Claude sandbox bridge sockets must fit the Unix-domain path limit.\n  const root = await mkdtemp(\"/tmp/agx-native-\");\n  const cwd = join(root, \"workspace\");\n  const vendorHome = join(root, \"vendor-home\");\n  const temp = join(root, \"tmp\");\n  await mkdir(cwd, { recursive: true });\n  await mkdir(vendorHome, { recursive: true });\n  await mkdir(temp, { recursive: true });\n  const outsideRoot = await mkdtemp(\"/home/fuyu/dotfiles/.agx-native-audit-\");\n  const marker =\n    scenario === \"sandbox\"\n      ? join(outsideRoot, \"outside-marker\")\n      : join(cwd, \"inside-marker\");\n  const command = `${scenario === \"hook-deny\" ? \"# audit-hook-denied\\n\" : \"\"}printf audit > '${marker}'`;\n  const api = modelServer({\n    vendor,\n    scenario,\n    command,\n    logPath: join(root, \"http.jsonl\"),\n  });\n  const hookLog = join(root, \"hooks.jsonl\");\n  const hook = {\n    type: \"command\",\n    command: `${process.execPath} ${join(\"/tmp/agx-native-o49jN4\", \"hook.ts\")}`,\n    timeout: 5,\n  };\n  const hooks = Object.fromEntries(\n    [\n      \"SessionStart\",\n      \"UserPromptSubmit\",\n      \"PreToolUse\",\n      \"PostToolUse\",\n      \"Stop\",\n    ].map((event) => [event, [{ hooks: [hook] }]]),\n  );\n  const provider = {\n    name: \"audit\",\n    base_url: `${api.url}/v1`,\n    wire_api: \"responses\",\n    requires_openai_auth: false,\n    supports_websockets: false,\n    request_max_retries: Number(process.env.AGX_AUDIT_CODEX_RETRIES ?? 0),\n    stream_max_retries: 0,\n    stream_idle_timeout_ms: 1000,\n  };\n  const codexConfig = {\n    model: \"gpt-6.1-sol\",\n    model_provider: \"audit\",\n    model_providers: { audit: provider },\n    features: { hooks: true },\n    approval_policy: \"never\",\n    sandbox_mode: scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n    \"sandbox_workspace_write.exclude_slash_tmp\": true,\n    \"sandbox_workspace_write.exclude_tmpdir_env_var\": true,\n  };\n  const codexShim = join(root, \"codex-audit\");\n  await writeFile(\n    codexShim,\n    '#!/bin/sh\\n# shim: exec-wrapper — vetted audit hooks only; all other argv is forwarded.\\nexec /home/linuxbrew/.linuxbrew/bin/codex --dangerously-bypass-hook-trust \"$@\"\\n',\n  );\n  await chmod(codexShim, 0o755);\n  if (vendor === \"codex\") {\n    await writeFile(join(vendorHome, \"hooks.json\"), JSON.stringify({ hooks }));\n    await writeFile(\n      join(vendorHome, \"config.toml\"),\n      `model = \"gpt-6.1-sol\"\\nmodel_provider = \"audit\"\\napproval_policy = \"never\"\\n[model_providers.audit]\\nname = \"audit\"\\nbase_url = \"${api.url}/v1\"\\nwire_api = \"responses\"\\nrequires_openai_auth = false\\nsupports_websockets = false\\nrequest_max_retries = ${Number(process.env.AGX_AUDIT_CODEX_RETRIES ?? 0)}\\nstream_max_retries = 0\\nstream_idle_timeout_ms = 1000\\n[features]\\nhooks = true\\n`,\n    );\n  } else {\n    await writeFile(\n      join(vendorHome, \"settings.json\"),\n      JSON.stringify({\n        hooks,\n        sandbox: {\n          enabled: true,\n          autoAllowBashIfSandboxed: true,\n          allowUnsandboxedCommands: false,\n          failIfUnavailable: true,\n        },\n        permissions: {\n          defaultMode: scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n        },\n      }),\n    );\n  }\n  const env = {\n    TMPDIR: temp,\n    TMP: temp,\n    TEMP: temp,\n    AGX_AUDIT_HOOK_LOG: hookLog,\n    CODEX_PATH:\n      process.env.AGX_AUDIT_PATCH_HOOK_SOURCE === undefined\n        ? codexShim\n        : join(\"/tmp/agx-native-o49jN4\", \"codex-appserver-shim.ts\"),\n    CODEX_HOME: vendorHome,\n    CODEX_CONFIG: JSON.stringify(codexConfig),\n    MODEL_PROVIDER: \"audit\",\n    ...(process.env.AGX_AUDIT_PATCH_HOOK_SOURCE === undefined\n      ? {}\n      : {\n          AGX_AUDIT_PATCH_HOOK_SOURCE: process.env.AGX_AUDIT_PATCH_HOOK_SOURCE,\n        }),\n    ...(process.env.AGX_AUDIT_TRUST_HOOKS === undefined\n      ? {}\n      : { AGX_AUDIT_TRUST_HOOKS: process.env.AGX_AUDIT_TRUST_HOOKS }),\n    CLAUDE_CONFIG_DIR: vendorHome,\n    CLAUDE_CODE_EXECUTABLE: \"/home/fuyu/.local/bin/claude\",\n    ACPX_CLAUDE_INCLUDE_USER_SETTINGS: \"1\",\n    ANTHROPIC_BASE_URL: api.url,\n    ANTHROPIC_API_KEY: \"audit-not-a-real-key\",\n    ANTHROPIC_AUTH_TOKEN: \"\",\n    CLAUDE_CODE_OAUTH_TOKEN: \"\",\n    OPENAI_API_KEY: \"audit-not-a-real-key\",\n    CODEX_API_KEY: \"audit-not-a-real-key\",\n    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: \"1\",\n    DISABLE_TELEMETRY: \"1\",\n    DISABLE_AUTOUPDATER: \"1\",\n    MAX_RETRIES: \"0\",\n  };\n  const adapter = process.env.AGX_AUDIT_ADAPTER_DIR ?? vendor;\n  const runtime = createAcpRuntime({\n    cwd,\n    sessionStore: createFileSessionStore({ stateDir: join(root, \"state\") }),\n    agentRegistry: createAgentRegistry({\n      overrides: {\n        [vendor]: [process.execPath, \"/tmp/agx-air-qKPyvS/proxy.ts\",\n          join(\"/tmp/agx-native-o49jN4\", \"node/bin/node\"),\n          join(\"/tmp/agx-native-o49jN4\", adapter, \"dist/index.js\"),\n        ],\n      },\n    }),\n    agentProcessEnv: env,\n    permissionMode: \"deny-all\",\n    fs: false,\n    terminal: false,\n    timeoutMs: 15000,\n    verbose: false,\n  });\n  const events: unknown[] = [];\n  const start = performance.now();\n  let failure: string | undefined;\n  try {\n    if (transport === \"agx\") {\n      const envFile = join(root, \"native-env.json\");\n      await writeFile(envFile, JSON.stringify(env));\n      const launcher = join(\"/tmp/agx-native-o49jN4\", \"vendor-launcher.ts\");\n      if (vendor === \"claude\") {\n        process.env.AGX_AUDIT_NATIVE_ENV_FILE = envFile;\n        const receipt = await runClaude({\n          target: cwd,\n          prompt: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n          model: \"claude-sonnet-4-6\",\n          permissionMode: scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n          maxTurns: 3,\n          timeoutMs: 15000,\n          maxBudgetUsd: 2,\n          safeMode: false,\n          bare: false,\n          progressFile: join(root, \"progress.jsonl\"),\n          persistSession: true,\n          claudeBin: launcher,\n        });\n        await writeFile(join(root, \"native.stdout\"), receipt.stdout);\n        await writeFile(join(root, \"native.stderr\"), receipt.stderr);\n        events.push({\n          type: \"agx_receipt\",\n          exit: receipt.exitCode,\n          capacityCause: receipt.capacityCause,\n          timedOut: receipt.timedOut,\n        });\n      } else {\n        const prompt = join(root, \"prompt.txt\");\n        await writeFile(\n          prompt,\n          \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        );\n        const args = [\n          process.execPath,\n          \"/home/fuyu/dotfiles/tools/agx-worker/src/workers/codex.ts\",\n          \"--model\",\n          \"gpt-6.1-sol\",\n          \"--effort\",\n          \"high\",\n          \"--sandbox\",\n          scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n          \"--cd\",\n          cwd,\n          \"--prompt-file\",\n          prompt,\n          \"--receipt-dir\",\n          join(root, \"receipts\"),\n          \"--timeout-s\",\n          \"15\",\n        ];\n        const proc = Bun.spawn(args, {\n          env: {\n            ...process.env,\n            AGX_CODEX_BIN: launcher,\n            AGX_CODEX_HOST_FILE: join(root, \"absent-host.toml\"),\n            AGX_AUDIT_NATIVE_ENV_FILE: envFile,\n          },\n          stdin: \"ignore\",\n          stdout: \"pipe\",\n          stderr: \"pipe\",\n          timeout: 20000,\n        });\n        const [out, err, exit] = await Promise.all([\n          proc.stdout.text(),\n          proc.stderr.text(),\n          proc.exited,\n        ]);\n        await writeFile(join(root, \"native.stdout\"), out);\n        await writeFile(join(root, \"native.stderr\"), err);\n        events.push(\n          ...out\n            .trim()\n            .split(\"\\n\")\n            .filter(Boolean)\n            .map((line) => {\n              try {\n                return { ...JSON.parse(line), agx_process_exit: exit };\n              } catch {\n                return { raw: line, agx_process_exit: exit };\n              }\n            }),\n        );\n        if (exit !== 0 && !out.includes('\"capacity\"'))\n          failure = `agx exit=${exit}: ${err.slice(-1000)}`;\n      }\n    } else if (transport === \"native\") {\n      const cmd =\n        vendor === \"codex\"\n          ? [\n              codexShim,\n              \"exec\",\n              \"--json\",\n              \"--skip-git-repo-check\",\n              \"--sandbox\",\n              scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n              \"-C\",\n              cwd,\n              \"-m\",\n              \"gpt-6.1-sol\",\n              \"-c\",\n              'approval_policy=\"never\"',\n              \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n            ]\n          : [\n              \"/home/fuyu/.local/bin/claude\",\n              \"-p\",\n              \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n              \"--model\",\n              \"claude-sonnet-4-6\",\n              \"--permission-mode\",\n              scenario === \"read-only\" ? \"plan\" : \"acceptEdits\",\n              \"--output-format\",\n              \"stream-json\",\n              \"--verbose\",\n              \"--max-turns\",\n              \"3\",\n            ];\n      const proc = Bun.spawn(cmd, {\n        cwd,\n        env: { ...process.env, ...env },\n        stdin: \"ignore\",\n        stdout: \"pipe\",\n        stderr: \"pipe\",\n        timeout: 15000,\n      });\n      const [out, err, exit] = await Promise.all([\n        proc.stdout.text(),\n        proc.stderr.text(),\n        proc.exited,\n      ]);\n      await writeFile(join(root, \"native.stdout\"), out);\n      await writeFile(join(root, \"native.stderr\"), err);\n      events.push(\n        ...out\n          .trim()\n          .split(\"\\n\")\n          .filter(Boolean)\n          .map((line) => {\n            try {\n              return JSON.parse(line);\n            } catch {\n              return { raw: line };\n            }\n          }),\n      );\n      if (exit !== 0)\n        failure = `native exit=${exit} signal=${proc.signalCode}: ${err.slice(-1500)}`;\n    } else if (transport === \"nodebridge\") {\n      const inputFile = join(root, \"node-input.json\");\n      await writeFile(inputFile, JSON.stringify({ root, cwd, vendor, adapter, scenario, env }));\n      const proc = Bun.spawn([join(\"/tmp/agx-native-o49jN4\", \"node/bin/node\"), join(\"/tmp/agx-native-o49jN4\", \"node-client.ts\")], { cwd, env: { ...process.env, AGX_AUDIT_NODE_INPUT: inputFile }, stdin: \"ignore\", stdout: \"pipe\", stderr: \"pipe\", timeout: 25000 });\n      const [out, err, exit] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);\n      await writeFile(join(root, \"node.stderr\"), err);\n      if (exit !== 0) throw Error(`native Node bridge ${exit}: ${err.slice(-2000)}`);\n      const parsed = JSON.parse(out.trim().split(\"\\n\").at(-1)!);\n      events.push(...parsed.events);\n    } else if (transport === \"bridge\") {\n      const receipt = await runAcpxWorker({\n        runtime,\n        input: {\n          sessionKey: `audit-${vendor}-${scenario}`,\n          agent: vendor,\n          mode: \"persistent\",\n          sessionOptions: {\n            model: vendor === \"codex\" ? \"gpt-6.1-sol\" : \"claude-sonnet-4-6\",\n            maxTurns: 3,\n          },\n        },\n        vendor,\n        prompt: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        sandbox: scenario === \"read-only\" ? \"read-only\" : \"workspace-write\",\n        timeoutMs: 15000,\n        onEvent: (event) => events.push(event),\n      });\n      events.push({ type: \"bridge_receipt\", ...receipt });\n    } else {\n      const handle = await runtime.ensureSession({\n        sessionKey: `audit-${vendor}-${scenario}`,\n        agent: vendor,\n        mode: \"persistent\",\n        sessionOptions: {\n          model: vendor === \"codex\" ? \"gpt-6.1-sol\" : \"claude-sonnet-4-6\",\n          maxTurns: 3,\n        },\n      });\n      await writeFile(\n        join(root, \"handle.json\"),\n        JSON.stringify(handle, null, 2),\n      );\n      if (vendor === \"codex\" && scenario === \"read-only\")\n        await runtime.setMode({ handle, mode: \"read-only\" });\n      for await (const event of runtime.runTurn({\n        handle,\n        text: \"Perform the scoped audit task; reply AUDIT_COMPLETED.\",\n        mode: \"prompt\",\n        requestId: crypto.randomUUID(),\n        timeoutMs: 15000,\n      }))\n        events.push(event);\n    }\n  } catch (error) {\n    failure = String(error);\n  } finally {\n    await runtime.shutdown();\n    await api.server.stop(true);\n  }\n  const present = await access(marker).then(\n    () => true,\n    () => false,\n  );\n  const hookText = await readFile(hookLog, \"utf8\").catch(() => \"\");\n  const result = {\n    transport,\n    vendor,\n    adapter,\n    scenario,\n    root,\n    outsideRoot,\n    marker,\n    present,\n    elapsedMs: Math.round(performance.now() - start),\n    ...api.counts(),\n    failure,\n    hooks: hookText\n      .trim()\n      .split(\"\\n\")\n      .filter(Boolean)\n      .map((line) => JSON.parse(line).hook_event_name),\n    events,\n  };\n  await writeFile(join(root, \"result.json\"), JSON.stringify(result, null, 2));\n  process.stdout.write(\n    `${JSON.stringify({ ...result, events: events.slice(-4) })}\\n`,\n  );\n}\nmain().catch((error) => {\n  process.stderr.write(`FATAL: ${String(error)}\\n`);\n  process.exitCode = 2;\n});\n"
+      }
+    },
+    "codex_repair_controls": [
+      {
+        "name": "codex-result",
+        "root": "/tmp/agx-native-VsD0B6",
+        "elapsedMs": 2040,
+        "modelCalls": 1,
+        "hooks": [],
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "",
+          "vendor_session": "01a1624e-c2b4-7a82-8246-aa5df1fe9298"
+        },
+        "terminalResultLog": "AUDIT_TURN_RESULT {\"status\":\"completed\",\"stopReason\":\"end_turn\",\"_meta\":{\"quota\":{\"token_count\":null,\"model_usage\":[]},\"jetbrains\":{\"air\":{\"version\":1,\"sessionFailure\":{\"id\":\"01a1624e-c355-7ce2-9c38-136434007157:error\",\"revision\":1,\"category\":\"connection\",\"severity\":\"error\",\"title\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:43157/v1/responses\",\"actions\":[\"retry\",\"new_session\"]}}}}}"
+      },
+      {
+        "name": "codex-terminal-capacity",
+        "root": "/tmp/agx-native-AG3Dgw",
+        "elapsedMs": 2047,
+        "modelCalls": 1,
+        "hooks": [],
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 75,
+          "outcome": "capacity",
+          "cause": "{\"type\":\"error\",\"message\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:44875/v1/responses\"}",
+          "timed_out": false,
+          "last_message": "",
+          "vendor_session": "01a16251-23e5-79d3-a957-ada91c2d1eaf"
+        },
+        "terminalResultLog": "AUDIT_TURN_RESULT {\"status\":\"completed\",\"stopReason\":\"end_turn\",\"_meta\":{\"quota\":{\"token_count\":null,\"model_usage\":[]},\"jetbrains\":{\"air\":{\"version\":1,\"sessionFailure\":{\"id\":\"01a16251-24b9-7592-8a76-7f9aff548bea:error\",\"revision\":1,\"category\":\"connection\",\"severity\":\"error\",\"title\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:44875/v1/responses\",\"actions\":[\"retry\",\"new_session\"]}}}}}"
+      },
+      {
+        "name": "codex-terminal-quote",
+        "root": "/tmp/agx-native-TBO6kX",
+        "elapsedMs": 2115,
+        "modelCalls": 2,
+        "hooks": [],
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 0,
+          "outcome": "returned",
+          "timed_out": false,
+          "last_message": "Selected model is at capacity. overloaded_error is quoted fixture text.",
+          "vendor_session": "01a16251-2cdd-7590-887e-c50f15e9d7ce"
+        },
+        "terminalResultLog": "AUDIT_TURN_RESULT {\"status\":\"completed\",\"stopReason\":\"end_turn\",\"_meta\":{\"quota\":{\"token_count\":{\"totalTokens\":25,\"inputTokens\":20,\"cachedInputTokens\":0,\"cacheWriteInputTokens\":0,\"outputTokens\":5,\"reasoningOutputTokens\":0},\"model_usage\":[{\"model\":\"gpt-6.1-sol\",\"token_count\":{\"totalTokens\":25,\"inputTokens\":20,\"cachedInputTokens\":0,\"cacheWriteInputTokens\":0,\"outputTokens\":5,\"reasoningOutputTokens\":0}}]}}}"
+      },
+      {
+        "name": "codex-terminal-retries",
+        "root": "/tmp/agx-native-wGezL9",
+        "elapsedMs": 1958,
+        "modelCalls": 4,
+        "hooks": [],
+        "receipt": {
+          "type": "bridge_receipt",
+          "exit_code": 75,
+          "outcome": "capacity",
+          "cause": "{\"type\":\"error\",\"message\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:37061/v1/responses\"}",
+          "timed_out": false,
+          "last_message": "",
+          "vendor_session": "01a1624f-bbf0-72f0-983f-f0a309551c84"
+        },
+        "terminalResultLog": "AUDIT_TURN_RESULT {\"status\":\"completed\",\"stopReason\":\"end_turn\",\"_meta\":{\"quota\":{\"token_count\":null,\"model_usage\":[]},\"jetbrains\":{\"air\":{\"version\":1,\"sessionFailure\":{\"id\":\"01a1624f-bc8a-7a22-a4eb-adce7fa41ea3:error\",\"revision\":1,\"category\":\"connection\",\"severity\":\"error\",\"title\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:37061/v1/responses\",\"actions\":[\"retry\",\"new_session\"]}}}}}"
+      },
+      {
+        "name": "codex-native-retries",
+        "root": "/tmp/agx-native-ARYHO3",
+        "elapsedMs": 598,
+        "modelCalls": 4,
+        "hooks": [
+          "SessionStart",
+          "UserPromptSubmit"
+        ],
+        "receipt": {
+          "schema": 1,
+          "run_id": "2026-10-22T06-33-05-813743546Z-1878653",
+          "outcome": "capacity",
+          "model": "gpt-6.1-sol",
+          "row": null,
+          "effort": "high",
+          "sandbox": "workspace-write",
+          "sandbox_effective": "workspace-write",
+          "unsandboxed_reason": null,
+          "cwd": "/tmp/agx-native-ARYHO3/workspace",
+          "started_at": "2026-10-22T06:33:05.813743546Z",
+          "elapsed_s": 0.5,
+          "session": "01a16250-34d1-77e0-abcc-a37bab66510b",
+          "codex_exit": 143,
+          "turns": 0,
+          "usage": {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0
+          },
+          "progress": {
+            "last": "starting",
+            "commands": 0,
+            "files": 0
+          },
+          "last_message": "",
+          "stderr_tail": "Reading additional input from stdin...",
+          "why": "{\"type\":\"error\",\"message\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:39979/v1/responses\"}",
+          "cause": "{\"type\":\"error\",\"message\":\"unexpected status 503 Service Unavailable: Selected model is at capacity. Please try a different model., url: http://127.0.0.1:39979/v1/responses\"}",
+          "transient": true,
+          "worker_fault": false,
+          "receipt_file": "/tmp/agx-native-ARYHO3/receipts/2026-10-22T06-33-05-813743546Z-1878653.json",
+          "agx_process_exit": 75
+        }
+      }
+    ],
+    "existing_domain_suite": {
+      "command": "mise run test:agx",
+      "exit": 0,
+      "passed": 497,
+      "failed": 0,
+      "assertions": 7401,
+      "seconds": 211.9
+    },
+    "documentation_check": {
+      "command": "mise exec -- rumdl check tools/agx-worker/docs/acpx-boundary.md tools/agx-worker/README.md",
+      "exit": 0
+    },
+    "config_inventory_check": {
+      "command": "bun test scripts/tests/config-map.test.ts",
+      "exit": 0,
+      "passed": 10,
+      "failed": 0
+    }
+  }
+}

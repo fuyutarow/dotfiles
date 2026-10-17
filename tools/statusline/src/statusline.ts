@@ -2,6 +2,7 @@
 // Stdin JSON -> the existing statusline bytes; no harness configuration cutover.
 import { DIM, ESC, RST } from "./ansi.ts";
 import { realpath } from "node:fs/promises";
+import { ok } from "neverthrow";
 import {
   execAsyncBounded,
   resetRenderBudget,
@@ -19,7 +20,7 @@ import type { SessionStatus } from "./session-status.ts";
 import { promptParts } from "./prompt-stamp.ts";
 import { coloredHead, render } from "./format.ts";
 import { buildDataframe } from "./build-dataframe.ts";
-import { readCodexRate } from "./codex-rate.ts";
+import { readCodexRate, readLiveCodexRate } from "./codex-rate.ts";
 import { sysSegment } from "./host-load.ts";
 import { fieldDisplay } from "./field-state.ts";
 import { ctxSegment } from "./model-context.ts";
@@ -66,7 +67,10 @@ async function emitPayloadById(sessionId: string): Promise<void> {
 async function renderDiscovered(cwd: string): Promise<string> {
   const sessions = await discoverSessions(cwd);
   if (sessions.length === 0) {
-    const frame = await buildDataframe({ cwd });
+    const frame = await buildDataframe(
+      { cwd },
+      { sources: { codexRate: () => readLiveCodexRate() } },
+    );
     return `${render(frame)}\n${DIM}no agent session in ${cwd}${RST}`;
   }
   const blocks: string[] = [];
@@ -75,7 +79,18 @@ async function renderDiscovered(cwd: string): Promise<string> {
       await payloadForSession(discovered),
     );
     if (!parsed.success) continue;
-    const frame = await buildDataframe(parsed.data);
+    const codex = discovered.vendor === "codex";
+    const frame = await buildDataframe(parsed.data, {
+      codex,
+      sources: {
+        codexRate: () =>
+          readLiveCodexRate(
+            sessions.find((session) => session.vendor === "codex")
+              ?.transcript_path,
+          ),
+        ...(codex ? { agentName: () => Promise.resolve(ok(undefined)) } : {}),
+      },
+    });
     blocks.push(render(frame, { codex: discovered.vendor === "codex" }));
   }
   return blocks.join("\n");

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.1 — 2026-10-17
+
+- Discover live Claude and Codex sessions from processes and open rollout descriptors without scanning the session store.
+
 ## 0.19.0 — 2026-10-17
 
 - Read owner-published run, workspace and doctor snapshots without refreshing during rendering; scope workspace counts to the current repository and fleet.

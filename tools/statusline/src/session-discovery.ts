@@ -1,5 +1,5 @@
-import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
-import { join } from "node:path";
+import * as fs from "node:fs/promises";
+import { basename, join } from "node:path";
 import { readJsonlTail } from "../../shared/src/jsonl.ts";
 import { jsonText, z } from "./zod.ts";
 
@@ -22,7 +22,12 @@ export const AgentSessionSchema = z.object({
 
 const home = () => process.env.HOME ?? "";
 const procRoot = () => process.env.STATUSLINE_PROC_ROOT ?? "/proc";
-const resolved = async (path: string) => realpath(path).catch(() => null);
+type DiscoveryFs = Pick<
+  typeof fs,
+  "open" | "readdir" | "readFile" | "readlink" | "realpath" | "stat"
+>;
+const resolved = async (path: string, io: DiscoveryFs) =>
+  io.realpath(path).catch(() => null);
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? Object.fromEntries(Object.entries(value))
@@ -37,34 +42,38 @@ const timestamp = (value: unknown): string | null => {
 const projectSlug = (cwd: string) => cwd.replaceAll("/", "-");
 const TRANSCRIPT_TAIL_BYTES = 512 * 1024;
 
-async function processRows() {
-  const names = await readdir(procRoot()).catch(() => []);
+async function processRows(io: DiscoveryFs) {
+  const names = await io.readdir(procRoot()).catch(() => []);
   return Promise.all(
     names
       .filter((name) => /^[1-9]\d*$/u.test(name))
       .map(async (name) => {
         const pid = Number(name);
-        const [argv, cwd] = await Promise.all([
-          readFile(join(procRoot(), name, "cmdline")).catch(() => null),
-          resolved(join(procRoot(), name, "cwd")),
-        ]);
-        if (argv === null || cwd === null) return null;
+        const argv = await io
+          .readFile(join(procRoot(), name, "cmdline"))
+          .catch(() => null);
+        if (argv === null) return null;
         const args = argv.toString("utf8").split("\0").filter(Boolean);
         const first = args[0] ?? "";
         const command = first.split("/").at(-1) ?? "";
-        const joined = args.join(" ");
+        // Only executable arguments identify an agent; prompt text and shell commands do not.
+        const executable = /^(?:node|bun)(?:\.exe)?$/u.test(command)
+          ? basename(args[1] ?? "")
+          : command;
         let vendor: "claude" | "codex" | undefined;
         if (
-          /^(claude|claude-code)$/u.test(command) ||
-          joined.includes("claude-code")
+          /^(claude|claude-code)(?:\.js)?$/u.test(executable) ||
+          (/^(node|bun)$/u.test(command) &&
+            /(?:^|\/)claude-code\/cli\.js$/u.test(args[1] ?? ""))
         )
           vendor = "claude";
-        else if (
-          /^(codex|codex-cli)$/u.test(command) ||
-          /(?:^|\/)codex(?:\s|$)/u.test(joined)
-        )
+        else if (/^(codex|codex-cli)(?:\.js)?$/u.test(executable))
           vendor = "codex";
-        return vendor === undefined ? null : { pid, cwd, vendor };
+        if (vendor === undefined) return null;
+        const cwd = await resolved(join(procRoot(), name, "cwd"), io);
+        return cwd === null
+          ? null
+          : { pid, cwd, vendor, server: args.includes("app-server") };
       }),
   );
 }
@@ -72,9 +81,10 @@ async function processRows() {
 async function claudeSession(
   pid: number,
   cwd: string,
+  io: DiscoveryFs,
 ): Promise<AgentSession | null> {
   const sessionFile = join(home(), ".claude", "sessions", `${pid}.json`);
-  const raw = await readFile(sessionFile, "utf8").catch(() => null);
+  const raw = await io.readFile(sessionFile, "utf8").catch(() => null);
   if (raw === null) return null;
   const parsed = jsonText.safeParse(raw);
   const record = parsed.success ? asRecord(parsed.data) : undefined;
@@ -90,9 +100,9 @@ async function claudeSession(
   )
     return null;
   const [resolvedCwd, resolvedRecordCwd, socketInfo] = await Promise.all([
-    resolved(cwd),
-    resolved(recordCwd),
-    stat(socket).catch(() => null),
+    resolved(cwd, io),
+    resolved(recordCwd, io),
+    io.stat(socket).catch(() => null),
   ]);
   if (
     resolvedCwd === null ||
@@ -107,7 +117,7 @@ async function claudeSession(
     projectSlug(recordCwd),
     `${sessionId}.jsonl`,
   );
-  const transcriptInfo = await stat(transcript).catch(() => null);
+  const transcriptInfo = await io.stat(transcript).catch(() => null);
   if (transcriptInfo?.isFile() !== true) return null;
   return {
     vendor: "claude",
@@ -119,99 +129,112 @@ async function claudeSession(
   };
 }
 
-async function codexRollout(cwd: string) {
-  const root = join(home(), ".codex", "sessions");
-  const matches: {
-    path: string;
-    sessionId: string;
-    startedAt: string;
-    mtime: number;
-  }[] = [];
-  const walk = async (dir: string, depth: number): Promise<void> => {
-    if (depth > 3) return;
-    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-    await Promise.all(
-      entries.map(async (entry) => {
-        const path = join(dir, entry.name);
-        if (entry.isDirectory()) return walk(path, depth + 1);
-        if (
-          !entry.isFile() ||
-          !entry.name.startsWith("rollout-") ||
-          !entry.name.endsWith(".jsonl")
-        )
-          return;
-        const first = await readFirstLine(path);
-        const parsed = jsonText.safeParse(first);
-        const row = parsed.success ? asRecord(parsed.data) : undefined;
-        const payload = asRecord(row?.payload);
-        const sessionId = text(payload?.session_id) ?? text(payload?.id);
-        const sessionCwd = text(payload?.cwd);
-        if (
-          row?.type !== "session_meta" ||
-          payload?.originator !== "codex-tui" ||
-          sessionCwd === undefined ||
-          sessionId === undefined
-        )
-          return;
-        if ((await resolved(sessionCwd)) !== cwd) return;
-        const info = await stat(path).catch(() => null);
-        if (info?.isFile() !== true) return;
-        matches.push({
-          path,
-          sessionId,
-          startedAt: Temporal.Instant.fromEpochMilliseconds(
-            Math.trunc(info.birthtimeMs),
-          ).toString(),
-          mtime: info.mtimeMs,
-        });
-      }),
-    );
-  };
-  await walk(root, 0);
-  return matches.toSorted((a, b) => b.mtime - a.mtime)[0];
+async function codexSessions(
+  pid: number,
+  cwd: string,
+  allCwds: boolean,
+  io: DiscoveryFs,
+): Promise<AgentSession[]> {
+  const fdRoot = join(procRoot(), String(pid), "fd");
+  const names = await io.readdir(fdRoot).catch(() => []);
+  const targets = await Promise.all(
+    names.map((name) => io.readlink(join(fdRoot, name)).catch(() => null)),
+  );
+  // A Desktop app-server can own several sessions, independently of its own cwd.
+  // Open descriptors are the liveness evidence; never enumerate the session store.
+  const paths = [
+    ...new Set(
+      targets
+        .filter((path) => path !== null)
+        .filter(
+          (path) =>
+            basename(path).startsWith("rollout-") && path.endsWith(".jsonl"),
+        ),
+    ),
+  ];
+  const rows = await Promise.all(
+    paths.map(async (path): Promise<AgentSession | null> => {
+      const first = await readFirstLine(path, io);
+      const parsed = jsonText.safeParse(first);
+      const row = parsed.success ? asRecord(parsed.data) : undefined;
+      const payload = asRecord(row?.payload);
+      const sessionId = text(payload?.session_id) ?? text(payload?.id);
+      const sessionCwd = text(payload?.cwd);
+      if (
+        row?.type !== "session_meta" ||
+        sessionId === undefined ||
+        sessionCwd === undefined
+      )
+        return null;
+      const canonicalCwd = await resolved(sessionCwd, io);
+      if (canonicalCwd === null || (!allCwds && canonicalCwd !== cwd))
+        return null;
+      const info = await io.stat(path).catch(() => null);
+      if (info?.isFile() !== true) return null;
+      const started = z.iso
+        .datetime({ offset: true })
+        .safeParse(payload?.timestamp);
+      return {
+        vendor: "codex",
+        pid,
+        cwd: canonicalCwd,
+        session_id: sessionId,
+        transcript_path: path,
+        started_at: started.success
+          ? started.data
+          : Temporal.Instant.fromEpochMilliseconds(
+              Math.trunc(info.birthtimeMs),
+            ).toString(),
+      };
+    }),
+  );
+  return rows.filter((row) => row !== null);
 }
 
-async function readFirstLine(path: string) {
-  const file = await open(path, "r").catch(() => null);
+async function readFirstLine(path: string, io: DiscoveryFs) {
+  const file = await io.open(path, "r").catch(() => null);
   if (file === null) return "";
   await using handle = file;
-  const buffer = Buffer.alloc(64 * 1024);
-  const result = await handle
-    .read(buffer, 0, buffer.length, 0)
-    .catch(() => ({ bytesRead: 0, buffer }));
-  const newline = buffer.indexOf(10, 0);
-  return buffer
-    .subarray(0, newline < 0 ? result.bytesRead : newline)
-    .toString("utf8");
+  // session_meta includes instructions; allow large headers without reading the rollout body.
+  const chunks: Buffer[] = [];
+  for (let offset = 0; offset < 2 * 1024 * 1024; offset += 64 * 1024) {
+    const buffer = Buffer.alloc(64 * 1024);
+    const result = await handle
+      .read(buffer, 0, buffer.length, offset)
+      .catch(() => null);
+    if (result === null) return "";
+    const bytes = buffer.subarray(0, result.bytesRead);
+    const newline = bytes.indexOf(10);
+    chunks.push(newline < 0 ? bytes : bytes.subarray(0, newline));
+    if (newline >= 0 || result.bytesRead < buffer.length)
+      return Buffer.concat(chunks).toString("utf8");
+  }
+  return "";
 }
 
 export async function discoverSessions(
   cwdInput = process.cwd(),
   allCwds = false,
+  io: DiscoveryFs = fs,
 ): Promise<AgentSession[]> {
-  const cwd = (await resolved(cwdInput)) ?? cwdInput;
-  const processes = (await processRows()).filter(
-    (row) => row !== null && (allCwds || row.cwd === cwd),
+  const cwd = (await resolved(cwdInput, io)) ?? cwdInput;
+  const processes = (await processRows(io)).filter(
+    (row) =>
+      row !== null &&
+      (allCwds || row.cwd === cwd || (row.vendor === "codex" && row.server)),
   );
   const rows = await Promise.all(
     processes.map(async (proc) => {
-      if (proc === null) return null;
-      if (proc.vendor === "claude") return claudeSession(proc.pid, proc.cwd);
-      const rollout = await codexRollout(proc.cwd);
-      return rollout === undefined
-        ? null
-        : {
-            vendor: "codex" as const,
-            pid: proc.pid,
-            cwd: proc.cwd,
-            session_id: rollout.sessionId,
-            transcript_path: rollout.path,
-            started_at: rollout.startedAt,
-          };
+      if (proc === null) return [];
+      if (proc.vendor === "claude") {
+        const session = await claudeSession(proc.pid, proc.cwd, io);
+        return session === null ? [] : [session];
+      }
+      return codexSessions(proc.pid, cwd, allCwds, io);
     }),
   );
   return rows
-    .filter((row) => row !== null)
+    .flat()
     .toSorted((a, b) => Temporal.Instant.compare(b.started_at, a.started_at));
 }
 

@@ -1,5 +1,6 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { readJsonlTail } from "../../shared/src/jsonl.ts";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
 import { clockHM, nowEpochSec, pad2, stampMDHM } from "./prompt-stamp.ts";
@@ -11,6 +12,76 @@ import {
 } from "../../shared/src/codex-subscription-usage.ts";
 
 export type CodexRate = CodexAccountRate;
+const LiveRateEvent = z.object({
+  timestamp: z.iso.datetime({ offset: true }).optional(),
+  type: z.literal("event_msg"),
+  payload: z.object({
+    type: z.literal("token_count"),
+    rate_limits: z.object({
+      primary: z.unknown().optional(),
+      secondary: z.unknown().optional(),
+      credits: z
+        .object({
+          has_credits: z.boolean().optional(),
+          unlimited: z.boolean().optional(),
+          balance: z.string().optional(),
+        })
+        .nullish(),
+    }),
+  }),
+});
+const LiveRateWindow = z.object({
+  used_percent: z.number(),
+  window_minutes: z.number(),
+  resets_at: z.number().optional(),
+});
+
+/** Standalone rendering uses only a process-associated rollout, never the account store. */
+export async function readLiveCodexRate(
+  path?: string,
+): Promise<Result<CodexRate | undefined, string>> {
+  if (path === undefined) return ok(undefined);
+  const tail = await readJsonlTail(path, 512 * 1024).catch(() => null);
+  if (tail === null) return err("live Codex rollout unreadable");
+  const now = Temporal.Now.instant().epochMilliseconds;
+  for (const line of tail.text.split("\n").toReversed()) {
+    if (!line.includes('"token_count"')) continue;
+    const parsed = jsonOf(LiveRateEvent).safeParse(line);
+    if (!parsed.success) continue;
+    const at = parsed.data.timestamp;
+    if (at === undefined) continue;
+    const mtimeMs = Temporal.Instant.from(at).epochMilliseconds;
+    if (mtimeMs > now || now - mtimeMs > 7 * 24 * 60 * 60 * 1000) continue;
+    const limits = parsed.data.payload.rate_limits;
+    const windows = [limits.primary, limits.secondary].flatMap((value) => {
+      const window = LiveRateWindow.safeParse(value);
+      if (!window.success) return [];
+      return [
+        {
+          minutes: window.data.window_minutes,
+          percent: window.data.used_percent,
+          ...(window.data.resets_at === undefined
+            ? {}
+            : { reset: window.data.resets_at }),
+        },
+      ];
+    });
+    if (windows.length === 0) continue;
+    const credit = limits.credits;
+    const credits =
+      credit?.has_credits === true &&
+      credit.unlimited === false &&
+      credit.balance !== undefined
+        ? String(Math.round(Number(credit.balance)))
+        : undefined;
+    return ok({
+      windows,
+      mtimeMs,
+      ...(credits === undefined ? {} : { credits }),
+    });
+  }
+  return ok(undefined);
+}
 const TAIL_BYTES = 256 * 1024;
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
 const TOKEN_USAGE = z.object({

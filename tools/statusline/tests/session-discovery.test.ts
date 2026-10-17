@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, test, spyOn } from "bun:test";
+import * as fs from "node:fs/promises";
 import {
   mkdir,
   mkdtemp,
@@ -133,8 +134,48 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
     fakeProcess(proc, 102, "/usr/bin/codex", cwd),
     fakeProcess(proc, 103, "/usr/bin/claude", elsewhere),
   ]);
+  await mkdir(join(proc, "102", "fd"));
+  await symlink(codexTranscript, join(proc, "102", "fd", "7"));
+  await symlink(codexTranscript, join(proc, "102", "fd", "8"));
+  // Same cwd and valid headers must never make dormant sessions look live.
+  await Promise.all(
+    Array.from({ length: 3000 }, (_, i) =>
+      writeFile(
+        join(rolloutDir, `rollout-dormant-${i}.jsonl`),
+        `${JSON.stringify({ type: "session_meta", payload: { id: `dormant-${i}`, cwd, originator: "codex-tui" } })}\n`,
+      ),
+    ),
+  );
+  await writeFile(join(claudeSessions, "999.json"), "dormant Claude session");
+  await fakeProcess(proc, 104, "/bin/sh", cwd);
+  await writeFile(join(proc, "104", "cmdline"), "sh\0-c\0codex claude-code\0");
 
-  const sessions = await discoverSessions(cwd);
+  const io = { ...fs };
+  const reads = spyOn(io, "readFile");
+  const opens = spyOn(io, "open");
+  const directories = spyOn(io, "readdir");
+  const sessions = await discoverSessions(cwd, false, io);
+  // Count session content opens, excluding process cmdline reads and metadata stat calls.
+  expect(
+    reads.mock.calls
+      .map(([path]) =>
+        typeof path === "string"
+          ? path
+          : expect.unreachable("Expected string read path"),
+      )
+      .filter((path) => !path.startsWith(proc)),
+  ).toEqual([join(claudeSessions, "101.json")]);
+  expect(opens.mock.calls.map(([path]) => String(path))).toEqual([
+    codexTranscript,
+  ]);
+  expect(
+    reads.mock.calls.filter(
+      ([path]) => typeof path === "string" && !path.startsWith(proc),
+    ).length + opens.mock.calls.length,
+  ).toBe(2);
+  expect(
+    directories.mock.calls.every(([path]) => String(path).startsWith(proc)),
+  ).toBe(true);
   expect(
     sessions.map(({ vendor, cwd: sessionCwd }) => [vendor, sessionCwd]),
   ).toEqual([
@@ -200,6 +241,33 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
   expect(automatic.exitCode, automatic.stderr.toString()).toBe(0);
   expect(automatic.stdout.toString()).toContain("claude-opus-4-8");
   expect(automatic.stdout.toString()).toContain("gpt-6-luna");
+
+  // Desktop sessions belong to their rollout cwd, not the app-server's cwd.
+  await fs.unlink(join(proc, "102", "cwd"));
+  await symlink(elsewhere, join(proc, "102", "cwd"));
+  await writeFile(join(proc, "102", "cmdline"), "codex\0app-server\0");
+  const desktopHeader = JSON.stringify({
+    type: "session_meta",
+    payload: {
+      id: "codex-desktop",
+      cwd,
+      originator: "Codex Desktop",
+      instructions: "x".repeat(100000),
+    },
+  });
+  await writeFile(codexTranscript, `${desktopHeader}\n`);
+  expect(
+    (await discoverSessions(cwd)).map((session) => session.session_id),
+  ).toContain("codex-desktop");
+  await writeFile(
+    join(proc, "101", "cmdline"),
+    "node\0/opt/node_modules/@anthropic-ai/claude-code/cli.js\0",
+  );
+  await fs.unlink(join(proc, "102", "fd", "7"));
+  await fs.unlink(join(proc, "102", "fd", "8"));
+  expect(
+    (await discoverSessions(cwd)).map((session) => session.vendor),
+  ).toEqual(["claude"]);
 });
 
 test("no-session invocation renders shared rows and the explicit absence line", async () => {
@@ -223,4 +291,51 @@ test("no-session invocation renders shared rows and the explicit absence line", 
   expect(output).toContain("Sys:");
   expect(output).toContain("Job:");
   expect(output).toContain(`no agent session in ${cwd}`);
+});
+
+test("Claude stdin payload performs no process discovery", async () => {
+  const { root, home, cwd } = await fixture();
+  const preload = join(root, "observe-proc.ts");
+  await writeFile(
+    preload,
+    `
+    import { mock } from "bun:test";
+    import * as fs from "node:fs/promises";
+    const read = fs.readdir;
+    mock.module("node:fs/promises", () => ({ ...fs, readdir: (...args) => {
+      if (String(args[0]).includes("discovery-proc")) process.stderr.write("DISCOVERY_RAN");
+      return read(...args);
+    } }));
+  `,
+  );
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--preload",
+      preload,
+      join(import.meta.dir, "../src/statusline.ts"),
+    ],
+    {
+      cwd,
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: "",
+        STATUSLINE_PROC_ROOT: join(root, "discovery-proc"),
+      },
+      stdin: new Blob([
+        JSON.stringify({ cwd, model: { display_name: "stdin-only" } }),
+      ]),
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const [output, errors, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect(exit, errors).toBe(0);
+  expect(output).toContain("stdin-only");
+  expect(errors).not.toContain("DISCOVERY_RAN");
 });

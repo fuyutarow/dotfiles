@@ -103,6 +103,11 @@ const EventSchema = z.discriminatedUnion("kind", [
     at: z.string(),
     decision: z.string(),
     note: z.string(),
+    evidence: z
+      .array(
+        z.object({ path: z.string(), sha256: z.string(), content: z.string() }),
+      )
+      .optional(),
     legacy_key: z.string().optional(),
   }),
 ]);

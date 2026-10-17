@@ -3,8 +3,8 @@
 // bound, the failure reasons and the trace that runs.jsonl keeps — before 2026-10-06 the same
 // transport was written twice (here and a separate jev CLI, now retired) and the two drifted (key
 // sources, reasons). What a caller asks and how it reads the answer stay with the caller.
-import { attempt } from "../../shared/src/attempt.ts";
-import { typesafeKey } from "../../shared/src/typesafe-key.ts";
+import { attempt } from "./attempt.ts";
+import { typesafeKey } from "./typesafe-key.ts";
 
 /** What runs.jsonl keeps about one Jev call (never the key). */
 export interface JevTrace {

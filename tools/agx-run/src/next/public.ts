@@ -1,4 +1,4 @@
-import { postJev } from "../jev-client.ts";
+import { postJev } from "../../../shared/src/jev-client.ts";
 import { loadRoster } from "../../../../agents/models/roster.ts";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 

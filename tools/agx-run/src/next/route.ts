@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { postJev } from "../jev-client.ts";
+import { postJev } from "../../../shared/src/jev-client.ts";
 import { sampleRow } from "../selection.ts";
 import {
   criterionFor,

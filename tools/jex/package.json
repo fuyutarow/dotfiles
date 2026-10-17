@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/jex",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "jex": "src/jex.ts"
+  }
+}

@@ -1,0 +1,248 @@
+import { afterAll, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { jsonOf, z } from "../../shared/src/zod.ts";
+import { FILE_CAP, TOTAL_CAP } from "../src/classify.ts";
+
+const Verdict = z.object({
+  bits: z.array(
+    z.object({ id: z.string(), p: z.number(), reason: z.string() }),
+  ),
+  refuted: z.object({ p: z.number(), reason: z.string() }).optional(),
+});
+function decode<S extends z.ZodType>(schema: S, text: string): z.output<S> {
+  const parsed = jsonOf(schema).safeParse(text);
+  if (!parsed.success) return expect.unreachable(parsed.error.message);
+  return parsed.data;
+}
+const verdict = (text: string) => decode(Verdict, text);
+const Preview = z.object({
+  state: z.object({
+    files: z.array(
+      z.object({
+        content: z.string(),
+        size: z.number(),
+        sha256: z.string(),
+        truncated: z.boolean(),
+      }),
+    ),
+  }),
+});
+const root = await mkdtemp(join(tmpdir(), "jex-test-"));
+const q = join(root, "questions.toml");
+const file = join(root, "input.txt");
+const cli = resolve(import.meta.dir, "../src/jex.ts");
+await writeFile(
+  q,
+  'schema = 1\n[[question]]\nid = "a"\ntext = "Is this readable?"\n[[question]]\nid = "b"\ntext = "Is this text?"\n',
+);
+await writeFile(file, "hello 世界\n");
+let calls = 0;
+let answer: unknown = {};
+let status = 200;
+let request: unknown;
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch: async (req) => {
+    calls++;
+    request = decode(z.unknown(), await req.text());
+    return Response.json(answer, { status });
+  },
+});
+afterAll(async () => {
+  await server.stop(true);
+  await rm(root, { recursive: true, force: true });
+});
+async function run(args = [q, file], endpoint = server.url.href) {
+  const child = Bun.spawn([process.execPath, cli, ...args], {
+    env: {
+      ...process.env,
+      TYPESAFE_API_KEY: "fake-jex-key",
+      JEX_JEV_URL: endpoint,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 10_000,
+  });
+  const [stdout, stderr, exit] = await Promise.all([
+    child.stdout.text(),
+    child.stderr.text(),
+    child.exited,
+  ]);
+  return { stdout, stderr, exit };
+}
+const replies = (a: number, b: number) => ({
+  answers: {
+    a: { type: "noul", noul: a },
+    b: { type: "noul", noul: b, reason: "fixture" },
+  },
+});
+
+test("all bits >= .5 succeeds and prints normalized bits", async () => {
+  answer = replies(0.5, 1);
+  const result = await run();
+  expect(result.exit).toBe(0);
+  expect(verdict(result.stdout)).toEqual({
+    bits: [
+      { id: "a", p: 0.5, reason: "Jev Noul probability of yes" },
+      { id: "b", p: 1, reason: "fixture" },
+    ],
+  });
+  expect(request).toMatchObject({
+    model: "jev-latest",
+    questions: { a: { type: "noul", instructions: "Is this readable?" } },
+    state: {
+      files: [
+        {
+          path: file,
+          sha256: createHash("sha256").update("hello 世界\n").digest("hex"),
+          content: "hello 世界\n",
+          size: Buffer.byteLength("hello 世界\n"),
+          truncated: false,
+        },
+      ],
+    },
+  });
+});
+test("one bit < .5 fails with bits on stdout", async () => {
+  answer = replies(0.499, 0.8);
+  const result = await run();
+  expect(result.exit).toBe(1);
+  expect(verdict(result.stdout).bits[0]?.p).toBe(0.499);
+});
+test("refuted >= .5 fails, below .5 succeeds", async () => {
+  const ref = join(root, "refuted.toml");
+  await writeFile(
+    ref,
+    `refuted_question = "Is this unreadable?"\n${await readFile(q, "utf8")}`,
+  );
+  for (const p of [0.5, 0.499]) {
+    answer = {
+      answers: {
+        ...replies(0.8, 0.9).answers,
+        refuted: { type: "noul", noul: p },
+      },
+    };
+    const result = await run([ref, file]);
+    expect(result.exit).toBe(p >= 0.5 ? 1 : 0);
+    expect(verdict(result.stdout).refuted?.p).toBe(p);
+    expect(verdict(result.stdout).bits).toHaveLength(2);
+  }
+});
+test("missing and extra ids cannot judge and still print bits", async () => {
+  for (const answers of [
+    { a: { type: "noul", noul: 1 } },
+    { ...replies(1, 1).answers, extra: { type: "noul", noul: 1 } },
+  ]) {
+    answer = { answers };
+    const result = await run();
+    expect(result.exit).toBe(4);
+    expect(verdict(result.stdout).bits.length).toBe(
+      Object.keys(answers).length,
+    );
+  }
+});
+test("invalid answer shape and probabilities never succeed", async () => {
+  for (const value of [
+    null,
+    { answers: {} },
+    { bits: [] },
+    {
+      answers: { a: { type: "noul", noul: 1.1 }, b: { type: "noul", noul: 1 } },
+    },
+    {
+      answers: { a: { type: "choice", noul: 1 }, b: { type: "noul", noul: 1 } },
+    },
+  ]) {
+    answer = value;
+    const result = await run();
+    expect(result.exit).toBe(4);
+    expect(verdict(result.stdout)).toHaveProperty("bits");
+  }
+});
+test("unreachable endpoint exits 3", async () => {
+  const unused = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(),
+  });
+  const url = unused.url.href;
+  await unused.stop(true);
+  expect((await run([q, file], url)).exit).toBe(3);
+});
+test("HTTP errors cannot succeed", async () => {
+  answer = replies(1, 1);
+  status = 503;
+  expect((await run()).exit).toBe(4);
+  status = 200;
+});
+test("--request sends nothing and matches sent request", async () => {
+  const before = calls;
+  const preview = await run(["--request", q, file]);
+  expect(preview.exit).toBe(0);
+  expect(calls).toBe(before);
+  answer = replies(1, 1);
+  await run();
+  expect(decode(z.unknown(), preview.stdout)).toEqual(request);
+});
+test("invalid questions, duplicate ids, count, command checks, and missing files exit 4 without sending", async () => {
+  const bad = join(root, "invalid.toml");
+  const text = await readFile(q, "utf8");
+  const before = calls;
+  for (const value of [
+    "!bad",
+    "schema = 1\nquestion = []",
+    text.replace('id = "b"', 'id = "a"'),
+    text.replace("schema = 1", "schema = 2"),
+    `verify = ["true"]\n${text}`,
+    `schema = 1\n${Array.from({ length: 9 }, (_, i) => `[[question]]\nid = "q${i}"\ntext = "Yes?"`).join("\n")}`,
+  ]) {
+    await writeFile(bad, value);
+    expect((await run([bad, file])).exit).toBe(4);
+  }
+  expect((await run([q, join(root, "missing")])).exit).toBe(4);
+  expect(calls).toBe(before);
+});
+test("excerpt cap is UTF-8 safe; hash covers the entire file and total excerpts are bounded", async () => {
+  const large = join(root, "large.txt");
+  const bytes = "a".repeat(FILE_CAP - 1) + "世".repeat(FILE_CAP);
+  await writeFile(large, bytes);
+  const result = await run([
+    "--request",
+    q,
+    ...Array.from({ length: 6 }, () => large),
+  ]);
+  expect(result.exit).toBe(0);
+  const files = decode(Preview, result.stdout).state.files;
+  expect(files[0]?.content).toBe("a".repeat(FILE_CAP - 1));
+  expect(files[0]?.sha256).toBe(
+    createHash("sha256").update(bytes).digest("hex"),
+  );
+  expect(files[0]?.size).toBe(Buffer.byteLength(bytes));
+  expect(files[0]?.truncated).toBe(true);
+  expect(
+    files.reduce(
+      (sum: number, f: { content: string }) =>
+        sum + Buffer.byteLength(f.content),
+      0,
+    ),
+  ).toBeLessThanOrEqual(TOTAL_CAP);
+  expect(
+    files.every((f: { content: string }) => !f.content.includes("�")),
+  ).toBe(true);
+});
+test("usage and prototype flag fail with exit 2; version is short", async () => {
+  for (const args of [
+    [],
+    [q],
+    ["--no-such-flag", q, file],
+    ["--__proto__", q, file],
+  ])
+    expect((await run(args)).exit).toBe(2);
+  const version = await run(["--version"]);
+  expect(version.exit).toBe(0);
+  expect(version.stdout).toBe("0.1.0\n");
+});

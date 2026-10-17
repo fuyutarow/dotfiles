@@ -69,12 +69,12 @@ over SSH reaches your _local_ terminal) · **bun** · **direnv** · **mise** · 
 
 Install tier follows when a tool is needed; OS guards remain in the Brewfiles:
 
-| Tier | Declaration | Use |
-| --- | --- | --- |
-| core | `Brewfile.core` | Installed on every box; missing commands point to `mise run install:tools`. |
-| on-demand | `Brewfile.ondemand` | Install a missing formula on first need with `mise run tool:get <cmd>`; casks use `mise run install:tools`. |
-| repo `mise.toml` | that repo's `mise.toml` | Run `mise install` in that repo. |
-| `uvx` / `bunx` | no Brewfile declaration | Run the one-shot CLI through `uvx` or `bunx`. |
+| Tier             | Declaration             | Use                                                                                                         |
+| ---------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| core             | `Brewfile.core`         | Installed on every box; missing commands point to `mise run install:tools`.                                 |
+| on-demand        | `Brewfile.ondemand`     | Install a missing formula on first need with `mise run tool:get <cmd>`; casks use `mise run install:tools`. |
+| repo `mise.toml` | that repo's `mise.toml` | Run `mise install` in that repo.                                                                            |
+| `uvx` / `bunx`   | no Brewfile declaration | Run the one-shot CLI through `uvx` or `bunx`.                                                               |
 
 `mise run tool:which <cmd>` reports the declaration tier and formula. The root `Brewfile` is the
 union of core and on-demand entries for full Homebrew Bundle installs.
@@ -106,10 +106,11 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 │   ├── smart-open/  # smart-open (`o`/`oo`, git/jj `o`): over ssh/herdr a URL → the client you sit at, a path → its VS Code Remote-SSH; else here; src/receive.ts + launchd plist on mac
 │   ├── agx/        # agx suite entry: process router only, no state or decision logic
 │   ├── agx-run/    # agx run/check/ls/judge/stats; records stay in ~/.local/state/agx-next
+│   ├── jex/        # jex Q FILE...: zero-shot multi-label yes/no classifier through the shared Jev client
 │   ├── agx-ws/     # agx ws / ws: repo-agnostic jj workspace lifecycle
 │   ├── agx-ticket/ # agx ticket / tkt: ticket issuance, derived listing and collection
 │   ├── storage-headroom/ # storage decisions (decide) and read-only headroom CLI; hooks adapt the verdict
-│   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, sockets, model-orders, worker-env)
+│   └── shared/      # code several tools import (Bash syntax parsing, hook path resolution, zod, attempt, narrow, typesafe-key, jev-client, sockets, model-orders, worker-env)
 ├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
 ├── tmux/        # tmux.conf, clipboard.conf, scripts/ (status bar, layouts)
 ├── herdr/       # config.toml (agent multiplexer; tmux muscle-memory port)
@@ -143,6 +144,10 @@ of `tools/` (including the suite boundary, dispatch pipeline, capacity domain, o
 invariant's check or planned ticket) lives in
 [`tools/spec/architecture.md`](tools/spec/architecture.md); each tool README links to it.
 
+`jex Q FILE...` classifies files against yes/no questions in TOML; `--request` previews without sending.
+See [jex](tools/jex/README.md) for its JSON and exit contracts. Attach its output with
+`agx judge RUN accept|reject --evidence FILE` (repeatable): agx records SHA-256 and content
+without interpreting them. `agx jev` is deprecated in favour of `jex` and remains available.
 
 `tools/agx-ticket/` (`tkt`, [spec](tools/spec/agx-ticket.md)) owns plain ticket issuance and collection across
 repositories: `tkt new` renders templates without overwriting, `tkt ls` derives run state and

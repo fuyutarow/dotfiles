@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { postJev } from "../src/jev-client.ts";
+import { postJev } from "../../shared/src/jev-client.ts";
 
 const testKey = "jev-client-fixture-secret";
 const previousKey = process.env.TYPESAFE_API_KEY;

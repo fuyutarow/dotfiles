@@ -165,6 +165,10 @@ async function main(): Promise<void> {
         parameters: ["<run>", "<decision>"],
         flags: {
           note: { type: String, description: "optional judgment note" },
+          evidence: {
+            type: [String],
+            description: "attach file sha256 and content (repeatable)",
+          },
         },
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
@@ -176,6 +180,7 @@ async function main(): Promise<void> {
       id: parsed._[0],
       decision: parsed._[1],
       note: parsed.flags.note,
+      evidence: parsed.flags.evidence,
     });
   } else if (commandName === "stats") {
     const parsed = cli(
@@ -203,7 +208,7 @@ async function main(): Promise<void> {
         name: "agx jev",
         help: {
           description:
-            "POST one JSON request from stdin to the configured Jev endpoint; print the JSON answer to stdout.",
+            "Deprecated in favour of jex. POST one JSON request from stdin to the configured Jev endpoint; print the JSON answer to stdout.",
         },
         parameters: [],
         strictFlags: true,

@@ -838,21 +838,41 @@ export async function list(flags: Flags): Promise<number> {
   return 0;
 }
 
-export async function judgeRun(flags: Flags): Promise<number> {
-  const id = value(flags, "id");
-  const decision = value(flags, "decision");
+export async function judgeRun(flags: {
+  id?: string | undefined;
+  decision?: string | undefined;
+  note?: string | undefined;
+  evidence?: string[] | undefined;
+}): Promise<number> {
+  const id = flags.id;
+  const decision = flags.decision;
   if (id === undefined || decision === undefined)
     return fatal("judge requires RUN_ID and accept|reject", 2);
   if (decision !== "accept" && decision !== "reject")
     return fatal("judge decision must be accept or reject", 2);
   if (!(await foldedRuns()).some((entry) => entry.id === id))
     return fatal(`unknown run ${id}`, 2);
+  const evidence = [];
+  for (const path of flags.evidence ?? []) {
+    const bytes = await readFile(path).catch(() =>
+      fatal(`cannot read evidence: ${path}`, 2),
+    );
+    const decoded = await Promise.try(() =>
+      new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes),
+    ).catch(() => fatal(`evidence must be UTF-8: ${path}`, 2));
+    evidence.push({
+      path,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      content: decoded,
+    });
+  }
   append({
     kind: "judged",
     id,
     at: now(),
     decision,
-    note: value(flags, "note") ?? "",
+    note: flags.note ?? "",
+    ...(evidence.length === 0 ? {} : { evidence }),
   });
   return 0;
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.4.0 — 2026-10-17
+
+- Attach opaque file content and SHA-256 with repeatable agx judge --evidence; deprecate agx jev in favour of jex.
+
 ## 5.3.4 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

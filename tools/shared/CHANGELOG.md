@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.0 — 2026-10-17
+
+- Move the single Jev transport client into shared for agx-run and jex.
+
 ## 0.11.5 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

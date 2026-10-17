@@ -44,7 +44,8 @@
     "skill-check": "agents/skills/forging-skills/scripts/skill-check.ts",
     "agx-ticket": "tools/agx-ticket/src/tkt.ts",
     "tkt": "tools/agx-ticket/src/tkt.ts",
-    "lint-ts-candidate": "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts"
+    "lint-ts-candidate": "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts",
+    "jex": "tools/jex/src/jex.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

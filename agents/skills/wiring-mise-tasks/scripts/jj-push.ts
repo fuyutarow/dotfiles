@@ -69,26 +69,28 @@ const hasRevision = async (revset: string): Promise<boolean> =>
 if (!parsed.flags.dryRun)
   await run(["git", "fetch", "--remote", "origin"], "fetching origin");
 
-const aheadResult = await command([
-  "log",
-  "--no-graph",
-  "-r",
-  "alpha@origin..alpha",
-]);
+const remoteExists = await hasRevision("alpha@origin");
+const aheadRevset = remoteExists
+  ? "alpha@origin..alpha"
+  : 'remote_bookmarks(remote="origin")..alpha';
+const aheadResult = await command(["log", "--no-graph", "-r", aheadRevset]);
 if (aheadResult.exitCode !== 0) {
   if (aheadResult.stderr.includes("Name `alpha` is conflicted"))
     die("alpha has diverged from alpha@origin; run `mise run pull` first");
   const stderr = aheadResult.stderr.trim();
   die(
-    `listing alpha@origin..alpha failed: ${stderr !== "" ? stderr : `jj exited ${aheadResult.exitCode}`}`,
+    `listing ${aheadRevset} failed: ${stderr !== "" ? stderr : `jj exited ${aheadResult.exitCode}`}`,
   );
 }
 const ahead = aheadResult.stdout.trimEnd();
-process.stdout.write(`${ahead !== "" ? ahead : "nothing to push"}\n`);
+let listing = ahead;
+if (listing === "")
+  listing = remoteExists
+    ? "nothing to push"
+    : "creating alpha@origin (no new commits)";
+process.stdout.write(`${listing}\n`);
 
 if (!(await hasRevision("alpha"))) die("bookmark alpha does not exist");
-if (!(await hasRevision("alpha@origin")))
-  die("bookmark alpha@origin does not exist; run `mise run pull` first");
 
 const conflictResult = await command(["resolve", "--list", "-r", "alpha"]);
 let conflicts = "";
@@ -109,23 +111,28 @@ if (conflicts !== "")
     `alpha has unresolved conflicts; resolve them before pushing:\n${conflicts}`,
   );
 
-const remoteOnly = await run(
-  [
-    "log",
-    "--no-graph",
-    "-r",
-    "alpha..alpha@origin",
-    "-T",
-    'commit_id ++ "\\n"',
-  ],
-  "checking alpha divergence",
-);
-if (remoteOnly !== "")
-  die(`alpha has diverged from alpha@origin; run \`mise run pull\` first`);
+if (remoteExists) {
+  const remoteOnly = await run(
+    [
+      "log",
+      "--no-graph",
+      "-r",
+      "alpha..alpha@origin",
+      "-T",
+      'commit_id ++ "\\n"',
+    ],
+    "checking alpha divergence",
+  );
+  if (remoteOnly !== "")
+    die(`alpha has diverged from alpha@origin; run \`mise run pull\` first`);
+}
 
-if (ahead === "") {
+if (remoteExists && ahead === "") {
   process.exit(0);
 }
 if (parsed.flags.dryRun) process.exit(0);
 
-await run(["git", "push", "-b", "alpha"], "pushing alpha");
+await run(
+  ["git", "push", "--remote", "origin", "-b", "alpha"],
+  "pushing alpha",
+);

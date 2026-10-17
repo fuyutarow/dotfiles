@@ -15,7 +15,7 @@ afterAll(() => {
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
 
-function fixture() {
+function fixture(pushInitially = true) {
   const dir = mkdtempSync(join(tmpdir(), "jj-push-test-"));
   dirs.push(dir);
   const root = join(dir, "repo");
@@ -88,7 +88,7 @@ function fixture() {
   jj("git", "init", "--no-colocate", remote);
   const bare = join(remote, ".jj/repo/store/git");
   jj("git", "remote", "add", "origin", bare);
-  jj("git", "push", "-b", "alpha");
+  if (pushInitially) jj("git", "push", "-b", "alpha");
   const push = (flags: string[] = []) =>
     run(["mise", "run", "push", "--", ...flags]);
   const remoteHead = () =>
@@ -109,6 +109,74 @@ function fixture() {
 }
 
 describe("jj push", () => {
+  test("first push creates alpha@origin and the second push is a no-op", () => {
+    const f = fixture(false);
+    const first = f.push();
+    expect(first.exitCode, first.stderr.toString()).toBe(0);
+    expect(first.stdout.toString()).toContain("fixture base");
+    const local = f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id");
+    expect(f.remoteHead()).toBe(local);
+    const mirror = join(f.dir, "mirror");
+    f.jj("git", "clone", "--no-colocate", f.bare, mirror);
+    expect(
+      f.jjAt(
+        mirror,
+        "log",
+        "--no-graph",
+        "-r",
+        "alpha@origin",
+        "-T",
+        "commit_id",
+      ),
+    ).toBe(local);
+    const second = f.push();
+    expect(second.exitCode, second.stderr.toString()).toBe(0);
+    expect(second.stdout.toString()).toContain("nothing to push");
+    expect(f.remoteHead()).toBe(local);
+  });
+
+  test("dry-run lists a new bookmark without creating it remotely", () => {
+    const f = fixture(false);
+    const result = f.push(["--dry-run"]);
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    expect(result.stdout.toString()).toContain("fixture base");
+    expect(f.jj("bookmark", "list", "--all-remotes")).not.toContain("@origin");
+  });
+
+  test("unrelated jj failures remain loud and non-zero", () => {
+    const f = fixture(false);
+    f.jj("git", "remote", "remove", "origin");
+    const result = f.push();
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain("fetching origin failed");
+  });
+
+  test("creates the bookmark even when another origin bookmark has all its commits", () => {
+    const f = fixture(false);
+    f.jj("bookmark", "create", "other", "-r", "alpha");
+    f.jj("git", "push", "--remote", "origin", "-b", "other");
+    const result = f.push();
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    expect(result.stdout.toString()).toContain(
+      "creating alpha@origin (no new commits)",
+    );
+    expect(result.stdout.toString()).not.toContain("fixture base");
+    expect(f.remoteHead()).toBe(
+      f.jj("log", "--no-graph", "-r", "alpha", "-T", "commit_id"),
+    );
+  });
+
+  test("a listing failure is not treated as a missing remote bookmark", () => {
+    const f = fixture(false);
+    f.jj("bookmark", "delete", "alpha");
+    const result = f.push();
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain("listing remote_bookmarks");
+    expect(result.stderr.toString()).toContain(
+      "Revision `alpha` doesn't exist",
+    );
+  });
+
   test("prints and pushes commits ahead of alpha@origin", () => {
     const f = fixture();
     writeFileSync(join(f.root, "ahead.txt"), "ahead\n");

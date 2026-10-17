@@ -649,6 +649,9 @@ describe("ws add", () => {
     const path = await repo();
     expect((await ws(["add", "dup"], path)).code).toBe(0);
     expect((await ws(["add", "dup"], path)).code).toBe(1);
+    const reused = await ws(["add", "dup", "--reuse"], path);
+    expect(reused.code, reused.err).toBe(0);
+    expect(reused.out.trim()).toBe(wsDir(path, "dup"));
   });
 
   test("new workspace slugs use hyphens; legacy names remain refreshable", async () => {

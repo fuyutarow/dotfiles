@@ -46,9 +46,13 @@ test("suite entry runs run, ws, and ticket help through their CLIs", async () =>
     { args: ["--version"], output: /^\d+\.\d+\.\d+\n$/u },
     {
       args: ["--help"],
-      output: /--unit=agt_<slug>[\s\S]*USAGE:[\s\S]*jev[\s\S]*roster/u,
+      output: /agx dispatch <ticket.md>[\s\S]*USAGE:[\s\S]*jev[\s\S]*roster/u,
     },
     { args: ["run", "--help"], output: /run/u },
+    {
+      args: ["dispatch", "--help"],
+      output: /USAGE:[\s\S]*<ticket>[\s\S]*--continue[\s\S]*--unit[\s\S]*--ws/u,
+    },
     { args: ["check", "--help"], output: /agx check/u },
     { args: ["ls", "--help"], output: /agx ls/u },
     { args: ["judge", "--help"], output: /agx judge/u },

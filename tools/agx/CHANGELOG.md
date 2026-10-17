@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 — 2026-10-17
+
+- Add agx dispatch to create matching durable workspaces and units
+
 ## 0.2.0 — 2026-10-16
 
 - Expose Jev requests and the validated dispatch roster through agx

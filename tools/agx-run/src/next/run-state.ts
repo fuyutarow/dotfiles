@@ -16,6 +16,7 @@ export const RunSchema = z.object({
   outcome: Outcome.nullable(),
   row: z.string(),
   worker_name: z.string().optional(),
+  unit: z.string().optional(),
   workspace_name: z.string().optional(),
   dispatcher_session: z.string().nullable(),
   cwd: z.string(),

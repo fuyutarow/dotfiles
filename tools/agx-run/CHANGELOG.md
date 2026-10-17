@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.2.6 — 2026-10-17
+
+- Record dispatcher-provided unit bindings on runs
+
 ## 5.2.5 — 2026-10-17
 
 - Reject nonconforming ticket names for fresh dispatches and preserve legacy continuations

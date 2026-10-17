@@ -46,6 +46,11 @@ const addCommand = command(
         description: "parent revision (default: jj's own default)",
       },
       repo: repoFlag,
+      reuse: {
+        type: Boolean,
+        description:
+          "return an already registered workspace without changing it",
+      },
     },
   },
   async (argv) => {
@@ -53,6 +58,7 @@ const addCommand = command(
       slug: argv._.slug,
       rev: argv.flags.rev,
       repo: argv.flags.repo ?? process.cwd(),
+      reuse: argv.flags.reuse === true,
     });
     if (!done.ok) {
       fail(done.error);

@@ -432,6 +432,7 @@ export type AddOptions = {
   slug: string;
   rev?: string | undefined;
   repo: string;
+  reuse?: boolean | undefined;
 };
 
 /** Runs in the coordinator's environment, before a sandboxed worker receives the path. */
@@ -492,7 +493,6 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
   const graveyard = await checkGraveyard();
   if (!graveyard.ok) return graveyard;
   const dir = join(repo.value.wsRoot, name);
-  if (existsSync(dir)) return bad(`${dir} already exists`);
   if (options.rev !== undefined) {
     const rev = await jjOut(
       ["log", "--no-graph", "-r", options.rev, "-T", 'commit_id ++ "\\n"'],
@@ -506,6 +506,12 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
   return withLock(repo.value, `ws add ${options.slug}`, async () => {
     const names = await workspaceNames(repo.value);
     if (!names.ok) return names;
+    const present = existsSync(dir);
+    if (present) {
+      if (options.reuse === true && names.value.includes(name))
+        return good(dir);
+      return bad(`${dir} already exists`);
+    }
     if (names.value.includes(name))
       return bad(`jj workspace ${name} is already registered`);
     const source = jjWorkspace(options.repo);

@@ -229,6 +229,12 @@ describe("agx-next run", () => {
       AGX_DISPATCHER_SESSION: "",
       CLAUDE_CODE_SESSION_ID: "claude-session",
     };
+    const binding = {
+      id: "00000000-0000-4000-8000-000000000001",
+      ticket: "fake",
+      workspace: root,
+      unit: "agt_other-2",
+    };
 
     const result = Bun.spawnSync(
       [
@@ -242,6 +248,8 @@ describe("agx-next run", () => {
         "read-only",
         "--session",
         "flag-session",
+        "--dispatch-binding",
+        JSON.stringify(binding),
       ],
       {
         cwd: process.cwd(),
@@ -261,6 +269,7 @@ describe("agx-next run", () => {
       at: z.string().optional(),
       row: z.string().optional(),
       worker_name: z.string().optional(),
+      unit: z.string().optional(),
       workspace_name: z.string().optional(),
       exit: z.number().optional(),
       dispatcher_session: z.string().nullable().optional(),
@@ -283,12 +292,9 @@ describe("agx-next run", () => {
       "ended",
     ]);
     expect(started.row).toBe("luna-high");
-    const unit =
-      process.env.INVOCATION_ID === undefined ||
-      process.env.INVOCATION_ID === ""
-        ? undefined
-        : systemdUnitName(readFileSync("/proc/self/cgroup", "utf8"));
-    expect(started.worker_name).toBe(unit ?? "agt_fake");
+    expect(started.id).toBe(binding.id);
+    expect(started.unit).toBe(binding.unit);
+    expect(started.worker_name).toBe(binding.unit);
     expect(started.workspace_name).toBe(basename(root));
     expect(ended.exit).toBe(0);
     expect(started.dispatcher_session).toBe("flag-session");
@@ -414,6 +420,7 @@ describe("agx-next run", () => {
         exit: z.number().nullable(),
         row: z.string(),
         dispatcher_session: z.string().nullable(),
+        unit: z.string().optional(),
         cwd: z.string(),
         workspace: z.string(),
         writes: z.array(z.string()),
@@ -507,6 +514,7 @@ describe("agx-next run", () => {
         "state",
         "ticket",
         "vendor_session",
+        "unit",
         "worker_name",
         "verify",
         "workspace",

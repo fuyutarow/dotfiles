@@ -33,7 +33,7 @@ async function main(): Promise<void> {
       name: "agx",
       help: {
         description:
-          "Durable runs: systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run <ticket.md>",
+          "Durable runs: agx dispatch <ticket.md> [--ws SLUG] [--unit NAME] [--sandbox MODE] [--continue RUN_ID].",
       },
       parameters: [],
       strictFlags: true,
@@ -78,6 +78,10 @@ async function main(): Promise<void> {
             type: String,
             description: "dispatching Claude Code or Codex session id",
           },
+          dispatchBinding: {
+            type: String,
+            description: "internal binding supplied by agx dispatch",
+          },
         },
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
@@ -92,6 +96,7 @@ async function main(): Promise<void> {
       continue: parsed.flags["continue"],
       supersedes: parsed.flags.supersedes,
       session: parsed.flags.session,
+      dispatchBinding: parsed.flags.dispatchBinding,
     } satisfies Flags;
     exit = await run(flags);
   } else if (commandName === "check") {

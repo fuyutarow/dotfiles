@@ -33,6 +33,10 @@ import { pinContinuation } from "./continue.ts";
 import { createRunTemp } from "../temp.ts";
 import { exitWithError } from "./exit.ts";
 import { ownerlessRefLocks } from "../../../shared/src/ref-locks.ts";
+import {
+  DispatchBindingSchema,
+  type DispatchBinding,
+} from "../../../shared/src/agx-dispatch-binding.ts";
 import { changedFiles, deriveOutcome, workspaceSnapshot } from "./outcome.ts";
 import {
   verificationEnvironment,
@@ -52,16 +56,14 @@ export function systemdUnitName(cgroup: string): string | undefined {
     .findLast((part) => part.endsWith(".service"));
   return unit?.slice(0, -".service".length);
 }
-const workerNameFor = async (ticket: string): Promise<string> => {
+const invocationUnitFor = async (): Promise<string | undefined> => {
   if (
     process.env.INVOCATION_ID === undefined ||
     process.env.INVOCATION_ID === ""
   )
-    return `agt_${ticket}`;
+    return undefined;
   const cgroup = await readFile("/proc/self/cgroup", "utf8").catch(() => null);
-  return cgroup === null
-    ? `agt_${ticket}`
-    : (systemdUnitName(cgroup) ?? `agt_${ticket}`);
+  return cgroup === null ? undefined : systemdUnitName(cgroup);
 };
 const refuseRunningWorkspace = async (cwd: string): Promise<void> => {
   const holder = await runningWorkspaceRun(cwd);
@@ -314,6 +316,20 @@ export async function run(flags: Flags): Promise<number> {
     path,
     value(flags, "continue") === undefined,
   );
+  const actualUnit = await invocationUnitFor();
+  const ticketName = ticket.name ?? basename(path, ".md");
+  const rawBinding = value(flags, "dispatchBinding");
+  let binding: DispatchBinding | undefined;
+  if (rawBinding !== undefined) {
+    const parsedBinding = jsonOf(DispatchBindingSchema).safeParse(rawBinding);
+    if (!parsedBinding.success)
+      return fatal(`invalid dispatch binding: ${parsedBinding.error.message}`);
+    binding = parsedBinding.data;
+    if (binding.ticket !== ticketName || resolve(binding.workspace) !== cwd)
+      return fatal(
+        "dispatch binding does not match the ticket and --cd workspace",
+      );
+  }
   const sandbox =
     value(flags, "sandbox") ?? ticket.sandbox ?? "workspace-write";
   if (!new Set(["none", "read-only", "workspace-write"]).has(sandbox))
@@ -368,9 +384,9 @@ export async function run(flags: Flags): Promise<number> {
       `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`,
       ticket.capabilities,
       ticket.timeout_s ?? 600,
-      await earlyQuitRows(ticket.name ?? basename(path, ".md"), cwd),
+      await earlyQuitRows(ticketName, cwd),
     ));
-  const id = randomUUID();
+  const id = binding?.id ?? randomUUID();
   // The run owns its temp space: removed on any exit path (process.exit included); a SIGKILL
   // leaves it for the next run's sweep.
   const made = createRunTemp(id);
@@ -438,7 +454,6 @@ export async function run(flags: Flags): Promise<number> {
       "WARN dispatcher session is unavailable; pass --session ID or preserve CLAUDE_CODE_SESSION_ID/CODEX_SESSION_ID (systemd-run: use -E NAME).\n",
     );
   const workspace = resolve(cwd);
-  const ticketName = ticket.name ?? basename(path, ".md");
   writeFileSync(
     workerBrief,
     withReportInstruction(renderPromise(ticket, cwd, sandbox, prose)),
@@ -463,16 +478,18 @@ export async function run(flags: Flags): Promise<number> {
   }
   // Also covers runs started by an older binary while this invocation was routing.
   await refuseRunningWorkspace(cwd);
-  const workerName = await workerNameFor(ticketName);
+  const unit = binding?.unit ?? actualUnit ?? `agt_${ticketName}`;
+  const workerName = unit;
   append({
     kind: "started",
     id,
     at: now(),
-    ticket: ticketName,
+    ticket: binding?.ticket ?? ticketName,
     writes: ticket.writes,
     cwd,
     workspace,
     worker_name: workerName,
+    unit,
     workspace_name: basename(workspace),
     row: row.id,
     dispatcher_session: dispatcher,
@@ -489,7 +506,7 @@ export async function run(flags: Flags): Promise<number> {
       process.pid,
       process.env.INVOCATION_ID !== undefined &&
         process.env.INVOCATION_ID !== ""
-        ? `${workerName}.service`
+        ? `${unit}.service`
         : null,
     ),
   });
@@ -696,7 +713,7 @@ export async function run(flags: Flags): Promise<number> {
   temp.remove();
   await workspaceLock.release();
   process.stdout.write(
-    `${JSON.stringify({ id, ticket: ticketName, row: row.id, exit, outcome, report_path: reportPath, state_file: recordPath(), host: hostname() })}\n`,
+    `${JSON.stringify({ id, ticket: ticketName, row: row.id, exit, outcome, report_path: reportPath, state_file: recordPath(), host: hostname(), unit })}\n`,
   );
   return exit;
 }

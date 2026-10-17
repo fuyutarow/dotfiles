@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 — 2026-10-17
+
+- Allow reuse of an existing registered workspace
+
 ## 0.5.2 — 2026-10-17
 
 - Reject nonconforming new workspace slugs while retaining legacy workspace lookup

@@ -11,6 +11,7 @@ if (Object.keys(parsed.unknownFlags).length > 0) {
 }
 const [first, ...remaining] = argv;
 const prefix = new Map([
+  ["dispatch", fileURLToPath(new URL("./dispatch.ts", import.meta.url))],
   ["ws", fileURLToPath(new URL("../../agx-ws/src/ws.ts", import.meta.url))],
   [
     "ticket",

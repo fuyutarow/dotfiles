@@ -26,3 +26,16 @@ agx roster --json
 This prints the parsed and validated dispatch roster as JSON. Its shape is the `value` returned by
 the internal `loadRoster` function; callers should consume this process output instead of importing
 repository source files.
+
+## Durable dispatch
+
+```sh
+agx dispatch .agents/tickets/foo-bar.md [--ws other] [--unit agt_other-2] [--sandbox workspace-write] [--continue RUN_ID]
+```
+
+Dispatch defaults to the ticket's `name` (or its filename without `.md`): `ws_<name>` and
+`agt_<name>`. `--ws` overrides the workspace slug passed to `ws add`; `--unit` overrides the
+systemd service name. Dispatch creates or reuses the workspace, refuses an active unit, verifies
+the ticket and workspace resolve to the same repository default workspace, then starts the unit.
+It waits for a run record containing its binding and prints the run id. It exits non-zero when the
+unit cannot start or the record does not appear.

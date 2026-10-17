@@ -27,10 +27,59 @@ import { rateRow } from "./rate-limits.ts";
 import { runLive, type LiveFrame } from "./live.ts";
 import type { Dataframe } from "./dataframe.ts";
 import { withSessionRender } from "./render-cache.ts";
+import {
+  AgentSessionSchema,
+  discoverSessions,
+  payloadForSession,
+  sessionFromId,
+} from "./session-discovery.ts";
 
 const HOME = process.env.HOME ?? "";
 const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
+async function listSessions(cwd: string): Promise<void> {
+  for (const session of await discoverSessions(cwd))
+    process.stdout.write(`${JSON.stringify(session)}\n`);
+}
+async function emitPayloads(): Promise<void> {
+  const input = await Bun.stdin.text();
+  for (const line of input.split("\n")) {
+    const parsed = jsonText.safeParse(line);
+    if (!parsed.success) continue;
+    const session = AgentSessionSchema.safeParse(parsed.data);
+    if (!session.success) continue;
+    process.stdout.write(
+      `${JSON.stringify(await payloadForSession(session.data))}\n`,
+    );
+  }
+}
+async function emitPayloadById(sessionId: string): Promise<void> {
+  const session = await sessionFromId(sessionId);
+  if (session === undefined) {
+    process.stderr.write(
+      `FATAL: no live agent session found for ${sessionId}\n`,
+    );
+    process.exit(1);
+  }
+  process.stdout.write(`${JSON.stringify(await payloadForSession(session))}\n`);
+}
+async function renderDiscovered(cwd: string): Promise<string> {
+  const sessions = await discoverSessions(cwd);
+  if (sessions.length === 0) {
+    const frame = await buildDataframe({ cwd });
+    return `${render(frame)}\n${DIM}no agent session in ${cwd}${RST}`;
+  }
+  const blocks: string[] = [];
+  for (const discovered of sessions) {
+    const parsed = ClaudeStatuslineInputSchema.safeParse(
+      await payloadForSession(discovered),
+    );
+    if (!parsed.success) continue;
+    const frame = await buildDataframe(parsed.data);
+    blocks.push(render(frame, { codex: discovered.vendor === "codex" }));
+  }
+  return blocks.join("\n");
+}
 async function writeSysSnapshot(df: Dataframe): Promise<void> {
   const sysColored = sysSegment(
     df.cpuPct,
@@ -142,7 +191,7 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 const args = cli(
   {
     name: "statusline",
-    parameters: [],
+    parameters: ["[command]", "[session]"],
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
     flags: {
@@ -170,15 +219,43 @@ const args = cli(
         type: String,
         description: "Live refresh interval in seconds (1–3600)",
       },
+      json: {
+        type: Boolean,
+        description: "Emit newline-delimited JSON records",
+      },
     },
   },
   undefined,
   Bun.argv.slice(2),
 );
+const watchSeconds =
+  (args.flags.watch ?? false) &&
+  args._.command !== undefined &&
+  /^\d+(?:\.\d+)?$/u.test(args._.command)
+    ? args._.command
+    : undefined;
+const subcommand = watchSeconds === undefined ? args._.command : undefined;
+if (subcommand === "sessions") {
+  await listSessions(args.flags.cwd ?? process.cwd());
+  process.exit(0);
+}
+if (subcommand === "payload") {
+  const sessionId = args._.session;
+  if (sessionId !== undefined) {
+    await emitPayloadById(sessionId);
+    process.exit(0);
+  }
+  await emitPayloads();
+  process.exit(0);
+}
+if (subcommand !== undefined) {
+  process.stderr.write(`FATAL: unknown statusline command ${subcommand}\n`);
+  process.exit(2);
+}
 const codexMode = args.flags.codex ?? false;
 const onceMode = args.flags.once ?? false;
 const watchMode = args.flags.watch ?? false;
-const intervalText = args.flags.interval;
+const intervalText = args.flags.interval ?? watchSeconds;
 const intervalSeconds = intervalText === undefined ? 5 : Number(intervalText);
 const stdoutTty = process.stdout.isTTY ?? false;
 const liveMode = codexMode && (watchMode || (!onceMode && stdoutTty));
@@ -186,9 +263,9 @@ if (watchMode && onceMode) {
   process.stderr.write("FATAL: --watch cannot be combined with --once\n");
   process.exit(2);
 }
-if (!codexMode && (onceMode || watchMode || intervalText !== undefined)) {
+if (!codexMode && (onceMode || (intervalText !== undefined && !watchMode))) {
   process.stderr.write(
-    "FATAL: --once, --watch and --interval require --codex\n",
+    "FATAL: --once requires --codex; --interval requires --watch or --codex\n",
   );
   process.exit(2);
 }
@@ -207,7 +284,7 @@ if (watchMode && !stdoutTty) {
   process.stderr.write("FATAL: --watch requires a TTY on stdout\n");
   process.exit(2);
 }
-if (intervalText !== undefined && !liveMode) {
+if (intervalText !== undefined && !liveMode && !watchMode) {
   process.stderr.write("FATAL: --interval requires live mode\n");
   process.exit(2);
 }
@@ -225,6 +302,13 @@ if (typeof Temporal === "undefined") {
   );
   process.exit(0);
 }
+if (!codexMode && watchMode) {
+  const code = await runLive({
+    intervalSeconds,
+    frame: async () => renderDiscovered(args.flags.cwd ?? process.cwd()),
+  });
+  process.exit(code);
+}
 let session: SessionStatus | undefined;
 if (codexMode) {
   session = await codexSessionFromFlags(args.flags, liveMode);
@@ -237,7 +321,12 @@ if (codexMode) {
   process.exit(2);
 }
 if (!codexMode) {
-  const raw = await Bun.stdin.text();
+  const raw = process.stdin.isTTY ? "" : await Bun.stdin.text();
+  if (raw === "") {
+    const cwd = args.flags.cwd ?? process.cwd();
+    process.stdout.write(await renderDiscovered(cwd));
+    process.exit(0);
+  }
   // unknown -> ClaudeStatuslineInput at the trust boundary: parsed and normalized by its adapter.
   const json = jsonText.safeParse(raw);
   if (!json.success) {

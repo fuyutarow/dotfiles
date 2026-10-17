@@ -290,6 +290,14 @@ test("live CLI rejects invalid interval and explicit watch without a TTY", () =>
   );
   expect(noTty.exitCode).toBe(2);
   expect(noTty.stderr.toString()).toContain("--watch requires a TTY");
+  const positionalInterval = Bun.spawnSync(
+    [process.execPath, script, "--watch", "2"],
+    { cwd: home, env: renderEnv(home) },
+  );
+  expect(positionalInterval.exitCode).toBe(2);
+  expect(positionalInterval.stderr.toString()).toContain(
+    "--watch requires a TTY",
+  );
   const conflict = Bun.spawnSync(
     [process.execPath, script, "--codex", "--watch", "--once"],
     { cwd: home, env: renderEnv(home) },
@@ -307,7 +315,9 @@ test("live CLI rejects invalid interval and explicit watch without a TTY", () =>
     { cwd: home, env: renderEnv(home) },
   );
   expect(misplacedInterval.exitCode).toBe(2);
-  expect(misplacedInterval.stderr.toString()).toContain("require --codex");
+  expect(misplacedInterval.stderr.toString()).toContain(
+    "requires --watch or --codex",
+  );
   const nonLiveInterval = Bun.spawnSync(
     [process.execPath, script, "--codex", "--interval", "5"],
     { cwd: home, env: renderEnv(home) },

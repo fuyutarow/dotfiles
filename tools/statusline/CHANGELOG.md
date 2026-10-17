@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.0 — 2026-10-17
+
+- Discover live Claude Code and Codex sessions from the current directory
+
 ## 0.17.1 — 2026-10-17
 
 - Count running workers from the current session and show other-session workers only on the fleet line.

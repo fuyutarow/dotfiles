@@ -11,6 +11,9 @@ Run with Bun 1.4 or newer:
 
 ```sh
 printf '%s' '{}' | bun tools/statusline/src/statusline.ts
+statusline
+statusline sessions --cwd . --json
+statusline payload <session-id>
 statusline --codex --cwd "$HOME/dotfiles"
 statusline --codex --thread 01a1291d-5a63-76d3-a760-021ebaabf5f2
 statusline --codex
@@ -31,6 +34,14 @@ Live mode selects the initial rollout once, then rereads that session ID on ever
 
 The Claude adapter parses Claude Code statusline JSON on stdin and normalizes it to the provider-neutral
 `SessionStatus` contract; stdout retains the existing ANSI rows and graceful invalid-input messages.
+With empty stdin or a terminal, `statusline` discovers live Claude Code and Codex processes in the
+current directory and renders one block per session, newest first. `statusline sessions --cwd DIR
+--json` emits one JSON record per session; `statusline payload SESSION_ID` emits the renderer
+payload for that live session. When no session is present, host and
+dispatch rows still render with `no agent session in <cwd>`. `--watch [SECONDS]` redraws discovered
+sessions in place (default five seconds); `--interval N` remains an equivalent interval option
+(1–3600 seconds). Non-empty piped payloads
+continue through the original renderer path unchanged.
 Existing environment variables, cache locations, schema
 checks, explicit absence messages, 2 s enrichment limits, 3 s agent lookup limit, 4 s shared
 render deadline, 5 s GPU cache and 30 s agent-name cache are preserved. Same-session renders

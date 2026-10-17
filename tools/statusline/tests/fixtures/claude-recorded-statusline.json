@@ -1,0 +1,6 @@
+{
+  "cwd": "<fixture-cwd>",
+  "session_id": "claude-session-a",
+  "model": { "display_name": "claude-opus-4-8", "id": "claude-opus-4-8" },
+  "context_window": { "total_input_tokens": 48000 }
+}

@@ -46,10 +46,7 @@ import {
   runQueue,
 } from "./land-queue.ts";
 import { applyToolChangesets } from "./land-changesets.ts";
-import {
-  runConsumerGates as runMainConsumerGates,
-  type ConsumerGateReport,
-} from "./consumer-gate.ts";
+import type { ConsumerGateReport } from "./consumer-gate.ts";
 import {
   landExit,
   landLiveness,
@@ -72,45 +69,55 @@ type WorkspaceRun = {
   judgment?: { decision: "accept" | "reject" } | null;
 };
 
-const ConsumerGateModule = z.looseObject({
-  runConsumerGates: z.function({
-    input: [z.string(), z.array(z.string())],
-    output: z.promise(
-      z.looseObject({
-        ok: z.boolean(),
-        checked: z.number(),
-        lines: z.array(z.string()),
-      }),
-    ),
+const ConsumerGateReportSchema = jsonOf(
+  z.looseObject({
+    ok: z.boolean(),
+    checked: z.number(),
+    lines: z.array(z.string()),
   }),
-});
+);
 
-async function runLandConsumerGates(
+export async function runLandConsumerGates(
   root: string,
   changed: readonly string[],
 ): Promise<Result<ConsumerGateReport, Error>> {
   const gatePath = join(root, "scripts/consumer-gate.ts");
-  let runCandidateConsumerGates: (
-    root: string,
-    changed: string[],
-  ) => Promise<ConsumerGateReport> = runMainConsumerGates;
+  let gateUrl = pathToFileURL(join(import.meta.dir, "consumer-gate.ts"));
   if (await pathExists(gatePath)) {
-    const loaded: unknown = await import(pathToFileURL(gatePath).href);
-    const candidateGate = ConsumerGateModule.safeParse(loaded);
-    if (!candidateGate.success)
-      return err(
-        new Error(
-          `invalid candidate consumer gate: ${candidateGate.error.message}`,
-        ),
-      );
-    runCandidateConsumerGates = candidateGate.data.runConsumerGates;
+    gateUrl = pathToFileURL(gatePath);
   } else if (changed.includes("scripts/consumer-gate.ts")) {
     return err(new Error("candidate consumer gate is missing after restore"));
   }
-  return ResultAsync.fromPromise(
-    runCandidateConsumerGates(root, [...changed]),
-    (error) => new Error(errorMessage(error)),
+  // A fresh process reloads the entire candidate graph after restore. Bun caches
+  // file modules even with a changed URL query, including an inline registry schema.
+  const source = `const gate = await import(${JSON.stringify(gateUrl.href)});
+if (typeof gate.runConsumerGates !== 'function') throw new Error('invalid candidate consumer gate');
+process.stdout.write(JSON.stringify(await gate.runConsumerGates(${JSON.stringify(root)}, ${JSON.stringify(changed)})));`;
+  const executed = await attempt(() =>
+    runProcess([process.execPath, "--eval", source], {
+      cwd: root,
+      // Each consumer step has its own declared timeout; allow the whole registry
+      // to run serially without imposing the ordinary command's two-minute limit.
+      timeout: 3_600_000,
+    }),
   );
+  if (!executed.ok) return err(new Error(errorMessage(executed.error)));
+  if (executed.value.exitCode !== 0)
+    return err(
+      new Error(
+        `candidate consumer gate exit ${executed.value.exitCode}: ${executed.value.stderr.toString().trim()}`,
+      ),
+    );
+  const report = ConsumerGateReportSchema.safeParse(
+    executed.value.stdout.toString(),
+  );
+  return report.success
+    ? ok(report.data)
+    : err(
+        new Error(
+          `invalid candidate consumer gate report: ${report.error.message}`,
+        ),
+      );
 }
 
 async function nextAgxRuns(

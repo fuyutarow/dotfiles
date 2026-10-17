@@ -23,8 +23,9 @@ import {
 } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { packageBinProblems } from "../land.ts";
+import { packageBinProblems, runLandConsumerGates } from "../land.ts";
 import { landStateDir } from "../land-queue.ts";
 import { doctorReport } from "../land-doctor.ts";
 import { applyToolChangesets } from "../land-changesets.ts";
@@ -121,6 +122,60 @@ test("package bin targets must be executable and start with a shebang", async ()
 
 test("every repository package bin target is executable and has a shebang", async () => {
   expect(await packageBinProblems(REPO)).toEqual([]);
+});
+
+test("restored candidate reloads its inline registry schema after the same path was imported", async () => {
+  const root = await mkdtemp(join(tmpdir(), "land-schema-cache-"));
+  temporary.push(root);
+  await mkdir(join(root, "scripts"));
+  await mkdir(join(root, "presets"));
+  await symlink(join(REPO, "agents"), join(root, "agents"));
+  const gate = join(root, "scripts/consumer-gate.ts");
+  await writeFile(
+    gate,
+    `export async function runConsumerGates() {
+    return {ok:false,checked:0,lines:['FAIL stale schema: unrecognized_keys preset_dirs notify']};
+  }`,
+  );
+  await import(pathToFileURL(gate).href);
+  await writeFile(
+    gate,
+    await Bun.file(join(REPO, "scripts/consumer-gate.ts")).text(),
+  );
+  await writeFile(
+    join(root, "presets/consumers.toml"),
+    `[[consumers]]
+name = "schema-fixture"
+root = "/unused"
+setup = ["true"]
+surfaces = ["presets/typescript"]
+preset_dirs = { typescript = "tools" }
+notify = [{ paths = ["tools/agent-resource-run/**"], contact = "polysearch-v1-agt_f24v", check = "RUSTC_WRAPPER= mise run hook:pre-commit" }]
+command = ["true"]
+timeout_ms = 1000
+`,
+  );
+  const result = await runLandConsumerGates(root, [
+    "tools/agent-resource-run/src/main.ts",
+  ]);
+  expect(result.isOk()).toBe(true);
+  if (result.isErr()) return;
+  expect(result.value.ok, result.value.lines.join("\n")).toBe(true);
+  expect(result.value.lines.join("\n")).toContain(
+    "NOTICE schema-fixture: contact polysearch-v1-agt_f24v",
+  );
+  expect(result.value.lines.join("\n")).not.toContain("stale schema");
+  // A second restore at the same path must also invalidate the first candidate.
+  await writeFile(
+    gate,
+    `export async function runConsumerGates() {
+    return {ok:false,checked:0,lines:['FAIL second candidate']};
+  }`,
+  );
+  const second = await runLandConsumerGates(root, ["presets/consumers.toml"]);
+  expect(second.isOk()).toBe(true);
+  if (second.isErr()) return;
+  expect(second.value.lines).toEqual(["FAIL second candidate"]);
 });
 
 async function fixture() {

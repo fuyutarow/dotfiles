@@ -111,8 +111,8 @@ The output is an array of objects with these contract fields:
 | `last_progress_path` | Most recent interim-return path, or `null`. |
 | `continues` | Previous agx run id supplied via `--continue`, or `null` for a fresh run. |
 | `supersedes` | Run replaced by this fresh dispatch, or `null`; absent in historical runs. |
-| `base_rev` | Full commit id observed in the `--cd` tree before routing; absent in historical runs. |
-| `premise_commits` | `{ premise, commit }` entries: revision/bookmark premises resolve their referenced commit; file, symbol and task checks are observed in the tree at `base_rev`. |
+| `base_rev` | Full commit id observed in the `--cd` tree before routing; absent when `--cd` has no repository and in historical runs. |
+| `premise_commits` | `{ premise, commit }` entries: revision/bookmark premises resolve their referenced commit; file, symbol and task checks are observed in the tree at `base_rev`, or omitted here when there is no repository. |
 | `ticket_path` | Absolute source ticket path. |
 | `ticket_orig_path` | Per-run provenance copy, preserved byte-for-byte. |
 | `ticket_sha256` | SHA-256 of those original bytes; also written to `ticket.orig.md.sha256`. |

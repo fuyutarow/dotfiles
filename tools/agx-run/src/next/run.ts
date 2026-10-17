@@ -102,14 +102,17 @@ const contextFor = async (path: string, cwd: string, ticket: NextTicket) => {
   if (!repository.ok) return fatal(repository.error);
   const placement = await ticketPlacement(path, repository);
   if (placement !== null) return fatal(placement);
-  // A worker in another workspace of this repository still checks its own base
-  // commit. Scratch directories and unrelated repositories cannot select context.
+  // Placement belongs to the ticket repository; execution provenance belongs to
+  // --cd, including a scratch directory with no repository or commit.
   const worker =
     resolve(cwd) === repository.root ? repository : await ticketContext(cwd);
-  const ctx =
-    worker.ok && worker.vcs !== undefined && worker.root === repository.root
-      ? { ...repository, base_rev: worker.base_rev, revision: worker.revision }
-      : repository;
+  if (!worker.ok) return fatal(worker.error);
+  const ctx = {
+    ...repository,
+    base_rev: worker.base_rev,
+    revision: worker.revision,
+    vcs: worker.vcs,
+  };
   if (ticket.base_rev !== undefined && ticket.base_rev !== ctx.base_rev)
     return fatal(
       `base_rev mismatch: ticket ${resolve(path)}, declared ${ticket.base_rev}, repository ${ctx.root}, worker ${cwd} commit ${ctx.base_rev ?? "unavailable"}`,
@@ -136,6 +139,8 @@ const premiseCommits = async (
     }
     const commit =
       reference === undefined ? ctx.base_rev : await ctx.revision(reference);
+    if (commit === null && reference === undefined && ctx.vcs === undefined)
+      continue;
     if (commit === null)
       return fatal(`cannot resolve premise commit: ${premise}`);
     commits.push({ premise, commit });
@@ -368,8 +373,12 @@ export async function run(flags: Flags): Promise<number> {
     );
   }
   const ctx = await contextFor(path, cwd, ticket);
-  if (ctx.base_rev === null)
+  if (ctx.base_rev === null && ctx.vcs !== undefined)
     return fatal("cannot resolve --cd commit for base_rev");
+  if (ctx.vcs === undefined)
+    process.stderr.write(
+      "agx: no repository in --cd; base_rev absent; repository changes, end commit and landing unavailable\n",
+    );
   const premises = checkedPremises(ticket, cwd, ctx.vcs);
   if (premises.status === "missing")
     return fatal(
@@ -524,7 +533,7 @@ export async function run(flags: Flags): Promise<number> {
     vendor_session: resumeSession ?? null,
     continues: continuationId ?? null,
     supersedes: supersedes ?? null,
-    base_rev: ctx.base_rev,
+    base_rev: ctx.base_rev ?? undefined,
     premise_commits,
     ticket_path: resolve(path),
     ticket_orig_path: ticketPath,

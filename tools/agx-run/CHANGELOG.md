@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.3.3 — 2026-10-17
+
+- Support repository tickets with a non-repository --cd, omit base_rev there, and run verification in the worker directory.
+
 ## 5.3.2 — 2026-10-17
 
 - Block ls --wait on file notifications and replay only appended record bytes, with a five-second liveness fallback.

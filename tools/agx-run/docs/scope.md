@@ -31,6 +31,16 @@ create, amend and version tickets in their repository's home. It preserves the e
 input after the source is edited or removed. A declared `base_rev` must equal the resolved
 `--cd` commit; a mismatch refuses dispatch before routing or launch and names both ids.
 
+A repository ticket can also launch a worker with `--cd` outside any repository for data or
+survey work. Ticket placement still uses the ticket's repository. The run omits `base_rev`
+and commit provenance for file, symbol and task premises in this case; those premises and
+all verify commands still run in `--cd`. A declared `base_rev` or revision premise still
+requires a resolvable worker commit. The router reports `no repository` for repository changes,
+end commits and landing; those actions are unavailable and do not fail the worker run.
+Content snapshots still count changed files in the promised write surface and derive the
+outcome from the worker report and checks. A Git or jj worker directory records its own
+commit as `base_rev`, including a scratch directory initialized with `jj git init`.
+
 `agx-run` owns fold and selection for `agx ls [SELECTOR] [--json]`, which accepts a run id, a unique run-id prefix, or an exact ticket name. Ticket selection returns that ticket's runs oldest first, with the newest run last. Ambiguous ID prefixes and unmatched selectors exit 2 with one line naming candidates. `agx ls --wait SELECTOR` is the one way to wait, and it is a read-only fold, not state: it takes an initial read, then re-reads the records file at a bounded poll interval (`AGX_WAIT_POLL_MS`, default 1000). A run-id selector preserves immediate lookup and returns at once if that run is already `ended`. An exact ticket selector ignores runs already terminal on the initial read; it waits until a run that was running on that read, or a run first recorded later, becomes `ended` (including derived `lost`, so a missing final report cannot hide a finished run), then prints that run's row in `ls` format (JSON with `--json`). It writes no file, not even the fold snapshot, and an empty, ambiguous, or unmatched selector exits 2 at once. The acceptance view is composed outside agx-run by `scripts/agx-accept.ts`; agx-run deliberately does not render reports or inspect workspace diffs.
 
 ## 2. agx-run does not

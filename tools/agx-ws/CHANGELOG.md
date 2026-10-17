@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0 — 2026-10-17
+
+- Add ws add --json with readiness output isolated on stderr
+
 ## 0.6.0 — 2026-10-17
 
 - Allow reuse of an existing registered workspace

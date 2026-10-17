@@ -433,12 +433,14 @@ export type AddOptions = {
   rev?: string | undefined;
   repo: string;
   reuse?: boolean | undefined;
+  json?: boolean | undefined;
 };
 
 /** Runs in the coordinator's environment, before a sandboxed worker receives the path. */
 async function readyWorkspace(
   dir: string,
   cfg: Config,
+  json: boolean,
 ): Promise<Attempt<void>> {
   const current = await updateStale(dir);
   if (!current.ok) return current;
@@ -468,7 +470,7 @@ async function readyWorkspace(
         Bun.spawn(["sh", "-c", command], {
           cwd: dir,
           stdin: "ignore",
-          stdout: "inherit",
+          stdout: json ? 2 : "inherit",
           stderr: "inherit",
         }).exited,
     );
@@ -534,7 +536,7 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
       false,
     );
     if (!made.ok) return made;
-    const ready = await readyWorkspace(dir, cfg.value);
+    const ready = await readyWorkspace(dir, cfg.value, options.json === true);
     if (!ready.ok) {
       const undone = await forgetAndBury(
         repo.value,

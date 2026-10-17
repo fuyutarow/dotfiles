@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { randomUUID } from "node:crypto";
 import { lstat, realpath } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { cli } from "cleye";
 import {
@@ -34,6 +34,7 @@ const RunRow = z.looseObject({
   unit: z.string().optional(),
 });
 const Rows = jsonOf(z.array(RunRow));
+const WorkspaceResult = jsonOf(z.object({ workspace: z.string().min(1) }));
 type RunRow = z.output<typeof RunRow>;
 
 async function invoke(
@@ -47,6 +48,7 @@ async function invoke(
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    timeout: 30_000,
   });
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
@@ -191,6 +193,13 @@ export async function dispatch(options: {
   }
   const slug = ticket.value;
   const wsSlug = options.ws ?? slug;
+  const ticketRepo = await defaultRepositoryRoot(dirname(ticketPath), env);
+  if (ticketRepo.root === undefined) {
+    process.stderr.write(
+      `agx dispatch: cannot resolve ticket repository: ${ticketRepo.error}\n`,
+    );
+    return 1;
+  }
 
   const unitInput = options.unit ?? `agt_${slug}`;
   const unit = unitInput.endsWith(".service")
@@ -233,7 +242,7 @@ export async function dispatch(options: {
     return 1;
   }
   const ws = await invoke(
-    ["ws", "add", wsSlug, "--repo", cwd, "--reuse"],
+    ["ws", "add", wsSlug, "--repo", ticketRepo.root, "--reuse", "--json"],
     cwd,
     env,
   );
@@ -244,21 +253,23 @@ export async function dispatch(options: {
     );
     return ws.code === 0 ? 1 : ws.code;
   }
-  const workspace = resolve(ws.out.trim());
-  if (basename(workspace) !== `ws_${wsSlug}`) {
+  const parsedWorkspace = WorkspaceResult.safeParse(ws.out);
+  if (
+    !parsedWorkspace.success ||
+    !isAbsolute(parsedWorkspace.data.workspace) ||
+    basename(parsedWorkspace.data.workspace) !== `ws_${wsSlug}`
+  ) {
     process.stderr.write(
       "agx dispatch: ws add returned an invalid workspace path\n",
     );
     return 1;
   }
+  const workspace = resolve(parsedWorkspace.data.workspace);
 
-  const [ticketRepo, workspaceRepo] = await Promise.all([
-    defaultRepositoryRoot(dirname(ticketPath), env),
-    defaultRepositoryRoot(workspace, env),
-  ]);
-  if (ticketRepo.root === undefined || workspaceRepo.root === undefined) {
+  const workspaceRepo = await defaultRepositoryRoot(workspace, env);
+  if (workspaceRepo.root === undefined) {
     process.stderr.write(
-      `agx dispatch: cannot verify ticket/workspace repositories: ${ticketRepo.error ?? workspaceRepo.error}\n`,
+      `agx dispatch: cannot verify ticket/workspace repositories: ${workspaceRepo.error}\n`,
     );
     return 1;
   }

@@ -46,6 +46,11 @@ const addCommand = command(
         description: "parent revision (default: jj's own default)",
       },
       repo: repoFlag,
+      json: {
+        type: Boolean,
+        description:
+          "print a JSON workspace object; readiness output goes to stderr",
+      },
       reuse: {
         type: Boolean,
         description:
@@ -59,12 +64,15 @@ const addCommand = command(
       rev: argv.flags.rev,
       repo: argv.flags.repo ?? process.cwd(),
       reuse: argv.flags.reuse === true,
+      json: argv.flags.json === true,
     });
     if (!done.ok) {
       fail(done.error);
       return;
     }
-    process.stdout.write(`${done.value}\n`);
+    process.stdout.write(
+      `${argv.flags.json === true ? JSON.stringify({ workspace: done.value }) : done.value}\n`,
+    );
   },
 );
 

@@ -35,7 +35,9 @@ agx dispatch .agents/tickets/foo-bar.md [--ws other] [--unit agt_other-2] [--san
 
 Dispatch defaults to the ticket's `name` (or its filename without `.md`): `ws_<name>` and
 `agt_<name>`. `--ws` overrides the workspace slug passed to `ws add`; `--unit` overrides the
-systemd service name. Dispatch creates or reuses the workspace, refuses an active unit, verifies
+systemd service name. The repository comes from the ticket's location, independently of the caller's
+working directory. Dispatch consumes `ws add --json` so readiness output cannot become a path.
+Dispatch creates or reuses the workspace, refuses an active unit, verifies
 the ticket and workspace resolve to the same repository default workspace, then starts the unit.
 It waits for a run record containing its binding and prints the run id. It exits non-zero when the
 unit cannot start or the record does not appear.

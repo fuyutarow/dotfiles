@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 — 2026-10-17
+
+- Resolve dispatch repositories from tickets and consume machine-readable workspace output
+
 ## 0.3.0 — 2026-10-17
 
 - Add agx dispatch to create matching durable workspaces and units

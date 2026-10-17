@@ -452,6 +452,26 @@ process.exitCode = stage === "add" && args.includes("add") && code === 0 ? 1 : c
 });
 
 describe("ws add", () => {
+  test("JSON output stays machine readable through install chatter and reuse", async () => {
+    const chatter =
+      "30 packages installed …\n/home/fuyu/dotfiles.ws/ws_fleet-line-real'\n";
+    const command = `printf '%s' '${chatter.replaceAll("'", "'\\''")}'`;
+    const path = await repo(`ready = [${JSON.stringify(command)}]\n`);
+    const created = await ws(["add", "fleet-line-real", "--json"], path);
+    expect(created.code, created.err).toBe(0);
+    expect(created.out).toBe(
+      `${JSON.stringify({ workspace: wsDir(path, "fleet-line-real") })}\n`,
+    );
+    expect(created.err).toContain(chatter);
+    const reused = await ws(
+      ["add", "fleet-line-real", "--reuse", "--json"],
+      path,
+    );
+    expect(reused.code, reused.err).toBe(0);
+    expect(reused.out).toBe(created.out);
+    expect(reused.err).not.toContain(chatter);
+  });
+
   test("uses sparse . even when the source workspace is narrowed", async () => {
     const path = await repo('ready = ["jj sparse list > sparse.out"]\n');
     await Bun.write(join(path, "artifact.txt"), "tracked artifact\n");

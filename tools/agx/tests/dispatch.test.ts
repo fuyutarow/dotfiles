@@ -78,14 +78,23 @@ function fixture() {
   };
   shim("ws", [
     `printf '%s\\n' "$@" > "$FAKE_WS_ARGS"`,
+    'if [ "$FAKE_WS_FAIL" = "yes" ]; then echo "ws: /home/fuyu is not a valid local jj workspace" >&2; exit 1; fi',
     'slug="$2"',
     "shift 2",
+    "json=no",
     'while [ "$#" -gt 0 ]; do',
+    '  if [ "$1" = "--json" ]; then json=yes; fi',
     '  if [ "$1" = "--repo" ]; then repo="$2"; shift 2; else shift; fi',
     "done",
+    'if [ "$repo" != "$FAKE_REPO" ]; then echo "ws: /home/fuyu is not a valid local jj workspace" >&2; exit 1; fi',
     'workspace="$(dirname "$repo")/$(basename "$repo").ws/ws_$slug"',
     'mkdir -p "$workspace/.jj"',
-    `printf '%s\\n' "$workspace"`,
+    'if [ "$FAKE_WS_CHATTER" = "yes" ]; then',
+    '  chatter="30 packages installed …\n/home/fuyu/dotfiles.ws/ws_fleet-line-real\'"',
+    '  if [ "$json" = "yes" ]; then printf "%s\\n" "$chatter" >&2; else printf "%s\\n" "$chatter"; exit 0; fi',
+    "fi",
+    'if [ "$FAKE_WS_INVALID" = "yes" ]; then echo "invalid workspace response"; exit 0; fi',
+    'if [ "$json" = "yes" ]; then printf \'{"workspace":"%s"}\\n\' "$workspace"; else printf \'%s\\n\' "$workspace"; fi',
   ]);
   shim("jj", [
     'case "$PWD" in',
@@ -130,7 +139,7 @@ async function invoke(f: ReturnType<typeof fixture>, ...args: string[]) {
   const child = Bun.spawn(
     [process.execPath, ENTRY, "dispatch", f.ticket, ...args],
     {
-      cwd: f.repo,
+      cwd: f.env.FAKE_CALLER_CWD ?? f.repo,
       env: f.env,
       stdin: "ignore",
       stdout: "pipe",
@@ -233,3 +242,46 @@ test("dispatch refuses a ticket and workspace from different repositories", asyn
   expect(result.stderr).toContain(`workspace repository ${otherRepo}`);
   expect(result.stdout).toBe("");
 });
+
+test("dispatch resolves the ticket repository from an unrelated caller cwd", async () => {
+  const f = fixture();
+  f.env.FAKE_CALLER_CWD = f.root;
+  const result = await invoke(f);
+  expect(result.exitCode, result.stderr).toBe(0);
+  expect(result.stdout.trim()).not.toBe("");
+  expect(await Bun.file(f.wsArgs).text()).toContain(`--repo\n${f.repo}\n`);
+  expect(await Bun.file(f.records).text()).toContain(result.stdout.trim());
+});
+
+test("dispatch uses machine output when readiness prints the reported install chatter and stray quote", async () => {
+  const f = fixture();
+  f.env.FAKE_WS_CHATTER = "yes";
+  const result = await invoke(f);
+  expect(result.exitCode, result.stderr).toBe(0);
+  expect(result.stdout.trim()).not.toBe("");
+  expect(await Bun.file(f.wsArgs).text()).toContain("--json\n");
+  expect(await Bun.file(f.records).text()).toContain(result.stdout.trim());
+  expect(await Bun.file(f.unitArgs).text()).toContain(
+    `${f.repo}.ws/ws_foo-bar\n`,
+  );
+});
+
+test.each([
+  [
+    "FAKE_WS_FAIL",
+    "ws add failed: ws: /home/fuyu is not a valid local jj workspace",
+  ],
+  ["FAKE_WS_INVALID", "ws add returned an invalid workspace"],
+])(
+  "dispatch names the cause and fails without starting a unit: %s",
+  async (flag, cause) => {
+    const f = fixture();
+    f.env[flag] = "yes";
+    const result = await invoke(f);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain(cause);
+    expect(result.stdout).toBe("");
+    expect(await Bun.file(f.unitArgs).exists()).toBe(false);
+    expect(await Bun.file(f.records).text()).toBe("[]\n");
+  },
+);

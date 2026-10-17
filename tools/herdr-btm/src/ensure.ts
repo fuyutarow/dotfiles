@@ -5,7 +5,9 @@ import { err, ok, ResultAsync, type Result } from "neverthrow";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const Agents = z.object({
-  result: z.object({ agents: z.array(z.object({ agent: z.string() })) }),
+  result: z.object({
+    agents: z.array(z.object({ agent: z.string(), tab_id: z.string() })),
+  }),
 });
 const Workspaces = z.object({
   result: z.object({
@@ -107,9 +109,30 @@ async function hasBtm(): Promise<Result<boolean, Error>> {
 }
 
 async function ensureLocked(socket: string): Promise<Result<void, Error>> {
-  const present = await hasBtm();
-  if (present.isErr()) return err(present.error);
-  if (present.value) return ok(undefined);
+  const agents = await request(["agent", "list"], Agents);
+  if (agents.isErr()) return err(agents.error);
+  const existingTabs = new Set(
+    agents.value.result.agents
+      .filter((agent) => agent.agent === "btm")
+      .map((agent) => agent.tab_id),
+  );
+  for (const tabId of existingTabs) {
+    const current = await request(
+      ["tab", "get", tabId],
+      z.object({
+        result: z.object({ tab: z.object({ label: z.string() }) }),
+      }),
+    );
+    if (current.isErr()) return err(current.error);
+    if (current.value.result.tab.label === "btm") continue;
+    // Installed help: herdr tab rename <TAB_ID> <LABEL>...
+    const renamed = await request(
+      ["tab", "rename", tabId, "btm"],
+      z.object({ result: z.unknown() }),
+    );
+    if (renamed.isErr()) return err(renamed.error);
+  }
+  if (existingTabs.size > 0) return ok(undefined);
   const workspaces = await request(["workspace", "list"], Workspaces);
   if (workspaces.isErr()) return err(workspaces.error);
   const workspace = workspaces.value.result.workspaces[0];

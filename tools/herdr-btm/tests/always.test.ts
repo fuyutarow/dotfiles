@@ -13,6 +13,7 @@ const Agents = jsonOf(
         z.object({
           agent: z.string(),
           pane_id: z.string(),
+          tab_id: z.string(),
         }),
       ),
     }),
@@ -108,7 +109,27 @@ test("isolated headless startup, repeated/concurrent ensure, and pane loss conve
     return expect.unreachable("BTM-ALWAYS: no btm row within 20s");
   };
   const first = await waitForOne();
+  await run(["herdr", "tab", "rename", first.tab_id, "2"]);
   await run([process.execPath, entry, "ensure"]);
+  const Tab = jsonOf(
+    z.object({ result: z.object({ tab: z.object({ label: z.string() }) }) }),
+  );
+  const tabLabel = async () => {
+    const parsed = Tab.safeParse(
+      await run(["herdr", "tab", "get", first.tab_id]),
+    );
+    if (!parsed.success) return expect.unreachable(parsed.error.message);
+    return parsed.data.result.tab.label;
+  };
+  // Startup ensure may still hold the lock after the agent first registers.
+  // A concurrent ensure skips; the server timer then performs the repair.
+  const repairDeadline = performance.now() + 10000;
+  let label = await tabLabel();
+  while (label !== "btm" && performance.now() < repairDeadline) {
+    await Bun.sleep(100);
+    label = await tabLabel();
+  }
+  expect(label).toBe("btm");
   await run([process.execPath, entry, "ensure"]);
   await Promise.all([
     run([process.execPath, entry, "ensure"]),

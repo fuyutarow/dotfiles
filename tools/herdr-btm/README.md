@@ -17,7 +17,11 @@ This works on a headless server; no shell prompt or attached TUI is required.
 
 Ensure requires an explicit `HERDR_SOCKET_PATH`. It locks per socket, reads
 `herdr agent list`, and counts rows whose `agent` is exactly `btm`. If one exists,
-it leaves it alone. Otherwise it creates a tab in the first workspace, or a
+it checks that agent's tab label and repairs it to `btm` with the documented
+`herdr tab rename <TAB_ID> <LABEL>...` command (installed `herdr tab rename --help`).
+Tabs already labelled `btm` need no rename; existing panes and processes remain.
+The sidebar's configured `tab` token displays this label.
+Otherwise it creates a tab in the first workspace, or a
 workspace if the server is empty. It replaces only its new placeholder tab using
 the documented [layout.apply argv launch](https://herdr.dev/docs/socket-api/).
 That avoids typing into a shell during startup. Existing workspace focus stays
@@ -38,5 +42,5 @@ No separate OS timer or service is needed. New interactive shells load the alias
 config and home under `/tmp`. It checks startup, automatic recovery after pane
 closure, repeated/concurrent ensure, zsh alias resolution, argument forwarding,
 registration and exit status. It does not address the owner's live server.
-The pending minor changeset targets version 0.2.0; release tooling writes the
+The pending patch changeset targets version 0.2.1; release tooling writes the
 package version and changelog.

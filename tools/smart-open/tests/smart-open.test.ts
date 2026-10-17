@@ -17,7 +17,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { homedir, tmpdir, userInfo } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { attempt } from "../../shared/src/attempt.ts";
 import {
@@ -45,7 +45,9 @@ afterEach(async () => {
 
 // Short on purpose: a unix socket path is limited to ~104 bytes on macOS.
 async function scratch(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "so-"));
+  // tmp-ok: OpenSSH refuses a RemoteForward socket path over the ~104-byte limit, and the test
+  // preload's nested TMPDIR already exceeds it; afterEach removes this dir.
+  const dir = await mkdtemp("/tmp/so-");
   cleanups.push(() => {
     return rm(dir, { recursive: true, force: true });
   });
@@ -85,14 +87,23 @@ type Receiver = { sock: string; opened: () => Promise<string[]> };
 
 async function startReceiver(
   dir: string,
-  opts: { args?: string[]; opener?: string; sockName?: string } = {},
+  opts: {
+    args?: string[];
+    opener?: string;
+    sockName?: string;
+    env?: Record<string, string>;
+  } = {},
 ): Promise<Receiver> {
   const sock = join(dir, opts.sockName ?? "r.sock");
   const [script, opened] = await recorder(dir, "receiver-opened");
   const proc = Bun.spawn(
     ["bun", RECEIVE, "--socket", sock, ...(opts.args ?? [])],
     {
-      env: { ...process.env, SMART_OPEN_OPENER: opts.opener ?? script },
+      env: {
+        ...process.env,
+        ...opts.env,
+        SMART_OPEN_OPENER: opts.opener ?? script,
+      },
       stdout: "pipe",
       stderr: "ignore",
     },
@@ -483,6 +494,136 @@ async function pathReceiver(
 }
 const pathLine = (path: unknown, host: unknown, kind: unknown = "dir") =>
   `${JSON.stringify({ path, kind, host })}\n`;
+
+test("Obsidian sender and receiver build a stable shadow only for a vouched directory", async () => {
+  const dir = await scratch();
+  const config = join(dir, "ssh-config");
+  const sock = join(dir, "r.sock");
+  await writeFile(
+    config,
+    `Host probe-host\n HostName box.invalid\n User remote-user\n Port 2226\n ProxyJump jump.invalid\n RemoteForward /tmp/probe.sock ${sock}\nHost elsewhere\n HostName elsewhere.invalid\n`,
+  );
+  const helper = join(dir, "obs-helper.ts");
+  const module = join(TOOL, "../../obsidian/open-remote.ts");
+  await writeFile(
+    helper,
+    `
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { RemoteRequest, shadowPath, prepareShadow } from ${JSON.stringify(module)};
+const parsed = RemoteRequest.safeParse(JSON.parse(await Bun.stdin.text()));
+if (!parsed.success) process.exit(2);
+const req = parsed.data;
+if (await Bun.file(join(process.env.HOME, 'fail-obs')).exists()) process.exit(7);
+// Longer than the ordinary ACK: Obsidian must wait for setup, not claim early success.
+await Bun.sleep(2100);
+const target = await shadowPath(req);
+const plugin = join(target, '.obsidian/plugins/remote-ssh');
+await mkdir(plugin, {recursive:true});
+for (const file of ['main.js','manifest.json']) await Bun.write(join(plugin,file), '{}');
+if ((await prepareShadow(target, req)).isErr()) process.exit(2);
+await Bun.write(join(process.env.HOME, 'shadow'), target);
+`,
+  );
+  const rx = await startReceiver(dir, {
+    args: ["--ssh-config", config],
+    env: { HOME: dir, SMART_OPEN_OBSIDIAN_OPENER: helper },
+  });
+  const env = { SMART_OPEN_SOCKET: rx.sock, SMART_OPEN_SSH_HOST: "probe-host" };
+  const first = await client(["--app", "obsidian", dir], env);
+  expect(first.code).toBe(0);
+  expect(first.out).toContain("Obsidian (Remote SSH probe-host)");
+  const shadow = await Bun.file(join(dir, "shadow")).text();
+  expect(shadow).toContain(join(dir, ".obsidian-remote/vaults"));
+  const dataPath = join(shadow, ".obsidian/plugins/remote-ssh/data.json");
+  const { jsonOf, z } = await import("../../shared/src/zod.ts");
+  const dataSchema = jsonOf(
+    z.object({
+      activeProfileId: z.string(),
+      autoConnectProfileId: z.string(),
+      profiles: z.array(
+        z.object({
+          id: z.string(),
+          remotePath: z.string(),
+          host: z.string(),
+          username: z.string(),
+          proxyCommand: z.string(),
+        }),
+      ),
+    }),
+  );
+  const checked = dataSchema.safeParse(await Bun.file(dataPath).text());
+  expect(checked.success).toBe(true);
+  if (!checked.success) return;
+  const data = checked.data;
+  expect(data.autoConnectProfileId).toMatch(/^so-[a-f0-9]{16}$/u);
+  expect(data.activeProfileId).toBe(data.autoConnectProfileId);
+  expect(data.profiles[0]).toMatchObject({
+    id: data.autoConnectProfileId,
+    remotePath: dir,
+    host: "box.invalid",
+    username: "remote-user",
+    proxyCommand: "/usr/bin/ssh -q -W %h:%p jump.invalid",
+  });
+  const json = async (path: string) => {
+    const parsed = jsonOf(z.unknown()).safeParse(await Bun.file(path).text());
+    return parsed.success ? parsed.data : undefined;
+  };
+  expect(await json(join(shadow, ".obsidian/community-plugins.json"))).toEqual([
+    "remote-ssh",
+  ]);
+  expect(await json(join(shadow, ".obsidian/app.json"))).toEqual({
+    promptDelete: false,
+  });
+  expect(await json(join(shadow, ".obsidian/core-plugins.json"))).toContain(
+    "file-explorer",
+  );
+  await Bun.write(
+    dataPath,
+    JSON.stringify({
+      ...data,
+      hostKeyStore: { keep: true },
+      secrets: { keep: "secret" },
+    }),
+  );
+  expect((await client(["--app", "obsidian", dir], env)).code).toBe(0);
+  expect(await Bun.file(join(dir, "shadow")).text()).toBe(shadow);
+  expect(await json(dataPath)).toMatchObject({
+    hostKeyStore: { keep: true },
+    secrets: { keep: "secret" },
+  });
+  const before = await Bun.file(dataPath).text();
+  for (const request of [
+    { app: "obsidian", path: dir, host: "elsewhere", kind: "dir" },
+    { app: "obsidian", path: dir, host: "probe-host", kind: "file" },
+    { app: "unrecognised", path: dir, host: "probe-host", kind: "dir" },
+  ])
+    expect((await ask(sock, `${JSON.stringify(request)}\n`)).reply).toStartWith(
+      "refused:",
+    );
+  expect(await Bun.file(dataPath).text()).toBe(before);
+  expect((await client(["--app", "obsidian", config], env)).code).toBe(1);
+  expect(
+    (await client(["--app", "obsidian", "https://example.invalid"], env)).code,
+  ).toBe(1);
+  expect((await client(["--app", "unknown", dir], env)).code).not.toBe(0);
+  expect(
+    (await client(["--app", "obsidian", "--here", dir], env)).code,
+  ).not.toBe(0);
+  await Bun.write(join(dir, "fail-obs"), "1");
+  const failed = await client(["--app", "obsidian", dir], env);
+  expect(failed.code).toBe(1);
+  expect(failed.err).toContain("Obsidian setup failed");
+  expect(
+    (
+      await client(["--app", "obsidian", dir], {
+        ...env,
+        SMART_OPEN_SOCKET: join(dir, "missing.sock"),
+      })
+    ).code,
+  ).toBe(1);
+  expect(await rx.opened()).toEqual([]);
+});
 
 describe("paths over a live forward", () => {
   test("a path goes to the client as a VS Code Remote-SSH URL on the named host, not to this machine", async () => {

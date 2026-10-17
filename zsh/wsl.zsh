@@ -87,10 +87,13 @@ link-win-exes
 # sit at and a path to its VS Code (Remote-SSH, back to here); otherwise explorer.exe with a Windows path. `o` / `oo` live in
 # zsh/aliases.zsh.
 alias open='smart-open'
-# Obsidian on the Mac cannot open a path that exists only in this WSL filesystem.
+# A vouched smart-open forward lets the Mac build a Remote SSH shadow vault for this directory.
 obs() {
-  print -u2 -- 'obs: cannot open a WSL/SSH path in the Mac Obsidian app; run obs in a local macOS shell with the vault available'
-  return 1
+  if (( $# > 1 )) || [[ ! -d ${1:-$PWD} ]]; then
+    print -u2 -- 'obs: usage: obs [directory]'
+    return 1
+  fi
+  smart-open --app obsidian -- "${${1:-$PWD}:A}"
 }
 # winget: run the real thing, then refresh the symlink farm (`link-win-exes`, above) so a
 # just-installed allowlisted tool is usable in EVERY live pane immediately — PATH never changes,

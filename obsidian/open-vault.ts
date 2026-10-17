@@ -162,7 +162,11 @@ async function acquireLock(lock: string): Promise<Result<void, string>> {
   return err(`timed out waiting for another obs registration: ${lock}`);
 }
 
-async function register(target: string): Promise<Result<void, string>> {
+async function register(
+  target: string,
+  prepare?: () => Promise<Result<void, string>>,
+  beforeOpen?: () => Promise<Result<void, string>>,
+): Promise<Result<void, string>> {
   const active = await running();
   if (active.isErr()) return err(active.error);
   if (active.value) {
@@ -176,6 +180,9 @@ async function register(target: string): Promise<Result<void, string>> {
     const latest = await readRegistry();
     if (latest.isErr()) return err(latest.error);
     let match = await containing(latest.value.vaults, target);
+    // A shadow needs its own plugin state even when an ancestor is a registered local vault.
+    if (prepare !== undefined && match?.root !== target) match = undefined;
+    const needsApply = match === undefined || prepare !== undefined;
     if (match === undefined) {
       let id = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
       while (Object.hasOwn(latest.value.vaults, id))
@@ -188,6 +195,9 @@ async function register(target: string): Promise<Result<void, string>> {
       latest.value.data.vaults = latest.value.vaults;
       await atomicWrite(latest.value.data);
       process.stdout.write(`SET   registered ${target} as ${id}\n`);
+      match = { id, root: target };
+    }
+    if (needsApply) {
       const applied = await command(
         [
           process.execPath,
@@ -197,16 +207,25 @@ async function register(target: string): Promise<Result<void, string>> {
         ],
         120_000,
       );
+      if (applied.exit !== 0 && prepare !== undefined)
+        return err(`house settings incomplete: ${applied.stderr}`);
       if (applied.exit !== 0)
         process.stderr.write(
           `WARN: house settings incomplete: ${applied.stderr}\nRun: bun ${JSON.stringify(join(import.meta.dir, "apply.ts"))} --vault ${JSON.stringify(target)}\n`,
         );
-      match = { id, root: target };
+    }
+    if (prepare !== undefined) {
+      const prepared = await prepare();
+      if (prepared.isErr()) return prepared;
     }
     const launch = await command(["open", "-a", "Obsidian"]);
     if (launch.exit !== 0)
       return err(`could not relaunch Obsidian: ${launch.stderr}`);
     launched = true;
+    if (beforeOpen !== undefined) {
+      const ready = await beforeOpen();
+      if (ready.isErr()) return ready;
+    }
     return openUri(match.id, match.root, target);
   }).then(
     (value) => value,
@@ -215,6 +234,28 @@ async function register(target: string): Promise<Result<void, string>> {
   );
   if (active.value && !launched) await command(["open", "-a", "Obsidian"]);
   return outcome;
+}
+
+export async function openVault(
+  target: string,
+  prepare?: () => Promise<Result<void, string>>,
+  beforeOpen?: () => Promise<Result<void, string>>,
+): Promise<Result<void, string>> {
+  const registry = await readRegistry();
+  if (registry.isErr()) return err(registry.error);
+  const match = await containing(registry.value.vaults, target);
+  if (match !== undefined && prepare === undefined)
+    return openUri(match.id, match.root, target);
+  await mkdir(dirname(REGISTRY), { recursive: true });
+  const lock = `${REGISTRY}.obs-lock`;
+  const locked = await acquireLock(lock);
+  if (locked.isErr()) return err(locked.error);
+  await using _unlock = {
+    async [Symbol.asyncDispose]() {
+      await rmdir(lock);
+    },
+  };
+  return await register(target, prepare, beforeOpen);
 }
 
 async function main(): Promise<Result<void, string>> {
@@ -259,18 +300,7 @@ async function main(): Promise<Result<void, string>> {
       );
     return ok(undefined);
   }
-  if (match !== undefined) return openUri(match.id, match.root, target);
-  await mkdir(dirname(REGISTRY), { recursive: true });
-  // Serialize cooperating obs invocations through relaunch, so the next writer sees the vault.
-  const lock = `${REGISTRY}.obs-lock`;
-  const locked = await acquireLock(lock);
-  if (locked.isErr()) return err(locked.error);
-  await using _unlock = {
-    async [Symbol.asyncDispose]() {
-      await rmdir(lock);
-    },
-  };
-  return await register(target);
+  return openVault(target);
 }
 
 if (import.meta.main) {

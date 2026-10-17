@@ -524,6 +524,16 @@ const OTHER: readonly Surface[] = [
   {
     kind: "applied",
     when: "mac",
+    sources: ["obsidian/open-remote.ts"],
+    deployed: "~/.obsidian-remote/vaults/<name>--<path-tail>/.obsidian/",
+    consumer: "Obsidian Remote SSH",
+    writer:
+      "obsidian/open-remote.ts after smart-open SSH vouch; plugin owns subsequent runtime state",
+    verify: "bun test tools/smart-open obsidian",
+  },
+  {
+    kind: "applied",
+    when: "mac",
     sources: ["obsidian/local-plugins/doc-view/manifest.json"],
     deployed:
       "each registered vault's .obsidian/plugins/doc-view/ (staged directory swap)",

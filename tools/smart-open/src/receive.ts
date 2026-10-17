@@ -4,7 +4,7 @@
 // only through your own ssh connections; the socket file itself is owner-only.
 //
 // Protocol: one JSON line in — {"url": "..."} or {"path": "/abs", "kind": "file"|"dir", "host":
-// "<ssh alias>"} — one line out:
+// "<ssh alias>", "app"?: "vscode"|"obsidian"} — one line out:
 //   ok                  the URL was handed to the opener, which exited 0 — or was still starting
 //                       after --settle-ms (a cold-starting app: it launched, so say so). For a
 //                       path that means VS Code got the URL; VS Code then asks before opening a
@@ -18,8 +18,8 @@
 //
 // A PATH lives on the remote, so Finder cannot show it; it opens as a VS Code Remote-SSH window on
 // that box instead (vscode://vscode-remote/ssh-remote+<host>-code<path>, `:1` appended for a file,
-// since VS Code reads every other path as a folder). That is the one non-http scheme, and this
-// receiver BUILDS it — the remote sends a path and a host, never a URL. Both aliases are vouched by
+// since VS Code reads every other path as a folder). This non-http scheme is built here: the
+// remote sends a path and a host, never a URL. Both aliases are vouched by
 // `ssh -G` (resolve without connecting):
 //   <host>        must forward smart-open to THIS socket — a box you deliberately attach from, so a
 //                 remote process cannot point your editor at an arbitrary ssh server
@@ -29,6 +29,10 @@
 //                 its window closes — and the next `o` in the still-attached terminal would open on
 //                 the remote's own screen.
 // What the editor then runs is VS Code's business (remote-path prompt, Workspace Trust).
+// Obsidian accepts directories only. After the attach alias is vouched, the Mac's resolved
+// hostname/port/user/proxyjump go to obsidian/open-remote.ts, which registers a local Remote SSH
+// shadow, applies pinned plugins, sets the absolute remotePath and auto-connect id, trusts it,
+// and opens it. This branch waits for the complete operation (protocol.ts), never an early ok.
 //
 // BOUNDS. That socket is reachable by EVERY process of your user on the remote — AI agents
 // included — and the owner-only mode does not separate them. So what they can make this Mac do is
@@ -56,7 +60,7 @@
 // --here). The limits protect the screen you sit at, not the availability of `o`.
 import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { attempt } from "../../shared/src/attempt.ts";
 import {
@@ -66,6 +70,7 @@ import {
   SETTLE_MS,
 } from "../../shared/src/sockets.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
+import { OBSIDIAN_OPEN_MS } from "./protocol.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -81,7 +86,7 @@ const argv = cli(
     parameters: [],
     help: {
       description:
-        "Listen for smart-open requests forwarded over ssh: open http(s) URLs here, and remote paths as VS Code Remote-SSH windows.",
+        "Listen for smart-open requests forwarded over ssh: open http(s) URLs and remote directories in VS Code or Obsidian Remote SSH.",
     },
     flags: {
       socket: {
@@ -252,6 +257,10 @@ const HOST = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/u;
 type Resolved = {
   target: string; // hostname:port as user — the box a connection would actually reach
   forwardsHere: boolean; // carries a RemoteForward onto this receiver's socket
+  hostname: string;
+  port: string;
+  user: string;
+  proxyjump: string | undefined;
 };
 async function sshResolve(
   host: string,
@@ -283,6 +292,10 @@ async function sshResolve(
   const value = (key: string) =>
     lines.find((l) => l.startsWith(`${key} `))?.slice(key.length + 1);
   return {
+    hostname: value("hostname") ?? "",
+    port: value("port") ?? "",
+    user: value("user") ?? "",
+    proxyjump: value("proxyjump"),
     target: `${value("hostname")}:${value("port")} as ${value("user")}`,
     forwardsHere: lines.some(
       (l) => l.startsWith("remoteforward ") && l.endsWith(` ${sock}`),
@@ -304,7 +317,11 @@ function malformedPath(
   path: unknown,
   kind: unknown,
   host: unknown,
+  app: unknown,
 ): string | null {
+  if (app !== "vscode" && app !== "obsidian") return "refused: unknown app";
+  if (app === "obsidian" && kind !== "dir")
+    return "refused: Obsidian requires kind=dir";
   if (
     typeof path !== "string" ||
     !path.startsWith("/") ||
@@ -319,7 +336,7 @@ function malformedPath(
   if (kind !== "file" && kind !== "dir")
     return "refused: kind must be file or dir";
   // VS Code would read the trailing :<digits> as a line number and open a file instead.
-  if (kind === "dir" && /:\d+$/u.test(path))
+  if (app === "vscode" && kind === "dir" && /:\d+$/u.test(path))
     return "refused: a folder whose name ends in :<digits> cannot be opened by URL";
   if (typeof host !== "string" || host === "")
     return "refused: no ssh host (the remote's forward names no client alias)";
@@ -331,8 +348,9 @@ async function handlePath(
   path: unknown,
   kind: unknown,
   host: unknown,
+  app: unknown = "vscode",
 ): Promise<string> {
-  const bad = malformedPath(path, kind, host);
+  const bad = malformedPath(path, kind, host, app);
   if (bad !== null) return bad;
   // Narrowed by malformedPath; restated for the type checker.
   const [p, k, h] = [String(path), String(kind), String(host)];
@@ -342,14 +360,16 @@ async function handlePath(
   }
   const start = performance.now();
   const editor = editorHost(h);
-  const [attach, code] = await Promise.all([
-    sshResolve(h, settleMs),
-    sshResolve(editor, settleMs),
-  ]);
+  const attach = await sshResolve(h, settleMs);
   if (attach?.forwardsHere !== true) {
     note("unvouched host");
     return `refused: ${h} does not forward smart-open to this receiver`;
   }
+  if (app === "obsidian") return openObsidian(p, h, attach);
+  const code = await sshResolve(
+    editor,
+    Math.max(1, settleMs - (performance.now() - start)),
+  );
   if (
     code === undefined ||
     code.forwardsHere ||
@@ -366,6 +386,47 @@ async function handlePath(
   return runOpener(editorUrl(editor, p, k), left);
 }
 
+let obsidianBusy = false;
+async function openObsidian(
+  path: string,
+  alias: string,
+  ssh: Resolved,
+): Promise<string> {
+  if (obsidianBusy) return "busy: Obsidian setup in progress";
+  obsidianBusy = true;
+  const outcome = await attempt(async () => {
+    // The helper receives only Mac-resolved SSH fields, never remote-supplied connection data.
+    const helper =
+      process.env.SMART_OPEN_OBSIDIAN_OPENER ??
+      join(import.meta.dir, "../../../obsidian/open-remote.ts");
+    const proc = Bun.spawn([process.execPath, helper], {
+      stdin: new Blob([
+        JSON.stringify({
+          alias,
+          path,
+          hostname: ssh.hostname,
+          port: ssh.port,
+          user: ssh.user,
+          proxyjump: ssh.proxyjump,
+        }),
+      ]),
+      stdout: "ignore",
+      stderr: "pipe",
+      timeout: OBSIDIAN_OPEN_MS,
+      killSignal: "SIGKILL",
+    });
+    const [code, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stderr).text(),
+    ]);
+    if (code === 0) return "ok";
+    note("Obsidian setup failed");
+    return `refused: Obsidian setup failed: ${stderr.slice(0, 2000).replaceAll(/\s+/gu, " ")}`;
+  });
+  obsidianBusy = false;
+  return outcome.ok ? outcome.value : "refused: Obsidian helper unavailable";
+}
+
 // A request line is a JSON object; which keys it has says what it asks for. Anything else (not
 // JSON, an array, a scalar) is "no keys", which falls through to the URL refusal below.
 const MessageSchema = z.record(z.string(), z.unknown());
@@ -375,7 +436,9 @@ async function handle(line: string): Promise<string> {
   const checked = jsonOf(MessageSchema).safeParse(line);
   const msg = checked.success ? checked.data : undefined;
   if (msg !== undefined && Object.hasOwn(msg, "path"))
-    return handlePath(msg["path"], msg["kind"], msg["host"]);
+    return handlePath(msg["path"], msg["kind"], msg["host"], msg["app"]);
+  if (msg !== undefined && Object.hasOwn(msg, "app"))
+    return "refused: app requires a directory path";
   const rawUrl = msg?.["url"];
   const url = typeof rawUrl === "string" ? rawUrl : "";
   if (!/^https?:\/\/[^\s]+$/iu.test(url)) return "refused: only http(s) URLs";

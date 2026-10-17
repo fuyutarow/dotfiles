@@ -148,8 +148,113 @@ if(name === "kill" || name === "killall") process.exit(99);
     (await exists(join(home, "events")))
       ? readFile(join(home, "events"), "utf8")
       : "";
-  return { home, target, registry, original, run, events };
+  return { home, target, registry, original, run, events, env };
 }
+
+test("remote shadow is applied and prepared before trust and opening, including registered retries", async () => {
+  const f = await fixture();
+  const initial = await object(f.registry);
+  initial.vaults = { ...record(initial.vaults), parent: { path: f.home } };
+  await writeFile(f.registry, JSON.stringify(initial));
+  await writeFile(
+    join(f.home, "plugins.json"),
+    JSON.stringify({ "remote-ssh": { local: "local-plugins/doc-view" } }),
+  );
+  const script = join(f.home, "remote.ts");
+  await writeFile(
+    script,
+    `
+import { openVault } from ${JSON.stringify(join(import.meta.dir, "open-vault.ts"))};
+import { prepareShadow } from ${JSON.stringify(join(import.meta.dir, "open-remote.ts"))};
+import { ok, err } from 'neverthrow';
+const target = ${JSON.stringify(f.target)};
+const result = await openVault(target, () => prepareShadow(target, {
+ alias:'probe-host',path:'/remote/absolute/work',hostname:'box.invalid',port:22,user:'fixture-user'
+}), async () => {
+ const text = await Bun.file(target+'/.obsidian/plugins/remote-ssh/data.json').text();
+ if(!text.includes('autoConnectProfileId') || !text.includes('/remote/absolute/work')) return err('not prepared before trust');
+ await Bun.write(process.env.HOME+'/trusted', '1');
+ return ok(undefined);
+});
+if(result.isErr()) console.error(result.error);
+process.exitCode=result.isOk()?0:2;
+`,
+  );
+  // Resolve dependencies from the repository even though the entry fixture has a temporary HOME.
+  const run = async () => {
+    const child = Bun.spawn([process.execPath, script], {
+      env: { ...f.env, NODE_PATH: join(import.meta.dir, "../node_modules") },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 30_000,
+    });
+    const [exit, out, error] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    return { exit, out, error };
+  };
+  expect(await run()).toMatchObject({ exit: 0, error: "" });
+  expect(await exists(join(f.home, "trusted"))).toBe(true);
+  expect(await exists(join(f.home, "opened"))).toBe(true);
+  expect(
+    Object.values(record((await object(f.registry)).vaults)).some(
+      (value) => record(value).path === f.target,
+    ),
+  ).toBe(true);
+  const state = await object(
+    join(f.target, ".obsidian/plugins/remote-ssh/data.json"),
+  );
+  expect(state.autoConnectProfileId).toMatch(/^so-/u);
+  // A partially installed registered shadow must be repaired on the next invocation.
+  await rm(join(f.target, ".obsidian/plugins/remote-ssh/main.js"));
+  expect(await run()).toMatchObject({ exit: 0, error: "" });
+  expect(
+    await exists(join(f.target, ".obsidian/plugins/remote-ssh/main.js")),
+  ).toBe(true);
+});
+
+test("WSL obs resolves its default directory and refuses files or extra arguments", async () => {
+  const f = await fixture();
+  const argsFile = join(f.home, "obs-args");
+  await writeFile(
+    join(f.home, "bin/smart-open"),
+    `#!${process.execPath}\nawait Bun.write(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));\n`,
+    { mode: 0o755 },
+  );
+  const run = async (args: string[]) => {
+    const child = Bun.spawn(
+      [
+        "zsh",
+        "-f",
+        "-c",
+        'source "$DOTFILES/zsh/wsl.zsh"; obs "$@"',
+        "obs",
+        ...args,
+      ],
+      {
+        env: f.env,
+        cwd: f.target,
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10_000,
+      },
+    );
+    const [exit, out, error] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    return { exit, out, error };
+  };
+  expect((await run([])).exit).toBe(0);
+  expect(await readFile(argsFile, "utf8")).toBe(
+    JSON.stringify(["--app", "obsidian", "--", f.target]),
+  );
+  expect((await run([f.registry])).exit).toBe(1);
+  expect((await run([f.target, f.target])).exit).toBe(1);
+});
 
 test("wrapper registers, gracefully saves, retains flushed entries in order, applies only the new vault and opens by ID", async () => {
   const f = await fixture();

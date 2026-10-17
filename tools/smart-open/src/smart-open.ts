@@ -55,6 +55,7 @@ import {
 } from "../../shared/src/sockets.ts";
 import { z } from "../../shared/src/zod.ts";
 import pkg from "../package.json" with { type: "json" };
+import { OBSIDIAN_ACK_MS } from "./protocol.ts";
 
 const die = (msg: string, code = 2): never => {
   console.error(`smart-open: ${msg}`);
@@ -77,6 +78,11 @@ const argv = cli(
         "Open URLs or paths on the screen you are in front of (client over ssh/herdr, else this machine).",
     },
     flags: {
+      app: {
+        type: String,
+        default: "vscode",
+        description: "remote path app: vscode or obsidian (directories only)",
+      },
       here: {
         type: Boolean,
         default: false,
@@ -92,6 +98,10 @@ const argv = cli(
   undefined,
   Bun.argv.slice(2),
 );
+if (!["vscode", "obsidian"].includes(argv.flags.app))
+  die("--app must be vscode or obsidian");
+if (argv.flags.app === "obsidian" && argv.flags.here)
+  die("--app obsidian requires a client SSH forward");
 
 const pathExists = async (path: string): Promise<boolean> =>
   (await attempt(() => stat(path))).ok;
@@ -181,6 +191,7 @@ const ErrorCodeSchema = z.object({ code: z.unknown() });
 
 // One line out, one line back. Resolves to the outcome; never throws.
 async function toClient(request: Record<string, string>): Promise<Probe> {
+  const ackMs = request.app === "obsidian" ? OBSIDIAN_ACK_MS : ACK_MS;
   const seen = await settled(fileKey(SOCKET));
   if (seen === undefined || !seen.socket)
     return { outcome: "no-socket", reply: "", why: "", seen };
@@ -191,8 +202,8 @@ async function toClient(request: Record<string, string>): Promise<Probe> {
     done({ outcome, reply: reply.trim(), why, seen });
   };
   const timer = setTimeout(() => {
-    finish("no-receiver", `accepted but sent no ok within ${ACK_MS} ms`);
-  }, ACK_MS);
+    finish("no-receiver", `accepted but sent no ok within ${ackMs} ms`);
+  }, ackMs);
   Bun.connect({
     unix: SOCKET,
     socket: {
@@ -324,25 +335,34 @@ async function dropStale(probe: Probe): Promise<string> {
 // Where a path goes. Only "no client attached" (no socket, or a dead bind) lands it here.
 async function routePath(path: string): Promise<Routed> {
   const editor = SSH_HOST === "" ? "<no alias: refused>" : editorHost(SSH_HOST);
+  const destination =
+    argv.flags.app === "obsidian"
+      ? `Obsidian (Remote SSH ${SSH_HOST})`
+      : `VS Code (ssh-remote+${editor})`;
   if (argv.flags.dryRun) {
-    const otherwise = OVER_SSH
-      ? "not opened (this shell is over ssh)"
-      : `${(await localCommand(path)).join(" ")} only if no client is attached (no socket, or a dead one); otherwise not opened`;
+    let otherwise = "not opened (Obsidian requires a client SSH forward)";
+    if (argv.flags.app !== "obsidian")
+      otherwise = OVER_SSH
+        ? "not opened (this shell is over ssh)"
+        : `${(await localCommand(path)).join(" ")} only if no client is attached (no socket, or a dead one); otherwise not opened`;
     console.log(
-      `${path} -> the client's VS Code (ssh-remote+${editor}) if ${SOCKET} answers; ${otherwise}`,
+      `${path} -> the client's ${destination} if ${SOCKET} answers; ${otherwise}`,
     );
     return { to: "client" };
   }
   const kind = (await stat(path)).isDirectory() ? "dir" : "file";
   const { value: probe, took } = await waitSaying(
-    `waiting for the client's VS Code (ssh-remote+${editor}) to take ${path}`,
-    toClient({ path, kind, host: SSH_HOST }),
+    `waiting for the client's ${destination} to take ${path}`,
+    toClient({
+      path,
+      kind,
+      host: SSH_HOST,
+      ...(argv.flags.app === "obsidian" ? { app: "obsidian" } : {}),
+    }),
   );
   if (probe.outcome === "client") {
     // `sent`, not `opened`: VS Code asks before opening a remote path, and a No is invisible here.
-    console.log(
-      `sent to the client's VS Code (ssh-remote+${editor})${took}: ${path}`,
-    );
+    console.log(`sent to the client's ${destination}${took}: ${path}`);
     return { to: "client" };
   }
   if (probe.outcome === "no-socket") return HERE;
@@ -361,6 +381,12 @@ async function landHere(
   target: string,
   why: string | undefined,
 ): Promise<boolean> {
+  if (argv.flags.app === "obsidian") {
+    console.error(
+      `smart-open: Obsidian needs a live Mac receiver and SSH forward (${why ?? LOOKED_FOR}); reattach with herdr --remote <alias>`,
+    );
+    return false;
+  }
   if (OVER_SSH && !argv.flags.here) {
     // One finding per line, in the order a developer acts on them: what failed, what was looked
     // for, why it matters, the fix (where to run it), and the escape hatch. <alias> is the client's
@@ -443,6 +469,15 @@ async function openHere(target: string): Promise<boolean> {
 }
 
 async function openOne(raw: string): Promise<boolean> {
+  if (argv.flags.app === "obsidian") {
+    const directory = await attempt(async () =>
+      (await stat(resolve(raw))).isDirectory(),
+    );
+    if (isUrl(raw) || !directory.ok || !directory.value) {
+      console.error(`smart-open: --app obsidian requires a directory: ${raw}`);
+      return false;
+    }
+  }
   if (isUrl(raw)) {
     const routed = argv.flags.here ? HERE : await routeUrl(raw);
     if (routed.to !== "here") return routed.to === "client";

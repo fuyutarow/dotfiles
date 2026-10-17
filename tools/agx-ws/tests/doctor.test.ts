@@ -43,3 +43,28 @@ test("workspace findings omit only timer-eligible classes and retain owner actio
       expect(doctorFindings([row(verdict, kind, true)])).toEqual([]);
   }
 });
+
+test("recent recorded workspaces cannot emit landing findings, but retain stale and abandoned actions", () => {
+  const recent = (
+    verdict: string,
+    kind: "ws" | "legacy" = "ws",
+    recorded = true,
+  ) => ({
+    ...row(verdict, kind, recorded),
+    ageMs: 72 * 60 * 60 * 1000,
+  });
+  for (const verdict of [
+    "empty",
+    "landed",
+    "unlanded",
+    "no trunk",
+    "keep",
+    "kept",
+    "land-temp",
+  ])
+    expect(doctorFindings([recent(verdict)])).toEqual([]);
+  for (const verdict of ["stale", "abandoned"])
+    expect(doctorFindings([recent(verdict)])).toHaveLength(1);
+  expect(doctorFindings([recent("empty", "ws", false)])).toHaveLength(1);
+  expect(doctorFindings([recent("unlanded", "legacy")])).toHaveLength(1);
+});

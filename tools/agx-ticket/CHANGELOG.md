@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7 — 2026-10-18
+
+- Reduce doctor CPU by sharing run history, ticket metadata, and workspace landing probes within each diagnostic.
+
 ## 0.1.6 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

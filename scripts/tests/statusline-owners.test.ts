@@ -64,7 +64,7 @@ test("registry links all owner units and deployment enables both singleton trigg
   expect(calls).toEqual([
     ["daemon-reload"],
     ["enable", "--now", "statusline-sampler.timer", "agx-doctor.path"],
-    ["start", "agx-doctor.service"],
+    ["start", "--no-block", "agx-doctor.service"],
   ]);
   calls.length = 0;
   expect(
@@ -89,7 +89,7 @@ test("registry links all owner units and deployment enables both singleton trigg
     "utf8",
   );
   expect(service).toContain("Type=oneshot");
-  expect(service).toContain("ExecStartPre=/usr/bin/sleep 1");
+  expect(service).toContain("ExecStartPre=/usr/bin/sleep 60");
   expect(service).toContain("SuccessExitStatus=1");
 });
 

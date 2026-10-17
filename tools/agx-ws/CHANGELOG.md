@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.5 — 2026-10-18
+
+- Reduce doctor work by sharing run history, skipping silent recent landing checks, and batching content comparisons.
+
 ## 0.8.4 — 2026-10-17
 
 - Keep ws add independent of repository-wide verdict scans and enforce a whole-command deadline that names the active step.

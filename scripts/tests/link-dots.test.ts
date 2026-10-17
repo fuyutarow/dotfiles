@@ -16,12 +16,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { mkdir, symlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { LINKS } from "../config-registry.ts";
 import {
   applies,
   assertRoots,
   type Ctx,
+  deployStatuslineOwners,
   ensureToolOwned,
   link,
   loadSmartOpenReceiver,
@@ -58,6 +60,61 @@ function fixture(mode: Ctx["mode"]): Ctx {
 
 const isLink = (p: string): boolean =>
   lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink() === true;
+
+async function ownerFixture(): Promise<Ctx> {
+  const ctx = { ...fixture("safe"), dotfiles: REPO };
+  const directory = join(ctx.home, ".config/systemd/user");
+  await mkdir(directory, { recursive: true });
+  for (const unit of [
+    "statusline-sampler.service",
+    "statusline-sampler.timer",
+    "agx-doctor.service",
+    "agx-doctor.path",
+  ])
+    await symlink(join(REPO, "systemd", unit), join(directory, unit));
+  return ctx;
+}
+
+test("doctor findings never make link deployment wait for the diagnostic verdict", async () => {
+  const calls: string[][] = [];
+  const result = await deployStatuslineOwners(
+    await ownerFixture(),
+    (args) => {
+      calls.push(args);
+      // A blocking doctor start would exceed the deployment's 10s deadline.
+      return Promise.resolve(
+        args[0] === "start" && !args.includes("--no-block")
+          ? { code: 137, out: "" }
+          : { code: 0, out: "" },
+      );
+    },
+    true,
+  );
+  expect(result).toBeUndefined();
+  expect(calls).toContainEqual(["start", "--no-block", "agx-doctor.service"]);
+  const unit = await Bun.file(join(REPO, "systemd/agx-doctor.service")).text();
+  expect(unit).toMatch(/^SuccessExitStatus=1$/mu);
+  expect(unit).toMatch(/^ExecStartPre=\/usr\/bin\/sleep 60$/mu);
+  expect(unit).not.toContain("SuccessExitStatus=1 2");
+});
+
+test.each([
+  { code: 5, out: "bus connection refused" },
+  { code: 137, out: "" },
+])(
+  "owner deployment reports systemctl exit $code and its output",
+  async (failure) => {
+    const result = await deployStatuslineOwners(
+      await ownerFixture(),
+      () => Promise.resolve(failure),
+      true,
+    );
+    expect(result?.message).toContain(`exit ${failure.code}`);
+    expect(result?.message).toContain(
+      failure.out === "" ? "no output" : failure.out,
+    );
+  },
+);
 
 describe("sshSupportsAttachMatch", () => {
   test.each([

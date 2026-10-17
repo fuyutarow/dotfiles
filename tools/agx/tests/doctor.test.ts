@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import * as fs from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
@@ -88,6 +89,7 @@ async function fixture(name: string) {
     AGX_STATE_DIR: state,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: cache,
     DOCTOR_TICKET_RECORDS: ticketRecords,
+    DOCTOR_CALLS: join(root, "doctor-calls"),
   };
   for (const path of [dotfiles, repo]) {
     expect((await run(["jj", "git", "init", path], root, env)).exitCode).toBe(
@@ -111,7 +113,10 @@ async function fixture(name: string) {
     ).toBe(0);
   }
   const fakeAgx = join(bin, "agx");
-  writeFileSync(fakeAgx, `#!/bin/sh\ncat "$DOCTOR_TICKET_RECORDS"\n`);
+  writeFileSync(
+    fakeAgx,
+    `#!/bin/sh\nprintf '%s\\n' "$*" >> "$DOCTOR_CALLS"\ncat "$DOCTOR_TICKET_RECORDS"\n`,
+  );
   chmodSync(fakeAgx, 0o755);
   writeFileSync(ticketRecords, "[]\n");
   return {
@@ -142,6 +147,13 @@ test("agx doctor clean fixture is silent on stdout and exits zero", async () => 
   expect(result.exitCode, result.stderr).toBe(0);
   expect(result.stdout).toBe("");
   expect(result.stderr).toBe("agx doctor: 0 finding(s)\n");
+  // Ticket doctor reads global history once across both repositories.
+  expect(
+    (await Bun.file(f.env.DOCTOR_CALLS!).text())
+      .trim()
+      .split("\n")
+      .filter((line) => line === "ls --json --all"),
+  ).toEqual(["ls --json --all"]);
   expect(await Bun.file(join(f.state, "records.jsonl")).exists()).toBe(false);
   expect(
     await Promise.all([
@@ -485,6 +497,106 @@ test("outside-home ignores 199 finished historical paths, but retains active, un
 async function runTicketDoctor(cwd: string, env: NodeJS.ProcessEnv) {
   return run([process.execPath, TICKET_CLI, "doctor"], cwd, env);
 }
+
+test("outside-home scanning ignores symlink files and symlink directories", async () => {
+  const f = await fixture("scan-symlinks");
+  const external = join(f.root, "external");
+  await fs.mkdir(external);
+  await fs.writeFile(join(external, "hidden.md"), ticketText("hidden"));
+  await fs.symlink(external, join(f.repo, "external"));
+  await fs.symlink(join(external, "hidden.md"), join(f.repo, "alias.md"));
+  const result = await runTicketDoctor(f.dotfiles, f.env);
+  expect(result.exitCode, result.stderr).toBe(0);
+  expect(result.stdout).toBe("");
+});
+
+test("header scan retains hidden, ignored, CRLF and spaced paths, but excludes dependency trees", async () => {
+  const f = await fixture("scan-headers");
+  await fs.mkdir(join(f.repo, ".hidden"));
+  await fs.mkdir(join(f.repo, "node_modules"));
+  await fs.mkdir(join(f.repo, ".ws"));
+  await fs.writeFile(join(f.repo, ".gitignore"), "*.md\n");
+  await fs.writeFile(
+    join(f.repo, ".hidden/crlf.md"),
+    ticketText("crlf").replaceAll("\n", "\r\n"),
+  );
+  await fs.writeFile(join(f.repo, "with space.md"), ticketText("with-space"));
+  await fs.writeFile(
+    join(f.repo, "node_modules/excluded.md"),
+    ticketText("excluded"),
+  );
+  await fs.writeFile(join(f.repo, ".ws/excluded.md"), ticketText("excluded"));
+  await fs.writeFile(
+    join(f.repo, "documentation.md"),
+    "# Documentation\n" + ticketText("not-a-ticket"),
+  );
+  const result = await runTicketDoctor(f.dotfiles, f.env);
+  expect(result.exitCode, result.stderr).toBe(1);
+  expect(
+    result.stdout
+      .trim()
+      .split("\n")
+      .map((line) => line.split("\t")[2])
+      .toSorted((a, b) => (a ?? "").localeCompare(b ?? "")),
+  ).toEqual(["crlf", "with space"]);
+});
+
+test("invalid run history remains a failure and cannot publish a complete snapshot", async () => {
+  const f = await fixture("history-failure");
+  await fs.writeFile(f.ticketRecords, "invalid history");
+  const result = await run(
+    [process.execPath, ENTRY, "doctor", "--json"],
+    f.dotfiles,
+    f.env,
+  );
+  expect(result.exitCode).toBe(2);
+  expect(result.stderr).toContain("invalid agx ls --json");
+  expect(result.stdout).toContain('"complete":false');
+  expect(await Bun.file(join(f.state, "doctor.json")).exists()).toBe(false);
+});
+
+test("forgotten accepted workspaces need one inventory, not a jj log per ticket", async () => {
+  const f = await fixture("forgotten-workspaces");
+  const records = Array.from({ length: 30 }, (_, i) => ({
+    id: `gone-${i}`,
+    ticket: `gone-${i}`,
+    started_at: "2026-10-16T00:00:00Z",
+    state: "ended",
+    judgment: { decision: "accept" },
+    cwd: f.repo,
+    workspace: join(f.root, `forgotten-${i}`),
+    workspace_name: `forgotten-${i}`,
+  }));
+  for (const record of records)
+    await fs.writeFile(
+      join(f.tickets, record.ticket + ".md"),
+      ticketText(record.ticket),
+    );
+  await fs.writeFile(f.ticketRecords, JSON.stringify(records));
+  const calls = join(f.root, "jj-calls");
+  const shim = join(f.root, "bin/jj");
+  await fs.writeFile(
+    shim,
+    `#!${process.execPath}
+import { appendFile } from "node:fs/promises";
+const args = process.argv.slice(2);
+if (args.includes("workspace") || args.includes("log")) await appendFile(${JSON.stringify(calls)}, JSON.stringify(args) + "\\n");
+const child = Bun.spawn([${JSON.stringify(REAL_JJ)}, ...args], {stdin:"inherit", stdout:"inherit", stderr:"inherit"});
+process.exitCode = await child.exited;
+`,
+  );
+  await fs.chmod(shim, 0o755);
+  const result = await runTicketDoctor(f.dotfiles, f.env);
+  expect(result.exitCode, result.stderr).toBe(0);
+  const commands = (await Bun.file(calls).text()).trim().split("\n");
+  expect(commands.filter((line) => line.includes('"log"'))).toHaveLength(0);
+  expect(
+    commands.filter((line) => line.includes('"workspace","list"')),
+  ).toHaveLength(1);
+  expect((await Bun.file(f.env.DOCTOR_CALLS!).text()).trim()).toBe(
+    "ls --json --all",
+  );
+});
 
 const endedRecord = (id: string, extra: object = {}) => ({
   kind: "ended",

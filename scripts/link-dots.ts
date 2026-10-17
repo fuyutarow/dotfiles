@@ -811,12 +811,12 @@ export async function deployStatuslineOwners(
   for (const args of [
     ["daemon-reload"],
     ["enable", "--now", "statusline-sampler.timer", "agx-doctor.path"],
-    ["start", "agx-doctor.service"],
+    ["start", "--no-block", "agx-doctor.service"],
   ]) {
     const result = await probe(args);
     if (result.code !== 0)
       return new Error(
-        `systemctl --user ${args.join(" ")} failed: ${result.out}; repair: mise run link:dots`,
+        `systemctl --user ${args.join(" ")} failed (exit ${result.code}): ${result.out === "" ? "no output (systemctl may have timed out)" : result.out}; repair: mise run link:dots`,
       );
   }
   say(

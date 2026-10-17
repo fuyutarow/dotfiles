@@ -126,6 +126,15 @@ async function committedConfig(
       ]);
       if (head.exit !== 0) return good({});
     }
+    const file = await read(
+      jj
+        ? ["jj", ...JJ_READ_ARGS, "file", "show", "-r", "@", ".agx.toml"]
+        : ["git", "--no-optional-locks", "show", "HEAD:.agx.toml"],
+    );
+    if (file.exit === 0)
+      return attempt((): unknown => Bun.TOML.parse(file.out));
+    // On the common present-file path one invocation suffices. A failed read
+    // still needs a listing to distinguish absence from a real read failure.
     const names = await read(
       jj
         ? ["jj", ...JJ_READ_ARGS, "file", "list", "-r", "@", ".agx.toml"]
@@ -144,14 +153,7 @@ async function committedConfig(
         `${root}: cannot read committed .agx.toml: ${names.err.trim()}`,
       );
     if (names.out.trim() === "") return good({});
-    const file = await read(
-      jj
-        ? ["jj", ...JJ_READ_ARGS, "file", "show", "-r", "@", ".agx.toml"]
-        : ["git", "--no-optional-locks", "show", "HEAD:.agx.toml"],
-    );
-    if (file.exit !== 0)
-      return bad(`cannot read committed .agx.toml: ${file.err.trim()}`);
-    return attempt((): unknown => Bun.TOML.parse(file.out));
+    return bad(`cannot read committed .agx.toml: ${file.err.trim()}`);
   });
   return result.ok ? result.value : result;
 }
@@ -289,11 +291,26 @@ async function command(
         `${args.join(" ")} failed (exit ${ran.value.code}): ${ran.value.err.trim()}`,
       );
 }
-async function belongs(run: Run, ctx: Context): Promise<boolean> {
-  const found = await attempt(() => repository(run.workspace));
+function repositoryReader() {
+  const cache = new Map<string, ReturnType<typeof repository>>();
+  return (path: string) => {
+    let read = cache.get(path);
+    if (read === undefined) {
+      read = repository(path);
+      cache.set(path, read);
+    }
+    return read;
+  };
+}
+async function belongs(
+  run: Run,
+  ctx: Context,
+  readRepository = repository,
+): Promise<boolean> {
+  const found = await attempt(() => readRepository(run.workspace));
   if (found.ok && ctx.store !== null && found.value.store === ctx.store)
     return true;
-  const cwd = await attempt(() => repository(run.cwd));
+  const cwd = await attempt(() => readRepository(run.cwd));
   if (cwd.ok && cwd.value.root === ctx.root) return true;
   // ws GC can remove the tree before ticket GC. Preserve run identity from ws
   // convention, but landing still fails closed when jj forgot the workspace.
@@ -379,23 +396,39 @@ export async function list(
   if (!records.ok) return records;
   const runs = jsonOf(z.array(Run)).safeParse(records.value);
   if (!runs.success) return bad(`invalid agx ls --json: ${runs.error.message}`);
-  const present = await exists(ctx.directory);
-  if (!present.ok) return present;
-  if (!present.value) return good([]);
-  const entries = await readdir(ctx.directory, { withFileTypes: true });
+  return listWithRuns(ctx, runs.data, options);
+}
+
+/** One history read per fleet diagnostic, indexed once per repository. */
+async function listWithRuns(
+  ctx: Context,
+  runs: Run[],
+  options: { quiet?: boolean; findingsOnly?: boolean },
+  files = new Map<string, { name: string; ticket: string; path: string }[]>(),
+  readRepository = repositoryReader(),
+  readLanding = landing,
+): Promise<Attempt<TicketRow[]>> {
+  const byTicket = new Map<string, Run[]>();
+  for (const run of runs) {
+    const group = byTicket.get(run.ticket) ?? [];
+    group.push(run);
+    byTicket.set(run.ticket, group);
+  }
+  let entries = files.get(ctx.directory);
+  if (entries === undefined) {
+    const inventory = await ticketFiles(ctx.directory);
+    if (!inventory.ok) return inventory;
+    entries = inventory.value;
+    files.set(ctx.directory, entries);
+  }
   const rows: TicketRow[] = [];
-  for (const entry of entries.toSorted((a, b) =>
-    a.name.localeCompare(b.name),
-  )) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    const path = join(ctx.directory, entry.name);
-    const ticket = await ticketName(path);
-    const matching = runs.data.filter(
-      (r) =>
-        r.ticket === ticket || r.ticket === path || r.ticket === entry.name,
+  for (const entry of entries) {
+    const { path, ticket } = entry;
+    const matching = [...new Set([ticket, path, entry.name])].flatMap(
+      (key) => byTicket.get(key) ?? [],
     );
     const membership = await Promise.all(
-      matching.map((run) => belongs(run, ctx)),
+      matching.map((run) => belongs(run, ctx, readRepository)),
     );
     const own = matching.filter((_run, index) => membership[index] === true);
     own.sort((a, b) => Temporal.Instant.compare(b.started_at, a.started_at));
@@ -403,10 +436,11 @@ export async function list(
     const active = own.find((run) => run.state === "running");
     const chosen = active ?? latest;
     const status = chosen === undefined ? "no-run" : stateOf(chosen);
+    if (options.findingsOnly === true && status !== "accepted") continue;
     const landed =
       chosen === undefined
         ? { landed: null, reason: "no run" }
-        : await landing(chosen, ctx, options.quiet);
+        : await readLanding(chosen, ctx, options.quiet);
     const physical = await realpath(path);
     const volatile = [
       "/tmp",
@@ -425,6 +459,24 @@ export async function list(
     });
   }
   return good(rows);
+}
+
+async function ticketFiles(
+  directory: string,
+): Promise<Attempt<{ name: string; ticket: string; path: string }[]>> {
+  const present = await exists(directory);
+  if (!present.ok) return present;
+  if (!present.value) return good([]);
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: { name: string; ticket: string; path: string }[] = [];
+  for (const entry of entries.toSorted((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    const path = join(directory, entry.name);
+    files.push({ name: entry.name, ticket: await ticketName(path), path });
+  }
+  return good(files);
 }
 
 export async function collect(
@@ -494,9 +546,6 @@ export async function doctor(): Promise<Attempt<string[]>> {
     if (resolve(ctx.value.root) !== backing || seen.has(backing)) continue;
     seen.add(backing);
     contexts.push({ ...ctx.value, backing });
-    const rows = await list(backing, { quiet: true });
-    if (!rows.ok) return rows;
-    findings.push(...acceptedLandedFindings(backing, rows.value));
   }
   const homes = contexts.flatMap((ctx) => [
     ctx.directory,
@@ -511,6 +560,24 @@ export async function doctor(): Promise<Attempt<string[]>> {
   if (!records.ok) return records;
   const runs = jsonOf(z.array(Run)).safeParse(records.value);
   if (!runs.success) return bad("invalid agx ls --json");
+  const files = new Map<
+    string,
+    { name: string; ticket: string; path: string }[]
+  >();
+  const readRepository = repositoryReader();
+  const readLanding = diagnosticLandingReader();
+  for (const ctx of contexts) {
+    const rows = await listWithRuns(
+      ctx,
+      runs.data,
+      { quiet: true, findingsOnly: true },
+      files,
+      readRepository,
+      readLanding,
+    );
+    if (!rows.ok) return rows;
+    findings.push(...acceptedLandedFindings(ctx.backing, rows.value));
+  }
   const actionable = runs.data.filter(
     (run) =>
       run.ticket_path !== undefined &&
@@ -521,7 +588,7 @@ export async function doctor(): Promise<Attempt<string[]>> {
   for (const run of actionable) {
     const path = resolve(run.cwd, run.ticket_path ?? run.ticket);
     const membership = await Promise.all(
-      contexts.map((candidate) => belongs(run, candidate)),
+      contexts.map((candidate) => belongs(run, candidate, readRepository)),
     );
     const ctx = contexts.find(
       (_candidate, index) => membership[index] === true,
@@ -549,6 +616,37 @@ export async function doctor(): Promise<Attempt<string[]>> {
         .join("\t"),
     );
   return good(findings);
+}
+
+/** Forgetting a workspace makes landing unknown. Discover missing names once,
+ * rather than spawning jj for every historical ticket. Caches last one run. */
+function diagnosticLandingReader(): typeof landing {
+  const workspaces = new Map<string, Promise<Attempt<string>>>();
+  const results = new Map<string, ReturnType<typeof landing>>();
+  return async (run, ctx, quiet) => {
+    if (ctx.store === null) return landing(run, ctx, quiet);
+    let inventory = workspaces.get(ctx.root);
+    if (inventory === undefined) {
+      inventory = command(
+        ["jj", ...JJ_READ_ARGS, "workspace", "list", "-T", 'name ++ "\\n"'],
+        ctx.root,
+        quiet,
+      );
+      workspaces.set(ctx.root, inventory);
+    }
+    const names = await inventory;
+    if (!names.ok) return { landed: null, reason: errorMessage(names.error) };
+    const name = run.workspace_name ?? basename(run.workspace);
+    if (!names.value.split("\n").includes(name))
+      return { landed: null, reason: "workspace is no longer registered" };
+    const key = JSON.stringify([ctx.root, name, run.end_commit]);
+    let result = results.get(key);
+    if (result === undefined) {
+      result = landing(run, ctx, quiet);
+      results.set(key, result);
+    }
+    return result;
+  };
 }
 
 function acceptedLandedFindings(backing: string, rows: TicketRow[]): string[] {

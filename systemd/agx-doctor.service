@@ -6,8 +6,10 @@ StartLimitIntervalSec=0
 Type=oneshot
 WorkingDirectory=%h/dotfiles
 Environment=PATH=%h/.bun/bin:%h/.local/bin:%h/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
-# Coalesce a burst of record and workspace publications in one singleton service.
-ExecStartPre=/usr/bin/sleep 1
+# Every activation waits 60s, including after failures. The singleton coalesces
+# input changes during this window and the run; doctor starts at most once/60s.
+# Keep StartLimitIntervalSec=0: a rate-limit rejection would disable the path.
+ExecStartPre=/usr/bin/sleep 60
 ExecStart=%h/.bun/bin/agx doctor --json
 SuccessExitStatus=1
 TimeoutStartSec=120s

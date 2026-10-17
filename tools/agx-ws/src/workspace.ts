@@ -129,20 +129,12 @@ export async function readConfig(
   const file = join(repo.backing, CONFIG_FILE);
   let text: string;
   if (committed) {
-    const files = await jjOut(
-      ["file", "list", "-r", "@-", CONFIG_FILE],
-      repo.backing,
-      true,
-    );
-    if (!files.ok) return files;
-    if (files.value.trim() === "")
-      return good({ ready: [], trunk: "trunk()", keep: [] });
     const content = await jjOut(
       ["file", "show", "-r", "@-", CONFIG_FILE],
       repo.backing,
       true,
     );
-    if (!content.ok) return content;
+    if (!content.ok) return missingCommittedConfig(repo, content);
     text = content.value;
   } else {
     if (!existsSync(file))
@@ -157,6 +149,21 @@ export async function readConfig(
     : bad(
         `${file}: ${checked.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
       );
+}
+
+async function missingCommittedConfig(
+  repo: Repo,
+  failure: Attempt<never>,
+): Promise<Attempt<Config>> {
+  const files = await jjOut(
+    ["file", "list", "-r", "@-", CONFIG_FILE],
+    repo.backing,
+    true,
+  );
+  if (!files.ok) return files;
+  return files.value.trim() === ""
+    ? good({ ready: [], trunk: "trunk()", keep: [] })
+    : failure;
 }
 
 function legacyWorkspaceName(slug: string): Attempt<string> {
@@ -1278,6 +1285,15 @@ function patchEdits(diff: string): Set<string> | null {
   );
 }
 
+function patchesByFile(diff: string): Map<string, string> {
+  return new Map(
+    diff
+      .split(/^diff --git /mu)
+      .filter(Boolean)
+      .map((block) => [block.split("\n", 1)[0]!, `diff --git ${block}`]),
+  );
+}
+
 type ContentResult = {
   differing: string[];
   total: number;
@@ -1409,17 +1425,57 @@ async function compareContent(
   const delta = entries.every((line) => /^[AMD] /u.test(line))
     ? new Set(entries.map((line) => line.slice(2)))
     : undefined;
+  const pending = changed.filter(
+    (path) =>
+      !consumed.includes(path) && (delta === undefined || delta.has(path)),
+  );
+  if (pending.length === 0)
+    return good({ differing, total: changed.length, consumed });
+  const batch = await Promise.all(
+    [tip, trunk].map((revision) =>
+      jjOut(
+        [
+          "diff",
+          "--from",
+          base,
+          "--to",
+          revision,
+          "--git",
+          "--context",
+          "0",
+          "--",
+          ...pending.map((path) => `root-file:${path}`),
+        ],
+        repo.backing,
+        true,
+      ),
+    ),
+  );
+  const [workBatch, integratedBatch] = batch;
+  if (workBatch === undefined || integratedBatch === undefined)
+    return bad("missing diff comparison");
+  if (!workBatch.ok) return workBatch;
+  if (!integratedBatch.ok) return integratedBatch;
+  const byRevision = [
+    patchesByFile(workBatch.value),
+    patchesByFile(integratedBatch.value),
+  ];
   for (const path of changed) {
     if (consumed.includes(path)) continue;
     if (delta !== undefined && !delta.has(path)) continue;
     const fileset = `root-file:${path}`;
-    const diff = await jjOut(
-      ["diff", "--from", tip, "--to", trunk, "--summary", "--", fileset],
-      repo.backing,
-      true,
-    );
-    if (!diff.ok) return diff;
-    if (diff.value.trim() === "") continue;
+    // A recognized batch summary already tells us this exact file differs.
+    // Only ambiguous rename/unknown displays need another per-file probe.
+    const diff =
+      delta === undefined
+        ? await jjOut(
+            ["diff", "--from", tip, "--to", trunk, "--summary", "--", fileset],
+            repo.backing,
+            true,
+          )
+        : undefined;
+    if (diff?.ok === false) return diff;
+    if (diff?.value.trim() === "") continue;
     const releaseFile = /^tools\/([^/]+)\/(package\.json|CHANGELOG\.md)$/u.exec(
       path,
     );
@@ -1430,23 +1486,30 @@ async function compareContent(
     )
       continue;
     const patches = await Promise.all(
-      [tip, trunk].map((revision) =>
-        jjOut(
-          [
-            "diff",
-            "--from",
-            base,
-            "--to",
-            revision,
-            "--git",
-            "--context",
-            "0",
-            "--",
-            fileset,
-          ],
-          repo.backing,
-          true,
-        ),
+      [tip, trunk].map((revision, index) =>
+        // Plain paths have unquoted git headers. Split the batch by file so an
+        // unsupported binary/addition still affects only that file. Unusual
+        // path quoting keeps the existing individual-file fallback.
+        /^[A-Za-z0-9_./-]+$/u.test(path)
+          ? Promise.resolve(
+              good(byRevision[index]?.get(`a/${path} b/${path}`) ?? ""),
+            )
+          : jjOut(
+              [
+                "diff",
+                "--from",
+                base,
+                "--to",
+                revision,
+                "--git",
+                "--context",
+                "0",
+                "--",
+                fileset,
+              ],
+              repo.backing,
+              true,
+            ),
       ),
     );
     const [work, integrated] = patches;
@@ -1540,6 +1603,7 @@ async function classify(
   records: RunRecord[],
   trunk: string | null,
   readOnly = false,
+  recentRecordedDiagnostic = false,
 ): Promise<Classification> {
   let change = ws.change ?? "?";
   let age = ws.age ?? "?";
@@ -1638,6 +1702,14 @@ async function classify(
       `all runs ended without acceptance over 24h ago: ${local.map((r) => `${r.id} (${r.outcome})`).join(", ")}`,
       true,
     );
+  // Doctor is silent for both landed recorded workspaces (GC owns them) and
+  // unlanded recorded workspaces under 72h. Staleness and abandonment above
+  // still need attention. GC and full inventories always do the full check.
+  if (recentRecordedDiagnostic)
+    return verdict(
+      "keep",
+      "recent recorded workspace: no landing diagnostic due",
+    );
   if (trunk === null)
     return verdict(
       "no trunk",
@@ -1659,7 +1731,7 @@ async function classify(
   ];
   const consumed = new Set<string>();
   const releases = new Set<string>();
-  for (const candidate of tips) {
+  for (const candidate of new Set(tips)) {
     const work = await outstanding(repo, candidate, trunk);
     if (!work.ok) return verdict("keep", `cannot judge: ${msg(work)}`);
     if (work.value.differing.length > 0)
@@ -1901,11 +1973,13 @@ export type DoctorWorkspaceRow = {
 /** Read-only inventory built from the same workspaces and classifier as `ws gc --dry-run`. */
 export async function doctorInventory(
   root = resolve(import.meta.dir, "../../.."),
+  findingsOnly = false,
 ): Promise<Attempt<DoctorWorkspaceRow[]>> {
   const paths = await doctorRepoPaths(root);
   if (!paths.ok) return paths;
   const seen = new Set<string>();
   const rows: DoctorWorkspaceRow[] = [];
+  let records: Attempt<RunRecord[]> | undefined;
   for (const path of paths.value) {
     const expanded = path.startsWith("~/")
       ? join(homedir(), path.slice(2))
@@ -1922,7 +1996,8 @@ export async function doctorInventory(
     if (!trunk.ok) return trunk;
     const candidates = await workspaces(repo);
     if (!candidates.ok) return candidates;
-    const records = await agxRecords(repo.backing);
+    // agx ls is a global run inventory, independent of repository cwd.
+    records ??= await agxRecords(repo.backing);
     if (!records.ok) return records;
     for (const ws of candidates.value) {
       const kind =
@@ -1930,6 +2005,11 @@ export async function doctorInventory(
         basename(resolve(ws.dir)).startsWith("ws_")
           ? "ws"
           : "legacy";
+      const info = await attempt(() => stat(ws.dir));
+      const ageMs = info.ok
+        ? Temporal.Now.instant().epochMilliseconds - info.value.mtimeMs
+        : undefined;
+      const recorded = lineageOf(records.value, realOr(ws.dir)).length > 0;
       const classification = await classify(
         repo,
         cfg.value,
@@ -1937,18 +2017,20 @@ export async function doctorInventory(
         records.value,
         trunk.value,
         true,
+        findingsOnly &&
+          kind === "ws" &&
+          recorded &&
+          ageMs !== undefined &&
+          ageMs <= 72 * 60 * 60 * 1000,
       );
-      const info = await attempt(() => stat(ws.dir));
       rows.push({
         repo: repo.backing,
         dir: ws.dir,
         name: ws.name,
         kind,
-        recorded: lineageOf(records.value, realOr(ws.dir)).length > 0,
+        recorded,
         classification,
-        ageMs: info.ok
-          ? Temporal.Now.instant().epochMilliseconds - info.value.mtimeMs
-          : undefined,
+        ageMs,
       });
     }
   }
@@ -1959,7 +2041,7 @@ const doctorClean = (value: string) => value.replaceAll(/[\t\r\n]/gu, " ");
 
 /** Map gc classifier outcomes to doctor findings; kept rows remain deliberately silent. */
 export async function doctor(): Promise<Attempt<string[]>> {
-  const inventory = await doctorInventory();
+  const inventory = await doctorInventory(undefined, true);
   if (!inventory.ok) return inventory;
   return good(doctorFindings(inventory.value));
 }

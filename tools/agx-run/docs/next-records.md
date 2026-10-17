@@ -21,10 +21,10 @@ is supplied. `agx ls SELECTOR [--json]` selects an exact run id, unique run-id p
 ticket name. A ticket selection is ordered oldest first so its latest run is last. Ambiguous
 prefixes and unmatched selectors exit 2 with one candidate line.
 
-JSON rows include `health`, computed by the same classification as `agx doctor`: `legacy`,
-`orphaned`, `missing-return`, `unjudged`, or `null` when there is no finding. Pre-lease history
-is `legacy`, including imported records. The statusline's lost count counts only `orphaned` rows;
-an ended run with `outcome: lost` and a missing return is a separate finding.
+JSON rows include `health`, computed by the same classification as `agx doctor`:
+`orphaned`, `unjudged`, or `null` when there is no finding. Imported and pre-contract
+history and judged runs have no finding and remain visible through `agx ls --all`.
+The statusline's lost count counts only `orphaned` rows.
 
 The next ticket schema requires `proposition.id`, `proposition.claim`, and
 `proposition.refuted_by`; legacy `decides`, `serves`, and `graph_node` are optional
@@ -155,13 +155,26 @@ checking liveness, and emitting rows still cost proportionally to the stored run
 
 ## Doctor findings
 
-`agx doctor` reports `orphaned` only for a leased run whose owner is gone and
+`agx doctor` reports current states that require a person's action. It reports
+`orphaned` only for an unjudged leased run whose owner is gone and
 whose `ended` record is absent after the liveness recheck. A recorded completion
-with `returned` false or absent is `missing-return`, independent of its outcome
-and verification results. For current writers, `returned` records the fenced
+with an explicit `returned` flag and no judgment is `unjudged` immediately,
+regardless of the flag's value, outcome or verification results. An absent flag
+identifies a completion from before the return contract; it produces no finding.
+For current writers, `returned` records the fenced
 `agx-return` marker, not the existence of a final JSON report; this flag does not
-establish process loss. Runs without
-a recorded lease, including legacy imports, are reported as `legacy` when terminal
-because their historical metadata cannot establish the modern lifecycle contract.
-Other completed runs without a judgment become `unjudged` after 24 hours.
-Doctor findings are read-only; none of these classifications rewrites history.
+establish process loss. Runs without a recorded lease, including legacy imports,
+and runs with a judgment produce no run finding. History stays in `agx ls --all`;
+none of these classifications rewrites it.
+
+Each finding includes its one-line action:
+
+| Kind | Action |
+| --- | --- |
+| `orphaned` | Review the lost run and run `agx judge RUN_ID accept\|reject`. |
+| `unjudged` | Review the completed run and run `agx judge RUN_ID accept\|reject`. |
+| `outside-home` | Move the ticket to the ticket home printed in the finding. |
+| `accepted-landed-present` | Run the printed `tkt gc --repo REPO` to collect the ticket. |
+| `collectable` | Run the printed `ws gc --include-unrecorded --repo REPO`. |
+| `unlanded-72h` | Enter the printed workspace and run `mise run land`. |
+| `stale` | Run the printed `ws refresh NAME --repo REPO`. |

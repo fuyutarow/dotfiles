@@ -164,7 +164,15 @@ test("doctor distinguishes observed completions, missing returns, legacy history
     .split("\n")
     .map((line) => line.split("\t"));
   expect(findings.filter((row) => row[3] === "lost")).toEqual([]);
-  expect(findings.filter((row) => row[3] === "missing-return")).toHaveLength(3);
-  expect(findings.find((row) => row[2] === "legacy")?.[3]).toBe("legacy");
+  expect(findings.filter((row) => row[3] === "missing-return")).toEqual([]);
+  expect(findings.filter((row) => row[3] === "unjudged")).toHaveLength(1);
+  expect(
+    findings.filter(
+      (row) =>
+        row[2] !== "killed" &&
+        row[2] !== "a7473fdd-ae5e-4dc2-be2f-3c63aa50dcbd",
+    ),
+  ).toEqual([]);
+  expect(findings.find((row) => row[2] === "legacy")).toBeUndefined();
   expect(findings.find((row) => row[2] === "killed")?.[3]).toBe("orphaned");
 });

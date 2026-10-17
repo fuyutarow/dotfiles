@@ -371,8 +371,7 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
   expect(result.stdout.trim().split("\n").toSorted()).toEqual(
     [
       `agx-run\t${f.repo}\torphan\torphaned\tagx judge orphan accept|reject`,
-      `agx-run\t${f.repo}\tlost\tmissing-return\tagx judge lost accept|reject`,
-      `agx-run\t${f.repo}\tno-return\tmissing-return\tagx judge no-return accept|reject`,
+      `agx-run\t${f.repo}\tlost\tunjudged\tagx judge lost accept|reject`,
       `agx-run\t${f.repo}\tunjudged\tunjudged\tagx judge unjudged accept|reject`,
       `agx-ws\t${f.repo}\tws_landed\tcollectable\tws gc --include-unrecorded --repo ${f.repo}`,
       `agx-ws\t${f.repo}\tws_old\tunlanded-72h\tcd ${old} && mise run land`,
@@ -384,7 +383,7 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
   // The unattended collector handles empty legacy workspaces; doctor reports only
   // workspaces requiring attention, so the legacy fixture must stay silent.
   expect(result.stdout).not.toContain(`\tlegacy\t`);
-  expect(result.stderr).toBe("agx doctor: 9 finding(s)\n");
+  expect(result.stderr).toBe("agx doctor: 8 finding(s)\n");
   const summary = await run(
     [process.execPath, ENTRY, "doctor", "--json"],
     f.dotfiles,
@@ -409,8 +408,7 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
     expect(machine.data.lost).toBe(1);
     expect(machine.data.kinds).toEqual({
       orphaned: 1,
-      "missing-return": 2,
-      unjudged: 1,
+      unjudged: 2,
       collectable: 1,
       "unlanded-72h": 1,
       stale: 1,
@@ -487,3 +485,114 @@ test("outside-home ignores 199 finished historical paths, but retains active, un
 async function runTicketDoctor(cwd: string, env: NodeJS.ProcessEnv) {
   return run([process.execPath, TICKET_CLI, "doctor"], cwd, env);
 }
+
+const endedRecord = (id: string, extra: object = {}) => ({
+  kind: "ended",
+  id,
+  at: Temporal.Now.instant().toString(),
+  exit: 0,
+  outcome: "ok",
+  report_path: null,
+  vendor_session: null,
+  verify: [],
+  ...extra,
+});
+
+test("doctor reports only current actionable runs and keeps history in ls --all", async () => {
+  const f = await fixture("current-runs");
+  const started = (id: string, extra: object = {}) => ({
+    kind: "started",
+    id,
+    at: "2026-10-12T00:00:00Z",
+    ticket: id,
+    writes: [],
+    cwd: f.repo,
+    workspace: f.repo,
+    row: "fixture",
+    dispatcher_session: null,
+    vendor_session: null,
+    pid: process.pid,
+    lease: { pid: process.pid, start: null, unit: null },
+    ...extra,
+  });
+  const rows = [
+    started("legacy-imported", { lease: undefined, legacy_key: "run:old" }),
+    endedRecord("legacy-imported", { legacy_key: "run-ended:old" }),
+    started("pre-contract"),
+    endedRecord("pre-contract"),
+    started("judged"),
+    endedRecord("judged", { returned: false }),
+    {
+      kind: "judged",
+      id: "judged",
+      at: "2026-10-17T00:00:00Z",
+      decision: "accept",
+      note: "done",
+    },
+    started("orphaned", {
+      lease: { pid: 2147483647, start: null, unit: null },
+      pid: 2147483647,
+    }),
+    started("unjudged"),
+    endedRecord("unjudged", { returned: false }),
+    started("live", { ticket_path: join(f.root, "live.md") }),
+  ];
+  await Bun.write(
+    join(f.state, "records.jsonl"),
+    rows.map((row) => JSON.stringify(row)).join("\n") + "\n",
+  );
+  await Bun.write(
+    f.ticketRecords,
+    JSON.stringify([
+      {
+        id: "live",
+        ticket: "live",
+        started_at: "2026-10-17T00:00:00Z",
+        state: "running",
+        judgment: null,
+        cwd: f.repo,
+        workspace: f.repo,
+        ticket_path: join(f.root, "live.md"),
+      },
+    ]),
+  );
+  const result = await run(
+    [process.execPath, ENTRY, "doctor"],
+    f.dotfiles,
+    f.env,
+  );
+  expect(result.exitCode, result.stderr).toBe(1);
+  expect(result.stdout.trim().split("\n").toSorted()).toEqual(
+    [
+      [
+        "agx-run",
+        f.repo,
+        "orphaned",
+        "orphaned",
+        "agx judge orphaned accept|reject",
+      ].join("\t"),
+      [
+        "agx-run",
+        f.repo,
+        "unjudged",
+        "unjudged",
+        "agx judge unjudged accept|reject",
+      ].join("\t"),
+      [
+        "agx-ticket",
+        f.repo,
+        "live",
+        "outside-home",
+        `mv ${join(f.root, "live.md")} ${f.tickets}/`,
+      ].join("\t"),
+    ].toSorted(),
+  );
+  const history = await run(
+    [process.execPath, ENTRY, "ls", "--all", "--json"],
+    f.dotfiles,
+    f.env,
+  );
+  expect(history.exitCode, history.stderr).toBe(0);
+  for (const id of ["legacy-imported", "pre-contract", "judged"])
+    expect(history.stdout).toContain(`"id":"${id}"`);
+});

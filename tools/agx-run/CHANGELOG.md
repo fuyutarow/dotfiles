@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.3.1 — 2026-10-17
+
+- Report only actionable orphaned and unjudged runs in doctor; keep legacy, pre-contract and judged history silent.
+
 ## 5.3.0 — 2026-10-17
 
 - Add optional machine summaries of running workers by dispatcher session.

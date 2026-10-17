@@ -39,8 +39,10 @@ export function fleetLine(
         ([kind, count], index) => `${index === 0 ? "⚠ " : ""}${kind} ${count}`,
       ),
     );
+  const other = workers === undefined ? 0 : workers.running - workers.here;
+  const workerSummary = `workers ${workers?.here ?? "unknown"} running`;
   return [
-    `workers ${workers?.running ?? "unknown"} running (${workers?.here ?? "unknown"} here)`,
+    workerSummary + (other > 0 ? ` (+${other} in other sessions)` : ""),
     `lost ${workers?.lost ?? "unknown"}`,
     `ws ${ws?.total ?? "unknown"}`,
     `unlanded ${ws?.unlanded ?? "unknown"}`,

@@ -594,7 +594,6 @@ export function routeLines(
     dispatcherSession === undefined || dispatcherSession === ""
       ? []
       : attributed.filter((r) => r.dispatcherSession === dispatcherSession);
-  const other = attributed.length - own.length;
   const shown = own;
   const choices = shown.map((r) => r.choice);
   const elapsed = shown.map((r) =>
@@ -647,7 +646,6 @@ export function routeLines(
   );
   const summary = [
     `${ESC}[38;5;167mlost ${lost}${RST}`,
-    ...(other > 0 ? [`${DIM}+${other} in other sessions${RST}`] : []),
     ...(unattributed > 0 ? [`${DIM}unattributed ${unattributed}${RST}`] : []),
     ...(unreadable > 0
       ? [`${ESC}[38;5;178munreadable ${unreadable}${RST}`]

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.1 — 2026-10-17
+
+- Count running workers from the current session and show other-session workers only on the fleet line.
+
 ## 0.17.0 — 2026-10-17
 
 - Add a cached fleet summary for running workers, lost runs, and workspace classifier counts; retain stale values and refresh at most once per minute.

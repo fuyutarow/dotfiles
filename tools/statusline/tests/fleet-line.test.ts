@@ -197,10 +197,60 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
     expect(output).toMatchSnapshot(name);
     if (name === "fresh")
       expect(output).toBe(
-        "workers 4 running (2 here) · lost 1 · ws 6 · unlanded 2 · collectable 3 · legacy 3 fresh · ⚠ orphaned 1 · unjudged 1",
+        "workers 2 running (+2 in other sessions) · lost 1 · ws 6 · unlanded 2 · collectable 3 · legacy 3 fresh · ⚠ orphaned 1 · unjudged 1",
       );
   }
 });
+
+test.each([
+  [2, 2, "workers 2 running (+2 in other sessions)"],
+  [2, 0, "workers 2 running"],
+  [0, 3, "workers 0 running (+3 in other sessions)"],
+] as const)(
+  "worker phrase snapshot: here %d, others %d",
+  async (here, others, expected) => {
+    const home = join(root, `phrase-${here}-${others}`);
+    const state = join(home, "state");
+    const dir = join(state, "statusline");
+    await mkdir(dir, { recursive: true });
+    const rows = Array.from({ length: here + others }, (_, i) => ({
+      id: `worker-${i}`,
+      ticket: `ticket-${i}`,
+      state: "running",
+      row: "terra-high",
+      dispatcher_session: i < here ? "here" : "elsewhere",
+    }));
+    await writeFile(
+      join(dir, "agx-runs.json"),
+      JSON.stringify({
+        output: JSON.stringify(rows),
+        capturedAt: at,
+        exit: 0,
+      }),
+    );
+    await writeFile(join(dir, "agx-runs.json.attempt"), String(at));
+    const output = await run(
+      `
+    import {expect} from "bun:test";
+    import {ok} from "neverthrow";
+    import {agxRouteRunsAsync} from ${JSON.stringify(join(source, "dispatch-runs.ts"))};
+    import {render} from ${JSON.stringify(join(source, "format.ts"))};
+    const scan = await agxRouteRunsAsync(process.env, "here", false);
+    const text = render({cwd:${JSON.stringify(home)},sid:"here",model:"fixture",wfOn:false,rc:"off",rlModel:[],jobs:[],orphans:0,
+      routes:ok(scan),vram:undefined,disks:ok([]),cpuPct:ok(0),ram:ok({pct:0,frac:"0/1G"})});
+    const lines = text.split("\\n");
+    const agx = lines.find(line => line.startsWith("agx "));
+    expect(agx).toBeDefined();
+    expect(agx).not.toContain("other sessions");
+    expect(text.split("other sessions").length - 1).toBe(${others > 0 ? 1 : 0});
+    console.log(lines.find(line => line.startsWith("workers "))?.split(" · ")[0]);
+  `,
+      { HOME: home, XDG_STATE_HOME: state, AGX_STATE_DIR: state },
+    );
+    expect(output).toBe(expected);
+    expect(output).toMatchSnapshot();
+  },
+);
 
 test("workspace failure keeps last good workspace counts and their original age", () => {
   const scan = {

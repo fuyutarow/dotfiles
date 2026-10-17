@@ -738,7 +738,7 @@ describe("statusline Run row", () => {
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
     ).toEqual([
-      "agx fresh · lost 0 · +1 in other sessions · dispatch warning n/a (dispatch warning unavailable) · recover: none",
+      "workers 0 running (+1 in other sessions) · lost 0 · ws unknown · unlanded unknown · collectable unknown · legacy unknown unknown · anomalies unknown",
     ]);
     expect(out).not.toContain("private worker");
     expect(out).not.toContain("luna-high");
@@ -749,7 +749,7 @@ describe("statusline Run row", () => {
     marker(dir, "unowned", process.pid, "undispatched worker", 90, null);
     const out = await render(dir);
     expect(out).toContain("unattributed 1");
-    expect(out).not.toContain("in other sessions");
+    expect(out).toContain("workers 0 running (+1 in other sessions)");
     expect(out).not.toContain("undispatched worker");
   });
 
@@ -779,8 +779,16 @@ describe("statusline Run row", () => {
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
     ).toEqual([
-      "agx fresh · lost 3 · +1 in other sessions · unattributed 2 · dispatch warning n/a (dispatch warning unavailable) · recover: none",
+      "workers 1 running (+3 in other sessions) · lost 3 · ws unknown · unlanded unknown · collectable unknown · legacy unknown unknown · anomalies unknown",
     ]);
+    expect(
+      out
+        .replaceAll(ANSI, "")
+        .split("\n")
+        .find((line) => line.startsWith("agx ")),
+    ).toBe(
+      "agx fresh · lost 3 · unattributed 2 · dispatch warning n/a (dispatch warning unavailable) · recover: none",
+    );
     expect(out).not.toContain("other worker");
     expect(out).not.toContain("unowned worker");
     expect(out).not.toContain("dead own");

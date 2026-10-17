@@ -1,5 +1,6 @@
 // Child completion and pipe EOF are different events: descendants can retain the pipes.
 import { attempt, type Attempt } from "../../shared/src/attempt.ts";
+import { enterStep, watchChild } from "./deadline.ts";
 
 export class StepFailure extends Error {
   constructor(
@@ -40,6 +41,10 @@ export async function runStep(
   });
   if (!spawned.ok) return spawned;
   const { child, signal, timeoutMs, capture } = spawned.value;
+  const leaveStep = enterStep(cmd.join(" "));
+  const unwatch = watchChild(() => {
+    child.kill("SIGKILL");
+  });
   const deadline = Promise.withResolvers<never>();
   let waitingFor = "child.exited";
   const expired = (): void => {
@@ -88,6 +93,8 @@ export async function runStep(
   void drains.catch(() => {});
   if (!result.ok) child.kill("SIGKILL");
   child.unref();
+  unwatch();
+  leaveStep();
   if (signal.aborted)
     return {
       ok: false,

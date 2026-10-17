@@ -1,11 +1,10 @@
 // Run-workspace lifecycle: add, rm, gc. Facts come from jj, .ws.toml and agx.
-// Successful observations publish the owner-written verdict inventory for small-file readers.
+// Explicit GC observations publish the owner-written verdict inventory for small-file readers.
 // Store locks and foreground waiter markers are transient and removed on completion.
 import {
   accessSync,
   constants,
   existsSync,
-  mkdirSync,
   readdirSync,
   readlinkSync,
   realpathSync,
@@ -36,6 +35,7 @@ import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import { jjWorkspace, refLocks } from "./jj-workspace.ts";
 import { withWorkspaceLock } from "./lock.ts";
 import { runStep, StepFailure } from "./subprocess.ts";
+import { enterStep } from "./deadline.ts";
 
 const bad = (message: string): Attempt<never> => ({
   ok: false,
@@ -418,6 +418,7 @@ async function readyWorkspace(
   cfg: Config,
   json: boolean,
 ): Promise<Attempt<void>> {
+  enterStep("workspace readiness");
   const current = await updateStale(dir);
   if (!current.ok) return current;
   const sparse = await jjOut(
@@ -462,6 +463,7 @@ async function readyWorkspace(
 }
 
 export async function add(options: AddOptions): Promise<Attempt<string>> {
+  enterStep("validate workspace and read configuration");
   const slug = validateSlug(options.slug, "ws add");
   if (!slug.ok) return slug;
   const name = `ws_${slug.value}`;
@@ -484,11 +486,12 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
     if (rev.value.split("\n").filter(Boolean).length !== 1)
       return bad(`--rev ${options.rev} must name exactly one commit`);
   }
-  let created = false;
+  enterStep("acquire workspace store lock");
   const result = await withLock(
     repo.value,
     `ws add ${options.slug}`,
     async () => {
+      enterStep("check workspace registration");
       const names = await workspaceNames(repo.value);
       if (!names.ok) return names;
       const present = existsSync(dir);
@@ -501,11 +504,13 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
         return bad(`jj workspace ${name} is already registered`);
       const source = jjWorkspace(options.repo);
       if (!source.ok) return source;
+      enterStep("refresh source workspace");
       for (const root of new Set([source.value.root, repo.value.backing])) {
         const current = await updateStale(root);
         if (!current.ok) return current;
       }
-      mkdirSync(repo.value.wsRoot, { recursive: true });
+      enterStep("create workspace");
+      await mkdir(repo.value.wsRoot, { recursive: true });
       const made = await jjOut(
         [
           "workspace",
@@ -521,6 +526,7 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
       if (!made.ok) return made;
       const ready = await readyWorkspace(dir, cfg.value, options.json === true);
       if (!ready.ok) {
+        enterStep("roll back workspace readiness failure");
         const undone = await forgetAndBury(
           repo.value,
           graveyard.value,
@@ -540,21 +546,11 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
           ),
         };
       }
-      created = true;
+      enterStep("release workspace store lock");
       return good(dir);
     },
   );
-  if (result.ok && created) {
-    const observation = await gc({
-      repo: options.repo,
-      dryRun: true,
-      includeUnrecorded: false,
-    });
-    if (!observation.ok)
-      process.stderr.write(
-        `ws: verdict snapshot unchanged: ${msg(observation)}\n`,
-      );
-  }
+  // Verdict inventory belongs to explicit gc, never the latency path of one creation.
   return result;
 }
 

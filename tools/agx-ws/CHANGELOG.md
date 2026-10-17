@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.4 — 2026-10-17
+
+- Keep ws add independent of repository-wide verdict scans and enforce a whole-command deadline that names the active step.
+
 ## 0.8.3 — 2026-10-17
 
 - Bound subprocess waits with named deadlines, close retained pipes after child exit, and preserve readiness exit status.

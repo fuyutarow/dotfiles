@@ -2,6 +2,7 @@
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "../../shared/src/cli.ts";
 import { StepFailure } from "./subprocess.ts";
+import { enterStep, runAddCommand } from "./deadline.ts";
 import { errorMessage } from "../../shared/src/attempt.ts";
 import packageJson from "../package.json" with { type: "json" };
 import {
@@ -63,22 +64,36 @@ const addCommand = command(
       },
     },
   },
-  async (argv) => {
-    const done = await add({
-      slug: argv._.slug,
-      rev: argv.flags.rev,
-      repo: argv.flags.repo ?? process.cwd(),
-      reuse: argv.flags.reuse === true,
-      json: argv.flags.json === true,
-    });
-    if (!done.ok) {
-      fail(done.error);
-      return;
-    }
-    process.stdout.write(
-      `${argv.flags.json === true ? JSON.stringify({ workspace: done.value }) : done.value}\n`,
-    );
-  },
+  async (argv) =>
+    runAddCommand(async () => {
+      const done = await add({
+        slug: argv._.slug,
+        rev: argv.flags.rev,
+        repo: argv.flags.repo ?? process.cwd(),
+        reuse: argv.flags.reuse === true,
+        json: argv.flags.json === true,
+      });
+      if (!done.ok) {
+        enterStep("write failure diagnostic");
+        await new Promise<void>((resolve) => {
+          process.stderr.write(`ws: ${errorMessage(done.error)}\n`, () => {
+            resolve();
+          });
+        });
+        process.exitCode =
+          done.error instanceof StepFailure ? done.error.code : 1;
+        return;
+      }
+      enterStep("write workspace result");
+      await new Promise<void>((resolve) => {
+        process.stdout.write(
+          `${argv.flags.json === true ? JSON.stringify({ workspace: done.value }) : done.value}\n`,
+          () => {
+            resolve();
+          },
+        );
+      });
+    }),
 );
 
 const adoptCommand = command(

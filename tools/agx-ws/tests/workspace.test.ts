@@ -630,24 +630,25 @@ describe("ws add", () => {
     expect((await jj(["workspace", "list"], path)).out).toContain("ws_alpha");
   });
 
-  test("writes owner verdict state outside the repository and workspace directory", async () => {
+  test("add leaves verdict publication to explicit gc outside the repository and workspace directory", async () => {
     const path = await repo('trunk = "main"\n');
+    const state = join(scratch, "explicit-verdict-state");
+    const env = baseEnv({ AGX_NEXT_STATE_DIR: state });
+    const verdictPath = join(state, "workspace-verdicts.json");
     const before = listing(join(path, ".."));
-    const added = await ws(["add", "s1"], path);
+    const added = await ws(["add", "s1"], path, env);
     expect(added.code, added.err).toBe(0);
     expect(listing(join(path, "..", "proj.ws"))).toEqual(["ws_s1"]);
     expect(
       listing(join(path, "..")).filter((n) => !before.includes(n)),
     ).toEqual(["proj.ws"]);
-    expect(
-      await Bun.file(join(home, "state/agx/workspace-verdicts.json")).exists(),
-      added.err,
-    ).toBe(true);
+    expect(await Bun.file(verdictPath).exists()).toBe(false);
+    const observed = await ws(["gc", "--dry-run"], path, env);
+    expect(observed.code, observed.err).toBe(0);
+    expect(await Bun.file(verdictPath).exists()).toBe(true);
     const observation = jsonOf(
       z.object({ fleetComplete: z.boolean() }),
-    ).safeParse(
-      await Bun.file(join(home, "state/agx/workspace-verdicts.json")).text(),
-    );
+    ).safeParse(await Bun.file(verdictPath).text());
     expect(observation).toMatchObject({
       success: true,
       data: { fleetComplete: false },

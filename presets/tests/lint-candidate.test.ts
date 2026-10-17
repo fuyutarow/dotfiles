@@ -90,9 +90,13 @@ test.each([".", "tools"])(
               'run = "lint-ts-candidate --dir ./tools/"',
             );
       expect(template).not.toMatch(/git diff|\$\(|\bif\s/u);
+      const bunPin = (await readFile(join(root, "mise.toml"), "utf8")).match(
+        /^bun = ("[^"]+")$/mu,
+      )?.[1];
+      expect(bunPin).toBeDefined();
       await writeFile(
         join(repo, "mise.toml"),
-        `[tools]\nbun = "1.4"\n${tasks}\n[tasks.commit]\nrun = ${JSON.stringify(`bun ${root}/agents/skills/wiring-mise-tasks/scripts/jj-commit.ts`)}\n`,
+        `[tools]\nbun = ${bunPin}\n${tasks}\n[tasks.commit]\nrun = ${JSON.stringify(`bun ${root}/agents/skills/wiring-mise-tasks/scripts/jj-commit.ts`)}\n`,
       );
       await writeFile(
         join(repo, "mise.toml"),

@@ -1,6 +1,9 @@
 {
   "name": "dotfiles",
   "private": true,
+  "engines": {
+    "bun": ">=1.4.3"
+  },
   "type": "module",
   "workspaces": [
     "tools/agx-usehooks"

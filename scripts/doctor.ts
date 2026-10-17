@@ -18,7 +18,7 @@
 //   git-hooks   .githooks                        core.hooksPath points at it
 //   login-shell zsh                              the account's login shell is zsh
 //   mise-scope  scripts/test-mise-scope.ts       INV-6: no implicit global toolchain
-//   bun-floor   mise installs + tracked pins     no bun < 1.4 (Temporal) installed or pinned
+//   bun-floor   package.json engines.bun         PATH, mise and Homebrew binaries satisfy the minimum
 //   mcp         .mcp.json                        every declared server registered in Claude Code
 //   codex-config agents/codex/config.declared.toml + .mcp.json
 //                                                Codex settings and managed MCP entries match declarations
@@ -61,6 +61,7 @@ import {
   rmSync,
   statfsSync,
 } from "node:fs";
+import { readdir, realpath } from "node:fs/promises";
 import { fromThrowable } from "neverthrow";
 import { ownerlessRefLocks } from "../tools/shared/src/ref-locks.ts";
 import { homedir, release, tmpdir, userInfo } from "node:os";
@@ -1454,78 +1455,113 @@ export async function checkIterm2(ctx: Ctx): Promise<Finding> {
       );
 }
 
-// Temporal is on by default only from bun 1.4, and this repo's TS uses it — so "which bun runs
-// a hook/statusline" is a correctness question, not a preference. That bun is NOT decided by
-// dotfiles' own mise.toml: a Claude session inherits the PATH of the directory it was launched
-// from, which can put an old mise install dir first; and mise auto_install re-creates an old
-// install the moment any repo still pinning it runs `bun`. Both halves are therefore checked:
-// the installs a frozen PATH could land on, and the tracked pins that would re-summon them.
-const BUN_FLOOR: readonly [number, number] = [1, 4];
-function belowFloor(v: string): boolean {
-  const m = /^(\d+)\.(\d+)/u.exec(v);
-  if (m === null) return false; // "latest", "1", a ref — not a sub-1.4 claim
-  const [maj, min] = [Number(m[1]), Number(m[2])];
-  return maj < BUN_FLOOR[0] || (maj === BUN_FLOOR[0] && min < BUN_FLOOR[1]);
-}
-function trackedBunPin(file: string): string | undefined {
-  let section = "";
-  for (const line of readFileSync(file, "utf8").split("\n")) {
-    const header = /^\s*\[([^\]]+)\]/u.exec(line);
-    if (header !== null) section = header[1] ?? "";
-    const pin = /^\s*"?bun"?\s*=\s*"([^"]+)"/u.exec(line);
-    if (section === "tools" && pin !== null) return pin[1];
-  }
-  return undefined;
-}
-/** One tracked-config link -> "pinned: <file> (bun = ...)" when it pins below the floor. */
-async function trackedOldPin(link: string): Promise<string | undefined> {
-  // config deleted since mise last saw it, or unreadable (e.g. an unmounted drive): neither
-  // can be a live pin on this machine, so a failure anywhere in this read is just "no pin here".
-  const read = await attempt(() => {
-    const file = realpathSync(link);
-    if (!file.endsWith(".toml")) return null;
-    const pin = trackedBunPin(file);
-    return { file, pin };
-  });
-  if (!read.ok || read.value === null) return undefined;
-  const { file, pin } = read.value;
-  return pin !== undefined && belowFloor(pin)
-    ? `pinned: ${file} (bun = "${pin}")`
+// package.json owns the runtime requirement; directory aliases are not version evidence.
+async function bunRequirement(ctx: Ctx): Promise<string | undefined> {
+  const source = await attempt(() =>
+    Bun.file(join(ctx.dotfiles, "package.json")).text(),
+  );
+  if (!source.ok) return undefined;
+  const parsed = jsonText.safeParse(source.value);
+  const required = parsed.success
+    ? obj(obj(parsed.data)?.engines)?.bun
+    : undefined;
+  return typeof required === "string" && /^>=\d+\.\d+\.\d+$/u.test(required)
+    ? required
     : undefined;
 }
-export async function checkBunFloor(ctx: Ctx): Promise<Finding> {
-  const floor = BUN_FLOOR.join(".");
+
+export async function checkBunRuntime(ctx: Ctx): Promise<Finding> {
+  const required = await bunRequirement(ctx);
+  if (required === undefined)
+    return fail(
+      "bun-runtime",
+      "package.json engines.bun must declare a minimum",
+      "repair package.json engines.bun",
+    );
+  return Bun.semver.satisfies(Bun.version, required)
+    ? pass(
+        "bun-runtime",
+        `${process.execPath} reports ${Bun.version} (required ${required})`,
+      )
+    : fail(
+        "bun-runtime",
+        `${process.execPath} reports ${Bun.version}; required ${required}`,
+        "mise install bun; brew upgrade bun",
+      );
+}
+
+async function trackedOldPin(
+  link: string,
+  required: string,
+): Promise<string | undefined> {
+  const read = await attempt(async () => {
+    const file = await realpath(link);
+    if (!file.endsWith(".toml")) return null;
+    const config = Bun.TOML.parse(await Bun.file(file).text());
+    const pin = obj(obj(config)?.tools)?.bun;
+    if (typeof pin !== "string" || !/^\d+\.\d+(?:\.\d+)?$/u.test(pin))
+      return null;
+    // A minor-line pin resolves to its newest patch; only a line below the minimum is stale.
+    const version = pin.split(".").length === 2 ? `${pin}.999999` : pin;
+    return Bun.semver.satisfies(version, required)
+      ? null
+      : `pinned: ${file} (bun = "${pin}")`;
+  });
+  return read.ok ? (read.value ?? undefined) : undefined;
+}
+
+export async function checkBunFloor(
+  ctx: Ctx,
+  homebrew = brewPrefix(ctx.home),
+  path = process.env.PATH ?? "",
+): Promise<Finding> {
+  const required = await bunRequirement(ctx);
+  if (required === undefined)
+    return fail(
+      "bun-floor",
+      "package.json engines.bun must declare a minimum",
+      "repair package.json engines.bun",
+    );
   const installs = join(ctx.home, ".local/share/mise/installs/bun");
   const tracked = join(ctx.home, ".local/state/mise/tracked-configs");
+  const installed = await attemptOr(() => readdir(installs), []);
+  const candidates = new Set([
+    process.execPath,
+    ...installed.map((v) => join(installs, v, "bin/bun")),
+    join(homebrew, "bin/bun"),
+    ...path.split(":").map((dir) => resolve(dir, "bun")),
+  ]);
   const old: string[] = [];
-  const oldVersions: string[] = [];
-  // mise's own alias links ("1", "latest") point at a real dir already listed.
-  const installed = existsSync(installs)
-    ? readdirSync(installs).filter(
-        (v) => !lstatSync(join(installs, v)).isSymbolicLink(),
-      )
-    : [];
-  oldVersions.push(...installed.filter((version) => belowFloor(version)));
-  old.push(...oldVersions.map((v) => `installed: bun ${v}`));
-  const links = existsSync(tracked) ? readdirSync(tracked) : [];
-  for (const link of links) {
-    const hit = await trackedOldPin(join(tracked, link));
+  const checked: string[] = [];
+  for (const binary of candidates) {
+    if (!(await Bun.file(binary).exists())) continue;
+    const result = await run([binary, "--version"], { ms: 5000 });
+    const version = result.out.trim();
+    if (
+      result.code !== 0 ||
+      result.timedOut ||
+      !/^\d+\.\d+\.\d+(?:[-+].*)?$/u.test(version)
+    ) {
+      old.push(`${binary}: cannot determine Bun version`);
+    } else if (!Bun.semver.satisfies(version, required)) {
+      old.push(`${binary} reports ${version}; required ${required}`);
+    } else checked.push(`${binary}=${version}`);
+  }
+  for (const link of await attemptOr(() => readdir(tracked), [])) {
+    const hit = await trackedOldPin(join(tracked, link), required);
     if (hit !== undefined) old.push(hit);
   }
-  if (old.length === 0)
-    return pass("bun-floor", `no bun < ${floor} installed or pinned`);
-  const fix = [
-    `set each pin to bun = "${floor}"`,
-    ...(oldVersions.length > 0
-      ? [`mise uninstall ${oldVersions.map((v) => `bun@${v}`).join(" ")}`]
-      : []),
-  ].join(", then ");
-  return fail(
-    "bun-floor",
-    `${old.length} bun < ${floor} install(s)/pin(s); Temporal-using TS breaks under them`,
-    fix,
-    capped(old),
-  );
+  return old.length === 0
+    ? pass(
+        "bun-floor",
+        `all ${checked.length} Bun binaries satisfy ${required}: ${checked.join(", ")}`,
+      )
+    : fail(
+        "bun-floor",
+        `${old.length} Bun binary/pin violation(s); required ${required}`,
+        `mise install bun; brew upgrade bun; update stale pins to bun = "${required.slice(2).split(".").slice(0, 2).join(".")}" with mise lock bun@${required.slice(2)}; mise uninstall bun@<old-version>`,
+        old,
+      );
 }
 
 export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
@@ -1924,6 +1960,7 @@ export const CHECKS: Check[] = [
   { name: "login-shell", run: checkLoginShell, applies: always },
   { name: "mise-scope", run: checkMiseScope, applies: always },
   { name: "bun-floor", run: checkBunFloor, applies: always },
+  { name: "bun-runtime", run: checkBunRuntime, applies: always },
   { name: "mcp", run: checkMcp, applies: always },
   {
     name: "codex-runtime",

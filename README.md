@@ -82,6 +82,13 @@ For large research-store objects, `git-lfs` is on-demand: check it with
 `mise run tool:which git-lfs`, then install it with `mise run tool:get git-lfs`. In the repo that
 needs LFS, run `git lfs install --local` so the setup stays repo-local.
 
+Bun tasks enforce the minimum in root `package.json` → `engines.bun` before running.
+`mise.toml` keeps the minor-line request; `mise.lock` fixes its resolved patch.
+`mise run doctor` checks reported versions of PATH, mise-install, and Homebrew binaries,
+and names stale binaries and their repair. The TypeScript preset delivers its own
+`package.json` engines declaration to consumers. After an upgrade, rebuild the
+vendored hook bundle with `mise run vendor:deps`.
+
 ## Architecture
 
 Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac` / `*.wsl`.

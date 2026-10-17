@@ -19,7 +19,7 @@ import {
 } from "node:fs";
 import { release, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { mkdir, symlink } from "node:fs/promises";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { LINKS } from "../config-registry.ts";
 import { applies, sshSupportsAttachMatch } from "../link-dots.ts";
 import {
@@ -1166,36 +1166,74 @@ network_access = true
   });
 
   /** A HOME with mise bun installs (real dirs + one alias link) and one tracked repo pin. */
-  function fixtureBunHome(installed: string[], pin: string): string {
+  async function fixtureBunHome(
+    installed: string[],
+    pin: string,
+  ): Promise<string> {
     const home = tmp("doctor-bun-");
     const installs = join(home, ".local/share/mise/installs/bun");
-    mkdirSync(installs, { recursive: true });
-    for (const v of installed) mkdirSync(join(installs, v));
-    symlinkSync(`./${installed[0]}`, join(installs, "latest"));
+    await mkdir(installs, { recursive: true });
+    for (const v of installed) {
+      const bin = join(installs, v, "bin");
+      await mkdir(bin, { recursive: true });
+      await writeFile(join(bin, "bun"), `#!/bin/sh\nprintf '%s\\n' '${v}'\n`, {
+        mode: 0o755,
+      });
+    }
+    await symlink(`./${installed[0]}`, join(installs, "latest"));
     const repo = join(home, "repo");
-    mkdirSync(repo);
-    writeFileSync(join(repo, "mise.toml"), `[tools]\nbun = "${pin}"\n`);
+    await mkdir(repo);
+    await writeFile(join(repo, "mise.toml"), `[tools]\nbun = "${pin}"\n`);
     const tracked = join(home, ".local/state/mise/tracked-configs");
-    mkdirSync(tracked, { recursive: true });
-    symlinkSync(join(repo, "mise.toml"), join(tracked, "abc123"));
+    await mkdir(tracked, { recursive: true });
+    await symlink(join(repo, "mise.toml"), join(tracked, "abc123"));
     return home;
   }
 
-  test("bun-floor: a sub-1.4 install and a sub-1.4 pin are both named", () => {
-    const home = fixtureBunHome(["1.4.2", "1.3.14"], "1.2.22");
-    const r = doctor("bun-floor", { HOME: home, DOTFILES: REPO });
+  test("bun-floor: old binaries and tracked pins are named with a repair", async () => {
+    const home = await fixtureBunHome(["1.4.3", "1.3.14"], "1.2.22");
+    const binary = join(home, ".local/share/mise/installs/bun/1.3.14/bin/bun");
+    const r = doctor("bun-floor", {
+      HOME: home,
+      DOTFILES: REPO,
+      PATH: "/usr/bin:/bin",
+    });
     expect(r.code).toBe(1);
-    expect(r.out).toMatch(/^FAIL {2}bun-floor {2}2 bun < 1\.4 /mu);
-    expect(r.out).toContain("installed: bun 1.3.14");
+    expect(r.out).toContain(binary);
     expect(r.out).toContain('(bun = "1.2.22")');
-    expect(r.out).toContain("mise uninstall bun@1.3.14");
+    expect(r.out).toContain("mise install bun; brew upgrade bun");
   });
 
-  test("bun-floor: only >= 1.4 installs and a minor-line pin pass", () => {
-    const home = fixtureBunHome(["1.4.2", "1.4.0"], "1.4");
-    const r = doctor("bun-floor", { HOME: home, DOTFILES: REPO });
-    expect(r.code).toBe(0);
-    expect(r.out).toMatch(/^PASS {2}bun-floor {2}no bun < 1\.4/mu);
+  test.each(["1.4.2", "1.4.3"])(
+    "bun-floor probes reported patch %s under a mise minor alias and on PATH",
+    async (version) => {
+      const home = await fixtureBunHome(["1.4"], "1.4");
+      const binary = join(home, ".local/share/mise/installs/bun/1.4/bin/bun");
+      await writeFile(binary, `#!/bin/sh\nprintf '%s\\n' '${version}'\n`, {
+        mode: 0o755,
+      });
+      const r = doctor("bun-floor", {
+        HOME: home,
+        DOTFILES: REPO,
+        PATH: `${dirname(binary)}:/usr/bin:/bin`,
+      });
+      expect(r.code).toBe(version === "1.4.2" ? 1 : 0);
+      expect(r.out).toContain(binary);
+      expect(r.out).toContain(version);
+      if (version === "1.4.2") expect(r.out).toContain("fix:");
+    },
+  );
+
+  test("bun-floor: a PATH binary reporting an unreadable version fails closed", async () => {
+    const home = await fixtureBunHome(["1.4.3"], "1.4.3");
+    const bin = join(home, "bin");
+    await mkdir(bin);
+    await writeFile(join(bin, "bun"), "#!/bin/sh\necho unknown\n", {
+      mode: 0o755,
+    });
+    const r = doctor("bun-floor", { HOME: home, DOTFILES: REPO, PATH: bin });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain(`${bin}/bun: cannot determine Bun version`);
   });
 
   test("brew-shadows: a PATH copy before Homebrew FAILs with both paths and rip; no shadow PASSes", () => {

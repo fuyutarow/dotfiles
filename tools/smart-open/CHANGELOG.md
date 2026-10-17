@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-10-17
+
+- Open remote directories in Mac Obsidian through vouched SSH shadow vaults.
+
 ## 1.0.2 — 2026-10-16
 
 - Narrow socket file keys explicitly in regression tests

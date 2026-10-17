@@ -261,3 +261,16 @@ describe("manifest preset CLI", () => {
     });
   }
 });
+
+test("TypeScript apply delivers the single Bun engines declaration", async () => {
+  const consumer = await target();
+  expect((await run("apply", "typescript", "--to", consumer)).exit).toBe(0);
+  const delivered = await readFile(join(consumer, "package.json"), "utf8");
+  const source = await readFile(
+    join(ROOT, "presets/typescript/package.json"),
+    "utf8",
+  );
+  expect(delivered).toBe(source);
+  expect(delivered.match(/"bun"\s*:/gu)).toHaveLength(1);
+  expect(delivered).toContain('"bun": ">=1.4.3"');
+});

@@ -10,12 +10,9 @@
 # it here is what makes those bodies correct on a machine that has not run `brew bundle` yet.
 # Measured before this line existed: mise carried bun 1.2.22 while PATH resolved Homebrew's
 # 1.3.14, so which bun a task actually ran was decided by PATH order, not by this repo.
-# "1.4" since 2026-09-27: a minor-line floor, not an exact pin. 1.4 is the first line with
-# Temporal on by default, so the floor is a runtime contract; patches follow without an edit.
-# Not "latest" — that would cross into 1.5/2.0 silently. The previous exact "1.3.14" was chosen
-# only as "newest on 2026-07-25" and then fell behind Homebrew's bun, because nothing bumps an
-# exact pin. Every bun < 1.4 pin mise tracked on this machine was raised the same day; since
-# mise auto_install=true, an untracked repo still pinning < 1.4 re-installs the old bun on use.
+# "1.4" is a minor-line pin: Temporal is enabled by default on this line.
+# Not "latest" — that would cross into 1.5/2.0 silently. The exact patch floor lives in
+# mise.lock and package.json engines.bun; doctor probes live binaries against engines.bun.
 # uv / rust are NOT declared, and no longer need to be: the FAILs that said otherwise were a
 # gate defect, not debt. Measured 2026-08-30 — the only `uv` in this file was inside
 # `echo "... (uv tool install cocoindex-code)"`, a MESSAGE, never an invocation. The runtime
@@ -27,11 +24,13 @@ bun = "1.4"
 rumdl = "0.2.78"
 
 [tasks.accept]
+depends = ["bun:check"]
 description = "READ-ONLY acceptance view for the latest selected agx run; does not judge or land. Usage: mise run accept -- <ticket|run-id>"
 dir = "{{config_root}}"
 run = "bun scripts/agx-accept.ts"
 
 [tasks.up]
+depends = ["bun:check"]
 alias = "u"
 description = "Update system packages"
 # scripts/up.ts: never a silent success, and never a sudo attempt where we have no sudo.
@@ -100,21 +99,25 @@ description = "Format Markdown with rumdl (config = .rumdl.toml: structural gate
 run = "rumdl fmt"
 
 [tasks."fmt:sh"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Format bash scripts in place with shfmt (2-space, -ci -sr -bn -s; bash dialect)"
 run = "bun scripts/fmt-sh.ts"
 
 [tasks."fmt:sh:check"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Check bash formatting without writing (CI gate; prints diff + non-zero on drift)"
 run = "bun scripts/fmt-sh-check.ts"
 
 [tasks."fmt:ts"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Format TypeScript in place with oxfmt (.oxfmtrc.json)"
 run = "bunx --bun oxfmt '**/*.ts'"
 
 [tasks."fmt:ts:check"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Check TS formatting without writing (CI gate; lists drifted files + non-zero on drift)"
 run = "bunx --bun oxfmt --check '**/*.ts'"
@@ -122,6 +125,7 @@ run = "bunx --bun oxfmt --check '**/*.ts'"
 # Umbrella format-check for the auto-formatted languages (Markdown check = lint:md via
 # rumdl, kept there since rumdl check is a structural lint not a format-verify).
 [tasks."fmt:staged"]
+depends = ["bun:check"]
 description = "Verify selected jj snapshot formatting; Git migration fallback formats staged files and refuses partial hunks (wiring-mise-tasks fmt:staged)"
 run = "bun agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool 'ts=bunx --bun oxfmt' --tool 'sh=shfmt -w -ln bash -i 2 -ci -sr -bn -s' --tool 'md=rumdl fmt' --exclude 'agents/skills/**/*.ts' --exclude 'archives/**'"
 
@@ -155,6 +159,7 @@ depends = [
 ]
 
 [tasks."lint:hook-slug"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Require unique hook slugs, prefixed messages and explicit external ownership"
 run = "bun scripts/lint-hook-slug.ts"
@@ -165,27 +170,32 @@ description = "Markdown structural gate: rumdl check (render-breaking defects on
 run = "rumdl check"
 
 [tasks."lint:sh"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "ShellCheck static analysis on bash scripts (-x follow sources; file list reused from shfmt -f)"
 run = "bun scripts/lint-sh.ts"
 
 [tasks."lint:zsh"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "zsh syntax gate: `zsh -n` parse-only on boot-critical zsh config (MUST use the zsh binary, never bash -n)"
 run = "bun scripts/lint-zsh.ts"
 
 [tasks."lint:skills-index"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 env = { SKILLS_LINT_WORKTREE = "1" }
 description = "Require every in-house skill in the catalog and reject third-party provenance under agents/skills"
 run = "bun scripts/lint-skills-index.ts"
 
 [tasks."lint:skills-wiring"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Check in-house skill directories and names, retired plugin manifests, and third-party provenance in the repository"
 run = "bun scripts/skills-doctor.ts"
 
 [tasks."lint:skill-script-paths"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when templates or dotfiles scripts call a skill helper by its internal file path instead of PATH bin"
 run = "bun scripts/lint-skill-script-paths.ts"
@@ -197,6 +207,7 @@ run = "bun scripts/lint-skill-script-paths.ts"
 # (compiling-latex found it). --budget adds the F4 STANDING check the per-skill pass cannot make:
 # what the collection charges every turn, against a declared ratchet.
 [tasks."lint:skills-floor"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 env = { SKILLS_LINT_WORKTREE = "1" }
 description = "Structural skill floor and listing budget over the worktree; commit hooks use BASE plus selected REV paths"
@@ -210,17 +221,20 @@ run = "bun scripts/lint-skills-floor.ts"
 # the machine-specific autoMode overlay (see scripts/render-home.ts), and P3 is about
 # what this repo SHARES, not what one machine ends up holding.
 [tasks."lint:harness-scope"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when a user-scope config or hook in this repo hardcodes one repo's absolute path (operating-the-harness P3)"
 run = "bun agents/skills/operating-the-harness/scripts/scope-check.ts agents/claude && bun agents/skills/operating-the-harness/scripts/scope-check.ts agents/codex"
 
 [tasks."lint:gates"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Batched-diagnostics floor (operating-the-harness §3): every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
 run = "bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/claude/hooks && bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/hooks"
 
 # The hand-written TS lint config lives in presets/typescript/.oxlintrc.json.
 [tasks.preset]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "List, apply, sync or compare project configuration presets: mise run preset -- list|apply|sync|diff <name> --to <dir>"
 run = "bun presets/src/cli.ts"
@@ -229,6 +243,7 @@ run = "bun presets/src/cli.ts"
 # every file has ONE writer. This gate fails when a hand-written declaration carries content a
 # renderer owns (a registry hook in a committed vendor file, a rendered roster in CLAUDE.md).
 [tasks."lint:one-writer"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "INV-8 one writer per file: fail when a hand-written declaration carries content scripts/render-home.ts owns"
 run = "bun scripts/one-writer-check.ts"
@@ -237,36 +252,43 @@ run = "bun scripts/one-writer-check.ts"
 # source, deploy kind, consumer, writer, verifier. config:map prints it; lint:config-map fails when
 # a tracked config-shaped file is in no row, or a row names a source that does not exist.
 [tasks."config:map"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Print every configuration surface (source → deployed, consumer, writer, verifier) from scripts/config-registry.ts. --json for a tool"
 run = "bun scripts/config-map.ts"
 
 [tasks."lint:config-map"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when a tracked config-shaped file is registered in no scripts/config-registry.ts row, or a row names a missing source"
 run = "bun scripts/config-map.ts --check"
 
 [tasks."lint:ignore"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when a tracked file is ignored or the global excludes source is undeclared"
 run = "bun scripts/lint-ignore.ts"
 
 [tasks."lint:live-refs"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when a deployed or declared agent command, repo link, or package bin points at a missing checkout file"
 run = "bun scripts/live-refs.ts"
 
 [tasks."vendor:deps"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Regenerate agents/hooks/vendor/deps.{js,d.ts}: the one zod (+ neverthrow fromThrowable) every file imports via agents/hooks/zod.ts — hooks run before bun install, so it is a committed bundle built from the pinned packages"
 run = "bun scripts/vendor-deps.ts"
 
 [tasks."vendor:deps:check"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail when the committed zod bundle is not what the pinned packages build to (run vendor:deps and commit)"
 run = "bun scripts/vendor-deps.ts --check"
 
 [tasks."lint:bun"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Enforce the writing-bun-scripts floor over every tracked production Bun CLI"
 run = "bun scripts/lint-bun.ts"
@@ -318,7 +340,7 @@ run = "bun scripts/lint-bun.ts"
 dir = "{{config_root}}"
 description = "oxlint --type-aware the repo's TS against .oxlintrc.json, with no disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
-depends = ["lint:ts-no-disable", "lint:no-sync"]
+depends = ["bun:check", "lint:ts-no-disable", "lint:no-sync"]
 run = "bunx --bun oxlint --type-aware"
 
 # node/no-sync for non-test TS, run through oxlint's own rule (scripts/lint-no-sync.ts). A genuinely
@@ -326,6 +348,7 @@ run = "bunx --bun oxlint --type-aware"
 # the exemption moves with the code. The rest are the per-file counts in lint/no-sync-baseline.tsv:
 # a new sync call fails, and the baseline only shrinks.
 [tasks."lint:no-sync"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail on a sync fs/child_process call in non-test TS beyond lint/no-sync-baseline.tsv (exempt: // sync-ok: <reason>)"
 run = "bun scripts/lint-no-sync.ts"
@@ -333,6 +356,7 @@ run = "bun scripts/lint-no-sync.ts"
 # Land refreshes the baseline after conversions: `mise run lint:no-sync-baseline`. It refuses any
 # per-file growth; `-- --init` re-bases deliberately.
 [tasks."lint:no-sync-baseline"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Regenerate lint/no-sync-baseline.tsv from the working copy (lowers it; refuses growth)"
 run = "bun scripts/lint-no-sync.ts --write"
@@ -341,6 +365,7 @@ run = "bun scripts/lint-no-sync.ts --write"
 # or eslint-disable in tracked TS fails (audit targets get no exception rules — enforced, not
 # promised). A hit prints its file:line.
 [tasks."lint:ts-no-disable"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Fail on any oxlint-disable / eslint-disable comment in tracked TS (no lint exceptions)"
 run = "bun scripts/lint-ts-no-disable.ts"
@@ -351,6 +376,7 @@ run = "bun scripts/lint-ts-no-disable.ts"
 # the same day (10 file units, each fix adversarially reviewed) rather than parked as a warning
 # — the flags were never lowered, and must not be.
 [tasks.typecheck]
+depends = ["bun:check"]
 alias = "tc"
 dir = "{{config_root}}"
 description = "Type-check the repo's own TS with tsgo (tsconfig.json: Coral-dpp-strict incl. noUncheckedIndexedAccess / exactOptionalPropertyTypes)"
@@ -373,16 +399,19 @@ depends = [
 ]
 
 [tasks."test:codex"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Narrow Codex integration regression suite: runtime/config tests, provider installer selection, coredev selector, and Codex doctor checks. Pass Bun filters with `mise run test:codex -- --filter <text>`."
 run = "bun test agents/codex/tests scripts/tests/install-ai-clis.test.ts scripts/tests/doctor.test.ts tools/coredev/tests"
 
 [tasks."test:android"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Offline safety checks for the Pixel LINE-only vibration policy parser"
 run = "bun test android/line-notifications.test.ts"
 
 [tasks."test:hooks"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Claude Code, Codex, vendor-neutral, and Goal Kernel hook tests (bun test; synthetic payloads exercise real adapters) — includes the hooks.toml registry and wiring"
 run = "bun test tools/detect-japanese/tests agents/hooks agents/claude/hooks agents/codex/hooks agents/goal-kernel scripts/tests/hook-registry.test.ts"
@@ -392,31 +421,37 @@ run = "bun test tools/detect-japanese/tests agents/hooks agents/claude/hooks age
 # wiring-mise-tasks contract keeps out of TOML bodies. The why and the measurement live in the
 # script's header.
 [tasks."test:resource-control"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Bounded resource admission and explicit Serena lifecycle tests (wrapped in the runner's own envelope where a user systemd can admit it)"
 run = "bun ~/dotfiles/scripts/test-resource-control.ts"
 
 [tasks."test:retrieval-control"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "repo-retrieve route and CLI contract tests (fake ccc/rg executables); also run by test:scripts via tools/*/tests"
 run = "bun test tools/repo-retrieve/tests"
 
 [tasks."test:agx"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "agx suite and run-engine tests: fake workers, fake Jev, scratch state dir"
 run = "bun test tools/agx tools/agx-run"
 
 [tasks."test:skills"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Run the tests shipped with all agent skills"
 run = "bun test agents/skills"
 
 [tasks."test:scripts"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "This repo's own script tests (scripts/tests) and their proof-of-fire fixtures, plus every tools/*/tests suite"
 run = "bun test scripts/tests tools/*/tests"
 
 [tasks."test:presets"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Prove shared preset fixture acceptance/rejection and strictness parity"
 run = "bun test presets"
@@ -424,6 +459,7 @@ run = "bun test presets"
 # Explicit invocation admits the live audit; directory discovery stays repository-only.
 # Deliberately outside test/check/gate:land.
 [tasks."test:doctor"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Doctor-only integration tests against deployed machine state"
 run = "bun test ./scripts/tests/doctor-live.ts"
@@ -432,6 +468,7 @@ run = "bun test ./scripts/tests/doctor-live.ts"
 # defined by tty-ness, a zle precmd hook and raw DEC escapes, via a real pty from `zsh/zpty`.
 # Bun has no pty, so a Bun test cannot reach those branches at all.
 [tasks."test:zsh"]
+depends = ["bun:check"]
 description = "Terminal-state hygiene regression tests (real pty via zsh/zpty; the timeout IS an assertion — one guarded regression is a hang)"
 run = 'bun ~/dotfiles/scripts/test-zsh.ts'
 
@@ -440,6 +477,7 @@ run = 'bun ~/dotfiles/scripts/test-zsh.ts'
 # shell mode (`-o interactive`) and inherited PATH, and its last case needs a real login tty.
 # The timeout is an assertion here too — that last case boots the user's whole login chain.
 [tasks."test:mise-scope"]
+depends = ["bun:check"]
 description = "Toolchain-scope regression tests (INV-6): the mise shim dir reaches non-interactive shells only, no global default version, no second version manager on login"
 run = 'bun ~/dotfiles/scripts/test-mise-scope.ts'
 
@@ -456,14 +494,17 @@ description = "Whole-tree land gate: non-mutating formatting checks + lint"
 depends = ["fmt:check", "lint", "lint:changesets"]
 
 [tasks.changeset]
+depends = ["bun:check"]
 description = "Generate a validated tool changeset"
 run = "bun scripts/changeset.ts"
 
 [tasks."lint:changesets"]
+depends = ["bun:check"]
 description = "Validate every pending tool changeset with the shared schema"
 run = "bun scripts/lint-changesets.ts"
 
 [tasks."usehooks:consumers"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Read-only declared consumer typechecks against this workspace's agx-usehooks; absent consumers are SKIP"
 run = "bun tools/agx-usehooks/src/check-consumers.ts"
@@ -471,11 +512,13 @@ run = "bun tools/agx-usehooks/src/check-consumers.ts"
 # Device policy tasks are intentionally outside the CI aggregate: a connected, authorized
 # Pixel is required. `android:line:check` is a live-device audit, not a source-code gate.
 [tasks."android:line"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Reapply the safe ADB settings for LINE-only vibration after the dedicated Android Mode is configured"
 run = "bun android/line-notifications.ts --apply"
 
 [tasks."android:line:check"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Audit the live Pixel LINE-only vibration and lock-screen privacy policy (read-only)"
 run = "bun android/line-notifications.ts"
@@ -493,10 +536,12 @@ depends = ["fmt:staged", "gate:land"]
 
 # 配線は tracked な core.hooksPath = .githooks(`git config core.hooksPath .githooks`)。
 [tasks."hook:post-commit"]
+depends = ["bun:check"]
 description = "git post-commit body: warm the cocoindex index incrementally (`ccc index`) so search never pays the update latency. No-op when ccc is absent, when the repo has no .cocoindex_code/, or when the daemon is already [indexing]. Called detached by .githooks/post-commit."
 run = 'bun ~/dotfiles/scripts/hook-post-commit.ts'
 
 [tasks."hook:post-merge"]
+depends = ["bun:check"]
 description = "After pull/merge: restore dependencies, relink dotfiles, converge Codex config and relink skills. Each step reports elapsed time and fails on a named timeout; total step budget 50 s. Called by .githooks/post-merge."
 # deps first: a pulled commit that adds a dependency (cli-progress for reclaim:purge, 2026-10-06)
 # otherwise fails at import on every box that only pulled. An unchanged lockfile is a no-op.
@@ -508,14 +553,17 @@ exec "$(mise which bun)" scripts/post-merge.ts
 # .claude/settings.json denies it — and jj runs no Git hooks. The commit and pull entrypoints
 # preserve the pre-commit and post-merge hooks; push provides the guarded alpha bookmark push.
 [tasks.commit]
+depends = ["bun:check"]
 description = "jj gated commit: snapshot, run hook:pre-commit with PRECOMMIT_VCS/PATHS_FILE/REV/BASE, commit exactly the named paths, move alpha to @-, optionally --push. mise run commit -- -m '<msg>' [--push] -- <path>..."
 run = "bun agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
 
 [tasks.land]
+depends = ["bun:check"]
 description = "Preflight, commit and push an accepted workspace, record its landed disposition and remove it; deployment is a separate mise run deploy task"
 run = "bun scripts/land.ts"
 
 [tasks.deploy]
+depends = ["bun:check"]
 description = "Deploy dotfiles to each configured host independently; optionally select a revision with --since <commit>"
 run = "bun scripts/deploy.ts"
 
@@ -529,17 +577,20 @@ mise run hook:post-merge
 '''
 
 [tasks.push]
+depends = ["bun:check"]
 description = "jj push: show alpha@origin..alpha, refuse divergence or conflicts, and push alpha to origin. Use --dry-run to print the list only."
 run = "bun agents/skills/wiring-mise-tasks/scripts/jj-push.ts"
 
 # ── reclaim ─────────────────────────────────────────────────────────────────
 # One preview surface and one explicit apply surface; the CLI owns candidate policy.
 [tasks.reclaim]
+depends = ["bun:check"]
 description = "Plan disk reclamation, including rip graveyard entries older than 24 hours; XDG Trash stays owner-only. Prints one JSONL record per candidate."
 raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" plan'
 
 [tasks."reclaim:yes"]
+depends = ["bun:check"]
 description = "Plan then apply safe disk-reclamation records, including expired rip graveyard entries; XDG Trash remains owner-only and requires explicit approval."
 raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" --yes'
@@ -552,6 +603,7 @@ run = 'bun "${MISE_PROJECT_ROOT}/tools/disk-reclaim/src/reclaim.ts" --yes'
 # session legitimately accumulates CPU. Plan by default; --execute stops only pids whose creation
 # time still matches the plan, so a pid reused by a new live session is left alone.
 [tasks."wsl:reap"]
+depends = ["bun:check"]
 description = "Reap ORPHANED sshd on the Windows host: the per-connection `-R` process (sshd.exe on 9.x, sshd-session.exe on 10.x) under any sshd service with NO child and NO socket (a live session always has both). READ-ONLY plan by default; --execute stops them, pid+creation-time matched. CPU time is reported, never the criterion. --host is an ssh alias."
 run = 'bun ~/dotfiles/scripts/wsl-reap.ts'
 
@@ -560,11 +612,13 @@ description = "Install core and on-demand Homebrew formulas and casks (Brewfile 
 run = 'brew bundle --file=~/dotfiles/Brewfile && mise run tools:audit'
 
 [tasks."tool:which"]
+depends = ["bun:check"]
 description = "Show whether a command is declared core, on-demand, or undeclared, and its formula when applicable"
 raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/tool-tiers/src/tool.ts" which'
 
 [tasks."tool:get"]
+depends = ["bun:check"]
 description = "Install one declared missing formula on first need; refuses undeclared commands and does not install casks"
 raw = true
 run = 'bun "${MISE_PROJECT_ROOT}/tools/tool-tiers/src/tool.ts" get'
@@ -575,6 +629,7 @@ dir = "{{config_root}}"
 run = 'brew bundle --file="${MISE_PROJECT_ROOT}/Brewfile.core"'
 
 [tasks."core:doctor"]
+depends = ["bun:check"]
 description = "Read-only core selection verification: core Brewfile commands, dependencies, bins, skills, MCP/Codex configuration, and the declared runtime; excludes on-demand tools and unrelated OS services."
 dir = "{{config_root}}"
 run = "DOCTOR_ONLY=brew,core-tools,deps,bins,skills,mcp,codex-config,codex-runtime bun scripts/doctor.ts"
@@ -587,6 +642,7 @@ run = "DOCTOR_ONLY=brew,core-tools,deps,bins,skills,mcp,codex-config,codex-runti
 # a re-implementation of exactly this mechanism, minus the declaration that made their shebangs
 # legitimate. Idempotent: re-linking an already-linked package is a no-op.
 [tasks.deps]
+depends = ["bun:check"]
 description = "Restore the repo's pinned Bun dependencies from bun.lock and `bun link` its bin commands into ~/.bun/bin (writing-bun-scripts BG3 graduation project; node_modules is gitignored). Required before running repo .ts scripts on a fresh clone."
 run = "bun install --frozen-lockfile && bun link && bun scripts/deps-prune.ts"
 
@@ -601,6 +657,7 @@ run = "bun install --frozen-lockfile && bun link && bun scripts/deps-prune.ts"
 # installer. This task also deploys WSL's explicit Windows Desktop `codex.exe` launcher.
 # gemini-cli dropped: Gemini is reached through agy (driving-antigravity).
 [tasks."install:ai-clis"]
+depends = ["bun:check"]
 description = "Install Claude Code and the standalone Codex CLI on macOS/Linux; on WSL deploy the explicit Windows Desktop codex.exe launcher while Brewfile.core supplies plain codex. Never bun/npm."
 run = "bun scripts/install-ai-clis.ts"
 
@@ -625,14 +682,17 @@ run = [
 ]
 
 [tasks."mac:defaults"]
+depends = ["bun:check"]
 description = "Apply declarative macOS system defaults (single source: macos/defaults.ts)"
 run = 'bun ~/dotfiles/macos/defaults.ts'
 
 [tasks."mac:obsidian"]
+depends = ["bun:check"]
 description = "Bring every registered Obsidian vault in line with obsidian/: merge app.json keys, install + enable sha256-pinned plugins.json"
 run = 'bun ~/dotfiles/obsidian/apply.ts'
 
 [tasks."mac:obsidian:trust"]
+depends = ["bun:check"]
 description = "Turn Obsidian's Restricted mode OFF for every registered vault so the plugins mac:obsidian installs load. RESTARTS Obsidian (it sets the switch through a one-shot DevTools port, then relaunches without it)"
 run = 'bun ~/dotfiles/obsidian/trust.ts'
 
@@ -641,10 +701,12 @@ description = "Point iTerm2 at dotfiles/iterm2/ as its preferences folder (singl
 run = 'bash ~/dotfiles/iterm2/setup.sh'
 
 [tasks."edge:policy"]
+depends = ["bun:check"]
 description = "Deploy edge/policy.plist.mac as Microsoft Edge's managed policy (/Library/Managed Preferences, sudo): blocks the extension that hijacked the default search and pins the engine. --check compares only (no sudo). macOS only."
 run = 'bun ~/dotfiles/scripts/edge-policy.ts'
 
 [tasks."mac:rosetta"]
+depends = ["bun:check"]
 description = "Install Rosetta 2 on Apple Silicon (idempotent no-op on Intel or if already installed)"
 run = 'bun ~/dotfiles/scripts/mac-rosetta.ts'
 
@@ -657,15 +719,18 @@ run = 'bun ~/dotfiles/scripts/mac-rosetta.ts'
 # dotfiles 自身の `lint` には入れない。他 repo の状態で dotfiles の gate が落ちるのは
 # 結合の誤りである。強制は各 repo の check が持ち、ここは差分を見るための眺めに徹する。
 [tasks."repos:audit"]
+depends = ["bun:check"]
 description = "~/Workspace の全 git repo の配線健全性を一望する (scaffolding-repositories の floor を横断実行)"
 run = 'bun ~/dotfiles/scripts/repos-audit.ts'
 
 [tasks."link:dots"]
+depends = ["bun:check"]
 description = "Create dotfile symlinks and render committed alpha inputs; dirty render inputs refuse unless --from-working-copy explicitly selects a local render"
 dir = "{{config_root}}"
 run = 'bun scripts/link-dots.ts --force'
 
 [tasks."tmux:plugins"]
+depends = ["bun:check"]
 description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"
 run = 'bun ~/dotfiles/scripts/tmux-plugins.ts'
 
@@ -683,15 +748,18 @@ dir = "{{config_root}}"
 run = 'bun scripts/doctor.ts'
 
 [tasks."secrets:push"]
+depends = ["bun:check"]
 description = "Relay selected fnox secrets from this machine or --from SSH host to an SSH target over stdin; values are SHA-256 verified. Only to a box whose root you trust. Usage: mise run secrets:push -- [--from HOST] [--secret NAME …] <target>"
 run = 'bun "${MISE_PROJECT_ROOT}/tools/secrets-push/src/secrets-push.ts"'
 
 [tasks."auth:push"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Transfer this machine's Codex, Claude Code, and GitHub CLI logins over SSH stdin to an owner's disposable box. Usage: mise run auth:push -- <host> [--only codex,claude,gh] [--force]"
 run = "bun scripts/auth-push.ts"
 
 [tasks."doctor:remote"]
+depends = ["bun:check"]
 description = "From the machine you sit at: is an ssh host usable as dotfiles promises? Key reach, the core CLIs on `ssh host cmd` (herdr --remote's bridge), an interactive login AND a herdr pane landing in zsh with the aliases, and the smart-open forward binding on attach — PASS/FAIL/WARN/SKIP with the fix. Usage: mise run doctor:remote -- <host>"
 run = 'bun ~/dotfiles/scripts/doctor-remote.ts'
 
@@ -703,25 +771,30 @@ run = 'bun ~/dotfiles/scripts/doctor-remote.ts'
 # standalone tool a human runs on purpose. Do not "fix" by silently wiring it in — the pass/fail
 # flip is a real CI-behavior change, not a naming one.
 [tasks."models:audit"]
+depends = ["bun:check"]
 description = "Model-release SSOT floor (agents/models/releases.toml): staleness, retirements, dead refs"
 run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 
 # A throwaway Linux box (rented GPU container, fresh VM): run scripts/bootstrap-linux.sh as root
 # (it ends by calling this as the target user). Homebrew owns core; mise owns repo toolchains.
 [tasks."linux:init"]
+depends = ["bun:check"]
 description = "Core utilities via Homebrew bundle Brewfile.core at the declared Linux prefix; source builds allowed. Agent native CLIs and dotfile links follow. Experiments stay per repo. --rented declares only a measured owner's disposable host."
 run = "bun ~/dotfiles/scripts/linux-init.ts"
 
 [tasks."linux:migrate-brew"]
+depends = ["bun:check"]
 description = "Migrate core to Homebrew at LAND_HOSTS' prefix; --dry-run prints plan. Verify new shell PATH before cleanup; defer links used by existing processes and never delete mise installs."
 run = "bun scripts/linux-init.ts --migrate-brew"
 
 # Run FROM THE MAC after a rental is reachable. Renting itself (offer, cap, tier) stays a judgment.
 [tasks."box:init"]
+depends = ["bun:check"]
 description = "From the Mac, once a rented box answers ssh (or with --root-host/--root-port to bootstrap it as root): bring it to 'experiments can resume' — reach, gh login (--gh), per --repo: clone, mise trust+install, jj (setup:jj or colocate), setup, doctor — then doctor:remote. Idempotent: a finished box re-runs as fast PASS no-ops. Usage: mise run box:init -- <alias> [--root-host H --root-port P] [--gh] [--repo owner/name …]"
 run = 'bun ~/dotfiles/scripts/box-init.ts'
 
 [tasks."wsl:init"]
+depends = ["bun:check"]
 description = "Initialize WSL environment (after: install linuxbrew, brew install mise)"
 run = 'bun ~/dotfiles/scripts/wsl-init.ts'
 
@@ -732,18 +805,22 @@ run = 'bun ~/dotfiles/scripts/wsl-init.ts'
 # Guarded: refuses to deploy a memory= that would leave Windows under ~6 GB on this host, since
 # an over-committed memory=60GB on a 63.9 GB box measurably destabilised it on 2026-09-06.
 [tasks."wsl:wslconfig"]
+depends = ["bun:check"]
 description = "Deploy wsl/wslconfig.win to %USERPROFILE%\\.wslconfig (COPY — Windows cannot follow a WSL symlink). Idempotent, backs up drift, guards memory= against host RAM. Needs `wsl --shutdown` to take effect."
 run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 
 [tasks."wsl:drive-mount"]
+depends = ["bun:check"]
 description = "Install the declared Google Drive G: drvfs entry in /etc/fstab so WSL mounts the virtual drive on future starts; preserves unrelated entries."
 run = "bun wsl/drive-mount.ts"
 
 [tasks."wsl:install-root-levers"]
+depends = ["bun:check"]
 description = "Install the WSL fstrim and page-cache oneshot units plus the exact per-user sudoers rule; run once from the owner account."
 run = "bun wsl/install-root-levers.ts"
 
 [tasks."wsl:root-levers:doctor"]
+depends = ["bun:check"]
 description = "Read-only check for installed WSL root-lever units and passwordless authorization to start only those units."
 run = "bun wsl/root-levers-doctor.ts"
 
@@ -762,20 +839,24 @@ run = "bun wsl/root-levers-doctor.ts"
 # Running: the distro can be up while ssh.service inside WSL is not (measured same day), so it
 # starts sshd through the host and re-checks.
 [tasks."wsl:wake"]
+depends = ["bun:check"]
 description = "Start every managed WSL distro and leave each guest ssh-reachable — for when Windows rebooted to the logon screen or a distro idle-terminated. Tries the LAN alias then the tailnet alias, continues past failures, and prints one result line per distro. --status to only report; --host to pin one route."
 dir = "{{config_root}}"
 run = "bun scripts/wsl-wake.ts"
 
 [tasks."wsl:keepalive"]
+depends = ["bun:check"]
 description = "Install or check S4U startup and logon keepalive tasks for managed WSL distros. --alias selects one; --check verifies principal, triggers, and Running state; --dry-run prints PowerShell."
 dir = "{{config_root}}"
 run = "bun scripts/wsl-keepalive.ts"
 
 [tasks."wsl:distro"]
+depends = ["bun:check"]
 description = "Create a named WSL distro and SSH alias; requires r99-u24 running because its Tailscale daemon owns the shared utility-VM address. --dry-run prints the plan."
 run = 'bun ~/dotfiles/scripts/wsl-distro.ts'
 
 [tasks."wsl:repair"]
+depends = ["bun:check"]
 description = "Add missing <alias>-code aliases and Tag smart-open to dotfiles-managed WSL blocks in ~/.ssh/config.local. --check prints a diff without writing."
 dir = "{{config_root}}"
 run = "bun scripts/wsl-distro.ts repair-config"
@@ -789,6 +870,7 @@ run = "bun scripts/wsl-distro.ts repair-config"
 # reaches Windows through interop powershell.exe). Exit 0 clear / 1 threshold breached /
 # 2 could not measure — "I could not see" is never folded into "I saw a problem".
 [tasks."wsl:audit"]
+depends = ["bun:check"]
 description = "READ-ONLY resource evidence for the WSL2 guest AND the Windows host under it, in one shot, with a threshold verdict (CPU/PSI, memory, swap, guest disk, C:, vmmemWSL, spinning processes, service crashes, vhdx allocated-vs-apparent). Deletes nothing. --json for machine use; --guest/--host take ssh aliases or 'local'."
 run = 'bun ~/dotfiles/scripts/wsl-audit.ts'
 
@@ -800,14 +882,17 @@ run = 'bun ~/dotfiles/scripts/wsl-audit.ts'
 # Coverage limit, by winget's contract: only packages a source can resolve are exported (96 of
 # 113 here). The NVIDIA display driver is NOT in winget; CUDA is.
 [tasks."wsl:winget:dump"]
+depends = ["bun:check"]
 description = "Capture the Windows host's winget-managed packages into wsl/winget.win.json (winget export via interop, ids sorted for stable diffs). Review the diff, then commit."
 run = 'bun ~/dotfiles/scripts/wsl-winget.ts dump'
 
 [tasks."wsl:winget:restore"]
+depends = ["bun:check"]
 description = "Install everything wsl/winget.win.json lists that is missing on the Windows host (winget import --no-upgrade --ignore-unavailable). --dry-run prints the command only."
 run = 'bun ~/dotfiles/scripts/wsl-winget.ts restore'
 
 [tasks."bench:definitions"]
+depends = ["bun:check"]
 description = "Yardstick for `rr exists`: top-1/3/10 per language and absence on a case file kept OUTSIDE this public repo (it names private code). mise run bench:definitions -- --cases ~/.local/share/repo-retrieve/bench/<name>.json"
 run = "bun tools/repo-retrieve/src/bench-definitions.ts"
 
@@ -816,6 +901,7 @@ description = "Enable the socket-activated reranker for `rr exists` (link:dots p
 run = 'systemctl --user daemon-reload && systemctl --user enable --now repo-retrieve-rerank.socket && systemctl --user is-active repo-retrieve-rerank.socket'
 
 [tasks."wsl:ccc-daemon"]
+depends = ["bun:check"]
 description = "Hand the ccc daemon to systemd with CPU/RAM caps (link:dots must have run first)"
 # Two-step by design, like cc:install-mcp: link:dots places the unit, this activates it.
 # Stop the incumbent first — a fresh daemon unlinks and rebinds the socket at startup, so
@@ -842,10 +928,12 @@ description = "Install Rust toolchain"
 run = 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh'
 
 [tasks."cc:install-mcp"]
+depends = ["bun:check"]
 description = "Apply .mcp.json (single declarative source) to Claude Code (user scope) AND Codex. Idempotent. mac & WSL."
 run = 'bun ~/dotfiles/scripts/install-mcp.ts && bun ~/dotfiles/agents/codex/codex-config.ts'
 
 [tasks."agents:link"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Link agent commands and Codex guidance into AI tool config directories"
 run = "bun scripts/link-agent-assets.ts"
@@ -856,43 +944,58 @@ run = "bun scripts/link-agent-assets.ts"
 # skills into both Claude Code and Codex with copied skill directories; sync then removes only
 # obsolete in-house names and reconciles declared third-party skills.
 [tasks."skills:migrate"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Copy global skill links that point into repositories into real tool-owned paths; preserves current Codex/Claude skills"
 run = "bun scripts/skills-migrate.ts"
 
 [tasks."skills:add"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Install and declare third-party skills globally. Usage: mise run skills:add -- <owner/repo> --skill <name> [--skill <name>…] [--dry-run]"
 run = "bun scripts/vendor-skill.ts"
 
 [tasks."skills:sync"]
+depends = ["bun:check"]
 dir = "{{config_root}}"
 description = "Install bare-name in-house skill copies into ~/.claude/skills and ~/.agents/skills, then reconcile declared third-party skills"
 run = "bun scripts/skills-sync.ts"
 
 [tasks."codex:remote-control"]
+depends = ["bun:check"]
 description = "Converge the Codex app-server daemon's remote control (how the ChatGPT mobile app reaches this machine) to agents/codex/app-server.toml. Idempotent; on drift it persists the setting and restarts a running daemon. `mise run doctor` (codex-remote) reports the drift."
 run = "bun agents/codex/codex-remote-control.ts"
 
 [tasks."codex:config"]
+depends = ["bun:check"]
 description = "Converge declared Codex model limits, workspace-write network settings, and .mcp.json MCP entries into ~/.codex/config.toml."
 run = "bun agents/codex/codex-config.ts"
 
 [tasks."codex:runtime"]
+depends = ["bun:check"]
 description = "Deploy the WSL dual-Codex integration: Homebrew plain codex plus explicit Windows codex.exe."
 dir = "{{config_root}}"
 run = "bun agents/codex/codex-runtime.ts deploy"
 
 [tasks."codex:runtime:check"]
+depends = ["bun:check"]
 description = "Verify the actual WSL Homebrew codex and explicit Windows codex.exe mapping without writing."
 dir = "{{config_root}}"
 run = "bun agents/codex/codex-runtime.ts --check"
 
 [tasks."coredev:selection"]
+depends = ["bun:check"]
 description = "Print the canonical coredev selected task set. Usage: mise run coredev:selection -- --kind <linux|wsl|mac> --phase <deploy|doctor> [--json]"
 dir = "{{config_root}}"
 run = "bun scripts/deployment-selection.ts"
 
 [tasks."lint:bash"]
+depends = ["bun:check"]
 description = "Reject added or grown shell scripts over 12 physical lines"
 run = "bun scripts/lint-no-new-bash.ts"
+
+# Validate the executing binary before Bun build/check task bodies run.
+[tasks."bun:check"]
+dir = "{{config_root}}"
+description = "Enforce package.json engines.bun for the task runtime"
+run = "DOCTOR_ONLY=bun-runtime bun scripts/doctor.ts"

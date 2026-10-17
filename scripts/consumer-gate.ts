@@ -24,6 +24,13 @@ import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 const Surface = z.string().regex(/^(presets\/[a-z0-9-]+|hooks|package-bins)$/u);
+const RelativePath = z
+  .string()
+  .min(1)
+  .refine(
+    (path) => !isAbsolute(path) && !path.split(/[\\/]/u).includes(".."),
+    "unsafe preset path",
+  );
 const ConsumerDeclaration = z.strictObject({
   name: z.string().min(1),
   root: z.string().min(1),
@@ -32,6 +39,18 @@ const ConsumerDeclaration = z.strictObject({
   bins: z.array(z.string().min(1)).optional(),
   full_gate_rule: z.string().optional(),
   surfaces: z.array(Surface).min(1),
+  preset_dirs: z
+    .strictObject({ typescript: RelativePath.optional() })
+    .optional(),
+  notify: z
+    .array(
+      z.strictObject({
+        paths: z.array(z.string().min(1)).min(1),
+        contact: z.string().min(1),
+        check: z.string().min(1),
+      }),
+    )
+    .optional(),
   command: z.array(z.string().min(1)).min(1),
   timeout_ms: z.number().int().positive().max(600_000),
 });
@@ -332,13 +351,6 @@ async function candidateBins(
   return undefined;
 }
 
-const RelativePath = z
-  .string()
-  .min(1)
-  .refine(
-    (path) => !isAbsolute(path) && !path.split(/[\\/]/u).includes(".."),
-    "unsafe preset path",
-  );
 const Mappings = z.looseObject({
   files: z.array(
     z.looseObject({
@@ -424,6 +436,47 @@ async function applySurface(
   return rendered.ok
     ? undefined
     : `render ${surface} ${rendered.reason}\n${diagnosticOutput(rendered.output)}`;
+}
+
+async function applyConsumerSurface(
+  candidate: string,
+  copy: string,
+  consumer: Consumer,
+  surface: string,
+  changed: readonly string[],
+  run: (argv: string[], cwd?: string) => ReturnType<typeof command>,
+): Promise<string | undefined> {
+  const directory =
+    surface === "presets/typescript"
+      ? consumer.preset_dirs?.typescript
+      : undefined;
+  const target = directory === undefined ? copy : join(copy, directory);
+  if (directory !== undefined) {
+    const rendered = join(directory, ".oxlintrc.json");
+    if (await containsSymlink(copy, rendered))
+      return `apply ${surface}: refusing write through consumer symlink ${rendered}`;
+    if (!(await Bun.file(join(copy, rendered)).exists()))
+      return `apply ${surface}: declared preset directory ${directory} has no rendered file ${rendered}`;
+  }
+  return applySurface(candidate, target, surface, changed, (argv) =>
+    run(argv, target),
+  );
+}
+
+function consumerNotices(
+  consumer: Consumer,
+  changed: readonly string[],
+): string[] {
+  return (consumer.notify ?? [])
+    .filter((notice) =>
+      notice.paths.some((pattern) =>
+        changed.some((path) => new Bun.Glob(pattern).match(path)),
+      ),
+    )
+    .map(
+      (notice) =>
+        `NOTICE ${consumer.name}: contact ${notice.contact}; gate cannot run check: ${notice.check}`,
+    );
 }
 
 async function registerWorkspaceLinks(
@@ -772,13 +825,13 @@ async function checkConsumer(
       ...resolvedPath.directories,
     ].join(":"),
   };
-  const run = (argv: string[]) => {
+  const run = (argv: string[], cwd = copy) => {
     const executable = argv[0];
     const resolved =
       executable === undefined
         ? argv
         : [executables.paths.get(executable) ?? executable, ...argv.slice(1)];
-    return command([...prefix, ...resolved], copy, env, consumer.timeout_ms);
+    return command([...prefix, ...resolved], cwd, env, consumer.timeout_ms);
   };
   await seedMiseInstalls(home);
   const linked = await registerWorkspaceLinks(candidate, home);
@@ -819,7 +872,14 @@ async function checkConsumer(
   const steps: { label: string; argv: string[] }[] = [];
   for (const surface of consumer.surfaces) {
     if (!surface.startsWith("presets/")) continue;
-    const applied = await applySurface(candidate, copy, surface, changed, run);
+    const applied = await applyConsumerSurface(
+      candidate,
+      copy,
+      consumer,
+      surface,
+      changed,
+      run,
+    );
     if (applied !== undefined)
       return [...lines, `FAIL ${consumer.name}: ${applied}`];
   }
@@ -877,6 +937,11 @@ export async function runConsumerGates(
   );
   const lines: string[] = parsed.data.pending.map(
     (consumer) => `pending ${consumer.name}: ${consumer.reason}`,
+  );
+  lines.push(
+    ...parsed.data.consumers.flatMap((consumer) =>
+      consumerNotices(consumer, changed),
+    ),
   );
   for (const consumer of selected) {
     const result = await attempt(() => checkConsumer(root, consumer, changed));

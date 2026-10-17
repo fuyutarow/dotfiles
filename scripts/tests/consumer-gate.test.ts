@@ -408,6 +408,7 @@ test("owner declarations select only the declared shared surfaces", async () => 
     "coralbase",
   ]);
   expect(declarations[0]).toMatchObject({
+    preset_dirs: { typescript: "tools" },
     trunk: "alpha",
     setup: ["mise", "run", "setup"],
     command: ["mise", "run", "lint"],
@@ -423,6 +424,134 @@ test("owner declarations select only the declared shared surfaces", async () => 
   ).toEqual([["package-bins"], ["package-bins"]]);
   expect(declarations[2]?.full_gate_rule).toContain("CLI or manifest schema");
   expect(declarations[2]?.trunk).toBeUndefined();
+  expect(parsed.data.pending).toHaveLength(0);
+  expect(declarations[2]?.command).toEqual([
+    "sh",
+    "-c",
+    "jj-commit --help >/dev/null && jj-push --help >/dev/null && fmt-staged --help >/dev/null && mise-contract && bun scripts/spec-lint.ts",
+  ]);
+  expect(declarations[2]?.notify).toEqual([
+    {
+      paths: ["tools/agent-resource-run/**"],
+      contact: "polysearch-v1-agt_f24v",
+      check: "RUSTC_WRAPPER= mise run hook:pre-commit",
+    },
+  ]);
+});
+
+async function typescriptFixture(directory?: string, missing = false) {
+  const target = directory ?? ".";
+  const f = await fixture({
+    surface: "presets/typescript",
+    gate: `
+if (await Bun.file(${JSON.stringify(`${target}/.oxlintrc.json`)}).text() !== 'candidate-policy') process.exit(4);
+if (${JSON.stringify(target)} !== '.' && await Bun.file('.oxlintrc.json').exists()) process.exit(5);
+`,
+  });
+  await mkdir(join(f.root, "presets/typescript"), { recursive: true });
+  await mkdir(join(f.root, "scripts"));
+  await writeFile(join(f.root, "presets/typescript/preset.toml"), "files = []");
+  // Fixture renderer honors the actual --repo argument, so a wrong directory fails the gate.
+  await writeFile(
+    join(f.root, "scripts/render-oxlintrc.ts"),
+    `
+import {join} from 'node:path';
+const repo = Bun.argv[Bun.argv.indexOf('--repo') + 1];
+await Bun.write(join(repo, '.oxlintrc.json'), 'candidate-policy');
+`,
+  );
+  if (!missing) {
+    await mkdir(join(f.consumer, target), { recursive: true });
+    await writeFile(join(f.consumer, target, ".oxlintrc.json"), "old-policy");
+  }
+  if (!missing) await snapshot(f.consumer);
+  if (directory !== undefined) {
+    const registry = join(f.root, "presets/consumers.toml");
+    await writeFile(
+      registry,
+      `${await Bun.file(registry).text()}\npreset_dirs = { typescript = ${JSON.stringify(directory)} }\n`,
+    );
+  }
+  return f;
+}
+
+test("declared TypeScript directory receives the candidate render and its gate passes", async () => {
+  const f = await typescriptFixture("tools");
+  const result = await runConsumerGates(f.root, [
+    "presets/typescript/policy.toml",
+  ]);
+  expect(result.ok, result.lines.join("\n")).toBe(true);
+  expect(result.checked).toBe(1);
+  expect(await Bun.file(join(f.consumer, "tools/.oxlintrc.json")).text()).toBe(
+    "old-policy",
+  );
+});
+
+test("omitted preset_dirs renders TypeScript at the consumer root", async () => {
+  const f = await typescriptFixture();
+  const result = await runConsumerGates(f.root, [
+    "presets/typescript/policy.toml",
+  ]);
+  expect(result.ok, result.lines.join("\n")).toBe(true);
+});
+
+test("missing rendered file in a declared directory fails naming consumer and path", async () => {
+  const f = await typescriptFixture("tools", true);
+  // A root render must never satisfy a declaration for tools/.
+  await mkdir(join(f.consumer, "tools"));
+  await writeFile(join(f.consumer, ".oxlintrc.json"), "wrong-directory");
+  await snapshot(f.consumer);
+  const result = await runConsumerGates(f.root, [
+    "presets/typescript/policy.toml",
+  ]);
+  expect(result.ok).toBe(false);
+  expect(result.lines.join("\n")).toContain(
+    "FAIL fixture-consumer: apply presets/typescript: declared preset directory tools has no rendered file tools/.oxlintrc.json",
+  );
+});
+
+test("preset directory paths cannot escape the consumer", () => {
+  const base = {
+    name: "fixture",
+    root: "/unused",
+    setup: ["true"],
+    surfaces: ["presets/typescript"],
+    command: ["true"],
+    timeout_ms: 1000,
+  };
+  for (const directory of [
+    "../outside",
+    "/outside",
+    "tools/../../outside",
+    "tools\\..\\outside",
+    "",
+  ]) {
+    expect(
+      ConsumerRegistry.safeParse({
+        consumers: [{ ...base, preset_dirs: { typescript: directory } }],
+      }).success,
+    ).toBe(false);
+  }
+});
+
+test("matching candidate paths emit one NOTICE with the owner contact and unavailable check", async () => {
+  const f = await fixture({ surface: "package-bins", gate: "" });
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    `${await Bun.file(registry).text()}\nnotify = [{ paths = ["tools/agent-resource-run/**"], contact = "polysearch-v1-agt_f24v", check = "RUSTC_WRAPPER= mise run hook:pre-commit" }]\n`,
+  );
+  const result = await runConsumerGates(f.root, [
+    "tools/agent-resource-run/src/main.ts",
+    "tools/agent-resource-run/package.json",
+  ]);
+  expect(result.ok, result.lines.join("\n")).toBe(true);
+  expect(result.checked).toBe(1);
+  expect(result.lines.filter((line) => line.startsWith("NOTICE"))).toEqual([
+    "NOTICE fixture-consumer: contact polysearch-v1-agt_f24v; gate cannot run check: RUSTC_WRAPPER= mise run hook:pre-commit",
+  ]);
+  const unrelated = await runConsumerGates(f.root, ["tools/other/main.ts"]);
+  expect(unrelated.lines.some((line) => line.startsWith("NOTICE"))).toBe(false);
 });
 
 test("omitted trunk uses the consumer repository's trunk() revset", async () => {

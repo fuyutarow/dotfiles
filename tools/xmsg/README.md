@@ -10,7 +10,7 @@ xmsg send --to claude:<session-id-or-exact-name> --message 'Can you check this?'
 ```
 
 Only the selected CLI must be on `PATH`. Codex targets use `codex queue`. Claude targets use a
-one-shot `claude --print` relay, with `--tools` limiting built-in tools to `ListAgents` and
+one-shot `claude --print --model haiku --effort low` relay, with `--tools` limiting built-in tools to `ListAgents` and
 `SendMessage` and `--allowedTools` pre-approving those tools. The relay uses a Claude turn to
 resolve one exact, unique target; this selection remains model-assisted. The unchanged message
 and the `SendMessage` call ID are checked against its structured `tool_result`. Model prose is

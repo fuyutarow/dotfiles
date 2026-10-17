@@ -268,3 +268,18 @@ test("help and both version aliases need no transport", async () => {
     expect(r.stdout).toMatch(/^xmsg \d+\.\d+\.\d+\n$/u);
   }
 });
+
+test("Claude relay explicitly selects Haiku and low effort", async () => {
+  const r = await run({ output: stream(use, accepted) });
+  expect(r.exit).toBe(0);
+  const modelIndex = r.argv.indexOf("--model");
+  const effortIndex = r.argv.indexOf("--effort");
+  expect(r.argv.slice(modelIndex, modelIndex + 2)).toEqual([
+    "--model",
+    "haiku",
+  ]);
+  expect(r.argv.slice(effortIndex, effortIndex + 2)).toEqual([
+    "--effort",
+    "low",
+  ]);
+});

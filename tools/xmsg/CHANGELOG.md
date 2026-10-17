@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 — 2026-10-18
+
+- Pin the one-shot Claude messaging relay to Haiku with low effort.
+
 ## 0.1.1 — 2026-10-18
 
 - Confirm Claude acceptance from SendMessage tool results, restrict relay tools, and distinguish rejected, unreachable and unknown outcomes.

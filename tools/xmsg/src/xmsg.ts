@@ -32,6 +32,10 @@ async function send(
       ? ["queue", "--thread", id, "--message", message]
       : [
           "--print",
+          "--model",
+          "haiku",
+          "--effort",
+          "low",
           "--tools=ListAgents,SendMessage",
           "--allowedTools=ListAgents,SendMessage",
           "--output-format",

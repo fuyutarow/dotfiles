@@ -57,9 +57,11 @@ and refreshes through its existing five-second `status-interval`. Herdr's comman
 tab-bar-wide; its pane metadata is display-only, so neither provides tmux's active-pane command
 format.
 
-Dispatch worker rows begin with the roster row and elapsed time, followed by the active display ID
-when present (for example, `luna-high 6m05s agt_lfix Repo: dotfiles…`). Older active markers
-without a display ID retain the worker session head/tail format.
+Dispatch worker rows show the roster row, elapsed time, cost, worker/workspace name and ticket.
+Session IDs remain in the data and are omitted from worker rows. Legacy `agx-<slug>` worker names
+display as `agt_<slug>`. The summary always includes `dispatch warning: none` when no warning is
+present. Its lost count uses the same `orphaned` classification as `agx doctor`, excluding legacy
+history and ended runs with missing returns.
 
 Storage still reads the canonical `agents/hooks/storage-headroom.toml` as runtime data, resolved
 relative to this package rather than cwd. Only `storageLine` is imported from shared storage code.

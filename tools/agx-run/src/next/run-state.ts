@@ -41,7 +41,10 @@ export const RunSchema = z.object({
   changed_files: z.number().optional(),
 });
 export type FoldedRun = z.output<typeof RunSchema>;
-export type ListedRun = Omit<FoldedRun, "pid" | "state" | "outcome" | "lease"> &
+export type ListedRun = { health?: string | null } & Omit<
+  FoldedRun,
+  "pid" | "state" | "outcome" | "lease"
+> &
   (
     | { state: "running"; outcome: null; lease: z.output<typeof Lease> }
     | { state: "ended"; outcome: Outcome; lease?: z.output<typeof Lease> }

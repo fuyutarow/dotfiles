@@ -61,7 +61,7 @@ describe("enforce-dispatch-contract", () => {
       expect(d.reason).toContain("agx judge <run> accept|reject");
       expect(d.reason).toContain("agx stats");
       expect(d.reason).toContain(
-        "systemd-run --user --unit=agx-<name> --collect -- agx run …",
+        "systemd-run --user --unit=agt_<slug> --collect -- agx run …",
       );
       // the table names every candidate, claude rows included, with its measured numbers and cost
       expect(d.reason).toContain("| ● | `luna-high` | codex | 33 | 4.5 |");

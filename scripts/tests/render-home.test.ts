@@ -265,7 +265,7 @@ describe("render-home: base only", () => {
       "agx ls [--json]",
       "agx judge <run> accept|reject",
       "agx stats [--import-legacy]",
-      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run <ticket.md>",
+      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run <ticket.md>",
       "agx run <ticket.md> --continue <run>",
       "$XDG_STATE_HOME/agx-next/records.jsonl",
       "Ticket time boxes: `timeout_s` defaults to 600 seconds",
@@ -574,7 +574,7 @@ describe("render-home: the rest of the rendered half", () => {
       "agx ls [--json]",
       "agx judge <run> accept|reject",
       "agx stats [--import-legacy]",
-      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run <ticket.md>",
+      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run <ticket.md>",
       "agx run <ticket.md> --continue <run>",
     ])
       expect(md).toContain(command);

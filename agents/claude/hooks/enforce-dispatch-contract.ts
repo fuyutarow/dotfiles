@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     `dispatch-contract: the ${tool} tool dispatches nothing — every worker starts with ${ENTRY}. ` +
       "Use `agx check <ticket>` to validate a ticket, `agx ls` to inspect runs, " +
       "`agx judge <run> accept|reject` to record a judgment, and `agx stats` for run statistics. " +
-      "For durable runs use `systemd-run --user --unit=agx-<name> --collect -- agx run …`; " +
+      "For durable runs use `systemd-run --user --unit=agt_<slug> --collect -- agx run …`; " +
       `continue with \`agx run <ticket> --continue <run>\`.\nRoster (${ROSTER_FILE}):\n${rosterTable(loaded.value)}`,
   );
 }

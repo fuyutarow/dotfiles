@@ -116,7 +116,7 @@ const extraWorker = (
     writeFileSync(join(active, `${name}.progress.json`), progressFor(session));
 };
 const AGX_FIXTURE_RUNNER =
-  'const fs=require("node:fs");const path=require("node:path");const dir=path.join(process.env.AGX_STATE_DIR??"","active");const rows=fs.readdirSync(dir).sort().filter((name)=>name.endsWith(".json")&&!name.endsWith(".progress.json")).map((name)=>{const marker=JSON.parse(fs.readFileSync(path.join(dir,name),"utf8"));let alive=true;try{process.kill(marker.pid,0)}catch{alive=false}const progressPath=path.join(dir,`${marker.run_id}.progress.json`);let progress;try{progress=JSON.parse(fs.readFileSync(progressPath,"utf8"))}catch{}return{id:marker.run_id,ticket:marker.label,row:marker.choice,state:alive?"running":"ended",outcome:alive?null:"lost",exit:null,cwd:marker.cwd,workspace:marker.cwd,writes:[],judgment:null,report_path:null,dispatcher_session:marker.dispatcher_session??null,vendor_session:marker.worker_session??progress?.session??null,started_at:marker.started_at,continues:marker.pick_source==="resume"?"previous":null,verify:[],last_progress_path:fs.existsSync(progressPath)?progressPath:null,pick_source:marker.pick_source,phase:marker.phase,cost_usd:marker.cost_usd}});process.stdout.write(JSON.stringify(rows));';
+  'const fs=require("node:fs");const path=require("node:path");const dir=path.join(process.env.AGX_STATE_DIR??"","active");const rows=fs.readdirSync(dir).sort().filter((name)=>name.endsWith(".json")&&!name.endsWith(".progress.json")).map((name)=>{const marker=JSON.parse(fs.readFileSync(path.join(dir,name),"utf8"));let alive=true;try{process.kill(marker.pid,0)}catch{alive=false}const progressPath=path.join(dir,`${marker.run_id}.progress.json`);let progress;try{progress=JSON.parse(fs.readFileSync(progressPath,"utf8"))}catch{}return{id:marker.run_id,ticket:marker.label,row:marker.choice,state:alive?"running":"ended",outcome:alive?null:"lost",health:alive?null:"orphaned",exit:null,cwd:marker.cwd,workspace:marker.cwd,writes:[],judgment:null,report_path:null,dispatcher_session:marker.dispatcher_session??null,vendor_session:marker.worker_session??progress?.session??null,started_at:marker.started_at,continues:marker.pick_source==="resume"?"previous":null,verify:[],last_progress_path:fs.existsSync(progressPath)?progressPath:null,pick_source:marker.pick_source,phase:marker.phase,cost_usd:marker.cost_usd}});process.stdout.write(JSON.stringify(rows));';
 
 // Extra agx state on top of the base worker, written before both entries run.
 const stateVariants: [string, (state: string) => void][] = [
@@ -198,21 +198,21 @@ const stateVariants: [string, (state: string) => void][] = [
     },
   ],
   [
-    "session ids sharing a UUIDv7 prefix render distinctly",
+    "session ids sharing a UUIDv7 prefix stay hidden",
     (state) => {
       extraWorker(state, "w1", "0191abcd-0000-7000-8000-11111111abcd");
       extraWorker(state, "w2", "0191abcd-0000-7000-8000-22222222bcde");
     },
   ],
   [
-    "session ids sharing their last four digits grow the tail",
+    "session ids sharing their last four digits stay hidden",
     (state) => {
       extraWorker(state, "w1", "01234567-0000-7000-8000-11111111abcd");
       extraWorker(state, "w2", "01239999-0000-7000-8000-22222222abcd");
     },
   ],
   [
-    "resume label identifies its row; a missing id reserves the column",
+    "resume label identifies its row without a session column",
     (state) => {
       extraWorker(
         state,

@@ -173,7 +173,7 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    tools) under `$XDG_DATA_HOME` or `~/.local/share`. The `rip` function refuses tmpfs/ramfs
    graveyards; linked `environment.d` settings cover systemd user services and `systemd-run --user`.
    For durable `agx run` dispatches, carry the caller's session with
-   `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run TICKET.md`.
+   `systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run TICKET.md`.
    Before dispatch, agx refuses a Git ref lock with no open holder that is older than 60 seconds.
    It prints the lock path and age, then gives the `rip <path>` repair after confirming no holder.
    Bash SSH shells read the same prefix and export both variables. `brew shellenv` belongs in login

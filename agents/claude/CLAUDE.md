@@ -10,7 +10,7 @@
 <!-- roster:end -->
 - **Dispatch workers through agx's five commands.** Start with `agx run <ticket>`; use
   `agx check <ticket>`, `agx ls`, `agx judge <run> accept|reject`, and `agx stats` as needed.
-  Durable runs use `systemd-run --user --unit=agx-<name> --collect -- agx run …`; continue a
+  Durable runs use `systemd-run --user --unit=agt_<slug> --collect -- agx run …`; continue a
   vendor session with `agx run <ticket> --continue <run>`.
 - **Execution stays observable; durability is earned, not stolen.** A PreToolUse hook denies
   Bash that orphans work to init — `setsid` (bare), `nohup`, `disown`, a detacher inside a
@@ -19,7 +19,7 @@
   waits, and agent-resource-run's own launch form) and `systemd-run --user --unit=<name>`
   (manager-owned, so stoppable, journal-streamed, and exit-status recorded) stay open. Order of
   preference: `run_in_background:true` to watch it now → `agent-resource-run --manifest` for
-  compute → `systemd-run --user --unit=agx-<name> --collect -- agx run …` for durable agx runs.
+  compute → `systemd-run --user --unit=agt_<slug> --collect -- agx run …` for durable agx runs.
   If none fit, STOP and say so; do not invent another way. Live jobs and orphan count render in
   the statusline's `Job:` segment.
 - **ccc-registered repos: raw search is banned; say WHAT you are looking for through `rr`.**

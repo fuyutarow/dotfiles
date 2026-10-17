@@ -31,6 +31,10 @@ async function main(): Promise<void> {
   const root = cli(
     {
       name: "agx",
+      help: {
+        description:
+          "Durable runs: systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run <ticket.md>",
+      },
       parameters: [],
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,

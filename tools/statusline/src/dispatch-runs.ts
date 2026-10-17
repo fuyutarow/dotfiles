@@ -52,8 +52,8 @@ export interface RouteRun {
       }
     | undefined;
 }
-// The lost count is the agx store fold: route runs include running rows and every
-// ended/lost row, so counting the latter matches `agx stats --json`'s `lost` field.
+// Lost rows come from the same health classification as agx doctor (orphaned),
+// excluding pre-lease history classified as legacy.
 const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
 function doingOf(dir: string, runId: string): RouteRun["doing"] {
   const text = readText(join(dir, `${runId}.progress.json`));
@@ -87,6 +87,7 @@ const AgxLsRowSchema = z.object({
   ticket: z.string(),
   state: z.enum(["running", "ended"]),
   outcome: z.string().nullable().optional(),
+  health: z.string().nullable().optional(),
   row: z.string(),
   dispatcher_session: z.string().nullable(),
   exit: z.unknown().optional(),
@@ -164,7 +165,7 @@ export async function agxRouteRunsAsync(
       continue;
     }
     const row = parsed.data;
-    if (row.state !== "running" && row.outcome !== "lost") continue;
+    if (row.state !== "running" && row.health !== "orphaned") continue;
     const recordedWorkspace = optionalString(row.workspace_name);
     const workspacePath =
       optionalString(row.workspace) ?? optionalString(row.cwd);
@@ -535,68 +536,6 @@ function doingText(d: RouteRun["doing"], phase: string | undefined): string {
   return `${DIM}│${RST} working · ${activity}`;
 }
 
-// The worker's vendor id (codex thread, claude session), shortened without UUIDv7's shared
-// timestamp prefix. Extend the tail only for rows that still collide. Same rules as the former
-// Claude statusline, now in tools/statusline (cbc82bdc): an id shorter than 8 characters gets a shorter
-// tail and an empty id is absent. Keep the rendered id ASCII-only so both collision checks and
-// column padding use the same unambiguous width.
-function growSessionTail(
-  group: number[],
-  ids: string[],
-  tailLengths: number[],
-): boolean {
-  let grew = false;
-  for (const index of group) {
-    const maxTail = (ids[index] ?? "").length - 4;
-    const tailLength = tailLengths[index] ?? 0;
-    if (tailLength < maxTail) {
-      tailLengths[index] = tailLength + 1;
-      grew = true;
-    }
-  }
-  return grew;
-}
-function sessionDisplays(shown: RouteRun[]): string[] {
-  const ids = shown.map(
-    (run) =>
-      (run.doing?.session ?? run.workerSession)?.replaceAll("-", "") ?? "",
-  );
-  const tailLengths = ids.map((id) =>
-    id === "" ? 0 : Math.min(4, Math.max(0, id.length - 4)),
-  );
-  const displayFor = (index: number): string => {
-    const displayId = shown[index]?.displayId;
-    if (displayId !== undefined) return displayId;
-    const id = ids[index] ?? "";
-    if (id === "") return "";
-    const tailLength = tailLengths[index] ?? 0;
-    const tail = tailLength === 0 ? "" : id.slice(-tailLength);
-    const base = `${id.slice(0, 4)}..${tail}`;
-    return base;
-  };
-  let displays = ids.map((_, index) => displayFor(index));
-  for (;;) {
-    const groups = new Map<string, number[]>();
-    displays.forEach((display, index) => {
-      if (display === "") return;
-      const group = groups.get(display) ?? [];
-      group.push(index);
-      groups.set(display, group);
-    });
-    const collisions = [...groups.values()].filter((group) => group.length > 1);
-    if (collisions.length === 0) break;
-    let grew = false;
-    for (const group of collisions)
-      grew = growSessionTail(group, ids, tailLengths) || grew;
-    if (!grew) break;
-    displays = ids.map((_, index) => displayFor(index));
-  }
-  return displays;
-}
-function sessionText(value: string, width: number, reserve: boolean): string {
-  if (value === "") return reserve ? " ".repeat(width + 1) : "";
-  return `${ESC}[38;5;240m${padDisplay(value, width)}${RST} `;
-}
 function costText(value: number | undefined, width: number): string {
   if (width === 0) return "";
   if (value === undefined) return `${padDisplay("$–", width)} `;
@@ -638,11 +577,6 @@ export function routeLines(
       : attributed.filter((r) => r.dispatcherSession === dispatcherSession);
   const other = attributed.length - own.length;
   const shown = own;
-  const sessions = sessionDisplays(shown);
-  const sessionWidth = Math.max(
-    0,
-    ...sessions.map((value) => Bun.stringWidth(value)),
-  );
   const choices = shown.map((r) => r.choice);
   const elapsed = shown.map((r) =>
     r.secs === undefined ? "n/a" : dur(r.secs),
@@ -670,7 +604,7 @@ export function routeLines(
   const identities = shown.map((run) =>
     run.workerName === undefined || run.workspaceName === undefined
       ? ""
-      : `${run.workerName}@${run.workspaceName}`,
+      : `${run.workerName.replace(/^agx-/u, "agt_")}@${run.workspaceName}`,
   );
   const identityWidth = Math.max(
     0,
@@ -688,10 +622,9 @@ export function routeLines(
     0,
     ...labels.map((value) => Bun.stringWidth(value)),
   );
-  const reserveSession = sessionWidth > 0;
   const lines = shown.map(
     (r, i) =>
-      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${sessionText(sessions[i] ?? "", sessionWidth, reserveSession)}${DIM}${padDisplay(identities[i] ?? "", identityWidth)}${identities[i] === "" ? "" : " "}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase)}`,
+      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${DIM}${padDisplay(identities[i] ?? "", identityWidth)}${identities[i] === "" ? "" : " "}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase)}`,
   );
   const summary = [
     `${ESC}[38;5;167mlost ${lost}${RST}`,

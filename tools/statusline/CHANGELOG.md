@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.7 — 2026-10-17
+
+- Fix empty agx summary fields, hide worker session IDs, normalize agt_ names, and count doctor-classified orphaned runs.
+
 ## 0.16.6 — 2026-10-17
 
 - Render agx summary as one line and count folded lost runs

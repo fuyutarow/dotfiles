@@ -32,7 +32,7 @@ and emits a `WARN` line. A durable systemd user unit does not inherit its caller
 forward both supported dispatcher variables explicitly:
 
 ```sh
-systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<name> --collect -- agx run TICKET.md
+systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run TICKET.md
 ```
 
 Harness VCS reads in premise checks, official-execution tracking and repo-retrieve run inside

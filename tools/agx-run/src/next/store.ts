@@ -26,6 +26,7 @@ import { lossEvidence, Lease, StopSignal } from "./lease.ts";
 import { RunSchema, type FoldedRun, type ListedRun } from "./run-state.ts";
 export type { ListedRun } from "./run-state.ts";
 import { VerifyResult } from "./verify.ts";
+import { runHealth } from "./health.ts";
 
 const PickAuditSchema = z.object({
   source: z.string(),
@@ -620,6 +621,10 @@ export async function foldedRuns() {
 
 const foldCache = new Map<string, z.output<typeof SnapshotSchema>>();
 
+function withHealth(run: ListedRun, legacy: boolean): ListedRun {
+  return Object.assign(run, { health: runHealth(run, legacy) ?? null });
+}
+
 async function liveRuns(
   runs: Map<string, FoldedRun>,
   before: { size: number; ino: number; dev: number } | null,
@@ -666,21 +671,36 @@ async function liveRuns(
     const { pid, state, outcome, lease: storedLease, ...fields } = run;
     const lease = storedLease ?? { pid, start: null, unit: null };
     if (state === "ended") {
-      listed.push({ ...fields, state, outcome: outcome ?? "refused", lease });
+      listed.push(
+        withHealth(
+          { ...fields, state, outcome: outcome ?? "refused", lease },
+          storedLease === undefined,
+        ),
+      );
       continue;
     }
     const evidence = await lossEvidence(lease);
     if (evidence === undefined)
-      listed.push({ ...fields, state: "running", outcome: null, lease });
+      listed.push(
+        withHealth(
+          { ...fields, state: "running", outcome: null, lease },
+          storedLease === undefined,
+        ),
+      );
     else {
       losses.add(run.id);
-      listed.push({
-        ...fields,
-        state: "ended",
-        outcome: "lost",
-        lease,
-        evidence,
-      });
+      listed.push(
+        withHealth(
+          {
+            ...fields,
+            state: "ended",
+            outcome: "lost",
+            lease,
+            evidence,
+          },
+          storedLease === undefined,
+        ),
+      );
     }
   }
   if (losses.size === 0) return listed;

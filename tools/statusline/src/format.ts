@@ -233,7 +233,7 @@ export function render(
       : (scan?.snapshotWhy ?? "snapshot unavailable");
   let dispatchWarning: string | undefined =
     df.dispatchWarning === undefined
-      ? ""
+      ? "dispatch warning: none"
       : `${ESC}[38;5;178m${df.dispatchWarning}${RST}`;
   if (df.dispatchWarningWhy !== undefined) dispatchWarning = undefined;
   let recover = recoverHealthBadge(df.recoverHealth, df.recoverHealth?.at);
@@ -272,9 +272,15 @@ export function render(
     ),
   ];
   const [agxSummary = "", ...agxDetails] = (runLines[0] ?? "").split("\n");
+  const warningLine =
+    (runLines[1]?.trim() ?? "") === "" ? "dispatch warning: none" : runLines[1];
+  const recoverLine =
+    (runLines[2]?.trim() ?? "") === "" ? "recover: none" : runLines[2];
   const agxBlock = [
     ...agxDetails,
-    [agxSummary, runLines[1] ?? "", runLines[2] ?? ""].join(` ${DIM}·${RST} `),
+    [agxSummary, warningLine, recoverLine]
+      .filter((part) => part !== undefined && part.trim() !== "")
+      .join(` ${DIM}·${RST} `),
   ]
     .filter((line) => line !== "")
     .join("\n");
@@ -290,10 +296,8 @@ export function render(
     sys: observed(sysLine),
     job: observed(jobLine),
     agx: observed(agxBlock),
-    "dispatch-warning": observed(
-      runLines[1] === "" ? "dispatch warning: none" : runLines[1],
-    ),
-    recover: observed(runLines[2] === "" ? "recover: none" : runLines[2]),
+    "dispatch-warning": observed(warningLine),
+    recover: observed(recoverLine),
   } satisfies DisplayRows;
   return renderRows(rows);
 }

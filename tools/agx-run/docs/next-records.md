@@ -21,6 +21,11 @@ is supplied. `agx ls SELECTOR [--json]` selects an exact run id, unique run-id p
 ticket name. A ticket selection is ordered oldest first so its latest run is last. Ambiguous
 prefixes and unmatched selectors exit 2 with one candidate line.
 
+JSON rows include `health`, computed by the same classification as `agx doctor`: `legacy`,
+`orphaned`, `missing-return`, `unjudged`, or `null` when there is no finding. Pre-lease history
+is `legacy`, including imported records. The statusline's lost count counts only `orphaned` rows;
+an ended run with `outcome: lost` and a missing return is a separate finding.
+
 The next ticket schema requires `proposition.id`, `proposition.claim`, and
 `proposition.refuted_by`; legacy `decides`, `serves`, and `graph_node` are optional
 and ignored. Legacy-only fields such as `consumer`, `first_return`,

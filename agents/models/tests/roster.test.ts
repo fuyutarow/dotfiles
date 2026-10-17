@@ -213,7 +213,7 @@ describe("dispatch roster", () => {
     ])
       expect(policy).toContain(command);
     expect(policy).toContain(
-      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agx-<name> --collect -- agx run",
+      "systemd-run --user -E CLAUDE_CODE_SESSION_ID -E CODEX_SESSION_ID --unit=agt_<slug> --collect -- agx run",
     );
     expect(policy).toContain("--continue");
     expect(policy).not.toMatch(/\bagx (?:dispatch|ticket|ps|ledger)\b/u);

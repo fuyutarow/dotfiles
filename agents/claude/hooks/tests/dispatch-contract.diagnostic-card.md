@@ -13,7 +13,7 @@ Cause confidence: proven
 Primary message: dispatch-contract: the tool dispatches nothing — every worker starts with
 `agx run <ticket>`. Use `agx check <ticket>`, `agx ls`, `agx judge <run> accept|reject`, and
 `agx stats` for the other run operations. Durable runs use
-`systemd-run --user --unit=agx-<name> --collect -- agx run …`.
+`systemd-run --user --unit=agt_<slug> --collect -- agx run …`.
 
 Recovery mode: exact
 Validated recovery: invoke `agx run <ticket>`; continue a vendor session with

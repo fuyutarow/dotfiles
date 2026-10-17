@@ -179,6 +179,8 @@ async function render(
                 outcome = null;
               }
               let continues: string | null = null;
+              let health: string | null = null;
+              if (!alive) health = "orphaned";
               if (source.pick_source === "resume") continues = "previous";
               if (existsSync(progressPath)) {
                 const progressText = readFileSync(progressPath, "utf8");
@@ -196,6 +198,7 @@ async function render(
                   ticket: source.label,
                   state,
                   outcome,
+                  health,
                   row: source.choice,
                   exit: null,
                   cwd: source.cwd ?? scratch,
@@ -285,7 +288,7 @@ describe("statusline Run row", () => {
     );
     const scan = await agxRouteRunsAsync(env);
     expect(scan.unreadable).toBe(0);
-    expect(scan.runs.filter((run) => !run.alive)).toHaveLength(15);
+    expect(scan.runs.filter((run) => !run.alive)).toHaveLength(0);
   });
 
   test("renders worker and workspace names from an agx run record", async () => {
@@ -501,7 +504,7 @@ describe("statusline Run row", () => {
       .split("\n")
       .find((value) => value.startsWith("luna-max "));
     expect(line).toContain("$0.06");
-    expect(line).toContain("thre..dnew");
+    expect(line).not.toContain("thre..dnew");
     expect(line).toContain("resume:");
     expect(line).toContain("verifying 3/6 bun test tools/agx");
     expect(line).not.toContain("no event yet");
@@ -674,7 +677,7 @@ describe("statusline Run row", () => {
     expect(line).toContain("2 cmd · 1 files");
   });
 
-  test("a display ID replaces the session ID while legacy markers keep their session ID", async () => {
+  test("worker rows omit session IDs for named and legacy markers", async () => {
     const dir = join(scratch, "display-id-row");
     marker(
       dir,
@@ -693,7 +696,7 @@ describe("statusline Run row", () => {
     );
     const out = await render(dir);
     expect(out).toMatch(
-      /^luna-high 1m3\ds \$– 0191\.\.abcd Repo: dotfiles │ working · \$ bun test/mu,
+      /^luna-high 1m3\ds \$– Repo: dotfiles │ working · \$ bun test/mu,
     );
 
     const legacyDir = join(scratch, "legacy-session-row");
@@ -702,7 +705,7 @@ describe("statusline Run row", () => {
       join(legacyDir, "active", "legacy.progress.json"),
       progress("$ ls", 2, "0191abcd-0000-7000-8000-11111111abcd"),
     );
-    expect(await render(legacyDir)).toContain("0191..abcd legacy row");
+    expect(await render(legacyDir)).toContain("legacy row");
   });
 
   test("a resumed ticketed worker from this session shows its full row", async () => {
@@ -888,10 +891,7 @@ describe("statusline Run row", () => {
       Bun.stringWidth(line.slice(0, line.indexOf("│"))),
     );
     expect(new Set(widths).size).toBe(1);
-    const idStarts = ["01a1..1111", "20e3..2222", "30e3..3333"].map((id) =>
-      lines.find((line) => line.includes(id))?.indexOf(id),
-    );
-    expect(new Set(idStarts).size).toBe(1);
+    expect(lines.join("\n")).not.toMatch(/[0-9a-f]{4}\.\.[0-9a-f]{4}/u);
     expect(lines.some((line) => line.includes("luna-high"))).toBe(true);
     expect(lines.some((line) => line.includes("sonnet-high"))).toBe(true);
     expect(lines.some((line) => line.includes("日本語のラベル"))).toBe(true);
@@ -922,7 +922,7 @@ describe("statusline Run row", () => {
     ).toBe(1);
   });
 
-  test("a worker's vendor session id is shown as head and tail", async () => {
+  test("a worker's vendor session id is omitted from its row", async () => {
     const dir = join(scratch, "session");
     marker(dir, "s", process.pid, "nothrow-1");
     writeFileSync(
@@ -930,11 +930,11 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "01a1111b-7dab-7d61-8f9b-231c4cc9568a"),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– 01a1\.\.568a nothrow-1 │ working · \$ ls · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$– nothrow-1 │ working · \$ ls · 12 cmd · 3 files$/mu,
     );
   });
 
-  test("six ids sharing a UUIDv7 prefix stay distinguishable", async () => {
+  test("six workers remain visible without UUIDv7 fragments", async () => {
     const dir = join(scratch, "six-colliding-prefixes");
     const ids = Array.from(
       { length: 6 },
@@ -959,13 +959,13 @@ describe("statusline Run row", () => {
     const lines = (await render(dir)).split("\n");
     const rendered = ids.map((id) => {
       const short = `01a1..${id.slice(-4)}`;
-      expect(lines.some((line) => line.includes(short))).toBe(true);
+      expect(lines.some((line) => line.includes(short))).toBe(false);
       return short;
     });
     expect(new Set(rendered).size).toBe(6);
   });
 
-  test("colliding tails grow together until the ids differ", async () => {
+  test("colliding session tails remain hidden", async () => {
     const dir = join(scratch, "growing-tails");
     const ids = [
       "01a11a74-0000-7000-8000-00000001abc0",
@@ -980,8 +980,8 @@ describe("statusline Run row", () => {
       );
     });
     const out = await render(dir);
-    expect(out).toContain("01a1..1abc0");
-    expect(out).toContain("01a1..2abc0");
+    expect(out).not.toContain("01a1..1abc0");
+    expect(out).not.toContain("01a1..2abc0");
   });
 
   test("resume label identifies a resumed worker", async () => {
@@ -1001,12 +1001,12 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "01a11a74-cd83-7de1-b627-16537d8de67d"),
     );
     expect(await render(dir)).toMatch(
-      /^luna-high 1m3\d+s \$– 01a1\.\.e67d resume: continued worker │ working · \$ ls · 12 cmd · 3 files$/mu,
+      /^luna-high 1m3\d+s \$– resume: continued worker │ working · \$ ls · 12 cmd · 3 files$/mu,
     );
   });
 
   // Ported from the pre-port suite (agents/claude/hooks/tests/statusline-run-row.test.ts, cbc82bdc).
-  test("UUIDv7 ids sharing their timestamp prefix still render distinctly", async () => {
+  test("UUIDv7 ids sharing their timestamp prefix remain hidden", async () => {
     const dir = join(scratch, "uuidv7-prefix-collision");
     marker(dir, "a", process.pid, "first", 30, SESSION, "luna-high");
     marker(dir, "b", process.pid, "second", 20, SESSION, "sonnet-high");
@@ -1019,11 +1019,11 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "0191abcd-0000-7000-8000-22222222bcde"),
     );
     const out = await render(dir);
-    expect(out).toContain("0191..abcd");
-    expect(out).toContain("0191..bcde");
+    expect(out).not.toContain("0191..abcd");
+    expect(out).not.toContain("0191..bcde");
   });
 
-  test("ids sharing their last four digits grow the tail until distinct", async () => {
+  test("ids sharing their last four digits remain hidden", async () => {
     const dir = join(scratch, "uuid-tail-collision");
     marker(dir, "a", process.pid, "first", 30, SESSION, "luna-high");
     marker(dir, "b", process.pid, "second", 20, SESSION, "sonnet-high");
@@ -1036,11 +1036,11 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "01239999-0000-7000-8000-22222222abcd"),
     );
     const out = await render(dir);
-    expect(out).toContain("0123..1abcd");
-    expect(out).toContain("0123..2abcd");
+    expect(out).not.toContain("0123..1abcd");
+    expect(out).not.toContain("0123..2abcd");
   });
 
-  test("resume workers show their reused session id without a duplicate marker", async () => {
+  test("resume workers omit their reused session id without a duplicate marker", async () => {
     const dir = join(scratch, "resume-session");
     marker(
       dir,
@@ -1057,12 +1057,12 @@ describe("statusline Run row", () => {
       progress("$ ls", 2, "0191abcd-0000-7000-8000-11111111abcd"),
     );
     const out = await render(dir);
-    expect(out).toContain("0191..abcd resume: resumed");
+    expect(out).toContain("resume: resumed");
     expect(out).not.toContain("↻");
     expect(out.match(/resume:/gu)).toHaveLength(1);
   });
 
-  test("fresh and prefix-colliding resumed rows retain ids and align", async () => {
+  test("fresh and prefix-colliding resumed rows omit ids and align", async () => {
     const dir = join(scratch, "aligned-resumes");
     const rows = [
       {
@@ -1111,9 +1111,9 @@ describe("statusline Run row", () => {
       .split("\n")
       .filter((line) => /^(sonnet|sol)-/u.test(line));
     expect(lines).toHaveLength(3);
-    expect(lines.some((line) => line.includes("8066..e1b6"))).toBe(true);
-    expect(lines.some((line) => line.includes("01a1..15b6"))).toBe(true);
-    expect(lines.some((line) => line.includes("01a1..14f5"))).toBe(true);
+    expect(lines.some((line) => line.includes("8066..e1b6"))).toBe(false);
+    expect(lines.some((line) => line.includes("01a1..15b6"))).toBe(false);
+    expect(lines.some((line) => line.includes("01a1..14f5"))).toBe(false);
     expect(lines.every((line) => !line.includes("↻"))).toBe(true);
     expect(lines.filter((line) => line.includes("resume:")).length).toBe(2);
     expect(
@@ -1450,13 +1450,13 @@ describe("statusline Run row", () => {
     console.info(`agx snapshot read warm cache: ${warmMs.toFixed(2)}ms`);
   });
 
-  // These fixtures are already agx-folded rows. Every ended/lost row contributes to the
-  // statusline count, matching `agx stats --json` regardless of age or judgment.
+  // These fixtures carry doctor's orphaned classification, regardless of age or judgment.
   const orphanRow = (id: string, ageS: number, judgment: unknown = null) => ({
     id,
     ticket: `old ${id}`,
     state: "ended",
     outcome: "lost",
+    health: "orphaned",
     row: "luna-high",
     exit: null,
     cwd: scratch,
@@ -1472,7 +1472,7 @@ describe("statusline Run row", () => {
     verify: [],
   });
 
-  test("lost count matches the agx fold regardless of age or judgment", async () => {
+  test("lost count includes doctor-classified orphans regardless of age or judgment", async () => {
     const old = Array.from({ length: 62 }, (_, i) =>
       orphanRow(`old-${i}`, 3 * 3600 + i),
     );

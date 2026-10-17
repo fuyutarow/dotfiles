@@ -3,6 +3,7 @@ import { err, ok } from "neverthrow";
 import { ClaudeStatuslineInputSchema } from "../src/adapters/claude-statusline.ts";
 import { buildDataframe } from "../src/build-dataframe.ts";
 import { render } from "../src/format.ts";
+import { currentDispatcherSession } from "../src/dispatch-runs.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,6 +62,56 @@ describe("statusline render golden", () => {
     const lines = render(dataframe).replaceAll(ANSI, "").split("\n");
     lines[0] = "<prompt-head>";
     expect(lines.join("\n")).toMatchSnapshot();
+    const summary = lines.find((line) => line.startsWith("agx "));
+    expect(summary).toContain("dispatch warning: none");
+    expect(summary?.split("·").every((part) => part.trim() !== "")).toBe(true);
+    const emptyWarning = render({
+      ...dataframe,
+      fields: {
+        ...dataframe.fields,
+        "dispatch-warning": { kind: "fresh", value: "  " },
+      },
+    })
+      .replaceAll(ANSI, "")
+      .split("\n")
+      .find((line) => line.startsWith("agx "));
+    expect(emptyWarning).toContain("dispatch warning: none");
+    expect(emptyWarning?.split("·").every((part) => part.trim() !== "")).toBe(
+      true,
+    );
+
+    const workerLines = render({
+      ...dataframe,
+      fields: {},
+      routes: ok({
+        runs: [
+          {
+            displayId: undefined,
+            choice: "terra-high",
+            label: "STATUSLINE-WORKER-ROWS",
+            workerName: "agx-x",
+            workspaceName: "ws_x",
+            pickSource: "agx",
+            phase: "working",
+            workerSession: "01a1111b-7dab-7d61-8f9b-231c4cc9082b",
+            markerCostUsd: 0.03,
+            secs: 90,
+            alive: true,
+            dispatcherSession: currentDispatcherSession("fixture-session"),
+            doing: undefined,
+          },
+        ],
+        unreadable: 0,
+      }),
+    })
+      .replaceAll(ANSI, "")
+      .split("\n");
+    workerLines[0] = "<prompt-head>";
+    expect(workerLines.join("\n")).toMatchSnapshot();
+    expect(workerLines.join("\n")).toContain(
+      "agt_x@ws_x STATUSLINE-WORKER-ROWS",
+    );
+    expect(workerLines.join("\n")).not.toMatch(/01a1|082b|agx-x/u);
 
     const codexLines = render(dataframe, { codex: true }).replaceAll(ANSI, "");
     expect(codexLines).not.toContain("fixture@example.test");

@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.2.3 — 2026-10-17
+
+- Expose doctor health classification in JSON listings and document durable units as agt_<slug>.
+
 ## 5.2.2 — 2026-10-17
 
 - Resolve ticket homes from the default jj workspace while checking revisions in the dispatch workspace
@@ -145,7 +149,7 @@
 
 - Switch `agx` to the five-command CLI: `run`, `check`, `ls`, `judge`, and `stats`; retain `agx-next` as a one-release alias.
 - Remove the legacy dispatch router, ticket store, lease/lifecycle implementation, grader, detach controls, and old command modules.
-- Remove resource-declaration requirements from dispatch hooks and policy; use `systemd-run --user --unit=agx-<name> --collect -- agx run …` for durable runs.
+- Remove resource-declaration requirements from dispatch hooks and policy; use `systemd-run --user --unit=agt_<slug> --collect -- agx run …` for durable runs.
 
 ## 3.8.0 — 2026-10-14
 

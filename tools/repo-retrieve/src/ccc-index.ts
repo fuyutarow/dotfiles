@@ -46,7 +46,6 @@ import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
 import {
   computeIndexPlan,
-  measuredEta,
   planReport,
   writePlanJsonl,
   type IndexPlan,
@@ -291,33 +290,42 @@ export type IndexProgressSource = {
   overBudget?: () => boolean;
 };
 
+type IndexWaitResult = {
+  exitCode: number;
+  origin: "ccc" | "budget" | "stall";
+};
+
 export async function waitForIndexChild(
   childExit: Promise<number>,
   stallMs: number,
   source: IndexProgressSource,
-): Promise<number> {
+): Promise<IndexWaitResult> {
   let lastProgress = source.now();
-  let lastSample = await source.sample();
-  if (source.overBudget?.() === true) return 125;
   let settled = false;
   let exitCode = 0;
   void childExit.then((code) => {
     settled = true;
     exitCode = code;
   });
+  let lastSample = await source.sample();
+  if (!settled && source.overBudget?.() === true)
+    return { exitCode: 125, origin: "budget" };
   for (;;) {
     if (settled) break;
     await source.sleep(INDEX_POLL_MS);
     if (settled) break;
     const sample = await source.sample();
-    if (source.overBudget?.() === true) return 125;
+    if (settled) break;
+    if (source.overBudget?.() === true)
+      return { exitCode: 125, origin: "budget" };
     if (sample !== lastSample) {
       lastSample = sample;
       lastProgress = source.now();
     }
-    if (source.now() - lastProgress >= stallMs) return 124;
+    if (source.now() - lastProgress >= stallMs)
+      return { exitCode: 124, origin: "stall" };
   }
-  return exitCode;
+  return { exitCode, origin: "ccc" };
 }
 
 async function indexProgressSample(
@@ -361,12 +369,11 @@ async function waitForProjectIdle(
   while (state.indexing) {
     if (
       timeBudget !== undefined &&
-      timeBudget.plan.rate_source === "measured" &&
       (Temporal.Now.instant().epochMilliseconds - timeBudget.startedAt) / 1000 >
         timeBudget.plan.budget.max_seconds
     ) {
       process.stderr.write(
-        `FATAL: elapsed time exceeds ETA budget while daemon is still indexing; left the daemon running\n${planReport(timeBudget.plan)}`,
+        `FATAL: repo-retrieve elapsed time exceeds max_seconds=${timeBudget.plan.budget.max_seconds} while daemon is still indexing (exit 125); left the daemon running; watermark left unchanged\n${planReport(timeBudget.plan)}`,
       );
       return 125;
     }
@@ -869,11 +876,10 @@ async function reindexCertified(
       asError,
     )();
     if (child.isErr()) return err(child.error);
-    const exitCode = child.value;
+    const { exitCode, cause } = child.value;
     if (exitCode !== 0) {
       process.stderr.write(
-        `FATAL: ccc index failed (exit ${exitCode}); watermark left unchanged so the gate stays ` +
-          "honest rather than reporting a failed reindex as fresh\n",
+        `FATAL: ccc index failed (exit ${exitCode}); ${cause}; watermark left unchanged\n`,
       );
       return ok({ code: exitCode, head: null });
     }
@@ -906,9 +912,10 @@ async function reindexCertified(
     plan === undefined ? undefined : { plan, startedAt },
   );
   if (idle !== 0) {
-    process.stderr.write(
-      `FATAL: ccc daemon kept indexing ${project} without progress for ${timeoutMs}ms; watermark left unwritten\n`,
-    );
+    if (idle === 124)
+      process.stderr.write(
+        `FATAL: ccc daemon kept indexing ${project} without progress for ${timeoutMs}ms (exit 124); watermark left unwritten\n`,
+      );
     return ok({ code: idle, head: null });
   }
 
@@ -958,7 +965,7 @@ async function runChildToStderr(
   timeoutMs: number,
   cwd: string,
   plan?: IndexPlan,
-): Promise<number> {
+): Promise<{ exitCode: number; cause: string }> {
   const runtimeDir = process.env.XDG_RUNTIME_DIR;
   if (runtimeDir !== undefined) {
     const deferralPath = join(
@@ -979,17 +986,15 @@ async function runChildToStderr(
       );
     }
   }
-  const initial = await indexProgressSample(cwd);
   const startedAt = Temporal.Now.instant().epochMilliseconds;
-  const initialChunks = initial.chunks ?? 0;
   let overBudget = false;
-  // bounded: waitForIndexChild enforces progress and ETA limits before terminating this client.
+  // bounded: waitForIndexChild enforces progress and elapsed limits before terminating this client.
   const child = Bun.spawn({
     cmd: command,
     cwd,
     env: process.env,
     stdout: "pipe",
-    stderr: "inherit",
+    stderr: "pipe",
   });
   let outputAdvance = 0;
   const relay = (async () => {
@@ -998,57 +1003,61 @@ async function runChildToStderr(
       process.stderr.write(chunk);
     }
   })();
+  let stderrTail = "";
+  const relayStderr = (async () => {
+    const decoder = new TextDecoder();
+    for await (const chunk of child.stderr) {
+      outputAdvance += chunk.length;
+      process.stderr.write(chunk);
+      stderrTail = (stderrTail + decoder.decode(chunk, { stream: true })).slice(
+        -16_384,
+      );
+    }
+    stderrTail = (stderrTail + decoder.decode()).slice(-16_384);
+  })();
   const sample = async () => {
     const state = await indexProgressSample(cwd);
     if (
       plan !== undefined &&
-      plan.rate_source === "measured" &&
       (Temporal.Now.instant().epochMilliseconds - startedAt) / 1000 >
         plan.budget.max_seconds
     )
       overBudget = true;
-    if (
-      plan !== undefined &&
-      state.chunks !== undefined &&
-      initialChunks !== undefined
-    ) {
-      const eta = measuredEta(
-        plan.total.est_chunks,
-        initialChunks,
-        state.chunks,
-        (Temporal.Now.instant().epochMilliseconds - startedAt) / 1000,
-      );
-      if (eta !== null) {
-        process.stderr.write(
-          `INDEX: measured ${eta.rate.toFixed(2)} chunks/s; ETA ${eta.remaining.toFixed(1)}s remaining\n`,
-        );
-        overBudget = overBudget || eta.totalSeconds > plan.budget.max_seconds;
-      }
-    }
+    // Chunks is the stored corpus size, not completed work: incremental indexing
+    // reuses old chunks and replacements/deletions may not increase it at all.
+    // With no pending-work count, extrapolating a full-corpus ETA falsely aborts.
     return `${state.signature}\nchild-output-bytes=${outputAdvance}`;
   };
-  const exitPromise = Promise.all([child.exited, relay]).then(([code]) => code);
-  const exitCode = await waitForIndexChild(exitPromise, timeoutMs, {
+  const exitPromise = Promise.all([child.exited, relay, relayStderr]).then(
+    ([code]) => code,
+  );
+  const result = await waitForIndexChild(exitPromise, timeoutMs, {
     now: () => Temporal.Now.instant().epochMilliseconds,
     sleep: (milliseconds) => Bun.sleep(milliseconds),
     sample,
     overBudget: () => overBudget,
   });
-  if (exitCode === 125) {
+  if (result.origin === "budget") {
     child.kill("SIGTERM");
-    process.stderr.write(
-      `FATAL: measured ETA exceeds time budget; stopped the client and left the daemon running\n${plan === undefined ? "" : planReport(plan)}`,
-    );
-    return 125;
+    const elapsed =
+      (Temporal.Now.instant().epochMilliseconds - startedAt) / 1000;
+    if (plan !== undefined) process.stderr.write(planReport(plan));
+    return {
+      exitCode: 125,
+      cause: `repo-retrieve elapsed ${elapsed.toFixed(1)}s exceeds max_seconds=${plan?.budget.max_seconds}; stopped the client and left the daemon running`,
+    };
   }
-  if (exitCode === 124) {
+  if (result.origin === "stall") {
     child.kill("SIGTERM");
-    process.stderr.write(
-      `FATAL: ccc index made no observable progress for ${timeoutMs}ms; stopped the client and left the daemon running\n`,
-    );
-    return 124;
+    return {
+      exitCode: 124,
+      cause: `repo-retrieve observed no progress for ${timeoutMs}ms; stopped the client and left the daemon running`,
+    };
   }
-  return exitCode;
+  return {
+    exitCode: result.exitCode,
+    cause: `ccc exited ${result.exitCode} (child exit status, not a repo-retrieve limit); ccc stderr tail=${JSON.stringify(stderrTail.trim() === "" ? "(empty)" : stderrTail.trim())}`,
+  };
 }
 
 // Companion to the freshness gate, not a search route: writes INDEXED_AT (ccc's DB dir). This is

@@ -43,6 +43,16 @@ const WrittenWatermarkSchema = z.object({
 });
 
 describe("index progress waiting", () => {
+  test("a child settled during sampling keeps its own exit status even when the budget expires", async () => {
+    const result = await waitForIndexChild(Promise.resolve(125), 600_000, {
+      now: () => 0,
+      sleep: () => Promise.resolve(),
+      sample: () => Promise.resolve("idle"),
+      overBudget: () => true,
+    });
+    expect(result).toEqual({ exitCode: 125, origin: "ccc" });
+  });
+
   test("a fake daemon advancing for 360 seconds does not hit the stall timeout", async () => {
     let now = 0;
     let finish: ((code: number) => void) | undefined;
@@ -62,7 +72,7 @@ describe("index progress waiting", () => {
         Promise.resolve(`Indexing in progress: ${samples} files listed`),
     });
     expect(now).toBe(360_000);
-    expect(result).toBe(0);
+    expect(result).toEqual({ exitCode: 0, origin: "ccc" });
   });
 
   test("an indexing state with no counter or output advance reaches the stall timeout", async () => {
@@ -80,7 +90,7 @@ describe("index progress waiting", () => {
       },
     );
     expect(now).toBe(3_000);
-    expect(result).toBe(124);
+    expect(result).toEqual({ exitCode: 124, origin: "stall" });
   });
 });
 
@@ -200,7 +210,7 @@ function fakeTools(): { bin: string; log: string } {
     python,
     `#!/bin/sh
 case "$1" in
-  */ccc_plan.py) if [ "\${3:-}" = --validate-excludes ]; then printf '[]'; fi; exit 0 ;;
+  */ccc_plan.py) if [ "\${3:-}" = --validate-excludes ]; then printf '[]'; elif [ -n "\${FAKE_PLAN_FILE:-}" ]; then cat "$FAKE_PLAN_FILE"; fi; exit 0 ;;
   */ccc_scope.py) exit 1 ;;
 esac
 exec /bin/sh "$@"
@@ -230,6 +240,9 @@ if [ "\${FAKE_CCC_INDEXING:-0}" = 1 ] || { [ "\${FAKE_CCC_INDEXING_AFTER_SEARCH:
 fi
 if [ "${name}" = ccc ] && [ "$1" = status ]; then
   printf 'Indexing in progress: 18 files listed | 7 added, 0 deleted, 0 reprocessed, 0 unchanged\\n'
+  if [ "\${FAKE_CCC_CHUNK_DELTA:-0}" = 1 ]; then
+    if [ -f "$PWD/.cocoindex_code/fake_target.db" ]; then printf 'Chunks: 10530\\n'; else printf 'Chunks: 10516\\n'; fi
+  fi
   exit 0
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_MUTATE_GIT_DURING_INDEX:-0}" = 1 ]; then
@@ -238,6 +251,7 @@ if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_MUTATE_GIT_DURING_I
   echo raced >> "$PWD/raced.md" && git -C "$PWD" add raced.md && git -C "$PWD" -c commit.gpgsign=false commit -q -m "raced structural mutation" >/dev/null 2>&1
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ]; then
+  if [ -n "\${FAKE_CCC_STDERR:-}" ]; then printf '%s\\n' "$FAKE_CCC_STDERR" >&2; fi
   # Stand-in for the real artifacts a genuine ccc index writes under .cocoindex_code -- lets
   # hasIndexArtifacts() (ccc-index.ts) see a project the router just indexed as non-empty.
   touch "$PWD/.cocoindex_code/fake_target.db" 2>/dev/null || true
@@ -1487,6 +1501,57 @@ describe("repo-retrieve route contract", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("FATAL: ccc index failed");
     expect(readFileSync(watermarkFilePath(dir), "utf8")).toBe(before);
+  });
+
+  test.each([124, 125])(
+    "native ccc exit %i carries its stderr in the final FATAL and is not called a budget abort",
+    async (exitCode) => {
+      const { dir } = registerGitProject();
+      run(dir, ["index"]);
+      const before = await Bun.file(watermarkFilePath(dir)).text();
+      const result = run(dir, ["index"], {
+        FAKE_SEARCH_EXIT: String(exitCode),
+        FAKE_CCC_STDERR:
+          "discarded-prefix" +
+          "x".repeat(40_000) +
+          "\nfixture ccc: database is locked",
+      });
+      expect(result.code).toBe(exitCode);
+      const fatal = result.stderr.trim().split("\n").at(-1) ?? "";
+      expect(fatal).toContain(`ccc exited ${exitCode}`);
+      expect(fatal).toContain("fixture ccc: database is locked");
+      expect(fatal).not.toContain("discarded-prefix");
+      expect(fatal.length).toBeLessThan(17_000);
+      expect(result.stderr).not.toContain("measured ETA exceeds");
+      expect(await Bun.file(watermarkFilePath(dir)).text()).toBe(before);
+    },
+  );
+
+  test("a small net chunk increase during a large incremental index does not trigger projected ETA cancellation", async () => {
+    const dir = registerProject();
+    const planFile = join(dir, "plan.jsonl");
+    await Bun.write(
+      planFile,
+      JSON.stringify({
+        path: "source.ts",
+        bytes: 8000000,
+        est_chunks: 8969,
+        kind: "text",
+      }) + "\n",
+    );
+    const result = run(dir, ["index"], {
+      FAKE_PLAN_FILE: planFile,
+      FAKE_CCC_CHUNK_DELTA: "1",
+      FAKE_CCC_INDEX_SLEEP: "1",
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("RESULT: INDEXED");
+    expect(
+      decodedJson(
+        WrittenWatermarkSchema,
+        await Bun.file(watermarkFilePath(dir)).text(),
+      ).source,
+    ).toBe("index");
   });
 
   test("index records a verified head:null watermark for a project with no git HEAD, and search then passes", () => {

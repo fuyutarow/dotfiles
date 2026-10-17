@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.5 — 2026-10-17
+
+- Fix false exit 125 during incremental indexing and name wrapper limits or ccc stderr in the final failure diagnostic.
+
 ## 1.3.4 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

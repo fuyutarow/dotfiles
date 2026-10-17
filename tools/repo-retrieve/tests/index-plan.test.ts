@@ -196,7 +196,7 @@ describe.skipIf(ccc === null)(
       ).toBe(true);
     }, 30_000);
 
-    test("slow measured progress stops only the fixture client and repeats the contributor report", async () => {
+    test("elapsed time budget stops only the fixture client and repeats the contributor report", async () => {
       if (ccc === null) return;
       const root = fixture(true);
       writeFileSync(
@@ -230,8 +230,11 @@ else:
         PATH: `${bin}:${process.env.PATH ?? ""}`,
       });
       expect(result.code).toBe(125);
-      expect(result.stderr).toContain("measured");
-      expect(result.stderr).toContain("ETA");
+      expect(result.stderr).toContain("repo-retrieve elapsed");
+      expect(result.stderr).toContain("exceeds max_seconds=1");
+      expect(result.stderr.trim().split("\n").at(-1)).toContain(
+        "watermark left unchanged",
+      );
       expect(result.stderr).toContain("left the daemon running");
       expect(result.stderr.match(/Top contributors/gu)?.length).toBe(2);
       expect(result.stderr).toContain("bulk/payload.json");
@@ -302,7 +305,7 @@ test("measured ETA uses chunk deltas, ignores no advancement, and stops the clie
       overBudget: () => over,
     },
   );
-  expect(result).toBe(125);
+  expect(result).toEqual({ exitCode: 125, origin: "budget" });
 });
 
 test("code-only plans pass and never suggest excluding code or prose", () => {

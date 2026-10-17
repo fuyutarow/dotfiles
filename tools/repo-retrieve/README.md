@@ -100,11 +100,13 @@ plan only when a measured historical rate is available; the fallback estimate is
 Exceeding any bound exits 4 before ccc starts, including with `--plan`. Invalid configuration or
 an unavailable matcher exits 2. `--accept-plan` permits a normal index despite the preflight
 violations and records the override in `.cocoindex_code/RR_ACCEPTED_PLAN.json`; it cannot be
-combined with `--plan`. The time bound still applies. While indexing, increases in ccc's reported
-persisted chunk count provide a measured chunks/s and remaining ETA. An estimated total duration
-over `max_seconds` exits 125 and repeats the contributor report. If replacement/deletion work
-does not increase the chunk count, no embedding rate is claimed; elapsed time still enforces the
-bound. Only the client stops; the daemon remains running. The existing no-progress guard exits 124.
+combined with `--plan`. While indexing, elapsed time over `max_seconds` exits 125 and repeats
+the contributor report. The stored chunk count measures corpus size; its net increase cannot
+measure incremental work remaining, so it never triggers a projected ETA cancellation.
+Only the client stops; the daemon remains running. The final FATAL names the wrapper limit and
+its bound. The existing no-progress guard exits 124. A nonzero ccc child exit is identified as
+a child exit status, with the last 16,384 characters of its stderr included in the final FATAL
+(escaped onto one line). A native ccc exit 124 or 125 is never labeled as a wrapper limit.
 
 Lexical NO_MATCH results from `text`, `regex`, and `files` name the repo root they searched and
 state that paths outside it were not searched. For path-like patterns and scratch-looking queries,

@@ -27,7 +27,7 @@ function rollout(threadId: string, model: string, effort?: string): string {
     payload: {
       id: threadId,
       session_id: threadId,
-      cwd: "/same/cwd",
+      cwd: "/fixture/standard-skills",
       originator: "codex-tui",
     },
   };
@@ -60,7 +60,7 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
   await mkdir(day, { recursive: true });
   const target = join(day, "rollout-fixture-target-thread.jsonl");
   const sibling = join(day, "rollout-fixture-sibling-thread.jsonl");
-  await writeFile(target, rollout("target-thread", "gpt-6.1-sol"));
+  await writeFile(target, rollout("target-thread", "gpt-6.1-sol", "medium"));
   await writeFile(sibling, rollout("sibling-thread", "gpt-6-luna", "low"));
   await utimes(sibling, 3, 3);
   expect(
@@ -75,6 +75,7 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
 
   const socketPath = join(home, "herdr-fixture.sock");
   const requests: unknown[] = [];
+  const tabRenames: unknown[] = [];
   const requestSchema = z.record(z.string(), z.unknown());
   const server = createServer((socket) => {
     let input = "";
@@ -83,6 +84,29 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
       const newline = input.indexOf("\n");
       if (newline < 0) return;
       const request = jsonOf(requestSchema).safeParse(input.slice(0, newline));
+      if (request.success && request.data.method === "pane.get") {
+        socket.end(
+          `${JSON.stringify({
+            result: {
+              pane: {
+                pane_id: "fixture-pane",
+                tokens: {
+                  fullname: "standard-skills-agt_0mr6",
+                  model: "Opus 5.5",
+                  effort: "high",
+                  rc: "🔗",
+                },
+              },
+            },
+          })}\n`,
+        );
+        return;
+      }
+      if (request.success && request.data.method === "tab.rename") {
+        tabRenames.push(request.data);
+        socket.end("{}\n");
+        return;
+      }
       if (request.success) requests.push(request.data);
       socket.end("{}\n");
     });
@@ -116,7 +140,7 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
             HERDR_ENV: herdrEnv,
             HERDR_SOCKET_PATH: socketPath,
             HERDR_PANE_ID: paneId,
-            HERDR_TAB_ID: "",
+            HERDR_TAB_ID: "fixture-tab",
           },
           stdio: ["pipe", "pipe", "pipe"],
         });
@@ -150,9 +174,19 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
 
   const startup = await runHook("SessionStart", "1");
   expect(startup.status).toBe(0);
-  expect(requests).toHaveLength(1); // model is sourced from this thread; effort stays explicit unknown
+  expect(requests).toHaveLength(1); // both facts are from this thread, not the pane's old Claude tokens
   expect(requests[0]).toMatchObject({
-    params: { tokens: { model: "gpt-6.1-sol", effort: "unknown" } },
+    params: {
+      tokens: {
+        fullname: "standard-skills-agt_0mr6",
+        model: "gpt-6.1-sol",
+        effort: "medium",
+        rc: "",
+      },
+    },
+  });
+  expect(tabRenames[0]).toMatchObject({
+    params: { tab_id: "fixture-tab", label: "agt_0mr6" },
   });
 
   const unchanged = await runHook("PostToolUse", "1");
@@ -202,6 +236,8 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
     (await runHook("PostToolUse", "1", "target-thread", "other-pane")).status,
   ).toBe(0);
   expect(requests).toHaveLength(5); // dedupe includes pane identity
+  expect(requests[4]).not.toHaveProperty("params.tokens.fullname");
+  // A reply for a different pane cannot replace this pane's name.
 
   const key = new Bun.CryptoHasher("sha256")
     .update(JSON.stringify([socketPath, "fixture-pane", "target-thread"]))
@@ -214,7 +250,7 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
   await writeFile(
     stamp,
     JSON.stringify({
-      pair: JSON.stringify(["gpt-6-luna", "low"]),
+      pair: JSON.stringify(["gpt-6-luna", "low", "standard-skills-agt_0mr6"]),
       at: Temporal.Now.instant().epochMilliseconds - 31_000,
     }),
   );
@@ -232,6 +268,33 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
   const outside = await runHook("Stop", "0");
   expect(outside.status).toBe(0);
   expect(requests).toHaveLength(6); // no Herdr pane, no report
+
+  await writeFile(target, rollout("target-thread", "gpt-6.1-sol"));
+  expect((await runHook("PostToolUse", "1")).status).toBe(0);
+  expect(requests).toHaveLength(7);
+  expect(requests[6]).toMatchObject({
+    params: {
+      tokens: {
+        model: "gpt-6.1-sol",
+        effort: "unknown",
+        fullname: "standard-skills-agt_0mr6",
+        rc: "",
+      },
+    },
+  }); // absent Codex effort never falls back to the pane's previous Claude effort
+  await writeFile(target, rollout("target-thread", ""));
+  expect((await runHook("PostToolUse", "1")).status).toBe(0);
+  expect(requests).toHaveLength(8);
+  expect(requests[7]).toMatchObject({
+    params: {
+      tokens: {
+        model: "unknown",
+        effort: "unknown",
+        fullname: "standard-skills-agt_0mr6",
+        rc: "",
+      },
+    },
+  }); // unknown facts actively replace the old vendor's tokens
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
       if (error !== undefined) {
@@ -246,4 +309,4 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
     stdout: "",
     stderr: "",
   }); // unavailable socket fails open
-});
+}, 30_000);

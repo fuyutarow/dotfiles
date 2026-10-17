@@ -8,6 +8,7 @@ import { strAt } from "../../hooks/narrow.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 import { readCodexThreadStatus } from "../../../tools/statusline/src/adapters/codex-rollout.ts";
 import { reportToHerdr } from "../../../tools/statusline/src/identity.ts";
+import { codexAgentName, readHerdrPaneName } from "./herdr-identity.ts";
 
 const reportValue = (value: string | undefined) =>
   value === undefined || value === "" ? "unknown" : value;
@@ -37,15 +38,14 @@ async function reportRequestedSession(
     () => null,
   );
   if (session?.sessionId !== requestedThread) return;
-  // Unresolved cold reads must not erase known pane metadata on each tool call.
-  if (
-    requestedEvent === "PostToolUse" &&
-    session.model?.name === undefined &&
-    session.effort === undefined
-  )
-    return;
+  // Unknown Codex facts must replace metadata left by a previous Claude occupant too.
   const model = reportValue(session.model?.name);
   const effort = reportValue(session.effort);
+  const paneName = await readHerdrPaneName();
+  const name =
+    session.cwd === undefined || session.cwd === "" || paneName === undefined
+      ? undefined
+      : codexAgentName(session.cwd, requestedThread, paneName.name);
   const key = new Bun.CryptoHasher("sha256")
     .update(
       JSON.stringify([
@@ -60,7 +60,7 @@ async function reportRequestedSession(
     `dotfiles-codex-herdr-${process.getuid?.() ?? "user"}`,
   );
   const path = join(directory, `${key}.json`);
-  const pair = JSON.stringify([model, effort]);
+  const pair = JSON.stringify([model, effort, name]);
   const now = Temporal.Now.instant().epochMilliseconds;
   const previous = await readStamp(path).catch(() => null);
   if (
@@ -70,7 +70,7 @@ async function reportRequestedSession(
     now - previous.at < DEDUPE_MS
   )
     return;
-  await reportToHerdr(model, undefined, effort, "unknown").catch(() => {});
+  await reportToHerdr(model, name, effort, "unknown", "codex").catch(() => {});
   // Sender is best-effort; expire even unchanged stamps so a lost report retries.
   await mkdir(directory, { recursive: true, mode: 0o700 })
     .then(async () => {

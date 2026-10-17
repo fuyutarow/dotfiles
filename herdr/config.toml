@@ -130,7 +130,7 @@ rows = [
 ]
 
 [ui.sidebar.agents.rows_by_agent]
-# Claude only — an override REPLACES rows, it doesn't extend them, so this repeats the layout
+# Both vendors — an override REPLACES rows, it doesn't extend them, so this repeats the layout
 # above rather than diffing against it. agents/claude/hooks/herdr-tab-name.ts and
 # tools/statusline now sends the real herdr tab name as just its trailing `-`-segment
 # ("firedancer-dc" -> "dc"), to keep the desktop tab bar compact — reading that back via the
@@ -139,6 +139,10 @@ rows = [
 # that instead, so the sidebar keeps the full name independently of the tab bar. Same colors and
 # same dropped-workspace layout as the default rows above — see that block's comment for why.
 claude = [
+  ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
+  [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
+]
+codex = [
   ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
   [{ token = "$model", fg = "#008787", bold = false, dim = false }, { token = "$effort", fg = "#ff8787", bold = false, dim = false }, "$rc"],
 ]

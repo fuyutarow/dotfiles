@@ -472,6 +472,7 @@ export async function reportToHerdr(
   sessionName?: string,
   effortDisplay?: string, // plain-text "xhigh" / "xhigh+WF"
   rc: RcState = rcState(),
+  vendor: "claude" | "codex" = "claude",
 ): Promise<void> {
   const socketPath = process.env.HERDR_SOCKET_PATH;
   const paneId = process.env.HERDR_PANE_ID;
@@ -495,7 +496,8 @@ export async function reportToHerdr(
   // Always set, never omitted — see the pane.report_metadata header note above for why
   // $effort and $rc need an active off-toggle instead of an absent key.
   tokens.effort = effortDisplay ?? "";
-  tokens.rc = RC_TOKEN[rc];
+  // Remote Control is Claude-specific. Clear a previous occupant's token for Codex.
+  tokens.rc = vendor === "codex" ? "" : RC_TOKEN[rc];
   await herdrSend(socketPath, {
     id: `dotfiles:statusline-model:${stamp}`,
     method: "pane.report_metadata",

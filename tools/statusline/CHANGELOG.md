@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.1 — 2026-10-17
+
+- Report Codex pane names with their project and source model and effort from the exact Codex session; preserve Claude sidebar behavior.
+
 ## 0.20.0 — 2026-10-17
 
 - Move collectors to timer-owned state; render without processes or cache writes, fix cached context tokens and jj workspace/version display, and derive agx freshness from input mtimes.

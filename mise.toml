@@ -72,7 +72,7 @@ run = 'exec zsh -l'
 # fmt (alias f) + lint aggregate over per-language sub-tasks (<domain>:<action>),
 # mirroring qoed. Markdown = rumdl (.rumdl.toml). Shell = shfmt + shellcheck for
 # bash. TypeScript = the ox toolchain, same as Coral-dpp: oxfmt for FORMAT (.oxfmtrc.json)
-# + oxlint for LINT (.oxlintrc.json, see lint:ts) + tsgo for TYPES (tsconfig.json, see
+# + oxlint for LINT (.oxlintrc.json, see lint:ts) + bun check for TYPES (tsconfig.json, see
 # typecheck), all pinned in package.json and restored by `mise run deps`. oxfmt replaced
 # biome on 2026-09-12 with a ZERO-diff migration: `.oxfmtrc.json` (2-space, width 80,
 # double quotes, semi, trailing commas) reproduced biome's output byte-for-byte on all 93
@@ -136,7 +136,7 @@ depends = ["fmt:sh:check", "fmt:ts:check"]
 
 [tasks.lint]
 alias = "l"
-description = "Lint the repo: Markdown + shell/zsh + Bun script contract + TS (oxlint + tsgo) + skills index"
+description = "Lint the repo: Markdown + shell/zsh + Bun script contract + TS (oxlint + bun check) + skills index"
 depends = [
   "lint:md",
   "lint:sh",
@@ -380,8 +380,8 @@ run = "bun scripts/lint-ts-no-disable.ts"
 depends = ["bun:check"]
 alias = "tc"
 dir = "{{config_root}}"
-description = "Type-check the repo's own TS with tsgo (tsconfig.json: Coral-dpp-strict incl. noUncheckedIndexedAccess / exactOptionalPropertyTypes)"
-run = "bunx --bun tsgo --noEmit"
+description = "Type-check the repo's own TS with bun check (tsconfig.json: Coral-dpp-strict incl. noUncheckedIndexedAccess / exactOptionalPropertyTypes)"
+run = "bun check"
 
 [tasks.test]
 alias = "t"

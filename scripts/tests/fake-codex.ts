@@ -10,7 +10,7 @@
 //   FAKE_CODEX_FAIL_REMOVE - comma-separated server names for which `mcp remove` exits 1
 
 // Script-scoped fixture, not a library: this makes it a module so its top-level names
-// (args, verb, name, csv, nameArg) don't collide with fake-claude.ts under tsgo.
+// (args, verb, name, csv, nameArg) don't collide with fake-claude.ts under type checking.
 export {};
 
 const args = Bun.argv.slice(2);

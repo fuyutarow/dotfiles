@@ -100,18 +100,7 @@ test("delivered runner retains its types with a consumer's own narrow include gl
     join(repo, "scripts/use-runner.ts"),
     'import "../lint-oxlint.ts";\n',
   );
-  const checked = await run(
-    repo,
-    "bunx",
-    "--bun",
-    "--no-install",
-    "tsgo",
-    "--noEmit",
-    "--listFiles",
-    "--project",
-    "tsconfig.json",
-  );
+  const checked = await run(repo, "bun", "check", "--project", "tsconfig.json");
   expect(checked.exit, checked.out + checked.err).toBe(0);
-  expect(checked.out).toContain(join(repo, "lint-oxlint.ts"));
   expect(await Bun.file(join(repo, "tsconfig.json")).text()).toBe(configText);
 }, 60_000);

@@ -9,7 +9,7 @@ import {
   realpathSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import {
   addedDiagnostics,
   checkConsumer,
@@ -19,10 +19,6 @@ import {
 } from "../src/check-consumers.ts";
 
 const temporary: string[] = [];
-const tsgo = resolve(
-  import.meta.dir,
-  "../../../node_modules/@typescript/native-preview/bin/tsgo",
-);
 afterEach(() => {
   for (const path of temporary.splice(0))
     rmSync(path, { recursive: true, force: true });
@@ -64,6 +60,7 @@ function fixture() {
     "export declare function gpu(): {nowPct: number} | {unavailable: string};\n";
   const alpha = tree("alpha", shape);
   const consumerRoot = join(root, "consumer");
+  const adapter = join(root, "bun-check-adapter.ts");
   const hooks = join(consumerRoot, ".agents/hooks");
   const installed = join(root, "installed");
   for (const path of [hooks, installed, join(consumerRoot, "node_modules")])
@@ -87,6 +84,19 @@ function fixture() {
     include: [".agents/hooks/**/*.ts", "launcher/**/*.ts"],
   });
   writeFileSync(join(consumerRoot, "tsconfig.json"), config);
+  writeFileSync(
+    adapter,
+    `import { readFileSync } from "node:fs";\n` +
+      `const args = Bun.argv.slice(2);\n` +
+      `const project = args[args.indexOf("-p") + 1] ?? ".";\n` +
+      `if (args.includes("--showConfig")) {\n` +
+      `  const config = Bun.JSONC.parse(readFileSync(project + "/tsconfig.json", "utf8"));\n` +
+      `  process.stdout.write(JSON.stringify({ compilerOptions: config.compilerOptions ?? {} }));\n` +
+      `} else {\n` +
+      `  const result = Bun.spawnSync(["bun", "check", "--project", project], { stdout: "inherit", stderr: "inherit" });\n` +
+      `  process.exitCode = result.exitCode;\n` +
+      `}\n`,
+  );
   const hook = join(hooks, "lanes.ts");
   const source =
     "import {gpu} from 'agx-usehooks'; import './broken.ts'; const device = gpu(); if (!('unavailable' in device)) device.nowPct;\n";
@@ -105,7 +115,7 @@ function fixture() {
     hooks: ".agents/hooks",
     link_task: "link:agx-usehooks",
     link_path: "node_modules/agx-usehooks",
-    command: ["bun", tsgo, "--noEmit", "-p", "{root}"],
+    command: ["bun", adapter, "--noEmit", "-p", "{root}"],
   };
   return {
     root,

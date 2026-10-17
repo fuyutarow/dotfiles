@@ -1,6 +1,6 @@
 {
-  // Type-check contract for repos using the house TypeScript preset. Bun TRANSPILES and never
-  // type-checks, so tsgo --noEmit is the type gate. These are dotfiles' compilerOptions verbatim.
+  // Type-check contract for repos using the house TypeScript preset. `bun check` is the type gate.
+  // These are dotfiles' compilerOptions verbatim.
   // The two flags that carry most of the strictness burden are `noUncheckedIndexedAccess`
   // (arr[i] is T | undefined) and `exactOptionalPropertyTypes` ({a?: T} refuses explicit undefined).
   // Both remain ON; the measured migration paid down the resulting errors rather than weakening them.

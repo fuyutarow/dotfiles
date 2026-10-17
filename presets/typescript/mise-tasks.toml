@@ -23,5 +23,5 @@ description = "oxlint --type-aware on every TypeScript/TSX file the config does 
 run = "bun lint-oxlint.ts --type-aware"
 
 [tasks.typecheck]
-description = "Type-check with tsgo against tsconfig.json (the owner's strict compilerOptions)"
-run = "bunx --bun tsgo --noEmit"
+description = "Type-check with bun check against tsconfig.json (requires Bun >= 1.4.3)"
+run = "bun require-bun.ts && bun check"

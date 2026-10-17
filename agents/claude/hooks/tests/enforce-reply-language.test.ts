@@ -283,7 +283,7 @@ describe("enforce-reply-language", () => {
     const transcript = writeTranscript([
       user("説明してください"),
       assistant(
-        `この変更は設定を更新し、関連する処理を確認します。\n\n| 項目 | 内容 |\n| --- | --- |\n| ファイル | agents/claude/hooks/enforce-reply-language.ts |\n| コマンド | bunx tsgo --noEmit -p . |\n| フラグ | --stop-hook-active |`,
+        `この変更は設定を更新し、関連する処理を確認します。\n\n| 項目 | 内容 |\n| --- | --- |\n| ファイル | agents/claude/hooks/enforce-reply-language.ts |\n| コマンド | bun check |\n| フラグ | --stop-hook-active |`,
       ),
     ]);
     const result = runHook(HOOK, stopPayload(transcript), {

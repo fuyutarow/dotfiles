@@ -31,7 +31,7 @@
  */
 
 // Script-scoped, not a library: this import (not an `export {}`, now redundant with it in
-// scope) makes the file a module so the top-level `await` calls below are legal under tsgo.
+// scope) makes the file a module so the top-level `await` calls below are legal under TypeScript.
 import { jsonOf, z } from "../hooks/zod.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";

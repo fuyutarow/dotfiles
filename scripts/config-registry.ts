@@ -783,7 +783,7 @@ const OTHER: readonly Surface[] = [
     when: "all",
     sources: [".oxfmtrc.json", ".rumdl.toml", "tsconfig.json", "mise.toml"],
     deployed: "the checkout",
-    consumer: "oxfmt, rumdl, tsgo, mise",
+    consumer: "oxfmt, rumdl, bun check, mise",
     writer: "human, in the repo",
     verify: "mise run fmt:check · lint:md · typecheck · mise tasks",
   },

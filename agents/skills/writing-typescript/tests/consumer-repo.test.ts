@@ -1,8 +1,8 @@
 // Consumers own copies of the strict compiler settings, pinned packages and oxlint config.
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { decodedJson } from "../../../hooks/tests/decode.ts";
 import { z } from "../../../hooks/zod.ts";
 
@@ -13,7 +13,8 @@ const Pkg = z.looseObject({
   devDependencies: z.record(z.string(), z.string()),
 });
 const ShowConfig = z.looseObject({
-  compilerOptions: z.record(z.string(), z.unknown()),
+  extends: z.string().optional(),
+  compilerOptions: z.record(z.string(), z.unknown()).optional(),
 });
 const read = (path: string): Promise<string> => readFile(path, "utf8");
 
@@ -39,18 +40,18 @@ const houseVersions = (
 ): Record<string, string | undefined> =>
   Object.fromEntries(Object.keys(fixture).map((name) => [name, house[name]]));
 
-/** The compilerOptions tsgo actually applies for `dir/tsconfig.json` (comments and defaults resolved). */
-async function effective(dir: string): Promise<Record<string, unknown>> {
-  const r = await run([
-    "bunx",
-    "--bun",
-    "tsgo",
-    "--showConfig",
-    "-p",
-    join(dir, "tsconfig.json"),
-  ]);
-  expect(r.exitCode).toBe(0);
-  return decodedJson(ShowConfig, r.stdout).compilerOptions;
+/** The compilerOptions delivered by the preset, including its JSONC comments. */
+async function effective(path: string): Promise<Record<string, unknown>> {
+  const config = await read(path);
+  const parsed = decodedJson(
+    ShowConfig,
+    JSON.stringify(Bun.JSONC.parse(config)),
+  );
+  const inherited =
+    parsed.extends === undefined
+      ? {}
+      : await effective(resolve(dirname(path), parsed.extends));
+  return { ...inherited, ...parsed.compilerOptions };
 }
 
 describe("consumer-repo fixture", () => {
@@ -80,8 +81,13 @@ describe("consumer-repo fixture", () => {
       dir,
     ]);
     expect(applied.exitCode).toBe(0);
-    await writeFile(join(dir, "x.ts"), "export const x = 1;\n"); // tsgo wants one input
-    expect(await effective(dir)).toEqual(await effective(ROOT));
+    await symlink(join(ROOT, "node_modules"), join(dir, "node_modules"));
+    await writeFile(join(dir, "x.ts"), "export const x = 1;\n");
+    expect(await effective(join(dir, "tsconfig.json"))).toEqual(
+      await effective(join(ROOT, "tsconfig.json")),
+    );
+    const checked = await run(["bun", "check"], dir);
+    expect(checked.exitCode, checked.stdout + checked.stderr).toBe(0);
   });
 
   test("the oxlint preset supplies exact config and plugin copies", async () => {

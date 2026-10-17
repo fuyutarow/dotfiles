@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
+import { bunVersionError } from "../typescript/require-bun.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const FIXTURES = join(import.meta.dir, "fixtures");
@@ -11,7 +12,8 @@ afterAll(async () => {
   await rm(OXLINT_SCRATCH, { recursive: true, force: true });
 });
 const ShowConfig = z.looseObject({
-  compilerOptions: z.record(z.string(), z.unknown()),
+  extends: z.string().optional(),
+  compilerOptions: z.record(z.string(), z.unknown()).optional(),
 });
 const OxReport = z.looseObject({
   diagnostics: z.array(
@@ -25,28 +27,28 @@ const OxReport = z.looseObject({
 });
 
 async function showConfig(path: string): Promise<Record<string, unknown>> {
-  const result = Bun.spawn(
-    ["bunx", "--bun", "tsgo", "--showConfig", "-p", path],
-    { cwd: ROOT, timeout: 60_000, stdout: "pipe", stderr: "pipe" },
-  );
-  const [stdout, exitCode] = await Promise.all([
-    new Response(result.stdout).text(),
-    result.exited,
-  ]);
-  expect(exitCode).toBe(0);
-  const parsed = jsonOf(ShowConfig).safeParse(stdout);
+  const config = await Bun.file(path).text();
+  const parsed = ShowConfig.safeParse(Bun.JSONC.parse(config));
   if (!parsed.success)
-    return expect.unreachable(`tsgo --showConfig: ${parsed.error.message}`);
-  return parsed.data.compilerOptions;
+    return expect.unreachable(`tsconfig: ${parsed.error.message}`);
+  const inherited =
+    parsed.data.extends === undefined
+      ? {}
+      : await showConfig(resolve(dirname(path), parsed.data.extends));
+  return { ...inherited, ...parsed.data.compilerOptions };
 }
 
 async function typecheck(path: string): Promise<number> {
-  const result = Bun.spawn(["bunx", "--bun", "tsgo", "--noEmit", "-p", path], {
+  const result = Bun.spawn(["bun", "check", "--project", path], {
     cwd: ROOT,
     timeout: 60_000,
     stdout: "pipe",
     stderr: "pipe",
   });
+  await Promise.all([
+    new Response(result.stdout).text(),
+    new Response(result.stderr).text(),
+  ]);
   return result.exited;
 }
 
@@ -86,7 +88,17 @@ describe("TypeScript preset", () => {
     expect(dotfiles).toMatchObject(preset);
   });
 
-  test("good fixture passes tsgo", async () => {
+  test("typecheck refuses Bun below 1.4.3 with a clear message", () => {
+    expect(bunVersionError("1.4.2")).toBe(
+      "typecheck requires Bun >= 1.4.3 (found 1.4.2)",
+    );
+    expect(bunVersionError("1.4.3-canary.1")).toBe(
+      "typecheck requires Bun >= 1.4.3 (found 1.4.3-canary.1)",
+    );
+    expect(bunVersionError("1.4.3")).toBeUndefined();
+  });
+
+  test("good fixture passes bun check", async () => {
     expect(await typecheck(join(FIXTURES, "ts/good/tsconfig.json"))).toBe(0);
   });
 

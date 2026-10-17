@@ -56,17 +56,24 @@ function ownedByMe(path: string): boolean {
   return stat.isOk() && (uid === undefined || stat.value.uid === uid);
 }
 
-/** Lines of `text` that write under a literal system temp path. */
+/** True when the comment block directly above `index` carries `tmp-ok: <reason>`. */
+function exempt(lines: string[], index: number): boolean {
+  for (let i = index - 1; i >= 0 && /^\s*\/\//u.test(lines[i] ?? ""); i--) {
+    if (/\btmp-ok:\s*\S/u.test(lines[i] ?? "")) return true;
+  }
+  return false;
+}
+
+/** Lines of `text` that write under a literal system temp path, unless justified with `// tmp-ok: <reason>`. */
 export function staticFindings(path: string, text: string): string[] {
-  return text
-    .split("\n")
-    .flatMap((line, index) =>
-      LEAK.test(line)
-        ? [
-            `${path}:${index + 1}: writes under a literal system temp path; use mkdtempSync(join(tmpdir(), …)) so the test preload's TMPDIR owns it`,
-          ]
-        : [],
-    );
+  const lines = text.split("\n");
+  return lines.flatMap((line, index) =>
+    LEAK.test(line) && !exempt(lines, index)
+      ? [
+          `${path}:${index + 1}: writes under a literal system temp path; use mkdtempSync(join(tmpdir(), …)) so the test preload's TMPDIR owns it`,
+        ]
+      : [],
+  );
 }
 
 /** Test files one TEST_GLOBS pattern selects under `root`, minus node_modules. */

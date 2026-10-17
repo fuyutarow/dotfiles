@@ -55,6 +55,27 @@ test("staticFindings leaves tmpdir() bases and /tmp fixture data alone", () => {
     expect(staticFindings("t.test.ts", line)).toEqual([]);
 });
 
+test("staticFindings honors a tmp-ok reason in the comment block directly above", () => {
+  // Assembled so this file's own source holds no literal temp-path write.
+  const name = "tmp";
+  const write = `await mkdtemp("/${name}/so-")`;
+  const justified = [
+    "// tmp-ok: socket path limit",
+    "// second line",
+    write,
+  ].join("\n");
+  expect(staticFindings("t.test.ts", justified)).toEqual([]);
+  expect(
+    staticFindings("t.test.ts", ["// tmp-ok:", write].join("\n")),
+  ).toHaveLength(1);
+  expect(
+    staticFindings(
+      "t.test.ts",
+      ["// tmp-ok: far away", "const x = 1;", write].join("\n"),
+    ),
+  ).toHaveLength(1);
+});
+
 test("lintStatic reports file:line for a test under tests/", () => {
   const root = scratch();
   const name = "tmp";

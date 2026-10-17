@@ -815,6 +815,8 @@ describe("ws gc", () => {
     for (const s of ["done", "live", "cont", "dirty", "orph"])
       await ws(["add", s], path);
     writeFileSync(join(wsDir(path, "dirty"), "w.txt"), "w\n");
+    // Dry-run classification reads saved jj state; explicitly snapshot this fixture's work.
+    expect((await jj(["status"], wsDir(path, "dirty"))).code).toBe(0);
     setRecords([
       rec(path, "done", {}),
       rec(path, "live", { state: "running" }),
@@ -1018,7 +1020,11 @@ describe("WS-GC-JJ-LIST", () => {
       [dirs.stale]: ["legacy", "unlanded"],
       [dirs.precious]: ["legacy", "kept"],
     });
-    expect((await jj(["status"], dirs.stale)).code).toBe(0);
+    // Inventory is read-only and must leave repair to an explicit mutation.
+    expect((await jj(["status"], dirs.stale)).err).toContain(
+      "working copy is stale",
+    );
+    expect((await jj(["workspace", "update-stale"], dirs.stale)).code).toBe(0);
     for (const dir of Object.values(dirs))
       expect(await Bun.file(join(dir, "a.txt")).exists()).toBe(true);
     const plain = await ws(["gc"], path);
@@ -1372,6 +1378,8 @@ describe("gc integration branches", () => {
       0,
     );
     // The workspace deletion has not landed yet: both must initially survive.
+    for (const dir of [landed, partial])
+      expect((await jj(["status"], dir)).code).toBe(0);
     setRecords([recFor(landed), recFor(partial)]);
     const before = await ws(["gc", "--dry-run"], path);
     expect(before.out).toContain(`${landed}\tws\tunlanded\t`);
@@ -1457,6 +1465,7 @@ describe("gc integration branches", () => {
       0,
     );
     setRecords([recFor(dir)]);
+    expect((await jj(["status"], dir)).code).toBe(0);
     const dry = await ws(["gc", "--dry-run"], path);
     expect(dry.code, dry.err).toBe(0);
     expect(dry.out).toContain(`${dir}\tws\tlanded\t`);

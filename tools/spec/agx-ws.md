@@ -18,6 +18,14 @@ workspaces whose sparse patterns are not exactly `.`. Refuted by a stale workspa
 or add, a newly added workspace with narrowed sparse patterns, or a narrowed fixture omitted
 from the gc report. Fixtures use temporary jj repositories outside the checkout.
 
+**Proposition (WS-GC-LOCK-SCOPE).** A GC pass over many slow classifications permits `ws add`
+to acquire the store lock during classification or immediately after the current workspace's
+removal. A changed verdict is re-checked under that lock and retained when no longer collectable.
+Dry runs never take the exclusive lock or snapshot workspaces. Waits exceeding five seconds
+report elapsed seconds and the holder's command, pid, host and start time. Refuted by add waiting
+for an entire pass, or removal without a locked re-check. Fixtures:
+`tools/agx-ws/tests/lock-scope.test.ts`.
+
 ## Layout and naming
 
 For a repo whose backing store is `<parent>/<repo>`:
@@ -59,7 +67,10 @@ ws gc  [--dry-run] [--include-unrecorded] [--repo P]
   The working copy is snapshotted first, so an uncommitted edit counts. Land or abandon the change
   first; there is no force flag.
 - **gc** — one line per candidate: `collected|would-collect|keep <TAB> dir <TAB> reason`. `--dry-run`
-  removes nothing and fails on the same preconditions a real run would.
+  removes nothing and fails on the same preconditions a real run would. Inventory and initial
+  classification use saved jj snapshots without locking, snapshotting or repairing stale
+  workspaces. Unsnapshotted edits can change a dry-run verdict; collection always snapshots and
+  re-checks the selected workspace under the lock before removal.
 
 ## gc: what is collected
 
@@ -99,11 +110,16 @@ Unknown keys are an error. dotfiles declares the example above.
 
 ## Invariants
 
-- **No state of its own.** Everything is derived from jj, `.ws.toml`, `agx ls --json` and the
-  filesystem. The only transient file is the lock directory `<parent>/<repo>.ws.lock`, removed on
-  release.
-- **One lock per backing store**, shared by all verbs (`tools/shared` dir-lock; a dead holder's lock
-  is taken over). A busy lock is waited for with a message, then refused; the holder is never killed.
+- **No durable state of its own.** Everything is derived from jj, `.ws.toml`, `agx ls --json` and
+  the filesystem. The lock directory `<parent>/<repo>.ws.lock` is removed on release. Foreground
+  waiters advertise transient intent in the adjacent `.ws.lock.waiters/` directory, cleaned on
+  completion; dead local waiter entries are discarded by GC.
+- **One lock per backing store**, shared by mutating verbs (`tools/shared` dir-lock; a dead holder's
+  lock is taken over). GC classifies without it, then acquires it separately for each removal,
+  refreshing config, trunk, run records and workspace registration before judging again. GC skips
+  busy stores and yields to advertised foreground waiters, so another removal cannot jump ahead
+  of a waiting add. Dry runs never acquire it. Other commands wait, reporting holder and elapsed
+  time every five seconds, then refuse after fifteen minutes; the holder is never killed.
 - **Foreground and loud.** Every failure is a `ws: …` line on stderr and a non-zero exit.
 - **Never kills jj.** jj runs without a timeout; read-only probes use `--ignore-working-copy`; Git
   ref locks are named and refused, never removed.

@@ -1,5 +1,6 @@
 // Run-workspace lifecycle: add, rm, gc. Facts come from jj, .ws.toml and agx.
 // Successful observations publish the owner-written verdict inventory for small-file readers.
+// Store locks and foreground waiter markers are transient and removed on completion.
 import {
   accessSync,
   constants,
@@ -33,6 +34,7 @@ import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
 import { validateSlug } from "../../shared/src/slug.ts";
 import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import { jjWorkspace, refLocks } from "./jj-workspace.ts";
+import { withWorkspaceLock } from "./lock.ts";
 
 const bad = (message: string): Attempt<never> => ({
   ok: false,
@@ -248,31 +250,14 @@ async function withLock<T>(
   repo: Repo,
   what: string,
   fn: () => Promise<Attempt<T>>,
+  skipBusy?: (reason: string) => Attempt<T>,
 ): Promise<Attempt<T>> {
-  const lock = join(repo.parent, `${repo.name}.ws.lock`);
-  const got = await acquire(
-    lock,
-    {
-      pid: process.pid,
-      host: hostname(),
-      what,
-      since: Temporal.Now.instant().toString(),
-    },
-    {
-      onWait: (holder) => {
-        process.stderr.write(
-          `ws: waiting for ${holder?.what ?? "another ws"} (pid ${holder?.pid ?? "?"}) on ${repo.name}\n`,
-        );
-      },
-    },
+  return withWorkspaceLock(
+    join(repo.parent, `${repo.name}.ws.lock`),
+    what,
+    fn,
+    skipBusy,
   );
-  if (typeof got !== "function")
-    return bad(
-      `lock ${lock} is held by ${got?.what ?? "unknown"} (pid ${got?.pid ?? "?"}); not waiting longer`,
-    );
-  const result = await attempt(fn);
-  got();
-  return result.ok ? result.value : bad(msg(result));
 }
 
 async function workspaceNames(repo: Repo): Promise<Attempt<string[]>> {
@@ -1735,7 +1720,9 @@ export async function gc(options: GcOptions): Promise<Attempt<GcResult>> {
   if (!pre.ok) return pre;
   const graveyard = await checkGraveyard();
   if (!graveyard.ok) return graveyard;
-  return withLock(repo, "ws gc", async () => {
+  // Inventory and initial classification are read-only, including in a real collection pass.
+  // A dry run never enters withLock (and therefore never creates waiter metadata either).
+  const run = async (): Promise<Attempt<GcResult>> => {
     const cfg = await readConfig(repo, true);
     if (!cfg.ok) return cfg;
     const trunk = await trunkCommit(repo, cfg.value);
@@ -1752,7 +1739,14 @@ export async function gc(options: GcOptions): Promise<Attempt<GcResult>> {
         basename(resolve(ws.dir)).startsWith("ws_")
           ? "ws"
           : "legacy";
-      const c = await classify(repo, cfg.value, ws, records.value, trunk.value);
+      let c = await classify(
+        repo,
+        cfg.value,
+        ws,
+        records.value,
+        trunk.value,
+        true,
+      );
       let label = c.verdict;
       let reason = c.reason;
       const recorded = lineageOf(records.value, realOr(ws.dir)).length > 0;
@@ -1771,15 +1765,80 @@ export async function gc(options: GcOptions): Promise<Attempt<GcResult>> {
       if (c.verdict === "abandoned" && options.abandoned !== true)
         reason += "; report only; pass --abandoned to collect";
       if (c.collect && allowed && !options.dryRun) {
-        const done = await collectWorkspace(
+        const done = await withLock<Classification>(
           repo,
-          graveyard.value,
-          ws,
-          c.verdict === "abandoned",
+          `ws gc ${ws.name}`,
+          async () => {
+            // Refresh every verdict input after acquiring the lock, including policy and runs.
+            const currentConfig = await readConfig(repo, true);
+            if (!currentConfig.ok) return currentConfig;
+            const currentTrunk = await trunkCommit(repo, currentConfig.value);
+            if (!currentTrunk.ok) return currentTrunk;
+            const currentRecords = await agxRecords(repo.backing);
+            if (!currentRecords.ok) return currentRecords;
+            const root = await jjOut(
+              ["workspace", "root", "--name", ws.name],
+              repo.backing,
+              true,
+            );
+            if (
+              !root.ok ||
+              realOr(resolve(repo.backing, root.value.trim())) !==
+                realOr(ws.dir)
+            )
+              return good({
+                ...c,
+                verdict: "keep",
+                collect: false,
+                reason: "workspace registration changed before removal",
+              });
+            const checked = await classify(
+              repo,
+              currentConfig.value,
+              ws,
+              currentRecords.value,
+              currentTrunk.value,
+            );
+            const stillRecorded =
+              lineageOf(currentRecords.value, realOr(ws.dir)).length > 0;
+            const stillAllowed =
+              (kind === "legacy"
+                ? options.legacy === true
+                : stillRecorded || options.includeUnrecorded) &&
+              (checked.verdict !== "abandoned" || options.abandoned === true);
+            if (!checked.collect) return good(checked);
+            if (!stillAllowed)
+              return good({
+                ...checked,
+                collect: false,
+                reason: `${checked.reason}; collection no longer permitted by current records/options`,
+              });
+            const removed = await collectWorkspace(
+              repo,
+              graveyard.value,
+              ws,
+              checked.verdict === "abandoned",
+            );
+            return good({
+              ...checked,
+              verdict: removed.ok ? "collected" : "FAILED",
+              reason: gcCollectionReason(checked.reason, removed),
+            });
+          },
+          (busyReason) =>
+            good({
+              ...c,
+              verdict: "keep",
+              collect: false,
+              reason: `collection skipped: ${busyReason}`,
+            }),
         );
-        label = done.ok ? "collected" : "FAILED";
-        reason = gcCollectionReason(reason, done);
-        failed.push(...(done.ok ? [] : [ws.dir]));
+        c = done.ok
+          ? done.value
+          : { ...c, verdict: "FAILED", reason: msg(done) };
+        label = c.verdict;
+        reason = c.reason;
+        failed.push(...(label === "FAILED" ? [ws.dir] : []));
       }
       // Escape control characters without breaking the column contract.
       lines.push(
@@ -1795,7 +1854,8 @@ export async function gc(options: GcOptions): Promise<Attempt<GcResult>> {
     };
     if (failed.length === 0) await publishVerdicts(repo.backing, result);
     return good(result);
-  });
+  };
+  return run();
 }
 
 async function registeredRepoPaths(root: string): Promise<Attempt<string[]>> {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1 — 2026-10-17
+
+- Keep workspace GC classification and dry runs lock-free; re-check each removal under the store lock and yield to waiting commands with holder and elapsed-time diagnostics.
+
 ## 0.8.0 — 2026-10-17
 
 - Expose workspace GC verdict counts as JSON.

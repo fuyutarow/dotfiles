@@ -93,8 +93,8 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
   expect(listing.exit, listing.stderr).toBe(0);
   const doctor = await invoke(CLI, "doctor");
   expect(doctor.exit).toBe(1);
-  expect(doctor.stdout).toContain("\tlegacy\t");
-  expect(doctor.stdout).toContain("\tmissing-return\t");
+  expect(doctor.stdout).not.toContain("legacy-import");
+  expect(doctor.stdout).toContain("\tunjudged\t");
   const doctorLost = doctor.stdout
     .split("\n")
     .filter((line) => line.includes("\torphaned\t")).length;

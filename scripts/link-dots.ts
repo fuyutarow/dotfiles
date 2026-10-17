@@ -761,6 +761,70 @@ export async function deployGpuSampler(
   return undefined;
 }
 
+/** Enable the registry-linked timer; --check never talks to the user manager. */
+export async function deployStatuslineOwners(
+  ctx: Ctx,
+  probe = async (args: string[]) => {
+    const child = Bun.spawn(["systemctl", "--user", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10_000,
+    });
+    const [out, err, code] = await Promise.all([
+      child.stdout.text(),
+      child.stderr.text(),
+      child.exited,
+    ]);
+    return { code, out: `${out}${err}`.trim() };
+  },
+  available?: boolean,
+): Promise<Error | undefined> {
+  if (ctx.os === "mac" || ctx.mode === "check") return undefined;
+  const systemd =
+    available ??
+    (Bun.which("systemctl") !== null &&
+      (await access("/run/systemd/system").then(
+        () => true,
+        () => false,
+      )));
+  if (!systemd) {
+    say("skip: statusline owners (no systemd on this host)");
+    return undefined;
+  }
+  for (const unit of [
+    "statusline-sampler.service",
+    "statusline-sampler.timer",
+    "agx-doctor.service",
+    "agx-doctor.path",
+  ]) {
+    const target = await realpath(
+      join(ctx.home, ".config/systemd/user", unit),
+    ).catch(() => null);
+    const source = await realpath(join(ctx.dotfiles, "systemd", unit)).catch(
+      () => null,
+    );
+    if (source === null || target !== source)
+      return new Error(
+        `${unit} is not the declared link; repair: mise run link:dots`,
+      );
+  }
+  for (const args of [
+    ["daemon-reload"],
+    ["enable", "--now", "statusline-sampler.timer", "agx-doctor.path"],
+    ["start", "agx-doctor.service"],
+  ]) {
+    const result = await probe(args);
+    if (result.code !== 0)
+      return new Error(
+        `systemctl --user ${args.join(" ")} failed: ${result.out}; repair: mise run link:dots`,
+      );
+  }
+  say(
+    "enabled: statusline-sampler.timer (5s after completion; agx doctor follows its inputs)",
+  );
+  return undefined;
+}
+
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
     process.stderr.write(
@@ -846,6 +910,8 @@ async function main(): Promise<Error | void> {
   if (gcError !== undefined) return gcError;
   const gpuSamplerError = await deployGpuSampler(ctx);
   if (gpuSamplerError !== undefined) return gpuSamplerError;
+  const ownersError = await deployStatuslineOwners(ctx);
+  if (ownersError !== undefined) return ownersError;
   const daemonError = deployCccDaemon(ctx);
   if (daemonError !== undefined) return daemonError;
   if (ctx.os === "mac") loadSmartOpenReceiver(ctx);

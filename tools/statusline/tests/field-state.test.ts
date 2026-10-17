@@ -269,7 +269,6 @@ test("every previously good display field survives failed reads independently wi
     "jev",
     "branch",
     "diff",
-    "worktree",
     "jobs",
     "cpu",
     "ram",
@@ -374,7 +373,8 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
   const text = plain(await new Response(child.stdout).text());
   expect(await child.exited).toBe(0);
   for (const n of [1, 2, 3]) expect(text).toContain(`terra-${n}`);
-  expect(text).toMatch(/agx 1[01]m old/u);
+  expect(text).toContain("agx fresh");
+  expect(text).not.toMatch(/agx \d+m old/u);
   expect(text).not.toContain("agx n/a");
   // A reader that reports its failure as a Result must use the same disk fallback,
   // even before this session has populated the individual field store.
@@ -412,7 +412,7 @@ test("three disk-snapshot workers survive an outer dispatch timeout, including s
     timeout: 15000,
   });
   expect(plain(await new Response(empty.stdout).text())).toContain(
-    "agx n/a (dispatch timeout 2000ms)",
+    "agx n/a (snapshot unavailable)",
   );
   expect(await empty.exited).toBe(0);
 }, 15000);

@@ -1,4 +1,12 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+  unlink,
+} from "node:fs/promises";
 import { hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { fromThrowable, jsonText, z } from "./zod.ts";
@@ -45,7 +53,9 @@ export async function cachedSource<T extends z.ZodType>(options: {
   const temp = `${path}.${process.pid}.tmp`;
   await writeFile(temp, JSON.stringify({ at: now(), value }), { mode: 0o600 })
     .then(() => rename(temp, path))
-    .catch(() => null);
+    .catch(async () => {
+      await unlink(temp).catch(() => null);
+    });
   return value;
 }
 
@@ -150,7 +160,9 @@ async function renderWithLock(
         mode: 0o600,
       })
         .then(() => rename(temp, outputPath))
-        .catch(() => null);
+        .catch(async () => {
+          await unlink(temp).catch(() => null);
+        });
       // Keep the owner visible briefly after publishing, so contenders can observe and reuse
       // this completed fresh frame before the next process acquires the lock.
       await Bun.sleep(50);

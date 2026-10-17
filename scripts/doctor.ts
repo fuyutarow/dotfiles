@@ -1031,6 +1031,62 @@ export async function checkWsGc(
   );
 }
 
+export async function checkStatuslineOwners(
+  _ctx: Ctx,
+  probe: typeof run = run,
+): Promise<Finding> {
+  const results = await Promise.all(
+    ["statusline-sampler.timer", "agx-doctor.path"].map(async (unit) => {
+      const active = await probe(["systemctl", "--user", "is-active", unit], {
+        ms: 10_000,
+      });
+      return { unit, active };
+    }),
+  );
+  if (results.every(({ active }) => active.missing))
+    return skip("statusline-owners", "no systemctl on this host");
+  const failed = results.filter(
+    ({ active }) =>
+      active.code !== 0 || active.timedOut || active.out.trim() !== "active",
+  );
+  if (failed.length > 0)
+    return fail(
+      "statusline-owners",
+      failed
+        .map(({ unit, active }) => `${unit}: ${active.out.trim()}`)
+        .join("; "),
+      "mise run link:dots",
+    );
+  // A running collector is healthy; a failed last invocation must remain visible.
+  const service = await probe(
+    [
+      "systemctl",
+      "--user",
+      "show",
+      "statusline-sampler.service",
+      "agx-doctor.service",
+      "--property=Result",
+    ],
+    { ms: 10_000 },
+  );
+  if (
+    service.code !== 0 ||
+    service.timedOut ||
+    service.out
+      .split("\n")
+      .some((line) => line.startsWith("Result=") && line !== "Result=success")
+  )
+    return fail(
+      "statusline-owners",
+      `collector failed: ${service.out.trim()}`,
+      "journalctl --user -u statusline-sampler.service -u agx-doctor.service",
+    );
+  return pass(
+    "statusline-owners",
+    "sampler timer and agx input watcher active; collectors successful",
+  );
+}
+
 export async function checkGpuSampler(
   _ctx: Ctx,
   probe: typeof run = run,
@@ -2007,6 +2063,11 @@ export const CHECKS: Check[] = [
   {
     name: "gpu-sampler",
     run: checkGpuSampler,
+    applies: (c) => (c.isMac ? "Linux only" : null),
+  },
+  {
+    name: "statusline-owners",
+    run: checkStatuslineOwners,
     applies: (c) => (c.isMac ? "Linux only" : null),
   },
   {

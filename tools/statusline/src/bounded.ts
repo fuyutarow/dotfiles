@@ -10,12 +10,20 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "./zod.ts";
 
 export const recoverInvalid = <T extends z.ZodType>(schema: T) =>
   schema.optional().catch(undefined);
+// A sampler probe may redirect its own state without touching deployed host caches.
+function cachePath(path: string): string {
+  const root = process.env.STATUSLINE_CACHE_ROOT;
+  const prefix = `${process.env.HOME ?? ""}/.cache/claude/`;
+  return root !== undefined && path.startsWith(prefix)
+    ? join(root, path.slice(prefix.length))
+    : path;
+}
 // Sync cache API retained for legacy callers; statusline collectors use readJsonAsync.
 // Read a JSON file and validate it. undefined = no usable file (missing, not JSON, or the wrong
 // shape) — the caller treats that as "expired" or reports its own n/a; it is never an assertion.
@@ -33,6 +41,7 @@ export async function readJsonAsync<S extends z.ZodType>(
   path: string,
   schema: S,
 ): Promise<z.output<S> | undefined> {
+  path = cachePath(path);
   const text = await Bun.file(path)
     .text()
     .catch(() => null);
@@ -244,7 +253,8 @@ export async function writeCacheAsync(
   path: string,
   value: unknown,
 ): Promise<void> {
-  const tmp = `${path}.${process.pid}.tmp`;
+  path = cachePath(path);
+  const tmp = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
   await mkdir(dirname(path), { recursive: true })
     .then(() => Bun.write(tmp, JSON.stringify(value)))
     .then(() => rename(tmp, path))

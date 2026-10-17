@@ -6,33 +6,13 @@ import type { RouteScan } from "./dispatch-runs.ts";
 import type { Admitted } from "./jobs.ts";
 import type { DiskEntry } from "./storage.ts";
 import type { ModelLimit } from "./rate-limits.ts";
-import {
-  account,
-  agentNameAsync,
-  readClaudeJsonAsync,
-  rcStateAsync,
-  reportToHerdr,
-  ultracodeConfiguredAsync,
-  type RcState,
-} from "./identity.ts";
-import { modelWeeklyLimits } from "./rate-limits.ts";
+import type { RcState } from "./identity.ts";
 import { contextLabel, firstNonEmpty, modelName } from "./model-context.ts";
-import { repoStateAsync } from "./repo-state.ts";
-import { scanOutOfHarnessAsync } from "./jobs.ts";
-import { readHostLoadAsync } from "./host-load.ts";
-import { agxRouteRunsAsync } from "./dispatch-runs.ts";
-import { readDispatchWarningAsync } from "./dispatch-warning.ts";
-import { diskReadingsAsync } from "./storage.ts";
-import type { DiskReading } from "./storage.ts";
-import { readCodexRate } from "./codex-rate.ts";
-import { readJevUsage } from "./jev-usage.ts";
-import {
-  readRecoverHealthAsync,
-  type RecoverHealth,
-} from "./recover-health.ts";
-import { cachedSource } from "./render-cache.ts";
-import { z } from "./zod.ts";
-import { prepareDisplayFields } from "./display-fields.ts";
+import type { readCodexRate } from "./codex-rate.ts";
+import type { readJevUsage } from "./jev-usage.ts";
+import type { RecoverHealth } from "./recover-health.ts";
+import { ownerSources, type OwnerState } from "./owner-state.ts";
+import { readCoreRuns } from "./core-runs.ts";
 
 type IdentityFacts = {
   email: string | undefined;
@@ -67,20 +47,24 @@ function healthPatch(
     };
   return { recoverHealth: value, recoverHealthWhy: undefined };
 }
-type Sources = {
+export type Sources = {
   identity: () => Promise<IdentityFacts>;
   agentName: (
     sid: string,
     hint?: string,
   ) => Promise<Result<string | undefined, string>>;
   rcState: () => Promise<RcState>;
-  repoState: (
-    cwd: string,
-  ) => Promise<{ branch: string | undefined; branchWhy: string | undefined }>;
+  repoState: (cwd: string) => Promise<{
+    branch: string | undefined;
+    branchWhy: string | undefined;
+    workspace?: string | undefined;
+    add?: number | undefined;
+    del?: number | undefined;
+  }>;
   jobScan: () => Promise<{
     jobs: Admitted[];
     orphans: number;
-    failed?: string;
+    failed?: string | undefined;
   }>;
   hostLoad: () => Promise<Omit<HostLoad, "disks">>;
   routes: (
@@ -100,6 +84,7 @@ type Sources = {
   recoverHealth: () => Promise<HealthRead>;
 };
 export interface BuildDataframeOptions {
+  ownerSnapshot?: Promise<OwnerState | undefined>;
   fieldStoreRoot?: string;
   sources?: Partial<Sources>;
   budgets?: Partial<Record<keyof Sources, number>>;
@@ -180,125 +165,6 @@ function settled<T>(
       : { value: fallback, why: result.value.why };
   return { value: fallback, why: `${name} unavailable` };
 }
-async function identityFacts(): Promise<IdentityFacts> {
-  const cjResult = await readClaudeJsonAsync();
-  const accountResult = cjResult.andThen(account);
-  const capsResult = cjResult.andThen(modelWeeklyLimits);
-  const workflow = await ultracodeConfiguredAsync();
-  return {
-    email: accountResult.unwrapOr(undefined),
-    accountWhy: accountResult.isErr() ? accountResult.error : undefined,
-    rlModel: capsResult.unwrapOr([]),
-    modelCapsWhy: capsResult.isErr() ? capsResult.error : undefined,
-    wfOn: workflow ?? false,
-    workflowWhy:
-      workflow === undefined ? "workflow settings unavailable" : undefined,
-  };
-}
-const RepoStateCacheSchema = z.object({
-  branch: z.string().optional(),
-  branchWhy: z.string().optional(),
-});
-const JobScanCacheSchema = z.object({
-  jobs: z.array(z.object({ name: z.string(), secs: z.number() })),
-  orphans: z.number(),
-  failed: z.string().optional(),
-});
-const DiskEntryCacheSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("reading"),
-    label: z.string(),
-    usedG: z.number(),
-    totalG: z.number().optional(),
-    freeG: z.number().optional(),
-    path: z.string().optional(),
-    rateGibPerMin: z.number().optional(),
-    rateRedMinutes: z.number().optional(),
-    rateYellowMinutes: z.number().optional(),
-  }),
-  z.object({ kind: z.literal("miss"), label: z.string(), why: z.string() }),
-]);
-const DiskResultCacheSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("readings"),
-    entries: z.array(DiskEntryCacheSchema),
-  }),
-  z.object({ kind: z.literal("error"), value: z.string() }),
-]);
-function diskEntryFromCache(entry: z.output<typeof DiskEntryCacheSchema>) {
-  if (entry.kind === "miss") return entry;
-  const reading: DiskReading = {
-    kind: "reading" as const,
-    label: entry.label,
-    usedG: entry.usedG,
-    totalG: entry.totalG,
-    freeG: entry.freeG,
-  };
-  if (entry.path !== undefined) reading.path = entry.path;
-  if (entry.rateGibPerMin !== undefined)
-    reading.rateGibPerMin = entry.rateGibPerMin;
-  if (entry.rateRedMinutes !== undefined)
-    reading.rateRedMinutes = entry.rateRedMinutes;
-  if (entry.rateYellowMinutes !== undefined)
-    reading.rateYellowMinutes = entry.rateYellowMinutes;
-  return reading;
-}
-const cachedStorage: Sources["storage"] = async () => {
-  const cached = await cachedSource({
-    key: "configured-disk-statfs-and-rates",
-    ttlMs: 5_000,
-    schema: DiskResultCacheSchema,
-    load: async () => {
-      const result = await diskReadingsAsync();
-      return result.match(
-        (entries) => ({ kind: "readings" as const, entries }),
-        (value) => ({ kind: "error" as const, value }),
-      );
-    },
-  });
-  return cached.kind === "error"
-    ? err(cached.value)
-    : ok(cached.entries.map(diskEntryFromCache));
-};
-const cachedRoutes: Sources["routes"] = async (sessionId, cwd) => {
-  return ok(await agxRouteRunsAsync(process.env, sessionId, false, cwd));
-};
-const DEFAULT_SOURCES: Sources = {
-  identity: identityFacts,
-  agentName: agentNameAsync,
-  rcState: rcStateAsync,
-  repoState: async (cwd) => {
-    const result = await cachedSource({
-      key: `git:${cwd}`,
-      ttlMs: 1_500,
-      schema: RepoStateCacheSchema,
-      load: () => repoStateAsync(cwd),
-    });
-    return { branch: result.branch, branchWhy: result.branchWhy };
-  },
-  jobScan: async () => {
-    const result = await cachedSource({
-      key: "ps-agx-admissions",
-      ttlMs: 1_000,
-      schema: JobScanCacheSchema,
-      load: scanOutOfHarnessAsync,
-    });
-    return {
-      jobs: result.jobs,
-      orphans: result.orphans,
-      ...(result.failed === undefined ? {} : { failed: result.failed }),
-    };
-  },
-  hostLoad: readHostLoadAsync,
-  routes: cachedRoutes,
-  dispatchWarning: readDispatchWarningAsync,
-  storage: cachedStorage,
-  herdrReport: reportToHerdr,
-  codexRate: readCodexRate,
-  jevUsage: () => readJevUsage(),
-  recoverHealth: readRecoverHealthAsync,
-};
-
 // Build facts within source budgets, then resolve each display field against its last-good store.
 export async function buildDataframe(
   data: SessionStatus,
@@ -306,7 +172,10 @@ export async function buildDataframe(
 ): Promise<Dataframe> {
   // || (not ??): an empty cwd string must ALSO fall through to PWD, matching the old sh's
   // `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
-  const cwdCandidate = firstNonEmpty(data.cwd, process.env.PWD ?? "");
+  const cwdCandidate = firstNonEmpty(
+    data.cwd,
+    process.env.PWD ?? process.cwd(),
+  );
   const cwd = cwdCandidate;
   const sid =
     data.sessionId !== undefined && data.sessionId !== ""
@@ -316,14 +185,27 @@ export async function buildDataframe(
     data.sessionName !== undefined && data.sessionName !== ""
       ? data.sessionName
       : undefined;
-  const sources = { ...DEFAULT_SOURCES, ...options.sources };
+  const owner = ownerSources(options.ownerSnapshot);
+  const sources = { ...owner, ...options.sources };
   const bounded = <T>(
     name: string,
     budgetMs: number,
     source: () => Promise<T>,
     onLate?: (value: T) => Promise<void>,
   ) =>
-    runBounded(name, budgetMs, source, options.clock ?? SOURCE_CLOCK, onLate);
+    options.sources === undefined ||
+    (name === "dispatch" && options.sources.routes === undefined)
+      ? source().then(
+          (value): Outcome<T> => ({ ok: true, value }),
+          (): Outcome<T> => ({ ok: false, why: name + " unavailable" }),
+        )
+      : runBounded(
+          name,
+          budgetMs,
+          source,
+          options.clock ?? SOURCE_CLOCK,
+          onLate,
+        );
 
   const model = modelName(data.model?.name, data.model?.id);
 
@@ -355,6 +237,7 @@ export async function buildDataframe(
   ) => {
     const frame = { ...(await ready.promise), ...patch };
     delete frame.fields;
+    const { prepareDisplayFields } = await import("./display-fields.ts");
     await prepareDisplayFields(
       frame,
       options.fieldStoreRoot,
@@ -440,9 +323,9 @@ export async function buildDataframe(
     bounded(
       "dispatch",
       budget("routes"),
-      () =>
-        process.env.STATUSLINE_AGX_FORCE_TIMEOUT === "1"
-          ? new Promise<Result<RouteScan, string> | undefined>(() => {})
+      async (): Promise<Result<RouteScan, string> | undefined> =>
+        options.sources?.routes === undefined
+          ? ok(await readCoreRuns(process.env, sid, cwd))
           : sources.routes(sid, cwd),
       (routes) => publish({ routes }, ["agx"]),
     ),
@@ -522,11 +405,11 @@ export async function buildDataframe(
     routes.value === undefined ||
     routes.value.isErr()
   ) {
-    const snapshot = await agxRouteRunsAsync(process.env, sid, false);
+    const snapshot = await readCoreRuns(process.env, sid, cwd);
     if (snapshot.snapshotWhy === undefined) {
       routes.value = ok({
         ...snapshot,
-        snapshotAgeSecs: Math.max(1, snapshot.snapshotAgeSecs ?? 0),
+        snapshotAgeSecs: snapshot.snapshotAgeSecs,
       });
       routes.why = undefined;
     }
@@ -606,9 +489,9 @@ export async function buildDataframe(
       (jevUsage.value.isErr() ? jevUsage.value.error : undefined),
     branch,
     branchWhy,
-    add: data.changes?.linesAdded,
-    del: data.changes?.linesRemoved,
-    wt: data.worktree?.name,
+    add: data.changes?.linesAdded ?? repo.value.add,
+    del: data.changes?.linesRemoved ?? repo.value.del,
+    workspace: repo.value.workspace,
     jobs,
     orphans,
     jobScanWhy: scan.why ?? scan.value.failed,
@@ -627,12 +510,46 @@ export async function buildDataframe(
   void bounded("herdr", budget("herdrReport"), () =>
     sources.herdrReport(model, sessionName, effortDisplay, rc.value),
   ).catch(() => null);
-  await prepareDisplayFields(
-    dataframe,
-    options.fieldStoreRoot,
-    undefined,
-    options.codex,
-  );
+  if (options.fieldStoreRoot !== undefined) {
+    const { prepareDisplayFields } = await import("./display-fields.ts");
+    await prepareDisplayFields(
+      dataframe,
+      options.fieldStoreRoot,
+      undefined,
+      options.codex,
+    );
+  }
+  if (options.fieldStoreRoot === undefined) {
+    const snapshot = await owner.snapshot;
+    const keys: Record<string, string> = {
+      cpu: "cpuPct",
+      ram: "ram",
+      vram: "vram",
+      gpu: "vram",
+      tmpfs: "tmpfs",
+      jobs: "jobScan",
+      name: `name:${sid ?? ""}`,
+      account: "identity",
+      "model-caps": "identity",
+      jev: "jevUsage",
+      recover: "recoverHealth",
+      "dispatch-warning": "dispatchWarning",
+      disk: "storage",
+      tmp: "tmp",
+      codex: "codexRate",
+    };
+    dataframe.ownerAges = Object.fromEntries(
+      Object.entries(keys).flatMap(([field, source]) => {
+        const saved = snapshot?.fields[source];
+        if (saved === undefined) return [];
+        const age = Math.max(
+          0,
+          Temporal.Now.instant().epochMilliseconds - saved.at,
+        );
+        return saved.error !== undefined || age > 30_000 ? [[field, age]] : [];
+      }),
+    );
+  }
   ready.resolve(dataframe);
   return dataframe;
 }

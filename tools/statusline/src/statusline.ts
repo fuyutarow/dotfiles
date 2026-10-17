@@ -1,48 +1,35 @@
 #!/usr/bin/env bun
 // Stdin JSON -> the existing statusline bytes; no harness configuration cutover.
 import { DIM, ESC, RST } from "./ansi.ts";
+import cliPackage from "../package.json" with { type: "json" };
+const { version } = cliPackage;
 import { realpath } from "node:fs/promises";
 import { ok } from "neverthrow";
-import {
-  execAsyncBounded,
-  resetRenderBudget,
-  writeCacheAsync,
-} from "./bounded.ts";
-import { cli as cleyeCli } from "cleye";
+import { resetRenderBudget } from "./bounded.ts";
 import { standardCli } from "../../shared/src/cli.ts";
-import cliPackage from "../package.json" with { type: "json" };
 import { jsonText, z } from "./zod.ts";
-import { ClaudeStatuslineInputSchema } from "./adapters/claude-statusline.ts";
-import {
-  readCodexSessionStatus,
-  readCodexPinnedSessionStatus,
-  readCodexThreadStatus,
-} from "./adapters/codex-rollout.ts";
 import type { SessionStatus } from "./session-status.ts";
 import { promptParts } from "./prompt-stamp.ts";
 import { coloredHead, render } from "./format.ts";
 import { buildDataframe } from "./build-dataframe.ts";
-import { readCodexRate, readLiveCodexRate } from "./codex-rate.ts";
-import { sysSegment } from "./host-load.ts";
-import { fieldDisplay } from "./field-state.ts";
-import { ctxSegment } from "./model-context.ts";
-import { rateRow } from "./rate-limits.ts";
+import type { readLiveCodexRate } from "./codex-rate.ts";
+const liveRate: typeof readLiveCodexRate = async (path) => {
+  if (path === undefined) return ok(undefined);
+  const { readLiveCodexRate } = await import("./codex-rate.ts");
+  return readLiveCodexRate(path);
+};
 import { runLive, type LiveFrame } from "./live.ts";
-import type { Dataframe } from "./dataframe.ts";
-import { withSessionRender } from "./render-cache.ts";
+import { readRenderSessions, readOwnerState } from "./owner-state.ts";
 import {
   AgentSessionSchema,
   discoverSessions,
   payloadForSession,
+  statusForSession,
   sessionFromId,
 } from "./session-discovery.ts";
 
 const cliArgv = () => process.argv.slice(2);
-const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
-const HOME = process.env.HOME ?? "";
-const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
-const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
 async function listSessions(cwd: string): Promise<void> {
   for (const session of await discoverSessions(cwd))
     process.stdout.write(`${JSON.stringify(session)}\n`);
@@ -70,26 +57,28 @@ async function emitPayloadById(sessionId: string): Promise<void> {
   process.stdout.write(`${JSON.stringify(await payloadForSession(session))}\n`);
 }
 async function renderDiscovered(cwd: string): Promise<string> {
-  const sessions = await discoverSessions(cwd);
+  const ownerSnapshot = readOwnerState();
+  const sessions = await readRenderSessions(cwd, ownerSnapshot);
   if (sessions.length === 0) {
     const frame = await buildDataframe(
       { cwd },
-      { sources: { codexRate: () => readLiveCodexRate() } },
+      {
+        ownerSnapshot,
+        sources: { codexRate: () => Promise.resolve(ok(undefined)) },
+      },
     );
     return `${render(frame)}\n${DIM}no agent session in ${cwd}${RST}`;
   }
   const blocks: string[] = [];
   for (const discovered of sessions) {
-    const parsed = ClaudeStatuslineInputSchema.safeParse(
-      await payloadForSession(discovered),
-    );
-    if (!parsed.success) continue;
+    const data = await statusForSession(discovered);
     const codex = discovered.vendor === "codex";
-    const frame = await buildDataframe(parsed.data, {
+    const frame = await buildDataframe(data, {
+      ownerSnapshot,
       codex,
       sources: {
         codexRate: () =>
-          readLiveCodexRate(
+          liveRate(
             sessions.find((session) => session.vendor === "codex")
               ?.transcript_path,
           ),
@@ -100,42 +89,14 @@ async function renderDiscovered(cwd: string): Promise<string> {
   }
   return blocks.join("\n");
 }
-async function writeSysSnapshot(df: Dataframe): Promise<void> {
-  const sysColored = sysSegment(
-    df.cpuPct,
-    df.ram,
-    df.vram,
-    df.disks,
-    df.tmp,
-    fieldDisplay(df.fields),
-    df.tmpfs,
-  );
-  const sysPlain = sysColored.replaceAll(ANSI, "");
-  await writeCacheAsync(SYS_CACHE, {
-    at: Temporal.Now.instant().epochMilliseconds,
-    line: `Sys: ${sysPlain}`,
-    ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
-  });
-}
 async function cwdForPid(pid: string): Promise<string | null> {
   const procCwd = await realpath(`/proc/${pid}/cwd`).catch(() => null);
   if (procCwd !== null) return procCwd;
-  const lsof = Bun.which("lsof");
-  if (lsof === null) return null;
-  const info = await execAsyncBounded(
-    "lsof",
-    lsof,
-    ["-a", "-p", pid, "-d", "cwd", "-Fn"],
-    500,
-  );
-  return info.isOk()
-    ? (info.value
-        .split("\n")
-        .find((line) => line.startsWith("n"))
-        ?.slice(1) ?? null)
-    : null;
+  return null;
 }
 async function codexSession(cwd?: string, pid?: string, threadId?: string) {
+  const { readCodexSessionStatus, readCodexThreadStatus } =
+    await import("./adapters/codex-rollout.ts");
   if (pid !== undefined && cwd !== undefined)
     return { session: null, error: "use only one of --pid or --cwd" };
   if (threadId !== undefined && (pid !== undefined || cwd !== undefined))
@@ -208,46 +169,71 @@ function rejectPrototypeFlag(type: string, flag: string): void {
     process.exit(2);
   }
 }
-const args = cli(
-  {
-    name: "statusline",
-    parameters: ["[command]", "[session]"],
-    strictFlags: true,
-    ignoreArgv: rejectPrototypeFlag,
-    flags: {
-      codex: {
-        type: Boolean,
-        description:
-          "Read the owner's interactive Codex session (defaults to the current directory)",
-      },
-      pid: {
-        type: String,
-        description: "Codex process ID (used to read its cwd)",
-      },
-      cwd: {
-        type: String,
-        description:
-          "Working directory to match (defaults to the current directory)",
-      },
-      thread: {
-        type: String,
-        description: "Interactive Codex thread ID shown in the TUI footer",
-      },
-      once: { type: Boolean, description: "Render one snapshot and exit" },
-      watch: { type: Boolean, description: "Explicitly refresh in a terminal" },
-      interval: {
-        type: String,
-        description: "Live refresh interval in seconds (1–3600)",
-      },
-      json: {
-        type: Boolean,
-        description: "Emit newline-delimited JSON records",
+async function parseArguments(argv: string[]) {
+  const { cli: cleyeCli } = await import("cleye");
+  const cli = standardCli(cleyeCli, cliPackage, cliArgv);
+  return cli(
+    {
+      name: "statusline",
+      parameters: ["[command]", "[session]"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      flags: {
+        codex: {
+          type: Boolean,
+          description:
+            "Read the owner's interactive Codex session (defaults to the current directory)",
+        },
+        pid: {
+          type: String,
+          description: "Codex process ID (used to read its cwd)",
+        },
+        cwd: {
+          type: String,
+          description:
+            "Working directory to match (defaults to the current directory)",
+        },
+        thread: {
+          type: String,
+          description: "Interactive Codex thread ID shown in the TUI footer",
+        },
+        once: { type: Boolean, description: "Render one snapshot and exit" },
+        watch: {
+          type: Boolean,
+          description: "Explicitly refresh in a terminal",
+        },
+        interval: {
+          type: String,
+          description: "Live refresh interval in seconds (1–3600)",
+        },
+        json: {
+          type: Boolean,
+          description: "Emit newline-delimited JSON records",
+        },
       },
     },
-  },
-  undefined,
-  cliArgv(),
-);
+    undefined,
+    argv,
+  );
+}
+// Empty stdin invocations have no arguments to parse. Keep the CLI library off that hot path;
+// every supplied argument, including --help, still goes through the strict Cleye contract.
+const emptyFlags: Awaited<ReturnType<typeof parseArguments>>["flags"] = {
+  help: undefined,
+  codex: undefined,
+  pid: undefined,
+  cwd: undefined,
+  thread: undefined,
+  once: undefined,
+  watch: undefined,
+  interval: undefined,
+  json: undefined,
+};
+const argv = cliArgv();
+const args =
+  argv.length === 0
+    ? { flags: emptyFlags, _: { command: undefined, session: undefined } }
+    : await parseArguments(argv);
 const watchSeconds =
   (args.flags.watch ?? false) &&
   args._.command !== undefined &&
@@ -351,18 +337,20 @@ if (!codexMode) {
   const json = jsonText.safeParse(raw);
   if (!json.success) {
     process.stdout.write(
-      `${coloredHead(promptParts(process.env.PWD ?? ""))}\n`,
+      `${coloredHead(promptParts(process.env.PWD ?? ""))} ${DIM}v${version}${RST}\n`,
     );
     process.stdout.write(`${DIM}Model: ? | invalid statusline JSON${RST}`);
     process.exit(0);
   }
+  const { ClaudeStatuslineInputSchema } =
+    await import("./adapters/claude-statusline.ts");
   const payload = ClaudeStatuslineInputSchema.safeParse(json.data);
   if (!payload.success) {
     const issue = payload.error.issues[0];
     const path = (issue?.path ?? []).map(String).join(".");
     const where = path !== "" ? path : "(root)";
     process.stdout.write(
-      `${coloredHead(promptParts(process.env.PWD ?? ""))}\n`,
+      `${coloredHead(promptParts(process.env.PWD ?? ""))} ${DIM}v${version}${RST}\n`,
     );
     process.stdout.write(
       `${DIM}Model: ? | invalid statusline payload: ${where}: ${issue?.message ?? "?"}${RST}`,
@@ -392,6 +380,8 @@ if (liveMode) {
           );
           return 2;
         }
+        const { readCodexPinnedSessionStatus } =
+          await import("./adapters/codex-rollout.ts");
         current = await readCodexPinnedSessionStatus(pinnedId);
       }
       firstFrame = false;
@@ -404,74 +394,14 @@ if (liveMode) {
         return 2;
       }
       pinnedSession ??= current;
-      return withSessionRender(
-        `codex:${current.sessionId}`,
-        async () => {
-          const frame = await buildDataframe(current, {
-            codex: true,
-            sources: {
-              codexRate: () => readCodexRate(undefined, current.sessionId),
-            },
-          });
-          await writeSysSnapshot(frame);
-          return render(frame, { codex: true });
-        },
-        { input: current },
-      );
+      const frame = await buildDataframe(current, { codex: true });
+      return render(frame, { codex: true });
     },
   });
   process.exit(code);
 } else {
-  let df: Dataframe | undefined;
-  const makeOutput = async (): Promise<string> => {
-    df =
-      codexMode && selectedSession?.sessionId !== undefined
-        ? await buildDataframe(selectedSession, {
-            codex: true,
-            sources: {
-              codexRate: () =>
-                readCodexRate(undefined, selectedSession.sessionId),
-            },
-          })
-        : await buildDataframe(session ?? {});
-    return render(df, { codex: codexMode });
-  };
-  const provider = codexMode ? "codex" : "claude";
-  const output =
-    session?.sessionId === undefined || session.sessionId === ""
-      ? await makeOutput()
-      : await withSessionRender(
-          `${provider}:${session.sessionId}`,
-          makeOutput,
-          {
-            input: session,
-          },
-        );
-  process.stdout.write(`${output}${codexMode && onceMode ? "\n" : ""}`);
-  // The active renderer owns snapshots; a contender reused output without source reads.
-  if (df === undefined) process.exit(0);
-
-  // Hand the plain Sys row to hooks/log-sys-snapshot.ts, which attaches it to the transcript.
-  // Host load shares GPU history with agx-usehooks; the snapshot hook just reads the latest
-  // rendered line, so transcript logging never pays for a sample. Host-wide values serve
-  // every session. Best-effort: a failed write only means the next hook firing finds it stale.
-  // Never empty: every Sys reading is a value or an explicit n/a (see the EXPLICIT-ABSENCE law).
-  await writeSysSnapshot(df);
-
-  // This session's rows for the snapshot, in display order: Ctx, then Rate. Neither is host-wide —
-  // each session's payload carries its own context and the rate_limits it last received, so one
-  // shared file let an idle session's older Rate overwrite a fresh one (observed 2026-10-01: 7d 60%
-  // then 51% with the same reset). One file per session; the hook reads its own and inserts the
-  // rows as given.
-  const sid = (session?.sessionId ?? "").replaceAll(/[^A-Za-z0-9_-]/gu, "_");
-  if (!codexMode && sid !== "") {
-    const rows = [ctxSegment(df), rateRow(df)]; // neither is ever empty: a value or an explicit n/a
-    await writeCacheAsync(
-      `${HOME}/.cache/claude/statusline-session/${sid}.json`,
-      {
-        at: Temporal.Now.instant().epochMilliseconds,
-        rows: rows.map((ansi) => ({ line: ansi.replaceAll(ANSI, ""), ansi })),
-      },
-    );
-  }
+  const df = await buildDataframe(session ?? {}, { codex: codexMode });
+  process.stdout.write(
+    `${render(df, { codex: codexMode })}${codexMode && onceMode ? "\n" : ""}`,
+  );
 }

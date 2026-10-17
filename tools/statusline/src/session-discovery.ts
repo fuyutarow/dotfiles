@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readJsonlTail } from "../../shared/src/jsonl.ts";
 import { jsonText, z } from "./zod.ts";
+import type { SessionStatus } from "./session-status.ts";
 
 export interface AgentSession {
   vendor: "claude" | "codex";
@@ -279,7 +280,18 @@ function codexPayload(raw: string, session: AgentSession) {
   };
 }
 
-export async function payloadForSession(session: AgentSession) {
+interface DiscoveredPayload {
+  cwd: string;
+  session_id: string;
+  transcript_path: string;
+  model?: { display_name: string; id?: string } | undefined;
+  context_window?:
+    | { total_input_tokens: number; used_percentage?: number }
+    | undefined;
+}
+export async function payloadForSession(
+  session: AgentSession,
+): Promise<DiscoveredPayload> {
   const raw =
     (
       await readJsonlTail(session.transcript_path, TRANSCRIPT_TAIL_BYTES).catch(
@@ -289,14 +301,24 @@ export async function payloadForSession(session: AgentSession) {
   if (session.vendor === "codex") return codexPayload(raw, session);
   let modelName: string | undefined;
   let inputTokens: number | undefined;
-  for (const line of raw.split("\n")) {
+  for (const line of raw.split("\n").toReversed()) {
+    if (!line.includes('"usage"') && !line.includes('"model"')) continue;
     const parsed = jsonText.safeParse(line);
     const row = parsed.success ? asRecord(parsed.data) : undefined;
     const message = asRecord(row?.message);
     const usage = asRecord(message?.usage);
-    if (typeof message?.model === "string") modelName = message.model;
-    if (typeof usage?.input_tokens === "number")
-      inputTokens = usage.input_tokens;
+    if (modelName === undefined && typeof message?.model === "string")
+      modelName = message.model;
+    if (inputTokens === undefined && typeof usage?.input_tokens === "number")
+      inputTokens =
+        usage.input_tokens +
+        (typeof usage.cache_read_input_tokens === "number"
+          ? usage.cache_read_input_tokens
+          : 0) +
+        (typeof usage.cache_creation_input_tokens === "number"
+          ? usage.cache_creation_input_tokens
+          : 0);
+    if (modelName !== undefined && inputTokens !== undefined) break;
   }
   return {
     cwd: session.cwd,
@@ -310,6 +332,28 @@ export async function payloadForSession(session: AgentSession) {
       inputTokens === undefined
         ? undefined
         : { total_input_tokens: inputTokens },
+  };
+}
+
+/** Transcript values have already crossed the discovery decoder; no wire round-trip. */
+export async function statusForSession(
+  session: AgentSession,
+): Promise<SessionStatus> {
+  const payload = await payloadForSession(session);
+  return {
+    cwd: payload.cwd,
+    sessionId: payload.session_id,
+    model:
+      payload.model === undefined
+        ? undefined
+        : { name: payload.model.display_name, id: payload.model.id },
+    context:
+      payload.context_window === undefined
+        ? undefined
+        : {
+            inputTokens: payload.context_window.total_input_tokens,
+            usedPercent: payload.context_window.used_percentage,
+          },
   };
 }
 

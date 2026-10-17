@@ -1,0 +1,14 @@
+[Unit]
+Description=Refresh statusline owner state without render-time collectors
+
+[Service]
+Type=oneshot
+RuntimeDirectory=statusline-sampler
+Environment=STATUSLINE_SAMPLER_LOCK_DIR=%t/statusline-sampler/lock
+WorkingDirectory=%h/dotfiles
+Environment=PATH=%h/.bun/bin:%h/.local/bin:%h/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env bun %h/dotfiles/tools/statusline/src/sampler.ts
+TimeoutStartSec=30s
+TimeoutStopSec=5s
+StandardOutput=journal
+StandardError=journal

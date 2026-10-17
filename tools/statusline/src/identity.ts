@@ -266,6 +266,20 @@ const AgentNameCacheSchema = z.record(z.string(), AgentNameEntrySchema);
 const AgentListSchema = z.array(
   z.object({ sessionId: maybe(z.string()), name: maybe(z.string()) }),
 );
+/** One sampler call resolves all live names, avoiding a process per session. */
+export async function readAgentNamesAsync() {
+  const result = await execAsyncWithin(
+    "claude agents",
+    CLAUDE_BIN,
+    ["agents", "--json"],
+    AGENT_LIST_TIMEOUT_MS,
+  );
+  if (result.isErr()) return err(result.error.why);
+  const parsed = jsonOf(AgentListSchema).safeParse(result.value);
+  return parsed.success
+    ? ok(parsed.data)
+    : err("claude agents output unparsable");
+}
 // Cache-miss refresh: fold `claude agents --json`'s list into the sid->name map, keeping only
 // entries that carry a sessionId. Extracted out of agentName() only to keep its try/for nesting
 // under max-depth; the exactOptionalPropertyTypes name-omission below is unchanged.

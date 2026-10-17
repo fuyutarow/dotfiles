@@ -7,7 +7,6 @@ import {
   readCodexSettingsEvents,
 } from "./codex-settings-stream.ts";
 import { jsonText, maybe, z } from "../zod.ts";
-import { cachedSource } from "../render-cache.ts";
 
 function settingText() {
   return maybe(z.string().trim().min(1)).catch(undefined);
@@ -75,25 +74,14 @@ type SettingsCache = Settings & {
   complete: Settings;
 };
 const settingsCache = new Map<string, SettingsCache>();
-const RolloutLookupSchema = z.object({ path: z.string().nullable() });
 
 // Cache discovery only. Settings and context must reflect appends and replacements
 // immediately, including while this short-lived cross-process lookup is still fresh.
 async function cachedRolloutLookup(
-  key: string,
+  _key: string,
   lookup: () => Promise<Awaited<ReturnType<typeof matchingRolloutOnDay>>>,
 ) {
-  const cached = await cachedSource({
-    key: `codex-selection:${key}`,
-    ttlMs: 1_000,
-    schema: RolloutLookupSchema,
-    load: async () => ({ path: (await lookup())?.path ?? null }),
-  });
-  if (cached.path === null) return null;
-  const meta = await metadata(cached.path);
-  return meta?.payload.originator === "codex-tui"
-    ? { path: cached.path, meta }
-    : null;
+  return lookup();
 }
 
 async function firstLine(path: string): Promise<string | null> {

@@ -4,6 +4,9 @@ import {
   execBounded,
 } from "./bounded.ts";
 import { firstNonEmpty } from "./model-context.ts";
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
+import { execAsyncWithin } from "./bounded.ts";
 
 export function repoState(cwd: string): {
   branch: string | undefined;
@@ -43,7 +46,41 @@ export function repoState(cwd: string): {
 export async function repoStateAsync(cwd: string): Promise<{
   branch: string | undefined;
   branchWhy: string | undefined;
+  workspace?: string | undefined;
+  add?: number | undefined;
+  del?: number | undefined;
 }> {
+  const jj = await stat(join(cwd, ".jj")).catch(() => null);
+  if (jj !== null) {
+    const result = await execAsyncWithin(
+      "jj",
+      "jj",
+      [
+        "--ignore-working-copy",
+        "--no-pager",
+        "--color=never",
+        "-R",
+        cwd,
+        "log",
+        "--no-graph",
+        "-r",
+        "@",
+        "-T",
+        'working_copies.map(|w| w.name()).join(",") ++ "\\t" ++ bookmarks ++ "\\t" ++ diff.stat().total_added() ++ "\\t" ++ diff.stat().total_removed()',
+      ],
+      2000,
+    );
+    if (result.isErr())
+      return { branch: undefined, branchWhy: result.error.why };
+    const [workspace, branch, add, del] = result.value.trim().split("\t");
+    return {
+      branch: branch === "" ? undefined : branch,
+      branchWhy: undefined,
+      workspace: workspace === "" ? undefined : workspace,
+      add: add === undefined ? undefined : Number(add),
+      del: del === undefined ? undefined : Number(del),
+    };
+  }
   const branchResult = await execAsyncBounded(
     "git",
     "git",

@@ -186,6 +186,26 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   ["not-mac", "systemd/ws-gc.timer", ".config/systemd/user/ws-gc.timer"],
   [
     "not-mac",
+    "systemd/statusline-sampler.service",
+    ".config/systemd/user/statusline-sampler.service",
+  ],
+  [
+    "not-mac",
+    "systemd/statusline-sampler.timer",
+    ".config/systemd/user/statusline-sampler.timer",
+  ],
+  [
+    "not-mac",
+    "systemd/agx-doctor.service",
+    ".config/systemd/user/agx-doctor.service",
+  ],
+  [
+    "not-mac",
+    "systemd/agx-doctor.path",
+    ".config/systemd/user/agx-doctor.path",
+  ],
+  [
+    "not-mac",
     "systemd/gpu-sampler.service",
     ".config/systemd/user/gpu-sampler.service",
   ],

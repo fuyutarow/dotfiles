@@ -736,7 +736,7 @@ describe("legacy enriched Run row", () => {
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
     ).toEqual([
-      "workers 0 running (+1 in other sessions) · lost 0 · ws unknown here · unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · ok",
+      "workers 0 running (+1 in other sessions) · lost 0 · ws unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · ok",
     ]);
     expect(out).not.toContain("private worker");
     expect(out).not.toContain("luna-high");
@@ -777,7 +777,7 @@ describe("legacy enriched Run row", () => {
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
     ).toEqual([
-      "workers 1 running (+3 in other sessions) · lost 3 · ws unknown here · unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · ⚠ orphaned 3",
+      "workers 1 running (+3 in other sessions) · lost 3 · ws unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · ⚠ orphaned 3",
     ]);
     expect(
       out
@@ -785,7 +785,7 @@ describe("legacy enriched Run row", () => {
         .split("\n")
         .find((line) => line.startsWith("agx ")),
     ).toBe(
-      "agx fresh · lost 3 · unattributed 2 · dispatch warning n/a (dispatch warning unavailable) · recover: none",
+      "agx fresh · lost 3 · unattributed 2 · dispatch warning n/a (dispatch warning unavailable) · recover n/a (recover health unavailable)",
     );
     expect(out).not.toContain("other worker");
     expect(out).not.toContain("unowned worker");
@@ -1503,7 +1503,7 @@ describe("legacy enriched Run row", () => {
     expect(out).toContain(`lost ${agxFoldLost}`);
     const agxLine = out.split("\n").find((line) => line.startsWith("agx "));
     expect(agxLine).toContain(
-      `agx fresh · lost ${agxFoldLost} · dispatch warning n/a (dispatch warning unavailable) · recover: none`,
+      `agx fresh · lost ${agxFoldLost} · dispatch warning n/a (dispatch warning unavailable) · recover n/a (recover health unavailable)`,
     );
     expect(
       out.split("\n").filter((line) => line.startsWith("agx ")),

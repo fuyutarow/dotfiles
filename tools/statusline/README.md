@@ -2,7 +2,8 @@
 
 Part of the [tools/ architecture](../spec/architecture.md) (report: invariant I-R3).
 
-Package-owned statusline, ported from the former Claude implementation (re-synced to alpha cbc82bdc), version 0.15.1.
+Package-owned statusline, ported from the former Claude implementation. The first row ends
+with the version imported from `package.json`.
 `agents/claude/settings.json` declares `statusLine.command` as `~/.bun/bin/statusline`, this package's `bin`
 (root `package.json` `bin`, installed by `bun link` / `mise run deps`). The former Claude implementation
 has been retired; parity fixtures preserve its expected behavior.
@@ -42,20 +43,29 @@ dispatch rows still render with `no agent session in <cwd>`. `--watch [SECONDS]`
 sessions in place (default five seconds); `--interval N` remains an equivalent interval option
 (1–3600 seconds). Non-empty piped payloads
 continue through the original renderer path unchanged.
-Existing environment variables, cache locations, schema
-checks, explicit absence messages, 2 s enrichment limits, 3 s agent lookup limit, 4 s shared
-render deadline, 5 s GPU cache and 30 s agent-name cache are preserved. Same-session renders
-are serialized across processes; a concurrent call reuses a frame only when it is under five
-seconds old, belongs to the same input, and a live owner is rendering. Each persisted frame records
-its render time and input. Git state and process/dispatch scans use 1–1.5 s
-persistent TTLs, disk readings and rates use 5 s, and Codex rollout selection uses 1 s. Selected
-metadata, streamed settings and context are reread on every call; live refresh remains pinned
-to its initially selected session. The GPU sampler remains
-a bounded detached child of the local host-load module, using the original host-wide lock.
+On Linux, `statusline-sampler.timer` owns collection and refreshes five seconds after
+each completed sample. It publishes `$XDG_STATE_HOME/statusline/owner.json` (default
+`~/.local/state/statusline/owner.json`) with separate observation timestamps. A failed
+collection retains the last successful value and its timestamp. The systemd service
+and its runtime lock prevent overlapping samples. GPU observations still come from
+the separate GPU owner.
+
+Rendering reads that owner file, the three agx owner files, transcripts and the selected
+PIDs under `/proc`. It never launches a collector, fetches a rate, writes a cache or waits
+for a session render lock. Standalone discovery uses the sampler's live session inventory;
+`statusline sessions` explicitly performs discovery when requested. The sampler removes
+the retired `fields/`, `renders/` and `sources/` directories and old temporary files.
+`STATUSLINE_OWNER_STATE`, `STATUSLINE_CACHE_ROOT` and `STATUSLINE_DISK_RATE_STATE` allow
+isolated sampler probes without changing deployed host files.
+
+Claude context counts include input, cache-read and cache-creation tokens from the latest
+request. A supplied current usage takes precedence over cumulative input totals.
+The repository segment shows the sampled jj workspace name; payload git worktree names
+are ignored. Outside a repository there is no workspace-name segment or workspace `here` count.
 
 Codex CLI has no command-driven statusline setting, so tmux renders the Codex adapter outside the
 TUI. `--codex` with no other flags uses the current directory; `--cwd` selects by the supplied
-directory, `--pid` reads the process cwd (`/proc` or bounded `lsof`), and `--thread` selects the
+directory, `--pid` reads the process cwd through `/proc`, and `--thread` selects the
 rollout whose filename ends in the supplied thread ID. Cwd and PID selection use the newest rollout
 whose `session_meta.cwd` matches and whose `originator` is `codex-tui`, skipping
 `codex_exec` workers. A snapshot selection with no match prints one dim line and exits; live
@@ -77,7 +87,7 @@ history and ended runs with missing returns.
 Storage still reads the canonical `agents/hooks/storage-headroom.toml` as runtime data, resolved
 relative to this package rather than cwd. Only `storageLine` is imported from shared storage code.
 Disk free GiB uses three significant figures. A fill/free rate appears at
-0.05 GiB/min or more, with two significant figures and ↓/↑ arrows. Each render atomically updates
+0.05 GiB/min or more, with two significant figures and ↓/↑ arrows. The sampler atomically updates
 `$XDG_STATE_HOME/statusline/disk-rate.json` (default `~/.local/state/statusline/disk-rate.json`).
 Linear regression over the last five minutes smooths short bursts; samples are spaced at least
 five seconds apart, capped at 61 per drive, and must span at least 30 seconds. Missing or corrupt
@@ -185,7 +195,12 @@ The agx and fleet rows read `current-runs.json`, `workspace-verdicts.json`, and
 session counts; `ws gc` and successful workspace creation/removal publish verdicts;
 `agx doctor` publishes complete findings. Rendering never starts a refresh for
 these rows. Missing observations remain unknown and older observations retain
-both their values and age.
+their values. An idle file does not become stale just because time has passed:
+`current-runs.json` is stale only when its mtime precedes `records.jsonl`;
+`doctor.json` is stale only when it precedes the newer of `records.jsonl` and
+`workspace-verdicts.json`. A failed watch-mode read retains the last owner value
+and shows its original age. `agx-doctor.path` triggers a debounced singleton
+refresh after either diagnostic input changes.
 
 `ws N here · M all` selects the current repository from the workspace owner's
 inventory and labels the fleet total. Counts cover the existing GC inventory,

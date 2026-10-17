@@ -1,0 +1,25 @@
+STATUSLINE-STEP2 host evidence — 2026-10-17, R99 (WSL2), source CLI v0.19.2
+
+The measured statusline resolved through a temporary workspace-local symlink to
+tools/statusline/src/statusline.ts. The deployed ~/.bun/bin/statusline was unchanged.
+Sampler output and caches were redirected into this workspace with
+STATUSLINE_OWNER_STATE, STATUSLINE_CACHE_ROOT and STATUSLINE_DISK_RATE_STATE.
+The sampler ran twice before the final measurements. Renders read the host's real
+agx owner files and session transcripts. No host deployment or host cache cleanup ran.
+
+~/Workspace
+$ time statusline < /dev/null
+statusline < /dev/null  0.13s user 0.03s system 114% cpu 0.147 total
+
+~/Workspace/firedancer
+$ time statusline < /dev/null
+statusline < /dev/null  0.12s user 0.04s system 114% cpu 0.146 total
+
+~/dotfiles
+$ time statusline < /dev/null
+statusline < /dev/null  0.13s user 0.04s system 120% cpu 0.144 total
+
+Result: every measurement exceeds 100 ms; STATUSLINE-STEP2 remains refuted.
+
+A temporary Bun --compile probe measured 503/512/522 ms and was removed.
+The --bytecode probe rejected this entry's top-level await. Neither is delivered.

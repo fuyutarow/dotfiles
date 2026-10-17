@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2 — 2026-10-17
+
+- Remove temporary doctor snapshot files when atomic publication fails.
+
 ## 0.4.1 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

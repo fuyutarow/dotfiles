@@ -2,7 +2,7 @@
 import { cli as cleyeCli } from "cleye";
 import { standardCli } from "../../shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,6 +73,11 @@ async function runDoctor(json: boolean): Promise<number> {
       await mkdir(root, { recursive: true });
       const path = join(root, "doctor.json");
       const temp = path + "." + crypto.randomUUID() + ".tmp";
+      await using _cleanup = {
+        [Symbol.asyncDispose]: async () => {
+          await unlink(temp).catch(() => null);
+        },
+      };
       await writeFile(temp, JSON.stringify(snapshot), { mode: 0o600 });
       await rename(temp, path);
     }

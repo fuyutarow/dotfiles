@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh statusline state five seconds after each completed sample
+
+[Timer]
+OnBootSec=15s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+Unit=statusline-sampler.service
+
+[Install]
+WantedBy=timers.target

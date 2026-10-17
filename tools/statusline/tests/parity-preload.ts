@@ -16,6 +16,7 @@ Object.defineProperty(process, "platform", { value: "linux" });
 const realRead = fs.readFileSync;
 const realReadAsync = fsPromises.readFile;
 const realStatfs = fsPromises.statfs;
+const realReaddir = fsPromises.readdir;
 await mock.module("node:fs", () => ({
   ...fs,
   readFileSync: (path: fs.PathOrFileDescriptor, options?: unknown) => {
@@ -39,10 +40,15 @@ await mock.module("node:fs/promises", () => ({
   ...fsPromises,
   // This fixture has no Codex rollouts. Keep missing-date probes in memory so
   // host disk contention cannot turn byte-parity checks into deadline tests.
-  readdir: (path: Parameters<typeof fsPromises.readdir>[0]) =>
-    String(path).includes("/.codex/sessions")
-      ? Promise.resolve([])
-      : fsPromises.readdir(path),
+  readdir: (
+    path: Parameters<typeof fsPromises.readdir>[0],
+    options?: { withFileTypes?: boolean },
+  ) => {
+    if (String(path).includes("/.codex/sessions")) return Promise.resolve([]);
+    return options?.withFileTypes === true
+      ? realReaddir(path, { withFileTypes: true })
+      : realReaddir(path);
+  },
   readFile: async (
     path: Parameters<typeof fsPromises.readFile>[0],
     options?: BufferEncoding,

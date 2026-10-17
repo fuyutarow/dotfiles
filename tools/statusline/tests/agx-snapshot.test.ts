@@ -36,7 +36,7 @@ test("old snapshots retain values and age; owner replacement is visible immediat
   );
   const before = await readAgxSnapshotAsync(env);
   expect(before.rows).toEqual([{ id: "live", state: "running" }]);
-  expect(before.ageSeconds).toBeGreaterThanOrEqual(75);
+  expect(before.ageSeconds).toBe(0);
   await writeFile(
     path,
     JSON.stringify({
@@ -47,5 +47,7 @@ test("old snapshots retain values and age; owner replacement is visible immediat
   );
   expect((await readAgxSnapshotAsync(env)).rows).toEqual([]);
   await writeFile(path, "broken");
-  expect((await readAgxSnapshotAsync(env)).reason).toBe("snapshot unavailable");
+  const retained = await readAgxSnapshotAsync(env);
+  expect(retained.rows).toEqual([]);
+  expect(retained.ageSeconds).toBeGreaterThanOrEqual(75);
 });

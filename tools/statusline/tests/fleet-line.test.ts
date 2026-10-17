@@ -214,7 +214,7 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
     expect(output).toMatchSnapshot(name);
     if (name === "fresh")
       expect(output).toBe(
-        "workers 2 running (+2 in other sessions) · lost 1 · ws unknown here · 6 all · unlanded 2 · collectable 3 · legacy 3 fresh · ⚠ orphaned 1 · unjudged 1",
+        "workers 2 running (+2 in other sessions) · lost 1 · ws 6 all · unlanded 2 · collectable 3 · legacy 3 · ⚠ orphaned 1 · unjudged 1",
       );
   }
 });
@@ -277,7 +277,7 @@ test.each([
   },
 );
 
-test("workspace failure keeps last good workspace counts and their original age", () => {
+test("unchanged workspace counts do not become stale with elapsed time", () => {
   const scan = {
     runs: [],
     unreadable: 0,
@@ -285,7 +285,7 @@ test("workspace failure keeps last good workspace counts and their original age"
     snapshotAgeSecs: 0,
     workspaces: workspaceCounts(tsv, at - 120_000),
   };
-  expect(fleetLine(scan, at)).toContain("legacy 3 stale(120s) unknown");
+  expect(fleetLine(scan, at)).toContain("legacy 3 unknown");
 });
 
 test("a cold per-repository observation never masquerades as a fleet total", () => {

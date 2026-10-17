@@ -9,9 +9,8 @@ import {
 } from "./prompt-stamp.ts";
 import { ESC, RST, paceColor, pctFmt, roles } from "./ansi.ts";
 import type { Dataframe } from "./dataframe.ts";
-import { codexRateSegment } from "./codex-rate.ts";
-import { jevUsageSegment } from "./jev-usage.ts";
-import { writeUsageSnapshot } from "./usage-snapshot.ts";
+import { codexRateSegment } from "./provider-display.ts";
+import { jevUsageSegment } from "./provider-display.ts";
 import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
 
 const RSET = "⟳";
@@ -27,30 +26,34 @@ export interface ModelLimit {
   pct: number;
   resetEpoch: number | undefined;
 }
-const CapsSchema = z.object({
-  cachedUsageUtilization: maybe(
-    z.object({
-      utilization: maybe(
-        z.object({
-          limits: maybe(
-            z.array(
-              z.object({
-                kind: maybe(z.string()),
-                percent: maybe(z.number()),
-                resets_at: maybe(z.string()),
-                scope: maybe(
-                  z.object({
-                    model: maybe(z.object({ display_name: maybe(z.string()) })),
-                  }),
-                ),
-              }),
+const CapsSchema = z.lazy(() =>
+  z.object({
+    cachedUsageUtilization: maybe(
+      z.object({
+        utilization: maybe(
+          z.object({
+            limits: maybe(
+              z.array(
+                z.object({
+                  kind: maybe(z.string()),
+                  percent: maybe(z.number()),
+                  resets_at: maybe(z.string()),
+                  scope: maybe(
+                    z.object({
+                      model: maybe(
+                        z.object({ display_name: maybe(z.string()) }),
+                      ),
+                    }),
+                  ),
+                }),
+              ),
             ),
-          ),
-        }),
-      ),
-    }),
-  ),
-});
+          }),
+        ),
+      }),
+    ),
+  }),
+);
 export function modelWeeklyLimits(cj: unknown): Result<ModelLimit[], string> {
   const parsed = CapsSchema.safeParse(cj);
   if (!parsed.success)
@@ -261,13 +264,6 @@ export function rateRow(
   sources: readonly (typeof RATE_SOURCES)[number][] = RATE_SOURCES,
   field: FieldDisplay = fieldDisplay(df.fields),
 ): string {
-  if (
-    df.sid !== undefined &&
-    df.sid !== "" &&
-    sources.includes("claude") &&
-    sources.includes("codex")
-  )
-    writeUsageSnapshot(df, now);
   const label = `${ESC}[38;5;108mRate:${RST}`;
   // Positive space: exactly one slot per source, in this fixed order. A renderer failure
   // belongs to its own slot; no early return or undefined filter can erase a provider.

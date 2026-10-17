@@ -1,7 +1,6 @@
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { mkdir, rm, stat } from "node:fs/promises";
-import { err, ok, fromThrowable, type Result } from "neverthrow";
+import { join } from "node:path";
+import { err, ok, type Result } from "neverthrow";
 import { execAsyncWithin, readJsonAsync, writeCacheAsync } from "./bounded.ts";
 import { z } from "./zod.ts";
 
@@ -32,56 +31,7 @@ const RecoverSnapshotSchema = z.object({
 });
 const now = (): number => Temporal.Now.instant().epochMilliseconds;
 
-async function refreshNeeded(): Promise<boolean> {
-  const snapshot = await readJsonAsync(
-    RECOVER_HEALTH_CACHE,
-    RecoverSnapshotSchema,
-  );
-  return (
-    snapshot === undefined ||
-    now() < snapshot.capturedAt ||
-    now() - snapshot.capturedAt >= RECOVER_HEALTH_REFRESH_MS
-  );
-}
-
-async function ensureRefresh(): Promise<void> {
-  if (!(await refreshNeeded())) return;
-  await mkdir(dirname(RECOVER_HEALTH_CACHE), { recursive: true }).catch(
-    () => null,
-  );
-  const acquired = await mkdir(RECOVER_HEALTH_LOCK).then(
-    () => true,
-    async () => {
-      const age = await stat(RECOVER_HEALTH_LOCK)
-        .then((value) => now() - value.mtimeMs)
-        .catch(() => null);
-      if (age === null || age <= 30_000) return false;
-      await rm(RECOVER_HEALTH_LOCK, { recursive: true, force: true }).catch(
-        () => null,
-      );
-      return mkdir(RECOVER_HEALTH_LOCK).then(
-        () => true,
-        () => false,
-      );
-    },
-  );
-  if (!acquired) return;
-  const started = fromThrowable(() =>
-    Bun.spawn([process.execPath, join(import.meta.dir, "recover-refresh.ts")], {
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
-      env: process.env,
-      detached: true,
-      timeout: 10_000,
-      killSignal: "SIGKILL",
-    }),
-  )();
-  if (started.isOk()) started.value.unref();
-  else await rm(RECOVER_HEALTH_LOCK, { recursive: true, force: true });
-}
-
-/** Read the short-lived health snapshot and refresh it out of the renderer process. */
+/** Read owner health only; the sampler owns all refreshes. */
 export async function readRecoverHealthAsync(): Promise<
   Result<RecoverHealth | undefined, string>
 > {
@@ -89,12 +39,11 @@ export async function readRecoverHealthAsync(): Promise<
     RECOVER_HEALTH_CACHE,
     RecoverSnapshotSchema,
   );
-  await ensureRefresh();
   if (snapshot === undefined) return err("recover health unavailable");
   return ok(snapshot.health ?? undefined);
 }
 
-/** Called only by the detached worker; neither the statusline nor its caller waits for systemd. */
+/** Called only by the timer-owned sampler. */
 export async function refreshRecoverHealth(): Promise<void> {
   let health: RecoverHealth | undefined;
   for (const unit of RECOVER_UNITS) {
@@ -124,9 +73,6 @@ export async function refreshRecoverHealth(): Promise<void> {
     capturedAt: now(),
     health: health ?? null,
   });
-  await rm(RECOVER_HEALTH_LOCK, { recursive: true, force: true }).catch(
-    () => null,
-  );
 }
 
 type Run = { lines: string[]; start: string };

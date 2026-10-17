@@ -14,6 +14,7 @@ import { decodedJson } from "./decode.ts";
 import { cleanupTempDirs, tempHome, coreSnapshot } from "./helpers.ts";
 import { z } from "../src/zod.ts";
 import { agxSnapshotPath } from "../src/agx-snapshot.ts";
+import { version } from "../package.json";
 
 const GOLDEN = join(import.meta.dir, "golden");
 setDefaultTimeout(30000);
@@ -494,6 +495,16 @@ async function expectGolden(
     expect(existsSync(snapshotPath)).toBe(true);
     const run = async (entry: string) => {
       await seed();
+      const sampler = Bun.spawnSync(
+        [
+          process.execPath,
+          "--preload",
+          PRELOAD,
+          join(import.meta.dir, "sample-fixture.ts"),
+        ],
+        { cwd: home, env, stdin: new Blob([input]), timeout: 30000 },
+      );
+      expect(sampler.exitCode, sampler.stderr.toString()).toBe(0);
       const r = Bun.spawnSync([process.execPath, "--preload", PRELOAD, entry], {
         cwd: home,
         env,
@@ -525,10 +536,10 @@ async function expectGolden(
     }
     expect(existsSync(golden), `missing ${golden}`).toBe(true);
     // JSON round-trip: undefined snapshots drop out on both sides.
-    const expected = readFileSync(golden, "utf8").replaceAll(
-      "5ab1a046da60",
-      HOST,
-    );
+    const expected = readFileSync(golden, "utf8")
+      .replaceAll("5ab1a046da60", HOST)
+      // Land bumps package.json after admitting a changeset; the suffix follows that import.
+      .replaceAll(/v\d+\.\d+\.\d+/gu, `v${version}`);
     expect(decodedJson(z.json(), JSON.stringify(await run(NEW)) ?? "")).toEqual(
       decodedJson(z.json(), expected),
     );

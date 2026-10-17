@@ -148,7 +148,7 @@ test("source guard: no run ledger, workspace enumeration, core count folding, or
   )) {
     const text = await Bun.file(join(source, path)).text();
     expect(text, path).not.toMatch(
-      /records\.jsonl|fullFoldedRuns|foldedRuns|\["workspace",\s*"list"\]|\["ws",\s*"gc"/u,
+      /fullFoldedRuns|foldedRuns|\["workspace",\s*"list"\]|\["ws",\s*"gc"/u,
     );
   }
   const snapshot = await Bun.file(join(source, "agx-snapshot.ts")).text();

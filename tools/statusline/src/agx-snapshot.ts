@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { stat } from "node:fs/promises";
 import { jsonOf, z } from "./zod.ts";
 const WorkspaceCountsSchema = () =>
   z.object({
@@ -8,6 +9,7 @@ const WorkspaceCountsSchema = () =>
     collectable: z.number().int().nonnegative(),
     legacy: z.number().int().nonnegative(),
     capturedAt: z.number(),
+    stale: z.boolean().optional(),
     here: z.number().int().nonnegative().optional(),
     fleetKnown: z.boolean().optional(),
   });
@@ -22,6 +24,7 @@ const FindingsSchema = () =>
     ),
     lost: z.number().int().nonnegative(),
     capturedAt: z.number(),
+    stale: z.boolean().optional(),
   });
 export type FleetFindings = z.output<ReturnType<typeof FindingsSchema>>;
 
@@ -48,7 +51,7 @@ const ListingSchema = z.lazy(() =>
 
 const SnapshotSchema = z.lazy(() =>
   z.object({
-    output: z.string(),
+    output: jsonOf(z.union([ListingSchema, z.array(z.unknown())])),
     capturedAt: z.number(),
     exit: z.literal(0),
     workspaces: WorkspaceCountsSchema().optional(),
@@ -107,18 +110,41 @@ export function workspaceCounts(
   ).safeParse(output);
   return parsed.success ? { ...parsed.data.counts, capturedAt } : undefined;
 }
+// Watch-mode last owner values only; no presentation or disk cache. Bound the path inventory.
+const lastOwner = new Map<string, string>();
+const failedReads = new Set<string>();
+function rememberOwner(path: string, text: string): void {
+  lastOwner.delete(path);
+  lastOwner.set(path, text);
+  failedReads.delete(path);
+  if (lastOwner.size <= 32) return;
+  const oldest = lastOwner.keys().next().value;
+  if (oldest === undefined) return;
+  lastOwner.delete(oldest);
+  failedReads.delete(oldest);
+}
 async function read<T extends z.ZodType>(path: string, schema: () => T) {
-  const file = Bun.file(path);
-  const text = (await file.exists()) ? await file.text().catch(() => "") : "";
-  const parsed = text === "" ? undefined : jsonOf(schema()).safeParse(text);
-  return parsed?.success === true ? parsed.data : undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const text = await Bun.file(path)
+      .text()
+      .catch(() => null);
+    const parsed = text === null ? undefined : jsonOf(schema()).safeParse(text);
+    if (parsed?.success !== true || text === null) continue;
+    rememberOwner(path, text);
+    return parsed.data;
+  }
+  failedReads.add(path);
+  const saved = lastOwner.get(path);
+  const previous =
+    saved === undefined ? undefined : jsonOf(schema()).safeParse(saved);
+  return previous?.success === true ? previous.data : undefined;
 }
 /** Owners publish these independent files on change; a read never refreshes or writes. */
 export async function readAgxSnapshotAsync(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
 ): Promise<AgxSnapshotRead> {
-  const [snapshot, ws, findings] = await Promise.all([
+  const [snapshot, ws, findings, times] = await Promise.all([
     read(agxSnapshotPath(env), () => SnapshotSchema),
     read(join(stateDir(env), "workspace-verdicts.json"), () =>
       z.object({
@@ -140,7 +166,30 @@ export async function readAgxSnapshotAsync(
     read(join(stateDir(env), "doctor.json"), () =>
       FindingsSchema().extend({ complete: z.literal(true) }),
     ),
+    Promise.all(
+      [
+        "current-runs.json",
+        "records.jsonl",
+        "workspace-verdicts.json",
+        "doctor.json",
+      ].map((name) =>
+        stat(join(stateDir(env), name))
+          .then((info) => info.mtimeMs)
+          .catch(() => 0),
+      ),
+    ),
   ]);
+  const [runsAt = 0, recordsAt = 0, wsAt = 0, doctorAt = 0] = times;
+  const runsStale = runsAt < recordsAt || failedReads.has(agxSnapshotPath(env));
+  const findingsWithFreshness =
+    findings === undefined
+      ? undefined
+      : {
+          ...findings,
+          stale:
+            doctorAt < Math.max(recordsAt, wsAt) ||
+            failedReads.has(join(stateDir(env), "doctor.json")),
+        };
   const repo = Object.keys(ws?.repos ?? {})
     .filter(
       (root) =>
@@ -162,6 +211,9 @@ export async function readAgxSnapshotAsync(
           here: own?.counts.total,
           fleetKnown: ws.fleetComplete !== false,
           capturedAt: capturedAt ?? ws.capturedAt,
+          stale: failedReads.has(
+            join(stateDir(env), "workspace-verdicts.json"),
+          ),
         };
   if (snapshot === undefined)
     return {
@@ -169,28 +221,23 @@ export async function readAgxSnapshotAsync(
       ageSeconds: undefined,
       reason: "snapshot unavailable",
       workspaces,
-      findings,
+      findings: findingsWithFreshness,
     };
-  const parsed = jsonOf(
-    z.union([ListingSchema, z.array(z.unknown())]),
-  ).safeParse(snapshot.output);
-  if (!parsed.success)
-    return {
-      rows: undefined,
-      ageSeconds: undefined,
-      reason: "snapshot invalid",
-    };
+  const listing = snapshot.output;
   return {
-    rows: Array.isArray(parsed.data) ? parsed.data : parsed.data.runs,
-    summary: Array.isArray(parsed.data) ? undefined : parsed.data.summary,
+    rows: Array.isArray(listing) ? listing : listing.runs,
+    summary: Array.isArray(listing) ? undefined : listing.summary,
     workspaces,
-    findings: findings ?? snapshot.findings,
-    ageSeconds: Math.max(
-      0,
-      Math.floor(
-        (Temporal.Now.instant().epochMilliseconds - snapshot.capturedAt) / 1000,
-      ),
-    ),
+    findings: findingsWithFreshness ?? snapshot.findings,
+    ageSeconds: runsStale
+      ? Math.max(
+          1,
+          Math.floor(
+            (Temporal.Now.instant().epochMilliseconds - snapshot.capturedAt) /
+              1000,
+          ),
+        )
+      : 0,
     reason: undefined,
   };
 }

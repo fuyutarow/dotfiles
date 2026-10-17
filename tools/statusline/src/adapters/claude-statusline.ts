@@ -15,6 +15,25 @@ function rateWindow(window: z.output<typeof RateWindowSchema>) {
     : { usedPercent: window.used_percentage, resetsAt: window.resets_at };
 }
 
+function contextTokens(window: {
+  total_input_tokens?: number | undefined;
+  current_usage?:
+    | {
+        input_tokens?: number | undefined;
+        cache_read_input_tokens?: number | undefined;
+        cache_creation_input_tokens?: number | undefined;
+      }
+    | undefined;
+}): number | undefined {
+  const usage = window.current_usage;
+  if (usage?.input_tokens === undefined) return window.total_input_tokens;
+  return (
+    usage.input_tokens +
+    (usage.cache_read_input_tokens ?? 0) +
+    (usage.cache_creation_input_tokens ?? 0)
+  );
+}
+
 // Claude Code's stdin contract ends here. The transformed output is the provider-neutral input
 // consumed by buildDataframe(); keep the wire keys out of the common statusline model.
 export const ClaudeStatuslineInputSchema = z
@@ -30,7 +49,13 @@ export const ClaudeStatuslineInputSchema = z
     context_window: maybe(
       z.object({
         total_input_tokens: maybe(z.number()),
-        current_usage: maybe(z.object({ input_tokens: maybe(z.number()) })),
+        current_usage: maybe(
+          z.object({
+            input_tokens: maybe(z.number()),
+            cache_read_input_tokens: maybe(z.number()),
+            cache_creation_input_tokens: maybe(z.number()),
+          }),
+        ),
         used_percentage: maybe(z.number()),
       }),
     ),
@@ -66,9 +91,7 @@ export const ClaudeStatuslineInputSchema = z
       input.context_window === undefined
         ? undefined
         : {
-            inputTokens:
-              input.context_window.total_input_tokens ??
-              input.context_window.current_usage?.input_tokens,
+            inputTokens: contextTokens(input.context_window),
             usedPercent: input.context_window.used_percentage,
           },
     effort: input.effort?.level,

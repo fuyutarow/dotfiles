@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch authoritative agx inputs for diagnostic refresh
+
+[Path]
+PathChanged=%h/.local/state/agx-next/records.jsonl
+PathChanged=%h/.local/state/agx-next/workspace-verdicts.json
+Unit=agx-doctor.service
+
+[Install]
+WantedBy=default.target

@@ -2,11 +2,10 @@
 // n/a segment, and the usage-percent color thresholds. Split out of the former Claude statusline
 // (2026-10-06) so a reader of host load needs none of the statusline's stdin machinery.
 
-import {
-  TMP_INODE_WARN_PCT,
-  TMP_INODE_DENY_PCT,
-} from "../../storage-headroom/src/decision.ts";
-export { TMP_INODE_WARN_PCT, TMP_INODE_DENY_PCT };
+// Presentation thresholds mirror the storage gate; tmp-headroom.test.ts enforces parity.
+// Importing that executable gate here loads its shell parser on every statusline render.
+export const TMP_INODE_WARN_PCT = 85;
+export const TMP_INODE_DENY_PCT = 95;
 
 export const ESC = "\u001B";
 export const RST = `${ESC}[0m`;

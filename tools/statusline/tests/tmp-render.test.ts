@@ -20,6 +20,28 @@ test.each([
     mkdirSync(bin);
     writeFileSync(join(bin, "nvidia-smi"), "#!/bin/sh\nexit 1\n");
     chmodSync(join(bin, "nvidia-smi"), 0o755);
+    const sampler = Bun.spawnSync(
+      [
+        process.execPath,
+        "--preload",
+        join(import.meta.dir, "parity-preload.ts"),
+        join(import.meta.dir, "sample-fixture.ts"),
+      ],
+      {
+        cwd: home,
+        env: {
+          HOME: home,
+          PATH: bin,
+          PWD: home,
+          TZ: "UTC",
+          AGX_STATE_DIR: join(home, "state"),
+          STATUSLINE_FIXTURE_TMP: mode,
+        },
+        stdin: new Blob(["{}"]),
+        timeout: 30000,
+      },
+    );
+    expect(sampler.exitCode, sampler.stderr.toString()).toBe(0);
     const result = Bun.spawnSync(
       [
         process.execPath,

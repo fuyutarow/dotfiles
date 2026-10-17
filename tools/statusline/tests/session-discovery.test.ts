@@ -208,7 +208,25 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
   }).toEqual({ ...recorded, cwd });
 
   const script = join(import.meta.dir, "..", "src", "statusline.ts");
-  const env = { ...process.env, HOME: home, STATUSLINE_PROC_ROOT: proc };
+  const ownerPath = join(home, "owner.json");
+  await writeFile(
+    ownerPath,
+    JSON.stringify({
+      schema: 1,
+      fields: {
+        sessions: {
+          at: Temporal.Now.instant().epochMilliseconds,
+          value: sessions,
+        },
+      },
+    }),
+  );
+  const env = {
+    ...process.env,
+    HOME: home,
+    STATUSLINE_PROC_ROOT: proc,
+    STATUSLINE_OWNER_STATE: ownerPath,
+  };
   const listed = Bun.spawnSync(
     [process.execPath, script, "sessions", "--cwd", cwd, "--json"],
     { cwd, env },

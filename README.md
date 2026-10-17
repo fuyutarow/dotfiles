@@ -162,6 +162,13 @@ On Linux, `mise run link:dots` also links and enables `gpu-sampler.timer`. It st
 its atomic state file. `mise run doctor` checks timer activity and the service's last
 result. See [GPU sampler operations](tools/shared/GPU-SAMPLER.md) for freshness and recovery.
 
+`statusline-sampler.timer` refreshes statusline CPU, memory, storage, jobs, rates,
+session discovery and repository state five seconds after each completed sample.
+Rendering only reads files and the selected session PIDs under `/proc`.
+`agx-doctor.path` watches the run ledger and workspace verdicts, coalesces changes
+for one second, and refreshes diagnostics through a single `agx-doctor.service`.
+Both triggers are enabled by `mise run link:dots` and checked by `mise run doctor`.
+
 On Linux, `mise run link:dots` links and enables `ws-gc.timer`. Five minutes after boot and
 hourly thereafter it runs `ws gc --all --legacy`, with TSV output in
 `journalctl --user -u ws-gc.service`. It uses the existing empty, landed and idle land-temp

@@ -53,11 +53,35 @@ function render(opts: {
   home?: string;
   payload?: unknown;
   env?: Record<string, string>;
+  repository?: boolean;
 }): {
   text: string;
   home: string;
 } {
   const home = opts.home ?? tempHome();
+  const cwd = tempDir("slcwd-");
+  if (opts.repository === true) mkdirSync(join(cwd, ".git"));
+  const sample = spawnSync(
+    process.execPath,
+    [
+      "--preload",
+      join(import.meta.dir, "gpu-isolation-preload.ts"),
+      join(import.meta.dir, "sample-fixture.ts"),
+    ],
+    {
+      input: JSON.stringify(opts.payload ?? {}),
+      encoding: "utf8",
+      cwd,
+      env: isolatedStatuslineEnv({
+        HOME: home,
+        PATH: opts.bin,
+        TZ: "UTC",
+        ...opts.env,
+      }),
+      timeout: 15000,
+    },
+  );
+  expect(sample.status, sample.stderr).toBe(0);
   const r = spawnSync(
     process.execPath,
     [
@@ -74,7 +98,7 @@ function render(opts: {
         TZ: "UTC",
         ...opts.env,
       }), // no inherited HERDR_*, session identity or real tools
-      cwd: tempDir("slcwd-"), // not a repo
+      cwd,
     },
   );
   expect(r.status).toBe(0);
@@ -334,7 +358,9 @@ describe("statusline repo line: branch", () => {
     "echo 'fatal: not a git repository (or any of the parent directories): .git' >&2; exit 128";
 
   test("no git on PATH is a failed lookup, shown as n/a", () => {
-    expect(render({ bin: binWith({}) }).text).toContain("branch n/a (no git)");
+    expect(render({ bin: binWith({}), repository: true }).text).toContain(
+      "branch n/a (no git)",
+    );
   });
 
   test("git's own 'not a git repository' means nothing to show: no branch at all", () => {
@@ -349,7 +375,7 @@ describe("statusline repo line: branch", () => {
       const bin = binWith({
         git: "echo 'fatal: detected dubious ownership in repository at /x' >&2; exit 128",
       });
-      expect(render({ bin }).text).toContain(
+      expect(render({ bin, repository: true }).text).toContain(
         "branch n/a (detected dubious ownership in repository at /x)",
       );
     },
@@ -358,7 +384,7 @@ describe("statusline repo line: branch", () => {
 
   test("a branch is shown as before", () => {
     const bin = binWith({ git: "echo main" });
-    expect(render({ bin }).text).toContain("⎇ main");
+    expect(render({ bin, repository: true }).text).toContain("⎇ main");
   });
 });
 
@@ -437,9 +463,9 @@ describe("statusline resource bounds", () => {
         env: FAST_BOUND,
       }).text;
       // Do not compare scheduler time to the budget: the unit budget test advances a fake clock.
-      expect(text).toContain("name n/a (name timeout 3000ms)");
-      expect(text).toMatch(/branch n\/a \(git timeout \d+ms\)/u);
-      expect(text).toContain("scan n/a (process scan timeout 2000ms)");
+      expect(text).toContain("name n/a (claude agents timeout 3000ms)");
+      expect(text).not.toContain("branch n/a");
+      expect(text).toContain("scan n/a (ps timeout 2000ms)");
       // nvidia-smi is not a render child any more (O4): its hang costs the render nothing, and the
       // bar says the sample is still being taken.
       expect(sysRow(text)).toContain(
@@ -456,6 +482,7 @@ describe("statusline resource bounds", () => {
       const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
       const cacheDir = join(home, ".cache", "claude");
       const files = ["statusline-gpu.json", "statusline-cpu.json"];
+      render({ home, bin }); // Seed owner state before concurrent readers.
       const procs = Array.from({ length: 8 }, () =>
         Bun.spawn([process.execPath, STATUSLINE], {
           stdin: new Blob([JSON.stringify({ session_id: "bounds-2" })]),

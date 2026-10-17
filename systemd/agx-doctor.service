@@ -1,0 +1,15 @@
+[Unit]
+Description=Refresh agx diagnostic state after owner inputs change
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/dotfiles
+Environment=PATH=%h/.bun/bin:%h/.local/bin:%h/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
+# Coalesce a burst of record and workspace publications in one singleton service.
+ExecStartPre=/usr/bin/sleep 1
+ExecStart=%h/.bun/bin/agx doctor --json
+SuccessExitStatus=1
+TimeoutStartSec=120s
+StandardOutput=journal
+StandardError=journal

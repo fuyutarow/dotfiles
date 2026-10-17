@@ -1,10 +1,10 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: fresh 1`] = `"workers 2 running (+2 in other sessions) · lost 1 · ws unknown here · 6 all · unlanded 2 · collectable 3 · legacy 3 fresh · ⚠ orphaned 1 · unjudged 1"`;
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: fresh 1`] = `"workers 2 running (+2 in other sessions) · lost 1 · ws 6 all · unlanded 2 · collectable 3 · legacy 3 · ⚠ orphaned 1 · unjudged 1"`;
 
-exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: old 1`] = `"workers 2 running (+2 in other sessions) · lost 1 · ws unknown here · 6 all · unlanded 2 · collectable 3 · legacy 3 stale(180s) · ⚠ orphaned 1 · unjudged 1"`;
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: old 1`] = `"workers 2 running (+2 in other sessions) · lost 1 · ws 6 all · unlanded 2 · collectable 3 · legacy 3 · ⚠ orphaned 1 · unjudged 1"`;
 
-exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: missing 1`] = `"workers unknown running · lost unknown · ws unknown here · unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · anomalies unknown"`;
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: missing 1`] = `"workers unknown running · lost unknown · ws unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · anomalies unknown"`;
 
 exports[`worker phrase snapshot: here 2, others 2 1`] = `"workers 2 running (+2 in other sessions)"`;
 

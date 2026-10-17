@@ -1,5 +1,11 @@
 import type { Dataframe } from "./dataframe.ts";
-import { writeSubscriptionUsageSnapshot } from "../../shared/src/subscription-usage.ts";
+import {
+  subscriptionUsagePath,
+  SubscriptionUsageSnapshotSchema,
+  writeSubscriptionUsageSnapshot,
+  type SubscriptionUsageSnapshot,
+} from "../../shared/src/subscription-usage.ts";
+import { readJsonAsync, writeCacheAsync } from "./bounded.ts";
 
 type RateFacts = Pick<
   Dataframe,
@@ -34,11 +40,10 @@ function windowUsage(
 }
 
 /** Persist the subscription facts already consumed by the statusline renderers. */
-export function writeUsageSnapshot(
+function usageSnapshot(
   facts: RateFacts,
   nowSeconds: number,
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
+): SubscriptionUsageSnapshot {
   const codexWeek = facts.codexRate?.windows.find(
     (window) => window.minutes === SEVEN_DAYS / 60,
   );
@@ -51,27 +56,54 @@ export function writeUsageSnapshot(
           codexWeek.minutes * 60,
           facts.codexRate?.mtimeMs ?? nowSeconds * 1000,
         );
-  return writeSubscriptionUsageSnapshot(
-    {
-      version: 1,
-      routes: {
-        claude: {
-          "5h": windowUsage(
-            facts.rl5,
-            facts.rl5Reset,
-            FIVE_HOURS,
-            nowSeconds * 1000,
-          ),
-          "7d": windowUsage(
-            facts.rl7,
-            facts.rl7Reset,
-            SEVEN_DAYS,
-            nowSeconds * 1000,
-          ),
-        },
-        codex: { "7d": codexWindow },
+  return {
+    version: 1,
+    routes: {
+      claude: {
+        "5h": windowUsage(
+          facts.rl5,
+          facts.rl5Reset,
+          FIVE_HOURS,
+          nowSeconds * 1000,
+        ),
+        "7d": windowUsage(
+          facts.rl7,
+          facts.rl7Reset,
+          SEVEN_DAYS,
+          nowSeconds * 1000,
+        ),
       },
+      codex: { "7d": codexWindow },
     },
-    env,
-  );
+  };
+}
+
+// Compatibility API for existing subscription-routing callers; never used by a renderer.
+export function writeUsageSnapshot(
+  facts: RateFacts,
+  nowSeconds: number,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return writeSubscriptionUsageSnapshot(usageSnapshot(facts, nowSeconds), env);
+}
+
+/** The timer owns publication; absent windows retain the previous source observation. */
+export async function writeUsageSnapshotAsync(
+  facts: RateFacts,
+  nowSeconds: number,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const path = subscriptionUsagePath(env);
+  const previous = await readJsonAsync(path, SubscriptionUsageSnapshotSchema);
+  const next = usageSnapshot(facts, nowSeconds);
+  await writeCacheAsync(path, {
+    version: 1,
+    routes: {
+      claude: {
+        "5h": next.routes.claude["5h"] ?? previous?.routes.claude["5h"],
+        "7d": next.routes.claude["7d"] ?? previous?.routes.claude["7d"],
+      },
+      codex: { "7d": next.routes.codex["7d"] ?? previous?.routes.codex["7d"] },
+    },
+  });
 }

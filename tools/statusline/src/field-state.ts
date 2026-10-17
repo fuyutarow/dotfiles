@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { DIM, RST, roles } from "./ansi.ts";
 import { jsonOf, z } from "./zod.ts";
@@ -34,7 +34,7 @@ export function renderField(label: string, state: FieldState<string>): string {
     const seconds = Math.max(0, Math.floor(state.age / 1000));
     const age = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m`;
     const value = state.value === "" ? `${label} none` : state.value;
-    if (label === "agx") return `agx ${age} old ${DIM}·${RST} ${value}`;
+    if (label === "agx") return `agx stale ${age} ${DIM}·${RST} ${value}`;
     return `${value} ${DIM}· ${age} old${RST}`;
   }
   if (state.kind === "unknown")
@@ -82,7 +82,9 @@ export async function retainField(
     mode: 0o600,
   })
     .then(() => rename(temp, path))
-    .catch(() => null);
+    .catch(async () => {
+      await unlink(temp).catch(() => null);
+    });
   return current;
 }
 

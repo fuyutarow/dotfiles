@@ -5,12 +5,13 @@ import { fleetLine } from "./fleet-line.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
 import { admittedJobSegment } from "./jobs.ts";
-import { routeLines } from "./dispatch-runs.ts";
-import { sysRow } from "./host-load.ts";
+import { routeLines } from "./dispatch-display.ts";
+import { sysRow } from "./host-display.ts";
 import { recoverHealthBadge } from "./recover-health.ts";
 import { fieldDisplay, observed, type FieldDisplay } from "./field-state.ts";
 import { fromThrowable } from "neverthrow";
 import { renderRows, type DisplayRows } from "./row-state.ts";
+import { version } from "../package.json";
 
 const SEP = ` ${DIM}|${RST} `;
 const BR = "⎇";
@@ -66,7 +67,18 @@ export function render(
   options: { codex?: boolean; collect?: FieldDisplay } = {},
 ): string {
   const codex = options.codex === true;
-  const field = fieldDisplay(df.fields, options.collect);
+  const display = fieldDisplay(df.fields, options.collect);
+  const field: FieldDisplay = (key, label, state) => {
+    const source = key.split(":", 1)[0] ?? key;
+    const age = df.ownerAges?.[key] ?? df.ownerAges?.[source] ?? 0;
+    return display(
+      key,
+      label,
+      state.kind === "fresh" && age > 0
+        ? observed(state.value, undefined, age)
+        : state,
+    );
+  };
   const joinText = (t: string, seg: string) => (t !== "" ? t + SEP : "") + seg;
 
   const line1 = coloredHead(
@@ -192,17 +204,8 @@ export function render(
         ),
       ),
     );
-  repoLine = joinText(
-    repoLine,
-    field(
-      "worktree",
-      "wt",
-      observed(
-        df.wt === undefined ? undefined : `${ESC}[38;5;140mwt: ${df.wt}${RST}`,
-        "payload has no worktree",
-      ),
-    ),
-  );
+  if (df.workspace !== undefined)
+    repoLine = joinText(repoLine, `${ESC}[38;5;140mws: ${df.workspace}${RST}`);
 
   // Always present: every reading in it is either a value or an explicit n/a.
   const sysLine = sysRow(df, field);
@@ -290,7 +293,9 @@ export function render(
     .join("\n");
 
   const rows = {
-    prompt: observed(joinText(line1, repoLine)),
+    prompt: observed(
+      `${repoLine === "" ? line1 : joinText(line1, repoLine)} ${DIM}v${version}${RST}`,
+    ),
     identity: observed(
       identityLine === "" ? undefined : identityLine,
       "payload has no session",

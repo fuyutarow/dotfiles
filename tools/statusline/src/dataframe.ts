@@ -20,6 +20,7 @@ import type { DisplayFields } from "./field-state.ts";
 // of the ~11 optional keys in and out.
 export interface Dataframe {
   fields?: DisplayFields;
+  ownerAges?: Record<string, number>;
   cwd: string;
   sid?: string | undefined;
   sessionName?: string | undefined; // undefined with no sessionNameWhy = not listed yet
@@ -50,6 +51,7 @@ export interface Dataframe {
   add?: number | undefined; // undefined = the payload carried no cost block (NOT zero lines)
   del?: number | undefined;
   wt?: string | undefined;
+  workspace?: string | undefined;
   jobs: Admitted[];
   orphans: number;
   jobScanWhy?: string | undefined; // the process scan failed: jobs/orphans are unknown, not zero

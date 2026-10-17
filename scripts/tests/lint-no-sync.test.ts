@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
@@ -9,6 +9,10 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadPolicy, renderOxlintrc } from "../render-oxlintrc.ts";
+
+// Each regression runs the real scanner repeatedly; its subprocess guard is 60s.
+// Set this file's integration budget explicitly (preload defaults do not cover every file).
+setDefaultTimeout(30_000);
 
 const REPO = join(import.meta.dir, "..", "..");
 const SCRIPT = join(REPO, "scripts", "lint-no-sync.ts");

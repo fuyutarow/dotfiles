@@ -27,7 +27,7 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pidAlive } from "./dir-lock.ts";
 import { fromThrowable } from "./zod.ts";
@@ -163,6 +163,12 @@ export function installTestTmp(
 }
 
 const processTmp = installTestTmp();
+// Installed tool binaries are test inputs. Preserve their declared location before
+// isolating HOME/XDG_DATA_HOME; mise must not reinstall the toolchain in each fixture.
+process.env.MISE_DATA_DIR ??= join(
+  process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"),
+  "mise",
+);
 // Subprocess integration tests have 30 s child guards. Bun's 5 s default otherwise kills an
 // awaited child under load before its own guard can report a result. This is a hang guard;
 // deadline behavior is asserted separately with injected clocks.

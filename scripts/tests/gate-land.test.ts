@@ -40,5 +40,6 @@ test("pre-commit runs exactly the gate:land checks plus staged formatting", asyn
     "lint",
     "test",
     "usehooks:consumers",
+    "lint:oxlint-policy",
   ]);
 });

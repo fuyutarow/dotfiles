@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { rm } from "node:fs/promises";
 import {
   lintHookSlugs,
   lintHookSource,
@@ -99,19 +100,33 @@ test("all deployed owned hooks have unique identities and external hooks have ex
   ).toBe("herdr");
 });
 
-test("agx workspace-add hook renders for both Claude and Codex with its nested slug", () => {
-  const registry = loadSlugs();
+test("a fixture hook renders for both Claude and Codex with its nested slug", async () => {
+  // The workspace-add policy was retired. Keep its registry/wiring contract independent
+  // of which production policies are deployed today.
+  const dir = fixture();
+  const hooksDir = join(dir, "agents/hooks");
+  const registryPath = join(hooksDir, "hooks.toml");
+  await Bun.write(join(hooksDir, "fixture-nested.ts"), "// Fixture hook.\n");
+  await Bun.write(
+    registryPath,
+    `${await Bun.file(registryPath).text()}\n[[hook]]\nslug = "agx:workspace-add"\nscript = "fixture-nested.ts"\nevent = "PreToolUse"\nmatcher = "Bash"\nfail_closed = true\nvendors = ["claude", "codex"]\n`,
+  );
+  await using cleanup = new AsyncDisposableStack();
+  cleanup.defer(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+  const registry = loadSlugs(registryPath);
   expect(registry).not.toBeInstanceOf(Error);
   if (registry instanceof Error) return;
   expect(
     registry.identities.find((identity) =>
-      identity.script.endsWith("enforce-agx-workspace-add.ts"),
+      identity.script.endsWith("fixture-nested.ts"),
     )?.slug,
   ).toBe("agx:workspace-add");
-  const hooks = loadRegistry(join(root, "agents/hooks"));
+  const hooks = loadRegistry(hooksDir);
   expect(hooks.errors).toEqual([]);
   const spec = hooks.specs.find(
-    (entry) => entry.script === "enforce-agx-workspace-add.ts",
+    (entry) => entry.script === "fixture-nested.ts",
   );
   expect(spec?.vendors).toEqual(["claude", "codex"]);
   if (spec === undefined) return;
@@ -123,7 +138,7 @@ test("agx workspace-add hook renders for both Claude and Codex with its nested s
           {
             type: "command",
             command:
-              "sh ~/.agents/hooks/run.sh --fail-closed enforce-agx-workspace-add.ts",
+              "sh ~/.agents/hooks/run.sh --fail-closed fixture-nested.ts",
           },
         ],
       },

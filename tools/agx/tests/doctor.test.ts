@@ -147,7 +147,7 @@ test("agx doctor clean fixture is silent on stdout and exits zero", async () => 
       jjOperations(f.repo, f.env),
     ]),
   ).toEqual(before);
-});
+}, 30_000);
 
 test("agx doctor folds the run, workspace, and ticket owners with exact findings", async () => {
   const f = await fixture("findings");
@@ -372,7 +372,6 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
       `agx-run\t${f.repo}\tlost\tmissing-return\tagx judge lost accept|reject`,
       `agx-run\t${f.repo}\tno-return\tmissing-return\tagx judge no-return accept|reject`,
       `agx-run\t${f.repo}\tunjudged\tunjudged\tagx judge unjudged accept|reject`,
-      `agx-ws\t${f.repo}\tlegacy\tlegacy-empty\tws gc --legacy --repo ${f.repo}`,
       `agx-ws\t${f.repo}\tws_landed\tcollectable\tws gc --include-unrecorded --repo ${f.repo}`,
       `agx-ws\t${f.repo}\tws_old\tunlanded-72h\tcd ${old} && mise run land`,
       `agx-ws\t${f.repo}\tws_stale\tstale\tws refresh stale --repo ${f.repo}`,
@@ -380,7 +379,10 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
       `agx-ticket\t${f.repo}\tstray\toutside-home\tmv ${join(f.repo, "stray.md")} ${f.tickets}/`,
     ].toSorted(),
   );
-  expect(result.stderr).toBe("agx doctor: 10 finding(s)\n");
+  // The unattended collector handles empty legacy workspaces; doctor reports only
+  // workspaces requiring attention, so the legacy fixture must stay silent.
+  expect(result.stdout).not.toContain(`\tlegacy\t`);
+  expect(result.stderr).toBe("agx doctor: 9 finding(s)\n");
   const summary = await run(
     [
       process.execPath,
@@ -405,7 +407,6 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
         orphaned: 1,
         "missing-return": 2,
         unjudged: 1,
-        "legacy-empty": 1,
         collectable: 1,
         "unlanded-72h": 1,
         stale: 1,
@@ -440,4 +441,4 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
     ].toSorted(),
   );
   expect(ticketDoctor.stderr).toBe("agx-ticket doctor: 2 finding(s)\n");
-});
+}, 30_000);

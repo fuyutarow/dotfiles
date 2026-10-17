@@ -69,7 +69,7 @@ test("suite entry runs run, ws, and ticket help through their CLIs", async () =>
     expect(result.stdout).toMatch(output);
     expect(result.stderr).toBe("");
   }
-});
+}, 30_000);
 
 test("agx roster --json prints the validated roster value", async () => {
   const loaded = await loadRoster();

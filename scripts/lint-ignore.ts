@@ -237,6 +237,8 @@ export function freshCloneGateFindings(root = ROOT): string[] {
   for (const task of ["lint:ignore", "lint:md"]) {
     const result = run(["mise", "run", task], clone, 180_000, {
       XDG_STATE_HOME: miseState,
+      MISE_OFFLINE: "1",
+      MISE_TRUSTED_CONFIG_PATHS: clone,
     });
     if (result.code !== 0)
       return [

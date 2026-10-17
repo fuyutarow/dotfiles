@@ -17,8 +17,9 @@ import { findings } from "../config-map.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const DISABLE_COMMENT = ["// eslint", "disable\n"].join("-");
-// Full-suite parallel run measured these JJ snapshot fixtures at 5.0–5.5s; keep a local 12s bound.
-const SLOW_JJ_FIXTURE_TIMEOUT_MS = 12_000;
+// These fixtures exercise multiple real jj snapshots and gate subprocesses. Match the
+// suite's 30s integration guard so scheduling load cannot kill a valid child at 12s.
+const SLOW_JJ_FIXTURE_TIMEOUT_MS = 30_000;
 function test(
   name: string,
   body: () => void | Promise<void>,

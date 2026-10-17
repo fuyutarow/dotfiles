@@ -190,8 +190,9 @@ describe("skills:sync", () => {
     ).toBe(true);
     expect(calls.filter((row) => row[3] === "vendor/repo")).toHaveLength(2);
     expect(
-      calls.filter((row) => row[1]?.startsWith("/tmp/skills-cli-cwd-") ?? false)
-        .length,
+      calls.filter(
+        (row) => row[1]?.startsWith(join(tmpdir(), "skills-cli-cwd-")) ?? false,
+      ).length,
     ).toBe(2);
     const args = readFileSync(`${marker}.args`, "utf8");
     expect(args).toContain("-a\tclaude-code");

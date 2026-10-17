@@ -109,6 +109,7 @@ test("the repo Markdown formatter output parses as one changeset entry", async (
         MISE_STATE_DIR: join(root, "mise-state"),
         MISE_CACHE_DIR: join(root, "mise-cache"),
         MISE_CONFIG_DIR: join(root, "mise-config"),
+        MISE_OFFLINE: "1",
       },
       stdout: "pipe",
       stderr: "pipe",

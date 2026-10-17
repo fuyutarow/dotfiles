@@ -1028,10 +1028,14 @@ network_access = true
     return dir;
   }
 
+  // ssh validates Unix socket path lengths even for -G. No socket or home is created:
+  // this logical client home keeps the fixture valid under arbitrarily long TMPDIRs.
+  const smartOpenHome = "/tmp/doctor-client";
+
   test.skipIf(OLD_SSH)(
     "smart-open: a forward joining the paths the code uses PASSes; drift on either end FAILs naming both sides",
     () => {
-      const home = tmp("doctor-home-");
+      const home = smartOpenHome;
       const remote = "/tmp/smart-open-tester--r99-u24.sock";
       const receiver = `${home}/.cache/smart-open/receiver.sock`;
       const pass = doctor("smart-open", {
@@ -1065,7 +1069,7 @@ network_access = true
   test.skipIf(OLD_SSH)(
     "smart-open: an editor alias that is missing, or carries the forward, FAILs naming the fix",
     () => {
-      const home = tmp("doctor-home-");
+      const home = smartOpenHome;
       const forward = `/tmp/smart-open-tester--r99-u24.sock ${home}/.cache/smart-open/receiver.sock`;
       const ok = doctor("smart-open", {
         HOME: home,
@@ -1094,7 +1098,7 @@ network_access = true
   );
 
   test("smart-open: a forward every command session carries FAILs (it would steal the socket)", () => {
-    const home = tmp("doctor-home-");
+    const home = smartOpenHome;
     const r = doctor("smart-open", {
       HOME: home,
       DOTFILES: fixtureSshConfig(
@@ -1112,7 +1116,7 @@ network_access = true
   test.skipIf(OLD_SSH)(
     "smart-open: a host with no RemoteForward at all FAILs, and an extra unrelated forward does not mask drift",
     () => {
-      const home = tmp("doctor-home-");
+      const home = smartOpenHome;
       const none = doctor("smart-open", {
         HOME: home,
         DOTFILES: fixtureSshConfig(null),

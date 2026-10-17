@@ -5,6 +5,7 @@ const ROOT = new URL("../../../../", import.meta.url).pathname;
 
 type CorpusEntry = Readonly<{
   path: string;
+  executable?: string;
   command?: string;
   prototypeFlag?: Readonly<{ exit: number; message: string }>;
   // A CLI whose OWN contract differs from Cleye's default for an unknown flag (exit 1, "Unknown
@@ -24,12 +25,23 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/deployment-selection.ts" },
   { path: "scripts/guest-capacity-recover.ts" },
   { path: "scripts/lint-no-sync.ts" },
+  {
+    path: "scripts/lint-no-new-bash.ts",
+    prototypeFlag: { exit: 2, message: "" },
+  },
   { path: "scripts/lint-tmp-leaks.ts" },
   { path: "scripts/install-ai-clis.ts" },
   { path: "scripts/vendor-deps.ts" },
   { path: "agents/models/check-releases.ts" },
   { path: "agents/research-control/cli.ts" },
   { path: "tools/agent-resource-run/src/agent-resource-run.ts" },
+  {
+    path: "tools/agent-resource-run/src/lib/status-command.ts",
+    executable: "tools/agent-resource-run/src/agent-resource-run.ts",
+    command: "status",
+  },
+  { path: "tools/agx-ticket/src/tkt.ts" },
+  { path: "tools/agx/src/dispatch.ts" },
   { path: "tools/baseline/src/baseline.ts" },
   {
     path: "tools/coredev/src/coredev.ts",
@@ -94,6 +106,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts" },
   { path: "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts" },
   { path: "agents/skills/wiring-mise-tasks/scripts/jj-push.ts" },
+  { path: "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts" },
   { path: "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts" },
   { path: "agents/skills/wiring-repositories/scripts/wiring-check.ts" },
   { path: "agents/skills/writing-bun-scripts/scripts/script-check.ts" },
@@ -135,7 +148,7 @@ const CORPUS: CorpusEntry[] = [
     path: "tools/storage-headroom/src/storage-headroom.ts",
     unknownFlag: { exit: 2, message: "Unknown flag" },
   },
-  { path: "tools/workspace/src/ws.ts" },
+  { path: "tools/agx-ws/src/ws.ts" },
 ] satisfies readonly CorpusEntry[];
 
 async function run(
@@ -150,7 +163,7 @@ async function run(
   const proc = Bun.spawn(
     [
       "bun",
-      join(ROOT, entry.path),
+      join(ROOT, entry.executable ?? entry.path),
       ...(entry.command !== undefined && entry.command !== ""
         ? [entry.command]
         : []),
@@ -224,9 +237,12 @@ describe("production Cleye corpus boundary", () => {
         message: "__proto__",
       };
       expect(prototype.exitCode).toBe(expectedPrototype.exit);
-      expect(prototype.stdout + prototype.stderr).toContain(
-        expectedPrototype.message,
-      );
+      if (expectedPrototype.message === "")
+        expect(prototype.stdout + prototype.stderr).toBe("");
+      else
+        expect(prototype.stdout + prototype.stderr).toContain(
+          expectedPrototype.message,
+        );
     });
   }
 });

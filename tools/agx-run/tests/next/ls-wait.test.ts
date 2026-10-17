@@ -53,10 +53,22 @@ const fixture = (events: readonly object[]): string => {
 };
 
 const deadPid = (): number => Bun.spawnSync(["true"]).pid;
-const spawnWait = (root: string, ...args: string[]) =>
-  Bun.spawn(
+const spawnWait = async (root: string, ...args: string[]) => {
+  const ready = join(root, "ready");
+  const preload = join(root, "ready.ts");
+  await Bun.write(
+    preload,
+    `import {mock} from "bun:test";
+const timers = await import("node:timers/promises");
+const sleep = timers.setTimeout;
+mock.module("node:timers/promises",()=>({...timers,setTimeout:async(...args)=>{await Bun.write(${JSON.stringify(ready)},"ready");return sleep(...args);}}));
+`,
+  );
+  const child = Bun.spawn(
     [
       process.execPath,
+      "--preload",
+      preload,
       "tools/agx-run/src/next/cli.ts",
       "ls",
       "--wait",
@@ -73,12 +85,20 @@ const spawnWait = (root: string, ...args: string[]) =>
       },
     },
   );
+  const deadline = performance.now() + 10000;
+  while (
+    !(await Bun.file(ready).exists()) &&
+    child.exitCode === null &&
+    performance.now() < deadline
+  )
+    await Bun.sleep(20);
+  return child;
+};
 const Rows = jsonOf(z.array(z.object({ id: z.string(), state: z.string() })));
 
 test("--wait on a running run returns its row after an ended record is appended", async () => {
   const root = fixture([started("run-live", "live", process.pid)]);
-  const child = spawnWait(root, "run-live", "--json");
-  await Bun.sleep(400);
+  const child = await spawnWait(root, "run-live", "--json");
   expect(child.exitCode).toBeNull();
   appendFileSync(
     join(root, "state", "records.jsonl"),
@@ -93,7 +113,7 @@ test("--wait on a running run returns its row after an ended record is appended"
 
 test("--wait on an already-ended run returns at once, in ls format", async () => {
   const root = fixture([started("run-done", "done", 0), ended("run-done")]);
-  const child = spawnWait(root, "run-done");
+  const child = await spawnWait(root, "run-done");
   expect(await child.exited).toBe(0);
   expect(await new Response(child.stdout).text()).toContain(
     "run-done ended tkt_done row=luna-high exit=0",
@@ -107,8 +127,7 @@ test("--wait on a ticket ignores old ended runs and waits for its running run", 
     started("run-old-orphaned", "ticket", deadPid()),
     started("run-live", "ticket", process.pid),
   ]);
-  const child = spawnWait(root, "ticket", "--json");
-  await Bun.sleep(400);
+  const child = await spawnWait(root, "ticket", "--json");
   expect(child.exitCode).toBeNull();
   appendFileSync(
     join(root, "state", "records.jsonl"),
@@ -123,8 +142,7 @@ test("--wait on a ticket ignores old ended runs and waits for its running run", 
 
 test("--wait on a ticket with only old ended runs waits for a new run to end", async () => {
   const root = fixture([started("run-old", "ticket", 0), ended("run-old")]);
-  const child = spawnWait(root, "ticket", "--json");
-  await Bun.sleep(400);
+  const child = await spawnWait(root, "ticket", "--json");
   expect(child.exitCode).toBeNull();
   appendFileSync(
     join(root, "state", "records.jsonl"),
@@ -139,7 +157,7 @@ test("--wait on a ticket with only old ended runs waits for a new run to end", a
 
 test("--wait returns a run whose process died without an ended record as ended lost", async () => {
   const root = fixture([started("run-gone", "gone", deadPid())]);
-  const child = spawnWait(root, "run-gone", "--json");
+  const child = await spawnWait(root, "run-gone", "--json");
   expect(await child.exited).toBe(0);
   const rows = Rows.safeParse(await new Response(child.stdout).text());
   expect(rows.success && rows.data).toEqual([
@@ -153,7 +171,7 @@ test("--wait on an unknown, ambiguous or missing selector fails at once", async 
     started("run-a2", "b", process.pid),
   ]);
   for (const args of [["nothing"], ["run-a"], []]) {
-    const child = spawnWait(root, ...args);
+    const child = await spawnWait(root, ...args);
     expect(await child.exited).toBe(2);
     expect(await new Response(child.stderr).text()).toContain("agx:");
   }
@@ -162,7 +180,9 @@ test("--wait on an unknown, ambiguous or missing selector fails at once", async 
 test("--wait writes no file", async () => {
   const root = fixture([started("run-done", "done", 0), ended("run-done")]);
   const before = readFileSync(join(root, "state", "records.jsonl"), "utf8");
-  await spawnWait(root, "run-done").exited;
+  await (
+    await spawnWait(root, "run-done")
+  ).exited;
   expect(readdirSync(join(root, "state"))).toEqual(["records.jsonl"]);
   expect(readFileSync(join(root, "state", "records.jsonl"), "utf8")).toBe(
     before,

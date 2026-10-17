@@ -1,23 +1,18 @@
+import { DIM, ESC, RST } from "./ansi.ts";
+import { dur } from "./jobs.ts";
+import { formatCostUsd } from "../../shared/src/dispatch-pricing.ts";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 import { homedir } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
-import { jsonOf, z } from "./zod.ts";
+import { jsonOf, z, recoverInvalid } from "./zod.ts";
 import { execError } from "./bounded.ts";
 import { activeDirs, ProgressSchema } from "./dispatch-state.ts";
-import { DIM, ESC, RST } from "./ansi.ts";
-import { dur } from "./jobs.ts";
-import {
-  readCodexActivity,
-  readCodexUsage,
-  resolveCodexSession,
-} from "./codex-rate.ts";
 import { parseActiveMarker } from "../../shared/src/dispatch-state.ts";
 import {
   costUsd,
   dispatchRowPrice,
-  formatCostUsd,
 } from "../../shared/src/dispatch-pricing.ts";
 import {
   readAgxSnapshotAsync,
@@ -26,10 +21,10 @@ import {
   type FleetFindings,
 } from "./agx-snapshot.ts";
 
-// Run row source: one marker per worker agx-run started (tools/agx-run/src/state.ts).
-// A marker is written at start and removed at exit, so a marker whose process is gone means
-// agx itself was killed — counted as lost (agx's own word), never dropped (EXPLICIT-ABSENCE).
+// Render rows use agx's published listing and doctor counts. Legacy marker readers below
+// remain compatibility APIs; the dataframe never calls them or enriches the core rows.
 export interface RouteRun {
+  coreState?: "running" | "ended";
   displayId: string | undefined;
   choice: string;
   label: string;
@@ -75,7 +70,15 @@ function doingOf(dir: string, runId: string): RouteRun["doing"] {
 export interface RouteScan {
   findings?: FleetFindings | undefined;
   workspaces?: WorkspaceCounts | undefined;
-  fleet?: { running: number; here: number; lost: number } | undefined;
+  fleet?:
+    | {
+        running: number;
+        here: number;
+        other: number;
+        lost?: number | undefined;
+        unattributed: number;
+      }
+    | undefined;
   runs: RouteRun[];
   unreadable: number;
   snapshotAgeSecs?: number | undefined;
@@ -124,10 +127,6 @@ function optionalNumber(value: unknown): number | undefined {
   const parsed = z.number().safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
-function runPhase(row: z.output<typeof AgxLsRowSchema>): string | undefined {
-  if (row.state !== "running") return undefined;
-  return "working";
-}
 /** Read the Job segment's named runs from the shared last-good agx snapshot. */
 export async function agxJobRunsAsync(
   sessionId: string | undefined,
@@ -155,15 +154,20 @@ export async function agxJobRunsAsync(
 export async function agxRouteRunsAsync(
   env: NodeJS.ProcessEnv = process.env,
   sessionId?: string,
-  enrichRows = true,
+  enrichRows = false,
+  renderCwd = process.cwd(),
 ): Promise<RouteScan> {
-  const snapshot = await readAgxSnapshotAsync(env);
+  if (!enrichRows) return readCoreRuns(env, sessionId, renderCwd);
+  const enrichment = enrichRows ? await import("./codex-rate.ts") : undefined;
+  const snapshot = await readAgxSnapshotAsync(env, renderCwd);
   const rows = snapshot.rows ?? [];
   const now = Temporal.Now.instant();
   const dispatcherSession = currentDispatcherSession(sessionId);
   const runs: RouteRun[] = [];
   let unreadable = 0;
-  const fleet = { running: 0, here: 0, lost: 0 };
+  const summary = snapshot.summary;
+  const session =
+    summary?.sessions[dispatcherSession ?? ""] ?? summary?.noSession;
   for (const value of rows) {
     const parsed = AgxLsRowSchema.safeParse(value);
     if (!parsed.success) {
@@ -171,16 +175,6 @@ export async function agxRouteRunsAsync(
       continue;
     }
     const row = parsed.data;
-    if (row.state === "running") {
-      fleet.running += 1;
-    }
-    if (
-      row.state === "running" &&
-      dispatcherSession !== undefined &&
-      row.dispatcher_session === dispatcherSession
-    )
-      fleet.here += 1;
-    if (row.health === "orphaned") fleet.lost += 1;
     if (row.state !== "running" && row.health !== "orphaned") continue;
     const recordedWorkspace = optionalString(row.workspace_name);
     const workspacePath =
@@ -197,7 +191,6 @@ export async function agxRouteRunsAsync(
               ),
             ),
           )().unwrapOr(undefined);
-    const phase = runPhase(row);
     const enrich =
       enrichRows &&
       row.state === "running" &&
@@ -211,11 +204,11 @@ export async function agxRouteRunsAsync(
       vendorSession =
         cwd === undefined
           ? undefined
-          : await resolveCodexSession(rolloutRoot, cwd, startedAt);
+          : await enrichment?.resolveCodexSession(rolloutRoot, cwd, startedAt);
     const activity =
       !enrich || vendorSession === undefined
         ? undefined
-        : await readCodexActivity(rolloutRoot, vendorSession, cwd);
+        : await enrichment?.readCodexActivity(rolloutRoot, vendorSession, cwd);
     let doing: RouteRun["doing"];
     if (activity !== undefined) {
       doing = {
@@ -251,7 +244,7 @@ export async function agxRouteRunsAsync(
       pickSource:
         optionalString(row.pick_source) ??
         (continues === null || continues === undefined ? "agx" : "resume"),
-      phase: optionalString(row.phase) ?? phase,
+      phase: optionalString(row.phase),
       workerSession: vendorSession,
       markerCostUsd: optionalNumber(row.cost_usd) ?? cost,
       secs,
@@ -263,7 +256,15 @@ export async function agxRouteRunsAsync(
   return {
     runs,
     unreadable,
-    fleet: snapshot.rows === undefined || unreadable > 0 ? undefined : fleet,
+    fleet:
+      summary === undefined || session === undefined
+        ? undefined
+        : {
+            running: summary.running,
+            ...session,
+            unattributed: summary.unattributed,
+            lost: snapshot.findings?.lost,
+          },
     workspaces: snapshot.workspaces,
     findings: snapshot.findings,
     ...(snapshot.ageSeconds === undefined
@@ -342,12 +343,6 @@ function actionLine(value: string, cwd?: string): string | undefined {
     return `editing ${relative(cwd, path)}`;
   return first;
 }
-function displayAction(value: string): string {
-  const action = actionLine(value) ?? "";
-  return action.startsWith("editing ")
-    ? truncateDisplay(action, RUN_LABEL_WIDTH)
-    : action;
-}
 const pidAlive = fromThrowable((pid: number) => process.kill(pid, 0));
 const sinceSecs = fromThrowable((iso: string) =>
   Math.max(
@@ -375,6 +370,7 @@ async function liveCodexCost(
     return progressCost;
   const price = dispatchRowPrice(choice);
   if (price?.route !== "codex") return progressCost;
+  const { readCodexUsage } = await import("./codex-rate.ts");
   const tokens = await readCodexUsage(rolloutRoot, session);
   return tokens === undefined ? progressCost : costUsd(price, tokens);
 }
@@ -541,7 +537,102 @@ export async function routeRunsAsync(
 // "│ $ bun test x.ts · 12 cmd · 3 files": the worker's latest event, then what it has done so far.
 // Older than a minute it says how old (a worker deep in reasoning prints nothing for a while — that
 // is shown as age, not hidden). No progress file yet = no event yet, said as such.
-function doingText(d: RouteRun["doing"], phase: string | undefined): string {
+
+const Row = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    ticket: z.string(),
+    state: z.enum(["running", "ended"]),
+    row: z.string(),
+    dispatcher_session: z.string().nullable(),
+    health: z.string().nullable().optional(),
+    workspace: recoverInvalid(z.string()),
+    workspace_name: recoverInvalid(z.string()),
+    worker_name: recoverInvalid(z.string()),
+    phase: recoverInvalid(z.string()),
+    cost_usd: recoverInvalid(z.number()),
+    vendor_session: z.string().nullable().optional(),
+    pick_source: recoverInvalid(z.string()),
+    continues: z.string().nullable().optional(),
+    elapsed_seconds: recoverInvalid(z.number()),
+  }),
+);
+/** The core's rows and summaries, without vendor enrichment or local state inference. */
+export async function readCoreRuns(
+  env: NodeJS.ProcessEnv = process.env,
+  sessionId?: string,
+  cwd = process.cwd(),
+): Promise<RouteScan> {
+  const snapshot = await readAgxSnapshotAsync(env, cwd);
+  const summary = snapshot.summary;
+  const session =
+    summary?.sessions[currentDispatcherSession(sessionId) ?? ""] ??
+    summary?.noSession;
+  const runs: RouteRun[] = [];
+  let unreadable = 0;
+  for (const value of snapshot.rows ?? []) {
+    const parsed = Row.safeParse(value);
+    if (!parsed.success) {
+      unreadable++;
+      continue;
+    }
+    const row = parsed.data;
+    if (row.state !== "running" && row.health !== "orphaned") continue;
+    runs.push({
+      displayId: undefined,
+      choice: row.row,
+      label: row.ticket,
+      workerName: row.worker_name,
+      workspaceName:
+        row.workspace_name ??
+        (row.workspace === undefined ? undefined : basename(row.workspace)),
+      pickSource:
+        row.pick_source ??
+        (row.continues === undefined || row.continues === null
+          ? "agx"
+          : "resume"),
+      phase: row.phase,
+      workerSession: row.vendor_session ?? undefined,
+      markerCostUsd: row.cost_usd,
+      secs: row.elapsed_seconds,
+      coreState: row.state,
+      alive: row.state === "running",
+      dispatcherSession: row.dispatcher_session ?? undefined,
+      doing: undefined,
+    });
+  }
+  return {
+    runs,
+    unreadable,
+    workspaces: snapshot.workspaces,
+    findings: snapshot.findings,
+    fleet:
+      summary === undefined || session === undefined
+        ? undefined
+        : {
+            running: summary.running,
+            ...session,
+            unattributed: summary.unattributed,
+            lost: snapshot.findings?.lost,
+          },
+    snapshotAgeSecs: snapshot.ageSeconds,
+    snapshotWhy: snapshot.reason,
+  };
+}
+
+function displayAction(value: string): string {
+  const action = actionLine(value) ?? "";
+  return action.startsWith("editing ")
+    ? truncateDisplay(action, RUN_LABEL_WIDTH)
+    : action;
+}
+function doingText(
+  d: RouteRun["doing"],
+  phase: string | undefined,
+  coreState?: RouteRun["coreState"],
+): string {
+  if (coreState !== undefined && d === undefined)
+    return `${DIM}│${RST} ${phase ?? coreState}`;
   if (phase === undefined) {
     if (d === undefined) return `${DIM}│ no event yet${RST}`;
     const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
@@ -580,15 +671,16 @@ export function routeLines(
   runs: RouteRun[],
   sessionId: string | undefined,
   unreadable = 0,
+  counts?: Partial<NonNullable<RouteScan["fleet"]>>,
 ): string[] {
   const live = runs
     .filter((r) => r.alive)
     .toSorted((a, b) => (b.secs ?? -1) - (a.secs ?? -1));
-  const lost = runs.filter((run) => !run.alive).length;
+
   const attributed = live.filter(
     (r) => r.dispatcherSession !== undefined && r.dispatcherSession !== "",
   );
-  const unattributed = live.length - attributed.length;
+
   const dispatcherSession = currentDispatcherSession(sessionId);
   const own =
     dispatcherSession === undefined || dispatcherSession === ""
@@ -642,11 +734,13 @@ export function routeLines(
   );
   const lines = shown.map(
     (r, i) =>
-      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${DIM}${padDisplay(identities[i] ?? "", identityWidth)}${identities[i] === "" ? "" : " "}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase)}`,
+      `${padDisplay(choices[i] ?? "", choiceWidth)} ${padDisplay(elapsed[i] ?? "", elapsedWidth, true)} ${costText(costs[i], costWidth)}${DIM}${padDisplay(identities[i] ?? "", identityWidth)}${identities[i] === "" ? "" : " "}${padDisplay(labels[i] ?? "", labelWidth)}${RST} ${doingText(r.doing, r.phase, r.coreState)}`,
   );
   const summary = [
-    `${ESC}[38;5;167mlost ${lost}${RST}`,
-    ...(unattributed > 0 ? [`${DIM}unattributed ${unattributed}${RST}`] : []),
+    `${ESC}[38;5;167mlost ${counts?.lost ?? "unknown"}${RST}`,
+    ...((counts?.unattributed ?? 0) > 0
+      ? [`${DIM}unattributed ${counts?.unattributed}${RST}`]
+      : []),
     ...(unreadable > 0
       ? [`${ESC}[38;5;178munreadable ${unreadable}${RST}`]
       : []),

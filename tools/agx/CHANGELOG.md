@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0 — 2026-10-17
+
+- Expose authoritative doctor finding counts and completeness as JSON.
+- Persist complete doctor findings with their observation timestamp for read-only consumers
+
 ## 0.3.1 — 2026-10-17
 
 - Resolve dispatch repositories from tickets and consume machine-readable workspace output

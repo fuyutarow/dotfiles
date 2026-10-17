@@ -85,6 +85,7 @@ type Sources = {
   hostLoad: () => Promise<Omit<HostLoad, "disks">>;
   routes: (
     sessionId?: string,
+    cwd?: string,
   ) => Promise<Result<RouteScan, string> | undefined>;
   dispatchWarning: () => Promise<WarningRead>;
   storage: () => Promise<Result<DiskEntry[], string>>;
@@ -259,8 +260,8 @@ const cachedStorage: Sources["storage"] = async () => {
     ? err(cached.value)
     : ok(cached.entries.map(diskEntryFromCache));
 };
-const cachedRoutes: Sources["routes"] = async (sessionId) => {
-  return ok(await agxRouteRunsAsync(process.env, sessionId));
+const cachedRoutes: Sources["routes"] = async (sessionId, cwd) => {
+  return ok(await agxRouteRunsAsync(process.env, sessionId, false, cwd));
 };
 const DEFAULT_SOURCES: Sources = {
   identity: identityFacts,
@@ -442,7 +443,7 @@ export async function buildDataframe(
       () =>
         process.env.STATUSLINE_AGX_FORCE_TIMEOUT === "1"
           ? new Promise<Result<RouteScan, string> | undefined>(() => {})
-          : sources.routes(sid),
+          : sources.routes(sid, cwd),
       (routes) => publish({ routes }, ["agx"]),
     ),
     bounded(

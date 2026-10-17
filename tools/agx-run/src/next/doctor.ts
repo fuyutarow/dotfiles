@@ -1,4 +1,4 @@
-import { foldedRuns } from "./store.ts";
+import { foldedRuns, publishCurrentRuns } from "./store.ts";
 
 const clean = (value: string): string => value.replaceAll(/[\t\r\n]/gu, " ");
 
@@ -10,6 +10,7 @@ export async function doctor(): Promise<number> {
     if (finding !== undefined) findings.push(finding);
   }
 
+  await publishCurrentRuns();
   if (findings.length > 0) process.stdout.write(`${findings.join("\n")}\n`);
   if (process.env.AGX_DOCTOR_QUIET !== "1")
     process.stderr.write(`agx-run doctor: ${findings.length} finding(s)\n`);

@@ -8,7 +8,12 @@ import { writeUsageSnapshot } from "../../../statusline/src/usage-snapshot.ts";
 import { ROUTING_OBJECTIVE } from "../../../../agents/models/roster.ts";
 import { readRouteUsage } from "../../src/next/usage.ts";
 import { route } from "../../src/next/route.ts";
-import { append, events, now } from "../../src/next/store.ts";
+import {
+  append,
+  events,
+  now,
+  flushRunPublications,
+} from "../../src/next/store.ts";
 import { parseNextTicket } from "../../src/next/ticket.ts";
 import { prepareTicketRepo } from "../ticket-repo.ts";
 
@@ -154,6 +159,7 @@ function appendStarted(row: string) {
 }
 
 afterEach(async () => {
+  await flushRunPublications();
   if (priorRoster === undefined) delete process.env.DISPATCH_ROSTER_PATH;
   else process.env.DISPATCH_ROSTER_PATH = priorRoster;
   for (const server of servers.splice(0)) await server.stop(true);

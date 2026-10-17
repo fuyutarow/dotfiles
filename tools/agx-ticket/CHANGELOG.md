@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 — 2026-10-17
+
+- Limit recorded outside-home findings to actionable runs and detect present files outside every ticket home.
+
 ## 0.1.4 — 2026-10-17
 
 - Reject nonconforming ticket slugs with a hyphenated tkt new suggestion

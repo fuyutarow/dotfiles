@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.0 — 2026-10-17
+
+- Read owner-published run, workspace and doctor snapshots without refreshing during rendering; scope workspace counts to the current repository and fleet.
+
 ## 0.18.0 — 2026-10-17
 
 - Discover live Claude Code and Codex sessions from the current directory

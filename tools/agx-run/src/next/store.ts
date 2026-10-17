@@ -12,7 +12,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { mkdir, open, stat as recordStat } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  rename,
+  writeFile,
+  stat as recordStat,
+} from "node:fs/promises";
 import { dlopen, FFIType } from "bun:ffi";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -26,6 +32,7 @@ import { lossEvidence, Lease, StopSignal } from "./lease.ts";
 import { RunSchema, type FoldedRun, type ListedRun } from "./run-state.ts";
 export type { ListedRun } from "./run-state.ts";
 import { VerifyResult } from "./verify.ts";
+import { runningSummary, listingRows } from "./listing.ts";
 import { runHealth } from "./health.ts";
 
 const PickAuditSchema = z.object({
@@ -103,19 +110,24 @@ export type NextEvent = z.output<typeof EventSchema>;
 
 export const stateDir = (): string =>
   resolve(
-    process.env.AGX_NEXT_STATE_DIR ??
-      process.env.AGX_STATE_DIR ??
+    [process.env.AGX_NEXT_STATE_DIR, process.env.AGX_STATE_DIR].find(
+      (value) => value !== undefined && value !== "",
+    ) ??
       join(
-        process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
+        (process.env.XDG_STATE_HOME === ""
+          ? undefined
+          : process.env.XDG_STATE_HOME) ?? join(homedir(), ".local", "state"),
         "agx-next",
       ),
   );
-export const recordPath = (): string => join(stateDir(), "records.jsonl");
+export const recordPath = (root = stateDir()): string =>
+  join(root, "records.jsonl");
 export const now = (): string => Temporal.Now.instant().toString();
 
 /** The file is only a stable inode; ownership lives in the kernel, never in its contents. */
 export async function acquireWorkspaceLock(
   workspace: string,
+  root = stateDir(),
 ): Promise<
   { ok: true; release: () => Promise<void> } | { ok: false; error: string }
 > {
@@ -126,7 +138,7 @@ export async function acquireWorkspaceLock(
   )();
   if (library.isErr())
     return { ok: false, error: `cannot load flock: ${String(library.error)}` };
-  const directory = join(stateDir(), "locks");
+  const directory = join(root, "locks");
   const key = createHash("sha256").update(resolve(workspace)).digest("hex");
   const opened = await fromPromise(
     mkdir(directory, { recursive: true }).then(() =>
@@ -177,10 +189,12 @@ export function append(event: z.input<typeof EventSchema>): void {
     encoding: "utf8",
     flag: "a",
   });
+  const root = stateDir();
+  schedulePublication(root);
 }
 
-export function events(): NextEvent[] {
-  const path = recordPath();
+export function events(root = stateDir()): NextEvent[] {
+  const path = recordPath(root);
   if (!existsSync(path)) return [];
   const text = readFileSync(path, "utf8");
   const lines = text.split("\n");
@@ -555,8 +569,8 @@ export async function fullFoldedRuns() {
 }
 
 /** Read only bytes after the last complete line folded into the snapshot. */
-export async function foldedRuns() {
-  const path = recordPath();
+export async function foldedRuns(root = stateDir()) {
+  const path = recordPath(root);
   if (!existsSync(path)) return [];
   const fd = openSync(path, "r");
   const stat = fstatSync(fd);
@@ -618,18 +632,22 @@ export async function foldedRuns() {
     offset: offset + complete,
     runs: [...runs.values()],
   });
-  return liveRuns(runs, stat);
+  return liveRuns(runs, stat, root);
 }
 
 const foldCache = new Map<string, z.output<typeof SnapshotSchema>>();
 
 function withHealth(run: ListedRun, legacy: boolean): ListedRun {
-  return Object.assign(run, { health: runHealth(run, legacy) ?? null });
+  return Object.assign(run, {
+    health: runHealth(run, legacy) ?? null,
+    phase: run.state === "running" ? "working" : undefined,
+  });
 }
 
 async function liveRuns(
   runs: Map<string, FoldedRun>,
   before: { size: number; ino: number; dev: number } | null,
+  root = stateDir(),
 ): Promise<ListedRun[]> {
   const listed: ListedRun[] = [];
   const losses = new Set<string>();
@@ -706,7 +724,7 @@ async function liveRuns(
     }
   }
   if (losses.size === 0) return listed;
-  const after = await recordStat(recordPath()).catch(() => null);
+  const after = await recordStat(recordPath(root)).catch(() => null);
   if (
     before !== null &&
     after?.size === before.size &&
@@ -718,12 +736,85 @@ async function liveRuns(
   // append ended and exit after our initial replay. Only infer loss after reading
   // the log again *after* observing death; never persist that inference in cache.
   const latest = new Map<string, FoldedRun>();
-  foldInto(latest, events());
+  foldInto(latest, events(root));
   const completed = new Map(
     [...latest].filter(([id, run]) => losses.has(id) && run.state === "ended"),
   );
   const recovered = new Map(
-    (await liveRuns(completed, after)).map((run) => [run.id, run]),
+    (await liveRuns(completed, after, root)).map((run) => [run.id, run]),
   );
   return listed.map((run) => recovered.get(run.id) ?? run);
+}
+
+// Serialize publications across processes using the same kernel-owned lock discipline as runs.
+const publications = new Map<string, Promise<void>>();
+const generations = new Map<string, number>();
+export const flushRunPublications = async () => {
+  await Promise.all(publications.values());
+};
+function schedulePublication(root: string): void {
+  generations.set(root, (generations.get(root) ?? 0) + 1);
+  if (publications.has(root)) return;
+  const pending = (async () => {
+    let seen: number | undefined;
+    do {
+      seen = generations.get(root);
+      await publishCurrentRuns(root);
+    } while (seen !== generations.get(root));
+    publications.delete(root);
+    generations.delete(root);
+  })().catch((error: unknown) => {
+    publications.delete(root);
+    generations.delete(root);
+    process.stderr.write(
+      `agx: snapshot publication failed: ${String(error)}\n`,
+    );
+  });
+  publications.set(root, pending);
+}
+export async function publishCurrentRuns(root = stateDir()): Promise<void> {
+  const path = join(root, "current-runs.json");
+  const deadline = performance.now() + 5000;
+  let lock = await acquireWorkspaceLock(path, root);
+  while (!lock.ok && performance.now() < deadline) {
+    await Bun.sleep(5);
+    lock = await acquireWorkspaceLock(path, root);
+  }
+  if (!lock.ok) {
+    process.stderr.write(
+      "agx: cannot publish current runs: " + lock.error + "\n",
+    );
+    return;
+  }
+  const held = lock;
+  const result = await fromPromise(
+    (async () => {
+      const runs = await foldedRuns(root);
+      const output = JSON.stringify({
+        runs: listingRows(
+          runs.filter(
+            (run) => run.state === "running" || run.health === "orphaned",
+          ),
+        ),
+        summary: runningSummary(runs),
+      });
+      const temp = path + "." + crypto.randomUUID() + ".tmp";
+      await writeFile(
+        temp,
+        JSON.stringify({
+          output,
+          capturedAt: Temporal.Now.instant().epochMilliseconds,
+          exit: 0,
+        }),
+        { mode: 0o600 },
+      );
+      await rename(temp, path);
+    })(),
+    String,
+  );
+  await held.release();
+  if (result.isErr())
+    process.stderr.write(
+      "agx: cannot publish current runs: " + result.error + "\n",
+    );
 }

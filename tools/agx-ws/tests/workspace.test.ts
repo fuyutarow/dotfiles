@@ -38,6 +38,7 @@ const baseEnv = (
   HOME: home,
   XDG_STATE_HOME: join(home, "state"),
   AGX_STATE_DIR: join(home, "state/agx"),
+  AGX_NEXT_STATE_DIR: "",
   XDG_CONFIG_HOME: join(scratch, "config"),
   XDG_DATA_HOME: join(home, "data"),
   XDG_CACHE_HOME: join(scratch, "cache"),
@@ -629,15 +630,28 @@ describe("ws add", () => {
     expect((await jj(["workspace", "list"], path)).out).toContain("ws_alpha");
   });
 
-  test("writes no state file: only the workspace directory appears", async () => {
-    const path = await repo();
+  test("writes owner verdict state outside the repository and workspace directory", async () => {
+    const path = await repo('trunk = "main"\n');
     const before = listing(join(path, ".."));
-    expect((await ws(["add", "s1"], path)).code).toBe(0);
+    const added = await ws(["add", "s1"], path);
+    expect(added.code, added.err).toBe(0);
     expect(listing(join(path, "..", "proj.ws"))).toEqual(["ws_s1"]);
     expect(
       listing(join(path, "..")).filter((n) => !before.includes(n)),
     ).toEqual(["proj.ws"]);
-    expect(listing(home).filter((n) => n !== ".bun")).toEqual([]);
+    expect(
+      await Bun.file(join(home, "state/agx/workspace-verdicts.json")).exists(),
+      added.err,
+    ).toBe(true);
+    const observation = jsonOf(
+      z.object({ fleetComplete: z.boolean() }),
+    ).safeParse(
+      await Bun.file(join(home, "state/agx/workspace-verdicts.json")).text(),
+    );
+    expect(observation).toMatchObject({
+      success: true,
+      data: { fleetComplete: false },
+    });
   });
 
   test("a failing readiness command is loud, non-zero, and leaves no workspace", async () => {
@@ -971,6 +985,27 @@ describe("WS-GC-JJ-LIST", () => {
       .split("\n")
       .map((line) => line.split("\t"));
     expect(rows).toHaveLength(6);
+    const machine = await ws(["gc", "--dry-run", "--legacy", "--json"], path);
+    expect(machine.code, machine.err).toBe(0);
+    expect(
+      jsonOf(
+        z.object({
+          counts: z.object({
+            total: z.number(),
+            unlanded: z.number(),
+            collectable: z.number(),
+            legacy: z.number(),
+          }),
+          complete: z.boolean(),
+        }),
+      ).safeParse(machine.out),
+    ).toMatchObject({
+      success: true,
+      data: {
+        counts: { total: 6, unlanded: 2, collectable: 3, legacy: 5 },
+        complete: true,
+      },
+    });
     expect(
       Object.fromEntries(
         rows.map(([dir, kind, verdict]) => [dir, [kind, verdict]]),
@@ -1563,30 +1598,24 @@ describe("gc integration branches", () => {
     if (!parsed.success) return;
     expect(parsed.data.value.failed).toEqual([]);
     expect(parsed.data.value.lines).toHaveLength(3);
-    const summaryModule = join(
-      import.meta.dir,
-      "../../statusline/src/agx-snapshot.ts",
-    );
-    const summary = await run(
-      [
-        process.execPath,
-        "--eval",
-        `import {workspaceCounts} from ${JSON.stringify(summaryModule)};
-        console.log(JSON.stringify(workspaceCounts(${JSON.stringify(parsed.data.value.lines.join("\n"))}, 0)));`,
-      ],
-      dotfiles,
-      baseEnv({ AGX_DISPATCHER_SESSION: "", CLAUDE_CODE_SESSION_ID: "" }),
-    );
-    expect(summary.code, summary.err).toBe(0);
-    expect(summary.out.trim()).toBe(
-      JSON.stringify({
-        total: 3,
-        unlanded: 0,
-        collectable: 3,
-        legacy: 0,
-        capturedAt: 0,
+    const counts = jsonOf(
+      z.object({
+        value: z.object({
+          counts: z.object({
+            total: z.number(),
+            unlanded: z.number(),
+            collectable: z.number(),
+            legacy: z.number(),
+          }),
+        }),
       }),
-    );
+    ).safeParse(result.out);
+    expect(counts).toMatchObject({
+      success: true,
+      data: {
+        value: { counts: { total: 3, unlanded: 0, collectable: 3, legacy: 0 } },
+      },
+    });
     for (const path of [dotfiles, consumer, pending]) {
       expect(
         parsed.data.value.lines.some((line) =>

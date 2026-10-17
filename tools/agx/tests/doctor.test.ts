@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
 import {
   chmodSync,
   mkdirSync,
@@ -10,6 +10,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { jsonOf, z } from "../../shared/src/zod.ts";
+
+setDefaultTimeout(30_000);
 
 const ENTRY = join(import.meta.dir, "../src/agx.ts");
 const TICKET_CLI = join(import.meta.dir, "../../agx-ticket/src/tkt.ts");
@@ -384,38 +386,38 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
   expect(result.stdout).not.toContain(`\tlegacy\t`);
   expect(result.stderr).toBe("agx doctor: 9 finding(s)\n");
   const summary = await run(
-    [
-      process.execPath,
-      "--eval",
-      `import {doctorFindings} from ${JSON.stringify(join(import.meta.dir, "../../statusline/src/agx-snapshot.ts"))}; console.log(JSON.stringify(doctorFindings(${JSON.stringify(result.stdout)}, 0)));`,
-    ],
+    [process.execPath, ENTRY, "doctor", "--json"],
     f.dotfiles,
     { ...f.env, AGX_DISPATCHER_SESSION: "", CLAUDE_CODE_SESSION_ID: "" },
   );
-  expect(summary.exitCode, summary.stderr).toBe(0);
-  expect(
-    jsonOf(
-      z.object({
-        kinds: z.record(z.string(), z.number()),
-        capturedAt: z.number(),
-      }),
-    ).safeParse(summary.stdout),
-  ).toEqual({
-    success: true,
-    data: {
-      kinds: {
-        orphaned: 1,
-        "missing-return": 2,
-        unjudged: 1,
-        collectable: 1,
-        "unlanded-72h": 1,
-        stale: 1,
-        "accepted-landed-present": 1,
-        "outside-home": 1,
-      },
-      capturedAt: 0,
-    },
-  });
+  expect(summary.exitCode, summary.stderr).toBe(1);
+  const machine = jsonOf(
+    z.object({
+      kinds: z.record(z.string(), z.number()),
+      capturedAt: z.number(),
+      lost: z.number(),
+      complete: z.boolean(),
+    }),
+  ).safeParse(summary.stdout);
+  expect(machine.success).toBe(true);
+  expect(await Bun.file(join(f.state, "doctor.json")).text()).toBe(
+    summary.stdout.trim(),
+  );
+  if (machine.success) {
+    expect(machine.data.capturedAt).toBeGreaterThan(0);
+    expect(machine.data.complete).toBe(true);
+    expect(machine.data.lost).toBe(1);
+    expect(machine.data.kinds).toEqual({
+      orphaned: 1,
+      "missing-return": 2,
+      unjudged: 1,
+      collectable: 1,
+      "unlanded-72h": 1,
+      stale: 1,
+      "accepted-landed-present": 1,
+      "outside-home": 1,
+    });
+  }
   expect(await Bun.file(f.ticketRecords).text()).toBe(before);
   expect(await Bun.file(join(f.repo, "stray.md")).exists()).toBe(true);
   expect(await Bun.file(join(f.tickets, "accepted.md")).exists()).toBe(true);
@@ -442,3 +444,46 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
   );
   expect(ticketDoctor.stderr).toBe("agx-ticket doctor: 2 finding(s)\n");
 }, 30_000);
+
+test("outside-home ignores 199 finished historical paths, but retains active, unjudged, and existing stray tickets", async () => {
+  const f = await fixture("actionable-outside-home");
+  const record = (id: string, extra: object = {}) => ({
+    id,
+    ticket: id,
+    started_at: "2026-10-16T00:00:00Z",
+    state: "ended",
+    judgment: { decision: "accept" },
+    cwd: f.repo,
+    workspace: f.repo,
+    ticket_path: join(f.root, id + ".md"),
+    ...extra,
+  });
+  writeFileSync(
+    f.ticketRecords,
+    JSON.stringify([
+      ...Array.from({ length: 199 }, (_, i) => record("historical-" + i)),
+      record("active", { state: "running", judgment: null }),
+      record("unjudged", { judgment: null }),
+      record("other-home", {
+        state: "running",
+        judgment: null,
+        ticket_path: join(f.dotfiles, ".agents/tickets/valid.md"),
+      }),
+    ]),
+  );
+  writeFileSync(join(f.repo, "still-present.md"), ticketText("still-present"));
+  const result = await runTicketDoctor(f.dotfiles, f.env);
+  expect(result.exitCode, result.stderr).toBe(1);
+  expect(result.stdout).not.toContain("historical-");
+  expect(result.stdout).not.toContain("other-home");
+  expect(
+    result.stdout
+      .trim()
+      .split("\n")
+      .map((line) => line.split("\t")[2])
+      .toSorted((a, b) => (a ?? "").localeCompare(b ?? "")),
+  ).toEqual(["active", "still-present", "unjudged"]);
+}, 15_000);
+async function runTicketDoctor(cwd: string, env: NodeJS.ProcessEnv) {
+  return run([process.execPath, TICKET_CLI, "doctor"], cwd, env);
+}

@@ -177,3 +177,17 @@ the actual host readings and real subprocess failure/timeout behavior.
 
 Repository checks: `mise run lint:ts` and `mise run typecheck`. The module map and import list above
 can be checked independently of unrelated concurrent edits elsewhere in this repository.
+
+### Owner-published agx facts
+
+The agx and fleet rows read `current-runs.json`, `workspace-verdicts.json`, and
+`doctor.json` under the agx state directory. Run appends publish current rows and
+session counts; `ws gc` and successful workspace creation/removal publish verdicts;
+`agx doctor` publishes complete findings. Rendering never starts a refresh for
+these rows. Missing observations remain unknown and older observations retain
+both their values and age.
+
+`ws N here · M all` selects the current repository from the workspace owner's
+inventory and labels the fleet total. Counts cover the existing GC inventory,
+excluding workspaces already collected. A partial first observation shows the
+repository count with an unknown fleet total until a complete fleet GC succeeds.

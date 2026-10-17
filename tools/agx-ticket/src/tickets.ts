@@ -248,6 +248,7 @@ const Run = z.looseObject({
   workspace: z.string(),
   workspace_name: z.string().optional(),
   end_commit: z.string().nullable().optional(),
+  ticket_path: z.string().optional(),
 });
 type Run = z.output<typeof Run>;
 export type TicketRow = {
@@ -480,6 +481,7 @@ export async function doctor(): Promise<Attempt<string[]>> {
   );
   const findings: string[] = [];
   const seen = new Set<string>();
+  const contexts: (Context & { backing: string })[] = [];
   for (const candidate of repos) {
     const git = await exists(join(candidate, ".git"));
     if (!git.ok || !git.value) continue;
@@ -491,13 +493,61 @@ export async function doctor(): Promise<Attempt<string[]>> {
         : resolve(dirname(dirname(ctx.value.store)));
     if (resolve(ctx.value.root) !== backing || seen.has(backing)) continue;
     seen.add(backing);
+    contexts.push({ ...ctx.value, backing });
     const rows = await list(backing, { quiet: true });
     if (!rows.ok) return rows;
-    findings.push(
-      ...acceptedLandedFindings(backing, rows.value),
-      ...(await outOfHomeFindings(backing, ctx.value.directory)),
-    );
+    findings.push(...acceptedLandedFindings(backing, rows.value));
   }
+  const homes = contexts.flatMap((ctx) => [
+    ctx.directory,
+    join(ctx.backing, ".agents/tickets"),
+  ]);
+  const outside = new Map<string, { backing: string; directory: string }>();
+  const first = contexts[0];
+  const records =
+    first === undefined
+      ? good("[]")
+      : await command(["agx", "ls", "--json", "--all"], first.backing, true);
+  if (!records.ok) return records;
+  const runs = jsonOf(z.array(Run)).safeParse(records.value);
+  if (!runs.success) return bad("invalid agx ls --json");
+  const actionable = runs.data.filter(
+    (run) =>
+      run.ticket_path !== undefined &&
+      (run.state === "running" ||
+        run.judgment === undefined ||
+        run.judgment === null),
+  );
+  for (const run of actionable) {
+    const path = resolve(run.cwd, run.ticket_path ?? run.ticket);
+    const membership = await Promise.all(
+      contexts.map((candidate) => belongs(run, candidate)),
+    );
+    const ctx = contexts.find(
+      (_candidate, index) => membership[index] === true,
+    );
+    if (
+      ctx !== undefined &&
+      !homes.some((ticketHome) => inside(path, ticketHome))
+    )
+      outside.set(path, ctx);
+  }
+  for (const ctx of contexts) {
+    for (const path of await outOfHomePaths(ctx.backing, homes))
+      outside.set(path, ctx);
+  }
+  for (const [path, { backing, directory }] of outside)
+    findings.push(
+      [
+        "agx-ticket",
+        backing,
+        basename(path, ".md"),
+        "outside-home",
+        `mv ${path} ${directory}/`,
+      ]
+        .map((value) => doctorClean(value))
+        .join("\t"),
+    );
   return good(findings);
 }
 
@@ -517,9 +567,9 @@ function acceptedLandedFindings(backing: string, rows: TicketRow[]): string[] {
     );
 }
 
-async function outOfHomeFindings(
+async function outOfHomePaths(
   backing: string,
-  directory: string,
+  homes: string[],
 ): Promise<string[]> {
   const findings: string[] = [];
   const ignored = new Set([".git", ".jj", "node_modules", ".ws"]);
@@ -530,23 +580,9 @@ async function outOfHomeFindings(
   })) {
     if (relativePath.split("/").some((part) => ignored.has(part))) continue;
     const path = resolve(backing, relativePath);
-    if (
-      inside(path, directory) ||
-      inside(path, join(backing, ".agents/tickets"))
-    )
-      continue;
+    if (homes.some((home) => inside(path, home))) continue;
     if (!(await isTicketFile(path))) continue;
-    findings.push(
-      [
-        "agx-ticket",
-        backing,
-        basename(path, ".md"),
-        "outside-home",
-        `mv ${path} ${directory}/`,
-      ]
-        .map((value) => doctorClean(value))
-        .join("\t"),
-    );
+    findings.push(path);
   }
   return findings;
 }

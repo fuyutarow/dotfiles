@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   append,
+  flushRunPublications,
   foldedRuns,
   fullFoldedRuns,
   recordPath,
@@ -14,7 +15,8 @@ import { list } from "../../src/next/run.ts";
 
 const previous = process.env.AGX_NEXT_STATE_DIR;
 const roots: string[] = [];
-afterEach(() => {
+afterEach(async () => {
+  await flushRunPublications();
   if (previous === undefined) delete process.env.AGX_NEXT_STATE_DIR;
   else process.env.AGX_NEXT_STATE_DIR = previous;
   for (const root of roots.splice(0))
@@ -117,7 +119,7 @@ test("seeded random append batches equal a full fold after every batch", async (
     }
     expect(await foldedRuns()).toEqual(await fullFoldedRuns());
   }
-});
+}, 15_000);
 
 test("warm fold reads exactly appended record bytes and zero for unchanged history", async () => {
   fixture();
@@ -225,6 +227,7 @@ test("unwritable snapshot falls back safely and malformed complete tail is rejec
   append(started("run"));
   fs.mkdirSync(join(root, "records.fold.json"));
   expect(await foldedRuns()).toEqual(await fullFoldedRuns());
+  await flushRunPublications();
   expect(fs.readdirSync(root).some((name) => name.endsWith(".tmp"))).toBe(
     false,
   );

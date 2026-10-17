@@ -1,7 +1,5 @@
-// Run-workspace lifecycle: add, rm, gc. The tool keeps no state of its own. The workspace
-// directory is the only artifact; what it must know it reads from the jj store (`jj workspace
-// list`, revsets), from the repo's `.ws.toml`, and from `agx ls --json`. The one transient file
-// is the per-store lock directory, removed on release.
+// Run-workspace lifecycle: add, rm, gc. Facts come from jj, .ws.toml and agx.
+// Successful observations publish the owner-written verdict inventory for small-file readers.
 import {
   accessSync,
   constants,
@@ -12,6 +10,8 @@ import {
   realpathSync,
 } from "node:fs";
 import {
+  rename,
+  writeFile,
   lstat,
   mkdir,
   readdir,
@@ -505,55 +505,73 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
     if (rev.value.split("\n").filter(Boolean).length !== 1)
       return bad(`--rev ${options.rev} must name exactly one commit`);
   }
-  return withLock(repo.value, `ws add ${options.slug}`, async () => {
-    const names = await workspaceNames(repo.value);
-    if (!names.ok) return names;
-    const present = existsSync(dir);
-    if (present) {
-      if (options.reuse === true && names.value.includes(name))
-        return good(dir);
-      return bad(`${dir} already exists`);
-    }
-    if (names.value.includes(name))
-      return bad(`jj workspace ${name} is already registered`);
-    const source = jjWorkspace(options.repo);
-    if (!source.ok) return source;
-    for (const root of new Set([source.value.root, repo.value.backing])) {
-      const current = await updateStale(root);
-      if (!current.ok) return current;
-    }
-    mkdirSync(repo.value.wsRoot, { recursive: true });
-    const made = await jjOut(
-      [
-        "workspace",
-        "add",
-        "--name",
-        name,
-        ...(options.rev === undefined ? [] : ["-r", options.rev]),
-        dir,
-      ],
-      repo.value.backing,
-      false,
-    );
-    if (!made.ok) return made;
-    const ready = await readyWorkspace(dir, cfg.value, options.json === true);
-    if (!ready.ok) {
-      const undone = await forgetAndBury(
-        repo.value,
-        graveyard.value,
-        name,
-        dir,
+  let created = false;
+  const result = await withLock(
+    repo.value,
+    `ws add ${options.slug}`,
+    async () => {
+      const names = await workspaceNames(repo.value);
+      if (!names.ok) return names;
+      const present = existsSync(dir);
+      if (present) {
+        if (options.reuse === true && names.value.includes(name))
+          return good(dir);
+        return bad(`${dir} already exists`);
+      }
+      if (names.value.includes(name))
+        return bad(`jj workspace ${name} is already registered`);
+      const source = jjWorkspace(options.repo);
+      if (!source.ok) return source;
+      for (const root of new Set([source.value.root, repo.value.backing])) {
+        const current = await updateStale(root);
+        if (!current.ok) return current;
+      }
+      mkdirSync(repo.value.wsRoot, { recursive: true });
+      const made = await jjOut(
+        [
+          "workspace",
+          "add",
+          "--name",
+          name,
+          ...(options.rev === undefined ? [] : ["-r", options.rev]),
+          dir,
+        ],
+        repo.value.backing,
+        false,
       );
-      return bad(
-        `${msg(ready)}; ${
-          undone.ok
-            ? "the new workspace was removed"
-            : `rollback also failed: ${msg(undone)} (remove ${dir} by hand)`
-        }`,
+      if (!made.ok) return made;
+      const ready = await readyWorkspace(dir, cfg.value, options.json === true);
+      if (!ready.ok) {
+        const undone = await forgetAndBury(
+          repo.value,
+          graveyard.value,
+          name,
+          dir,
+        );
+        return bad(
+          `${msg(ready)}; ${
+            undone.ok
+              ? "the new workspace was removed"
+              : `rollback also failed: ${msg(undone)} (remove ${dir} by hand)`
+          }`,
+        );
+      }
+      created = true;
+      return good(dir);
+    },
+  );
+  if (result.ok && created) {
+    const observation = await gc({
+      repo: options.repo,
+      dryRun: true,
+      includeUnrecorded: false,
+    });
+    if (!observation.ok)
+      process.stderr.write(
+        `ws: verdict snapshot unchanged: ${msg(observation)}\n`,
       );
-    }
-    return good(dir);
-  });
+  }
+  return result;
 }
 
 /** Repair only the named workspace: no readiness commands or sparse changes. */
@@ -603,29 +621,36 @@ export async function remove(options: {
   if (protectedWorkspace(repo.value, cfg.value, { name: name.value, dir }))
     return bad(`${dir} is kept by .ws.toml`);
   if (!existsSync(dir)) return bad(`${dir} does not exist`);
-  return withLock(repo.value, `ws rm ${options.slug}`, async () => {
-    const names = await workspaceNames(repo.value);
-    if (!names.ok) return names;
-    if (!names.value.includes(name.value))
-      return bad(
-        `${name.value} is not a registered jj workspace of ${repo.value.backing}`,
+  const result = await withLock(
+    repo.value,
+    `ws rm ${options.slug}`,
+    async () => {
+      const names = await workspaceNames(repo.value);
+      if (!names.ok) return names;
+      if (!names.value.includes(name.value))
+        return bad(
+          `${name.value} is not a registered jj workspace of ${repo.value.backing}`,
+        );
+      const occupied = busy(realOr(dir));
+      if (occupied !== undefined) return bad(occupied);
+      const work = await unlanded(repo.value, cfg.value, dir, name.value, []);
+      if (!work.ok) return work;
+      if (work.value.length > 0)
+        return bad(
+          `${dir} has unlanded changes; land or abandon them first:\n${work.value.map((l) => `  ${l}`).join("\n")}`,
+        );
+      const done = await forgetAndBury(
+        repo.value,
+        graveyard.value,
+        name.value,
+        dir,
       );
-    const occupied = busy(realOr(dir));
-    if (occupied !== undefined) return bad(occupied);
-    const work = await unlanded(repo.value, cfg.value, dir, name.value, []);
-    if (!work.ok) return work;
-    if (work.value.length > 0)
-      return bad(
-        `${dir} has unlanded changes; land or abandon them first:\n${work.value.map((l) => `  ${l}`).join("\n")}`,
-      );
-    const done = await forgetAndBury(
-      repo.value,
-      graveyard.value,
-      name.value,
-      dir,
-    );
-    return done.ok ? good(dir) : done;
-  });
+      return done.ok ? good(dir) : done;
+    },
+  );
+  if (result.ok)
+    await gc({ repo: options.repo, dryRun: true, includeUnrecorded: false });
+  return result;
 }
 
 const RunRecord = z.looseObject({
@@ -1682,10 +1707,27 @@ async function classify(
   );
 }
 
+function gcCounts(lines: string[]) {
+  const rows = lines
+    .map((line) => line.split("\t"))
+    .filter((row) => row[2] !== "collected");
+  return {
+    total: rows.length,
+    unlanded: rows.filter((row) => row[2] === "unlanded").length,
+    collectable: rows.filter((row) =>
+      ["empty", "landed", "abandoned"].includes(row[2] ?? ""),
+    ).length,
+    legacy: rows.filter((row) => row[1] === "legacy").length,
+  };
+}
+type GcResult = {
+  lines: string[];
+  failed: string[];
+  counts: ReturnType<typeof gcCounts>;
+};
+
 /** TSV columns: path, kind, verdict, change id, age, reason. Legacy deletion is opt-in. */
-export async function gc(
-  options: GcOptions,
-): Promise<Attempt<{ lines: string[]; failed: string[] }>> {
+export async function gc(options: GcOptions): Promise<Attempt<GcResult>> {
   const resolved = resolveRepo(options.repo);
   if (!resolved.ok) return resolved;
   const repo = resolved.value;
@@ -1746,7 +1788,13 @@ export async function gc(
           .join("\t"),
       );
     }
-    return good({ lines, failed });
+    const result = {
+      lines,
+      failed,
+      counts: gcCounts(lines),
+    };
+    if (failed.length === 0) await publishVerdicts(repo.backing, result);
+    return good(result);
   });
 }
 
@@ -1923,7 +1971,7 @@ export function doctorFindings(rows: DoctorWorkspaceRow[]): string[] {
 export async function gcAll(
   options: Omit<GcOptions, "repo">,
   root = resolve(import.meta.dir, "../../.."),
-): Promise<Attempt<{ lines: string[]; failed: string[] }>> {
+): Promise<Attempt<GcResult>> {
   const roots = await registeredRepoPaths(root);
   if (!roots.ok) return roots;
   const lines: string[] = [];
@@ -1950,5 +1998,97 @@ export async function gcAll(
     lines.push(...done.value.lines);
     failed.push(...done.value.failed);
   }
-  return good({ lines, failed });
+  const result = { lines, failed, counts: gcCounts(lines) };
+  if (failed.length === 0) await publishVerdicts(undefined, result, seen);
+  return good(result);
+}
+
+const Counts = z.object({
+  total: z.number(),
+  unlanded: z.number(),
+  collectable: z.number(),
+  legacy: z.number(),
+});
+const VerdictCache = z.object({
+  fleetComplete: z.boolean().optional(),
+  repos: z.record(
+    z.string(),
+    z.object({
+      lines: z.array(z.string()),
+      counts: Counts,
+      capturedAt: z.number(),
+    }),
+  ),
+});
+/** One fixed, atomic owner output. Per-repo observations retain their own age. */
+async function publishVerdicts(
+  repo: string | undefined,
+  result: GcResult,
+  retained?: Set<string>,
+): Promise<void> {
+  const root =
+    [process.env.AGX_NEXT_STATE_DIR, process.env.AGX_STATE_DIR].find(
+      (value) => value !== undefined && value !== "",
+    ) ??
+    join(
+      (process.env.XDG_STATE_HOME === ""
+        ? undefined
+        : process.env.XDG_STATE_HOME) ??
+        join(process.env.HOME ?? homedir(), ".local/state"),
+      "agx-next",
+    );
+  const path = join(root, "workspace-verdicts.json");
+  await mkdir(root, { recursive: true });
+  const release = await acquire(
+    path + ".lock",
+    {
+      pid: process.pid,
+      host: hostname(),
+      what: "publish workspace verdicts",
+      since: Temporal.Now.instant().toString(),
+    },
+    { pollMs: 5, waitMs: 10_000 },
+  );
+  if (typeof release !== "function") return;
+  const done = await attempt(async () => {
+    const text = await Bun.file(path)
+      .text()
+      .catch(() => "");
+    const parsed = jsonOf(VerdictCache).safeParse(text);
+    const repos = parsed.success ? parsed.data.repos : {};
+    for (const key of Object.keys(repos).filter(
+      (candidate) => retained !== undefined && !retained.has(candidate),
+    ))
+      delete repos[key];
+    if (repo !== undefined)
+      repos[repo] = {
+        lines: result.lines.filter(
+          (line) => line.split("\t")[2] !== "collected",
+        ),
+        counts: result.counts,
+        capturedAt: Temporal.Now.instant().epochMilliseconds,
+      };
+    const entries = Object.values(repos);
+    const lines = entries.flatMap((entry) => entry.lines);
+    const temp = path + "." + crypto.randomUUID() + ".tmp";
+    await writeFile(
+      temp,
+      JSON.stringify({
+        repos,
+        fleetComplete:
+          retained !== undefined ||
+          (parsed.success && parsed.data.fleetComplete === true),
+        rows: lines.map((line) => line.split("\t")),
+        tsv: lines.join("\n"),
+        counts: gcCounts(lines),
+        capturedAt: Math.min(...entries.map((entry) => entry.capturedAt)),
+        complete: true,
+      }),
+      { mode: 0o600 },
+    );
+    await rename(temp, path);
+  });
+  release();
+  if (!done.ok)
+    process.stderr.write("ws: cannot publish verdicts: " + msg(done) + "\n");
 }

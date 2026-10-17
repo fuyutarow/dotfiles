@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { setDefaultTimeout } from "bun:test";
 import { decodedJson } from "./decode.ts";
-import { cleanupTempDirs, tempHome } from "./helpers.ts";
+import { cleanupTempDirs, tempHome, coreSnapshot } from "./helpers.ts";
 import { z } from "../src/zod.ts";
 import { agxSnapshotPath } from "../src/agx-snapshot.ts";
 
@@ -473,11 +473,7 @@ async function expectGolden(
     mkdirSync(dirname(snapshotPath), { recursive: true });
     writeFileSync(
       snapshotPath,
-      JSON.stringify({
-        output: agxRows.stdout.toString(),
-        capturedAt: NOW,
-        exit: 0,
-      }),
+      JSON.stringify(coreSnapshot(agxRows.stdout.toString(), NOW)),
     );
     expect(existsSync(snapshotPath)).toBe(true);
     const run = async (entry: string) => {

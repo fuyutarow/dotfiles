@@ -13,6 +13,7 @@ import { parseNextTicket, type NextTicket } from "./ticket.ts";
 import { ticketContext, ticketPlacement } from "./ticket-home.ts";
 import {
   append,
+  flushRunPublications,
   acquireWorkspaceLock,
   events,
   foldedRuns,
@@ -412,7 +413,11 @@ export async function run(flags: Flags): Promise<number> {
   process.on("exit", temp.remove);
   let started = false;
   let ended = false;
-  const stop = (signal: StopSignal, code: number): never => {
+  let stopTask: Promise<never> | undefined;
+  let killWorker: (() => void) | undefined;
+  const stop = (signal: StopSignal, code: number): void => {
+    if (stopTask !== undefined) return;
+    killWorker?.();
     if (started && !ended) {
       ended = true;
       append({
@@ -427,7 +432,10 @@ export async function run(flags: Flags): Promise<number> {
         verify: [],
       });
     }
-    process.exit(code);
+    stopTask = (async () => {
+      await flushRunPublications();
+      process.exit(code);
+    })();
   };
   for (const [signal, code] of [
     ["SIGINT", 130],
@@ -493,6 +501,13 @@ export async function run(flags: Flags): Promise<number> {
   await refuseRunningWorkspace(cwd);
   const unit = binding?.unit ?? actualUnit ?? `agt_${ticketName}`;
   const workerName = unit;
+  const startedLease = await leaseFor(
+    process.pid,
+    process.env.INVOCATION_ID !== undefined && process.env.INVOCATION_ID !== ""
+      ? `${unit}.service`
+      : null,
+  );
+  if (stopTask !== undefined) await stopTask;
   append({
     kind: "started",
     id,
@@ -515,13 +530,7 @@ export async function run(flags: Flags): Promise<number> {
     ticket_orig_path: ticketPath,
     ticket_sha256,
     pid: process.pid,
-    lease: await leaseFor(
-      process.pid,
-      process.env.INVOCATION_ID !== undefined &&
-        process.env.INVOCATION_ID !== ""
-        ? `${unit}.service`
-        : null,
-    ),
+    lease: startedLease,
   });
 
   started = true;
@@ -607,6 +616,7 @@ export async function run(flags: Flags): Promise<number> {
   };
   const before = workspaceSnapshot(cwd, ticket.writes);
   const runEnv = verificationEnvironment(cwd, process.env, temp.env);
+  if (stopTask !== undefined) await stopTask;
   const child = Bun.spawn([process.execPath, ...workerArgs()], {
     cwd,
     stdin: "ignore",
@@ -618,6 +628,9 @@ export async function run(flags: Flags): Promise<number> {
     },
     timeout: (ticket.timeout_s ?? 600) * 1000,
   });
+  killWorker = () => {
+    child.kill();
+  };
   process.on("exit", () => {
     child.kill();
   });
@@ -642,6 +655,7 @@ export async function run(flags: Flags): Promise<number> {
   const exit = await child.exited;
   clearInterval(progressWatcher);
   const output = await outputPromise;
+  if (stopTask !== undefined) await stopTask;
   const after = workspaceSnapshot(cwd, ticket.writes);
   const changed =
     before.isOk() && after.isOk()
@@ -708,6 +722,7 @@ export async function run(flags: Flags): Promise<number> {
     if (interim?.success === true)
       persistInterim(id, progressPath, interim.data.last_message);
   }
+  if (stopTask !== undefined) await stopTask;
   append({
     kind: "ended",
     id,
@@ -770,6 +785,9 @@ const selectedRuns = (
   };
 };
 
+export { runningSummary } from "./listing.ts";
+import { runningSummary, listingRows } from "./listing.ts";
+
 export async function list(flags: Flags): Promise<number> {
   const running = flags.running === true || value(flags, "running") === "true";
   const rows = (await foldedRuns()).filter(
@@ -792,9 +810,17 @@ export async function list(flags: Flags): Promise<number> {
         `${entry.id} ${entry.state} tkt_${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"} outcome=${entry.outcome ?? "-"}`,
     )
     .join("\n");
-  if (asJson)
-    output = `${JSON.stringify(selector === undefined ? rows : visible)}\n`;
-  else if (selector === undefined && visible.length > 0) {
+  if (asJson) {
+    const selected = selector === undefined ? rows : visible;
+    let payload: unknown = listingRows(selected);
+    if (flags.summary === true) {
+      payload = {
+        runs: listingRows(selected),
+        summary: runningSummary(selected),
+      };
+    }
+    output = JSON.stringify(payload) + "\n";
+  } else if (selector === undefined && visible.length > 0) {
     output += "\n";
     const older = rows.length - visible.length;
     if (older > 0) output += `… ${older} older (agx ls --all)\n`;

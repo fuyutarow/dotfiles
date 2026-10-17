@@ -194,6 +194,10 @@ const gcCommand = command(
     },
     flags: {
       dryRun: { type: Boolean, description: "report only; remove nothing" },
+      json: {
+        type: Boolean,
+        description: "emit rows and authoritative verdict counts",
+      },
       legacy: {
         type: Boolean,
         description: "also forget and rip empty or landed legacy workspaces",
@@ -233,7 +237,17 @@ const gcCommand = command(
       fail(done.error);
       return;
     }
-    for (const line of done.value.lines) process.stdout.write(`${line}\n`);
+    if (argv.flags.json === true) {
+      const rows = done.value.lines.map((line) => line.split("\t"));
+      process.stdout.write(
+        JSON.stringify({
+          rows,
+          counts: done.value.counts,
+          complete: done.value.failed.length === 0,
+        }) + "\n",
+      );
+    } else
+      for (const line of done.value.lines) process.stdout.write(`${line}\n`);
     if (done.value.failed.length > 0)
       fail(`could not collect: ${done.value.failed.join(", ")}`);
   },

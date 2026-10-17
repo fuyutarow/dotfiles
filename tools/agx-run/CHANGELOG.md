@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.3.0 — 2026-10-17
+
+- Add optional machine summaries of running workers by dispatcher session.
+- Publish bounded current run snapshots after record appends so ended workers leave statusline immediately
+
 ## 5.2.7 — 2026-10-17
 
 - Resolve ticket repositories from ticket paths before worker directories and skip invalid repository markers with path-aware diagnostics.

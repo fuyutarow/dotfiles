@@ -18,7 +18,7 @@ import { serializeActiveMarker } from "../../shared/src/dispatch-state.ts";
 import { agxJobRunsAsync, agxRouteRunsAsync } from "../src/dispatch-runs.ts";
 import { ProgressReaderSchema } from "../../shared/src/dispatch-state.ts";
 import { decodedJson } from "./decode.ts";
-import { isolatedStatuslineEnv } from "./helpers.ts";
+import { coreSnapshot, isolatedStatuslineEnv } from "./helpers.ts";
 import { jsonOf, z } from "../src/zod.ts";
 import { agxSnapshotPath } from "../src/agx-snapshot.ts";
 import {
@@ -29,12 +29,12 @@ import {
   unreadableMarker,
 } from "../../shared/tests/fixtures/active-markers.ts";
 
-// The statusline Run rows (no "Run:" head; each line starts with its row id): agx's running workers, read from its markers
+// The legacy enriched Run rows (no "Run:" head; each line starts with its row id): agx's running workers, read from its markers
 // (tools/agx-run/src/state.ts). One line per live worker (row, elapsed time, label), the
 // longest-running first; a marker whose process is gone is counted as stale, never hidden; more
 // than RUN_LINES workers say `+N more`; no state dir at all means no row.
 
-const STATUSLINE = join(import.meta.dir, "..", "src", "statusline.ts");
+const STATUSLINE = join(import.meta.dir, "route-render-fixture.ts");
 const scratch = mkdtempSync(join(tmpdir(), "statusline-run-"));
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
@@ -230,11 +230,9 @@ async function render(
   mkdirSync(dirname(snapshotPath), { recursive: true });
   writeFileSync(
     snapshotPath,
-    JSON.stringify({
-      output: agxRows,
-      capturedAt: Temporal.Now.instant().epochMilliseconds,
-      exit: 0,
-    }),
+    JSON.stringify(
+      coreSnapshot(agxRows, Temporal.Now.instant().epochMilliseconds),
+    ),
   );
   const p = Bun.spawn([process.execPath, STATUSLINE], {
     stdin: new Blob([PAYLOAD]),
@@ -260,7 +258,7 @@ async function render(
   return out.replace(ANSI, "");
 }
 
-describe("statusline Run row", () => {
+describe("legacy enriched Run row", () => {
   test("accepts the captured agx 4.5 ls sample including legacy optional fields", async () => {
     const dir = join(scratch, "captured-agx-ls-sample");
     const stateDir = join(dir, "state");
@@ -738,7 +736,7 @@ describe("statusline Run row", () => {
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
     ).toEqual([
-      "workers 0 running (+1 in other sessions) · lost 0 · ws unknown · unlanded unknown · collectable unknown · legacy unknown unknown · anomalies unknown",
+      "workers 0 running (+1 in other sessions) · lost 0 · ws unknown here · unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · ok",
     ]);
     expect(out).not.toContain("private worker");
     expect(out).not.toContain("luna-high");
@@ -779,7 +777,7 @@ describe("statusline Run row", () => {
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
     ).toEqual([
-      "workers 1 running (+3 in other sessions) · lost 3 · ws unknown · unlanded unknown · collectable unknown · legacy unknown unknown · anomalies unknown",
+      "workers 1 running (+3 in other sessions) · lost 3 · ws unknown here · unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · ⚠ orphaned 3",
     ]);
     expect(
       out

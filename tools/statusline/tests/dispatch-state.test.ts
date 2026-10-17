@@ -71,10 +71,24 @@ test("unattributed rows stay dim even with an absent or empty payload session", 
   };
   for (const session of [undefined, "", "owner"]) {
     expect(
-      routeLines([run, { ...run, dispatcherSession: "" }], session),
+      routeLines([run, { ...run, dispatcherSession: "" }], session, 0, {
+        running: 2,
+        here: 0,
+        other: 2,
+        lost: 0,
+        unattributed: 2,
+      }),
     ).toEqual([
       `${ESC}[38;5;167mlost 0${RST} ${DIM}·${RST} ${DIM}unattributed 2${RST}`,
     ]);
   }
-  expect(routeLines([], "owner")).toEqual([`${ESC}[38;5;167mlost 0${RST}`]);
+  expect(
+    routeLines([], "owner", 0, {
+      running: 0,
+      here: 0,
+      other: 0,
+      lost: 0,
+      unattributed: 0,
+    }),
+  ).toEqual([`${ESC}[38;5;167mlost 0${RST}`]);
 });

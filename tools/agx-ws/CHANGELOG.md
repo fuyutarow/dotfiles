@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0 — 2026-10-17
+
+- Expose workspace GC verdict counts as JSON.
+- Publish atomic per-repository workspace verdict inventories from GC and workspace mutations
+
 ## 0.7.1 — 2026-10-17
 
 - Exclude workspaces collectible by the safe unattended gc timer from doctor findings

@@ -4,6 +4,7 @@ import { waitRun } from "./wait.ts";
 import { COMMAND_NAMES } from "./commands.ts";
 import { cli, command } from "cleye";
 import { exitWithError } from "./exit.ts";
+import { flushRunPublications } from "./store.ts";
 import { doctor } from "./doctor.ts";
 import { jev, roster } from "./public.ts";
 import packageJson from "../../package.json" with { type: "json" };
@@ -128,6 +129,11 @@ async function main(): Promise<void> {
         },
         flags: {
           json: { type: Boolean, description: "emit the ls JSON contract" },
+          summary: {
+            type: Boolean,
+            description:
+              "with --json, include running counts by dispatcher session",
+          },
           all: { type: Boolean, description: "show every run" },
           running: { type: Boolean, description: "show only live runs" },
           wait: {
@@ -231,6 +237,7 @@ async function main(): Promise<void> {
       exit = 2;
     }
   }
+  await flushRunPublications();
   process.exitCode = exit;
 }
 

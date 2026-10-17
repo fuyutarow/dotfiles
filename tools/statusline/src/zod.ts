@@ -42,3 +42,6 @@ export const jsonText = z.codec(z.string(), z.unknown(), {
 export function jsonOf<S extends z.ZodType>(schema: S) {
   return jsonText.pipe(schema);
 }
+
+export const recoverInvalid = <T extends z.ZodType>(schema: T) =>
+  schema.optional().catch(undefined);

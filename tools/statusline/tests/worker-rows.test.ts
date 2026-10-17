@@ -89,7 +89,7 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
       .map((event) => JSON.stringify(event))
       .join("\n") + "\n",
   );
-  const listing = await invoke(CLI, "ls", "--json");
+  const listing = await invoke(CLI, "ls", "--json", "--summary");
   expect(listing.exit, listing.stderr).toBe(0);
   const doctor = await invoke(CLI, "doctor");
   expect(doctor.exit).toBe(1);
@@ -105,6 +105,11 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
       output: listing.stdout,
       capturedAt: Temporal.Instant.from(at).epochMilliseconds,
       exit: 0,
+      findings: {
+        kinds: { orphaned: 1 },
+        lost: doctorLost,
+        capturedAt: Temporal.Instant.from(at).epochMilliseconds,
+      },
     }),
   );
   // Run the readers and renderer under the same isolated environment as the CLI.
@@ -115,7 +120,7 @@ test("worker snapshot uses doctor's classification and hides vendor sessions", a
     `
     import { agxRouteRunsAsync, routeLines } from ${JSON.stringify(join(import.meta.dir, "../src/dispatch-runs.ts"))};
     const scan = await agxRouteRunsAsync(process.env, ${JSON.stringify(SESSION)}, false);
-    const lines = routeLines(scan.runs.map(run => ({ ...run, secs: 90 })), ${JSON.stringify(SESSION)}, scan.unreadable);
+    const lines = routeLines(scan.runs.map(run => ({ ...run, secs: 90 })), ${JSON.stringify(SESSION)}, scan.unreadable, scan.fleet);
     process.stdout.write(JSON.stringify({
       lines,
       sessions: scan.runs.filter(run => run.alive).map(run => run.workerSession),

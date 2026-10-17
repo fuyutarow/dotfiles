@@ -489,6 +489,7 @@ describe("agx-next run", () => {
     expect(Object.keys(firstRow).toSorted()).toEqual(
       [
         "ended_at",
+        "elapsed_seconds",
         "started_at",
         "continues",
         "supersedes",

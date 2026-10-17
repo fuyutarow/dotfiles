@@ -2,6 +2,6 @@
 
 exports[`worker snapshot uses doctor's classification and hides vendor sessions 1`] = `
 "lost 1
-terra-high 1m30s $– agt_x@ws_x tkt_old-unit │ working · no event yet
-terra-high 1m30s $– agt_x@ws_x tkt_new-unit │ working · no event yet"
+terra-high 1m30s $– agt_x@ws_x tkt_old-unit │ working
+terra-high 1m30s $– agt_x@ws_x tkt_new-unit │ working"
 `;

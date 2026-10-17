@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { leaseFor } from "../../src/next/lease.ts";
 import {
   append,
+  flushRunPublications,
   events,
   foldedRuns,
   fullFoldedRuns,
@@ -14,6 +15,7 @@ const previousState = process.env.AGX_NEXT_STATE_DIR;
 const previousPath = process.env.PATH;
 const roots: string[] = [];
 afterEach(async () => {
+  await flushRunPublications();
   if (previousState === undefined) delete process.env.AGX_NEXT_STATE_DIR;
   else process.env.AGX_NEXT_STATE_DIR = previousState;
   if (previousPath === undefined) delete process.env.PATH;

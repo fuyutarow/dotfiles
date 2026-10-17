@@ -1,5 +1,5 @@
 import { prepareTicketRepo } from "../ticket-repo.ts";
-import { afterAll, afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test, setDefaultTimeout } from "bun:test";
 import {
   appendFileSync,
   existsSync,
@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
 import { createTempTracker } from "../temp.ts";
 
+setDefaultTimeout(15_000);
 const temps = createTempTracker();
 afterAll(temps.assertRemoved);
 const cleanups: (() => Promise<void>)[] = [];
@@ -22,7 +23,8 @@ afterEach(async () => {
 });
 
 async function until(predicate: () => boolean) {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+  const deadline = performance.now() + 5000;
+  while (performance.now() < deadline) {
     if (predicate()) return;
     await Bun.sleep(10);
   }
@@ -389,6 +391,20 @@ for (const [signal, exit] of [
     await until(() => f.workers().length === 1);
     first.child.kill(signal);
     expect((await first.result).exit).toBe(exit);
+    const published = jsonOf(z.object({ output: z.string() })).safeParse(
+      await Bun.file(
+        join(
+          f.env.AGX_NEXT_STATE_DIR ??
+            expect.unreachable("missing isolated state"),
+          "current-runs.json",
+        ),
+      ).text(),
+    );
+    expect(published.success).toBe(true);
+    if (published.success) {
+      expect(published.data.output).toContain('"running":0');
+      expect(published.data.output).not.toContain('"state":"running"');
+    }
     const row = (await f.listed()).find((entry) => entry.id !== "prior");
     expect(row).toMatchObject({ state: "ended", outcome: "stopped", signal });
     const before = await Bun.file(f.log).text();

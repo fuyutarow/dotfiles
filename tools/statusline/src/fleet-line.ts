@@ -22,6 +22,7 @@ export function fleetLine(
   if (
     workers !== undefined &&
     ws !== undefined &&
+    ws.fleetKnown !== false &&
     findings !== undefined &&
     ages.every((value) => value !== undefined)
   )
@@ -39,15 +40,15 @@ export function fleetLine(
         ([kind, count], index) => `${index === 0 ? "⚠ " : ""}${kind} ${count}`,
       ),
     );
-  const other = workers === undefined ? 0 : workers.running - workers.here;
+  const other = workers === undefined ? 0 : workers.other;
   const workerSummary = `workers ${workers?.here ?? "unknown"} running`;
   return [
     workerSummary + (other > 0 ? ` (+${other} in other sessions)` : ""),
-    `lost ${workers?.lost ?? "unknown"}`,
-    `ws ${ws?.total ?? "unknown"}`,
-    `unlanded ${ws?.unlanded ?? "unknown"}`,
-    `collectable ${ws?.collectable ?? "unknown"}`,
-    `legacy ${ws?.legacy ?? "unknown"} ${freshness}`,
+    `lost ${findings?.lost ?? workers?.lost ?? "unknown"}`,
+    `ws ${ws?.here ?? "unknown"} here · ${ws?.fleetKnown === false ? "unknown" : (ws?.total ?? "unknown")} all`,
+    `unlanded ${ws?.fleetKnown === false ? "unknown" : (ws?.unlanded ?? "unknown")}`,
+    `collectable ${ws?.fleetKnown === false ? "unknown" : (ws?.collectable ?? "unknown")}`,
+    `legacy ${ws?.fleetKnown === false ? "unknown" : (ws?.legacy ?? "unknown")} ${freshness}`,
     ...health,
   ].join(" · ");
 }

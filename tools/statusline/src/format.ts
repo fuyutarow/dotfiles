@@ -227,7 +227,10 @@ export function render(
   const routeText =
     scan === undefined || scan.snapshotWhy !== undefined
       ? undefined
-      : routeLines(scan.runs, df.sid, scan.unreadable).join("\n");
+      : routeLines(scan.runs, df.sid, scan.unreadable, {
+          ...scan.fleet,
+          lost: scan.findings?.lost ?? scan.fleet?.lost,
+        }).join("\n");
   const routeWhy =
     df.routes?.isErr() === true
       ? df.routes.error

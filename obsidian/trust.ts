@@ -51,7 +51,10 @@ const PageSchema = z.object({
 const EvaluateReplySchema = z.object({
   result: z.object({ result: z.object({ value: z.unknown() }) }),
 });
-const ReadBackSchema = z.record(z.string(), z.unknown());
+const EvaluateValueSchema = z.object({
+  fresh: z.array(z.string()),
+  back: z.record(z.string(), z.unknown()),
+});
 
 async function exists(path: string): Promise<boolean> {
   return access(path).then(
@@ -224,12 +227,17 @@ async function main(): Promise<Result<void, string>> {
   if (ws.isErr()) return err(ws.error);
 
   const keys = JSON.stringify(ids.map((id) => `enable-plugin-${id}`));
-  const readBack = await evaluate(
+  const result = await evaluate(
     ws.value,
-    `(() => { const ks = ${keys}; ks.forEach(k => localStorage.setItem(k, "true"));
-      return Object.fromEntries(ks.map(k => [k, localStorage.getItem(k)])); })()`,
+    `(() => { const ks = ${keys};
+      const fresh = ks.filter(k => localStorage.getItem(k) !== "true");
+      ks.forEach(k => localStorage.setItem(k, "true"));
+      return { fresh, back: Object.fromEntries(ks.map(k => [k, localStorage.getItem(k)])) }; })()`,
   );
-  if (readBack.isErr()) return err(readBack.error);
+  if (result.isErr()) return err(result.error);
+  const evaluated = EvaluateValueSchema.safeParse(result.value);
+  if (!evaluated.success)
+    return err(`unexpected read-back: ${JSON.stringify(result.value)}`);
 
   // Chromium commits localStorage to leveldb on a delay; quitting at once lost the last key
   // (measured 2026-10-01). Wait out the commit, then prove each key reached disk.
@@ -237,15 +245,14 @@ async function main(): Promise<Result<void, string>> {
   const quitAfter = await quit();
   if (quitAfter.isErr()) return err(quitAfter.error);
   await rm(PORT_FILE, { force: true });
-  const unsaved = await notOnDisk(ids.map((id) => `enable-plugin-${id}`));
+  // Only keys this run changed are checked on disk: a key already "true" causes no new journal
+  // write, and its older record may sit Snappy-compressed in an *.ldb where a byte search misses it.
+  const unsaved = await notOnDisk(evaluated.data.fresh);
   await $`open -a Obsidian`.quiet();
   if (unsaved.length > 0)
     return err(`not persisted to leveldb: ${unsaved.join(", ")}`);
 
-  const back = ReadBackSchema.safeParse(readBack.value);
-  if (!back.success)
-    return err(`unexpected read-back: ${JSON.stringify(readBack.value)}`);
-  const entries = Object.entries(back.data);
+  const entries = Object.entries(evaluated.data.back);
   for (const [k, v] of entries) {
     process.stdout.write(
       `${v === "true" ? "OK  " : "FAIL"} ${k} = ${String(v)}\n`,

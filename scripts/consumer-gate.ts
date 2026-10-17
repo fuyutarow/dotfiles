@@ -36,7 +36,7 @@ const ConsumerDeclaration = z.strictObject({
   name: z.string().min(1),
   root: z.string().min(1),
   trunk: z.string().min(1).optional(),
-  setup: z.array(z.string().min(1)).min(1),
+  setup: z.array(z.string().min(1)).min(1).optional(),
   bins: z.array(z.string().min(1)).optional(),
   full_gate_rule: z.string().optional(),
   surfaces: z.array(Surface).min(1),
@@ -538,7 +538,7 @@ async function captureExecutables(scratch: string, consumer: Consumer) {
     "git",
     "jj",
     "tar",
-    consumer.setup[0],
+    consumer.setup?.[0],
     consumer.command[0],
   ])) {
     if (name === undefined) continue;
@@ -791,13 +791,30 @@ async function checkConsumer(
   await seedMiseInstalls(home);
   const linked = await registerWorkspaceLinks(candidate, home);
   if (linked !== undefined) return [`FAIL ${consumer.name}: ${linked}`];
-  const setup = await run(consumer.setup);
-  const lines = [
-    `${setup.ok ? "PASS" : "FAIL"} ${consumer.name}: setup ${consumer.setup.join(" ")} ${setup.reason}\n${diagnosticOutput(setup.output)}`,
-  ];
-  if (!setup.ok) return lines;
+  const lines: string[] = [];
+  if (consumer.setup !== undefined) {
+    const setup = await run(consumer.setup);
+    lines.push(
+      `${setup.ok ? "PASS" : "FAIL"} ${consumer.name}: setup ${consumer.setup.join(" ")} ${setup.reason}\n${diagnosticOutput(setup.output)}`,
+    );
+    if (!setup.ok) return lines;
+  }
   // Consumer linters may read jj revisions. Give them a private committed baseline,
   // then overlay the candidate so their diff contains only the shared-surface change.
+  // A named trunk also needs its origin bookmark for checks such as dx check @.
+  // This reference points only at the private baseline; no fetch or live ref write.
+  const trunkRefs =
+    consumer.trunk !== undefined && /^[a-zA-Z0-9_-]+$/u.test(consumer.trunk)
+      ? [
+          ["git", "remote", "add", "origin", "."],
+          [
+            "git",
+            "update-ref",
+            `refs/remotes/origin/${consumer.trunk}`,
+            "HEAD",
+          ],
+        ]
+      : [];
   for (const argv of [
     ["git", "-c", "core.hooksPath=/dev/null", "init", "--quiet"],
     ["git", "add", "--all", "--", "."],
@@ -815,6 +832,7 @@ async function checkConsumer(
       "-m",
       "consumer trunk export",
     ],
+    ...trunkRefs,
     ["jj", "git", "init", "--colocate"],
   ]) {
     const result = await run(argv);

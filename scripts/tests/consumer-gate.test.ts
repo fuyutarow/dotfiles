@@ -134,6 +134,25 @@ test("the same preset passes when consumer code is compliant", async () => {
   expect(result.lines[0]).toContain("PASS fixture-consumer");
 });
 
+test("omitted setup still runs the consumer check and rejects noncompliant code", async () => {
+  for (const compliant of [true, false]) {
+    const f = await fixture({ compliant });
+    const registry = join(f.root, "presets/consumers.toml");
+    await writeFile(
+      registry,
+      (await readFile(registry, "utf8")).replace('setup = ["true"]\n', ""),
+    );
+    const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+    expect(result.ok, result.lines.join("\n")).toBe(compliant);
+    expect(result.checked).toBe(1);
+    expect(result.lines.join("\n")).not.toContain(": setup ");
+    expect(result.lines.join("\n")).toContain(
+      compliant ? "exit 0" : "lint:fixture: strict rule rejected code.ts",
+    );
+    expect(await Bun.file(join(f.consumer, "gate-ran")).exists()).toBe(false);
+  }
+});
+
 test("no shared surface skips without even loading the registry", async () => {
   const result = await runConsumerGates("/does-not-exist", [
     "README",
@@ -288,12 +307,12 @@ test("owner declarations select only the declared shared surfaces", async () => 
     "coralbase",
   ]);
   expect(declarations[0]).toMatchObject({
-    preset_dirs: { typescript: "tools" },
     trunk: "alpha",
-    setup: ["mise", "run", "setup"],
-    command: ["mise", "run", "lint"],
+    command: ["mise", "run", "check"],
     surfaces: ["presets/typescript"],
   });
+  expect(declarations[0]?.setup).toBeUndefined();
+  expect(declarations[0]?.preset_dirs).toBeUndefined();
   expect(declarations[1]?.command).toEqual(["mise", "run", "lint:ts"]);
   expect(
     declarations.slice(2).map((row: { surfaces: string[] }) => row.surfaces),
@@ -534,6 +553,28 @@ if (exit !== 0 || !paths.includes('rule') || paths.includes('code.ts')) {process
   });
   const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
   expect(result.ok, result.lines.join("\n")).toBe(true);
+  expect(await Bun.file(join(f.consumer, "rule")).exists()).toBe(false);
+});
+
+test("consumer checks resolve the named origin trunk to the private baseline without setup", async () => {
+  const f = await fixture({
+    gate: `
+const child = Bun.spawn(['jj', 'log', '-r', 'alpha@origin', '--no-graph', '-T', 'commit_id'], {stdout:'pipe', stderr:'pipe'});
+const [id, diagnostic, exit] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+if (exit !== 0) { process.stderr.write(diagnostic); process.exit(4); }
+const baseline = Bun.spawn(['jj', 'file', 'show', '-r', id.trim(), 'rule'], {stdout:'pipe', stderr:'pipe'});
+await Promise.all([new Response(baseline.stdout).text(), new Response(baseline.stderr).text()]);
+if (await baseline.exited === 0 || await Bun.file('rule').text() !== 'strict') process.exit(5);
+`,
+  });
+  const registry = join(f.root, "presets/consumers.toml");
+  await writeFile(
+    registry,
+    (await readFile(registry, "utf8")).replace('setup = ["true"]\n', ""),
+  );
+  const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
+  expect(result.ok, result.lines.join("\n")).toBe(true);
+  expect(result.checked).toBe(1);
   expect(await Bun.file(join(f.consumer, "rule")).exists()).toBe(false);
 });
 

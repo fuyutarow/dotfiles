@@ -6,10 +6,8 @@ name = "retrospectives"
 root = "/home/fuyu/Workspace/retrospectives"
 trunk = "alpha"
 surfaces = ["presets/typescript"]
-preset_dirs = { typescript = "tools" }
-setup = ["mise", "run", "setup"]
-# Coordinator: hook:pre-commit depends only on lint = lint:records + lint:ts.
-command = ["mise", "run", "lint"]
+# No setup: dx supplies runtime dependencies; check depends on lint (dx check @).
+command = ["mise", "run", "check"]
 timeout_ms = 120000
 
 [[consumers]]

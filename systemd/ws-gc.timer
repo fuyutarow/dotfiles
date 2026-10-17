@@ -1,0 +1,11 @@
+[Unit]
+Description=Collect finished jj workspaces hourly and after boot
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Unit=ws-gc.service
+
+[Install]
+WantedBy=timers.target
+

@@ -182,6 +182,9 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   // in ~/.config/systemd/user/ (systemd treats any symlink in the unit path as an enablement link),
   // so a disable leaves the unit `not-found`, not `disabled`. Re-run `mise run link:dots` after one.
   //
+  ["not-mac", "systemd/ws-gc.service", ".config/systemd/user/ws-gc.service"],
+  ["not-mac", "systemd/ws-gc.timer", ".config/systemd/user/ws-gc.timer"],
+
   // --- cocoindex-code (declarative global settings = no interactive `ccc init`) ---
   [
     "all",

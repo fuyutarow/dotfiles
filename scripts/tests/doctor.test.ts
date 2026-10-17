@@ -18,8 +18,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { release, tmpdir } from "node:os";
-import { join } from "node:path";
-import { sshSupportsAttachMatch } from "../link-dots.ts";
+import { dirname, join } from "node:path";
+import { mkdir, symlink } from "node:fs/promises";
+import { LINKS } from "../config-registry.ts";
+import { applies, sshSupportsAttachMatch } from "../link-dots.ts";
 import {
   checkAgx,
   CHECKS,
@@ -841,8 +843,18 @@ describe("doctor", () => {
     expect(readdirSync(home)).toEqual([]);
   });
 
-  test("links: a dangling link into the repo is reported, not pruned", () => {
+  test("links: a dangling link into the repo is reported, not pruned", async () => {
     const home = tmp("doctor-home-");
+    // Realize the declared links so this fixture tests dangling links, not the display cap.
+    let os: "mac" | "wsl" | "linux" = "linux";
+    if (process.platform === "darwin") os = "mac";
+    if (/microsoft/iu.test(release())) os = "wsl";
+    for (const [when, source, destination] of LINKS) {
+      if (!applies(when, os) || source.startsWith("@")) continue;
+      const target = join(home, destination);
+      await mkdir(dirname(target), { recursive: true });
+      await symlink(join(REPO, source), target);
+    }
     mkdirSync(join(home, ".local", "bin"), { recursive: true });
     symlinkSync(
       join(REPO, "no-such-file.ts"),

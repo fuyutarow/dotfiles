@@ -105,6 +105,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── sheldon/     # zsh plugin manager (sources only zsh/aliases.zsh)
 ├── lazygit/     # config.yml + ai-commit.sh
 ├── cocoindex/   # cocoindex-code (ccc) settings + its capped daemon unit
+├── systemd/     # ws-gc user service + hourly/boot timer (Linux; linked and enabled by link:dots)
 ├── android/     # Pixel LINE vibration policy: ADB audit/apply script and one-time UI recipe
 ├── bottom/      # btm system monitor — groups same-named processes so swarm leaks are visible
 ├── topgrade/    # which update steps `mise run up` runs
@@ -143,6 +144,15 @@ file. Run `mise run changeset -- <tool> <patch|minor|major> "<entry>"`; do not h
 bump per tool, prepends all entries under one new SemVer heading, and removes the changeset files
 in the same landed commit. `gate:land` and land validate the file through the same zod schema.
 Landing with no changesets leaves tool versions and changelogs alone.
+
+On Linux, `mise run link:dots` links and enables `ws-gc.timer`. Five minutes after boot and
+hourly thereafter it runs `ws gc --all --legacy`, with TSV output in
+`journalctl --user -u ws-gc.service`. It uses the existing empty, landed and idle land-temp
+classes; kept, live and unlanded workspaces remain protected. Abandoned workspaces require an
+explicit owner command with `--abandoned`; the timer never passes it. Unrecorded workspaces in
+the standard layout still require `--include-unrecorded`. `mise run doctor` fails when the
+timer is inactive or the service's last run failed. `agx doctor` counts workspace findings
+that this unattended command cannot collect, including abandoned and unrecorded workspaces.
 
 **Single sources of truth** — each fact has one home, so nothing drifts:
 

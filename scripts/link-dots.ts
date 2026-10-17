@@ -38,6 +38,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { access, realpath } from "node:fs/promises";
 import { hostname, homedir, release } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
@@ -651,6 +652,59 @@ export function ensureToolOwned(ctx: Ctx, p: string): void {
   say(`created (tool-owned, empty): ${p}`);
 }
 
+/** Enable the registry-linked timer; --check never talks to the user manager. */
+export async function deployWsGc(
+  ctx: Ctx,
+  probe = async (args: string[]) => {
+    const child = Bun.spawn(["systemctl", "--user", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10_000,
+    });
+    const [out, err, code] = await Promise.all([
+      child.stdout.text(),
+      child.stderr.text(),
+      child.exited,
+    ]);
+    return { code, out: `${out}${err}`.trim() };
+  },
+  available?: boolean,
+): Promise<Error | undefined> {
+  if (ctx.os === "mac" || ctx.mode === "check") return undefined;
+  const systemd =
+    available ??
+    (Bun.which("systemctl") !== null &&
+      (await access("/run/systemd/system").then(
+        () => true,
+        () => false,
+      )));
+  if (!systemd) {
+    say("skip: ws-gc (no systemd on this host)");
+    return undefined;
+  }
+  for (const unit of ["ws-gc.service", "ws-gc.timer"]) {
+    const target = await realpath(
+      join(ctx.home, ".config/systemd/user", unit),
+    ).catch(() => null);
+    const source = await realpath(join(ctx.dotfiles, "systemd", unit)).catch(
+      () => null,
+    );
+    if (source === null || target !== source)
+      return new Error(
+        `${unit} is not the declared link; repair: mise run link:dots`,
+      );
+  }
+  for (const args of [["daemon-reload"], ["enable", "--now", "ws-gc.timer"]]) {
+    const result = await probe(args);
+    if (result.code !== 0)
+      return new Error(
+        `systemctl --user ${args.join(" ")} failed: ${result.out}; repair: mise run link:dots`,
+      );
+  }
+  say("enabled: ws-gc.timer (hourly and after boot)");
+  return undefined;
+}
+
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
     process.stderr.write(
@@ -732,6 +786,8 @@ async function main(): Promise<Error | void> {
   }
   const renderError = renderHome(ctx, parsed.flags.fromWorkingCopy);
   if (renderError !== undefined) return renderError;
+  const gcError = await deployWsGc(ctx);
+  if (gcError !== undefined) return gcError;
   const daemonError = deployCccDaemon(ctx);
   if (daemonError !== undefined) return daemonError;
   if (ctx.os === "mac") loadSmartOpenReceiver(ctx);

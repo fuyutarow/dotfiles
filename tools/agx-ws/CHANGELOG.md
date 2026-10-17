@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1 — 2026-10-17
+
+- Exclude workspaces collectible by the safe unattended gc timer from doctor findings
+
 ## 0.7.0 — 2026-10-17
 
 - Add ws add --json with readiness output isolated on stderr

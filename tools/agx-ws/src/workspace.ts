@@ -1794,6 +1794,7 @@ export type DoctorWorkspaceRow = {
   dir: string;
   name: string;
   kind: "ws" | "legacy";
+  recorded: boolean;
   classification: Classification;
   ageMs: number | undefined;
 };
@@ -1844,6 +1845,7 @@ export async function doctorInventory(
         dir: ws.dir,
         name: ws.name,
         kind,
+        recorded: lineageOf(records.value, realOr(ws.dir)).length > 0,
         classification,
         ageMs: info.ok
           ? Temporal.Now.instant().epochMilliseconds - info.value.mtimeMs
@@ -1860,13 +1862,24 @@ const doctorClean = (value: string) => value.replaceAll(/[\t\r\n]/gu, " ");
 export async function doctor(): Promise<Attempt<string[]>> {
   const inventory = await doctorInventory();
   if (!inventory.ok) return inventory;
+  return good(doctorFindings(inventory.value));
+}
+
+/** Findings count workspaces that the unattended `ws gc --all --legacy` cannot collect. */
+export function doctorFindings(rows: DoctorWorkspaceRow[]): string[] {
   const findings: string[] = [];
-  for (const row of inventory.value) {
+  for (const row of rows) {
     const c = row.classification;
     if (
       c.verdict === "kept" ||
       c.verdict === "keep" ||
       c.verdict === "land-temp"
+    )
+      continue;
+    if (
+      c.collect &&
+      c.verdict !== "abandoned" &&
+      (row.kind === "legacy" || row.recorded)
     )
       continue;
     const emit = (finding: string, fix: string) => {
@@ -1903,7 +1916,7 @@ export async function doctor(): Promise<Attempt<string[]>> {
     )
       emit("unlanded-72h", `cd ${row.dir} && mise run land`);
   }
-  return good(findings);
+  return findings;
 }
 
 /** Fleet-wide gc; the consumer registry is data, never executable configuration. */

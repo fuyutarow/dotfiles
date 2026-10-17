@@ -11,7 +11,15 @@ import {
   readlinkSync,
   realpathSync,
 } from "node:fs";
-import { lstat, mkdir, readdir, readlink, stat } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readlink,
+  rm,
+  rmdir,
+  stat,
+} from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { projectSlug } from "../../shared/src/agent-name.ts";
@@ -784,7 +792,24 @@ export type AdoptOptions = {
   all: boolean;
   dryRun: boolean;
   includeKept: boolean;
+  fixNames?: boolean;
 };
+
+/** Strip layout markers before normalization; run-id suffixes remain part of the slug. */
+function adoptionSlug(repo: Repo, dir: string): string {
+  let name = basename(dir).replace(/^ws_/u, "");
+  for (const prefix of [
+    `${repo.name}-arm-`,
+    `${repo.name}-ws-`,
+    "dotfiles-arm-",
+  ]) {
+    if (name.startsWith(prefix)) {
+      name = name.slice(prefix.length);
+      break;
+    }
+  }
+  return projectSlug(name);
+}
 
 /** Re-home the snapshotted change; jj creates all pointers and path registrations. */
 async function moveWorkspace(
@@ -804,42 +829,92 @@ async function moveWorkspace(
   if (!change.ok) return change;
   const before = await jjOut(["diff", "--git"], ws.dir, true);
   if (!before.ok) return before;
+  const rootInfo = await attempt(() => lstat(repo.wsRoot));
+  if (
+    !rootInfo.ok &&
+    !z.object({ code: z.literal("ENOENT") }).safeParse(rootInfo.error).success
+  )
+    return bad(`cannot inspect ${repo.wsRoot}: ${msg(rootInfo)}`);
+  const hadRoot = rootInfo.ok;
   await mkdir(repo.wsRoot, { recursive: true });
   // Reserve even empty targets: jj itself accepts an existing empty directory.
   const reserved = await attempt(() => mkdir(target));
-  if (!reserved.ok)
+  if (!reserved.ok) {
+    if (!hadRoot) await rmdir(repo.wsRoot);
     return bad(`${target}: cannot reserve destination: ${msg(reserved)}`);
-  const made = await jjOut(
-    ["workspace", "add", "--name", name, "--sparse-patterns", "full", target],
-    repo.backing,
-    false,
-  );
-  if (!made.ok)
-    return bad(`${msg(made)}; old workspace retained; inspect ${target}`);
-  const edited = await jjOut(["edit", change.value.trim()], target, false);
-  if (!edited.ok)
-    return bad(`${msg(edited)}; old workspace retained; inspect ${target}`);
-  const status = await jjOut(["status"], target, false);
-  if (!status.ok) return bad(`${msg(status)}; old workspace retained`);
-  const after = await jjOut(
-    ["log", "--no-graph", "-r", "@", "-T", "change_id"],
-    target,
-    true,
-  );
-  if (!after.ok) return after;
-  const diff = await jjOut(["diff", "--git"], target, true);
-  if (!diff.ok) return diff;
-  if (after.value !== change.value || diff.value !== before.value)
+  }
+  const rollback = async (failure: unknown): Promise<Attempt<void>> => {
+    const names = await workspaceNames(repo);
+    if (!names.ok)
+      return bad(`${errorMessage(failure)}; rollback failed: ${msg(names)}`);
+    if (names.value.includes(name)) {
+      const forgot = await jjOut(
+        ["workspace", "forget", name],
+        repo.backing,
+        false,
+      );
+      if (!forgot.ok)
+        return bad(`${errorMessage(failure)}; rollback failed: ${msg(forgot)}`);
+    }
+    const removed = await attempt(async () => {
+      await rm(target, { recursive: true, force: true });
+      if (!hadRoot) await rmdir(repo.wsRoot);
+    });
     return bad(
-      `change id or diff mismatch; old workspace retained; inspect ${target}`,
+      `${errorMessage(failure)}; ${removed.ok ? "new workspace removed; old workspace retained" : `rollback failed: ${msg(removed)}`}`,
     );
-  const active = busy(realOr(ws.dir));
-  if (active !== undefined)
-    return bad(`${active}; old workspace retained; new checkout at ${target}`);
-  const removed = await forgetAndBury(repo, graveyard, ws.name, ws.dir);
-  return removed.ok
-    ? good(undefined)
-    : bad(`${msg(removed)}; new checkout verified at ${target}`);
+  };
+  const moved = await attempt(async (): Promise<Attempt<void>> => {
+    const made = await jjOut(
+      ["workspace", "add", "--name", name, "--sparse-patterns", "full", target],
+      repo.backing,
+      false,
+    );
+    if (!made.ok) return made;
+    const edited = await jjOut(["edit", change.value.trim()], target, false);
+    if (!edited.ok) return edited;
+    const status = await jjOut(["status"], target, false);
+    if (!status.ok) return status;
+    const after = await jjOut(
+      ["log", "--no-graph", "-r", "@", "-T", "change_id"],
+      target,
+      true,
+    );
+    if (!after.ok) return after;
+    const diff = await jjOut(["diff", "--git"], target, true);
+    if (!diff.ok) return diff;
+    if (after.value !== change.value || diff.value !== before.value)
+      return bad("change id or diff mismatch");
+    const active = busy(realOr(ws.dir));
+    if (active !== undefined) return bad(active);
+    // Remember precisely the forget operation so a burial failure can restore the old
+    // registration without rewinding unrelated operations in this shared store.
+    const forgot = await jjOut(
+      ["workspace", "forget", ws.name],
+      repo.backing,
+      false,
+    );
+    if (!forgot.ok) return forgot;
+    const operation = await jjOut(
+      ["op", "log", "--no-graph", "-n", "1", "-T", "id"],
+      repo.backing,
+      true,
+    );
+    const buried = operation.ok ? await bury(graveyard, ws.dir) : operation;
+    if (buried.ok) return good(undefined);
+    const restored = operation.ok
+      ? await jjOut(
+          ["op", "revert", operation.value.trim()],
+          repo.backing,
+          true,
+        )
+      : bad("cannot identify forget operation");
+    return bad(
+      `${msg(buried)}${restored.ok ? "" : `; old registration recovery failed: ${msg(restored)}`}`,
+    );
+  });
+  const result = moved.ok ? moved.value : bad(msg(moved));
+  return result.ok ? result : rollback(result.error);
 }
 
 const adoptLine = (dir: string, target: string, verdict: string): string =>
@@ -960,6 +1035,12 @@ async function orphanLines(
       (entry) =>
         entry.isDirectory() &&
         (entry.name.startsWith(`${repo.name}-arm-`) ||
+          entry.name.startsWith(`${repo.name}-ws-`) ||
+          (entry.name.startsWith("dotfiles-arm-") &&
+            (() => {
+              const owner = jjWorkspace(join(repo.parent, entry.name));
+              return owner.ok && owner.value.backingRoot === repo.backing;
+            })()) ||
           entry.name === `${repo.name}-ws`),
     )
     .map((entry) => join(repo.parent, entry.name));
@@ -981,13 +1062,13 @@ async function orphanLines(
   const lines: string[] = [];
   for (const dir of candidates) {
     if (seen.has(realOr(dir))) continue;
-    const target = join(repo.wsRoot, `ws_${projectSlug(basename(dir))}`);
+    const target = join(repo.wsRoot, `ws_${adoptionSlug(repo, dir)}`);
     const difference = await orphanDifference(repo, dir, cfg.trunk);
     lines.push(
       adoptLine(
         dir,
         target,
-        `orphan: files differ from ${cfg.trunk}: ${difference}; owner decision required; never adopted`,
+        `orphan: files differ from ${cfg.trunk}: ${difference}; not registered in jj workspace list; owner decision required; never adopted`,
       ),
     );
   }
@@ -1003,14 +1084,14 @@ async function adoptRow(
   targets: Set<string>,
   graveyard?: Graveyard,
 ): Promise<{ line: string; failed: boolean }> {
-  const name = `ws_${projectSlug(options.slug ?? basename(ws.dir))}`;
+  const name = `ws_${options.slug === undefined ? adoptionSlug(repo, ws.dir) : projectSlug(options.slug)}`;
   const target = join(repo.wsRoot, name);
   const kept = keepEntries(repo, cfg, ws);
   const present = await attempt(() => lstat(target));
   const source = jjWorkspace(ws.dir);
   let reason: string | undefined;
-  if (within(ws.dir, realOr(repo.wsRoot)))
-    reason = "already inside repository workspace directory";
+  if (realOr(ws.dir) === realOr(target))
+    reason = "already at target workspace path";
   else if (!source.ok) reason = msg(source);
   else if (
     source.value.root !== realOr(ws.dir) ||
@@ -1055,11 +1136,14 @@ async function adoptRow(
 export async function adopt(
   options: AdoptOptions,
 ): Promise<Attempt<{ lines: string[]; failed: string[] }>> {
-  if (options.all && (options.path !== undefined || options.slug !== undefined))
-    return bad("--all cannot be combined with a path or --slug");
-  if (options.all && options.repo === undefined)
-    return bad("--all requires --repo");
-  if (!options.all && options.path === undefined)
+  const batch = options.all || options.fixNames === true;
+  if (options.all && options.fixNames === true)
+    return bad("--all cannot be combined with --fix-names");
+  if (batch && (options.path !== undefined || options.slug !== undefined))
+    return bad("--all/--fix-names cannot be combined with a path or --slug");
+  if (batch && options.repo === undefined)
+    return bad("--all/--fix-names requires --repo");
+  if (!batch && options.path === undefined)
     return bad("provide a workspace path or --all --repo <R>");
   const resolved = resolveRepo(options.repo ?? options.path ?? process.cwd());
   if (!resolved.ok) return resolved;
@@ -1071,12 +1155,16 @@ export async function adopt(
     if (!cfg.ok) return cfg;
     const listed = await workspaces(repo);
     if (!listed.ok) return listed;
-    const selected = options.all
-      ? listed.value.filter((ws) => !within(ws.dir, realOr(repo.wsRoot)))
-      : listed.value.filter(
-          (ws) => realOr(ws.dir) === realOr(resolve(options.path ?? "")),
+    const selected = listed.value.filter((ws) => {
+      if (options.fixNames === true)
+        return (
+          within(ws.dir, realOr(repo.wsRoot)) &&
+          basename(ws.dir).startsWith(`ws_${repo.name}-arm-`)
         );
-    if (!options.all && selected.length !== 1)
+      if (options.all) return !within(ws.dir, realOr(repo.wsRoot));
+      return realOr(ws.dir) === realOr(resolve(options.path ?? ""));
+    });
+    if (!batch && selected.length !== 1)
       return bad(
         "path must be the root of a registered non-primary workspace of this repository",
       );
@@ -1104,7 +1192,7 @@ export async function adopt(
       .filter((row) => row.failed)
       .map((row) => row.line.split("\t")[0] ?? "?");
     const orphans =
-      options.dryRun && options.all
+      options.dryRun && batch
         ? await orphanLines(repo, cfg.value, listed.value)
         : good([]);
     if (!orphans.ok) return orphans;

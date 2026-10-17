@@ -70,7 +70,7 @@ const adoptCommand = command(
     ignoreArgv: rejectPrototypeFlag,
     help: {
       description:
-        "Move a legacy jj workspace into <repo>.ws/ws_<hyphen-slug>, preserving its change. TSV: old path, target path, verdict and reason. Refuses processes inside and existing targets.",
+        "Re-home a jj workspace into <repo>.ws/ws_<hyphen-slug>, stripping legacy layout prefixes and preserving its change. TSV: old path, target path, verdict and reason. Refuses processes inside and existing targets.",
     },
     flags: {
       repo: repoFlag,
@@ -82,6 +82,11 @@ const adoptCommand = command(
       all: {
         type: Boolean,
         description: "adopt every legacy workspace; requires --repo",
+      },
+      fixNames: {
+        type: Boolean,
+        description:
+          "re-home ws_<repo>-arm-* workspaces to stripped names; requires --repo",
       },
       dryRun: {
         type: Boolean,
@@ -99,6 +104,7 @@ const adoptCommand = command(
       repo: argv.flags.repo,
       slug: argv.flags.slug,
       all: argv.flags.all === true,
+      fixNames: argv.flags.fixNames === true,
       dryRun: argv.flags.dryRun === true,
       includeKept: argv.flags.includeKept === true,
     });

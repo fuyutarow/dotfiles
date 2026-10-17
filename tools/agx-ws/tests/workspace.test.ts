@@ -19,7 +19,7 @@ import {
 } from "node:fs";
 import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
-import { mkdir, chmod, unlink } from "node:fs/promises";
+import { mkdir, chmod, unlink, lstat } from "node:fs/promises";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 setDefaultTimeout(60_000);
@@ -107,8 +107,147 @@ afterAll(() => {
 
 const listing = (dir: string): string[] =>
   existsSync(dir) ? readdirSync(dir).toSorted() : [];
+const pathExists = (dir: string): Promise<boolean> =>
+  lstat(dir).then(
+    () => true,
+    () => false,
+  );
 
 describe("ws adopt", () => {
+  test("WS-ADOPT-2: strips layout prefixes, preserves run suffixes and re-homes adopted changes", async () => {
+    const path = await repo('trunk = "main"\n');
+    for (const [old, slug] of [
+      ["proj-arm-foo_bar", "foo-bar"],
+      ["proj-ws-run_name-deadbeef", "run-name-deadbeef"],
+      ["dotfiles-arm-impl_learner", "impl-learner"],
+      ["proj.ws/ws_proj-arm-foo", "foo"],
+    ]) {
+      const dir = join(path, "..", old ?? "");
+      await mkdir(join(dir, ".."), { recursive: true });
+      expect(
+        (await jj(["workspace", "add", "--name", `old-${slug}`, dir], path))
+          .code,
+      ).toBe(0);
+      await Bun.write(join(dir, "work.txt"), `${old}\n`);
+      const before = await jj(
+        ["log", "--no-graph", "-r", "@", "-T", "change_id"],
+        dir,
+      );
+      const moved = await ws(["adopt", dir], path);
+      expect(moved.code, moved.err + moved.out).toBe(0);
+      const target = wsDir(path, slug ?? "");
+      expect(
+        (await jj(["log", "--no-graph", "-r", "@", "-T", "change_id"], target))
+          .out,
+      ).toBe(before.out);
+      expect(await Bun.file(join(target, "work.txt")).text()).toBe(`${old}\n`);
+      expect(await pathExists(dir)).toBe(false);
+    }
+  });
+
+  test("WS-ADOPT-2: fix-names plans and moves only prefixed adopted workspaces", async () => {
+    const path = await repo('trunk = "main"\n');
+    for (const slug of ["proj-arm-one", "proj-arm-two-deadbeef", "retained"])
+      expect((await ws(["add", slug], path)).code).toBe(0);
+    const old = wsDir(path, "proj-arm-one");
+    const before = await jj(
+      ["log", "--no-graph", "-r", "@", "-T", "change_id"],
+      old,
+    );
+    const dry = await ws(
+      ["adopt", "--fix-names", "--repo", path, "--dry-run"],
+      path,
+    );
+    expect(dry.code, dry.err).toBe(0);
+    expect(dry.out.split("\n").filter(Boolean)).toHaveLength(2);
+    expect(dry.out).toContain(`${old}\t${wsDir(path, "one")}\twould-adopt`);
+    const moved = await ws(["adopt", "--fix-names", "--repo", path], path);
+    expect(moved.code, moved.err + moved.out).toBe(0);
+    expect(
+      (
+        await jj(
+          ["log", "--no-graph", "-r", "@", "-T", "change_id"],
+          wsDir(path, "one"),
+        )
+      ).out,
+    ).toBe(before.out);
+    expect(await pathExists(wsDir(path, "two-deadbeef"))).toBe(true);
+    expect(await pathExists(wsDir(path, "retained"))).toBe(true);
+    expect(await pathExists(old)).toBe(false);
+    for (const args of [
+      ["--fix-names"],
+      ["--fix-names", "--all", "--repo", path],
+      ["--fix-names", "--repo", path, old],
+      ["--fix-names", "--repo", path, "--slug", "x"],
+    ])
+      expect((await ws(["adopt", ...args], path)).code).toBe(1);
+  });
+
+  test("WS-ADOPT-2: every failure after add removes registration and directory, retaining source", async () => {
+    const realJj = Bun.which("jj");
+    expect(realJj).not.toBeNull();
+    for (const stage of ["add", "edit", "status", "diff", "forget", "bury"]) {
+      const path = await repo('trunk = "main"\n');
+      const dir = join(path, "..", "proj-arm-failure");
+      expect(
+        (await jj(["workspace", "add", "--name", "legacy", dir], path)).code,
+      ).toBe(0);
+      await Bun.write(join(dir, "work.txt"), "retain source\n");
+      const before = await jj(
+        ["log", "--no-graph", "-r", "@", "-T", "change_id"],
+        dir,
+      );
+      const registered = await jj(
+        ["--ignore-working-copy", "workspace", "list"],
+        path,
+      );
+      const tree = listing(join(path, ".."));
+      const wrapper = join(scratch, `fail-${stage}`);
+      await mkdir(wrapper);
+      await Bun.write(
+        join(wrapper, "jj"),
+        `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+const stage = ${JSON.stringify(stage)};
+const target = ${JSON.stringify(wsDir(path, "failure"))};
+const fail = (stage === "edit" || stage === "status" || stage === "diff") && process.cwd() === target && args.includes(stage)
+  || stage === "forget" && args.includes("forget") && args.includes("legacy");
+if (fail) { process.stderr.write("injected Entry too large\\n"); process.exit(1); }
+const child = Bun.spawn([${JSON.stringify(realJj)}, ...args], {stdout:"inherit",stderr:"inherit"});
+const code = await child.exited;
+process.exitCode = stage === "add" && args.includes("add") && code === 0 ? 1 : code;
+`,
+      );
+      await chmod(join(wrapper, "jj"), 0o755);
+      if (stage === "bury") {
+        await Bun.write(
+          join(wrapper, "rip"),
+          "#!/bin/sh\necho 'injected burial failure' >&2\nexit 1\n",
+        );
+        await chmod(join(wrapper, "rip"), 0o755);
+      }
+      const failed = await ws(
+        ["adopt", dir],
+        path,
+        baseEnv({ PATH: `${wrapper}:${bin}:${process.env.PATH}` }),
+      );
+      expect(failed.code, failed.out + failed.err).toBe(1);
+      expect(failed.out).toContain("new workspace removed");
+      expect(
+        (await jj(["--ignore-working-copy", "workspace", "list"], path)).out,
+      ).toBe(registered.out);
+      expect(listing(join(path, ".."))).toEqual(tree);
+      expect(await pathExists(wsDir(path, "failure"))).toBe(false);
+      expect(
+        (await jj(["log", "--no-graph", "-r", "@", "-T", "change_id"], dir))
+          .out,
+      ).toBe(before.out);
+      expect(await Bun.file(join(dir, "work.txt")).text()).toBe(
+        "retain source\n",
+      );
+    }
+  });
+
   test("dry-run inventories forgotten and plain orphan directories without adopting them", async () => {
     const path = await repo('trunk = "main"\n');
     const parent = join(path, "..");
@@ -116,9 +255,11 @@ describe("ws adopt", () => {
     const changed = join(parent, "proj-arm-changed");
     const plain = join(parent, "proj-arm-plain");
     const nested = join(parent, "proj-ws", "orphan");
+    const crossNamed = join(parent, "dotfiles-arm-impl_learner");
     for (const [name, dir] of [
       ["equal", equal],
       ["changed", changed],
+      ["cross-named", crossNamed],
     ] as const) {
       expect(
         (
@@ -151,16 +292,17 @@ describe("ws adopt", () => {
     const before = await op();
     const dry = await ws(["adopt", "--all", "--repo", path, "--dry-run"], path);
     expect(dry.code, dry.err).toBe(0);
-    expect(dry.out.split("\n").filter(Boolean)).toHaveLength(4);
+    expect(dry.out.split("\n").filter(Boolean)).toHaveLength(5);
     expect(dry.out).toContain(
-      `${equal}\t${wsDir(path, "proj-arm-equal")}\torphan: files differ from main: no`,
+      `${crossNamed}\t${wsDir(path, "impl-learner")}\torphan:`,
     );
     expect(dry.out).toContain(
-      `${changed}\t${wsDir(path, "proj-arm-changed")}\torphan: files differ from main: yes: bytes differ at a.txt`,
+      `${equal}\t${wsDir(path, "equal")}\torphan: files differ from main: no`,
     );
     expect(dry.out).toContain(
-      `${plain}\t${wsDir(path, "proj-arm-plain")}\torphan:`,
+      `${changed}\t${wsDir(path, "changed")}\torphan: files differ from main: yes: bytes differ at a.txt`,
     );
+    expect(dry.out).toContain(`${plain}\t${wsDir(path, "plain")}\torphan:`);
     expect(dry.out).toContain(`${nested}\t${wsDir(path, "orphan")}\torphan:`);
     expect((await op()).out).toBe(before.out);
     expect((await ws(["adopt", equal], path)).code).toBe(1);

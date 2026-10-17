@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 — 2026-10-17
+
+- Fix adoption slugs, re-home already adopted workspaces with --fix-names, roll back failed adoption, and report cross-named orphans
+
 ## 0.5.0 — 2026-10-17
 
 - Add ws adopt to re-home legacy workspace changes with process and keep guards, plus read-only orphan reporting.

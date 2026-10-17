@@ -739,13 +739,13 @@ const OTHER: readonly Surface[] = [
   {
     kind: "in-place",
     when: "all",
-    sources: ["presets", "oxlint-policy.toml", ".oxlintrc.json"],
-    deployed: "the checkout (.oxlintrc.json is GENERATED from the policy)",
+    sources: ["presets", ".oxlintrc.json"],
+    deployed: "the checkout (root config extends the hand-written preset)",
     consumer:
       "preset CLI and per-language configuration consumers; oxlint (mise run lint:ts)",
     writer:
-      "presets/ is the shared source; presets/typescript/policy.toml owns the lint policy (root oxlint-policy.toml is an alias); mise run oxlint:render writes .oxlintrc.json",
-    verify: "bun test presets · mise run lint:oxlint-policy",
+      "presets/typescript/.oxlintrc.json owns the shared lint config; root extends it locally; consumers receive committed copies",
+    verify: "bun test presets",
   },
   {
     kind: "in-place",

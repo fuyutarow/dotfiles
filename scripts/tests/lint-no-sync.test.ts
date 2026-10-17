@@ -8,7 +8,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { loadPolicy, renderOxlintrc } from "../render-oxlintrc.ts";
 
 // Each regression runs the real scanner repeatedly; its subprocess guard is 60s.
 // Set this file's integration budget explicitly (preload defaults do not cover every file).
@@ -23,7 +22,7 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
-/** A fixture repo outside the workspace, using the rendered house rule and test exclusions. */
+/** A fixture repo outside the workspace, using the root scanner settings and test exclusions. */
 function fixture(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "lint-no-sync-"));
   cleanups.push(() => {
@@ -63,7 +62,7 @@ const exempted = (name: string, reason: string): string =>
   `import { readFileSync } from "node:fs";\nexport function ${name}(): string {\n  // sync-ok: ${reason}\n  return readFileSync("x", "utf8");\n}\n`;
 
 describe("lint-no-sync.ts", () => {
-  test("reads root-level options from the rendered policy instead of a scanner default", async () => {
+  test("reads root-level options from standard config instead of a scanner default", () => {
     const root = fixture({});
     const source = read("load");
     write(
@@ -77,20 +76,20 @@ describe("lint-no-sync.ts", () => {
         .replace(";\n}\n", ";\n"),
     );
     expect(run(["--init"], root).code).toBe(0);
-    const loaded = await loadPolicy();
-    if (!loaded.ok) expect.unreachable(loaded.error);
-    const rule = loaded.value.option.find(
-      (option) => option.rule === "node/no-sync",
+    write(
+      root,
+      ".oxlintrc.json",
+      readFileSync(join(root, ".oxlintrc.json"), "utf8").replace(
+        '"allowAtRootLevel": true',
+        '"allowAtRootLevel": false',
+      ),
     );
-    if (rule === undefined) expect.unreachable("no-sync policy entry missing");
-    rule.value = { allowAtRootLevel: false };
-    write(root, ".oxlintrc.json", renderOxlintrc(loaded.value));
     const failed = run([], root);
     expect(failed.code).toBe(1);
     expect(failed.out).toContain("root.ts: 1 sync call(s)");
   });
 
-  test("missing rendered rule fails closed", () => {
+  test("missing configured rule fails closed", () => {
     const root = fixture({});
     write(root, ".oxlintrc.json", '{"ignorePatterns":[]}\n');
     const failed = run(["--init"], root);

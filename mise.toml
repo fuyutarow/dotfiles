@@ -219,19 +219,7 @@ dir = "{{config_root}}"
 description = "Batched-diagnostics floor (operating-the-harness §3): every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
 run = "bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/claude/hooks && bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/hooks"
 
-# The TS lint policy lives in oxlint-policy.toml (rules, reasons, custom bans with bad/good
-# snippets); .oxlintrc.json is generated from it. scripts/tests/oxlint-policy.test.ts (test:scripts)
-# proves each custom ban fires on its bad snippet and is silent on its good one.
-[tasks."oxlint:render"]
-dir = "{{config_root}}"
-description = "Render .oxlintrc.json from presets/typescript/policy.toml (the shared TS lint policy)"
-run = "bun scripts/render-oxlintrc.ts --write"
-
-[tasks."lint:oxlint-policy"]
-dir = "{{config_root}}"
-description = "Fail when .oxlintrc.json is not a fresh render of presets/typescript/policy.toml"
-run = "bun scripts/render-oxlintrc.ts --check"
-
+# The hand-written TS lint config lives in presets/typescript/.oxlintrc.json.
 [tasks.preset]
 dir = "{{config_root}}"
 description = "List, apply, sync or compare project configuration presets: mise run preset -- list|apply|sync|diff <name> --to <dir>"
@@ -460,7 +448,7 @@ run = 'bun ~/dotfiles/scripts/test-mise-scope.ts'
 [tasks.check]
 alias = "c"
 description = "全gate集約 (CI): fmt:check + lint + test"
-depends = ["fmt:check", "lint", "test", "usehooks:consumers", "lint:oxlint-policy"]
+depends = ["fmt:check", "lint", "test", "usehooks:consumers"]
 
 # Single whole-tree, non-mutating check list used by tickets and hook:pre-commit.
 [tasks."gate:land"]

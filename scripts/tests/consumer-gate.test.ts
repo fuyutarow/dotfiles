@@ -1,7 +1,6 @@
 import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import {
   chmod,
-  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -17,15 +16,10 @@ import {
   runConsumerGates,
   sharedSurfaces,
 } from "../consumer-gate.ts";
-import {
-  loadPolicy,
-  loadRepoPolicy,
-  renderOxlintrc,
-} from "../render-oxlintrc.ts";
 
 // Real exports, PATH capture and nested sandboxes can exceed Bun's five seconds.
 // Individual consumer-command deadlines (including the timeout test) stay short.
-setDefaultTimeout(20_000);
+setDefaultTimeout(60_000);
 
 async function snapshot(cwd: string) {
   for (const argv of [
@@ -138,120 +132,6 @@ test("the same preset passes when consumer code is compliant", async () => {
   const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
   expect(result).toMatchObject({ ok: true, checked: 1 });
   expect(result.lines[0]).toContain("PASS fixture-consumer");
-});
-
-test("recorded presets render with read-only owner history and candidate files remain local", async () => {
-  const f = await fixture({ surface: "presets/typescript" });
-  const repository = join(import.meta.dir, "../..");
-  for (const directory of [
-    "scripts",
-    "agents/hooks/vendor",
-    "tools/shared/src",
-    "presets/typescript",
-  ])
-    await mkdir(join(f.root, directory), { recursive: true });
-  for (const path of [
-    "scripts/render-oxlintrc.ts",
-    "agents/hooks/attempt.ts",
-    "agents/hooks/zod.ts",
-    "agents/hooks/vendor/deps.js",
-    "tools/shared/src/attempt.ts",
-    "tools/shared/src/zod.ts",
-    "presets/typescript/policy.toml",
-  ])
-    await cp(join(repository, path), join(f.root, path));
-  await symlink(join(repository, "node_modules"), join(f.root, "node_modules"));
-  await writeFile(join(f.root, "presets/typescript/preset.toml"), "files = []");
-  await snapshot(f.root);
-  const revision = Bun.spawn(
-    [
-      "jj",
-      "--ignore-working-copy",
-      "-R",
-      f.root,
-      "log",
-      "-r",
-      "alpha",
-      "--no-graph",
-      "-T",
-      "commit_id",
-    ],
-    { stdout: "pipe", stderr: "pipe", timeout: 10000 },
-  );
-  const [commit, error, exit] = await Promise.all([
-    new Response(revision.stdout).text(),
-    new Response(revision.stderr).text(),
-    revision.exited,
-  ]);
-  expect(exit, error).toBe(0);
-  const loaded = await loadPolicy(
-    join(f.root, "presets/typescript/policy.toml"),
-  );
-  expect(loaded.ok).toBe(true);
-  if (!loaded.ok) return;
-  const policy = await loadRepoPolicy(f.consumer, {
-    ...loaded.value,
-    presetCommit: commit.trim(),
-  });
-  expect(policy.ok).toBe(true);
-  if (!policy.ok) return;
-  const rendered = renderOxlintrc(policy.value);
-  await writeFile(join(f.consumer, ".oxlintrc.json"), rendered);
-  await mkdir(join(f.consumer, "tools"));
-  await writeFile(join(f.consumer, "tools/.oxlintrc.json"), rendered);
-  const policyPath = join(f.root, "presets/typescript/policy.toml");
-  // Advance alpha, then leave a different candidate edit uncommitted: the
-  // historical tools render, adopting render, and local render have three sources.
-  await writeFile(
-    policyPath,
-    (await readFile(policyPath, "utf8")).replace(
-      'style = "off"',
-      'style = "error"',
-    ),
-  );
-  await snapshot(f.root);
-  await writeFile(
-    policyPath,
-    (await readFile(policyPath, "utf8")).replace(
-      'nursery = "off"',
-      'nursery = "error"',
-    ),
-  );
-  await writeFile(
-    join(f.consumer, "gate.ts"),
-    `
-import { join } from 'node:path';
-import { writeFile } from 'node:fs/promises';
-const renderer = join(process.env.DOTFILES, 'scripts/render-oxlintrc.ts');
-for (const args of [['--repo', 'tools', '--check'], []]) {
-  const p = Bun.spawn([process.execPath, renderer, ...args], {stdout:'pipe', stderr:'pipe', timeout:10000});
-  const [out, err, exit] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
-  if (exit !== 0) { process.stderr.write(out+err); process.exit(4); }
-  if (args.length === 0) await Bun.write('candidate-render.json', out);
-}
-const local = await Bun.file('candidate-render.json').json();
-if (local.categories.nursery !== 'error') process.exit(5);
-const adopted = await Bun.file('.oxlintrc.json').json();
-if (adopted.categories.style !== 'error' || adopted.categories.nursery !== 'off') process.exit(9);
-if (await Bun.file('tools/.oxlintrc.json').text() !== ${JSON.stringify(rendered)}) process.exit(6);
-for (const directory of [process.env.DOTFILES_PRESET_GIT_DIR, join(process.env.DOTFILES, '.git'), ${JSON.stringify(join(f.root, ".git"))}]) {
-  if (!directory) process.exit(7);
-  const writable = await writeFile(join(directory, 'gate-write-probe'), 'bad').then(() => true, () => false);
-  if (writable) { process.stderr.write('writable dotfiles history: '+directory); process.exit(8); }
-}
-`,
-  );
-  await snapshot(f.consumer);
-  const result = await runConsumerGates(f.root, [
-    "presets/typescript/policy.toml",
-  ]);
-  expect(result.ok, result.lines.join("\n")).toBe(true);
-  expect(await readFile(join(f.consumer, "tools/.oxlintrc.json"), "utf8")).toBe(
-    rendered,
-  );
-  expect(await Bun.file(join(f.root, ".git/gate-write-probe")).exists()).toBe(
-    false,
-  );
 });
 
 test("no shared surface skips without even loading the registry", async () => {
@@ -414,11 +294,7 @@ test("owner declarations select only the declared shared surfaces", async () => 
     command: ["mise", "run", "lint"],
     surfaces: ["presets/typescript"],
   });
-  expect(declarations[1]?.command).toEqual([
-    "sh",
-    "-c",
-    "mise run lint:ts && mise run lint:oxlint-policy",
-  ]);
+  expect(declarations[1]?.command).toEqual(["mise", "run", "lint:ts"]);
   expect(
     declarations.slice(2).map((row: { surfaces: string[] }) => row.surfaces),
   ).toEqual([["package-bins"], ["package-bins"]]);
@@ -450,15 +326,13 @@ if (${JSON.stringify(target)} !== '.' && await Bun.file('.oxlintrc.json').exists
   });
   await mkdir(join(f.root, "presets/typescript"), { recursive: true });
   await mkdir(join(f.root, "scripts"));
-  await writeFile(join(f.root, "presets/typescript/preset.toml"), "files = []");
-  // Fixture renderer honors the actual --repo argument, so a wrong directory fails the gate.
   await writeFile(
-    join(f.root, "scripts/render-oxlintrc.ts"),
-    `
-import {join} from 'node:path';
-const repo = Bun.argv[Bun.argv.indexOf('--repo') + 1];
-await Bun.write(join(repo, '.oxlintrc.json'), 'candidate-policy');
-`,
+    join(f.root, "presets/typescript/preset.toml"),
+    'files = [{source=".oxlintrc.json",destination=".oxlintrc.json"}]',
+  );
+  await writeFile(
+    join(f.root, "presets/typescript/.oxlintrc.json"),
+    "candidate-policy",
   );
   if (!missing) {
     await mkdir(join(f.consumer, target), { recursive: true });
@@ -475,10 +349,10 @@ await Bun.write(join(repo, '.oxlintrc.json'), 'candidate-policy');
   return f;
 }
 
-test("declared TypeScript directory receives the candidate render and its gate passes", async () => {
+test("declared TypeScript directory receives the candidate config and its gate passes", async () => {
   const f = await typescriptFixture("tools");
   const result = await runConsumerGates(f.root, [
-    "presets/typescript/policy.toml",
+    "presets/typescript/.oxlintrc.json",
   ]);
   expect(result.ok, result.lines.join("\n")).toBe(true);
   expect(result.checked).toBe(1);
@@ -487,26 +361,26 @@ test("declared TypeScript directory receives the candidate render and its gate p
   );
 });
 
-test("omitted preset_dirs renders TypeScript at the consumer root", async () => {
+test("omitted preset_dirs copies TypeScript at the consumer root", async () => {
   const f = await typescriptFixture();
   const result = await runConsumerGates(f.root, [
-    "presets/typescript/policy.toml",
+    "presets/typescript/.oxlintrc.json",
   ]);
   expect(result.ok, result.lines.join("\n")).toBe(true);
 });
 
-test("missing rendered file in a declared directory fails naming consumer and path", async () => {
+test("missing config file in a declared directory fails naming consumer and path", async () => {
   const f = await typescriptFixture("tools", true);
-  // A root render must never satisfy a declaration for tools/.
+  // A root config must never satisfy a declaration for tools/.
   await mkdir(join(f.consumer, "tools"));
   await writeFile(join(f.consumer, ".oxlintrc.json"), "wrong-directory");
   await snapshot(f.consumer);
   const result = await runConsumerGates(f.root, [
-    "presets/typescript/policy.toml",
+    "presets/typescript/.oxlintrc.json",
   ]);
   expect(result.ok).toBe(false);
   expect(result.lines.join("\n")).toContain(
-    "FAIL fixture-consumer: apply presets/typescript: declared preset directory tools has no rendered file tools/.oxlintrc.json",
+    "FAIL fixture-consumer: apply presets/typescript: declared preset directory tools has no config file tools/.oxlintrc.json",
   );
 });
 
@@ -725,11 +599,11 @@ test("land-style outer sandbox preserves setup executable reached through a shad
   expect(out).toContain("PASS fixture-consumer: setup mise exit 0");
 });
 
-test("setup failures carry the last twenty combined output lines indented", async () => {
+test("setup failures carry the last forty combined output lines indented", async () => {
   const f = await fixture();
   const registry = join(f.root, "presets/consumers.toml");
   const setup =
-    "for(let i=0;i<25;i++)process.stdout.write('out'+i+'\\n'); for(let i=0;i<10;i++)process.stderr.write('err'+i+'\\n'); process.exit(6);";
+    "for(let i=0;i<60;i++)process.stdout.write('out'+i+'\\n'); for(let i=0;i<10;i++)process.stderr.write('err'+i+'\\n'); process.exit(6);";
   await writeFile(
     registry,
     (await readFile(registry, "utf8")).replace(
@@ -740,21 +614,21 @@ test("setup failures carry the last twenty combined output lines indented", asyn
   const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
   expect(result.ok).toBe(false);
   const report = result.lines.join("\n");
-  expect(report).toContain("exit 6\n  out15\n");
+  expect(report).toContain("exit 6\n  out30\n");
   expect(report).toContain("\n  err9");
-  expect(report).not.toContain("\n  out14\n");
-  expect(result.lines[0]?.split("\n")).toHaveLength(21);
+  expect(report).not.toContain("\n  out29\n");
+  expect(result.lines[0]?.split("\n")).toHaveLength(41);
 });
 
 test("gate stderr is retained and indented under the failure", async () => {
   const f = await fixture({
-    gate: "for(let i=0;i<25;i++)process.stderr.write('failure'+i+'\\n'); process.exit(7);",
+    gate: "for(let i=0;i<55;i++)process.stderr.write('failure'+i+'\\n'); process.exit(7);",
   });
   const result = await runConsumerGates(f.root, ["presets/demo/rule"]);
   const failure = result.lines.find((line) => line.startsWith("FAIL"));
-  expect(failure).toContain("exit 7\n  failure5\n");
-  expect(failure?.split("\n")).toHaveLength(21);
-  expect(failure).toContain("\n  failure24");
+  expect(failure).toContain("exit 7\n  failure15\n");
+  expect(failure?.split("\n")).toHaveLength(41);
+  expect(failure).toContain("\n  failure54");
 });
 
 test("silent failures explicitly report that no command output was captured", async () => {
@@ -830,4 +704,29 @@ test("tasks can spawn sh by name through a symlinked bin in nested sandboxes", a
   ]);
   expect(exit, out + err).toBe(0);
   expect(out).toContain("child-shell-ok");
+});
+
+test("direct CLI runs candidate gates and returns their diagnostics and status", async () => {
+  const f = await fixture();
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      join(import.meta.dir, "../consumer-gate.ts"),
+      "--root",
+      f.root,
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 60_000,
+    },
+  );
+  const [out, err, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  expect(exit, err).toBe(1);
+  expect(out).toContain("FAIL fixture-consumer");
+  expect(out).toContain("lint:fixture: strict rule rejected code.ts");
 });

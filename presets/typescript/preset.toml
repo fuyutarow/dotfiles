@@ -1,6 +1,8 @@
 name = "typescript"
-description = "Strict TypeScript compiler, package, codec, mise tasks, and house oxlint policy"
+description = "Strict TypeScript compiler, package, codec, mise tasks, and standard oxlint configuration"
 files = [
+  { source = "house-plugin.js", destination = "house-plugin.js" },
+  { source = ".oxlintrc.json", destination = ".oxlintrc.json" },
   { source = "tsconfig.json", destination = "tsconfig.json" },
   { source = "package.json", destination = "package.json" },
   { source = "zod.ts", destination = "zod.ts" },

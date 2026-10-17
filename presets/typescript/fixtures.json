@@ -1,0 +1,182 @@
+[
+  {
+    "id": "no-date",
+    "entry": -1,
+    "scope": "house",
+    "bad": ["export const t = Date.now();\n"],
+    "good": [
+      "export const t = Temporal.Now.instant();\n",
+      "export function now(Date: { now: () => number }): number { return Date.now(); }\n"
+    ]
+  },
+  {
+    "id": "no-switch",
+    "entry": 0,
+    "scope": "house",
+    "bad": [
+      "export function f(x: number): number {\n  switch (x) {\n    case 1:\n      return 1;\n    default:\n      return 0;\n  }\n}\n"
+    ],
+    "good": [
+      "export function f(x: number): number {\n  return x === 1 ? 1 : 0;\n}\n"
+    ]
+  },
+  {
+    "id": "no-nested-ternary",
+    "entry": 1,
+    "scope": "house",
+    "bad": [
+      "export const f = (a: boolean, b: boolean): number => (a ? (b ? 1 : 2) : 3);\n"
+    ],
+    "good": ["export const f = (a: boolean): number => (a ? 1 : 3);\n"]
+  },
+  {
+    "id": "no-try",
+    "entry": 2,
+    "scope": "house",
+    "bad": [
+      "declare function g(): void;\nexport function f(): void {\n  try {\n    g();\n  } finally {\n    g();\n  }\n}\n"
+    ],
+    "good": [
+      "declare function g(): void;\nexport function f(): void {\n  g();\n}\n"
+    ]
+  },
+  {
+    "id": "no-throw",
+    "entry": 3,
+    "scope": "house",
+    "bad": [
+      "export function f(x: number): number {\n  if (x < 0) throw new Error(\"negative\");\n  return x;\n}\n"
+    ],
+    "good": [
+      "import { err, ok, type Result } from \"neverthrow\";\nexport function f(x: number): Result<number, string> {\n  return x < 0 ? err(\"negative\") : ok(x);\n}\n"
+    ]
+  },
+  {
+    "id": "no-promise-reject",
+    "entry": 4,
+    "scope": "house",
+    "bad": [
+      "export const f = (): Promise<never> => Promise.reject(new Error(\"no\"));\n"
+    ],
+    "good": [
+      "import { errAsync, type ResultAsync } from \"neverthrow\";\nexport const f = (): ResultAsync<never, string> => errAsync(\"no\");\n"
+    ]
+  },
+  {
+    "id": "no-stdin-listener",
+    "entry": 5,
+    "scope": "house",
+    "bad": [
+      "process.stdin.once(\"data\", (d: Buffer) => {\n  void d;\n});\nexport {};\n"
+    ],
+    "good": ["export const answer = prompt(\"continue?\") ?? \"\";\n"]
+  },
+  {
+    "id": "no-type-predicate",
+    "entry": 6,
+    "scope": "house",
+    "bad": [
+      "export function isText(x: unknown): x is string {\n  return typeof x === \"string\";\n}\n"
+    ],
+    "good": [
+      "export function isText(x: unknown): boolean {\n  return typeof x === \"string\";\n}\n"
+    ]
+  },
+  {
+    "id": "no-in-probe",
+    "entry": 7,
+    "scope": "house",
+    "bad": [
+      "export const has = (v: object): boolean => \"k\" in v;\n",
+      "export const has = (v: object, k: string): boolean => k in v;\n"
+    ],
+    "good": [
+      "export const has = (v: object, k: string): boolean => Object.hasOwn(v, k);\n",
+      "export function keys(v: Record<string, number>): string[] {\n  return Object.keys(v);\n}\n"
+    ]
+  },
+  {
+    "id": "no-as-cast",
+    "entry": 8,
+    "scope": "house",
+    "bad": ["export const n = (v: unknown): number => v as number;\n"],
+    "good": ["export const pair = [1, 2] as const;\n"]
+  },
+  {
+    "id": "no-angle-cast",
+    "entry": 9,
+    "scope": "house",
+    "bad": ["export const n = (v: unknown): number => <number>v;\n"],
+    "good": ["export const pair = [1, 2] as const;\n"]
+  },
+  {
+    "id": "no-json-parse",
+    "entry": 10,
+    "scope": "house",
+    "bad": [
+      "export const v: unknown = JSON.parse(\"1\");\n",
+      "declare const lib: { codec: (f: () => unknown) => unknown };\nexport const c = lib.codec((): unknown => JSON.parse(\"1\"));\n"
+    ],
+    "good": [
+      "import { z } from \"./agents/hooks/zod.ts\";\nexport const c = z.codec(z.string(), z.unknown(), {\n  decode: (s: string): unknown => JSON.parse(s),\n  encode: (v: unknown): string => JSON.stringify(v),\n});\n"
+    ]
+  },
+  {
+    "id": "no-throwing-parse",
+    "entry": 11,
+    "scope": "house",
+    "bad": [
+      "import { z } from \"./agents/hooks/zod.ts\";\nexport const n = z.number().parse(1);\n",
+      "import { jsonText } from \"./agents/hooks/zod.ts\";\nexport const v: unknown = jsonText.parse(\"1\");\n",
+      "import { jsonOf, z } from \"./agents/hooks/zod.ts\";\nexport const n = jsonOf(z.number()).parse(\"1\");\n"
+    ],
+    "good": [
+      "import { z } from \"./agents/hooks/zod.ts\";\nexport const r = z.number().safeParse(1);\n",
+      "import { jsonOf, z } from \"./agents/hooks/zod.ts\";\nexport const r = jsonOf(z.number()).safeParse(\"1\");\n",
+      "export const t: unknown = Bun.TOML.parse(\"a = 1\");\n",
+      "export const y: unknown = Bun.YAML.parse(\"a: 1\");\n"
+    ]
+  },
+  {
+    "id": "no-untyped-json-body",
+    "entry": 12,
+    "scope": "house",
+    "bad": [
+      "export async function f(r: Response): Promise<unknown> {\n  return await r.json();\n}\n"
+    ],
+    "good": [
+      "export async function f(r: Response): Promise<string> {\n  return await r.text();\n}\n",
+      "import { z } from \"./agents/hooks/zod.ts\";\nexport const anyJson = z.json();\n"
+    ]
+  },
+  {
+    "id": "no-direct-zod",
+    "entry": 0,
+    "scope": "dotfiles",
+    "bad": [
+      "import { z } from \"zod\";\nexport const s = z.string();\n",
+      "export { z } from \"zod\";\n",
+      "export * from \"zod\";\n"
+    ],
+    "good": [
+      "import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n",
+      "export { z } from \"./agents/hooks/zod.ts\";\n",
+      "export * from \"./agents/hooks/zod.ts\";\n"
+    ]
+  },
+  {
+    "id": "no-direct-zod-subpath",
+    "entry": 1,
+    "scope": "dotfiles",
+    "bad": [
+      "import { z } from \"zod/v4\";\nexport const s = z.string();\n",
+      "export { z } from \"zod/v4\";\n",
+      "export * from \"zod/v4\";\n"
+    ],
+    "good": [
+      "import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n",
+      "export { z } from \"./agents/hooks/zod.ts\";\n",
+      "export * from \"./agents/hooks/zod.ts\";\n"
+    ]
+  }
+]

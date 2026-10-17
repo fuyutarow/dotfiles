@@ -1,6 +1,6 @@
 # The house TypeScript gates for a repo other than dotfiles. Paste these into the repo's mise.toml
 # Merge these lint/check dependencies with the repo's existing gates.
-# Policy drift belongs only in check: an owner preset update must never block a commit.
+# Consumers lint their own committed config; preset diff is an explicit owner operation.
 #
 # lint:ts checks changed candidate .ts/.tsx files from an immutable jj snapshot.
 # lint:ts:all is the whole tree, for a deliberate sweep.
@@ -9,25 +9,17 @@
 depends = ["lint:ts"]
 
 [tasks.check]
-depends = ["lint", "typecheck", "lint:oxlint-policy"]
+depends = ["lint", "typecheck"]
 
 [tasks."hook:pre-commit"]
 depends = ["fmt:staged", "lint"]
-
-[tasks."oxlint:render"]
-description = "Render .oxlintrc.json from the owner's policy, local ignores and React package globs"
-run = "bun ~/dotfiles/scripts/render-oxlintrc.ts --repo . --write"
-
-[tasks."lint:oxlint-policy"]
-description = "Fail when .oxlintrc.json is not a fresh render of the owner's policy and local declarations"
-run = "bun ~/dotfiles/scripts/render-oxlintrc.ts --repo . --check"
 
 [tasks."lint:ts"]
 description = "oxlint --type-aware on the selected jj commit candidate files"
 run = "lint-ts-candidate"
 
 [tasks."lint:ts:all"]
-description = "oxlint --type-aware on every TypeScript/TSX file the policy does not ignore"
+description = "oxlint --type-aware on every TypeScript/TSX file the config does not ignore"
 run = "bun lint-oxlint.ts --type-aware"
 
 [tasks.typecheck]

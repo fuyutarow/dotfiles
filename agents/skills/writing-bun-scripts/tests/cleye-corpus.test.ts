@@ -21,8 +21,8 @@ const CORPUS: CorpusEntry[] = [
   { path: "agents/goal-kernel/cli.ts" },
   { path: "tools/agx-run/src/next/cli.ts", cli: true },
   { path: "tools/agx-run/src/workers/codex.ts" },
-  { path: "scripts/render-oxlintrc.ts" },
   { path: "scripts/deployment-selection.ts" },
+  { path: "scripts/consumer-gate.ts" },
   { path: "scripts/guest-capacity-recover.ts" },
   { path: "scripts/lint-no-sync.ts" },
   {

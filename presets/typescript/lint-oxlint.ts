@@ -1,3 +1,6 @@
+/// <reference types="bun" />
+// Selected lint files can sit outside a consumer's include globs. Load this runner's
+// runtime types explicitly so type-aware lint also works for that standalone file.
 // Consumer lint entrypoint: run the pinned local oxlint with Bun, never its Node shebang.
 // Human/agent consumer: JSON diagnostics and a checked file count. Exit 0 clean / 1 findings /
 // 2 fatal (including empty, malformed or zero-file reports). No network installation fallback.

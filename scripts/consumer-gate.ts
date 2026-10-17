@@ -20,6 +20,7 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
@@ -91,7 +92,6 @@ export function sharedSurfaces(changed: readonly string[]): string[] {
       surfaces.add("package-bins");
     if (
       path.startsWith("presets/src/") ||
-      path === "scripts/render-oxlintrc.ts" ||
       path === REGISTRY ||
       path === "scripts/config-registry.ts"
     )
@@ -137,7 +137,7 @@ async function command(
     ok: exit === 0 && !signal.aborted,
     stdout: out,
     reason: signal.aborted ? `timeout after ${timeout}ms` : `exit ${exit}`,
-    output: `${out}${err}`.trim().split("\n").slice(-20).join("\n"),
+    output: `${out}${err}`.trim().split("\n").slice(-40).join("\n"),
   };
 }
 
@@ -145,7 +145,7 @@ function diagnosticOutput(output: string): string {
   const lines =
     output.trim() === ""
       ? ["(command emitted no stdout or stderr)"]
-      : output.split("\n").slice(-20);
+      : output.split("\n").slice(-40);
   return lines.map((line) => `  ${line}`).join("\n");
 }
 
@@ -230,7 +230,6 @@ function sandbox(
   liveDotfiles: string | undefined,
   executableDirectories: readonly string[],
   linkedDotfiles: { source: string; target: string } | undefined,
-  history: { source: string; target: string } | undefined,
 ): string[] | undefined {
   if (process.platform === "linux" && Bun.which("bwrap") !== null)
     return [
@@ -248,9 +247,6 @@ function sandbox(
       "--bind",
       scratch,
       scratch,
-      ...(history === undefined
-        ? []
-        : ["--ro-bind", history.source, history.target]),
       ...(linkedDotfiles === undefined
         ? []
         : ["--ro-bind", linkedDotfiles.source, linkedDotfiles.target]),
@@ -272,7 +268,7 @@ function sandbox(
     return [
       "sandbox-exec",
       "-p",
-      `(version 1)(allow default)(deny file-write*)(allow file-write* (subpath ${JSON.stringify(scratch)}))(allow file-write* (literal "/dev/null"))${history === undefined ? "" : `(deny file-write* (subpath ${JSON.stringify(history.source)}))`}`,
+      `(version 1)(allow default)(deny file-write*)(allow file-write* (subpath ${JSON.stringify(scratch)}))(allow file-write* (literal "/dev/null"))`,
     ];
   return undefined;
 }
@@ -426,16 +422,7 @@ async function applySurface(
     if (!installed.ok)
       return `install ${surface} ${installed.reason}\n${diagnosticOutput(installed.output)}`;
   }
-  const rendered = await run([
-    process.execPath,
-    join(candidate, "scripts/render-oxlintrc.ts"),
-    "--repo",
-    copy,
-    "--write",
-  ]);
-  return rendered.ok
-    ? undefined
-    : `render ${surface} ${rendered.reason}\n${diagnosticOutput(rendered.output)}`;
+  return undefined;
 }
 
 async function applyConsumerSurface(
@@ -452,11 +439,11 @@ async function applyConsumerSurface(
       : undefined;
   const target = directory === undefined ? copy : join(copy, directory);
   if (directory !== undefined) {
-    const rendered = join(directory, ".oxlintrc.json");
-    if (await containsSymlink(copy, rendered))
-      return `apply ${surface}: refusing write through consumer symlink ${rendered}`;
-    if (!(await Bun.file(join(copy, rendered)).exists()))
-      return `apply ${surface}: declared preset directory ${directory} has no rendered file ${rendered}`;
+    const config = join(directory, ".oxlintrc.json");
+    if (await containsSymlink(copy, config))
+      return `apply ${surface}: refusing write through consumer symlink ${config}`;
+    if (!(await Bun.file(join(copy, config)).exists()))
+      return `apply ${surface}: declared preset directory ${directory} has no config file ${config}`;
   }
   return applySurface(candidate, target, surface, changed, (argv) =>
     run(argv, target),
@@ -719,36 +706,6 @@ async function checkConsumer(
   );
   const shadowed = roots.flatMap((entry) => (entry.ok ? [entry.value] : []));
   const resolvedPath = await capturePath(scratch, shadowed);
-  // A worktree's .git can be a pointer into the shared store. Resolve the
-  // common directory before mounts shadow the live checkout, never copy it.
-  let history: { source: string; target: string } | undefined;
-  if ((await attempt(() => lstat(join(root, ".git")))).ok) {
-    const resolved = await command(
-      [
-        "git",
-        "--no-optional-locks",
-        "-C",
-        root,
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-common-dir",
-      ],
-      root,
-      process.env,
-      30_000,
-    );
-    if (!resolved.ok)
-      return [
-        `FAIL ${consumer.name}: dotfiles history ${resolved.reason}\n${diagnosticOutput(resolved.output)}`,
-      ];
-    const directory = await realpath(resolved.stdout.trim());
-    const target =
-      process.platform === "linux"
-        ? join(scratch, "preset-history")
-        : directory;
-    if (process.platform === "linux") await mkdir(target);
-    history = { source: directory, target };
-  }
   const prefix = sandbox(
     scratch,
     home,
@@ -758,7 +715,6 @@ async function checkConsumer(
     liveDotfiles,
     resolvedPath.bindings,
     linkedDotfiles,
-    history,
   );
   if (prefix === undefined)
     return [
@@ -798,7 +754,6 @@ async function checkConsumer(
     ...process.env,
     HOME: home,
     DOTFILES: candidate,
-    DOTFILES_PRESET_GIT_DIR: history?.target,
     TMPDIR: temporary,
     TMP: temporary,
     TEMP: temporary,
@@ -963,3 +918,41 @@ export async function runConsumerGates(
     lines,
   };
 }
+
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write("consumer-gate: unknown option --__proto__\n");
+    process.exit(2);
+  }
+}
+
+// Direct human/agent entry: check all preset copies by default, or only supplied changed paths.
+// Real consumers stay read-only; each gate operates in its own disposable trunk export.
+async function main(): Promise<void> {
+  const argv = cli({
+    name: "consumer-gate",
+    parameters: ["[paths...]"],
+    flags: { root: { type: String, default: resolve(import.meta.dir, "..") } },
+    strictFlags: true,
+    ignoreArgv: rejectPrototypeFlag,
+  });
+  const root = resolve(argv.flags.root);
+  const changed =
+    argv._.length > 0
+      ? argv._
+      : [
+          "scripts/config-registry.ts",
+          ...(await Array.fromAsync(
+            new Bun.Glob("presets/*/preset.toml").scan({ cwd: root }),
+          )),
+        ];
+  const report = await runConsumerGates(root, changed);
+  process.stdout.write(`${report.lines.join("\n")}\n`);
+  process.exitCode = report.ok ? 0 : 1;
+}
+
+if (import.meta.main)
+  await main().catch((error: unknown) => {
+    process.stderr.write(`consumer-gate: FATAL: ${errorMessage(error)}\n`);
+    process.exitCode = 2;
+  });

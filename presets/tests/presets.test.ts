@@ -3,7 +3,6 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import { loadPolicy, renderOxlintrc } from "../../scripts/render-oxlintrc.ts";
 
 const ROOT = join(import.meta.dir, "../..");
 const FIXTURES = join(import.meta.dir, "fixtures");
@@ -13,10 +12,6 @@ afterAll(async () => {
 });
 const ShowConfig = z.looseObject({
   compilerOptions: z.record(z.string(), z.unknown()),
-});
-const OxConfig = z.looseObject({
-  categories: z.record(z.string(), z.unknown()),
-  rules: z.record(z.string(), z.unknown()),
 });
 const OxReport = z.looseObject({
   diagnostics: z.array(
@@ -101,42 +96,6 @@ describe("TypeScript preset", () => {
 });
 
 describe("oxlint preset", () => {
-  test("consumer policy has no rule or category below dotfiles' level", async () => {
-    const base = await loadPolicy();
-    expect(base.ok).toBe(true);
-    if (!base.ok) return;
-    // The policy's local example belongs at the consumer root; construct the house view directly
-    // here because the test compares rule strength, not an actual target repository.
-    const house = {
-      ...base.value,
-      custom: base.value.custom.filter((rule) => rule.scope === "house"),
-    };
-    const root = jsonOf(OxConfig).safeParse(
-      await readFile(join(ROOT, ".oxlintrc.json"), "utf8"),
-    );
-    const rendered = jsonOf(OxConfig).safeParse(renderOxlintrc(house));
-    if (!root.success)
-      expect.unreachable(`.oxlintrc.json: ${root.error.message}`);
-    if (!rendered.success)
-      expect.unreachable(`rendered oxlint config: ${rendered.error.message}`);
-    const rootConfig = root.data;
-    const houseConfig = rendered.data;
-    const rootRules = rootConfig.rules;
-    const houseRules = houseConfig.rules;
-    for (const [rule, level] of Object.entries(houseRules)) {
-      if (level === "error" || (Array.isArray(level) && level[0] === "error")) {
-        expect(rootRules[rule]).toBeDefined();
-        expect(rootRules[rule]).not.toBe("off");
-        expect(
-          Array.isArray(rootRules[rule])
-            ? rootRules[rule]?.[0]
-            : rootRules[rule],
-        ).toBe("error");
-      }
-    }
-    expect(rootConfig.categories).toEqual(base.value.categories);
-  });
-
   const rules = [
     ["no-explicit-any", "typescript/no-explicit-any"],
     ["no-throwing-parse", "eslint-js/no-restricted-syntax"],

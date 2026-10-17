@@ -57,29 +57,19 @@ as a configuration surface covers new kinds without registry edits.
 
 ## Existing presets
 
-`typescript` copies `tsconfig.json`, `package.json`, `zod.ts`, `mise-tasks.toml`, and
-`lint-oxlint.ts`. See [the TypeScript README](typescript/README.md) for React opt-in
-and the checked oxlint runner.
+`typescript` copies `tsconfig.json`, `package.json`, `zod.ts`, `mise-tasks.toml`,
+`lint-oxlint.ts`, `.oxlintrc.json`, and its JS plugin. See
+[the TypeScript README](typescript/README.md) for React opt-in and the checked
+oxlint runner.
 Dotfiles extends `typescript/tsconfig.json`, keeping its own include/exclude paths at the
 root. Consumers may tighten compiler options; weakening the preset is drift.
 
-The preset renders `.oxlintrc.json` from dotfiles' canonical
-`typescript/policy.toml` and the target's optional `oxlint-policy.local.toml`.
-It creates neither a policy copy nor an empty local file. When local ignores are
-needed, use `typescript/local.example.toml` as a template and add reasoned entries;
-the local file may add ignores and opt into React rules with `react = [package globs]`.
-A missing local file means no additions.
-`apply` reports an existing unused `oxlint-policy.toml` copy for manual review
-and removal, preserving its bytes.
-
-`mise run oxlint:render` renders `typescript/policy.toml` to dotfiles' root
-`.oxlintrc.json`. The root `oxlint-policy.toml` remains a relative symlink to
-`presets/typescript/policy.toml` for external consumers. Edit the canonical preset
-policy; the alias contains no second copy.
-
-The policy owns `node/no-sync` options and test-file exclusions. Ordinary oxlint
-keeps that rule off; `lint:no-sync` enables the rendered entry for its baseline
-and call-site exemption scan. No rule options are duplicated in the scanner.
+The TypeScript preset copies complete, self-contained oxlint configuration and
+its `house-plugin.js` into consumers. They own and commit those copies. Local
+ignores and React overrides use oxlint's own JSONC format. `preset diff` reports
+byte drift against the preset; `preset sync typescript` replaces only the oxlint
+config and plugin. Consumer lint reads its local files. Dotfiles itself extends
+the preset using a repository-local path.
 
 `python` supplies uv project metadata, Ruff/Pyright settings, hooks, mise tasks,
 and optional examples. `rust` supplies Cargo workspace lints, build profiles,

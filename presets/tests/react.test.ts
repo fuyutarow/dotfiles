@@ -11,11 +11,6 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { jsonOf, z } from "../../agents/hooks/zod.ts";
-import {
-  loadPolicy,
-  loadRepoPolicy,
-  renderOxlintrc,
-} from "../../scripts/render-oxlintrc.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const scratch = await mkdtemp(join(tmpdir(), "preset-react-"));
@@ -57,32 +52,50 @@ async function run(cwd: string, ...args: string[]) {
   return { stdout, stderr, exit };
 }
 
-async function render(repo: string) {
-  const base = await loadPolicy();
-  if (!base.ok) return expect.unreachable(base.error);
-  const local = await loadRepoPolicy(repo, base.value);
-  if (!local.ok) return expect.unreachable(local.error);
-  const text = renderOxlintrc(local.value);
-  await writeFile(join(repo, ".oxlintrc.json"), text);
-  return text;
-}
-
-test("React declaration scopes real hook diagnostics and absence preserves the base render", async () => {
+test("standard React override scopes hook diagnostics to declared packages", async () => {
   const repo = await mkdtemp(join(scratch, "consumer-"));
   // CLI apply/sync coverage lives in cli.test.ts and drift-gate.test.ts. This
   // fixture only needs the installed runner and codec to test React diagnostics.
-  for (const file of ["package.json", "zod.ts", "lint-oxlint.ts"])
+  for (const file of [
+    "package.json",
+    "zod.ts",
+    "lint-oxlint.ts",
+    "house-plugin.js",
+  ])
     await cp(join(ROOT, "presets/typescript", file), join(repo, file));
   await symlink(join(ROOT, "node_modules"), join(repo, "node_modules"));
-  const original = await render(repo);
-  const localPath = join(repo, "oxlint-policy.local.toml");
-  await writeFile(localPath, "schema = 1\nignore = []\nreact = []\n");
-  expect(await render(repo)).toBe(original);
-  await writeFile(
-    localPath,
-    'schema = 1\nignore = []\nreact = ["ts/heritage-react/**"]\n',
+  const base = Bun.JSONC.parse(
+    await Bun.file(join(ROOT, "presets/typescript/.oxlintrc.json")).text(),
   );
-  const config = jsonOf(Config).safeParse(await render(repo));
+  const checked = Config.safeParse(base);
+  if (!checked.success) expect.unreachable(checked.error.message);
+  const original = JSON.stringify(base);
+  await writeFile(
+    join(repo, ".oxlintrc.json"),
+    JSON.stringify({
+      ...checked.data,
+      jsPlugins: [
+        { name: "eslint-js", specifier: "oxlint-plugin-eslint" },
+        { name: "house", specifier: "./house-plugin.js" },
+      ],
+      overrides: [
+        ...checked.data.overrides,
+        {
+          files: ["ts/heritage-react/**"],
+          plugins: [...checked.data.plugins, "react"],
+          rules: {
+            "react/rules-of-hooks": "error",
+            "react/exhaustive-deps": "error",
+            "react/hooks": "off",
+            "react/exhaustive-effect-dependencies": "off",
+          },
+        },
+      ],
+    }),
+  );
+  const config = jsonOf(Config).safeParse(
+    await Bun.file(join(repo, ".oxlintrc.json")).text(),
+  );
   if (!config.success) expect.unreachable(config.error.message);
   expect(config.data.plugins).not.toContain("react");
   const overrides = config.data.overrides.filter(
@@ -143,8 +156,8 @@ export function Bad({ enabled, value }: { enabled: boolean; value: string }) {
         item.filename.includes("ordinary") && item.code.startsWith("react"),
     ),
   ).toBe(false);
-  await rm(localPath);
-  expect(await render(repo)).toBe(original);
+  await writeFile(join(repo, ".oxlintrc.json"), original);
+  expect(await Bun.file(join(repo, ".oxlintrc.json")).text()).toBe(original);
   const clean = await run(repo, "lint-oxlint.ts", "ts");
   expect(clean.exit).toBe(0);
   expect(clean.stdout).toContain("checked 2 file(s)");

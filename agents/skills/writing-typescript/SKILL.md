@@ -13,7 +13,7 @@ paths: "**/*.{ts,tsx}"
 
 # Writing TypeScript — house style
 
-> **Version**: v2610.1.1 (2026-10-16) — adopts the canonical TypeScript and oxlint presets.
+> **Version**: v2610.1.2 (2026-10-17) — consumers own standard oxlint configuration copies.
 > A lean per-filetype style floor; extend as house TS conventions accrete.
 
 Each rule changes what you write. Prefer the `✅` form; flag the `❌` in review.
@@ -44,32 +44,29 @@ Each rule changes what you write. Prefer the `✅` form; flag the `❌` in revie
 
 ## What is enforced, and in other repos
 
-The rules above are style; what a gate enforces is `presets/typescript/policy.toml` in dotfiles — the one home
-of the house lint policy (no `throw`, no `try`, no `as`, zod `safeParse`, …), each rule with its
-reason. `.oxlintrc.json` is rendered from it, never edited. When a rule here and the policy
-disagree, the policy wins and this file is stale.
+The enforced house rules live in dotfiles' `presets/typescript/.oxlintrc.json`,
+a hand-written standard oxlint config. Each custom entry explains its reason in
+`message`; disabled rules retain their reasons as JSONC comments. Bad/good
+fixtures beside the config prove every custom entry.
 
-A repo other than dotfiles adopts the same setup from
-[`presets/typescript/`](../../../presets/typescript/).
-From the dotfiles checkout, run:
+From dotfiles, install the preset with:
 
 ```sh
 mise run preset -- apply typescript --to /path/to/repo
 ```
 
-The TypeScript preset supplies `package.json` (rename it), `tsconfig.json` (adjust only
-`include`/`exclude`), `zod.ts` (the `jsonOf` JSON codec), and `mise-tasks.toml`.
-Paste the supplied tasks into the consumer's `mise.toml` and add `lint:ts` and
-`lint:oxlint-policy` to its `lint` depends, then run `bun install` there.
-The same preset supplies the policy, seeds `oxlint-policy.local.toml` from
-[`presets/typescript/local.example.toml`](../../../presets/typescript/local.example.toml)
-only when absent, and renders `.oxlintrc.json`. Local additions are ignores only, each with
-a reason; after changing them, run `mise run oxlint:render` in the consumer.
-Dotfiles keeps its own codec in `agents/hooks/zod.ts`.
-`lint:ts` checks staged files only, so another session's WIP never
-blocks a commit. `tests/consumer-repo.test.ts` fails when these files drift from dotfiles' own
-pins, compilerOptions or rules. A consumer gets only the policy's `scope = "house"` rules; a
-`scope = "dotfiles"` rule (the vendored-zod import) describes dotfiles' own layout and stays there.
+The consumer owns and commits copies of `.oxlintrc.json`, `house-plugin.js`,
+`package.json` (rename it), `tsconfig.json` (adjust include/exclude), `zod.ts`,
+`lint-oxlint.ts`, and `mise-tasks.toml`. Merge the task fragment into its mise
+config and run `bun install`. Lint reads only the consumer's own config and
+plugin. Add ignores or React overrides directly using oxlint's standard format.
+
+Run `mise run preset -- diff typescript --to /path/to/repo` from dotfiles to
+inspect drift. `sync typescript --to /path/to/repo` replaces only the oxlint
+config and its plugin; review and commit the change. Dotfiles' root extends the
+preset locally and adds its vendored-zod restrictions, which consumers do not
+receive. `lint:ts` checks changed candidate files; `lint:ts:all` checks the whole
+tree. Dotfiles keeps its JSON codec in `agents/hooks/zod.ts`.
 
 ## Cut
 

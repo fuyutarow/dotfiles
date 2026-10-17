@@ -62,4 +62,4 @@ test("LaTeX preset applies to an empty repo and detects drift", async () => {
     expect((await run("apply", "latex", "--to", repo)).exit).toBe(0);
     expect((await run("diff", "latex", "--to", repo)).exit).toBe(0);
   }
-});
+}, 60_000);

@@ -1,5 +1,6 @@
 import {
   access,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -9,11 +10,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { cli } from "cleye";
-import {
-  loadCommittedPolicy,
-  loadRepoPolicy,
-  renderOxlintrc,
-} from "../../scripts/render-oxlintrc.ts";
+import { attempt, errorMessage } from "../../agents/hooks/attempt.ts";
+import { z } from "../../agents/hooks/zod.ts";
 import { discoverPresets } from "./manifests.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
@@ -43,8 +41,7 @@ const argv = cli(
     ignoreArgv: rejectPrototypeFlag,
     parameters: ["<action>", "[name]", "[dir]"],
     help: {
-      description:
-        "Apply a dotfiles preset, sync its policy render, or show target drift.",
+      description: "Copy a dotfiles preset or show target drift.",
     },
     flags: {
       to: { type: String, description: "target repository" },
@@ -109,28 +106,43 @@ const files = preset.files.map((file) => ({
   destination: join(target, file.destination),
 }));
 
-const expected = new Map<string, string>();
-for (const file of files) {
-  if (action === "sync") continue;
-  if (file.createOnly === true && (await exists(file.destination))) continue;
-  expected.set(file.destination, await readFile(file.source, "utf8"));
+async function requireOwnedDestination(destination: string): Promise<void> {
+  let current = target;
+  const paths = [target];
+  for (const part of relative(target, destination).split("/")) {
+    current = join(current, part);
+    paths.push(current);
+  }
+  for (const path of paths) {
+    const entry = await attempt(() => lstat(path));
+    if (entry.ok && entry.value.isSymbolicLink())
+      fatal(`refusing write through consumer symlink: ${path}`);
+    if (
+      !entry.ok &&
+      !z.looseObject({ code: z.literal("ENOENT") }).safeParse(entry.error)
+        .success
+    )
+      fatal(`cannot inspect ${path}: ${errorMessage(entry.error)}`);
+  }
 }
 
-if (name === "typescript") {
-  const loaded = await loadCommittedPolicy();
-  if (!loaded.ok) fatal(`cannot load TypeScript policy: ${loaded.error}`);
-  if (action === "apply" && (await exists(join(target, "oxlint-policy.toml"))))
-    console.log(
-      "preset: stale oxlint-policy.toml exists; renderer uses dotfiles' presets/typescript/policy.toml; review and remove the unused copy manually",
-    );
-  const repoPolicy =
-    target === ROOT ? loaded : await loadRepoPolicy(target, loaded.value);
-  if (repoPolicy.ok)
-    expected.set(
-      join(target, ".oxlintrc.json"),
-      renderOxlintrc(repoPolicy.value),
-    );
-  else fatal(repoPolicy.error);
+// Validate every destination before the first write, including unchanged files and parent paths.
+if (writes)
+  for (const file of files) await requireOwnedDestination(file.destination);
+
+const expected = new Map<string, string>();
+for (const file of files) {
+  if (
+    action === "sync" &&
+    ![
+      ".oxlintrc.json",
+      "house-plugin.js",
+      "oxlint-plugin-eslint.d.ts",
+    ].includes(relative(preset.directory, file.source))
+  )
+    continue;
+  if (file.createOnly === true && (await exists(file.destination))) continue;
+  expected.set(file.destination, await readFile(file.source, "utf8"));
 }
 
 async function applyOne(destination: string, content: string): Promise<void> {

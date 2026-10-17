@@ -18,8 +18,8 @@ root = "/home/fuyu/Workspace/firedancer"
 trunk = "alpha"
 surfaces = ["presets/typescript"]
 setup = ["bun", "install", "--frozen-lockfile"]
-# Coordinator: retain the policy drift check here even when it moves to check.
-command = ["sh", "-c", "mise run lint:ts && mise run lint:oxlint-policy"]
+# Consumers lint their owned configuration; compare preset drift explicitly.
+command = ["mise", "run", "lint:ts"]
 timeout_ms = 120000
 
 [[consumers]]

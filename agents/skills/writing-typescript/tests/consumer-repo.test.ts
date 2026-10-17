@@ -1,6 +1,4 @@
-// The canonical presets/typescript and presets/typescript files are the house setup another repo adopts
-// (firedancer, 2026-10-06). It must not drift from dotfiles itself: the same pins, the same strict
-// compilerOptions, and — rendered through the repo's own render-oxlintrc --repo — the same rules.
+// Consumers own copies of the strict compiler settings, pinned packages and oxlint config.
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,7 +8,6 @@ import { z } from "../../../hooks/zod.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..", "..");
 const FIXTURE = join(ROOT, "presets", "typescript");
-const LOCAL_EXAMPLE = join(ROOT, "presets", "typescript", "local.example.toml");
 const Pkg = z.looseObject({
   dependencies: z.record(z.string(), z.string()),
   devDependencies: z.record(z.string(), z.string()),
@@ -18,7 +15,6 @@ const Pkg = z.looseObject({
 const ShowConfig = z.looseObject({
   compilerOptions: z.record(z.string(), z.unknown()),
 });
-const Rc = z.looseObject({ rules: z.record(z.string(), z.unknown()) });
 const read = (path: string): Promise<string> => readFile(path, "utf8");
 
 async function run(cmd: string[], cwd = ROOT) {
@@ -88,56 +84,19 @@ describe("consumer-repo fixture", () => {
     expect(await effective(dir)).toEqual(await effective(ROOT));
   });
 
-  test("the oxlint preset renders dotfiles' house rules and seeds local ignores", async () => {
+  test("the oxlint preset supplies exact config and plugin copies", async () => {
     const dir = await mkdtemp(join(tmpdir(), "consumer-oxlint-"));
-    const r = await run([
-      "bun",
-      join(ROOT, "presets", "src", "cli.ts"),
+    const result = await run([
+      process.execPath,
+      join(ROOT, "presets/src/cli.ts"),
       "apply",
       "typescript",
       "--to",
       dir,
     ]);
-    expect(r.exitCode).toBe(0);
-    expect(await read(join(dir, "oxlint-policy.local.toml"))).toBe(
-      await read(LOCAL_EXAMPLE),
-    );
-    const [oursText, theirsText] = await Promise.all([
-      read(join(ROOT, ".oxlintrc.json")),
-      read(join(dir, ".oxlintrc.json")),
-    ]);
-    const ours = decodedJson(Rc, oursText);
-    const theirs = decodedJson(Rc, theirsText);
-    // The house rules are dotfiles' own; only the dotfiles-scoped ones (the zod import
-    // restriction: oxlint-policy.toml scope = "dotfiles") stay behind in dotfiles.
-    const { "eslint/no-restricted-imports": ourImports, ...ourRest } =
-      ours.rules;
-    const { "eslint/no-restricted-imports": theirImports, ...theirRest } =
-      theirs.rules;
-    expect(theirRest).toEqual(ourRest);
-    expect(JSON.stringify(ourImports)).toContain('"name":"zod"');
-    expect(JSON.stringify(theirImports)).not.toContain('"name":"zod"');
-  });
-
-  test("the mise tasks parse and name the gates the SKILL.md section promises", async () => {
-    const Tasks = z.looseObject({
-      tasks: z.record(z.string(), z.looseObject({ run: z.string() })),
-    });
-    const parsed = Tasks.safeParse(
-      Bun.TOML.parse(await read(join(FIXTURE, "mise-tasks.toml"))),
-    );
-    expect(parsed.success).toBe(true);
-    const tasks = parsed.success ? parsed.data.tasks : {};
-    expect(Object.keys(tasks).toSorted()).toEqual(
-      [
-        "lint:oxlint-policy",
-        "lint:ts",
-        "lint:ts:all",
-        "oxlint:render",
-        "typecheck",
-      ].toSorted(),
-    );
-    expect(tasks["lint:ts"]?.run).toContain("git diff --cached");
+    expect(result.exitCode).toBe(0);
+    for (const file of [".oxlintrc.json", "house-plugin.js"])
+      expect(await read(join(dir, file))).toBe(await read(join(FIXTURE, file)));
   });
 });
 
@@ -154,39 +113,5 @@ describe("consumer-repo zod.ts", () => {
     expect(bad.success ? "" : (bad.error.issues[0]?.code ?? "")).toBe(
       "invalid_format",
     );
-  });
-});
-
-// lint:ts must fail CLOSED (Tiger ledger, 2026-10-06). In a jj secondary workspace there is no Git
-// index: `git diff --cached` exits 129, the old body read that as "no staged .ts files" and exited 0
-// — a gate reporting a pass it never checked (measured on firedancer-ts, Vast).
-describe("consumer-repo lint:ts", () => {
-  const Tasks = z.looseObject({
-    tasks: z.record(z.string(), z.looseObject({ run: z.string() })),
-  });
-  const body = async (): Promise<string> => {
-    const tasks = decodedJson(
-      Tasks,
-      JSON.stringify(
-        Bun.TOML.parse(await read(join(FIXTURE, "mise-tasks.toml"))),
-      ),
-    ).tasks;
-    return tasks["lint:ts"]?.run ?? "";
-  };
-  const runIn = async (dir: string) => run(["sh", "-c", await body()], dir);
-
-  test("outside a Git checkout it refuses and says why, never 'no staged files'", async () => {
-    const r = await runIn(await mkdtemp(join(tmpdir(), "lint-ts-nogit-")));
-    expect(r.exitCode).not.toBe(0);
-    expect(r.stderr).toContain("cannot read the Git index");
-    expect(r.stdout).not.toContain("no staged .ts files");
-  });
-
-  test("in a Git checkout with nothing staged it passes, saying so", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "lint-ts-git-"));
-    expect((await run(["git", "init", "-q"], dir)).exitCode).toBe(0);
-    const r = await runIn(dir);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout).toContain("no staged .ts files");
   });
 });

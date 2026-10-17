@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.3 — 2026-10-18
+
+- Deny GPU admissions with recorded stall evidence
+
 ## 1.5.2 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

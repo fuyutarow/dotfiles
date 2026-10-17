@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.1 — 2026-10-18
+
+- Require consecutive probe misses before recording a GPU stall
+
 ## 0.12.0 — 2026-10-17
 
 - Move the single Jev transport client into shared for agx-run and jex.

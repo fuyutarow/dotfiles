@@ -1584,6 +1584,108 @@ describe("bounded execution", () => {
   );
 
   test.skipIf(NO_UTIL_LINUX)(
+    "does not deny GPU admission for one slow probe without recorded stall evidence",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const gpuOwnerStatePath = join(stateDirectory, "gpu-owner.json");
+      const now = Temporal.Now.instant().epochMilliseconds;
+      writeFileSync(
+        gpuOwnerStatePath,
+        `${JSON.stringify({
+          schema: 1,
+          attemptAt: now,
+          sampledAt: now,
+          consecutiveProbeMisses: 1,
+          devices: [],
+          processes: [],
+          samples: [],
+        })}\n`,
+      );
+      const reports: string[] = [];
+      const result = await checkJob(gpuManifest(), {
+        stateDirectory,
+        gpuOwnerStatePath,
+        kernelEnforcement: {
+          available: false,
+          reason: "test sampled enforcement",
+        },
+        hostOptIn: { sampled_enforcement_reason: "test" },
+        snapshot: hostSnapshot({
+          gpus: [
+            {
+              id: 0,
+              total_bytes: 16 * GiB,
+              used_bytes: 3 * GiB,
+              utilization_percent: 0,
+            },
+          ],
+        }),
+        gpuComputeAppsOutput: () => "42, 512",
+        report: (line) => {
+          reports.push(line);
+        },
+      });
+      expect(result).toMatchObject({ ok: true, exitCode: 0 });
+      expect(reports.join("\n")).not.toContain("GPU stall recorded");
+    },
+  );
+
+  test.skipIf(NO_UTIL_LINUX)(
+    "denies GPU admission only for a recorded stall and reports its evidence",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const gpuOwnerStatePath = join(stateDirectory, "gpu-owner.json");
+      writeFileSync(
+        gpuOwnerStatePath,
+        `${JSON.stringify({
+          schema: 1,
+          attemptAt: 1_000,
+          sampledAt: 1_000,
+          unresponsiveSince: 900,
+          stallEvidence:
+            "2 consecutive probe deadlines missed (deadline 20000 ms)",
+          devices: [],
+          processes: [],
+          samples: [],
+        })}\n`,
+      );
+      const reports: string[] = [];
+      const result = await checkJob(gpuManifest(), {
+        stateDirectory,
+        gpuOwnerStatePath,
+        kernelEnforcement: {
+          available: false,
+          reason: "test sampled enforcement",
+        },
+        hostOptIn: { sampled_enforcement_reason: "test" },
+        snapshot: hostSnapshot({
+          gpus: [
+            {
+              id: 0,
+              total_bytes: 16 * GiB,
+              used_bytes: 3 * GiB,
+              utilization_percent: 0,
+            },
+          ],
+        }),
+        gpuComputeAppsOutput: () => "42, 512",
+        report: (line) => {
+          reports.push(line);
+        },
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        exitCode: 69,
+        reason: "admission",
+      });
+      expect(reports.join("\n")).toContain(
+        "2 consecutive probe deadlines missed",
+      );
+      expect(reports.join("\n")).toContain("GPU stall recorded since");
+    },
+  );
+
+  test.skipIf(NO_UTIL_LINUX)(
     "measurement failure warns and uses declared-sum admission",
     async () => {
       const stateDirectory = temporaryStateDirectory();

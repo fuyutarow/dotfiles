@@ -574,6 +574,8 @@ type ExecuteOptions = {
   manifestSource?: ManifestSource;
   /** Injected query result for deterministic tests; production reads the GPU owner state. */
   gpuComputeAppsOutput?: (jobPids?: number[]) => string | null;
+  /** GPU owner state path override for deterministic admission tests. */
+  gpuOwnerStatePath?: string;
   /** Injected `index,memory.used` query result for deterministic device-delta tests. */
   gpuDeviceMemoryOutput?: (gpuId: number) => string | null;
   /** Slots requested directly by the CLI, independent of manifest declarations. */
@@ -2167,12 +2169,23 @@ function measuredVramFields(
 type GpuUsageProbe = {
   usage: Map<number, number> | null;
   diagnostic?: string;
+  stallEvidence?: string;
   sampledAt?: number | undefined;
 };
 
 async function admissionGpuUsage(
   options: ExecuteOptions,
 ): Promise<GpuUsageProbe> {
+  const state = await readGpuState(options.gpuOwnerStatePath);
+  if (state?.unresponsiveSince !== undefined) {
+    const since = Temporal.Instant.fromEpochMilliseconds(
+      state.unresponsiveSince,
+    ).toString();
+    return {
+      usage: null,
+      stallEvidence: `GPU stall recorded since ${since}: ${state.stallEvidence ?? "evidence unavailable"}`,
+    };
+  }
   const gpuComputeAppsOutput = options.gpuComputeAppsOutput;
   if (gpuComputeAppsOutput === undefined) return sampleGpuComputeApps();
   const injected = gpuComputeAppsOutput([]);
@@ -2699,6 +2712,11 @@ async function checkJobResult(
       : { usage: null };
   const gpuUsage = gpuUsageProbe.usage;
   if (manifest.device.kind === "gpu" && gpuUsage === null) {
+    if (gpuUsageProbe.stallEvidence !== undefined) {
+      const reason = gpuUsageProbe.stallEvidence;
+      report(`DENY job=${manifest.job_id} reason=${JSON.stringify(reason)}`);
+      return ok({ ok: false, exitCode: 69, reason: "admission" });
+    }
     const warning =
       `WARN job=${manifest.job_id} VRAM measurement failed; ${gpuUsageProbe.diagnostic ?? "probe=unavailable"}; ` +
       "using declared-sum admission (fail-closed basis)";
@@ -2817,6 +2835,11 @@ async function executeJobResult(
       : { usage: null };
   const gpuUsageAtAdmission = gpuUsageProbe.usage;
   if (manifest.device.kind === "gpu" && gpuUsageAtAdmission === null) {
+    if (gpuUsageProbe.stallEvidence !== undefined) {
+      const reason = gpuUsageProbe.stallEvidence;
+      report(`DENY job=${manifest.job_id} reason=${JSON.stringify(reason)}`);
+      return ok({ ok: false, exitCode: 69, reason: "admission" });
+    }
     const warning =
       `WARN job=${manifest.job_id} VRAM measurement failed; ${gpuUsageProbe.diagnostic ?? "probe=unavailable"}; ` +
       "using declared-sum admission (fail-closed basis)";

@@ -46,7 +46,7 @@ test("admission and monitor projections only read fresh owner state", async () =
     JSON.stringify({ ...state, unresponsiveSince: state.attemptAt }),
   );
   expect((await queryNvidiaSmi([], options)).report.stderr).toContain(
-    "unresponsive since",
+    "GPU stall recorded since",
   );
   await Bun.write(
     statePath,

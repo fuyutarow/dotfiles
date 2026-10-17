@@ -220,6 +220,8 @@ export type SamplerOptions = {
   path?: string;
   fallbacks?: string[];
   timeoutMs?: number;
+  /** Consecutive missed probe deadlines required before recording a GPU stall. */
+  stallMisses?: number;
   procRoot?: string;
   now?: () => number;
 };
@@ -246,11 +248,22 @@ export async function runGpuSampler(
       samples: [],
     };
     if (await hostHasNvidiaSmi(options.procRoot)) {
+      const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
+      const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
       await writeState(path, {
         ...base,
-        unresponsiveSince: base.unresponsiveSince ?? now,
+        attemptAt: now,
+        consecutiveProbeMisses,
+        ...(stalled
+          ? {
+              unresponsiveSince: base.unresponsiveSince ?? now,
+              stallEvidence: `${consecutiveProbeMisses} consecutive sampler starts found nvidia-smi still running`,
+            }
+          : { unresponsiveSince: undefined, stallEvidence: undefined }),
       });
-      return "refused: nvidia-smi exists";
+      return stalled
+        ? "unresponsive: nvidia-smi persists"
+        : "slow sample: nvidia-smi exists";
     }
     // A future timestamp also refuses: clock rollback must not bypass the minimum interval.
     if (
@@ -268,7 +281,6 @@ export async function runGpuSampler(
     const pending = {
       ...base,
       attemptAt: now,
-      unresponsiveSince: base.unresponsiveSince ?? now,
     };
     await writeState(path, pending);
     const signal = AbortSignal.timeout(options.timeoutMs ?? 20_000);
@@ -297,12 +309,40 @@ export async function runGpuSampler(
     // Do not await exited after the deadline: an unkillable D-state process may never exit.
     const snapshot = await Promise.race([completed, timedOut]);
     if (snapshot === undefined || signal.aborted) {
-      await writeState(path, { ...pending, attemptAt: clock() });
-      return "unresponsive";
+      const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
+      const stallMisses = options.stallMisses ?? 2;
+      const stalled = consecutiveProbeMisses >= stallMisses;
+      await writeState(path, {
+        ...pending,
+        attemptAt: clock(),
+        consecutiveProbeMisses,
+        ...(stalled
+          ? {
+              unresponsiveSince: base.unresponsiveSince ?? clock(),
+              stallEvidence: `${consecutiveProbeMisses} consecutive probe deadlines missed (deadline ${options.timeoutMs ?? 20_000} ms)`,
+            }
+          : { unresponsiveSince: undefined, stallEvidence: undefined }),
+      });
+      return stalled ? "unresponsive" : "slow sample";
     }
     const at = clock();
     const first = snapshot.devices[0];
-    if (first === undefined) return "unresponsive";
+    if (first === undefined) {
+      const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
+      const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
+      await writeState(path, {
+        ...pending,
+        attemptAt: at,
+        consecutiveProbeMisses,
+        ...(stalled
+          ? {
+              unresponsiveSince: base.unresponsiveSince ?? at,
+              stallEvidence: `${consecutiveProbeMisses} consecutive invalid probe results`,
+            }
+          : { unresponsiveSince: undefined, stallEvidence: undefined }),
+      });
+      return stalled ? "unresponsive" : "slow sample";
+    }
     const sample = {
       ts: at,
       nextTs: at + GPU_INTERVAL_MS,
@@ -314,6 +354,7 @@ export async function runGpuSampler(
       schema: 1,
       attemptAt: now,
       sampledAt: at,
+      consecutiveProbeMisses: 0,
       ...snapshot,
       samples: [
         ...base.samples.filter((s) => at - s.ts <= RETAIN_MS),

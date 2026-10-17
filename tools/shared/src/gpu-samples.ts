@@ -116,6 +116,8 @@ export const GpuStateSchema = z.object({
   attemptAt: z.number().int().nonnegative(),
   sampledAt: z.number().int().nonnegative().optional(),
   unresponsiveSince: z.number().int().nonnegative().optional(),
+  stallEvidence: z.string().optional(),
+  consecutiveProbeMisses: z.number().int().nonnegative().optional(),
   why: z.string().optional(),
   devices: z.array(GpuDeviceSchema).max(256),
   processes: z.array(GpuProcessSchema).max(65536),
@@ -139,7 +141,7 @@ export function gpuStateFailure(
 ): string | undefined {
   if (state === undefined) return "stale (GPU sampler state unavailable)";
   if (state.unresponsiveSince !== undefined)
-    return `unresponsive since ${Temporal.Instant.fromEpochMilliseconds(state.unresponsiveSince).toString()}`;
+    return `GPU stall recorded since ${Temporal.Instant.fromEpochMilliseconds(state.unresponsiveSince).toString()} (${state.stallEvidence ?? "evidence unavailable"})`;
   if (state.sampledAt === undefined)
     return state.why ?? "stale (no GPU sample)";
   if (state.sampledAt > now || now - state.sampledAt > maxAgeMs)

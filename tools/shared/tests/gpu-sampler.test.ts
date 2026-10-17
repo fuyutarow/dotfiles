@@ -80,12 +80,34 @@ test("success and failure both persist the sixty-second cooldown across sampler 
   const failed = await fixture(true);
   now = 2_000_000;
   expect(await runGpuSampler({ ...failed.options, now: () => now })).toBe(
-    "unresponsive",
+    "slow sample",
   );
+  expect(
+    (await readGpuState(failed.options.statePath))?.unresponsiveSince,
+  ).toBeUndefined();
   expect(
     await runGpuSampler({ ...failed.options, now: () => now + 59_999 }),
   ).toContain("60s");
   expect(await readFile(failed.calls, "utf8")).toBe("x");
+  now += 60_000;
+  expect(await runGpuSampler({ ...failed.options, now: () => now })).toBe(
+    "unresponsive",
+  );
+  expect(
+    (await readGpuState(failed.options.statePath))?.stallEvidence,
+  ).toContain("2 consecutive probe deadlines missed");
+  await writeFile(
+    failed.binary,
+    `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(GPU_XML)});\n`,
+    { mode: 0o755 },
+  );
+  now += 60_000;
+  expect(await runGpuSampler({ ...failed.options, now: () => now })).toBe(
+    "sampled",
+  );
+  const recovered = await readGpuState(failed.options.statePath);
+  expect(recovered?.unresponsiveSince).toBeUndefined();
+  expect(recovered?.consecutiveProbeMisses).toBe(0);
 });
 test("concurrent owner requests and many consumers never multiply a hanging driver process", async () => {
   const { options, calls } = await fixture(true);
@@ -112,12 +134,13 @@ test("concurrent owner requests and many consumers never multiply a hanging driv
   const readers = await Promise.all(
     Array.from({ length: 40 }, () => sampleGpu(options)),
   );
+  expect(readers.every((r) => !r.ok)).toBe(true);
   expect(
-    readers.every((r) => !r.ok && r.why.startsWith("unresponsive since")),
-  ).toBe(true);
-  expect(
-    (await Promise.all(owners)).filter((out) => out === "unresponsive"),
+    (await Promise.all(owners)).filter((out) => out === "slow sample"),
   ).toHaveLength(1);
+  expect(
+    (await readGpuState(options.statePath))?.unresponsiveSince,
+  ).toBeUndefined();
   expect(await readFile(calls, "utf8")).toBe("x");
   expect(await runGpuSampler(options)).toContain("60s");
   expect(await readFile(calls, "utf8")).toBe("x");
@@ -133,13 +156,13 @@ test("an existing process in any state refuses a start even after the interval a
     await writeFile(join(pid, "stat"), `123 (nvidia-smi) ${state}`);
     const at = now;
     expect(await runGpuSampler({ ...options, now: () => at })).toContain(
-      "nvidia-smi exists",
+      state === "D" ? "slow sample" : "unresponsive",
     );
     expect(await Bun.file(calls).exists()).toBe(false);
     now += 60_001;
   }
   expect((await readGpuState(options.statePath))?.unresponsiveSince).toBe(
-    1_000_000,
+    1_060_001,
   );
 });
 test.skipIf(process.platform !== "linux")(
@@ -188,7 +211,7 @@ test("readers serve only fresh state and preserve an explicit unresponsive verdi
     gpuReadFromState({ ...ownerState(now), unresponsiveSince: now }, now),
   ).toMatchObject({
     ok: false,
-    why: "unresponsive since 1970-01-01T00:16:40Z",
+    why: "GPU stall recorded since 1970-01-01T00:16:40Z (evidence unavailable)",
   });
   await Bun.write(options.statePath, "corrupt");
   expect(await readGpuState(options.statePath)).toBeUndefined();
@@ -245,7 +268,7 @@ test("concurrent reclaimers of a dead owner still start only one hanging driver"
       return out;
     }),
   );
-  expect(results.filter((value) => value === "unresponsive")).toHaveLength(1);
+  expect(results.filter((value) => value === "slow sample")).toHaveLength(1);
   expect(await Bun.file(calls).text()).toBe("x");
   expect(
     (await readdir(dir)).filter((name) => name.includes(".dead-")),

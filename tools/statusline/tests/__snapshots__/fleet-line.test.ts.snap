@@ -1,0 +1,7 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: fresh 1`] = `"workers 4 running (2 here) · lost 1 · ws 6 · unlanded 2 · collectable 3 · legacy 3 fresh · ⚠ orphaned 1 · unjudged 1"`;
+
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: old 1`] = `"workers 4 running (2 here) · lost 1 · ws 6 · unlanded 2 · collectable 3 · legacy 3 stale(180s) · ⚠ orphaned 1 · unjudged 1"`;
+
+exports[`snapshot renders one fleet row in order from the actual agx fold; fresh, stale and missing never invoke jj: missing 1`] = `"workers unknown running (unknown here) · lost unknown · ws unknown · unlanded unknown · collectable unknown · legacy unknown unknown · anomalies unknown"`;

@@ -31,7 +31,7 @@ function fixture(name: string, agxBody: string) {
   const agx = join(bin, "agx");
   writeFileSync(
     agx,
-    "#!/bin/sh\nprintf 'agx' >> '" + log + "'\n" + agxBody + "\n",
+    `#!/bin/sh\nif [ "$1" = ws ] || [ "$1" = doctor ]; then exit 1; fi\nprintf agx >> '${log}'\n${agxBody}\n`,
   );
   chmodSync(agx, 0o755);
   const env = isolatedStatuslineEnv({
@@ -118,7 +118,7 @@ const run = JSON.stringify([
 describe("agx statusline snapshot", () => {
   test("a timed-out refresh keeps the last good rows and marks their age", async () => {
     const f = fixture("slow-after-good", "/bin/sleep 3\nprintf '[]\\n'");
-    const snapshotPath = writeGoodSnapshot(f.env, run, 45_000);
+    const snapshotPath = writeGoodSnapshot(f.env, run, 75_000);
     const before = readFileSync(snapshotPath, "utf8");
 
     const snapshot = await readAgxSnapshotAsync(f.env);
@@ -129,7 +129,7 @@ describe("agx statusline snapshot", () => {
     expect(output).toContain("luna-high");
     expect(output).toContain("v4_learn");
     expect(output).toMatch(
-      /agx (4[5-9]|5[0-9])s old · lost 0 · dispatch warning n\/a \(dispatch warning unavailable\) · recover n\/a \(recover health unavailable\)/u,
+      /agx 1m old · lost 0 · dispatch warning n\/a \(dispatch warning unavailable\) · recover n\/a \(recover health unavailable\)/u,
     );
     expect(output).not.toContain("agx n/a");
 

@@ -7,7 +7,8 @@ fixture-agent | Opus | high | rc:off | Ctx: 1.0k 25%
 Rate: claude n/a · 5h n/a · 7d n/a | codex n/a | Jev n/a (fixture unavailable)
 Sys: CPU 12% · RAM 25% (2.0/8.0G) · tmp n/a (not sampled)
 Job: idle
-agx fresh · lost 0 · dispatch warning: none · recover: none"
+agx fresh · lost 0 · dispatch warning: none · recover: none
+workers unknown running (unknown here) · lost unknown · ws unknown · unlanded unknown · collectable unknown · legacy unknown unknown · anomalies unknown"
 `;
 
 exports[`statusline render golden fixed collector results keep the rendered rows unchanged 2`] = `
@@ -17,6 +18,7 @@ fixture-agent | Opus | high | rc:off | Ctx: 1.0k 25%
 Rate: claude n/a · 5h n/a · 7d n/a | codex n/a | Jev n/a (fixture unavailable)
 Sys: CPU 12% · RAM 25% (2.0/8.0G) · tmp n/a (not sampled)
 Job: idle
-terra-high 1m30s $0.03 agt_x@ws_x STATUSLINE-WORKER-ROWS │ working · no event yet
-agx fresh · lost 0 · dispatch warning: none · recover: none"
+terra-high 1m30s $0.03 agt_x@ws_x tkt_STATUSLINE-WORKER-ROWS │ working · no event yet
+agx fresh · lost 0 · dispatch warning: none · recover: none
+workers unknown running (unknown here) · lost unknown · ws unknown · unlanded unknown · collectable unknown · legacy unknown unknown · anomalies unknown"
 `;

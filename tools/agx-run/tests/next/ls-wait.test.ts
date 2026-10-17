@@ -96,7 +96,7 @@ test("--wait on an already-ended run returns at once, in ls format", async () =>
   const child = spawnWait(root, "run-done");
   expect(await child.exited).toBe(0);
   expect(await new Response(child.stdout).text()).toContain(
-    "run-done ended done row=luna-high exit=0",
+    "run-done ended tkt_done row=luna-high exit=0",
   );
 }, 30_000);
 

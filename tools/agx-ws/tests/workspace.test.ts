@@ -1516,6 +1516,30 @@ describe("gc integration branches", () => {
     if (!parsed.success) return;
     expect(parsed.data.value.failed).toEqual([]);
     expect(parsed.data.value.lines).toHaveLength(3);
+    const summaryModule = join(
+      import.meta.dir,
+      "../../statusline/src/agx-snapshot.ts",
+    );
+    const summary = await run(
+      [
+        process.execPath,
+        "--eval",
+        `import {workspaceCounts} from ${JSON.stringify(summaryModule)};
+        console.log(JSON.stringify(workspaceCounts(${JSON.stringify(parsed.data.value.lines.join("\n"))}, 0)));`,
+      ],
+      dotfiles,
+      baseEnv({ AGX_DISPATCHER_SESSION: "", CLAUDE_CODE_SESSION_ID: "" }),
+    );
+    expect(summary.code, summary.err).toBe(0);
+    expect(summary.out.trim()).toBe(
+      JSON.stringify({
+        total: 3,
+        unlanded: 0,
+        collectable: 3,
+        legacy: 0,
+        capturedAt: 0,
+      }),
+    );
     for (const path of [dotfiles, consumer, pending]) {
       expect(
         parsed.data.value.lines.some((line) =>

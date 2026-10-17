@@ -495,6 +495,7 @@ describe("agx-next run", () => {
         "exit",
         "outcome",
         "failed_early_quit",
+        "health",
         "id",
         "judgment",
         "last_progress_path",

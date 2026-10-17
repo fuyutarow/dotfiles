@@ -9,6 +9,7 @@ export const ROW_KINDS = [
   "sys",
   "job",
   "agx",
+  "fleet",
   "dispatch-warning",
   "recover",
 ] as const;
@@ -22,6 +23,7 @@ const LABELS = {
   sys: "Sys:",
   job: "Job:",
   agx: "agx",
+  fleet: "fleet",
   "dispatch-warning": "dispatch warning",
   recover: "recover",
 } satisfies Record<RowKind, string>;

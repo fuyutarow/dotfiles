@@ -140,7 +140,7 @@ test("agx ls selects an id prefix and an exact ticket with newest last", () => {
   expect(substring.exitCode).toBe(2);
   expect(substring.stderr.toString()).toContain("no run id or exact ticket");
   expect(substring.stderr.toString()).toContain(
-    "accept-fold, accept-fold-extra",
+    "tkt_accept-fold, tkt_accept-fold-extra",
   );
   expect(substring.stderr.toString().trim().split("\n")).toHaveLength(1);
 

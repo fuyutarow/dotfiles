@@ -22,6 +22,8 @@ import {
 import {
   readAgxSnapshotAsync,
   stateDir as agxStateDir,
+  type WorkspaceCounts,
+  type FleetFindings,
 } from "./agx-snapshot.ts";
 
 // Run row source: one marker per worker agx-run started (tools/agx-run/src/state.ts).
@@ -71,6 +73,9 @@ function doingOf(dir: string, runId: string): RouteRun["doing"] {
   };
 }
 export interface RouteScan {
+  findings?: FleetFindings | undefined;
+  workspaces?: WorkspaceCounts | undefined;
+  fleet?: { running: number; here: number; lost: number } | undefined;
   runs: RouteRun[];
   unreadable: number;
   snapshotAgeSecs?: number | undefined;
@@ -158,6 +163,7 @@ export async function agxRouteRunsAsync(
   const dispatcherSession = currentDispatcherSession(sessionId);
   const runs: RouteRun[] = [];
   let unreadable = 0;
+  const fleet = { running: 0, here: 0, lost: 0 };
   for (const value of rows) {
     const parsed = AgxLsRowSchema.safeParse(value);
     if (!parsed.success) {
@@ -165,6 +171,16 @@ export async function agxRouteRunsAsync(
       continue;
     }
     const row = parsed.data;
+    if (row.state === "running") {
+      fleet.running += 1;
+    }
+    if (
+      row.state === "running" &&
+      dispatcherSession !== undefined &&
+      row.dispatcher_session === dispatcherSession
+    )
+      fleet.here += 1;
+    if (row.health === "orphaned") fleet.lost += 1;
     if (row.state !== "running" && row.health !== "orphaned") continue;
     const recordedWorkspace = optionalString(row.workspace_name);
     const workspacePath =
@@ -247,6 +263,9 @@ export async function agxRouteRunsAsync(
   return {
     runs,
     unreadable,
+    fleet: snapshot.rows === undefined || unreadable > 0 ? undefined : fleet,
+    workspaces: snapshot.workspaces,
+    findings: snapshot.findings,
     ...(snapshot.ageSeconds === undefined
       ? {}
       : { snapshotAgeSecs: snapshot.ageSeconds }),
@@ -595,9 +614,9 @@ export function routeLines(
   );
   const labels = shown.map((r) =>
     truncateDisplay(
-      r.pickSource === "resume" && !/^resume(?::|\b)/iu.test(r.label)
-        ? `resume: ${r.label}`
-        : r.label,
+      r.pickSource === "resume"
+        ? `resume: tkt_${r.label.replace(/^resume(?::|\b)\s*/iu, "")}`
+        : `tkt_${r.label}`,
       RUN_LABEL_WIDTH,
     ),
   );

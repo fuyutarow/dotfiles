@@ -36,7 +36,7 @@ const select = (
     rows: [],
     kind: "ticket",
     error: `no run id or exact ticket matches '${selector}'; ticket candidates: ${[
-      ...new Set(rows.map((entry) => entry.ticket)),
+      ...new Set(rows.map((entry) => `tkt_${entry.ticket}`)),
     ]
       .toSorted()
       .slice(0, 10)
@@ -45,7 +45,7 @@ const select = (
 };
 
 const line = (entry: Row): string =>
-  `${entry.id} ${entry.state} ${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"} outcome=${entry.outcome ?? "-"}`;
+  `${entry.id} ${entry.state} tkt_${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"} outcome=${entry.outcome ?? "-"}`;
 
 /**
  * `agx ls --wait SELECTOR`: a read-only fold over the record log, re-read on a

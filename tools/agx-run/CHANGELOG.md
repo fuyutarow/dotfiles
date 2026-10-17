@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.2.4 — 2026-10-17
+
+- Prefix human-facing ticket names with tkt_ while preserving bare slugs in JSON and records.
+
 ## 5.2.3 — 2026-10-17
 
 - Expose doctor health classification in JSON listings and document durable units as agt_<slug>.

@@ -461,7 +461,7 @@ export function overlapWarnings(writes: string[]): void {
       writes.filter((b) => globsOverlap(a, b)),
     );
     if (intersections.length > 0)
-      process.stderr.write(`WARN overlap run=${id} ticket=${run.ticket}\n`);
+      process.stderr.write(`WARN overlap run=${id} ticket=tkt_${run.ticket}\n`);
   }
 }
 

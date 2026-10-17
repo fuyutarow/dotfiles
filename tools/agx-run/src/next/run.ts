@@ -721,7 +721,7 @@ const selectedRuns = (
   return {
     rows: [],
     error: `no run id or exact ticket matches '${selector}'; ticket candidates: ${[
-      ...new Set(rows.map((entry) => entry.ticket)),
+      ...new Set(rows.map((entry) => `tkt_${entry.ticket}`)),
     ]
       .toSorted()
       .slice(0, 10)
@@ -748,7 +748,7 @@ export async function list(flags: Flags): Promise<number> {
   let output = visible
     .map(
       (entry) =>
-        `${entry.id} ${entry.state} ${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"} outcome=${entry.outcome ?? "-"}`,
+        `${entry.id} ${entry.state} tkt_${entry.ticket} row=${entry.row} exit=${entry.exit ?? "-"} outcome=${entry.outcome ?? "-"}`,
     )
     .join("\n");
   if (asJson)

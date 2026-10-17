@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const ENTRY = join(import.meta.dir, "../src/agx.ts");
 const TICKET_CLI = join(import.meta.dir, "../../agx-ticket/src/tkt.ts");
@@ -380,6 +381,40 @@ test("agx doctor folds the run, workspace, and ticket owners with exact findings
     ].toSorted(),
   );
   expect(result.stderr).toBe("agx doctor: 10 finding(s)\n");
+  const summary = await run(
+    [
+      process.execPath,
+      "--eval",
+      `import {doctorFindings} from ${JSON.stringify(join(import.meta.dir, "../../statusline/src/agx-snapshot.ts"))}; console.log(JSON.stringify(doctorFindings(${JSON.stringify(result.stdout)}, 0)));`,
+    ],
+    f.dotfiles,
+    { ...f.env, AGX_DISPATCHER_SESSION: "", CLAUDE_CODE_SESSION_ID: "" },
+  );
+  expect(summary.exitCode, summary.stderr).toBe(0);
+  expect(
+    jsonOf(
+      z.object({
+        kinds: z.record(z.string(), z.number()),
+        capturedAt: z.number(),
+      }),
+    ).safeParse(summary.stdout),
+  ).toEqual({
+    success: true,
+    data: {
+      kinds: {
+        orphaned: 1,
+        "missing-return": 2,
+        unjudged: 1,
+        "legacy-empty": 1,
+        collectable: 1,
+        "unlanded-72h": 1,
+        stale: 1,
+        "accepted-landed-present": 1,
+        "outside-home": 1,
+      },
+      capturedAt: 0,
+    },
+  });
   expect(await Bun.file(f.ticketRecords).text()).toBe(before);
   expect(await Bun.file(join(f.repo, "stray.md")).exists()).toBe(true);
   expect(await Bun.file(join(f.tickets, "accepted.md")).exists()).toBe(true);

@@ -143,7 +143,8 @@ test("R3: every row kind renders when every reader times out before any good obs
   for (const [index, label] of labels.entries())
     expect(lines[index]).toContain(label);
   expect(lines[6]).toContain("dispatch warning n/a");
-  expect(lines.at(-1)).toContain("recover n/a");
+  expect(lines[6]).toContain("recover n/a");
+  expect(lines.at(-1)).toContain("workers unknown running");
   expect(output).toContain("dispatch timeout 5ms");
 });
 
@@ -156,6 +157,7 @@ test("R3: the closed row record cannot silently omit or empty any row", () => {
     sys: observed("sys"),
     job: observed("job"),
     agx: observed("agx"),
+    fleet: observed("workers unknown running"),
     "dispatch-warning": observed("dispatch warning"),
     recover: observed("recover"),
   } satisfies DisplayRows;

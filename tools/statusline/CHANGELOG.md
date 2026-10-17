@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.0 — 2026-10-17
+
+- Add a cached fleet summary for running workers, lost runs, and workspace classifier counts; retain stale values and refresh at most once per minute.
+- Show cached agx doctor findings by kind, show ok only after a clean observation, and prefix worker-row tickets with tkt_.
+
 ## 0.16.7 — 2026-10-17
 
 - Fix empty agx summary fields, hide worker session IDs, normalize agt_ names, and count doctor-classified orphaned runs.

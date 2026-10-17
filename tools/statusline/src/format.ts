@@ -1,6 +1,7 @@
 import { DIM, ESC, RST } from "./ansi.ts";
 import { promptParts, type PromptParts } from "./prompt-stamp.ts";
 import type { Dataframe } from "./dataframe.ts";
+import { fleetLine } from "./fleet-line.ts";
 import { ctxSegment } from "./model-context.ts";
 import { rateRow } from "./rate-limits.ts";
 import { admittedJobSegment } from "./jobs.ts";
@@ -296,6 +297,7 @@ export function render(
     sys: observed(sysLine),
     job: observed(jobLine),
     agx: observed(agxBlock),
+    fleet: observed(fleetLine(scan)),
     "dispatch-warning": observed(warningLine),
     recover: observed(recoverLine),
   } satisfies DisplayRows;

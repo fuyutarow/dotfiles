@@ -35,6 +35,7 @@ import { validateSlug } from "../../shared/src/slug.ts";
 import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import { jjWorkspace, refLocks } from "./jj-workspace.ts";
 import { withWorkspaceLock } from "./lock.ts";
+import { runStep, StepFailure } from "./subprocess.ts";
 
 const bad = (message: string): Attempt<never> => ({
   ok: false,
@@ -75,23 +76,11 @@ async function exec(
   cwd: string,
   env?: Record<string, string>,
 ): Promise<Attempt<Ran>> {
-  return attempt(async () => {
-    const child = Bun.spawn(cmd, {
-      cwd,
-      env: { ...process.env, ...env },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [out, err, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return { out, err, code };
-  });
+  const ran = await runStep(cmd, cwd, { env });
+  return ran.ok ? good({ ...ran.value, out: ran.value.out.toString() }) : ran;
 }
 
-/** jj never gets a timeout: killing it mid-write is the failure this tool exists to avoid. */
+/** Every jj invocation has a named deadline, including reads after workspace creation. */
 async function jjOut(
   args: string[],
   cwd: string,
@@ -176,8 +165,8 @@ function legacyWorkspaceName(slug: string): Attempt<string> {
     : bad(`invalid slug '${slug}': use letters, digits, '_' and '-'`);
 }
 
-/** Filesystem type of the nearest existing ancestor of `path`; undefined when it cannot be read. */
-async function fsType(path: string): Promise<string | undefined> {
+/** Filesystem type of the nearest existing ancestor; preserve named step failures. */
+async function fsType(path: string): Promise<Attempt<string>> {
   let probe = path;
   while (!existsSync(probe) && dirname(probe) !== probe) probe = dirname(probe);
   const args =
@@ -185,7 +174,12 @@ async function fsType(path: string): Promise<string | undefined> {
       ? ["-f", "%T", probe]
       : ["-f", "-c", "%T", probe];
   const ran = await exec(["stat", ...args], probe);
-  return ran.ok && ran.value.code === 0 ? ran.value.out.trim() : undefined;
+  if (!ran.ok) return ran;
+  return ran.value.code === 0
+    ? good(ran.value.out.trim())
+    : bad(
+        `stat ${args.join(" ")} failed (exit ${ran.value.code}): ${ran.value.err.trim()}`,
+      );
 }
 
 export type Graveyard = { path: string };
@@ -198,13 +192,10 @@ export async function checkGraveyard(): Promise<Attempt<Graveyard>> {
     process.env.GRAVEYARD ??
     join(data, "graveyard");
   const type = await fsType(path);
-  if (type === undefined)
+  if (!type.ok) return type;
+  if (type.value === "tmpfs" || type.value === "ramfs")
     return bad(
-      `cannot verify the filesystem of the graveyard ${path}; refusing`,
-    );
-  if (type === "tmpfs" || type === "ramfs")
-    return bad(
-      `graveyard ${path} is on ${type} (RAM-backed); set RIP_GRAVEYARD to a disk path`,
+      `graveyard ${path} is on ${type.value} (RAM-backed); set RIP_GRAVEYARD to a disk path`,
     );
   return good({ path });
 }
@@ -443,26 +434,29 @@ async function readyWorkspace(
     const trusted = await exec(["mise", "trust", config], dir);
     if (!trusted.ok) return bad(`mise trust ${config}: ${msg(trusted)}`);
     if (trusted.value.code !== 0)
-      return bad(
-        `mise trust ${config} failed (exit ${trusted.value.code}): ${trusted.value.err.trim()}`,
-      );
+      return {
+        ok: false,
+        error: new StepFailure(
+          `mise trust ${config} failed (exit ${trusted.value.code}): ${trusted.value.err.trim()}`,
+          trusted.value.code,
+        ),
+      };
     process.stderr.write(`ws: ready: trusted ${config}\n`);
   }
   for (const command of cfg.ready) {
     process.stderr.write(`ws: ready: ${command}\n`);
-    const ran = await attempt(
-      () =>
-        Bun.spawn(["sh", "-c", command], {
-          cwd: dir,
-          stdin: "ignore",
-          stdout: json ? 2 : "inherit",
-          stderr: "inherit",
-        }).exited,
-    );
-    if (!ran.ok)
-      return bad(`readiness command failed: ${command}: ${msg(ran)}`);
-    if (ran.value !== 0)
-      return bad(`readiness command failed (exit ${ran.value}): ${command}`);
+    const ran = await runStep(["sh", "-c", command], dir, {
+      output: json ? "json" : "inherit",
+    });
+    if (!ran.ok) return ran;
+    if (ran.value.code !== 0)
+      return {
+        ok: false,
+        error: new StepFailure(
+          `readiness command failed (exit ${ran.value.code}): ${command}`,
+          ran.value.code,
+        ),
+      };
   }
   return good(undefined);
 }
@@ -533,13 +527,18 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
           name,
           dir,
         );
-        return bad(
-          `${msg(ready)}; ${
-            undone.ok
-              ? "the new workspace was removed"
-              : `rollback also failed: ${msg(undone)} (remove ${dir} by hand)`
-          }`,
-        );
+        const failure = `${msg(ready)}; ${
+          undone.ok
+            ? "the new workspace was removed"
+            : `rollback also failed: ${msg(undone)} (remove ${dir} by hand)`
+        }`;
+        return {
+          ok: false,
+          error: new StepFailure(
+            failure,
+            ready.error instanceof StepFailure ? ready.error.code : 1,
+          ),
+        };
       }
       created = true;
       return good(dir);
@@ -961,8 +960,7 @@ async function orphanFileDifference(
   if (!info.value.isFile() && !info.value.isSymbolicLink())
     return `yes: file type differs at ${path}`;
   const compared = await attempt(async () => {
-    // bounded: local jj store read; never kill jj mid-operation.
-    const child = Bun.spawn(
+    const ran = await runStep(
       [
         "jj",
         "--ignore-working-copy",
@@ -973,13 +971,10 @@ async function orphanFileDifference(
         trunk,
         `root-file:${path}`,
       ],
-      { cwd: repo.backing, stdout: "pipe", stderr: "pipe" },
+      repo.backing,
     );
-    const [expected, err, code] = await Promise.all([
-      new Response(child.stdout).arrayBuffer(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
+    if (!ran.ok) return `unknown: ${msg(ran)}`;
+    const { out: expected, err, code } = ran.value;
     if (code !== 0) return `unknown: ${err.trim()}`;
     const actual = info.value.isSymbolicLink()
       ? Buffer.from(await readlink(disk))

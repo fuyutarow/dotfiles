@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3 — 2026-10-17
+
+- Bound subprocess waits with named deadlines, close retained pipes after child exit, and preserve readiness exit status.
+
 ## 0.8.2 — 2026-10-17
 
 - Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.

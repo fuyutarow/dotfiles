@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { cli as cleyeCli, command } from "cleye";
 import { standardCli } from "../../shared/src/cli.ts";
+import { StepFailure } from "./subprocess.ts";
 import { errorMessage } from "../../shared/src/attempt.ts";
 import packageJson from "../package.json" with { type: "json" };
 import {
@@ -25,7 +26,7 @@ const rejectPrototypeFlag = (type: string, flag: string): void => {
 
 const fail = (error: unknown): void => {
   process.stderr.write(`ws: ${errorMessage(error)}\n`);
-  process.exitCode = 1;
+  process.exitCode = error instanceof StepFailure ? error.code : 1;
 };
 
 const repoFlag = {

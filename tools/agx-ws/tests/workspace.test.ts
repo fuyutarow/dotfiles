@@ -654,10 +654,26 @@ describe("ws add", () => {
     });
   });
 
+  test("WS-ADD-HANG: mise exits with retained pipes, then add returns the readiness status", async () => {
+    const path = await repo(`ready = ["exit 7"]\n`);
+    await Bun.write(join(path, "mise.toml"), "# fixture\n");
+    expect((await jj(["commit", "-m", "mise fixture"], path)).code).toBe(0);
+    const pidFile = join(scratch, "retained-pipe.pid");
+    shim("mise", `sleep 30 & echo $! > "${pidFile}"; exit 0`);
+    const started = performance.now();
+    const r = await ws(["add", "retained-pipe"], path);
+    process.kill(Number(await Bun.file(pidFile).text()), "SIGKILL");
+    await unlink(join(bin, "mise"));
+    expect(r.code, r.err).toBe(7);
+    expect(r.err).toContain("readiness command failed (exit 7): exit 7");
+    expect(performance.now() - started).toBeLessThan(5_000);
+    expect(existsSync(wsDir(path, "retained-pipe"))).toBe(false);
+  });
+
   test("a failing readiness command is loud, non-zero, and leaves no workspace", async () => {
     const path = await repo('ready = ["echo boom >&2; exit 7"]\n');
     const r = await ws(["add", "bad"], path);
-    expect(r.code).toBe(1);
+    expect(r.code).toBe(7);
     expect(r.err).toContain("exit 7");
     expect(existsSync(wsDir(path, "bad"))).toBe(false);
     expect((await jj(["workspace", "list"], path)).out).not.toContain("ws_bad");

@@ -2,8 +2,8 @@
 // Reference: obsidian-remote-ssh 1.1.11 plugin/src/shadow/ShadowVaultBootstrap.ts
 // and vaultNaming.ts. Identity lives in autoConnectProfileId, not the directory name.
 import { createHash } from "node:crypto";
-import { mkdir, readdir, rename } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { access, mkdir, readdir, rename } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import plugins from "./plugins.json";
@@ -20,6 +20,11 @@ export const RemoteRequest = z.object({
 type Request = z.infer<typeof RemoteRequest>;
 const ObjectJson = jsonOf(z.record(z.string(), z.unknown()));
 const home = () => process.env.HOME ?? "";
+const exists = (path: string): Promise<boolean> =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
 export const profileId = (alias: string, path: string): string =>
   `so-${createHash("sha256").update(`${alias}\0${path}`).digest("hex").slice(0, 16)}`;
 const segment = (raw: string): string => {
@@ -49,9 +54,20 @@ export async function shadowPath(request: Request): Promise<string> {
     if (state.isOk() && state.value.autoConnectProfileId === id)
       return join(base, entry);
   }
-  // Include the stable identity in the friendly name to disambiguate identical path tails.
-  const name = `${request.alias.slice(0, 20)} ${id}`;
-  return join(base, `${segment(name)}--${segment(basename(request.path))}`);
+  // Obsidian lists a vault by its directory name, so it reads `<alias>--<folder>` like the
+  // plugin's own shadows; identity stays in data.json. A tail already taken by another path gets
+  // its parent folder, then a counter.
+  const parent = basename(dirname(request.path));
+  const names = [
+    basename(request.path),
+    `${parent}-${basename(request.path)}`,
+    ...[2, 3, 4, 5, 6, 7, 8, 9].map(
+      (n) => `${parent}-${basename(request.path)}-${n}`,
+    ),
+  ].map((tail) => join(base, `${segment(request.alias)}--${segment(tail)}`));
+  for (const candidate of names)
+    if (!(await exists(candidate))) return candidate;
+  return join(base, `${segment(request.alias)}--${segment(id)}`);
 }
 
 export async function prepareShadow(
@@ -73,7 +89,7 @@ export async function prepareShadow(
   const data = state.value;
   const profile = {
     id,
-    name: `${request.alias.slice(0, 20)} ${id}`,
+    name: `${request.alias}:${request.path}`,
     host: request.hostname,
     port: request.port,
     username: request.user,

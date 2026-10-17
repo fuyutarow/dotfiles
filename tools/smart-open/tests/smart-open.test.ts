@@ -535,6 +535,10 @@ await Bun.write(join(process.env.HOME, 'shadow'), target);
   expect(first.out).toContain("Obsidian (Remote SSH probe-host)");
   const shadow = await Bun.file(join(dir, "shadow")).text();
   expect(shadow).toContain(join(dir, ".obsidian-remote/vaults"));
+  // Obsidian lists a vault by its directory name: host and folder, no identity hash.
+  expect(shadow.endsWith(`/probe-host--${dir.split("/").at(-1) ?? ""}`)).toBe(
+    true,
+  );
   const dataPath = join(shadow, ".obsidian/plugins/remote-ssh/data.json");
   const { jsonOf, z } = await import("../../shared/src/zod.ts");
   const dataSchema = jsonOf(

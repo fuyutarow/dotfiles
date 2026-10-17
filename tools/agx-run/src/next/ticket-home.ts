@@ -63,7 +63,7 @@ async function committedHome(
   if (names.exit !== 0)
     return {
       ok: false,
-      error: `cannot read committed .agx.toml: ${names.err.trim()}`,
+      error: `cannot read committed ${join(root, ".agx.toml")}: ${names.err.trim()}`,
     } as const;
   if (names.out.trim() === "")
     return { ok: true, declared: ".agents/tickets" } as const;
@@ -83,41 +83,89 @@ async function committedHome(
   if (config.exit !== 0 || !checked.success)
     return {
       ok: false,
-      error: "invalid committed .agx.toml: tickets must be a nonempty path",
+      error: `invalid committed ${join(root, ".agx.toml")}: tickets must be a nonempty path`,
     } as const;
   return { ok: true, declared: checked.data.tickets } as const;
 }
 
+async function repositoryKind(root: string) {
+  if ((await lstat(join(root, ".jj")).catch(() => null)) !== null) {
+    const probe = await treeRead(
+      [
+        "jj",
+        ...JJ_READ_ARGS,
+        "log",
+        "-r",
+        "@",
+        "--no-graph",
+        "-T",
+        "commit_id",
+      ],
+      root,
+    );
+    if (
+      probe.exit === 0 &&
+      /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(probe.out.trim())
+    ) {
+      return "jj";
+    }
+  }
+  if ((await lstat(join(root, ".git")).catch(() => null)) !== null) {
+    const probe = await treeRead(
+      [
+        "git",
+        "--no-optional-locks",
+        `--git-dir=${join(root, ".git")}`,
+        "rev-parse",
+        "--verify",
+        "HEAD^{commit}",
+      ],
+      root,
+    );
+    if (
+      probe.exit === 0 &&
+      /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(probe.out.trim())
+    ) {
+      return "git";
+    }
+  }
+  return null;
+}
+
 export async function ticketContext(cwd: string) {
-  let root = await realpath(cwd);
+  const physical = await realpath(cwd).catch(() => null);
+  if (physical === null)
+    return {
+      ok: false,
+      error: `cannot examine ticket repository at ${resolve(cwd)}`,
+    } as const;
+  let root = physical;
   let vcs: "jj" | "git" | undefined;
   while (true) {
-    if ((await lstat(join(root, ".jj")).catch(() => null)) !== null) {
-      vcs = "jj";
-      break;
-    }
-    if ((await lstat(join(root, ".git")).catch(() => null)) !== null) {
-      vcs = "git";
+    const kind = await repositoryKind(root);
+    if (kind !== null) {
+      vcs = kind;
       break;
     }
     const parent = dirname(root);
     if (parent === root) {
-      root = await realpath(cwd);
+      root = physical;
       break;
     }
     root = parent;
   }
+  const workspace = root;
   if (vcs === "jj") {
     // Ticket storage belongs to the repository, not the dispatch workspace.
-    // Revision reads below still use cwd so base_rev identifies that workspace.
+    // Revision reads below use the discovered workspace, skipping invalid markers.
     const repository = await treeRead(
       ["jj", ...JJ_READ_ARGS, "workspace", "root", "--name", "default"],
-      cwd,
+      workspace,
     );
     if (repository.exit !== 0 || repository.out.trim() === "")
       return {
         ok: false,
-        error: `cannot resolve repository default workspace: ${repository.err.trim()}`,
+        error: `cannot resolve repository default workspace at ${workspace}: ${repository.err.trim()}`,
       } as const;
     root = await realpath(repository.out.trim());
   }
@@ -143,7 +191,7 @@ export async function ticketContext(cwd: string) {
             "--end-of-options",
             `${rev}^{commit}`,
           ],
-      cwd,
+      workspace,
     );
     const id = result.out.trim();
     return result.exit === 0 && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(id)
@@ -155,7 +203,7 @@ export async function ticketContext(cwd: string) {
   if (vcs !== undefined && config_rev === null)
     return {
       ok: false,
-      error: `cannot resolve committed ticket configuration for ${vcs === "jj" ? "trunk()" : "HEAD"}`,
+      error: `cannot resolve committed ticket configuration at ${root} for ${vcs === "jj" ? "trunk()" : "HEAD"}`,
     } as const;
   const config = await committedHome(vcs, root, config_rev);
   if (!config.ok) return config;

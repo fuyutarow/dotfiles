@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
@@ -92,13 +92,26 @@ const ticketFor = async (path: string, newDispatch = true) => {
   return { ticket: accepted.ticket, prose: accepted.prose, bytes };
 };
 const contextFor = async (path: string, cwd: string, ticket: NextTicket) => {
-  const ctx = await ticketContext(cwd);
-  if (!ctx.ok) return fatal(ctx.error);
-  const placement = await ticketPlacement(path, ctx);
+  const located = await ticketContext(dirname(resolve(path)));
+  if (!located.ok) return fatal(located.error);
+  // External declared homes have no repository ancestor. In that case only,
+  // use the supplied workspace to find the declaration and verify placement.
+  const repository =
+    located.vcs === undefined ? await ticketContext(cwd) : located;
+  if (!repository.ok) return fatal(repository.error);
+  const placement = await ticketPlacement(path, repository);
   if (placement !== null) return fatal(placement);
+  // A worker in another workspace of this repository still checks its own base
+  // commit. Scratch directories and unrelated repositories cannot select context.
+  const worker =
+    resolve(cwd) === repository.root ? repository : await ticketContext(cwd);
+  const ctx =
+    worker.ok && worker.vcs !== undefined && worker.root === repository.root
+      ? { ...repository, base_rev: worker.base_rev, revision: worker.revision }
+      : repository;
   if (ticket.base_rev !== undefined && ticket.base_rev !== ctx.base_rev)
     return fatal(
-      `base_rev mismatch: declared ${ticket.base_rev}, --cd commit ${ctx.base_rev ?? "unavailable"}`,
+      `base_rev mismatch: ticket ${resolve(path)}, declared ${ticket.base_rev}, repository ${ctx.root}, worker ${cwd} commit ${ctx.base_rev ?? "unavailable"}`,
     );
   return ctx;
 };

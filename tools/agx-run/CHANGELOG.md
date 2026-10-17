@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.2.7 — 2026-10-17
+
+- Resolve ticket repositories from ticket paths before worker directories and skip invalid repository markers with path-aware diagnostics.
+
 ## 5.2.6 — 2026-10-17
 
 - Record dispatcher-provided unit bindings on runs

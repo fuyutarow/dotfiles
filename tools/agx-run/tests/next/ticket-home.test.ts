@@ -210,8 +210,8 @@ async function fixture(home = "tickets") {
     AGX_NEXT_STATE_DIR: join(root, "state"),
     DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
   };
-  const invoke = async (args: string[]) => {
-    const child = Bun.spawn([process.execPath, CLI, ...args, "--cd", root], {
+  const invoke = async (args: string[], cwd = root) => {
+    const child = Bun.spawn([process.execPath, CLI, ...args, "--cd", cwd], {
       env,
       stdin: "ignore",
       stdout: "pipe",
@@ -227,6 +227,85 @@ async function fixture(home = "tickets") {
   };
   return { root, directory, ticket, env, invoke };
 }
+
+test.each(["scratch", "empty-git", "other-repository"])(
+  "ticket repository wins over scratch --cd (fake parent: %s)",
+  async (fake) => {
+    const f = await fixture(".agents/tickets");
+    const parent = await mkdtemp(join(tmpdir(), "agx-ticket-scratch-"));
+    roots.push(parent);
+    const scratch = join(parent, "scratch");
+    await mkdir(scratch);
+    if (fake === "empty-git") await mkdir(join(parent, ".git"));
+    if (fake === "other-repository") await prepareTicketRepo(scratch, ".");
+    const worker = join(parent, "worker.ts");
+    await writeFile(
+      worker,
+      'console.log(JSON.stringify({exit:0, report:{summary:"done",changes:[],checks:[],for_coordinator:[],open:[]}}));\n',
+    );
+    const invoke = async (command: string, ticket: string) => {
+      const child = Bun.spawn(
+        [process.execPath, CLI, command, ticket, "--cd", scratch],
+        {
+          env: {
+            ...f.env,
+            AGX_NEXT_WORKER: worker,
+            AGX_TMP_ROOT: join(parent, "tmp"),
+            AGX_NEXT_JEV_URL: "http://127.0.0.1:1/choice",
+          },
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: 15000,
+        },
+      );
+      const [exit, out, err] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      return { exit, out, err };
+    };
+    for (const command of ["check", "run"]) {
+      const result = await invoke(command, f.ticket);
+      expect(result.exit, `${result.out}\n${result.err}`).toBe(0);
+      const stray = join(f.root, "undeclared.md");
+      await writeFile(stray, text());
+      const refused = await invoke(command, stray);
+      expect(refused.exit).toBe(2);
+      expect(refused.err).toContain(`refused ticket path ${stray}`);
+    }
+  },
+  30000,
+);
+
+test.each([".git", ".jj"])(
+  "invalid %s marker is skipped on the ticket path",
+  async (marker) => {
+    const f = await fixture(".agents/tickets");
+    await mkdir(join(f.directory, marker));
+    const result = await f.invoke(["check", f.ticket]);
+    expect(result.exit, result.err).toBe(0);
+    const ctx = await ticketContext(f.directory);
+    expect(ctx.ok).toBe(true);
+    if (ctx.ok) expect(ctx.root).toBe(f.root);
+  },
+);
+
+test("an undeclared external ticket names its path even under an invalid repository marker", async () => {
+  const f = await fixture();
+  const parent = await mkdtemp(join(tmpdir(), "agx-ticket-invalid-parent-"));
+  roots.push(parent);
+  await mkdir(join(parent, ".git"));
+  const stray = join(parent, "stray.md");
+  await writeFile(stray, text());
+  for (const command of ["check", "run"]) {
+    const result = await f.invoke([command, stray], parent);
+    expect(result.exit).toBe(2);
+    expect(result.err).toContain(`refused ticket path ${stray}`);
+    expect(result.err).not.toContain("configuration for HEAD");
+  }
+});
 
 test("check refuses an undeclared /tmp ticket with refused, declared home and tkt new", async () => {
   const f = await fixture();

@@ -83,7 +83,11 @@ For large research-store objects, `git-lfs` is on-demand: check it with
 needs LFS, run `git lfs install --local` so the setup stays repo-local.
 
 Bun tasks enforce the minimum in root `package.json` → `engines.bun` before running.
-`mise.toml` keeps the minor-line request; `mise.lock` fixes its resolved patch.
+The owner chose the exact house pin `bun = "1.4.3"` on 2026-10-17 in `mise.toml`;
+`mise.lock` records the same version. Raise this pin deliberately: `mise-contract`
+requires consumers' `[tools].bun` to match it exactly. During migration, the previous
+house value `"1.4"` emits a warning naming `"1.4.3"` and `mise.toml`; all other
+mismatches fail. A later change will make `"1.4"` fail after all registered consumers migrate.
 `mise run doctor` checks reported versions of PATH, mise-install, and Homebrew binaries,
 and names stale binaries and their repair. The TypeScript preset delivers its own
 `package.json` engines declaration to consumers. After an upgrade, rebuild the

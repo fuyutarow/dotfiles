@@ -5,7 +5,7 @@ lockfile_version = 3
 [[tools.bun]]
 version = "1.4.3"
 backend = "core:bun"
-specifiers = ["1.4"]
+specifiers = ["1.4.3"]
 
 [tools.bun."platforms.linux-arm64"]
 checksum = "sha256:efa9813da5ed72423bf847f916e8d2c47c0d776add972354026a75e10da9aa21"

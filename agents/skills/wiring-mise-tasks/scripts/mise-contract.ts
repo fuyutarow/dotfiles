@@ -256,13 +256,12 @@ function declaredTools(source: string): Set<string> {
   return out;
 }
 
-// --- C-C MINOR-PINNED (added 2026-10-05) ----------------------------------------------------
-// A runtime pinned to a patch ("1.4.0") is never bumped, so it goes stale, and with mise's
-// auto_install it reinstalls that old release on use. Measured 2026-10-05: soks, OpenFactory/soks
-// and polysearch-rs pinned bun 1.4.0, Coral-dpp and four DPP repos 1.2.22, qoed 1.3.14, and r99
-// had 1.4.0 reinstalled beside 1.4.2. The owner's rule: bun is "1.4" everywhere, no exception.
-// The house value lives in ONE place, the dotfiles mise.toml beside this skill; other tools only
-// warn on a patch pin, since their owners choose the version.
+// --- C-C HOUSE-PINNED (added 2026-10-05; owner decision revised 2026-10-17) ---------------
+// Bun must equal the dotfiles mise.toml house value, now an exact patch pin raised deliberately.
+// A matching exact house pin is intentional and exempt from the patch-pin warning.
+// Transition: the previous house value "1.4" warns until registered consumers migrate.
+// A later ticket removes that exception; all other mismatches fail now.
+// Other tools still warn on patch pins, since their owners choose the version.
 const HOUSE_TOML = join(import.meta.dir, "..", "..", "..", "..", "mise.toml");
 async function exists(path: string): Promise<boolean> {
   return access(path).then(
@@ -289,11 +288,16 @@ async function checkPins(source: string): Promise<[number, number]> {
     : undefined;
   for (const [tool, pin] of toolPins(source)) {
     if (tool === "bun" && house !== undefined && pin !== house) {
+      const migrating = house === "1.4.3" && pin === "1.4";
       process.stdout.write(
-        `FAIL  pin: bun = "${pin}" — the house pin is bun = "${house}" (a minor, tracking its newest patch); write bun = "${house}"\n`,
+        `${migrating ? "WARN" : "FAIL"}  pin: bun = "${pin}" — the house pin is bun = "${house}"; edit mise.toml [tools] to bun = "${house}"${migrating ? " (previous house pin temporarily accepted during migration)" : " (raise the house pin deliberately)"}\n`,
       );
-      failures += 1;
-    } else if (/^\d+\.\d+\.\d+$/u.test(pin)) {
+      warnings += migrating ? 1 : 0;
+      failures += migrating ? 0 : 1;
+    } else if (
+      !(tool === "bun" && pin === house) &&
+      /^\d+\.\d+\.\d+$/u.test(pin)
+    ) {
       process.stdout.write(
         `WARN  pin: ${tool} = "${pin}" is a patch pin — it is never bumped and mise auto_install reinstalls it; pin the minor ("${pin.split(".").slice(0, 2).join(".")}")\n`,
       );

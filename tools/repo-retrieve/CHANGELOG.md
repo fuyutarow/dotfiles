@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.4 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 1.3.3 — 2026-10-16
 
 - Isolate Git inspection from shared ref writes under router deadlines.

@@ -1,9 +1,14 @@
 // Suite-level diagnostic composition; the suite entry remains process-only.
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 async function runDoctor(json: boolean): Promise<number> {
   const targets = [

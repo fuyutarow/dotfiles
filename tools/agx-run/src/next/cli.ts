@@ -2,12 +2,16 @@
 import { check, judgeRun, list, run, stats, type Flags } from "./run.ts";
 import { waitRun } from "./wait.ts";
 import { COMMAND_NAMES } from "./commands.ts";
-import { cli, command } from "cleye";
+import { cli as cleyeCli, command } from "cleye";
+import { standardCli } from "../../../shared/src/cli.ts";
 import { exitWithError } from "./exit.ts";
 import { flushRunPublications } from "./store.ts";
 import { doctor } from "./doctor.ts";
 import { jev, roster } from "./public.ts";
 import packageJson from "../../package.json" with { type: "json" };
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, packageJson, cliArgv);
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -24,11 +28,7 @@ export const COMMANDS = COMMAND_NAMES.map((name) => ({
 }));
 
 async function main(): Promise<void> {
-  const rawArgs = process.argv.slice(2);
-  if (rawArgs.length === 1 && rawArgs[0] === "--version") {
-    process.stdout.write(`${packageJson.version}\n`);
-    return;
-  }
+  const rawArgs = cliArgv();
   const root = cli(
     {
       name: "agx",

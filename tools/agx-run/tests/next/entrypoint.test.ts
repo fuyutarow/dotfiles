@@ -13,7 +13,7 @@ test("agx-run --version prints the package version", () => {
     },
   );
   expect(result.exitCode).toBe(0);
-  expect(result.stdout.toString()).toBe(`${packageJson.version}\n`);
+  expect(result.stdout.toString()).toBe(`agx-run ${packageJson.version}\n`);
 });
 
 test("agx-run run --help explains continuation amendments", () => {

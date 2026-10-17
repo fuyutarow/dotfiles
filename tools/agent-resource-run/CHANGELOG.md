@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.2 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 1.5.1 — 2026-10-17
 
 - Use cached GPU owner observations for admission and VRAM monitoring.

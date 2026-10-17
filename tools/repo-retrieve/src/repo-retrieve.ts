@@ -55,7 +55,8 @@
 
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { cli, command } from "cleye";
+import { cli as cleyeCli, command } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
 import { z } from "../../shared/src/zod.ts";
 import {
   err,
@@ -78,6 +79,9 @@ import {
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
 import { findDefinitions, refreshCatalog, renderCards } from "./definitions.ts";
 import pkg from "../package.json" with { type: "json" };
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, pkg, cliArgv);
 
 const asError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error));
@@ -1503,7 +1507,7 @@ function indexCommand() {
 async function main(): Promise<Result<number, Error>> {
   argumentError = undefined;
   commandResult = ok(0);
-  const argv = normalizeNegativeNumericValues(Bun.argv.slice(2));
+  const argv = normalizeNegativeNumericValues(cliArgv());
   const missing = missingFlagValue(argv);
   if (missing !== undefined) return err(missing);
   await cli(

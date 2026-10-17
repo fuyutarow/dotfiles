@@ -96,7 +96,7 @@ describe("--version", () => {
       new Response(run.stderr).text(),
     ]);
     expect(exitCode).toBe(0);
-    expect(stdout.trim()).toBe(pkg.version);
+    expect(stdout.trim()).toBe(`serena-foreground ${pkg.version}`);
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 });

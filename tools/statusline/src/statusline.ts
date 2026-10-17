@@ -8,7 +8,9 @@ import {
   resetRenderBudget,
   writeCacheAsync,
 } from "./bounded.ts";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { jsonText, z } from "./zod.ts";
 import { ClaudeStatuslineInputSchema } from "./adapters/claude-statusline.ts";
 import {
@@ -34,6 +36,9 @@ import {
   payloadForSession,
   sessionFromId,
 } from "./session-discovery.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const HOME = process.env.HOME ?? "";
 const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
@@ -241,7 +246,7 @@ const args = cli(
     },
   },
   undefined,
-  Bun.argv.slice(2),
+  cliArgv(),
 );
 const watchSeconds =
   (args.flags.watch ?? false) &&

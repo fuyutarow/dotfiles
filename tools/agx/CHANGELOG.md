@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 0.4.0 — 2026-10-17
 
 - Expose authoritative doctor finding counts and completeness as JSON.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 0.5.0
 
 - Converge declared Codex settings as a target-host profile step.

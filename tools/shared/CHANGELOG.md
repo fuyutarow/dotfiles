@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.5 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 0.11.4 — 2026-10-17
 
 - Centralize NVIDIA sampling behind one owner with persistent cooldown and read-only consumers.

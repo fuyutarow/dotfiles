@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-import { cli, command } from "cleye";
+import { cli as cleyeCli, command } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
 import { errorMessage } from "../../shared/src/attempt.ts";
 import packageJson from "../package.json" with { type: "json" };
 import {
@@ -11,6 +12,9 @@ import {
   refresh,
   remove,
 } from "./workspace.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, packageJson, cliArgv);
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -275,21 +279,17 @@ const doctorCommand = command(
   },
 );
 
-const args = process.argv.slice(2);
-if (args.length === 1 && args[0] === "--version")
-  process.stdout.write(`${packageJson.version}\n`);
-else
-  void cli({
-    name: "ws",
-    version: packageJson.version,
-    strictFlags: true,
-    ignoreArgv: rejectPrototypeFlag,
-    commands: [
-      addCommand,
-      adoptCommand,
-      refreshCommand,
-      rmCommand,
-      gcCommand,
-      doctorCommand,
-    ],
-  });
+void cli({
+  name: "ws",
+  version: packageJson.version,
+  strictFlags: true,
+  ignoreArgv: rejectPrototypeFlag,
+  commands: [
+    addCommand,
+    adoptCommand,
+    refreshCommand,
+    rmCommand,
+    gcCommand,
+    doctorCommand,
+  ],
+});

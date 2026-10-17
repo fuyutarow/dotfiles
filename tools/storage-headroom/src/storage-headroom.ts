@@ -1,8 +1,13 @@
 #!/usr/bin/env bun
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { fromThrowable } from "neverthrow";
 import { headroom } from "./headroom.ts";
 import type { StorageMeasurement } from "../../shared/src/storage-headroom.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const usageExit = (code: number) => {
   if (code === 1) process.exitCode = 2;
@@ -16,7 +21,7 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 }
 
 export function main(
-  argv = Bun.argv.slice(2),
+  argv = cliArgv(),
   measure?: (path: string) => StorageMeasurement | null,
 ): number {
   process.on("exit", usageExit);

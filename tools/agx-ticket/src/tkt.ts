@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-import { cli, command } from "cleye";
+import { cli as cleyeCli, command } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
 import {
   attempt,
   errorMessage,
@@ -7,6 +8,9 @@ import {
 } from "../../shared/src/attempt.ts";
 import { collect, create, doctor as doctorTickets, list } from "./tickets.ts";
 import pkg from "../package.json" with { type: "json" };
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, pkg, cliArgv);
 
 const fail = (error: unknown): void => {
   process.stderr.write(`tkt: ${errorMessage(error)}\n`);
@@ -143,12 +147,9 @@ const doctorCommand = command(
       },
     ),
 );
-if (process.argv.length === 3 && process.argv[2] === "--version")
-  process.stdout.write(`${pkg.version}\n`);
-else
-  await cli({
-    ...common,
-    name: "tkt",
-    version: pkg.version,
-    commands: [newCommand, lsCommand, gcCommand, doctorCommand],
-  });
+await cli({
+  ...common,
+  name: "tkt",
+  version: pkg.version,
+  commands: [newCommand, lsCommand, gcCommand, doctorCommand],
+});

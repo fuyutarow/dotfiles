@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 1.0.1 — 2026-10-15
 
 - Use async filesystem and subprocess APIs.

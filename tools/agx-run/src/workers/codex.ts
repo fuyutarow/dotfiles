@@ -42,7 +42,9 @@
 import { mkdirSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../../shared/src/cli.ts";
+import cliPackage from "../../package.json" with { type: "json" };
 import { fromThrowable } from "neverthrow";
 import { jsonOf, jsonText, z } from "../../../shared/src/zod.ts";
 import { attempt, errorMessage } from "../../../shared/src/attempt.ts";
@@ -69,6 +71,9 @@ import { activityWriter } from "../lifecycle.ts";
 import { interimReturnWriter, parseReturn } from "../report.ts";
 import { progressIntervalMs, progressThrottle } from "../progress.ts";
 import { workerEnvironment } from "./environment.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["none", "read-only", "workspace-write"];
@@ -201,7 +206,7 @@ const argv = cli(
     },
   },
   undefined,
-  Bun.argv.slice(2),
+  cliArgv(),
 );
 
 // Resolved model and effort: from --model/--effort, or from the roster row --choice names (below).

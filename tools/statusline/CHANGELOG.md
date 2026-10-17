@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.3 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 0.19.2 — 2026-10-17
 
 - Read fresh GPU owner state without launching driver probes.

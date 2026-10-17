@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.3.4 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 5.3.3 — 2026-10-17
 
 - Support repository tickets with a non-repository --cd, omit base_rev there, and run verification in the worker directory.

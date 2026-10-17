@@ -42,6 +42,9 @@ const CORPUS: CorpusEntry[] = [
   },
   { path: "tools/agx-ticket/src/tkt.ts" },
   { path: "tools/agx/src/dispatch.ts" },
+  { path: "tools/agx/src/doctor.ts" },
+  { path: "tools/herdr-btm/src/btmp.ts", cli: false },
+  { path: "tools/detect-japanese/src/cli.ts" },
   { path: "tools/baseline/src/baseline.ts" },
   {
     path: "tools/coredev/src/coredev.ts",

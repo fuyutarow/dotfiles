@@ -343,7 +343,7 @@ describe("repo-retrieve route contract", () => {
   test("--version prints the version of this package's package.json", () => {
     const result = run(tmpdir(), ["--version"]);
     expect(result.code).toBe(0);
-    expect(result.stdout.trim()).toBe(pkg.version);
+    expect(result.stdout.trim()).toBe(`rr ${pkg.version}`);
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 

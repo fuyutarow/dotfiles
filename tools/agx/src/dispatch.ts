@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import { lstat, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import {
   attempt,
   errorMessage,
@@ -17,6 +19,9 @@ import {
 } from "../../shared/src/agx-dispatch-binding.ts";
 import { JJ_READ_ARGS } from "../../shared/src/jj-read.ts";
 import { readonlyCommand } from "../../shared/src/readonly-command.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.7 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 1.4.6 — 2026-10-16
 
 - Expire rip payloads incrementally within a two-minute work budget, retaining partial progress and avoiding a full graveyard census before deletion.

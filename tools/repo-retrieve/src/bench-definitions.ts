@@ -8,10 +8,15 @@
 // A case with "truth": [] is a NEGATIVE: nothing in the repo does it, so the right answer is
 // NO_DEFINITION (strength "none"); it is counted under "absent".
 import { homedir } from "node:os";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { findDefinitions } from "./definitions.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 let prototypeFlag = false;
 const rejectPrototypeFlag = (type: string, flag: string): boolean => {
@@ -30,7 +35,7 @@ const argv = cli(
     },
   },
   undefined,
-  Bun.argv.slice(2),
+  cliArgv(),
 );
 if (prototypeFlag) {
   console.error("bench-definitions: unknown option '--__proto__'");

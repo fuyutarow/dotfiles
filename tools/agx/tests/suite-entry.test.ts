@@ -43,7 +43,7 @@ async function invokeWithInput(
 
 test("suite entry runs run, ws, and ticket help through their CLIs", async () => {
   const cases = [
-    { args: ["--version"], output: /^\d+\.\d+\.\d+\n$/u },
+    { args: ["--version"], output: /^agx \d+\.\d+\.\d+\n$/u },
     {
       args: ["--help"],
       output: /agx dispatch <ticket.md>[\s\S]*USAGE:[\s\S]*jev[\s\S]*roster/u,

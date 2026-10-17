@@ -5,8 +5,13 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const SSH = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15"];
 const TARGET_CONFIG = '"$HOME/.config/fnox/config.toml"';
@@ -240,7 +245,7 @@ async function targetConfig(host: string): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const parsed = cli(SECRETS_PUSH_CLI_OPTIONS, undefined, Bun.argv.slice(2));
+  const parsed = cli(SECRETS_PUSH_CLI_OPTIONS, undefined, cliArgv());
   const host = parsed._.target;
   const source = parsed.flags.from;
   if (parsed._.length !== (host === undefined ? 0 : 1) || host === undefined) {

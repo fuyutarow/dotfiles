@@ -61,7 +61,9 @@
 import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { attempt } from "../../shared/src/attempt.ts";
 import {
   ACK_MS,
@@ -71,6 +73,9 @@ import {
 } from "../../shared/src/sockets.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { OBSIDIAN_OPEN_MS } from "./protocol.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -134,7 +139,7 @@ const argv = cli(
     },
   },
   undefined,
-  Bun.argv.slice(2),
+  cliArgv(),
 );
 // Cleye leaves stray positionals in `_`; this command takes none.
 if (argv._.length > 0) {

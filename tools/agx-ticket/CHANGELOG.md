@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 0.1.5 — 2026-10-17
 
 - Limit recorded outside-home findings to actionable runs and detect present files outside every ticket home.

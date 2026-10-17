@@ -1,7 +1,31 @@
 #!/usr/bin/env bun
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { ensureBtm } from "./ensure.ts";
 import { btmpArgs } from "./args.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
+
+const discoveryArgs = cliArgv();
+if (
+  import.meta.main &&
+  discoveryArgs.length === 1 &&
+  ["--help", "-h", "--version", "-V"].includes(discoveryArgs[0] ?? "")
+) {
+  cli({
+    name: "btmp",
+    parameters: ["[btm-args...]"],
+    strictFlags: true,
+    ignoreArgv: rejectPrototypeFlag,
+    help: {
+      description:
+        "Run btm with Herdr metadata, or btmp ensure to install it. Other arguments are forwarded to btm.",
+    },
+  });
+}
 
 const REPORT_INTERVAL_MS = 3_000;
 const METRICS_TIMEOUT_MS = 2_000;
@@ -222,4 +246,11 @@ if (import.meta.main) {
     return 1;
   });
   process.exitCode = status;
+}
+
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write("Error: unknown flag --__proto__\n");
+    process.exit(2);
+  }
 }

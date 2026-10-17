@@ -10,9 +10,14 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const DEFAULT_CONFIG_DIR = "~/.sui/sui_config";
 const ED25519_FLAG = 0;
@@ -235,11 +240,7 @@ function renderCounts(label: string, counts: Counts): string {
 }
 
 async function main(): Promise<void> {
-  const parsed = cli(
-    SUI_KEYSTORE_MERGE_CLI_OPTIONS,
-    undefined,
-    Bun.argv.slice(2),
-  );
+  const parsed = cli(SUI_KEYSTORE_MERGE_CLI_OPTIONS, undefined, cliArgv());
   if (parsed._.length > 0) {
     process.stderr.write(
       "sui-keystore-merge accepts no positional arguments\n",

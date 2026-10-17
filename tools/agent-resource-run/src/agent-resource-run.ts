@@ -21,7 +21,8 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
 import {
   err,
   fromAsyncThrowable,
@@ -49,6 +50,9 @@ import {
   assessRecoveryVerdict,
   readRecoveryVerdict,
 } from "./lib/recovery-verdict.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, pkg, cliArgv);
 
 const KiB = 1024;
 const MiB = 1024 ** 2;
@@ -3259,7 +3263,7 @@ async function main(): Promise<Result<number, Error>> {
       },
     },
     undefined,
-    Bun.argv.slice(2),
+    cliArgv(),
   );
   if (parsed.command === "status") {
     if (statusHasOperands(parsed))

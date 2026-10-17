@@ -1,9 +1,13 @@
 #!/usr/bin/env bun
-import { cli, command } from "cleye";
+import { cli as cleyeCli, command } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import packageJson from "../package.json" with { type: "json" };
 import { newFailures, render } from "./data.ts";
 import { record } from "./record.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, packageJson, cliArgv);
 
 function fatal(message: string): void {
   process.stderr.write(`FATAL: baseline: ${message}\n`);

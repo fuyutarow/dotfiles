@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 // Consumer: humans (tables) and machine callers (one JSON document).
-import { cli, command } from "cleye";
+import { cli as cleyeCli, command } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { resolve } from "node:path";
@@ -46,6 +48,9 @@ import {
   processDecisionText,
   summarizeProcessFailures,
 } from "./lib/procs.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -489,7 +494,7 @@ function outputPlan(
 }
 
 export async function main(
-  argv = Bun.argv.slice(2),
+  argv = cliArgv(),
   targets: Target[] = registry,
   dependencies: Pick<EngineOptions, "captureLiveness"> = {},
 ): Promise<number> {

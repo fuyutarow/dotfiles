@@ -1,0 +1,31 @@
+// Copy to the package's src/cli.ts; adjust the shared-helper import for its location.
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
+import pkg from "../package.json" with { type: "json" };
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, pkg, cliArgv);
+
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write("FATAL: unknown option --__proto__\n");
+    process.exit(2);
+  }
+}
+
+async function main(): Promise<void> {
+  const parsed = cli({
+    name: Object.keys(pkg.bin)[0],
+    parameters: [],
+    strictFlags: true,
+    ignoreArgv: rejectPrototypeFlag,
+    help: { description: "Describe this command's purpose." },
+  });
+  if (parsed._.length > 0) throw new Error("unexpected positional arguments");
+  process.stdout.write("OK\n");
+}
+
+await main().catch((error: unknown) => {
+  process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exitCode = 2;
+});

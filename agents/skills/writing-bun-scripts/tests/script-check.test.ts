@@ -682,3 +682,50 @@ describe("script-check floor — .sh shim marker (F7, BG0)", () => {
     expect(code).toBe(0);
   });
 });
+
+test("the standard Cleye adapter retains strict and prototype floor checks", async () => {
+  const source = `
+    import { cli as cleyeCli } from "cleye";
+    import { standardCli } from "../../shared/src/cli.ts";
+    const cliArgv = () => Bun.argv.slice(2);
+    const cli = standardCli(cleyeCli, { version: "1.0.0" }, cliArgv);
+    function rejectPrototypeFlag() {}
+    const parsed = cli({ name: "fixture", parameters: [], strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, cliArgv());
+    if (parsed._.length > 0) process.exitCode = 2;
+  `;
+  expect((await runFloor(source, "fixture.ts", { cleye: "2.6.0" })).code).toBe(
+    0,
+  );
+  const missingGuard = await runFloor(
+    source.replace("ignoreArgv: rejectPrototypeFlag", ""),
+    "fixture.ts",
+    { cleye: "2.6.0" },
+  );
+  expect(missingGuard.code).toBe(1);
+  expect(missingGuard.out).toContain("prototype guard");
+  const missingStrict = await runFloor(
+    source.replace("strictFlags: true", ""),
+    "fixture.ts",
+    { cleye: "2.6.0" },
+  );
+  expect(missingStrict.code).toBe(1);
+  expect(missingStrict.out).toContain("strictFlags: true");
+});
+
+test("the shared CLI adapter passes BG1 after candidate export and rejects global argv reads", async () => {
+  const source = await Bun.file(
+    new URL("../../../../tools/shared/src/cli.ts", import.meta.url),
+  ).text();
+  const dependencies = { cleye: "2.6.0", "type-flag": "4.5.0" };
+  const exported = await runFloor(source, "cli.ts", dependencies);
+  expect(exported.out).toContain("FAIL=0");
+  expect(exported.code).toBe(0);
+
+  const globalArgv = await runFloor(
+    `${source}\nconst forbiddenArgv = process.argv.slice(2);\n`,
+    "cli.ts",
+    dependencies,
+  );
+  expect(globalArgv.code).toBe(1);
+  expect(globalArgv.out).toContain("argv read without a Cleye boundary");
+});

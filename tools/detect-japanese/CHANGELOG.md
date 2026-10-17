@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 0.2.1 — 2026-10-15
 
 - Use asynchronous process execution in CLI tests.

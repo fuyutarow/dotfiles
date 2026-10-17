@@ -6,7 +6,8 @@
 import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
 import { fromPromise } from "neverthrow";
 import {
   executeJob,
@@ -14,6 +15,9 @@ import {
   type ResourceManifest,
 } from "../../agent-resource-run/src/index.ts";
 import pkg from "../package.json" with { type: "json" };
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, pkg, cliArgv);
 
 const GiB = 1024 ** 3;
 export const SERENA_COMMIT = "29d07d4f6b7a04a0db3981d6c6be6f736cfb44d2";
@@ -180,7 +184,7 @@ async function main(): Promise<void> {
       },
     },
     undefined,
-    Bun.argv.slice(2),
+    cliArgv(),
   );
   if (prototypeFlagSeen) {
     process.stderr.write("USAGE: Unknown option '--__proto__'\n");

@@ -558,10 +558,19 @@ async function checkFile(file: string): Promise<void> {
   );
   // Alias policy: only exact `{ cli, command }` bindings are house Cleye boundaries.
   // Aliases fail explicitly; coincidentally named local/domain helpers are never counted.
-  const importsCleyeCli = cleyeImportSpecifiers.includes("cli");
+  const standardAdapter =
+    cleyeImportSpecifiers.includes("cli as cleyeCli") &&
+    /\bconst\s+cli\s*=\s*standardCli\s*\(\s*cleyeCli\s*,/u.test(code) &&
+    /import\s*\{\s*standardCli\s*\}\s*from\s*["'][^"']*shared\/src\/cli\.ts["']/u.test(
+      code,
+    );
+  const importsCleyeCli =
+    cleyeImportSpecifiers.includes("cli") || standardAdapter;
   const importsCleyeCommand = cleyeImportSpecifiers.includes("command");
-  const aliasedCleyeBoundary = cleyeImportSpecifiers.find((specifier) =>
-    /^(?:cli|command)\s+as\s+/u.test(specifier),
+  const aliasedCleyeBoundary = cleyeImportSpecifiers.find(
+    (specifier) =>
+      /^(?:cli|command)\s+as\s+/u.test(specifier) &&
+      !(standardAdapter && specifier === "cli as cleyeCli"),
   );
   const cliCalls = importsCleyeCli
     ? (executable.match(/\bcli\s*\(/gu)?.length ?? 0)

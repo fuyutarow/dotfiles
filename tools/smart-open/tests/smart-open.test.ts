@@ -238,7 +238,7 @@ describe("version", () => {
   test("--version prints the version of this package's package.json", async () => {
     const r = await client(["--version"], {});
     expect(r.code).toBe(0);
-    expect(r.out.trim()).toBe(pkg.version);
+    expect(r.out.trim()).toBe(`smart-open ${pkg.version}`);
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 });

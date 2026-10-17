@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 0.2.2 — 2026-10-15
 
 - Use async fs and child-process APIs throughout so the tool no longer blocks the event loop; behavior is unchanged.

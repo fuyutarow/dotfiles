@@ -2175,7 +2175,9 @@ describe("--version", () => {
       { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
     );
     expect(run.exitCode).toBe(0);
-    expect(run.stdout.toString().trim()).toBe(pkg.version);
+    expect(run.stdout.toString().trim()).toBe(
+      `agent-resource-run ${pkg.version}`,
+    );
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 });

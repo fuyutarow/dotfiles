@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../shared/src/cli.ts";
 import { release } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,6 +16,9 @@ import {
 import { readApprovedHost } from "./hosts.ts";
 import pkg from "../package.json" with { type: "json" };
 import { attempt } from "../../shared/src/attempt.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, pkg, cliArgv);
 
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",

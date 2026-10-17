@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
+import { standardCli } from "../../../shared/src/cli.ts";
+import cliPackage from "../../package.json" with { type: "json" };
 import { err, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../../../shared/src/zod.ts";
 import { interimReturnWriter, parseReturn } from "../report.ts";
@@ -8,6 +10,9 @@ import { activityWriter } from "../lifecycle.ts";
 import { workerEnvironment } from "./environment.ts";
 import { progressWriter } from "./codex-progress.ts";
 import { foldClaudeEvent, resultEvent } from "./claude-progress.ts";
+
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, cliPackage, cliArgv);
 
 let emptyStringFlag: string | undefined;
 
@@ -414,7 +419,7 @@ async function configFromCli(): Promise<Result<RunConfig, Error>> {
       ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
-    Bun.argv.slice(2),
+    cliArgv(),
   );
 
   if (emptyStringFlag !== undefined)

@@ -1,7 +1,12 @@
 #!/usr/bin/env bun
+import { printVersion } from "../../shared/src/cli.ts";
+import cliPackage from "../package.json" with { type: "json" };
 // argv-forwarding: agx-run, agx-ws, agx-ticket
 import { fileURLToPath } from "node:url";
 import { typeFlag } from "type-flag";
+
+if (import.meta.main && printVersion(cliPackage, "agx", process.argv.slice(2)))
+  process.exit(0);
 
 const argv = Bun.argv.slice(2);
 const parsed = typeFlag({}, [...argv], { ignore: () => true });

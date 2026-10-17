@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 1.1.0 — 2026-10-17
 
 - Open remote directories in Mac Obsidian through vouched SSH shadow vaults.

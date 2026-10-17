@@ -15,7 +15,7 @@ description: >-
 
 # Writing Bun scripts — local automation in Bun TypeScript
 
-> **Version**: v2610.1.0 (2026-10-06) — human progress/spinner/prompt is `@clack/prompts`, never a hand-drawn bar.
+> **Version**: v2610.1.1 (2026-10-17) — package CLI version aliases, typed flag errors, and deterministic plain help.
 > Bun runtime facts remain pinned in `references/bun-facts.md`.
 > **Scope**: local automation scripts on this host — dotfiles scripts, skill `scripts/`, Claude
 > hooks, repo helpers. NORMATIVE, not descriptive: the 2026-07 bash→TS migration corpus (18
@@ -60,6 +60,21 @@ inside Japanese prose: **LAW**, **gate** (BG0–BG4), **shim**, **envelope**, **
 | **BG2 SUBPROCESS** | Simple shell-out → `Bun.$` (escaped interpolation, cross-platform; sharp edges in facts §2 — spread `process.env` in `.env()`, branch on `exitCode` after `.nothrow()`, no `$` in polling loops). Can hang, needs streaming or kill → `Bun.spawn` with NATIVE `timeout:` / `killSignal:` / `signal:` — a hand-rolled `setTimeout`+`kill()` is REFACTOR (facts §3). **Drain `stdout` and `stderr` in ONE `Promise.all`** with `proc.exited` — sequential drain deadlocks on the pipe you are not reading, and the only symptom is your own timeout, which misreads as a slow child. **Bound a hangable child with `signal: AbortSignal.timeout(ms)` and read the timeout off the SIGNAL** (`sig.aborted`) — `proc.killed` is true after a clean exit, and `proc.signalCode` cannot separate your timeout from an external kill. All three measured, facts §3. Always bound relayed output (slice caps); gate on `Bun.which` before real work. Hooks context: sync `main`, `spawnSync`, zero npm imports ever. | `timeout:` present, or a `// bounded:` comment naming why not; floor W9/W10 clean (no `.killed` branch, no sequential drain) |
 | **BG3 DEPENDENCIES** | The ladder: node:/bun: builtins → Bun global → **the repo-root graduation project** (package.json + bun.lock, restored by `mise run deps`; bare import, EXACT version, resolved on the file's realpath so symlinked skills work from any cwd) → `bunx pkg@x.y.z` (PINNED — unpinned bunx in any hook/CI path is drift; staleness is real, facts §5) → GRADUATION to a package.json + bun.lock project (trigger: ≥2 files sharing deps, a dep you must pin, or type/editor pressure). Inline `pkg@ver` imports are legal ONLY in throwaway one-offs run from a known-clean cwd — an ancestor `node_modules` makes them THROW (facts §4). Hooks: no imports beyond node:/bun:, ever — auto-install at hook time is the hazard. | floor unpinned-import FAIL; graduation = the package.json itself |
 | **BG4 VERIFICATION** | Behavior worth keeping → `bun test` in a sibling `tests/`, fixture-binary pattern (a real spawned executable exercising timeout/error paths — not a mock); prove any new gate/floor check FIRES (inject bad input, watch FAIL, revert); types: editor LSP + `bunx typescript@<pin> tsc --noEmit` at graduation — never claim "typed" from a green run (TRANSPILE-ONLY). | test run output / red→green record in the change |
+
+## CLI version and help surface
+
+For package CLIs, start from [the CLI template](assets/cli.ts.txt). In dotfiles use
+`tools/shared/src/cli.ts` `standardCli(cleyeCli, pkg, cliArgv)` with a single static package.json
+import. Outside dotfiles, copy that helper into the owning package and adjust its import. Define `cliArgv = () => process.argv.slice(2)` at the CLI boundary and reuse it
+for any explicit argv passed to Cleye; the shared adapter never reads global argv.
+`-V` and `--version` must print one stdout line `<name> <version>` and exit 0.
+Aliases share the first declared package bin name.
+The helper preserves Cleye inference and parameter mapping, renders help without ESC bytes
+or terminal-dependent headings/widths (including FORCE_COLOR), and preserves the typed
+unknown flag in diagnostics. Apply it to command help as well as root help. Test all
+four TTY/FORCE_COLOR combinations against the same help bytes; version aliases must
+match, and an unknown `-Z` must be diagnosed as `-Z`. Forwarding wrappers retain their
+downstream argument contract and own their wrapper help/version before delegation.
 
 ## Decision table
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 — 2026-10-17
+
+- Standardize -V/--version, plain deterministic help, and typed unknown-flag diagnostics.
+
 ## 0.1.3 — 2026-10-16
 
 - Detect duplicate PATH copies of declared Homebrew commands

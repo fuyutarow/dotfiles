@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2 — 2026-10-17
+
+- Reject nonconforming new workspace slugs while retaining legacy workspace lookup
+
 ## 0.5.1 — 2026-10-17
 
 - Fix adoption slugs, re-home already adopted workspaces with --fix-names, roll back failed adoption, and report cross-named orphans

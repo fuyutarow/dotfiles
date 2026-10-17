@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.3 — 2026-10-17
+
+- Add the shared lowercase hyphenated slug validator and repair suggestions
+
 ## 0.11.2 — 2026-10-16
 
 - Add fail-closed read-only command isolation for bounded VCS inspection.

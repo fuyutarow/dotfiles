@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 — 2026-10-17
+
+- Reject nonconforming ticket slugs with a hyphenated tkt new suggestion
+
 ## 0.1.3 — 2026-10-16
 
 - Resolve ticket homes from committed .agx.toml so ticket creation agrees with dispatch validation.

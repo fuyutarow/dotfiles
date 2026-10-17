@@ -650,6 +650,30 @@ describe("ws add", () => {
     expect((await ws(["add", "dup"], path)).code).toBe(0);
     expect((await ws(["add", "dup"], path)).code).toBe(1);
   });
+
+  test("new workspace slugs use hyphens; legacy names remain refreshable", async () => {
+    const path = await repo();
+    for (const slug of ["arena_g3", "Arena-G3"]) {
+      const refused = await ws(["add", slug], path);
+      expect(refused.code).toBe(1);
+      expect(refused.err).toContain("ws add arena-g3");
+      expect(await Bun.file(join(wsDir(path, slug), ".jj/repo")).exists()).toBe(
+        false,
+      );
+    }
+    const accepted = await ws(["add", "arena-g3"], path);
+    expect(accepted.code, accepted.err).toBe(0);
+    expect(accepted.out).toContain("ws_arena-g3");
+    const legacy = wsDir(path, "old_name");
+    expect(
+      (await jj(["workspace", "add", "--name", "ws_old_name", legacy], path))
+        .code,
+    ).toBe(0);
+    expect((await ws(["refresh", "old_name"], path)).code).toBe(0);
+    expect((await jj(["workspace", "list"], path)).out).toContain(
+      "ws_old_name",
+    );
+  });
 });
 
 describe("ws refresh", () => {

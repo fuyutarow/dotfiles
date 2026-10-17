@@ -91,6 +91,26 @@ const Rows = z.array(
   }),
 );
 
+test("new accepts a hyphenated slug and refuses underscores and uppercase before writing", async () => {
+  const f = await fixture();
+  for (const slug of ["arena_g3", "Arena-G3"]) {
+    const refused = await f.tkt(["new", slug]);
+    expect(refused.code).toBe(1);
+    expect(refused.err).toContain("tkt new arena-g3");
+  }
+  expect(
+    await Bun.file(join(f.repo, ".agents/tickets/arena_g3.md")).exists(),
+  ).toBe(false);
+  const accepted = await f.tkt(["new", "arena-g3"]);
+  expect(accepted.code, accepted.err).toBe(0);
+  expect(await readdir(join(f.repo, ".agents/tickets"))).toEqual([
+    "arena-g3.md",
+  ]);
+  expect(await readFile(accepted.out.trim(), "utf8")).toContain(
+    'name = "arena-g3"',
+  );
+});
+
 test("an uncommitted .agx.toml edit does not move the ticket home", async () => {
   const f = await fixture('tickets = "committed-tickets"\n');
   await writeFile(

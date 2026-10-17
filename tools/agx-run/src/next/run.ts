@@ -5,6 +5,7 @@ import { basename, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../../../shared/src/zod.ts";
+import { validateSlug } from "../../../shared/src/slug.ts";
 import { checkPremises } from "../premises.ts";
 import { verifyLine } from "../ticket.ts";
 import { parseReport, parseReturn, withReportInstruction } from "../report.ts";
@@ -67,7 +68,7 @@ const refuseRunningWorkspace = async (cwd: string): Promise<void> => {
   if (holder !== undefined)
     fatal(`workspace ${cwd} already has running run ${holder.id}`, 2);
 };
-const ticketFor = async (path: string) => {
+const ticketFor = async (path: string, newDispatch = true) => {
   const bytes = await readFile(path).catch(() =>
     fatal(`no such ticket: ${path}`, 2),
   );
@@ -75,6 +76,13 @@ const ticketFor = async (path: string) => {
   const accepted = parsed.success
     ? parsed
     : fatal(`invalid ticket: ${parsed.reason}`, 2);
+  if (newDispatch) {
+    const slug = validateSlug(
+      accepted.ticket.name ?? basename(path, ".md"),
+      "tkt new",
+    );
+    if (!slug.ok) return fatal(String(slug.error));
+  }
   if (accepted.warnings.length > 0)
     process.stderr.write(
       `WARN ignored legacy ticket fields: ${accepted.warnings.join(", ")}\n`,
@@ -293,7 +301,7 @@ export async function check(flags: Flags): Promise<number> {
   if (!loaded.ok)
     return fatal(`cannot read dispatch roster: ${loaded.error}`, 1);
   process.stdout.write(
-    `OK ticket=${ticket.name ?? basename(path)} cwd=${cwd} ${routeFilterLabel(loaded.value.auto)}\n`,
+    `OK ticket=${ticket.name ?? basename(path, ".md")} cwd=${cwd} ${routeFilterLabel(loaded.value.auto)}\n`,
   );
   return 0;
 }
@@ -302,7 +310,10 @@ export async function run(flags: Flags): Promise<number> {
   const path = value(flags, "ticket");
   const cwd = resolve(value(flags, "cd") ?? process.cwd());
   if (path === undefined) return fatal("run requires positional TICKET", 2);
-  const { ticket, prose, bytes } = await ticketFor(path);
+  const { ticket, prose, bytes } = await ticketFor(
+    path,
+    value(flags, "continue") === undefined,
+  );
   const sandbox =
     value(flags, "sandbox") ?? ticket.sandbox ?? "workspace-write";
   if (!new Set(["none", "read-only", "workspace-write"]).has(sandbox))
@@ -357,7 +368,7 @@ export async function run(flags: Flags): Promise<number> {
       `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`,
       ticket.capabilities,
       ticket.timeout_s ?? 600,
-      await earlyQuitRows(ticket.name ?? basename(path), cwd),
+      await earlyQuitRows(ticket.name ?? basename(path, ".md"), cwd),
     ));
   const id = randomUUID();
   // The run owns its temp space: removed on any exit path (process.exit included); a SIGKILL
@@ -427,7 +438,7 @@ export async function run(flags: Flags): Promise<number> {
       "WARN dispatcher session is unavailable; pass --session ID or preserve CLAUDE_CODE_SESSION_ID/CODEX_SESSION_ID (systemd-run: use -E NAME).\n",
     );
   const workspace = resolve(cwd);
-  const ticketName = ticket.name ?? basename(path);
+  const ticketName = ticket.name ?? basename(path, ".md");
   writeFileSync(
     workerBrief,
     withReportInstruction(renderPromise(ticket, cwd, sandbox, prose)),

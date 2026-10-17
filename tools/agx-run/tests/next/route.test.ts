@@ -419,14 +419,14 @@ describe("capability constrained routing", () => {
       });
   });
 
-  test("th_purge replay rejects luna-medium and sends timeout as task size", async () => {
+  test("th-purge replay rejects luna-medium and sends timeout as task size", async () => {
     await isolateState();
     const server = startServer("luna-medium", {
       "luna-medium": 0.99,
       "sol-low": 0.01,
     });
     const parsed = parseNextTicket(
-      `+++\nschema = 2\nname = "th_purge"\nwrites = ["PURGE-MANIFEST.tsv", "admission/**"]\noutcome = "inventory, classify, retain, and verify every theory file"\ntimeout_s = 14400\ncapabilities = ["terminal-agentic", "long-tool-loop", "bulk-classification"]\n[proposition]\nid = "TH-PURGE-1"\nclaim = "every THEORY file is retained byte-exact in canonical v1"\nrefuted_by = "a THEORY row lacks a verified v1 id or has a byte mismatch"\n+++\nInventory all prose research artifacts.\n`,
+      `+++\nschema = 2\nname = "th-purge"\nwrites = ["PURGE-MANIFEST.tsv", "admission/**"]\noutcome = "inventory, classify, retain, and verify every theory file"\ntimeout_s = 14400\ncapabilities = ["terminal-agentic", "long-tool-loop", "bulk-classification"]\n[proposition]\nid = "TH-PURGE-1"\nclaim = "every THEORY file is retained byte-exact in canonical v1"\nrefuted_by = "a THEORY row lacks a verified v1 id or has a byte mismatch"\n+++\nInventory all prose research artifacts.\n`,
     );
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;

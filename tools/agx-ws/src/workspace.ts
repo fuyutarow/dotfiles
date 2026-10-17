@@ -30,6 +30,7 @@ import {
 } from "../../shared/src/attempt.ts";
 import { acquire, pidAlive } from "../../shared/src/dir-lock.ts";
 import { dispatchStateDir } from "../../shared/src/dispatch-state.ts";
+import { validateSlug } from "../../shared/src/slug.ts";
 import { fromThrowable, jsonOf, z } from "../../shared/src/zod.ts";
 import { jjWorkspace, refLocks } from "./jj-workspace.ts";
 
@@ -61,7 +62,8 @@ const ConfigSchema = z.strictObject({
   trunk: z.string().min(1).default("trunk()"),
   keep: z.array(z.string().min(1)).default([]),
 });
-const SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
+// Lookup accepts historical names so refresh/rm still work after the creation rule changes.
+const LEGACY_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 const TERMINAL_STATES = new Set(["ended", "orphaned"]);
 
 type Ran = { code: number; out: string; err: string };
@@ -166,8 +168,8 @@ export async function readConfig(
       );
 }
 
-export function checkSlug(slug: string): Attempt<string> {
-  return SLUG.test(slug)
+function legacyWorkspaceName(slug: string): Attempt<string> {
+  return LEGACY_NAME.test(slug)
     ? good(`ws_${slug}`)
     : bad(`invalid slug '${slug}': use letters, digits, '_' and '-'`);
 }
@@ -478,8 +480,9 @@ async function readyWorkspace(
 }
 
 export async function add(options: AddOptions): Promise<Attempt<string>> {
-  const name = checkSlug(options.slug);
-  if (!name.ok) return name;
+  const slug = validateSlug(options.slug, "ws add");
+  if (!slug.ok) return slug;
+  const name = `ws_${slug.value}`;
   const repo = resolveRepo(options.repo);
   if (!repo.ok) return repo;
   const cfg = await readConfig(repo.value);
@@ -488,7 +491,7 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
   if (!pre.ok) return pre;
   const graveyard = await checkGraveyard();
   if (!graveyard.ok) return graveyard;
-  const dir = join(repo.value.wsRoot, name.value);
+  const dir = join(repo.value.wsRoot, name);
   if (existsSync(dir)) return bad(`${dir} already exists`);
   if (options.rev !== undefined) {
     const rev = await jjOut(
@@ -503,8 +506,8 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
   return withLock(repo.value, `ws add ${options.slug}`, async () => {
     const names = await workspaceNames(repo.value);
     if (!names.ok) return names;
-    if (names.value.includes(name.value))
-      return bad(`jj workspace ${name.value} is already registered`);
+    if (names.value.includes(name))
+      return bad(`jj workspace ${name} is already registered`);
     const source = jjWorkspace(options.repo);
     if (!source.ok) return source;
     for (const root of new Set([source.value.root, repo.value.backing])) {
@@ -517,7 +520,7 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
         "workspace",
         "add",
         "--name",
-        name.value,
+        name,
         ...(options.rev === undefined ? [] : ["-r", options.rev]),
         dir,
       ],
@@ -530,7 +533,7 @@ export async function add(options: AddOptions): Promise<Attempt<string>> {
       const undone = await forgetAndBury(
         repo.value,
         graveyard.value,
-        name.value,
+        name,
         dir,
       );
       return bad(
@@ -550,7 +553,7 @@ export async function refresh(options: {
   slug: string;
   repo: string;
 }): Promise<Attempt<string>> {
-  const name = checkSlug(options.slug);
+  const name = legacyWorkspaceName(options.slug);
   if (!name.ok) return name;
   const repo = resolveRepo(options.repo);
   if (!repo.ok) return repo;
@@ -578,7 +581,7 @@ export async function remove(options: {
   slug: string;
   repo: string;
 }): Promise<Attempt<string>> {
-  const name = checkSlug(options.slug);
+  const name = legacyWorkspaceName(options.slug);
   if (!name.ok) return name;
   const repo = resolveRepo(options.repo);
   if (!repo.ok) return repo;

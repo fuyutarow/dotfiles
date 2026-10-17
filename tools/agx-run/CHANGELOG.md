@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.2.5 — 2026-10-17
+
+- Reject nonconforming ticket names for fresh dispatches and preserve legacy continuations
+
 ## 5.2.4 — 2026-10-17
 
 - Prefix human-facing ticket names with tkt_ while preserving bare slugs in JSON and records.

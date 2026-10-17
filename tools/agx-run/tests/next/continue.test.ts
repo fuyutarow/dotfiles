@@ -26,7 +26,7 @@ const ticketText = (prose: string): string =>
 
 // Seeds one ended run per prior row; the Jev endpoint is a closed port, so a continue that
 // routed would fall back to the roster default (luna-high) instead of the pinned row.
-const fixture = async () => {
+const fixture = async (ticketName = "pin") => {
   const root = tempDirs.register(
     mkdtempSync(join(tmpdir(), `agx-test-${process.pid}-continue-`)),
   );
@@ -39,7 +39,7 @@ const fixture = async () => {
       kind: "started",
       id,
       at: "2026-10-14T01:00:00.000Z",
-      ticket: "pin",
+      ticket: ticketName,
       writes: [],
       cwd: root,
       workspace: root,
@@ -74,7 +74,10 @@ const fixture = async () => {
     `const i = process.argv.indexOf("--resume");\nprocess.stdout.write(JSON.stringify({ exit: 0, report: { summary: "ok", changes: [], checks: [], for_coordinator: [], open: [] }, vendor_session: "next-" + process.argv[i + 1] }) + "\\n");\n`,
   );
   const ticket = join(root, "ticket.md");
-  writeFileSync(ticket, ticketText("first prose"));
+  writeFileSync(
+    ticket,
+    ticketText("first prose").replace('name = "pin"', `name = "${ticketName}"`),
+  );
   const resume = (id: string) =>
     Bun.spawnSync(
       [
@@ -134,26 +137,29 @@ const Started = z.looseObject({
 const Receipt = z.looseObject({ id: z.string(), row: z.string() });
 
 describe("agx run --continue pins the prior row", () => {
-  test("a codex run resumes on its codex row even when the router would prefer claude", async () => {
-    const f = await fixture();
-    const result = f.resume("codex-run");
-    expect(result.exitCode).toBe(0);
-    const receiptResult = jsonOf(Receipt).safeParse(
-      result.stdout.toString().trim(),
-    );
-    expect(receiptResult.success).toBe(true);
-    if (!receiptResult.success) return;
-    const receipt = receiptResult.data;
-    expect(receipt.row).toBe("terra-high");
-    const started = f
-      .events()
-      .map((event) => Started.safeParse(event))
-      .flatMap((parsed) => (parsed.success ? [parsed.data] : []))
-      .find((event) => event.id === receipt.id);
-    expect(started?.row).toBe("terra-high");
-    expect(started?.vendor_session).toBe("codex-thread-1");
-    expect(started?.continues).toBe("codex-run");
-  });
+  test.each(["design_g5", "Design-G5"])(
+    "legacy ticket %s resumes on its pinned row",
+    async (name) => {
+      const f = await fixture(name);
+      const result = f.resume("codex-run");
+      expect(result.exitCode).toBe(0);
+      const receiptResult = jsonOf(Receipt).safeParse(
+        result.stdout.toString().trim(),
+      );
+      expect(receiptResult.success).toBe(true);
+      if (!receiptResult.success) return;
+      const receipt = receiptResult.data;
+      expect(receipt.row).toBe("terra-high");
+      const started = f
+        .events()
+        .map((event) => Started.safeParse(event))
+        .flatMap((parsed) => (parsed.success ? [parsed.data] : []))
+        .find((event) => event.id === receipt.id);
+      expect(started?.row).toBe("terra-high");
+      expect(started?.vendor_session).toBe("codex-thread-1");
+      expect(started?.continues).toBe("codex-run");
+    },
+  );
 
   test("a claude run resumes its claude session on its claude row", async () => {
     const f = await fixture();

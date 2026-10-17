@@ -27,6 +27,33 @@ const CLI = resolve("tools/agx-run/src/next/cli.ts");
 const text = (extra = "") =>
   `+++\nschema = 2\nname = "home"\noutcome = "recover ticket"\n${extra}\n[proposition]\nid = "HOME"\nclaim = "ticket is recoverable"\nrefuted_by = "bytes differ"\n+++\n原本\r\n`;
 
+test("new dispatch refuses nonconforming names with tkt new repair, without artifacts", async () => {
+  const f = await fixture();
+  for (const command of ["check", "run"]) {
+    for (const name of ["design_g5", "Design-G5"]) {
+      const original = text().replace('name = "home"', `name = "${name}"`);
+      await writeFile(f.ticket, original);
+      const result = await f.invoke([command, f.ticket]);
+      expect(result.exit).toBe(2);
+      expect(result.err).toContain("tkt new design-g5");
+      expect(await readFile(f.ticket, "utf8")).toBe(original);
+    }
+  }
+  const unnamed = join(f.directory, "design_g5.md");
+  await writeFile(unnamed, text().replace('name = "home"\n', ""));
+  expect((await f.invoke(["check", unnamed])).err).toContain(
+    "tkt new design-g5",
+  );
+  const valid = join(f.directory, "arena-g3.md");
+  await writeFile(valid, text().replace('name = "home"\n', ""));
+  const checked = await f.invoke(["check", valid]);
+  expect(checked.exit, checked.err).toBe(0);
+  expect(checked.out).toContain("ticket=arena-g3 ");
+  expect(
+    await Bun.file(join(f.env.AGX_NEXT_STATE_DIR, "records.jsonl")).exists(),
+  ).toBe(false);
+}, 30000);
+
 test.each([
   {
     name: "main checkout default home",

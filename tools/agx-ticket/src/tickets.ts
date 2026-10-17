@@ -25,6 +25,7 @@ import {
 import { jsonOf, z } from "../../shared/src/zod.ts";
 import { JJ_READ_ARGS } from "../../shared/src/jj-read.ts";
 import { readonlyCommand } from "../../shared/src/readonly-command.ts";
+import { validateSlug } from "../../shared/src/slug.ts";
 
 const bad = (error: string): Attempt<never> => ({ ok: false, error });
 const good = <T>(value: T): Attempt<T> => ({ ok: true, value });
@@ -158,7 +159,6 @@ type Context = Extract<
   Awaited<ReturnType<typeof context>>,
   { ok: true }
 >["value"];
-const slugValid = (slug: string) => /^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(slug);
 const DEFAULT_TEMPLATE = `+++\nschema = 2\nname = {{slug:json}}\noutcome = {{slug:json}}\nwrites = []\nverify = []\n\n[proposition]\nid = {{slug:json}}\nclaim = {{slug:json}}\nrefuted_by = "Describe the observation that refutes this claim"\n+++\n\n# {{slug}}\n`;
 
 function render(
@@ -186,8 +186,8 @@ export async function create(options: {
   set: string[];
   each?: string | undefined;
 }): Promise<Attempt<string[]>> {
-  if (!slugValid(options.slug))
-    return bad("invalid slug: use letters, digits, '_' and '-'");
+  const checkedSlug = validateSlug(options.slug, "tkt new");
+  if (!checkedSlug.ok) return checkedSlug;
   const ctx = await context(options.repo);
   if (!ctx.ok) return ctx;
   const values = new Map<string, string>();

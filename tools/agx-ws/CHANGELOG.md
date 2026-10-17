@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 — 2026-10-17
+
+- Add ws adopt to re-home legacy workspace changes with process and keep guards, plus read-only orphan reporting.
+
 ## 0.4.1 — 2026-10-16
 
 - Collect immutable workspace commits without abandoning them

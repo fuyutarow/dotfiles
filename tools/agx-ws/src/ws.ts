@@ -4,6 +4,7 @@ import { errorMessage } from "../../shared/src/attempt.ts";
 import packageJson from "../package.json" with { type: "json" };
 import {
   add,
+  adopt,
   doctor as doctorWorkspaces,
   gc,
   gcAll,
@@ -58,6 +59,56 @@ const addCommand = command(
       return;
     }
     process.stdout.write(`${done.value}\n`);
+  },
+);
+
+const adoptCommand = command(
+  {
+    name: "adopt",
+    parameters: ["[path]"],
+    strictFlags: true,
+    ignoreArgv: rejectPrototypeFlag,
+    help: {
+      description:
+        "Move a legacy jj workspace into <repo>.ws/ws_<hyphen-slug>, preserving its change. TSV: old path, target path, verdict and reason. Refuses processes inside and existing targets.",
+    },
+    flags: {
+      repo: repoFlag,
+      slug: {
+        type: String,
+        description:
+          "override the old basename; normalized to lowercase hyphen words",
+      },
+      all: {
+        type: Boolean,
+        description: "adopt every legacy workspace; requires --repo",
+      },
+      dryRun: {
+        type: Boolean,
+        description: "read-only TSV plan; move nothing",
+      },
+      includeKept: {
+        type: Boolean,
+        description: "include .ws.toml keep entries and print required updates",
+      },
+    },
+  },
+  async (argv) => {
+    const done = await adopt({
+      path: argv._.path,
+      repo: argv.flags.repo,
+      slug: argv.flags.slug,
+      all: argv.flags.all === true,
+      dryRun: argv.flags.dryRun === true,
+      includeKept: argv.flags.includeKept === true,
+    });
+    if (!done.ok) {
+      fail(done.error);
+      return;
+    }
+    for (const line of done.value.lines) process.stdout.write(`${line}\n`);
+    if (argv.flags.dryRun !== true && done.value.failed.length > 0)
+      fail(`could not adopt: ${done.value.failed.join(", ")}`);
   },
 );
 
@@ -199,5 +250,12 @@ else
     version: packageJson.version,
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
-    commands: [addCommand, refreshCommand, rmCommand, gcCommand, doctorCommand],
+    commands: [
+      addCommand,
+      adoptCommand,
+      refreshCommand,
+      rmCommand,
+      gcCommand,
+      doctorCommand,
+    ],
   });

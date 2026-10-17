@@ -108,6 +108,207 @@ afterAll(() => {
 const listing = (dir: string): string[] =>
   existsSync(dir) ? readdirSync(dir).toSorted() : [];
 
+describe("ws adopt", () => {
+  test("dry-run inventories forgotten and plain orphan directories without adopting them", async () => {
+    const path = await repo('trunk = "main"\n');
+    const parent = join(path, "..");
+    const equal = join(parent, "proj-arm-equal");
+    const changed = join(parent, "proj-arm-changed");
+    const plain = join(parent, "proj-arm-plain");
+    const nested = join(parent, "proj-ws", "orphan");
+    for (const [name, dir] of [
+      ["equal", equal],
+      ["changed", changed],
+    ] as const) {
+      expect(
+        (
+          await jj(
+            ["workspace", "add", "--name", name, "-r", "main", dir],
+            path,
+          )
+        ).code,
+      ).toBe(0);
+      expect((await jj(["workspace", "forget", name], path)).code).toBe(0);
+    }
+    await Bun.write(join(changed, "a.txt"), new Uint8Array([0, 255, 128]));
+    await mkdir(plain);
+    await mkdir(nested, { recursive: true });
+    await Bun.write(join(plain, "leftover.txt"), "owner decision\n");
+    const op = () =>
+      jj(
+        [
+          "--ignore-working-copy",
+          "op",
+          "log",
+          "--no-graph",
+          "-n",
+          "1",
+          "-T",
+          "id",
+        ],
+        path,
+      );
+    const before = await op();
+    const dry = await ws(["adopt", "--all", "--repo", path, "--dry-run"], path);
+    expect(dry.code, dry.err).toBe(0);
+    expect(dry.out.split("\n").filter(Boolean)).toHaveLength(4);
+    expect(dry.out).toContain(
+      `${equal}\t${wsDir(path, "proj-arm-equal")}\torphan: files differ from main: no`,
+    );
+    expect(dry.out).toContain(
+      `${changed}\t${wsDir(path, "proj-arm-changed")}\torphan: files differ from main: yes: bytes differ at a.txt`,
+    );
+    expect(dry.out).toContain(
+      `${plain}\t${wsDir(path, "proj-arm-plain")}\torphan:`,
+    );
+    expect(dry.out).toContain(`${nested}\t${wsDir(path, "orphan")}\torphan:`);
+    expect((await op()).out).toBe(before.out);
+    expect((await ws(["adopt", equal], path)).code).toBe(1);
+    const actual = await ws(["adopt", "--all", "--repo", path], path);
+    expect(actual.code, actual.err).toBe(0);
+    expect(actual.out).toBe("");
+    expect(await Bun.file(join(equal, "a.txt")).text()).toBe("a\n");
+    expect(await Bun.file(join(plain, "leftover.txt")).text()).toBe(
+      "owner decision\n",
+    );
+  });
+
+  test("WS-ADOPT: unlanded and nested workspaces move intact; kept and live ones are refused", async () => {
+    const path = await repo('trunk = "main"\nkeep = ["../Legacy_Kept"]\n');
+    const parent = join(path, "..");
+    const old = [
+      "Legacy_Unlanded",
+      "Legacy_Kept",
+      "Legacy_Live",
+      "plain/Nested_Work",
+    ];
+    await mkdir(join(parent, "plain"));
+    const changes: string[] = [];
+    for (const [i, name] of old.entries()) {
+      const dir = join(parent, name);
+      expect(
+        (await jj(["workspace", "add", "--name", `legacy-${i}`, dir], path))
+          .code,
+      ).toBe(0);
+      await Bun.write(join(dir, "unlanded.txt"), `${name}\n`);
+      const change = await jj(
+        ["log", "--no-graph", "-r", "@", "-T", "change_id"],
+        dir,
+      );
+      expect(change.code, change.err).toBe(0);
+      changes.push(change.out);
+    }
+    const live = join(parent, "Legacy_Live", "inside");
+    await mkdir(live);
+    const child = Bun.spawn(["sleep", "30"], {
+      cwd: live,
+      stdout: "ignore",
+      stderr: "ignore",
+      timeout: 35_000,
+    });
+    await Bun.sleep(100);
+    const dry = await ws(["adopt", "--all", "--repo", path, "--dry-run"], path);
+    const moved = await ws(["adopt", "--all", "--repo", path], path);
+    child.kill();
+    await child.exited;
+    expect(dry.code, dry.err).toBe(0);
+    expect(dry.out.split("\n").filter(Boolean)).toHaveLength(4);
+    expect(dry.out).toContain("would-adopt");
+    expect(dry.out).toContain('kept by .ws.toml keep: "../Legacy_Kept"');
+    expect(dry.out).toContain("processes are working inside");
+    expect(moved.code).toBe(1);
+    expect(moved.out).toContain("processes are working inside");
+    expect(moved.out).toContain("kept by .ws.toml");
+    const registered = await jj(["workspace", "list"], path);
+    for (const [i, slug] of [
+      [0, "legacy-unlanded"],
+      [3, "nested-work"],
+    ] as const) {
+      const target = wsDir(path, slug);
+      expect(registered.out).toContain(`ws_${slug}`);
+      expect((await jj(["status"], target)).code).toBe(0);
+      expect(
+        (
+          await jj(["workspace", "root", "--name", `ws_${slug}`], path)
+        ).out.trim(),
+      ).toBe(target);
+      expect(
+        (await jj(["log", "--no-graph", "-r", "@", "-T", "change_id"], target))
+          .out,
+      ).toBe(changes[i] ?? "missing change id");
+      expect(await Bun.file(join(target, "unlanded.txt")).text()).toBe(
+        `${old[i]}\n`,
+      );
+      expect(
+        await Bun.file(join(parent, old[i] ?? "", ".jj", "repo")).exists(),
+      ).toBe(false);
+    }
+    for (const name of ["Legacy_Kept", "Legacy_Live"])
+      expect((await jj(["status"], join(parent, name))).code).toBe(0);
+    const kept = await ws(
+      [
+        "adopt",
+        join(parent, "Legacy_Kept"),
+        "--include-kept",
+        "--slug",
+        "Chosen_Name",
+      ],
+      path,
+    );
+    expect(kept.code, kept.err).toBe(0);
+    expect(kept.out).toContain(
+      'update .ws.toml keep "../Legacy_Kept" to "../proj.ws/ws_chosen-name"',
+    );
+    expect((await jj(["status"], wsDir(path, "chosen-name"))).code).toBe(0);
+  });
+
+  test("dry run leaves files and operation unchanged; refuses collisions and invalid selection", async () => {
+    const path = await repo();
+    const dir = join(path, "..", "Legacy");
+    expect(
+      (await jj(["workspace", "add", "--name", "legacy", dir], path)).code,
+    ).toBe(0);
+    const op = () =>
+      jj(
+        [
+          "--ignore-working-copy",
+          "op",
+          "log",
+          "--no-graph",
+          "-n",
+          "1",
+          "-T",
+          "id",
+        ],
+        path,
+      );
+    const before = await op();
+    const pointer = await Bun.file(join(dir, ".jj", "repo")).text();
+    const dry = await ws(["adopt", dir, "--dry-run"], path);
+    expect(dry.code, dry.err).toBe(0);
+    expect(dry.out).toContain(`${dir}\t${wsDir(path, "legacy")}\twould-adopt`);
+    expect((await op()).out).toBe(before.out);
+    expect(await Bun.file(join(dir, ".jj", "repo")).text()).toBe(pointer);
+    await mkdir(wsDir(path, "legacy"), { recursive: true });
+    await Bun.write(join(wsDir(path, "legacy"), "sentinel"), "retain");
+    const conflict = await ws(["adopt", dir], path);
+    expect(conflict.code).toBe(1);
+    expect(conflict.out).toContain("target already exists");
+    expect(await Bun.file(join(wsDir(path, "legacy"), "sentinel")).text()).toBe(
+      "retain",
+    );
+    expect((await jj(["status"], dir)).code).toBe(0);
+    for (const args of [
+      ["adopt"],
+      ["adopt", "--all"],
+      ["adopt", "--all", "--repo", path, dir],
+      ["adopt", path],
+      ["adopt", "--all", "--repo", path, "--slug", "x"],
+    ])
+      expect((await ws(args, path)).code).toBe(1);
+  });
+});
+
 describe("ws add", () => {
   test("uses sparse . even when the source workspace is narrowed", async () => {
     const path = await repo('ready = ["jj sparse list > sparse.out"]\n');

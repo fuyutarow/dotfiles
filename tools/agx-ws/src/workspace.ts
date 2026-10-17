@@ -11,9 +11,10 @@ import {
   readlinkSync,
   realpathSync,
 } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { lstat, mkdir, readdir, readlink, stat } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { projectSlug } from "../../shared/src/agent-name.ts";
 import {
   attempt,
   errorMessage,
@@ -762,14 +763,357 @@ async function workspaces(repo: Repo): Promise<Attempt<Workspace[]>> {
   return good(found);
 }
 
-function protectedWorkspace(repo: Repo, cfg: Config, ws: Workspace): boolean {
-  return cfg.keep.some((entry) => {
+function keepEntries(repo: Repo, cfg: Config, ws: Workspace): string[] {
+  return cfg.keep.filter((entry) => {
     if (entry === ws.name) return true;
     const path = entry.startsWith("~/")
       ? join(homedir(), entry.slice(2))
       : resolve(repo.backing, entry);
     return realOr(path) === realOr(ws.dir);
   });
+}
+
+function protectedWorkspace(repo: Repo, cfg: Config, ws: Workspace): boolean {
+  return keepEntries(repo, cfg, ws).length > 0;
+}
+
+export type AdoptOptions = {
+  path?: string | undefined;
+  repo?: string | undefined;
+  slug?: string | undefined;
+  all: boolean;
+  dryRun: boolean;
+  includeKept: boolean;
+};
+
+/** Re-home the snapshotted change; jj creates all pointers and path registrations. */
+async function moveWorkspace(
+  repo: Repo,
+  ws: Workspace,
+  target: string,
+  name: string,
+  graveyard: Graveyard,
+): Promise<Attempt<void>> {
+  const occupied = busy(realOr(ws.dir));
+  if (occupied !== undefined) return bad(occupied);
+  const change = await jjOut(
+    ["log", "--no-graph", "-r", "@", "-T", "change_id"],
+    ws.dir,
+    false,
+  );
+  if (!change.ok) return change;
+  const before = await jjOut(["diff", "--git"], ws.dir, true);
+  if (!before.ok) return before;
+  await mkdir(repo.wsRoot, { recursive: true });
+  // Reserve even empty targets: jj itself accepts an existing empty directory.
+  const reserved = await attempt(() => mkdir(target));
+  if (!reserved.ok)
+    return bad(`${target}: cannot reserve destination: ${msg(reserved)}`);
+  const made = await jjOut(
+    ["workspace", "add", "--name", name, "--sparse-patterns", "full", target],
+    repo.backing,
+    false,
+  );
+  if (!made.ok)
+    return bad(`${msg(made)}; old workspace retained; inspect ${target}`);
+  const edited = await jjOut(["edit", change.value.trim()], target, false);
+  if (!edited.ok)
+    return bad(`${msg(edited)}; old workspace retained; inspect ${target}`);
+  const status = await jjOut(["status"], target, false);
+  if (!status.ok) return bad(`${msg(status)}; old workspace retained`);
+  const after = await jjOut(
+    ["log", "--no-graph", "-r", "@", "-T", "change_id"],
+    target,
+    true,
+  );
+  if (!after.ok) return after;
+  const diff = await jjOut(["diff", "--git"], target, true);
+  if (!diff.ok) return diff;
+  if (after.value !== change.value || diff.value !== before.value)
+    return bad(
+      `change id or diff mismatch; old workspace retained; inspect ${target}`,
+    );
+  const active = busy(realOr(ws.dir));
+  if (active !== undefined)
+    return bad(`${active}; old workspace retained; new checkout at ${target}`);
+  const removed = await forgetAndBury(repo, graveyard, ws.name, ws.dir);
+  return removed.ok
+    ? good(undefined)
+    : bad(`${msg(removed)}; new checkout verified at ${target}`);
+}
+
+const adoptLine = (dir: string, target: string, verdict: string): string =>
+  [dir, target, verdict]
+    .map((field) => field.replaceAll("\t", "\\t").replaceAll("\n", "\\n"))
+    .join("\t");
+
+/** Compare raw bytes (including binary files) without opening or snapshotting the orphan. */
+async function orphanFileDifference(
+  repo: Repo,
+  dir: string,
+  trunk: string,
+  path: string,
+): Promise<string | undefined> {
+  const disk = join(dir, path);
+  const info = await attempt(() => lstat(disk));
+  if (!info.ok) {
+    const missing = z
+      .object({ code: z.literal("ENOENT") })
+      .safeParse(info.error);
+    return missing.success ? `yes: missing ${path}` : `unknown: ${msg(info)}`;
+  }
+  if (!info.value.isFile() && !info.value.isSymbolicLink())
+    return `yes: file type differs at ${path}`;
+  const compared = await attempt(async () => {
+    // bounded: local jj store read; never kill jj mid-operation.
+    const child = Bun.spawn(
+      [
+        "jj",
+        "--ignore-working-copy",
+        "--no-pager",
+        "file",
+        "show",
+        "-r",
+        trunk,
+        `root-file:${path}`,
+      ],
+      { cwd: repo.backing, stdout: "pipe", stderr: "pipe" },
+    );
+    const [expected, err, code] = await Promise.all([
+      new Response(child.stdout).arrayBuffer(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (code !== 0) return `unknown: ${err.trim()}`;
+    const actual = info.value.isSymbolicLink()
+      ? Buffer.from(await readlink(disk))
+      : Buffer.from(await Bun.file(disk).arrayBuffer());
+    return actual.equals(Buffer.from(expected))
+      ? undefined
+      : `yes: bytes differ at ${path}`;
+  });
+  return compared.ok ? compared.value : `unknown: ${msg(compared)}`;
+}
+
+/** File content/path comparison, including extra files; .jj/.git metadata is excluded. */
+async function orphanDifference(
+  repo: Repo,
+  dir: string,
+  trunk: string,
+): Promise<string> {
+  const listed = await jjOut(
+    ["file", "list", "-r", trunk, "-T", 'json(path) ++ "\\n"'],
+    repo.backing,
+    true,
+  );
+  if (!listed.ok) return `unknown: ${msg(listed)}`;
+  const paths: string[] = [];
+  for (const line of listed.value.split("\n").filter(Boolean)) {
+    const path = jsonOf(z.string()).safeParse(line);
+    if (!path.success) return "unknown: invalid trunk file list";
+    paths.push(path.data);
+    const difference = await orphanFileDifference(repo, dir, trunk, path.data);
+    if (difference !== undefined) return difference;
+  }
+  return orphanExtraFiles(dir, new Set(paths));
+}
+
+async function orphanExtraFiles(
+  dir: string,
+  known: Set<string>,
+): Promise<string> {
+  const pending = [dir];
+  let visited = 0;
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (path === undefined) break;
+    if (++visited > 100_000)
+      return "unknown: file inventory exceeds 100000 entries";
+    const info = await attempt(() => lstat(path));
+    if (!info.ok) return `unknown: ${msg(info)}`;
+    if (!info.value.isDirectory() && !known.has(relative(dir, path)))
+      return `yes: extra file ${relative(dir, path)}`;
+    if (!info.value.isDirectory()) continue;
+    const entries = await attempt(() => readdir(path));
+    if (!entries.ok) return `unknown: ${msg(entries)}`;
+    pending.push(
+      ...entries.value
+        .filter((name) => name !== ".jj" && name !== ".git")
+        .map((name) => join(path, name)),
+    );
+  }
+  return "no (file bytes and paths; excludes .jj/.git metadata)";
+}
+
+/** Discover legacy sibling/nested leftovers without following directory symlinks. */
+async function orphanLines(
+  repo: Repo,
+  cfg: Config,
+  registered: Workspace[],
+): Promise<Attempt<string[]>> {
+  const siblings = await attempt(() =>
+    readdir(repo.parent, { withFileTypes: true }),
+  );
+  if (!siblings.ok) return siblings;
+  const roots = siblings.value
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        (entry.name.startsWith(`${repo.name}-arm-`) ||
+          entry.name === `${repo.name}-ws`),
+    )
+    .map((entry) => join(repo.parent, entry.name));
+  const candidates = roots.filter(
+    (path) => basename(path) !== `${repo.name}-ws`,
+  );
+  for (const root of roots.filter(
+    (path) => basename(path) === `${repo.name}-ws`,
+  )) {
+    const nested = await attempt(() => readdir(root, { withFileTypes: true }));
+    if (!nested.ok) return nested;
+    candidates.push(
+      ...nested.value
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => join(root, entry.name)),
+    );
+  }
+  const seen = new Set(registered.map((ws) => realOr(ws.dir)));
+  const lines: string[] = [];
+  for (const dir of candidates) {
+    if (seen.has(realOr(dir))) continue;
+    const target = join(repo.wsRoot, `ws_${projectSlug(basename(dir))}`);
+    const difference = await orphanDifference(repo, dir, cfg.trunk);
+    lines.push(
+      adoptLine(
+        dir,
+        target,
+        `orphan: files differ from ${cfg.trunk}: ${difference}; owner decision required; never adopted`,
+      ),
+    );
+  }
+  return good(lines);
+}
+
+async function adoptRow(
+  repo: Repo,
+  cfg: Config,
+  ws: Workspace,
+  options: AdoptOptions,
+  reserved: Set<string>,
+  targets: Set<string>,
+  graveyard?: Graveyard,
+): Promise<{ line: string; failed: boolean }> {
+  const name = `ws_${projectSlug(options.slug ?? basename(ws.dir))}`;
+  const target = join(repo.wsRoot, name);
+  const kept = keepEntries(repo, cfg, ws);
+  const present = await attempt(() => lstat(target));
+  const source = jjWorkspace(ws.dir);
+  let reason: string | undefined;
+  if (within(ws.dir, realOr(repo.wsRoot)))
+    reason = "already inside repository workspace directory";
+  else if (!source.ok) reason = msg(source);
+  else if (
+    source.value.root !== realOr(ws.dir) ||
+    source.value.backingRoot !== repo.backing
+  )
+    reason = "workspace metadata does not match repository registration";
+  else if (kept.length > 0 && !options.includeKept)
+    reason = `kept by .ws.toml keep: ${kept.map((entry) => JSON.stringify(entry)).join(", ")}; pass --include-kept`;
+  else if (present.ok || targets.has(target))
+    reason = "target already exists or is reserved";
+  else if (
+    !z.object({ code: z.literal("ENOENT") }).safeParse(present.error).success
+  )
+    reason = `cannot inspect target: ${msg(present)}`;
+  else if (reserved.has(name))
+    reason = `jj workspace ${name} is already registered`;
+  else reason = busy(realOr(ws.dir));
+  if (reason === undefined) {
+    targets.add(target);
+    reserved.add(name);
+  }
+  if (reason === undefined && !options.dryRun && graveyard !== undefined) {
+    const moved = await moveWorkspace(repo, ws, target, name, graveyard);
+    if (!moved.ok) reason = msg(moved);
+  }
+  const verdict = options.dryRun ? "would-adopt" : "adopted";
+  const update =
+    kept.length === 0
+      ? ""
+      : `; update .ws.toml keep ${kept.map((entry) => JSON.stringify(entry)).join(", ")} to ${JSON.stringify(relative(repo.backing, target))}`;
+  return {
+    line: adoptLine(
+      ws.dir,
+      target,
+      `${reason === undefined ? verdict : `refused: ${reason}`}${update}`,
+    ),
+    failed: reason !== undefined,
+  };
+}
+
+/** Dry runs never lock, snapshot, or write, including when inspecting a real repository. */
+export async function adopt(
+  options: AdoptOptions,
+): Promise<Attempt<{ lines: string[]; failed: string[] }>> {
+  if (options.all && (options.path !== undefined || options.slug !== undefined))
+    return bad("--all cannot be combined with a path or --slug");
+  if (options.all && options.repo === undefined)
+    return bad("--all requires --repo");
+  if (!options.all && options.path === undefined)
+    return bad("provide a workspace path or --all --repo <R>");
+  const resolved = resolveRepo(options.repo ?? options.path ?? process.cwd());
+  if (!resolved.ok) return resolved;
+  const repo = resolved.value;
+  const run = async (): Promise<
+    Attempt<{ lines: string[]; failed: string[] }>
+  > => {
+    const cfg = await readConfig(repo);
+    if (!cfg.ok) return cfg;
+    const listed = await workspaces(repo);
+    if (!listed.ok) return listed;
+    const selected = options.all
+      ? listed.value.filter((ws) => !within(ws.dir, realOr(repo.wsRoot)))
+      : listed.value.filter(
+          (ws) => realOr(ws.dir) === realOr(resolve(options.path ?? "")),
+        );
+    if (!options.all && selected.length !== 1)
+      return bad(
+        "path must be the root of a registered non-primary workspace of this repository",
+      );
+    const names = await workspaceNames(repo);
+    if (!names.ok) return names;
+    const reserved = new Set(names.value);
+    const targets = new Set<string>();
+    const graveyard = options.dryRun ? undefined : await checkGraveyard();
+    if (graveyard !== undefined && !graveyard.ok) return graveyard;
+    const rows = [];
+    for (const ws of selected)
+      rows.push(
+        await adoptRow(
+          repo,
+          cfg.value,
+          ws,
+          options,
+          reserved,
+          targets,
+          graveyard?.value,
+        ),
+      );
+    const lines = rows.map((row) => row.line);
+    const failed = rows
+      .filter((row) => row.failed)
+      .map((row) => row.line.split("\t")[0] ?? "?");
+    const orphans =
+      options.dryRun && options.all
+        ? await orphanLines(repo, cfg.value, listed.value)
+        : good([]);
+    if (!orphans.ok) return orphans;
+    lines.push(...orphans.value);
+    return good({ lines, failed });
+  };
+  if (options.dryRun) return run();
+  const pre = common(repo);
+  return pre.ok ? withLock(repo, "ws adopt", run) : pre;
 }
 
 /** Freeze one real trunk commit for the whole repo; root is not a usable integration branch. */

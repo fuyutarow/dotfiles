@@ -61,11 +61,16 @@ export function exempt(lines: readonly string[], index: number): boolean {
   return false;
 }
 
-async function oxlintConfig(root: string): Promise<string> {
+async function oxlintConfig(
+  root: string,
+): Promise<
+  { ok: true; json: string; ignores: string[] } | { ok: false; error: string }
+> {
   const text = await Bun.file(join(root, ".oxlintrc.json")).text();
   const rc = jsonOf(Rc).safeParse(text);
-  if (!rc.success) return `.oxlintrc.json: ${rc.error.message}`;
-  return JSON.stringify({
+  if (!rc.success)
+    return { ok: false, error: `.oxlintrc.json: ${rc.error.message}` };
+  const json = JSON.stringify({
     plugins: ["node"],
     categories: { correctness: "off" },
     // Severity is enabled for this scan; policy options remain in the rendered entry.
@@ -73,6 +78,7 @@ async function oxlintConfig(root: string): Promise<string> {
     ignorePatterns: rc.data.ignorePatterns,
     overrides: rc.data.overrides,
   });
+  return { ok: true, json, ignores: rc.data.ignorePatterns };
 }
 
 type Scan =
@@ -81,13 +87,26 @@ type Scan =
 
 async function scan(root: string): Promise<Scan> {
   const config = await oxlintConfig(root);
-  if (!config.startsWith("{")) return { ok: false, error: config };
+  if (!config.ok) return config;
   const dir = await mkdtemp(join(tmpdir(), "lint-no-sync-"));
   const configPath = join(dir, "oxlintrc.json");
   const outPath = join(dir, "out.json");
-  await Bun.write(configPath, config);
+  await Bun.write(configPath, config.json);
+  // oxlint resolves a config's ignorePatterns against the config's own directory, and this
+  // config lives in tmpdir, so they are passed again on the command line, relative to root.
+  const ignores = config.ignores.flatMap((p) => ["--ignore-pattern", p]);
   const proc = Bun.spawn(
-    ["bun", "--bun", OXLINT, "-c", configPath, "--format", "json", "."],
+    [
+      "bun",
+      "--bun",
+      OXLINT,
+      "-c",
+      configPath,
+      ...ignores,
+      "--format",
+      "json",
+      ".",
+    ],
     // stdout goes to a file: oxlint exits before a pipe is drained and the JSON arrives cut off.
     { cwd: root, stdout: Bun.file(outPath), stderr: "pipe", timeout: 120_000 },
   );

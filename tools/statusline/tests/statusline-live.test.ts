@@ -120,7 +120,7 @@ test("live Codex PTY redraws changed pinned session and restores the terminal on
   expect(
     await waitUntil(
       () =>
-        output.includes("gpt-6-luna") && output.includes("Updated every 1s"),
+        output.includes("GPT-6-Luna") && output.includes("Updated every 1s"),
       15000,
     ),
   ).toBe(true);
@@ -136,12 +136,12 @@ test("live Codex PTY redraws changed pinned session and restores the terminal on
   expect(
     await waitUntil(
       () =>
-        output.includes("gpt-6-orbit") &&
+        output.includes("GPT-6-Orbit") &&
         output.split(`${esc}2J`).length - 1 >= 2,
       15000,
     ),
   ).toBe(true);
-  expect(output).not.toContain("gpt-6-newer");
+  expect(output).not.toContain("GPT-6-Newer");
   expect(output).toContain("54.0k");
   proc.terminal?.write("q");
   expect(await waitUntil(() => proc.exitCode !== null, 5000)).toBe(true);
@@ -269,59 +269,73 @@ test("SIGTERM exits 143 and restores terminal modes", async () => {
   expect(output).toContain(`${esc}?25h${esc}?1049l`);
 });
 
-test("live CLI rejects invalid interval and explicit watch without a TTY", () => {
-  const home = mkdtempSync(join(tmpdir(), "statusline-live-cli-"));
-  homes.push(home);
-  const invalid = Bun.spawnSync(
-    [process.execPath, script, "--codex", "--watch", "--interval", "Infinity"],
-    {
-      cwd: home,
-      env: renderEnv(home, "/fixture/codex"),
-    },
-  );
-  expect(invalid.exitCode).toBe(2);
-  expect(invalid.stderr.toString()).toContain("finite number from 1 to 3600");
-  const noTty = Bun.spawnSync(
-    [process.execPath, script, "--codex", "--watch"],
-    {
-      cwd: home,
-      env: renderEnv(home, "/fixture/codex"),
-    },
-  );
-  expect(noTty.exitCode).toBe(2);
-  expect(noTty.stderr.toString()).toContain("--watch requires a TTY");
-  const positionalInterval = Bun.spawnSync(
-    [process.execPath, script, "--watch", "2"],
-    { cwd: home, env: renderEnv(home) },
-  );
-  expect(positionalInterval.exitCode).toBe(2);
-  expect(positionalInterval.stderr.toString()).toContain(
-    "--watch requires a TTY",
-  );
-  const conflict = Bun.spawnSync(
-    [process.execPath, script, "--codex", "--watch", "--once"],
-    { cwd: home, env: renderEnv(home) },
-  );
-  expect(conflict.exitCode).toBe(2);
-  expect(conflict.stderr.toString()).toContain("cannot be combined");
-  const once = Bun.spawnSync([process.execPath, script, "--codex", "--once"], {
-    cwd: home,
-    env: renderEnv(home, "/fixture/codex"),
-  });
-  expect(once.exitCode).toBe(0);
-  expect(once.stdout.toString().endsWith("\n")).toBe(true);
-  const misplacedInterval = Bun.spawnSync(
-    [process.execPath, script, "--interval", "5"],
-    { cwd: home, env: renderEnv(home) },
-  );
-  expect(misplacedInterval.exitCode).toBe(2);
-  expect(misplacedInterval.stderr.toString()).toContain(
-    "requires --watch or --codex",
-  );
-  const nonLiveInterval = Bun.spawnSync(
-    [process.execPath, script, "--codex", "--interval", "5"],
-    { cwd: home, env: renderEnv(home) },
-  );
-  expect(nonLiveInterval.exitCode).toBe(2);
-  expect(nonLiveInterval.stderr.toString()).toContain("requires live mode");
-});
+test(
+  "live CLI rejects invalid interval and explicit watch without a TTY",
+  () => {
+    const home = mkdtempSync(join(tmpdir(), "statusline-live-cli-"));
+    homes.push(home);
+    const invalid = Bun.spawnSync(
+      [
+        process.execPath,
+        script,
+        "--codex",
+        "--watch",
+        "--interval",
+        "Infinity",
+      ],
+      {
+        cwd: home,
+        env: renderEnv(home, "/fixture/codex"),
+      },
+    );
+    expect(invalid.exitCode).toBe(2);
+    expect(invalid.stderr.toString()).toContain("finite number from 1 to 3600");
+    const noTty = Bun.spawnSync(
+      [process.execPath, script, "--codex", "--watch"],
+      {
+        cwd: home,
+        env: renderEnv(home, "/fixture/codex"),
+      },
+    );
+    expect(noTty.exitCode).toBe(2);
+    expect(noTty.stderr.toString()).toContain("--watch requires a TTY");
+    const positionalInterval = Bun.spawnSync(
+      [process.execPath, script, "--watch", "2"],
+      { cwd: home, env: renderEnv(home) },
+    );
+    expect(positionalInterval.exitCode).toBe(2);
+    expect(positionalInterval.stderr.toString()).toContain(
+      "--watch requires a TTY",
+    );
+    const conflict = Bun.spawnSync(
+      [process.execPath, script, "--codex", "--watch", "--once"],
+      { cwd: home, env: renderEnv(home) },
+    );
+    expect(conflict.exitCode).toBe(2);
+    expect(conflict.stderr.toString()).toContain("cannot be combined");
+    const once = Bun.spawnSync(
+      [process.execPath, script, "--codex", "--once"],
+      {
+        cwd: home,
+        env: renderEnv(home, "/fixture/codex"),
+      },
+    );
+    expect(once.exitCode).toBe(0);
+    expect(once.stdout.toString().endsWith("\n")).toBe(true);
+    const misplacedInterval = Bun.spawnSync(
+      [process.execPath, script, "--interval", "5"],
+      { cwd: home, env: renderEnv(home) },
+    );
+    expect(misplacedInterval.exitCode).toBe(2);
+    expect(misplacedInterval.stderr.toString()).toContain(
+      "requires --watch or --codex",
+    );
+    const nonLiveInterval = Bun.spawnSync(
+      [process.execPath, script, "--codex", "--interval", "5"],
+      { cwd: home, env: renderEnv(home) },
+    );
+    expect(nonLiveInterval.exitCode).toBe(2);
+    expect(nonLiveInterval.stderr.toString()).toContain("requires live mode");
+  },
+  { timeout: 30_000 },
+); // Seven cold CLI processes; the render latency gate is separate.

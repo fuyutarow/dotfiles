@@ -66,13 +66,13 @@ export async function repoStateAsync(cwd: string): Promise<{
         "-r",
         "@",
         "-T",
-        'working_copies.map(|w| w.name()).join(",") ++ "\\t" ++ bookmarks ++ "\\t" ++ diff.stat().total_added() ++ "\\t" ++ diff.stat().total_removed()',
+        'working_copies.map(|w| w.name()).join(",") ++ "\\t" ++ if(bookmarks, bookmarks, "HEAD") ++ "\\t" ++ diff.stat().total_added() ++ "\\t" ++ diff.stat().total_removed()',
       ],
       2000,
     );
     if (result.isErr())
       return { branch: undefined, branchWhy: result.error.why };
-    const [workspace, branch, add, del] = result.value.trim().split("\t");
+    const [workspace, branch, add, del] = result.value.trimEnd().split("\t");
     return {
       branch: branch === "" ? undefined : branch,
       branchWhy: undefined,

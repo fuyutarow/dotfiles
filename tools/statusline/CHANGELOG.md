@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.2 — 2026-10-18
+
+- Render one location, one row per session and shared host facts once; retain sampler values across project state overrides and keep renders under 100 ms.
+
 ## 0.20.1 — 2026-10-17
 
 - Report Codex pane names with their project and source model and effort from the exact Codex session; preserve Claude sidebar behavior.

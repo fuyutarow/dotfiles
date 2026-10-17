@@ -71,13 +71,7 @@ export function stateDir(env: NodeJS.ProcessEnv): string {
   return (
     [env.AGX_NEXT_STATE_DIR, env.AGX_STATE_DIR].find(
       (value) => value !== undefined && value !== "",
-    ) ??
-    join(
-      env.XDG_STATE_HOME === ""
-        ? join(env.HOME ?? homedir(), ".local/state")
-        : (env.XDG_STATE_HOME ?? join(env.HOME ?? homedir(), ".local/state")),
-      "agx-next",
-    )
+    ) ?? join(join(env.HOME ?? homedir(), ".local/state"), "agx-next")
   );
 }
 export const agxSnapshotPath = (env: NodeJS.ProcessEnv) =>

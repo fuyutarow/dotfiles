@@ -236,18 +236,45 @@ export async function discoverSessions(
   );
   return rows
     .flat()
+    .toSorted((a, b) => {
+      const primaryA = a.transcript_path.endsWith(`-${a.session_id}.jsonl`);
+      const primaryB = b.transcript_path.endsWith(`-${b.session_id}.jsonl`);
+      if (primaryA !== primaryB) return primaryA ? -1 : 1;
+      return Temporal.Instant.compare(b.started_at, a.started_at);
+    })
+    .filter(
+      (session, index, sessions) =>
+        sessions.findIndex(
+          (candidate) =>
+            candidate.vendor === session.vendor &&
+            candidate.session_id === session.session_id,
+        ) === index,
+    )
     .toSorted((a, b) => Temporal.Instant.compare(b.started_at, a.started_at));
 }
 
 function codexPayload(raw: string, session: AgentSession) {
   let model: string | undefined;
+  let effort: string | undefined;
   let inputTokens: number | undefined;
   let contextWindow: number | undefined;
   for (const line of raw.split("\n")) {
     const parsed = jsonText.safeParse(line);
     const row = parsed.success ? asRecord(parsed.data) : undefined;
     const payload = asRecord(row?.payload);
-    if (row?.type === "turn_context") model = text(payload?.model) ?? model;
+    if (row?.type === "turn_context") {
+      model = text(payload?.model) ?? model;
+      effort =
+        text(payload?.effort) ?? text(payload?.reasoning_effort) ?? effort;
+    }
+    if (
+      row?.type === "event_msg" &&
+      payload?.type === "thread_settings_applied"
+    ) {
+      const settings = asRecord(payload.thread_settings);
+      model = text(settings?.model) ?? model;
+      effort = text(settings?.reasoning_effort) ?? effort;
+    }
     if (row?.type !== "event_msg" || payload?.type !== "token_count") continue;
     const info = asRecord(payload.info);
     const usage = asRecord(info?.last_token_usage);
@@ -275,7 +302,8 @@ function codexPayload(raw: string, session: AgentSession) {
     cwd: session.cwd,
     session_id: session.session_id,
     transcript_path: session.transcript_path,
-    model: model === undefined ? undefined : { display_name: model },
+    model: model === undefined ? undefined : { display_name: model, id: model },
+    effort: effort === undefined ? undefined : { level: effort },
     context_window: context,
   };
 }
@@ -285,6 +313,7 @@ interface DiscoveredPayload {
   session_id: string;
   transcript_path: string;
   model?: { display_name: string; id?: string } | undefined;
+  effort?: { level: string } | undefined;
   context_window?:
     | { total_input_tokens: number; used_percentage?: number }
     | undefined;
@@ -292,13 +321,34 @@ interface DiscoveredPayload {
 export async function payloadForSession(
   session: AgentSession,
 ): Promise<DiscoveredPayload> {
+  if (session.vendor === "codex") {
+    const data = await statusForSession(session);
+    let context_window: DiscoveredPayload["context_window"];
+    if (data.context?.inputTokens !== undefined)
+      context_window = {
+        total_input_tokens: data.context.inputTokens,
+        ...(data.context.usedPercent === undefined
+          ? {}
+          : { used_percentage: data.context.usedPercent }),
+      };
+    return {
+      cwd: session.cwd,
+      session_id: session.session_id,
+      transcript_path: session.transcript_path,
+      model:
+        data.model?.name === undefined
+          ? undefined
+          : { display_name: data.model.name },
+      effort: data.effort === undefined ? undefined : { level: data.effort },
+      context_window,
+    };
+  }
   const raw =
     (
       await readJsonlTail(session.transcript_path, TRANSCRIPT_TAIL_BYTES).catch(
         () => null,
       )
     )?.text ?? "";
-  if (session.vendor === "codex") return codexPayload(raw, session);
   let modelName: string | undefined;
   let inputTokens: number | undefined;
   for (const line of raw.split("\n").toReversed()) {
@@ -338,11 +388,37 @@ export async function payloadForSession(
 /** Transcript values have already crossed the discovery decoder; no wire round-trip. */
 export async function statusForSession(
   session: AgentSession,
+  sampledRender = false,
 ): Promise<SessionStatus> {
-  const payload = await payloadForSession(session);
+  if (session.vendor === "codex" && !sampledRender) {
+    const { readCodexTranscriptStatus } =
+      await import("./adapters/codex-rollout.ts");
+    return (
+      (await readCodexTranscriptStatus(
+        session.transcript_path,
+        session.cwd,
+      )) ?? {
+        cwd: session.cwd,
+        sessionId: session.session_id,
+      }
+    );
+  }
+  const payload =
+    session.vendor === "codex"
+      ? codexPayload(
+          (
+            await readJsonlTail(
+              session.transcript_path,
+              TRANSCRIPT_TAIL_BYTES,
+            ).catch(() => null)
+          )?.text ?? "",
+          session,
+        )
+      : await payloadForSession(session);
   return {
     cwd: payload.cwd,
     sessionId: payload.session_id,
+    effort: payload.effort?.level,
     model:
       payload.model === undefined
         ? undefined

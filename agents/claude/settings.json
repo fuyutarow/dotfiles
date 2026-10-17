@@ -312,7 +312,7 @@
   "enableWorkflows": false,
   "statusLine": {
     "type": "command",
-    "command": "~/.bun/bin/statusline",
+    "command": "~/.bun/bin/statusline --session stdin",
     "refreshInterval": 5
   },
   "enabledPlugins": {

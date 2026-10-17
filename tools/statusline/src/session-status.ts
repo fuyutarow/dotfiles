@@ -1,3 +1,20 @@
+import { z } from "./zod.ts";
+
+export const SessionStatusSchema = z.object({
+  cwd: z.string().optional(),
+  sessionId: z.string().optional(),
+  sessionName: z.string().optional(),
+  model: z
+    .object({ name: z.string().optional(), id: z.string().optional() })
+    .optional(),
+  effort: z.string().optional(),
+  context: z
+    .object({
+      inputTokens: z.number().optional(),
+      usedPercent: z.number().optional(),
+    })
+    .optional(),
+});
 // Provider-neutral facts supplied to the statusline builder. Host wire formats are parsed and
 // translated at their adapter boundary; this module contains no provider field names.
 export interface SessionStatus {

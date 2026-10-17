@@ -736,7 +736,7 @@ describe("legacy enriched Run row", () => {
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
     ).toEqual([
-      "workers 0 running (+1 in other sessions) · lost 0 · ws unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · ok",
+      "workers 0 running (+1 in other sessions) · ws unknown all · unlanded unknown · collectable unknown · unknown · ok",
     ]);
     expect(out).not.toContain("private worker");
     expect(out).not.toContain("luna-high");
@@ -777,7 +777,7 @@ describe("legacy enriched Run row", () => {
         .map((line) => line.replace(ANSI, ""))
         .filter((line) => line.includes("in other sessions")),
     ).toEqual([
-      "workers 1 running (+3 in other sessions) · lost 3 · ws unknown all · unlanded unknown · collectable unknown · legacy unknown unknown · ⚠ orphaned 3",
+      "workers 1 running (+3 in other sessions) · ws unknown all · unlanded unknown · collectable unknown · unknown · ok",
     ]);
     expect(
       out

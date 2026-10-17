@@ -4,7 +4,7 @@ Part of the [tools/ architecture](../spec/architecture.md) (report: invariant I-
 
 Package-owned statusline, ported from the former Claude implementation. The first row ends
 with the version imported from `package.json`.
-`agents/claude/settings.json` declares `statusLine.command` as `~/.bun/bin/statusline`, this package's `bin`
+`agents/claude/settings.json` declares `statusLine.command` as `~/.bun/bin/statusline --session stdin`, this package's `bin`
 (root `package.json` `bin`, installed by `bun link` / `mise run deps`). The former Claude implementation
 has been retired; parity fixtures preserve its expected behavior.
 
@@ -36,21 +36,28 @@ Live mode selects the initial rollout once, then rereads that session ID on ever
 The Claude adapter parses Claude Code statusline JSON on stdin and normalizes it to the provider-neutral
 `SessionStatus` contract; stdout retains the existing ANSI rows and graceful invalid-input messages.
 With empty stdin or a terminal, `statusline` discovers live Claude Code and Codex processes in the
-current directory and renders one block per session, newest first. `statusline sessions --cwd DIR
+current directory and renders one location line, one line per session, then shared Rate, Sys,
+Job, agx and worker lines once. `--session ID` selects one live session; `--session stdin`
+uses Claude's supplied session payload. `statusline sessions --cwd DIR
 --json` emits one JSON record per session; `statusline payload SESSION_ID` emits the renderer
 payload for that live session. When no session is present, host and
 dispatch rows still render with `no agent session in <cwd>`. `--watch [SECONDS]` redraws discovered
 sessions in place (default five seconds); `--interval N` remains an equivalent interval option
 (1–3600 seconds). Non-empty piped payloads
-continue through the original renderer path unchanged.
+use the same location/session/shared layout.
 On Linux, `statusline-sampler.timer` owns collection and refreshes five seconds after
-each completed sample. It publishes `$XDG_STATE_HOME/statusline/owner.json` (default
-`~/.local/state/statusline/owner.json`) with separate observation timestamps. A failed
+each completed sample. It publishes `~/.local/state/statusline/owner.json`
+with separate observation timestamps. Host status deliberately ignores project-local
+`XDG_STATE_HOME` overrides; explicit `STATUSLINE_OWNER_STATE` redirects isolated probes. A failed
 collection retains the last successful value and its timestamp. The systemd service
 and its runtime lock prevent overlapping samples. GPU observations still come from
 the separate GPU owner.
 
-Rendering reads that owner file, the three agx owner files, transcripts and the selected
+The sampler also publishes `owner.json.view`, using the same renderer, and atomic last-good
+copies of both files. Normal empty-stdin renders read that prepared display and selected
+PIDs, update its clock, and show an age when sampling stops or the main file is unreadable.
+This removes cold dependency initialization and whole-rollout settings scans from each render.
+On first use, the full renderer reads the owner file, the three agx owner files, transcripts and the selected
 PIDs under `/proc`. It never launches a collector, fetches a rate, writes a cache or waits
 for a session render lock. Standalone discovery uses the sampler's live session inventory;
 `statusline sessions` explicitly performs discovery when requested. The sampler removes
@@ -88,7 +95,7 @@ Storage still reads the canonical `agents/hooks/storage-headroom.toml` as runtim
 relative to this package rather than cwd. Only `storageLine` is imported from shared storage code.
 Disk free GiB uses three significant figures. A fill/free rate appears at
 0.05 GiB/min or more, with two significant figures and ↓/↑ arrows. The sampler atomically updates
-`$XDG_STATE_HOME/statusline/disk-rate.json` (default `~/.local/state/statusline/disk-rate.json`).
+`~/.local/state/statusline/disk-rate.json`.
 Linear regression over the last five minutes smooths short bursts; samples are spaced at least
 five seconds apart, capped at 61 per drive, and must span at least 30 seconds. Missing or corrupt
 state starts a new window silently. A capacity change, backwards clock step, or five-minute gap
@@ -206,3 +213,8 @@ refresh after either diagnostic input changes.
 inventory and labels the fleet total. Counts cover the existing GC inventory,
 excluding workspaces already collected. A partial first observation shows the
 repository count with an unknown fleet total until a complete fleet GC succeeds.
+
+The anomaly suffix counts only workspace/ticket findings with clearing actions from
+`agx doctor`, labeled with those commands (`ws refresh`, `ws gc …`, `tkt gc`, or
+`mise run land`). Historical outside-home, unjudged, orphaned and legacy counters
+remain available in `agx doctor`; they do not appear in that suffix.

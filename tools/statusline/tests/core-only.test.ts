@@ -132,9 +132,9 @@ test("fixed core outputs are rendered verbatim; bf3bb781 has no working row and 
     ram: ok({ pct: 0, frac: "0/1G" }),
   });
   expect(out).toContain(
-    "workers 37 running (+11 in other sessions) · lost 0 · ws 13 here · 89 all · unlanded 23 · collectable 17 · legacy 9",
+    "workers 37 running (+11 in other sessions) · ws 13 here · 89 all · unlanded 23 · collectable 17",
   );
-  expect(out).toContain("outside-home 2");
+  expect(out).not.toContain("outside-home 2");
   expect(out).toContain("tkt_live-ticket");
   expect(out).toContain("0m42s");
   expect(out).not.toContain("finished-ticket");

@@ -30,7 +30,7 @@ export function diskRateStatePath(): string {
   if (process.env.STATUSLINE_DISK_RATE_STATE !== undefined)
     return process.env.STATUSLINE_DISK_RATE_STATE;
   return join(
-    process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
+    join(homedir(), ".local", "state"),
     "statusline",
     "disk-rate.json",
   );

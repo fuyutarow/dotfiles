@@ -11,7 +11,7 @@ import { AgentSessionSchema } from "./session-discovery.ts";
 export const ownerStatePath = () =>
   process.env.STATUSLINE_OWNER_STATE ??
   join(
-    process.env.XDG_STATE_HOME ?? join(process.env.HOME ?? "", ".local/state"),
+    join(process.env.HOME ?? "", ".local/state"),
     "statusline",
     "owner.json",
   );
@@ -147,10 +147,24 @@ const RateSchema = z
   }));
 
 export async function readOwnerState(): Promise<OwnerState | undefined> {
-  const text = await readFile(ownerStatePath(), "utf8").catch(() => null);
-  if (text === null) return undefined;
-  const parsed = jsonOf(OwnerStateSchema).safeParse(text);
-  return parsed.success ? parsed.data : undefined;
+  const path = ownerStatePath();
+  for (const candidate of [path, `${path}.last-good`]) {
+    const text = await readFile(candidate, "utf8").catch(() => null);
+    const parsed =
+      text === null ? undefined : jsonOf(OwnerStateSchema).safeParse(text);
+    if (parsed?.success !== true) continue;
+    if (candidate === path) return parsed.data;
+    return {
+      schema: 1,
+      fields: Object.fromEntries(
+        Object.entries(parsed.data.fields).map(([key, field]) => [
+          key,
+          { ...field, error: field.error ?? "owner snapshot unreadable" },
+        ]),
+      ),
+    };
+  }
+  return undefined;
 }
 
 /** Discovery is sampled once for every session; rendering validates only the selected PIDs. */

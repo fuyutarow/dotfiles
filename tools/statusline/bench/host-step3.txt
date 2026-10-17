@@ -1,0 +1,48 @@
+STATUSLINE-STEP3 host evidence — 2026-10-17, R99 (WSL2), source CLI v0.20.1
+
+Patch changeset targets 0.20.2; land owns the version bump.
+The command below used the workspace statusline through a temporary PATH entry.
+Both sessions are live in ~/dotfiles. The sampler used isolated owner/cache/disk-rate
+paths under this workspace; neither the installed CLI nor deployed host state changed.
+
+Root cause: coralbase Claude PID 3764 inherited
+XDG_STATE_HOME=/home/fuyu/Workspace/coralbase/.state; research-record-v2 PID 1408912
+did not. Host sample readers had followed the project override. Host status now
+uses ~/.local/state, with explicit STATUSLINE/AGX overrides retained for probes.
+
+Profile: bun --cpu-prof ... tools/statusline/src/statusline.ts < /dev/null
+Before, the cold render took 0.290s without profiling. Exclusive CPU profile samples
+identified codex-settings-stream feed/stringCharacter/character at 179.583 ms total,
+and vendor/deps initialization/functions at 166.229 ms total. Profiling adds overhead;
+these are sampled costs, not uninstrumented render wall time. The sampler now owns
+full settings scans and prepares display records with the existing formatter.
+The read path loads neither dependency graph. The after-profile contains zero
+call frames from vendor/deps or codex-settings-stream.
+
+~/dotfiles
+$ statusline < /dev/null
+fuyu@R99:10-17 23:56+09|~/dotfiles | ⎇ HEAD | (+2643,-109) | ws: default | v0.20.1
+GPT-6-Luna | high | Ctx: 72.9k  9% | Session: 01a14a0a-97cc-71e1-91aa-de8e94381c58
+dotfiles-agt_g67e | Opus 5.5 | effort n/a (payload has no effort) | workflow n/a (payload has no effort) | rc n/a | Ctx: 257.5k n/a | fuyutarow@gmail.com | Session: 47cecd33-9bd9-42b8-be16-8f17bb0bae76
+Rate: claude n/a · 5h n/a · 7d n/a | codex 7d 77% ⟳10-24 07:52(6d7h 10%) | Jev 7d spend <$0.01
+Sys: CPU 91% · RAM 30% (16.4/54.9G) · VRAM n/a (unresponsive since 2026-10-17T14:56:37.069Z) · GPU n/a (unresponsive since 2026-10-17T14:56:37.069Z) · Disk C: 268GiB/930GiB (29%) free · Disk WSL 386GiB/590GiB (65%) free · tmp 24.0GiB free · inodes 77% free
+Job: idle
+sol-medium 14m53s $– agt_statusline-step3-2@ws_statusline-step3 tkt_statusline-step3        │ working
+sol-medium 13m54s $– agt_agx-doctor-unit-2@ws_agx-doctor-unit   resume: tkt_agx-doctor-unit │ working
+agx stale 4s · lost 28 · dispatch warning: none · recover: none
+workers 2 running (+3 in other sessions) · ws 11 here · 72 all · unlanded 30 · collectable 29 · stale(25s) · ok
+
+~/dotfiles
+$ time statusline < /dev/null
+statusline < /dev/null  0.04s user 0.01s system 80% cpu 0.059 total
+$ time statusline < /dev/null
+statusline < /dev/null  0.03s user 0.02s system 94% cpu 0.050 total
+$ time statusline < /dev/null
+statusline < /dev/null  0.03s user 0.01s system 100% cpu 0.045 total
+
+PASS: one location, two session lines, one Rate/Sys/Job/agx/fleet block; no 0s old;
+branch and sampled diff present; every timed render under 100ms.
+
+Live regression replay: launching the workspace CLI from ~/Workspace/coralbase with
+XDG_STATE_HOME=~/Workspace/coralbase/.state reads real host samples and agx state;
+exit 0, no sampler unavailable or snapshot unavailable text.

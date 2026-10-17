@@ -321,7 +321,7 @@ describe("statusline other rows", () => {
     const text = render({ bin: binWith({}), payload: {} }).text;
     expect(text).toContain("Ctx: n/a");
     expect(text).toContain("Rate: claude n/a · 5h n/a · 7d n/a");
-    expect(text).toContain("diff n/a (payload has no cost block)");
+    expect(text).toContain("diff n/a (repository not sampled)");
     expect(text).not.toContain("(+0,-0)");
   });
 

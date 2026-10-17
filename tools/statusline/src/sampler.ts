@@ -4,7 +4,11 @@ import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { buildDataframe } from "./build-dataframe.ts";
 import { COLLECTOR_SOURCES } from "./collector-sources.ts";
-import { discoverSessions, payloadForSession } from "./session-discovery.ts";
+import {
+  discoverSessions,
+  payloadForSession,
+  statusForSession,
+} from "./session-discovery.ts";
 import {
   ownerStatePath,
   readOwnerState,
@@ -23,6 +27,14 @@ import { ESC, RST } from "./ansi.ts";
 import { readAgentNamesAsync } from "./identity.ts";
 import { ok, err, Ok, Err } from "neverthrow";
 import { writeUsageSnapshotAsync } from "./usage-snapshot.ts";
+import {
+  writePresentation,
+  type Presentation,
+  type PresentationRow,
+} from "./presentation.ts";
+import { render } from "./format.ts";
+import { renderField } from "./field-state.ts";
+import { version } from "../package.json";
 
 const plain = (value: string) =>
   value.replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");
@@ -161,7 +173,10 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
       for (const [metric, value] of Object.entries(metrics.data))
         persist(metric, value);
     };
-    const sessions = await discoverSessions(process.cwd(), true);
+    // Explicit payloads are scoped collector fixtures. Only the timer's no-argument
+    // sample discovers the host; a fixture must not scan unrelated live rollouts.
+    const sessions =
+      payloads === undefined ? await discoverSessions(process.cwd(), true) : [];
     persist("sessions", sessions);
     const home = process.env.HOME ?? "";
     const roots = new Set<string>();
@@ -217,7 +232,65 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
         save(`repo:${root}`, () => COLLECTOR_SOURCES.repoState(root)),
       ),
     ]);
+    await Promise.all(
+      sessions.map((session) =>
+        save(`session:${session.session_id}`, () => statusForSession(session)),
+      ),
+    );
+    await writeCacheAsync(`${path}.last-good`, next);
     await writeCacheAsync(path, next);
+    const rows: PresentationRow[] = [];
+    for (const cwd of new Set([
+      ...roots,
+      ...sessions.map((session) => session.cwd),
+    ])) {
+      const selected = sessions.filter((session) => session.cwd === cwd);
+      const frames = await Promise.all(
+        selected.map(async (session) => ({
+          session,
+          frame: await buildDataframe(await statusForSession(session), {
+            codex: session.vendor === "codex",
+            ownerSnapshot: Promise.resolve(next),
+          }),
+        })),
+      );
+      const first =
+        frames.find(({ session }) => session.vendor === "claude")?.frame ??
+        frames[0]?.frame ??
+        (await buildDataframe(
+          { cwd },
+          { ownerSnapshot: Promise.resolve(next) },
+        ));
+      rows.push({
+        cwd,
+        location: render(first, {
+          layout: "location",
+          collect: (key, label, state) => {
+            if (key === "prompt-time")
+              return `${ESC}[36m@@STATUSLINE_TIME@@${RST}`;
+            if (key === "prompt-zone")
+              return `${ESC}[38;5;240m@@STATUSLINE_ZONE@@${RST}`;
+            return renderField(label, state);
+          },
+        }),
+        sessions: frames.map(({ session, frame }) => ({
+          id: session.session_id,
+          pid: session.pid,
+          line: render(frame, {
+            layout: "session",
+            codex: session.vendor === "codex",
+          }),
+        })),
+        shared: render(first, { layout: "shared" }),
+      });
+    }
+    const view: Presentation = {
+      schema: 1,
+      version,
+      at: Temporal.Now.instant().epochMilliseconds,
+      rows,
+    };
+    await writePresentation(view);
     const inputs =
       payloads ??
       (
@@ -232,7 +305,28 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
       ).flat();
     await publishSnapshots(inputs);
     await cleanRetiredCaches();
+    await cleanSamplerLeftovers(dirname(path));
   }
+}
+
+/** Remove only this collector's abandoned atomic files, never another tool's state. */
+export async function cleanSamplerLeftovers(root: string): Promise<void> {
+  const entries = await readdir(root).catch(() => []);
+  const cutoff = Temporal.Now.instant().epochMilliseconds - 60_000;
+  await Promise.all(
+    entries
+      .filter((name) =>
+        /^(?:owner\.json(?:\.view)?(?:\.last-good)?|disk-rate\.json)\..+\.tmp$/u.test(
+          name,
+        ),
+      )
+      .map(async (name) => {
+        const path = join(root, name);
+        const info = await stat(path).catch(() => null);
+        if (info !== null && info.mtimeMs < cutoff)
+          await rm(path, { force: true });
+      }),
+  );
 }
 
 function rejectPrototypeFlag(type: string, flag: string): void {

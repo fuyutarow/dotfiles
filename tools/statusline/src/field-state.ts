@@ -31,7 +31,7 @@ export function renderField(label: string, state: FieldState<string>): string {
       ? `agx fresh ${DIM}·${RST} ${state.value}`
       : state.value;
   if (state.kind === "stale") {
-    const seconds = Math.max(0, Math.floor(state.age / 1000));
+    const seconds = Math.max(1, Math.floor(state.age / 1000));
     const age = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m`;
     const value = state.value === "" ? `${label} none` : state.value;
     if (label === "agx") return `agx stale ${age} ${DIM}·${RST} ${value}`;

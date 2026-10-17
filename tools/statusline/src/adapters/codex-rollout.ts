@@ -417,6 +417,14 @@ async function readSelectedSessionStatus(
 }
 
 /** Select the newest interactive TUI rollout for the cwd and normalize its current turn/context facts. */
+export async function readCodexTranscriptStatus(
+  path: string,
+  cwd: string,
+): Promise<SessionStatus | undefined> {
+  const meta = await metadata(path);
+  return readSelectedSessionStatus(meta === null ? null : { path, meta }, cwd);
+}
+
 export async function readCodexSessionStatus(
   cwd: string,
   root = join(process.env.HOME ?? "", ".codex", "sessions"),

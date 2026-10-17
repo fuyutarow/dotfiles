@@ -32,11 +32,25 @@ export function modelName(
   display: string | undefined,
   id: string | undefined,
 ): string {
-  let model = display ?? "";
-  const modelId = id ?? "";
+  let model = firstNonEmpty(display, id ?? "");
+  const modelId = id ?? model;
+  const claude =
+    /^claude-(opus|sonnet|haiku)-(\d+)-(\d+)(?:-\d{8})?(\[1m\])?$/u.exec(model);
+  if (claude !== null) {
+    const family = claude[1] ?? "";
+    model = `${family.charAt(0).toUpperCase()}${family.slice(1)} ${claude[2]}.${claude[3]}${claude[4] === undefined ? "" : " (1M)"}`;
+  }
+  if (model.startsWith("gpt-")) {
+    model = model
+      .replace(/^gpt-/u, "GPT-")
+      .replaceAll(
+        /-([a-z])/gu,
+        (_match: string, letter: string) => `-${letter.toUpperCase()}`,
+      );
+  }
   // model name (guarantee e.g. "Opus 4.8"): keep display_name if it already has a version,
   // else derive "Family X.Y" from the id (claude-opus-4-8[1m] -> Opus 4.8).
-  if (!/[0-9]/u.test(model)) {
+  if (!/[0-9]/u.test(model) && modelId.startsWith("claude-")) {
     // String.split always returns at least one element, so this is never actually undefined;
     // the fallback is only to satisfy noUncheckedIndexedAccess.
     const base = modelId.replace(/^claude-/u, "").split("[")[0] ?? "";

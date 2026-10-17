@@ -109,13 +109,13 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
           id: "codex-session-b",
           session_id: "codex-session-b",
           cwd,
-          model: "gpt-6-luna",
+          model: "gpt-6.1-sol",
           originator: "codex-tui",
         },
       }),
       JSON.stringify({
         type: "turn_context",
-        payload: { model: "gpt-6-luna" },
+        payload: { model: "gpt-6.1-sol", effort: "medium" },
       }),
       JSON.stringify({
         type: "event_msg",
@@ -257,8 +257,32 @@ test("finds Claude and Codex only in the selected cwd and builds recorded payloa
   ).toBe(claudeId);
   const automatic = Bun.spawnSync([process.execPath, script], { cwd, env });
   expect(automatic.exitCode, automatic.stderr.toString()).toBe(0);
-  expect(automatic.stdout.toString()).toContain("claude-opus-4-8");
-  expect(automatic.stdout.toString()).toContain("gpt-6-luna");
+  expect(automatic.stdout.toString()).toContain("Opus 4.8");
+  expect(automatic.stdout.toString()).toContain("GPT-6.1-Sol");
+  expect(automatic.stdout.toString()).toContain("medium");
+  const output = automatic.stdout.toString();
+  for (const label of ["Rate:", "Sys:", "Job:", "workers ", "codex-session-b"])
+    expect(output.split(label)).toHaveLength(2);
+  expect(output).not.toContain("0s old");
+  const selected = Bun.spawn(
+    [process.execPath, script, "--session", claudeId],
+    {
+      cwd,
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      timeout: 5000,
+    },
+  );
+  const [selectedOutput, selectedErrors, selectedExit] = await Promise.all([
+    selected.stdout.text(),
+    selected.stderr.text(),
+    selected.exited,
+  ]);
+  expect(selectedExit, selectedErrors).toBe(0);
+  expect(selectedOutput).toContain(claudeId);
+  expect(selectedOutput).not.toContain("codex-session-b");
 
   // Desktop sessions belong to their rollout cwd, not the app-server's cwd.
   await fs.unlink(join(proc, "102", "cwd"));
@@ -356,4 +380,36 @@ test("Claude stdin payload performs no process discovery", async () => {
   expect(exit, errors).toBe(0);
   expect(output).toContain("stdin-only");
   expect(errors).not.toContain("DISCOVERY_RAN");
+});
+
+test("primary rollout wins over a newer auto-review carrying the same session ID", async () => {
+  const { root, proc, cwd } = await fixture();
+  await fakeProcess(proc, 201, "/usr/bin/codex", cwd);
+  await mkdir(join(proc, "201/fd"));
+  const primary = join(root, "rollout-primary.jsonl");
+  const auxiliary = join(root, "rollout-auxiliary.jsonl");
+  await writeFile(
+    primary,
+    JSON.stringify({
+      type: "session_meta",
+      payload: { id: "primary", cwd, timestamp: "2026-10-17T10:00:00Z" },
+    }) + "\n",
+  );
+  await writeFile(
+    auxiliary,
+    JSON.stringify({
+      type: "session_meta",
+      payload: {
+        id: "auxiliary",
+        session_id: "primary",
+        cwd,
+        timestamp: "2026-10-17T11:00:00Z",
+      },
+    }) + "\n",
+  );
+  await symlink(primary, join(proc, "201/fd/7"));
+  await symlink(auxiliary, join(proc, "201/fd/8"));
+  const sessions = await discoverSessions(cwd);
+  expect(sessions).toHaveLength(1);
+  expect(sessions[0]?.transcript_path).toBe(primary);
 });

@@ -72,10 +72,10 @@ test("doctor findings retain every source kind, omit zero counts, and require a 
   });
   expect(doctorFindings("bad", at)).toBeUndefined();
   expect(fleetLine({ runs: [], unreadable: 0, findings }, at)).toContain(
-    "lost 1",
+    "ws refresh 1",
   );
   expect(fleetLine({ runs: [], unreadable: 0, findings }, at)).toEndWith(
-    "⚠ orphaned 1 · stale 1",
+    "⚠ ws refresh 1",
   );
   expect(
     fleetLine(
@@ -214,7 +214,7 @@ test("snapshot renders one fleet row in order from the actual agx fold; fresh, s
     expect(output).toMatchSnapshot(name);
     if (name === "fresh")
       expect(output).toBe(
-        "workers 2 running (+2 in other sessions) · lost 1 · ws 6 all · unlanded 2 · collectable 3 · legacy 3 · ⚠ orphaned 1 · unjudged 1",
+        "workers 2 running (+2 in other sessions) · ws 6 all · unlanded 2 · collectable 3 · ok",
       );
   }
 });
@@ -285,7 +285,7 @@ test("unchanged workspace counts do not become stale with elapsed time", () => {
     snapshotAgeSecs: 0,
     workspaces: workspaceCounts(tsv, at - 120_000),
   };
-  expect(fleetLine(scan, at)).toContain("legacy 3 unknown");
+  expect(fleetLine(scan, at)).toContain("collectable 3 · unknown");
 });
 
 test("a cold per-repository observation never masquerades as a fleet total", () => {

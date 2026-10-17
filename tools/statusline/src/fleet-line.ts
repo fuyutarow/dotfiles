@@ -1,5 +1,18 @@
 import type { RouteScan } from "./dispatch-runs.ts";
 
+// These workspace findings have clearing commands in agx doctor. Run-history
+// classifications (including orphaned/unjudged) are diagnostic history only.
+const ACTIONS: Record<string, string> = {
+  stale: "ws refresh",
+  abandoned: "ws gc --abandoned",
+  "legacy-empty": "ws gc --legacy",
+  "legacy-layout": "ws gc --legacy",
+  empty: "ws gc --include-unrecorded",
+  collectable: "ws gc --include-unrecorded",
+  "unlanded-72h": "mise run land",
+  "accepted-landed-present": "tkt gc",
+};
+
 /** Cached facts only: neither jj nor a classifier belongs on the render path. */
 export function fleetLine(
   scan: RouteScan | undefined,
@@ -27,7 +40,7 @@ export function fleetLine(
     freshness = age === 0 ? "" : `stale(${age}s)`;
   else if (age > 0) freshness = `stale(${age}s) unknown`;
   const anomalies = Object.entries(findings?.kinds ?? {})
-    .filter(([, count]) => count > 0)
+    .filter(([kind, count]) => count > 0 && ACTIONS[kind] !== undefined)
     .toSorted(([a], [b]) => a.localeCompare(b));
   const health = findings === undefined ? ["anomalies unknown"] : ["ok"];
   if (anomalies.length > 0)
@@ -35,18 +48,18 @@ export function fleetLine(
       0,
       1,
       ...anomalies.map(
-        ([kind, count], index) => `${index === 0 ? "⚠ " : ""}${kind} ${count}`,
+        ([kind, count], index) =>
+          `${index === 0 ? "⚠ " : ""}${ACTIONS[kind]} ${count}`,
       ),
     );
   const other = workers === undefined ? 0 : workers.other;
   const workerSummary = `workers ${workers?.here ?? "unknown"} running`;
   return [
     workerSummary + (other > 0 ? ` (+${other} in other sessions)` : ""),
-    `lost ${findings?.lost ?? workers?.lost ?? "unknown"}`,
     `ws ${ws?.here === undefined ? "" : `${ws.here} here · `}${ws?.fleetKnown === false ? "unknown" : (ws?.total ?? "unknown")} all`,
     `unlanded ${ws?.fleetKnown === false ? "unknown" : (ws?.unlanded ?? "unknown")}`,
     `collectable ${ws?.fleetKnown === false ? "unknown" : (ws?.collectable ?? "unknown")}`,
-    `legacy ${ws?.fleetKnown === false ? "unknown" : (ws?.legacy ?? "unknown")}${freshness === "" ? "" : ` ${freshness}`}`,
+    ...(freshness === "" ? [] : [freshness]),
     ...health,
   ].join(" · ");
 }

@@ -64,7 +64,11 @@ export function coloredHead(
 }
 export function render(
   df: Dataframe,
-  options: { codex?: boolean; collect?: FieldDisplay } = {},
+  options: {
+    codex?: boolean;
+    collect?: FieldDisplay;
+    layout?: "location" | "session" | "shared" | "block";
+  } = {},
 ): string {
   const codex = options.codex === true;
   const display = fieldDisplay(df.fields, options.collect);
@@ -190,7 +194,7 @@ export function render(
     repoLine,
     field("branch", "branch", observed(branch, df.branchWhy)),
   );
-  if (!codex)
+  if (!codex || options.layout !== undefined)
     repoLine = joinText(
       repoLine,
       field(
@@ -200,7 +204,7 @@ export function render(
           df.add === undefined || df.del === undefined
             ? undefined
             : `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`,
-          "payload has no cost block",
+          "repository not sampled",
         ),
       ),
     );
@@ -294,7 +298,7 @@ export function render(
 
   const rows = {
     prompt: observed(
-      `${repoLine === "" ? line1 : joinText(line1, repoLine)} ${DIM}v${version}${RST}`,
+      `${repoLine === "" ? line1 : joinText(line1, repoLine)}${SEP}${DIM}v${version}${RST}`,
     ),
     identity: observed(
       identityLine === "" ? undefined : identityLine,
@@ -309,5 +313,14 @@ export function render(
     "dispatch-warning": observed(warningLine),
     recover: observed(recoverLine),
   } satisfies DisplayRows;
+  if (options.layout !== undefined) {
+    const location = rows.prompt.kind === "fresh" ? rows.prompt.value : "";
+    const session = [agentLine, identityLine].filter(Boolean).join(SEP);
+    const shared = renderRows(rows).split("\n").slice(3).join("\n");
+    if (options.layout === "location") return location;
+    if (options.layout === "session") return session;
+    if (options.layout === "shared") return shared;
+    return [location, session, shared].filter(Boolean).join("\n");
+  }
   return renderRows(rows);
 }

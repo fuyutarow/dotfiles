@@ -45,7 +45,8 @@
     "agx-ticket": "tools/agx-ticket/src/tkt.ts",
     "tkt": "tools/agx-ticket/src/tkt.ts",
     "lint-ts-candidate": "agents/skills/wiring-mise-tasks/scripts/lint-ts-candidate.ts",
-    "jex": "tools/jex/src/jex.ts"
+    "jex": "tools/jex/src/jex.ts",
+    "xmsg": "tools/xmsg/src/xmsg.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

@@ -500,6 +500,7 @@ const OTHER: readonly Surface[] = [
       "tools/agx/package.json",
       "tools/agx-run/package.json",
       "tools/jex/package.json",
+      "tools/xmsg/package.json",
       "tools/coredev/package.json",
       "tools/herdr-btm/package.json",
       "tools/secrets-push/package.json",

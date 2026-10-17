@@ -11,11 +11,9 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { access } from "node:fs/promises";
 import { fromThrowable } from "neverthrow";
 import { jsonText, z } from "../src/zod.ts";
 import {
@@ -36,16 +34,6 @@ const SLOW = { timeout: 30_000 };
 // CPU/RAM readings come from the host's own /proc on Linux and from os.cpus()/vm_stat on macOS.
 const HAS_PROC = existsSync("/proc/stat");
 const IS_MAC = process.platform === "darwin";
-const HAS_GPU_FALLBACK = (
-  await Promise.all(
-    ["/usr/lib/wsl/lib/nvidia-smi", "/usr/bin/nvidia-smi"].map((path) =>
-      access(path).then(
-        () => true,
-        () => false,
-      ),
-    ),
-  )
-).some(Boolean);
 const HAS_CPU = HAS_PROC || IS_MAC;
 
 // A bin dir holding only the fakes named here: anything else (ps, git, nvidia-smi) is absent,
@@ -92,26 +80,7 @@ function render(opts: {
   expect(r.status).toBe(0);
   return { text: (r.stdout ?? "").replace(ANSI, ""), home };
 }
-// The GPU is sampled by a background process the render starts (Tiger ledger O4): a render shows
-// what is cached and returns at once. The sampler holds statusline-gpu.lock until it has written
-// the cache, so "the lock is gone" is "the sample is in".
-const gpuLock = (home: string): string =>
-  join(home, ".cache", "claude", "statusline-gpu.lock");
-function waitForSampler(home: string): void {
-  const deadline = nowMs() + 30_000;
-  while (existsSync(gpuLock(home)) && nowMs() < deadline) Bun.sleepSync(25);
-  expect(existsSync(gpuLock(home))).toBe(false);
-}
-// Render once (starting the sampler), wait for the sample, render again: the bar as a session
-// sees it one refresh later.
-function renderSettled(opts: Parameters<typeof render>[0]): {
-  text: string;
-  home: string;
-} {
-  const first = render(opts);
-  waitForSampler(first.home);
-  return render({ ...opts, home: first.home });
-}
+// Rendering consumes owner state and never starts a background sampler.
 // A short sampler bound, so a hung nvidia-smi is named without waiting out the 20 s default.
 const FAST_BOUND = { STATUSLINE_GPU_SAMPLE_TIMEOUT_MS: "500" };
 const sysRow = (text: string): string =>
@@ -121,9 +90,6 @@ function seedCache(home: string, file: string, cache: unknown): void {
   mkdirSync(join(home, ".cache", "claude"), { recursive: true });
   writeFileSync(join(home, ".cache", "claude", file), JSON.stringify(cache));
 }
-const seedGpuCache = (home: string, cache: unknown): void => {
-  seedCache(home, "statusline-gpu.json", cache);
-};
 // Read back a cache file the statusline wrote, parsed by a schema (never an annotation): a file
 // of the wrong shape fails the test with zod's message instead of a confusing `undefined`.
 function readCache<S extends z.ZodType>(
@@ -139,272 +105,62 @@ function writeClaudeJson(home: string, body: string): void {
   writeFileSync(join(home, ".claude.json"), body);
 }
 
-function countingGpu(log: string, body: string): string {
-  return `echo "$1" >> '${log}'\n${body}`;
-}
-
-function invocations(log: string): number {
-  return existsSync(log)
-    ? readFileSync(log, "utf8")
-        .split("\n")
-        .filter((line) => line.startsWith("--query-gpu=")).length
-    : 0;
-}
-
-// What a concurrent reader would see: no file yet, a whole JSON document, or half of one.
 function cacheFileState(path: string): "missing" | "valid" | "torn" {
   const read = fromThrowable(() => readFileSync(path, "utf8"))();
   if (read.isErr()) return "missing";
   return jsonText.safeParse(read.value).success ? "valid" : "torn";
 }
-const GpuMissSchema = z.object({
-  at: z.number(),
-  why: z.string().optional(),
-  reading: z.unknown().optional(),
-});
 const SysCacheSchema = z.object({ line: z.string() });
 
 describe("statusline Sys row: VRAM", () => {
-  test("a warm estimate renders compactly beside VRAM with its sample count", () => {
+  test("renders the owner's fresh sample without invoking a tool", async () => {
     const home = tempHome();
-    seedGpuCache(home, {
-      at: nowMs(),
-      reading: { frac: " 3.5/12.0G", pct: 29.2, gpuAvg15: 3, gpuSamples15: 42 },
-    });
-    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
-    expect(sysRow(render({ home, bin }).text)).toContain(
-      "VRAM 29% ( 3.5/12.0G) · GPU≈3%/15m n=42",
+    const stateRoot = join(home, ".local", "state");
+    const at = nowMs();
+    await Bun.write(
+      join(stateRoot, "gpu-owner.json"),
+      JSON.stringify({
+        schema: 1,
+        attemptAt: at,
+        sampledAt: at,
+        devices: [],
+        processes: [],
+        samples: [
+          {
+            ts: at,
+            nextTs: at + 60_000,
+            utilPct: 0,
+            memUsedGiB: 3.5,
+            memTotalGiB: 12,
+          },
+        ],
+      }),
     );
-  });
-
-  test("a working nvidia-smi shows the number", () => {
-    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
-    expect(sysRow(renderSettled({ bin }).text)).toContain(
+    const bin = binWith({ "nvidia-smi": "exit 99" });
+    expect(sysRow(render({ home, bin }).text)).toContain(
       "VRAM 29% ( 3.5/12.0G)",
     );
   });
-
-  // O4: the render never waits for nvidia-smi.
-  test(
-    "O4: a render does not wait for nvidia-smi: it says it is sampling and returns at once",
-    () => {
-      const bin = binWith({ "nvidia-smi": "exec /bin/sleep 6" });
-      const first = render({
-        bin,
-        env: { STATUSLINE_GPU_SAMPLE_TIMEOUT_MS: "3000" },
-      });
-      // The returned sampling state proves the renderer did not await the result. Deadline
-      // arithmetic is checked with an injected clock in build-dataframe-budget.test.ts.
-      expect(sysRow(first.text)).toContain("VRAM n/a (sampling in progress)");
-      waitForSampler(first.home);
-    },
-    SLOW,
-  );
-
-  test(
-    "O4: a sample slower than the old 2 s bound is an answer, not a failure",
-    () => {
-      const bin = binWith({
-        "nvidia-smi": "/bin/sleep 3\necho '0, 0, 3584, 12288'",
-      });
-      const row = sysRow(renderSettled({ bin }).text);
-      expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
-      // VRAM only: this PATH holds just the fake nvidia-smi, so on macOS RAM reads n/a (no vm_stat).
-      expect(row).not.toContain("VRAM n/a");
-    },
-    SLOW,
-  );
-
-  test(
-    "O4: while a sampler is running, the previous reading is shown with its age, never a gap",
-    () => {
-      const home = tempHome();
-      const at = nowMs();
-      seedGpuCache(home, {
-        at: at - 20_000,
-        reading: { frac: " 3.5/12.0G", pct: 29.2 },
-        good: { at: at - 20_000, reading: { frac: " 3.5/12.0G", pct: 29.2 } },
-      });
-      const bin = binWith({
-        "nvidia-smi": "/bin/sleep 2\necho '0, 0, 3584, 12288'",
-      });
-      const during = sysRow(render({ home, bin }).text);
-      expect(during).toContain("VRAM 29% ( 3.5/12.0G)"); // 20 s old: plain, no marker under 60 s
-      waitForSampler(home);
-      expect(
-        readCache(home, "statusline-gpu.json", GpuMissSchema).at,
-      ).toBeGreaterThan(at);
-    },
-    SLOW,
-  );
-
-  test("O4: started by hand without the lock, the sampler refuses and writes nothing", () => {
+  test("missing and unresponsive owner state are explicit", async () => {
     const home = tempHome();
-    const r = spawnSync(process.execPath, [STATUSLINE], {
-      encoding: "utf8",
-      env: isolatedStatuslineEnv({
-        HOME: home,
-        PATH: binWith({ "nvidia-smi": "echo '1, 2'" }),
-        TZ: "UTC",
-        STATUSLINE_SAMPLE_GPU: "1",
+    const bin = binWith({ "nvidia-smi": "exec /bin/sleep 30" });
+    expect(sysRow(render({ home, bin }).text)).toContain(
+      "VRAM n/a (stale (GPU sampler state unavailable))",
+    );
+    await Bun.write(
+      join(home, ".local", "state", "gpu-owner.json"),
+      JSON.stringify({
+        schema: 1,
+        attemptAt: nowMs(),
+        unresponsiveSince: nowMs(),
+        devices: [],
+        processes: [],
+        samples: [],
       }),
-    });
-    expect(r.status).toBe(2);
-    expect(r.stderr).toContain("refusing to run without it");
-    expect(
-      existsSync(join(home, ".cache", "claude", "statusline-gpu.json")),
-    ).toBe(false);
-  });
-
-  // Linux only: on a Mac no nvidia-smi means no discrete VRAM (see the macOS test below).
-  test.skipIf(IS_MAC || HAS_GPU_FALLBACK)(
-    "no nvidia-smi is stated, not silently omitted",
-    () => {
-      const row = sysRow(render({ bin: binWith({}) }).text);
-      expect(row).toContain("VRAM n/a (no nvidia-smi)");
-    },
-  );
-
-  test(
-    "a hung nvidia-smi names the bound it hit (was: cached as 'no GPU')",
-    () => {
-      const bin = binWith({ "nvidia-smi": "exec /bin/sleep 6" });
-      const row = sysRow(renderSettled({ bin, env: FAST_BOUND }).text);
-      expect(row).toContain("VRAM n/a (nvidia-smi timeout 500ms)");
-    },
-    SLOW,
-  );
-
-  test(
-    "a killed nvidia-smi names the signal instead of a bare 'failed'",
-    () => {
-      const bin = binWith({ "nvidia-smi": "kill -9 $$" });
-      expect(sysRow(renderSettled({ bin }).text)).toContain(
-        "VRAM n/a (nvidia-smi killed by SIGKILL)",
-      );
-    },
-    SLOW,
-  );
-
-  test(
-    "a timeout is NOT cached as 'no GPU': the next render samples again",
-    () => {
-      const home = tempHome();
-      renderSettled({
-        home,
-        bin: binWith({ "nvidia-smi": "exec /bin/sleep 6" }),
-        env: FAST_BOUND,
-      });
-      // Simulate time passing past the 5 s TTL, then a healthy driver.
-      const failed = readCache(home, "statusline-gpu.json", GpuMissSchema);
-      expect(failed.why).toBe("nvidia-smi timeout 500ms");
-      expect(failed.reading ?? null).toBeNull();
-      seedGpuCache(home, { ...failed, at: failed.at - 60_000 });
-      const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
-      expect(sysRow(renderSettled({ home, bin }).text)).toContain(
-        "VRAM 29% ( 3.5/12.0G)",
-      );
-    },
-    SLOW,
-  );
-
-  test(
-    "a miss within the TTL is served from cache with its reason, without waiting out another timeout",
-    () => {
-      const home = tempHome();
-      const slow = binWith({ "nvidia-smi": "exec /bin/sleep 6" });
-      renderSettled({ home, bin: slow, env: FAST_BOUND });
-      const row = sysRow(render({ home, bin: slow, env: FAST_BOUND }).text);
-      expect(row).toContain("VRAM n/a (nvidia-smi timeout 500ms)");
-      // Served from the cached miss: no second sampler starts inside the TTL.
-      expect(existsSync(gpuLock(home))).toBe(false);
-    },
-    SLOW,
-  );
-
-  test("a failed sample shows the last good one, marked stale with age and reason once it is 60 s old", () => {
-    const home = tempHome();
-    const at = nowMs();
-    seedGpuCache(home, {
-      at: at - 120_000,
-      why: "nvidia-smi timeout 2000ms",
-      good: { at: at - 90_000, reading: { frac: " 3.5/12.0G", pct: 29.2 } },
-    });
-    const row = sysRow(
-      renderSettled({ home, bin: binWith({ "nvidia-smi": "exit 9" }) }).text,
     );
-    expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
-    expect(row).toMatch(/· 1m old/u);
-  });
-
-  test("a last-good under 60 s old is shown plainly: that age is the normal case, not news", () => {
-    const home = tempHome();
-    const at = nowMs();
-    seedGpuCache(home, {
-      at: at - 60_000,
-      why: "nvidia-smi timeout 2000ms",
-      good: { at: at - 40_000, reading: { frac: " 3.5/12.0G", pct: 29.2 } },
-    });
-    const row = sysRow(
-      renderSettled({ home, bin: binWith({ "nvidia-smi": "exit 9" }) }).text,
+    expect(sysRow(render({ home, bin }).text)).toContain(
+      "VRAM n/a (unresponsive since ",
     );
-    expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
-    expect(row).not.toContain("stale");
-  });
-
-  test("a last-good older than 30 min remains visible with its age", () => {
-    const home = tempHome();
-    seedGpuCache(home, {
-      at: nowMs() - 60_000,
-      good: {
-        at: nowMs() - 31 * 60_000,
-        reading: { frac: " 3.5/12.0G", pct: 29.2 },
-      },
-    });
-    const row = sysRow(
-      renderSettled({ home, bin: binWith({ "nvidia-smi": "exit 9" }) }).text,
-    );
-    expect(row).toContain("3.5/12.0G");
-    expect(row).toContain("31m old");
-  });
-
-  test("a cache entry stamped in the future (clock stepped back) is not 'fresh'", () => {
-    const home = tempHome();
-    seedGpuCache(home, {
-      at: nowMs() + 3_600_000,
-      reading: { frac: "9.9/12.0G", pct: 82 },
-      good: {
-        at: nowMs() + 3_600_000,
-        reading: { frac: "9.9/12.0G", pct: 82 },
-      },
-    });
-    const row = sysRow(
-      renderSettled({
-        home,
-        bin: binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" }),
-      }).text,
-    );
-    expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
-    expect(row).not.toContain("9.9/12.0G");
-    expect(row).not.toContain("stale");
-  });
-
-  test(
-    "garbage output is 'unparsable', not a number",
-    () => {
-      const bin = binWith({ "nvidia-smi": "echo 'No devices were found'" });
-      expect(sysRow(renderSettled({ bin }).text)).toContain(
-        "VRAM n/a (nvidia-smi output unparsable)",
-      );
-    },
-    SLOW,
-  );
-
-  test("the pre-fix cache shape ({reading:null}) is not trusted as 'no GPU'", () => {
-    const home = tempHome();
-    seedGpuCache(home, { at: nowMs(), reading: null });
-    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
-    expect(sysRow(renderSettled({ home, bin }).text)).toContain("VRAM 29%");
   });
 });
 
@@ -419,12 +175,9 @@ describe("statusline Sys row: every reading is present", () => {
     },
   );
 
-  test.skipIf(!IS_MAC)(
-    "macOS: no nvidia-smi means no discrete VRAM, so no VRAM segment",
-    () => {
-      expect(sysRow(render({ bin: binWith({}) }).text)).not.toContain("VRAM");
-    },
-  );
+  test.skipIf(!IS_MAC)("macOS: missing owner state is explicit", () => {
+    expect(sysRow(render({ bin: binWith({}) }).text)).toContain("stale");
+  });
 
   test.skipIf(!IS_MAC)(
     "macOS: RAM is Activity Monitor's used (app + wired + compressed) from vm_stat",
@@ -689,8 +442,9 @@ describe("statusline resource bounds", () => {
       expect(text).toContain("scan n/a (process scan timeout 2000ms)");
       // nvidia-smi is not a render child any more (O4): its hang costs the render nothing, and the
       // bar says the sample is still being taken.
-      expect(sysRow(text)).toContain("VRAM n/a (sampling in progress)");
-      waitForSampler(home);
+      expect(sysRow(text)).toContain(
+        "VRAM n/a (stale (GPU sampler state unavailable))",
+      );
     },
     SLOW,
   );
@@ -731,87 +485,6 @@ describe("statusline resource bounds", () => {
     },
     SLOW,
   );
-
-  // O3: one utilisation sampler host-wide. Count utilisation queries separately from the
-  // once-per-minute compute-app probe for the ccc indexing badge (same sampler, sequential).
-  test(
-    "O3: six concurrent renders start one GPU sampler; each says it is sampling",
-    async () => {
-      const home = tempHome();
-      const log = join(tempDir("slog-"), "gpu.log");
-      const bin = binWith({
-        "nvidia-smi": countingGpu(
-          log,
-          "/bin/sleep 1\necho '0, 0, 3584, 12288'",
-        ),
-      });
-      const outputs = await Promise.all(
-        Array.from({ length: 6 }, async () => {
-          const p = Bun.spawn([process.execPath, STATUSLINE], {
-            stdin: new Blob([JSON.stringify({})]),
-            stdout: "pipe",
-            stderr: "ignore",
-            env: isolatedStatuslineEnv({ HOME: home, PATH: bin, TZ: "UTC" }),
-            cwd: tempDir("slcwd-"),
-          });
-          const text = await new Response(p.stdout).text();
-          await p.exited;
-          return text.replace(ANSI, "");
-        }),
-      );
-      waitForSampler(home);
-      expect(invocations(log)).toBe(1);
-      expect(
-        readFileSync(log, "utf8")
-          .split("\n")
-          .filter((line) => line.startsWith("--query-compute-apps=")).length,
-      ).toBe(1);
-      // Every session names what it is waiting for — none is silent about VRAM.
-      for (const r of outputs.map((output) => sysRow(output))) {
-        expect(r).toContain("VRAM n/a (sampling in progress)");
-      }
-      // One refresh later every session reads the one shared sample.
-      expect(sysRow(render({ home, bin }).text)).toContain(
-        "VRAM 29% ( 3.5/12.0G)",
-      );
-      expect(invocations(log)).toBe(1);
-    },
-    SLOW,
-  );
-
-  test("O3: a lock older than the sample bound plus margin belongs to a crashed sampler and is broken", () => {
-    const home = tempHome();
-    const lock = join(home, ".cache", "claude", "statusline-gpu.lock");
-    mkdirSync(lock, { recursive: true });
-    const oldSecs = (nowMs() - 60_000) / 1000; // utimes takes epoch seconds; no Date (banned)
-    utimesSync(lock, oldSecs, oldSecs);
-    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
-    expect(sysRow(renderSettled({ home, bin }).text)).toContain(
-      "VRAM 29% ( 3.5/12.0G)",
-    );
-    expect(existsSync(lock)).toBe(false); // released after the sample
-  });
-
-  test("O3: while another session holds the lock, no second nvidia-smi starts and the last good value is shown stale", () => {
-    const home = tempHome();
-    const log = join(tempDir("slog-"), "gpu.log");
-    mkdirSync(join(home, ".cache", "claude", "statusline-gpu.lock"), {
-      recursive: true,
-    });
-    seedGpuCache(home, {
-      at: nowMs() - 60_000,
-      good: {
-        at: nowMs() - 30_000,
-        reading: { frac: " 3.5/12.0G", pct: 29.2 },
-      },
-    });
-    const bin = binWith({ "nvidia-smi": countingGpu(log, "echo '1, 2'") });
-    const row = sysRow(render({ home, bin }).text);
-    expect(invocations(log)).toBe(0);
-    expect(row).toContain("VRAM 29% ( 3.5/12.0G)");
-    // 30 s old: under the 60 s marker threshold, so the value shows plainly.
-    expect(row).not.toContain("stale");
-  });
 });
 
 // ZOD FIRST: every external value is parsed by a schema; a file or payload of the wrong shape is
@@ -840,28 +513,12 @@ describe("statusline trust boundaries (zod)", () => {
     expect(text).toContain("Rate: claude n/a · 5h n/a · 7d n/a");
   });
 
-  test("a GPU cache of the wrong shape is an empty cache: the sample is retaken", () => {
-    const home = tempHome();
-    seedGpuCache(home, { at: "yesterday", reading: { frac: 1, pct: "x" } });
-    const bin = binWith({ "nvidia-smi": "echo '0, 0, 3584, 12288'" });
-    expect(sysRow(renderSettled({ home, bin }).text)).toContain(
-      "VRAM 29% ( 3.5/12.0G)",
-    );
-  });
-
   test("a CPU cache of the wrong shape is no baseline, not a crash", () => {
     if (!HAS_PROC) return;
     const home = tempHome();
     seedCache(home, "statusline-cpu.json", { total: "x", idle: null });
     expect(sysRow(render({ home, bin: binWith({}) }).text)).toContain(
       "CPU n/a (no earlier sample to diff against)",
-    );
-  });
-
-  test("an empty-field nvidia-smi line is unparsable, not 0 MiB", () => {
-    const bin = binWith({ "nvidia-smi": "echo ' , 12288'" });
-    expect(sysRow(renderSettled({ bin }).text)).toContain(
-      "VRAM n/a (nvidia-smi output unparsable)",
     );
   });
 });

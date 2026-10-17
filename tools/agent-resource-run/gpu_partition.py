@@ -16,9 +16,8 @@ checked against reality (journalctl --user -u <unit>).
 Used by cocoindex/ccc-daemon-launch.py (service "ccc") and tools/repo-retrieve/src/rerank_server.py (service "rerank"). Policy path: $AGENT_RESOURCE_POLICY or the file beside this one.
 """
 
+import json
 import os
-import shutil
-import subprocess
 import sys
 import threading
 import time
@@ -31,29 +30,42 @@ PEAK_REPORT_SECONDS = 300
 
 
 def _policy() -> dict:
-    path = os.environ.get("AGENT_RESOURCE_POLICY") or str(Path(__file__).resolve().with_name("resource-policy.toml"))
+    path = os.environ.get("AGENT_RESOURCE_POLICY") or str(
+        Path(__file__).resolve().with_name("resource-policy.toml")
+    )
     with open(path, "rb") as f:
         return tomllib.load(f)
 
 
-def _nvidia_smi() -> str | None:
-    # On WSL the driver ships nvidia-smi in /usr/lib/wsl/lib, which a systemd user unit's PATH
-    # does not include (measured 2026-10-01: the ccc daemon fell back to CPU on "0 MiB free").
-    return shutil.which("nvidia-smi") or shutil.which("nvidia-smi", path="/usr/lib/wsl/lib")
-
-
 def _free_bytes(device: int) -> int | None:
-    smi = _nvidia_smi()
-    if smi is None:
-        return None
+    """Read the shared owner's fresh state; never start a GPU driver query."""
+    root = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state")))
     try:
-        out = subprocess.run(
-            [smi, "-i", str(device), "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=15, check=True,
-        ).stdout.strip()
-        return int(out.splitlines()[0]) * MiB
-    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
-        return None  # no GPU, no driver, or an unreadable answer: treated as "no room"
+        with (root / "gpu-owner.json").open() as stream:
+            state = json.load(stream)
+        if state.get("schema") != 1 or state.get("unresponsiveSince") is not None:
+            return None
+        sampled = state.get("sampledAt")
+        if (
+            not isinstance(sampled, (int, float))
+            or not 0 <= time.time() * 1000 - sampled <= 120_000
+        ):
+            return None
+        if state.get("why") is not None:
+            return None
+        for row in state.get("devices", []):
+            if row.get("id") == device:
+                total, used = row["totalMiB"], row["usedMiB"]
+                if not (
+                    isinstance(total, (int, float))
+                    and isinstance(used, (int, float))
+                    and 0 <= used <= total
+                ):
+                    return None
+                return int((total - used) * MiB)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None
+    return None
 
 
 def _report_peak(service: str, torch) -> None:
@@ -62,7 +74,9 @@ def _report_peak(service: str, torch) -> None:
         time.sleep(PEAK_REPORT_SECONDS)
         peak = torch.cuda.max_memory_reserved(0)
         if peak > last:
-            sys.stderr.write(f"gpu_partition[{service}]: allocator peak {peak / MiB:.0f} MiB\n")
+            sys.stderr.write(
+                f"gpu_partition[{service}]: allocator peak {peak / MiB:.0f} MiB\n"
+            )
             sys.stderr.flush()
             last = peak
 
@@ -77,7 +91,7 @@ def apply(service: str) -> str:
         if partition == 0:
             why = "partition 0"
         elif free is None:
-            why = "nvidia-smi unavailable or unreadable"
+            why = "GPU sampler state stale or unresponsive"
         else:
             why = f"{free / MiB:.0f} MiB free < {partition / MiB:.0f} MiB partition"
         sys.stderr.write(f"gpu_partition[{service}]: CPU ({why})\n")
@@ -86,7 +100,9 @@ def apply(service: str) -> str:
     import torch
 
     total = torch.cuda.get_device_properties(0).total_memory
-    torch.cuda.set_per_process_memory_fraction((partition - CONTEXT_ALLOWANCE) / total, 0)
+    torch.cuda.set_per_process_memory_fraction(
+        (partition - CONTEXT_ALLOWANCE) / total, 0
+    )
     sys.stderr.write(
         f"gpu_partition[{service}]: GPU {device}, partition {partition / MiB:.0f} MiB "
         f"(allocator cap {(partition - CONTEXT_ALLOWANCE) / MiB:.0f} MiB)\n"

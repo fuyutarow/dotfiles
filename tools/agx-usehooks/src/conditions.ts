@@ -227,11 +227,15 @@ async function command(
 }
 
 /** First NVIDIA GPU, with shared jittered history; null averages need more samples. */
-export function gpu(
+export async function gpu(
   ctx: HookContext,
   search: { path?: string; fallbacks?: string[]; statePath?: string } = {},
 ): Promise<Gpu> {
-  const result = sampleGpu({ ...search, cwd: ctx.cwd, timeoutMs: LIMIT_MS });
+  const result = await sampleGpu({
+    ...search,
+    cwd: ctx.cwd,
+    timeoutMs: LIMIT_MS,
+  });
   return validated(
     GpuSchema,
     result.ok ? result.value : { unavailable: result.why },

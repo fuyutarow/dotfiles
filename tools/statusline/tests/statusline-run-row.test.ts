@@ -1398,7 +1398,12 @@ describe("legacy enriched Run row", () => {
     );
     expect(out).not.toMatch(/^luna-high /mu);
     expect(out).not.toContain("verifying");
-    expect(out).not.toContain("stale ");
+    expect(
+      out
+        .split("\n")
+        .filter((line) => !line.startsWith("Sys:"))
+        .join("\n"),
+    ).not.toContain("stale ");
   });
 
   test("Job and Run readers share the last-good snapshot without spawning agx", async () => {

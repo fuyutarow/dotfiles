@@ -72,10 +72,8 @@ gpu_soft_limit_fraction = 0.9
 # How often a running job's RSS and process count are sampled (a free /proc read).
 default_monitor_interval_ms = 200
 
-# Peak VRAM is sampled by shelling out to nvidia-smi, unlike RSS (a free /proc read every monitor
-# tick). At the monitor's own default_monitor_interval_ms (200 ms) that would spawn nvidia-smi 5
-# times a second per GPU job; throttling it to once a second keeps a fleet of concurrent GPU jobs
-# from turning "measure the peak" into unmanaged load on the very device being measured.
+# Interval between reads of the shared GPU owner state. This never launches a driver query.
+# The owner refreshes at most once per 60 seconds; faster local reads do not add observations.
 gpu_vram_sample_interval_ms = 1000
 
 # --- Standing GPU partitions for resident services ------------------------------------------------

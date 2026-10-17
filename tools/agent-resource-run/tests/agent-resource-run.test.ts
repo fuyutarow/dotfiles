@@ -60,7 +60,6 @@ import { decoded, decodedJson } from "../../shared/src/decode.ts";
 // container has no user systemd).
 const NO_UTIL_LINUX =
   Bun.which("taskset") === null || Bun.which("setsid") === null;
-const TIMEOUT = Bun.which("timeout") ?? "/usr/bin/timeout";
 const NO_CGROUP_SCOPES =
   NO_UTIL_LINUX || !valueOf(probeKernelEnforcementResult()).available;
 
@@ -169,8 +168,8 @@ const readHostOptIn = (...args: Parameters<typeof readHostOptInResult>) =>
 const resolveEnforcement = (
   ...args: Parameters<typeof resolveEnforcementResult>
 ) => valueOf(resolveEnforcementResult(...args));
-const probeHostSnapshot = (cwd: string, includeGpu = true) =>
-  valueOf(probeHostSnapshotResult(cwd, includeGpu));
+const probeHostSnapshot = async (cwd: string, includeGpu = true) =>
+  valueOf(await probeHostSnapshotResult(cwd, includeGpu));
 const probeKernelEnforcement = () => valueOf(probeKernelEnforcementResult());
 const checkJob = async (...args: Parameters<typeof checkJobResult>) =>
   valueOf(await checkJobResult(...args));
@@ -409,13 +408,12 @@ describe("admission", () => {
     );
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
-    expect(result.reason).toContain("GPU not visible in this unit");
-    expect(result.reason).toContain("nvidia-smi not found on PATH=");
+    expect(result.reason).toContain("GPU 0 is not visible");
   });
 
   test.skipIf(process.platform !== "linux")(
     "CPU admission skips a hanging nvidia-smi probe",
-    () => {
+    async () => {
       const bin = mkdtempSync(join(tmpdir(), "cpu-no-gpu-probe-"));
       const marker = join(bin, "invoked");
       const executable = join(bin, "nvidia-smi");
@@ -424,7 +422,7 @@ describe("admission", () => {
       const previousPath = process.env.PATH;
       process.env.PATH = `${bin}:${previousPath ?? ""}`;
       const startedAt = performance.now();
-      const snapshot = probeHostSnapshot(process.cwd(), false);
+      const snapshot = await probeHostSnapshot(process.cwd(), false);
       const result = decideAdmission(cpuManifest(), snapshot, []);
       const elapsedMs = performance.now() - startedAt;
       const invoked = existsSync(marker);
@@ -437,67 +435,14 @@ describe("admission", () => {
     },
   );
 
-  test.skipIf(Bun.which("timeout") === null)(
-    "GPU admission names a bounded probe timeout as indeterminate",
-    () => {
-      const bin = mkdtempSync(join(tmpdir(), "gpu-timeout-probe-"));
-      const executable = join(bin, "nvidia-smi");
-      writeFileSync(executable, "#!/bin/sh\nexec sleep 30\n");
-      chmodSync(executable, 0o755);
-      const previousPath = process.env.PATH;
-      process.env.PATH = `${bin}:${previousPath ?? ""}`;
-      const query = queryNvidiaSmi(["--query-gpu=test"], {
-        timeoutMs: 100,
-        totalTimeoutMs: 300,
-        backoffMs: [100, 100],
-        executablePath: executable,
-        timeoutPath: TIMEOUT,
-      });
-      const result = denied(
-        decideAdmission(
-          gpuManifest(),
-          hostSnapshot({ gpus: [], gpu_probe: query.report }),
-          [],
-        ),
-      );
-      if (previousPath === undefined) delete process.env.PATH;
-      else process.env.PATH = previousPath;
-      rmSync(bin, { recursive: true, force: true });
-      expect(query.report).toMatchObject({ status: "timeout" });
-      expect(result.reason).toContain("probe timed out after");
-      expect(result.reason).not.toContain("is not visible to nvidia-smi");
-    },
-  );
-
-  test.skipIf(Bun.which("timeout") === null)(
-    "nvidia-smi retries a timeout with backoff and admits the recovered probe",
-    () => {
-      const bin = mkdtempSync(join(tmpdir(), "gpu-probe-bin-"));
-      const marker = join(bin, "first-attempt");
-      const calls = join(bin, "calls");
-      const executable = join(bin, "nvidia-smi");
-      writeFileSync(
-        executable,
-        `#!/bin/sh\nprintf x >> '${calls}'\nif [ ! -e '${marker}' ]; then : > '${marker}'; sleep 3; exit 0; fi\nprintf "0, 12288, 1024, 0, [N/A]\\n"\n`,
-      );
-      chmodSync(executable, 0o755);
-      const result = queryNvidiaSmi(["--query-gpu=test"], {
-        timeoutMs: 2_000,
-        backoffMs: [20],
-        executablePath: executable,
-        timeoutPath: TIMEOUT,
-      });
-      const callCount = readFileSync(calls, "utf8").length;
-      const markerCreated = existsSync(marker);
-      rmSync(bin, { recursive: true, force: true });
-      expect(result.report).toMatchObject({ status: "visible" });
-      expect(result.report.attempts).toBe(2);
-      expect(callCount).toBe(2);
-      expect(markerCreated).toBe(true);
-      expect(result.stdout).toContain("0, 12288, 1024");
-    },
-    10_000,
-  );
+  test("GPU admission reads stale state without executing or retrying a driver query", async () => {
+    const query = await queryNvidiaSmi([
+      "--query-gpu=index,memory.total,memory.used,utilization.gpu,power.draw",
+    ]);
+    expect(query.report.attempts).toBe(0);
+    expect(query.report.status).toBe("error");
+    expect(query.report.stderr).toContain("stale");
+  });
 
   test("subtracts concurrent reservations and preserves system headroom", () => {
     const existing = reservation({
@@ -1441,7 +1386,7 @@ describe("admission receipt", () => {
         [process.execPath, "-e", childScript],
         {
           stateDirectory,
-          snapshot: probeHostSnapshot(process.cwd()),
+          snapshot: await probeHostSnapshot(process.cwd()),
           monitorIntervalMs: 25,
           manifestSource,
           report: (line) => {
@@ -1607,7 +1552,7 @@ describe("bounded execution", () => {
       utimesSync(lockDirectory, old, old);
       const result = await checkJob(cpuManifest(), {
         stateDirectory,
-        snapshot: probeHostSnapshot(process.cwd()),
+        snapshot: await probeHostSnapshot(process.cwd()),
       });
       expect(result).toMatchObject({ ok: true, exitCode: 0 });
       expect(readdirSync(stateDirectory)).toEqual([]);
@@ -1618,7 +1563,7 @@ describe("bounded execution", () => {
     "injects one-thread settings and releases the reservation",
     async () => {
       const stateDirectory = temporaryStateDirectory();
-      const snapshot = probeHostSnapshot(process.cwd());
+      const snapshot = await probeHostSnapshot(process.cwd());
       const result = await executeJob(
         cpuManifest(),
         [
@@ -1869,7 +1814,7 @@ describe("bounded execution", () => {
         ],
         {
           stateDirectory,
-          snapshot: probeHostSnapshot(process.cwd()),
+          snapshot: await probeHostSnapshot(process.cwd()),
           monitorIntervalMs: 25,
           manifestSource,
           report: (line) => {
@@ -1944,7 +1889,7 @@ describe("bounded execution", () => {
     "terminates the whole process group at the walltime",
     async () => {
       const stateDirectory = temporaryStateDirectory();
-      const snapshot = probeHostSnapshot(process.cwd());
+      const snapshot = await probeHostSnapshot(process.cwd());
       const termReceipt = join(stateDirectory, "term-grace-completed");
       const started = performance.now();
       const result = await executeJob(
@@ -1979,7 +1924,7 @@ describe("bounded execution", () => {
     "terminates a process fanout beyond the declared ceiling",
     async () => {
       const stateDirectory = temporaryStateDirectory();
-      const snapshot = probeHostSnapshot(process.cwd());
+      const snapshot = await probeHostSnapshot(process.cwd());
       const result = await executeJob(
         cpuManifest({ processes: 1 }),
         ["sh", "-c", "sleep 10 & wait"],
@@ -2010,7 +1955,7 @@ describe("bounded execution", () => {
     "the cgroup kills a job before it can exceed its RAM envelope",
     async () => {
       const stateDirectory = temporaryStateDirectory();
-      const snapshot = probeHostSnapshot(process.cwd());
+      const snapshot = await probeHostSnapshot(process.cwd());
       const started = performance.now();
       const result = await executeJob(
         cpuManifest({ host_ram_peak_bytes: 64 * MiB }),
@@ -2043,7 +1988,7 @@ describe("bounded execution", () => {
     "scope cleanup kills a descendant that escapes the process group",
     async () => {
       const stateDirectory = temporaryStateDirectory();
-      const snapshot = probeHostSnapshot(process.cwd());
+      const snapshot = await probeHostSnapshot(process.cwd());
       const pidFile = join(stateDirectory, "escaped.pid");
       const result = await executeJob(
         cpuManifest({ processes: 3 }),
@@ -2090,7 +2035,7 @@ describe("bounded execution", () => {
       const stateDirectory = temporaryStateDirectory();
       const result = await executeJobResult(cpuManifest(), ["true"], {
         stateDirectory,
-        snapshot: probeHostSnapshot(process.cwd()),
+        snapshot: await probeHostSnapshot(process.cwd()),
         kernelEnforcement: { available: true },
         monitorIntervalMs: 25,
         systemdScopeCleanup: () => false,

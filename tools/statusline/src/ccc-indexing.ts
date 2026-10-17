@@ -8,7 +8,7 @@
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findGpuExecutableAsync } from "../../shared/src/gpu-samples.ts";
+import { gpuStateFailure, readGpuState } from "../../shared/src/gpu-samples.ts";
 import {
   execAsyncWithin,
   readJsonAsync,
@@ -68,7 +68,7 @@ export function cccBadge(
 
 type Options = {
   cachePath: string;
-  nvidia?: string;
+  statePath?: string;
   ccc?: string;
   procRoot?: string;
   now?: () => number;
@@ -98,26 +98,15 @@ function policyStatusPaths(): string[] {
 }
 
 async function daemonPid(options: Options): Promise<number | null> {
-  const nvidia = options.nvidia ?? (await findGpuExecutableAsync());
-  if (nvidia === undefined) return null;
-  const apps = await execAsyncWithin(
-    "nvidia-smi",
-    nvidia,
-    ["--query-compute-apps=pid", "--format=csv,noheader"],
-    options.boundMs ?? 2_000,
-  );
-  if (apps.isErr()) return null;
-  // Bound /proc reads even if a driver reports a pathological number of processes.
-  const candidates = apps.value.slice(0, 65_536).split("\n").slice(0, 256);
-  for (const candidate of candidates) {
-    const parsed = z.coerce
-      .number()
-      .int()
-      .positive()
-      .safeParse(candidate.trim());
-    if (!parsed.success) continue;
+  const state = await readGpuState(options.statePath);
+  if (
+    state === undefined ||
+    gpuStateFailure(state, options.now?.()) !== undefined
+  )
+    return null;
+  for (const candidate of state.processes.slice(0, 256)) {
     const cmdline = await readFile(
-      `${options.procRoot ?? "/proc"}/${parsed.data}/cmdline`,
+      `${options.procRoot ?? "/proc"}/${candidate.pid}/cmdline`,
       "utf8",
     ).catch(() => "");
     if (
@@ -125,7 +114,7 @@ async function daemonPid(options: Options): Promise<number | null> {
         cmdline.replaceAll("\0", " "),
       )
     )
-      return parsed.data;
+      return candidate.pid;
   }
   return null;
 }

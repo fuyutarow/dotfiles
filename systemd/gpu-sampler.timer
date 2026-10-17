@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh shared GPU state every sixty seconds after completion
+
+[Timer]
+OnBootSec=15s
+OnUnitInactiveSec=60s
+AccuracySec=1s
+Unit=gpu-sampler.service
+
+[Install]
+WantedBy=timers.target

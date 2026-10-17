@@ -184,6 +184,16 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
   //
   ["not-mac", "systemd/ws-gc.service", ".config/systemd/user/ws-gc.service"],
   ["not-mac", "systemd/ws-gc.timer", ".config/systemd/user/ws-gc.timer"],
+  [
+    "not-mac",
+    "systemd/gpu-sampler.service",
+    ".config/systemd/user/gpu-sampler.service",
+  ],
+  [
+    "not-mac",
+    "systemd/gpu-sampler.timer",
+    ".config/systemd/user/gpu-sampler.timer",
+  ],
 
   // --- cocoindex-code (declarative global settings = no interactive `ccc init`) ---
   [

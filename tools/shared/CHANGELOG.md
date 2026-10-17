@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.4 — 2026-10-17
+
+- Centralize NVIDIA sampling behind one owner with persistent cooldown and read-only consumers.
+- Recover GPU sampler locks only after owner and driver absence are verified, with concurrent reclaimers serialized.
+
 ## 0.11.3 — 2026-10-17
 
 - Add the shared lowercase hyphenated slug validator and repair suggestions

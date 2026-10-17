@@ -431,9 +431,25 @@ async function expectGolden(
         join(cache, "statusline-cpu.json"),
         JSON.stringify({ total: 500, idle: 400, at: NOW - 5000 }),
       );
+      await mkdir(join(home, "gpu-state"), { recursive: true });
       await writeFile(
-        join(cache, "statusline-gpu.json"),
-        JSON.stringify({ at: NOW, reading: { frac: " 3.5/12.0G", pct: 29.2 } }),
+        join(home, "gpu-state", "gpu-owner.json"),
+        JSON.stringify({
+          schema: 1,
+          attemptAt: NOW,
+          sampledAt: NOW,
+          devices: [],
+          processes: [],
+          samples: [
+            {
+              ts: NOW,
+              nextTs: NOW + 60_000,
+              utilPct: 0,
+              memUsedGiB: 3.5,
+              memTotalGiB: 12,
+            },
+          ],
+        }),
       );
       await writeFile(
         join(cache, "statusline-agent-names.json"),
@@ -459,7 +475,7 @@ async function expectGolden(
       AGX_STATE_DIR: join(home, "state"),
       AGX_NEXT_STATE_DIR: "",
       XDG_RUNTIME_DIR: "",
-      XDG_STATE_HOME: "",
+      XDG_STATE_HOME: join(home, "gpu-state"),
       AGX_DISPATCHER_SESSION: "",
       CLAUDE_CODE_SESSION_ID: "",
       CLAUDE_CODE_BRIDGE_SESSION_ID: "bridge",

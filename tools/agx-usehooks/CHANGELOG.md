@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.1 — 2026-10-17
+
+- Read GPU owner state and report stale or unresponsive observations.
+
 ## 0.11.0 — 2026-10-16
 
 - usehooks:consumers typechecks each consumer against alpha's agx-usehooks and the workspace's and fails only on diagnostics the workspace adds; a consumer already broken on alpha is PRE-EXISTING with its error count, and an untouched tools/agx-usehooks tree is SKIP

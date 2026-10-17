@@ -1,4 +1,8 @@
 import { hookJson } from "./lib.ts";
+import {
+  gpuStateFailure,
+  readGpuState,
+} from "../../../tools/shared/src/gpu-samples.ts";
 // Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
 // (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
@@ -10,8 +14,8 @@ import { hookJson } from "./lib.ts";
 // 16 PreToolUse hook_success records with decision JSON in this session's transcript, none of it
 // in the model's context).
 //
-// Sampler: none here. tools/statusline/src/host-load.ts samples (nvidia-smi, the /proc CPU delta) on every
-// render and caches the plain row in ~/.cache/claude/statusline-sys.json; this hook only reads
+// Sampler: tools/shared/src/gpu-sampler.ts owns GPU observations. The statusline
+// caches the plain row in ~/.cache/claude/statusline-sys.json; this hook only reads
 // it, so a tool call never pays for a sample. A reading older than STALE_MS is not shown — it
 // would be a claim about a moment it does not describe.
 //
@@ -53,7 +57,10 @@ async function main(): Promise<void> {
   if (typeof cachedAt !== "number" || cachedLine === undefined) return;
   // The statusline's own colors when present (the renderer keeps ANSI: hook_system_message is a
   // plain Ink text node), else the plain row.
-  const sys = strAt(cached, "ansi") ?? cachedLine;
+  const gpuWhy = gpuStateFailure(await readGpuState());
+  const sys =
+    (strAt(cached, "ansi") ?? cachedLine) +
+    (gpuWhy === undefined ? "" : ` · GPU ${gpuWhy}`);
   if (now - cachedAt > STALE_MS) return;
 
   const key = sid.replaceAll(/[^A-Za-z0-9_-]/gu, "_");

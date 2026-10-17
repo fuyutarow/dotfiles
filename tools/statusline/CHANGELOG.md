@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.2 — 2026-10-17
+
+- Read fresh GPU owner state without launching driver probes.
+
 ## 0.19.1 — 2026-10-17
 
 - Discover live Claude and Codex sessions from processes and open rollout descriptors without scanning the session store.

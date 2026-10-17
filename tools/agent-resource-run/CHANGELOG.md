@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1 — 2026-10-17
+
+- Use cached GPU owner observations for admission and VRAM monitoring.
+
 ## 1.5.0 — 2026-10-16
 
 - Add read-only slot status with capacity provenance, holder and FIFO queue identities, and timestamped wait/acquisition events.

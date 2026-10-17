@@ -32,8 +32,9 @@ plus declared headroom for jobs still warming up, plus the new job's declared ca
 the configured device safety margin. It also caps at `gpu_max_concurrent_jobs` concurrent jobs per
 device (see "Operator policy" below). A reservation counts its declared VRAM during the first 30
 seconds, or until its per-process use exceeds 64 MiB; after that, admission uses measured use.
-`nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits` supplies per-PID
-use, joined to the job's scope PIDs or sampled process-group PIDs. If sampling fails or returns invalid output, the runner
+The shared GPU owner state supplies per-PID use, joined to the job's scope PIDs or sampled
+process-group PIDs. The runner reads this file; it never starts a driver query. If the owner
+state is stale or unresponsive, the runner
 prints a warning to stderr and in `ADMIT`, and falls back to the prior declared-sum admission rule.
 The utilization gate screens unmanaged load only — it is skipped once a reservation is held there, so
 an admitted job cannot block the next admission with its own compute. Sharing is only sound
@@ -42,7 +43,8 @@ because the budget is pushed into the job: a GPU reservation exports
 The runner independently enforces the declared value as a per-job cap: two consecutive samples
 above 105% of the cap terminate the job's process group/scope with
 `reason=VRAM_CAP_EXCEEDED`. The five percent allowance absorbs allocator and driver reporting
-overhead; two samples avoid killing on one transient reading. Scratch remains an admission
+overhead; the two samples must have distinct owner sample timestamps. Repeated reads of
+one cached observation do not advance this counter. Scratch remains an admission
 reservation only. On WSL2 `nvidia-smi` reports no per-process VRAM (`used_memory` is `[N/A]`), so
 the runner warns and uses declared-sum admission; its sampled cap enforcement is unavailable there.
 
@@ -141,13 +143,14 @@ line — printed once per run, whether the job passed or breached, right before 
 is torn down — reports what it _measured_: `ram_peak_measured_bytes` (preferring the scope's own
 cgroup `MemoryPeak`, kernel-tracked and unaffected by the monitor's own polling interval; falling
 back to the highest `/proc` RSS the monitor sampled when cgroup accounting is unavailable —
-`ram_peak_source` says which) and, for a `gpu` job, `vram_peak_measured_bytes` sampled from
-`nvidia-smi` once a second. When compute-app rows include the job's PIDs, the method is
+`ram_peak_source` says which) and, for a `gpu` job, `vram_peak_measured_bytes` read from
+the shared GPU owner state. The owner samples no more than once per 60 seconds; these
+observations can miss shorter peaks. State older than 120 seconds is unavailable. When compute-app rows include the job's PIDs, the method is
 `per-process`; otherwise the runner samples the admitted GPU's `memory.used` and records the
 non-negative peak delta from a pre-launch baseline as `device-delta`. Device-wide deltas may
 include other processes on that GPU. `vram_measure_method` says which source was used, and
 device-delta artifacts include `vram_baseline_raw_bytes` and `vram_peak_raw_bytes`. When neither
-query provides usable data, the measured peak is `null` and the method is `unavailable`. These
+cached observation provides usable data, the measured peak is `null` and the method is `unavailable`. These
 fields are written as JSON to `<manifest path>.peak.json`, so a caller can read its own job's
 measured peak without capturing stdout at all; that file is overwritten per run, like every other
 piece of this runner's per-run state.

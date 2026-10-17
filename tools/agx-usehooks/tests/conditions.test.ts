@@ -307,40 +307,19 @@ test("unattributed markers require project cwd; exact sessions override cwd", as
   ]);
 });
 
-test("GPU resolves the WSL fallback and explains missing, invalid, or timed-out sampling", async () => {
+test("GPU consumers only read owner state even with a working tool on PATH", async () => {
   const { dir, ctx } = world();
-  process.env.PATH = join(dir, "empty-path");
-  const statePath = join(dir, "gpu-samples.jsonl");
-  expect(await gpu(ctx, { fallbacks: [], statePath })).toEqual({
-    unavailable: "no nvidia-smi",
+  const binary = join(dir, "nvidia-smi");
+  commandFixture(binary, { stdout: "19, 0, 4096, 12288\n" });
+  expect(
+    await gpu(ctx, {
+      path: dir,
+      fallbacks: [],
+      statePath: join(dir, "missing.json"),
+    }),
+  ).toEqual({
+    unavailable: "stale (GPU sampler state unavailable)",
   });
-  const wslLib = join(dir, "usr", "lib", "wsl", "lib");
-  mkdirSync(wslLib, { recursive: true });
-  const wslSmi = join(wslLib, "nvidia-smi");
-  commandFixture(wslSmi, { stdout: "19, 0, 4096, 12288\n" });
-  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toEqual({
-    nowPct: 19,
-    avg15Pct: null,
-    avg60Pct: null,
-    samples15: 1,
-    memUsedGiB: 4,
-    memTotalGiB: 12,
-  });
-  commandFixture(wslSmi, { stdout: "[N/A], 0, 4096, 12288\n" });
-  rmSync(statePath);
-  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toEqual({
-    unavailable: "nvidia-smi output unparsable",
-  });
-  commandFixture(wslSmi, { stdout: "101, 0, 4096, 12288\n" });
-  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toEqual({
-    unavailable: "nvidia-smi output unparsable",
-  });
-  commandFixture(wslSmi, { sleepMs: 10_000 });
-  const started = performance.now();
-  expect(await gpu(ctx, { fallbacks: [wslSmi], statePath })).toEqual({
-    unavailable: "nvidia-smi timeout 1000ms",
-  });
-  expect(performance.now() - started).toBeLessThan(1_500);
 });
 
 test("English segments use the exact fence, quote, path, paragraph and threshold rules", async () => {

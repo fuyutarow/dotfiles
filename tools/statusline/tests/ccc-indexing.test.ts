@@ -37,7 +37,7 @@ test("sampler uses GPU PID plus daemon indexing, caches probes and resets idle",
   await using _cleanup = {
     [Symbol.asyncDispose]: () => rm(dir, { recursive: true, force: true }),
   };
-  const nvidia = join(dir, "nvidia-smi");
+  const statePath = join(dir, "gpu-owner.json");
   const ccc = join(dir, "ccc");
   const calls = join(dir, "calls");
   const procRoot = join(dir, "proc");
@@ -47,9 +47,15 @@ test("sampler uses GPU PID plus daemon indexing, caches probes and resets idle",
     "python\0/repo/cocoindex/ccc-daemon-launch.py\0",
   );
   await writeFile(
-    nvidia,
-    `#!/bin/sh\nprintf 'gpu\\n' >> '${calls}'\nprintf '42\\n'\n`,
-    { mode: 0o755 },
+    statePath,
+    JSON.stringify({
+      schema: 1,
+      attemptAt: 1_000_000,
+      sampledAt: 1_000_000,
+      devices: [],
+      processes: [{ pid: 42, usedMiB: null }],
+      samples: [],
+    }),
   );
   await writeFile(
     ccc,
@@ -59,7 +65,7 @@ test("sampler uses GPU PID plus daemon indexing, caches probes and resets idle",
   let now = 1_000_000;
   const options = {
     cachePath: join(dir, "cache.json"),
-    nvidia,
+    statePath,
     ccc,
     procRoot,
     now: () => now,
@@ -70,7 +76,7 @@ test("sampler uses GPU PID plus daemon indexing, caches probes and resets idle",
   expect(first.since).toBe(now);
   now += 30_000;
   expect(await sampleCccIndexing(options)).toEqual(first);
-  expect((await readFile(calls, "utf8")).trim().split("\n")).toHaveLength(2);
+  expect((await readFile(calls, "utf8")).trim().split("\n")).toHaveLength(1);
   now += 31_000;
   expect((await sampleCccIndexing(options)).since).toBe(first.since);
   await writeFile(ccc, "#!/bin/sh\nprintf '/repo [idle]\\n'\n", {
@@ -78,7 +84,7 @@ test("sampler uses GPU PID plus daemon indexing, caches probes and resets idle",
   });
   now += 61_000;
   expect((await sampleCccIndexing(options)).since).toBeNull();
-  await writeFile(nvidia, "#!/bin/sh\nexec sleep 5\n", { mode: 0o755 });
+  await writeFile(statePath, "corrupt");
   now += 61_000;
   expect(
     (await sampleCccIndexing({ ...options, boundMs: 100 })).pid,
@@ -105,7 +111,7 @@ test("CPU deferral is visible immediately, expires, and clears when GPU policy r
   const options = {
     cachePath: join(dir, "cache.json"),
     policyStatusPaths: [policyStatusPath],
-    nvidia: join(dir, "missing-nvidia"),
+    statePath: join(dir, "missing-nvidia"),
     now: () => now,
   };
   const deferred = await sampleCccIndexing(options);
@@ -154,7 +160,7 @@ test("the newest fresh policy signal wins across runtime and SSH status paths", 
   const options = {
     cachePath: join(dir, "cache.json"),
     policyStatusPaths: [primary, fallback],
-    nvidia: join(dir, "missing-nvidia"),
+    statePath: join(dir, "missing-nvidia"),
     now: () => now,
   };
   expect(cccBadge(await sampleCccIndexing(options), now)).toContain(

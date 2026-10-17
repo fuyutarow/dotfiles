@@ -1,24 +1,11 @@
-// Host-wide, opportunistic GPU estimates. No resident polling: consumers share a locked,
-// atomic history, with jitter to avoid synchronizing with periodic short GPU bursts.
-import { randomUUID } from "node:crypto";
-import {
-  accessSync,
-  constants,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { access } from "node:fs/promises";
-import { homedir, hostname } from "node:os";
-import { dirname, join } from "node:path";
-import { tryAcquire } from "./dir-lock.ts";
-import { fromThrowable, jsonOf, z } from "./zod.ts";
-
-const RETAIN_MS = 2 * 60 * 60_000;
+// Read-only GPU state API. Only gpu-sampler.ts may execute the driver tool.
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { attemptOr } from "./attempt.ts";
+import { jsonOf, z } from "./zod.ts";
+export const RETAIN_MS = 2 * 60 * 60_000;
 const MAX_SAMPLES = 721;
-const MAX_BYTES = 1024 * 1024;
+export const MAX_BYTES = 1024 * 1024;
 const Pct = z.number().min(0).max(100);
 const Memory = z
   .object({
@@ -53,7 +40,7 @@ export const GpuSampleSchema = Memory.extend({
   ts: z.number().int().nonnegative(),
   utilPct: Pct,
   nextTs: z.number().int().nonnegative(),
-}).refine((s) => s.nextTs >= s.ts + 10_000 && s.nextTs <= s.ts + 20_000);
+}).refine((s) => s.nextTs >= s.ts + 60_000);
 export type GpuSample = z.output<typeof GpuSampleSchema>;
 export const GpuReadingSchema = Memory.extend({
   nowPct: Pct,
@@ -63,34 +50,25 @@ export const GpuReadingSchema = Memory.extend({
 });
 export type GpuReading = z.output<typeof GpuReadingSchema>;
 
+export const GPU_INTERVAL_MS = 60_000;
+export const GPU_FRESH_MS = 120_000;
 export function gpuStatePath(): string {
   return join(
     process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"),
-    "gpu-samples.jsonl",
+    "gpu-owner.json",
   );
 }
-export function gpuSampleInterval(random = Math.random): number {
-  return 10_000 + Math.floor(Math.max(0, Math.min(1, random())) * 10_000);
+export function gpuSampleInterval(_random = Math.random): number {
+  return GPU_INTERVAL_MS;
 }
-/** A corrupt, oversized, unordered, or future-dated history contributes no samples. */
-// Sync history API serves the off-render sampler; renderer executable checks use the async API.
-export function readGpuSamples(path: string, now: number): GpuSample[] {
-  const text = fromThrowable(() => {
-    if (statSync(path).size > MAX_BYTES) return null;
-    return readFileSync(path, "utf8");
-  })();
-  if (text.isErr() || text.value === null) return [];
-  const lines = text.value.trim().split("\n");
-  if (lines.length > MAX_SAMPLES) return [];
-  const samples: GpuSample[] = [];
-  for (const line of lines) {
-    const parsed = jsonOf(GpuSampleSchema).safeParse(line);
-    if (!parsed.success || parsed.data.ts > now) return [];
-    const previous = samples.at(-1);
-    if (previous !== undefined && parsed.data.ts < previous.nextTs) return [];
-    samples.push(parsed.data);
-  }
-  return samples.filter((s) => now - s.ts <= RETAIN_MS);
+export async function readGpuSamples(
+  path: string,
+  now: number,
+): Promise<GpuSample[]> {
+  const state = await readGpuState(path);
+  return (
+    state?.samples.filter((s) => s.ts <= now && now - s.ts <= RETAIN_MS) ?? []
+  );
 }
 function mean(rows: GpuSample[]): number | null {
   return rows.length < 3
@@ -119,135 +97,80 @@ export function gpuEstimate(
   });
   return parsed.success ? parsed.data : "unknown";
 }
-// Sync executable probe remains for synchronous sampler callers; renderer uses findGpuExecutableAsync.
-export function findGpuExecutable(
-  path = process.env.PATH ?? "",
-  fallbacks = ["/usr/lib/wsl/lib/nvidia-smi", "/usr/bin/nvidia-smi"],
+
+export const GpuDeviceSchema = z
+  .object({
+    id: z.number().int().nonnegative(),
+    totalMiB: z.number().positive(),
+    usedMiB: z.number().nonnegative(),
+    utilPct: Pct,
+    powerWatts: z.number().nonnegative().optional(),
+  })
+  .refine((d) => d.usedMiB <= d.totalMiB);
+export const GpuProcessSchema = z.object({
+  pid: z.number().int().positive(),
+  usedMiB: z.number().nonnegative().nullable(),
+});
+export const GpuStateSchema = z.object({
+  schema: z.literal(1),
+  attemptAt: z.number().int().nonnegative(),
+  sampledAt: z.number().int().nonnegative().optional(),
+  unresponsiveSince: z.number().int().nonnegative().optional(),
+  why: z.string().optional(),
+  devices: z.array(GpuDeviceSchema).max(256),
+  processes: z.array(GpuProcessSchema).max(65536),
+  samples: z.array(GpuSampleSchema).max(MAX_SAMPLES),
+});
+export type GpuState = z.output<typeof GpuStateSchema>;
+export async function readGpuState(
+  path = gpuStatePath(),
+): Promise<GpuState | undefined> {
+  return attemptOr(async () => {
+    const file = Bun.file(path);
+    const text = file.size > MAX_BYTES ? "" : await file.text();
+    const parsed = jsonOf(GpuStateSchema).safeParse(text);
+    return parsed.success ? parsed.data : undefined;
+  }, undefined);
+}
+export function gpuStateFailure(
+  state: GpuState | undefined,
+  now = Temporal.Now.instant().epochMilliseconds,
+  maxAgeMs = GPU_FRESH_MS,
 ): string | undefined {
-  const candidates = path
-    .split(process.platform === "win32" ? ";" : ":")
-    .filter((p) => p !== "")
-    .map((p) => join(p, "nvidia-smi"));
-  return [...candidates, ...fallbacks].find((p) =>
-    fromThrowable(() => {
-      accessSync(p, constants.X_OK);
-    })().isOk(),
-  );
+  if (state === undefined) return "stale (GPU sampler state unavailable)";
+  if (state.unresponsiveSince !== undefined)
+    return `unresponsive since ${Temporal.Instant.fromEpochMilliseconds(state.unresponsiveSince).toString()}`;
+  if (state.sampledAt === undefined)
+    return state.why ?? "stale (no GPU sample)";
+  if (state.sampledAt > now || now - state.sampledAt > maxAgeMs)
+    return "stale (GPU sample expired)";
+  return state.why;
 }
-export async function findGpuExecutableAsync(
-  path = process.env.PATH ?? "",
-  fallbacks = ["/usr/lib/wsl/lib/nvidia-smi", "/usr/bin/nvidia-smi"],
-): Promise<string | undefined> {
-  const candidates = [
-    ...path
-      .split(process.platform === "win32" ? ";" : ":")
-      .filter((p) => p !== "")
-      .map((p) => join(p, "nvidia-smi")),
-    ...fallbacks,
-  ];
-  const probes = candidates.map((candidate) =>
-    access(candidate, constants.X_OK)
-      .then(() => candidate)
-      .catch(() => null),
-  );
-  for (const probe of probes) {
-    const candidate = await probe;
-    if (candidate !== null) return candidate;
-  }
-  return undefined;
-}
-type Options = {
-  cwd?: string;
-  path?: string;
-  fallbacks?: string[];
-  statePath?: string;
-  timeoutMs?: number;
-  now?: number;
-  random?: () => number;
-};
 export type GpuRead =
   | { ok: true; value: GpuReading }
   | { ok: false; why: string };
-function answer(samples: GpuSample[], now: number): GpuRead {
-  const value = gpuEstimate(samples, now);
+export function gpuReadFromState(
+  state: GpuState | undefined,
+  now = Temporal.Now.instant().epochMilliseconds,
+): GpuRead {
+  const why = gpuStateFailure(state, now);
+  if (why !== undefined) return { ok: false, why };
+  const value = gpuEstimate(state?.samples ?? [], now);
   return value === "unknown"
-    ? { ok: false, why: "sampling in progress" }
+    ? { ok: false, why: "stale (no GPU sample)" }
     : { ok: true, value };
 }
-function collect(
-  options: Options,
-): { ok: true; output: string } | { ok: false; why: string } {
-  const executable = findGpuExecutable(options.path, options.fallbacks);
-  if (executable === undefined) return { ok: false, why: "no nvidia-smi" };
-  const timeout = options.timeoutMs ?? 1_000;
-  const started = performance.now();
-  const proc = Bun.spawnSync(
-    [executable, GPU_QUERY, "--format=csv,noheader,nounits"],
-    {
-      cwd: options.cwd ?? process.cwd(),
-      timeout: timeout,
-      maxBuffer: MAX_BYTES,
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  if (proc.signalCode === "SIGTERM" && performance.now() - started >= timeout)
-    return { ok: false, why: `nvidia-smi timeout ${timeout}ms` };
-  if (proc.signalCode !== undefined && proc.signalCode !== null)
-    return { ok: false, why: `nvidia-smi killed by ${proc.signalCode}` };
-  if (proc.exitCode !== 0)
-    return { ok: false, why: `nvidia-smi exit ${proc.exitCode}` };
-  return { ok: true, output: proc.stdout.toString() };
-}
-function lockedRead(options: Options, path: string): GpuRead {
-  const lock = tryAcquire(`${path}.lock`, {
-    pid: process.pid,
-    host: hostname(),
-    what: "GPU sample",
-    since: Temporal.Now.instant().toString(),
-  });
-  // Stamp after acquiring: a competing writer may have landed a newer sample while
-  // this reader was entering the lock. Never discard it as future-dated and resample.
-  const now = options.now ?? Temporal.Now.instant().epochMilliseconds;
-  if (!lock.ok) return answer(readGpuSamples(path, now), now);
-  using _held = { [Symbol.dispose]: lock.release };
-  const samples = readGpuSamples(path, now);
-  const last = samples.at(-1);
-  if (last !== undefined && now < last.nextTs) return answer(samples, now);
-  const collected = collect(options);
-  if (!collected.ok) return collected;
-  const parsed = GpuOutputSchema.safeParse(collected.output);
-  if (!parsed.success)
-    return { ok: false, why: "nvidia-smi output unparsable" };
-  const ts = options.now ?? Temporal.Now.instant().epochMilliseconds;
-  const sample = {
-    ...parsed.data,
-    ts,
-    nextTs: ts + gpuSampleInterval(options.random),
-  };
-  const rows = [...samples.filter((s) => ts - s.ts <= RETAIN_MS), sample].slice(
-    -MAX_SAMPLES,
-  );
-  const tmp = join(dirname(path), `.gpu-${randomUUID()}.tmp`);
-  using _temp = {
-    [Symbol.dispose]: () => {
-      fromThrowable(() => {
-        rmSync(tmp, { force: true });
-      })();
-    },
-  };
-  writeFileSync(tmp, `${rows.map((s) => JSON.stringify(s)).join("\n")}\n`, {
-    mode: 0o600,
-  });
-  renameSync(tmp, path);
-  return answer(rows, ts);
-}
-/** One bounded read across both consumers; lock losers use history without waiting. */
-export function sampleGpu(options: Options = {}): GpuRead {
-  const result = fromThrowable(() =>
-    lockedRead(options, options.statePath ?? gpuStatePath()),
-  )();
-  return result.isOk()
-    ? result.value
-    : { ok: false, why: "GPU sampling unavailable" };
+/** Compatibility name: this reads only; it never samples or starts a process. */
+export async function sampleGpu(
+  options: {
+    statePath?: string;
+    now?: number;
+    cwd?: string;
+    path?: string;
+    fallbacks?: string[];
+    timeoutMs?: number;
+    random?: () => number;
+  } = {},
+): Promise<GpuRead> {
+  return gpuReadFromState(await readGpuState(options.statePath), options.now);
 }

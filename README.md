@@ -105,7 +105,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── sheldon/     # zsh plugin manager (sources only zsh/aliases.zsh)
 ├── lazygit/     # config.yml + ai-commit.sh
 ├── cocoindex/   # cocoindex-code (ccc) settings + its capped daemon unit
-├── systemd/     # ws-gc user service + hourly/boot timer (Linux; linked and enabled by link:dots)
+├── systemd/     # ws-gc and GPU sampler user services + timers (Linux; linked and enabled by link:dots)
 ├── android/     # Pixel LINE vibration policy: ADB audit/apply script and one-time UI recipe
 ├── bottom/      # btm system monitor — groups same-named processes so swarm leaks are visible
 ├── topgrade/    # which update steps `mise run up` runs
@@ -144,6 +144,12 @@ file. Run `mise run changeset -- <tool> <patch|minor|major> "<entry>"`; do not h
 bump per tool, prepends all entries under one new SemVer heading, and removes the changeset files
 in the same landed commit. `gate:land` and land validate the file through the same zod schema.
 Landing with no changesets leaves tool versions and changelogs alone.
+
+On Linux, `mise run link:dots` also links and enables `gpu-sampler.timer`. It starts
+15 seconds after boot and 60 seconds after each run completes. The shared owner in
+`tools/shared/src/gpu-sampler.ts` is the only NVIDIA-query caller; every consumer reads
+its atomic state file. `mise run doctor` checks timer activity and the service's last
+result. See [GPU sampler operations](tools/shared/GPU-SAMPLER.md) for freshness and recovery.
 
 On Linux, `mise run link:dots` links and enables `ws-gc.timer`. Five minutes after boot and
 hourly thereafter it runs `ws gc --all --legacy`, with TSV output in

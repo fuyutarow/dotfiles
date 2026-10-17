@@ -1,0 +1,12 @@
+[Unit]
+Description=Sample NVIDIA GPU state through the single shared owner
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/dotfiles
+Environment=PATH=%h/.bun/bin:%h/.local/bin:%h/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env bun %h/dotfiles/tools/shared/src/gpu-sampler.ts
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=30s
+TimeoutStopSec=5s

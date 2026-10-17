@@ -51,13 +51,19 @@ const body = (stdout: string): string =>
     .replace(/^\[dotfiles:sys-snapshot\] /u, "")
     .replace(/^[^@\s]+@[^:\s]+:\d\d-\d\d \d\d:\d\d[+-]\d\d(?:\d\d)? \| /u, ""); // the prompt-stamp.ts head, offset included
 const fire = (home: string, event: string) =>
-  runHook(HOOK, { hook_event_name: event, session_id: "s1" }, { HOME: home });
+  runHook(
+    HOOK,
+    { hook_event_name: event, session_id: "s1" },
+    { HOME: home, XDG_STATE_HOME: join(home, ".local", "state") },
+  );
 
 describe("log-sys-snapshot", () => {
   test("Stop attaches the cached Sys row as a systemMessage", () => {
     const r = fire(homeWithCache(1_000), "Stop");
     expect(r.code).toBe(0);
-    expect(body(r.stdout)).toBe(LINE);
+    expect(body(r.stdout)).toBe(
+      `${LINE} · GPU stale (GPU sampler state unavailable)`,
+    );
   });
 
   test("one line: user@host:local event time, then the fields, joined by the bar's dimmed |", () => {
@@ -109,19 +115,46 @@ describe("log-sys-snapshot", () => {
   test("this session's rows follow the time in the order given: Ctx, Rate, then Sys", () => {
     const home = homeWithCache(1_000);
     writeSession(home, "s1", [CTX, RATE]);
-    expect(body(fire(home, "Stop").stdout)).toBe(`${CTX} | ${RATE} | ${LINE}`);
+    expect(body(fire(home, "Stop").stdout)).toBe(
+      `${CTX} | ${RATE} | ${LINE} · GPU stale (GPU sampler state unavailable)`,
+    );
   });
   test("another session's rows are never shown here", () => {
     const home = homeWithCache(1_000);
     writeSession(home, "other", ["Ctx: 9k 5%", "Rate: 7d 51% ⟳5d"]);
-    expect(body(fire(home, "Stop").stdout)).toBe(LINE);
+    expect(body(fire(home, "Stop").stdout)).toBe(
+      `${LINE} · GPU stale (GPU sampler state unavailable)`,
+    );
   });
   test("stale or empty session rows leave only the Sys row", () => {
     const stale = homeWithCache(1_000);
     writeSession(stale, "s1", [CTX, RATE], 10 * 60_000);
-    expect(body(fire(stale, "Stop").stdout)).toBe(LINE);
+    expect(body(fire(stale, "Stop").stdout)).toBe(
+      `${LINE} · GPU stale (GPU sampler state unavailable)`,
+    );
     const empty = homeWithCache(1_000);
     writeSession(empty, "s1", [""]);
-    expect(body(fire(empty, "Stop").stdout)).toBe(LINE);
+    expect(body(fire(empty, "Stop").stdout)).toBe(
+      `${LINE} · GPU stale (GPU sampler state unavailable)`,
+    );
   });
+});
+
+test("owner unresponsive state overrides a fresh cached Sys observation without probing", async () => {
+  const home = homeWithCache(1_000);
+  const at = Temporal.Now.instant().epochMilliseconds;
+  await Bun.write(
+    join(home, ".local", "state", "gpu-owner.json"),
+    JSON.stringify({
+      schema: 1,
+      attemptAt: at,
+      unresponsiveSince: at,
+      devices: [],
+      processes: [],
+      samples: [],
+    }),
+  );
+  expect(messageOf(fire(home, "Stop").stdout)).toContain(
+    "GPU unresponsive since ",
+  );
 });

@@ -1030,6 +1030,58 @@ export async function checkWsGc(
   );
 }
 
+export async function checkGpuSampler(
+  _ctx: Ctx,
+  probe: typeof run = run,
+): Promise<Finding> {
+  const name = "gpu-sampler";
+  const active = await probe(
+    ["systemctl", "--user", "is-active", "gpu-sampler.timer"],
+    { ms: 10_000 },
+  );
+  if (active.missing) return skip(name, "no systemctl on this host");
+  if (active.code !== 0 || active.timedOut || active.out.trim() !== "active")
+    return fail(
+      name,
+      `gpu-sampler.timer is ${active.out.trim() === "" ? "not active" : active.out.trim()}`,
+      "mise run link:dots",
+    );
+  const last = await probe(
+    [
+      "systemctl",
+      "--user",
+      "show",
+      "gpu-sampler.service",
+      "--property=Result",
+      "--property=ExecMainStatus",
+      "--property=ActiveState",
+    ],
+    { ms: 10_000 },
+  );
+  const properties = new Map<string, string>();
+  for (const line of last.out.trim().split("\n")) {
+    const [key, value] = line.split("=", 2);
+    if (key !== undefined && value !== undefined) properties.set(key, value);
+  }
+  if (
+    last.code !== 0 ||
+    last.timedOut ||
+    last.missing ||
+    properties.get("Result") !== "success" ||
+    properties.get("ExecMainStatus") !== "0" ||
+    properties.get("ActiveState") === "failed"
+  )
+    return fail(
+      name,
+      `gpu-sampler.service last run unhealthy: ${last.out.trim()}`,
+      "journalctl --user -u gpu-sampler.service; systemctl --user start gpu-sampler.service",
+    );
+  return pass(
+    name,
+    "gpu-sampler.timer active; gpu-sampler.service last run successful (or not yet run)",
+  );
+}
+
 export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
   const unit = "wsl-capacity-recover.timer";
   const active = await run(["systemctl", "--user", "is-active", unit], {
@@ -1913,6 +1965,11 @@ export const CHECKS: Check[] = [
   {
     name: "ws-gc",
     run: checkWsGc,
+    applies: (c) => (c.isMac ? "Linux only" : null),
+  },
+  {
+    name: "gpu-sampler",
+    run: checkGpuSampler,
     applies: (c) => (c.isMac ? "Linux only" : null),
   },
   {

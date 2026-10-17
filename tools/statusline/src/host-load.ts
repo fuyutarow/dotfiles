@@ -1,23 +1,8 @@
 // Host load — CPU · RAM · VRAM · Disk — read and rendered as the statusline's Sys row. Consumers:
 // tools/statusline/src/statusline.ts (row 5) and `s` in zsh/aliases.zsh (one row, now).
-// Split out of the former Claude statusline (2026-10-06): reading host load used to require the whole
-// statusline (a stdin payload, sessions, rate limits), and the GPU sampler re-executed the
-// statusline itself; now the sampler re-executes THIS file (same SAMPLE_ENV, cache and lock).
-import { spawn } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmdirSync,
-  statSync,
-} from "node:fs";
-import {
-  mkdir as mkdirAsync,
-  readFile,
-  rmdir as rmdirAsync,
-  stat as statAsync,
-} from "node:fs/promises";
-import { dirname } from "node:path";
+// GPU data comes exclusively from tools/shared/src/gpu-sampler.ts state.
+import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import {
@@ -34,9 +19,11 @@ import { cgroupMemory } from "./cgroup-memory.ts";
 import { z } from "./zod.ts";
 import { CccIndexSchema, cccBadge, sampleCccIndexing } from "./ccc-indexing.ts";
 import {
-  findGpuExecutable,
-  findGpuExecutableAsync,
-  sampleGpu,
+  gpuStatePath,
+  GpuStateSchema,
+  gpuReadFromState,
+  readGpuState,
+  type GpuState,
 } from "../../shared/src/gpu-samples.ts";
 import { ESC, RST, pctFmt, roles } from "./ansi.ts";
 import {
@@ -48,9 +35,7 @@ import {
 import {
   ENRICHMENT_TIMEOUT_MS,
   execAsyncBounded,
-  type ExecFailure,
   execBounded,
-  failWhy,
   readJson,
   readJsonAsync,
   within,
@@ -89,231 +74,22 @@ export function memReading(
   };
 }
 
-// Called on EVERY render now (Sys row, below), not just while a job is admitted — the one
-// subprocess call among the three Sys readings, bounded like every other enrichment here.
-// nvidia-smi is ~170 ms of a ~200 ms render (measured 2026-10-01) and its answer is host-wide, so
-// one sample is shared by every session for GPU_SAMPLE_TTL_MS. That is what lets settings.json run
-// the bar every 5 s (statusLine.refreshInterval) — the cadence a Remote Control connect needs to
-// show up promptly, since the bridge attaches after the command's own render.
-export const GPU_CACHE = `${HOME}/.cache/claude/statusline-gpu.json`;
-export const GPU_SAMPLE_TTL_MS = 5_000;
-// The sampler's bound. Measured 2026-10-05 under load average 22-26 (24 samples): nvidia-smi
-// p50 2.6 s, p90 5.6 s, max 12.6 s, 15 of 24 over the old 2 s bound. Above the
-// worst seen, so a slow answer is an answer; below "hung", so a dead driver is still named.
-// STATUSLINE_GPU_SAMPLE_TIMEOUT_MS lets the tests exercise the timeout without waiting it out.
-export const GPU_SAMPLE_TIMEOUT_SCHEMA = z.coerce
-  .number()
-  .int()
-  .min(100)
-  .max(120_000);
-const gpuSampleTimeout = GPU_SAMPLE_TIMEOUT_SCHEMA.safeParse(
-  process.env.STATUSLINE_GPU_SAMPLE_TIMEOUT_MS,
-);
-export const GPU_SAMPLE_TIMEOUT_MS = gpuSampleTimeout.success
-  ? gpuSampleTimeout.data
-  : 20_000;
-// A last-good sample older than this is a claim about a moment too far back to still be useful;
-// beyond it the reading becomes n/a instead of a stale number.
-export const GPU_STALE_MAX_MS = 30 * 60_000;
-// A last-good sample younger than this is shown without the `stale` marker (see memSegment).
+// GPU observations belong to the shared owner. Rendering never launches a sampler.
 export const STALE_SHOW_S = 60;
-// `reading`: the newest sample, set when it succeeded. `why`: set when it failed — a failure is
-// cached for the TTL like a success, so a hung nvidia-smi costs one bounded render per 5 s, not
-// every render. `good`: the newest SUCCESSFUL sample, kept across failures. The pre-2026-10-03
-// shape wrote `reading: null` for ANY failure ("no GPU"), which is how a timeout under load made
-// VRAM disappear; that shape carries no `why`, so it is simply treated as expired.
-export const GpuCacheSchema = z.object({
-  at: z.number().optional(),
-  reading: MemReadingSchema.nullish(), // `null` is the pre-fix "no GPU" marker
-  why: z.string().optional(),
-  good: z.object({ at: z.number(), reading: MemReadingSchema }).optional(),
-});
-export type GpuCache = z.output<typeof GpuCacheSchema>;
-// SAMPLING IS OFF THE RENDER PATH (Tiger ledger O4, 2026-10-05). The bar used to run nvidia-smi
-// inside the render under a 2 s bound. Under load (load average 26 on 12 cores, plus the per-job
-// nvidia-smi pollers of agent-resource-run) nvidia-smi takes 2-10 s, so a bound shorter than its
-// service time failed nearly every attempt, and VRAM sat 264 s stale: an attempt-deadline below the
-// service time is starvation, not a timeout. Now the render only READS the cache and, when it has
-// expired, makes sure one sampler is running; the sampler is this same file started with
-// SAMPLE_ENV set, gets GPU_SAMPLE_TIMEOUT_MS (above the worst latency measured), and writes the cache.
-// The render never waits for it.
-// An environment variable, not argv: this file has no command line of its own (its input is the
-// stdin payload), so the mode is an internal channel between the render and the process it starts.
-export const SAMPLE_ENV = "STATUSLINE_SAMPLE_GPU";
-// What a reading is marked with while the newest attempt has not finished (or there is none yet).
-export const SAMPLING_WHY = "sampling in progress";
-// ONE nvidia-smi in flight host-wide (Tiger ledger O3). The lock is a directory because mkdir is
-// atomic (EEXIST for every loser) and needs no flags or libraries. The render that wins it hands
-// it to the sampler it starts (the sampler releases it when it ends), so while a sampler runs no
-// other session starts a second one — at 40 sessions that is the difference between one process and
-// a herd feeding the load that made nvidia-smi slow. Its owner is not recorded: a lock older than
-// GPU_LOCK_STALE_MS (the sample bound + start-up margin) is a crashed sampler's, and is broken.
-export const GPU_LOCK = `${HOME}/.cache/claude/statusline-gpu.lock`;
-export const GPU_LOCK_STALE_MS = GPU_SAMPLE_TIMEOUT_MS + 19_000;
-export interface GpuLock {
-  release(): void;
-}
-// Sync lock API remains for sync readHostLoad callers; the Claude renderer uses its async twin.
-export function acquireGpuLock(): Result<GpuLock, string> {
-  const take = (): boolean =>
-    fromThrowable(() => {
-      mkdirSync(dirname(GPU_LOCK), { recursive: true });
-      mkdirSync(GPU_LOCK);
-    })().isOk();
-  const lock: GpuLock = {
-    release: () => {
-      fromThrowable(() => {
-        rmdirSync(GPU_LOCK);
-      })();
-    },
-  };
-  if (take()) return ok(lock);
-  const held = fromThrowable(() => statSync(GPU_LOCK).mtimeMs)();
-  const now = Temporal.Now.instant().epochMilliseconds;
-  // Stale = OLD, nothing else. within() also rejects a timestamp in the future (right for a cache,
-  // where it means a stepped-back clock), but a lock dir created a moment ago has a sub-ms mtime that
-  // can sit a fraction of a ms past this integer `now` — and was then "broken" as stale, starting a
-  // second sampler (the O3 flake: ~1 in 10 renders of 6, before and after the host-load split).
-  if (held.isOk() && now - held.value >= GPU_LOCK_STALE_MS) {
-    lock.release();
-    if (take()) return ok(lock);
-  }
-  return err("another sampler holds the lock");
-}
-// Render side: make sure a sampler is in flight, and return at once. Ok = one is running or was
-// just started; err = it could not be started (the reason is shown beside the reading).
-export function ensureSampler(): Result<void, string> {
-  const lock = acquireGpuLock();
-  if (lock.isErr()) return ok(undefined); // one is already in flight: that is the goal
-  // Re-check under the lock (O3: one sample per TTL). The caller judged the cache expired BEFORE
-  // taking the lock; a sampler can finish and release in between, and this render would then start
-  // a second one for a sample that just landed — seen as 2 nvidia-smi runs for 6 concurrent renders
-  // (statusline-explicit-absence.test.ts O3, ~1 in 10 before the split, ~3 in 10 after it, because
-  // the sampler now starts faster).
-  // "Landed" means what vramFrac calls fresh: inside the TTL AND saying something (a reading, or why
-  // there is none) — the pre-2026-10-03 `{reading: null}` says neither and must not stop a sample.
-  const now = Temporal.Now.instant().epochMilliseconds;
-  const c = readJson(GPU_CACHE, GpuCacheSchema);
-  const says =
-    (c?.reading !== null && c?.reading !== undefined) || c?.why !== undefined;
-  if (c?.at !== undefined && within(c.at, now, GPU_SAMPLE_TTL_MS) && says) {
-    lock.value.release();
-    return ok(undefined);
-  }
-  const started = fromThrowable(
-    () => {
-      const child = spawn(process.execPath, [import.meta.path], {
-        stdio: "ignore",
-        env: { ...process.env, [SAMPLE_ENV]: "1" },
+function vramFromState(
+  state: GpuState | undefined,
+): Result<MemReading, string> {
+  const result = gpuReadFromState(state);
+  if (!result.ok) return err(result.why);
+  const d = result.value;
+  const reading = memReading(d.memUsedGiB, d.memTotalGiB);
+  return reading === undefined
+    ? err("stale (invalid GPU memory)")
+    : ok({
+        ...reading,
+        gpuAvg15: d.avg15Pct,
+        gpuSamples15: d.samples15,
       });
-      child.once("error", () => {
-        lock.value.release();
-      });
-      child.unref(); // the render exits without waiting; the child is bounded by its own timeout
-    },
-    (e): string => `sampler not started (${failWhy(e, "bun")})`,
-  )();
-  if (started.isErr()) lock.value.release();
-  return started;
-}
-interface AsyncGpuLock {
-  release(): Promise<void>;
-}
-async function acquireGpuLockAsync(): Promise<Result<AsyncGpuLock, string>> {
-  const take = async (): Promise<boolean> =>
-    mkdirAsync(dirname(GPU_LOCK), { recursive: true })
-      .then(() => mkdirAsync(GPU_LOCK))
-      .then(() => true)
-      .catch(() => false);
-  const lock: AsyncGpuLock = {
-    release: async () => {
-      await rmdirAsync(GPU_LOCK).catch(() => null);
-    },
-  };
-  if (await take()) return ok(lock);
-  const held = await statAsync(GPU_LOCK)
-    .then((value) => value.mtimeMs)
-    .catch(() => null);
-  const now = Temporal.Now.instant().epochMilliseconds;
-  if (held !== null && now - held >= GPU_LOCK_STALE_MS) {
-    await lock.release();
-    if (await take()) return ok(lock);
-  }
-  return err("another sampler holds the lock");
-}
-/** Async render-path lock and cache check; the sampler still owns the lock after spawn. */
-async function ensureSamplerAsync(): Promise<Result<void, string>> {
-  const lock = await acquireGpuLockAsync();
-  if (lock.isErr()) return ok(undefined);
-  const now = Temporal.Now.instant().epochMilliseconds;
-  const cached = await readJsonAsync(GPU_CACHE, GpuCacheSchema);
-  const says =
-    (cached?.reading !== null && cached?.reading !== undefined) ||
-    cached?.why !== undefined;
-  if (
-    cached?.at !== undefined &&
-    within(cached.at, now, GPU_SAMPLE_TTL_MS) &&
-    says
-  ) {
-    await lock.value.release();
-    return ok(undefined);
-  }
-  const started = fromThrowable(
-    () => {
-      const child = spawn(process.execPath, [import.meta.path], {
-        stdio: "ignore",
-        env: { ...process.env, [SAMPLE_ENV]: "1" },
-      });
-      child.once("error", () => {
-        void lock.value.release();
-      });
-      child.unref();
-    },
-    (e): string => `sampler not started (${failWhy(e, "bun")})`,
-  )();
-  if (started.isErr()) await lock.value.release();
-  return started;
-}
-// Sampler side (`STATUSLINE_SAMPLE_GPU=1 bun tools/statusline/src/host-load.ts`): take ONE sample under the long bound
-// and record it. `good` is the previous last-good sample, carried over a failure so a transient
-// miss can still be shown (marked stale) instead of turning into n/a. Returns the exit code; the
-// caller exits AFTER this returns, so the lock is released by `using` first. Refuses to run
-// without the lock: ensureSampler starts it and hands the lock over.
-// The separate sampler child uses this sync entry; renderer calls return before sampling starts.
-export async function runSampler(): Promise<number> {
-  if (!existsSync(GPU_LOCK)) {
-    process.stderr.write(
-      `statusline: ${SAMPLE_ENV} is set by the statusline, which holds ${GPU_LOCK}; refusing to run without it\n`,
-    );
-    return 2;
-  }
-  using _held: Disposable = {
-    [Symbol.dispose]: () => {
-      fromThrowable(() => {
-        rmdirSync(GPU_LOCK);
-      })();
-    },
-  };
-  const good = readJson(GPU_CACHE, GpuCacheSchema)?.good;
-  const sampled = sampleVram();
-  const cccIndexing = sampled.isOk()
-    ? await sampleCccIndexing({
-        cachePath: `${HOME}/.cache/claude/statusline-ccc-indexing.json`,
-      })
-    : undefined;
-  const reading = sampled.map((value) =>
-    Object.assign({}, value, { cccIndexing }),
-  );
-  // Stamped AFTER the sample returns, so the TTL runs from when the answer exists.
-  const at = Temporal.Now.instant().epochMilliseconds;
-  writeCache(
-    GPU_CACHE,
-    reading.match(
-      (value) => ({ at, reading: value, good: { at, reading: value } }),
-      (failure) => ({ at, why: failure.why, good }),
-    ), // JSON drops an undefined `good`
-  );
-  return 0;
 }
 // A Mac with no nvidia-smi has no discrete VRAM to read: Apple silicon's GPU shares the RAM the
 // row already shows. That is "does not exist", which the EXPLICIT-ABSENCE law keeps silent. On
@@ -327,50 +103,7 @@ export function vramGated(): Result<MemReading, string> | undefined {
   return absent ? undefined : vram;
 }
 export function vramFrac(): Result<MemReading, string> {
-  // A missing tool needs no sampler to be known, and a Mac without one has no VRAM row (vramGated).
-  if (findGpuExecutable() === undefined) return err("no nvidia-smi");
-  // A file that is missing or fails GpuCacheSchema is an empty cache. Read BEFORE taking `now`: the
-  // sampler is another process and may land a sample at any moment, and an entry stamped a few ms
-  // after a `now` taken first reads as "from the future" (within() rejects it, as it must for a
-  // stepped-back clock) — the reading would vanish for exactly one render (seen live, 2026-10-05).
-  const cached: GpuCache = readJson(GPU_CACHE, GpuCacheSchema) ?? {};
-  const now = Temporal.Now.instant().epochMilliseconds;
-  // Fresh = an entry that says something (a reading, or why there is none) and is inside the TTL.
-  // The pre-2026-10-03 `{reading: null}` says neither, so it counts as expired.
-  const fresh =
-    cached.at !== undefined &&
-    within(cached.at, now, GPU_SAMPLE_TTL_MS) &&
-    ((cached.reading !== null && cached.reading !== undefined) ||
-      cached.why !== undefined);
-  if (fresh && cached.reading !== null && cached.reading !== undefined)
-    return ok(cached.reading);
-  // Expired: refresh in the background and answer from what is cached NOW. A cached miss inside
-  // the TTL is served as-is, without starting another sampler (one attempt per TTL, not per render).
-  const started = fresh ? ok(undefined) : ensureSampler();
-  const why = started.isErr() ? started.error : (cached.why ?? SAMPLING_WHY);
-  // A last-good sample is still better than nothing, provided its age and the reason the newer
-  // one is missing are printed beside it (memSegment marks it from STALE_SHOW_S on); otherwise
-  // the reading is plainly n/a.
-  const good = cached.good;
-  if (good !== undefined && within(good.at, now, GPU_STALE_MAX_MS)) {
-    const secs = Math.round((now - good.at) / 1000);
-    return ok({ ...good.reading, stale: { secs, why } });
-  }
-  return err(why);
-}
-// Runs in the sampler, under GPU_SAMPLE_TIMEOUT_MS — never inside a render.
-export function sampleVram(): Result<MemReading, ExecFailure> {
-  const result = sampleGpu({ timeoutMs: GPU_SAMPLE_TIMEOUT_MS });
-  if (!result.ok) return err({ why: result.why, stderr: "", ran: true });
-  const device = result.value;
-  const reading = memReading(device.memUsedGiB, device.memTotalGiB);
-  return reading === undefined
-    ? err({ why: "nvidia-smi output unparsable", stderr: "", ran: true })
-    : ok({
-        ...reading,
-        gpuAvg15: device.avg15Pct,
-        gpuSamples15: device.samples15,
-      });
+  return vramFromState(readJson(gpuStatePath(), GpuStateSchema));
 }
 
 // Host RAM, Linux only (reads /proc/meminfo — instant, no subprocess). MemAvailable (not
@@ -850,26 +583,12 @@ async function ramFracAsync(): Promise<Result<MemReading, string>> {
   return reading === undefined ? err("meminfo unparsable") : ok(reading);
 }
 async function vramFracAsync(): Promise<Result<MemReading, string>> {
-  if ((await findGpuExecutableAsync()) === undefined)
-    return err("no nvidia-smi");
-  const cached: GpuCache =
-    (await readJsonAsync(GPU_CACHE, GpuCacheSchema)) ?? {};
-  const now = Temporal.Now.instant().epochMilliseconds;
-  const fresh =
-    cached.at !== undefined &&
-    within(cached.at, now, GPU_SAMPLE_TTL_MS) &&
-    ((cached.reading !== null && cached.reading !== undefined) ||
-      cached.why !== undefined);
-  if (fresh && cached.reading !== null && cached.reading !== undefined)
-    return ok(cached.reading);
-  const started = fresh ? ok(undefined) : await ensureSamplerAsync();
-  const why = started.isErr() ? started.error : (cached.why ?? SAMPLING_WHY);
-  const good = cached.good;
-  if (good !== undefined) {
-    const secs = Math.round((now - good.at) / 1000);
-    return ok({ ...good.reading, stale: { secs, why } });
-  }
-  return err(why);
+  const reading = vramFromState(await readGpuState());
+  if (reading.isErr()) return reading;
+  const cccIndexing = await sampleCccIndexing({
+    cachePath: `${HOME}/.cache/claude/statusline-ccc.json`,
+  });
+  return ok({ ...reading.value, cccIndexing });
 }
 async function vramGatedAsync(): Promise<
   Result<MemReading, string> | undefined
@@ -889,23 +608,12 @@ export function sysRow(
   return `${ESC}[38;5;74mSys:${RST} ${sysSegment(h.cpuPct, h.ram, h.vram, h.disks, h.tmp, field, h.tmpfs)}`;
 }
 
-// Standalone (`s`): one row, now. A render reads what the last render left (CPU needs a baseline,
-// VRAM a finished sample), so the first read of a cold host would be all n/a; a person asking
-// "now" waits for both, boundedly — never longer than one GPU sample, and whatever is still
-// missing then prints as n/a with its reason.
+// Standalone (`s`): render the available observations; cold or expired GPU state is explicit.
 async function main(): Promise<void> {
   currentTmp = await tmpReadingsAsync();
-  const first = readHostLoad();
-  const cold = first.cpuPct.isErr() || (first.vram?.isErr() ?? false);
-  if (!cold) {
-    process.stdout.write(`${sysRow(first)}\n`);
-    return;
-  }
-  const deadline = performance.now() + GPU_SAMPLE_TIMEOUT_MS;
-  await Bun.sleep(500);
-  while (existsSync(GPU_LOCK) && performance.now() < deadline)
-    await Bun.sleep(100);
-  process.stdout.write(`${sysRow(readHostLoad())}\n`);
+  process.stdout.write(
+    `${sysRow({ ...(await readHostLoadAsync()), disks: diskReadings() })}\n`,
+  );
 }
 
 // JSON sampler mode is the process boundary for other tools: it exposes this file's existing
@@ -915,6 +623,4 @@ if (process.env.STATUSLINE_HOST_METRICS === "1") {
   process.exit(0);
 }
 
-// Sampler mode (started by ensureSampler with SAMPLE_ENV): one GPU sample, then exit.
-if (process.env[SAMPLE_ENV] === "1") process.exit(await runSampler());
 if (import.meta.main) await main();

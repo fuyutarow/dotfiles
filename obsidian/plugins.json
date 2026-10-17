@@ -24,6 +24,42 @@
       }
     }
   },
+  "remote-ssh": {
+    "repo": "sotashimozono/obsidian-remote-ssh",
+    "version": "1.1.11",
+    "sha256": {
+      "main.js": "46965b95c6e370383ebd124219b204d634c704f5460c9305591f8852d66e42c9",
+      "manifest.json": "6fa05a45cecab94ac42270f1a4c847b6320df365a525a1a5acc4d5f163831314",
+      "styles.css": "0685aeaaa1077e25f66801e2a7a6b17ab8409be4c86ef85420dc6a6a0a8f358d"
+    },
+    "settings": {
+      "onboardingCompleted": true,
+      "daemonDownloadConsented": true,
+      "profiles": [
+        {
+          "id": "r99-u26",
+          "name": "r99-u26",
+          "host": "localhost",
+          "port": 2226,
+          "username": "fuyu",
+          "authMethod": "privateKey",
+          "privateKeyPath": "~/.ssh/id_ed25519",
+          "proxyCommand": "/usr/bin/ssh -q -W %h:%p r99",
+          "remotePath": "Workspace",
+          "connectTimeoutMs": 15000,
+          "keepaliveIntervalMs": 10000,
+          "keepaliveCountMax": 3,
+          "transport": "rpc",
+          "walkIgnoreDirs": [
+            ".git", "node_modules", ".svn", ".hg", "__pycache__", ".venv", "venv", ".tox",
+            ".mypy_cache", ".pytest_cache", "target", "dist", "build", ".next", ".nuxt",
+            ".cache", ".gradle", ".idea", "vendor", ".terraform", ".julia", ".cargo",
+            ".rustup", ".npm", ".conda", ".gem", ".jj"
+          ]
+        }
+      ]
+    }
+  },
   "show-whitespace-cm6": {
     "repo": "ebullient/obsidian-show-whitespace-cm6",
     "version": "0.3.0",

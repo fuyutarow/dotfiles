@@ -190,6 +190,10 @@ export async function loadCommittedPolicy(
   revision = "alpha",
   root = ROOT,
 ): Promise<PolicyLoad> {
+  // Consumer gates export candidate files without VCS metadata. Their separate
+  // owner history mount is read-only and must not use the consumer's GIT_DIR.
+  // Local loadPolicy() deliberately continues to read candidate working files.
+  const history = process.env.DOTFILES_PRESET_GIT_DIR;
   const run = async (
     command: string[],
   ): Promise<{ ok: true; value: string } | { ok: false; error: string }> => {
@@ -224,49 +228,45 @@ export async function loadCommittedPolicy(
       root,
       ...args,
     ]);
-  let commit = await jj([
-    "log",
-    "-r",
-    revision,
-    "--no-graph",
-    "-T",
-    "commit_id",
-  ]);
+  const git = (args: string[]) =>
+    run([
+      "git",
+      "--no-optional-locks",
+      ...(history === undefined ? ["-C", root] : ["--git-dir", history]),
+      ...args,
+    ]);
+  const gitRevision = [
+    "rev-parse",
+    "--verify",
+    `${revision === "alpha" ? "refs/heads/alpha" : revision}^{commit}`,
+  ];
+  let commit =
+    history === undefined
+      ? await jj(["log", "-r", revision, "--no-graph", "-T", "commit_id"])
+      : await git(gitRevision);
   // Some jj versions also write while determining secure config. Colocated
   // Git can read the same committed objects without touching jj's metadata.
   if (
     !commit.ok &&
     (revision === "alpha" || /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(revision))
   )
-    commit = await run([
-      "git",
-      "--no-optional-locks",
-      "-C",
-      root,
-      "rev-parse",
-      "--verify",
-      `${revision === "alpha" ? "refs/heads/alpha" : revision}^{commit}`,
-    ]);
+    commit = await git(gitRevision);
   if (!commit.ok) return commit;
   commit = { ok: true, value: commit.value.trim() };
   if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(commit.value))
     return { ok: false, error: "preset revision must resolve to one commit" };
-  let content = await jj([
-    "file",
-    "show",
-    "-r",
-    commit.value,
-    "root:presets/typescript/policy.toml",
-  ]);
-  if (!content.ok)
-    content = await run([
-      "git",
-      "--no-optional-locks",
-      "-C",
-      root,
-      "show",
-      `${commit.value}:presets/typescript/policy.toml`,
-    ]);
+  const gitPolicy = ["show", `${commit.value}:presets/typescript/policy.toml`];
+  let content =
+    history === undefined
+      ? await jj([
+          "file",
+          "show",
+          "-r",
+          commit.value,
+          "root:presets/typescript/policy.toml",
+        ])
+      : await git(gitPolicy);
+  if (!content.ok) content = await git(gitPolicy);
   if (!content.ok) return content;
   const raw = await attempt(() => Bun.TOML.parse(content.value));
   if (!raw.ok) return { ok: false, error: errorMessage(raw.error) };

@@ -211,6 +211,7 @@ function sandbox(
   liveDotfiles: string | undefined,
   executableDirectories: readonly string[],
   linkedDotfiles: { source: string; target: string } | undefined,
+  history: { source: string; target: string } | undefined,
 ): string[] | undefined {
   if (process.platform === "linux" && Bun.which("bwrap") !== null)
     return [
@@ -228,6 +229,9 @@ function sandbox(
       "--bind",
       scratch,
       scratch,
+      ...(history === undefined
+        ? []
+        : ["--ro-bind", history.source, history.target]),
       ...(linkedDotfiles === undefined
         ? []
         : ["--ro-bind", linkedDotfiles.source, linkedDotfiles.target]),
@@ -249,7 +253,7 @@ function sandbox(
     return [
       "sandbox-exec",
       "-p",
-      `(version 1)(allow default)(deny file-write*)(allow file-write* (subpath ${JSON.stringify(scratch)}))(allow file-write* (literal "/dev/null"))`,
+      `(version 1)(allow default)(deny file-write*)(allow file-write* (subpath ${JSON.stringify(scratch)}))(allow file-write* (literal "/dev/null"))${history === undefined ? "" : `(deny file-write* (subpath ${JSON.stringify(history.source)}))`}`,
     ];
   return undefined;
 }
@@ -662,6 +666,36 @@ async function checkConsumer(
   );
   const shadowed = roots.flatMap((entry) => (entry.ok ? [entry.value] : []));
   const resolvedPath = await capturePath(scratch, shadowed);
+  // A worktree's .git can be a pointer into the shared store. Resolve the
+  // common directory before mounts shadow the live checkout, never copy it.
+  let history: { source: string; target: string } | undefined;
+  if ((await attempt(() => lstat(join(root, ".git")))).ok) {
+    const resolved = await command(
+      [
+        "git",
+        "--no-optional-locks",
+        "-C",
+        root,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+      ],
+      root,
+      process.env,
+      30_000,
+    );
+    if (!resolved.ok)
+      return [
+        `FAIL ${consumer.name}: dotfiles history ${resolved.reason}\n${diagnosticOutput(resolved.output)}`,
+      ];
+    const directory = await realpath(resolved.stdout.trim());
+    const target =
+      process.platform === "linux"
+        ? join(scratch, "preset-history")
+        : directory;
+    if (process.platform === "linux") await mkdir(target);
+    history = { source: directory, target };
+  }
   const prefix = sandbox(
     scratch,
     home,
@@ -671,6 +705,7 @@ async function checkConsumer(
     liveDotfiles,
     resolvedPath.bindings,
     linkedDotfiles,
+    history,
   );
   if (prefix === undefined)
     return [
@@ -710,6 +745,7 @@ async function checkConsumer(
     ...process.env,
     HOME: home,
     DOTFILES: candidate,
+    DOTFILES_PRESET_GIT_DIR: history?.target,
     TMPDIR: temporary,
     TMP: temporary,
     TEMP: temporary,

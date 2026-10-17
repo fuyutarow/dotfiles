@@ -568,6 +568,64 @@ export async function fullFoldedRuns() {
   return liveRuns(runs, before);
 }
 
+/** Read-only, process-local cursor. Partial lines retain their original bytes. */
+export function recordCursor(root = stateDir()) {
+  let offset = 0;
+  let identity: { ino: number; dev: number } | undefined;
+  let pending = Buffer.alloc(0);
+  const runs = new Map<string, FoldedRun>();
+  const read = async (): Promise<ListedRun[]> => {
+    const file = await open(recordPath(root), "r").catch(() => null);
+    if (file === null) return [];
+    const stat = await file.stat();
+    if (
+      identity?.ino !== stat.ino ||
+      identity.dev !== stat.dev ||
+      stat.size < offset
+    ) {
+      offset = 0;
+      pending = Buffer.alloc(0);
+      runs.clear();
+    }
+    identity = stat;
+    const bytes = Buffer.alloc(stat.size - offset);
+    let length = 0;
+    while (length < bytes.length) {
+      const result = await file.read({
+        buffer: bytes,
+        offset: length,
+        length: bytes.length - length,
+        position: offset + length,
+      });
+      if (result.bytesRead === 0) break;
+      length += result.bytesRead;
+    }
+    await file.close();
+    offset += length;
+    const tail = Buffer.concat([pending, bytes.subarray(0, length)]);
+    const complete = tail.lastIndexOf(10) + 1;
+    const input = tail
+      .subarray(0, complete)
+      .toString("utf8")
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line) => jsonOf(EventSchema).safeParse(line));
+    const invalid = input.find((event) => !event.success);
+    if (invalid !== undefined)
+      return exitWithError(
+        `agx: invalid record log line: ${invalid.error.message}\n`,
+        1,
+      );
+    foldInto(
+      runs,
+      input.flatMap((event) => (event.success ? [event.data] : [])),
+    );
+    pending = Buffer.from(tail.subarray(complete));
+    return liveRuns(runs, stat, root, read);
+  };
+  return { read };
+}
+
 /** Read only bytes after the last complete line folded into the snapshot. */
 export async function foldedRuns(root = stateDir()) {
   const path = recordPath(root);
@@ -648,6 +706,7 @@ async function liveRuns(
   runs: Map<string, FoldedRun>,
   before: { size: number; ino: number; dev: number } | null,
   root = stateDir(),
+  reread?: () => Promise<ListedRun[]>,
 ): Promise<ListedRun[]> {
   const listed: ListedRun[] = [];
   const losses = new Set<string>();
@@ -735,6 +794,7 @@ async function liveRuns(
   // Liveness observation awaits /proc or ps and possibly systemd. The owner can
   // append ended and exit after our initial replay. Only infer loss after reading
   // the log again *after* observing death; never persist that inference in cache.
+  if (reread !== undefined) return reread();
   const latest = new Map<string, FoldedRun>();
   foldInto(latest, events(root));
   const completed = new Map(

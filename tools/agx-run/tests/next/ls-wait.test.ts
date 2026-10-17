@@ -58,10 +58,8 @@ const spawnWait = async (root: string, ...args: string[]) => {
   const preload = join(root, "ready.ts");
   await Bun.write(
     preload,
-    `import {mock} from "bun:test";
-const timers = await import("node:timers/promises");
-const sleep = timers.setTimeout;
-mock.module("node:timers/promises",()=>({...timers,setTimeout:async(...args)=>{await Bun.write(${JSON.stringify(ready)},"ready");return sleep(...args);}}));
+    `const timeout = globalThis.setTimeout;
+globalThis.setTimeout = (...args) => { Bun.write(${JSON.stringify(ready)}, "ready"); return timeout(...args); };
 `,
   );
   const child = Bun.spawn(
@@ -75,6 +73,7 @@ mock.module("node:timers/promises",()=>({...timers,setTimeout:async(...args)=>{a
       ...args,
     ],
     {
+      timeout: 15000,
       cwd: process.cwd(),
       stdout: "pipe",
       stderr: "pipe",

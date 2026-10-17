@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.3.2 — 2026-10-17
+
+- Block ls --wait on file notifications and replay only appended record bytes, with a five-second liveness fallback.
+
 ## 5.3.1 — 2026-10-17
 
 - Report only actionable orphaned and unjudged runs in doctor; keep legacy, pre-contract and judged history silent.

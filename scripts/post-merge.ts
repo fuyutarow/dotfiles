@@ -1,4 +1,4 @@
-// Consumer: deploy coordinator. Fail closed on the first failed or timed-out step.
+// Consumer: deploy coordinator. Link findings are deferred; fatal failures and timeouts stop.
 // No argv boundary: this hook accepts no arguments and uses this checkout as its source.
 import { dirname, join } from "node:path";
 
@@ -29,6 +29,7 @@ export async function runSteps(
   root: string,
   report: (line: string) => void = (line) => process.stderr.write(`${line}\n`),
 ): Promise<number> {
+  let findings = 0;
   for (const step of steps) {
     const started = performance.now();
     const signal = AbortSignal.timeout(step.boundMs);
@@ -57,12 +58,12 @@ export async function runSteps(
       );
       return 124;
     }
-    if (code !== 0) {
-      report(`[post-merge] ${step.name} failed (exit ${code})`);
-      return code;
-    }
+    if (code === 0) continue;
+    report(`[post-merge] ${step.name} failed (exit ${code})`);
+    if (step.name !== "link:dots" || code !== 1) return code;
+    findings = 1;
   }
-  return 0;
+  return findings;
 }
 
 if (import.meta.main) {

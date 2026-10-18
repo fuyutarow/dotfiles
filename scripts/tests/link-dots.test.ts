@@ -380,6 +380,57 @@ describe("loadSmartOpenReceiver", () => {
   });
 });
 
+test.each(["ENODEV", "ENOTCONN", "EIO", "ESTALE"])(
+  "stale Drive (%s) preserves its links and permits later links and units",
+  async (code) => {
+    const ctx = await ownerFixture();
+    ctx.os = "wsl";
+    symlinkSync("/mnt/g", join(ctx.home, "Google Drive"));
+    const result = Bun.spawnSync(
+      [
+        process.execPath,
+        "-e",
+        `
+      import { spyOn } from "bun:test";
+      import * as fs from "node:fs";
+      import assert from "node:assert/strict";
+      import { linkGoogleDrive, link, deployStatuslineOwners } from ${JSON.stringify(SCRIPT)};
+      const ctx = ${JSON.stringify(ctx)};
+      const original = fs.statSync;
+      spyOn(fs, "statSync").mockImplementation((...args) => {
+        if (String(args[0]) === "/mnt/g")
+          throw Object.assign(new Error("stale"), { code: ${JSON.stringify(code)}, path: "/mnt/g" });
+        return original(...args);
+      });
+      linkGoogleDrive(ctx);
+      linkGoogleDrive(ctx);
+      link(ctx, "zsh/zshenv", ctx.home + "/.zshenv");
+      const calls = [];
+      const error = await deployStatuslineOwners(ctx, async (args) => {
+        calls.push(args);
+        return { code: 0, out: "" };
+      }, true);
+      assert.equal(error, undefined);
+      assert(calls.some(args => args.includes("statusline-sampler.timer")));
+      assert.deepEqual([...ctx.unreachable], ["/mnt/g"]);
+    `,
+      ],
+      { timeout: 5000 },
+    );
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    expect(result.stderr.toString()).toBe(
+      `skip (unreachable ${code}): /mnt/g; repair: mise run wsl:drive-mount && sudo mount /mnt/g\n`,
+    );
+    expect(readlinkSync(join(ctx.home, ".zshenv"))).toBe(
+      join(REPO, "zsh/zshenv"),
+    );
+    expect(readlinkSync(join(ctx.home, "Google Drive"))).toBe("/mnt/g");
+    expect(result.stdout.toString()).toContain(
+      "enabled: statusline-sampler.timer",
+    );
+  },
+);
+
 const dstOf = (ctx: Ctx): string =>
   join(ctx.home, ".ssh/config.d/smart-open-attach.conf");
 
@@ -469,6 +520,72 @@ test("assertRoots: relative or foreign roots are refused before any mutation", (
 });
 
 describe("CLI", () => {
+  test.each(["ENODEV", "ENOTCONN", "EIO", "ESTALE", "EACCES"])(
+    "registry destination %s reports its outcome after other links",
+    (code) => {
+      const home = tmp("link-dots-stale-cli-");
+      mkdirSync(join(home, ".bun/bin"), { recursive: true });
+      writeFileSync(join(home, ".bun/bin/statusline"), "#!/bin/sh\n");
+      const preload = join(tmp("link-dots-preload-"), "stale.ts");
+      const failed = join(home, ".zshrc");
+      writeFileSync(
+        preload,
+        `
+      import { spyOn } from "bun:test";
+      import * as fs from "node:fs";
+      import * as fsp from "node:fs/promises";
+      import * as os from "node:os";
+      spyOn(os, "release").mockReturnValue("plain-linux");
+      const lstat = fs.lstatSync;
+      spyOn(fs, "lstatSync").mockImplementation((...args) => {
+        if (String(args[0]) === ${JSON.stringify(failed)})
+          throw Object.assign(new Error("stale"), { code: ${JSON.stringify(code)}, path: ${JSON.stringify(failed)} });
+        return lstat(...args);
+      });
+      const exists = fs.existsSync;
+      spyOn(fs, "existsSync").mockImplementation((path) =>
+        String(path) === "/run/systemd/system" ? false : exists(path));
+      const access = fsp.access;
+      spyOn(fsp, "access").mockImplementation((...args) =>
+        String(args[0]) === "/run/systemd/system" ? Promise.reject(new Error("fixture has no systemd")) : access(...args));
+    `,
+      );
+      const r = Bun.spawnSync(
+        [process.execPath, "--preload", preload, SCRIPT, "--from-working-copy"],
+        {
+          env: {
+            ...process.env,
+            HOME: home,
+            DOTFILES: REPO,
+            COMMAND_TARGET_HOME: home,
+          },
+          timeout: 60_000,
+        },
+      );
+      if (code === "EACCES") {
+        expect(r.exitCode).toBe(2);
+        expect(r.stderr.toString()).toContain("FATAL: stale");
+        return;
+      }
+      expect(r.exitCode, r.stderr.toString()).toBe(1);
+      expect(r.stderr.toString().trim().split("\n")).toEqual([
+        `skip (unreachable ${code}): ${failed}; repair: mise run wsl:drive-mount && sudo mount /mnt/g`,
+      ]);
+      for (const [when, src, dst] of LINKS) {
+        if (
+          !applies(when, "linux") ||
+          src.startsWith("@") ||
+          join(home, dst) === failed
+        )
+          continue;
+        expect(readlinkSync(join(home, dst))).toBe(join(REPO, src));
+      }
+      expect(existsSync(join(home, ".claude/settings.json"))).toBe(true);
+      expect(r.stdout.toString()).toContain("done with 1 unreachable path(s).");
+    },
+    65_000,
+  );
+
   function cli(args: string[], home: string): { code: number; out: string } {
     const r = Bun.spawnSync([process.execPath, SCRIPT, ...args], {
       env: { ...process.env, HOME: home, DOTFILES: REPO },

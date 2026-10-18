@@ -76,3 +76,35 @@ test("a failed step stays failed and prevents subsequent work", async () => {
     60_000,
   );
 }, 15_000);
+
+test("link findings allow remaining deploy steps and remain a non-zero outcome", async () => {
+  const lines: string[] = [];
+  const code = await runSteps(
+    [
+      { name: "link:dots", args: ["-e", "process.exit(1)"], boundMs: 1000 },
+      { name: "remaining", args: ["-e", "process.exit(0)"], boundMs: 1000 },
+    ],
+    tmpdir(),
+    (line) => {
+      lines.push(line);
+    },
+  );
+  expect(code).toBe(1);
+  expect(lines.join("\n")).toContain("[post-merge] remaining");
+});
+
+test("fatal link failures still stop deployment", async () => {
+  const lines: string[] = [];
+  const code = await runSteps(
+    [
+      { name: "link:dots", args: ["-e", "process.exit(2)"], boundMs: 1000 },
+      { name: "never", args: ["-e", "process.exit(0)"], boundMs: 1000 },
+    ],
+    tmpdir(),
+    (line) => {
+      lines.push(line);
+    },
+  );
+  expect(code).toBe(2);
+  expect(lines.join("\n")).not.toContain("never");
+});

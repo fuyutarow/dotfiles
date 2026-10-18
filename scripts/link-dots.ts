@@ -21,7 +21,7 @@
 //                      is not realized, exit 1 if any. The settings render is skipped here;
 //                      doctor compares it separately.
 // Inputs from the environment (so tests and doctor can point it at fixtures): HOME, DOTFILES.
-// Exit: 0 done / no drift · 1 drift (--check) · 2 FATAL or usage error.
+// Exit: 0 done / no drift · 1 drift or unreachable links · 2 FATAL or usage error.
 
 import {
   chmodSync,
@@ -64,7 +64,41 @@ export type Ctx = {
   mode: Mode;
   drift: string[];
   changedLinks?: Set<string>;
+  unreachable?: Set<string>;
+  failures?: Error[];
 };
+
+const unreachableError = z.object({
+  code: z.enum(["ENODEV", "ENOTCONN", "EIO", "ESTALE"]),
+  path: z.string().optional(),
+});
+
+/** A stale optional filesystem must not prevent unrelated links or units from deploying. */
+function withReachablePath(ctx: Ctx, path: string, apply: () => void): void {
+  if (
+    [...(ctx.unreachable ?? [])].some(
+      (root) => path === root || path.startsWith(`${root}${sep}`),
+    )
+  )
+    return;
+  const result = fromThrowable(apply)();
+  if (result.isOk()) return;
+  const parsed = unreachableError.safeParse(result.error);
+  if (!parsed.success) {
+    ctx.failures ??= [];
+    ctx.failures.push(new Error(errorMessage(result.error)));
+    return;
+  }
+  const failedPath = parsed.data.path ?? path;
+  ctx.unreachable ??= new Set();
+  if (ctx.unreachable.has(failedPath)) return;
+  ctx.unreachable.add(failedPath);
+  process.stderr.write(
+    `skip (unreachable ${parsed.data.code}): ${failedPath}; repair: mise run wsl:drive-mount && sudo mount /mnt/g\n`,
+  );
+  if (ctx.mode === "check")
+    drift(ctx, `${failedPath} (unreachable ${parsed.data.code})`);
+}
 
 // Prune: a link this script USED to create keeps pointing into the repo after the source is
 // renamed or deleted. Only symlinks INTO this repo that no longer resolve are removed — foreign or
@@ -122,12 +156,14 @@ export function applies(when: When, os: Os): boolean {
 
 /** Link <repo-relative source> to an absolute destination, honoring the mode. */
 export function link(ctx: Ctx, rel: string, dst: string): void {
-  const src = join(ctx.dotfiles, rel);
-  if (!existsSync(src)) {
-    say(`skip (missing): ${src}`);
-    return;
-  }
-  linkTarget(ctx, src, dst);
+  withReachablePath(ctx, dst, () => {
+    const src = join(ctx.dotfiles, rel);
+    if (!existsSync(src)) {
+      say(`skip (missing): ${src}`);
+      return;
+    }
+    linkTarget(ctx, src, dst);
+  });
 }
 
 function linkTarget(ctx: Ctx, src: string, dst: string): void {
@@ -340,21 +376,29 @@ export function googleDriveTargets(
 
 export function linkGoogleDrive(ctx: Ctx): void {
   if (ctx.os === "linux") return;
-  const targets = googleDriveTargets(ctx.home, ctx.os, {
-    persistCache: ctx.mode !== "check",
-  });
-  for (const [, source, name] of LINKS) {
-    if (!source.startsWith("@google-drive/")) continue;
-    const isRoot = source === "@google-drive/root";
-    const token = isRoot ? "root" : "personal";
-    const target = isRoot ? targets.root : targets.personal;
-    const dst = join(ctx.home, name);
-    if (target === undefined) {
-      reportDriveUnavailable(ctx, dst, token);
-      continue;
-    }
-    linkTarget(ctx, target, dst);
-  }
+  withReachablePath(
+    ctx,
+    ctx.os === "wsl" ? "/mnt/g" : join(ctx.home, "Library/CloudStorage"),
+    () => {
+      const targets = googleDriveTargets(ctx.home, ctx.os, {
+        persistCache: ctx.mode !== "check",
+      });
+      for (const [, source, name] of LINKS) {
+        if (!source.startsWith("@google-drive/")) continue;
+        const isRoot = source === "@google-drive/root";
+        const token = isRoot ? "root" : "personal";
+        const target = isRoot ? targets.root : targets.personal;
+        const dst = join(ctx.home, name);
+        if (target === undefined) {
+          reportDriveUnavailable(ctx, dst, token);
+          continue;
+        }
+        withReachablePath(ctx, dst, () => {
+          linkTarget(ctx, target, dst);
+        });
+      }
+    },
+  );
 }
 
 function reportDriveUnavailable(ctx: Ctx, dst: string, token: string): void {
@@ -585,10 +629,18 @@ function pruneOne(ctx: Ctx, p: string, retired: boolean): void {
 export function prune(ctx: Ctx): void {
   for (const rel of PRUNE_DIRS) {
     const dir = join(ctx.home, rel);
-    const names = isDir(dir) ? readdirSync(dir) : [];
-    for (const name of names) pruneOne(ctx, join(dir, name), false);
+    withReachablePath(ctx, dir, () => {
+      const names = isDir(dir) ? readdirSync(dir) : [];
+      for (const name of names)
+        withReachablePath(ctx, join(dir, name), () => {
+          pruneOne(ctx, join(dir, name), false);
+        });
+    });
   }
-  for (const rel of RETIRED) pruneOne(ctx, join(ctx.home, rel), true);
+  for (const rel of RETIRED)
+    withReachablePath(ctx, join(ctx.home, rel), () => {
+      pruneOne(ctx, join(ctx.home, rel), true);
+    });
 }
 
 // Every prune decision is "a dangling link whose target starts with <dotfiles>/", so the root must
@@ -615,18 +667,32 @@ function detectOs(): Os | Error {
 }
 
 export function linkAll(ctx: Ctx, sshV: string): void {
-  ensureSshDir(ctx);
+  withReachablePath(ctx, join(ctx.home, ".ssh"), () => {
+    ensureSshDir(ctx);
+  });
   for (const [when, src, dst] of LINKS) {
     if (src.startsWith("@google-drive/")) continue;
     if (applies(when, ctx.os)) link(ctx, src, join(ctx.home, dst));
   }
   linkGoogleDrive(ctx);
-  linkSshAttach(ctx, sshV);
+  withReachablePath(
+    ctx,
+    join(ctx.home, ".ssh/config.d/smart-open-attach.conf"),
+    () => {
+      linkSshAttach(ctx, sshV);
+    },
+  );
   if (ctx.os === "wsl") {
-    for (const [src, dst, apply] of ETC_LINKS) linkEtc(ctx, src, dst, apply);
+    for (const [src, dst, apply] of ETC_LINKS)
+      withReachablePath(ctx, dst, () => {
+        linkEtc(ctx, src, dst, apply);
+      });
   }
   prune(ctx);
-  for (const rel of TOOL_OWNED) ensureToolOwned(ctx, join(ctx.home, rel));
+  for (const rel of TOOL_OWNED)
+    withReachablePath(ctx, join(ctx.home, rel), () => {
+      ensureToolOwned(ctx, join(ctx.home, rel));
+    });
 }
 
 /** A real file the tool may write; an empty one when missing. Runs after prune, which removes a
@@ -899,6 +965,7 @@ async function main(): Promise<Error | void> {
     if (refused !== undefined) return refused;
   }
   linkAll(ctx, sshVersion());
+  if (ctx.failures?.[0] !== undefined) return ctx.failures[0];
   if (ctx.mode === "check") {
     say(`check: ${ctx.drift.length} drift(s)`);
     process.exitCode = ctx.drift.length > 0 ? 1 : 0;
@@ -915,7 +982,9 @@ async function main(): Promise<Error | void> {
   const daemonError = deployCccDaemon(ctx);
   if (daemonError !== undefined) return daemonError;
   if (ctx.os === "mac") loadSmartOpenReceiver(ctx);
-  say("done.");
+  const skipped = ctx.unreachable?.size ?? 0;
+  say(skipped === 0 ? "done." : `done with ${skipped} unreachable path(s).`);
+  process.exitCode = skipped > 0 ? 1 : 0;
 }
 
 if (import.meta.main) {

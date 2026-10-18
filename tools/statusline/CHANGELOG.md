@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.4 — 2026-10-18
+
+- Keep Claude and Codex sidebar identity tokens tied to their own session events
+
 ## 0.20.3 — 2026-10-18
 
 - Require reasons for unavailable values and render Stop snapshots from the statusline formatter and sampled session frames.

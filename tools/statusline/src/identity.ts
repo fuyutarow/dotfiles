@@ -487,17 +487,17 @@ export async function reportToHerdr(
     return;
 
   const stamp = Temporal.Now.instant().epochMilliseconds;
-  const tokens: Record<string, string> = { model: m };
+  const tokens: Record<string, string> = {
+    model: m,
+    fullname: sessionName ?? "",
+    effort: effortDisplay ?? "",
+    rc: vendor === "codex" ? "" : RC_TOKEN[rc],
+  };
   // Rides the SAME request as model — one socket round-trip, not two (see the
   // ONE-REQUEST-PER-CONNECTION note above for why a second request here would risk being
   // dropped anyway).
-  if (sessionName !== undefined && sessionName !== "")
-    tokens.fullname = sessionName;
-  // Always set, never omitted — see the pane.report_metadata header note above for why
-  // $effort and $rc need an active off-toggle instead of an absent key.
-  tokens.effort = effortDisplay ?? "";
-  // Remote Control is Claude-specific. Clear a previous occupant's token for Codex.
-  tokens.rc = vendor === "codex" ? "" : RC_TOKEN[rc];
+  // Always write the fullname key: an empty/unknown current identity must retire
+  // the previous pane occupant's value rather than leave it attached to this row.
   await herdrSend(socketPath, {
     id: `dotfiles:statusline-model:${stamp}`,
     method: "pane.report_metadata",
@@ -524,4 +524,27 @@ export async function reportToHerdr(
       params: { tab_id: tabId, label: shortName },
     });
   }
+}
+
+/** Clear vendor identity on a pane before its new session has reportable metadata. */
+export async function clearHerdrMetadata(): Promise<void> {
+  const socketPath = process.env.HERDR_SOCKET_PATH;
+  const paneId = process.env.HERDR_PANE_ID;
+  if (
+    process.env.HERDR_ENV !== "1" ||
+    socketPath === undefined ||
+    socketPath === "" ||
+    paneId === undefined ||
+    paneId === ""
+  )
+    return;
+  await herdrSend(socketPath, {
+    id: `dotfiles:statusline-clear:${Temporal.Now.instant().epochMilliseconds}`,
+    method: "pane.report_metadata",
+    params: {
+      pane_id: paneId,
+      source: "dotfiles:statusline-model",
+      tokens: { fullname: "", model: "", effort: "", rc: "" },
+    },
+  });
 }

@@ -507,9 +507,12 @@ export async function buildDataframe(
     tmpfs: host.value.tmpfs,
     tmp: host.value.tmp,
   };
-  void bounded("herdr", budget("herdrReport"), () =>
-    sources.herdrReport(model, sessionName, effortDisplay, rc.value),
-  ).catch(() => null);
+  // Codex has an exact-session hook that owns its sidebar tokens. Its statusline
+  // has no Claude agent name/RC identity and must not overwrite those tokens.
+  if (options.codex !== true)
+    void bounded("herdr", budget("herdrReport"), () =>
+      sources.herdrReport(model, sessionName, effortDisplay, rc.value),
+    ).catch(() => null);
   if (options.fieldStoreRoot !== undefined) {
     const { prepareDisplayFields } = await import("./display-fields.ts");
     await prepareDisplayFields(

@@ -31,6 +31,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { readStdinJson } from "./lib.ts";
 import { attempt } from "../../hooks/attempt.ts";
 import { arr, parseJson, strAt } from "../../hooks/narrow.ts";
+import { clearHerdrMetadata } from "../../../tools/statusline/src/identity.ts";
 
 const HOME = process.env.HOME ?? "";
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
@@ -199,6 +200,9 @@ async function reportPaneMetadata(paneId: string, name: string): Promise<void> {
 // cosmetic hook -> never fail a session start over this
 await attempt(async () => {
   if (process.env.HERDR_ENV !== "1") process.exit(0);
+  // SessionStart has no dependable model/effort fields. Clear a reused pane
+  // before looking up a name; the first Claude statusline render fills it in.
+  await clearHerdrMetadata();
   const tabId = process.env.HERDR_TAB_ID;
   if (tabId === undefined || tabId === "") process.exit(0);
 

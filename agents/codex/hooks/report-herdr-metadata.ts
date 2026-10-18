@@ -7,7 +7,10 @@ import { readBoundedStdinJson } from "./lib.ts";
 import { strAt } from "../../hooks/narrow.ts";
 import { jsonOf, z } from "../../hooks/zod.ts";
 import { readCodexThreadStatus } from "../../../tools/statusline/src/adapters/codex-rollout.ts";
-import { reportToHerdr } from "../../../tools/statusline/src/identity.ts";
+import {
+  clearHerdrMetadata,
+  reportToHerdr,
+} from "../../../tools/statusline/src/identity.ts";
 import { codexAgentName, readHerdrPaneName } from "./herdr-identity.ts";
 
 const reportValue = (value: string | undefined) =>
@@ -83,15 +86,23 @@ async function reportRequestedSession(
     .catch(() => {});
 }
 
-if (
-  (event === "SessionStart" || event === "Stop" || event === "PostToolUse") &&
-  threadId !== undefined &&
-  /^[A-Za-z0-9_-]{1,128}$/u.test(threadId) &&
+const hasHerdrPane =
   process.env.HERDR_ENV === "1" &&
   process.env.HERDR_SOCKET_PATH !== undefined &&
   process.env.HERDR_SOCKET_PATH !== "" &&
   process.env.HERDR_PANE_ID !== undefined &&
-  process.env.HERDR_PANE_ID !== ""
+  process.env.HERDR_PANE_ID !== "";
+
+// A pane can be reused before a new rollout exists (or even before Codex gives
+// us a session id). Retire the old occupant's tokens at the start boundary.
+if (event === "SessionStart" && hasHerdrPane)
+  await clearHerdrMetadata().catch(() => {});
+
+if (
+  (event === "SessionStart" || event === "Stop" || event === "PostToolUse") &&
+  threadId !== undefined &&
+  /^[A-Za-z0-9_-]{1,128}$/u.test(threadId) &&
+  hasHerdrPane
 ) {
   await reportRequestedSession(threadId, event);
 }

@@ -78,4 +78,51 @@ describe("buildDataframe source budgets", () => {
     expect(timers.size).toBe(0);
     await rm(fieldStoreRoot, { recursive: true, force: true });
   });
+
+  test("a Codex statusline does not overwrite exact-session Herdr metadata", async () => {
+    const parsed = ClaudeStatuslineInputSchema.safeParse({
+      cwd: "/fixture/codex",
+      session_id: "codex-thread",
+      model: { display_name: "GPT-6.1-Sol" },
+      effort: { level: "medium" },
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    let reports = 0;
+    await buildDataframe(parsed.data, {
+      codex: true,
+      sources: {
+        identity: () =>
+          Promise.resolve({
+            email: undefined,
+            accountWhy: undefined,
+            rlModel: [],
+            modelCapsWhy: undefined,
+            wfOn: false,
+          }),
+        agentName: () => Promise.resolve(ok(undefined)),
+        rcState: () => Promise.resolve("unknown"),
+        repoState: () =>
+          Promise.resolve({ branch: undefined, branchWhy: undefined }),
+        jobScan: () => Promise.resolve({ jobs: [], orphans: 0 }),
+        hostLoad: () =>
+          Promise.resolve({
+            cpuPct: err("host unavailable"),
+            ram: err("host unavailable"),
+            vram: err("host unavailable"),
+          }),
+        routes: () => Promise.resolve(ok({ runs: [], unreadable: 0 })),
+        dispatchWarning: () => Promise.resolve(undefined),
+        storage: () => Promise.resolve(ok([])),
+        herdrReport: () => {
+          reports++;
+          return Promise.resolve();
+        },
+        codexRate: () => Promise.resolve(ok(undefined)),
+        jevUsage: () => Promise.resolve(ok(undefined)),
+        recoverHealth: () => Promise.resolve(undefined),
+      },
+    });
+    expect(reports).toBe(0);
+  });
 });

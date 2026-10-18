@@ -174,8 +174,12 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
 
   const startup = await runHook("SessionStart", "1");
   expect(startup.status).toBe(0);
-  expect(requests).toHaveLength(1); // both facts are from this thread, not the pane's old Claude tokens
+  expect(requests).toHaveLength(2); // clear old occupant, then report this exact thread
   expect(requests[0]).toMatchObject({
+    method: "pane.report_metadata",
+    params: { tokens: { fullname: "", model: "", effort: "", rc: "" } },
+  });
+  expect(requests[1]).toMatchObject({
     params: {
       tokens: {
         fullname: "standard-skills-agt_0mr6",
@@ -191,7 +195,7 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
 
   const unchanged = await runHook("PostToolUse", "1");
   expect(unchanged).toEqual({ status: 0, stdout: "", stderr: "" });
-  expect(requests).toHaveLength(1);
+  expect(requests).toHaveLength(2);
 
   await writeFile(target, rollout("target-thread", "gpt-6.1-sol", "xhigh"));
   expect(
@@ -202,8 +206,8 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
   ).toMatchObject({ effort: "xhigh" });
   const during = await runHook("PostToolUse", "1");
   expect(during).toEqual({ status: 0, stdout: "", stderr: "" });
-  expect(requests).toHaveLength(2);
-  expect(requests[1]).toMatchObject({
+  expect(requests).toHaveLength(3);
+  expect(requests[2]).toMatchObject({
     method: "pane.report_metadata",
     params: {
       pane_id: "fixture-pane",
@@ -212,10 +216,10 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
   });
 
   expect((await runHook("PostToolUse", "1")).status).toBe(0);
-  expect(requests).toHaveLength(2);
+  expect(requests).toHaveLength(3);
   const stop = await runHook("Stop", "1");
   expect(stop).toEqual({ status: 0, stdout: "", stderr: "" });
-  expect(requests).toHaveLength(3); // lifecycle events reassert despite dedupe
+  expect(requests).toHaveLength(4); // lifecycle events reassert despite dedupe
 
   await appendFile(
     target,
@@ -228,15 +232,15 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
     })}\n`,
   );
   expect((await runHook("PostToolUse", "1")).status).toBe(0);
-  expect(requests).toHaveLength(4);
-  expect(requests[3]).toMatchObject({
+  expect(requests).toHaveLength(5);
+  expect(requests[4]).toMatchObject({
     params: { tokens: { model: "gpt-6-luna", effort: "low" } },
   });
   expect(
     (await runHook("PostToolUse", "1", "target-thread", "other-pane")).status,
   ).toBe(0);
-  expect(requests).toHaveLength(5); // dedupe includes pane identity
-  expect(requests[4]).not.toHaveProperty("params.tokens.fullname");
+  expect(requests).toHaveLength(6); // dedupe includes pane identity
+  expect(requests[5]).toHaveProperty("params.tokens.fullname", "");
   // A reply for a different pane cannot replace this pane's name.
 
   const key = new Bun.CryptoHasher("sha256")
@@ -255,7 +259,7 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
     }),
   );
   expect((await runHook("PostToolUse", "1")).status).toBe(0);
-  expect(requests).toHaveLength(6); // unchanged values retry after the short TTL
+  expect(requests).toHaveLength(7); // unchanged values retry after the short TTL
 
   for (const id of ["", "../target-thread", "missing-thread"]) {
     expect((await runHook("PostToolUse", "1", id)).status).toBe(0);
@@ -263,16 +267,16 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
   expect((await runHook("PostToolUse", "1", "target-thread", "")).status).toBe(
     0,
   );
-  expect(requests).toHaveLength(6);
+  expect(requests).toHaveLength(7);
 
   const outside = await runHook("Stop", "0");
   expect(outside.status).toBe(0);
-  expect(requests).toHaveLength(6); // no Herdr pane, no report
+  expect(requests).toHaveLength(7); // no Herdr pane, no report
 
   await writeFile(target, rollout("target-thread", "gpt-6.1-sol"));
   expect((await runHook("PostToolUse", "1")).status).toBe(0);
-  expect(requests).toHaveLength(7);
-  expect(requests[6]).toMatchObject({
+  expect(requests).toHaveLength(8);
+  expect(requests[7]).toMatchObject({
     params: {
       tokens: {
         model: "gpt-6.1-sol",
@@ -284,8 +288,8 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
   }); // absent Codex effort never falls back to the pane's previous Claude effort
   await writeFile(target, rollout("target-thread", ""));
   expect((await runHook("PostToolUse", "1")).status).toBe(0);
-  expect(requests).toHaveLength(8);
-  expect(requests[7]).toMatchObject({
+  expect(requests).toHaveLength(9);
+  expect(requests[8]).toMatchObject({
     params: {
       tokens: {
         model: "unknown",
@@ -295,6 +299,13 @@ test("natural retry reports exact thread metadata and requires Herdr pane contex
       },
     },
   }); // unknown facts actively replace the old vendor's tokens
+  const noSessionId = await runHook("SessionStart", "1", "");
+  expect(noSessionId.status).toBe(0);
+  expect(requests).toHaveLength(10);
+  expect(requests[9]).toMatchObject({
+    method: "pane.report_metadata",
+    params: { tokens: { fullname: "", model: "", effort: "", rc: "" } },
+  });
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
       if (error !== undefined) {

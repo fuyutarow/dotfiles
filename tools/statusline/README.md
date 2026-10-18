@@ -21,6 +21,23 @@ statusline --codex
 bun test tools/statusline/tests
 ```
 
+## Unavailable values and Stop snapshots
+
+Unavailable fields use the shared `Unavailable` type, with a required reason. Its only text
+renderer emits `n/a (<why>)`; the ANSI layer styles that text. Snapshot caches containing
+legacy bare `n/a` are rejected until the sampler replaces them.
+
+The sampler publishes Stop's Ctx, Rate, and Sys rows through `render(..., { layout: "snapshot" })`,
+using the same session frames as the statusline presentation. The hook only reads those rows;
+it does not format metrics or append a separate GPU observation.
+
+The 2026-10-18 09:17 JST report exposed two causes. Claude's statusline stdin supplies
+`context_window.used_percentage` and `rate_limits`; transcript reconstruction supplies usage
+token counts but neither of those fields. The snapshot publisher reconstructed that poorer
+input separately. The unavailable renderer then suppressed its default reason, producing bare
+`n/a`. Reusing the sampled frames removes that reconstruction; transcript-only inputs still
+explain missing fields rather than inventing a percentage or rate.
+
 ## Codex display contract
 
 | Invocation                                              | Behavior                                                                                                             |

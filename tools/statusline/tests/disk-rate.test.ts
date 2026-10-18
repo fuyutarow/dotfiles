@@ -256,7 +256,9 @@ test("unknown capacity retains coloured free space and the unchanged rate", () =
 
 test("unknown free space and capacity render a named n/a", () => {
   const reading = { ...disk(0), freeG: undefined, totalG: undefined };
-  expect(plain(diskSegment(reading))).toBe("Disk C: n/a");
+  expect(plain(diskSegment(reading))).toBe(
+    "Disk C: n/a (invalid free space reading)",
+  );
   expect(updateDiskRates([reading], undefined, 0).state.drives).toEqual({});
 });
 

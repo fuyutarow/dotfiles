@@ -1,13 +1,20 @@
 import { mkdir, readFile, rename, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { DIM, RST, roles } from "./ansi.ts";
+import {
+  DIM,
+  RST,
+  roles,
+  unavailable,
+  hasBareUnavailable,
+  type Unavailable,
+} from "./ansi.ts";
 import { jsonOf, z } from "./zod.ts";
 
 /** Unknown is permitted only before a successful observation. Good values never expire. */
 export type FieldState<T> =
   | { kind: "fresh"; value: T }
   | { kind: "stale"; value: T; age: number }
-  | { kind: "unknown"; reason: string };
+  | Unavailable;
 
 export type FieldDisplay = (
   key: string,
@@ -21,11 +28,15 @@ export function observed(
   reason = "unavailable",
   age = 0,
 ): FieldState<string> {
-  if (value === undefined) return { kind: "unknown", reason };
+  if (value === undefined) return unavailable(reason);
   return age > 0 ? { kind: "stale", value, age } : { kind: "fresh", value };
 }
 
 export function renderField(label: string, state: FieldState<string>): string {
+  if (state.kind !== "unknown" && hasBareUnavailable(state.value))
+    return roles
+      .unavailable(label, unavailable("stored value has no unavailable reason"))
+      .trimStart();
   if (state.kind === "fresh")
     return label === "agx"
       ? `agx fresh ${DIM}·${RST} ${state.value}`
@@ -38,14 +49,7 @@ export function renderField(label: string, state: FieldState<string>): string {
     return `${value} ${DIM}· ${age} old${RST}`;
   }
   if (state.kind === "unknown")
-    return roles
-      .unavailable(
-        label,
-        state.reason === "" || state.reason === "unavailable"
-          ? undefined
-          : state.reason,
-      )
-      .trimStart();
+    return roles.unavailable(label, state).trimStart();
   return state satisfies never;
 }
 

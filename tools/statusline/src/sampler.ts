@@ -4,11 +4,7 @@ import { dirname, join } from "node:path";
 import { cli } from "cleye";
 import { buildDataframe } from "./build-dataframe.ts";
 import { COLLECTOR_SOURCES } from "./collector-sources.ts";
-import {
-  discoverSessions,
-  payloadForSession,
-  statusForSession,
-} from "./session-discovery.ts";
+import { discoverSessions, statusForSession } from "./session-discovery.ts";
 import {
   ownerStatePath,
   readOwnerState,
@@ -18,10 +14,7 @@ import {
 import { refreshRecoverHealth } from "./recover-health.ts";
 import { writeCacheAsync } from "./bounded.ts";
 import { jsonText, z } from "./zod.ts";
-import { sysSegment } from "./host-display.ts";
-import { ctxSegment } from "./model-context.ts";
-import { rateRow } from "./rate-limits.ts";
-import { ClaudeStatuslineInputSchema } from "./adapters/claude-statusline.ts";
+import type { Dataframe } from "./dataframe.ts";
 import type { SessionStatus } from "./session-status.ts";
 import { ESC, RST } from "./ansi.ts";
 import { readAgentNamesAsync } from "./identity.ts";
@@ -42,37 +35,32 @@ const plain = (value: string) =>
 /** The transcript hook consumes these owner-written presentation snapshots. */
 export async function publishSnapshots(
   payloads: SessionStatus[] = [],
+  sampledFrames?: Dataframe[],
 ): Promise<void> {
-  const frames = await Promise.all(
-    (payloads.length === 0 ? [{ cwd: process.cwd() }] : payloads).map(
-      (payload) => buildDataframe(payload),
-    ),
-  );
+  const frames =
+    sampledFrames ??
+    (await Promise.all(
+      (payloads.length === 0 ? [{ cwd: process.cwd() }] : payloads).map(
+        (payload) => buildDataframe(payload),
+      ),
+    ));
   const frame = frames[0];
   if (frame === undefined) return;
-  const sys = sysSegment(
-    frame.cpuPct,
-    frame.ram,
-    frame.vram,
-    frame.disks,
-    frame.tmp,
-    undefined,
-    frame.tmpfs,
-  );
+  const sys = render(frame, { layout: "snapshot" }).split("\n")[2] ?? "";
   const at = Temporal.Now.instant().epochMilliseconds;
   const root =
     process.env.STATUSLINE_CACHE_ROOT ??
     join(process.env.HOME ?? "", ".cache/claude");
   await writeCacheAsync(join(root, "statusline-sys.json"), {
     at,
-    line: `Sys: ${plain(sys)}`,
-    ansi: `${ESC}[38;5;74mSys:${RST} ${sys}`,
+    line: plain(sys),
+    ansi: sys,
   });
   for (const df of frames) {
     await writeUsageSnapshotAsync(df, Math.floor(at / 1000));
     if (df.sid === undefined) continue;
     const sid = df.sid.replaceAll(/[^A-Za-z0-9_-]/gu, "_");
-    const rows = [ctxSegment(df), rateRow(df)];
+    const rows = render(df, { layout: "snapshot" }).split("\n").slice(0, 2);
     await writeCacheAsync(join(root, "statusline-session", `${sid}.json`), {
       at,
       rows: rows.map((ansi) => ({ line: plain(ansi), ansi })),
@@ -240,6 +228,7 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
     await writeCacheAsync(`${path}.last-good`, next);
     await writeCacheAsync(path, next);
     const rows: PresentationRow[] = [];
+    const snapshotFrames: Dataframe[] = [];
     for (const cwd of new Set([
       ...roots,
       ...sessions.map((session) => session.cwd),
@@ -261,6 +250,7 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
           { cwd },
           { ownerSnapshot: Promise.resolve(next) },
         ));
+      snapshotFrames.push(...frames.map(({ frame }) => frame));
       rows.push({
         cwd,
         location: render(first, {
@@ -291,19 +281,13 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
       rows,
     };
     await writePresentation(view);
-    const inputs =
-      payloads ??
-      (
-        await Promise.all(
-          sessions.map(async (session) => {
-            const parsed = ClaudeStatuslineInputSchema.safeParse(
-              await payloadForSession(session),
-            );
-            return parsed.success ? [parsed.data] : [];
-          }),
-        )
-      ).flat();
-    await publishSnapshots(inputs);
+    // Reuse the exact session frames rendered above; do not reconstruct a poorer wire payload.
+    await publishSnapshots(
+      payloads,
+      payloads === undefined && snapshotFrames.length > 0
+        ? snapshotFrames
+        : undefined,
+    );
     await cleanRetiredCaches();
     await cleanSamplerLeftovers(dirname(path));
   }

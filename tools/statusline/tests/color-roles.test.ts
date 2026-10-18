@@ -114,7 +114,7 @@ test("Rate missing values keep plain names/windows, amber n/a and dim reasons", 
     jevUsageWhy: "unreadable",
   });
   expect(row).toContain(
-    `claude ${amber}n/a${reset} ${dim}·${reset} 5h ${amber}n/a${reset} ${dim}·${reset} 7d ${amber}n/a${reset}`,
+    `claude ${amber}n/a${reset} ${dim}(input has no Claude rate limits)${reset} ${dim}·${reset} 5h ${amber}n/a${reset} ${dim}(input has no Claude 5h rate limit)${reset} ${dim}·${reset} 7d ${amber}n/a${reset} ${dim}(input has no Claude 7d rate limit)${reset}`,
   );
   expect(row).toContain(`codex ${amber}n/a${reset} ${dim}(timeout)${reset}`);
   expect(row).toEndWith(`Jev ${amber}n/a${reset} ${dim}(unreadable)${reset}`);
@@ -158,7 +158,7 @@ test("Sys n/a values and reasons share the Rate roles", () => {
     sysSegment(err("cpu"), err("ram"), undefined, err("storage"), []),
   ).toEndWith(`Disk ${amber}n/a${reset} ${dim}(storage)${reset}`);
   expect(diskSegment({ ...disk, freeG: undefined })).toBe(
-    `Disk / ${amber}n/a${reset}`,
+    `Disk / ${amber}n/a${reset} ${dim}(invalid free space reading)${reset}`,
   );
 });
 

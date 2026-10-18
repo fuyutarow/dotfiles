@@ -1,4 +1,4 @@
-import { DIM, ESC, RST } from "./ansi.ts";
+import { DIM, ESC, RST, renderUnavailable, unavailable } from "./ansi.ts";
 import { dur } from "./jobs.ts";
 import { relative } from "node:path";
 import { formatCostUsd } from "../../shared/src/dispatch-pricing.ts";
@@ -82,7 +82,9 @@ export function routeLines(
   const shown = own;
   const choices = shown.map((r) => r.choice);
   const elapsed = shown.map((r) =>
-    r.secs === undefined ? "n/a" : dur(r.secs),
+    r.secs === undefined
+      ? renderUnavailable(unavailable("start time unavailable"))
+      : dur(r.secs),
   );
   const costs = shown.map((r) =>
     r.phase === "working"

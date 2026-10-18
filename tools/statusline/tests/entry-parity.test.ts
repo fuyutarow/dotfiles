@@ -15,11 +15,21 @@ import { cleanupTempDirs, tempHome, coreSnapshot } from "./helpers.ts";
 import { z } from "../src/zod.ts";
 import { agxSnapshotPath } from "../src/agx-snapshot.ts";
 import { version } from "../package.json";
+import { hasBareUnavailable } from "../src/ansi.ts";
 
 const GOLDEN = join(import.meta.dir, "golden");
 setDefaultTimeout(30000);
 // One-shot regeneration: GOLDEN_FROM=<entry.ts> bun test ... rewrites golden/ from that entry.
 const GOLDEN_FROM = process.env.GOLDEN_FROM;
+// JSON escapes ANSI; inspect decoded presentation strings at the cache boundary.
+function presentationStrings(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value))
+    return value.flatMap((entry) => presentationStrings(entry));
+  if (typeof value === "object" && value !== null)
+    return Object.values(value).flatMap((entry) => presentationStrings(entry));
+  return [];
+}
 const NEW = join(import.meta.dir, "..", "src", "statusline.ts");
 const PRELOAD = join(import.meta.dir, "parity-preload.ts");
 const NOW = Temporal.Instant.from("2026-10-08T12:34:00Z").epochMilliseconds;
@@ -524,6 +534,14 @@ async function expectGolden(
           )
         : undefined;
       const stdout = r.stdout.toString();
+      expect(hasBareUnavailable(stdout)).toBe(false);
+      const cacheStrings = [snapshots, sessionSnapshot].flatMap((snapshot) =>
+        snapshot === undefined
+          ? []
+          : presentationStrings(decodedJson(z.json(), snapshot)),
+      );
+      for (const text of cacheStrings)
+        expect(hasBareUnavailable(text)).toBe(false);
       return { stdout, snapshots, sessionSnapshot };
     };
     const golden = join(GOLDEN, `${name}.json`);

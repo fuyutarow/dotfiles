@@ -67,7 +67,7 @@ export function render(
   options: {
     codex?: boolean;
     collect?: FieldDisplay;
-    layout?: "location" | "session" | "shared" | "block";
+    layout?: "location" | "session" | "shared" | "block" | "snapshot";
   } = {},
 ): string {
   const codex = options.codex === true;
@@ -314,6 +314,9 @@ export function render(
     recover: observed(recoverLine),
   } satisfies DisplayRows;
   if (options.layout !== undefined) {
+    // Transcript snapshots select rows from this render, with the same field resolver and ages.
+    if (options.layout === "snapshot")
+      return [ctxSegment(df, field), rateLine, sysLine].join("\n");
     const location = rows.prompt.kind === "fresh" ? rows.prompt.value : "";
     const session = [agentLine, identityLine].filter(Boolean).join(SEP);
     const shared = renderRows(rows).split("\n").slice(3).join("\n");

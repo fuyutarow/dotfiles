@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promptParts } from "./prompt-stamp.ts";
 import { version } from "../package.json";
+import { hasBareUnavailable } from "./ansi.ts";
 
 export const presentationPath = () =>
   `${process.env.STATUSLINE_OWNER_STATE ?? join(process.env.HOME ?? "", ".local/state/statusline/owner.json")}.view`;
@@ -64,7 +65,8 @@ function decodePresentation(text: string): Presentation | undefined {
     if (extra !== undefined) return undefined;
     const a = decode(first),
       c = decode(third);
-    if (a === undefined || c === undefined) return undefined;
+    if (a === undefined || c === undefined || hasBareUnavailable(c))
+      return undefined;
     const location = kind === "row" ? decode(second) : undefined;
     if (kind === "row" && location === undefined) return undefined;
     if (kind === "row" && location !== undefined) {

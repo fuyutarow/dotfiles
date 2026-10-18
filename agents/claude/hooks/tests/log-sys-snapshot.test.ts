@@ -61,9 +61,7 @@ describe("log-sys-snapshot", () => {
   test("Stop attaches the cached Sys row as a systemMessage", () => {
     const r = fire(homeWithCache(1_000), "Stop");
     expect(r.code).toBe(0);
-    expect(body(r.stdout)).toBe(
-      `${LINE} · GPU stale (GPU sampler state unavailable)`,
-    );
+    expect(body(r.stdout)).toBe(LINE);
   });
 
   test("one line: user@host:local event time, then the fields, joined by the bar's dimmed |", () => {
@@ -98,6 +96,25 @@ describe("log-sys-snapshot", () => {
     expect(r.code).toBe(0);
     expect(r.stdout.trim()).toBe("");
   });
+  test("legacy bare unavailable session rows cannot reach Stop", () => {
+    const home = homeWithCache(1_000);
+    writeSession(home, "s1", [
+      "Ctx: 609.8k n/a",
+      "Rate: claude n/a · 5h n/a · 7d n/a",
+    ]);
+    expect(body(fire(home, "Stop").stdout)).toBe(LINE);
+  });
+  test("a legacy bare unavailable Sys cache waits for the next sampler publication", async () => {
+    const home = homeWithCache(1_000);
+    await Bun.write(
+      join(home, ".cache/claude/statusline-sys.json"),
+      JSON.stringify({
+        at: Temporal.Now.instant().epochMilliseconds,
+        line: "Sys: CPU n/a",
+      }),
+    );
+    expect(fire(home, "Stop").stdout).toBe("");
+  });
   test("a cached colored row is preferred over the plain one", () => {
     const home = homeWithCache(1_000);
     const cache = join(home, ".cache", "claude", "statusline-sys.json");
@@ -115,32 +132,24 @@ describe("log-sys-snapshot", () => {
   test("this session's rows follow the time in the order given: Ctx, Rate, then Sys", () => {
     const home = homeWithCache(1_000);
     writeSession(home, "s1", [CTX, RATE]);
-    expect(body(fire(home, "Stop").stdout)).toBe(
-      `${CTX} | ${RATE} | ${LINE} · GPU stale (GPU sampler state unavailable)`,
-    );
+    expect(body(fire(home, "Stop").stdout)).toBe(`${CTX} | ${RATE} | ${LINE}`);
   });
   test("another session's rows are never shown here", () => {
     const home = homeWithCache(1_000);
     writeSession(home, "other", ["Ctx: 9k 5%", "Rate: 7d 51% ⟳5d"]);
-    expect(body(fire(home, "Stop").stdout)).toBe(
-      `${LINE} · GPU stale (GPU sampler state unavailable)`,
-    );
+    expect(body(fire(home, "Stop").stdout)).toBe(LINE);
   });
   test("stale or empty session rows leave only the Sys row", () => {
     const stale = homeWithCache(1_000);
     writeSession(stale, "s1", [CTX, RATE], 10 * 60_000);
-    expect(body(fire(stale, "Stop").stdout)).toBe(
-      `${LINE} · GPU stale (GPU sampler state unavailable)`,
-    );
+    expect(body(fire(stale, "Stop").stdout)).toBe(LINE);
     const empty = homeWithCache(1_000);
     writeSession(empty, "s1", [""]);
-    expect(body(fire(empty, "Stop").stdout)).toBe(
-      `${LINE} · GPU stale (GPU sampler state unavailable)`,
-    );
+    expect(body(fire(empty, "Stop").stdout)).toBe(LINE);
   });
 });
 
-test("owner unresponsive state overrides a fresh cached Sys observation without probing", async () => {
+test("the hook preserves the formatter-owned Sys row even if GPU owner state changes", async () => {
   const home = homeWithCache(1_000);
   const at = Temporal.Now.instant().epochMilliseconds;
   await Bun.write(
@@ -154,7 +163,5 @@ test("owner unresponsive state overrides a fresh cached Sys observation without 
       samples: [],
     }),
   );
-  expect(messageOf(fire(home, "Stop").stdout)).toContain(
-    "GPU unresponsive since ",
-  );
+  expect(body(fire(home, "Stop").stdout)).toBe(LINE);
 });

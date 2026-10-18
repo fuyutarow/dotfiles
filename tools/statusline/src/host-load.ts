@@ -1,3 +1,4 @@
+import { renderUnavailable, unavailable } from "./ansi.ts";
 import { memReading, type MemReading } from "./host-model.ts";
 import { sysRow, formatBytes, type HostLoad } from "./host-display.ts";
 export { MemReadingSchema, memReading } from "./host-model.ts";
@@ -246,16 +247,16 @@ export interface HostMetrics {
 export async function readHostMetrics(): Promise<HostMetrics> {
   const cpu = cpuPct().match(
     (value) => `${Math.round(value)}%`,
-    () => "n/a",
+    (why) => renderUnavailable(unavailable(why)),
   );
   const ram = ramFrac().match(
     (value) => value.frac,
-    () => "n/a",
+    (why) => renderUnavailable(unavailable(why)),
   );
   const tmp = (await tmpfsReading()).match(
     (value) =>
       `${formatBytes(value.availableBytes)} free · ${value.freeInodes}i`,
-    () => "n/a",
+    (why) => renderUnavailable(unavailable(why)),
   );
   return { cpu, ram, tmp };
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.3 — 2026-10-18
+
+- Require reasons for unavailable values and render Stop snapshots from the statusline formatter and sampled session frames.
+
 ## 0.20.2 — 2026-10-18
 
 - Render one location, one row per session and shared host facts once; retain sampler values across project state overrides and keep renders under 100 ms.

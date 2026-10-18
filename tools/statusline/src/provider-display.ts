@@ -1,5 +1,5 @@
 import { clockHM, nowEpochSec, pad2, stampMDHM } from "./prompt-stamp.ts";
-import { pctColor, roles, paceColor, pctFmt } from "./ansi.ts";
+import { pctColor, roles, paceColor, pctFmt, unavailable } from "./ansi.ts";
 import { formatCostUsd } from "../../shared/src/dispatch-pricing.ts";
 import type { CodexRate } from "./codex-rate.ts";
 import type { JevUsage } from "./jev-usage.ts";
@@ -17,7 +17,10 @@ export function codexRateSegment(
   timeZone = Temporal.Now.timeZoneId(),
 ): string {
   if (rate === undefined) {
-    return roles.unavailable("codex", why);
+    return roles.unavailable(
+      "codex",
+      unavailable(why ?? "rate sample unavailable"),
+    );
   }
   const parts = rate.windows.map((window) => {
     let label = `${window.minutes}m`;
@@ -46,7 +49,8 @@ export function codexRateSegment(
     }
     return item;
   });
-  if (parts.length === 0) return roles.unavailable("codex");
+  if (parts.length === 0)
+    return roles.unavailable("codex", unavailable("no rate windows reported"));
   return parts.join(roles.separator());
 }
 
@@ -54,7 +58,11 @@ export function jevUsageSegment(
   usage: JevUsage | undefined,
   why?: string,
 ): string {
-  if (usage?.costUsd === undefined) return roles.unavailable("Jev", why);
+  if (usage?.costUsd === undefined)
+    return roles.unavailable(
+      "Jev",
+      unavailable(why ?? "usage sample unavailable"),
+    );
   const cost = formatCostUsd(usage.costUsd);
   // Seven-day spend: green below $1, yellow below $5, red at $5 and above.
   return `${roles.label("Jev")} ${roles.window("7d")} ${roles.secondary("spend")} ${roles.value(cost, pctColor(usage.costUsd, 1, 5))}`;

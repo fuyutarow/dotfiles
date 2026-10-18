@@ -102,9 +102,9 @@ test.each([
   );
   let expected = "Rate: claude 5h 15% · 7d 50% · Fable 20%";
   if (hasCodex) expected += " | codex 5h 10% · codex 7d 12%";
-  else expected += " | codex n/a";
+  else expected += " | codex n/a (unavailable)";
   if (hasJev) expected += " | Jev 7d spend <$0.01";
-  else expected += " | Jev n/a";
+  else expected += " | Jev n/a (unavailable)";
   expect(row).toBe(expected);
 });
 
@@ -116,9 +116,9 @@ test("missing Claude rates retain their placeholders without dangling provider s
     }),
   );
   expect(row).toBe(
-    "Rate: claude n/a · 5h n/a · 7d n/a | codex n/a | Jev 7d spend <$0.01",
+    "Rate: claude n/a (input has no Claude rate limits) · 5h n/a (input has no Claude 5h rate limit) · 7d n/a (input has no Claude 7d rate limit) | codex n/a (unavailable) | Jev 7d spend <$0.01",
   );
   expect(stripAnsi(rateRow({ rlModel: [] }))).toBe(
-    "Rate: claude n/a · 5h n/a · 7d n/a | codex n/a | Jev n/a",
+    "Rate: claude n/a (input has no Claude rate limits) · 5h n/a (input has no Claude 5h rate limit) · 7d n/a (input has no Claude 7d rate limit) | codex n/a (unavailable) | Jev n/a (unavailable)",
   );
 });

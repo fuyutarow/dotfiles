@@ -73,7 +73,7 @@ describe("tmp reading", () => {
   });
   test("an inode count of zero is unknown, shown as inodes n/a", () => {
     expect(plain(tmpSegment(read({ ...fixture(26.5, 0), files: 0 })))).toBe(
-      "tmp 26.5GiB free · inodes n/a",
+      "tmp 26.5GiB free · inodes n/a (inode count not reported)",
     );
   });
   test("a statfs failure is named, never a blank or a throw", async () => {

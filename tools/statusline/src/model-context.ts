@@ -16,14 +16,14 @@ export function ctxSegment(
 ): string {
   const label = `${ESC}[38;5;66mCtx:${RST}`;
   // Neither figure in the payload (before the first API response): one n/a, not two.
-  let seg = `${label} ${field("context-tokens", "", observed(df.ctx))}`;
+  let seg = `${label} ${field("context-tokens", "", observed(df.ctx, "input has no context token count"))}`;
   // No MID here on purpose — see render()'s header note: this is one fact (context usage)
   // shown two ways, not two sibling facts, so a bare space separates them, not the middot.
   if (df.ctxPct !== null && df.ctxPct !== undefined) {
     const { text: pct, col } = pctFmt(df.ctxPct);
     seg += ` ${field("context-percent", "context", observed(`${ESC}[${col}m${pct}%${RST}`))}`;
   } else {
-    seg += ` ${field("context-percent", "", observed(undefined))}`;
+    seg += ` ${field("context-percent", "", observed(undefined, "input has no context percentage"))}`;
   }
   return seg;
 }

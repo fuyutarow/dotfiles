@@ -183,7 +183,7 @@ describe("statusline Sys row: VRAM", () => {
       }),
     );
     expect(sysRow(render({ home, bin }).text)).toContain(
-      "VRAM n/a (unresponsive since ",
+      "VRAM n/a (GPU stall recorded since ",
     );
   });
 });
@@ -320,7 +320,9 @@ describe("statusline other rows", () => {
   test("an empty payload prints n/a for Ctx, Rate and diff instead of 0 or nothing", () => {
     const text = render({ bin: binWith({}), payload: {} }).text;
     expect(text).toContain("Ctx: n/a");
-    expect(text).toContain("Rate: claude n/a · 5h n/a · 7d n/a");
+    expect(text).toContain(
+      "Rate: claude n/a (input has no Claude rate limits) · 5h n/a (input has no Claude 5h rate limit) · 7d n/a (input has no Claude 7d rate limit)",
+    );
     expect(text).toContain("diff n/a (repository not sampled)");
     expect(text).not.toContain("(+0,-0)");
   });
@@ -537,7 +539,9 @@ describe("statusline trust boundaries (zod)", () => {
       },
     }).text;
     expect(text).toContain("Ctx: 12.3k n/a");
-    expect(text).toContain("Rate: claude n/a · 5h n/a · 7d n/a");
+    expect(text).toContain(
+      "Rate: claude n/a (input has no Claude rate limits) · 5h n/a (input has no Claude 5h rate limit) · 7d n/a (input has no Claude 7d rate limit)",
+    );
   });
 
   test("a CPU cache of the wrong shape is no baseline, not a crash", () => {

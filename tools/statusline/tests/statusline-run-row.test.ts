@@ -1362,7 +1362,7 @@ describe("legacy enriched Run row", () => {
       ]),
     );
     expect(out).toMatch(
-      /^luna-high n\/a \$– tkt_worker without time │ working · no event yet$/mu,
+      /^luna-high n\/a \(start time unavailable\) \$– tkt_worker without time │ working · no event yet$/mu,
     );
   });
 

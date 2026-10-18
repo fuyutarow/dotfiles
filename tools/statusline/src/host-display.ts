@@ -1,5 +1,12 @@
 import type { Result } from "neverthrow";
-import { ESC, RST, pctFmt, roles } from "./ansi.ts";
+import {
+  ESC,
+  RST,
+  pctFmt,
+  roles,
+  renderUnavailable,
+  unavailable,
+} from "./ansi.ts";
 import {
   fieldDisplay,
   observed,
@@ -164,7 +171,8 @@ export interface HostLoad {
 }
 
 export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "n/a";
+  if (!Number.isFinite(bytes) || bytes < 0)
+    return renderUnavailable(unavailable("invalid byte count"));
   if (bytes < 1024) return `${bytes}B`;
   const units = ["KiB", "MiB", "GiB", "TiB"];
   let value = bytes;

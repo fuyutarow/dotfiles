@@ -1,5 +1,12 @@
 import type { DiskEntry, TmpEntry } from "./storage.ts";
-import { diskFreeColor, MID, naSegment, roles, tmpInodeColor } from "./ansi.ts";
+import {
+  diskFreeColor,
+  MID,
+  naSegment,
+  roles,
+  tmpInodeColor,
+  unavailable,
+} from "./ansi.ts";
 
 export function tmpSegment(t: TmpEntry): string {
   if (t.kind === "miss") return naSegment(t.label, t.why);
@@ -7,14 +14,17 @@ export function tmpSegment(t: TmpEntry): string {
   const bytes = `${roles.label(t.label)} ${roles.value(`${significant(t.freeG, 3)}GiB`, tmpInodeColor(100 - (freePercent ?? 100)))}${roles.secondary(" free")}`;
   const inodes =
     t.inodeUsedPct === undefined
-      ? roles.unavailable("inodes")
+      ? roles.unavailable("inodes", unavailable("inode count not reported"))
       : `${roles.label("inodes")} ${roles.value(`${Math.round(100 - t.inodeUsedPct)}%`, tmpInodeColor(t.inodeUsedPct))}${roles.secondary(" free")}`;
   return `${bytes} ${roles.secondary(MID)} ${inodes}`;
 }
 export function diskSegment(d: DiskEntry): string {
   if (d.kind === "miss") return naSegment(d.label, d.why);
   if (d.freeG === undefined || !Number.isFinite(d.freeG) || d.freeG < 0)
-    return roles.unavailable(d.label);
+    return roles.unavailable(
+      d.label,
+      unavailable("invalid free space reading"),
+    );
   const free = significant(d.freeG, 3);
   const total = d.totalG;
   const fraction =

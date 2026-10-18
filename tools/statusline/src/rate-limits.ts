@@ -204,7 +204,7 @@ function claudeRateSegment(
       "5h",
       observed(
         rl5 === undefined ? undefined : rl5Segment(rl5, df.rl5Reset, now),
-        undefined,
+        "input has no Claude 5h rate limit",
         df.rl5Reset !== undefined && df.rl5Reset <= now
           ? (now - df.rl5Reset + 1) * 1000
           : 0,
@@ -215,7 +215,7 @@ function claudeRateSegment(
       "7d",
       observed(
         rl7 === undefined ? undefined : rl7Segment(rl7, df.rl7Reset, now),
-        undefined,
+        "input has no Claude 7d rate limit",
         df.rl7Reset !== undefined && df.rl7Reset <= now
           ? (now - df.rl7Reset + 1) * 1000
           : 0,
@@ -229,6 +229,7 @@ function claudeRateSegment(
       rl5 !== undefined || rl7 !== undefined
         ? roles.label("claude")
         : undefined,
+      "input has no Claude rate limits",
     ),
   );
   const claudeSeparator =

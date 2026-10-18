@@ -19,8 +19,26 @@ export const MID = "·"; //   meter middot
 // the thing does not exist (not a repo -> no branch; no model-scoped weekly cap -> no segment).
 // rc:? above is the older instance of the same rule.
 export const NA_COLOR = `${ESC}[38;5;178m`; // amber, same as rc:? — "unverified", not "bad"
+export type Unavailable = { kind: "unknown"; reason: string };
+export function unavailable(reason: string): Unavailable {
+  // Upstream diagnostic text can itself contain the reserved absence token.
+  const why = reason.trim().replaceAll(/\bn\/a\b/gu, "unavailable");
+  return {
+    kind: "unknown",
+    reason: why === "" ? "unavailable" : why,
+  };
+}
+/** The only renderer for an unavailable value; even empty runtime reasons are explicit. */
+export function renderUnavailable(state: Unavailable): string {
+  return `n/a (${unavailable(state.reason).reason})`;
+}
+/** Reject legacy presentation strings at cache boundaries before they reach either surface. */
+export function hasBareUnavailable(value: string): boolean {
+  const plain = value.replaceAll(new RegExp(`${ESC}\\[[0-9;]*m`, "gu"), "");
+  return /\bn\/a\b(?! \([^()\r\n])/u.test(plain);
+}
 export function naSegment(label: string, why: string): string {
-  return roles.unavailable(label, why);
+  return roles.unavailable(label, unavailable(why));
 }
 // Usage-percent -> rounded int + threshold color (green <70 / yellow <90 / red >=90).
 export function pctColor(i: number, yellow = 70, red = 90): string {
@@ -59,8 +77,11 @@ export const roles = {
   value: (text: string, color: string) => `${ESC}[${color}m${text}${RST}`,
   secondary: (text: string) => `${DIM}${text}${RST}`,
   separator: (text = MID) => ` ${DIM}${text}${RST} `,
-  unavailable: (label: string, why?: string): string =>
-    `${roles.label(label)} ${roles.value("n/a", pctColor(70))}${why === undefined ? "" : ` ${roles.secondary(`(${why})`)}`}`,
+  unavailable: (label: string, state: Unavailable): string => {
+    const text = renderUnavailable(state);
+    const space = text.indexOf(" ");
+    return `${roles.label(label)} ${roles.value(text.slice(0, space), pctColor(70))} ${roles.secondary(text.slice(space + 1))}`;
+  },
 };
 // `text` is the percentage right-aligned to three columns ("  9", " 42", "100"): a value crossing
 // 10 or 100 must not shift every segment after it — the row flickered as CPU went 12% -> 9%

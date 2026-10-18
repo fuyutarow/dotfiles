@@ -1,8 +1,5 @@
 import { hookJson } from "./lib.ts";
-import {
-  gpuStateFailure,
-  readGpuState,
-} from "../../../tools/shared/src/gpu-samples.ts";
+import { hasBareUnavailable } from "../../../tools/statusline/src/ansi.ts";
 // Stop / PostToolUse hook — attach one line "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
 // (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
@@ -57,10 +54,9 @@ async function main(): Promise<void> {
   if (typeof cachedAt !== "number" || cachedLine === undefined) return;
   // The statusline's own colors when present (the renderer keeps ANSI: hook_system_message is a
   // plain Ink text node), else the plain row.
-  const gpuWhy = gpuStateFailure(await readGpuState());
-  const sys =
-    (strAt(cached, "ansi") ?? cachedLine) +
-    (gpuWhy === undefined ? "" : ` · GPU ${gpuWhy}`);
+  const sys = strAt(cached, "ansi") ?? cachedLine;
+  // Pre-upgrade presentation caches cannot establish a reason. Wait for the sampler to replace them.
+  if (hasBareUnavailable(sys)) return;
   if (now - cachedAt > STALE_MS) return;
 
   const key = sid.replaceAll(/[^A-Za-z0-9_-]/gu, "_");
@@ -74,7 +70,9 @@ async function main(): Promise<void> {
   const fresh = typeof sessAt === "number" && now - sessAt <= STALE_MS;
   const rows = (fresh ? (arr(at(sess, "rows")) ?? []) : []).flatMap((r) => {
     const row = strAt(r, "ansi") ?? strAt(r, "line");
-    return row === undefined || row === "" ? [] : [row];
+    return row === undefined || row === "" || hasBareUnavailable(row)
+      ? []
+      : [row];
   });
   // One record per line: "user@host:MM-DD HH:MM+09 | Ctx: … | Rate: … | Sys: …" — who and where
   // (sessions now span machines), and this event's time (the mobile app shows none), in the

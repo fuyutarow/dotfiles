@@ -73,7 +73,12 @@ test("Codex rollout normalizes cwd, model, effort, context and token window", as
     effort: "medium",
     context: { inputTokens: 24000, usedPercent: 12 },
   });
-  const rate = await readCodexRate(root, "fixture-codex-session");
+  // This is a normalization fixture, not a wall-clock expiry test.
+  const rate = await readCodexRate(
+    root,
+    "fixture-codex-session",
+    Temporal.Instant.from("2026-10-11T01:00:00Z").epochMilliseconds,
+  );
   expect(rate.isOk() ? rate.value?.windows : undefined).toEqual([
     { minutes: 10080, percent: 31, reset: 1792200971 },
     { minutes: 300, percent: 15, reset: 1791652800 },

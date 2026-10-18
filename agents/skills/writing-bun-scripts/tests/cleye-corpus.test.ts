@@ -45,6 +45,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "tools/agx/src/doctor.ts" },
   { path: "tools/herdr-btm/src/btmp.ts", cli: false },
   { path: "tools/detect-japanese/src/cli.ts" },
+  { path: "tools/jex/src/jex.ts" },
   { path: "tools/baseline/src/baseline.ts" },
   {
     path: "tools/coredev/src/coredev.ts",
@@ -145,7 +146,7 @@ const CORPUS: CorpusEntry[] = [
   { path: "scripts/wsl-winget.ts" },
   { path: "tools/smart-open/src/receive.ts" },
   { path: "tools/smart-open/src/smart-open.ts" },
-  { path: "tools/statusline/src/statusline.ts" },
+  { path: "tools/statusline/src/sampler.ts" },
   { path: "tools/sui-keystore-merge/src/sui-keystore-merge.ts" },
   {
     path: "tools/storage-headroom/src/storage-headroom.ts",

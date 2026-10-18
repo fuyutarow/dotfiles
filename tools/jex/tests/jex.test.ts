@@ -234,15 +234,18 @@ test("excerpt cap is UTF-8 safe; hash covers the entire file and total excerpts 
     files.every((f: { content: string }) => !f.content.includes("�")),
   ).toBe(true);
 });
-test("usage and prototype flag fail with exit 2; version is short", async () => {
-  for (const args of [
-    [],
-    [q],
-    ["--no-such-flag", q, file],
-    ["--__proto__", q, file],
-  ])
+test("usage and unknown flags fail with exit 2; version aliases print the package version", async () => {
+  for (const args of [[], [q], ["--__proto__", q, file]])
     expect((await run(args)).exit).toBe(2);
-  const version = await run(["--version"]);
-  expect(version.exit).toBe(0);
-  expect(version.stdout).toBe("0.1.0\n");
+  expect((await run(["--no-such-flag", q, file])).exit).toBe(1);
+  const unknownShort = await run(["-Z", q, file]);
+  expect(unknownShort.exit).toBe(1);
+  expect(unknownShort.stderr).toContain("-Z");
+  expect(unknownShort.stderr).not.toContain("--Z");
+  for (const flag of ["-V", "--version"]) {
+    const version = await run([flag]);
+    expect(version.exit).toBe(0);
+    expect(version.stdout).toBe("jex 0.2.0\n");
+    expect(version.stderr).toBe("");
+  }
 });

@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
-import { cli } from "cleye";
+import { cli as cleyeCli } from "cleye";
 import packageJson from "../package.json" with { type: "json" };
+import { standardCli } from "../../shared/src/cli.ts";
 import { classify } from "./classify.ts";
 import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 
+const cliArgv = () => process.argv.slice(2);
+const cli = standardCli(cleyeCli, packageJson, cliArgv);
+
 async function main(): Promise<void> {
-  if (Bun.argv.length === 3 && Bun.argv[2] === "--version") {
-    process.stdout.write(`${packageJson.version}\n`);
-    return;
-  }
   const parsed = await attempt(() =>
     cli({
       name: "jex",
@@ -20,12 +20,6 @@ async function main(): Promise<void> {
         },
       },
       strictFlags: true,
-      ignoreArgv: (type, flag) => {
-        if (type === "unknown-flag") {
-          process.stderr.write(`jex: unknown option --${flag}\n`);
-          process.exit(2);
-        }
-      },
       help: {
         description:
           "Zero-shot multi-label yes/no classification over files through Jev. Exit: 0 yes, 1 no/refuted, 2 usage, 3 unreachable, 4 cannot judge.",

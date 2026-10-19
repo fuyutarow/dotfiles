@@ -1,0 +1,4 @@
+include_patterns:
+  - README.md
+exclude_patterns:
+  - '**/.cocoindex_code'

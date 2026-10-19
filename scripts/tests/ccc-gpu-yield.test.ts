@@ -18,6 +18,7 @@ test("ccc GPU policy and embedder adapter yield under the runner's admission loc
       "-p",
       "no:cacheprovider",
       join(import.meta.dir, "../../cocoindex/test_gpu_yield.py"),
+      join(import.meta.dir, "../../cocoindex/test_cpu_launch.py"),
     ],
     {
       timeout: 60_000,

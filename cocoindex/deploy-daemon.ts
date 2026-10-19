@@ -1,5 +1,6 @@
-// Consumer: link:dots deploy. Copy the declared unit, enable every time, never restart an active
-// daemon. The .wsl source suffix must not become a systemd alias through a renamed symlink.
+// Consumer: link:dots deploy. Install and enable the unit; never start or restart it.
+// Only the operator (or default.target at login) owns activation. The .wsl source suffix
+// must not become a systemd alias through a renamed symlink.
 import {
   existsSync,
   lstatSync,
@@ -82,17 +83,8 @@ export function deployCccDaemon(
         `systemctl --user ${args.join(" ")} failed: ${r.out}; repair: mise run link:dots`,
       );
   }
-  // start is a no-op for an active unit, unlike restart; do not stop any incumbent here.
-  const active = run(["is-active", CCC_UNIT]);
-  if (active.code !== 0 || active.out !== "active") {
-    const r = run(["start", CCC_UNIT]);
-    if (r.code !== 0)
-      return new Error(
-        `ccc-daemon start failed: ${r.out}; repair: mise run link:dots`,
-      );
-  }
   process.stdout.write(
-    "enabled: ccc-daemon (default.target; active daemon preserved)\n",
+    "enabled: ccc-daemon (activation preserved; start explicitly with systemctl --user start ccc-daemon)\n",
   );
   return undefined;
 }

@@ -1,6 +1,6 @@
 # cocoindex-code daemon — owned by systemd, resource-capped.
 # Copied as a real ~/.config/systemd/user/ccc-daemon.service by mise run link:dots.
-# Deploy reloads and enables it into default.target; no linger means first-login startup.
+# Deploy reloads and enables it into default.target without starting it; explicit stops survive deploy.
 #
 # WHY THIS UNIT EXISTS
 # --------------------
@@ -62,23 +62,12 @@ StartLimitBurst=8
 
 [Service]
 Type=simple
-# GPU-only launcher: ccc owns the standing partition in
-# tools/agent-resource-run/resource-policy.toml (currently 6144 MiB, including a 512 MiB
-# context allowance). Research reservations use the remainder and do not defer ccc. If the
-# partition is unavailable, outside the configured window, or at its duty ceiling, ccc waits;
-# it never embeds on CPU. The model stays in fp16 on CUDA between batches; CUDA OOM splits the
-# batch recursively, and a single-chunk failure remains a visible indexing error. Utilization is
-# average CUDA duty time, not instantaneous SM utilization.
-# CPUQuota/RAM remain the daemon's supervisor-owned limits; no watcher/restart or second daemon.
+# CPU-only support service. Hide CUDA before any library import; the launcher also
+# forces the documented embedding.device=cpu setting, overriding global device/envs.
 ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/cocoindex/ccc-daemon-launch.py
-Environment="CCC_GPU_UTILIZATION_PERCENT=100"
-Environment="CCC_GPU_BATCH_SIZE=8"
-Environment="CCC_GPU_WAIT_SECONDS=1"
-Environment="XDG_RUNTIME_DIR=%t"
-# Optional HH:MM-HH:MM host-local window, end exclusive, wrapping midnight supported.
-# Equal endpoints permit all day; utilization 0 disables GPU indexing entirely.
-Environment="CCC_GPU_WINDOW=00:00-00:00"
+Environment="CUDA_VISIBLE_DEVICES="
 Environment="COCOINDEX_RUN_GPU_IN_SUBPROCESS=0"
+Environment="XDG_RUNTIME_DIR=%t"
 Restart=always
 RestartSec=2
 

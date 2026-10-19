@@ -74,8 +74,8 @@ async function fixture(enabled = "disabled", active = "inactive") {
   return { home, ctx, run, doctor, calls, pathExists, enableEdge, state };
 }
 
-test("deploy migrates the suffix alias, enables default.target and starts once; repeated deploy preserves the process and file", async () => {
-  const f = await fixture("alias");
+test("deploy migrates the suffix alias, enables default.target without activation; repeated deploy preserves the process and file", async () => {
+  const f = await fixture("alias", "active");
   const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
   await mkdir(join(f.home, ".config/systemd/user"), { recursive: true });
   await symlink(join(REPO, "cocoindex/ccc-daemon.service.wsl"), unit);
@@ -100,7 +100,7 @@ test("deploy migrates the suffix alias, enables default.target and starts once; 
   expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
   expect((await lstat(unit)).ino).toBe(inode);
   const calls = f.calls.join("\n");
-  expect(calls.match(/--user start /gu)).toHaveLength(1);
+  expect(calls).not.toMatch(/--user start /u);
   expect(calls.match(/--user enable /gu)).toHaveLength(2);
   expect(calls).not.toMatch(/\b(stop|restart)\b/u);
 }, 30_000);
@@ -131,40 +131,39 @@ test("an old enable edge pointing directly at the repo declaration migrates to t
   expect((await f.doctor()).verdict).toBe("PASS");
 }, 20_000);
 
-test("doctor reports the GPU-only policy and rejects an old CPU/RAM-only unit", async () => {
+test("doctor reports the CPU-only policy and rejects a unit without GPU isolation", async () => {
   const f = await fixture("enabled", "active");
   await f.enableEdge();
   expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
-  expect((await f.doctor()).detail).toContain("GPU-only indexing");
+  expect((await f.doctor()).detail).toContain("CPU-only indexing");
   const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
   await writeFile(
     unit,
     (await readFile(unit, "utf8")).replaceAll(
-      /^Environment="(?:CCC_GPU_|COCOINDEX_RUN_GPU_IN_SUBPROCESS).*\n/gmu,
+      /^Environment="(?:CUDA_VISIBLE_DEVICES|COCOINDEX_RUN_GPU_IN_SUBPROCESS).*\n/gmu,
       "",
     ),
   );
   expect((await f.doctor()).verdict).toBe("FAIL");
 }, 20_000);
 
-test.each([
-  "CCC_GPU_UTILIZATION_PERCENT",
-  "CCC_GPU_BATCH_SIZE",
-  "CCC_GPU_WAIT_SECONDS",
-  "CCC_GPU_WINDOW",
-  "COCOINDEX_RUN_GPU_IN_SUBPROCESS",
-])("doctor rejects an installed unit missing %s", async (key) => {
-  const f = await fixture("enabled", "active");
-  await f.enableEdge();
-  expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
-  const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
-  const lines = (await readFile(unit, "utf8")).split("\n");
-  await writeFile(
-    unit,
-    lines.filter((line) => !line.startsWith(`Environment="${key}=`)).join("\n"),
-  );
-  expect((await f.doctor()).verdict).toBe("FAIL");
-});
+test.each(["CUDA_VISIBLE_DEVICES", "COCOINDEX_RUN_GPU_IN_SUBPROCESS"])(
+  "doctor rejects an installed unit missing %s",
+  async (key) => {
+    const f = await fixture("enabled", "active");
+    await f.enableEdge();
+    expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
+    const unit = join(f.home, ".config/systemd/user/ccc-daemon.service");
+    const lines = (await readFile(unit, "utf8")).split("\n");
+    await writeFile(
+      unit,
+      lines
+        .filter((line) => !line.startsWith(`Environment="${key}=`))
+        .join("\n"),
+    );
+    expect((await f.doctor()).verdict).toBe("FAIL");
+  },
+);
 
 test.each(["disabled", "alias", "enabled-runtime", "masked"])(
   "doctor rejects %s even while active, names deploy repair",
@@ -177,13 +176,14 @@ test.each(["disabled", "alias", "enabled-runtime", "masked"])(
   20_000,
 );
 
-test("doctor rejects enabled without the default.target edge and enabled but inactive", async () => {
+test("doctor rejects a missing default.target edge and reports a preserved stop", async () => {
   const f = await fixture("enabled", "active");
   await f.enableEdge();
   expect((await f.doctor()).verdict).toBe("FAIL");
   expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
   f.state.active = "inactive";
-  expect((await f.doctor()).verdict).toBe("FAIL");
+  expect((await f.doctor()).verdict).toBe("WARN");
+  expect((await f.doctor()).detail).toContain("Deploy preserves stops");
 }, 20_000);
 
 test("macOS, check mode and hosts without systemd skip without writes or commands", async () => {
@@ -201,7 +201,7 @@ test("macOS, check mode and hosts without systemd skip without writes or command
   }
 });
 
-test.each(["daemon-reload", "enable", "start"])(
+test.each(["daemon-reload", "enable"])(
   "deploy fails closed on %s failure",
   async (verb) => {
     const f = await fixture();
@@ -211,4 +211,17 @@ test.each(["daemon-reload", "enable", "start"])(
     expect(error?.message).toContain("mise run link:dots");
   },
   20_000,
+);
+
+// Inactivity has no reliable provenance in systemd: preserve all inactive/failed
+// units, including first installation, rather than guessing whether stop was explicit.
+test.each(["inactive", "failed", "activating", "deactivating"])(
+  "deploy preserves %s across repeated deployments",
+  async (active) => {
+    const f = await fixture("enabled", active);
+    expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
+    expect(await deploy(f.ctx, f.run, true)).toBeUndefined();
+    expect(f.state.active).toBe(active);
+    expect(f.calls.join("\n")).not.toMatch(/\b(start|stop|restart)\b/u);
+  },
 );

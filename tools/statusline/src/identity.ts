@@ -4,6 +4,7 @@ import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, maybe, z } from "./zod.ts";
 import { writeFleetSession } from "../../shared/src/fleet-session.ts";
 import {
+  execAsyncRenderBounded,
   execAsyncWithin,
   execBounded,
   readJson,
@@ -354,7 +355,7 @@ export async function agentNameAsync(
     Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
   )
     return ok(hit.name);
-  const outResult = await execAsyncWithin(
+  const outResult = await execAsyncRenderBounded(
     "claude agents",
     CLAUDE_BIN,
     ["agents", "--json"],

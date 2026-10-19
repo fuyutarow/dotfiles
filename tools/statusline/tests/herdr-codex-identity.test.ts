@@ -1,5 +1,3 @@
-// Keep the vendor hook regression in the statusline verification command as well.
-import "../../../agents/codex/hooks/tests/report-herdr-metadata.test.ts";
 import { expect, test } from "bun:test";
 import { jsonText, z } from "../src/zod.ts";
 import { createServer } from "node:net";
@@ -7,7 +5,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp, rm } from "node:fs/promises";
 import { codexAgentName } from "../../../agents/codex/hooks/herdr-identity.ts";
-import { clearHerdrMetadata, reportToHerdr } from "../src/identity.ts";
+import { readFleetSession } from "../../shared/src/fleet-session.ts";
+import { writeStatuslineFleetSession } from "../src/fleet-session.ts";
 
 test("Codex names use the shared project rule and keep an existing pane suffix", () => {
   expect(codexAgentName("/fixture/standard-skills", "thread", "agt_0mr6")).toBe(
@@ -28,13 +27,14 @@ test("Codex names use the shared project rule and keep an existing pane suffix",
   );
 });
 
-test("Claude metadata and compact tab label remain unchanged", async () => {
-  const root = await mkdtemp(join(tmpdir(), "herdr-claude-"));
+test("Claude status writes the fleet session and leaves Herdr metadata to its projector", async () => {
+  const root = await mkdtemp(join(tmpdir(), "herdr-claude-fleet-"));
   await using _directory = {
     [Symbol.asyncDispose]: async () => {
       await rm(root, { recursive: true, force: true });
     },
   };
+  const runtime = join(root, "runtime");
   const socketPath = join(root, "fixture.sock");
   const requests: unknown[] = [];
   const server = createServer((socket) => {
@@ -66,6 +66,7 @@ test("Claude metadata and compact tab label remain unchanged", async () => {
     HERDR_SOCKET_PATH: socketPath,
     HERDR_PANE_ID: "claude-pane",
     HERDR_TAB_ID: "claude-tab",
+    XDG_RUNTIME_DIR: runtime,
   };
   const previous = new Map(
     Object.keys(settings).map((key) => [key, process.env[key]]),
@@ -79,28 +80,31 @@ test("Claude metadata and compact tab label remain unchanged", async () => {
     },
   };
   Object.assign(process.env, settings);
-  await reportToHerdr("Opus 5.5", "standard-skills-agt_0mr6", "medium", "on");
-  // Socket sends are fire-and-forget; observe receipt before checking the payload.
-  for (let i = 0; i < 100 && requests.length < 2; i++) await Bun.sleep(5);
-  expect(requests).toHaveLength(2);
-  expect(requests[0]).toMatchObject({
-    method: "pane.report_metadata",
-    params: {
-      tokens: {
-        model: "Opus 5.5",
-        effort: "medium",
-        fullname: "standard-skills-agt_0mr6",
-        rc: "🔗",
-      },
+  await writeStatuslineFleetSession(
+    {
+      sessionId: "claude-session",
+      sessionName: "display-hint-only",
+      cwd: "/work/standard-skills",
+      model: { name: "Opus 5.5" },
+      effort: "medium",
+      context: { inputTokens: 1200, usedPercent: 12.5 },
     },
-  });
-  expect(requests[1]).toMatchObject({
-    method: "tab.rename",
-    params: { label: "agt_0mr6" },
+    "claude",
+  );
+  await Bun.sleep(25);
+  expect(requests).toEqual([]);
+  expect(
+    await readFleetSession("claude-session", { XDG_RUNTIME_DIR: runtime }),
+  ).toMatchObject({
+    vendor: "claude",
+    model: "Opus 5.5",
+    effort: "medium",
+    ctx: { tokens: 1200, pct: 12.5 },
+    cwd: "/work/standard-skills",
   });
 });
 
-test("Claude session start clears a prior occupant before the statusline reports its identity", async () => {
+test("Claude status does not clear or report pane metadata on session start", async () => {
   const root = await mkdtemp(join(tmpdir(), "herdr-claude-start-"));
   await using _directory = {
     [Symbol.asyncDispose]: async () => {
@@ -133,10 +137,12 @@ test("Claude session start clears a prior occupant before the statusline reports
       });
     },
   };
+  const runtime = join(root, "runtime");
   const settings = {
     HERDR_ENV: "1",
     HERDR_SOCKET_PATH: socketPath,
     HERDR_PANE_ID: "claude-pane",
+    XDG_RUNTIME_DIR: runtime,
   };
   const previous = new Map(
     Object.keys(settings).map((key) => [key, process.env[key]]),
@@ -151,33 +157,26 @@ test("Claude session start clears a prior occupant before the statusline reports
   };
   Object.assign(process.env, settings);
 
-  // SessionStart has no dependable model/effort fields, including when its
-  // payload has no session id, so clear before the first statusline report.
-  await clearHerdrMetadata();
-  await reportToHerdr(
-    "Sonnet 5.5",
-    "research-record-v2-agt_6yz6",
-    "high",
-    "off",
+  await writeStatuslineFleetSession(
+    {
+      sessionId: "claude-session-start",
+      cwd: "/work/research-record-v2",
+      model: { name: "Sonnet 5.5" },
+      effort: "high",
+    },
+    "claude",
   );
-  for (let i = 0; i < 100 && requests.length < 2; i++) await Bun.sleep(5);
-  expect(requests).toHaveLength(2);
-  expect(requests[0]).toMatchObject({
-    method: "pane.report_metadata",
-    params: {
-      tokens: { fullname: "", model: "", effort: "", rc: "" },
-    },
-  });
-  expect(requests[1]).toMatchObject({
-    method: "pane.report_metadata",
-    params: {
-      tokens: {
-        fullname: "research-record-v2-agt_6yz6",
-        model: "Sonnet 5.5",
-        effort: "high",
-        rc: "rc:off",
-      },
-    },
+  await Bun.sleep(25);
+  expect(requests).toEqual([]);
+  expect(
+    await readFleetSession("claude-session-start", {
+      XDG_RUNTIME_DIR: runtime,
+    }),
+  ).toMatchObject({
+    vendor: "claude",
+    model: "Sonnet 5.5",
+    effort: "high",
+    cwd: "/work/research-record-v2",
   });
 });
 

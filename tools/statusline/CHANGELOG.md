@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.10 — 2026-10-19
+
+- Bound async statusline children by the render deadline and align Herdr tests with fleet-session ownership
+
 ## 0.20.9 — 2026-10-19
 
 - Write resolved Claude session names to fleet handoffs

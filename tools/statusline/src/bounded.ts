@@ -214,7 +214,32 @@ export async function execAsyncWithin(
     return err({ why: `${tool} exit ${status}`, stderr: trimmed, ran: true });
   return ok(stdout);
 }
-/** Apply the shared enrichment bound without consuming the synchronous render budget. */
+/** Apply a child bound and the remaining whole-render budget. */
+export function execAsyncRenderBounded(
+  tool: string,
+  file: string,
+  args: string[],
+  ownBoundMs: number,
+  env?: NodeJS.ProcessEnv,
+): Promise<Result<string, ExecFailure>> {
+  const left = RENDER_BUDGET_MS - (performance.now() - RENDER_T0);
+  if (left <= 0)
+    return Promise.resolve(
+      err({
+        why: `${tool} not run, render budget ${RENDER_BUDGET_MS}ms spent`,
+        stderr: "",
+        ran: false,
+      }),
+    );
+  return execAsyncWithin(
+    tool,
+    file,
+    args,
+    Math.min(ownBoundMs, Math.ceil(left)),
+    env,
+  );
+}
+/** Apply the standard enrichment cap as well as the whole-render budget. */
 export function execAsyncBounded(
   tool: string,
   file: string,
@@ -222,7 +247,7 @@ export function execAsyncBounded(
   ownBoundMs: number,
   env?: NodeJS.ProcessEnv,
 ): Promise<Result<string, ExecFailure>> {
-  return execAsyncWithin(
+  return execAsyncRenderBounded(
     tool,
     file,
     args,

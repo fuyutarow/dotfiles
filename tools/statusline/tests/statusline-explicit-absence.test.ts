@@ -57,6 +57,7 @@ function render(opts: {
 }): {
   text: string;
   home: string;
+  renderMs: number;
 } {
   const home = opts.home ?? tempHome();
   const cwd = tempDir("slcwd-");
@@ -82,6 +83,7 @@ function render(opts: {
     },
   );
   expect(sample.status, sample.stderr).toBe(0);
+  const startedAt = performance.now();
   const r = spawnSync(
     process.execPath,
     [
@@ -101,8 +103,9 @@ function render(opts: {
       cwd,
     },
   );
+  const renderMs = performance.now() - startedAt;
   expect(r.status).toBe(0);
-  return { text: (r.stdout ?? "").replace(ANSI, ""), home };
+  return { text: (r.stdout ?? "").replace(ANSI, ""), home, renderMs };
 }
 // Rendering consumes owner state and never starts a background sampler.
 // A short sampler bound, so a hung nvidia-smi is named without waiting out the 20 s default.
@@ -456,16 +459,17 @@ describe("statusline resource bounds", () => {
         claude: HANG,
       });
       const home = tempHome();
-      const text = render({
+      const result = render({
         bin,
         home,
         payload: { session_id: "bounds-1" },
         env: FAST_BOUND,
-      }).text;
-      // Do not compare scheduler time to the budget: the unit budget test advances a fake clock.
+      });
+      const text = result.text;
+      expect(result.renderMs).toBeLessThan(4000);
       expect(text).toContain("name n/a (claude agents timeout 3000ms)");
       expect(text).not.toContain("branch n/a");
-      expect(text).toContain("scan n/a (ps timeout 2000ms)");
+      expect(text).toMatch(/scan n\/a \(ps timeout \d+ms\)/u);
       // nvidia-smi is not a render child any more (O4): its hang costs the render nothing, and the
       // bar says the sample is still being taken.
       expect(sysRow(text)).toContain(

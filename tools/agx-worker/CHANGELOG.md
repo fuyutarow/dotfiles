@@ -1,5 +1,9 @@
 # Changelog
 
+## 7.1.4 — 2026-10-19
+
+- Limit overlap warnings to the checked ticket repository
+
 ## 7.1.3 — 2026-10-19
 
 - Use the last valid final report and warn on trailing text

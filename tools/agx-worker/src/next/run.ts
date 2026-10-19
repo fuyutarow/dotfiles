@@ -202,7 +202,7 @@ export async function check(flags: Flags): Promise<number> {
   const { ticket, loaded } = inspected;
   if (ticket === undefined || !loaded.ok)
     return fatal("preflight did not resolve ticket and roster");
-  overlapWarnings(ticket.writes);
+  await overlapWarnings(ticket.writes, inspected.ctx?.root ?? cwd);
   process.stdout.write(
     `OK ticket=${ticket.name ?? basename(path, ".md")} cwd=${cwd} ${routeFilterLabel(loaded.value.auto)}\n`,
   );
@@ -245,7 +245,7 @@ export async function run(flags: Flags): Promise<number> {
   const supersedes =
     pinned?.supersedes ?? value(flags, "supersedes") ?? ticket.supersedes;
   const resumeSession = pinned?.resumeSession;
-  overlapWarnings(ticket.writes);
+  await overlapWarnings(ticket.writes, ctx.root);
   if (ctx.vcs === undefined)
     process.stderr.write(
       "agx: no repository in --cd; base_rev absent; repository changes, end commit and landing unavailable\n",

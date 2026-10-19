@@ -34,6 +34,7 @@ export type { ListedRun } from "./run-state.ts";
 import { VerifyResult } from "./verify.ts";
 import { runningSummary, listingRows } from "./listing.ts";
 import { runHealth } from "./health.ts";
+import { ticketContext } from "./ticket-home.ts";
 
 const PickAuditSchema = z.object({
   source: z.string(),
@@ -463,7 +464,10 @@ export async function importLegacyRecords(): Promise<LegacyImportResult> {
   };
 }
 
-export function overlapWarnings(writes: string[]): void {
+export async function overlapWarnings(
+  writes: string[],
+  repositoryRoot: string,
+): Promise<void> {
   const started = new Map<string, Extract<NextEvent, { kind: "started" }>>();
   const ended = new Set<string>();
   for (const event of events()) {
@@ -477,6 +481,18 @@ export function overlapWarnings(writes: string[]): void {
       (error) => error,
     )();
     if (live.isErr()) continue;
+    const sameRepository = async (path: string, isTicket = false) => {
+      const context = await ticketContext(
+        isTicket ? dirname(resolve(path)) : resolve(path),
+      );
+      return context.ok && context.root === repositoryRoot;
+    };
+    const sharesRepository =
+      (run.ticket_path !== undefined &&
+        (await sameRepository(run.ticket_path, true))) ||
+      (await sameRepository(run.workspace)) ||
+      (await sameRepository(run.cwd));
+    if (!sharesRepository) continue;
     const intersections = run.writes.flatMap((a) =>
       writes.filter((b) => globsOverlap(a, b)),
     );

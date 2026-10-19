@@ -20,6 +20,26 @@ afterEach(async () => {
   );
 });
 
+const overlapStartedRecord = (
+  id: string,
+  workspace: string,
+  ticketPath: string,
+) =>
+  JSON.stringify({
+    kind: "started",
+    id,
+    at: "2026-10-19T01:00:00Z",
+    ticket: id,
+    ticket_path: ticketPath,
+    writes: ["src/**"],
+    cwd: workspace,
+    workspace,
+    row: "terra-high",
+    dispatcher_session: null,
+    vendor_session: null,
+    pid: process.pid,
+  });
+
 test("schema failures include every invalid field and write glob", () => {
   const parsed = parseNextTicket(
     `+++\nschema = 1\noutcome = ""\nwrites = ["/absolute/**", "../escape/**"]\n+++\n`,
@@ -103,4 +123,53 @@ test("check and run report writes, home, mise, live workspace and premises toget
     expect(await readFile(ticket, "utf8")).toBe(original);
     expect(await readdir(state)).not.toContain("runs");
   }
+}, 30000);
+
+test("check warns only about overlapping runs whose ticket or workspace shares the ticket repository", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agx-overlap-scope-"));
+  const unrelated = await mkdtemp(join(tmpdir(), "agx-overlap-unrelated-"));
+  roots.push(root, unrelated);
+  await prepareTicketRepo(root, ".agents/tickets");
+  await prepareTicketRepo(unrelated, ".agents/tickets");
+  const ticketHome = join(root, ".agents/tickets");
+  const unrelatedTicketHome = join(unrelated, ".agents/tickets");
+  await mkdir(ticketHome, { recursive: true });
+  await mkdir(unrelatedTicketHome, { recursive: true });
+  const ticket = join(ticketHome, "current.md");
+  await writeFile(
+    ticket,
+    `+++\nschema = 2\nname = "current"\nwrites = ["src/**"]\noutcome = "checked"\n[proposition]\nid = "SCOPE"\nclaim = "only same-repository overlap is warned"\nrefuted_by = "an unrelated overlap warning"\n+++\n`,
+  );
+  const state = join(root, "state");
+  await mkdir(state);
+  await mkdir(join(root, "secondary"));
+  await writeFile(
+    join(state, "records.jsonl"),
+    `${overlapStartedRecord("same-repository", join(root, "secondary"), ticket)}\n${overlapStartedRecord("unrelated", unrelated, join(unrelatedTicketHome, "prior.md"))}\n`,
+  );
+  const env = {
+    ...process.env,
+    AGX_NEXT_STATE_DIR: state,
+    DISPATCH_ROSTER_PATH: resolve("agents/models/dispatch-roster.toml"),
+  };
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      resolve("tools/agx-worker/src/next/cli.ts"),
+      "check",
+      ticket,
+      "--cd",
+      root,
+    ],
+    { env, stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: 15000 },
+  );
+  const [exit, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(exit, stderr).toBe(0);
+  expect(stdout).toContain("OK ticket=current");
+  expect(stderr).toContain("WARN overlap run=same-repository");
+  expect(stderr).not.toContain("WARN overlap run=unrelated");
 }, 30000);

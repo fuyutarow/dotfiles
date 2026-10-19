@@ -6,6 +6,16 @@ import { attempt, errorMessage } from "../../shared/src/attempt.ts";
 import { cccPython } from "./ccc-scope.ts";
 import { readIndexRate } from "./index-rate.ts";
 
+// Byte backstops complement ceil(chars / 800): binary files have zero chunks,
+// and a large dump must not disappear into a source-heavy data-share denominator.
+// Aggregate defaults follow the existing 50,000 chunks / 20% data conventions.
+const CONTENT_LIMITS = {
+  max_file_bytes: 1_048_576,
+  max_data_file_bytes: 65_536,
+  max_total_bytes: 50_000 * 800,
+  max_data_bytes: 50_000 * 800 * 0.2,
+};
+
 const BudgetSchema = z
   .object({
     max_est_chunks: z.number().int().positive().default(50_000),
@@ -19,6 +29,7 @@ const FileSchema = z.object({
   bytes: z.number().nonnegative(),
   est_chunks: z.number().int().nonnegative(),
   kind: z.enum(["data", "text"]),
+  blob: z.boolean().optional(),
 });
 export type PlanFile = z.infer<typeof FileSchema>;
 export type Budget = z.infer<typeof BudgetSchema>;
@@ -149,6 +160,43 @@ export function summarize(
   const chunks_per_second = measuredRate ?? budget.est_chunks_per_second;
   const est_seconds = chunks / chunks_per_second;
   const violations = [];
+  const bytes = files.reduce((sum, file) => sum + file.bytes, 0);
+  const dataBytes = files
+    .filter((file) => file.kind === "data")
+    .reduce((sum, file) => sum + file.bytes, 0);
+  const inadequate =
+    "effective candidate remains included; .gitignore/exclude_patterns or max_file_size in .cocoindex_code/settings.yml must exclude it";
+  for (const file of files) {
+    if (file.blob === true)
+      violations.push(`${file.path}: binary/blob content; ${inadequate}`);
+    if (file.bytes > CONTENT_LIMITS.max_file_bytes)
+      violations.push(
+        `${file.path}: ${file.bytes} bytes > per-file limit ${CONTENT_LIMITS.max_file_bytes}; ${inadequate}`,
+      );
+    else if (
+      file.kind === "data" &&
+      file.bytes > CONTENT_LIMITS.max_data_file_bytes
+    )
+      violations.push(
+        `${file.path}: dump/data candidate ${file.bytes} bytes > data-file limit ${CONTENT_LIMITS.max_data_file_bytes}; ${inadequate}`,
+      );
+  }
+  if (bytes > CONTENT_LIMITS.max_total_bytes)
+    violations.push(
+      `aggregate candidate bytes ${bytes} > ${CONTENT_LIMITS.max_total_bytes}; exclusions are inadequate; largest paths: ${files
+        .toSorted((a, b) =>
+          a.bytes === b.bytes
+            ? a.path.localeCompare(b.path)
+            : b.bytes - a.bytes,
+        )
+        .slice(0, 5)
+        .map((file) => file.path)
+        .join(", ")}`,
+    );
+  if (dataBytes > CONTENT_LIMITS.max_data_bytes)
+    violations.push(
+      `aggregate data bytes ${dataBytes} > ${CONTENT_LIMITS.max_data_bytes}; exclusions are inadequate; exclude dump/data candidates`,
+    );
   if (chunks > budget.max_est_chunks)
     violations.push(`est_chunks ${chunks} > ${budget.max_est_chunks}`);
   if (data_share > budget.max_data_share)
@@ -164,7 +212,7 @@ export function summarize(
     budget,
     total: {
       files: files.length,
-      bytes: files.reduce((sum, file) => sum + file.bytes, 0),
+      bytes,
       est_chunks: chunks,
       share: chunks === 0 ? 0 : 1,
     },
@@ -201,7 +249,13 @@ export async function computeIndexPlan(
         new Error("index plan refused: cannot locate ccc's Python interpreter"),
       );
     const child = Bun.spawn({
-      cmd: [python, join(import.meta.dir, "ccc_plan.py"), project],
+      cmd: [
+        python,
+        join(import.meta.dir, "ccc_plan.py"),
+        project,
+        "--limits",
+        JSON.stringify(CONTENT_LIMITS),
+      ],
       cwd: project,
       env: { ...process.env, RUST_LOG: "error", OTEL_SDK_DISABLED: "true" },
       stdout: "pipe",
@@ -321,6 +375,7 @@ export function planReport(plan: IndexPlan): string {
       ? "PLAN WARNING: time estimate uses the configured fallback rate; the time budget is advisory until a measured host rate exists.\n"
       : "") +
     `BUDGET: ${JSON.stringify(plan.budget)}\n` +
+    `CONTENT LIMITS (bytes): ${JSON.stringify(CONTENT_LIMITS)}; blob content is refused at any size\n` +
     (plan.violations.length === 0
       ? "PLAN: within budget\n"
       : "PLAN REFUSED: " + plan.violations.join("; ") + "\n") +

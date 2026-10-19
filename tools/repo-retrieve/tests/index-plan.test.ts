@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  truncateSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -86,6 +87,131 @@ async function cli(
 describe.skipIf(ccc === null)(
   "CCC-PLAN-GATE with installed ccc matcher",
   () => {
+    test("effective huge files, dumps and disguised blobs refuse before the index child; exclusions fix admission", async () => {
+      if (ccc === null) return;
+      const root = fixture();
+      mkdirSync(join(root, "research"));
+      writeFileSync(
+        join(root, "research", "running.md"),
+        "Research is running.\n",
+      );
+      mkdirSync(join(root, "runs"));
+      // Sparse 2 GiB fixtures must be rejected from metadata, never read whole.
+      for (const name of ["huge.txt", "huge.json"]) {
+        writeFileSync(join(root, "runs", name), "");
+        truncateSync(join(root, "runs", name), 2 ** 31);
+      }
+      writeFileSync(
+        join(root, "runs", "dump.json"),
+        JSON.stringify({ values: "1234567890".repeat(7000) }),
+      );
+      writeFileSync(join(root, "checkpoint.ts"), Buffer.from([65, 0, 66]));
+      writeFileSync(join(root, "invalid.md"), Buffer.from([255, 254, 128]));
+      // A substantial valid source denominator cannot hide a dump or zero-chunk blob.
+      writeFileSync(
+        join(root, "normal.ts"),
+        "const value = calculateResult(input);\n".repeat(20000),
+      );
+      const result = await computeIndexPlan(root, ccc);
+      expect(result.isOk()).toBe(true);
+      if (result.isErr()) return;
+      const report = planReport(result.value);
+      expect(report).toContain(
+        "runs/huge.txt: 2147483648 bytes > per-file limit 1048576",
+      );
+      expect(report).toContain(
+        "runs/huge.json: 2147483648 bytes > per-file limit 1048576",
+      );
+      expect(report).toContain("checkpoint.ts: binary/blob content");
+      expect(report).toContain("invalid.md: binary/blob content");
+      expect(report).toContain("exclusions are inadequate");
+      // The walker visits root files first, then runs; the data dump is before
+      // the huge files, so its bounded content classification is also exercised.
+      expect(report).toContain("runs/dump.json: dump/data candidate");
+      expect(report).toContain("data-file limit 65536");
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      const shebang = readFileSync(realpathSync(ccc), "utf8").split("\n")[0];
+      expect(shebang).toBeDefined();
+      if (shebang === undefined) return;
+      const called = join(root, "called");
+      const fake = join(bin, "ccc");
+      writeFileSync(
+        fake,
+        `${shebang}\nfrom pathlib import Path\nPath(${JSON.stringify(called)}).write_text('called')\nraise SystemExit(1)\n`,
+      );
+      chmodSync(fake, 0o755);
+      const refused = await cli(root, [], {
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+      });
+      expect(refused.code).toBe(4);
+      expect(await Bun.file(called).exists()).toBe(false);
+      expect(
+        await Bun.file(join(root, ".cocoindex_code", "INDEXED_AT")).exists(),
+      ).toBe(false);
+      // Root and nested gitignore semantics, including a re-included source,
+      // remove the actual offenders without rejecting research presence.
+      writeFileSync(join(root, ".gitignore"), "checkpoint.ts\ninvalid.md\n");
+      writeFileSync(
+        join(root, "runs", ".gitignore"),
+        "*.txt\n*.json\n!keep.txt\n",
+      );
+      writeFileSync(join(root, "runs", "keep.txt"), "Keep primary evidence.\n");
+      const fixed = await computeIndexPlan(root, ccc);
+      expect(fixed.isOk()).toBe(true);
+      if (fixed.isErr()) return;
+      expect(fixed.value.violations).toEqual([]);
+      expect(fixed.value.files.map((file) => file.path)).toContain(
+        "runs/keep.txt",
+      );
+      expect(fixed.value.files.map((file) => file.path)).toContain(
+        "research/running.md",
+      );
+      expect(
+        fixed.value.files.some(
+          (file) => file.path.includes("huge") || file.blob === true,
+        ),
+      ).toBe(false);
+    }, 30_000);
+
+    test("explicit exclusions and ccc max_file_size remove bad candidates; empty exclusions allow normal source", async () => {
+      if (ccc === null) return;
+      const root = fixture();
+      writeFileSync(join(root, "dump.txt"), "1,2,3,4,5,6,7,8,9\n".repeat(5000));
+      writeFileSync(join(root, "blob.ts"), Buffer.from([0, 1, 2]));
+      const planned = await computeIndexPlan(root, ccc);
+      expect(planned.isOk()).toBe(true);
+      if (planned.isErr()) return;
+      expect(
+        planned.value.violations.some((item) =>
+          item.includes("dump.txt: dump/data"),
+        ),
+      ).toBe(true);
+      expect(
+        planned.value.violations.some((item) =>
+          item.includes("blob.ts: binary/blob"),
+        ),
+      ).toBe(true);
+      settings(root, "- 'blob.ts'\nmax_file_size: 65536\n");
+      const fixed = await computeIndexPlan(root, ccc);
+      expect(fixed.isOk()).toBe(true);
+      if (fixed.isErr()) return;
+      expect(fixed.value.violations).toEqual([]);
+      expect(
+        fixed.value.files.some((file) =>
+          ["dump.txt", "blob.ts"].includes(file.path),
+        ),
+      ).toBe(false);
+      const normal = fixture();
+      writeFileSync(
+        join(normal, ".cocoindex_code", "settings.yml"),
+        "include_patterns: ['**/*.ts', '**/*.txt']\nexclude_patterns: []\n",
+      );
+      const allowed = await computeIndexPlan(normal, ccc);
+      expect(allowed.isOk()).toBe(true);
+      if (allowed.isOk()) expect(allowed.value.violations).toEqual([]);
+    }, 30_000);
+
     test("bulk JSON is refused before any ccc command; its suggested exclude fixes the plan and retains text", async () => {
       if (ccc === null) return;
       const root = fixture(true);
@@ -278,6 +404,64 @@ else:
     });
   },
 );
+
+test("content byte boundaries include equality and enforce aggregate bytes independently of chunk estimates", () => {
+  const budget = {
+    max_est_chunks: 50_000,
+    max_data_share: 1,
+    max_seconds: 600,
+    est_chunks_per_second: 50,
+  };
+  const source = {
+    path: "src/main.ts",
+    bytes: 1_048_576,
+    est_chunks: 1,
+    kind: "text" as const,
+  };
+  const data = {
+    path: "data/rows.json",
+    bytes: 65_536,
+    est_chunks: 1,
+    kind: "data" as const,
+  };
+  expect(summarize([source, data], budget).violations).toEqual([]);
+  expect(
+    summarize([{ ...source, bytes: source.bytes + 1 }], budget).violations.join(
+      "\n",
+    ),
+  ).toContain("per-file limit 1048576");
+  expect(
+    summarize([{ ...data, bytes: data.bytes + 1 }], budget).violations.join(
+      "\n",
+    ),
+  ).toContain("data-file limit 65536");
+  const sources = Array.from({ length: 40 }, (_, i) => ({
+    ...source,
+    path: `src/${i}.ts`,
+    bytes: 1_000_000,
+  }));
+  expect(summarize(sources, budget).violations).toEqual([]);
+  expect(
+    summarize([...sources, { ...source, bytes: 1 }], budget).violations.join(
+      "\n",
+    ),
+  ).toContain("aggregate candidate bytes 40000001 > 40000000");
+  const rows = Array.from({ length: 125 }, (_, i) => ({
+    ...data,
+    path: `data/${i}.json`,
+    bytes: 64_000,
+  }));
+  expect(summarize(rows, budget).violations).toEqual([]);
+  expect(
+    summarize([...rows, { ...data, bytes: 1 }], budget).violations.join("\n"),
+  ).toContain("aggregate data bytes 8000001 > 8000000");
+  expect(
+    summarize(
+      [{ ...source, bytes: 3, est_chunks: 0, blob: true }],
+      budget,
+    ).violations.join("\n"),
+  ).toContain("src/main.ts: binary/blob content");
+});
 
 test("measured ETA uses chunk deltas, ignores no advancement, and stops the client wait", async () => {
   expect(measuredEta(1000, 100, 100, 10)).toBeNull();

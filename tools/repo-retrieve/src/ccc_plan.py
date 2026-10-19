@@ -6,6 +6,7 @@ Unreadable files abort the plan rather than silently undercounting the workload.
 
 import json
 import math
+import stat
 import sys
 from pathlib import Path, PurePath
 
@@ -28,7 +29,7 @@ DATA_EXTENSIONS = {
 def kind(path: Path, text: str) -> str:
     if path.suffix.lower() in DATA_EXTENSIONS or path.name.lower().endswith(".min.js"):
         return "data"
-    if path.suffix.lower() == ".ipynb":
+    if path.suffix.lower() == ".ipynb" and text:
         notebook = json.loads(text)
         if any(cell.get("outputs") for cell in notebook.get("cells", [])):
             return "data"
@@ -78,23 +79,52 @@ def main() -> None:
         settings.exclude_patterns,
         settings.max_file_size,
     )
+    # Policy lives in index-plan.ts. Metadata for every effective candidate is
+    # retained, but rejected workloads never require unbounded content reads.
+    limits = json.loads(sys.argv[3]) if sys.argv[2:3] == ["--limits"] else None
+    if limits is None:
+        raise ValueError("planner requires content limits from index-plan.ts")
+    total_bytes = 0
     for absolute, relative in iter_included_files(root, root, matcher):
-        raw = absolute.read_bytes()
-        try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            # ccc process_file skips undecodable content. Keep it in the exact file set.
-            text = ""
+        metadata = absolute.stat()
+        size = metadata.st_size
+        total_bytes += size
+        blob = not stat.S_ISREG(metadata.st_mode)
+        category = kind(absolute, "")
+        chunks = math.ceil(size / 800)
+        if (
+            not blob
+            and size <= limits["max_file_bytes"]
+            and total_bytes <= limits["max_total_bytes"]
+        ):
+            with absolute.open("rb") as stream:
+                # One extra byte detects growth after stat without reading a
+                # concurrently growing file to EOF. Oversized files aren't opened.
+                raw = stream.read(limits["max_file_bytes"] + 1)
+            size = max(size, len(raw))
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                blob = True
+                text = ""
+            # UTF-8 decoding alone accepts NULs and other binary control bytes.
+            blob = (
+                blob
+                or any(byte < 32 and byte not in (9, 10, 12, 13) for byte in raw)
+                or b"\x7f" in raw
+            )
+            category = "data" if blob else kind(absolute, text)
+            chunks = math.ceil(len(text) / 800) if text.strip() else 0
+        if blob:
             category = "data"
-        else:
-            category = kind(absolute, text)
         print(
             json.dumps(
                 {
                     "path": relative.as_posix(),
-                    "bytes": len(raw),
-                    "est_chunks": math.ceil(len(text) / 800) if text.strip() else 0,
+                    "bytes": size,
+                    "est_chunks": chunks,
                     "kind": category,
+                    "blob": blob,
                 }
             ),
             flush=True,

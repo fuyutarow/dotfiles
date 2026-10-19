@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.6 — 2026-10-19
+
+- Refuse effective dump, oversized-file and blob candidates before indexing with bounded admission inspection.
+
 ## 1.3.5 — 2026-10-17
 
 - Fix false exit 125 during incremental indexing and name wrapper limits or ccc stderr in the final failure diagnostic.

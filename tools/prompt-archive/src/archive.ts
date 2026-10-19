@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type Attempt } from "../../shared/src/attempt.ts";
+import { attempt, type Attempt } from "../../shared/src/attempt.ts";
 import { jsonText, z } from "../../shared/src/zod.ts";
 
 type JsonRecord = Record<string, unknown>;
@@ -127,9 +127,30 @@ async function readJsonLines(
 function getDataHome(options: ArchiveOptions): string {
   return (
     options.dataHome ??
-    process.env.XDG_DATA_HOME ??
+    (process.env.XDG_DATA_HOME === ""
+      ? undefined
+      : process.env.XDG_DATA_HOME) ??
     join(homedir(), ".local", "share")
   );
+}
+
+async function readArchives(dir: string): Promise<Attempt<unknown[]>> {
+  const names = await attempt(() => readdir(dir));
+  if (!names.ok) {
+    const code = errorCodeSchema.safeParse(names.error);
+    if (code.success && code.data.code === "ENOENT")
+      return { ok: true, value: [] };
+    return names;
+  }
+  const records: unknown[] = [];
+  for (const name of names.value.filter((candidate) =>
+    /^\d{4}-\d{2}\.jsonl$/u.test(candidate),
+  )) {
+    const loaded = await readJsonLines(join(dir, name));
+    if (!loaded.ok) return loaded;
+    records.push(...loaded.value.records);
+  }
+  return { ok: true, value: records };
 }
 
 export async function archiveHistories(
@@ -146,26 +167,36 @@ export async function archiveHistories(
       path: options.codexHistory ?? join(home, ".codex", "history.jsonl"),
     },
   ];
-  const archiveDir = join(getDataHome(options), "prompts");
+  const dataHome = getDataHome(options);
+  const archiveDir = join(dataHome, "prompt-archive");
   await mkdir(archiveDir, { recursive: true });
   const existing = new Set<string>();
-  const archiveNames = (await readdir(archiveDir)).filter((name) =>
-    /^\d{4}-\d{2}\.jsonl$/u.test(name),
-  );
-  const archiveReads = await Promise.all(
-    archiveNames.map((name) => readJsonLines(join(archiveDir, name))),
-  );
-  const failedArchiveRead = archiveReads.find((read) => !read.ok);
-  if (failedArchiveRead !== undefined && !failedArchiveRead.ok)
-    return failedArchiveRead;
-  const archiveRecords = archiveReads.flatMap((read) =>
-    read.ok ? [read.value.records] : [],
-  );
-  for (const records of archiveRecords) addArchivedKeys(existing, records);
+  const archiveRecords = await readArchives(archiveDir);
+  if (!archiveRecords.ok) return archiveRecords;
+  addArchivedKeys(existing, archiveRecords.value);
 
   const pending = new Map<string, string[]>();
   let skipped = 0;
   let archived = 0;
+  // Preserve entries that have since disappeared from the source histories.
+  // Leave the old archive intact; keys make this migration safe to repeat.
+  const legacy = await readArchives(join(dataHome, "prompts"));
+  if (!legacy.ok) return legacy;
+  for (const value of legacy.value) {
+    const parsed = parseArchived(value);
+    if (parsed === undefined) {
+      skipped += 1;
+      continue;
+    }
+    const result = addPendingRecords(
+      parsed.vendor,
+      [parsed.archived],
+      archiveDir,
+      existing,
+      pending,
+    );
+    archived += result.archived;
+  }
   for (const source of sources) {
     const loaded = await readJsonLines(source.path);
     if (!loaded.ok) return loaded;

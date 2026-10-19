@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdir, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
@@ -7,159 +7,204 @@ import { runHook, tempHome } from "./helpers.ts";
 import { decoded } from "../../../hooks/tests/decode.ts";
 
 const HOOK = "log-agx-snapshot.ts";
-const Message = z.looseObject({ systemMessage: z.string() });
-const messageOf = (stdout: string): string =>
-  decoded(Message, parseJson(stdout)).systemMessage.replace(
-    /^\[dotfiles:agx:snapshot\] /u,
-    "",
-  );
-
-const minutesAgo = (m: number): string =>
-  Temporal.Instant.fromEpochMilliseconds(
-    Temporal.Now.instant().epochMilliseconds - m * 60_000,
-  ).toString();
-
-function run(
+const Message = z.object({ systemMessage: z.string() });
+const row = (
   id: string,
-  ticket: string,
-  session: string | null,
-  state: "running" | "ended" | "orphaned",
-  judged = false,
-  startedMinutesAgo = 4,
-) {
-  return {
-    id,
-    ticket,
-    row: "luna-high",
-    state,
-    started_at: minutesAgo(startedMinutesAgo),
-    ended_at: state === "running" ? null : minutesAgo(1),
-    dispatcher_session: session,
-    judgment: judged ? { decision: "accept", note: "" } : null,
-  };
-}
+  session = "s1",
+  vendor: string | null = "thread-1",
+) => ({
+  id,
+  ticket: "/t/worker.md",
+  row: "terra-high",
+  state: "running",
+  dispatcher_session: session,
+  vendor_session: vendor,
+});
 
-// A HOME whose XDG_RUNTIME_DIR holds the statusline's agx snapshot (the file the hook reads).
-function homeWithSnapshot(rows: unknown[], ageMs = 1_000) {
+async function fixture(rows: unknown[] = [], legacy = false) {
   const home = tempHome();
-  const runtime = join(home, "run");
-  mkdirSync(join(runtime, "statusline"), { recursive: true });
-  writeFileSync(
-    join(runtime, "statusline", "agx-runs.json"),
+  const state = join(home, ".local/state/agx-next");
+  await mkdir(state, { recursive: true });
+  const path = join(state, "current-runs.json");
+  await Bun.write(
+    path,
     JSON.stringify({
-      output: JSON.stringify(rows),
-      capturedAt: Temporal.Now.instant().epochMilliseconds - ageMs,
+      output: JSON.stringify(legacy ? rows : { runs: rows, summary: {} }),
+      capturedAt: 1, // owner publications do not expire merely with wall-clock age
       exit: 0,
     }),
   );
-  return { home, runtime };
+  return { home, state, path };
 }
 
-const fire = (
-  env: { home: string; runtime: string },
-  event: string,
-  sid = "s1",
-) =>
-  runHook(
+function fire(
+  f: { home: string },
+  event = "Stop",
+  payload?: unknown,
+  extra: Record<string, string> = {},
+) {
+  return runHook(
     HOOK,
-    { hook_event_name: event, session_id: sid },
     {
-      HOME: env.home,
-      XDG_RUNTIME_DIR: env.runtime,
-      PATH: "/nonexistent", // the hook must not need agx (or anything) on PATH
+      hook_event_name: event,
+      ...decoded(
+        z.record(z.string(), z.unknown()),
+        payload ?? { session_id: "s1" },
+      ),
+    },
+    {
+      HOME: f.home,
+      AGX_NEXT_STATE_DIR: "",
+      AGX_STATE_DIR: "",
+      CLAUDE_CODE_SESSION_ID: "",
+      CODEX_THREAD_ID: "",
+      CODEX_SESSION_ID: "",
+      XDG_RUNTIME_DIR: join(f.home, "runtime"),
+      PATH: "/nonexistent",
+      ...extra,
     },
   );
+}
 
-const fleet = [
-  run("a", "/t/herdr-btm.md", "s1", "running", false, 4),
-  run("b", "/t/statusline-design.md", "s1", "running", false, 12),
-  run("c", "/t/done1.md", "s1", "ended"),
-  run("d", "/t/done2.md", "s1", "ended"),
-  run("e", "/t/done3.md", "s1", "ended", true),
-  run("f", "/t/lost.md", "s1", "orphaned"),
-  run("g", "/t/other.md", "other", "running"),
-];
+function message(result: ReturnType<typeof fire>, session = "s1") {
+  expect(result.code).toBe(0);
+  expect(result.stderr).toBe("");
+  expect(result.stdout.trim().split("\n")).toHaveLength(1);
+  const msg = decoded(Message, parseJson(result.stdout)).systemMessage;
+  expect(msg).toStartWith("[dotfiles:agx:snapshot] ");
+  expect(msg).toContain(`session=${session}`);
+  expect(msg).not.toContain("\n");
+  return msg;
+}
 
 describe("log-agx-snapshot", () => {
-  test("Stop emits one line: counts, then one entry per running run of this session", () => {
-    const r = fire(homeWithSnapshot(fleet), "Stop");
-    expect(r.code).toBe(0);
-    expect(Object.keys(decoded(Message, parseJson(r.stdout)))).toEqual([
-      "systemMessage",
+  test("Stop lists only this session's runs with run prefixes and vendor session/thread ids", async () => {
+    const f = await fixture([
+      row("abcdef12-aaaa", "s1", "claude-worker-session"),
+      row("12345678-bbbb", "s1", "codex-worker-thread"),
+      row("other-id", "other"),
     ]);
-    const msg = messageOf(r.stdout);
-    expect(msg).not.toContain("\n");
-    expect(msg).toBe(
-      "Agx: 2 running · 2 ended-unjudged · orphaned 1 | herdr-btm luna-high 4m working · statusline-design luna-high 12m working",
+    const msg = message(fire(f));
+    expect(msg).toContain("2 running");
+    expect(msg).toContain("abcdef12");
+    expect(msg).toContain("12345678");
+    expect(msg).toContain("vendor_session=claude-worker-session");
+    expect(msg).toContain("vendor_session=codex-worker-thread");
+    expect(msg).not.toContain("other-id");
+    message(fire(f)); // every Stop, including immediately repeated Stops
+  });
+
+  test("zero runs, foreign runs and unattributed runs still print 0 running", async () => {
+    for (const rows of [
+      [],
+      [row("foreign", "other")],
+      [{ ...row("none"), dispatcher_session: null }],
+    ]) {
+      expect(message(fire(await fixture(rows)))).toContain("0 running");
+    }
+  });
+
+  test("legacy owner array is supported and missing vendor identity is explicit", async () => {
+    const msg = message(
+      fire(await fixture([row("abcdefgh-run", "s1", null)], true)),
+    );
+    expect(msg).toContain("abcdefgh");
+    expect(msg).toContain("vendor_session=n/a (not recorded)");
+  });
+
+  test("unreadable state prints n/a with its read failure reason", async () => {
+    const f = await fixture();
+    const msg = message(
+      fire(
+        f,
+        "Stop",
+        { session_id: "s1" },
+        { AGX_NEXT_STATE_DIR: join(f.home, "missing") },
+      ),
+    );
+    expect(msg).toContain("n/a (");
+    expect(msg).toContain("ENOENT");
+  });
+
+  test("invalid JSON, invalid envelope and invalid listing print n/a with reason", async () => {
+    for (const data of [
+      "{nope",
+      "null",
+      JSON.stringify({ output: "{}", capturedAt: 1, exit: 0 }),
+    ]) {
+      const f = await fixture();
+      await Bun.write(f.path, data);
+      expect(message(fire(f))).toContain("n/a (invalid current-runs.json)");
+    }
+  });
+
+  test("state publication older than records is reported as unavailable", async () => {
+    const f = await fixture([row("abcdef12-run")]);
+    await utimes(f.path, 1, 1);
+    await Bun.write(join(f.state, "records.jsonl"), "new record\n");
+    expect(message(fire(f))).toContain(
+      "n/a (current-runs.json predates records.jsonl)",
     );
   });
 
-  test("another session's runs only: no output, exit 0", () => {
-    const r = fire(
-      homeWithSnapshot([run("g", "/t/other.md", "other", "running")]),
-      "Stop",
+  test("Stop survives an unwritable cadence cache", async () => {
+    const f = await fixture();
+    await Bun.write(join(f.home, ".cache"), "not a directory");
+    expect(message(fire(f))).toContain("0 running");
+  });
+
+  test("PostToolUse is throttled but Stop is never throttled", async () => {
+    const f = await fixture();
+    message(fire(f, "PostToolUse"));
+    expect(fire(f, "PostToolUse").stdout).toBe("");
+    message(fire(f));
+    message(fire(f));
+  });
+
+  test("Codex thread and environment fallback identities are printed", async () => {
+    const f = await fixture();
+    message(fire(f, "Stop", { thread_id: "codex-thread" }), "codex-thread");
+    message(
+      fire(f, "Stop", {}, { CODEX_SESSION_ID: "codex-env" }),
+      "codex-env",
     );
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
-  });
-
-  test("a run with no dispatcher session is never this session's", () => {
-    const r = fire(
-      homeWithSnapshot([run("n", "/t/n.md", null, "running")]),
-      "Stop",
+    message(
+      fire(f, "Stop", {}, { CLAUDE_CODE_SESSION_ID: "claude-env" }),
+      "claude-env",
     );
-    expect(r.stdout.trim()).toBe("");
-  });
-
-  test("a second PostToolUse within 60 s emits nothing", () => {
-    const env = homeWithSnapshot(fleet);
-    expect(fire(env, "PostToolUse").stdout).toContain("Agx:");
-    const r = fire(env, "PostToolUse");
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
-    expect(fire(env, "Stop").stdout).toContain("Agx:"); // Stop is never throttled
-  });
-
-  test("a stale snapshot emits nothing", () => {
-    const r = fire(homeWithSnapshot(fleet, 10 * 60_000), "Stop");
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
-  });
-
-  test("a missing snapshot is fail-open: exit 0, no output", () => {
-    const home = tempHome();
-    const r = fire({ home, runtime: join(home, "run") }, "Stop");
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
-  });
-
-  test("a garbled snapshot is fail-open", () => {
-    const env = homeWithSnapshot([]);
-    writeFileSync(join(env.runtime, "statusline", "agx-runs.json"), "{nope");
-    const r = fire(env, "Stop");
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
-  });
-
-  test("only judged ended runs: nothing to report", () => {
-    const r = fire(
-      homeWithSnapshot([run("e", "/t/e.md", "s1", "ended", true)]),
-      "Stop",
+    expect(message(fire(f, "Stop", {}), "n/a (not supplied)")).toContain(
+      "n/a (session id not supplied)",
     );
-    expect(r.stdout.trim()).toBe("");
   });
 
-  test("ended-unjudged alone gives counts without entries", () => {
-    const r = fire(
-      homeWithSnapshot([run("c", "/t/c.md", "s1", "ended")]),
-      "Stop",
+  test("agx state overrides win over HOME and obsolete runtime cache", async () => {
+    const f = await fixture([row("default-run")]);
+    const override = await fixture([row("override-run")]);
+    const msg = message(
+      fire(
+        f,
+        "Stop",
+        { session_id: "s1" },
+        { AGX_NEXT_STATE_DIR: override.state, AGX_STATE_DIR: f.state },
+      ),
     );
-    expect(messageOf(r.stdout)).toBe("Agx: 1 ended-unjudged");
+    expect(msg).toContain("override");
+    expect(msg).not.toContain("default");
+    expect(
+      message(
+        fire(
+          f,
+          "Stop",
+          { session_id: "s1" },
+          { AGX_STATE_DIR: override.state },
+        ),
+      ),
+    ).toContain("override");
   });
 
-  test("other events are ignored", () => {
-    const r = fire(homeWithSnapshot(fleet), "UserPromptSubmit");
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
+  test("other events stay silent", async () => {
+    const result = fire(await fixture(), "UserPromptSubmit");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("");
   });
 });

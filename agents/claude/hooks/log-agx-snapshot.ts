@@ -1,127 +1,122 @@
-import { hookJson } from "./lib.ts";
-// Stop / PostToolUse hook — attach one line "Agx: 3 running · 2 ended-unjudged · orphaned 1 | <ticket> <row> 4m working · …"
-// describing THIS session's agx fleet at this moment, so a transcript shows when each worker
-// started, ended and was judged. Sibling of log-sys-snapshot.ts and built the same way.
-//
-// Channel: a top-level `systemMessage` (recorded in the transcript, shown to the user, not added
-// to the model's context) — see log-sys-snapshot.ts for the measurement.
-//
-// Sampler: none, and this hook never spawns agx. tools/statusline/src/agx-snapshot.ts refreshes
-// `agx ls --json` into <runtime>/statusline/agx-runs.json on every render; this hook only reads
-// that file (the path rule is a copy of agxSnapshotPath — readAgxSnapshotAsync itself would
-// start a refresh, i.e. a sampler). A missing, unparsable or older-than-STALE_MS snapshot says
-// nothing about now, so no line.
-//
-// Attribution: a run belongs to this session when its `dispatcher_session` equals the payload's
-// session_id. Other sessions' runs never enter the counts or the entries.
-//
-// Cadence: every Stop, and on PostToolUse at most once per MIN_GAP_MS per session.
-//
-// Fail-open: this is a log, never a gate. Any problem -> exit 0 with no output.
+// Stop / PostToolUse — one session-attributed fleet line, without spawning agx.
+// Read agx's owner publication, not the retired statusline presentation cache.
+// Fail-open: unavailable state is a diagnostic, never a gate. Stop always emits;
+// PostToolUse retains its one-minute cadence. Cadence write failures cannot hide a line.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { attempt } from "../../hooks/attempt.ts";
-import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
-import { readStdinJson } from "./lib.ts";
+import { attempt, errorMessage } from "../../hooks/attempt.ts";
+import { parseJson, strAt } from "../../hooks/narrow.ts";
+import { jsonOf, z } from "../../hooks/zod.ts";
+import { hookJson } from "./lib.ts";
 
-const HOME = process.env.HOME ?? "";
-const STATE_DIR = `${HOME}/.cache/claude/agx-log`;
-const STALE_MS = 120_000;
 const MIN_GAP_MS = 60_000;
-
 const nonEmpty = (v: string | undefined): string | undefined =>
   v !== undefined && v !== "" ? v : undefined;
+const oneLine = (text: string): string =>
+  text.replaceAll(/[\r\n\u2028\u2029]/gu, " ");
 
-// The statusline's snapshot location (tools/statusline/src/agx-snapshot.ts agxSnapshotPath).
-function snapshotPath(): string {
-  const env = process.env;
-  const runtime = nonEmpty(env.XDG_RUNTIME_DIR);
-  if (runtime !== undefined)
-    return join(runtime, "statusline", "agx-runs.json");
-  const state =
-    nonEmpty(env.AGX_NEXT_STATE_DIR) ??
-    nonEmpty(env.AGX_STATE_DIR) ??
-    (nonEmpty(env.XDG_STATE_HOME) === undefined
-      ? join(env.HOME ?? "", ".local", "state", "agx-next")
-      : join(env.XDG_STATE_HOME ?? "", "agx-next"));
-  return join(state, "statusline", "agx-runs.json");
-}
+// Same owner path as agx-run/store.ts. The statusline reader also consumes this
+// publication, but imports npm dependencies; hooks must work before bun install.
+const stateDir =
+  nonEmpty(process.env.AGX_NEXT_STATE_DIR) ??
+  nonEmpty(process.env.AGX_STATE_DIR) ??
+  join(process.env.HOME ?? homedir(), ".local/state/agx-next");
+const Run = z.looseObject({
+  id: z.string().min(1),
+  state: z.string(),
+  dispatcher_session: z.string().nullable(),
+  vendor_session: z.string().nullable().optional(),
+  ticket: z.string().optional(),
+  row: z.string().optional(),
+  judgment: z.unknown().optional(),
+});
+const Runs = z.array(Run);
+const Snapshot = jsonOf(
+  z.object({
+    output: jsonOf(z.union([Runs, z.object({ runs: Runs })])),
+    capturedAt: z.number(),
+    exit: z.literal(0),
+  }),
+);
 
-function elapsed(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
-}
-
-const ticketName = (t: string): string => basename(t).replace(/\.md$/u, "");
-
-async function describe(
-  runs: unknown[],
-  now: number,
-): Promise<string | undefined> {
-  const running: string[] = [];
-  let ended = 0;
-  let orphaned = 0;
-  for (const r of runs) {
-    const state = strAt(r, "state");
-    if (state === "running") {
-      const started = await attempt(
-        () =>
-          Temporal.Instant.from(strAt(r, "started_at") ?? "").epochMilliseconds,
-      );
-      const age = started.ok ? ` ${elapsed(now - started.value)}` : "";
-      const row = strAt(r, "row");
-      running.push(
-        `${ticketName(strAt(r, "ticket") ?? strAt(r, "id") ?? "?")}${row === undefined ? "" : ` ${row}`}${age} working`,
-      );
-    } else if (state === "orphaned") orphaned += 1;
-    else if (state === "ended" && (at(r, "judgment") ?? null) === null)
-      ended += 1;
-  }
+async function describe(sid: string): Promise<string> {
+  const path = join(stateDir, "current-runs.json");
+  const read = await attempt(() => readFile(path, "utf8"));
+  if (!read.ok) return `n/a (${oneLine(errorMessage(read.error))})`;
+  const snapshot = Snapshot.safeParse(read.value);
+  if (!snapshot.success) return "n/a (invalid current-runs.json)";
+  // Owner publications expire on a newer event, not merely on wall-clock age.
+  const [published, records] = await Promise.all([
+    stat(path),
+    stat(join(stateDir, "records.jsonl")).catch(() => null),
+  ]);
+  if (records !== null && published.mtimeMs < records.mtimeMs)
+    return "n/a (current-runs.json predates records.jsonl)";
+  const output = snapshot.data.output;
+  const mine = (Array.isArray(output) ? output : output.runs).filter(
+    (run) => run.dispatcher_session === sid,
+  );
+  const running = mine.filter((run) => run.state === "running");
+  const ended = mine.filter(
+    (run) => run.state === "ended" && (run.judgment ?? null) === null,
+  ).length;
+  const orphaned = mine.filter((run) => run.state === "orphaned").length;
   const counts = [
-    running.length > 0 ? `${running.length} running` : "",
-    ended > 0 ? `${ended} ended-unjudged` : "",
-    orphaned > 0 ? `orphaned ${orphaned}` : "",
-  ].filter((c) => c !== "");
-  if (counts.length === 0) return undefined;
-  const head = `Agx: ${counts.join(" · ")}`;
-  return running.length > 0 ? `${head} | ${running.join(" · ")}` : head;
+    `${running.length} running`,
+    ...(ended > 0 ? [`${ended} ended-unjudged`] : []),
+    ...(orphaned > 0 ? [`orphaned ${orphaned}`] : []),
+  ];
+  const entries = running.map((run) => {
+    const ticket = basename(run.ticket ?? run.id).replace(/\.md$/u, "");
+    const vendor =
+      nonEmpty(run.vendor_session ?? undefined) ?? "n/a (not recorded)";
+    return `${run.id.slice(0, 8)} ${ticket}${run.row === undefined ? "" : ` ${run.row}`} vendor_session=${vendor}`;
+  });
+  return oneLine(
+    `${counts.join(" · ")}${entries.length === 0 ? "" : ` | ${entries.join(" · ")}`}`,
+  );
 }
 
 async function main(): Promise<void> {
-  const payload = readStdinJson();
-  const event = strAt(payload, "hook_event_name") ?? "";
-  const sid = str(at(payload, "session_id") ?? "");
+  const payload = parseJson(await Bun.stdin.text());
+  const event = strAt(payload, "hook_event_name");
   if (event !== "Stop" && event !== "PostToolUse") return;
-  if (sid === undefined || sid === "") return;
-
+  const sid =
+    nonEmpty(strAt(payload, "session_id")) ??
+    nonEmpty(strAt(payload, "thread_id")) ??
+    nonEmpty(process.env.CLAUDE_CODE_SESSION_ID) ??
+    nonEmpty(process.env.CODEX_THREAD_ID) ??
+    nonEmpty(process.env.CODEX_SESSION_ID);
   const now = Temporal.Now.instant().epochMilliseconds;
-  const snap = parseJson(await readFile(snapshotPath(), "utf8"));
-  const capturedAt = at(snap, "capturedAt");
-  const output = strAt(snap, "output");
-  if (typeof capturedAt !== "number" || output === undefined) return;
-  if (now - capturedAt > STALE_MS || capturedAt > now) return;
-  const all = arr(parseJson(output));
-  if (all === undefined) return;
-  const mine = all.filter((r) => strAt(r, "dispatcher_session") === sid);
-  const line = await describe(mine, now);
-  if (line === undefined) return;
-
-  const key = sid.replaceAll(/[^A-Za-z0-9_-]/gu, "_");
-  const statePath = `${STATE_DIR}/${key}.last`;
-  const last = await attempt(async () =>
-    Number(await readFile(statePath, "utf8")),
+  const key = (sid ?? "unknown").replaceAll(/[^A-Za-z0-9_-]/gu, "_");
+  const cadenceDir = join(
+    process.env.HOME ?? homedir(),
+    ".cache/claude/agx-log",
   );
-  const lastAt = last.ok && Number.isFinite(last.value) ? last.value : 0;
-  if (event === "PostToolUse" && now - lastAt < MIN_GAP_MS) return;
-
-  await mkdir(STATE_DIR, { recursive: true });
-  await writeFile(statePath, `${now}\n`);
-  process.stdout.write(`${hookJson({ systemMessage: line })}\n`);
+  const cadence = join(cadenceDir, `${key}.last`);
+  if (event === "PostToolUse") {
+    const last = await attempt(async () =>
+      Number(await readFile(cadence, "utf8")),
+    );
+    if (last.ok && Number.isFinite(last.value) && now - last.value < MIN_GAP_MS)
+      return;
+  }
+  const result = await attempt(async () =>
+    sid === undefined ? "n/a (session id not supplied)" : describe(sid),
+  );
+  const body = result.ok
+    ? result.value
+    : `n/a (${oneLine(errorMessage(result.error))})`;
+  process.stdout.write(
+    `${hookJson({ systemMessage: `Agx: session=${oneLine(sid ?? "n/a (not supplied)")} | ${body}` })}\n`,
+  );
+  await attempt(async () => {
+    await mkdir(cadenceDir, { recursive: true });
+    await writeFile(cadence, `${now}\n`);
+  });
 }
 
-await attempt(main); // FAIL OPEN — a missing snapshot or state file just means no line this time
+await main();
 process.exit(0);

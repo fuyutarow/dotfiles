@@ -7,7 +7,7 @@ import { ROSTER_PATH } from "../../../models/roster.ts";
 import { runHook } from "./helpers.ts";
 
 // enforce-dispatch-contract: the Agent, Task and Workflow tools dispatch nothing. Every worker
-// starts through `agx run`, so every one of these calls is denied with that entry point and the roster
+// starts through the worker tool, so every one of these calls is denied with its entry points and the roster
 // table. The roster itself loads strictly: an unknown key — including the retired `enabled`
 // switch — rejects the load, and the hook then fails closed.
 const HOOK = "enforce-dispatch-contract.ts";
@@ -50,18 +50,23 @@ describe("enforce-dispatch-contract", () => {
     ["Task", { subagent_type: "general-purpose" }],
     ["Workflow", { script: "export const meta = {}" }],
   ])(
-    "%s %o is denied with the agx run entry point and the roster",
+    "%s %o is denied with the agx worker entry points and the roster",
     (tool, input) => {
       const d = decisionOf(runHook(HOOK, call(tool, input)).stdout);
       expect(d.decision).toBe("deny");
       expect(d.reason).toContain(`the ${tool} tool dispatches nothing`);
-      expect(d.reason).toContain("every worker starts with `agx run <ticket>`");
-      expect(d.reason).toContain("agx check <ticket>");
-      expect(d.reason).toContain("agx ls");
-      expect(d.reason).toContain("agx judge <run> accept|reject");
-      expect(d.reason).toContain("agx stats");
       expect(d.reason).toContain(
-        "systemd-run --user --unit=agt_<slug> --collect -- agx run …",
+        "every worker starts with `agx worker run <ticket>` or `agx-worker run <ticket>`",
+      );
+      expect(d.reason).toContain("agx worker dispatch <ticket>");
+      expect(d.reason).toContain("agx-worker dispatch <ticket>");
+      expect(d.reason).toContain(
+        "systemd-run --user --unit=agt_<slug> --collect -- agx worker dispatch …",
+      );
+      expect(d.reason).toContain("agx worker run <ticket> --continue <run>");
+      expect(d.reason).toContain("agx-worker run <ticket> --continue <run>");
+      expect(d.reason).not.toMatch(
+        /\bagx (?:run|dispatch|check|ls|judge|stats|roster|doctor|jev)\b/u,
       );
       // the table names every candidate, claude rows included, with its measured numbers and cost
       expect(d.reason).toContain("| ● | `luna-high` | codex | 33 | 4.5 |");

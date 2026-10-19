@@ -8,7 +8,8 @@ guarded by `~/.codex/hooks.json`; the Desktop `collaboration.spawn_agent` path s
 fresh-session live probe, so do not claim that Desktop path is enforced yet. This is advisory
 context, not the guard itself.
 
-Use `agx worker run <ticket>` for worker dispatch. The local hook validates the model and effort pair;
+Use `agx worker run <ticket>`, `agx worker dispatch <ticket>`, or
+`agx-worker dispatch <ticket>` for worker dispatch. The local hook validates the model and effort pair;
 it does not require a resource declaration. The Desktop `collaboration.spawn_agent` path remains
 unproven until a fresh-session live probe succeeds; do not claim hook enforcement there.
 

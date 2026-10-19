@@ -42,7 +42,7 @@ function sessionRows(session: FleetSession): string[] {
   return [context, usage].map((row) => oneLine(row));
 }
 
-// Same owner path as agx-run/store.ts. The statusline reader also consumes this
+// Same owner path as tools/agx-worker/src/next/store.ts. The statusline reader also consumes this
 // publication, but imports npm dependencies; hooks must work before bun install.
 const stateDir =
   nonEmpty(process.env.AGX_NEXT_STATE_DIR) ??

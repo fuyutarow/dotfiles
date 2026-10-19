@@ -1,9 +1,9 @@
 // PreToolUse gate — the Agent, Task and Workflow tools dispatch nothing; every worker starts
-// through `agx run <ticket>`. matcher: Agent|Task|Workflow (settings.json: run.sh --fail-closed)
+// through `agx worker run <ticket>` or `agx-worker run <ticket>`. matcher: Agent|Task|Workflow (settings.json: run.sh --fail-closed)
 //
 // THE ROSTER (agents/models/dispatch-roster.toml, read through agents/models/roster.ts) is the one
 // home of what may be dispatched, and agx is the one entry point: Jev picks a row from the
-// brief, codex rows run `codex exec` (agx-run), claude rows run `claude -p` (tools/agx-worker/src/workers/run-claude.ts,
+// brief, codex rows run `codex exec` (agx-worker), claude rows run `claude -p` (tools/agx-worker/src/workers/run-claude.ts,
 // run-claude.ts, bounded by the roster's [claude_run]). Every run is logged, shown on the statusline
 // Run: row and gradable — none of which an Agent or Workflow call would be.
 //
@@ -21,7 +21,7 @@ import { loadRoster, rosterTable } from "../../models/roster.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const ROSTER_FILE = "agents/models/dispatch-roster.toml";
-const ENTRY = "`agx run <ticket>`";
+const ENTRY = "`agx worker run <ticket>` or `agx-worker run <ticket>`";
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
@@ -45,10 +45,10 @@ async function main(): Promise<void> {
   decidePre(
     "deny",
     `dispatch-contract: the ${tool} tool dispatches nothing — every worker starts with ${ENTRY}. ` +
-      "Use `agx check <ticket>` to validate a ticket, `agx ls` to inspect runs, " +
-      "`agx judge <run> accept|reject` to record a judgment, and `agx stats` for run statistics. " +
-      "For durable runs use `systemd-run --user --unit=agt_<slug> --collect -- agx run …`; " +
-      `continue with \`agx run <ticket> --continue <run>\`.\nRoster (${ROSTER_FILE}):\n${rosterTable(loaded.value)}`,
+      "Dispatch with `agx worker dispatch <ticket>` or `agx-worker dispatch <ticket>`. " +
+      "For durable runs use `systemd-run --user --unit=agt_<slug> --collect -- agx worker dispatch …`; " +
+      "continue with `agx worker run <ticket> --continue <run>` or `agx-worker run <ticket> --continue <run>`.\n" +
+      `Roster (${ROSTER_FILE}):\n${rosterTable(loaded.value)}`,
   );
 }
 

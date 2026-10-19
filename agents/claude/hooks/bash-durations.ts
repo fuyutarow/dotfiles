@@ -6,7 +6,7 @@
 // PreToolUse (enforce-background-waits) records the start of every foreground Bash call by its
 // tool_use_id; PostToolUse (record-bash-duration) turns that into a duration and keeps the last
 // KEEP durations per command key. A key is the leading words of the command (`mise run commit`,
-// `bun test`, `agx run`), so every call of the same tool shares one history.
+// `bun test`, `agx worker run`), so every call of the same tool shares one history.
 // Zero-dep (hooks run before node_modules exist): node fs and the vendored zod bundle.
 
 import {
@@ -44,8 +44,13 @@ function stepKey(step: string): string | undefined {
   const lead = firstFlag === -1 ? words : words.slice(0, firstFlag);
   const stop = lead.findIndex((w) => NOT_A_WORD.test(w) || w.includes("/"));
   const head = (stop === -1 ? lead : lead.slice(0, stop)).slice(0, 3);
-  const commandHead =
-    head[0] === "agx" && head[1] === "run" ? head.slice(0, 2) : head;
+  let commandHead = head;
+  if (
+    head[0] === "agx-worker" &&
+    (head[1] === "run" || head[1] === "dispatch")
+  ) {
+    commandHead = head.slice(0, 2);
+  }
   const flags =
     firstFlag === -1
       ? []

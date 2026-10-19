@@ -277,8 +277,8 @@ describe("enforce-search-route", () => {
   test("ignores search words in ticket text and heredoc bodies", () => {
     const project = registerProject();
     for (const command of [
-      `agx run /tmp/ticket.md --sandbox read-only`,
-      `agx run /tmp/ticket-with-grep.md`,
+      `agx worker run /tmp/ticket.md --sandbox read-only`,
+      `agx-worker run /tmp/ticket-with-grep.md`,
       `cat <<'TICKET'\nThe ticket asks to use grep and rg.\nTICKET`,
       `printf '%s' 'grep is mentioned in this ticket'`,
     ]) {
@@ -295,9 +295,9 @@ describe("enforce-search-route", () => {
     for (const command of [
       "rr text 'needle' | grep -F -e X",
       "jj workspace list | awk '{print $1}'",
-      "agx ls | grep run-123",
-      "agx ls 2>&1 | grep -E 'a|b'",
-      "agx ls --json | jq -r .x | rg -i y | head",
+      "agx worker dispatch /tmp/ticket.md | grep run-123",
+      "agx-worker dispatch /tmp/ticket.md 2>&1 | grep -E 'a|b'",
+      "agx worker run /tmp/ticket.md --json | jq -r .x | rg -i y | head",
       "journalctl -u service | rg -v x | head",
       "bun test agents/hooks/tests | rg -v 'pass' | head -n 20",
       "jj log --limit 10 | rg -E -v -i 'foo|bar'",
@@ -314,19 +314,19 @@ describe("enforce-search-route", () => {
   test("allows the live PreToolUse reproduction through downstream text stages", () => {
     const project = registerProject();
     for (const command of [
-      "agx ls --json 2>&1 | grep -e '^VERIFY' -e 'result='",
-      "cd /home/fuyu/dotfiles && agx ls --json 2>&1 | grep -e A -e B",
-      "agx ls --json 2>&1 | grep -e A -e B | cut -c1-150",
-      "cd /home/fuyu/dotfiles && agx ls --json 2>&1 | grep -e '^VERIFY' -e 'result=' | cut -c1-150",
+      "agx worker run /tmp/ticket.md --json 2>&1 | grep -e '^VERIFY' -e 'result='",
+      "cd /home/fuyu/dotfiles && agx worker dispatch /tmp/ticket.md 2>&1 | grep -e A -e B",
+      "agx-worker dispatch /tmp/ticket.md 2>&1 | grep -e A -e B | cut -c1-150",
+      "cd /home/fuyu/dotfiles && agx worker run /tmp/ticket.md --json 2>&1 | grep -e '^VERIFY' -e 'result=' | cut -c1-150",
       "rr text x 2>&1 | grep -F -e y | head",
-      "agx ls | grep x | tail -n 5",
-      "agx ls | grep x | sort -r | uniq -c | wc -l",
-      "agx ls | grep x | tr a-z A-Z",
-      "agx ls --json | jq -r '.name'",
-      "agx ls --json | jq --arg key value '.name + $key'",
-      "agx ls | awk '{print $1}'",
-      "agx ls | sed -n '1p'",
-      "agx ls | sed -e '1p' -e '2p'",
+      "agx worker dispatch /tmp/ticket.md | grep x | tail -n 5",
+      "agx-worker dispatch /tmp/ticket.md | grep x | sort -r | uniq -c | wc -l",
+      "agx worker run /tmp/ticket.md | grep x | tr a-z A-Z",
+      "agx worker run /tmp/ticket.md --json | jq -r '.name'",
+      "agx worker run /tmp/ticket.md --json | jq --arg key value '.name + $key'",
+      "agx worker dispatch /tmp/ticket.md | awk '{print $1}'",
+      "agx worker run /tmp/ticket.md | sed -n '1p'",
+      "agx worker run /tmp/ticket.md | sed -e '1p' -e '2p'",
     ]) {
       const result = runHook(HOOK, bashPayload(project, command), withCcc());
       expect({ command, decision: decisionOf(result.stdout) }).toEqual({
@@ -345,9 +345,9 @@ describe("enforce-search-route", () => {
       "awk '{print}' agents/hooks/enforce-search-route.ts | rg foo",
       "find . -type f | grep foo",
       "ls -laR . | rg foo",
-      "agx ls | grep -f agents/hooks/patterns.txt",
+      "agx worker run /tmp/ticket.md | grep -f agents/hooks/patterns.txt",
       "grep -r foo .",
-      "agx ls | grep foo | xargs cat",
+      "agx worker run /tmp/ticket.md | grep foo | xargs cat",
     ]) {
       expect({
         command,
@@ -379,7 +379,7 @@ describe("enforce-search-route", () => {
       "repo-retrieve files | grep -- wanted | rg raw",
       "repo-retrieve literal --query needle ; grep -- wanted file.txt",
       "repo-retrieve literal --query needle | grep -- wanted < file.txt",
-      "agx ls | grep foo | cut -c1-150 file.txt",
+      "agx worker run /tmp/ticket.md | grep foo | cut -c1-150 file.txt",
     ]) {
       expect(
         decisionOf(

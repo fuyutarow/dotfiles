@@ -11,14 +11,14 @@ Evidence / locus: the input `tool_name` identifies the denied tool.
 Cause confidence: proven
 
 Primary message: dispatch-contract: the tool dispatches nothing — every worker starts with
-`agx run <ticket>`. Use `agx check <ticket>`, `agx ls`, `agx judge <run> accept|reject`, and
-`agx stats` for the other run operations. Durable runs use
-`systemd-run --user --unit=agt_<slug> --collect -- agx run …`.
+`agx worker run <ticket>` or `agx-worker run <ticket>`. Dispatch with
+`agx worker dispatch <ticket>` or `agx-worker dispatch <ticket>`. Durable runs use
+`systemd-run --user --unit=agt_<slug> --collect -- agx worker dispatch …`.
 
 Recovery mode: exact
-Validated recovery: invoke `agx run <ticket>`; continue a vendor session with
-`agx run <ticket> --continue <run>`.
+Validated recovery: invoke `agx worker run <ticket>` or `agx-worker run <ticket>`; continue a vendor
+session with `agx worker run <ticket> --continue <run>` or `agx-worker run <ticket> --continue <run>`.
 Preconditions: the ticket file and run workspace are available to the CLI.
-Next observation: `agx ls --json` reports the run and its judgment.
+Next observation: the worker run record reports the run and its judgment.
 
 Receipt: `bun test agents/claude/hooks/tests/enforce-dispatch-contract.test.ts`

@@ -24,7 +24,8 @@ jex questions.toml report.md > ev.json && agx judge RUN accept --evidence ev.jso
 ```
 
 There are no subcommands. Flags may precede or follow operands; `--` permits paths
-beginning with a dash. `--help` prints usage and `--version` prints only semver.
+beginning with a dash. `--help` prints usage, including the combined input limit of
+**30,000 bytes**, and `--version` prints only semver.
 Stdout emits one JSON object per HTTP answer, in terminals and pipelines alike:
 `{model,bits:[{id,p,reason}],refuted?:{p,reason}}`. `model` is the model Jev reports; when
 the response does not report a usable model, it is `{na:true,why}`. Exit 1 still prints the complete object,
@@ -39,17 +40,19 @@ reason, `reason` says `Jev Noul probability of yes`. It is a source label, not g
 | 1    | A bit is below 0.5, or refuted is at least 0.5                                           |
 | 2    | Usage error                                                                              |
 | 3    | No Jev response (transport failure, timeout, or unavailable key)                         |
-| 4    | Cannot judge: invalid questions/input, non-200 HTTP, malformed answer, or mismatched ids |
+| 4    | Cannot judge: invalid questions/input, input over 30,000 bytes, non-200 HTTP, malformed answer, or mismatched ids |
 
 Malformed answers print `{bits:[]}`; well-shaped answers with mismatched ids retain
 the returned probabilities on stdout and exit 4. Missing optional refutation answers
 also exit 4 when requested. No response or invalid local inputs produce no verdict JSON.
 Preview exits 0 after reading inputs and validating the questions, without looking up a key.
 
-Requests carry each path, full-file SHA-256, original byte size, UTF-8 content/excerpt,
-and `truncated`. Excerpts are capped at 64 KiB per file and 256 KiB total, ending on
-UTF-8 boundaries. Files are streamed to compute their full hashes. The serialized
-request must fit 1 MiB; invalid UTF-8 in included content is rejected.
+The combined original size of all input files must be at most 30,000 bytes. Larger
+inputs exit 4 with a stderr diagnostic naming the limit and actual combined size;
+they are never truncated or sent. Requests carry each path, full-file SHA-256,
+original byte size, and complete UTF-8 content. Files are streamed to compute their
+full hashes. The serialized request must fit 1 MiB; invalid UTF-8 in input content is
+rejected.
 
 `JEX_JEV_URL` overrides the endpoint (then `AGX_NEXT_JEV_URL`, then
 `https://api.typesafe.ai/v1/systemone`). `JEX_JEV_MODEL` defaults to `jev-latest`.

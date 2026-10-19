@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 — 2026-10-19
+
+- Reject combined input over 30000 bytes instead of truncating it
+
 ## 0.2.2 — 2026-10-19
 
 - Include Jev's reported model in verdict JSON

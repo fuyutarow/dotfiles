@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { jsonOf, z } from "../../shared/src/zod.ts";
-import { FILE_CAP, TOTAL_CAP } from "../src/classify.ts";
+import { INPUT_CAP } from "../src/classify.ts";
 
 const Verdict = z.object({
   model: z.union([
@@ -22,18 +22,6 @@ function decode<S extends z.ZodType>(schema: S, text: string): z.output<S> {
   return parsed.data;
 }
 const verdict = (text: string) => decode(Verdict, text);
-const Preview = z.object({
-  state: z.object({
-    files: z.array(
-      z.object({
-        content: z.string(),
-        size: z.number(),
-        sha256: z.string(),
-        truncated: z.boolean(),
-      }),
-    ),
-  }),
-});
 const root = await mkdtemp(join(tmpdir(), "jex-test-"));
 const q = join(root, "questions.toml");
 const file = join(root, "input.txt");
@@ -106,7 +94,6 @@ test("all bits >= .5 succeeds and prints normalized bits", async () => {
           sha256: createHash("sha256").update("hello 世界\n").digest("hex"),
           content: "hello 世界\n",
           size: Buffer.byteLength("hello 世界\n"),
-          truncated: false,
         },
       ],
     },
@@ -247,33 +234,22 @@ test("invalid questions, duplicate ids, count, command checks, and missing files
   expect((await run([q, join(root, "missing")])).exit).toBe(4);
   expect(calls).toBe(before);
 });
-test("excerpt cap is UTF-8 safe; hash covers the entire file and total excerpts are bounded", async () => {
-  const large = join(root, "large.txt");
-  const bytes = "a".repeat(FILE_CAP - 1) + "世".repeat(FILE_CAP);
-  await writeFile(large, bytes);
-  const result = await run([
-    "--request",
-    q,
-    ...Array.from({ length: 6 }, () => large),
-  ]);
-  expect(result.exit).toBe(0);
-  const files = decode(Preview, result.stdout).state.files;
-  expect(files[0]?.content).toBe("a".repeat(FILE_CAP - 1));
-  expect(files[0]?.sha256).toBe(
-    createHash("sha256").update(bytes).digest("hex"),
+test("combined input over the byte limit exits 4 with the actual size and sends nothing", async () => {
+  const first = join(root, "first.txt");
+  const second = join(root, "second.txt");
+  await writeFile(first, "a".repeat(20_000));
+  const invalidUtf8 = new Uint8Array(INPUT_CAP - 20_000 + 1);
+  invalidUtf8.fill(0x62);
+  invalidUtf8[0] = 0xff;
+  await writeFile(second, invalidUtf8);
+  const before = calls;
+  const result = await run(["--request", q, first, second]);
+  expect(result.exit).toBe(4);
+  expect(result.stdout).toBe("");
+  expect(result.stderr).toContain(
+    `input exceeds ${INPUT_CAP}-byte limit (actual size: ${INPUT_CAP + 1} bytes)`,
   );
-  expect(files[0]?.size).toBe(Buffer.byteLength(bytes));
-  expect(files[0]?.truncated).toBe(true);
-  expect(
-    files.reduce(
-      (sum: number, f: { content: string }) =>
-        sum + Buffer.byteLength(f.content),
-      0,
-    ),
-  ).toBeLessThanOrEqual(TOTAL_CAP);
-  expect(
-    files.every((f: { content: string }) => !f.content.includes("�")),
-  ).toBe(true);
+  expect(calls).toBe(before);
 });
 test("usage and unknown flags fail with exit 2; version aliases print the package version", async () => {
   for (const args of [[], [q], ["--__proto__", q, file]])
@@ -289,4 +265,7 @@ test("usage and unknown flags fail with exit 2; version aliases print the packag
     expect(version.stdout).toBe("jex 0.2.1\n");
     expect(version.stderr).toBe("");
   }
+  const help = await run(["--help"]);
+  expect(help.exit).toBe(0);
+  expect(help.stdout).toContain(`${INPUT_CAP} bytes`);
 });

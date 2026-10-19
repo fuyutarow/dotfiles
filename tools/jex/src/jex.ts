@@ -22,7 +22,7 @@ async function main(): Promise<void> {
       strictFlags: true,
       help: {
         description:
-          "Zero-shot multi-label yes/no classification over files through Jev. Exit: 0 yes, 1 no/refuted, 2 usage, 3 unreachable, 4 cannot judge.",
+          "Zero-shot multi-label yes/no classification over files through Jev. Input limit: 30000 bytes combined. Exit: 0 yes, 1 no/refuted, 2 usage, 3 unreachable, 4 cannot judge.",
       },
     }),
   );

@@ -31,8 +31,7 @@ const Noul = z.object({
   reason: z.string().optional(),
 });
 const Answer = z.object({ answers: z.record(z.string(), Noul) });
-export const FILE_CAP = 64 * 1024;
-export const TOTAL_CAP = 256 * 1024;
+export const INPUT_CAP = 30_000;
 const REQUEST_CAP = 1024 * 1024;
 
 async function fileState(path: string, cap: number) {
@@ -56,38 +55,47 @@ async function fileState(path: string, cap: number) {
   await reader.cancel().catch(() => {});
   reader.releaseLock();
   if (!read.ok) return read;
-  const truncated = retained < size;
-  // Streaming decode discards an incomplete final code point only for an excerpt.
-  const decoded = await attempt(() =>
-    new TextDecoder("utf-8", { fatal: true }).decode(
-      prefix.subarray(0, retained),
-      { stream: truncated },
-    ),
-  );
-  if (!decoded.ok) return decoded;
   return {
     ok: true as const,
     value: {
       path,
       sha256: digest.digest("hex"),
       size,
-      content: decoded.value,
-      truncated,
+      content: prefix.subarray(0, retained),
     },
   };
 }
 
+const readFileState = (path: string, cap: number) =>
+  attempt(() => fileState(path, cap));
+
 export async function buildRequest(q: Questions, paths: string[]) {
   const files = [];
-  let remaining = TOTAL_CAP;
+  let remaining = INPUT_CAP;
+  let inputSize = 0;
   for (const path of paths) {
-    const cap = Math.min(FILE_CAP, remaining);
-    const result = await attempt(() => fileState(path, cap));
+    const result = await readFileState(path, remaining);
     if (!result.ok) return result;
     if (!result.value.ok) return result.value;
     const file = result.value.value;
-    remaining -= Buffer.byteLength(file.content);
+    inputSize += file.size;
+    remaining -= file.content.byteLength;
     files.push(file);
+  }
+  if (inputSize > INPUT_CAP)
+    return {
+      ok: false as const,
+      error: new Error(
+        `input exceeds ${INPUT_CAP}-byte limit (actual size: ${inputSize} bytes)`,
+      ),
+    };
+  const decodedFiles = [];
+  for (const file of files) {
+    const decoded = await attempt(() =>
+      new TextDecoder("utf-8", { fatal: true }).decode(file.content),
+    );
+    if (!decoded.ok) return decoded;
+    decodedFiles.push({ ...file, content: decoded.value });
   }
   const questions = Object.fromEntries(
     q.question.map(({ id, text }) => [
@@ -102,7 +110,7 @@ export async function buildRequest(q: Questions, paths: string[]) {
     });
   const request = {
     model: process.env.JEX_JEV_MODEL ?? "jev-latest",
-    state: { files },
+    state: { files: decodedFiles },
     questions,
   };
   if (Buffer.byteLength(JSON.stringify(request)) > REQUEST_CAP)

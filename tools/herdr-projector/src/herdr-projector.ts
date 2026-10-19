@@ -8,6 +8,7 @@ import {
   readFleetSession,
   type FleetSessionRead,
 } from "../../shared/src/fleet-session.ts";
+import { readCodexSessionStatus } from "../../statusline/src/adapters/codex-rollout.ts";
 import { jsonOf, z } from "../../shared/src/zod.ts";
 
 const argv = process.argv.slice(2);
@@ -17,6 +18,7 @@ const AgentSchema = z.object({
   pane_id: z.string().optional(),
   tab_id: z.string().optional(),
   agent_session: z.object({ value: z.string().optional() }).nullish(),
+  cwd: z.string().optional(),
   tokens: z.record(z.string(), z.string()).nullish(),
 });
 const ListSchema = z.object({
@@ -60,30 +62,75 @@ async function herdr(args: string[]): Promise<boolean> {
 }
 
 function sessionWhy(session: FleetSessionRead | undefined): string {
-  if (session === undefined) return "session id unavailable";
+  if (session === undefined) return "no id";
   const unavailable = FleetSessionUnavailableSchema.safeParse(session);
-  if (unavailable.success) return unavailable.data.why;
-  const parsed = FleetSessionSchema.safeParse(session);
-  if (!parsed.success) return "identity unavailable";
-  const unavailableName = FleetSessionUnavailableSchema.safeParse(
-    parsed.data.name,
-  );
-  return unavailableName.success
-    ? unavailableName.data.why
-    : "identity unavailable";
+  if (unavailable.success) {
+    if (unavailable.data.why.includes("missing")) return "missing";
+    if (unavailable.data.why.includes("invalid")) return "invalid";
+    return "unknown";
+  }
+  return "unknown";
 }
+
+function unavailableLabel(agent: Agent, why: string): string {
+  const shortWhy = why.slice(0, 20);
+  const suffix = ` · n/a(${shortWhy})`;
+  const name = agent.agent ?? "agent";
+  return `${name.slice(0, Math.max(1, 40 - suffix.length))}${suffix}`.slice(
+    0,
+    40,
+  );
+}
+
+type CodexSessionLookup = (cwd: string) => Promise<string | undefined>;
 
 export async function projectAgents(
   agents: Agent[],
   sessions: ReadonlyMap<string, FleetSessionRead>,
   apply: (args: string[]) => Promise<boolean>,
+  findCodexSessionId: CodexSessionLookup = async (cwd) =>
+    (await readCodexSessionStatus(cwd))?.sessionId,
 ): Promise<number> {
   let updated = 0;
   for (const agent of agents) {
     if (agent.pane_id === undefined || agent.tab_id === undefined) continue;
-    const sessionId = agent.agent_session?.value;
-    const session =
+    const vendor = agent.agent;
+    const herdrSessionId = agent.agent_session?.value;
+    let sessionId = herdrSessionId;
+    if (
+      sessionId === undefined &&
+      vendor === "codex" &&
+      agent.cwd !== undefined
+    )
+      sessionId = await findCodexSessionId(agent.cwd);
+    let candidate =
       sessionId === undefined ? undefined : sessions.get(sessionId);
+    if (
+      candidate === undefined &&
+      sessionId !== undefined &&
+      herdrSessionId === undefined
+    )
+      candidate = await readFleetSession(sessionId);
+    const parsedCandidate = FleetSessionSchema.safeParse(candidate);
+    let session: FleetSessionRead | undefined;
+    if (
+      parsedCandidate.success &&
+      parsedCandidate.data.vendor === vendor &&
+      parsedCandidate.data.session_id === sessionId
+    ) {
+      session = parsedCandidate.data;
+    } else if (
+      candidate !== undefined &&
+      FleetSessionUnavailableSchema.safeParse(candidate).success
+    ) {
+      session = candidate;
+    }
+    const matchedSessionId =
+      parsedCandidate.success &&
+      (parsedCandidate.data.vendor !== vendor ||
+        parsedCandidate.data.session_id !== sessionId)
+        ? undefined
+        : sessionId;
     const parsedSession = FleetSessionSchema.safeParse(session);
     const identity = parsedSession.success ? parsedSession.data : undefined;
     const knownName =
@@ -94,15 +141,13 @@ export async function projectAgents(
     const priorSessionId = agent.tokens?.fleet_session_id;
     const priorName = agent.tokens?.fullname ?? "";
     const priorKnown =
-      priorSessionId === sessionId &&
+      priorSessionId === matchedSessionId &&
       priorName !== "" &&
       !priorName.includes("(unidentified:");
     if (!known && priorKnown) continue;
 
     const why = sessionWhy(session);
-    const name =
-      knownName ??
-      `${agent.agent ?? "agent"} ${agent.pane_id} (unidentified: ${why})`;
+    const name = knownName ?? unavailableLabel(agent, why);
     const model =
       identity !== undefined && typeof identity.model === "string"
         ? identity.model
@@ -129,7 +174,7 @@ export async function projectAgents(
       "--token",
       `rc=${rc}`,
       "--token",
-      `fleet_session_id=${sessionId ?? ""}`,
+      `fleet_session_id=${matchedSessionId ?? ""}`,
     ]);
     if (renamed && reported) updated++;
   }

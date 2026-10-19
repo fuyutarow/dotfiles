@@ -3,6 +3,7 @@
 // Retired owner directories prevent delayed reclaimers from moving a successor lock.
 import { attempt, attemptOr } from "./attempt.ts";
 import { z, jsonOf } from "./zod.ts";
+import { cli } from "cleye";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import {
@@ -225,6 +226,139 @@ export type SamplerOptions = {
   procRoot?: string;
   now?: () => number;
 };
+
+export type GpuSamplerCheckOptions = {
+  statePath?: string;
+  procRoot?: string;
+};
+
+type ProcFinding = {
+  dxgTasks: string[];
+  zombies: Set<number>;
+  errors: string[];
+};
+
+let hasUnknownFlag = false;
+function rejectPrototypeFlag(type: string, _flag: string): boolean {
+  if (type !== "unknown-flag") return false;
+  hasUnknownFlag = true;
+  return true;
+}
+
+function processState(statText: string): string | undefined {
+  // comm is parenthesized and may itself contain spaces or closing parentheses.
+  return /^\d+ \(.*\) ([A-Z]) /u.exec(statText)?.[1];
+}
+
+async function inspectProcesses(procRoot: string): Promise<ProcFinding> {
+  const finding: ProcFinding = { dxgTasks: [], zombies: new Set(), errors: [] };
+  if (process.platform !== "linux") {
+    finding.errors.push("process inventory is available only on Linux");
+    return finding;
+  }
+  const inventory = await attempt(() => readdir(procRoot));
+  if (!inventory.ok) {
+    finding.errors.push(`cannot read ${procRoot}: ${String(inventory.error)}`);
+    return finding;
+  }
+  await Promise.all(
+    inventory.value
+      .filter((name) => /^\d+$/u.test(name))
+      .map(async (pidText) => {
+        const pid = Number(pidText);
+        const stat = await attempt(() =>
+          readFile(join(procRoot, pidText, "stat"), "utf8"),
+        );
+        if (!stat.ok) {
+          const code = z.object({ code: z.string() }).safeParse(stat.error);
+          if (code.success && code.data.code === "ENOENT") return;
+          finding.errors.push(
+            `cannot read ${procRoot}/${pidText}/stat: ${String(stat.error)}`,
+          );
+          return;
+        }
+        const state = processState(stat.value);
+        if (state === undefined) {
+          finding.errors.push(`cannot parse ${procRoot}/${pidText}/stat`);
+          return;
+        }
+        if (state === "Z") finding.zombies.add(pid);
+        if (state !== "D") return;
+        const waitChannel = await attempt(() =>
+          readFile(join(procRoot, pidText, "wchan"), "utf8"),
+        );
+        if (!waitChannel.ok) {
+          const code = z
+            .object({ code: z.string() })
+            .safeParse(waitChannel.error);
+          if (!code.success || code.data.code !== "ENOENT")
+            finding.errors.push(
+              `cannot read ${procRoot}/${pidText}/wchan: ${String(waitChannel.error)}`,
+            );
+          return;
+        }
+        const wchan = waitChannel.value.trim();
+        if (/dxg/iu.test(wchan))
+          finding.dxgTasks.push(
+            `${pid} (wchan ${wchan !== "" ? wchan : "unknown"})`,
+          );
+        else if (wchan === "" || wchan === "0")
+          finding.errors.push(
+            `cannot identify wait channel for D-state process ${pid}`,
+          );
+      }),
+  );
+  return finding;
+}
+
+/** Read-only recovery gate. Every condition is independently reported for the owner. */
+export async function checkGpuSampler(
+  options: GpuSamplerCheckOptions = {},
+): Promise<{ ok: boolean; failures: string[] }> {
+  const path = options.statePath ?? gpuStatePath();
+  const procRoot = options.procRoot ?? "/proc";
+  const [state, proc] = await Promise.all([
+    readGpuState(path),
+    inspectProcesses(procRoot),
+  ]);
+  const failures: string[] = [];
+
+  if (proc.dxgTasks.length > 0)
+    failures.push(`D-state process(es) in dxg: ${proc.dxgTasks.join(", ")}`);
+  if (proc.errors.length > 0)
+    failures.push(`process inventory incomplete: ${proc.errors.join("; ")}`);
+
+  if (state === undefined) {
+    failures.push(
+      `GPU sampler state unavailable or invalid: ${path}`,
+      "cannot verify GPU-holding zombies without a valid GPU sampler state",
+      "last GPU probe did not succeed (state unavailable)",
+      "cannot verify unresponsiveSince without a valid GPU sampler state",
+    );
+  } else {
+    const gpuZombies = state.processes
+      .map((gpuProcess) => gpuProcess.pid)
+      .filter((pid) => proc.zombies.has(pid));
+    if (gpuZombies.length > 0)
+      failures.push(`GPU-holding zombie process(es): ${gpuZombies.join(", ")}`);
+    if (proc.errors.length > 0 && state.processes.length > 0)
+      failures.push(
+        "cannot fully verify GPU-holding zombies because process inventory is incomplete",
+      );
+    if (
+      state.sampledAt === undefined ||
+      state.sampledAt < state.attemptAt ||
+      state.why !== undefined
+    )
+      failures.push(
+        "last GPU probe did not succeed (latest attempt has no successful sample)",
+      );
+    if (state.unresponsiveSince !== undefined)
+      failures.push(`unresponsiveSince is set (${state.unresponsiveSince})`);
+  }
+  return { ok: failures.length === 0, failures };
+}
+
 export async function runGpuSampler(
   options: SamplerOptions = {},
 ): Promise<string> {
@@ -364,8 +498,36 @@ export async function runGpuSampler(
     return "sampled";
   }, "unresponsive");
 }
-if (import.meta.main) {
-  // A supervisor may restart this one-shot owner every 60s; no consumer launches it.
+async function main(): Promise<void> {
+  const parsed = cli(
+    {
+      name: "gpu-sampler",
+      flags: {
+        check: {
+          type: Boolean,
+          description: "Run the read-only recovery check",
+        },
+      },
+      parameters: [],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
+  if (
+    hasUnknownFlag ||
+    Object.keys(parsed.unknownFlags).length > 0 ||
+    parsed._.length > 0
+  ) {
+    process.stderr.write("Usage: bun gpu-sampler.ts [--check]\n");
+    process.exitCode = 2;
+    return;
+  }
+  if (parsed.flags.check === true) {
+    await reportCheck();
+    return;
+  }
   const result = await attempt(() => runGpuSampler());
   if (result.ok) process.stdout.write(`${result.value}\n`);
   else {
@@ -373,3 +535,19 @@ if (import.meta.main) {
     process.exitCode = 1;
   }
 }
+
+async function reportCheck(): Promise<void> {
+  const result = await checkGpuSampler();
+  if (result.ok) {
+    process.stdout.write("GPU sampler recovery check: OK\n");
+  } else {
+    emitFailures(result.failures);
+    process.exitCode = 1;
+  }
+}
+
+function emitFailures(failures: string[]): void {
+  for (const failure of failures) process.stderr.write(`FAIL: ${failure}\n`);
+}
+
+if (import.meta.main) await main();

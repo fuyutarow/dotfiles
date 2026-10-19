@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.1 — 2026-10-19
+
+- Add a read-only GPU recovery check and WSL stall runbook
+
 ## 0.13.0 — 2026-10-19
 
 - Share the tool, object, finding and remedy diagnostic record schema

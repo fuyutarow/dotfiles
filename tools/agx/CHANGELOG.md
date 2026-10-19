@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3 — 2026-10-19
+
+- Remove temporary agx jev forwarding
+
 ## 0.6.2 — 2026-10-19
 
 - Restore temporary agx jev forwarding for dx 0.1.4

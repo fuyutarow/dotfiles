@@ -75,6 +75,7 @@ test.each([
   "__proto__",
   "agx-next",
   "agx-run",
+  "jev",
 ])("suite rejects '%s' without dispatching", async (verb) => {
   await using f = await fixture();
   const result = await run(f.bin, [verb, "ticket.md"], 19);
@@ -83,16 +84,6 @@ test.each([
   expect(result.stderr).toBe(
     `agx: unknown tool '${verb}'; expected worker, ticket, ws\n`,
   );
-});
-test("temporary jev compatibility forwards help to agx-worker successfully", async () => {
-  await using f = await fixture();
-  const result = await run(f.bin, ["jev", "--help"]);
-  expect(result.code).toBe(0);
-  expect(result.stderr).toBe("");
-  expect(decode(result.stdout)).toEqual({
-    tool: "worker",
-    args: ["jev", "--help"],
-  });
 });
 test("suite owns its version and takes descriptions from PATH tools", async () => {
   await using f = await fixture();

@@ -127,12 +127,36 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
   const fakeBtm = join(binDir, "btm");
   await writeFile(fakeBtm, `#!/bin/sh\nprintf ran > '${marker}'\nsleep 3.4\n`);
   await chmod(fakeBtm, 0o755);
+  const stateDir = join(root, "state");
+  await mkdir(stateDir);
+  const now = Temporal.Now.instant().epochMilliseconds;
+  await Bun.write(
+    join(stateDir, "gpu-owner.json"),
+    JSON.stringify({
+      schema: 1,
+      attemptAt: now,
+      sampledAt: now,
+      devices: [],
+      processes: [],
+      samples: [
+        {
+          ts: now,
+          nextTs: now + 60_000,
+          utilPct: 40,
+          memUsedGiB: 3.4,
+          memTotalGiB: 12,
+        },
+      ],
+    }),
+  );
   const socketPath = join(root, "herdr.sock");
   const requests = await fakeHerdrSocket(socketPath);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: `${binDir}:${process.env.PATH ?? ""}`,
     HOME: join(root, "home"),
+    XDG_STATE_HOME: stateDir,
+    TZ: "UTC",
     HERDR_ENV: "1",
     HERDR_SOCKET_PATH: basename(socketPath),
     HERDR_PANE_ID: "w1:p9",
@@ -165,7 +189,7 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
     (request) => request.method === "pane.report_metadata",
   );
   const parsedMetadata = MetadataRequestSchema.safeParse(metadata);
-  expect(parsedMetadata.success).toBe(true);
+  expect(parsedMetadata.success, JSON.stringify(metadata)).toBe(true);
   if (parsedMetadata.success) {
     expect(parsedMetadata.data.params).toMatchObject({
       pane_id: "w1:p9",
@@ -174,7 +198,9 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
       ttl_ms: 10000,
     });
     const { cpu, ram, tmp, btm_summary } = parsedMetadata.data.params.tokens;
-    expect(btm_summary).toBe(`CPU ${cpu} · RAM ${ram} · tmpfs ${tmp}`);
+    expect(btm_summary).toBe(
+      `CPU ${cpu} · RAM ${ram} · tmpfs ${tmp} · GPU 3.4/12G 40%`,
+    );
     expect(parsedMetadata.data.params.title).toBe(`btm · ${btm_summary}`);
   }
   const metadataRequests = requests.filter(
@@ -192,6 +218,132 @@ test("reports btm lifecycle and shared host metrics to the current pane", async 
     requests.filter((request) => request.method === "pane.release_agent"),
   ).toHaveLength(1);
 }, 15000);
+
+test.each([
+  [
+    "paused GPU job",
+    (now: number) => ({
+      schema: 1,
+      attemptAt: now,
+      sampledAt: now,
+      paused: true,
+      holder: { slot: "gpu.0.0", pid: 2468 },
+      devices: [],
+      processes: [],
+      samples: [],
+    }),
+    "GPU paused (job pid 2468)",
+  ],
+  [
+    "unresponsive GPU sampler",
+    (now: number) => ({
+      schema: 1,
+      attemptAt: now,
+      sampledAt: now,
+      unresponsiveSince: 0,
+      devices: [],
+      processes: [],
+      samples: [],
+    }),
+    "GPU ⚠ stalled since 00:00",
+  ],
+  [
+    "expired GPU sample",
+    (now: number) => ({
+      schema: 1,
+      attemptAt: now - 120_001,
+      sampledAt: now - 120_001,
+      devices: [],
+      processes: [],
+      samples: [
+        {
+          ts: now - 120_001,
+          nextTs: now - 60_001,
+          utilPct: 40,
+          memUsedGiB: 3.4,
+          memTotalGiB: 12,
+        },
+      ],
+    }),
+    "GPU n/a(stale (GPU sample expired))",
+  ],
+])(
+  "reports %s in the Herdr label without probing NVML",
+  async (_name, state, expected) => {
+    const root = await tempRoot();
+    const binDir = join(root, "bin");
+    await mkdir(binDir);
+    const marker = join(root, "nvidia-smi-called");
+    const fakeBtm = join(binDir, "btm");
+    const fakeNvidiaSmi = join(binDir, "nvidia-smi");
+    await writeFile(fakeBtm, "#!/bin/sh\nsleep 3.4\n");
+    await writeFile(fakeNvidiaSmi, `#!/bin/sh\nprintf called > '${marker}'\n`);
+    await Promise.all([chmod(fakeBtm, 0o755), chmod(fakeNvidiaSmi, 0o755)]);
+    const stateDir = join(root, "state");
+    await mkdir(stateDir);
+    const now = Temporal.Now.instant().epochMilliseconds;
+    await Bun.write(
+      join(stateDir, "gpu-owner.json"),
+      JSON.stringify(state(now)),
+    );
+    const socketPath = join(root, "herdr.sock");
+    const requests = await fakeHerdrSocket(socketPath);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      HOME: join(root, "home"),
+      XDG_STATE_HOME: stateDir,
+      TZ: "UTC",
+      HERDR_ENV: "1",
+      HERDR_SOCKET_PATH: basename(socketPath),
+      HERDR_PANE_ID: "w1:p9",
+    };
+
+    expect(await runEntry(root, env)).toBe(0);
+    const metadata = requests.find(
+      (request) => request.method === "pane.report_metadata",
+    );
+    const parsed = MetadataRequestSchema.safeParse(metadata);
+    expect(parsed.success, JSON.stringify(metadata)).toBe(true);
+    if (parsed.success)
+      expect(parsed.data.params.tokens.btm_summary).toContain(expected);
+    expect(await Bun.file(marker).exists()).toBe(false);
+  },
+  15000,
+);
+
+test("reports a missing GPU owner state as n/a", async () => {
+  const root = await tempRoot();
+  const binDir = join(root, "bin");
+  await mkdir(binDir);
+  const fakeBtm = join(binDir, "btm");
+  await writeFile(fakeBtm, "#!/bin/sh\nsleep 3.4\n");
+  await chmod(fakeBtm, 0o755);
+  const stateDir = join(root, "state");
+  await mkdir(stateDir);
+  const socketPath = join(root, "herdr.sock");
+  const requests = await fakeHerdrSocket(socketPath);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    HOME: join(root, "home"),
+    XDG_STATE_HOME: stateDir,
+    HERDR_ENV: "1",
+    HERDR_SOCKET_PATH: basename(socketPath),
+    HERDR_PANE_ID: "w1:p9",
+  };
+
+  expect(await runEntry(root, env)).toBe(0);
+  const metadata = requests.find(
+    (request) => request.method === "pane.report_metadata",
+  );
+  const parsed = MetadataRequestSchema.safeParse(metadata);
+  expect(parsed.success, JSON.stringify(metadata)).toBe(true);
+  if (parsed.success)
+    expect(parsed.data.params.tokens.btm_summary).toContain(
+      "GPU n/a(stale (GPU sampler state unavailable))",
+    );
+});
 
 test("runs btm without any Herdr reports outside a Herdr pane", async () => {
   const root = await tempRoot();

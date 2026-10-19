@@ -3,6 +3,11 @@ import { cli as cleyeCli } from "cleye";
 import { standardCli } from "../../shared/src/cli.ts";
 import cliPackage from "../package.json" with { type: "json" };
 import { jsonOf, z } from "../../shared/src/zod.ts";
+import {
+  gpuEstimate,
+  gpuStateFailure,
+  readGpuState,
+} from "../../shared/src/gpu-samples.ts";
 import { ensureBtm } from "./ensure.ts";
 import { btmpArgs } from "./args.ts";
 
@@ -83,13 +88,39 @@ async function metrics(): Promise<z.output<typeof MetricsSchema> | undefined> {
   return parsed.success ? parsed.data : undefined;
 }
 
+async function gpuLabel(): Promise<string> {
+  const state = await readGpuState();
+  if (state?.unresponsiveSince !== undefined)
+    return `GPU ⚠ stalled since ${Temporal.Instant.fromEpochMilliseconds(
+      state.unresponsiveSince,
+    )
+      .toZonedDateTimeISO(Temporal.Now.timeZoneId())
+      .toPlainTime()
+      .toString({ smallestUnit: "minute" })}`;
+  if (state?.paused === true) {
+    const pid = state.holder?.pid;
+    return pid === undefined
+      ? "GPU n/a(paused job pid unavailable)"
+      : `GPU paused (job pid ${pid})`;
+  }
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const failure = gpuStateFailure(state, now);
+  if (failure !== undefined)
+    return `GPU n/a(${failure.replaceAll(/\s+/gu, " ").slice(0, 120)})`;
+  const reading = gpuEstimate(state?.samples ?? [], now);
+  if (reading === "unknown") return "GPU n/a(stale (no GPU sample))";
+  const used = Number(reading.memUsedGiB.toFixed(1)).toString();
+  const total = Number(reading.memTotalGiB.toFixed(1)).toString();
+  return `GPU ${used}/${total}G ${Math.round(reading.nowPct)}%`;
+}
+
 async function reportMetadata(
   paneId: string,
   stillRunning: () => boolean,
 ): Promise<void> {
-  const sample = await metrics();
+  const [sample, gpu] = await Promise.all([metrics(), gpuLabel()]);
   if (sample === undefined || !stillRunning()) return;
-  const summary = `CPU ${sample.cpu} · RAM ${sample.ram} · tmpfs ${sample.tmp}`;
+  const summary = `CPU ${sample.cpu} · RAM ${sample.ram} · tmpfs ${sample.tmp} · ${gpu}`;
   await herdr([
     "pane",
     "report-metadata",

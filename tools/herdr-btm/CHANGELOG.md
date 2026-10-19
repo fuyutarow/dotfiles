@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 — 2026-10-19
+
+- Add sampler-backed GPU details to the btm Herdr label
+
 ## 0.2.2 — 2026-10-17
 
 - Repair existing btm tab labels through herdr tab rename without replacing panes.

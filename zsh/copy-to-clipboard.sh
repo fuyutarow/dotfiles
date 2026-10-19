@@ -30,13 +30,14 @@ osc52_copy() {
   # leak its "cannot create /dev/tty" message past the 2>/dev/null — a bare `cmd > /dev/tty
   # 2> /dev/null` can still print that message to the REAL stderr, because the shell reports a
   # redirection-setup failure before the command's own fd2 redirect takes effect.
-  if ( printf '\033]52;c;%s\a' "$(printf '%s' "$data" | base64 | tr -d '\n')" > /dev/tty ) 2> /dev/null; then
+  if (printf '\033]52;c;%s\a' "$(printf '%s' "$data" | base64 | tr -d '\n')" > /dev/tty) 2> /dev/null; then
     tty_ok=0
   fi
 }
 
 echo_back() {
-  ( printf '%s\n' "$data" > /dev/tty ) 2> /dev/null || true
+  [ "${COPY_TO_CLIPBOARD_QUIET:-0}" = 1 ] && return 0
+  (printf '%s\n' "$data" > /dev/tty) 2> /dev/null || true
 }
 
 # Over SSH (incl. WSL-over-SSH): native tools target the SERVER, never the terminal CLIENT —

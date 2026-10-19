@@ -171,7 +171,6 @@ export const LINKS: readonly (readonly [When, string, string])[] = [
 
   // --- codex (user-level hooks; guidance/prompts link, skills copy-install via skills:sync) ---
   ["all", "agents/codex/hooks", ".codex/hooks"],
-  ["all", "agents/codex/terminal", ".codex/terminal"],
 
   // --- vendor-neutral hooks (the hook analogue of ~/.agents/skills) ---
   // hooks.toml there is wired into BOTH the rendered ~/.claude/settings.json and ~/.codex/hooks.json
@@ -556,6 +555,7 @@ const OTHER: readonly Surface[] = [
       "tools/agx-ws/package.json",
       "tools/agx-ticket/package.json",
       "tools/baseline/package.json",
+      "tools/codex-thread-copy/package.json",
     ],
     deployed: "the checkout",
     consumer:

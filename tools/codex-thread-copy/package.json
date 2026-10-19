@@ -1,0 +1,9 @@
+{
+  "name": "@dotfiles/codex-thread-copy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "codex-thread-copy": "src/codex-thread-copy.ts"
+  }
+}

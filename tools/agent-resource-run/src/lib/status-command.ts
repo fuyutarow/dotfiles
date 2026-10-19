@@ -19,6 +19,6 @@ export const statusCommand = command({
   ignoreArgv: rejectPrototypeFlag,
   help: {
     description:
-      "Read current slot capacities, sources, holders and FIFO queues without changing state.",
+      "Read flock slot holders and GPU owner state without changing state.",
   },
 });

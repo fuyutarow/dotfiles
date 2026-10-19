@@ -1,272 +1,45 @@
-# Agent resource control
+# Agent resource runner
 
-Part of the [tools/ architecture](../spec/architecture.md) (admit: invariant I15).
+A thin Linux composition of flock and user systemd. The manifest schema lives in
+[orchestrating-agents P7](../../agents/skills/orchestrating-agents/references/measurement-and-resources.md).
 
-`tools/agent-resource-run/` implements the machine floor; it does not own policy. The sole schema and
-GPU-first argument live in
-`agents/skills/orchestrating-agents/references/measurement-and-resources.md` P7.
+GPU jobs acquire one of the flock files at
+`$XDG_RUNTIME_DIR/agent-resource/slots/gpu.<n>`, with the count from
+`resource-policy.toml:gpu_max_concurrent_jobs`. Each acquisition waits at most
+`min(900, walltime_seconds)` seconds and returns 75 on timeout. Named Julia compile
+slots use the same mechanism and the existing `~/.config/agent-resource/slots.toml`
+capacity declaration. No FIFO order is promised.
 
-`src/agent-resource-run.ts` is the package `bin` `agent-resource-run` (installed into `~/.bun/bin` by
-`bun link` via dotfiles `mise run deps`). On Linux it reserves a
-disjoint CPU set and aggregate RAM/VRAM/scratch headroom. Each admitted command runs in a transient
-user-systemd scope with a CPU quota, `MemoryHigh` and `MemoryMax` both set to the exact declared
-RAM envelope (no runner-added margin on either — 2026-09-04, see `agent-resource-run.test.ts`'s
-"no runner-added margin" test), zero job swap, `OOMPolicy=kill`, and a coarse thread-aware
-`TasksMax`. This only covers commands actually launched through this file's own `buildSystemdLaunch`
-— a job started via a hand-typed `systemd-run --user --unit=<name> …` (the sanctioned durability
-pattern for outliving a session) bypasses this entirely; that is a distinct, known coverage gap,
-not something this tool can see or enforce. A process-group monitor still enforces the exact declared process count,
-walltime, and TERM→KILL cleanup. Finalization also stops and rechecks the whole systemd scope, so a
-descendant that creates a new session cannot survive by escaping the monitored process group; an
-unverifiable scope cleanup cannot produce `PASS`. Missing user-cgroup enforcement is a denial, not
-a monitor-only fallback.
+Every command runs in its own `systemd-run --user --scope --collect` scope with
+MemoryMax, MemoryHigh, zero swap, CPUQuota, TasksMax, RuntimeMaxSec and OOMPolicy=kill.
+Before launch, the scope child verifies the effective RAM/swap ceiling and pids.peak.
+The flock child retains its descriptors until systemd has stopped all descendants.
+The runner returns the command's exit status, including scope OOM and walltime kills.
+VRAM budget environment variables remain for the firedancer model runner; there is no
+VRAM accounting or sampled enforcement.
+There is no CPU-set allocator, resource ledger, sampled monitor or peak persistence.
 
-**Investigating an unattributed `agent-resource-*.scope` OOM-kill?** `agent-resource-run.test.ts`
-deliberately triggers a real kernel OOM-kill against a real systemd scope as one test's passing
-condition (2026-09-04, mistaken for live-dispatch harm twice in one evening). Check whether
-`bun test tools/agent-resource-run/` ran around that time before assuming the kill came from a real
-dispatch — see that test's own comment for the incident history.
+`--manifest`, `--check-only`, `--job-id`, `--slot julia-compile` and `status`
+retain their invocation forms. DENY is 69, recovery HOLD is 70, flock timeout is 75.
+The inherited admission receipt and its digest remain available to polysearch's gate;
+each scope exposes its own cgroup v2 pids.peak. CPU_IDS is compatibility metadata,
+not exclusive affinity. Thread-count environment variables remain bounded.
 
-Several declared GPU jobs may share one device: the controller admits against measured device use
-plus declared headroom for jobs still warming up, plus the new job's declared cap, while retaining
-the configured device safety margin. It also caps at `gpu_max_concurrent_jobs` concurrent jobs per
-device (see "Operator policy" below). A reservation counts its declared VRAM during the first 30
-seconds, or until its per-process use exceeds 64 MiB; after that, admission uses measured use.
-The shared GPU owner state supplies per-PID use, joined to the job's scope PIDs or sampled
-process-group PIDs. The runner reads this file; it never starts a driver query. If the owner
-state is stale or unresponsive, the runner
-prints a warning to stderr and in `ADMIT`, and falls back to the prior declared-sum admission rule.
-The utilization gate screens unmanaged load only — it is skipped once a reservation is held there, so
-an admitted job cannot block the next admission with its own compute. Sharing is only sound
-because the budget is pushed into the job: a GPU reservation exports
-`JULIA_CUDA_HARD_MEMORY_LIMIT`, `JULIA_CUDA_SOFT_MEMORY_LIMIT`, and `AGENT_RESOURCE_VRAM_BYTES`.
-The runner independently enforces the declared value as a per-job cap: two consecutive samples
-above 105% of the cap terminate the job's process group/scope with
-`reason=VRAM_CAP_EXCEEDED`. The five percent allowance absorbs allocator and driver reporting
-overhead; the two samples must have distinct owner sample timestamps. Repeated reads of
-one cached observation do not advance this counter. Scratch remains an admission
-reservation only. On WSL2 `nvidia-smi` reports no per-process VRAM (`used_memory` is `[N/A]`), so
-the runner warns and uses declared-sum admission; its sampled cap enforcement is unavailable there.
+A GPU-specific refusal requires unresponsiveSince in the shared gpu-owner.json.
+It names the evidence and recorded GPU-holding pids with their commands. Missing or
+stale samples do not deny admission. The runner never invokes the GPU driver.
+`status` reads slot holders from lslocks and the owner state without taking locks.
 
-## Julia precompile slot
+`resource-policy.toml` also retains capacity/partition values read by firedancer's
+jq_capacity.py and the resident-service partition helper. These values are not an
+aggregate reservation ledger in this runner. The Python helper remains resident-service
+code; runner tests read its state path without loading CUDA.
 
-Julia package precompilation is admitted through one host-wide `julia-compile` slot pool, shared
-across repository and jj workspace paths. Manifests that perform Julia compilation declare
-`"compile_slots": ["julia-compile"]`; a direct Julia invocation can request the same gate with
-`agent-resource-run --manifest job.resource.json --slot julia-compile -- julia …`. Queue tickets
-are served FIFO. A waiter prints `WAIT slot=julia-compile holders=<held>/<capacity> ahead=<n>`
-once while queued, and dead controller PIDs are reclaimed on the next admission.
+Run the contract and real systemd integration tests with:
 
-The optional host declaration `~/.config/agent-resource/slots.toml` sets the machine capacity:
-
-```toml
-schema = 1
-julia_compile = 2
+```sh
+bun test tools/agent-resource-run agents/claude/hooks/tests/enforce-official-execution.test.ts
 ```
 
-`AGENT_RESOURCE_SLOTS` may point to another absolute declaration path. Without a declaration the
-capacity is `max(1, floor(available host CPUs / 6))`. Julia test workers should all use the same
-canonical `JULIA_DEPOT_PATH` and project path so package precompile caches are reused across runs
-and workspace checkouts.
-
-### Inspecting slots and wait times
-
-Run `agent-resource-run status` to answer whether a job is waiting without reading its logs.
-This command needs no manifest, resource policy, or admission probe. It reads the same host-wide
-state directory as admission (see "Shared admission lock" below), and never creates state,
-takes a lock, acquires/releases a slot, or removes dead entries. It prints every supported slot
-pool, including an unused pool; currently the sole pool is `julia-compile`.
-
-```text
-SLOT slot=julia-compile capacity=2 source="/path/to/slots.toml:julia_compile" holders=2 queued=3
-HOLDER slot=julia-compile pid=123 unit="integration.service" job="build-1" token=... since=2026-10-16T01:00:00.000Z
-QUEUE slot=julia-compile position=1 pid=456 unit="integration.service" job="build-3" token=... since=2026-10-16T01:01:00.000Z
-```
-
-Each capacity line names its source: the resolved declaration path plus `:julia_compile`, or
-`derived default: max(1, floor(host CPU count / 6))` with the measured CPU count and missing
-declaration path. The count comes from `node:os.cpus().length`, the same input admission uses.
-`holders` and `queued` count live tickets, and queue positions start at one in FIFO order
-(creation time, then token). Holder `since` is acquisition time; queue `since` is waiting time.
-`unit` is the controller's enclosing systemd service/scope, rather than the child scope that has
-yet to launch. Jobs started before this metadata was introduced show `job="unknown"` and
-`unit="unknown"`; their holder `since` falls back to the original ticket creation time.
-No read-only command can recover identity or acquisition timestamps absent from those old tickets.
-
-Admission emits these flat text events through its existing report stream:
-
-```text
-WAIT slot=julia-compile holders=2/2 ahead=3 job="build-6" waiting-since=2026-10-16T01:01:00.000Z
-ACQUIRED slot=julia-compile job="build-6" waiting-since=2026-10-16T01:01:00.000Z acquired-at=2026-10-16T01:04:00.000Z
-```
-
-`WAIT` is emitted once if the job blocks; `ACQUIRED` is emitted on acquisition, including an
-immediate acquisition. Both use the same waiting timestamp, retained in the holder ticket
-alongside `acquired_at`. Subtract the UTC ISO timestamps to calculate elapsed wait time. String
-identities and capacity sources are JSON-quoted; the existing WAIT prefix and `ahead` count
-(zero-based number of tickets ahead) are preserved.
-
-The status interface serves humans, agents, and shell callers with identical plain line output
-on stdout in a TTY or pipe; stdin is unused. `status --help` describes the command. Extra operands
-and unknown flags are rejected by the CLI. A successful snapshot exits 0; invalid operands exit 2
-(parser-level unknown flags exit 1); unreadable or malformed declarations/state exit 70 with a
-diagnostic on stderr. A missing declaration explicitly uses the derived default, and missing
-state means an unused pool. Status bypasses admission health/policy checks so it remains usable
-when launches are refused. It does not poll or wait for a lock. The view is a best-effort snapshot:
-admission/release can race reads, and dead tickets are filtered without reclamation. A malformed
-entry fails visibly rather than silently omitting a waiter. New output fields may be appended;
-existing admission invocation syntax is preserved.
-
-## Operator policy: `resource-policy.toml`
-
-CONFIG vs MECHANISM, as in `agents/hooks/storage-headroom.toml`. Every operator-tunable threshold
-lives in `resource-policy.toml` next to the script, each with the reason for its value: the CPU,
-host-RAM, scratch, and VRAM safety headroom, the GPU idle rules (utilization and board power), the
-per-device GPU concurrency cap, CUDA.jl soft-limit fraction, VRAM warm-up window/allocation
-threshold, cap tolerance, and RSS/VRAM sampling intervals. `agent-resource-run.ts` keeps only
-implementation invariants (unit sizes, lock timing,
-kernel task bounds). To change policy, edit the one key in the TOML — for example
-`gpu_max_concurrent_jobs = 8` — and update its comment with the measurement that justified it; no
-code edit, and the cap test derives its reservations from the loaded value.
-
-The file is resolved next to the script's real path, so the `bun link` bin reads the repo copy.
-`AGENT_RESOURCE_POLICY=/absolute/path.toml` points one process at another file (the tests use it).
-Every key is required, typed, and range-checked, and an unknown key is an error; any violation
-refuses every admission with `USAGE:` exit 2, naming the file, the key, the bad value, and the
-expected type. There is no fallback default: a silently wrong admission limit is worse than a
-refusal.
-
-## Admission and measured peak, on release
-
-The manifest's `host_ram_peak_bytes`/`vram_peak_bytes` are what the job _declared_; a `RELEASE`
-line — printed once per run, whether the job passed or breached, right before the systemd scope
-is torn down — reports what it _measured_: `ram_peak_measured_bytes` (preferring the scope's own
-cgroup `MemoryPeak`, kernel-tracked and unaffected by the monitor's own polling interval; falling
-back to the highest `/proc` RSS the monitor sampled when cgroup accounting is unavailable —
-`ram_peak_source` says which) and, for a `gpu` job, `vram_peak_measured_bytes` read from
-the shared GPU owner state. The owner samples no more than once per 60 seconds; these
-observations can miss shorter peaks. State older than 120 seconds is unavailable. When compute-app rows include the job's PIDs, the method is
-`per-process`; otherwise the runner samples the admitted GPU's `memory.used` and records the
-non-negative peak delta from a pre-launch baseline as `device-delta`. Device-wide deltas may
-include other processes on that GPU. `vram_measure_method` says which source was used, and
-device-delta artifacts include `vram_baseline_raw_bytes` and `vram_peak_raw_bytes`. When neither
-cached observation provides usable data, the measured peak is `null` and the method is `unavailable`. These
-fields are written as JSON to `<manifest path>.peak.json`, so a caller can read its own job's
-measured peak without capturing stdout at all; that file is overwritten per run, like every other
-piece of this runner's per-run state.
-GPU `ADMIT` and `RELEASE` lines and the peak JSON record `admission_basis` and
-`vram_measured_at_admission_bytes`; RELEASE also records `vram_cap_bytes` and, when enforcement
-terminates a job, `breach_reason=VRAM_CAP_EXCEEDED` with the observed peak.
-
-## Machines without cgroup enforcement: the host opt-in
-
-Some machines can never pass the user-systemd probe — a rented container (Vast.ai, 2026-10-05) has
-a read-only cgroup tree, no `CAP_SYS_ADMIN` and no user systemd. Fail-closed there admits nothing.
-The machine's owner may opt in, once per machine and with a reason, in
-`~/.config/agent-resource/host.toml` (`AGENT_RESOURCE_HOST`, absolute, for tests):
-
-```toml
-schema = 1
-sampled_enforcement_reason = "Vast.ai container: read-only cgroup, no user systemd"
-```
-
-Jobs there run under the sampled ceilings every job already has — process-group RSS and process
-count (TERM→KILL on breach), walltime, CPU affinity — without the kernel's MemoryMax/TasksMax. The
-`ADMIT` line says `enforcement=affinity+sampled-process-group cgroup=none cgroup_reason="…"` and
-`scope_unit=none`; the job gets `AGENT_RESOURCE_ENFORCEMENT=sampled` (`cgroup` otherwise). Rules:
-
-- No file: refused exactly as before. An invalid file (bad TOML, empty reason, unknown key) refuses
-  with its error — it is never ignored.
-- Where cgroups work, they are used whatever the file says.
-- Not `prlimit` as a stand-in: `RLIMIT_AS` breaks CUDA's address-space reservation, and
-  `RLIMIT_NPROC` counts every process of the user, not the job's.
-- The receipt keeps schema 1, so its `scope_unit` names no live scope under sampled enforcement:
-  step (4) below cannot hold there, and `verifyAdmissionReceipt` returns false. A consumer that
-  needs provenance checks `AGENT_RESOURCE_ENFORCEMENT` first.
-
-## Child admission receipt
-
-For an executing command, the runner reads the manifest as bytes, resolves its absolute path, and
-computes `AGENT_RESOURCE_MANIFEST_SHA256` itself. Only after it has written the live reservation
-does it replace (rather than inherit) every `AGENT_RESOURCE_*` admission/resource key with the
-admitted values. Before constructing that environment, it rejects any lease whose CPU count, RAM,
-scratch, or device differs from the admitted manifest, so the runner-owned resource variables and
-the receipt always describe the same reservation. This includes a fresh
-`AGENT_RESOURCE_ADMISSION_ID`, the random `AGENT_RESOURCE_RESERVATION_ID`, the canonical absolute
-manifest path, and
-`AGENT_RESOURCE_ADMISSION_RECEIPT`: compact canonical JSON containing the manifest digest, job,
-reservation, deterministic systemd scope unit, controller PID, CPU IDs, RAM, scratch, device, and
-reservation start time. `AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256` is the SHA-256 digest of those
-exact UTF-8 JSON bytes. The execution-only `ADMIT` line includes the admission ID, reservation ID,
-scope unit, manifest digest, and receipt digest for correlation; `--check-only` does not create a
-receipt.
-
-A cooperating child should (1) hash the receipt bytes and compare it with the receipt digest, (2)
-parse it and require its manifest path/digest fields to equal the corresponding environment
-values, (3) hash `AGENT_RESOURCE_MANIFEST_PATH` and compare it with
-`AGENT_RESOURCE_MANIFEST_SHA256`, and (4) require `/proc/self/cgroup` to contain its `scope_unit`
-as a complete slash-delimited component. `verifyAdmissionReceipt` implements steps 1 and 4 for Bun
-consumers, and additionally rejects unknown fields, non-schema-1 receipts, invalid field types,
-non-canonical JSON, non-absolute manifest paths, and malformed SHA-256 strings.
-The reservation file remains the controller's existing live-state record and is removed during
-lease cleanup; there is deliberately no durable receipt file.
-
-This is cooperative local provenance, not cryptographic attestation: an untrusted same-UID process
-can forge environment variables, receipt JSON, or another user scope. It does establish that a
-cooperating child launched by this runner has a byte-bound manifest receipt and is currently in the
-runner's scope; it does not establish a remote or adversary-resistant launcher identity.
-
-The Linux receipt integration test uses the task-owned outer envelope at
-`tools/agent-resource-run/examples/resource-runner-tests.resource.json`: it grants three CPUs so
-the inner two-CPU reservation can retain the controller's one-CPU safety reserve, and it reserves
-768 MiB for the inner 512 MiB scope plus the outer Bun test runner/controller. The inner receipt
-job is the separate two-CPU manifest at
-`tools/agent-resource-run/examples/resource-runner-receipt-inner.resource.json`. The test writes
-the runner-child environment and receipt to its temporary state directory, confirms verification
-inside the runner scope, then reuses that exact environment in a direct child and requires
-verification to fail because its cgroup does not contain the receipt's scope component.
-
-Smoke check:
-
-```bash
-agent-resource-run \
-  --manifest "$HOME/dotfiles/tools/agent-resource-run/examples/cpu-smoke.resource.json" \
-  --check-only
-```
-
-## Named resource classes, without copying the manifest per ticket
-
-`decideAdmission` refuses two live reservations under the same `job_id`, and `job_id` is a field
-_inside_ the manifest — so running several concurrent tickets from one resource shape (say, a
-"cpu-8g" class) used to force a fresh copy of the file per ticket just to give each one a unique
-identity (reported live 2026-09-26: 20+ per-ticket copies of one template piling up under one
-fleet's envelope directory). `--job-id <id>` overrides the manifest's own `job_id` at invocation
-time — through `validateJobId`, the exact same filesystem-safety rule the manifest field itself is
-checked against — so one shared template file per class is enough:
-
-```bash
-agent-resource-run --manifest cpu-8g.resource.json --job-id firedancer-ticket-42 -- <command>
-```
-
-The manifest's own `job_id` still works unmodified when `--job-id` is omitted. The admission
-receipt's `manifest_sha256` is still the shared template's own bytes, unaffected by the override —
-it proves "this declared envelope shape," while the receipt's separate `job_id` field is what
-distinguishes concurrent tickets sharing that shape.
-
-`serena-foreground` uses the same controller for one pinned, project-scoped foreground HTTP
-service. It replaces user-global Serena stdio auto-start; it does not restore a global MCP entry.
-
-## Shared admission lock
-
-The runner and supervised ccc daemon use one state directory: `$XDG_RUNTIME_DIR/agent-resource-control`
-when `XDG_RUNTIME_DIR` is absolute, otherwise `${TMPDIR:-/tmp}/agent-resource-control-<uid>`. The
-daemon uses only that selected directory; it does not probe or lock a second `/tmp` ledger. Its
-`.lock` is a directory marker with `owner.json`, not an open file descriptor. The daemon owns this
-marker only during CUDA batch or partition setup and removes it before CPU fallback. The runner
-opens the reservation file with `O_CLOEXEC` and closes it before launching any child.
-
-When admission sees a live lock owner other than `agent-resource-run`, it immediately reports
-`lock held by <pid> <comm>`, leaves the owner's lock untouched, and returns an admission denial
-(exit 69). Locks with a dead owner are reclaimed only after they are at least five seconds old; a
-fresh ownerless or partially written lock may be waited on for up to six seconds. The ccc user
-service sets `XDG_RUNTIME_DIR=%t` so it selects the runtime path used by user shells.
+The tests use fake GPU work (sleep), deliberate bounded OOM, a RuntimeMaxSec overrun,
+and independent scope task accounting. They require Linux and a live user manager.

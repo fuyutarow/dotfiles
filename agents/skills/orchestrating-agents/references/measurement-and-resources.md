@@ -81,9 +81,9 @@ Julia package compilation uses the host-wide `julia-compile` slot pool. A manife
 precompile packages declares `"compile_slots": ["julia-compile"]`; a direct Julia command uses
 `agent-resource-run --manifest <envelope> --slot julia-compile -- julia …`. The host declaration
 is `~/.config/agent-resource/slots.toml` (`schema = 1`, `julia_compile = <positive count>`); absent
-that file, capacity is `max(1, floor(available host CPUs / 6))`. Waiters are admitted FIFO and
-report the holder count and number ahead. Dead controller PIDs release their slots on the next
-queue pass.
+that file, capacity is `max(1, floor(available host CPUs / 6))`. Slots are flock files under `$XDG_RUNTIME_DIR/agent-resource/slots/julia-compile.<n>`.
+`flock -w min(900, walltime_seconds)` bounds each acquisition; timeout exits 75.
+The kernel releases a lock when its last descriptor closes; FIFO ordering is not promised.
 
 All Julia workers on one host use the same canonical project path and `JULIA_DEPOT_PATH`, including
 test runs launched from separate jj workspaces. This shares precompile caches and avoids repeating
@@ -128,14 +128,9 @@ admission不能である。
 }
 ```
 
-`gpu_status` は `compatible | incompatible | not-beneficial`。`compatible` では必要VRAMを必須にし、
-空いていて必要headroomを持つGPUが一台でもあればCPU admissionを拒否する。`incompatible` は
-device実装が無いこと、`not-beneficial` は転送・起動費を含むpilotでCPUが速いことを、rationaleと
-measurement locusで示す。つまり **GPU-firstは「全算術をGPUへ移す」ではなく、最速の適合する
-vendor primitive / fused array operation / libraryを先に選ぶこと** である。手書きkernelの可否は
-`optimizing-julia-gpu-kernels` のGK0が所有する。
-別途、model stepにGPU性能目標がある場合、その段ごとの実行場所と転送の検収は
-同skillのGKRが所有する。P7のdevice選択だけではGKRを課さない。
+`gpu_status` は `compatible | incompatible | not-beneficial`。`compatible` では必要VRAMを必須にする。
+これらは呼出側がdevice選択の理由を記録する互換schemaである。実行器はGPU性能や空きVRAMを判定しない。
+GPU primitiveと実行場所の判断は `optimizing-julia-gpu-kernels` が所有する。
 
 ### pilot前の算術上限
 
@@ -145,82 +140,62 @@ vendor primitive / fused array operation / libraryを先に選ぶこと** であ
 増やす」は発射しない。pilotはこの算術上限より小さいことを確認した後にだけ費用・失敗様式・保存形式を
 測る。本走はpilotのwall time/RSS/VRAM/process高水位から外挿したETAとstop thresholdを持つ。
 
-### system reserve と機械的な停止
+### flock と systemd による実行
 
-Linux実装は、同じuserの実行器が作った予約をaggregateし、互いに重ならないCPU affinityを割り当てる。
-agent自身が次のsystem reserveを下げる欄はない。
+Linux実行器はGPU slotの排他と、全jobのRAM ceilingを担う。
+GPU slotは `$XDG_RUNTIME_DIR/agent-resource/slots/gpu.<n>`（0始まり）であり、
+本数は `resource-policy.toml` の `gpu_max_concurrent_jobs` で決める。
+空いているslotを候補にし、競合時はflock自身が待つ。各待機は
+`flock -w min(900, walltime_seconds)` によって有限とし、timeoutはexit 75である。
+独自FIFO、CPU集合の予約、RAM/VRAM/scratchの合算台帳は持たない。
+同じjob_idの同時実行は別のflockで拒否する（DENY 69）。
 
-| 資源 | admission reserve / rule |
+コマンドは `systemd-run --user --scope --collect` により毎回固有のscopeで実行する。
+次のpropertyを設定する。
+
+| property | manifestからの値 |
 |---|---|
-| CPU | allowed logical CPUのうち最低1個を予約外に残す。`-t auto`、`-n auto`、`n_jobs=-1`は禁止。 |
-| host RAM | `max(4 GiB, MemTotalの10%)`をsystem用に残し、live reservationを差し引く。 |
-| scratch | 1 GiBを残し、live reservationを差し引く。 |
-| NVIDIA GPU | 宣言VRAMを合算し、実測usedも考慮してheadroomを残す。実効のreserve・管理外負荷判定・同時job上限はresource-controlの有効なresource-policy.tomlから読む。固定の旧値をここから適用しない。 |
+| MemoryMax / MemoryHigh | host_ram_peak_bytes（両方とも同じ値） |
+| MemorySwapMax | 0 |
+| CPUQuota | cpu_threads × 100% |
+| TasksMax | min(65535, max(32, processes × (cpu_threads + 16))) |
+| RuntimeMaxSec | walltime_seconds |
+| OOMPolicy | kill |
+| TimeoutStopSec | cleanup.grace_seconds |
 
-実行器は `setsid` で新しいprocess groupを作り、user systemdの一時scopeへ
-`CPUQuota=cpu_threads×100% / MemoryMax=host_ram_peak_bytes / MemorySwapMax=0 /
-OOMPolicy=kill` を設定する。`TasksMax`はprocess数とCPU数からruntime thread余白を含む
-coarseなkernel上限を算出し、別の200 ms monitorが宣言したexact process数を検査する。
-`taskset` affinityと
-`JULIA_NUM_THREADS / OMP_NUM_THREADS / OPENBLAS_NUM_THREADS / MKL_NUM_THREADS /
-NUMEXPR_NUM_THREADS / RAYON_NUM_THREADS / POLARS_MAX_THREADS` をenvelopeのCPU数へ固定する。
-monitorはgroup全体のRSSも測り、宣言上限またはwalltimeを越えたらgroupへTERM、猶予後に
-KILLする。終了時はsystemd scopeもstopし、process groupを脱出した子孫を回収してから
-予約を解放する。同じ `job_id` の二重起動も拒否する。user systemd managerまたは
-必要なpropertyのprobeが失敗したらfail closedとし、monitor-onlyの直接実行へfallbackしない。
+scope内で実効memory.max、memory.high、memory.swap.maxとpids.peakの可読性を確認してから
+コマンドを起動する。ceilingを確認できなければDENY 69とし、直接実行にはfallbackしない。
+OOMとwalltimeの停止はsystemd/kernelが行い、子の終了コードをそのまま返す。
+独自monitor、process-group killer、RAM peakファイルへの永続化はない。
+`TasksMax` はthreadも数えるcoarseな上限であり、exact process数の監視はしない。
+終了時はscope全体の停止を待ってからslotを解放する。
 
-GPU予約は排他ではなく合算である（2026-08-06改定）。排他が正当なのは宣言VRAMが**どこでも強制されて
-いない**ときだけで、その条件下では一台一本が唯一の安全な近似だった。実行器が予約VRAMをjobのruntimeへ
-押し込むようになった以上、台帳の方が厳密に強い。宣言を守る腕は排他より多く通り、宣言を破る腕は排他でも
-守られなかったからである。合算だけを入れて強制を入れない改変は、この理由により不可。
+GPU固有の拒否は `~/.local/state/gpu-owner.json`（`XDG_STATE_HOME`対応）に
+`unresponsiveSince` が記録されている場合だけである。DENY行は記録のpath、stallEvidence、
+GPUを保持するPIDとそのcommandを示す。欠落・古いsample・utilization・VRAM量では拒否しない。
+`status` はflockのslot holderとGPU owner stateを読み出す。
 
-実行器はGPU予約に対し `CUDA_VISIBLE_DEVICES` に加えて
-`JULIA_CUDA_HARD_MEMORY_LIMIT` / `JULIA_CUDA_SOFT_MEMORY_LIMIT` / `AGENT_RESOURCE_VRAM_BYTES`
-を渡す。CUDA.jlは既定で「pool that uses all available device memory」を取るため、この変数が無い腕は
-宣言と無関係に一台を飲み込む。
+### 発射とconsumer互換
 
-kernel hard limitはCPU、host memory、job swap、coarse task数に対するものである。VRAMとscratchは
-admission/reservationでありkernel capではない。VRAMの上限は**runtime内の検査**であって
-cgroup controllerではない。CUDA.jlは毎allocation前に確認するが、他のruntime（PyTorchは
-in-processの `set_per_process_memory_fraction`）は `AGENT_RESOURCE_VRAM_BYTES` を自ら守る責任を負う。
-WSL2では `nvidia-smi` がprocess別VRAMを返さないため、floorは遵守を実測で検収できない。
-`TasksMax`はthreadも数えるため、宣言したexact process capの検収はsampled monitorが担う。
-この強度の違いを隠さない。
-
-### 発射と検収
+`--manifest <json>`、`--check-only`、`--job-id`、`--slot julia-compile`、`status` を保つ。
+manifestは上記schema 1のままである。`compile_slots: ["julia-compile"]` も引き続き受け付ける。
 
 ```bash
 agent-resource-run --manifest /absolute/path/job.resource.json --check-only
-agent-resource-run --manifest /absolute/path/job.resource.json -- julia --project=. script.jl
+agent-resource-run --manifest /absolute/path/job.resource.json --job-id unique-run -- command args
 ```
 
-発射表には
-`job / dependency / envelope locus / device / CPU set / RAM / VRAM / process cap /
-account / pilot cost / ETA / stop threshold` を置く。
-同じGPUを共有するだけで一律に直列化せず、同時適合とcritical returnの期限を併せて確認する。
-容量に収まっても、競合で期限を破るjobは減らすか直列化する。低utilizationを追加発射の根拠にしない。
-同時job上限は安全上限であり、埋める目標ではない。実測の遅延と予約待ちをdriverへ返す。
-`ADMIT / DENY / BREACH / PASS` verdictと、pilot/本走の高水位を
-measurement packetへ保存する。Linux floorでenforcementを用意できないplatformではfail closedとし、
-unboundedな直接実行へfallbackしない。
+予約をgrantできない場合はDENY 69、fresh recovery HOLDは70、flock timeoutは75。
+usage errorは2（Cleyeのunknown flagは1）、実行したcommandの終了コードはそのまま返す。
+ADMIT / RELEASE / PASSの行は呼出側のtiming collector向けに維持する。
 
-runner終了時に、peak RSS/VRAM/process、観測元・対象・期間、実際の解放時刻を永続receiptへ書く。
-欠測は`UNKNOWN`とする。非対応のcollectorが返した0を、測定済みのpeakとして扱わない。
-
-| 拒否または観測 | 次の操作と必要なreceipt |
-|---|---|
-| 予約で満杯、実使用は少ない | jobごとの予約・PID/phase・終了/解放を照合する。次の空きイベントを特定し、同じ拒否のpollだけで済ませない |
-| 終了したjobの予約が残る | ownerのcleanup経路で回収し、解放をread-backする。生存不明の予約を削除しない |
-| process peakが欠測、device全体の使用量だけ分かる | `RESOURCE_OBSERVABILITY_GAP`を記録する。全体値をjob数で割らず、0から予約を縮めない |
-| runtime内のallocator/pool peakだけ分かる | その範囲を明記する。context、workspace、pool外allocation、子process、未観測phaseの上限を別に含める |
-| 同じ形・全phaseを測ったjob receiptがある | 入力寸法の上限と観測範囲を照合し、未計測領域と余白を含むboundから次のenvelopeを校正する。観測peakだけはworst-case boundにならない |
-| 必要な観測が得られない | 保守的な解析boundを維持するか、admittedな計器修理を行う。優先jobを通すなら所有する低優先jobの安全な停止・解放を使う |
-
-再見積りは将来のenvelopeへ適用する。live予約の縮小は実行器の対応と安全条件が確認できる場合だけ行う。
-allocator/pool peakに余白を足すだけで、job全体のboundを置き換えない。
-新しい入力形は再び上限を導く。実測を理由に走行中のhard capを緩めない。
-同時本数は期限・資源・競合から決め、低utilizationや固定の本数目標から逆算しない。
-receiptやcollectorの実装はresource-control/runtime ownerの修理であり、この記述をもって実装済みと扱わない。
+子には `AGENT_RESOURCE_ADMISSION_RECEIPT` とそのSHA-256、`AGENT_RESOURCE_ENFORCEMENT=cgroup`、
+`AGENT_RESOURCE_CPU_IDS`、`AGENT_RESOURCE_MAX_PROCESSES`、`AGENT_RESOURCE_HOST_RAM_BYTES`、
+`AGENT_RESOURCE_SCRATCH_BYTES` を渡す。CPU_IDSは互換の論理CPUリストであり、排他的予約ではない。
+thread環境変数はcpu_threadsに固定する。GPU jobはCUDA_VISIBLE_DEVICESでdeviceを選ぶ。
+VRAM budget環境変数はcaller互換のため維持する（AGENT_RESOURCE_VRAM_BYTES、JULIA_CUDA_HARD_MEMORY_LIMIT、JULIA_CUDA_SOFT_MEMORY_LIMIT）。VRAM合算・監視とRAM peak永続化は廃止した。
+receiptを継承した子からのnested予約はDENY 69。既存receiptを検証して再利用する呼出側はそのまま動く。
+`/sys/fs/cgroup<own cgroup>/pids.peak` は各run固有のscopeにあり、他runの高水位を混ぜない。
 
 ## Retired P8/P9 — one semantic home
 

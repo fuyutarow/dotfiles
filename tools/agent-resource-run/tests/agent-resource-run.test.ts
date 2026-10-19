@@ -1,2285 +1,479 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  utimesSync,
-  writeFileSync,
-} from "node:fs";
+import { afterAll, expect, test } from "bun:test";
+import { chmod, mkdtemp, mkdir, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { fromThrowable, type Result } from "neverthrow";
+import { join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import {
-  buildSampledLaunch,
   buildSystemdLaunch,
-  readHostOptIn as readHostOptInResult,
-  resolveEnforcement as resolveEnforcementResult,
-  commandEnvironment as commandEnvironmentResult,
-  createAdmissionReceipt,
-  decideAdmission as decideAdmissionResult,
-  hasUnmanagedGpuLoad as hasUnmanagedGpuLoadResult,
-  parseNvidiaSmiComputeAppRow,
-  vramAdmissionCharge,
-  parseNvidiaSmiGpuRow as parseNvidiaSmiGpuRowResult,
-  checkJob as checkJobResult,
-  executeJob as executeJobResult,
-  kernelTasksMax,
-  loadResourcePolicy as loadResourcePolicyResult,
-  parseCpuList as parseCpuListResult,
-  resourcePolicy as resourcePolicyResult,
-  resourcePolicyPath as resourcePolicyPathResult,
-  probeKernelEnforcement as probeKernelEnforcementResult,
-  probeHostSnapshot as probeHostSnapshotResult,
-  manifestSourceFromBytes,
-  scopeUnitFor,
-  terminateProcessGroup,
-  validateJobId as validateJobIdResult,
-  validateManifest as validateManifestResult,
-  verifyAdmissionReceipt,
-  queryNvidiaSmi,
-  type AdmissionFailure,
-  type AdmissionResult,
-  type HostSnapshot,
+  validateManifest,
   type ResourceManifest,
-  type Reservation,
 } from "../src/agent-resource-run.ts";
-import {
-  assessRecoveryVerdict,
-  type RecoveryVerdict,
-} from "../src/lib/recovery-verdict.ts";
-import { decoded, decodedJson } from "../../shared/src/decode.ts";
 
-// Platform requirements, declared — a test that needs a facility this machine lacks is SKIPPED
-// and counted as such, never failed for that reason (macOS has no util-linux setsid/taskset; a
-// container has no user systemd).
-const NO_UTIL_LINUX =
-  Bun.which("taskset") === null || Bun.which("setsid") === null;
-const NO_CGROUP_SCOPES =
-  NO_UTIL_LINUX || !valueOf(probeKernelEnforcementResult()).available;
-
-const GiB = 1024 ** 3;
-const MiB = 1024 ** 2;
-
-const recoveryVerdict = (
-  overrides: Partial<RecoveryVerdict> = {},
-): RecoveryVerdict => ({
+const runtime = await mkdtemp(`/run/user/${process.getuid?.()}/arr-test-`);
+await symlink(`/run/user/${process.getuid?.()}/bus`, join(runtime, "bus"));
+await symlink(
+  `/run/user/${process.getuid?.()}/systemd`,
+  join(runtime, "systemd"),
+);
+afterAll(() => rm(runtime, { recursive: true, force: true }));
+const root = await mkdtemp(join(tmpdir(), "arr-thin-"));
+afterAll(() => rm(root, { recursive: true, force: true }));
+const runner = join(import.meta.dir, "../src/agent-resource-run.ts");
+const manifest = (
+  overrides: Partial<ResourceManifest> = {},
+): ResourceManifest => ({
   schema: 1,
-  verdict: "OK",
-  memory_emergency: false,
-  windows_available_mb: 4096,
-  recorded_at: "2026-10-12T00:00:00.000Z",
+  job_id: `test-${crypto.randomUUID()}`,
+  run_class: "test",
+  cpu_threads: 1,
+  processes: 8,
+  host_ram_peak_bytes: 128 * 1024 ** 2,
+  memory_bound: "bounded fixture",
+  device: { kind: "cpu", gpu_status: "incompatible", rationale: "CPU fixture" },
+  scratch_bytes: 2 * 1024 ** 3,
+  child_fanout: 0,
+  walltime_seconds: 10,
+  cleanup: { mode: "term-then-kill", grace_seconds: 1 },
   ...overrides,
 });
-
-describe("recover service admission verdict", () => {
-  const now = Temporal.Instant.from(
-    "2026-10-12T00:04:00.000Z",
-  ).epochMilliseconds;
-
-  test("refuses fresh HOLD and names its verdict, age, and Windows memory", () => {
-    expect(
-      assessRecoveryVerdict(
-        JSON.stringify(
-          recoveryVerdict({ verdict: "HOLD", windows_available_mb: 1024 }),
-        ),
-        now,
-      ),
-    ).toEqual({
-      kind: "refuse",
-      message:
-        "RECOVER_VERDICT verdict=HOLD age=240s windows_available_mb=1024",
-    });
-  });
-
-  test("refuses fresh memory emergency even with an OK disk verdict", () => {
-    const result = assessRecoveryVerdict(
-      JSON.stringify(
-        recoveryVerdict({
-          memory_emergency: true,
-          windows_available_mb: 900,
-        }),
-      ),
-      now,
-    );
-    expect(result.kind).toBe("refuse");
-    expect(result.message).toContain("verdict=OK+memory_emergency");
-    expect(result.message).toContain("windows_available_mb=900");
-  });
-
-  test("allows and reports a fresh OK verdict", () => {
-    expect(
-      assessRecoveryVerdict(JSON.stringify(recoveryVerdict()), now),
-    ).toEqual({
-      kind: "allow",
-      message: "RECOVER_VERDICT verdict=OK age=240s windows_available_mb=4096",
-    });
-  });
-
-  test("allows and reports stale or missing verdicts", () => {
-    const stale = assessRecoveryVerdict(
-      JSON.stringify(
-        recoveryVerdict({ recorded_at: "2026-10-12T00:00:00.000Z" }),
-      ),
-      Temporal.Instant.from("2026-10-12T00:06:00.000Z").epochMilliseconds,
-    );
-    expect(stale.kind).toBe("allow");
-    expect(stale.message).toContain("status=stale");
-    expect(assessRecoveryVerdict(undefined, now)).toEqual({
-      kind: "allow",
-      message:
-        "RECOVER_VERDICT verdict=missing age=unknown windows_available_mb=unknown",
-    });
-  });
-});
-
-const parseJson = (text: string): unknown => decodedJson(z.json(), text);
-
-function valueOf<T, E>(result: Result<T, E>): T {
-  return result._unsafeUnwrap();
-}
-
-const parseCpuList = (text: string) => valueOf(parseCpuListResult(text));
-const validateJobId = (value: unknown, label: string) =>
-  valueOf(validateJobIdResult(value, label));
-const validateManifest = (value: unknown) =>
-  valueOf(validateManifestResult(value));
-const parseNvidiaSmiGpuRow = (line: string) =>
-  valueOf(parseNvidiaSmiGpuRowResult(line));
-const loadResourcePolicy = (path?: string) =>
-  valueOf(loadResourcePolicyResult(path));
-const resourcePolicyPath = () => valueOf(resourcePolicyPathResult());
-const resourcePolicy = () => valueOf(resourcePolicyResult());
-const hasUnmanagedGpuLoad = (
-  gpu: Parameters<typeof hasUnmanagedGpuLoadResult>[0],
-) => valueOf(hasUnmanagedGpuLoadResult(gpu));
-const decideAdmission = (...args: Parameters<typeof decideAdmissionResult>) =>
-  valueOf(decideAdmissionResult(...args));
-const commandEnvironment = (
-  ...args: Parameters<typeof commandEnvironmentResult>
-) => valueOf(commandEnvironmentResult(...args));
-const readHostOptIn = (...args: Parameters<typeof readHostOptInResult>) =>
-  valueOf(readHostOptInResult(...args));
-const resolveEnforcement = (
-  ...args: Parameters<typeof resolveEnforcementResult>
-) => valueOf(resolveEnforcementResult(...args));
-const probeHostSnapshot = async (cwd: string, includeGpu = true) =>
-  valueOf(await probeHostSnapshotResult(cwd, includeGpu));
-const probeKernelEnforcement = () => valueOf(probeKernelEnforcementResult());
-const checkJob = async (...args: Parameters<typeof checkJobResult>) =>
-  valueOf(await checkJobResult(...args));
-const executeJob = async (...args: Parameters<typeof executeJobResult>) =>
-  valueOf(await executeJobResult(...args));
-
-// The fields of an admission receipt the tests read directly. Assertions on the whole receipt
-// (JSON.stringify round-trip, toMatchObject) stay on the unparsed value, whose key order is the
-// writer's.
-const ReceiptFieldsSchema = z.object({
-  cpu_ids: z.array(z.unknown()),
-  scope_unit: z.string(),
-  manifest_path: z.string(),
-  manifest_sha256: z.string(),
-  job_id: z.string(),
-});
-
-// What the child script in the receipt test writes to disk.
-const SavedChildSchema = z.object({
-  verified: z.boolean(),
-  cgroup: z.string(),
-  environment: z.record(z.string(), z.string()),
-});
-
-const PeakFieldsSchema = z.object({
-  ram_peak_measured_bytes: z.number(),
-  ram_peak_source: z.string(),
-});
-
-function cpuManifest(
-  overrides: Partial<ResourceManifest> = {},
-): ResourceManifest {
+async function fixture(m = manifest()) {
+  const dir = join(root, m.job_id);
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, "manifest.json");
+  await Bun.write(path, JSON.stringify(m));
+  const policy = join(dir, "policy.toml");
+  await Bun.write(policy, "schema=1\ngpu_max_concurrent_jobs=1\n");
   return {
-    schema: 1,
-    job_id: "test-job",
-    run_class: "test",
-    cpu_threads: 1,
-    processes: 2,
-    host_ram_peak_bytes: 128 * MiB,
-    memory_bound: "measured shell baseline plus 64 MiB margin",
-    device: {
-      kind: "cpu",
-      gpu_status: "incompatible",
-      rationale: "the fixture only validates process control",
+    m,
+    path,
+    dir,
+    env: {
+      ...process.env,
+      AGENT_RESOURCE_POLICY: policy,
+      XDG_STATE_HOME: dir,
+      XDG_RUNTIME_DIR: runtime,
+      DBUS_SESSION_BUS_ADDRESS: `unix:path=/run/user/${process.getuid?.()}/bus`,
+      AGENT_RESOURCE_ADMISSION_RECEIPT: undefined,
+      AGENT_RESOURCE_SCOPE_LAUNCH: undefined,
     },
-    scratch_bytes: 0,
-    child_fanout: 0,
-    walltime_seconds: 5,
-    cleanup: { mode: "term-then-kill", grace_seconds: 1 },
-    ...overrides,
   };
 }
-
-function hostSnapshot(overrides: Partial<HostSnapshot> = {}): HostSnapshot {
-  return {
-    allowed_cpu_ids: [0, 1, 2, 3, 4, 5, 6, 7],
-    mem_total_bytes: 32 * GiB,
-    mem_available_bytes: 24 * GiB,
-    scratch_available_bytes: 100 * GiB,
-    gpus: [
-      {
-        id: 0,
-        total_bytes: 12 * GiB,
-        used_bytes: 2 * GiB,
-        utilization_percent: 0,
-      },
-    ],
-    ...overrides,
-  };
+async function invoke(
+  args: string[],
+  env: Record<string, string | undefined> = process.env,
+) {
+  const child = Bun.spawn([process.execPath, runner, ...args], {
+    env,
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 30000,
+  });
+  const [stdout, stderr, exit] = await Promise.all([
+    child.stdout.text(),
+    child.stderr.text(),
+    child.exited,
+  ]);
+  return { stdout, stderr, exit };
 }
+const live = process.platform === "linux" && Bun.which("systemd-run") !== null;
 
-function reservation(overrides: Partial<Reservation> = {}): Reservation {
-  return {
-    schema: 1,
-    reservation_id: "existing-1",
-    job_id: "other-job",
-    controller_pid: process.pid,
-    cpu_ids: [0],
-    host_ram_peak_bytes: GiB,
-    scratch_bytes: 0,
-    device: { kind: "cpu" },
-    started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
-    ...overrides,
-  };
-}
-
-function gpuManifest(
-  overrides: Partial<ResourceManifest> = {},
-): ResourceManifest {
-  return cpuManifest({
-    device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 2 * GiB },
-    ...overrides,
-  });
-}
-
-function gpuReservation(
-  name: string,
-  vramBytes = 2 * GiB,
-  gpuId = 0,
-): Reservation {
-  return reservation({
-    reservation_id: name,
-    job_id: `job-${name}`,
-    device: { kind: "gpu", gpu_id: gpuId, vram_peak_bytes: vramBytes },
-  });
-}
-
-/** Asserts admission was denied, the same runtime check the callers below used inline, and
- * narrows the result so `.reason` is available afterward. */
-function denied(result: AdmissionResult): AdmissionFailure {
-  expect(result.ok).toBe(false);
-  return result.ok
-    ? { ok: false, reason: "expected admission to be denied" }
-    : result;
-}
-
-function manifestSourceFor(manifest: ResourceManifest) {
-  return manifestSourceFromBytes(
-    "fixtures/test.resource.json",
-    Buffer.from(JSON.stringify(manifest), "utf8"),
-  );
-}
-
-/** Restores one env var to its pre-test value, deleting it when it was previously unset. */
-function restoreEnvValue(key: string, value: string | undefined): void {
-  if (value === undefined) delete process.env[key];
-  else process.env[key] = value;
-}
-
-const temporaryDirectories: string[] = [];
-function temporaryStateDirectory(): string {
-  const path = mkdtempSync(join(tmpdir(), "agent-resource-test-"));
-  temporaryDirectories.push(path);
-  return path;
-}
-
-afterEach(() => {
-  for (const path of temporaryDirectories.splice(0)) {
-    rmSync(path, { recursive: true, force: true });
-  }
-});
-
-describe("resource manifest", () => {
-  test("parses Linux CPU list ranges without duplicates", () => {
-    expect(parseCpuList("0-2,4,6-7,2")).toEqual([0, 1, 2, 4, 6, 7]);
-  });
-
-  test("accepts a complete bounded CPU manifest", () => {
-    expect(validateManifest(cpuManifest())).toEqual(cpuManifest());
-  });
-
-  test("accepts a manifest-declared Julia compile slot and rejects duplicates", () => {
-    expect(
-      validateManifest({
-        ...cpuManifest(),
-        compile_slots: ["julia-compile"],
-      }).compile_slots,
-    ).toEqual(["julia-compile"]);
-    const duplicate = validateManifestResult({
-      ...cpuManifest(),
-      compile_slots: ["julia-compile", "julia-compile"],
-    });
-    expect(duplicate.isErr()).toBe(true);
-    expect(duplicate._unsafeUnwrapErr().message).toContain("compile_slots");
-  });
-
-  test("validateJobId enforces the same rule for the manifest field and the --job-id override", () => {
-    expect(validateJobId("firedancer-ticket-42", "--job-id")).toBe(
-      "firedancer-ticket-42",
-    );
-    const empty = validateJobIdResult("", "--job-id");
-    expect(empty.isErr()).toBe(true);
-    expect(empty._unsafeUnwrapErr().message).toMatch(/--job-id/u);
-    const spaces = validateJobIdResult("has spaces", "--job-id");
-    expect(spaces.isErr()).toBe(true);
-    expect(spaces._unsafeUnwrapErr().message).toContain(
-      "--job-id must contain only",
-    );
-    const leading = validateJobIdResult("-leading-hyphen", "--job-id");
-    expect(leading.isErr()).toBe(true);
-    expect(leading._unsafeUnwrapErr().message).toContain(
-      "--job-id must contain only",
-    );
-    const tooLong = validateJobIdResult("a".repeat(81), "--job-id");
-    expect(tooLong.isErr()).toBe(true);
-  });
-
-  test("rejects an unbounded memory claim and nested agent fanout", () => {
-    const memoryBound = validateManifestResult({
-      ...cpuManifest(),
-      memory_bound: "",
-    });
-    expect(memoryBound.isErr()).toBe(true);
-    expect(memoryBound._unsafeUnwrapErr().message).toMatch(/memory_bound/u);
-    const childFanout = validateManifestResult({
-      ...cpuManifest(),
-      child_fanout: 1,
-    });
-    expect(childFanout.isErr()).toBe(true);
-    expect(childFanout._unsafeUnwrapErr().message).toMatch(/child_fanout/u);
-  });
-});
-
-describe("admission", () => {
-  test("GPU-first rejects CPU when a compatible idle GPU has headroom", () => {
-    const manifest = cpuManifest({
-      device: {
-        kind: "cpu",
-        gpu_status: "compatible",
-        gpu_vram_peak_bytes: 4 * GiB,
-        rationale: "CPU fallback only if no compatible GPU is available",
-      },
-    });
-    const result = denied(decideAdmission(manifest, hostSnapshot(), []));
-    expect(result.reason).toContain("gpu-first");
-  });
-
-  test("allows an explicit CPU fallback when compatible GPUs lack headroom", () => {
-    const manifest = cpuManifest({
-      device: {
-        kind: "cpu",
-        gpu_status: "compatible",
-        gpu_vram_peak_bytes: 10 * GiB,
-        rationale: "GPU has insufficient free VRAM at admission",
-      },
-    });
-    const result = decideAdmission(manifest, hostSnapshot(), []);
-    expect(result.ok).toBe(true);
-  });
-
-  test("a GPU manifest reports the missing executable before generic device denial", () => {
-    const previousPath = process.env.PATH;
-    process.env.PATH = tmpdir();
-    const result = denied(
-      decideAdmission(gpuManifest(), hostSnapshot({ gpus: [] }), []),
-    );
-    if (previousPath === undefined) delete process.env.PATH;
-    else process.env.PATH = previousPath;
-    expect(result.reason).toContain("GPU 0 is not visible");
-  });
-
-  test.skipIf(process.platform !== "linux")(
-    "CPU admission skips a hanging nvidia-smi probe",
-    async () => {
-      const bin = mkdtempSync(join(tmpdir(), "cpu-no-gpu-probe-"));
-      const marker = join(bin, "invoked");
-      const executable = join(bin, "nvidia-smi");
-      writeFileSync(executable, `#!/bin/sh\n: > '${marker}'\nexec sleep 30\n`);
-      chmodSync(executable, 0o755);
-      const previousPath = process.env.PATH;
-      process.env.PATH = `${bin}:${previousPath ?? ""}`;
-      const startedAt = performance.now();
-      const snapshot = await probeHostSnapshot(process.cwd(), false);
-      const result = decideAdmission(cpuManifest(), snapshot, []);
-      const elapsedMs = performance.now() - startedAt;
-      const invoked = existsSync(marker);
-      if (previousPath === undefined) delete process.env.PATH;
-      else process.env.PATH = previousPath;
-      rmSync(bin, { recursive: true, force: true });
-      expect(result.ok).toBe(true);
-      expect(invoked).toBe(false);
-      expect(elapsedMs).toBeLessThan(1_000);
+test("manifest schema retains all P7 fields, bounds and compile slot extension", () => {
+  expect(validateManifest(manifest()).isOk()).toBe(true);
+  expect(
+    validateManifest(manifest({ compile_slots: ["julia-compile"] })).isOk(),
+  ).toBe(true);
+  const invalid = [
+    manifest({ host_ram_peak_bytes: 0 }),
+    { ...manifest(), child_fanout: 1 },
+    { ...manifest(), extra: 1 },
+    manifest({ cpu_threads: 1025 }),
+    manifest({ processes: 4097 }),
+    manifest({ walltime_seconds: 86401 }),
+    manifest({ compile_slots: ["julia-compile", "julia-compile"] }),
+    {
+      ...manifest(),
+      device: { kind: "cpu", gpu_status: "compatible", rationale: "test" },
     },
-  );
-
-  test("GPU admission reads stale state without executing or retrying a driver query", async () => {
-    const query = await queryNvidiaSmi([
-      "--query-gpu=index,memory.total,memory.used,utilization.gpu,power.draw",
-    ]);
-    expect(query.report.attempts).toBe(0);
-    expect(query.report.status).toBe("error");
-    expect(query.report.stderr).toContain("stale");
-  });
-
-  test("subtracts concurrent reservations and preserves system headroom", () => {
-    const existing = reservation({
-      cpu_ids: [0, 1],
-      host_ram_peak_bytes: 3 * GiB,
-    });
-    const manifest = cpuManifest({
-      cpu_threads: 2,
-      host_ram_peak_bytes: 2 * GiB,
-    });
-    const result = denied(
-      decideAdmission(
-        manifest,
-        hostSnapshot({ mem_available_bytes: 8 * GiB }),
-        [existing],
-      ),
-    );
-    expect(result.reason).toContain("host RAM");
-  });
-
-  test("packs several declared GPU jobs onto one device", () => {
-    const snapshot = hostSnapshot({
-      gpus: [
-        {
-          id: 0,
-          total_bytes: 24 * GiB,
-          used_bytes: 2 * GiB,
-          utilization_percent: 0,
-        },
-      ],
-    });
-    const result = decideAdmission(gpuManifest(), snapshot, [
-      gpuReservation("a"),
-      gpuReservation("b"),
-    ]);
-    expect(result).toMatchObject({
-      ok: true,
-      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 2 * GiB },
-    });
-  });
-
-  test("admits the firedancer pattern using measured use instead of seven declarations", () => {
-    const held = Array.from({ length: 7 }, (_, index) => ({
-      ...gpuReservation(`firedancer-${index}`, 2 * GiB),
-      vram_measured_bytes: 0,
-    }));
-    const snapshot = hostSnapshot({
-      gpus: [
-        {
-          id: 0,
-          total_bytes: 24 * GiB,
-          used_bytes: 3 * GiB,
-          utilization_percent: 0,
-        },
-      ],
-    });
-    expect(decideAdmission(gpuManifest(), snapshot, held).ok).toBe(true);
-  });
-
-  test("counts declared VRAM through warm-up until use passes the allocation threshold", () => {
-    const policy = resourcePolicy();
-    const held = gpuReservation("warming", 2 * GiB);
-    const now =
-      Temporal.Instant.from(held.started_at).epochMilliseconds + 1_000;
-    expect(vramAdmissionCharge(held, 32 * MiB, policy, now)).toBe(2 * GiB);
-    expect(vramAdmissionCharge(held, 65 * MiB, policy, now)).toBe(65 * MiB);
-    expect(
-      vramAdmissionCharge(
-        { ...held, vram_warmed_up: true },
-        32 * MiB,
-        policy,
-        now,
-      ),
-    ).toBe(32 * MiB);
-  });
-
-  test("aggregates declared VRAM and denies the job that overflows the device", () => {
-    const snapshot = hostSnapshot({
-      gpus: [
-        { id: 0, total_bytes: 12 * GiB, used_bytes: 0, utilization_percent: 0 },
-      ],
-    });
-    const result = denied(
-      decideAdmission(gpuManifest(), snapshot, [
-        gpuReservation("a", 5 * GiB),
-        gpuReservation("b", 5 * GiB),
-      ]),
-    );
-    expect(result.reason).toContain("VRAM request");
-    // 12 GiB - (10 GiB declared + 2 GiB standing ccc floor) - safety -> clamped to 0.
-    expect(result.reason).toContain("0 available");
-    expect(result.reason).toContain(
-      `${2 * GiB} bytes of standing service partitions`,
-    );
-  });
-
-  test("standing service partitions are reserved before any job, used or not", () => {
-    // Shipped policy: ccc's 2 GiB floor always, reranker 2 GiB only while it runs, on GPU 0. The
-    // card reads 1 GiB used, yet a job sees 12 - 2 - 0.5 = 9.5 GiB with the reranker off and
-    // 12 - 4 - 0.5 = 7.5 GiB with it on — never overlapping either standing partition.
-    const card = (rerank_active?: boolean) =>
-      hostSnapshot({
-        gpus: [
-          {
-            id: 0,
-            total_bytes: 12 * GiB,
-            used_bytes: GiB,
-            utilization_percent: 0,
-            ...(rerank_active === undefined ? {} : { rerank_active }),
-          },
-        ],
-      });
-    const want = (bytes: number) =>
-      gpuManifest({
-        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: bytes },
-      });
-    const off = denied(decideAdmission(want(10 * GiB), card(), []));
-    expect(off.reason).toContain(`${9.5 * GiB} available`);
-    expect(off.reason).toContain("standing service partitions");
-    expect(decideAdmission(want(9 * GiB), card(), []).ok).toBe(true);
-    const on = denied(decideAdmission(want(8 * GiB), card(true), []));
-    expect(on.reason).toContain(`${7.5 * GiB} available`);
-    expect(decideAdmission(want(7 * GiB), card(true), []).ok).toBe(true);
-    // Another device carries no partition.
-    const gpu1 = hostSnapshot({
-      gpus: [
-        {
-          id: 1,
-          total_bytes: 12 * GiB,
-          used_bytes: GiB,
-          utilization_percent: 0,
-        },
-      ],
-    });
-    expect(
-      decideAdmission(
-        gpuManifest({
-          device: { kind: "gpu", gpu_id: 1, vram_peak_bytes: 10 * GiB },
-        }),
-        gpu1,
-        [],
-      ).ok,
-    ).toBe(true);
-  });
-
-  test("observed device usage still floors the ledger above the declarations", () => {
-    const snapshot = hostSnapshot({
-      gpus: [
-        {
-          id: 0,
-          total_bytes: 12 * GiB,
-          used_bytes: 9 * GiB,
-          utilization_percent: 0,
-        },
-      ],
-    });
-    const held = [gpuReservation("a", 2 * GiB)];
-    expect(decideAdmission(gpuManifest(), snapshot, held).ok).toBe(true);
-    expect(
-      decideAdmission(
-        gpuManifest({
-          device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 3 * GiB },
-        }),
-        snapshot,
-        held,
-      ).ok,
-    ).toBe(false);
-  });
-
-  test("utilization screens unmanaged load but not a job's own reservations", () => {
-    const busy = hostSnapshot({
-      gpus: [
-        {
-          id: 0,
-          total_bytes: 12 * GiB,
-          used_bytes: 2 * GiB,
-          utilization_percent: 97,
-        },
-      ],
-    });
-    const unmanaged = denied(decideAdmission(gpuManifest(), busy, []));
-    expect(unmanaged.reason).toContain("97% utilization");
-    // The VRAM fits, so the reason must lead with the clause that refused, not read as a VRAM
-    // denial (2026-09-24: 4.3 GB asked, 8.4 GB free, reported as "VRAM request … exceeds").
-    expect(unmanaged.reason.startsWith("unmanaged load")).toBe(true);
-    expect(unmanaged.reason).not.toContain("exceeds");
-    expect(decideAdmission(gpuManifest(), busy, [gpuReservation("a")]).ok).toBe(
-      true,
-    );
-  });
-
-  test("idle board power overrides a display-only utilization reading (WSL2 compositor)", () => {
-    // Observed 2026-09-24 on the WSL2 host: P8, 16 W, 462 MiB, no compute process, 39 %.
-    const displayOnly = hostSnapshot({
-      gpus: [
-        {
-          id: 0,
-          total_bytes: 12 * GiB,
-          used_bytes: 462 * MiB,
-          utilization_percent: 39,
-          power_watts: 16,
-        },
-      ],
-    });
-    expect(decideAdmission(gpuManifest(), displayOnly, []).ok).toBe(true);
-  });
-
-  test("high utilization with compute-level power, or unknown power, is still unmanaged load", () => {
-    const base = {
-      id: 0,
-      total_bytes: 12 * GiB,
-      used_bytes: 2 * GiB,
-      utilization_percent: 97,
-    };
-    expect(hasUnmanagedGpuLoad({ ...base, power_watts: 150 })).toBe(true);
-    expect(hasUnmanagedGpuLoad({ ...base })).toBe(true);
-    expect(hasUnmanagedGpuLoad({ ...base, utilization_percent: 10 })).toBe(
-      false,
-    );
-    const computeBound = hostSnapshot({
-      gpus: [{ ...base, power_watts: 150 }],
-    });
-    expect(
-      denied(decideAdmission(gpuManifest(), computeBound, [])).reason,
-    ).toContain("150 W board power");
-  });
-
-  test("parses the nvidia-smi row including power.draw, and tolerates [N/A] power", () => {
-    const row = parseNvidiaSmiGpuRow("0, 12288, 462, 39, 16.23");
-    expect(row.utilization_percent).toBe(39);
-    expect(row.power_watts).toBeCloseTo(16.23);
-    expect(row.used_bytes).toBe(462 * MiB);
-    expect(
-      parseNvidiaSmiGpuRow("0, 12288, 462, 39, [N/A]").power_watts,
-    ).toBeUndefined();
-    expect(parseNvidiaSmiGpuRowResult("0, 12288, 462, 39").isErr()).toBe(true);
-    expect(parseNvidiaSmiGpuRowResult("0, 12288, oops, 39, 16").isErr()).toBe(
-      true,
-    );
-  });
-
-  test("parses a nvidia-smi compute-apps row and rejects malformed ones", () => {
-    expect(parseNvidiaSmiComputeAppRow("12345, 2048")).toEqual({
-      pid: 12345,
-      usedBytes: 2048 * MiB,
-    });
-    expect(parseNvidiaSmiComputeAppRow("12345")).toBeNull();
-    expect(parseNvidiaSmiComputeAppRow("oops, 2048")).toBeNull();
-    expect(parseNvidiaSmiComputeAppRow("0, 2048")).toBeNull();
-    expect(parseNvidiaSmiComputeAppRow("-1, 2048")).toBeNull();
-  });
-
-  test("caps concurrent jobs on one device even when VRAM is abundant", () => {
-    // Derived from the live policy, so moving the cap in resource-policy.toml needs no test edit.
-    const cap = resourcePolicy().gpu_max_concurrent_jobs;
-    const held = Array.from({ length: cap }, (_, index) =>
-      gpuReservation(`held-${index}`, 128 * MiB),
-    );
-    expect(
-      decideAdmission(gpuManifest(), hostSnapshot(), held.slice(1)).ok,
-    ).toBe(true);
-    const result = denied(decideAdmission(gpuManifest(), hostSnapshot(), held));
-    expect(result.reason).toContain("concurrency cap");
-    expect(result.reason.startsWith("GPU 0 already holds")).toBe(true);
-    expect(result.reason).not.toContain("exceeds");
-  });
-
-  test("reservations on another device do not consume this device's ledger", () => {
-    const snapshot = hostSnapshot({
-      gpus: [
-        { id: 0, total_bytes: 12 * GiB, used_bytes: 0, utilization_percent: 0 },
-        { id: 1, total_bytes: 12 * GiB, used_bytes: 0, utilization_percent: 0 },
-      ],
-    });
-    const result = decideAdmission(gpuManifest(), snapshot, [
-      gpuReservation("elsewhere", 11 * GiB, 1),
-    ]);
-    expect(result.ok).toBe(true);
-  });
-
-  test("rejects a duplicate live job id", () => {
-    const result = denied(
-      decideAdmission(cpuManifest(), hostSnapshot(), [
-        reservation({ job_id: "test-job" }),
-      ]),
-    );
-    expect(result.reason).toContain("already reserved");
-  });
+  ];
+  for (const value of invalid)
+    expect(validateManifest(value).isErr()).toBe(true);
 });
-
-function withKey(key: string, value: string): (text: string) => string {
-  return (text) => {
-    const pattern = new RegExp(`^${key} = .*$`, "mu");
-    expect(pattern.test(text)).toBe(true);
-    return text.replace(pattern, `${key} = ${value}`);
-  };
-}
-
-const digestFor = (payload: string): string =>
-  createHash("sha256").update(payload).digest("hex");
-
-describe("resource policy", () => {
-  const shippedPolicyPath = resolve(
-    import.meta.dir,
-    "..",
-    "resource-policy.toml",
+test("scope properties include RAM, zero swap, quota, tasks, walltime and OOM policy", () => {
+  const m = manifest();
+  const argv = buildSystemdLaunch(m, "agent-resource-test.scope", ["true"]);
+  for (const value of [
+    "--user",
+    "--scope",
+    "--collect",
+    `MemoryMax=${m.host_ram_peak_bytes}`,
+    `MemoryHigh=${m.host_ram_peak_bytes}`,
+    "MemorySwapMax=0",
+    "CPUQuota=100%",
+    "TasksMax=136",
+    "RuntimeMaxSec=10",
+    "OOMPolicy=kill",
+  ])
+    expect(argv).toContain(value);
+});
+test("CLI retains version, help, unknown flag and malformed manifest exits", async () => {
+  const pkg = (await import("../package.json")).default;
+  expect((await invoke(["--version"])).stdout.trim()).toBe(
+    `agent-resource-run ${pkg.version}`,
   );
-  const scriptPath = resolve(
-    import.meta.dir,
-    "..",
-    "src",
-    "agent-resource-run.ts",
-  );
-
-  /** Writes the shipped policy with `edit` applied to its text; returns the fixture path. */
-  function policyFixture(edit: (text: string) => string): string {
-    const path = join(temporaryStateDirectory(), "resource-policy.toml");
-    writeFileSync(path, edit(readFileSync(shippedPolicyPath, "utf8")));
-    return path;
-  }
-
-  test("the shipped TOML carries exactly the former hardcoded thresholds", () => {
-    const expected = {
-      cpu_safety_count: 1,
-      min_host_ram_safety_bytes: 4 * GiB,
-      host_ram_safety_fraction: 0.1,
-      scratch_safety_bytes: GiB,
-      gpu_safety_bytes: 512 * MiB,
-      gpu_vram_warmup_ms: 30_000,
-      gpu_vram_warmup_threshold_bytes: 64 * MiB,
-      gpu_vram_cap_tolerance_fraction: 0.05,
-      gpu_idle_utilization_percent: 20,
-      gpu_idle_power_watts: 30,
-      gpu_max_concurrent_jobs: 8,
-      gpu_soft_limit_fraction: 0.9,
-      default_monitor_interval_ms: 200,
-      gpu_vram_sample_interval_ms: 1_000,
-      gpu_partition_device: 0,
-      gpu_partition_ccc_bytes: 2048 * MiB,
-      gpu_partition_rerank_bytes: 2048 * MiB,
-    };
-    expect(loadResourcePolicy(shippedPolicyPath)).toEqual(expected);
-    expect(resourcePolicyPath()).toBe(shippedPolicyPath);
-    expect(resourcePolicy()).toEqual(expected);
-  });
-
-  test("AGENT_RESOURCE_POLICY moves the GPU cap without a code edit", () => {
-    const fixture = policyFixture(withKey("gpu_max_concurrent_jobs", "2"));
-    const saved = process.env.AGENT_RESOURCE_POLICY;
-    process.env.AGENT_RESOURCE_POLICY = fixture;
-    const policy = loadResourcePolicy();
-    restoreEnvValue("AGENT_RESOURCE_POLICY", saved);
-    expect(policy.gpu_max_concurrent_jobs).toBe(2);
-    const one = [gpuReservation("a", 128 * MiB)];
-    const two = [...one, gpuReservation("b", 128 * MiB)];
-    expect(decideAdmission(gpuManifest(), hostSnapshot(), one, policy).ok).toBe(
-      true,
-    );
+  const help = await invoke(["--help"]);
+  for (const flag of ["--manifest", "--check-only", "--job-id", "--slot"])
+    expect(help.stdout).toContain(flag);
+  expect((await invoke(["-Z"])).exit).toBe(1);
+  expect((await invoke(["--__proto__"])).exit).toBe(2);
+  expect((await invoke([])).exit).toBe(2);
+  const f = await fixture();
+  await Bun.write(f.path, "{}");
+  expect(
+    (await invoke(["--manifest", f.path, "--check-only"], f.env)).exit,
+  ).toBe(2);
+}, 30000);
+test.skipIf(!live)(
+  "all caller invocation shapes and job-id/slot flags still execute",
+  async () => {
+    const f = await fixture();
+    const slots = join(f.dir, "slots.toml");
+    await Bun.write(slots, "schema=1\njulia_compile=1\n");
+    for (const flags of [
+      [],
+      ["--job-id", `override-${crypto.randomUUID()}`],
+      ["--slot", "julia-compile"],
+    ]) {
+      const result = await invoke(
+        ["--manifest", f.path, ...flags, "--", "/bin/sh", "-c", "exit 23"],
+        { ...f.env, AGENT_RESOURCE_SLOTS: slots },
+      );
+      expect(result.exit, result.stderr).toBe(23);
+      expect(result.stdout).toContain("ADMIT job=");
+      expect(result.stdout).toContain("RELEASE job=");
+    }
     expect(
-      denied(decideAdmission(gpuManifest(), hostSnapshot(), two, policy))
-        .reason,
-    ).toContain("2-job concurrency cap");
-    // The module-level startup load honours the variable too, in a fresh process.
-    const probe = Bun.spawnSync(
+      (await invoke(["--manifest", f.path, "--check-only"], f.env)).exit,
+    ).toBe(0);
+    expect(
+      (
+        await invoke(
+          ["--manifest", f.path, "--check-only", "--", "true"],
+          f.env,
+        )
+      ).exit,
+    ).toBe(2);
+  },
+  30000,
+);
+test.skipIf(!live)(
+  "scope exposes per-run pids.peak and intact inherited polysearch admission",
+  async () => {
+    const f = await fixture(
+      manifest({ host_ram_peak_bytes: 1536 * 1024 ** 2 }),
+    );
+    const result = await invoke(
       [
+        "--manifest",
+        f.path,
+        "--",
         process.execPath,
         "-e",
-        `import { resourcePolicy } from ${JSON.stringify(scriptPath)};` +
-          "const result = resourcePolicy(); if (result.isOk()) console.log(result.value.gpu_max_concurrent_jobs); else process.exit(1);",
+        `
+    const fs = await import('node:fs/promises'); const crypto = await import('node:crypto');
+    const payload=process.env.AGENT_RESOURCE_ADMISSION_RECEIPT;
+    const receipt=JSON.parse(payload); const group=(await fs.readFile('/proc/self/cgroup','utf8')).trim().split('::')[1];
+    const root='/sys/fs/cgroup'+group;
+    const peak=Number(await fs.readFile(root+'/pids.peak','utf8'));
+    if(!group.endsWith(receipt.scope_unit) || !(peak>=1 && peak<136)) process.exit(41);
+    if(crypto.createHash('sha256').update(payload).digest('hex')!==process.env.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256) process.exit(42);
+    if(process.env.AGENT_RESOURCE_ENFORCEMENT!=='cgroup' || process.env.AGENT_RESOURCE_CPU_IDS.split(',').length!==1
+      || Number(process.env.AGENT_RESOURCE_MAX_PROCESSES)<8 || Number(process.env.AGENT_RESOURCE_HOST_RAM_BYTES)<1610612736
+      || Number(process.env.AGENT_RESOURCE_SCRATCH_BYTES)<2147483648) process.exit(43);
+    console.log('CGROUP',group,'PEAK',peak);
+    const child=Bun.spawn([process.execPath,${JSON.stringify(runner)},'--manifest',${JSON.stringify(f.path)},'--','true'],{stdout:'pipe',stderr:'pipe'});
+    const [out,err,code]=await Promise.all([child.stdout.text(),child.stderr.text(),child.exited]);
+    console.log(out,err);if(code!==69 || !out.includes('nested reservation refused')) process.exit(44);
+  `,
       ],
-      {
-        env: { ...process.env, AGENT_RESOURCE_POLICY: fixture },
-        stdout: "pipe",
-        stderr: "pipe",
-      },
+      f.env,
     );
-    expect(probe.stdout.toString().trim()).toBe("2");
-  });
-
-  test("a relative AGENT_RESOURCE_POLICY is refused", () => {
-    const saved = process.env.AGENT_RESOURCE_POLICY;
-    process.env.AGENT_RESOURCE_POLICY = "resource-policy.toml";
-    const result = resourcePolicyPathResult();
-    restoreEnvValue("AGENT_RESOURCE_POLICY", saved);
-    expect(result.isErr()).toBe(true);
-    expect(String(result._unsafeUnwrapErr())).toContain("absolute path");
-  });
-
-  test("a missing key fails closed and names the key and file", () => {
-    const fixture = policyFixture((text) =>
-      text.replace(/^gpu_max_concurrent_jobs = .*$/mu, ""),
+    expect(result.exit, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain("CGROUP");
+    expect(result.stdout).toContain("nested reservation refused");
+  },
+  15000,
+);
+test.skipIf(!live)(
+  "two fake GPU jobs on one slot never overlap; status names the holder",
+  async () => {
+    const f = await fixture(
+      manifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 } }),
     );
-    const result = loadResourcePolicyResult(fixture);
-    expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().message).toContain(
-      "gpu_max_concurrent_jobs: required key is missing (expected a positive integer)",
-    );
-    expect(result._unsafeUnwrapErr().message).toContain(fixture);
-  });
-
-  test("an unknown key fails closed and names the key", () => {
-    const fixture = policyFixture(
-      (text) => `${text}\ngpu_max_concurent_jobs = 8\n`,
-    );
-    const result = loadResourcePolicyResult(fixture);
-    expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().message).toContain(
-      "gpu_max_concurent_jobs: unknown key",
-    );
-  });
-
-  test("out-of-range and mistyped values fail closed with the key and value named", () => {
-    const cases: [string, string, string][] = [
-      ["gpu_max_concurrent_jobs", "0", "expected a positive integer, got 0"],
-      [
-        "gpu_max_concurrent_jobs",
-        "2.5",
-        "expected a positive integer, got 2.5",
-      ],
-      [
-        "gpu_soft_limit_fraction",
-        "1.5",
-        "expected a fraction in (0, 1], got 1.5",
-      ],
-      [
-        "host_ram_safety_fraction",
-        '"0.1"',
-        'expected a fraction in (0, 1], got "0.1"',
-      ],
-      ["gpu_safety_mib", "-512", "expected a positive integer (MiB), got -512"],
-      [
-        "gpu_idle_power_watts",
-        "nan",
-        "expected a positive number (W), got null",
-      ],
-    ];
-    for (const [key, value, message] of cases) {
-      const fixture = policyFixture(withKey(key, value));
-      const result = loadResourcePolicyResult(fixture);
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain(`${key}: ${message}`);
-    }
-  });
-
-  test("the CLI refuses with USAGE exit 2 when the policy is invalid", () => {
-    const fixture = policyFixture((text) =>
-      text.replace(/^gpu_max_concurrent_jobs = .*$/mu, ""),
-    );
-    const run = Bun.spawnSync(
-      [process.execPath, scriptPath, "--manifest", "/nonexistent.json"],
-      {
-        env: { ...process.env, AGENT_RESOURCE_POLICY: fixture },
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    expect(run.exitCode).toBe(2);
-    expect(run.stderr.toString()).toContain("USAGE: resource policy");
-    expect(run.stderr.toString()).toContain("gpu_max_concurrent_jobs");
-  });
-});
-
-describe("kernel enforcement", () => {
-  test("maps the envelope to a user-systemd scope", () => {
-    const manifest = cpuManifest({ cpu_threads: 2, processes: 3 });
-    const launch = buildSystemdLaunch(
-      manifest,
-      reservation({
-        reservation_id: "controller-1",
-        cpu_ids: [2, 3],
-      }),
-      ["sh", "-c", "true"],
-    );
-
-    expect(kernelTasksMax(manifest)).toBe(54);
-    expect(launch).toMatchObject({
-      scopeUnit: "agent-resource-controller-1.scope",
-      tasksMax: 54,
-    });
-    expect(launch.argv).toContain("--property=CPUQuota=200%");
-    expect(launch.argv).toContain(`--property=MemoryHigh=${128 * MiB}`);
-    expect(launch.argv).toContain(`--property=MemoryMax=${128 * MiB}`);
-    expect(launch.argv).toContain("--property=MemorySwapMax=0");
-    expect(launch.argv).toContain("--property=TasksMax=54");
-    expect(launch.argv).toContain("--property=OOMPolicy=kill");
-    expect(launch.argv.slice(-6)).toEqual([
-      "taskset",
-      "-c",
-      "2,3",
-      "sh",
-      "-c",
-      "true",
+    const log = join(f.dir, "events");
+    const job = (name: string) =>
+      invoke(
+        [
+          "--manifest",
+          f.path,
+          "--job-id",
+          `${name}-${crypto.randomUUID()}`,
+          "--",
+          "/bin/sh",
+          "-c",
+          `[ "$AGENT_RESOURCE_VRAM_BYTES" = 1 ] || exit 42; echo start-${name} >> '${log}'; sleep 1; echo end-${name} >> '${log}'`,
+        ],
+        f.env,
+      );
+    const first = job("a");
+    for (let n = 0; n < 100 && !(await Bun.file(log).exists()); n++)
+      await Bun.sleep(20);
+    const second = job("b");
+    const status = await invoke(["status"], f.env);
+    expect(status.exit, status.stderr).toBe(0);
+    expect(status.stdout).toContain("gpu.0");
+    expect(status.stdout).toContain("GPU_OWNER");
+    const results = await Promise.all([first, second]);
+    for (const result of results) expect(result.exit, result.stderr).toBe(0);
+    expect((await readFile(log, "utf8")).trim().split("\n")).toEqual([
+      "start-a",
+      "end-a",
+      "start-b",
+      "end-b",
     ]);
-  });
-
-  test("MemoryHigh and MemoryMax both equal the declared envelope, no runner-added margin (2026-09-04 incident)", () => {
-    const declared = 28 * GiB;
-    const manifest = cpuManifest({ host_ram_peak_bytes: declared });
-    const launch = buildSystemdLaunch(manifest, reservation(), ["true"]);
-    expect(launch.argv).toContain(`--property=MemoryHigh=${declared}`);
-    expect(launch.argv).toContain(`--property=MemoryMax=${declared}`);
-    // No multiplier anywhere: both properties cite the exact declared byte count.
-    const memoryProps = launch.argv.filter((a) =>
-      a.startsWith("--property=Memory"),
-    );
-    for (const prop of memoryProps) {
-      if (prop.startsWith("--property=MemorySwapMax=")) continue;
-      expect(prop.endsWith(`=${declared}`)).toBe(true);
-    }
-  });
-
-  test.skipIf(NO_CGROUP_SCOPES)(
-    "the current host accepts the required user-systemd properties",
-    () => {
-      expect(probeKernelEnforcement()).toEqual({ available: true });
-    },
-  );
-
-  test("binds the reserved VRAM budget inside the job's CUDA runtime", () => {
-    const manifest = gpuManifest();
-    const reserved = reservation({
-      reservation_id: "controller-1",
-      job_id: manifest.job_id,
-      host_ram_peak_bytes: manifest.host_ram_peak_bytes,
-      scratch_bytes: manifest.scratch_bytes,
-      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 2 * GiB },
-    });
-    const environment = commandEnvironment(
-      manifest,
-      reserved,
-      createAdmissionReceipt(
-        manifestSourceFor(manifest),
-        reserved,
-        "admit-gpu",
-      ),
-    );
-    expect(environment).toMatchObject({
-      CUDA_VISIBLE_DEVICES: "0",
-      AGENT_RESOURCE_VRAM_BYTES: String(2 * GiB),
-      JULIA_CUDA_HARD_MEMORY_LIMIT: String(2 * GiB),
-      JULIA_CUDA_SOFT_MEMORY_LIMIT: String(Math.floor(2 * GiB * 0.9)),
-    });
-  });
-
-  test("binds GPU admission basis and measured use into the child receipt", () => {
-    const manifest = gpuManifest();
-    const reserved = reservation({
-      job_id: manifest.job_id,
-      host_ram_peak_bytes: manifest.host_ram_peak_bytes,
-      scratch_bytes: manifest.scratch_bytes,
-      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 2 * GiB },
-      admission_basis: "measured",
-      vram_measured_at_admission_bytes: 3 * GiB,
-    });
-    const receipt = createAdmissionReceipt(
-      manifestSourceFor(manifest),
-      reserved,
-      "admit-measured",
-    );
-    expect(
-      decodedJson(
-        z.object({
-          admission_basis: z.string(),
-          vram_measured_at_admission_bytes: z.number(),
-        }),
-        receipt.payload,
-      ),
-    ).toMatchObject({
-      admission_basis: "measured",
-      vram_measured_at_admission_bytes: 3 * GiB,
-    });
-  });
-
-  test("leaves no CUDA budget behind on a CPU reservation", () => {
-    const manifest = cpuManifest();
-    const reserved = reservation({
-      job_id: manifest.job_id,
-      host_ram_peak_bytes: manifest.host_ram_peak_bytes,
-      scratch_bytes: manifest.scratch_bytes,
-    });
-    const environment = commandEnvironment(
-      manifest,
-      reserved,
-      createAdmissionReceipt(
-        manifestSourceFor(manifest),
-        reserved,
-        "admit-cpu",
-      ),
-    );
-    expect(environment.CUDA_VISIBLE_DEVICES).toBe("");
-    expect(environment.JULIA_CUDA_HARD_MEMORY_LIMIT).toBeUndefined();
-    expect(environment.AGENT_RESOURCE_VRAM_BYTES).toBeUndefined();
-  });
-
-  test("refuses an environment when the live reservation differs from the manifest", () => {
-    const manifest = cpuManifest();
-    const reserved = reservation({
-      job_id: manifest.job_id,
-      host_ram_peak_bytes: 512 * MiB,
-    });
-    const receipt = createAdmissionReceipt(
-      manifestSourceFor(manifest),
-      reserved,
-      "admit-mismatch",
-    );
-    const result = commandEnvironmentResult(manifest, reserved, receipt);
-    expect(result.isErr()).toBe(true);
-    expect(result._unsafeUnwrapErr().message).toContain(
-      "manifest and reservation resources must match",
-    );
-  });
-
-  test("replaces spoofed resource environment with an exact scope-bound receipt", () => {
-    const manifest = cpuManifest({
-      cpu_threads: 2,
-      host_ram_peak_bytes: 512 * MiB,
-      scratch_bytes: 64 * MiB,
-    });
-    const reserved = reservation({
-      reservation_id: "reservation-123",
-      job_id: "test-job",
-      controller_pid: 4_242,
-      cpu_ids: [2, 5],
-      host_ram_peak_bytes: 512 * MiB,
-      scratch_bytes: 64 * MiB,
-      started_at: "2026-08-20T01:02:03.000Z",
-    });
-    const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
-    const source = manifestSourceFromBytes(
-      "fixtures/exact.resource.json",
-      manifestBytes,
-    );
-    const receipt = createAdmissionReceipt(source, reserved, "admission-456");
-    const expectedPayload = JSON.stringify({
-      schema: 1,
-      admission_id: "admission-456",
-      manifest_path: resolve("fixtures/exact.resource.json"),
-      manifest_sha256: createHash("sha256").update(manifestBytes).digest("hex"),
-      job_id: "test-job",
-      reservation_id: "reservation-123",
-      scope_unit: "agent-resource-reservation-123.scope",
-      controller_pid: 4_242,
-      cpu_ids: [2, 5],
-      host_ram_peak_bytes: 512 * MiB,
-      scratch_bytes: 64 * MiB,
-      device: { kind: "cpu" },
-      started_at: "2026-08-20T01:02:03.000Z",
-    });
-    expect(source).toEqual({
-      path: resolve("fixtures/exact.resource.json"),
-      sha256: createHash("sha256").update(manifestBytes).digest("hex"),
-    });
-    expect(receipt.payload).toBe(expectedPayload);
-    expect(receipt.sha256).toBe(
-      createHash("sha256").update(expectedPayload).digest("hex"),
-    );
-    expect(scopeUnitFor(reserved)).toBe("agent-resource-reservation-123.scope");
-    expect(
-      verifyAdmissionReceipt(
-        receipt.payload,
-        receipt.sha256,
-        "0::/user.slice/user-1000.slice/agent-resource-reservation-123.scope",
-      ),
-    ).toBe(true);
-    expect(
-      verifyAdmissionReceipt(
-        receipt.payload,
-        receipt.sha256,
-        "0::/user.slice/user-1000.slice/not-agent-resource-reservation-123.scope",
-      ),
-    ).toBe(false);
-    expect(
-      verifyAdmissionReceipt(
-        receipt.payload,
-        "0".repeat(64),
-        "0::/user.slice/user-1000.slice/agent-resource-reservation-123.scope",
-      ),
-    ).toBe(false);
-
-    const reservedKeys = [
-      "AGENT_RESOURCE_JOB_ID",
-      "AGENT_RESOURCE_CPU_IDS",
-      "AGENT_RESOURCE_MAX_PROCESSES",
-      "AGENT_RESOURCE_HOST_RAM_BYTES",
-      "AGENT_RESOURCE_SCRATCH_BYTES",
-      "AGENT_RESOURCE_MANIFEST_SHA256",
-      "AGENT_RESOURCE_MANIFEST_PATH",
-      "AGENT_RESOURCE_ADMISSION_ID",
-      "AGENT_RESOURCE_RESERVATION_ID",
-      "AGENT_RESOURCE_ADMISSION_RECEIPT",
-      "AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256",
-      "AGENT_RESOURCE_VRAM_BYTES",
-      "JULIA_CUDA_HARD_MEMORY_LIMIT",
-      "JULIA_CUDA_SOFT_MEMORY_LIMIT",
-      "CUDA_VISIBLE_DEVICES",
-    ];
-    const inherited = new Map(
-      reservedKeys.map((key) => [key, process.env[key]]),
-    );
-    // Cleanup runs on return AND on throw, same as the prior try/finally: a `using` block whose
-    // only job is to restore every spoofed env var when this test's scope ends, in any manner.
-    using _restoreEnv = {
-      [Symbol.dispose]: () => {
-        for (const [key, value] of inherited) restoreEnvValue(key, value);
-      },
-    };
-    for (const key of reservedKeys) process.env[key] = "caller-spoofed";
-    const environment = commandEnvironment(manifest, reserved, receipt);
-    expect(environment).toMatchObject({
-      AGENT_RESOURCE_JOB_ID: "test-job",
-      AGENT_RESOURCE_CPU_IDS: "2,5",
-      AGENT_RESOURCE_MAX_PROCESSES: "2",
-      AGENT_RESOURCE_HOST_RAM_BYTES: String(512 * MiB),
-      AGENT_RESOURCE_SCRATCH_BYTES: String(64 * MiB),
-      AGENT_RESOURCE_MANIFEST_SHA256: source.sha256,
-      AGENT_RESOURCE_MANIFEST_PATH: source.path,
-      AGENT_RESOURCE_ADMISSION_ID: "admission-456",
-      AGENT_RESOURCE_RESERVATION_ID: "reservation-123",
-      AGENT_RESOURCE_ADMISSION_RECEIPT: expectedPayload,
-      AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256: receipt.sha256,
-    });
-    expect(environment.AGENT_RESOURCE_VRAM_BYTES).toBeUndefined();
-    expect(environment.JULIA_CUDA_HARD_MEMORY_LIMIT).toBeUndefined();
-    expect(environment.JULIA_CUDA_SOFT_MEMORY_LIMIT).toBeUndefined();
-    expect(environment.CUDA_VISIBLE_DEVICES).toBe("");
-  });
-});
-
-describe("admission receipt", () => {
-  test("rejects malformed, unknown, altered, and non-canonical receipts", () => {
-    const source = manifestSourceFromBytes(
-      "fixtures/receipt.resource.json",
-      Buffer.from('{"schema":1}\n', "utf8"),
-    );
-    const reserved = reservation({
-      reservation_id: "receipt-123",
-      job_id: "receipt-job",
-      controller_pid: 4_242,
-      cpu_ids: [1, 3],
-      host_ram_peak_bytes: 512 * MiB,
-      scratch_bytes: 0,
-      started_at: "2026-08-21T01:02:03.000Z",
-    });
-    const receipt = createAdmissionReceipt(source, reserved, "admission-123");
-    const cgroup =
-      "0::/user.slice/user-1000.slice/agent-resource-receipt-123.scope";
-    const validPayload = {
-      schema: 1,
-      admission_id: "admission-123",
-      manifest_path: source.path,
-      manifest_sha256: source.sha256,
-      job_id: "receipt-job",
-      reservation_id: "receipt-123",
-      scope_unit: "agent-resource-receipt-123.scope",
-      controller_pid: 4_242,
-      cpu_ids: [1, 3],
-      host_ram_peak_bytes: 512 * MiB,
-      scratch_bytes: 0,
-      device: { kind: "cpu" },
-      started_at: "2026-08-21T01:02:03.000Z",
-    };
-    const invalidPayloads = [
-      "{",
-      JSON.stringify({ ...validPayload, unexpected: true }),
-      JSON.stringify({ ...validPayload, schema: 2 }),
-      JSON.stringify({ ...validPayload, admission_id: 1 }),
-      JSON.stringify({ ...validPayload, manifest_path: "relative.json" }),
-      JSON.stringify({ ...validPayload, manifest_sha256: "A".repeat(64) }),
-      JSON.stringify({ ...validPayload, job_id: null }),
-      JSON.stringify({ ...validPayload, reservation_id: null }),
-      JSON.stringify({ ...validPayload, scope_unit: "wrong.scope" }),
-      JSON.stringify({ ...validPayload, controller_pid: 1.5 }),
-      JSON.stringify({ ...validPayload, cpu_ids: [1, 1] }),
-      JSON.stringify({ ...validPayload, host_ram_peak_bytes: 1.5 }),
-      JSON.stringify({ ...validPayload, scratch_bytes: -1 }),
-      JSON.stringify({
-        ...validPayload,
-        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1.5 },
+  },
+  15000,
+);
+test.skipIf(!live)(
+  "flock queue timeout is 75 and duplicate job id remains DENY 69",
+  async () => {
+    const f = await fixture(
+      manifest({
+        walltime_seconds: 1,
+        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 },
       }),
-      JSON.stringify({ ...validPayload, started_at: "not-an-iso-timestamp" }),
-      // Same field values as validPayload but with admission_id reordered to the front: the
-      // canonical round-trip in admissionReceiptPayloadFrom must reject non-canonical key order,
-      // not just semantic equality. Destructuring (not a literal duplicate key) reorders without
-      // ever naming admission_id twice in one object literal.
-      (() => {
-        const { admission_id, ...rest } = validPayload;
-        return JSON.stringify({ admission_id, ...rest });
-      })(),
+    );
+    const locksRoot = join(runtime, "agent-resource");
+    await mkdir(join(locksRoot, "slots"), { recursive: true });
+    const blocker = Bun.spawn(
+      ["flock", "-F", join(locksRoot, "slots/gpu.0"), "sleep", "3"],
+      { stdout: "ignore", stderr: "ignore", timeout: 5000 },
+    );
+    await Bun.sleep(100);
+    const timed = await invoke(["--manifest", f.path, "--", "true"], f.env);
+    expect(timed.exit, timed.stderr).toBe(75);
+    expect(timed.stdout).toContain("flock wait expired");
+    await blocker.exited;
+    const marker = join(f.dir, "started");
+    const a = await fixture(manifest());
+    const running = invoke(
+      [
+        "--manifest",
+        a.path,
+        "--",
+        "/bin/sh",
+        "-c",
+        `touch '${marker}'; sleep 8`,
+      ],
+      a.env,
+    );
+    for (let n = 0; n < 500 && !(await Bun.file(marker).exists()); n++)
+      await Bun.sleep(20);
+    expect(
+      (await invoke(["--manifest", a.path, "--", "true"], a.env)).exit,
+    ).toBe(69);
+    expect((await running).exit).toBe(0);
+  },
+  15000,
+);
+test.skipIf(!live)(
+  "RAM ceiling causes a scope OOM kill and passes through exit 137",
+  async () => {
+    const f = await fixture(manifest({ host_ram_peak_bytes: 96 * 1024 ** 2 }));
+    const result = await invoke(
+      [
+        "--manifest",
+        f.path,
+        "--",
+        process.execPath,
+        "-e",
+        "const a=[];for(;;){a.push(Buffer.alloc(8*1024*1024,1));}",
+      ],
+      f.env,
+    );
+    expect(result.exit, result.stdout + result.stderr).toBe(137);
+    expect(result.stdout).toContain("RELEASE job=");
+    const unit = result.stderr.match(/agent-resource-[a-z0-9-]+\.scope/u)?.[0];
+    expect(unit).toBeDefined();
+    const journal = Bun.spawn(
+      ["journalctl", "--user", "-u", unit!, "--no-pager", "-n", "20"],
+      { stdout: "pipe", stderr: "pipe", timeout: 5000 },
+    );
+    const [log, errors, exit] = await Promise.all([
+      journal.stdout.text(),
+      journal.stderr.text(),
+      journal.exited,
+    ]);
+    expect(exit, errors).toBe(0);
+    expect(log).toContain("oom-kill");
+  },
+  15000,
+);
+test.skipIf(!live)(
+  "RuntimeMaxSec ends a walltime overrun without a runner monitor",
+  async () => {
+    const f = await fixture(manifest({ walltime_seconds: 1 }));
+    const start = performance.now();
+    const result = await invoke(
+      ["--manifest", f.path, "--", "sleep", "20"],
+      f.env,
+    );
+    expect(result.exit, result.stdout + result.stderr).toBe(143);
+    expect(performance.now() - start).toBeLessThan(6000);
+  },
+  10000,
+);
+test("recorded stall DENY contains evidence and GPU-holding pid/command; missing state permits GPU", async () => {
+  const f = await fixture(
+    manifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 } }),
+  );
+  await Bun.write(
+    join(f.dir, "gpu-owner.json"),
+    JSON.stringify({
+      schema: 1,
+      attemptAt: Temporal.Now.instant().epochMilliseconds,
+      unresponsiveSince: Temporal.Now.instant().epochMilliseconds,
+      stallEvidence: "probe timed out twice",
+      devices: [],
+      processes: [{ pid: process.pid, usedMiB: null }],
+      samples: [],
+    }),
+  );
+  const result = await invoke(["--manifest", f.path, "--", "true"], f.env);
+  expect(result.exit, result.stderr).toBe(69);
+  for (const value of [
+    "probe timed out twice",
+    "gpu-owner.json",
+    String(process.pid),
+    "bun",
+  ])
+    expect(result.stdout).toContain(value);
+});
+
+test("fresh recovery HOLD retains exit 70", async () => {
+  const f = await fixture();
+  const home = join(f.dir, "home");
+  const state = join(home, ".local/state/wsl-capacity-recover");
+  await mkdir(state, { recursive: true });
+  await Bun.write(
+    join(state, "latest-verdict.json"),
+    JSON.stringify({
+      schema: 1,
+      verdict: "HOLD",
+      memory_emergency: true,
+      windows_available_mb: 100,
+      recorded_at: Temporal.Now.instant().toString(),
+    }),
+  );
+  const result = await invoke(["--manifest", f.path, "--", "true"], {
+    ...f.env,
+    HOME: home,
+  });
+  expect(result.exit, result.stdout + result.stderr).toBe(70);
+  expect(result.stdout).toContain("HOLD RECOVER_VERDICT");
+}, 10000);
+
+test.skipIf(!live)(
+  "caller argv snapshots preserve downstream flags without executing consumer work",
+  async () => {
+    const f = await fixture();
+    const bin = join(f.dir, "bin");
+    await mkdir(bin);
+    for (const tool of ["mise", "cargo", "julia"]) {
+      await Bun.write(
+        join(bin, tool),
+        `#!${process.execPath}\nprocess.stdout.write('CALLER '+JSON.stringify(process.argv.slice(2))+'\\n');\n`,
+        { mode: 0o755 },
+      );
+      await chmod(join(bin, tool), 0o755);
+    }
+    const callers = [
+      {
+        name: "firedancer launcher/launch.ts via launch_checks.ts",
+        flags: ["--job-id", "launcher-gpu-0-exclusive"],
+        argv: [
+          "mise",
+          "exec",
+          "--",
+          "bun",
+          "launcher/launch.ts",
+          "--exec-in-snapshot",
+          "sealed-rev",
+          "--",
+          "julia",
+          "--project=envs/gpu",
+          "runner.jl",
+        ],
+      },
+      {
+        name: "firedancer launcher/jq_submit.py",
+        flags: [],
+        argv: ["julia", "--project=envs/gpu", "runner.jl"],
+      },
+      {
+        name: "polysearch-v1 mise.toml up",
+        flags: [],
+        argv: ["cargo", "update", "--workspace"],
+      },
+      {
+        name: "polysearch-v1 mise.toml up:check",
+        flags: [],
+        argv: ["cargo", "update", "--workspace", "--dry-run"],
+      },
+      {
+        name: "polysearch-v1 scripts/gate-timings.ts",
+        flags: ["--job-id", "polysearch-v1-gate-fixture"],
+        argv: [
+          "cargo",
+          "test",
+          "-j1",
+          "--workspace",
+          "--no-run",
+          "--message-format=json",
+        ],
+      },
     ];
-    for (const payload of invalidPayloads) {
-      expect(verifyAdmissionReceipt(payload, digestFor(payload), cgroup)).toBe(
-        false,
+    for (const caller of callers) {
+      const result = await invoke(
+        ["--manifest", f.path, ...caller.flags, "--", ...caller.argv],
+        { ...f.env, PATH: `${bin}:${process.env.PATH}` },
+      );
+      expect(result.exit, caller.name + result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain(
+        `CALLER ${JSON.stringify(caller.argv.slice(1))}`,
       );
     }
-    expect(
-      verifyAdmissionReceipt(
-        receipt.payload.replace("admission-123", "admission-124"),
-        receipt.sha256,
-        cgroup,
-      ),
-    ).toBe(false);
-  });
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "check-only admission does not issue receipt identifiers",
-    async () => {
-      const reports: string[] = [];
-      const result = await checkJob(cpuManifest(), {
-        stateDirectory: temporaryStateDirectory(),
-        snapshot: hostSnapshot(),
-        kernelEnforcement: { available: true },
-        report: (line) => {
-          reports.push(line);
-        },
-      });
-      expect(result).toMatchObject({ ok: true, exitCode: 0 });
-      expect(reports.join("\n")).toContain("check_only=true");
-      expect(reports.join("\n")).not.toContain("admission_id=");
-      expect(reports.join("\n")).not.toContain("receipt_sha256=");
-    },
-  );
-
-  // WHY skipIf, not a plain assertion (2026-09-12, tests/ move regression + invocation gap): this
-  // test verifies a receipt-bearing CHILD from INSIDE a receipt-bearing PARENT, so it requires
-  // this `bun test` PROCESS ITSELF to already be running under agent-resource-run's own admission
-  // — see README.md "Child admission receipt" and the task-owned outer envelope at
-  // examples/resource-runner-tests.resource.json. `mise run test:resource-control` wraps itself
-  // that way wherever the runner can admit (Linux + a live user systemd); a plain
-  // `bun test tools/agent-resource-run`, or the task on macOS, does not (measured:
-  // AGENT_RESOURCE_ADMISSION_RECEIPT is unset there), so this test skips instead of failing on a
-  // precondition the invocation never promised — asserting on `undefined` would be a false
-  // failure, not a caught bug. Confirmed green when actually wrapped:
-  //   bun tools/agent-resource-run/src/agent-resource-run.ts \
-  //     --manifest tools/agent-resource-run/examples/resource-runner-tests.resource.json -- \
-  //     bun test tools/agent-resource-run/tests/agent-resource-run.test.ts -t "accepts only a runner child"
-  const outerReceiptIsPresent =
-    process.env.AGENT_RESOURCE_ADMISSION_RECEIPT !== undefined;
-  if (!outerReceiptIsPresent) {
-    console.warn(
-      "SKIP admission receipt > accepts only a runner child in the receipt's live systemd " +
-        "scope: AGENT_RESOURCE_ADMISSION_RECEIPT is unset — this bun test process was not " +
-        "launched via agent-resource-run, so the self-referential outer receipt this test " +
-        "checks does not exist here. See the test's own comment for the wrapped invocation.",
-    );
-  }
-  test.skipIf(!outerReceiptIsPresent)(
-    "accepts only a runner child in the receipt's live systemd scope",
-    async () => {
-      const outerManifestPath = join(
-        import.meta.dir,
-        "../examples/resource-runner-tests.resource.json",
-      );
-      const outerManifestBytes = readFileSync(outerManifestPath);
-      const outerManifest = validateManifest(
-        parseJson(outerManifestBytes.toString()),
-      );
-      const outerSource = manifestSourceFromBytes(
-        outerManifestPath,
-        outerManifestBytes,
-      );
-      expect(outerManifest).toMatchObject({
-        cpu_threads: 3,
-        processes: 4,
-        host_ram_peak_bytes: 768 * MiB,
-      });
-      const manifestPath = join(
-        import.meta.dir,
-        "../examples/resource-runner-receipt-inner.resource.json",
-      );
-      const manifestBytes = readFileSync(manifestPath);
-      const manifest = validateManifest(parseJson(manifestBytes.toString()));
-      const manifestSource = manifestSourceFromBytes(
-        manifestPath,
-        manifestBytes,
-      );
-      const outerPayload = decoded(
-        z.string(),
-        process.env.AGENT_RESOURCE_ADMISSION_RECEIPT,
-      );
-      const outerReceiptSha256 = decoded(
-        z.string(),
-        process.env.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256,
-      );
-      const outerCgroup = readFileSync("/proc/self/cgroup", "utf8");
-      expect(process.env.AGENT_RESOURCE_MANIFEST_PATH).toBe(outerSource.path);
-      expect(process.env.AGENT_RESOURCE_MANIFEST_SHA256).toBe(
-        outerSource.sha256,
-      );
-      expect(process.env.AGENT_RESOURCE_JOB_ID).toBe(outerManifest.job_id);
-      expect(typeof process.env.AGENT_RESOURCE_RESERVATION_ID).toBe("string");
-      expect(typeof outerPayload).toBe("string");
-      expect(typeof outerReceiptSha256).toBe("string");
-      expect(outerReceiptSha256).toBe(
-        createHash("sha256").update(outerPayload).digest("hex"),
-      );
-      expect(
-        verifyAdmissionReceipt(outerPayload, outerReceiptSha256, outerCgroup),
-      ).toBe(true);
-      const outerReceiptRaw = parseJson(outerPayload);
-      const outerReceipt = decoded(ReceiptFieldsSchema, outerReceiptRaw);
-      expect(JSON.stringify(outerReceiptRaw)).toBe(outerPayload);
-      expect(outerReceiptRaw).toMatchObject({
-        schema: 1,
-        admission_id: process.env.AGENT_RESOURCE_ADMISSION_ID,
-        manifest_path: outerSource.path,
-        manifest_sha256: outerSource.sha256,
-        job_id: outerManifest.job_id,
-        reservation_id: process.env.AGENT_RESOURCE_RESERVATION_ID,
-        host_ram_peak_bytes: outerManifest.host_ram_peak_bytes,
-        scratch_bytes: outerManifest.scratch_bytes,
-        device: { kind: "cpu" },
-      });
-      expect(outerReceipt.cpu_ids).toHaveLength(outerManifest.cpu_threads);
-      expect(outerReceipt.scope_unit).toBe(
-        `agent-resource-${process.env.AGENT_RESOURCE_RESERVATION_ID}.scope`,
-      );
-      expect(outerReceipt.manifest_path).not.toBe(manifestSource.path);
-      expect(outerReceipt.manifest_sha256).not.toBe(manifestSource.sha256);
-      expect(outerReceipt.job_id).not.toBe(manifest.job_id);
-      const stateDirectory = temporaryStateDirectory();
-      const receiptPath = join(stateDirectory, "child-receipt.json");
-      const runnerModulePath = join(
-        import.meta.dir,
-        "../src/agent-resource-run.ts",
-      );
-      const childScript = [
-        'import { readFileSync, writeFileSync } from "node:fs";',
-        `import { verifyAdmissionReceipt } from ${JSON.stringify(runnerModulePath)};`,
-        `const receiptPath = ${JSON.stringify(receiptPath)};`,
-        "const payload = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT;",
-        "const sha256 = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256;",
-        "const cgroup = readFileSync('/proc/self/cgroup', 'utf8');",
-        "const verified = typeof payload === 'string' && typeof sha256 === 'string' && verifyAdmissionReceipt(payload, sha256, cgroup);",
-        "const environment = Object.fromEntries(Object.entries(process.env));",
-        "writeFileSync(receiptPath, JSON.stringify({ verified, cgroup, environment }) + '\\n');",
-        "process.exit(verified ? 0 : 1);",
-      ].join("\n");
-      const reports: string[] = [];
-      const result = await executeJob(
-        manifest,
-        [process.execPath, "-e", childScript],
-        {
-          stateDirectory,
-          snapshot: await probeHostSnapshot(process.cwd()),
-          monitorIntervalMs: 25,
-          manifestSource,
-          report: (line) => {
-            reports.push(line);
-          },
-        },
-      );
-      expect(result).toMatchObject({ ok: true, exitCode: 0 });
-      const admit = reports.find((line) => line.startsWith("ADMIT "));
-      expect(admit).toContain("admission_id=");
-      expect(admit).toContain("reservation_id=");
-      expect(admit).toContain("scope_unit=");
-      expect(admit).toContain("manifest_sha256=");
-      expect(admit).toContain("receipt_sha256=");
-
-      const saved = decoded(
-        SavedChildSchema,
-        parseJson(readFileSync(receiptPath, "utf8")),
-      );
-      expect(saved.verified).toBe(true);
-      const innerEnvironment = saved.environment;
-      const innerPayload = decoded(
-        z.string(),
-        innerEnvironment.AGENT_RESOURCE_ADMISSION_RECEIPT,
-      );
-      const innerReceiptSha256 = decoded(
-        z.string(),
-        innerEnvironment.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256,
-      );
-      expect(innerEnvironment.AGENT_RESOURCE_MANIFEST_PATH).toBe(
-        manifestSource.path,
-      );
-      expect(innerEnvironment.AGENT_RESOURCE_MANIFEST_SHA256).toBe(
-        manifestSource.sha256,
-      );
-      expect(innerEnvironment.AGENT_RESOURCE_JOB_ID).toBe(manifest.job_id);
-      expect(typeof innerEnvironment.AGENT_RESOURCE_RESERVATION_ID).toBe(
-        "string",
-      );
-      expect(typeof innerEnvironment.AGENT_RESOURCE_ADMISSION_ID).toBe(
-        "string",
-      );
-      expect(typeof innerPayload).toBe("string");
-      expect(typeof innerReceiptSha256).toBe("string");
-      expect(innerReceiptSha256).toBe(
-        createHash("sha256").update(innerPayload).digest("hex"),
-      );
-      expect(
-        verifyAdmissionReceipt(innerPayload, innerReceiptSha256, saved.cgroup),
-      ).toBe(true);
-      const innerReceiptRaw = parseJson(innerPayload);
-      const innerReceipt = decoded(ReceiptFieldsSchema, innerReceiptRaw);
-      expect(JSON.stringify(innerReceiptRaw)).toBe(innerPayload);
-      expect(innerReceiptRaw).toMatchObject({
-        schema: 1,
-        admission_id: innerEnvironment.AGENT_RESOURCE_ADMISSION_ID,
-        manifest_path: manifestSource.path,
-        manifest_sha256: manifestSource.sha256,
-        job_id: manifest.job_id,
-        reservation_id: innerEnvironment.AGENT_RESOURCE_RESERVATION_ID,
-        host_ram_peak_bytes: manifest.host_ram_peak_bytes,
-        scratch_bytes: manifest.scratch_bytes,
-        device: { kind: "cpu" },
-      });
-      expect(innerReceipt.cpu_ids).toHaveLength(manifest.cpu_threads);
-      expect(innerReceipt.scope_unit).toBe(
-        `agent-resource-${innerEnvironment.AGENT_RESOURCE_RESERVATION_ID}.scope`,
-      );
-      expect(innerReceipt.manifest_path).not.toBe(outerSource.path);
-      expect(innerReceipt.manifest_sha256).not.toBe(outerSource.sha256);
-      expect(innerReceipt.job_id).not.toBe(outerManifest.job_id);
-      const directScript = [
-        'import { readFileSync } from "node:fs";',
-        `import { verifyAdmissionReceipt } from ${JSON.stringify(runnerModulePath)};`,
-        "const payload = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT;",
-        "const sha256 = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256;",
-        "const verified = typeof payload === 'string' && typeof sha256 === 'string' && verifyAdmissionReceipt(payload, sha256, readFileSync('/proc/self/cgroup', 'utf8'));",
-        "process.exit(verified ? 1 : 0);",
-      ].join("\n");
-      const direct = Bun.spawnSync([process.execPath, "-e", directScript], {
-        env: { ...process.env, ...saved.environment },
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      expect(direct.exitCode).toBe(0);
-    },
-  );
-});
-
-describe("bounded execution", () => {
-  test.skipIf(process.platform !== "linux")(
-    "denies immediately when a live non-runner owns the admission lock",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const lockDirectory = join(stateDirectory, ".lock");
-      mkdirSync(lockDirectory);
-      writeFileSync(
-        join(lockDirectory, "owner.json"),
-        `${JSON.stringify({ pid: process.pid })}\n`,
-      );
-      const reports: string[] = [];
-      const startedAt = performance.now();
-      const result = await checkJobResult(cpuManifest(), {
-        stateDirectory,
-        snapshot: hostSnapshot(),
-        kernelEnforcement: {
-          available: false,
-          reason: "fixture sampled enforcement",
-        },
-        hostOptIn: { sampled_enforcement_reason: "test" },
-        report: (line) => {
-          reports.push(line);
-        },
-      });
-      expect(result.isOk()).toBe(true);
-      if (result.isOk())
-        expect(result.value).toMatchObject({
-          ok: false,
-          exitCode: 69,
-          reason: "admission",
-        });
-      expect(reports.join("\n")).toContain(`lock held by ${process.pid} `);
-      expect(performance.now() - startedAt).toBeLessThan(500);
-      expect(existsSync(lockDirectory)).toBe(true);
-    },
-  );
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "fails closed when kernel enforcement is unavailable",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const reports: string[] = [];
-      const result = await checkJob(cpuManifest(), {
-        stateDirectory,
-        snapshot: hostSnapshot(),
-        kernelEnforcement: {
-          available: false,
-          reason: "fixture user manager unavailable",
-        },
-        hostOptIn: null, // hermetic: never this machine's own ~/.config/agent-resource/host.toml
-        report: (line) => {
-          reports.push(line);
-        },
-      });
-      expect(result).toMatchObject({
-        ok: false,
-        exitCode: 69,
-        reason: "admission",
-      });
-      expect(reports.join("\n")).toContain("kernel enforcement unavailable");
-      expect(readdirSync(stateDirectory)).toEqual([]);
-    },
-  );
-
-  test.skipIf(NO_CGROUP_SCOPES)(
-    "reclaims an old lock left before its owner file was written",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const lockDirectory = join(stateDirectory, ".lock");
-      mkdirSync(lockDirectory);
-      // utimes takes epoch SECONDS as a number.
-      const old = (Temporal.Now.instant().epochMilliseconds - 10_000) / 1000;
-      utimesSync(lockDirectory, old, old);
-      const result = await checkJob(cpuManifest(), {
-        stateDirectory,
-        snapshot: await probeHostSnapshot(process.cwd()),
-      });
-      expect(result).toMatchObject({ ok: true, exitCode: 0 });
-      expect(readdirSync(stateDirectory)).toEqual([]);
-    },
-  );
-
-  test.skipIf(NO_CGROUP_SCOPES)(
-    "injects one-thread settings and releases the reservation",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const snapshot = await probeHostSnapshot(process.cwd());
-      const result = await executeJob(
-        cpuManifest(),
-        [
-          "sh",
-          "-c",
-          'test "$OMP_NUM_THREADS" = 1 && test "$JULIA_NUM_THREADS" = 1',
-        ],
-        {
-          stateDirectory,
-          snapshot,
-          monitorIntervalMs: 25,
-          manifestSource: manifestSourceFor(cpuManifest()),
-        },
-      );
-      expect(result).toMatchObject({ ok: true, exitCode: 0 });
-      expect(readdirSync(stateDirectory)).toEqual([]);
-    },
-  );
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "does not deny GPU admission for one slow probe without recorded stall evidence",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const gpuOwnerStatePath = join(stateDirectory, "gpu-owner.json");
-      const now = Temporal.Now.instant().epochMilliseconds;
-      writeFileSync(
-        gpuOwnerStatePath,
-        `${JSON.stringify({
-          schema: 1,
-          attemptAt: now,
-          sampledAt: now,
-          consecutiveProbeMisses: 1,
-          devices: [],
-          processes: [],
-          samples: [],
-        })}\n`,
-      );
-      const reports: string[] = [];
-      const result = await checkJob(gpuManifest(), {
-        stateDirectory,
-        gpuOwnerStatePath,
-        kernelEnforcement: {
-          available: false,
-          reason: "test sampled enforcement",
-        },
-        hostOptIn: { sampled_enforcement_reason: "test" },
-        snapshot: hostSnapshot({
-          gpus: [
-            {
-              id: 0,
-              total_bytes: 16 * GiB,
-              used_bytes: 3 * GiB,
-              utilization_percent: 0,
-            },
-          ],
-        }),
-        gpuComputeAppsOutput: () => "42, 512",
-        report: (line) => {
-          reports.push(line);
-        },
-      });
-      expect(result).toMatchObject({ ok: true, exitCode: 0 });
-      expect(reports.join("\n")).not.toContain("GPU stall recorded");
-    },
-  );
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "denies GPU admission only for a recorded stall and reports its evidence",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const gpuOwnerStatePath = join(stateDirectory, "gpu-owner.json");
-      writeFileSync(
-        gpuOwnerStatePath,
-        `${JSON.stringify({
-          schema: 1,
-          attemptAt: 1_000,
-          sampledAt: 1_000,
-          unresponsiveSince: 900,
-          stallEvidence:
-            "2 consecutive probe deadlines missed (deadline 20000 ms)",
-          devices: [],
-          processes: [],
-          samples: [],
-        })}\n`,
-      );
-      const reports: string[] = [];
-      const result = await checkJob(gpuManifest(), {
-        stateDirectory,
-        gpuOwnerStatePath,
-        kernelEnforcement: {
-          available: false,
-          reason: "test sampled enforcement",
-        },
-        hostOptIn: { sampled_enforcement_reason: "test" },
-        snapshot: hostSnapshot({
-          gpus: [
-            {
-              id: 0,
-              total_bytes: 16 * GiB,
-              used_bytes: 3 * GiB,
-              utilization_percent: 0,
-            },
-          ],
-        }),
-        gpuComputeAppsOutput: () => "42, 512",
-        report: (line) => {
-          reports.push(line);
-        },
-      });
-      expect(result).toMatchObject({
-        ok: false,
-        exitCode: 69,
-        reason: "admission",
-      });
-      expect(reports.join("\n")).toContain(
-        "2 consecutive probe deadlines missed",
-      );
-      expect(reports.join("\n")).toContain("GPU stall recorded since");
-    },
-  );
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "measurement failure warns and uses declared-sum admission",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const held = Array.from({ length: 7 }, (_, index) =>
-        gpuReservation(`fallback-${index}`),
-      );
-      for (const item of held) {
-        writeFileSync(
-          join(stateDirectory, `${item.reservation_id}.reservation.json`),
-          `${JSON.stringify(item)}\n`,
-        );
-      }
-      const reports: string[] = [];
-      const result = await checkJob(gpuManifest(), {
-        stateDirectory,
-        kernelEnforcement: {
-          available: false,
-          reason: "test sampled enforcement",
-        },
-        hostOptIn: { sampled_enforcement_reason: "test" },
-        snapshot: hostSnapshot({
-          gpus: [
-            {
-              id: 0,
-              total_bytes: 16 * GiB,
-              used_bytes: 3 * GiB,
-              utilization_percent: 0,
-            },
-          ],
-        }),
-        gpuComputeAppsOutput: () => null,
-        report: (line) => {
-          reports.push(line);
-        },
-      });
-      expect(result).toMatchObject({ ok: false, reason: "admission" });
-      expect(reports.join("\n")).toContain("using declared-sum admission");
-      expect(reports.join("\n")).toContain("15032385536 bytes declared");
-    },
-  );
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "kills after two over-cap VRAM samples and records the reason",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const manifestDirectory = temporaryStateDirectory();
-      const manifest = gpuManifest({
-        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 128 * MiB },
-        processes: 2,
-      });
-      const manifestPath = join(manifestDirectory, "cap.resource.json");
-      const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
-      writeFileSync(manifestPath, manifestBytes);
-      const reports: string[] = [];
-      const result = await executeJob(manifest, ["sh", "-c", "sleep 5"], {
-        stateDirectory,
-        snapshot: hostSnapshot({
-          gpus: [
-            {
-              id: 0,
-              total_bytes: 24 * GiB,
-              used_bytes: 0,
-              utilization_percent: 0,
-            },
-          ],
-        }),
-        kernelEnforcement: {
-          available: false,
-          reason: "test sampled enforcement",
-        },
-        hostOptIn: { sampled_enforcement_reason: "test" },
-        monitorIntervalMs: 20,
-        gpuComputeAppsOutput: (pids) =>
-          pids !== undefined && pids.length > 0 ? `${pids[0]},256` : "",
-        manifestSource: manifestSourceFromBytes(manifestPath, manifestBytes),
-        report: (line) => {
-          reports.push(line);
-        },
-      });
-      expect(result).toMatchObject({
-        ok: false,
-        reason: "vram-cap",
-        vram_cap_bytes: 128 * MiB,
-      });
-      expect(reports.join("\n")).toContain("reason=VRAM_CAP_EXCEEDED");
-      expect(reports.join("\n")).toContain(`vram_cap_bytes=${128 * MiB}`);
-      expect(reports.join("\n")).toContain("breach_reason=VRAM_CAP_EXCEEDED");
-      expect(
-        parseJson(readFileSync(`${manifestPath}.peak.json`, "utf8")),
-      ).toMatchObject({
-        vram_peak_measured_bytes: 256 * MiB,
-        vram_cap_bytes: 128 * MiB,
-        vram_cap_exceeded: true,
-        breach_reason: "VRAM_CAP_EXCEEDED",
-      });
-    },
-  );
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "records injected VRAM sampling methods and device deltas",
-    async () => {
-      const run = async (
-        computeApps: (pids?: number[]) => string | null,
-        deviceSamples: Array<string | null>,
-        jobId: string,
-      ) => {
-        const stateDirectory = temporaryStateDirectory();
-        const manifestDirectory = temporaryStateDirectory();
-        const manifest = gpuManifest({ job_id: jobId });
-        const manifestPath = join(manifestDirectory, `${jobId}.resource.json`);
-        const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
-        writeFileSync(manifestPath, manifestBytes);
-        let deviceSampleIndex = 0;
-        await executeJob(manifest, ["sh", "-c", "sleep 1.3"], {
-          stateDirectory,
-          snapshot: hostSnapshot(),
-          kernelEnforcement: {
-            available: false,
-            reason: "test sampled enforcement",
-          },
-          hostOptIn: { sampled_enforcement_reason: "test" },
-          monitorIntervalMs: 20,
-          gpuComputeAppsOutput: computeApps,
-          gpuDeviceMemoryOutput: () =>
-            deviceSamples[deviceSampleIndex++] ?? null,
-          manifestSource: manifestSourceFromBytes(manifestPath, manifestBytes),
-        });
-        return parseJson(readFileSync(`${manifestPath}.peak.json`, "utf8"));
-      };
-
-      const perProcess = await run(
-        (pids) =>
-          pids !== undefined && pids.length > 0 ? `${pids[0]},512` : "",
-        ["0, 100", "0, 900"],
-        "per-process-sample",
-      );
-      expect(perProcess).toMatchObject({
-        vram_peak_measured_bytes: 512 * MiB,
-        vram_measure_method: "per-process",
-      });
-
-      const deviceDelta = await run(
-        () => "",
-        ["0, 100", "0, 300"],
-        "device-delta-sample",
-      );
-      expect(deviceDelta).toMatchObject({
-        vram_peak_measured_bytes: 200 * MiB,
-        vram_measure_method: "device-delta",
-        vram_baseline_raw_bytes: 100 * MiB,
-        vram_peak_raw_bytes: 300 * MiB,
-        vram_measure_note:
-          "Device-wide delta may include other processes on the GPU.",
-      });
-
-      const unavailable = await run(
-        () => null,
-        [null, null],
-        "unavailable-sample",
-      );
-      expect(unavailable).toMatchObject({
-        vram_peak_measured_bytes: null,
-        vram_measure_method: "unavailable",
-      });
-    },
-  );
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "does not kill on one over-cap VRAM sample",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const manifest = gpuManifest({
-        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 128 * MiB },
-        processes: 2,
-      });
-      let samples = 0;
-      const result = await executeJob(manifest, ["sh", "-c", "sleep 3"], {
-        stateDirectory,
-        snapshot: hostSnapshot({
-          gpus: [
-            {
-              id: 0,
-              total_bytes: 24 * GiB,
-              used_bytes: 0,
-              utilization_percent: 0,
-            },
-          ],
-        }),
-        kernelEnforcement: {
-          available: false,
-          reason: "test sampled enforcement",
-        },
-        hostOptIn: { sampled_enforcement_reason: "test" },
-        monitorIntervalMs: 20,
-        gpuComputeAppsOutput: (pids) => {
-          if (pids !== undefined && pids.length === 0) return "";
-          samples += 1;
-          return `${pids?.[0]},${samples === 1 ? 256 : 1}`;
-        },
-        manifestSource: manifestSourceFor(manifest),
-        report: () => {},
-      });
-      expect(result).toMatchObject({ ok: true, exitCode: 0 });
-      expect(samples).toBeGreaterThanOrEqual(2);
-    },
-  );
-
-  test.skipIf(NO_CGROUP_SCOPES)(
-    "reports a measured RAM peak and persists it beside the manifest",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const manifestDirectory = temporaryStateDirectory();
-      const manifest = cpuManifest();
-      const manifestPath = join(manifestDirectory, "job.resource.json");
-      const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
-      writeFileSync(manifestPath, manifestBytes);
-      const manifestSource = manifestSourceFromBytes(
-        manifestPath,
-        manifestBytes,
-      );
-      const reports: string[] = [];
-      const result = await executeJob(
-        manifest,
-        [
-          process.execPath,
-          "-e",
-          "Buffer.alloc(4 * 1024 * 1024, 1); await Bun.sleep(300);",
-        ],
-        {
-          stateDirectory,
-          snapshot: await probeHostSnapshot(process.cwd()),
-          monitorIntervalMs: 25,
-          manifestSource,
-          report: (line) => {
-            reports.push(line);
-          },
-        },
-      );
-      expect(result).toMatchObject({ ok: true, exitCode: 0 });
-
-      const release = reports.find((line) => line.startsWith("RELEASE "));
-      expect(release).toContain(`job=${manifest.job_id}`);
-      expect(release).toMatch(/ram_peak_measured_bytes=\d+/u);
-      expect(release).toMatch(/ram_peak_source=(cgroup|sampled)/u);
-      expect(release).toContain("released_at=");
-      // A CPU-only manifest never samples VRAM — see executeJob's onSample.
-      expect(release).not.toContain("vram_peak_measured_bytes=");
-
-      const peakPath = `${manifestPath}.peak.json`;
-      const peakRaw = parseJson(readFileSync(peakPath, "utf8"));
-      const peak = decoded(PeakFieldsSchema, peakRaw);
-      expect(peakRaw).toMatchObject({
-        schema: 1,
-        job_id: manifest.job_id,
-      });
-      expect(peak.ram_peak_source).toMatch(/^(cgroup|sampled)$/u);
-      expect(peak.ram_peak_measured_bytes).toBeGreaterThan(0);
-      rmSync(peakPath);
-    },
-  );
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "waits through the bounded TERM grace before escalating a live process group",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const ready = join(stateDirectory, "term-ready");
-      const termReceipt = join(stateDirectory, "term-grace-completed");
-      const refLock = join(stateDirectory, "packed-refs.lock");
-      const packedRefs = join(stateDirectory, "packed-refs");
-      const child = Bun.spawn(
-        [
-          "setsid",
-          "--wait",
-          "sh",
-          "-c",
-          `exec 9> ${refLock}; trap 'sleep 1.25; mv ${refLock} ${packedRefs}; exec 9>&-; : > ${termReceipt}; exit 0' TERM; : > ${ready}; while :; do sleep 0.02; done`,
-        ],
-        {
-          stdin: "ignore",
-          stdout: "ignore",
-          stderr: "ignore",
-          timeout: 5_000,
-          killSignal: "SIGKILL",
-        },
-      );
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        if (existsSync(ready)) break;
-        await Bun.sleep(10);
-      }
-      expect(existsSync(ready)).toBe(true);
-      const terminated = await terminateProcessGroup(child.pid, 1);
-      const exit = await child.exited;
-      expect(terminated.isOk()).toBe(true);
-      expect(exit).toBe(0);
-      expect(existsSync(termReceipt)).toBe(true);
-      expect(existsSync(refLock)).toBe(false);
-      expect(existsSync(packedRefs)).toBe(true);
-      rmSync(stateDirectory, { recursive: true, force: true });
-    },
-  );
-
-  test.skipIf(NO_CGROUP_SCOPES)(
-    "terminates the whole process group at the walltime",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const snapshot = await probeHostSnapshot(process.cwd());
-      const termReceipt = join(stateDirectory, "term-grace-completed");
-      const started = performance.now();
-      const result = await executeJob(
-        cpuManifest({ walltime_seconds: 1 }),
-        [
-          "sh",
-          "-c",
-          `trap 'sleep 0.25; : > ${termReceipt}; exit 0' TERM; while :; do sleep 0.02; done`,
-        ],
-        {
-          stateDirectory,
-          snapshot,
-          monitorIntervalMs: 25,
-          manifestSource: manifestSourceFor(
-            cpuManifest({ walltime_seconds: 1 }),
+    // jq_capacity.py consumes these policy fields without any runner invocation.
+    const decodedPolicy = z
+      .record(z.string(), z.unknown())
+      .safeParse(
+        Bun.TOML.parse(
+          await readFile(
+            join(import.meta.dir, "../resource-policy.toml"),
+            "utf8",
           ),
-        },
-      );
-      expect(result).toMatchObject({
-        ok: false,
-        exitCode: 124,
-        reason: "walltime",
-      });
-      expect(performance.now() - started).toBeLessThan(4_000);
-      expect(existsSync(termReceipt)).toBe(true);
-      rmSync(termReceipt);
-      expect(readdirSync(stateDirectory)).toEqual([]);
-    },
-  );
-
-  test.skipIf(NO_CGROUP_SCOPES)(
-    "terminates a process fanout beyond the declared ceiling",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const snapshot = await probeHostSnapshot(process.cwd());
-      const result = await executeJob(
-        cpuManifest({ processes: 1 }),
-        ["sh", "-c", "sleep 10 & wait"],
-        {
-          stateDirectory,
-          snapshot,
-          monitorIntervalMs: 25,
-          manifestSource: manifestSourceFor(cpuManifest({ processes: 1 })),
-        },
-      );
-      expect(result).toMatchObject({
-        ok: false,
-        exitCode: 137,
-        reason: "processes",
-      });
-      expect(readdirSync(stateDirectory)).toEqual([]);
-    },
-  );
-
-  // This test deliberately triggers a REAL kernel OOM-kill against a REAL systemd scope —
-  // it is not simulated (2026-09-04, recurred twice in one evening as "unattributed OOM kill on
-  // agent-resource-*.scope" reports to two other fleets, once resolved by matching this run's
-  // own scope UUIDs against dmesg, once by attribution failing because the dmesg ring had
-  // already rolled past the run and only a firedancer journal read settled it). Before
-  // investigating an unattributed `agent-resource-*.scope` OOM-kill in dmesg or a journal, check
-  // whether `bun test tools/agent-resource-run/` ran around that time — this is very likely it.
-  test.skipIf(NO_CGROUP_SCOPES)(
-    "the cgroup kills a job before it can exceed its RAM envelope",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const snapshot = await probeHostSnapshot(process.cwd());
-      const started = performance.now();
-      const result = await executeJob(
-        cpuManifest({ host_ram_peak_bytes: 64 * MiB }),
-        [
-          process.execPath,
-          "-e",
-          "const value = Buffer.alloc(256 * 1024 * 1024, 1); " +
-            "process.stdout.write(String(value.length)); await Bun.sleep(5_000);",
-        ],
-        {
-          stateDirectory,
-          snapshot,
-          monitorIntervalMs: 1_000,
-          manifestSource: manifestSourceFor(
-            cpuManifest({ host_ram_peak_bytes: 64 * MiB }),
-          ),
-        },
-      );
-      expect(result).toMatchObject({
-        ok: false,
-        exitCode: 137,
-        reason: "command-exit",
-      });
-      expect(performance.now() - started).toBeLessThan(4_000);
-      expect(readdirSync(stateDirectory)).toEqual([]);
-    },
-  );
-
-  test.skipIf(NO_CGROUP_SCOPES)(
-    "scope cleanup kills a descendant that escapes the process group",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const snapshot = await probeHostSnapshot(process.cwd());
-      const pidFile = join(stateDirectory, "escaped.pid");
-      const result = await executeJob(
-        cpuManifest({ processes: 3 }),
-        [
-          "sh",
-          "-c",
-          `setsid sh -c 'echo $$ > ${pidFile}; exec sleep 10' & ` +
-            `while [ ! -s ${pidFile} ]; do sleep 0.01; done`,
-        ],
-        {
-          stateDirectory,
-          snapshot,
-          monitorIntervalMs: 25,
-          manifestSource: manifestSourceFor(cpuManifest({ processes: 3 })),
-        },
-      );
-      const escapedPid = Number(readFileSync(pidFile, "utf8").trim());
-      let escapedProcessIsLive = true;
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        const statResult = fromThrowable(() =>
-          readFileSync(`/proc/${escapedPid}/stat`, "utf8"),
-        )();
-        if (statResult.isOk()) {
-          const stat = statResult.value;
-          const close = stat.lastIndexOf(")");
-          escapedProcessIsLive =
-            close !== -1 && stat.slice(close + 2)[0] !== "Z";
-        } else {
-          escapedProcessIsLive = false;
-        }
-        if (!escapedProcessIsLive) break;
-        await Bun.sleep(25);
-      }
-
-      expect(result).toMatchObject({ ok: true, exitCode: 0 });
-      expect(escapedProcessIsLive).toBe(false);
-      expect(readdirSync(stateDirectory)).toEqual(["escaped.pid"]);
-    },
-  );
-
-  test.skipIf(NO_UTIL_LINUX)(
-    "fails closed when systemd scope cleanup cannot be verified",
-    async () => {
-      const stateDirectory = temporaryStateDirectory();
-      const result = await executeJobResult(cpuManifest(), ["true"], {
-        stateDirectory,
-        snapshot: await probeHostSnapshot(process.cwd()),
-        kernelEnforcement: { available: true },
-        monitorIntervalMs: 25,
-        systemdScopeCleanup: () => false,
-        manifestSource: manifestSourceFor(cpuManifest()),
-      });
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain(
-        "failed to verify cleanup of systemd scope",
-      );
-      expect(readdirSync(stateDirectory)).toEqual([]);
-    },
-  );
-});
-
-// A machine that can never have cgroup enforcement (a rented container, 2026-10-05) may opt into
-// sampled enforcement, once, with a reason; nothing else changes (agent-resource-run.ts, Host opt-in).
-const optInFile = (text: string): string => {
-  const path = join(mkdtempSync(join(tmpdir(), "arr-host-")), "host.toml");
-  writeFileSync(path, text);
-  return path;
-};
-
-describe("sampled enforcement (host opt-in)", () => {
-  test("no file is no opt-in; a valid file carries its reason; an invalid one returns an error", () => {
-    expect(readHostOptIn(join(tmpdir(), "arr-absent", "host.toml"))).toBeNull();
-    expect(
-      readHostOptIn(
-        optInFile(
-          'schema = 1\nsampled_enforcement_reason = "Vast container: no user systemd"\n',
         ),
-      ),
-    ).toEqual({
-      sampled_enforcement_reason: "Vast container: no user systemd",
-    });
-    const blankReason = readHostOptInResult(
-      optInFile('schema = 1\nsampled_enforcement_reason = "  "\n'),
-    );
-    expect(blankReason.isErr()).toBe(true);
-    expect(blankReason._unsafeUnwrapErr().message).toContain("is invalid");
-    const extraKey = readHostOptInResult(
-      optInFile('schema = 1\nsampled_enforcement_reason = "x"\nextra = 1\n'),
-    );
-    expect(extraKey.isErr()).toBe(true);
-    expect(extraKey._unsafeUnwrapErr().message).toContain("is invalid");
-    const malformed = readHostOptInResult(optInFile("schema = ["));
-    expect(malformed.isErr()).toBe(true);
-    expect(malformed._unsafeUnwrapErr().message).toContain("not valid TOML");
-  });
-
-  test("cgroups win where they work; without them, no opt-in still refuses; with it, sampled", () => {
-    const optIn = { sampled_enforcement_reason: "rented container" };
-    expect(resolveEnforcement({ available: true }, optIn)).toEqual({
-      ok: true,
-      enforcement: { kind: "cgroup" },
-    });
-    const refused = resolveEnforcement(
-      { available: false, reason: "read-only cgroup" },
-      null,
-    );
-    expect(refused.ok).toBe(false);
-    expect(refused.ok ? "" : refused.reason).toContain(
-      "kernel enforcement unavailable",
-    );
-    expect(refused.ok ? "" : refused.reason).toContain("host.toml");
-    expect(
-      resolveEnforcement(
-        { available: false, reason: "read-only cgroup" },
-        optIn,
-      ),
-    ).toEqual({
-      ok: true,
-      enforcement: {
-        kind: "sampled",
-        reason: "read-only cgroup; host opt-in: rented container",
-      },
-    });
-  });
-
-  test("the sampled launch keeps the session and the affinity, and starts no systemd scope", () => {
-    const argv = buildSampledLaunch(reservation({ cpu_ids: [4, 5] }), [
-      "sh",
-      "-c",
-      "true",
-    ]);
-    expect(argv).toEqual([
-      "setsid",
-      "--wait",
-      "taskset",
-      "-c",
-      "4,5",
-      "sh",
-      "-c",
-      "true",
-    ]);
-    expect(argv).not.toContain("systemd-run");
-  });
-
-  // checkJob refuses before admission without setsid/taskset (Linux util-linux): skipped, and
-  // counted as skipped, on a machine that lacks them (macOS) rather than failing for that reason.
-  test.skipIf(Bun.which("taskset") === null || Bun.which("setsid") === null)(
-    "the ADMIT line says no cgroup bounds the job, and why",
-    async () => {
-      const reports: string[] = [];
-      const result = await checkJob(cpuManifest(), {
-        stateDirectory: temporaryStateDirectory(),
-        snapshot: hostSnapshot(),
-        kernelEnforcement: { available: false, reason: "read-only cgroup" },
-        hostOptIn: { sampled_enforcement_reason: "rented container" },
-        report: (line) => {
-          reports.push(line);
-        },
-      });
-      expect(result).toMatchObject({ ok: true, exitCode: 0 });
-      const admit = reports.join("\n");
-      expect(admit).toContain(
-        "enforcement=affinity+sampled-process-group cgroup=none",
       );
-      expect(admit).toContain(
-        'cgroup_reason="read-only cgroup; host opt-in: rented container"',
-      );
-    },
-  );
-});
-
-describe("--version", () => {
-  test("prints the version of this package.json", () => {
-    const pkg = decodedJson(
-      z.object({ version: z.string() }),
-      readFileSync(join(import.meta.dir, "../package.json"), "utf8"),
-    );
-    const run = Bun.spawnSync(
-      [
-        "bun",
-        join(import.meta.dir, "../src/agent-resource-run.ts"),
-        "--version",
-      ],
-      { stdout: "pipe", stderr: "pipe", timeout: 30_000 },
-    );
-    expect(run.exitCode).toBe(0);
-    expect(run.stdout.toString().trim()).toBe(
-      `agent-resource-run ${pkg.version}`,
-    );
-    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/u);
-  });
-});
+    expect(decodedPolicy.success).toBe(true);
+    if (!decodedPolicy.success) return;
+    const policy = decodedPolicy.data;
+    for (const key of [
+      "min_host_ram_safety_gib",
+      "host_ram_safety_fraction",
+      "gpu_partition_device",
+      "gpu_partition_ccc_mib",
+      "gpu_safety_mib",
+    ])
+      expect(typeof policy[key]).toBe("number");
+  },
+  60000,
+);

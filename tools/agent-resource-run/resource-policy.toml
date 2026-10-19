@@ -1,100 +1,15 @@
-# resource-policy — the declarative half of agent-resource-run.ts.
-#
-# This file says HOW MUCH the admission controller holds back and how often it samples; the
-# script says HOW (probing the host, pricing reservations, launching the systemd scope). Moving a
-# threshold is an edit here — no code edit. The script validates this file on every start: a
-# missing key, an unknown key, a wrong type, or an out-of-range value REFUSES every admission
-# (exit 2, the key named) rather than falling back to a guessed default — a silently wrong
-# admission limit is worse than a refusal. AGENT_RESOURCE_POLICY=/absolute/path.toml points the
-# script at another policy (the test suite's fixtures).
-#
-# Units are in the key name. Sizes are whole MiB/GiB; intervals are whole milliseconds.
-
+# Runner policy. Only gpu_max_concurrent_jobs controls agent-resource-run admission.
 schema = 1
-
-# --- CPU -----------------------------------------------------------------------------------------
-
-# Allowed CPUs kept outside every reservation, so the host (and this controller) always has one.
-cpu_safety_count = 1
-
-# --- Host RAM ------------------------------------------------------------------------------------
-
-# System RAM headroom = max(min_host_ram_safety_gib, host_ram_safety_fraction * MemTotal).
-min_host_ram_safety_gib = 4
-host_ram_safety_fraction = 0.1
-
-# --- Scratch -------------------------------------------------------------------------------------
-
-# Free space on the working directory's filesystem kept outside every scratch reservation.
-scratch_safety_gib = 1
-
-# --- GPU -----------------------------------------------------------------------------------------
-
-# Device VRAM kept outside every reservation (driver/context overhead, display).
-gpu_safety_mib = 512
-
-# A newly launched process has up to 30 seconds to initialize CUDA before its actual use replaces
-# its declared headroom. Any per-process reading above 64 MiB ends warm-up early; small context
-# noise below that threshold does not make admission treat a still-loading model as fully settled.
-gpu_vram_warmup_ms = 30000
-gpu_vram_warmup_threshold_mib = 64
-
-# Cap enforcement allows allocator/context overhead up to 5% of the declared cap. Two consecutive
-# over-tolerance samples are required to avoid killing on one transient driver reading.
-gpu_vram_cap_tolerance_fraction = 0.05
-
-# Utilization at or below this is idle; above it, the device holds unmanaged load unless the
-# board-power rule below says otherwise.
-gpu_idle_utilization_percent = 20
-
-# On a WSL2 host `utilization.gpu` also counts the Windows desktop compositor (observed
-# 2026-09-24: 33-40 % at P8 / 16 W, no compute process, 462 MiB used), so utilization alone
-# misreads an idle card as busy and denies every GPU job. Board power separates the two: any
-# compute kernel on an RTX 3060-class card draws well above this floor, display load does not.
-gpu_idle_power_watts = 30
-
-# VRAM is a divisible reservation like RAM and scratch, so several declared jobs may share one
-# device. This backstop bounds SM/PCIe contention and per-context overhead, which the VRAM
-# ledger does not price: a manifest declaring a tiny peak must not admit an unbounded fleet.
-# Raised 4 -> 8 on 2026-09-27 at the owner's explicit instruction: the fleet's GPU jobs are
-# kernel-launch-bound (B=1) and left the card at 18-39% utilization with 3 GiB of 12 GiB VRAM
-# used while jobs queued on this cap.
 gpu_max_concurrent_jobs = 8
 
-# CUDA.jl releases cached pool blocks at the soft limit and refuses allocation at the hard one.
-# Leaving the soft limit below the hard limit turns pool fragmentation into a reclaim instead of
-# an out-of-memory error. Ref: CUDA.jl docs/src/usage/memory.md "Memory limits".
-# JULIA_CUDA_SOFT_MEMORY_LIMIT = floor(declared vram_peak_bytes * this fraction).
-gpu_soft_limit_fraction = 0.9
+# Compatibility capacity declarations: firedancer envs/jq/jq_capacity.py reads these.
+# The thin runner does not reserve or aggregate these resources.
+min_host_ram_safety_gib = 4
+host_ram_safety_fraction = 0.1
+gpu_safety_mib = 512
 
-# --- Monitoring ----------------------------------------------------------------------------------
-
-# How often a running job's RSS and process count are sampled (a free /proc read).
-default_monitor_interval_ms = 200
-
-# Interval between reads of the shared GPU owner state. This never launches a driver query.
-# The owner refreshes at most once per 60 seconds; faster local reads do not add observations.
-gpu_vram_sample_interval_ms = 1000
-
-# --- Standing GPU partitions for resident services ------------------------------------------------
-#
-# Owner ruling 2026-10-01: 「VRAM は ccc と分けて使うべきです。はじめから隔壁しておけよ」. The
-# agent-resource-run subtracts the ccc floor on gpu_partition_device from research admission even
-# while ccc is idle; the reranker's fixed partition is subtracted only while
-# repo-retrieve-rerank.service runs (it starts on demand and exits after 5 idle minutes).
-# cccoom applies an elastic per-batch allocator cap in cocoindex/ccc_gpu_yield.py: it grows into
-# currently free VRAM and shrinks by live research reservations, but never below the ccc floor.
-# The reranker continues to use its fixed partition via tools/agent-resource-run/gpu_partition.py.
-# Why these sizes: ccc's 2048 MiB standing allocation is the floor, not its maximum. The fp16
-# model weights use ~597 MiB; cccoom's 32 MiB per-code-chunk workspace budget allows 29 chunks at
-# the floor after the 512 MiB CUDA-context allowance: floor((2048 - 512 - 597) / 32) = 29.
-# When VRAM is free, cccoom grows the cap to available headroom after live research reservations
-# and the 512 MiB device safety margin. firedancer's 2026-10-15 re-index needed more than the old
-# fixed 1536 MiB allocator cap, so the elastic cap can use that free capacity without reserving it
-# from research while ccc is idle.
-#   rerank  Qwen3-Reranker-0.6B bf16 ~1.2 GB; with last-token logits only, a 30-candidate request
-#           raised device use by ~1.3 GB in total and ran in 0.6-0.9 s inside a 2 GiB cap.
-# 0 disables a partition (and that service then never uses the GPU).
+# Resident services and jq_capacity.py retain their partition declarations.
+# gpu_partition.py and cocoindex/ccc-daemon-launch.py are independent consumers.
 gpu_partition_device = 0
 gpu_partition_ccc_mib = 2048
 gpu_partition_rerank_mib = 2048

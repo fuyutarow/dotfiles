@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.4 — 2026-10-19
+
+- Replace resource ledgers and monitors with bounded flock slots and systemd scopes while retaining caller contracts.
+
 ## 1.5.3 — 2026-10-18
 
 - Deny GPU admissions with recorded stall evidence

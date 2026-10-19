@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { ok } from "neverthrow";
 import { readCoreRuns } from "../src/core-runs.ts";
 import { render } from "../src/format.ts";
-import { readHostLoadAsync } from "../src/host-load.ts";
+import { readHostLoadAsync, vramFrac } from "../src/host-load.ts";
 import { sysRow } from "../src/host-display.ts";
 import { fleetLine } from "../src/fleet-line.ts";
 
@@ -195,7 +195,7 @@ test("source ages name their source only alongside an action; elapsed idle time 
     }),
   ).toContain("stale ws 70s");
 });
-test("gpu-owner stall replaces the utilization average on Sys and names the holding process", async () => {
+test("gpu-owner stall replaces the utilization average with a JST recovery warning", async () => {
   const root = await fixture();
   process.env.XDG_STATE_HOME = root;
   process.env.STATUSLINE_PROC_ROOT = join(root, "proc");
@@ -207,7 +207,8 @@ test("gpu-owner stall replaces the utilization average on Sys and names the hold
       schema: 1,
       attemptAt: at(),
       sampledAt: at(),
-      unresponsiveSince: at() - 30 * 60_000,
+      unresponsiveSince: Temporal.Instant.from("2026-10-16T23:07:00Z")
+        .epochMilliseconds,
       consecutiveProbeMisses: 10,
       devices: [],
       processes: [{ pid: 2461429, usedMiB: null }],
@@ -222,7 +223,8 @@ test("gpu-owner stall replaces the utilization average on Sys and names the hold
   );
   const host = await readHostLoadAsync();
   const text = Bun.stripANSI(sysRow({ ...host, disks: ok([]) }));
-  expect(text).toContain("GPU stalled 30m00s (julia 2461429)");
+  expect(text).toContain("⚠ GPU stalled since 08:07 JST · gpu-sampler --check");
+  expect(text.split("⚠ GPU stalled")).toHaveLength(2);
   expect(text).not.toContain("GPU≈");
 });
 
@@ -281,8 +283,62 @@ test("sampler publishes a GPU stall over a previously good utilization sample", 
     child.exited,
   ]);
   expect(exit, stdout + stderr).toBe(0);
-  expect(await Bun.file(owner).text()).toContain("GPU stalled ");
+  expect(await Bun.file(owner).text()).toContain("⚠ GPU stalled since ");
+  expect(await Bun.file(owner).text()).toContain("JST · gpu-sampler --check");
   expect(await Bun.file(owner).text()).not.toContain('"gpuAvg15":1');
+});
+
+test("GPU owner fixtures cover first failed probe, recovery, and paused failures without driver calls", async () => {
+  const root = await fixture();
+  process.env.XDG_STATE_HOME = root;
+  const now = at();
+  const state = {
+    schema: 1,
+    attemptAt: Temporal.Instant.from("2026-10-18T15:04:00Z").epochMilliseconds,
+    sampledAt: now,
+    devices: [],
+    processes: [],
+    samples: [0, 1, 2].map((n) => ({
+      ts: now - (2 - n) * 60_000,
+      nextTs: now - (1 - n) * 60_000,
+      utilPct: 12,
+      memUsedGiB: 1,
+      memTotalGiB: 12,
+    })),
+  };
+  for (const variant of [
+    { consecutiveProbeMisses: 1 },
+    { consecutiveProbeMisses: 0 },
+    { consecutiveProbeMisses: 3, paused: true },
+    { consecutiveProbeMisses: 3, paused: true, unresponsiveSince: 0 },
+  ]) {
+    await writeFile(
+      join(root, "gpu-owner.json"),
+      JSON.stringify({ ...state, ...variant }),
+    );
+    const before = await Bun.file(join(root, "gpu-owner.json")).text();
+    const reading = vramFrac();
+    const text = Bun.stripANSI(
+      sysRow({
+        cpuPct: ok(1),
+        ram: ok({ frac: "1/2G", pct: 50 }),
+        vram: reading,
+        disks: ok([]),
+        tmp: [],
+      }),
+    );
+    if (variant.consecutiveProbeMisses > 0 && variant.paused !== true) {
+      expect(text).toContain(
+        "⚠ GPU stalled since 00:04 JST · gpu-sampler --check",
+      );
+      expect(text).not.toContain("GPU≈");
+    } else {
+      expect(text).not.toContain("stalled");
+      expect(text).not.toContain("gpu-sampler --check");
+      expect(text).toContain("GPU≈12%");
+    }
+    expect(await Bun.file(join(root, "gpu-owner.json")).text()).toBe(before);
+  }
 });
 
 test("1000 old unjudged runs and foreign sessions render only judge 2", async () => {

@@ -72,7 +72,7 @@ export function sysSegment(
     gpuAge = (m.stale?.secs ?? 0) * 1000;
   }
   const stall =
-    vram?.isErr() === true && vram.error.startsWith("GPU stalled ")
+    vram?.isErr() === true && vram.error.startsWith("⚠ GPU stalled since ")
       ? vram.error
       : undefined;
   if (stall !== undefined) gpu = roles.value(stall, "167");

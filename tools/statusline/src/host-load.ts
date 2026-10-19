@@ -1,6 +1,4 @@
 import { renderUnavailable, unavailable } from "./ansi.ts";
-import { dur } from "./jobs.ts";
-import { join } from "node:path";
 import { memReading, type MemReading } from "./host-model.ts";
 import { sysRow, formatBytes, type HostLoad } from "./host-display.ts";
 export { MemReadingSchema, memReading } from "./host-model.ts";
@@ -51,7 +49,26 @@ const HOME = process.env.HOME ?? "";
 function vramFromState(
   state: GpuState | undefined,
 ): Result<MemReading, string> {
-  const result = gpuReadFromState(state);
+  // A recorded failure is current evidence, even when the last good sample is old.
+  // Pausing an admitted GPU job is intentional and must never become a stall alert.
+  if (
+    state !== undefined &&
+    state.paused !== true &&
+    state.why?.startsWith("probe paused:") !== true &&
+    (state.unresponsiveSince !== undefined ||
+      (state.consecutiveProbeMisses ?? 0) > 0)
+  ) {
+    const since = Temporal.Instant.fromEpochMilliseconds(
+      state.unresponsiveSince ?? state.attemptAt,
+    ).toZonedDateTimeISO("Asia/Tokyo");
+    const time = `${String(since.hour).padStart(2, "0")}:${String(since.minute).padStart(2, "0")}`;
+    return err(`⚠ GPU stalled since ${time} JST · gpu-sampler --check`);
+  }
+  const result = gpuReadFromState(
+    state?.paused === true
+      ? { ...state, unresponsiveSince: undefined, why: undefined }
+      : state,
+  );
   if (!result.ok) return err(result.why);
   const d = result.value;
   const reading = memReading(d.memUsedGiB, d.memTotalGiB);
@@ -391,33 +408,6 @@ async function ramFracAsync(): Promise<Result<MemReading, string>> {
 }
 async function vramFracAsync(): Promise<Result<MemReading, string>> {
   const state = await readGpuState();
-  if (state?.unresponsiveSince !== undefined) {
-    const age = dur(
-      Math.max(
-        0,
-        Math.floor(
-          (Temporal.Now.instant().epochMilliseconds - state.unresponsiveSince) /
-            1000,
-        ),
-      ),
-    );
-    const owners = await Promise.all(
-      state.processes.map(async ({ pid }) => {
-        const comm = await readFile(
-          join(
-            process.env.STATUSLINE_PROC_ROOT ?? "/proc",
-            String(pid),
-            "comm",
-          ),
-          "utf8",
-        ).catch(() => "unknown");
-        return `${comm.trim()} ${pid}`;
-      }),
-    );
-    return err(
-      `GPU stalled ${age}${owners.length === 0 ? "" : ` (${owners.join(", ")})`}`,
-    );
-  }
   const reading = vramFromState(state);
   if (reading.isErr()) return reading;
   const cccIndexing = await sampleCccIndexing({

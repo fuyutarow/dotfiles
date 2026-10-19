@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.20.12 — 2026-10-19
+
+- Show recorded GPU stalls and failed probes with a JST timestamp and gpu-sampler --check; suppress alerts while paused.
+
 ## 0.20.11 — 2026-10-19
 
 - Write Codex rollout identity to fleet sessions

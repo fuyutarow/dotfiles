@@ -126,7 +126,7 @@ export async function sample(payloads?: SessionStatus[]): Promise<void> {
       const gpuStalled =
         key === "vram" &&
         failed.success &&
-        failed.data.error.startsWith("GPU stalled ");
+        failed.data.error.startsWith("⚠ GPU stalled since ");
       if (
         failed.success &&
         !gpuStalled &&

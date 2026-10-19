@@ -239,4 +239,4 @@ The anomaly suffix counts only workspace/ticket findings with clearing actions f
 `mise run land`). Historical outside-home, unjudged, orphaned and legacy counters
 remain available in `agx doctor`; they do not appear in that suffix.
 
-When `gpu-owner.json` has `unresponsiveSince`, Sys shows `GPU stalled <age> (<comm> <pid>)` instead of a utilization average. Process names come from read-only `/proc/<pid>/comm`; missing names remain `unknown`. The sampler prepares this display for the normal fast read path. Source ages name the stale owner and never create a bottom row on their own.
+When `gpu-owner.json` has `unresponsiveSince` or a failed probe (`consecutiveProbeMisses > 0`), the GPU segment on Sys shows `⚠ GPU stalled since HH:MM JST · gpu-sampler --check` instead of a utilization average. The timestamp is the recorded stall onset, or the failed attempt time when no onset is recorded, always in Asia/Tokyo. Paused probes add no warning. This only reads owner state; it never runs `nvidia-smi`. The sampler prepares this display for the normal fast read path. Source ages name the stale owner and never create a bottom row on their own.

@@ -126,6 +126,23 @@ function assertHookCommand(command: string): void {
 }
 
 describe("render-home: base only", () => {
+  test("real Claude settings retain transcripts for 100 years", () => {
+    const home = makeHome();
+    const result = run({
+      HOME: home,
+      DOTFILES: ROOT,
+      DOTFILES_RENDER_FROM_WORKING_COPY: "1",
+      CLAUDE_SETTINGS_PRIVATE: join(home, "missing-overlay.json"),
+    });
+    const rendered = result.code === 0 ? readDest(home) : {};
+    cleanup(home);
+    expect(result.code, result.out).toBe(0);
+    // The reference states no maximum (default 30 days, minimum 1).
+    // Use 36500 days (100 years) to effectively disable transcript cleanup.
+    // https://code.claude.com/docs/en/settings-reference#cleanupperioddays
+    expect(rendered.cleanupPeriodDays).toBe(36500);
+  });
+
   test("real Claude settings render agx:snapshot on the same events as sys-snapshot", async () => {
     const base = jsonOf(JsonObject).safeParse(
       await Bun.file(join(ROOT, "agents/claude/settings.json")).text(),

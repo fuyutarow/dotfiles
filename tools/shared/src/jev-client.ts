@@ -5,6 +5,7 @@
 // sources, reasons). What a caller asks and how it reads the answer stay with the caller.
 import { attempt } from "./attempt.ts";
 import { typesafeKey } from "./typesafe-key.ts";
+import { jsonOf, z } from "./zod.ts";
 
 /** What runs.jsonl keeps about one Jev call (never the key). */
 export interface JevTrace {
@@ -19,7 +20,13 @@ export interface JevTrace {
 
 /** ok = an HTTP answer arrived (any status; the caller judges it); otherwise why none did. */
 export type JevPost =
-  | { ok: true; status: number; text: string; trace: JevTrace }
+  | {
+      ok: true;
+      status: number;
+      text: string;
+      model?: string;
+      trace: JevTrace;
+    }
   | { ok: false; reason: string; trace: JevTrace };
 
 function errorDetail(error: unknown, depth = 0): string {
@@ -102,5 +109,16 @@ export async function postJev(
     };
   }
   const text = body.value.replaceAll(key.key, "[REDACTED]");
-  return { ok: true, status: res.value.status, text, trace };
+  const response = jsonOf(
+    z.looseObject({ model: z.string().trim().min(1).optional() }),
+  ).safeParse(text);
+  return {
+    ok: true,
+    status: res.value.status,
+    text,
+    ...(response.success && response.data.model !== undefined
+      ? { model: response.data.model }
+      : {}),
+    trace,
+  };
 }

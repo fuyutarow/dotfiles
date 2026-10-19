@@ -154,9 +154,13 @@ export async function classify(
     diagnostic(post.reason);
     return 3;
   }
+  const model = post.model ?? {
+    na: true,
+    why: "Jev response did not report a usable model",
+  };
   const answer = jsonOf(Answer).safeParse(post.text);
   if (!answer.success) {
-    process.stdout.write(`${JSON.stringify({ bits: [] })}\n`);
+    process.stdout.write(`${JSON.stringify({ model, bits: [] })}\n`);
     diagnostic(`invalid Jev answer (HTTP ${post.status})`);
     return 4;
   }
@@ -170,7 +174,7 @@ export async function classify(
       ? undefined
       : normalized.find((bit) => bit.id === "refuted");
   process.stdout.write(
-    `${JSON.stringify({ bits: normalized.filter((bit) => bit !== refuted), ...(refuted === undefined ? {} : { refuted: { p: refuted.p, reason: refuted.reason } }) })}\n`,
+    `${JSON.stringify({ model, bits: normalized.filter((bit) => bit !== refuted), ...(refuted === undefined ? {} : { refuted: { p: refuted.p, reason: refuted.reason } }) })}\n`,
   );
   const expected = Object.keys(built.value.questions);
   if (

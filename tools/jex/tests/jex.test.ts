@@ -7,6 +7,10 @@ import { jsonOf, z } from "../../shared/src/zod.ts";
 import { FILE_CAP, TOTAL_CAP } from "../src/classify.ts";
 
 const Verdict = z.object({
+  model: z.union([
+    z.string(),
+    z.object({ na: z.literal(true), why: z.string() }),
+  ]),
   bits: z.array(
     z.object({ id: z.string(), p: z.number(), reason: z.string() }),
   ),
@@ -82,10 +86,11 @@ const replies = (a: number, b: number) => ({
 });
 
 test("all bits >= .5 succeeds and prints normalized bits", async () => {
-  answer = replies(0.5, 1);
+  answer = { ...replies(0.5, 1), model: "jev-test-reported-model" };
   const result = await run();
   expect(result.exit).toBe(0);
   expect(verdict(result.stdout)).toEqual({
+    model: "jev-test-reported-model",
     bits: [
       { id: "a", p: 0.5, reason: "Jev Noul probability of yes" },
       { id: "b", p: 1, reason: "fixture" },
@@ -107,11 +112,24 @@ test("all bits >= .5 succeeds and prints normalized bits", async () => {
     },
   });
 });
+test("missing response model is explicit on verdict output", async () => {
+  answer = replies(1, 1);
+  const result = await run();
+  expect(result.exit).toBe(0);
+  expect(verdict(result.stdout).model).toEqual({
+    na: true,
+    why: "Jev response did not report a usable model",
+  });
+});
 test("one bit < .5 fails with bits on stdout", async () => {
   answer = replies(0.499, 0.8);
   const result = await run();
   expect(result.exit).toBe(1);
   expect(verdict(result.stdout)).toEqual({
+    model: {
+      na: true,
+      why: "Jev response did not report a usable model",
+    },
     bits: [
       { id: "a", p: 0.499, reason: "Jev Noul probability of yes" },
       { id: "b", p: 0.8, reason: "fixture" },
@@ -134,6 +152,10 @@ test("refuted >= .5 fails, below .5 succeeds", async () => {
     const result = await run([ref, file]);
     expect(result.exit).toBe(p >= 0.5 ? 1 : 0);
     expect(verdict(result.stdout)).toEqual({
+      model: {
+        na: true,
+        why: "Jev response did not report a usable model",
+      },
       bits: [
         { id: "a", p: 0.8, reason: "Jev Noul probability of yes" },
         { id: "b", p: 0.9, reason: "fixture" },
@@ -172,6 +194,15 @@ test("invalid answer shape and probabilities never succeed", async () => {
     expect(result.exit).toBe(4);
     expect(verdict(result.stdout)).toHaveProperty("bits");
   }
+});
+test("invalid answer retains the response-reported model", async () => {
+  answer = { model: "jev-invalid-answer-model", answers: {} };
+  const result = await run();
+  expect(result.exit).toBe(4);
+  expect(verdict(result.stdout)).toMatchObject({
+    model: "jev-invalid-answer-model",
+    bits: [],
+  });
 });
 test("unreachable endpoint exits 3", async () => {
   const unused = Bun.serve({

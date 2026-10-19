@@ -26,10 +26,11 @@ jex questions.toml report.md > ev.json && agx judge RUN accept --evidence ev.jso
 There are no subcommands. Flags may precede or follow operands; `--` permits paths
 beginning with a dash. `--help` prints usage and `--version` prints only semver.
 Stdout emits one JSON object per HTTP answer, in terminals and pipelines alike:
-`{bits:[{id,p,reason}],refuted?:{p,reason}}`. Exit 1 still prints the complete object,
+`{model,bits:[{id,p,reason}],refuted?:{p,reason}}`. `model` is the model Jev reports; when
+the response does not report a usable model, it is `{na:true,why}`. Exit 1 still prints the complete object,
 including every bit and any refuted answer; the exit status carries the yes/no result.
-Diagnostics go to stderr. The TypeSafe
-Noul API supplies probabilities, without explanations: absent an endpoint-provided
+Diagnostics go to stderr.
+The TypeSafe Noul API supplies probabilities, without explanations: absent an endpoint-provided
 reason, `reason` says `Jev Noul probability of yes`. It is a source label, not generated reasoning.
 
 | Exit | Meaning                                                                                  |

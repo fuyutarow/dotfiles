@@ -15,7 +15,8 @@
 | `agx worker doctor` | Diagnose worker records as tool/object/finding/remedy JSON Lines. |
 
 Tickets are caller-owned files. `agx run` accepts positional ticket paths and optionally a working
-tree and sandbox mode. A continuation uses the previous run ID and resumes its vendor session.
+tree and sandbox mode. A continuation uses the previous run ID and resumes its vendor session,
+except for the capacity recovery described below.
 Run events, progress, and judgments are stored in one append-only `records.jsonl` file. The default
 state directory keeps its `agx-next` name for compatibility; the real state directory is not
 migrated by this CLI switch.
@@ -46,5 +47,28 @@ prevent backend metadata writes. See [the call-site and patch inventory](docs/re
 The dispatcher does not detach, amend, or create ticket stores and does not run a pre-dispatch
 grader. `agx run` records an interim return as progress and continues the worker until completion or
 its timeout. Verification commands declared by the ticket run after the worker exits.
+
+Vendor capacity ends a run with outcome `capacity` and temporary-unavailability exit 75. Codex's
+`Selected model is at capacity` and Claude's documented HTTP 529 `overloaded_error` are vendor
+unavailability, not worker failures ([Claude error reference](https://platform.claude.com/docs/en/api/errors)).
+The wrappers stop on either error immediately, allow one second for termination, then force a kill;
+pipe draining has a further one-second bound. No vendor retry is started by the wrapper.
+
+The initial model wait is bounded to 120 seconds, allowing ordinary startup and network latency
+without consuming a long ticket's budget. Session/turn metadata and reconnect messages do not
+renew this bound. Substantive model output or tool activity ends the initial wait; an active
+worker then has the ticket's normal timeout. Expiring the initial wait also yields `capacity`.
+
+The selected row remains in the run record. A capacity outcome excludes that row, and every
+effort variant for its vendor model, for 300 seconds after completion. Five minutes prevents
+immediate relaunch loops while allowing automatic recovery. Existing capability, subscription,
+route-allowlist and Jev/fallback rules choose among the remaining rows; exhausting them refuses
+dispatch rather than waiting or retrying a cooled model. Capacity runs skip ticket verification,
+do not require a worker judgment, and never contribute to graded worker acceptance/failure counts.
+
+`--continue` on a capacity run always routes away from the old vendor model, even after its
+cool-down expires. A recorded Codex session can resume on another Codex model using `-m/--model`
+(verified with `codex exec resume --help`). Otherwise the command announces a fresh dispatch and
+records `supersedes` with `continues: null`. A resumed session records `continues` normally.
 
 See [next-records.md](docs/next-records.md) for the append-only record schema and JSON listing.

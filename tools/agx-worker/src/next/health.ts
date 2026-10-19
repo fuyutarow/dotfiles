@@ -8,6 +8,7 @@ export function runHealth(
   legacy: boolean,
 ): string | undefined {
   if (run.state === "running" || run.judgment !== null) return undefined;
+  if (run.outcome === "capacity") return undefined;
   // Pre-lease history (including imports) cannot establish modern lifecycle or
   // return guarantees. Missing metadata is not evidence that a run was lost.
   if (legacy) return undefined;

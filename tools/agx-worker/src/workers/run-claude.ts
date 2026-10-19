@@ -10,6 +10,13 @@ import { activityWriter } from "../lifecycle.ts";
 import { workerEnvironment } from "./environment.ts";
 import { progressWriter } from "./codex-progress.ts";
 import { foldClaudeEvent, resultEvent } from "./claude-progress.ts";
+import {
+  CAPACITY_EXIT,
+  CAPACITY_STOP_GRACE_MS,
+  capacityMessage,
+  modelAnswered,
+  modelWaitMs,
+} from "./capacity.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);
@@ -82,6 +89,7 @@ export type RunResult = Readonly<{
   stderr: string;
   claude: unknown;
   parseError: string | undefined;
+  capacityCause?: string | undefined;
 }>;
 
 type Relay = Readonly<{
@@ -95,6 +103,10 @@ type Relay = Readonly<{
   stdout?: string | undefined;
   stderr?: string | undefined;
   parse_error?: string | undefined;
+  outcome?: "capacity";
+  cause?: string;
+  transient?: boolean;
+  worker_fault?: boolean;
 }>;
 
 const RecordSchema = z.record(z.string(), z.unknown());
@@ -142,13 +154,20 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     args.push("--json-schema", config.jsonSchema);
 
   const deadline = new AbortController();
+  let capacityCause: string | undefined;
+  let timedOut = false;
+  let modelWaitTimer: ReturnType<typeof setTimeout> | undefined;
+  let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
   const expire = (): void => {
+    timedOut = true;
     deadline.abort();
   };
   const boundTimer = setTimeout(expire, config.timeoutMs);
   process.on("SIGUSR1", expire);
   const cleanup = (): void => {
     clearTimeout(boundTimer);
+    clearTimeout(modelWaitTimer);
+    clearTimeout(forceKillTimer);
     process.removeListener("SIGUSR1", expire);
   };
   const signal = deadline.signal;
@@ -162,6 +181,25 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     signal: signal,
     killSignal: "SIGTERM",
   });
+  const stopForCapacity = (cause: string): void => {
+    if (capacityCause !== undefined) return;
+    capacityCause = cause;
+    deadline.abort();
+    // bounded: a vendor retry loop gets at most one second to terminate.
+    forceKillTimer = setTimeout(() => {
+      child.kill("SIGKILL");
+    }, CAPACITY_STOP_GRACE_MS);
+  };
+  const waitMs = modelWaitMs();
+  modelWaitTimer = setTimeout(() => {
+    stopForCapacity(
+      `no model response from ${config.model} within ${waitMs} ms`,
+    );
+  }, waitMs);
+  const observeCapacity = (line: string): void => {
+    const cause = capacityMessage(line, "claude");
+    if (cause !== undefined) stopForCapacity(cause);
+  };
   await using _childLifecycle = {
     [Symbol.asyncDispose]: async () => {
       deadline.abort();
@@ -194,6 +232,8 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     process.env.AGX_INTERIM_REPORTS_FILE,
   );
   const feed = async (line: string): Promise<void> => {
+    observeCapacity(line);
+    if (modelAnswered(line, "claude")) clearTimeout(modelWaitTimer);
     progress?.feed(line);
     const messageFile = process.env.AGX_LAST_MESSAGE_FILE;
     if (messageFile === undefined) return;
@@ -209,21 +249,27 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     await recordInterim(returnedText);
   };
   const recordActivity = activityWriter();
+  const graced = (reading: Promise<string>): Promise<string> =>
+    child.exited.then(() =>
+      Promise.race([reading, Bun.sleep(1_000).then(() => "")]),
+    );
   const [stdout, stderr, exitCode] = await Promise.all([
-    progress === undefined
-      ? readLines(child.stdout, () => {}, recordActivity)
-      : readLines(child.stdout, feed, recordActivity),
-    readLines(child.stderr, () => {}, recordActivity),
+    graced(readLines(child.stdout, feed, recordActivity, observeCapacity)),
+    graced(
+      readLines(child.stderr, observeCapacity, recordActivity, observeCapacity),
+    ),
     child.exited,
   ]);
   await recordInterim.flush();
   cleanup();
-  const timedOut = signal.aborted;
+  let resultExit = exitCode;
+  if (timedOut) resultExit = 124;
+  if (capacityCause !== undefined) resultExit = CAPACITY_EXIT;
   progress?.flush();
   if (config.progressFile !== undefined) {
     const result = resultEvent(stdout);
     return {
-      exitCode: timedOut ? 124 : exitCode,
+      exitCode: resultExit,
       timedOut,
       stdout,
       stderr,
@@ -232,6 +278,7 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
         result === undefined
           ? "no result event in the stream-json output"
           : undefined,
+      capacityCause,
     };
   }
 
@@ -250,12 +297,13 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
   const parseError = parsed.parseError;
 
   return {
-    exitCode: timedOut ? 124 : exitCode,
+    exitCode: resultExit,
     timedOut,
     stdout,
     stderr,
     claude,
     parseError,
+    capacityCause,
   };
 }
 
@@ -264,6 +312,7 @@ async function readLines(
   stream: ReadableStream<Uint8Array> | null,
   onLine: (line: string) => void | Promise<void>,
   recordActivity: (bytes: number) => void,
+  onPartial: (line: string) => void,
 ): Promise<string> {
   if (stream === null) return "";
   const decoder = new TextDecoder();
@@ -276,6 +325,7 @@ async function readLines(
     const lines = (pending + piece).split("\n");
     pending = lines.pop() ?? "";
     for (const line of lines) await onLine(line);
+    onPartial(pending);
   }
   if (pending !== "") await onLine(pending);
   return text;
@@ -306,8 +356,18 @@ function primitive(
 
 export function toRelay(run: RunResult): Relay {
   const claude = asRecord(run.claude);
+  const capacity =
+    run.capacityCause === undefined
+      ? {}
+      : ({
+          outcome: "capacity",
+          cause: run.capacityCause,
+          transient: true,
+          worker_fault: false,
+        } satisfies Partial<Relay>);
   if (claude === undefined) {
     return {
+      ...capacity,
       exit_code: run.exitCode,
       timed_out: run.timedOut,
       stdout: boundedText(run.stdout),
@@ -318,6 +378,7 @@ export function toRelay(run: RunResult): Relay {
 
   const result = claude.result;
   return {
+    ...capacity,
     exit_code: run.exitCode,
     timed_out: run.timedOut,
     result: typeof result === "string" ? boundedText(result) : undefined,

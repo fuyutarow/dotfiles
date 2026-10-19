@@ -1,5 +1,9 @@
 # Changelog
 
+## 7.1.1 — 2026-10-19
+
+- Classify vendor capacity promptly, bound model startup waits to 120 seconds, cool unavailable models for 300 seconds, and reroute capacity continuations.
+
 ## 7.1.0 — 2026-10-19
 
 - Add latest ticket run selection with verification exits and report path

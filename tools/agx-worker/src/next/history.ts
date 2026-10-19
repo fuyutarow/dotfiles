@@ -29,7 +29,12 @@ export async function gradedHistory(
   const target = proposition(brief);
   const graded = await Promise.all(
     runs
-      .filter((run) => run.state === "ended" && run.judgment !== null)
+      .filter(
+        (run) =>
+          run.state === "ended" &&
+          run.judgment !== null &&
+          run.outcome !== "capacity",
+      )
       .map(async (run) => {
         const source =
           target === undefined

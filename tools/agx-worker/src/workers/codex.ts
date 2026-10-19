@@ -27,10 +27,11 @@
 //                        1 codex-failed (nonzero exit, or exit 0 with no last message)
 //                        2 refused (usage, floor, sandbox/effort policy) — codex never started
 //                        3 timeout, stdin-wait or spin (the receipt distinguishes them)
+//                       75 capacity (temporary vendor unavailability, not a worker failure)
 //                      every non-ok receipt has a non-empty `cause` (codex's last error event, else
 //                      "codex printed no error event" + the last stderr line); every receipt has
 //                      `progress` {last, commands, files} — at a timeout, where the worker was.
-//   Waits / liveness     bounded by --timeout-s (default 900; this runs in the background).
+//   Waits / liveness     initial model response bounded by 120 s, then --timeout-s (default 900).
 //   Fallbacks / handoffs never another model; sandbox fallbacks record the effective mode and reason.
 //   C5  evolution   receipt fields are additive; `schema` bumps on any removal or meaning change.
 // --emit-envelope PATH writes the P7 resource envelope for exactly this call (same checks, no
@@ -71,6 +72,13 @@ import { activityWriter } from "../lifecycle.ts";
 import { interimReturnWriter, parseReturn } from "../report.ts";
 import { progressIntervalMs, progressThrottle } from "../progress.ts";
 import { workerEnvironment } from "./environment.ts";
+import {
+  CAPACITY_EXIT,
+  CAPACITY_STOP_GRACE_MS,
+  capacityMessage,
+  modelAnswered,
+  modelWaitMs,
+} from "./capacity.ts";
 
 const cliArgv = () => process.argv.slice(2);
 const cli = standardCli(cleyeCli, cliPackage, cliArgv);
@@ -103,6 +111,7 @@ const CODEX_BIN = process.env.AGX_CODEX_BIN ?? "codex";
 type Outcome =
   | "ok"
   | "codex-failed"
+  | "capacity"
   | "refused"
   | "timeout"
   | "stdin-wait"
@@ -111,6 +120,7 @@ type Outcome =
 const EXIT: Record<Outcome, number> = {
   ok: 0,
   "codex-failed": 1,
+  capacity: CAPACITY_EXIT,
   killed: 1,
   refused: 2,
   timeout: 3,
@@ -238,6 +248,7 @@ function emit(outcome: Outcome, fields: Record<string, unknown>): never {
     run_id: runId,
     outcome,
     model: model ?? null,
+    row: argv.flags.choice ?? null,
     effort: effort ?? null,
     sandbox: argv.flags.sandbox ?? null,
     // additive (C5): what codex actually ran with, and why it differs from `sandbox`
@@ -485,14 +496,16 @@ let stdinWaitFired = false;
 let stdinWaitCause: string | undefined;
 let stdinWaitTimer: ReturnType<typeof setTimeout> | undefined;
 let forceKillTimer: ReturnType<typeof setTimeout> | undefined;
+let modelWaitTimer: ReturnType<typeof setTimeout> | undefined;
+let capacityCause: string | undefined;
 const STOP_GRACE_MS = 30_000;
-const requestStop = (): void => {
+const requestStop = (graceMs = STOP_GRACE_MS): void => {
   if (deadline.signal.aborted) return;
   deadline.abort();
   // bounded: TERM first; force KILL after the cleanup window for a non-cooperative child.
   forceKillTimer = setTimeout(() => {
     proc.kill("SIGKILL");
-  }, STOP_GRACE_MS);
+  }, graceMs);
 };
 const expire = (): void => {
   boundFired = true;
@@ -509,6 +522,7 @@ const clearDeadline = (): void => {
   clearTimeout(boundTimer);
   if (stdinWaitTimer !== undefined) clearTimeout(stdinWaitTimer);
   if (forceKillTimer !== undefined) clearTimeout(forceKillTimer);
+  if (modelWaitTimer !== undefined) clearTimeout(modelWaitTimer);
   process.removeListener("SIGUSR1", expire);
   process.removeListener("SIGTERM", onTerminate);
   process.removeListener("SIGINT", onTerminate);
@@ -531,6 +545,19 @@ if (!spawned.ok) {
   refuse(`cannot start ${CODEX_BIN}: ${errorMessage(spawned.error)}`);
 }
 const proc = spawned.value;
+const waitMs = modelWaitMs();
+modelWaitTimer = setTimeout(() => {
+  if (capacityCause !== undefined) return;
+  capacityCause = `no model response from ${model} within ${waitMs} ms (session metadata and reconnects do not count)`;
+  requestStop(CAPACITY_STOP_GRACE_MS);
+}, waitMs);
+const observeCapacity = (line: string): void => {
+  const message = capacityMessage(line, "codex");
+  if (message === undefined || capacityCause !== undefined) return;
+  capacityCause = message;
+  clearTimeout(modelWaitTimer);
+  requestStop(CAPACITY_STOP_GRACE_MS);
+};
 const shouldReportProgress = progressThrottle(PROGRESS_INTERVAL_MS);
 const heartbeat = setInterval(() => {
   if (shouldReportProgress())
@@ -606,6 +633,8 @@ function readEvents(): Promise<string> {
       const lines = `${pending}${text}`.split("\n");
       pending = lines.pop() ?? "";
       for (const line of lines) {
+        observeCapacity(line);
+        if (modelAnswered(line, "codex")) clearTimeout(modelWaitTimer);
         const eventText = jsonText.safeParse(line);
         if (
           eventText.success &&
@@ -620,6 +649,7 @@ function readEvents(): Promise<string> {
           deadline.abort();
         }
       }
+      observeCapacity(pending);
     },
   });
   return proc.stdout.pipeTo(sink).then(() => streamed);
@@ -634,11 +664,16 @@ async function readErrors(): Promise<string> {
     text += decoded;
     const lines = `${pending}${decoded}`.split("\n");
     pending = lines.pop() ?? "";
-    for (const line of lines) watchStdinWait(line);
+    for (const line of lines) {
+      watchStdinWait(line);
+      observeCapacity(line);
+    }
+    observeCapacity(pending);
   }
   const tail = decoder.decode();
   text += tail;
   watchStdinWait(`${pending}${tail}`);
+  observeCapacity(`${pending}${tail}`);
   return text;
 }
 // Both readers start now; each is cut PIPE_GRACE_MS after the child exits (graced waits for that).
@@ -723,6 +758,14 @@ const common = {
   stderr_tail: stderrTail,
 };
 
+if (capacityCause !== undefined)
+  emit("capacity", {
+    ...common,
+    why: capacityCause,
+    cause: capacityCause,
+    transient: true,
+    worker_fault: false,
+  });
 if (stdinWaitFired)
   emit("stdin-wait", {
     ...common,

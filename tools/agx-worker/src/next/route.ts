@@ -13,6 +13,7 @@ import { exitWithError } from "./exit.ts";
 import { readRouteUsage } from "./usage.ts";
 import { gradedHistory } from "./history.ts";
 import { foldedRuns, setPendingPickAudit } from "./store.ts";
+import { CAPACITY_COOLDOWN_MS, capacityRows } from "./capacity.ts";
 
 const Reply = z.looseObject({
   answers: z.record(
@@ -39,6 +40,12 @@ export async function route(
       1,
     );
   const roster = loaded.value;
+  const runs = await foldedRuns();
+  const cooling = capacityRows(runs, roster.choice);
+  const coolingNote =
+    cooling.size === 0
+      ? ""
+      : `; capacity rows cooling down for up to ${CAPACITY_COOLDOWN_MS / 1000} s`;
   const endpoint = process.env.AGX_NEXT_JEV_URL ?? roster.auto.jev.url;
   let timeoutClass = "standard";
   if (timeoutS > 600) timeoutClass = "extended";
@@ -54,6 +61,7 @@ export async function route(
         (roster.auto.routes === undefined ||
           roster.auto.routes.includes(row.route)) &&
         !maskedRows.includes(row.id) &&
+        !cooling.has(row.id) &&
         (minimumTb4 === undefined || (row.tb4 ?? 0) >= minimumTb4),
     )
     .toSorted(
@@ -66,11 +74,11 @@ export async function route(
   if (candidates.length === 0)
     return exitWithError(
       eligible.length === 0
-        ? `agx: no roster row satisfies required capabilities (${routeFilterLabel(roster.auto)})\n`
+        ? `agx: no roster row satisfies required capabilities (${routeFilterLabel(roster.auto)})${coolingNote}\n`
         : "agx: all capability-eligible routes are at their subscription limit\n",
       2,
     );
-  const history = await gradedHistory(await foldedRuns(), brief);
+  const history = await gradedHistory(runs, brief);
   const criteria = Object.fromEntries(
     candidates.map((row) => [
       row.id,

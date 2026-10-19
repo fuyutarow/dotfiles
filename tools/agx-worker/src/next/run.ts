@@ -387,7 +387,7 @@ export async function run(flags: Flags): Promise<number> {
     );
   if (premises.status === "timeout") return fatal("premise check timed out", 2);
   const continuationId = value(flags, "continue");
-  const supersedes = value(flags, "supersedes") ?? ticket.supersedes;
+  let supersedes = value(flags, "supersedes") ?? ticket.supersedes;
   if (continuationId !== undefined && supersedes !== undefined)
     return fatal("supersedes and --continue are mutually exclusive");
   if (
@@ -396,18 +396,25 @@ export async function run(flags: Flags): Promise<number> {
   )
     return fatal(`cannot supersede unknown run ${supersedes}`);
   const premise_commits = await premiseCommits(ticket, ctx);
+  const routing = {
+    brief: `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`,
+    capabilities: ticket.capabilities ?? [],
+    timeoutS: ticket.timeout_s ?? 600,
+    maskedRows: await earlyQuitRows(ticketName, cwd),
+  };
   const pinned =
     continuationId === undefined
       ? undefined
-      : await pinContinuation(continuationId, path);
+      : await pinContinuation(continuationId, path, routing);
+  supersedes = pinned?.supersedes ?? supersedes;
   const resumeSession = pinned?.resumeSession;
   const row =
     pinned?.row ??
     (await route(
-      `Proposition ${ticket.proposition.id}: ${ticket.proposition.claim}\n${prose}`,
-      ticket.capabilities,
-      ticket.timeout_s ?? 600,
-      await earlyQuitRows(ticketName, cwd),
+      routing.brief,
+      routing.capabilities,
+      routing.timeoutS,
+      routing.maskedRows,
     ));
   const id = binding?.id ?? randomUUID();
   // The run owns its temp space: removed on any exit path (process.exit included); a SIGKILL
@@ -531,7 +538,7 @@ export async function run(flags: Flags): Promise<number> {
     row: row.id,
     dispatcher_session: dispatcher,
     vendor_session: resumeSession ?? null,
-    continues: continuationId ?? null,
+    continues: supersedes === undefined ? (continuationId ?? null) : null,
     supersedes: supersedes ?? null,
     base_rev: ctx.base_rev ?? undefined,
     premise_commits,
@@ -665,12 +672,6 @@ export async function run(flags: Flags): Promise<number> {
   clearInterval(progressWatcher);
   const output = await outputPromise;
   if (stopTask !== undefined) await stopTask;
-  const after = workspaceSnapshot(cwd, ticket.writes);
-  const changed =
-    before.isOk() && after.isOk()
-      ? changedFiles(before.value, after.value)
-      : undefined;
-  const verify = await runVerify(ticket.verify, cwd, runDir, runEnv);
   const receiptLine = output.trim().split("\n").at(-1) ?? "";
   const receipt = jsonOf(
     z.looseObject({
@@ -681,16 +682,29 @@ export async function run(flags: Flags): Promise<number> {
       session: z.string().optional(),
       session_id: z.string().optional(),
       outcome: z.string().optional(),
+      cause: z.string().optional(),
       timed_out: z.boolean().optional(),
       exit_code: z.number().optional(),
     }),
   ).safeParse(receiptLine);
   const workerReceipt = receipt.success ? receipt.data : {};
+  // Capacity never ran the promised work; verification cannot turn it into a worker failure
+  // or delay releasing this model to the router's cool-down.
+  const capacity = workerReceipt.outcome === "capacity";
+  const after = capacity ? undefined : workspaceSnapshot(cwd, ticket.writes);
+  const changed =
+    before.isOk() && after?.isOk() === true
+      ? changedFiles(before.value, after.value)
+      : undefined;
+  const verify = capacity
+    ? []
+    : await runVerify(ticket.verify, cwd, runDir, runEnv);
   const parsedReport = parseReport(
     workerReceipt.structured_output ?? workerReceipt.report,
     workerReceipt.last_message ?? receiptLine,
   );
   const outcome = deriveOutcome({
+    capacity,
     timedOut:
       child.signalCode === "SIGTERM" ||
       workerReceipt.timed_out === true ||
@@ -705,12 +719,24 @@ export async function run(flags: Flags): Promise<number> {
     reportValid: parsedReport.ok,
     changed,
   });
-  const report = parsedReport.ok
+  let report: unknown = parsedReport.ok
     ? parsedReport.report
     : {
         raw: output.trim(),
         error: parsedReport.error,
       };
+  if (capacity)
+    report = {
+      summary: `Vendor capacity on ${row.id}: ${workerReceipt.cause ?? "model unavailable"}`,
+      changes: [],
+      checks: [],
+      for_coordinator: [
+        "Dispatch again or use --continue to route away from this model.",
+      ],
+      open: [
+        "The vendor did not complete this ticket; this is not a worker failure.",
+      ],
+    };
   writeFileSync(reportPath, `${JSON.stringify(report)}\n`);
   const vendorSession =
     workerReceipt.vendor_session ??

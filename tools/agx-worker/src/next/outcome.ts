@@ -14,6 +14,7 @@ export const Outcome = z.enum([
   "verify-unrunnable",
   "verify-killed",
   "timeout",
+  "capacity",
   "refused",
   "malformed",
 ]);
@@ -62,12 +63,14 @@ export function changedFiles(
 }
 
 export function deriveOutcome(input: {
+  capacity?: boolean;
   timedOut: boolean;
   refused: boolean;
   verify: readonly { exit: number; kind?: VerifyKind }[];
   reportValid: boolean;
   changed: number | undefined;
 }): Outcome {
+  if (input.capacity === true) return "capacity";
   if (input.timedOut) return "timeout";
   if (input.refused || input.changed === undefined) return "refused";
   const kinds = new Set(

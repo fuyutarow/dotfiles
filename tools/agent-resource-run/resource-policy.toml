@@ -1,6 +1,7 @@
-# Runner policy. Only gpu_max_concurrent_jobs controls agent-resource-run admission.
+# Runner policy. One GPU job scope at a time, including its surviving children.
+# This counts jobs across the host, not devices, processes, or existing slot files.
 schema = 1
-gpu_max_concurrent_jobs = 8
+gpu_max_concurrent_jobs = 1
 
 # Compatibility capacity declarations: firedancer envs/jq/jq_capacity.py reads these.
 # The thin runner does not reserve or aggregate these resources.

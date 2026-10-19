@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.6 — 2026-10-19
+
+- Default to one host GPU job and retain slots through failed scope cleanup until all descendants exit
+
 ## 1.5.5 — 2026-10-19
 
 - Wait for ccc CUDA process exit before acquiring research GPU slots

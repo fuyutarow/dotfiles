@@ -10,6 +10,10 @@ GPU jobs acquire one of the flock files at
 slots use the same mechanism and the existing `~/.config/agent-resource/slots.toml`
 capacity declaration. No FIFO order is promised.
 
+The declared default is one concurrent GPU job scope across the host. Children count
+as part of that job; devices, process counts and leftover slot files do not increase
+capacity. An explicit `AGENT_RESOURCE_POLICY` override supplies the caller's policy.
+
 Before taking a GPU slot, research writes a unique want file under
 `$XDG_RUNTIME_DIR/agent-resource/gpu-wants/` and waits with `flock --shared -w`
 on `agent-resource/ccc-gpu.lock`. The ccc supervisor holds that lock exclusively
@@ -32,7 +36,13 @@ enables the service and never starts it.
 Every command runs in its own `systemd-run --user --scope --collect` scope with
 MemoryMax, MemoryHigh, zero swap, CPUQuota, TasksMax, RuntimeMaxSec and OOMPolicy=kill.
 Before launch, the scope child verifies the effective RAM/swap ceiling and pids.peak.
+GPU slot locks are held by a separate systemd-owned holder scope, outside the caller's
+service cgroup. The holder launches the bounded job scope and stays alive while cleanup
+is confirmed, so stopping the caller cannot release a GPU slot while its job remains.
 The flock child retains its descriptors until systemd has stopped all descendants.
+If scope cleanup fails, times out, or leaves its cgroup populated, it reports HOLD,
+retains the slots and retries until the cgroup is empty or removed. A cleanup error
+never authorizes another job.
 The runner returns the command's exit status, including scope OOM and walltime kills.
 VRAM budget environment variables remain for the firedancer model runner; there is no
 VRAM accounting or sampled enforcement.

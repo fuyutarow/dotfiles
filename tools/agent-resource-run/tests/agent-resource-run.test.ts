@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "../../shared/src/zod.ts";
 import {
+  buildLockHolderLaunch,
   buildSystemdLaunch,
   validateManifest,
   type ResourceManifest,
@@ -77,6 +78,112 @@ async function invoke(
 }
 const live = process.platform === "linux" && Bun.which("systemd-run") !== null;
 
+test("operator default permits exactly one concurrent GPU job", async () => {
+  const parsed = z
+    .object({
+      schema: z.literal(1),
+      gpu_max_concurrent_jobs: z.number().int().min(1),
+    })
+    .safeParse(
+      Bun.TOML.parse(
+        await Bun.file(join(import.meta.dir, "../resource-policy.toml")).text(),
+      ),
+    );
+  expect(parsed.success).toBe(true);
+  expect(parsed.success ? parsed.data.gpu_max_concurrent_jobs : undefined).toBe(
+    1,
+  );
+});
+
+test("GPU slot holders run in a caller-independent systemd scope", () => {
+  expect(
+    buildLockHolderLaunch("agent-resource-holder-test.scope", [
+      "flock",
+      "gpu.0",
+    ]),
+  ).toEqual([
+    "systemd-run",
+    "--user",
+    "--scope",
+    "--collect",
+    "--unit=agent-resource-holder-test.scope",
+    "--",
+    "flock",
+    "gpu.0",
+  ]);
+});
+
+test.skipIf(!live)(
+  "cleanup failure retains the slot until scope stop succeeds",
+  async () => {
+    const dir = await mkdtemp(join(root, "cleanup-"));
+    const bin = join(dir, "bin");
+    await mkdir(bin);
+    const attempted = join(dir, "stop-attempted");
+    const release = join(dir, "allow-stop");
+    const lock = join(dir, "gpu.0");
+    await Bun.write(
+      join(bin, "systemctl"),
+      `#!${process.execPath}
+    if (process.argv.includes('show')) process.exit(0);
+    await Bun.write(${JSON.stringify(attempted)}, 'attempted');
+    if (!(await Bun.file(${JSON.stringify(release)}).exists())) {
+      process.stderr.write('scope still active: stop failed\\n'); process.exit(1);
+    }
+  `,
+      { mode: 0o755 },
+    );
+    await chmod(join(bin, "systemctl"), 0o755);
+    const controller = Bun.spawn(
+      [
+        "flock",
+        "-F",
+        lock,
+        process.execPath,
+        join(import.meta.dir, "../src/scope-controller.ts"),
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          AGENT_RESOURCE_SCOPE_LAUNCH: JSON.stringify({
+            argv: ["true"],
+            scope: "fixture.scope",
+          }),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: 10000,
+      },
+    );
+    for (let n = 0; n < 300 && !(await Bun.file(attempted).exists()); n++)
+      await Bun.sleep(10);
+    // Let the controller consume the failed stop before probing its lock.
+    await Bun.sleep(150);
+    const probe = Bun.spawn(["flock", "-n", "-E", "75", lock, "true"], {
+      stdout: "ignore",
+      stderr: "ignore",
+      timeout: 1000,
+    });
+    const held = await probe.exited;
+    await Bun.write(release, "scope may stop");
+    const [stdout, stderr, exit] = await Promise.all([
+      controller.stdout.text(),
+      controller.stderr.text(),
+      controller.exited,
+    ]);
+    expect(held, stdout + stderr).toBe(75);
+    expect(exit, stdout + stderr).toBe(0);
+    const released = Bun.spawn(["flock", "-n", "-E", "75", lock, "true"], {
+      stdout: "ignore",
+      stderr: "ignore",
+      timeout: 1000,
+    });
+    expect(await released.exited).toBe(0);
+  },
+  15000,
+);
+
 test("manifest schema retains all P7 fields, bounds and compile slot extension", () => {
   expect(validateManifest(manifest()).isOk()).toBe(true);
   expect(
@@ -132,6 +239,92 @@ test("CLI retains version, help, unknown flag and malformed manifest exits", asy
     (await invoke(["--manifest", f.path, "--check-only"], f.env)).exit,
   ).toBe(2);
 }, 30000);
+for (const stopMode of ["real-stop", "false-success"])
+  test.skipIf(!live)(
+    `GPU slot remains held until a wrapper's surviving child and scope have ended (${stopMode})`,
+    async () => {
+      const f = await fixture(
+        manifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1 } }),
+      );
+      const events = join(f.dir, "scope-events");
+      const scopeFile = join(f.dir, "scope");
+      const ready = join(f.dir, "child-ready");
+      const wrapper = join(f.dir, "wrapper.ts");
+      const child = join(f.dir, "child.ts");
+      await Bun.write(
+        child,
+        `
+      process.on('SIGTERM', async () => {
+        await Bun.sleep(250);
+        await Bun.write(${JSON.stringify(events)}, 'child-ended\\n');
+        process.exit(0);
+      });
+      await Bun.write(${JSON.stringify(ready)}, 'ready');
+      await Bun.sleep(1800);
+      await Bun.write(${JSON.stringify(events)}, 'child-ended\\n');
+    `,
+      );
+      await Bun.write(
+        wrapper,
+        `
+      await Bun.write(${JSON.stringify(scopeFile)}, JSON.parse(process.env.AGENT_RESOURCE_ADMISSION_RECEIPT).scope_unit);
+      // Bun closes unrelated descriptors: the child cannot retain the flock for us.
+      Bun.spawn([process.execPath, ${JSON.stringify(child)}], {stdin:'ignore',stdout:'ignore',stderr:'ignore'}).unref();
+      while (!(await Bun.file(${JSON.stringify(ready)}).exists())) await Bun.sleep(10);
+    `,
+      );
+      const firstEnv: Record<string, string | undefined> = { ...f.env };
+      if (stopMode === "false-success") {
+        const bin = join(f.dir, "bin");
+        await mkdir(bin);
+        // Simulate a stop that reports success while the real scope stays populated.
+        await Bun.write(
+          join(bin, "systemctl"),
+          `#!${process.execPath}
+        if(process.argv.includes('stop')) process.exit(0);
+        const child=Bun.spawn([${JSON.stringify(Bun.which("systemctl"))},...process.argv.slice(2)],{stdin:'inherit',stdout:'inherit',stderr:'inherit'});
+        process.exit(await child.exited);
+      `,
+        );
+        await chmod(join(bin, "systemctl"), 0o755);
+        firstEnv.PATH = `${bin}:${process.env.PATH}`;
+      }
+      const first = invoke(
+        ["--manifest", f.path, "--", process.execPath, wrapper],
+        firstEnv,
+      );
+      for (let n = 0; n < 300 && !(await Bun.file(ready).exists()); n++)
+        await Bun.sleep(10);
+      expect(await Bun.file(ready).exists()).toBe(true);
+      const second = invoke(
+        [
+          "--manifest",
+          f.path,
+          "--job-id",
+          `second-${crypto.randomUUID()}`,
+          "--",
+          process.execPath,
+          "-e",
+          `const fs=await import('node:fs/promises');
+       const scope=await Bun.file(${JSON.stringify(scopeFile)}).text();
+       const probe=Bun.spawn(['systemctl','--user','is-active',scope],{stdout:'pipe',stderr:'pipe'});
+       const [state,,code]=await Promise.all([probe.stdout.text(),probe.stderr.text(),probe.exited]);
+       if(code===0 || state.trim()==='deactivating') process.exit(42);
+       await fs.appendFile(${JSON.stringify(events)},'second-started\\n');`,
+        ],
+        f.env,
+      );
+      const results = await Promise.all([first, second]);
+      for (const result of results)
+        expect(result.exit, result.stdout + result.stderr).toBe(0);
+      if (stopMode === "false-success")
+        expect(results[0]?.stderr).toContain("scope cgroup still populated");
+      expect(await Bun.file(events).text()).toBe(
+        "child-ended\nsecond-started\n",
+      );
+    },
+    15000,
+  );
 test.skipIf(!live)(
   "all caller invocation shapes and job-id/slot flags still execute",
   async () => {

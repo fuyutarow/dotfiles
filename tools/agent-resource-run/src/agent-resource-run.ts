@@ -293,6 +293,20 @@ export function buildSystemdLaunch(
     ...command,
   ];
 }
+// Keep slot-owning flock processes in a systemd-owned scope, outside the caller's
+// service cgroup. If that caller is stopped, the holder remains until its nested
+// job scope and every descendant have ended.
+export function buildLockHolderLaunch(unit: string, command: string[]) {
+  return [
+    "systemd-run",
+    "--user",
+    "--scope",
+    "--collect",
+    `--unit=${unit}`,
+    "--",
+    ...command,
+  ];
+}
 async function stopScope(scope: string) {
   const stopped = await output(["systemctl", "--user", "stop", scope], 45000);
   if (stopped.code === 0 || /not loaded|not found/iu.test(stopped.stderr))
@@ -462,6 +476,12 @@ async function run(
     want = marker;
   }
   argv = lock(identity, 0, 69, argv);
+  if (manifest.device.kind === "gpu") {
+    argv = buildLockHolderLaunch(
+      `agent-resource-holder-${randomUUID()}.scope`,
+      argv,
+    );
+  }
   // bounded: each flock has -w; systemd owns RuntimeMaxSec and descendant cleanup.
   const child = Bun.spawn(argv, {
     cwd: options.cwd ?? process.cwd(),

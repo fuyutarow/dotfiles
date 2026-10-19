@@ -175,7 +175,7 @@ export async function classify(
   const normalized = Object.entries(answer.data.answers).map(([id, a]) => ({
     id,
     p: a.noul,
-    reason: a.reason ?? "Jev Noul probability of yes",
+    reason: a.reason ?? { na: true as const, why: JSON.stringify(a) },
   }));
   const refuted =
     q.data.refuted_question === undefined

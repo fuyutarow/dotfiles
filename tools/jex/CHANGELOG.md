@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 — 2026-10-19
+
+- Preserve Jev reasons and mark absent reasons as not available
+
 ## 0.2.3 — 2026-10-19
 
 - Reject combined input over 30000 bytes instead of truncating it

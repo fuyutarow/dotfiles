@@ -27,12 +27,12 @@ There are no subcommands. Flags may precede or follow operands; `--` permits pat
 beginning with a dash. `--help` prints usage, including the combined input limit of
 **30,000 bytes**, and `--version` prints only semver.
 Stdout emits one JSON object per HTTP answer, in terminals and pipelines alike:
-`{model,bits:[{id,p,reason}],refuted?:{p,reason}}`. `model` is the model Jev reports; when
+`{model,bits:[{id,p,reason}],refuted?:{p,reason}}`. A reason is the text Jev returned for
+that answer, or `{na:true,why}` when Jev returned no reason; `why` is the JSON text of Jev's
+Noul answer. No reason text is inferred from the probability. `model` is the model Jev reports; when
 the response does not report a usable model, it is `{na:true,why}`. Exit 1 still prints the complete object,
 including every bit and any refuted answer; the exit status carries the yes/no result.
 Diagnostics go to stderr.
-The TypeSafe Noul API supplies probabilities, without explanations: absent an endpoint-provided
-reason, `reason` says `Jev Noul probability of yes`. It is a source label, not generated reasoning.
 
 | Exit | Meaning                                                                                  |
 | ---- | ---------------------------------------------------------------------------------------- |

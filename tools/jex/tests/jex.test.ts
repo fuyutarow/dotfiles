@@ -12,9 +12,24 @@ const Verdict = z.object({
     z.object({ na: z.literal(true), why: z.string() }),
   ]),
   bits: z.array(
-    z.object({ id: z.string(), p: z.number(), reason: z.string() }),
+    z.object({
+      id: z.string(),
+      p: z.number(),
+      reason: z.union([
+        z.string(),
+        z.object({ na: z.literal(true), why: z.string() }),
+      ]),
+    }),
   ),
-  refuted: z.object({ p: z.number(), reason: z.string() }).optional(),
+  refuted: z
+    .object({
+      p: z.number(),
+      reason: z.union([
+        z.string(),
+        z.object({ na: z.literal(true), why: z.string() }),
+      ]),
+    })
+    .optional(),
 });
 function decode<S extends z.ZodType>(schema: S, text: string): z.output<S> {
   const parsed = jsonOf(schema).safeParse(text);
@@ -80,7 +95,11 @@ test("all bits >= .5 succeeds and prints normalized bits", async () => {
   expect(verdict(result.stdout)).toEqual({
     model: "jev-test-reported-model",
     bits: [
-      { id: "a", p: 0.5, reason: "Jev Noul probability of yes" },
+      {
+        id: "a",
+        p: 0.5,
+        reason: { na: true, why: '{"type":"noul","noul":0.5}' },
+      },
       { id: "b", p: 1, reason: "fixture" },
     ],
   });
@@ -118,7 +137,11 @@ test("one bit < .5 fails with bits on stdout", async () => {
       why: "Jev response did not report a usable model",
     },
     bits: [
-      { id: "a", p: 0.499, reason: "Jev Noul probability of yes" },
+      {
+        id: "a",
+        p: 0.499,
+        reason: { na: true, why: '{"type":"noul","noul":0.499}' },
+      },
       { id: "b", p: 0.8, reason: "fixture" },
     ],
   });
@@ -144,10 +167,20 @@ test("refuted >= .5 fails, below .5 succeeds", async () => {
         why: "Jev response did not report a usable model",
       },
       bits: [
-        { id: "a", p: 0.8, reason: "Jev Noul probability of yes" },
+        {
+          id: "a",
+          p: 0.8,
+          reason: { na: true, why: '{"type":"noul","noul":0.8}' },
+        },
         { id: "b", p: 0.9, reason: "fixture" },
       ],
-      refuted: { p, reason: "Jev Noul probability of yes" },
+      refuted: {
+        p,
+        reason: {
+          na: true,
+          why: JSON.stringify({ type: "noul", noul: p }),
+        },
+      },
     });
   }
 });
@@ -262,7 +295,7 @@ test("usage and unknown flags fail with exit 2; version aliases print the packag
   for (const flag of ["-V", "--version"]) {
     const version = await run([flag]);
     expect(version.exit).toBe(0);
-    expect(version.stdout).toBe("jex 0.2.1\n");
+    expect(version.stdout).toBe("jex 0.2.3\n");
     expect(version.stderr).toBe("");
   }
   const help = await run(["--help"]);

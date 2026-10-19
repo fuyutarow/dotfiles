@@ -20,7 +20,7 @@ description: >-
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2610.5.0 (2026-10-16) — split task bodies and configurable literal tool authority checks.
+> **Version**: v2610.6.0 (2026-10-19) — repository-owned contract tools and optional SDK portability pattern.
 > Owns the task graph, naming, template fragments and resolution gate.
 > Dated tool facts, provenance and rulings live in `references/recipes.md`.
 
@@ -59,7 +59,7 @@ skill now closes.
 |---|---|---|
 | `fmt` / `f` | HARD / HARD | format in place; >1 language → depends-only aggregate over `fmt:<lang>` |
 | `fmt:check` | HARD | non-mutating format verification (the CI form of fmt) |
-| `fmt:staged` | SOFT | in jj mode, verify selected snapshot files in a temporary candidate copy and refuse files needing formatting; in Git migration mode, format staged files and re-stage exactly them, refusing partial hunks. Body = `scripts/fmt-staged.ts` (recipes §8) |
+| `fmt:staged` | SOFT | in jj mode, verify selected snapshot files in a temporary candidate copy and refuse files needing formatting; in Git migration mode, format staged files and re-stage exactly them, refusing partial hunks. The consumer owns a copied `tools/fmt-staged.ts`. |
 | `lint` / `l` | HARD / SOFT | static analysis, report-only (fixes belong to fmt) |
 | `test` / `t` | HARD / SOFT | the test surface; blocked-with-pointer is legal (body may `exit 2` naming focused `test:*` — the TOKEN must still resolve) |
 | `up` / `u` | HARD / SOFT | dependency update — the lockfile-moving verb |
@@ -71,9 +71,9 @@ jj runs no git hooks, so these provide the commit gate, post-merge step, and gua
 
 | Token | Tier | Meaning |
 |---|---|---|
-| `commit` | HARD in a jj repo | validate named paths, snapshot `@`, run `hook:pre-commit` with the J1 interface below, `jj commit` exactly those paths, move the bookmark (`--bookmark`, else `BOOKMARK`, default `alpha`) to `@-`, `--push` pushes and checks the remote; then the `post-commit` shim. No Git binary or index is needed to commit. Body = `scripts/jj-commit.ts`, run, never copied |
+| `commit` | HARD in a jj repo | validate named paths, snapshot `@`, run `hook:pre-commit` with the J1 interface below, `jj commit` exactly those paths, move the bookmark (`--bookmark`, else `BOOKMARK`, default `alpha`) to `@-`, `--push` pushes and checks the remote; then the `post-commit` shim. No Git binary or index is needed to commit. The consumer owns a copied `tools/jj-commit.ts`. |
 | `pull` | HARD in a jj repo | `jj git fetch`, then `jj rebase -b @ -d 'trunk()'`; a repo with `hook:post-merge` runs it last |
-| `push` | HARD in a jj repo | show `alpha@origin..alpha`, refuse divergence or conflicts, then `jj git push -b alpha`; `--dry-run` prints the list without pushing. Body = `scripts/jj-push.ts`, run, never copied |
+| `push` | HARD in a jj repo | show `alpha@origin..alpha`, refuse divergence or conflicts, then `jj git push -b alpha`; `--dry-run` prints the list without pushing. The consumer owns a copied `tools/jj-push.ts`. |
 
 Dotfiles landing: `mise run land -- <workspace-name> -m '<message>' [--review <run-id>] [--dry-run]` requires every run associated with the workspace to have an existing accept judgment (`agx worker ls --json`), checks overlap, rebases onto alpha, formats the changed paths, commits and pushes, appends the recognized `kind: landed` disposition, then removes the workspace. If judgment is missing, land prints the `agx worker stats --import-legacy`, `agx worker ls --json`, and `agx worker judge <run> accept --note <text>` steps. Queue entries preserve the optional review ID and use the same prerequisite. Deployment is separate: coordinators run `mise run deploy [--since <commit>]` after landing; land never deploys or records judgment.
 
@@ -81,7 +81,8 @@ In an agx-created workspace, `mise run commit` requires an explicit target via `
 Defaults live in `scripts/config-registry.ts` (`LAND_HOSTS`); deployment runs pull then deps per host only after push succeeds, and dry-run previews in disposable copies without changing the original checkouts.
 
 - **Resolution** = the token is a LOCAL task name or alias (`mise tasks ls --json`, source under
-  the repo root — global `~/.config/mise` tasks do not count).
+  the repo root — global `~/.config/mise` tasks do not count). Contract helpers are source owned
+  by that repository under `tools/` and run through a runtime pinned there.
 - **Always invoke via `mise run`** (user alias `m`). NEVER bare `mise <token>`: `fmt`, `i`, `t`,
   `r` shadow mise BUILT-INS — observed: bare `mise fmt` runs mise's own mise.toml formatter, not
   the repo task.
@@ -89,7 +90,7 @@ Defaults live in `scripts/config-registry.ts` (`LAND_HOSTS`); deployment runs pu
   a verb waives its standard alias (one decision per family). Silent absence is the failure mode;
   a waiver is a recorded decision.
 
-## J1 pre-commit interface — dotfiles, firedancer and polysearch
+## J1 pre-commit interface — repository-owned copies
 
 Invoke `mise run commit -- -m '<message>' [--push] -- <repo-relative-path>...`.
 The wrapper snapshots the working copy before running `mise run --jobs 1 hook:pre-commit`.
@@ -111,7 +112,8 @@ Deletions have no content at REV. Include both selected sides of a rename.
 For arbitrary filenames, the companion diff template `path ++ "\\0"` avoids newline ambiguity.
 Use `--ignore-working-copy` for consumer reads: the fixed revision is the authority.
 
-`scripts/jj-precommit.ts` implements context validation, enumeration and snapshot reads.
+The consumer owns a copied `tools/jj-precommit.ts`, which implements context validation,
+enumeration and snapshot reads.
 Collection gates use BASE with selected REV paths overlaid (`jjCandidate`), so unrelated dirty
 skills and new files cannot enter the candidate. Read unchanged dependencies from BASE.
 In jj mode `fmt:staged` verifies a temporary candidate copy; if formatting would change selected
@@ -203,19 +205,20 @@ declared under the first rule, moving a body to `scripts/*.ts` costs nothing —
   (`keeping-research-notebooks` homes §0) uses recipes §1 NOTEBOOK-JULIA for Julia bodies.
   Copy the nearest one, select runtime versions in `[tools]`, and fill the actual roots and coverage.
   Preserve verbs and aliases; verify the materialized configuration before calling it ready.
-- **Verify — after EVERY mise.toml edit**:
-  `mise-contract [repo-dir ...]`
+- **Verify — after EVERY mise.toml edit**: run the consumer's copied
+  `tools/mise-contract.ts` through a runtime in its `[tools]` pins (for example,
+  `bun tools/mise-contract.ts`).
   Exit 0 = contract holds (WARNs allowed) · 1 = HARD violation · 2 = environment error. The gate
   is resolution-based by design — do NOT rewrite it as mise.toml regex parsing (rejected
   precedent; evidence in the ledger).
-- **Split tasks and tool authority**: root tasks, `mise/tasks/**/*.toml`, and TOML files selected by `task_config.includes` receive body/runtime checks. Use `mise-contract --tools` to audit literal commands in tasks, package scripts, and JS/TS scripts/tests against `[tools]`, exact Bun lock entries and OS base commands. Optional policy flags and coverage limits: [references/tool-authority.md](references/tool-authority.md).
-- **Wire per repo**: every template carries `[tasks."mise:contract"]` and calls the `mise-contract`
-  PATH bin. It stays OUT of `check.depends` by default (a machine without
-  the skills deployment would break CI); wire it in where deployment is guaranteed.
-- **`fmt:staged` body**: `fmt-staged --tool
+- **Split tasks and tool authority**: root tasks, `mise/tasks/**/*.toml`, and TOML files selected by `task_config.includes` receive body/runtime checks. A repository-owned checker audits literal commands in tasks, package scripts, and JS/TS scripts/tests against `[tools]`, commands in that repository's `tools/`, exact Bun lock entries and OS base commands. It also rejects forbidden alias packages in both `package.json` and the lockfile. Keep its source and policy with the repository; detail and limits: [references/tool-authority.md](references/tool-authority.md).
+- **Wire per repo**: a consumer that adopts `mise:contract` stores its checker under its own
+  `tools/` and invokes it with the pinned runtime. A repository gate must not depend on a
+  machine-wide operator tool or a dotfiles/skill path.
+- **`fmt:staged` body**: `bun tools/fmt-staged.ts --tool
   '<ext>[,<ext>]=<command>' [--exclude '<glob>']`. Give one `--tool` per formatter: the `fmt`
-  command without its path. Unlike `mise:contract`, it runs in the commit gate. The repo
-  therefore needs the skills deployment, and `bun` in `[tools]`.
+  command without its path. It runs in the commit gate, so the repository owns
+  `tools/fmt-staged.ts` and declares `bun` in `[tools]`.
 - **Prove the gate fires** after any gate edit: run it against a repo known to miss a token and
   watch it FAIL (xoria pre-fix was the forge's proof case). A gate never seen red is decoration.
 
@@ -276,11 +279,12 @@ MUST NOT fire (route):
 
 | File | Covers | Read when |
 |---|---|---|
+| `references/repository-presets.md` | jj-first setup, repository tool authority, optional SDK portability and gate lanes | adopting the coralbase-derived repo-local patterns |
 | `references/recipes.md` | per-cell provenance grades, the lint-tier / test-blocked / clippy-location / biome-config rulings, polyglot composition, known corpus deviations, dated tool versions | before deviating from a matrix cell; before an audit; any "why this body?" question |
 | `templates/*.mise.toml` | copy-out fragments; runtime versions and project scopes must be filled | scaffolding a repo, before materialization and verification |
-| `scripts/mise-contract.ts` | the resolution gate — run, never read into context | after every mise.toml edit; per-repo in audits |
-| `scripts/fmt-staged.ts` | the `fmt:staged` body — run, never copied into a repo | wiring or debugging a commit gate |
-| `scripts/jj-commit.ts` | the `commit` body in a jj repo — run, never copied; `--help` lists flags | wiring or debugging a jj commit gate |
-| `scripts/jj-push.ts` | the guarded `push` body in a jj repo — run, never copied; `--help` lists flags | wiring or debugging jj bookmark pushes |
-| `scripts/jj-precommit.ts` | J1 consumer helpers for selected immutable snapshot bytes and candidate trees | migrating a pre-commit consumer to jj |
+| `scripts/mise-contract.ts` | source for repository-owned checker copies; the producer repo runs its own source locally | after every mise.toml edit; per-repo in audits |
+| `scripts/fmt-staged.ts` | source for the consumer's copied `tools/fmt-staged.ts` | wiring or debugging a commit gate |
+| `scripts/jj-commit.ts` | source for the consumer's copied `tools/jj-commit.ts`; `--help` lists flags | wiring or debugging a jj commit gate |
+| `scripts/jj-push.ts` | source for the consumer's copied `tools/jj-push.ts`; `--help` lists flags | wiring or debugging jj bookmark pushes |
+| `scripts/jj-precommit.ts` | source for the consumer's copied helper for selected immutable snapshot bytes and candidate trees | migrating a pre-commit consumer to jj |
 | `tests/forge-verification-ledger.md` | F3 artifact: fleet findings, drift baseline 2026-07-17, provenance of this skill's own claims | reforging; auditing this skill |

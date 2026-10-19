@@ -46,6 +46,15 @@ even inside Japanese prose. **LAW**, **gate** (S1–S4), **layer**, **SET / ORDE
 > layer.** Every wire is laid by its owner skill and governed there afterwards. And the default
 > is the **smallest wiring whose absence you can name a failure for**.
 
+Operator tools and repository contract tools have different delivery contracts. Operator tools
+used machine-wide (for example `agx`, `rr`, `jex`, `xmsg`, `gpu-sampler`, `agent-resource-run`,
+`statusline`, and `herdr-projector`) are installed with Bun and have one machine version.
+Repository contract tools used by `mise run check` or the repo's commit path (for example
+`jj-commit`, `jj-push`, `jj-precommit`, `fmt-staged`, `mise-contract`, `wiring-check`, and
+`lint-ts-candidate`) are source copied under that repository's `tools/`; updates are explicit
+pulls. A consumer never names a dotfiles path, and a repo gate never calls a machine-wide operator
+tool. The owner skills define the task bodies and copy-out details.
+
 A rule about a layer's *contents* appearing in this file is a bug.
 
 **Why the default runs that way.** The human failure this corrects is *under*-wiring — ship the
@@ -121,6 +130,10 @@ command. So the gate and the post-merge step need an entrypoint jj cannot skip.
 | **JJ-2** | Agents get no git: `.claude/settings.json` denies `Bash(git:*)`, `Bash(command git:*)`, `Bash(env git:*)`. Mise task bodies may still call git | `wiring-check.ts` JJ-2 |
 | **JJ-3** | Identity, `trunk()`, and the snapshot size cap come from the dotfiles user config (`jj/config.toml`). `jj config set --repo` only for a value specific to this repo (e.g. `trunk()` on `main`), never a copy of the shared one | — (repo config lives outside the checkout) |
 
+**Setup ordering.** When a repo adopts a `setup` aggregate, make its first dependency `setup:jj`.
+The task body, helper behavior and copy-out example belong to
+[`wiring-mise-tasks`' repository preset reference](../wiring-mise-tasks/references/repository-presets.md#jj-first-setup).
+
 Keep `.githooks/` + `core.hooksPath` in a jj repo. `commit` reuses `hook:pre-commit` and the
 `post-commit` shim. A human's git command still runs them. S2 rows 2–3 still apply.
 
@@ -171,8 +184,10 @@ exact-patch pin rule are dated facts — `references/layers.md` §2.
    is the scaffold plan, and it goes in the commit message.
 3. **LAY (S2)** — in the order above, calling each layer's owner skill for its contents. This
    skill writes no task body, no hook body, no manifest, no settings block.
-4. **VERIFY (S3)** — `wiring-check` for the joint. Then the owners' own gates:
-   `mise run check` and `mise-contract.ts`. **Then clone to a temp dir and run them again.** That
+4. **VERIFY (S3)** — repository-owned `wiring-check` for the joint. Then the owners' own gates:
+   `mise run --continue-on-error check` and the repository-owned mise contract checker. Run
+   independent gate lanes in parallel; move `alpha` only after every lane passes. **Then clone to a
+   temp dir and run them again.** That
    second run is the gate; the first only proves it works where it was built.
 5. **HAND OFF (S4)** — record the owner per layer. Later edits fire the owner skill.
 

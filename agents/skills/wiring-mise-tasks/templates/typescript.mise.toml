@@ -2,7 +2,8 @@
 # wiring-mise-tasks/SKILL.md。bun 管理プロジェクト前提 (package.json + bun.lock)。
 # biome は fmt と lint を別タスクに保ち (check 合流は不使用)、設定は committed
 # biome.json に置く — 両裁定とも wiring-mise-tasks/references/recipes.md §4。
-# 検査: mise-contract
+# Repository-owned helpers: copy the contract tools under tools/ and pin bun in [tools].
+# 検査: bun tools/mise-contract.ts
 
 [tasks.setup]
 alias = "i"
@@ -16,7 +17,7 @@ run = "bunx biome format --write ."
 
 [tasks."fmt:staged"]
 description = "commit 用: staged の file だけを in-place 整形して再 stage。unstaged hunk を持つ file は拒否"
-run = "fmt-staged --tool 'ts,tsx,js,jsx,mjs,cjs,json=bunx biome format --write --no-errors-on-unmatched'"
+run = "bun tools/fmt-staged.ts --tool 'ts,tsx,js,jsx,mjs,cjs,json=bunx biome format --write --no-errors-on-unmatched'"
 
 [tasks."fmt:check"]
 description = "整形チェック (CI用・非破壊): --write を渡さない biome format は報告のみ"
@@ -46,7 +47,7 @@ depends = ["fmt:check", "lint", "test"]
 
 [tasks."mise:contract"]
 description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
-run = "mise-contract"
+run = "bun tools/mise-contract.ts"
 
 # git の各 hook で何が走るかはここで宣言する。.githooks/<event> は `mise run --jobs 1 hook:<event>`
 # だけを実行する shim(形 = wiring-repositories HOOK-1、mise の実行上の注意 = wiring-mise-tasks
@@ -62,7 +63,7 @@ depends = ["fmt:staged", "lint"]
 # git だけのリポジトリなら二つとも消す。hook:post-merge を持つリポジトリは pull の最後で呼ぶ。
 [tasks.commit]
 description = "jj gated commit: 指定 path だけを hook:pre-commit に通して jj commit、bookmark を @- へ、--push で push。mise run commit -- -m '<msg>' [--push] -- <path>..."
-run = "jj-commit"
+run = "bun tools/jj-commit.ts"
 
 [tasks.pull]
 description = "jj 取り込み: origin を fetch し、作業中の枝を trunk() の上へ rebase"
@@ -71,3 +72,7 @@ set -e
 jj git fetch --remote origin
 jj rebase -b @ -d 'trunk()'
 """
+
+[tasks.push]
+description = "jj bookmark push: repository-owned guarded push helper"
+run = "bun tools/jj-push.ts"

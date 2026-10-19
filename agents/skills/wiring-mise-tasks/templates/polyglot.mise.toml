@@ -4,7 +4,8 @@
 # 多言語合成の裁定 = wiring-mise-tasks/references/recipes.md §6 (qoed 前例)。
 # 各セルの中身は単言語 template から移植し、TeX は compiling-latex の
 # latex:* template に委ねて check が latex:check を集約する。
-# 検査: mise-contract
+# Repository-owned helpers: copy the contract tools under tools/ and pin bun in [tools].
+# 検査: bun tools/mise-contract.ts
 # コピー時に runtime を [tools] に宣言し、各 manifest と cwd を実際の配置へ合わせる。
 # Cargo と JS の root が同じ場合も、manager ごとの leaf task は分ける。
 
@@ -45,7 +46,7 @@ run = "rumdl fmt"
 # 辿って staged 外の file を書き換えたら fmt:staged が FAIL を出す(recipes.md §8)。
 [tasks."fmt:staged"]
 description = "commit 用: staged の file だけを in-place 整形して再 stage。unstaged hunk を持つ file は拒否"
-run = "fmt-staged --tool 'jl=julia --project=. -m Runic --inplace' --tool 'rs=rustfmt --edition 2024' --tool 'md=rumdl fmt'"
+run = "bun tools/fmt-staged.ts --tool 'jl=julia --project=. -m Runic --inplace' --tool 'rs=rustfmt --edition 2024' --tool 'md=rumdl fmt'"
 
 [tasks."fmt:check"]
 description = "整形チェック (CI用・非破壊): 全言語ぶんを一括"
@@ -99,7 +100,7 @@ depends = ["fmt:check", "lint", "test"]
 
 [tasks."mise:contract"]
 description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
-run = "mise-contract"
+run = "bun tools/mise-contract.ts"
 
 # git の各 hook で何が走るかはここで宣言する。.githooks/<event> は `mise run --jobs 1 hook:<event>`
 # だけを実行する shim(形 = wiring-repositories HOOK-1、mise の実行上の注意 = wiring-mise-tasks
@@ -115,7 +116,7 @@ depends = ["fmt:staged", "lint"]
 # git だけのリポジトリなら二つとも消す。hook:post-merge を持つリポジトリは pull の最後で呼ぶ。
 [tasks.commit]
 description = "jj gated commit: 指定 path だけを hook:pre-commit に通して jj commit、bookmark を @- へ、--push で push。mise run commit -- -m '<msg>' [--push] -- <path>..."
-run = "jj-commit"
+run = "bun tools/jj-commit.ts"
 
 [tasks.pull]
 description = "jj 取り込み: origin を fetch し、作業中の枝を trunk() の上へ rebase"
@@ -124,3 +125,7 @@ set -e
 jj git fetch --remote origin
 jj rebase -b @ -d 'trunk()'
 """
+
+[tasks.push]
+description = "jj bookmark push: repository-owned guarded push helper"
+run = "bun tools/jj-push.ts"

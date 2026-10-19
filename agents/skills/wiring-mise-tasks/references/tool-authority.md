@@ -1,8 +1,8 @@
 # Split tasks and literal tool authority
 
-Read when adopting split tasks or replacing a repository-local tool checker.
-Version v2610.5.0 adds this capability to `scripts/mise-contract.ts`; no separate tool
-release or changeset is needed because this helper belongs to the skill package.
+Read when adopting split tasks or designing a repository-owned tool checker.
+Version v2610.6.0 records the checker's copy-out contract: consumers keep the checker source under
+their own `tools/` and update that copy only by an explicit pull.
 
 Task names and aliases still come from the actual `mise tasks ls --json` result.
 Bodies come from parsed TOML: root `[tasks.*]`, `mise/tasks/**/*.toml`, and files,
@@ -18,7 +18,7 @@ For arbitrary command names and commands spawned inside scripts, enable `--tools
 Dotfiles uses the default mode: its host tooling has separate Brewfile authority.
 
 ```sh
-mise-contract --tools /path/to/repo
+bun tools/mise-contract.ts --tools .
 ```
 
 Tool mode audits root/split task run bodies, split task Tera `exec(command=...)`,
@@ -50,13 +50,15 @@ repository, not global house requirements:
 Coralbase wave-a's tool policy maps to:
 
 ```sh
-mise-contract --tools --task-directory mise/tasks --require-pinned \
-  --require-npm-lock --require-aggressive --require-min-version /path/to/copy
+bun tools/mise-contract.ts --tools --task-directory mise/tasks --require-pinned \
+  --require-npm-lock --require-aggressive --require-min-version .
 ```
 
 The importable `checkTools(root, policy)` returns finding strings. CLI mode prints
 one hard finding per returned string; the final count includes existing contract
 failures too. Exit codes remain 0 clean (warnings allowed), 1 violations, 2 environment.
+Add a consumer-specific forbidden-package policy when aliases are part of its contract; inspect
+both `package.json` and the lockfile so a stale lock cannot preserve a removed alias.
 
 ## Static coverage and reference differences
 

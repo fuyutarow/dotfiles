@@ -116,6 +116,7 @@ export const GpuStateSchema = z.object({
   attemptAt: z.number().int().nonnegative(),
   sampledAt: z.number().int().nonnegative().optional(),
   unresponsiveSince: z.number().int().nonnegative().optional(),
+  na: z.literal(true).optional(),
   stallEvidence: z.string().optional(),
   consecutiveProbeMisses: z.number().int().nonnegative().optional(),
   why: z.string().optional(),

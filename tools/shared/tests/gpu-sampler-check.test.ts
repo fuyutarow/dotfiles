@@ -48,6 +48,28 @@ test("passes when the proc inventory is clear and the latest GPU probe succeeded
   expect(await checkGpuSampler(f)).toEqual({ ok: true, failures: [] });
 });
 
+test("reports an admitted-job pause as OK without requiring a fresh probe", async () => {
+  const f = await fixture();
+  await Bun.write(
+    f.statePath,
+    `${JSON.stringify({
+      schema: 1,
+      attemptAt: f.at,
+      sampledAt: f.at - 60_000,
+      na: true,
+      why: "probe paused: GPU job admitted",
+      devices: [],
+      processes: [],
+      samples: [],
+    })}\n`,
+  );
+  expect(await checkGpuSampler(f)).toEqual({
+    ok: true,
+    failures: [],
+    paused: "probe paused: GPU job admitted",
+  });
+});
+
 test("reports dxg D-state, GPU-holding zombie, failed probe, and unresponsive state", async () => {
   const f = await fixture();
   await procTask(f.procRoot, 42, "Z");

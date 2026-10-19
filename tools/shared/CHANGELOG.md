@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.1 — 2026-10-19
+
+- Pause GPU sampling while admitted GPU slots are held
+
 ## 0.15.0 — 2026-10-19
 
 - Add schema 1 fleet session handoff parsing, reasoned unavailable reads, and atomic writes.

@@ -12,7 +12,17 @@ the declared core-tool PATH. Use the same absolute `XDG_STATE_HOME` for the serv
 and consumers if overriding the default `$HOME/.local/state/gpu-owner.json`.
 Consumers never start this service.
 
-Each invocation inventories Linux `/proc` before starting `nvidia-smi -q -x`.
+Each invocation checks the live `lslocks` rows for files matching `gpu.*` in
+`$XDG_RUNTIME_DIR/agent-resource/slots` before considering any driver query. A
+held GPU slot writes `na: true` and `why: "probe paused: GPU job admitted"`;
+it preserves the last successful `sampledAt` and sample ring and does not count
+as a miss or stall. The first cycle after all GPU slots are free can probe
+without waiting out a pause-induced cooldown. `gpu-sampler --check` treats this
+state as OK and prints the pause reason. Slot inventory failures pause probing
+as well, fail-closed. If no slot directory exists, there are no admitted slots.
+
+When no GPU slot is held, each invocation inventories Linux `/proc` before
+starting `nvidia-smi -q -x`.
 An existing process blocks the query regardless of its state, including D and Z.
 Inventory errors fail closed; platforms without this inventory also refuse queries.
 One XML response supplies device and process data. The owner atomically records an

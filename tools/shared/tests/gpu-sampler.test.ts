@@ -33,6 +33,14 @@ async function fixture(hang = false) {
   const calls = join(dir, "calls");
   const procRoot = join(dir, "proc");
   await mkdir(procRoot);
+  const slotDirectory = join(dir, "slots");
+  await mkdir(slotDirectory);
+  const lslocksPath = join(dir, "lslocks");
+  await writeFile(
+    lslocksPath,
+    `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ locks: [] }))});\n`,
+    { mode: 0o755 },
+  );
   const binary = join(dir, "nvidia-smi");
   // A real executable with a bounded native timeout; never falls back to the host binary.
   await writeFile(
@@ -44,15 +52,67 @@ async function fixture(hang = false) {
     dir,
     calls,
     binary,
+    slotDirectory,
     options: {
       statePath: join(dir, "state.json"),
       path: dir,
       fallbacks: [],
       procRoot,
+      slotDirectory,
+      lslocksPath,
       timeoutMs: hang ? 250 : 5000,
     },
   };
 }
+
+test("pauses during a held GPU slot without probing or counting a miss, then resumes immediately", async () => {
+  const { options, calls, slotDirectory } = await fixture();
+  const at = 1_000_000;
+  expect(await runGpuSampler({ ...options, now: () => at })).toBe("sampled");
+  const good = await readGpuState(options.statePath);
+  expect(good?.sampledAt).toBe(at);
+
+  const slot = join(slotDirectory, "gpu.0.0");
+  await writeFile(slot, "");
+  await writeFile(
+    options.lslocksPath,
+    `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ locks: [{ path: slot }] }))});\n`,
+    { mode: 0o755 },
+  );
+  await Bun.write(
+    options.statePath,
+    `${JSON.stringify({
+      ...good,
+      unresponsiveSince: at - 1,
+      stallEvidence: "prior probe stall",
+    })}\n`,
+  );
+  expect(await runGpuSampler({ ...options, now: () => at + 60_000 })).toBe(
+    "probe paused: GPU job admitted",
+  );
+  const paused = await readGpuState(options.statePath);
+  expect(paused).toMatchObject({
+    na: true,
+    why: "probe paused: GPU job admitted",
+    sampledAt: at,
+    attemptAt: at + 60_000,
+    consecutiveProbeMisses: 0,
+    samples: good?.samples,
+  });
+  expect(paused?.unresponsiveSince).toBeUndefined();
+  expect(await Bun.file(calls).text()).toBe("x");
+
+  await writeFile(
+    options.lslocksPath,
+    `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify({ locks: [] }))});\n`,
+    { mode: 0o755 },
+  );
+  expect(await runGpuSampler({ ...options, now: () => at + 60_001 })).toBe(
+    "sampled",
+  );
+  expect(await Bun.file(calls).text()).toBe("xx");
+  expect((await readGpuState(options.statePath))?.sampledAt).toBe(at + 60_001);
+});
 test("one XML snapshot includes GPU memory, power, utilization and per-process memory", () => {
   expect(parseGpuXml(GPU_XML)).toEqual({
     devices: ownerState(0).devices,

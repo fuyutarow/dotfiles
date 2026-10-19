@@ -4,6 +4,30 @@
 
 The immediate failure is in the WSL GPU-PV `dxg` guest/host request path: GPU callers are blocked waiting for adapter-lock acquisition or a VMBus completion, while repeated `dxgvmb_send_sync_msg` requests fail to complete. This is strongly supported by the guest evidence. The underlying cause of the host-side noncompletion is **not established**. The evidence does not distinguish a Windows NVIDIA driver defect, a WSL `dxgkrnl` defect, or a GPU/host state left unhealthy by earlier work. A CUDA fault, resource pressure, and NVML probing remain possible triggers or contributors, but none is established as the cause.
 
+## Hypothesis under test: pause sampler probes during admitted GPU work
+
+At 18:53 JST on Oct 19, the WSL dxg path failed again with
+`dxgvmb_send_sync_msg: wait_for_completion failed`, followed by
+`dxgkio_query_adapter_info: Ioctl failed: -512`. Only one GPU job was admitted:
+firedancer pe-selcopy (Julia PID 4190016, alive in futex wait), with slot
+`gpu.0.0` held by scope-controller PID 4189924. The process observed in D state
+was the sampler's own `nvidia-smi` (PID 45850, wait channel
+`dxgvmb_send_sync_msg`, query `adapter_info`). Earlier the same day, a stalled
+research process waited on `dxgglobal_acquire_process_adapter_lock` while the
+sampler's `nvidia-smi` waited in `dxgvmb_send_sync_msg`.
+
+The best-supported working hypothesis is that an NVML `query_adapter_info`
+issued while a CUDA job is active can remain blocked on this host, with other
+GPU callers then queued behind it. This is not established as the root cause.
+The mitigation under test is for the sole NVML caller (`gpu-sampler`) to inspect
+the agent-resource GPU slot locks and skip `nvidia-smi` whenever any slot has a
+live holder. A paused cycle records `na: true` and
+`why: "probe paused: GPU job admitted"`, preserves the last successful sample
+timestamp, and does not count as a probe miss or stall; sampling resumes on the
+first cycle after slots are free. This tests whether sampler probes during
+admitted work contribute to the observed dxg blockage; it cannot prove the
+underlying driver fault is fixed.
+
 ## Captured state
 
 - `/proc/version`: `6.18.54.1-microsoft-standard-WSL2` (build date shown there: 2026-10-06).

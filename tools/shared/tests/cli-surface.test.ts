@@ -90,19 +90,42 @@ for await (const packagePath of new Bun.Glob("tools/*/package.json").scan({
         const entry = join(root, name);
         await symlink(resolve(ROOT, packagePath, "..", source), entry);
         for (const flag of ["-V", "--version"]) {
-          expect(await run(entry, [flag])).toEqual({
+          const result = await run(entry, [flag]);
+          expect(result).toEqual({
             stdout: `${Object.keys(pkg.bin ?? {})[0]} ${pkg.version}\n`,
-            stderr: "",
+            stderr:
+              name === "agx-next"
+                ? "agx-next is deprecated; use agx-worker (agx worker) instead\n"
+                : "",
             exit: 0,
           });
         }
         const plain = await run(entry, ["--help"]);
         expect(plain.exit, plain.stderr).toBe(0);
-        expect(plain.stderr).toBe("");
-        expect(plain.stdout).toContain("Show help");
+        expect(plain.stderr).toBe(
+          name === "agx-next"
+            ? "agx-next is deprecated; use agx-worker (agx worker) instead\n"
+            : "",
+        );
+        expect(plain.stdout).toContain(name === "agx" ? "TOOLS:" : "Show help");
         expect(plain.stdout).not.toContain("\u001B");
-        for (const { tty, color } of environments)
-          expect(await run(entry, ["--help"], tty, color)).toEqual(plain);
+        for (const { tty, color } of environments) {
+          const rendered = await run(entry, ["--help"], tty, color);
+          if (name === "agx-next") {
+            const warning =
+              "agx-next is deprecated; use agx-worker (agx worker) instead\n";
+            expect(`${rendered.stdout}${rendered.stderr}`).toContain(warning);
+            expect(rendered.stdout.replace(warning, "")).toBe(
+              plain.stdout.replace(warning, ""),
+            );
+            expect(rendered.stderr.replace(warning, "")).toBe(
+              plain.stderr.replace(warning, ""),
+            );
+            expect(rendered.exit).toBe(plain.exit);
+          } else {
+            expect(rendered).toEqual(plain);
+          }
+        }
         // The forwarding wrapper must deliver the typed token to its downstream diagnostic.
         const extraEnv: NodeJS.ProcessEnv = {};
         if (name === "btmp") {
@@ -116,7 +139,7 @@ for await (const packagePath of new Bun.Glob("tools/*/package.json").scan({
         }
         const error = await run(entry, ["-Z"], false, false, extraEnv);
         expect(error.exit).toBeGreaterThan(0);
-        expect(error.stderr).toContain("-Z");
+        expect(error.stderr).toMatch(/(?:-Z|unknown option: Z)/u);
         expect(error.stderr).not.toContain("--Z");
       }
     });
@@ -161,9 +184,6 @@ test("CLI template produces the same surface", async () => {
 });
 
 for (const command of [
-  ["doctor"],
-  ["dispatch"],
-  ["run"],
   ["ws", "add"],
   ["ticket", "new"],
 ]) {

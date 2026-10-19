@@ -17,6 +17,7 @@ import {
   rm,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { plainHelp, printVersion } from "./cli.ts";
 import {
   GPU_INTERVAL_MS,
   GpuDeviceSchema,
@@ -27,6 +28,7 @@ import {
   readGpuState,
   type GpuState,
 } from "./gpu-samples.ts";
+import pkg from "../package.json" with { type: "json" };
 
 const tag = (xml: string, name: string): string | undefined =>
   new RegExp(`<${name}>([^<]*)</${name}>`, "u").exec(xml)?.[1]?.trim();
@@ -225,6 +227,10 @@ export type SamplerOptions = {
   /** Consecutive missed probe deadlines required before recording a GPU stall. */
   stallMisses?: number;
   procRoot?: string;
+  /** Test seam for the flock slot directory; production uses XDG_RUNTIME_DIR. */
+  slotDirectory?: string;
+  /** Test seam for lslocks; production resolves it through PATH. */
+  lslocksPath?: string;
   now?: () => number;
 };
 
@@ -233,6 +239,56 @@ export type GpuSamplerCheckOptions = {
   procRoot?: string;
 };
 
+const pausedReason = "probe paused: GPU job admitted";
+
+/** Match agent-resource-run status: only lslocks rows on GPU slot files count. */
+async function gpuSlotHeld(
+  options: SamplerOptions,
+): Promise<boolean | undefined> {
+  if (process.platform !== "linux") return undefined;
+  const runtimeRoot = process.env.XDG_RUNTIME_DIR;
+  const directory =
+    options.slotDirectory ??
+    (runtimeRoot !== undefined && runtimeRoot.startsWith("/")
+      ? join(runtimeRoot, "agent-resource", "slots")
+      : undefined);
+  if (directory === undefined) return undefined;
+  const names = await attempt(() => readdir(directory));
+  if (!names.ok) {
+    const missing = z
+      .object({ code: z.literal("ENOENT") })
+      .safeParse(names.error);
+    return missing.success ? false : undefined;
+  }
+  const slots = new Set(
+    names.value
+      .filter((name) => /^gpu\.\d+\.\d+$/u.test(name))
+      .map((name) => join(directory, name)),
+  );
+  if (slots.size === 0) return false;
+  const binary = options.lslocksPath ?? "lslocks";
+  const childResult = await attempt(() =>
+    Promise.resolve(
+      Bun.spawn([binary, "--json", "--notruncate", "--output", "PATH"], {
+        stdout: "pipe",
+        stderr: "ignore",
+        timeout: 5000,
+      }),
+    ),
+  );
+  if (!childResult.ok) return undefined;
+  const child = childResult.value;
+  const [stdout, exit] = await Promise.all([child.stdout.text(), child.exited]);
+  if (exit !== 0) return undefined;
+  const parsed = jsonOf(
+    z.object({ locks: z.array(z.object({ path: z.string().nullable() })) }),
+  ).safeParse(stdout.trim());
+  if (!parsed.success) return undefined;
+  return parsed.data.locks.some(
+    (row) => row.path !== null && slots.has(row.path),
+  );
+}
+
 type ProcFinding = {
   dxgTasks: string[];
   zombies: Set<number>;
@@ -240,11 +296,18 @@ type ProcFinding = {
 };
 
 let hasUnknownFlag = false;
-function rejectPrototypeFlag(type: string, _flag: string): boolean {
+const unknownFlags: string[] = [];
+function rejectPrototypeFlag(type: string, flag: string): boolean {
   if (type !== "unknown-flag") return false;
+  if (flag === "__proto__") {
+    process.stderr.write("Error: unknown option '--__proto__'\n");
+    process.exit(2);
+  }
   hasUnknownFlag = true;
+  unknownFlags.push(flag);
   return true;
 }
+const cliArgv = () => process.argv.slice(2);
 
 function processState(statText: string): string | undefined {
   // comm is parenthesized and may itself contain spaces or closing parentheses.
@@ -315,7 +378,7 @@ async function inspectProcesses(procRoot: string): Promise<ProcFinding> {
 /** Read-only recovery gate. Every condition is independently reported for the owner. */
 export async function checkGpuSampler(
   options: GpuSamplerCheckOptions = {},
-): Promise<{ ok: boolean; failures: string[] }> {
+): Promise<{ ok: boolean; failures: string[]; paused?: string }> {
   const path = options.statePath ?? gpuStatePath();
   const procRoot = options.procRoot ?? "/proc";
   const [state, proc] = await Promise.all([
@@ -323,6 +386,8 @@ export async function checkGpuSampler(
     inspectProcesses(procRoot),
   ]);
   const failures: string[] = [];
+  const paused =
+    state?.na === true && state.why === pausedReason ? state.why : undefined;
 
   if (proc.dxgTasks.length > 0)
     failures.push(`D-state process(es) in dxg: ${proc.dxgTasks.join(", ")}`);
@@ -346,10 +411,12 @@ export async function checkGpuSampler(
       failures.push(
         "cannot fully verify GPU-holding zombies because process inventory is incomplete",
       );
+    const isPaused = state.na === true && state.why === pausedReason;
     if (
-      state.sampledAt === undefined ||
-      state.sampledAt < state.attemptAt ||
-      state.why !== undefined
+      !isPaused &&
+      (state.sampledAt === undefined ||
+        state.sampledAt < state.attemptAt ||
+        state.why !== undefined)
     )
       failures.push(
         "last GPU probe did not succeed (latest attempt has no successful sample)",
@@ -357,7 +424,11 @@ export async function checkGpuSampler(
     if (state.unresponsiveSince !== undefined)
       failures.push(`unresponsiveSince is set (${state.unresponsiveSince})`);
   }
-  return { ok: failures.length === 0, failures };
+  return {
+    ok: failures.length === 0,
+    failures,
+    ...(paused === undefined ? {} : { paused }),
+  };
 }
 
 export async function runGpuSampler(
@@ -382,6 +453,22 @@ export async function runGpuSampler(
       processes: [],
       samples: [],
     };
+    const slotHeld = await gpuSlotHeld(options);
+    if (slotHeld !== false) {
+      const unavailable = slotHeld === undefined;
+      const why = unavailable
+        ? "probe paused: GPU slot state unavailable"
+        : pausedReason;
+      await writeState(path, {
+        ...base,
+        attemptAt: now,
+        na: true,
+        unresponsiveSince: undefined,
+        stallEvidence: undefined,
+        why,
+      });
+      return why;
+    }
     if (await hostHasNvidiaSmi(options.procRoot)) {
       const consecutiveProbeMisses = (base.consecutiveProbeMisses ?? 0) + 1;
       const stalled = consecutiveProbeMisses >= (options.stallMisses ?? 2);
@@ -403,6 +490,7 @@ export async function runGpuSampler(
     // A future timestamp also refuses: clock rollback must not bypass the minimum interval.
     if (
       previous !== undefined &&
+      previous.na !== true &&
       now - Math.max(previous.attemptAt, previous.sampledAt ?? 0) <
         GPU_INTERVAL_MS
     )
@@ -416,6 +504,8 @@ export async function runGpuSampler(
     const pending = {
       ...base,
       attemptAt: now,
+      na: undefined,
+      why: undefined,
     };
     await writeState(path, pending);
     const signal = AbortSignal.timeout(options.timeoutMs ?? 20_000);
@@ -488,6 +578,7 @@ export async function runGpuSampler(
     await writeState(path, {
       schema: 1,
       attemptAt: now,
+      na: undefined,
       sampledAt: at,
       consecutiveProbeMisses: 0,
       ...snapshot,
@@ -500,28 +591,37 @@ export async function runGpuSampler(
   }, "unresponsive");
 }
 async function main(): Promise<void> {
+  const argv = cliArgv();
+  if (printVersion(pkg, "gpu-sampler", argv)) process.exit(0);
   const parsed = cli(
     {
       name: "gpu-sampler",
+      version: pkg.version,
+      help: { render: plainHelp },
       flags: {
         check: {
           type: Boolean,
           description: "Run the read-only recovery check",
         },
+        version: { type: Boolean, alias: "V", description: "Show version" },
       },
       parameters: [],
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
-    Bun.argv.slice(2),
+    argv,
   );
   if (
     hasUnknownFlag ||
     Object.keys(parsed.unknownFlags).length > 0 ||
     parsed._.length > 0
   ) {
-    process.stderr.write("Usage: bun gpu-sampler.ts [--check]\n");
+    process.stderr.write(
+      unknownFlags.length > 0
+        ? `gpu-sampler: unknown option(s): ${unknownFlags.map((flag) => `-${flag}`).join(", ")}\n`
+        : "Usage: bun gpu-sampler.ts [--check]\n",
+    );
     process.exitCode = 2;
     return;
   }
@@ -540,7 +640,11 @@ async function main(): Promise<void> {
 async function reportCheck(): Promise<void> {
   const result = await checkGpuSampler();
   if (result.ok) {
-    process.stdout.write("GPU sampler recovery check: OK\n");
+    process.stdout.write(
+      result.paused === undefined
+        ? "GPU sampler recovery check: OK\n"
+        : `GPU sampler recovery check: OK (${result.paused})\n`,
+    );
   } else {
     emitFailures(result.failures);
     process.exitCode = 1;
